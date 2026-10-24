@@ -15,16 +15,6 @@ import { createAdmissionSession } from '@/lib/admission-setup-actions';
 import { apiFetch, getMe } from '@/lib/api';
 import type { AdmissionCycle, Year } from '@/lib/types';
 
-/** Merit points a new session may award to applications (the scored application flow). */
-const MERIT = [
-  { code: 'sibling', name: 'Sibling studies here', points: 20, rule: 'sibling' },
-  { code: 'staff_ward', name: 'Child of a staff member', points: 25, rule: 'staff_ward' },
-  { code: 'alumni', name: 'Parent is an alumnus', points: 10, rule: 'alumni' },
-  { code: 'single_girl', name: 'Single girl child', points: 10, rule: 'single_girl_child' },
-  { code: 'distance', name: 'Lives within 5 km', points: 15, rule: 'distance_within:5' },
-  { code: 'interview', name: 'Interaction (marked by staff)', points: 30, rule: '' },
-] as const;
-
 /**
  * Admission sessions: the list, and a short form for a new one. Classes, forms, seats and fees are set
  * on each session's own page.
@@ -219,37 +209,6 @@ export default async function CyclesPage({
                 help="Left empty: ADM- and the year, e.g. ADM-2027-28"
               />
             </FormRow>
-            <details className="ep-cy__merit">
-              <summary>Merit points (optional)</summary>
-              <p className="ep-field__help">
-                Points added to an application&apos;s score for shortlisting. Untick what this
-                session does not use; all but the interaction are worked out from the application.
-              </p>
-              <div className="ep-cy__merit-row ep-cy__merit-head" aria-hidden="true">
-                <span>Counts for</span>
-                <span>Points</span>
-              </div>
-              {MERIT.map((m) => (
-                <div key={m.code} className="ep-cy__merit-row">
-                  <input type="hidden" name="scoreCode" value={m.code} />
-                  <input type="hidden" name="scoreName" value={m.name} />
-                  <input type="hidden" name="scoreRule" value={m.rule} />
-                  <label className="ep-check">
-                    <input type="checkbox" name="scoreOn" value={m.code} defaultChecked />
-                    <span>{m.name}</span>
-                  </label>
-                  <input
-                    className="ep-input"
-                    name="scorePoints"
-                    aria-label={`Points for ${m.name.toLowerCase()}`}
-                    type="number"
-                    min={0}
-                    max={1000}
-                    defaultValue={m.points}
-                  />
-                </div>
-              ))}
-            </details>
             <FormActions>
               <Button type="submit">Create and set up classes</Button>
             </FormActions>

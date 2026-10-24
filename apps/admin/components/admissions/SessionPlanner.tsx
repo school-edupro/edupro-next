@@ -16,7 +16,6 @@ type Line = Omit<SessionClass, 'className' | 'formName' | 'applications' | 'regi
 const local = (iso: string | null) =>
   iso ? new Date(new Date(iso).getTime() + 330 * 60_000).toISOString().slice(0, 16) : '';
 const fromLocal = (v: string) => (v ? new Date(`${v}:00+05:30`).toISOString() : null);
-const rupees = (n: number) => `₹${n.toLocaleString('en-IN')}`;
 
 /**
  * An admission session (docs/design/39, part 2): its classes (form, seats, window, age and date of
@@ -42,7 +41,10 @@ export function SessionPlanner({
     () => new Map(plan.allClasses.map((c) => [c.id, c.name])),
     [plan.allClasses],
   );
-  const categories = plan.categories.filter((c) => c.status === 'active');
+  // the default category (General) first, the rest in the set-up's order
+  const categories = plan.categories
+    .filter((c) => c.status === 'active')
+    .sort((x, y) => Number(y.isDefault) - Number(x.isDefault) || x.sortOrder - y.sortOrder);
   const fee = (classId: string, categoryId: string) =>
     fees.find((f) => f.classId === classId && f.categoryId === categoryId) ?? {
       classId,
@@ -59,6 +61,16 @@ export function SessionPlanner({
     setFees((cur) => {
       const rest = cur.filter((f) => !(f.classId === classId && f.categoryId === categoryId));
       return [...rest, { ...fee(classId, categoryId), ...patch }];
+    });
+  /** Copies one class's fees and category seats to every other class of the session. */
+  const copyFees = (fromClassId: string) =>
+    setFees((cur) => {
+      const src = categories.map((k) => fee(fromClassId, k.id));
+      const others = plan.classes.filter((c) => c.classId !== fromClassId).map((c) => c.classId);
+      return [
+        ...cur.filter((f) => !others.includes(f.classId)),
+        ...others.flatMap((classId) => src.map((f) => ({ ...f, classId }))),
+      ];
     });
   const setLine = (i: number, patch: Partial<Line>) =>
     setLines((cur) => cur.map((l, j) => (j === i ? { ...l, ...patch } : l)));
@@ -335,117 +347,137 @@ export function SessionPlanner({
       {tab === 'fees' ? (
         <section aria-label="Fee table">
           <p className="ep-field__help">
-            The registration fee is paid with the form; the admission fee after the offer. A
-            candidate&rsquo;s category comes from the form&rsquo;s answers and is confirmed at
-            Document check (categories are set in Admission set-up). 0 means no fee. Seats of a
-            category (EWS, for example) cap its offers; blank takes from the class&rsquo;s seats.
+            The registration fee is paid with the form, the admission fee after the offer; 0 means
+            no fee. A family&rsquo;s category comes from the form&rsquo;s answers and is confirmed
+            at Document check. Seats of a category (EWS, for example) cap its offers; leave them
+            blank to let the category use any of the class&rsquo;s seats.
           </p>
           {plan.classes.length === 0 ? (
             <p className="ep-field__help">Add the classes first.</p>
           ) : (
-            <div
-              className="ep-table-wrap"
-              tabIndex={0}
-              role="region"
-              aria-label="Fees per class and category"
-            >
-              <table className="ep-table ep-table--dense ep-sp__fees">
-                <thead>
-                  <tr>
-                    <th scope="col" rowSpan={2}>
-                      Class
-                    </th>
-                    {categories.map((k) => (
-                      <th key={k.id} scope="colgroup" colSpan={3}>
-                        {k.name}
-                        {k.isDefault ? <Badge tone="neutral">default</Badge> : null}
-                      </th>
-                    ))}
-                  </tr>
-                  <tr>
-                    {categories.flatMap((k) => [
-                      <th key={`${k.id}r`} scope="col">
-                        Registration
-                      </th>,
-                      <th key={`${k.id}a`} scope="col">
-                        Admission
-                      </th>,
-                      <th key={`${k.id}s`} scope="col">
-                        Seats
-                      </th>,
-                    ])}
-                  </tr>
-                </thead>
-                <tbody>
-                  {plan.classes.map((c) => (
-                    <tr key={c.classId}>
-                      <th scope="row">{c.className}</th>
-                      {categories.flatMap((k) => {
-                        const f = fee(c.classId, k.id);
-                        return [
-                          <td key={`${k.id}r`}>
-                            <input
-                              className="ep-input ep-sp__num"
-                              inputMode="decimal"
-                              aria-label={`${c.className}, ${k.name}: registration fee`}
-                              disabled={!canEdit}
-                              value={f.registrationFee}
-                              onChange={(e) =>
-                                setFee(c.classId, k.id, {
-                                  registrationFee:
-                                    Number(e.target.value.replace(/[^\d.]/g, '')) || 0,
-                                })
-                              }
-                            />
-                          </td>,
-                          <td key={`${k.id}a`}>
-                            <input
-                              className="ep-input ep-sp__num"
-                              inputMode="decimal"
-                              aria-label={`${c.className}, ${k.name}: admission fee`}
-                              disabled={!canEdit}
-                              value={f.admissionFee}
-                              onChange={(e) =>
-                                setFee(c.classId, k.id, {
-                                  admissionFee: Number(e.target.value.replace(/[^\d.]/g, '')) || 0,
-                                })
-                              }
-                            />
-                          </td>,
-                          <td key={`${k.id}s`}>
-                            <input
-                              className="ep-input ep-sp__num"
-                              inputMode="numeric"
-                              aria-label={`${c.className}, ${k.name}: seats (blank: from the class seats)`}
-                              disabled={!canEdit}
-                              value={f.seats ?? ''}
-                              onChange={(e) =>
-                                setFee(c.classId, k.id, {
-                                  seats:
-                                    e.target.value === ''
-                                      ? null
-                                      : Number(e.target.value.replace(/\D/g, '')) || 0,
-                                })
-                              }
-                            />
-                          </td>,
-                        ];
-                      })}
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+            <div className="ep-sp__feecards">
+              {plan.classes.map((c) => {
+                const capped = categories.reduce(
+                  (n, k) => n + (fee(c.classId, k.id).seats ?? 0),
+                  0,
+                );
+                return (
+                  <section
+                    key={c.classId}
+                    className="ep-sp__feecard"
+                    aria-label={`Fees of ${c.className}`}
+                  >
+                    <header className="ep-sp__feecard-head">
+                      <h3>{c.className}</h3>
+                      <span className="ep-field__help">{c.seats} seats</span>
+                    </header>
+                    <table className="ep-table ep-table--dense ep-sp__fees">
+                      <thead>
+                        <tr>
+                          <th scope="col">Category</th>
+                          <th scope="col">Registration fee (₹)</th>
+                          <th scope="col">Admission fee (₹)</th>
+                          <th scope="col">Seats</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {categories.map((k) => {
+                          const f = fee(c.classId, k.id);
+                          return (
+                            <tr key={k.id}>
+                              <th scope="row">
+                                {k.name}
+                                {k.isDefault ? (
+                                  <>
+                                    {' '}
+                                    <Badge tone="neutral">default</Badge>
+                                  </>
+                                ) : null}
+                              </th>
+                              <td>
+                                <input
+                                  className="ep-input ep-sp__num"
+                                  inputMode="decimal"
+                                  aria-label={`${c.className}, ${k.name}: registration fee`}
+                                  disabled={!canEdit}
+                                  value={f.registrationFee}
+                                  onChange={(e) =>
+                                    setFee(c.classId, k.id, {
+                                      registrationFee:
+                                        Number(e.target.value.replace(/[^\d.]/g, '')) || 0,
+                                    })
+                                  }
+                                />
+                              </td>
+                              <td>
+                                <input
+                                  className="ep-input ep-sp__num"
+                                  inputMode="decimal"
+                                  aria-label={`${c.className}, ${k.name}: admission fee`}
+                                  disabled={!canEdit}
+                                  value={f.admissionFee}
+                                  onChange={(e) =>
+                                    setFee(c.classId, k.id, {
+                                      admissionFee:
+                                        Number(e.target.value.replace(/[^\d.]/g, '')) || 0,
+                                    })
+                                  }
+                                />
+                              </td>
+                              <td>
+                                <input
+                                  className="ep-input ep-sp__num"
+                                  inputMode="numeric"
+                                  placeholder="Any"
+                                  aria-label={`${c.className}, ${k.name}: seats (blank: any of the class's seats)`}
+                                  disabled={!canEdit}
+                                  value={f.seats ?? ''}
+                                  onChange={(e) =>
+                                    setFee(c.classId, k.id, {
+                                      seats:
+                                        e.target.value === ''
+                                          ? null
+                                          : Number(e.target.value.replace(/\D/g, '')) || 0,
+                                    })
+                                  }
+                                />
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                    {capped > c.seats ? (
+                      <p className="ep-sp__feewarn" role="alert">
+                        Category seats add up to {capped}, more than the class&rsquo;s {c.seats}{' '}
+                        seats.
+                      </p>
+                    ) : null}
+                    {canEdit && plan.classes.length > 1 ? (
+                      <button
+                        type="button"
+                        className="ep-btn ep-btn--ghost ep-btn--sm"
+                        onClick={() => {
+                          copyFees(c.classId);
+                          setMsg({
+                            tone: 'success',
+                            text: `${c.className}'s fees copied to every class. Save fees to keep them.`,
+                          });
+                        }}
+                      >
+                        Copy these fees to all classes
+                      </button>
+                    ) : null}
+                  </section>
+                );
+              })}
             </div>
           )}
           {canEdit && plan.classes.length ? (
             <div className="ep-sp__actions">
               <span className="ep-field__help">
-                Example: {plan.classes[0]?.className} General{' '}
-                {rupees(
-                  fee(plan.classes[0]!.classId, categories.find((k) => k.isDefault)?.id ?? '')
-                    .registrationFee,
-                )}{' '}
-                registration.
+                Categories and how a family is placed in one are set in{' '}
+                <a href="/admissions/setup#as-cats">Admission set-up</a>.
               </span>
               <button
                 type="button"

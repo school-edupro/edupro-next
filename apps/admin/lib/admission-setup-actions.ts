@@ -126,7 +126,6 @@ export async function createAdmissionSession(fd: FormData) {
       const y = years.data.find((x) => x.id === yearId);
       code = y ? `ADM-${y.code}`.replace(/[^A-Z0-9-]/g, '').slice(0, 20) : '';
     }
-    const merit = fd.getAll('scoreCode').map(String);
     const r = await apiFetch<{ id: string }>('/admissions/cycles', {
       method: 'POST',
       body: JSON.stringify({
@@ -137,17 +136,8 @@ export async function createAdmissionSession(fd: FormData) {
         closesAt: new Date(str(fd, 'closesAt')).toISOString(),
         applicationFee: Number(str(fd, 'applicationFee') || '0'),
         criteria: [],
-        // merit points ticked for the scored application flow
-        scoreCriteria: merit
-          .map((c, i) => ({
-            code: c,
-            name: String(fd.getAll('scoreName')[i] ?? ''),
-            points: Number(fd.getAll('scorePoints')[i] ?? 0),
-            autoRule: String(fd.getAll('scoreRule')[i] ?? '') || undefined,
-            on: fd.getAll('scoreOn').map(String).includes(c),
-          }))
-          .filter((s) => s.on && s.name && s.points > 0)
-          .map(({ on: _on, ...s }) => s),
+        // merit points are set on the session's Merit points tab (docs/design/40)
+        scoreCriteria: [],
       }),
     });
     id = r.id;

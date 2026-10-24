@@ -10803,44 +10803,16 @@ a.ep-pub-foot__item {
 .ep-cy__new {
   margin-top: var(--sp-5);
 }
-.ep-cy__new > summary,
-.ep-cy__merit > summary {
+.ep-cy__new > summary {
   cursor: pointer;
   font-weight: var(--fw-semibold);
-  color: var(--text-heading);
-}
-.ep-cy__new > summary {
   font-size: var(--fs-body);
+  color: var(--text-heading);
 }
 .ep-cy__form {
   display: grid;
   gap: var(--sp-4);
   margin-top: var(--sp-4);
-}
-.ep-cy__merit {
-  border: 1px solid var(--border-default);
-  border-radius: var(--radius-sm);
-  padding: var(--sp-3) var(--sp-4);
-}
-.ep-cy__merit[open] {
-  display: grid;
-  gap: var(--sp-3);
-}
-.ep-cy__merit-row {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 8rem;
-  gap: var(--sp-3);
-  align-items: end;
-}
-.ep-cy__merit-row {
-  align-items: center;
-}
-.ep-cy__merit-head {
-  color: var(--text-muted);
-  font-size: var(--fs-caption);
-  font-weight: var(--fw-semibold);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
 }
 .ep-cy__new-btn {
   white-space: nowrap;
@@ -10959,6 +10931,50 @@ a.ep-pub-foot__item {
 .ep-sp__table tbody th,
 .ep-sp__fees tbody th {
   white-space: nowrap;
+}
+/* the fee table: a card per class, the categories as rows */
+.ep-sp__feecards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 30rem), 1fr));
+  gap: var(--sp-4);
+}
+.ep-sp__feecard {
+  display: grid;
+  gap: var(--sp-3);
+  align-content: start;
+  justify-items: start;
+  padding: var(--sp-4);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  background: var(--surface-card);
+  min-width: 0;
+}
+.ep-sp__feecard > table {
+  width: 100%;
+}
+.ep-sp__feecard-head {
+  display: flex;
+  align-items: baseline;
+  gap: var(--sp-3);
+}
+.ep-sp__feecard-head h3 {
+  margin: 0;
+  font-size: var(--fs-body);
+}
+.ep-sp__feecard .ep-sp__num {
+  min-width: 0;
+  width: 100%;
+}
+.ep-sp__feecard tbody th {
+  white-space: normal;
+}
+.ep-sp__feewarn {
+  margin: 0;
+  color: var(--status-warning-text);
+  background: var(--status-warning-bg);
+  padding: var(--sp-2) var(--sp-3);
+  border-radius: var(--radius-sm);
+  font-size: var(--fs-small);
 }
 /* ---- admission approval process (docs/design/39, part 4) ---- */
 .ep-pe__list {
