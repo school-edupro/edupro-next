@@ -6,6 +6,7 @@ import {
   PROFILE_LIST_DEFAULTS,
   defProblems,
   loadProfileLists,
+  type AdmissionAnswers,
   type AdmissionField,
   type AdmissionFormDef,
   type PoolClient,
@@ -79,12 +80,30 @@ export class AdmissionFormsService {
     out['@states'] = out.State ?? [];
     out['@countries'] = out.Country ?? [];
     out['@houses'] = out.House ?? [];
+    // each state's cities (System setup → cities), for a city list that follows a state field
+    const byState = await c.query<{ state: string; cities: string[] }>(
+      `SELECT st.name AS state, array_agg(ci.name ORDER BY ci.name) AS cities
+         FROM cities ci JOIN states st ON st.id = ci.state_id
+        WHERE ci.status = 'active' AND st.status = 'active' GROUP BY st.name`,
+    );
+    for (const r of byState.rows) out[`@cities@${r.state}`] = r.cities;
     return out;
   }
 
   /** The options of one field: typed, a school list, or a master. */
-  static optionsOf(f: AdmissionField, all: Record<string, string[]>): string[] | undefined {
+  static optionsOf(
+    f: AdmissionField,
+    all: Record<string, string[]>,
+    answers?: AdmissionAnswers,
+  ): string[] | undefined {
     if (f.options?.length) return f.options;
+    // a city list that follows a state field: that state's cities (all of them when the state has none
+    // set up); nothing until a state is chosen
+    if (f.source === 'cities' && f.dependsOn && answers) {
+      const st = answers[f.dependsOn];
+      if (typeof st !== 'string' || !st) return [];
+      return all[`@cities@${st}`] ?? all['@cities'] ?? [];
+    }
     if (f.list) return all[f.list] ?? [];
     if (f.source) return all[`@${f.source}`] ?? [];
     if (f.type === 'yesno') return undefined;

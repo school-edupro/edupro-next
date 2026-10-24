@@ -14,6 +14,7 @@ import {
   type AdmissionField,
   type AdmissionFormDef,
   type SiblingAnswer,
+  linkCityStates,
 } from '../admission-engine';
 
 export interface UploadedFile {
@@ -52,8 +53,18 @@ export interface AdmissionFormFillProps {
   header?: ReactNode;
 }
 
-const optionsFor = (f: AdmissionField, all: Record<string, string[]>): string[] | undefined => {
+const optionsFor = (
+  f: AdmissionField,
+  all: Record<string, string[]>,
+  answers: Record<string, unknown> = {},
+): string[] | undefined => {
   if (f.options?.length) return f.options;
+  // a city list that follows a state field: that state's cities; nothing until a state is chosen
+  if (f.source === 'cities' && f.dependsOn) {
+    const st = answers[f.dependsOn];
+    if (typeof st !== 'string' || !st) return [];
+    return all[`@cities@${st}`] ?? all['@cities'] ?? [];
+  }
   if (f.list) return all[f.list] ?? [];
   if (f.source) return all[`@${f.source}`] ?? [];
   return undefined;
@@ -86,7 +97,7 @@ const Svg = ({ d }: { d: string }) => (
  * then the declaration and submit. The same rules run on the server.
  */
 export function AdmissionFormFill({
-  def,
+  def: defIn,
   options,
   initial,
   files: initialFiles,
@@ -101,6 +112,8 @@ export function AdmissionFormFill({
   submitLabel = 'I agree & submit',
   header,
 }: AdmissionFormFillProps) {
+  // each city list follows its state (the builder's preview gets the raw form)
+  const def = useMemo(() => linkCityStates(defIn), [defIn]);
   const [answers, setAnswers] = useState<AdmissionAnswers>(() => ({ ...(initial ?? {}) }));
   const [files, setFiles] = useState<Record<string, UploadedFile>>(initialFiles ?? {});
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -124,6 +137,12 @@ export function AdmissionFormFill({
   const set = (key: string, v: AdmissionAnswer) => {
     setAnswers((a) => {
       const next = { ...a, [key]: v };
+      // a city that is not in the newly chosen state's list is cleared
+      for (const f of def.fields)
+        if (f.dependsOn === key && typeof next[f.key] === 'string' && next[f.key]) {
+          const list = optionsFor(f, options, next) ?? [];
+          if (!list.includes(next[f.key] as string)) next[f.key] = null;
+        }
       // "same as" boxes copy as the source changes
       for (const f of def.fields)
         if (f.type === 'address_same' && next[f.key] === true)
@@ -150,7 +169,7 @@ export function AdmissionFormFill({
       // an ID number already saved comes back masked (XXXX-XXXX-1234): the server keeps the real one
       const v = answers[f.key];
       if (typeof v === 'string' && /^X{4}-X{4}-\w{4}$/.test(v)) continue;
-      const e = fieldError(f, answers, def.settings, optionsFor(f, options));
+      const e = fieldError(f, answers, def.settings, optionsFor(f, options, answers));
       if (e) out[f.key] = e;
     }
     return out;
@@ -226,7 +245,7 @@ export function AdmissionFormFill({
       'aria-describedby': describedBy,
       disabled: !editable(f),
     };
-    const opts = optionsFor(f, options) ?? [];
+    const opts = optionsFor(f, options, answers) ?? [];
     const str = typeof v === 'string' ? v : v === null || v === undefined ? '' : String(v);
     const upper =
       (f.upper ?? def.settings.upperCase) && ['text', 'textarea'].includes(f.type) && !f.preset;
@@ -252,7 +271,11 @@ export function AdmissionFormFill({
             value={f.fixedValue ?? str}
             onChange={(e) => set(f.key, e.target.value || null)}
           >
-            <option value="">Choose…</option>
+            <option value="">
+              {f.dependsOn && !answers[f.dependsOn]
+                ? `Choose the ${def.fields.find((x) => x.key === f.dependsOn)?.label ?? 'state'} first`
+                : 'Choose…'}
+            </option>
             {f.fixedValue && !opts.includes(f.fixedValue) ? <option>{f.fixedValue}</option> : null}
             {opts.map((o) => (
               <option key={o} value={o}>

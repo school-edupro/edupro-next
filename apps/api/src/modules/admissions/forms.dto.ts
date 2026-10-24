@@ -28,6 +28,8 @@ export const AdmissionFieldSchema = z.object({
   options: z.array(z.string().trim().min(1).max(160)).max(200).optional(),
   list: z.string().trim().max(40).optional(),
   source: z.enum(OPTION_SOURCES).optional(),
+  // '' keeps any city (no state field)
+  dependsOn: z.union([z.string().regex(/^[a-z][a-z0-9_]{0,39}$/), z.literal('')]).optional(),
   preset: z.enum(PRESETS).optional(),
   min: z.number().optional(),
   max: z.number().optional(),

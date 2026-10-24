@@ -9,6 +9,7 @@ import {
   fieldState,
   formErrors,
   formProgress,
+  linkCityStates,
   visibleSteps,
   type AdmissionAnswers,
   type AdmissionField,
@@ -182,5 +183,76 @@ describe('admission form engine (docs/design/39)', () => {
     const errs = formErrors(G, {}, opts, 'student');
     expect(Object.keys(errs)).toContain('first_name');
     expect(Object.keys(errs)).not.toContain('father_staff_school');
+  });
+
+  it('a city list follows the state on its tab; set, linked by itself, or any city', () => {
+    const base = {
+      ...G,
+      steps: [
+        { key: 'father', title: 'Father' },
+        { key: 'mother', title: 'Mother' },
+      ],
+      fields: [
+        { key: 'f_state', label: 'Office State', type: 'select', step: 'father', source: 'states' },
+        { key: 'f_city', label: 'Office City', type: 'select', step: 'father', source: 'cities' },
+        { key: 'm_state', label: 'Office State', type: 'select', step: 'mother', source: 'states' },
+        {
+          key: 'm_city',
+          label: 'Office City',
+          type: 'select',
+          step: 'mother',
+          source: 'cities',
+          dependsOn: 'm_state',
+        },
+        {
+          key: 'any_city',
+          label: 'Born in',
+          type: 'select',
+          step: 'mother',
+          source: 'cities',
+          dependsOn: '',
+        },
+      ],
+    } as typeof G;
+    const linked = linkCityStates(base);
+    expect(linked.fields.find((f) => f.key === 'f_city')!.dependsOn).toBe('f_state');
+    expect(linked.fields.find((f) => f.key === 'm_city')!.dependsOn).toBe('m_state');
+    expect(linked.fields.find((f) => f.key === 'any_city')!.dependsOn).toBe('');
+    expect(defProblems(linked)).toEqual([]);
+    const bad = {
+      ...base,
+      fields: base.fields.map((f) => (f.key === 'f_city' ? { ...f, dependsOn: 'm_city' } : f)),
+    } as typeof G;
+    expect(defProblems(bad)).toEqual([
+      'Office City: it can follow only a state field (Office City is not one)',
+    ]);
+    // the server's check uses the chosen state's cities
+    const all: Record<string, string[]> = {
+      '@cities': ['Pune', 'Lucknow'],
+      '@cities@Maharashtra': ['Pune'],
+      '@cities@Uttar Pradesh': ['Lucknow'],
+    };
+    const cityOpts = (f: AdmissionField, a: AdmissionAnswers) =>
+      f.source === 'cities' && f.dependsOn
+        ? typeof a[f.dependsOn] === 'string' && a[f.dependsOn]
+          ? (all[`@cities@${String(a[f.dependsOn])}`] ?? all['@cities'])
+          : []
+        : f.source
+          ? all[`@${f.source}`]
+          : undefined;
+    const wrong = formErrors(
+      linked,
+      { f_state: 'Maharashtra', f_city: 'Lucknow' },
+      cityOpts,
+      'father',
+    );
+    expect(wrong).toHaveProperty('f_city');
+    const right = formErrors(
+      linked,
+      { f_state: 'Maharashtra', f_city: 'Pune' },
+      cityOpts,
+      'father',
+    );
+    expect(right).not.toHaveProperty('f_city');
   });
 });

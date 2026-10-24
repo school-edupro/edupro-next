@@ -10,6 +10,7 @@ import {
   formErrors,
   formProgress,
   LAYOUT_TYPES,
+  linkCityStates,
   matchCategory,
   type AdmissionAnswers,
   type AdmissionField,
@@ -175,7 +176,8 @@ export class AdmissionCoreService {
       [a.cycle_id, a.class_id],
     );
     const l = line.rows[0];
-    return {
+    // each city list follows its state (set in the builder, or the only state field on its tab)
+    return linkCityStates({
       ...def,
       settings: {
         ...def.settings,
@@ -183,7 +185,7 @@ export class AdmissionCoreService {
         dobFrom: l?.dob_from ?? def.settings.dobFrom,
         dobTo: l?.dob_to ?? def.settings.dobTo,
       },
-    };
+    });
   }
 
   /** Stored answers as typed (ID numbers decrypted for the family and the office's form view). */
@@ -277,7 +279,7 @@ export class AdmissionCoreService {
     const errors = formErrors(
       def,
       merged,
-      (f) => AdmissionFormsService.optionsOf(f, options),
+      (f, a) => AdmissionFormsService.optionsOf(f, options, a),
       opts.step,
     );
     if (Object.keys(errors).length) return { errors, progress: formProgress(def, merged) };
@@ -359,7 +361,7 @@ export class AdmissionCoreService {
     if (Object.keys(errors).length) return { errors, changed: [] };
     const merged = { ...before, ...incoming };
     const options = await this.forms.optionsWith(c);
-    const all = formErrors(def, merged, (f) => AdmissionFormsService.optionsOf(f, options));
+    const all = formErrors(def, merged, (f, a) => AdmissionFormsService.optionsOf(f, options, a));
     // only the answers corrected are held to the form's rules (the rest stay as the family left them)
     for (const k of Object.keys(incoming)) if (all[k]) errors[k] = all[k];
     if (Object.keys(errors).length) return { errors, changed: [] };

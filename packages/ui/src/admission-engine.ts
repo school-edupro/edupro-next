@@ -117,6 +117,11 @@ export interface AdmissionField {
   list?: string;
   /** another master */
   source?: OptionSource;
+  /**
+   * a city list that follows the state chosen in this field (its key): only that state's cities. Not set:
+   * the only state field on the same tab, if there is one (linkCityStates); '' for any city.
+   */
+  dependsOn?: string;
   preset?: AdmissionPreset;
   min?: number;
   max?: number;
@@ -511,13 +516,13 @@ export function fieldError(
 export function formErrors(
   def: AdmissionFormDef,
   answers: AdmissionAnswers,
-  optionsOf: (f: AdmissionField) => string[] | undefined,
+  optionsOf: (f: AdmissionField, answers: AdmissionAnswers) => string[] | undefined,
   step?: string,
 ): Record<string, string> {
   const out: Record<string, string> = {};
   for (const f of def.fields) {
     if (step && f.step !== step) continue;
-    const e = fieldError(f, answers, def.settings, optionsOf(f));
+    const e = fieldError(f, answers, def.settings, optionsOf(f, answers));
     if (e) out[f.key] = e;
   }
   return out;
@@ -596,6 +601,22 @@ export function answerText(f: AdmissionField, v: AdmissionAnswer | undefined): s
   return text(v);
 }
 
+/**
+ * Links each city list to the state it follows: the one set in the builder, or else the only state field
+ * on its tab ('' keeps any city). The fill screens and the server's checks both use the linked form.
+ */
+export function linkCityStates(def: AdmissionFormDef): AdmissionFormDef {
+  const isState = (x: AdmissionField) => x.source === 'states' || x.list === 'State';
+  return {
+    ...def,
+    fields: def.fields.map((f) => {
+      if (f.source !== 'cities' || f.dependsOn !== undefined) return f;
+      const same = def.fields.filter((x) => x.step === f.step && isState(x));
+      return same.length === 1 ? { ...f, dependsOn: same[0]!.key } : f;
+    }),
+  };
+}
+
 /** Form-level checks the builder runs before saving a form. */
 export function defProblems(def: AdmissionFormDef): string[] {
   const out: string[] = [];
@@ -619,6 +640,12 @@ export function defProblems(def: AdmissionFormDef): string[] {
     if (f.type === 'subjects' && (!f.streamField || !f.slots?.length))
       out.push(`${f.label}: choose the stream field and add the subject slots`);
     if (f.type === 'marks' && !f.rows?.length) out.push(`${f.label}: add the subject rows`);
+    if (f.dependsOn) {
+      const st = def.fields.find((x) => x.key === f.dependsOn);
+      if (!st) out.push(`${f.label}: the state field it follows does not exist`);
+      else if (st.source !== 'states' && st.list !== 'State')
+        out.push(`${f.label}: it can follow only a state field (${st.label} is not one)`);
+    }
     for (const r of f.rules ?? [])
       for (const c of r.conditions)
         if (!def.fields.some((x) => x.key === c.field))

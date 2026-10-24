@@ -621,11 +621,33 @@ function FieldEditor({
   const mapCandidates = meta.studentFields;
   const mapped = mapCandidates.find((s) => s.key === f.maps);
 
+  // the key made from the label: the same label on another tab (Father / Mother) gets the tab's name
+  // in front, then a number, so it never clashes
+  const autoKey = () => {
+    const base = slug(f.label || 'field');
+    const taken = (k: string) => others.some((x) => x.key === k);
+    if (!taken(base)) return base;
+    const tab = def.steps.find((st) => st.key === f.step);
+    const withTab = slug(`${tab?.title ?? f.step} ${f.label}`).slice(0, 40);
+    if (!taken(withTab)) return withTab;
+    for (let n = 2; ; n += 1) {
+      const k = `${withTab.slice(0, 36)}_${String(n)}`;
+      if (!taken(k)) return k;
+    }
+  };
+  const stateFields = def.fields.filter(
+    (x) => x.key !== initial.key && (x.source === 'states' || x.list === 'State'),
+  );
+  // the state field on the same tab, if there is just one (as the fill screens assume)
+  const sameTab = stateFields.filter((x) => x.step === f.step);
+  const defaultState = sameTab.length === 1 ? sameTab[0]!.key : undefined;
   const finish = () => {
-    const key = f.key || slug(f.label);
+    const key = f.key || autoKey();
     if (!f.label.trim()) return setErr('Give the field a label');
     if (others.some((x) => x.key === key))
-      return setErr(`Another field already uses the key ${key}`);
+      return setErr(
+        `Another field already uses the key ${key}: type another key, or leave it empty`,
+      );
     if (needsOptions && !f.list && !f.source && !f.options?.length)
       return setErr('Choose a list, a master or type the options');
     if (
@@ -637,7 +659,9 @@ function FieldEditor({
       return setErr(
         `This goes to ${mapped.label}, which uses the ${mapped.list} list: pick that list`,
       );
-    onSave({ ...f, key, label: f.label.trim() });
+    // a city list follows the form's only state field unless told otherwise
+    const dependsOn = f.source === 'cities' ? (f.dependsOn ?? defaultState) : undefined;
+    onSave({ ...f, key, label: f.label.trim(), dependsOn });
   };
 
   return (
@@ -705,13 +729,15 @@ function FieldEditor({
           <input
             className="ep-input"
             value={f.key}
-            placeholder={slug(f.label || 'field')}
+            placeholder={autoKey()}
             maxLength={40}
             disabled={!isNew}
             onChange={(e) => set({ key: e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, '') })}
           />
           <span className="ep-field__help">
-            {isNew ? 'Left empty: made from the label.' : 'A key cannot change once answers exist.'}
+            {isNew
+              ? `Left empty: ${autoKey()} (made from the label; the tab's name is added when another tab uses the same label).`
+              : 'A key cannot change once answers exist.'}
           </span>
         </label>
         <label className="ep-field">
@@ -800,20 +826,43 @@ function FieldEditor({
                 </span>
               </label>
             ) : optionMode === 'source' ? (
-              <label className="ep-field">
-                <span className="ep-field__label">Master</span>
-                <select
-                  className="ep-select"
-                  value={f.source ?? 'classes'}
-                  onChange={(e) => set({ source: e.target.value as AdmissionField['source'] })}
-                >
-                  {OPTION_SOURCES.map((s) => (
-                    <option key={s} value={s}>
-                      {SOURCE_LABEL[s]}
-                    </option>
-                  ))}
-                </select>
-              </label>
+              <>
+                <label className="ep-field">
+                  <span className="ep-field__label">Master</span>
+                  <select
+                    className="ep-select"
+                    value={f.source ?? 'classes'}
+                    onChange={(e) => set({ source: e.target.value as AdmissionField['source'] })}
+                  >
+                    {OPTION_SOURCES.map((s) => (
+                      <option key={s} value={s}>
+                        {SOURCE_LABEL[s]}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                {f.source === 'cities' ? (
+                  <label className="ep-field">
+                    <span className="ep-field__label">Cities of the state chosen in</span>
+                    <select
+                      className="ep-select"
+                      value={f.dependsOn ?? defaultState ?? ''}
+                      onChange={(e) => set({ dependsOn: e.target.value })}
+                    >
+                      <option value="">Any city (no state field)</option>
+                      {stateFields.map((x) => (
+                        <option key={x.key} value={x.key}>
+                          {x.label} ({def.steps.find((st) => st.key === x.step)?.title ?? x.step})
+                        </option>
+                      ))}
+                    </select>
+                    <span className="ep-field__help">
+                      The family picks the state first and sees only its cities. Put the state field
+                      above the city on the tab.
+                    </span>
+                  </label>
+                ) : null}
+              </>
             ) : (
               <label className="ep-field">
                 <span className="ep-field__label">One option per line</span>
