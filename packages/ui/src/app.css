@@ -11021,6 +11021,20 @@ a.ep-pub-foot__item {
   flex-wrap: wrap;
   gap: var(--sp-2);
 }
+.ep-adm-rowacts {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+  align-items: center;
+}
+.ep-adm-resumed {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-3);
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--sp-4);
+}
 .ep-adm-points__lines {
   margin: var(--sp-1) 0 0;
   padding-left: var(--sp-5);

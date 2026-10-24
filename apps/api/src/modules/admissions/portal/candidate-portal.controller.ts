@@ -104,7 +104,14 @@ export class CandidatePortalController {
   @UseGuards(AdmissionCandidateGuard)
   @PublicThrottle(30)
   start(@Req() req: CandidateRequest, @Body() body: StartDto) {
-    return this.portal.start(req.candidate!, body.cycleId, body.classId, null, body.enquiry);
+    return this.portal.start(
+      req.candidate!,
+      body.cycleId,
+      body.classId,
+      null,
+      body.enquiry,
+      body.another ?? false,
+    );
   }
 
   @Get('me/applications/:id')

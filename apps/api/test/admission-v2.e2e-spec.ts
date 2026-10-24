@@ -878,6 +878,45 @@ describe('online admission (e2e)', () => {
         c.query(`UPDATE applications SET status = 'withdrawn' WHERE id = $1`, [id]),
       );
     });
+
+    it("opens the family's draft for the class again; another child starts a new form on purpose (docs/design/41)", async () => {
+      const start = (extra: Record<string, unknown> = {}) =>
+        inject({
+          method: 'POST',
+          url: '/public/admission/me/applications',
+          headers: pub(tokenA),
+          json: { cycleId, classId: classMini, ...extra },
+        });
+      // the draft left by the refused second form of Asha opens again
+      const first = await start();
+      expect(first.statusCode).toBe(201);
+      expect(first.json().resumed).toBe(true);
+      const again = await start();
+      expect(again.json()).toEqual({ id: first.json().id, resumed: true });
+      // another child: a new form
+      const other = await start({ another: true });
+      expect(other.json().resumed).toBeUndefined();
+      expect(other.json().id).not.toBe(first.json().id);
+      // My registrations: drafts first, with the class to continue
+      const me = await inject({ method: 'GET', url: '/public/admission/me', headers: pub(tokenA) });
+      const list = me.json().applications as Array<{ id: string; status: string; classId: string }>;
+      const drafts = list.filter((x) => x.status === 'draft');
+      expect(list.slice(0, drafts.length).every((x) => x.status === 'draft')).toBe(true);
+      expect(drafts.map((x) => x.id)).toEqual(
+        expect.arrayContaining([first.json().id, other.json().id]),
+      );
+      expect(drafts[0]!.classId).toBe(classMini);
+      // deleted drafts leave the family as before
+      for (const id of [first.json().id, other.json().id]) {
+        const del = await inject({
+          method: 'DELETE',
+          url: `/public/admission/me/applications/${id}`,
+          headers: pub(tokenA),
+          json: {},
+        });
+        expect(del.statusCode).toBeLessThan(300);
+      }
+    });
   });
   describe('part 4: approval process', () => {
     let stages: Array<{ id: string; name: string; kind: string }>;

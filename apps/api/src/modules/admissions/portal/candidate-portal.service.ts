@@ -159,13 +159,16 @@ export class CandidatePortalService {
         fee: string | null;
         created_at: Date;
         stage: string | null;
+        cycle_id: string;
+        class_id: string;
       }>(
         `SELECT a.id::text, a.application_no AS number, a.status::text, a.candidate_name AS candidate, cl.name AS class_name,
+                a.cycle_id::text, a.class_id::text,
                 y.name AS cycle_name, ay.name AS year, a.progress, a.registration_fee::text AS fee, a.created_at,
                 NULL::text AS stage
            FROM applications a JOIN admission_cycles y ON y.id = a.cycle_id JOIN academic_years ay ON ay.id = y.academic_year_id
            JOIN classes cl ON cl.id = a.class_id
-          WHERE a.applicant_id = $1 ORDER BY a.created_at DESC`,
+          WHERE a.applicant_id = $1 ORDER BY (a.status = 'draft') DESC, a.created_at DESC`,
         [cand.id],
       );
       return {
@@ -176,6 +179,8 @@ export class CandidatePortalService {
           status: x.status,
           candidate: x.candidate,
           className: x.class_name,
+          cycleId: x.cycle_id,
+          classId: x.class_id,
           session: x.cycle_name,
           academicYear: x.year,
           progress: x.progress,
@@ -193,8 +198,20 @@ export class CandidatePortalService {
     classId: string,
     enteredBy: string | null = null,
     enquiryToken?: string,
-  ) {
+    another = false,
+  ): Promise<{ id: string; resumed?: boolean }> {
     return this.db.tenant(this.t(cand), async (c) => {
+      // the family's unfinished form for this class opens again, unless another child is meant
+      // (docs/design/41, part 2); an enquiry's invitation is for its own child
+      if (!enteredBy && !another && !enquiryToken) {
+        const draft = await c.query<{ id: string }>(
+          `SELECT id::text FROM applications
+            WHERE cycle_id = $1 AND class_id = $2 AND applicant_id = $3 AND status = 'draft'
+            ORDER BY updated_at DESC, id DESC LIMIT 1`,
+          [cycleId, classId, cand.id],
+        );
+        if (draft.rows[0]) return { id: draft.rows[0].id, resumed: true };
+      }
       const k = await c.query<{ open: boolean; has_form: boolean; form_id: string | null }>(
         `SELECT (y.status = 'open' AND k.status = 'open' AND COALESCE(k.opens_at, y.opens_at) <= now() AND COALESCE(k.closes_at, y.closes_at) > now()) AS open,
                 k.form_id IS NOT NULL AS has_form, k.form_id::text

@@ -13,7 +13,7 @@ import {
 } from '@/lib/admission';
 import { AdmissionApplicationForm } from '@/components/AdmissionApplicationForm';
 import { ViewDownload } from '@/components/ViewDownload';
-import { withdrawRegistration } from '../../actions';
+import { startRegistration, withdrawRegistration } from '../../actions';
 
 /**
  * One registration in the admission portal (docs/design/39, part 3): the form while it is a draft or sent
@@ -25,7 +25,7 @@ export default async function AdmissionApplicationPage({
   searchParams,
 }: {
   params: Promise<{ school: string; id: string }>;
-  searchParams: Promise<{ error?: string; paid?: string }>;
+  searchParams: Promise<{ error?: string; paid?: string; resumed?: string }>;
 }) {
   const { school, id } = await params;
   const sp = await searchParams;
@@ -79,6 +79,23 @@ export default async function AdmissionApplicationPage({
           style={{ marginBottom: 'var(--sp-4)' }}
         >
           {sp.error}
+        </div>
+      ) : null}
+      {sp.resumed && app.status === 'draft' ? (
+        <div className="ep-alert ep-alert--info ep-adm-resumed" role="status">
+          <span>
+            You already started this form for {app.class.name} on {dmy(app.createdAt)}: carry on
+            here. Registering a different child?
+          </span>
+          <form action={startRegistration}>
+            <input type="hidden" name="school" value={school} />
+            <input type="hidden" name="cycleId" value={app.session.id} />
+            <input type="hidden" name="classId" value={app.class.id} />
+            <input type="hidden" name="another" value="1" />
+            <button className="ep-btn ep-btn--secondary ep-btn--sm" type="submit">
+              Register another child
+            </button>
+          </form>
         </div>
       ) : null}
 

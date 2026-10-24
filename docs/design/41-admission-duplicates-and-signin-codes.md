@@ -42,7 +42,7 @@ date of birth, or the same Aadhaar. A match stops the submit with "ASHA VERMA al
 APP/ADM-2027-28/00013 for Class I this year", naming the class and status. At the desk an admin may
 continue with a reason (history and audit).
 
-**Part 2 — Back to the unfinished draft.** "Register for Class I" opens the family's draft for that class
+**Part 2 — Back to the unfinished draft (built 24 Oct 2026).** "Register for Class I" opens the family's draft for that class
 and session when there is one; the portal says so. "Register another child" starts a new draft on
 purpose. My registrations lists drafts first with Continue and Delete.
 

@@ -25,19 +25,20 @@ export async function startRegistration(fd: FormData) {
   const cycleId = String(fd.get('cycleId') ?? '');
   const classId = String(fd.get('classId') ?? '');
   const enquiry = String(fd.get('enquiry') ?? '');
+  // "Register another child": a new form even when the family has a draft for the class
+  const another = fd.get('another') === '1';
   if (!/^[a-z0-9-]{2,20}$/.test(school)) redirect('/');
-  let id: string;
+  let out: { id: string; resumed?: boolean };
   try {
-    id = (
-      await admissionFetch<{ id: string }>('/me/applications', {
-        method: 'POST',
-        body: JSON.stringify({
-          cycleId,
-          classId,
-          ...(/^[A-Za-z0-9_-]{16,64}$/.test(enquiry) ? { enquiry } : {}),
-        }),
-      })
-    ).id;
+    out = await admissionFetch<{ id: string; resumed?: boolean }>('/me/applications', {
+      method: 'POST',
+      body: JSON.stringify({
+        cycleId,
+        classId,
+        ...(/^[A-Za-z0-9_-]{16,64}$/.test(enquiry) ? { enquiry } : {}),
+        ...(another ? { another: true } : {}),
+      }),
+    });
   } catch (error) {
     const msg =
       error instanceof PublicApiError
@@ -45,7 +46,7 @@ export async function startRegistration(fd: FormData) {
         : 'Could not start';
     redirect(`/${school}/admission?error=${encodeURIComponent(String(msg).slice(0, 160))}`);
   }
-  redirect(`/${school}/admission/application/${id}`);
+  redirect(`/${school}/admission/application/${out.id}${out.resumed ? '?resumed=1' : ''}`);
 }
 
 export async function saveAdmissionStep(

@@ -59,6 +59,8 @@ export interface PortalMe {
     status: string;
     candidate: string | null;
     className: string;
+    cycleId: string;
+    classId: string;
     session: string;
     academicYear: string;
     progress: number;

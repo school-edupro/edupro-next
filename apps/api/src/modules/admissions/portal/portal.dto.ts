@@ -31,6 +31,8 @@ export const StartSchema = z.object({
     .string()
     .regex(/^[A-Za-z0-9_-]{16,64}$/)
     .optional(),
+  /** a new form on purpose (another child), instead of the family's draft for the class (docs/design/41) */
+  another: z.boolean().optional(),
 });
 export class StartDto extends createZodDto(StartSchema) {}
 

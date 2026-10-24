@@ -14,7 +14,7 @@ import {
 } from '@/lib/admission';
 import { AdmissionSignIn } from '@/components/AdmissionSignIn';
 import { ViewDownload } from '@/components/ViewDownload';
-import { startRegistration } from './actions';
+import { startRegistration, withdrawRegistration } from './actions';
 
 /** An email or notice written in HTML, shown as plain text (no frames, nothing of it runs). */
 const htmlToText = (html: string) =>
@@ -63,6 +63,13 @@ export default async function AdmissionPortalPage({
   const inbox = me ? await admissionFetch<PortalInbox>('/me/inbox').catch(() => null) : null;
   // an invitation from the enquiry desk: kept through the sign-in and given to the new registration
   const enquiry = /^[A-Za-z0-9_-]{16,64}$/.test(sp.enquiry ?? '') ? sp.enquiry! : null;
+  // classes where the family has an unfinished form
+  const drafted = (cycleId: string, classId: string) =>
+    Boolean(
+      me?.applications.some(
+        (a) => a.status === 'draft' && a.cycleId === cycleId && a.classId === classId,
+      ),
+    );
   const sessions = sp.session
     ? open.sessions
         .filter((s) => s.code.toLowerCase() === sp.session!.toLowerCase())
@@ -141,12 +148,29 @@ export default async function AdmissionPortalPage({
                           ) : null}
                         </td>
                         <td>
-                          <a
-                            className="ep-btn ep-btn--secondary ep-btn--sm"
-                            href={`/${school}/admission/application/${a.id}`}
-                          >
-                            {a.status === 'draft' || a.status === 'sent_back' ? 'Continue' : 'Open'}
-                          </a>
+                          <span className="ep-adm-rowacts">
+                            <a
+                              className="ep-btn ep-btn--secondary ep-btn--sm"
+                              href={`/${school}/admission/application/${a.id}`}
+                            >
+                              {a.status === 'draft' || a.status === 'sent_back'
+                                ? 'Continue'
+                                : 'Open'}
+                            </a>
+                            {a.status === 'draft' ? (
+                              <form action={withdrawRegistration}>
+                                <input type="hidden" name="school" value={school} />
+                                <input type="hidden" name="id" value={a.id} />
+                                <button
+                                  className="ep-btn ep-btn--ghost ep-btn--sm"
+                                  type="submit"
+                                  aria-label={`Delete the draft for ${a.className}${a.candidate ? ` (${a.candidate})` : ''}`}
+                                >
+                                  Delete
+                                </button>
+                              </form>
+                            ) : null}
+                          </span>
                         </td>
                       </tr>
                     );
@@ -255,15 +279,33 @@ export default async function AdmissionPortalPage({
                           {new Date(k.opensAt).getTime() > Date.now() ? 'Opens soon' : 'Closed'}
                         </Badge>
                       ) : me ? (
-                        <form action={startRegistration}>
-                          <input type="hidden" name="school" value={school} />
-                          <input type="hidden" name="cycleId" value={s.id} />
-                          <input type="hidden" name="classId" value={k.id} />
-                          {enquiry ? <input type="hidden" name="enquiry" value={enquiry} /> : null}
-                          <button className="ep-btn ep-btn--primary ep-btn--sm" type="submit">
-                            Register for {k.name}
-                          </button>
-                        </form>
+                        <span className="ep-adm-rowacts">
+                          {/* the family's draft for the class opens again (docs/design/41, part 2) */}
+                          <form action={startRegistration}>
+                            <input type="hidden" name="school" value={school} />
+                            <input type="hidden" name="cycleId" value={s.id} />
+                            <input type="hidden" name="classId" value={k.id} />
+                            {enquiry ? (
+                              <input type="hidden" name="enquiry" value={enquiry} />
+                            ) : null}
+                            <button className="ep-btn ep-btn--primary ep-btn--sm" type="submit">
+                              {drafted(s.id, k.id) && !enquiry
+                                ? `Continue the ${k.name} form`
+                                : `Register for ${k.name}`}
+                            </button>
+                          </form>
+                          {drafted(s.id, k.id) && !enquiry ? (
+                            <form action={startRegistration}>
+                              <input type="hidden" name="school" value={school} />
+                              <input type="hidden" name="cycleId" value={s.id} />
+                              <input type="hidden" name="classId" value={k.id} />
+                              <input type="hidden" name="another" value="1" />
+                              <button className="ep-btn ep-btn--ghost ep-btn--sm" type="submit">
+                                Register another child
+                              </button>
+                            </form>
+                          ) : null}
+                        </span>
                       ) : (
                         <a className="ep-btn ep-btn--secondary ep-btn--sm" href="#sign-in">
                           Sign in to register
