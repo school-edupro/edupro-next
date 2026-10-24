@@ -31,6 +31,7 @@ const PAGES = [
   '/admissions/enquiries/new',
   '/admissions/enquiries/report',
   '/admissions/enquiries/7',
+  '/admissions/cycles',
   '/admissions/cycles/4',
   '/fees/demands',
   '/fees/payments',

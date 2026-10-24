@@ -561,8 +561,8 @@
     },
     "admissions_cycles": {
       "kicker": "Admissions",
-      "title": "Admission cycles",
-      "description": "A cycle opens classes for a session with age windows, seats, passcodes, the application form and scoring masters."
+      "title": "Admission sessions",
+      "description": "Each session takes registrations into one academic year. Open a session to set its classes, registration forms, seats and fees."
     },
     "admissions_applications": {
       "kicker": "Admissions",

@@ -10749,6 +10749,103 @@ a.ep-pub-foot__item {
   color: var(--status-warning-text);
 }
 
+/* ---- admission sessions list ------------------------------------------------------------------ */
+.ep-cy__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: var(--sp-4);
+}
+.ep-cy__item {
+  display: grid;
+  gap: var(--sp-3);
+}
+.ep-cy__head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2) var(--sp-3);
+  align-items: center;
+}
+.ep-cy__name {
+  font-family: var(--font-heading);
+  font-size: var(--fs-h3);
+  font-weight: var(--fw-semibold);
+}
+.ep-cy__facts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 11rem), 1fr));
+  gap: var(--sp-3) var(--sp-5);
+  margin: 0;
+}
+.ep-cy__facts dt {
+  color: var(--text-muted);
+  font-size: var(--fs-caption);
+  font-weight: var(--fw-semibold);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.ep-cy__facts dd {
+  margin: var(--sp-1) 0 0;
+  color: var(--text-body);
+}
+.ep-cy__sub {
+  color: var(--text-muted);
+  font-size: var(--fs-caption);
+  font-weight: normal;
+}
+.ep-cy__actions {
+  display: inline-flex;
+  gap: var(--sp-2);
+  align-items: center;
+  flex-wrap: wrap;
+}
+.ep-cy__new {
+  margin-top: var(--sp-5);
+}
+.ep-cy__new > summary,
+.ep-cy__merit > summary {
+  cursor: pointer;
+  font-weight: var(--fw-semibold);
+  color: var(--text-heading);
+}
+.ep-cy__new > summary {
+  font-size: var(--fs-body);
+}
+.ep-cy__form {
+  display: grid;
+  gap: var(--sp-4);
+  margin-top: var(--sp-4);
+}
+.ep-cy__merit {
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  padding: var(--sp-3) var(--sp-4);
+}
+.ep-cy__merit[open] {
+  display: grid;
+  gap: var(--sp-3);
+}
+.ep-cy__merit-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 8rem;
+  gap: var(--sp-3);
+  align-items: end;
+}
+.ep-cy__merit-row {
+  align-items: center;
+}
+.ep-cy__merit-head {
+  color: var(--text-muted);
+  font-size: var(--fs-caption);
+  font-weight: var(--fw-semibold);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.ep-cy__new-btn {
+  white-space: nowrap;
+}
+
 /* ---- admission session and set-up (docs/design/39) --------------------------------------------- */
 .ep-sp {
   display: grid;

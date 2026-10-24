@@ -108,3 +108,56 @@ export async function updateAdmissionSession(fd: FormData) {
       : `/admissions/cycles/${id}?ok=1&r=${Date.now().toString(36)}&detail=${encodeURIComponent(fd.has('status') ? `Session ${str(fd, 'status') === 'open' ? 'opened' : str(fd, 'status') === 'closed' ? 'closed' : 'saved'}` : 'Session saved')}`,
   );
 }
+
+/**
+ * A new admission session: the year, name, registration dates and fee. Classes, forms, seats and fees
+ * are set on the session's own page, which opens next. The code defaults to ADM-<year>.
+ */
+export async function createAdmissionSession(fd: FormData) {
+  const yearId = str(fd, 'academicYearId');
+  let code = str(fd, 'code').toUpperCase();
+  let id = '';
+  let error = '';
+  try {
+    if (!code) {
+      const years = await apiFetch<{ data: Array<{ id: string; code: string }> }>(
+        '/platform/years',
+      );
+      const y = years.data.find((x) => x.id === yearId);
+      code = y ? `ADM-${y.code}`.replace(/[^A-Z0-9-]/g, '').slice(0, 20) : '';
+    }
+    const merit = fd.getAll('scoreCode').map(String);
+    const r = await apiFetch<{ id: string }>('/admissions/cycles', {
+      method: 'POST',
+      body: JSON.stringify({
+        academicYearId: yearId,
+        code,
+        name: str(fd, 'name'),
+        opensAt: new Date(str(fd, 'opensAt')).toISOString(),
+        closesAt: new Date(str(fd, 'closesAt')).toISOString(),
+        applicationFee: Number(str(fd, 'applicationFee') || '0'),
+        criteria: [],
+        // merit points ticked for the scored application flow
+        scoreCriteria: merit
+          .map((c, i) => ({
+            code: c,
+            name: String(fd.getAll('scoreName')[i] ?? ''),
+            points: Number(fd.getAll('scorePoints')[i] ?? 0),
+            autoRule: String(fd.getAll('scoreRule')[i] ?? '') || undefined,
+            on: fd.getAll('scoreOn').map(String).includes(c),
+          }))
+          .filter((s) => s.on && s.name && s.points > 0)
+          .map(({ on: _on, ...s }) => s),
+      }),
+    });
+    id = r.id;
+  } catch (e) {
+    error = problem(e).error;
+  }
+  revalidatePath('/admissions/cycles');
+  redirect(
+    error
+      ? `/admissions/cycles?error=session&detail=${encodeURIComponent(error.slice(0, 300))}`
+      : `/admissions/cycles/${id}?ok=1&detail=${encodeURIComponent('Session created. Now add its classes, forms and seats.')}`,
+  );
+}
