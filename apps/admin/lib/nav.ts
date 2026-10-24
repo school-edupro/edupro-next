@@ -82,6 +82,8 @@ export const NAV: Array<{
         label: 'recruitmentSetup',
         permission: 'people.recruitment.view',
       },
+      { href: '/people/exits', label: 'employeeExits', permission: 'people.exit.view' },
+      { href: '/people/exits/setup', label: 'exitSetup', permission: 'people.exit.view' },
     ],
   },
   {

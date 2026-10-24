@@ -18,6 +18,8 @@ export interface StaffWaiting {
   approvals: number;
   /** staff profile changes routed to me */
   profileChanges?: number;
+  /** colleagues' exits waiting at my approval level */
+  exits?: number;
 }
 export interface StaffGroup {
   id: string;
@@ -162,6 +164,18 @@ export const STAFF_MENU: StaffGroup[] = [
         label: 'Profile changes to approve',
         help: 'Changes colleagues asked for on their profile, routed to you',
         allowed: (_can, w) => (w.profileChanges ?? 0) > 0,
+      },
+      {
+        href: '/resignation',
+        label: 'My resignation',
+        help: 'Ask for resignation, see where it is, withdraw it until it is accepted',
+        allowed: always,
+      },
+      {
+        href: '/exit-approvals',
+        label: 'Exits to approve',
+        help: 'Resignations of colleagues waiting for your decision',
+        allowed: (_can, w) => (w.exits ?? 0) > 0,
       },
       {
         href: '/library',

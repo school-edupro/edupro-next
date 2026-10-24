@@ -13,6 +13,9 @@ export const PEOPLE = {
   studentMerge: 'people.student.merge',
   /** Ask to cancel an admission with the fee settled (0236). */
   admissionCancel: 'people.admission.cancel',
+  /** Employee exits (0237): see them; create on an employee's behalf and set up. */
+  exitView: 'people.exit.view',
+  exitManage: 'people.exit.manage',
   guardianView: 'people.guardian.view',
   guardianEdit: 'people.guardian.edit',
   enrolmentManage: 'people.enrolment.manage',

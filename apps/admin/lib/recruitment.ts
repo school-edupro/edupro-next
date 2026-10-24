@@ -80,7 +80,7 @@ export interface VacancyView extends Vacancy {
 }
 
 /** Who approves a vacancy, level by level (Recruitment set-up). */
-export type ApprovalBy = 'employees' | 'designation' | 'hod' | 'role';
+export type ApprovalBy = 'employees' | 'designation' | 'hod' | 'manager' | 'role';
 export interface ApprovalLevel {
   name: string;
   by: ApprovalBy;

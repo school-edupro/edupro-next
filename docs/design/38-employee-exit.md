@@ -33,3 +33,33 @@
 6. **No-dues**: the clearance board per exit, departments clear with dues; library and assets automatic.
 7. **FNF and close**: the statement, its approval and payment, the letters (PDF), the close (inactive,
    logins stopped, assignments listed), the exit register and Excel.
+
+## Part 5 as built (24 Oct 2026)
+- Migration 0237: `employee_exit_types` (staff may ask in the app; notice counts), `employee_exit_settings`
+  (notice days per employee type), `exit_clearance_departments` (for part 6; library / assets fill in
+  from the system), `employee_exits` (one in progress per employee) and `employee_exit_events` (the
+  timeline); rights `people.exit.view` and `people.exit.manage` (admins).
+- A school starts with: Resignation (staff may ask, notice counts), Termination, Retirement, Contract
+  end; notice 90 / 30 / 30 / 0 days (teaching / non-teaching / contract / visiting); departments Library,
+  Accounts, IT and assets, Admin and ID card, HOD (hand-over), Transport, Hostel. All editable under
+  Employee management → Exit set-up.
+- Approval levels per employee type on the workflow engine (`employee_exit_<type>`, entity
+  `employee_exit`), set like vacancy approval with the same editor (now shared): named employees, a
+  designation, the HOD of the employee's department, the **reporting manager** of the employee (new
+  engine choice: the posting of the working year), or a role. A school starts with HOD, then Principal. A
+  level nobody holds is skipped; the raiser's own level and a level of someone who already approved count
+  as approved; saving moves the exits waiting to the new people.
+- The request: the employee in the staff app (**My resignation**: type, proposed last day, reason, letter)
+  or the office on their behalf for any type (**Record an exit**). The notice of the employee's type
+  gives the expected last day and the shortfall.
+- Decisions: in the admin (the exit page, also linked from My inbox) and the staff app (**Exits to
+  approve**, shown when something waits): approve (may set the accepted last working day and waive the
+  notice shortfall), send back with a remark (the employee or the office changes it and sends it again;
+  the levels start over), or reject with the reason. The employee or the office withdraws it until it is
+  accepted. The letter opens for the office, the employee and the approvers (View / Download).
+- Engine: `WorkflowService.cancelIn` (cancel in the caller's transaction after the module's own check),
+  used so the employee can withdraw a request the office raised.
+- API: `GET|PUT people/exits/setup`, `GET|PUT people/exits/setup/approval/:type`, `GET|POST people/exits`,
+  `GET people/exits/to-approve`, `GET people/exits/:id`, `GET people/exits/:id/letter`,
+  `POST people/exits/:id/approve|send-back|reject|withdraw|resubmit`, `GET|POST me/exits`. Tests:
+  `employee-exits.e2e-spec.ts` (5).

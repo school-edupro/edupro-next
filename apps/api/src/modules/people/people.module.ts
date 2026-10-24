@@ -45,6 +45,9 @@ import { StudentCorrectionsController } from './student-corrections.controller';
 import { StudentCorrectionsService } from './student-corrections.service';
 import { ClassCorrectionsService } from './class-corrections.service';
 import { StudentMergesController } from './student-merges.controller';
+import { ExitSetupService } from './exits/exit-setup.service';
+import { ExitsController } from './exits/exits.controller';
+import { ExitsService } from './exits/exits.service';
 import { StudentMergesService } from './student-merges.service';
 import { StudentBulkService } from './student-bulk.service';
 import { StudentGridService } from './student-grid.service';
@@ -73,6 +76,7 @@ import { StudentsService } from './students.service';
     SectionRollController,
     StudentCorrectionsController,
     StudentMergesController,
+    ExitsController,
     StudentProfileController,
     StudentsController,
     EmployeesController,
@@ -103,6 +107,8 @@ import { StudentsService } from './students.service';
     StudentCorrectionsService,
     ClassCorrectionsService,
     StudentMergesService,
+    ExitSetupService,
+    ExitsService,
     StudentGridService,
     StudentProfileService,
     StudentsService,
@@ -122,6 +128,7 @@ export class PeopleModule implements OnModuleInit {
     private readonly corrections: StudentCorrectionsService,
     private readonly classCorrections: ClassCorrectionsService,
     private readonly merges: StudentMergesService,
+    private readonly exits: ExitsService,
   ) {}
 
   onModuleInit() {
@@ -140,6 +147,10 @@ export class PeopleModule implements OnModuleInit {
     // a merge of duplicate records decided at the last level, or withdrawn (0235)
     this.workflow.onComplete('student_merge', (c, ctx, instance, outcome) =>
       this.merges.onDecision(c, ctx, instance, outcome),
+    );
+    // an employee exit decided at the last level, or ended early (0237)
+    this.workflow.onComplete('employee_exit', (c, ctx, instance, outcome) =>
+      this.exits.onDecision(c, ctx, instance, outcome),
     );
     // a department's HOD changed: the vacancies waiting for approval follow at once (0201)
     this.masters.onChange('departments', (ctx) => this.approval.refresh(ctx));

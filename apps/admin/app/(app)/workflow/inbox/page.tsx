@@ -109,6 +109,13 @@ export default async function InboxPage({
             {s.instance.entityType === 'admission_cancellation' ? (
               <CancelPreview payload={s.instance.payload} />
             ) : null}
+            {s.instance.entityType === 'employee_exit' ? (
+              <p style={{ marginTop: 'var(--sp-2)' }}>
+                <a href={`/people/exits/${s.instance.entityId}`}>
+                  Open the exit (set the last working day, send back)
+                </a>
+              </p>
+            ) : null}
             {s.instance.entityType === 'vacancy' ? (
               <p style={{ marginTop: 'var(--sp-2)' }}>
                 <a href={`/people/recruitment/${s.instance.entityId}`}>{w('viewEntity')}</a>

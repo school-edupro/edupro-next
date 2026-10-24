@@ -42,11 +42,12 @@ export const ResolverSchema = z.discriminatedUnion('kind', [
   /**
    * Staff of the school (vacancy approval, set in Recruitment set-up): the employees named, everyone
    * holding a designation, or the HOD of the request's department (payload.department; the HOD is set on
-   * the department master). Employees without a sign-in are left out.
+   * the department master), or the reporting manager of the employee the request is about
+   * (payload.employeeId; the posting of the working year). Employees without a sign-in are left out.
    */
   z.object({
     kind: z.literal('staff'),
-    by: z.enum(['employees', 'designation', 'hod']),
+    by: z.enum(['employees', 'designation', 'hod', 'manager']),
     employeeIds: z.array(IdSchema).max(30).default([]),
     designation: z.string().trim().max(80).optional(),
   }),

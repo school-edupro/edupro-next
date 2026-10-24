@@ -33,6 +33,8 @@ const PAGES = [
   '/library',
   '/library?view=history',
   '/library?view=find&q=a',
+  '/resignation',
+  '/exit-approvals',
 ];
 
 for (const sub of ['dev-teacher']) {

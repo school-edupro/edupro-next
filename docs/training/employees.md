@@ -94,3 +94,14 @@ For the HR / office staff who keep staff records. Design: docs/design/30-employe
 4. _Can I see someone who left?_ Status: Left / inactive, or just search the name.
 5. _I need a staff list with PAN and bank details._ Columns → Identity documents and Bank details, then
    Export Excel (full numbers only with the Sensitive data viewer role).
+
+## Exits and resignations
+- **Set-up** (Employee management → Exit set-up): exit types, the notice period per type of employee, the
+  no-dues departments, and who approves an exit for each type (HOD, reporting manager, Principal, a
+  designation, named employees or a role).
+- **A resignation**: the employee asks in the staff app (My resignation) with the proposed last day and
+  the letter, or the office records it (Exits and resignations → Record an exit). The office also
+  records terminations, retirements and contract ends.
+- **Approval**: each level approves (and may set the last working day and waive the notice shortfall),
+  sends it back with a remark, or rejects it. Approvers decide on the exit page or in the staff app
+  (Exits to approve). A resignation can be withdrawn until it is accepted.

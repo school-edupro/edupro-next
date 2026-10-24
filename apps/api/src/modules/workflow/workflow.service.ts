@@ -452,7 +452,11 @@ export class WorkflowService {
     resolver: Resolver,
     requestedBy: string | null,
     /** what the request is about: the pupil's section for a class-teacher level, the department for its HOD */
-    scope: { sectionId?: string | null; department?: string | null } = {},
+    scope: {
+      sectionId?: string | null;
+      department?: string | null;
+      employeeId?: string | null;
+    } = {},
   ): Promise<string[]> {
     if (resolver.kind === 'named_user') return [resolver.userId];
     if (resolver.kind === 'staff') {
@@ -464,18 +468,25 @@ export class WorkflowService {
               `SELECT DISTINCT e.user_id::text AS id FROM employees e WHERE e.id = ANY($1::bigint[]) AND ${live}`,
               [resolver.employeeIds],
             )
-          : resolver.by === 'designation'
+          : resolver.by === 'manager'
             ? await c.query<{ id: string }>(
                 // eslint-disable-next-line no-restricted-syntax -- live is a fixed fragment
-                `SELECT DISTINCT e.user_id::text AS id FROM employees e WHERE lower(e.designation) = lower($1) AND ${live}`,
-                [resolver.designation ?? ''],
+                `SELECT DISTINCT e.user_id::text AS id FROM postings p JOIN employees e ON e.id = p.reports_to_employee_id
+                  WHERE p.employee_id = $1 AND p.academic_year_id = app.current_academic_year_id() AND ${live}`,
+                [scope.employeeId ?? null],
               )
-            : await c.query<{ id: string }>(
-                // eslint-disable-next-line no-restricted-syntax -- live is a fixed fragment
-                `SELECT DISTINCT e.user_id::text AS id FROM departments d JOIN employees e ON e.id = d.hod_employee_id
+            : resolver.by === 'designation'
+              ? await c.query<{ id: string }>(
+                  // eslint-disable-next-line no-restricted-syntax -- live is a fixed fragment
+                  `SELECT DISTINCT e.user_id::text AS id FROM employees e WHERE lower(e.designation) = lower($1) AND ${live}`,
+                  [resolver.designation ?? ''],
+                )
+              : await c.query<{ id: string }>(
+                  // eslint-disable-next-line no-restricted-syntax -- live is a fixed fragment
+                  `SELECT DISTINCT e.user_id::text AS id FROM departments d JOIN employees e ON e.id = d.hod_employee_id
                   WHERE (lower(d.name) = lower($1) OR d.code = $1) AND ${live}`,
-                [scope.department ?? ''],
-              );
+                  [scope.department ?? ''],
+                );
       return r.rows.map((x) => x.id);
     }
     if (resolver.kind === 'class_teacher') {
@@ -668,6 +679,8 @@ export class WorkflowService {
     }
     const scope = {
       sectionId: typeof input.payload?.sectionId === 'string' ? input.payload.sectionId : null,
+      department: typeof input.payload?.department === 'string' ? input.payload.department : null,
+      employeeId: typeof input.payload?.employeeId === 'string' ? input.payload.employeeId : null,
     };
     let firstAssignees: string[] = [];
     for (const level of [...def.rows[0].levels].sort((a, b) => a.level - b.level)) {
@@ -791,6 +804,7 @@ export class WorkflowService {
     const scope = {
       sectionId: typeof inst.payload.sectionId === 'string' ? inst.payload.sectionId : null,
       department: typeof inst.payload.department === 'string' ? inst.payload.department : null,
+      employeeId: typeof inst.payload.employeeId === 'string' ? inst.payload.employeeId : null,
     };
     interface Plan {
       level: Level;
@@ -1200,22 +1214,13 @@ export class WorkflowService {
   // ---- Sprint 17: cancel, reassign, comment, history --------------------------------------------
   async cancel(ctx: RequestContext, instanceId: string, dto: CancelDto): Promise<InstanceRow> {
     return this.db.tenant(requireTenant(ctx), async (c) => {
-      const cur = await c.query<{
-        status: string;
-        requested_by: string | null;
-        entity_type: string;
-      }>(
-        `SELECT status::text, requested_by::text, entity_type FROM workflow_instances WHERE id = $1 FOR UPDATE`,
+      const cur = await c.query<{ requested_by: string | null }>(
+        `SELECT requested_by::text FROM workflow_instances WHERE id = $1`,
         [instanceId],
       );
-      const row = cur.rows[0];
-      if (!row) throw new DomainError('not-found', 'Instance not found', { status: 404 });
-      if (row.status !== 'pending')
-        throw new DomainError('workflow.not_pending', `The approval is already ${row.status}`, {
-          status: 409,
-        });
+      if (!cur.rows[0]) throw new DomainError('not-found', 'Instance not found', { status: 404 });
       const mayManage = ctx.permissions?.has('workflow.instance.cancel') === true;
-      if (row.requested_by !== ctx.user.id && !mayManage)
+      if (cur.rows[0].requested_by !== ctx.user.id && !mayManage)
         throw new DomainError(
           'permission-denied',
           'Only the requester or a workflow manager may cancel',
@@ -1223,27 +1228,50 @@ export class WorkflowService {
             status: 403,
           },
         );
-      await c.query(
-        `UPDATE workflow_steps SET status = 'skipped' WHERE instance_id = $1 AND status = 'pending'`,
-        [instanceId],
-      );
-      await c.query(
-        `UPDATE workflow_instances SET status = 'cancelled', cancel_reason = $2, completed_at = now(), completed_by = app.current_user_id(), updated_at = now() WHERE id = $1`,
-        [instanceId, dto.reason],
-      );
-      await this.event(c, instanceId, null, 'cancelled', ctx.user.id, dto.reason);
-      const instance = (await this.instanceWith(c, instanceId))!;
-      await this.audit.stage(ctx, c, {
-        action: 'workflow.instance.cancelled',
-        entityType: 'workflow_instances',
-        entityId: instanceId,
-        after: { reason: dto.reason },
-      });
-      // the owning module treats a cancellation like a rejection (the entity goes back to its author)
-      const handler = this.handlers.get(instance.entityType);
-      if (handler) await handler(c, ctx, instance, 'rejected');
-      return instance;
+      return this.cancelIn(c, ctx, instanceId, dto.reason);
     });
+  }
+
+  /**
+   * Cancels a pending approval in the caller's transaction, for a module that checked its own rights
+   * (an employee withdrawing their resignation raised by the office, the office withdrawing it).
+   */
+  async cancelIn(
+    c: PoolClient,
+    ctx: RequestContext,
+    instanceId: string,
+    reason: string,
+  ): Promise<InstanceRow> {
+    const cur = await c.query<{ status: string }>(
+      `SELECT status::text FROM workflow_instances WHERE id = $1 FOR UPDATE`,
+      [instanceId],
+    );
+    const row = cur.rows[0];
+    if (!row) throw new DomainError('not-found', 'Instance not found', { status: 404 });
+    if (row.status !== 'pending')
+      throw new DomainError('workflow.not_pending', `The approval is already ${row.status}`, {
+        status: 409,
+      });
+    await c.query(
+      `UPDATE workflow_steps SET status = 'skipped' WHERE instance_id = $1 AND status = 'pending'`,
+      [instanceId],
+    );
+    await c.query(
+      `UPDATE workflow_instances SET status = 'cancelled', cancel_reason = $2, completed_at = now(), completed_by = app.current_user_id(), updated_at = now() WHERE id = $1`,
+      [instanceId, reason],
+    );
+    await this.event(c, instanceId, null, 'cancelled', ctx.user.id, reason);
+    const instance = (await this.instanceWith(c, instanceId))!;
+    await this.audit.stage(ctx, c, {
+      action: 'workflow.instance.cancelled',
+      entityType: 'workflow_instances',
+      entityId: instanceId,
+      after: { reason },
+    });
+    // the owning module treats a cancellation like a rejection (the entity goes back to its author)
+    const handler = this.handlers.get(instance.entityType);
+    if (handler) await handler(c, ctx, instance, 'rejected');
+    return instance;
   }
 
   async reassign(ctx: RequestContext, stepId: string, dto: ReassignDto): Promise<InstanceRow> {

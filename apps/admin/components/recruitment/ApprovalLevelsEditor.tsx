@@ -6,11 +6,14 @@ import type { ApprovalBy, ApprovalLevel, ApprovalSetup } from '@/lib/recruitment
 
 type Row = ApprovalLevel & { key: string };
 
-const BY: Record<Exclude<ApprovalBy, 'role'>, string> = {
+const BY: Record<Exclude<ApprovalBy, 'role' | 'manager'>, string> = {
   employees: 'Named employees',
   designation: 'Everyone with a designation',
   hod: 'HOD of the vacancy’s department',
 };
+type SaveLevels = (
+  levels: ApprovalLevel[],
+) => Promise<{ ok: true; moved: number; approved: number } | { ok: false; error: string }>;
 
 /**
  * Who approves a vacancy, level by level (docs/design/34-recruitment.md, part 5): named employees, everyone
@@ -18,8 +21,41 @@ const BY: Record<Exclude<ApprovalBy, 'role'>, string> = {
  * raiser's own level and a level of someone who already approved count as approved. Saving moves the
  * vacancies waiting to the new people at once.
  */
-export function ApprovalLevelsEditor({ setup }: { setup: ApprovalSetup }) {
+export function ApprovalLevelsEditor({
+  setup,
+  save: saveLevels = saveVacancyApproval,
+  title = 'Who approves a vacancy',
+  intro,
+  hodLabel = 'HOD of the vacancy’s department',
+  hodHelp = 'The HOD set on the vacancy’s department approves.',
+  waitingNoun = ['vacancy', 'vacancies'],
+  allowManager = false,
+  allowRole = false,
+  idPrefix = 'ra',
+}: {
+  setup: ApprovalSetup;
+  /** Saves the levels (vacancy approval by default). */
+  save?: SaveLevels;
+  title?: string;
+  intro?: string;
+  hodLabel?: string;
+  hodHelp?: string;
+  waitingNoun?: [string, string];
+  /** Offer the reporting manager of the employee the request is about (employee exit). */
+  allowManager?: boolean;
+  /** Offer everyone holding a role (the principal's sign-in, accounts …). */
+  allowRole?: boolean;
+  idPrefix?: string;
+}) {
   const canEdit = setup.can.manage;
+  const choices: Array<[ApprovalBy, string]> = [
+    ['employees', BY.employees],
+    ['designation', BY.designation],
+    ['hod', hodLabel],
+    ...(allowManager
+      ? [['manager', 'Reporting manager of the employee'] as [ApprovalBy, string]]
+      : []),
+  ];
   const [rows, setRows] = useState<Row[]>(
     setup.levels.map((l, i) => ({ ...l, key: `l${String(i)}` })),
   );
@@ -57,27 +93,30 @@ export function ApprovalLevelsEditor({ setup }: { setup: ApprovalSetup }) {
     setup.roles.find((r) => r.code === code)?.name ?? code ?? '';
   const save = () =>
     start(async () => {
-      const r = await saveVacancyApproval(rows.map(({ key: _key, ...l }) => l));
+      const r = await saveLevels(rows.map(({ key: _key, ...l }) => l));
       setMsg(
         r.ok
           ? {
               tone: 'success',
-              text: `Saved.${r.moved ? ` ${String(r.moved)} vacanc${r.moved > 1 ? 'ies' : 'y'} waiting moved to the new people.` : ''}${r.approved ? ` ${String(r.approved)} had nothing left to wait for and ${r.approved > 1 ? 'are' : 'is'} approved.` : ''}`,
+              text: `Saved.${r.moved ? ` ${String(r.moved)} ${r.moved > 1 ? waitingNoun[1] : waitingNoun[0]} waiting moved to the new people.` : ''}${r.approved ? ` ${String(r.approved)} had nothing left to wait for and ${r.approved > 1 ? 'are' : 'is'} approved.` : ''}`,
             }
           : { tone: 'danger', text: r.error },
       );
     });
   return (
-    <section className="ep-card" aria-labelledby="ra-h" style={{ padding: 'var(--sp-4)' }}>
-      <h2 id="ra-h" className="ep-card__title">
-        Who approves a vacancy
+    <section
+      className="ep-card"
+      aria-labelledby={`${idPrefix}-h`}
+      style={{ padding: 'var(--sp-4)' }}
+    >
+      <h2 id={`${idPrefix}-h`} className="ep-card__title">
+        {title}
       </h2>
       <p className="ep-field__help" style={{ marginTop: 0 }}>
-        A vacancy sent for approval goes through these levels in order and shows in each approver’s
-        header approvals. A level nobody holds is skipped. The level of the person who raised it,
-        and a level of someone who already approved it, count as approved.
+        {intro ??
+          'A vacancy sent for approval goes through these levels in order and shows in each approver’s header approvals. A level nobody holds is skipped. The level of the person who raised it, and a level of someone who already approved it, count as approved.'}
         {setup.waiting
-          ? ` ${String(setup.waiting)} vacanc${setup.waiting > 1 ? 'ies are' : 'y is'} waiting now: saving moves ${setup.waiting > 1 ? 'them' : 'it'} to the new people.`
+          ? ` ${String(setup.waiting)} ${setup.waiting > 1 ? `${waitingNoun[1]} are` : `${waitingNoun[0]} is`} waiting now: saving moves ${setup.waiting > 1 ? 'them' : 'it'} to the new people.`
           : ''}
       </p>
       {msg ? (
@@ -95,10 +134,10 @@ export function ApprovalLevelsEditor({ setup }: { setup: ApprovalSetup }) {
                 <span className="ep-ra-level__n" aria-hidden="true">
                   {n}
                 </span>
-                <label className="ep-field" htmlFor={`ra-name-${r.key}`}>
+                <label className="ep-field" htmlFor={`${idPrefix}-name-${r.key}`}>
                   <span className="ep-field__label">Level {n}: name</span>
                   <input
-                    id={`ra-name-${r.key}`}
+                    id={`${idPrefix}-name-${r.key}`}
                     className="ep-input"
                     maxLength={80}
                     placeholder="HOD review, Principal approval…"
@@ -107,29 +146,29 @@ export function ApprovalLevelsEditor({ setup }: { setup: ApprovalSetup }) {
                     onChange={(e) => set(r.key, { name: e.target.value })}
                   />
                 </label>
-                <label className="ep-field" htmlFor={`ra-by-${r.key}`}>
+                <label className="ep-field" htmlFor={`${idPrefix}-by-${r.key}`}>
                   <span className="ep-field__label">Who approves</span>
                   <select
-                    id={`ra-by-${r.key}`}
+                    id={`${idPrefix}-by-${r.key}`}
                     className="ep-select"
                     value={r.by}
                     disabled={!canEdit}
                     onChange={(e) => set(r.key, { by: e.target.value as ApprovalBy })}
                   >
-                    {(Object.keys(BY) as Array<keyof typeof BY>).map((k) => (
+                    {choices.map(([k, label]) => (
                       <option key={k} value={k}>
-                        {BY[k]}
+                        {label}
                       </option>
                     ))}
-                    {r.by === 'role' ? (
+                    {r.by === 'role' && !allowRole ? (
                       <option value="role">Role: {roleName(r.roleCode)} (set before)</option>
                     ) : null}
                   </select>
                 </label>
-                <label className="ep-field ep-ra-level__sla" htmlFor={`ra-sla-${r.key}`}>
+                <label className="ep-field ep-ra-level__sla" htmlFor={`${idPrefix}-sla-${r.key}`}>
                   <span className="ep-field__label">Reply within (hours)</span>
                   <input
-                    id={`ra-sla-${r.key}`}
+                    id={`${idPrefix}-sla-${r.key}`}
                     className="ep-input"
                     type="number"
                     min={1}
@@ -191,10 +230,10 @@ export function ApprovalLevelsEditor({ setup }: { setup: ApprovalSetup }) {
                     </p>
                   )
                 ) : r.by === 'designation' ? (
-                  <label className="ep-field" htmlFor={`ra-des-${r.key}`}>
+                  <label className="ep-field" htmlFor={`${idPrefix}-des-${r.key}`}>
                     <span className="ep-field__label">Level {n}: designation</span>
                     <select
-                      id={`ra-des-${r.key}`}
+                      id={`${idPrefix}-des-${r.key}`}
                       className="ep-select"
                       value={r.designation ?? ''}
                       disabled={!canEdit}
@@ -218,10 +257,9 @@ export function ApprovalLevelsEditor({ setup }: { setup: ApprovalSetup }) {
                 ) : r.by === 'hod' ? (
                   <div>
                     <p className="ep-field__help" style={{ margin: 0 }}>
-                      The HOD set on the vacancy’s department approves. HODs who can sign in are set
-                      for {withHod.length} of {setup.departments.length} departments; a vacancy of a
-                      department without one skips this level.{' '}
-                      <a href="/masters/staff?tab=departments">Set the HODs</a>
+                      {hodHelp} HODs who can sign in are set for {withHod.length} of{' '}
+                      {setup.departments.length} departments; a department without one skips this
+                      level. <a href="/masters/staff?tab=departments">Set the HODs</a>
                     </p>
                     <details className="ep-ra-level__hods">
                       <summary>The departments and their HODs</summary>
@@ -237,6 +275,29 @@ export function ApprovalLevelsEditor({ setup }: { setup: ApprovalSetup }) {
                       </ul>
                     </details>
                   </div>
+                ) : r.by === 'manager' ? (
+                  <p className="ep-field__help" style={{ margin: 0 }}>
+                    The manager the employee reports to this year (set on the employee’s posting)
+                    approves; an employee without one skips this level.
+                  </p>
+                ) : allowRole ? (
+                  <label className="ep-field" htmlFor={`${idPrefix}-role-${r.key}`}>
+                    <span className="ep-field__label">Level {n}: role</span>
+                    <select
+                      id={`${idPrefix}-role-${r.key}`}
+                      className="ep-select"
+                      value={r.roleCode ?? ''}
+                      disabled={!canEdit}
+                      onChange={(e) => set(r.key, { roleCode: e.target.value || null })}
+                    >
+                      <option value="">Pick a role</option>
+                      {setup.roles.map((x) => (
+                        <option key={x.code} value={x.code}>
+                          {x.name}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
                 ) : (
                   <p className="ep-field__help" style={{ margin: 0 }}>
                     Everyone with the role {roleName(r.roleCode)}, as set before. Pick employees, a
