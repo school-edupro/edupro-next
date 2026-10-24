@@ -52,7 +52,7 @@ the code went and "Resend in 30 s" (at most 5 an hour per mobile / email, as tod
 set-up gets "Also show the sign-in code on screen (testing)"; each code shown is recorded, and the
 portal shows a notice while it is on.
 
-**Part 4 — Closed means closed, with a late-entry passcode.** When the session or the class is closed (or
+**Part 4 — Closed means closed, with a late-entry passcode (built 24 Oct 2026, migration 0244).** When the session or the class is closed (or
 past its closing time), the portal shows the form read-only with "Registrations closed on 11 Nov 2026":
 no new registration, no save, no submit, no registration-fee payment (corrections the office asked for
 and the admission fee after an offer are not affected). In the session's page the admin gives a

@@ -101,3 +101,31 @@ export async function withdrawRegistration(fd: FormData) {
   }).catch(() => undefined);
   redirect(`/${school}/admission`);
 }
+
+/**
+ * A late-entry passcode from the school (docs/design/41, part 4): it opens the closed class for the
+ * family, then their form for it (the draft they had, or a new one).
+ */
+export async function usePasscode(fd: FormData) {
+  const school = String(fd.get('school') ?? '').toLowerCase();
+  const code = String(fd.get('code') ?? '').trim();
+  if (!/^[a-z0-9-]{2,20}$/.test(school)) redirect('/');
+  let out: { id: string; resumed?: boolean };
+  try {
+    const p = await admissionFetch<{ cycleId: string; classId: string }>('/me/passcode', {
+      method: 'POST',
+      body: JSON.stringify({ code }),
+    });
+    out = await admissionFetch<{ id: string; resumed?: boolean }>('/me/applications', {
+      method: 'POST',
+      body: JSON.stringify({ cycleId: p.cycleId, classId: p.classId }),
+    });
+  } catch (error) {
+    const msg =
+      error instanceof PublicApiError
+        ? (error.problem.detail ?? error.problem.type)
+        : 'Could not use the passcode';
+    redirect(`/${school}/admission?error=${encodeURIComponent(String(msg).slice(0, 200))}`);
+  }
+  redirect(`/${school}/admission/application/${out.id}`);
+}

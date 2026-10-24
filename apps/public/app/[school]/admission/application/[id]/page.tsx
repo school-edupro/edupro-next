@@ -13,7 +13,7 @@ import {
 } from '@/lib/admission';
 import { AdmissionApplicationForm } from '@/components/AdmissionApplicationForm';
 import { ViewDownload } from '@/components/ViewDownload';
-import { startRegistration, withdrawRegistration } from '../../actions';
+import { startRegistration, usePasscode, withdrawRegistration } from '../../actions';
 
 /**
  * One registration in the admission portal (docs/design/39, part 3): the form while it is a draft or sent
@@ -50,7 +50,8 @@ export default async function AdmissionApplicationPage({
           .catch(() => [])
       : [];
   const st = STATUS_TEXT[app.status] ?? { label: app.status, tone: 'neutral' as const };
-  const editing = app.status === 'draft' || app.status === 'sent_back';
+  // closed for this family (no passcode): the form is read-only and the registration fee waits
+  const editing = (app.status === 'draft' && !app.locked) || app.status === 'sent_back';
 
   return (
     <>
@@ -79,6 +80,42 @@ export default async function AdmissionApplicationPage({
           style={{ marginBottom: 'var(--sp-4)' }}
         >
           {sp.error}
+        </div>
+      ) : null}
+      {app.locked ? (
+        <div className="ep-alert ep-alert--warning ep-adm-resumed" role="status">
+          <span>
+            Registrations for {app.class.name} closed
+            {app.locked.closedOn ? ` on ${app.locked.closedOn}` : ''}: this form can no longer be
+            changed, submitted or paid. If the school gave you a passcode, enter it here.
+          </span>
+          <form action={usePasscode} className="ep-adm-pass">
+            <input type="hidden" name="school" value={school} />
+            <label className="ep-field">
+              <span className="ep-sr-only">Passcode from the school</span>
+              <input
+                className="ep-input ep-adm-pass__code"
+                name="code"
+                required
+                minLength={8}
+                maxLength={20}
+                autoComplete="off"
+                placeholder="ABCD-EFGH"
+              />
+            </label>
+            <button className="ep-btn ep-btn--secondary ep-btn--sm" type="submit">
+              Use passcode
+            </button>
+          </form>
+        </div>
+      ) : app.passUntil ? (
+        <div
+          className="ep-alert ep-alert--info"
+          role="status"
+          style={{ marginBottom: 'var(--sp-4)' }}
+        >
+          Registrations are closed, and the school has opened this class for you until{' '}
+          {dmy(app.passUntil)}: fill the form and pay the fee before then.
         </div>
       ) : null}
       {sp.resumed && app.status === 'draft' ? (
@@ -236,7 +273,7 @@ export default async function AdmissionApplicationPage({
               next steps; the form and the receipt were mailed to you.
             </p>
           ) : null}
-          {app.feeDue > 0 ? (
+          {app.feeDue > 0 && !app.locked ? (
             <div style={{ display: 'grid', gap: 'var(--sp-3)' }}>
               <p style={{ margin: 0 }}>
                 The form is submitted. Pay the registration fee of{' '}

@@ -10529,12 +10529,15 @@ a.ep-pub-foot__item {
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 22rem), 1fr));
   gap: var(--sp-3);
 }
+/* tab names stay on one line; a row with many tabs wraps instead of squeezing them */
 .ep-fb__views {
   display: flex;
-  gap: var(--sp-2);
+  flex-wrap: wrap;
+  gap: 0 var(--sp-2);
   border-bottom: 1px solid var(--border-default);
 }
 .ep-fb__view {
+  white-space: nowrap;
   padding: var(--sp-2) var(--sp-3);
   border: 0;
   border-bottom: 3px solid transparent;
@@ -10996,6 +10999,34 @@ a.ep-pub-foot__item {
 .ep-sel__head .ep-as__h {
   margin: 0;
 }
+/* late-entry passcodes of a session (docs/design/41, part 4) */
+.ep-late {
+  display: grid;
+  gap: var(--sp-4);
+  min-width: 0;
+}
+.ep-late h3 {
+  margin: 0 0 var(--sp-2);
+  font-size: var(--fs-body);
+}
+.ep-late__form {
+  padding: var(--sp-4);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  background: var(--surface-card);
+}
+.ep-late__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 14rem), 1fr));
+  gap: var(--sp-3) var(--sp-4);
+}
+.ep-late__grid .ep-field {
+  min-width: 0;
+}
+.ep-late__acts {
+  display: inline-flex;
+  gap: var(--sp-1);
+}
 .ep-desk-dup {
   display: grid;
   gap: var(--sp-2);
@@ -11020,6 +11051,20 @@ a.ep-pub-foot__item {
   display: flex;
   flex-wrap: wrap;
   gap: var(--sp-2);
+}
+.ep-adm-pass {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-3);
+  align-items: flex-end;
+}
+.ep-adm-pass .ep-field {
+  flex: 1 1 14rem;
+  min-width: 0;
+}
+.ep-adm-pass__code {
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
 }
 .ep-adm-code {
   font-size: var(--fs-h4);

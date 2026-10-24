@@ -1,6 +1,7 @@
 'use client';
 import { Badge } from '@edupro/ui';
 import { useMemo, useState, useTransition } from 'react';
+import { LateEntry } from '@/components/admissions/LateEntry';
 import { MeritPoints } from '@/components/admissions/MeritPoints';
 import { VacancyShare } from '@/components/recruitment/VacancyShare';
 import {
@@ -8,7 +9,7 @@ import {
   saveSessionFees,
   saveSessionRefund,
 } from '@/lib/admission-setup-actions';
-import type { SessionClass, SessionPlan, SessionPoints } from '@/lib/admission-setup';
+import type { LatePasscode, SessionClass, SessionPlan, SessionPoints } from '@/lib/admission-setup';
 
 type Line = Omit<SessionClass, 'className' | 'formName' | 'applications' | 'registered'> & {
   applications: number;
@@ -26,14 +27,19 @@ const fromLocal = (v: string) => (v ? new Date(`${v}:00+05:30`).toISOString() : 
 export function SessionPlanner({
   plan: initial,
   points,
+  passcodes,
   canEdit,
 }: {
   plan: SessionPlan;
   points: SessionPoints;
+  /** late-entry passcodes; null when this user may not give them */
+  passcodes: LatePasscode[] | null;
   canEdit: boolean;
 }) {
   const [plan, setPlan] = useState(initial);
-  const [tab, setTab] = useState<'classes' | 'fees' | 'points' | 'share' | 'refund'>('classes');
+  const [tab, setTab] = useState<'classes' | 'fees' | 'points' | 'late' | 'share' | 'refund'>(
+    'classes',
+  );
   const [lines, setLines] = useState<Line[]>(() => initial.classes.map((c) => ({ ...c })));
   const [fees, setFees] = useState(() => initial.fees);
   const [refund, setRefund] = useState(initial.session.refundDeductionPct);
@@ -122,6 +128,7 @@ export function SessionPlanner({
             ['classes', `Classes (${String(lines.length)})`],
             ['fees', 'Fee table'],
             ['points', 'Merit points'],
+            ...(passcodes ? ([['late', 'Late entry']] as const) : []),
             ['refund', 'Offers and refund'],
             ['share', 'Public link, QR and poster'],
           ] as const
@@ -499,6 +506,16 @@ export function SessionPlanner({
       {tab === 'points' ? (
         <section aria-label="Merit points">
           <MeritPoints sessionId={plan.session.id} initial={points} canEdit={canEdit} />
+        </section>
+      ) : null}
+
+      {tab === 'late' && passcodes ? (
+        <section aria-label="Late entry">
+          <LateEntry
+            sessionId={plan.session.id}
+            classes={plan.classes.map((c) => ({ classId: c.classId, className: c.className }))}
+            initial={passcodes}
+          />
         </section>
       ) : null}
 

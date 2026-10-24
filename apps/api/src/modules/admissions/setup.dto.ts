@@ -116,3 +116,18 @@ export const SessionPointsSchema = z.object({
 });
 export class SessionPointsDto extends createZodDto(SessionPointsSchema) {}
 export type PointRuleInput = z.infer<typeof PointRule>;
+
+// ---- late-entry passcodes (docs/design/41, part 4) --------------------------------------------------
+export const PasscodeSchema = z.object({
+  classId: IdSchema,
+  email: z.string().trim().email().max(200),
+  mobile: z
+    .string()
+    .regex(/^[6-9]\d{9}$/, 'a 10-digit mobile number')
+    .optional(),
+  childName: z.string().trim().max(120).optional(),
+  /** the last day it works (India time) */
+  validUntil: DateSchema,
+  note: z.string().trim().max(300).optional(),
+});
+export class PasscodeDto extends createZodDto(PasscodeSchema) {}

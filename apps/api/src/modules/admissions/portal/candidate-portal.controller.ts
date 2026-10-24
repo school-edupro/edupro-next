@@ -25,6 +25,7 @@ import {
   CodeVerifyDto,
   PayDto,
   SaveStepDto,
+  PasscodeUseDto,
   SlotDto,
   StartDto,
   SubmitFormDto,
@@ -112,6 +113,17 @@ export class CandidatePortalController {
       body.enquiry,
       body.another ?? false,
     );
+  }
+
+  @Post('me/passcode')
+  @Public()
+  @UseGuards(AdmissionCandidateGuard)
+  @PublicThrottle(10)
+  @ApiOperation({
+    summary: 'A late-entry passcode from the school: opens a closed class for the family',
+  })
+  usePasscode(@Req() req: CandidateRequest, @Body() body: PasscodeUseDto) {
+    return this.portal.usePasscode(req.candidate!, body.code);
   }
 
   @Get('me/applications/:id')

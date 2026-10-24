@@ -938,6 +938,133 @@ describe('online admission (e2e)', () => {
       );
     });
 
+    it('locks a closed class for families; a late-entry passcode opens it for one family (docs/design/41)', async () => {
+      const step = (id: string, token: string) =>
+        inject({
+          method: 'PUT',
+          url: `/public/admission/me/applications/${id}/step`,
+          headers: pub(token),
+          json: { step: 'student', answers: answers({ first_name: 'Late' }) },
+        });
+      const draft = (
+        await inject({
+          method: 'POST',
+          url: '/public/admission/me/applications',
+          headers: pub(tokenA),
+          json: { cycleId, classId: classMini, another: true },
+        })
+      ).json().id as string;
+      // the class closes
+      await withMigrator((c) =>
+        c.query(
+          `UPDATE admission_class_criteria SET closes_at = now() - interval '1 minute' WHERE cycle_id = $1 AND class_id = $2`,
+          [cycleId, classMini],
+        ),
+      );
+      try {
+        const fresh = await inject({
+          method: 'POST',
+          url: '/public/admission/me/applications',
+          headers: pub(tokenA),
+          json: { cycleId, classId: classMini, another: true },
+        });
+        expect(fresh.statusCode).toBe(409);
+        expect(fresh.json().detail).toMatch(/closed.*late-entry passcode/);
+        expect((await step(draft, tokenA)).statusCode).toBe(409);
+        const sub = await inject({
+          method: 'POST',
+          url: `/public/admission/me/applications/${draft}/submit`,
+          headers: pub(tokenA),
+          json: { answers: answers({ first_name: 'Late' }) },
+        });
+        expect(sub.statusCode).toBe(409);
+        const seen = await inject({
+          method: 'GET',
+          url: `/public/admission/me/applications/${draft}`,
+          headers: pub(tokenA),
+        });
+        expect(seen.json().locked).toBeTruthy();
+        // the school admin opens it for family A until tomorrow; a clerk cannot
+        const tomorrow = new Date(Date.now() + 86_400_000 + 330 * 60_000)
+          .toISOString()
+          .slice(0, 10);
+        const give = {
+          classId: classMini,
+          email: `late.${Date.now()}@example.com`,
+          mobile: mobileA,
+          childName: 'Asha Verma',
+          validUntil: tomorrow,
+        };
+        const denied = await inject({
+          method: 'POST',
+          url: `/admissions/cycles/${cycleId}/passcodes`,
+          headers: h(clerk),
+          json: give,
+        });
+        expect(denied.statusCode).toBe(403);
+        const given = await inject({
+          method: 'POST',
+          url: `/admissions/cycles/${cycleId}/passcodes`,
+          headers: h(),
+          json: give,
+        });
+        expect(given.statusCode).toBe(201);
+        expect(given.json()[0]).toMatchObject({ email: give.email, state: 'sent' });
+        // the formatted email carries the passcode; the database only its hash
+        const mail = await withMigrator((c) =>
+          c.query<{ body: string }>(
+            `SELECT m.body FROM comms_messages m JOIN comms_templates t ON t.id = m.template_id
+              WHERE m.school_id = $1 AND t.code = 'admission_passcode' AND m.recipient_address = $2 ORDER BY m.id DESC LIMIT 1`,
+            [school.id, give.email],
+          ),
+        );
+        const code = /[A-HJ-NP-Z2-9]{4}-[A-HJ-NP-Z2-9]{4}/.exec(mail.rows[0]!.body)![0];
+        const use = (token: string, c: string) =>
+          inject({
+            method: 'POST',
+            url: '/public/admission/me/passcode',
+            headers: pub(token),
+            json: { code: c },
+          });
+        expect((await use(tokenA, 'ZZZZ-ZZZZ')).statusCode).toBe(400);
+        // another family cannot use it
+        expect((await use(tokenB, code)).statusCode).toBe(403);
+        const ok = await use(tokenA, code.toLowerCase().replace('-', ' '));
+        expect(ok.statusCode).toBe(201);
+        expect(ok.json()).toMatchObject({ cycleId, classId: classMini });
+        expect((await step(draft, tokenA)).statusCode).toBe(200);
+        const open = await inject({
+          method: 'GET',
+          url: `/public/admission/me/applications/${draft}`,
+          headers: pub(tokenA),
+        });
+        expect(open.json()).toMatchObject({ locked: null });
+        expect(open.json().passUntil).toBeTruthy();
+        // revoked: closed again
+        const id = given.json()[0].id as string;
+        const rev = await inject({
+          method: 'POST',
+          url: `/admissions/passcodes/${id}/revoke`,
+          headers: h(),
+        });
+        expect(rev.json()[0]).toMatchObject({ state: 'revoked' });
+        expect((await step(draft, tokenA)).statusCode).toBe(409);
+      } finally {
+        await withMigrator((c) =>
+          c.query(
+            `UPDATE admission_class_criteria SET closes_at = NULL WHERE cycle_id = $1 AND class_id = $2`,
+            [cycleId, classMini],
+          ),
+        );
+        await inject({
+          method: 'DELETE',
+          url: `/public/admission/me/applications/${draft}`,
+          headers: pub(tokenA),
+          json: {},
+        });
+      }
+    });
+
     it("opens the family's draft for the class again; another child starts a new form on purpose (docs/design/41)", async () => {
       const start = (extra: Record<string, unknown> = {}) =>
         inject({

@@ -63,3 +63,7 @@ export class SlotDto extends createZodDto(SlotSchema) {}
 
 export const WithdrawSchema = z.object({ reason: z.string().trim().max(300).optional() });
 export class WithdrawDto extends createZodDto(WithdrawSchema) {}
+
+/** A late-entry passcode as the family types it (ABCD-EFGH, case and dashes free). */
+export const PasscodeUseSchema = z.object({ code: z.string().trim().min(8).max(20) });
+export class PasscodeUseDto extends createZodDto(PasscodeUseSchema) {}

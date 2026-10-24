@@ -97,3 +97,21 @@ export interface RegistrationPoints {
   confirmedAt: string | null;
   confirmedBy: string | null;
 }
+
+/** A late-entry passcode of a session (docs/design/41, part 4). */
+export interface LatePasscode {
+  id: string;
+  classId: string;
+  className: string;
+  email: string;
+  mobile: string | null;
+  childName: string | null;
+  validUntil: string;
+  state: 'sent' | 'used' | 'expired' | 'revoked';
+  sentAt: string | null;
+  usedAt: string | null;
+  usedBy: string | null;
+  note: string | null;
+  createdBy: string | null;
+  createdAt: string;
+}

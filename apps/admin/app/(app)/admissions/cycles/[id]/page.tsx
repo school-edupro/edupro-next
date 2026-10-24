@@ -14,7 +14,7 @@ import { Notice } from '@/components/Notice';
 import { SessionPlanner } from '@/components/admissions/SessionPlanner';
 import { drawCycle, requestCycleApprovals, shortlistCycle } from '@/lib/actions';
 import { updateAdmissionSession } from '@/lib/admission-setup-actions';
-import type { SessionPlan, SessionPoints } from '@/lib/admission-setup';
+import type { LatePasscode, SessionPlan, SessionPoints } from '@/lib/admission-setup';
 import { apiFetch, getMe } from '@/lib/api';
 import type { AdmissionCycle } from '@/lib/types';
 
@@ -37,6 +37,10 @@ export default async function CyclePage({
     apiFetch<SessionPoints>(`/admissions/cycles/${id}/points`),
   ]);
   const canManage = me.permissions.includes('admissions.cycle.manage');
+  // late-entry passcodes are the admission admin's (docs/design/41, part 4)
+  const passcodes = me.permissions.includes('admissions.setup.manage')
+    ? await apiFetch<LatePasscode[]>(`/admissions/cycles/${id}/passcodes`).catch(() => null)
+    : null;
   const canDecide = me.permissions.includes('admissions.application.review');
   const classOptions = cycle.criteria.map((k) => ({ value: k.classId, label: k.classCode }));
   const local = (iso: string) =>
@@ -95,7 +99,7 @@ export default async function CyclePage({
         }
       />
       <Notice params={sp} />
-      <SessionPlanner plan={plan} points={points} canEdit={canManage} />
+      <SessionPlanner plan={plan} points={points} passcodes={passcodes} canEdit={canManage} />
       {canManage ? (
         <Card title="Session details" style={{ marginTop: 'var(--sp-5)' }}>
           <form action={updateAdmissionSession}>

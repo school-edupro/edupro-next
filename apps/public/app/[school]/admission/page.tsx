@@ -14,7 +14,7 @@ import {
 } from '@/lib/admission';
 import { AdmissionSignIn } from '@/components/AdmissionSignIn';
 import { ViewDownload } from '@/components/ViewDownload';
-import { startRegistration, withdrawRegistration } from './actions';
+import { startRegistration, usePasscode, withdrawRegistration } from './actions';
 
 /** An email or notice written in HTML, shown as plain text (no frames, nothing of it runs). */
 const htmlToText = (html: string) =>
@@ -230,6 +230,32 @@ export default async function AdmissionPortalPage({
               ))}
             </section>
           ) : null}
+        </Card>
+      ) : null}
+      {me ? (
+        <Card elevated title="Late-entry passcode" style={{ marginBottom: 'var(--sp-4)' }}>
+          <form action={usePasscode} className="ep-adm-pass">
+            <input type="hidden" name="school" value={school} />
+            <label className="ep-field">
+              <span className="ep-field__label">Passcode from the school</span>
+              <input
+                className="ep-input ep-adm-pass__code"
+                name="code"
+                required
+                minLength={8}
+                maxLength={20}
+                autoComplete="off"
+                placeholder="ABCD-EFGH"
+              />
+              <span className="ep-field__help">
+                Registrations closed? If the school emailed you a passcode, enter it to open your
+                child&apos;s form.
+              </span>
+            </label>
+            <button className="ep-btn ep-btn--secondary" type="submit">
+              Use passcode
+            </button>
+          </form>
         </Card>
       ) : null}
 

@@ -70,6 +70,10 @@ export interface PortalMe {
 }
 export interface PortalApplication {
   id: string;
+  /** registrations closed for this family: read-only, no fee (docs/design/41, part 4) */
+  locked?: { closedOn: string | null } | null;
+  /** opened for the family by a late-entry passcode until */
+  passUntil?: string | null;
   number: string | null;
   status: string;
   session: { id: string; code: string; name: string; academicYear: string };

@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Inject, Param, Put } from '@nestjs/common';
+import { Body, Controller, Get, Inject, Param, Post, Put } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { RequirePermission } from '../../common/access/require-permission.decorator';
 import { ReqCtx, type RequestContext } from '../../common/http/request-context';
@@ -7,11 +7,13 @@ import { ADMISSIONS } from './admissions.dto';
 import {
   AdmissionSettingsDto,
   FeeCategoriesDto,
+  PasscodeDto,
   SessionClassesDto,
   SessionFeesDto,
   SessionPointsDto,
   SessionSettingsDto,
 } from './setup.dto';
+import { AdmissionLateEntryService } from './late-entry.service';
 import { AdmissionPointsService } from './points.service';
 import { AdmissionSetupService } from './setup.service';
 
@@ -25,6 +27,7 @@ export class AdmissionSetupController {
   constructor(
     private readonly svc: AdmissionSetupService,
     private readonly points: AdmissionPointsService,
+    private readonly late: AdmissionLateEntryService,
     @Inject(ENV) private readonly env: Env,
   ) {}
 
@@ -109,6 +112,36 @@ export class AdmissionSetupController {
     @Body() dto: SessionPointsDto,
   ) {
     return this.points.save(ctx, id, dto);
+  }
+
+  @Get('cycles/:id/passcodes')
+  @ApiOperation({
+    summary: 'Late-entry passcodes of the session (closed classes opened for a family)',
+  })
+  @RequirePermission(ADMISSION_SETUP)
+  passcodes(@ReqCtx() ctx: RequestContext, @Param('id') id: string) {
+    return this.late.list(ctx, id);
+  }
+
+  @Post('cycles/:id/passcodes')
+  @ApiOperation({
+    summary: 'Open a closed class for one family until a date: a passcode mailed to them',
+  })
+  @RequirePermission(ADMISSION_SETUP)
+  givePasscode(@ReqCtx() ctx: RequestContext, @Param('id') id: string, @Body() dto: PasscodeDto) {
+    return this.late.create(ctx, id, dto);
+  }
+
+  @Post('passcodes/:id/resend')
+  @RequirePermission(ADMISSION_SETUP)
+  resendPasscode(@ReqCtx() ctx: RequestContext, @Param('id') id: string) {
+    return this.late.resend(ctx, id);
+  }
+
+  @Post('passcodes/:id/revoke')
+  @RequirePermission(ADMISSION_SETUP)
+  revokePasscode(@ReqCtx() ctx: RequestContext, @Param('id') id: string) {
+    return this.late.revoke(ctx, id);
   }
 
   @Get('cycles/:id/qr')

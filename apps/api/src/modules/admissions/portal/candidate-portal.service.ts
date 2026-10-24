@@ -9,6 +9,7 @@ import { FilesService } from '../../files/files.service';
 import { PaymentsService } from '../../payments/payments.service';
 import { AdmissionCoreService, type AppRow } from '../admission-core.service';
 import { startFromEnquiry } from '../enquiry-engine';
+import { classOpenFor, hashPasscode, plainPasscode } from '../late-entry.service';
 import { journey, slotOf } from '../process-engine';
 import { publicTenant } from '../public/otp.service';
 import { AdmissionScheduleService } from '../schedule.service';
@@ -23,6 +24,10 @@ const MASKED = /^X{4}-X{4}-\w{4}$/;
  * registrations (several children under one sign-in), the form tab by tab with uploads, submit, the
  * registration fee online, the registration number, the form and receipts as PDFs, withdrawing.
  */
+/** Why a family cannot go on: the class closed, and what to do. */
+const closedText = (className: string | null, closedOn: string | null) =>
+  `Registrations${className ? ` for ${className}` : ' for this class'} closed${closedOn ? ` on ${closedOn}` : ''}. If the school gave you a late-entry passcode, enter it under “Late-entry passcode” on the admission page.`;
+
 @Injectable()
 export class CandidatePortalService {
   constructor(
@@ -228,10 +233,12 @@ export class CandidatePortalService {
         throw new DomainError('admissions.no_form', 'This class has no registration form yet', {
           status: 409,
         });
-      if (!line.open && !enteredBy)
-        throw new DomainError('admissions.closed', 'Registrations for this class are closed', {
-          status: 409,
-        });
+      if (!line.open && !enteredBy) {
+        // a late-entry passcode the family used opens the class for them (docs/design/41, part 4)
+        const o = await classOpenFor(c, cycleId, classId, cand.id);
+        if (!o.open)
+          throw new DomainError('admissions.closed', closedText(null, o.closedOn), { status: 409 });
+      }
       // the mobile and email the family signed in with start the form's contact answers
       const def = await c.query<{ fields: Array<{ key: string; maps?: string; type?: string }> }>(
         `SELECT def->'fields' AS fields FROM admission_forms WHERE id = $1`,
@@ -319,8 +326,13 @@ export class CandidatePortalService {
       );
       const slot = await slotOf(c, id);
       const x = extra.rows[0]!;
+      // closed for this family: the form opens read-only and the fee waits (docs/design/41, part 4)
+      const waiting = a.status === 'draft' || (a.status === 'submitted' && !a.application_no);
+      const open = waiting ? await classOpenFor(c, a.cycle_id, a.class_id, cand.id) : null;
       return {
         ...view,
+        locked: open && !open.open ? { closedOn: open.closedOn } : null,
+        passUntil: open?.passUntil ?? null,
         steps,
         slot: slot && ['registered', 'under_review'].includes(a.status) ? slot : null,
         offer:
@@ -368,9 +380,76 @@ export class CandidatePortalService {
     );
   }
 
+  /** A draft, or a form whose registration fee is due, waits on registrations being open (or a passcode). */
+  private async mustBeOpen(c: PoolClient, cand: AdmissionCandidate, a: AppRow) {
+    if (!(a.status === 'draft' || (a.status === 'submitted' && !a.application_no))) return;
+    const o = await classOpenFor(c, a.cycle_id, a.class_id, cand.id);
+    if (!o.open)
+      throw new DomainError('admissions.closed', closedText(a.class_name, o.closedOn), {
+        status: 409,
+      });
+  }
+
+  /**
+   * A late-entry passcode from the school (docs/design/41, part 4): it works for the family it was given
+   * to (their email or mobile) until its date, and opens that class for them.
+   */
+  async usePasscode(cand: AdmissionCandidate, code: string) {
+    return this.db.tenant(this.t(cand), async (c) => {
+      const r = await c.query<{
+        id: string;
+        cycle_id: string;
+        class_id: string;
+        class_name: string;
+        email: string;
+        mobile: string | null;
+        valid_until: Date;
+        status: string;
+        used_by: string | null;
+      }>(
+        `SELECT p.id::text, p.cycle_id::text, p.class_id::text, cl.name AS class_name, p.email, p.mobile, p.valid_until,
+                p.status, p.used_by::text
+           FROM admission_passcodes p JOIN classes cl ON cl.id = p.class_id
+          WHERE p.code_hash = $1`,
+        [hashPasscode(this.env.APPLICANT_JWT_SECRET, code)],
+      );
+      const p = r.rows[0];
+      if (!p || p.status !== 'active' || plainPasscode(code).length !== 8)
+        throw new DomainError('admissions.passcode_wrong', 'This passcode is not right', {
+          status: 400,
+        });
+      if (p.valid_until.getTime() <= Date.now())
+        throw new DomainError(
+          'admissions.passcode_ended',
+          'This passcode has expired: ask the school for a new one',
+          { status: 409 },
+        );
+      const mine =
+        (cand.email && cand.email.toLowerCase() === p.email.toLowerCase()) ||
+        (cand.mobile && p.mobile && cand.mobile === p.mobile);
+      if (!mine || (p.used_by && p.used_by !== cand.id))
+        throw new DomainError(
+          'admissions.passcode_other',
+          'This passcode was given to another family: sign in with the email or mobile the school sent it to',
+          { status: 403 },
+        );
+      await c.query(
+        `UPDATE admission_passcodes SET used_by = $2, used_at = COALESCE(used_at, now()) WHERE id = $1`,
+        [p.id, cand.id],
+      );
+      return {
+        cycleId: p.cycle_id,
+        classId: p.class_id,
+        className: p.class_name,
+        validUntil: p.valid_until.toISOString(),
+      };
+    });
+  }
+
   async saveStep(cand: AdmissionCandidate, id: string, answers: AdmissionAnswers, step: string) {
     return this.db.tenant(this.t(cand), async (c) => {
       const a = await this.own(c, cand, id);
+      await this.mustBeOpen(c, cand, a);
       return this.core.save(c, a, this.unmask(answers), { step });
     });
   }
@@ -378,6 +457,7 @@ export class CandidatePortalService {
   async submit(cand: AdmissionCandidate, id: string, answers: AdmissionAnswers) {
     const out = await this.db.tenant(this.t(cand), async (c) => {
       const a = await this.own(c, cand, id);
+      await this.mustBeOpen(c, cand, a);
       return this.core.submit(c, a, this.unmask(answers), { actorApplicant: cand.id });
     });
     if (Object.keys(out.errors).length)
@@ -399,6 +479,8 @@ export class CandidatePortalService {
         throw new DomainError('admissions.nothing_due', 'Nothing is due on this registration', {
           status: 409,
         });
+      // the registration fee closes with registrations; the admission fee after an offer does not
+      if (registration) await this.mustBeOpen(c, cand, a);
       if (admission && a.offer_expires_at && a.offer_expires_at.getTime() < Date.now())
         throw new DomainError(
           'admissions.offer_lapsed',

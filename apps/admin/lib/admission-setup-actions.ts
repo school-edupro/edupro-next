@@ -6,6 +6,7 @@ import { ApiError, apiFetch } from './api';
 import type {
   AdmissionSettings,
   FeeCategory,
+  LatePasscode,
   PointRule,
   RegistrationPoints,
   SessionPlan,
@@ -192,5 +193,39 @@ export async function checkRegistrationPoints(
     'POST',
     { action, lines },
     `/admissions/registrations/${id}`,
+  );
+}
+
+/** A late-entry passcode for a family (mailed), a new one in its place, or revoked (docs/design/41). */
+export async function giveLatePasscode(
+  sessionId: string,
+  body: {
+    classId: string;
+    email: string;
+    mobile?: string;
+    childName?: string;
+    validUntil: string;
+    note?: string;
+  },
+) {
+  if (!okId(sessionId)) return { ok: false as const, error: 'Unknown session' };
+  return call<LatePasscode[]>(
+    `/admissions/cycles/${sessionId}/passcodes`,
+    'POST',
+    body,
+    `/admissions/cycles/${sessionId}`,
+  );
+}
+export async function latePasscodeAction(
+  sessionId: string,
+  id: string,
+  action: 'resend' | 'revoke',
+) {
+  if (!okId(sessionId) || !okId(id)) return { ok: false as const, error: 'Unknown passcode' };
+  return call<LatePasscode[]>(
+    `/admissions/passcodes/${id}/${action}`,
+    'POST',
+    {},
+    `/admissions/cycles/${sessionId}`,
   );
 }
