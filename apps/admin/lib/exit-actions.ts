@@ -31,7 +31,7 @@ async function call<T>(
   }
 }
 
-export async function saveExitSetup(body: Omit<ExitSetup, 'employeeTypes' | 'can'>) {
+export async function saveExitSetup(body: Omit<ExitSetup, 'employeeTypes' | 'can' | 'roles'>) {
   return call('/people/exits/setup', 'PUT', body, ['/people/exits/setup']);
 }
 
@@ -170,4 +170,27 @@ export async function findEmployees(q: string): Promise<
     department: e.department,
     designation: e.designation,
   }));
+}
+
+/** A department clears an exit, noting the dues. */
+export async function clearExit(
+  id: string,
+  department: string,
+  body: { dues: number; note?: string },
+) {
+  if (!okId(id) || !/^[a-z][a-z0-9_]{1,39}$/.test(department))
+    return { ok: false as const, error: 'Unknown clearance' };
+  return call(`/people/exits/${id}/clearance/${department}`, 'POST', body, [
+    `/people/exits/${id}`,
+    '/people/exits/clearance',
+  ]);
+}
+
+export async function reopenClearance(id: string, department: string, reason?: string) {
+  if (!okId(id) || !/^[a-z][a-z0-9_]{1,39}$/.test(department))
+    return { ok: false as const, error: 'Unknown clearance' };
+  return call(`/people/exits/${id}/clearance/${department}/reopen`, 'POST', { reason }, [
+    `/people/exits/${id}`,
+    '/people/exits/clearance',
+  ]);
 }

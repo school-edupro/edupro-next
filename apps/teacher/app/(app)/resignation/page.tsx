@@ -24,6 +24,12 @@ interface ExitRow {
   waitingAt: string | null;
 }
 interface Mine {
+  clearances: Array<{
+    department: string;
+    name: string;
+    status: 'pending' | 'cleared';
+    dues: number;
+  }>;
   employee: { name: string; code: string; typeName: string };
   types: Array<{ code: string; name: string; noticeApplies: boolean }>;
   noticeDays: number;
@@ -140,6 +146,22 @@ export default async function ResignationPage({
               </div>
             ) : null}
           </dl>
+          {open.status === 'approved' && mine.clearances.length ? (
+            <div style={{ marginTop: 'var(--sp-3)' }}>
+              <strong>
+                No-dues: {mine.clearances.filter((x) => x.status === 'cleared').length} of{' '}
+                {mine.clearances.length} departments cleared
+              </strong>
+              <ul className="ep-rp__events">
+                {mine.clearances.map((x) => (
+                  <li key={x.department}>
+                    {x.name}: {x.status === 'cleared' ? 'cleared' : 'waiting'}
+                    {x.dues > 0 ? ` · dues Rs. ${x.dues.toLocaleString('en-IN')}` : ''}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
           {open.status === 'sent_back' ? (
             <>
               <p className="ep-alert ep-alert--info" role="status">

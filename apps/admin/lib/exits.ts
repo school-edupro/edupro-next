@@ -32,7 +32,41 @@ export interface ExitRow {
   decidedAt: string | null;
   waitingAt: string | null;
 }
+export type ClearanceApprover =
+  | { kind: 'office' }
+  | { kind: 'hod' }
+  | { kind: 'role'; code: string }
+  | { kind: 'user'; userId: string };
+export interface ClearanceRow {
+  department: string;
+  name: string;
+  auto: 'library' | 'assets' | null;
+  status: 'pending' | 'cleared';
+  dues: number;
+  note: string | null;
+  actedBy: string | null;
+  actedAt: string | null;
+  approvers: string[];
+  check: { kind: string; due: boolean; amount: number; detail: string } | null;
+  mayClear: boolean;
+}
+export interface BoardExit {
+  id: string;
+  employee: {
+    id: string;
+    name: string;
+    code: string;
+    department: string | null;
+    designation: string | null;
+  };
+  exitType: string;
+  lastDay: string | null;
+  clearances: ClearanceRow[];
+  pending: number;
+  dues: number;
+}
 export interface ExitDetail extends ExitRow {
+  clearances: ClearanceRow[];
   events: Array<{ what: string; note: string | null; by: string | null; at: string }>;
   steps: Array<{
     level: number;
@@ -59,7 +93,9 @@ export interface ExitSetup {
     name: string;
     auto: 'library' | 'assets' | null;
     active: boolean;
+    approvers: ClearanceApprover[];
   }>;
+  roles: Array<{ code: string; name: string }>;
   employeeTypes: Array<{ code: EmployeeType; name: string }>;
   can: { manage: boolean };
 }
@@ -83,6 +119,9 @@ export const EXIT_EVENT: Record<string, string> = {
   rejected: 'Not accepted',
   withdrawn: 'Withdrawn',
   approval_moved: 'Approvers changed',
+  cleared: 'Cleared',
+  all_cleared: 'Every department has cleared',
+  reopened: 'Clearance opened again',
 };
 export const dmy = (iso: string | null) =>
   iso ? `${iso.slice(8, 10)}-${iso.slice(5, 7)}-${iso.slice(0, 4)}` : '—';

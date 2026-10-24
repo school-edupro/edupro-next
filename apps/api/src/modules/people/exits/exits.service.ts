@@ -13,6 +13,7 @@ import {
   ExitSetupService,
   exitFlowCode,
 } from './exit-setup.service';
+import { ExitClearanceService } from './exit-clearance.service';
 import type {
   EmployeeType,
   ExitCreateDto,
@@ -164,6 +165,7 @@ export class ExitsService {
     private readonly workflow: WorkflowService,
     private readonly setup: ExitSetupService,
     private readonly files: FilesService,
+    private readonly clearance: ExitClearanceService,
   ) {}
 
   private async employee(c: PoolClient, id: string): Promise<Emp> {
@@ -413,8 +415,16 @@ export class ExitsService {
         : null;
       const step = await this.myStep(c, x.workflow_instance_id);
       const manage = ctx.permissions?.has(PEOPLE.exitManage) === true;
+      if (x.status === 'approved') await this.clearance.makeBoard(c, x.id);
+      const clearances = await this.clearance.rowsWith(c, ctx, {
+        id: x.id,
+        employeeId: x.employee_id,
+        department: x.emp_department,
+        open: x.status === 'approved',
+      });
       return {
         ...toRow(x),
+        clearances,
         events: events.rows.map((e) => ({
           what: e.what,
           note: e.note,
@@ -547,6 +557,8 @@ export class ExitsService {
         [instance.entityId, note],
       );
       await this.event(c, ctx, instance.entityId, 'approved', note);
+      // the no-dues clearance starts (part 6)
+      await this.clearance.makeBoard(c, instance.entityId);
       return;
     }
     const cancelled = await c.query<{ status: string }>(
@@ -668,7 +680,26 @@ export class ExitsService {
       const r = await c.query<ExitDb>(`${SELECT} WHERE x.employee_id = $1 ORDER BY x.id DESC`, [
         emp.id,
       ]);
+      const rows = r.rows.map(toRow);
+      const open = r.rows.find((x) => x.status === 'approved');
+      const clearances = open
+        ? (
+            await this.clearance.rowsWith(c, ctx, {
+              id: open.id,
+              employeeId: open.employee_id,
+              department: open.emp_department,
+              open: false,
+            })
+          ).map(({ department, name, status, dues, actedAt }) => ({
+            department,
+            name,
+            status,
+            dues,
+            actedAt,
+          }))
+        : [];
       return {
+        clearances,
         employee: {
           id: emp.id,
           name: emp.name,
@@ -677,7 +708,7 @@ export class ExitsService {
         },
         types: types.map((t) => ({ code: t.code, name: t.name, noticeApplies: t.noticeApplies })),
         noticeDays: notice,
-        data: r.rows.map(toRow),
+        data: rows,
       };
     });
   }

@@ -63,3 +63,22 @@
   `GET people/exits/to-approve`, `GET people/exits/:id`, `GET people/exits/:id/letter`,
   `POST people/exits/:id/approve|send-back|reject|withdraw|resubmit`, `GET|POST me/exits`. Tests:
   `employee-exits.e2e-spec.ts` (5).
+
+## Part 6 as built (24 Oct 2026)
+- Migration 0238: who clears each department (`exit_clearance_departments.approvers`: the office, the
+  HOD of the employee's department, a role, named users; Library starts with the librarian, Accounts with
+  the accountant, HOD hand-over with the HOD, all with the office) and `exit_clearances` (one row per
+  department in use, made when the exit is accepted).
+- Each department clears the exit or notes dues with an amount and a note; what the system shows is kept
+  with it. Library: books not returned, unpaid fines and unpaid library charges of the employee (the
+  same counts the student withdrawal uses). Assets: EduPro keeps no asset register yet, so the department
+  notes anything not returned by hand. A department whose system check shows something owed clears only
+  with the dues or a note. The office may open a department's clearance again. When every department has
+  cleared, the timeline says so.
+- Where: **No-dues clearance** (the board of accepted exits, Employee management), the exit page
+  (clear or open again), the staff app **No-dues to clear** (shown when a department waits for the
+  person: an HOD, the librarian) and the employee's **My resignation** (progress and dues).
+- The dues are summed for the full and final statement (part 7).
+- API: `GET people/exits/clearance`, `GET people/exits/clearance/mine`,
+  `POST people/exits/:id/clearance/:department`, `POST …/reopen`; set-up carries the departments'
+  approvers. Tests: 4 more cases in `employee-exits.e2e-spec.ts`.

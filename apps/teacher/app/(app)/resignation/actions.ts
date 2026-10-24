@@ -101,3 +101,19 @@ export async function sendBackExit(fd: FormData) {
 export async function rejectExit(fd: FormData) {
   return decide(fd, 'reject');
 }
+
+/** A department I clear for clears a colleague's exit, noting the dues. */
+export async function clearForDepartment(fd: FormData) {
+  try {
+    await bff.api.fetch(`/people/exits/${str(fd, 'id')}/clearance/${str(fd, 'department')}`, {
+      method: 'POST',
+      body: JSON.stringify({
+        dues: Number(str(fd, 'dues') || 0),
+        ...(str(fd, 'note') ? { note: str(fd, 'note') } : {}),
+      }),
+    });
+  } catch (error) {
+    failed(error, '/no-dues');
+  }
+  redirect('/no-dues?ok=cleared');
+}

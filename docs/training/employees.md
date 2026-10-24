@@ -105,3 +105,7 @@ For the HR / office staff who keep staff records. Design: docs/design/30-employe
 - **Approval**: each level approves (and may set the last working day and waive the notice shortfall),
   sends it back with a remark, or rejects it. Approvers decide on the exit page or in the staff app
   (Exits to approve). A resignation can be withdrawn until it is accepted.
+- **No-dues**: once an exit is accepted, each department (Library, Accounts, IT and assets, Admin, HOD
+  hand-over, Transport, Hostel, as set up) clears it or notes what is owed. Library books still out and
+  unpaid fines show by themselves. Departments clear on the exit page or in the staff app (No-dues to
+  clear); Employee management → No-dues clearance shows every exit's progress.

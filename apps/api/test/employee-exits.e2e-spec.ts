@@ -301,4 +301,202 @@ describe('employee exits (e2e)', () => {
       withdrawn: 1,
     });
   });
+
+  describe('part 6: no-dues clearance', () => {
+    let exitId: string;
+    let librarian: SeededUser;
+
+    beforeAll(async () => {
+      exitId = (
+        await withMigrator((c) =>
+          c.query<{ id: string }>(
+            `SELECT id::text FROM employee_exits WHERE employee_id = $1 AND status = 'approved'`,
+            [emp.t1],
+          ),
+        )
+      ).rows[0]!.id;
+      await withMigrator(async (c) => {
+        librarian = await seedUser(c, school, `${school.code}-lib`, 'librarian');
+        // Ravi still has a library book
+        const lib = await c.query<{ id: string }>(
+          `INSERT INTO library_libraries (school_id, code, name) VALUES ($1, 'MAIN', 'Main library') RETURNING id::text`,
+          [school.id],
+        );
+        const t = await c.query<{ id: string }>(
+          `INSERT INTO library_titles (school_id, title) VALUES ($1, 'Physics') RETURNING id::text`,
+          [school.id],
+        );
+        const cp = await c.query<{ id: string }>(
+          `INSERT INTO library_copies (school_id, title_id, accession_no, library_id) VALUES ($1, $2, 'A1', $3) RETURNING id::text`,
+          [school.id, t.rows[0]!.id, lib.rows[0]!.id],
+        );
+        await c.query(
+          `INSERT INTO library_loans (school_id, copy_id, borrower_kind, borrower_id, issued_on, due_on)
+           VALUES ($1, $2, 'employee', $3, CURRENT_DATE - 5, CURRENT_DATE + 9)`,
+          [school.id, cp.rows[0]!.id, emp.t1],
+        );
+      });
+    });
+
+    it('an accepted exit gets its board: every department in use, the library shown from the system', async () => {
+      const board = await inject({ method: 'GET', url: '/people/exits/clearance', headers: h() });
+      expect(board.statusCode).toBe(200);
+      const x = (
+        board.json().data as Array<{
+          id: string;
+          pending: number;
+          clearances: Array<{
+            department: string;
+            check: { due: boolean; detail: string } | null;
+            mayClear: boolean;
+          }>;
+        }>
+      ).find((e) => e.id === exitId)!;
+      expect(x.pending).toBe(7);
+      const library = x.clearances.find((r) => r.department === 'library')!;
+      expect(library.check).toMatchObject({ due: true, detail: '1 book not returned' });
+      expect(library.mayClear).toBe(true);
+      expect(x.clearances.find((r) => r.department === 'it_assets')!.check!.detail).toMatch(
+        /no asset register/,
+      );
+    });
+
+    it('each department clears it, by the people set: the librarian, the HOD, the office', async () => {
+      const mine = await inject({
+        method: 'GET',
+        url: '/people/exits/clearance/mine',
+        headers: h(hodU),
+      });
+      expect(mine.json().data.map((x: { id: string }) => x.id)).toEqual([exitId]);
+      const notHers = await inject({
+        method: 'POST',
+        url: `/people/exits/${exitId}/clearance/library`,
+        headers: h(hodU),
+        json: { dues: 0 },
+      });
+      expect(notHers.statusCode).toBe(403);
+      // a book out: cleared only with the dues written down
+      const bare = await inject({
+        method: 'POST',
+        url: `/people/exits/${exitId}/clearance/library`,
+        headers: h(librarian),
+        json: { dues: 0 },
+      });
+      expect(bare.statusCode).toBe(400);
+      const lib = await inject({
+        method: 'POST',
+        url: `/people/exits/${exitId}/clearance/library`,
+        headers: h(librarian),
+        json: { dues: 450, note: 'Physics not returned' },
+      });
+      expect(lib.json()).toMatchObject({ cleared: 'library', pending: 6 });
+      const hod = await inject({
+        method: 'POST',
+        url: `/people/exits/${exitId}/clearance/hod`,
+        headers: h(hodU),
+        json: { dues: 0, note: 'Hand-over done' },
+      });
+      expect(hod.statusCode).toBe(200);
+      const again = await inject({
+        method: 'POST',
+        url: `/people/exits/${exitId}/clearance/hod`,
+        headers: h(),
+        json: { dues: 0 },
+      });
+      expect(again.statusCode).toBe(409);
+      for (const d of ['accounts', 'it_assets', 'admin', 'transport', 'hostel'])
+        expect(
+          (
+            await inject({
+              method: 'POST',
+              url: `/people/exits/${exitId}/clearance/${d}`,
+              headers: h(),
+              json: { dues: d === 'it_assets' ? 1200 : 0 },
+            })
+          ).statusCode,
+        ).toBe(200);
+      const x = await inject({ method: 'GET', url: `/people/exits/${exitId}`, headers: h() });
+      expect(x.json().clearances.every((r: { status: string }) => r.status === 'cleared')).toBe(
+        true,
+      );
+      expect(x.json().clearances.reduce((s: number, r: { dues: number }) => s + r.dues, 0)).toBe(
+        1650,
+      );
+      expect(x.json().events.map((e: { what: string }) => e.what)).toContain('all_cleared');
+      // the employee sees the progress
+      const own = await inject({ method: 'GET', url: '/me/exits', headers: h(t1U) });
+      expect(own.json().clearances).toHaveLength(7);
+    });
+
+    it('the office opens a clearance again; nobody else can', async () => {
+      const no = await inject({
+        method: 'POST',
+        url: `/people/exits/${exitId}/clearance/library/reopen`,
+        headers: h(librarian),
+        json: {},
+      });
+      expect(no.statusCode).toBe(403);
+      const ok = await inject({
+        method: 'POST',
+        url: `/people/exits/${exitId}/clearance/library/reopen`,
+        headers: h(),
+        json: { reason: 'Dues amount was wrong' },
+      });
+      expect(ok.statusCode).toBe(200);
+      const x = await inject({ method: 'GET', url: `/people/exits/${exitId}`, headers: h() });
+      expect(
+        x.json().clearances.find((r: { department: string }) => r.department === 'library'),
+      ).toMatchObject({
+        status: 'pending',
+        dues: 0,
+      });
+    });
+
+    it('who clears a department is set up; a pending exit has no board', async () => {
+      const setup = await inject({ method: 'GET', url: '/people/exits/setup', headers: h() });
+      const depts = setup.json().departments as Array<{ code: string; approvers: unknown[] }>;
+      expect(depts.find((d) => d.code === 'hod')!.approvers).toEqual([
+        { kind: 'hod' },
+        { kind: 'office' },
+      ]);
+      const saved = await inject({
+        method: 'PUT',
+        url: '/people/exits/setup',
+        headers: h(),
+        json: {
+          types: setup.json().types,
+          noticeDays: setup.json().noticeDays,
+          departments: depts.map((d) =>
+            d.code === 'transport' ? { ...d, approvers: [{ kind: 'user', userId: t2U.id }] } : d,
+          ),
+        },
+      });
+      expect(saved.statusCode).toBe(200);
+      const pending = await inject({
+        method: 'POST',
+        url: '/people/exits',
+        headers: h(),
+        json: {
+          employeeId: emp.hod,
+          exitType: 'retirement',
+          reason: 'Retiring',
+          proposedLastDay: day(10),
+        },
+      });
+      const early = await inject({
+        method: 'POST',
+        url: `/people/exits/${pending.json().id}/clearance/library`,
+        headers: h(),
+        json: { dues: 0 },
+      });
+      expect(pending.json().status).toBe('pending');
+      expect(early.statusCode).toBe(409);
+      const after = await inject({ method: 'GET', url: '/people/exits/setup', headers: h() });
+      expect(
+        (after.json().departments as Array<{ code: string; approvers: unknown[] }>).find(
+          (d) => d.code === 'transport',
+        )!.approvers,
+      ).toEqual([{ kind: 'user', userId: t2U.id }]);
+    });
+  });
 });

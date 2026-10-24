@@ -35,13 +35,14 @@ const PAGES = [
   '/library?view=find&q=a',
   '/resignation',
   '/exit-approvals',
+  '/no-dues',
 ];
 
 for (const sub of ['dev-teacher']) {
   for (const width of [1280, 375]) {
     test(`teacher ${sub} @${width}`, async ({ page }) => {
       // the list of pages has grown: the default 30 s is not enough for all of them
-      test.setTimeout(120_000);
+      test.setTimeout(180_000);
       await page.setViewportSize({ width, height: 900 });
       await page.goto(`${BASE}/login`);
       await page.selectOption('select[name=sub]', sub);

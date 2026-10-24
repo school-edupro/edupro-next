@@ -5,9 +5,11 @@ import { AuthenticatedOnly } from '../../../common/auth/decorators';
 import { DomainError } from '../../../common/errors/domain-error';
 import { ReqCtx, type RequestContext } from '../../../common/http/request-context';
 import { PEOPLE } from '../people.permissions';
+import { ExitClearanceService } from './exit-clearance.service';
 import { ExitSetupService } from './exit-setup.service';
 import {
   EMPLOYEE_TYPES,
+  ClearDto,
   ExitApprovalDto,
   ExitCreateDto,
   ExitDecisionDto,
@@ -16,6 +18,7 @@ import {
   ExitSetupDto,
   ExitWithdrawDto,
   MyExitDto,
+  ReopenDto,
   type EmployeeType,
 } from './exits.dto';
 import { ExitsService } from './exits.service';
@@ -34,6 +37,7 @@ export class ExitsController {
   constructor(
     private readonly exits: ExitsService,
     private readonly setup: ExitSetupService,
+    private readonly clearance: ExitClearanceService,
   ) {}
 
   @Get('people/exits/setup')
@@ -88,6 +92,48 @@ export class ExitsController {
   @AuthenticatedOnly()
   toApprove(@ReqCtx() ctx: RequestContext) {
     return this.exits.toApprove(ctx);
+  }
+
+  @Get('people/exits/clearance')
+  @ApiOperation({ summary: 'The no-dues board: accepted exits and their departments' })
+  @RequirePermission(PEOPLE.exitView)
+  board(@ReqCtx() ctx: RequestContext) {
+    return this.clearance.board(ctx, { mine: false });
+  }
+
+  @Get('people/exits/clearance/mine')
+  @ApiOperation({ summary: 'Exits with a department waiting for my clearance' })
+  // anybody may clear a department (the HOD, the librarian): empty for those who do not
+  @AuthenticatedOnly()
+  myBoard(@ReqCtx() ctx: RequestContext) {
+    return this.clearance.board(ctx, { mine: true });
+  }
+
+  @Post('people/exits/:id/clearance/:department')
+  @HttpCode(200)
+  @ApiOperation({ summary: 'Clear the exit for a department, noting any dues' })
+  // the department's approvers (checked in the service)
+  @AuthenticatedOnly()
+  clear(
+    @ReqCtx() ctx: RequestContext,
+    @Param('id') id: string,
+    @Param('department') department: string,
+    @Body() dto: ClearDto,
+  ) {
+    return this.clearance.clear(ctx, id, department, dto);
+  }
+
+  @Post('people/exits/:id/clearance/:department/reopen')
+  @HttpCode(200)
+  @ApiOperation({ summary: 'Open a department’s clearance again (the office)' })
+  @RequirePermission(PEOPLE.exitManage)
+  reopen(
+    @ReqCtx() ctx: RequestContext,
+    @Param('id') id: string,
+    @Param('department') department: string,
+    @Body() dto: ReopenDto,
+  ) {
+    return this.clearance.reopen(ctx, id, department, dto.reason);
   }
 
   @Get('people/exits/:id')

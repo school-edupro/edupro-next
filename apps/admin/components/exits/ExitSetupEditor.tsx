@@ -1,7 +1,8 @@
 'use client';
 import { useState, useTransition } from 'react';
+import { ChipPicker } from '@/components/ChipPicker';
 import { saveExitSetup } from '@/lib/exit-actions';
-import type { ExitSetup } from '@/lib/exits';
+import type { ClearanceApprover, ExitSetup } from '@/lib/exits';
 
 type TypeRow = ExitSetup['types'][number];
 type DeptRow = ExitSetup['departments'][number];
@@ -28,15 +29,37 @@ export function ExitSetupEditor({ setup }: { setup: ExitSetup }) {
     setTypes((cur) => cur.map((t, j) => (j === i ? { ...t, ...patch } : t)));
   const setDept = (i: number, patch: Partial<DeptRow>) =>
     setDepts((cur) => cur.map((d, j) => (j === i ? { ...d, ...patch } : d)));
+  const has = (d: DeptRow, kind: 'office' | 'hod') => d.approvers.some((a) => a.kind === kind);
+  const toggle = (i: number, kind: 'office' | 'hod', on: boolean) =>
+    setDept(i, {
+      approvers: on
+        ? [...depts[i]!.approvers, { kind }]
+        : depts[i]!.approvers.filter((a) => a.kind !== kind),
+    });
+  const rolesOf = (d: DeptRow) => d.approvers.flatMap((a) => (a.kind === 'role' ? [a.code] : []));
+  const setRoles = (i: number, codes: string[]) =>
+    setDept(i, {
+      approvers: [
+        ...depts[i]!.approvers.filter((a) => a.kind !== 'role'),
+        ...codes.map((code): ClearanceApprover => ({ kind: 'role', code })),
+      ],
+    });
+  const roleOptions = setup.roles.map((r) => ({ value: r.code, label: r.name }));
 
   return (
     <section
       className="ep-card"
-      style={{ padding: 'var(--sp-4)', display: 'grid', gap: 'var(--sp-4)' }}
+      // one column that may shrink: the wide tables scroll inside their own box, not the page
+      style={{
+        padding: 'var(--sp-4)',
+        display: 'grid',
+        gap: 'var(--sp-4)',
+        gridTemplateColumns: 'minmax(0, 1fr)',
+      }}
     >
       <div>
         <h2 className="ep-card__title">Exit types</h2>
-        <div className="ep-table-wrap">
+        <div className="ep-table-wrap" style={{ position: 'relative' }}>
           <table className="ep-table">
             <caption className="ep-sr-only">Exit types</caption>
             <thead>
@@ -131,13 +154,14 @@ export function ExitSetupEditor({ setup }: { setup: ExitSetup }) {
           Each clears an exit or notes dues. Library and assets fill in what the system knows (books
           on loan, unpaid library charges).
         </p>
-        <div className="ep-table-wrap">
+        <div className="ep-table-wrap" style={{ position: 'relative' }}>
           <table className="ep-table">
             <caption className="ep-sr-only">Clearance departments</caption>
             <thead>
               <tr>
                 <th scope="col">Department</th>
                 <th scope="col">Dues from the system</th>
+                <th scope="col">Who clears</th>
                 <th scope="col">In use</th>
               </tr>
             </thead>
@@ -169,6 +193,40 @@ export function ExitSetupEditor({ setup }: { setup: ExitSetup }) {
                       <option value="assets">Assets issued</option>
                     </select>
                   </td>
+                  <td style={{ minWidth: '16rem' }}>
+                    {(['office', 'hod'] as const).map((k) => (
+                      <label key={k} className="ep-check">
+                        <input
+                          type="checkbox"
+                          className="ep-check__input"
+                          checked={has(d, k)}
+                          disabled={!canEdit}
+                          onChange={(e) => toggle(i, k, e.target.checked)}
+                        />
+                        <span className="ep-check__box" aria-hidden="true" />
+                        <span className="ep-check__text">
+                          {k === 'office' ? 'The office' : 'HOD of the employee'}
+                        </span>
+                      </label>
+                    ))}
+                    {canEdit ? (
+                      <ChipPicker
+                        label={`${d.name || 'Department'}: roles that clear`}
+                        options={roleOptions}
+                        value={rolesOf(d)}
+                        onChange={(next) => setRoles(i, next)}
+                      />
+                    ) : (
+                      <span className="ep-field__help">
+                        {rolesOf(d)
+                          .map((c) => setup.roles.find((r) => r.code === c)?.name ?? c)
+                          .join(', ')}
+                      </span>
+                    )}
+                    {d.approvers.some((a) => a.kind === 'user') ? (
+                      <span className="ep-field__help">and named people set before</span>
+                    ) : null}
+                  </td>
                   <td>
                     <label className="ep-check">
                       <input
@@ -193,7 +251,10 @@ export function ExitSetupEditor({ setup }: { setup: ExitSetup }) {
             className="ep-btn ep-btn--ghost ep-btn--sm"
             disabled={depts.length >= 20}
             onClick={() =>
-              setDepts((cur) => [...cur, { code: '', name: '', auto: null, active: true }])
+              setDepts((cur) => [
+                ...cur,
+                { code: '', name: '', auto: null, active: true, approvers: [{ kind: 'office' }] },
+              ])
             }
           >
             Add a department
@@ -226,6 +287,11 @@ export function ExitSetupEditor({ setup }: { setup: ExitSetup }) {
                       used.add(code);
                       return { ...x, name: x.name.trim(), code };
                     });
+                if (depts.some((d) => d.name.trim() && d.active && !d.approvers.length))
+                  return setMsg({
+                    tone: 'danger',
+                    text: 'Each department in use needs someone who clears it',
+                  });
                 const t = withCode(types);
                 used.clear();
                 const d = withCode(depts);

@@ -1,9 +1,10 @@
 import { Badge, Breadcrumbs, Card, PageHeader } from '@edupro/ui';
 import { notFound } from 'next/navigation';
 import { ExitActions } from '@/components/exits/ExitActions';
+import { ExitClearance } from '@/components/exits/ExitClearance';
 import { ViewDownload } from '@/components/admissions/ViewDownload';
 import { Notice } from '@/components/Notice';
-import { ApiError, apiFetch } from '@/lib/api';
+import { ApiError, apiFetch, getMe } from '@/lib/api';
 import { EXIT_EVENT, EXIT_STATUS, dmy, type ExitDetail } from '@/lib/exits';
 
 const STEP: Record<string, string> = {
@@ -26,6 +27,7 @@ export default async function ExitPage({
   const { id } = await params;
   const sp = await searchParams;
   if (!/^\d{1,18}$/.test(id)) notFound();
+  const me = await getMe();
   const x = await apiFetch<ExitDetail>(`/people/exits/${id}`).catch((e: unknown) => {
     if (e instanceof ApiError && e.status === 404) notFound();
     throw e;
@@ -117,6 +119,15 @@ export default async function ExitPage({
       <div style={{ marginTop: 'var(--sp-4)' }}>
         <ExitActions x={x} />
       </div>
+      {x.clearances.length ? (
+        <Card title="No-dues clearance" style={{ marginTop: 'var(--sp-4)' }}>
+          <ExitClearance
+            exitId={x.id}
+            rows={x.clearances}
+            canReopen={x.status === 'approved' && me.permissions.includes('people.exit.manage')}
+          />
+        </Card>
+      ) : null}
       <Card title="What happened" style={{ marginTop: 'var(--sp-4)' }}>
         <ul className="ep-rp__events">
           {x.events.map((e, i) => (

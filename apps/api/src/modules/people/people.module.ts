@@ -45,6 +45,7 @@ import { StudentCorrectionsController } from './student-corrections.controller';
 import { StudentCorrectionsService } from './student-corrections.service';
 import { ClassCorrectionsService } from './class-corrections.service';
 import { StudentMergesController } from './student-merges.controller';
+import { ExitClearanceService } from './exits/exit-clearance.service';
 import { ExitSetupService } from './exits/exit-setup.service';
 import { ExitsController } from './exits/exits.controller';
 import { ExitsService } from './exits/exits.service';
@@ -108,6 +109,7 @@ import { StudentsService } from './students.service';
     ClassCorrectionsService,
     StudentMergesService,
     ExitSetupService,
+    ExitClearanceService,
     ExitsService,
     StudentGridService,
     StudentProfileService,

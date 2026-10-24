@@ -20,6 +20,8 @@ export interface StaffWaiting {
   profileChanges?: number;
   /** colleagues' exits waiting at my approval level */
   exits?: number;
+  /** colleagues' no-dues waiting for a department I clear */
+  noDues?: number;
 }
 export interface StaffGroup {
   id: string;
@@ -176,6 +178,12 @@ export const STAFF_MENU: StaffGroup[] = [
         label: 'Exits to approve',
         help: 'Resignations of colleagues waiting for your decision',
         allowed: (_can, w) => (w.exits ?? 0) > 0,
+      },
+      {
+        href: '/no-dues',
+        label: 'No-dues to clear',
+        help: 'Colleagues leaving: clear for your department or note what they owe',
+        allowed: (_can, w) => (w.noDues ?? 0) > 0,
       },
       {
         href: '/library',

@@ -7,6 +7,7 @@ import { requireTenant, type RequestContext } from '../../../common/http/request
 import { WorkflowService, type Level } from '../../workflow/workflow.service';
 import { buildLevels, setupLists, toSetup } from '../approval-levels';
 import { PEOPLE } from '../people.permissions';
+import type { ClearanceApprover } from './exit-clearance.service';
 import {
   EMPLOYEE_TYPES,
   type EmployeeType,
@@ -52,14 +53,17 @@ const DEFAULT_NOTICE: Record<EmployeeType, number> = {
   contract: 30,
   visiting: 0,
 };
-const DEFAULT_DEPARTMENTS: Array<[string, string, 'library' | 'assets' | null]> = [
-  ['library', 'Library', 'library'],
-  ['accounts', 'Accounts', null],
-  ['it_assets', 'IT and assets', 'assets'],
-  ['admin', 'Admin and ID card', null],
-  ['hod', 'HOD (hand-over)', null],
-  ['transport', 'Transport', null],
-  ['hostel', 'Hostel', null],
+const OFFICE: ClearanceApprover[] = [{ kind: 'office' }];
+const DEFAULT_DEPARTMENTS: Array<
+  [string, string, 'library' | 'assets' | null, ClearanceApprover[]]
+> = [
+  ['library', 'Library', 'library', [{ kind: 'role', code: 'librarian' }, ...OFFICE]],
+  ['accounts', 'Accounts', null, [{ kind: 'role', code: 'accountant' }, ...OFFICE]],
+  ['it_assets', 'IT and assets', 'assets', OFFICE],
+  ['admin', 'Admin and ID card', null, OFFICE],
+  ['hod', 'HOD (hand-over)', null, [{ kind: 'hod' }, ...OFFICE]],
+  ['transport', 'Transport', null, OFFICE],
+  ['hostel', 'Hostel', null, OFFICE],
 ];
 
 /**
@@ -93,11 +97,11 @@ export class ExitSetupService {
       [JSON.stringify(DEFAULT_NOTICE)],
     );
     if (!has.rows[0]!.departments)
-      for (const [i, [code, name, auto]] of DEFAULT_DEPARTMENTS.entries())
+      for (const [i, [code, name, auto, approvers]] of DEFAULT_DEPARTMENTS.entries())
         await c.query(
-          `INSERT INTO exit_clearance_departments (school_id, code, name, auto, sort_order)
-           VALUES (app.current_school_id(), $1, $2, $3, $4) ON CONFLICT DO NOTHING`,
-          [code, name, auto, i],
+          `INSERT INTO exit_clearance_departments (school_id, code, name, auto, sort_order, approvers)
+           VALUES (app.current_school_id(), $1, $2, $3, $4, $5::jsonb) ON CONFLICT DO NOTHING`,
+          [code, name, auto, i, JSON.stringify(approvers)],
         );
   }
 
@@ -133,8 +137,17 @@ export class ExitSetupService {
     return this.db.tenant(requireTenant(ctx), async (c) => {
       const types = await this.typesWith(c);
       const noticeDays = await this.noticeWith(c);
-      const d = await c.query<{ code: string; name: string; auto: string | null; status: string }>(
-        `SELECT code, name, auto, status::text FROM exit_clearance_departments ORDER BY sort_order, name`,
+      const d = await c.query<{
+        code: string;
+        name: string;
+        auto: string | null;
+        status: string;
+        approvers: ClearanceApprover[];
+      }>(
+        `SELECT code, name, auto, status::text, approvers FROM exit_clearance_departments ORDER BY sort_order, name`,
+      );
+      const roles = await c.query<{ code: string; name: string }>(
+        `SELECT DISTINCT ON (code) code, name FROM roles WHERE school_id IS NULL OR school_id = app.current_school_id() ORDER BY code, school_id NULLS LAST`,
       );
       return {
         types,
@@ -144,7 +157,9 @@ export class ExitSetupService {
           name: x.name,
           auto: x.auto,
           active: x.status === 'active',
+          approvers: x.approvers,
         })),
+        roles: roles.rows,
         employeeTypes: EMPLOYEE_TYPES.map((t) => ({ code: t, name: EMPLOYEE_TYPE_LABEL[t] })),
         can: { manage: ctx.permissions?.has(PEOPLE.exitManage) ?? false },
       };
@@ -181,11 +196,18 @@ export class ExitSetupService {
       );
       for (const [i, d] of dto.departments.entries())
         await c.query(
-          `INSERT INTO exit_clearance_departments (school_id, code, name, auto, sort_order, status)
-           VALUES (app.current_school_id(), $1, $2, $3, $4, $5::row_status)
+          `INSERT INTO exit_clearance_departments (school_id, code, name, auto, sort_order, status, approvers)
+           VALUES (app.current_school_id(), $1, $2, $3, $4, $5::row_status, $6::jsonb)
            ON CONFLICT (school_id, code) DO UPDATE SET name = EXCLUDED.name, auto = EXCLUDED.auto,
-             sort_order = EXCLUDED.sort_order, status = EXCLUDED.status`,
-          [d.code, d.name, d.auto, i, d.active ? 'active' : 'inactive'],
+             sort_order = EXCLUDED.sort_order, status = EXCLUDED.status, approvers = EXCLUDED.approvers`,
+          [
+            d.code,
+            d.name,
+            d.auto,
+            i,
+            d.active ? 'active' : 'inactive',
+            JSON.stringify(d.approvers),
+          ],
         );
       await c.query(
         `UPDATE exit_clearance_departments SET status = 'inactive' WHERE NOT (code = ANY($1::text[]))`,

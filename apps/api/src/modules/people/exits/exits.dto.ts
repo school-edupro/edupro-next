@@ -29,6 +29,19 @@ export const ExitSetupSchema = z.object({
         name: z.string().trim().min(2).max(80),
         auto: z.enum(['library', 'assets']).nullable().default(null),
         active: z.boolean().default(true),
+        /** Who clears it: the office, the employee's HOD, a role, or named users. */
+        approvers: z
+          .array(
+            z.discriminatedUnion('kind', [
+              z.object({ kind: z.literal('office') }),
+              z.object({ kind: z.literal('hod') }),
+              z.object({ kind: z.literal('role'), code: z.string().trim().min(2).max(40) }),
+              z.object({ kind: z.literal('user'), userId: Id }),
+            ]),
+          )
+          .min(1)
+          .max(10)
+          .default([{ kind: 'office' }]),
       }),
     )
     .max(20),
@@ -93,3 +106,13 @@ export class ExitListDto extends createZodDto(ExitListSchema) {}
 
 export const ExitWithdrawSchema = z.object({ reason: z.string().trim().max(500).optional() });
 export class ExitWithdrawDto extends createZodDto(ExitWithdrawSchema) {}
+
+/** A department clears an exit, noting the dues (0 when nothing is owed). */
+export const ClearSchema = z.object({
+  dues: z.number().min(0).max(10_000_000).default(0),
+  note: z.string().trim().max(500).optional(),
+});
+export class ClearDto extends createZodDto(ClearSchema) {}
+
+export const ReopenSchema = z.object({ reason: z.string().trim().max(500).optional() });
+export class ReopenDto extends createZodDto(ReopenSchema) {}
