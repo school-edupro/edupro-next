@@ -13,7 +13,9 @@ export const viewport: Viewport = { themeColor: '#00265D', width: 'device-width'
 
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
-    <html lang="en">
+    // suppressHydrationWarning: browser extensions add attributes to <html> (data-xt-extension-active)
+    // before React hydrates; this only quiets attribute differences on <html> itself, not its children
+    <html lang="en" suppressHydrationWarning>
       <body style={{ background: 'var(--surface-page)' }}>
         <SearchableSelects />
         {/* a school's pages bring its frame (app/[school]/layout.tsx); the home page its own main */}
