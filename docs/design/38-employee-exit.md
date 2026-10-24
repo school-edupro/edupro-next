@@ -82,3 +82,28 @@
 - API: `GET people/exits/clearance`, `GET people/exits/clearance/mine`,
   `POST people/exits/:id/clearance/:department`, `POST …/reopen`; set-up carries the departments'
   approvers. Tests: 4 more cases in `employee-exits.e2e-spec.ts`.
+
+## Part 7 as built (24 Oct 2026)
+- Migration 0239: exit status `closed` with `left_on`, `closed_at`, `handover`; `employee_exit_settings.fnf_approvers`
+  (the principal's role by default; set under Exit set-up); `employee_fnf` (the lines, totals, draft →
+  submitted → approved → paid); right `people.exit.fnf` (admins, accountant; the accountant also sees exits).
+- **Full and final statement** on the exit page, made for accounts once the exit is accepted: earnings
+  (salary for the days worked, leave encashment, gratuity, bonus, other) and deductions (notice shortfall,
+  with the days short noted; advances; TDS; other) typed by accounts, and one line for each clearance
+  department's dues, kept in step with the clearance while it is a draft. Sent for approval only when
+  every department has cleared; an approver set up approves or sends it back with a remark; accounts
+  marks it paid (or recovered, when the net is negative) with the date, mode and reference. PDF with the
+  amount in words and signature lines.
+- **Close** (the office), on or after the last working day: needs every department cleared and the
+  statement approved. The employee becomes inactive with the leaving date, their sign-in membership is
+  inactive and their roles revoked; class-teacher and subject assignments end on the leaving day; those,
+  departments they head and staff reporting to them are listed for re-assignment.
+- **Letters** (PDF, the school's letterhead): acceptance of resignation once accepted; relieving letter
+  and experience certificate once closed. In the staff app the employee opens the acceptance letter and
+  the approved statement; the relieving letter and experience certificate are handed over by the office
+  (the sign-in stops at the close).
+- **Exit register** (Employee management): who left or is leaving in a period, by exit type, with the
+  settlement; Excel download.
+- API: `GET|PUT people/exits/:id/fnf`, `POST …/fnf/submit|approve|return|paid`, `GET …/fnf.pdf`,
+  `GET …/letters/:kind.pdf`, `GET|POST people/exits/:id/close`, `GET people/exits/register`,
+  `GET people/exits/register.xlsx`. Tests: 4 more cases in `employee-exits.e2e-spec.ts` (13 in all).

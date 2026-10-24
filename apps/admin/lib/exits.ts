@@ -1,5 +1,5 @@
 /** Employee exit (docs/design/38): the shapes the admin screens read. */
-export type ExitStatus = 'pending' | 'sent_back' | 'approved' | 'rejected' | 'withdrawn';
+export type ExitStatus = 'pending' | 'sent_back' | 'approved' | 'rejected' | 'withdrawn' | 'closed';
 export type EmployeeType = 'teaching' | 'non_teaching' | 'contract' | 'visiting';
 
 export interface ExitRow {
@@ -78,6 +78,9 @@ export interface ExitDetail extends ExitRow {
     note: string | null;
   }>;
   may: { decide: boolean; withdraw: boolean; edit: boolean };
+  /** what the close ended, to re-assign */
+  handover?: Array<{ kind: string; what: string }> | null;
+  leftOn?: string | null;
 }
 export interface ExitSetup {
   types: Array<{
@@ -96,6 +99,7 @@ export interface ExitSetup {
     approvers: ClearanceApprover[];
   }>;
   roles: Array<{ code: string; name: string }>;
+  fnfApprovers: ClearanceApprover[];
   employeeTypes: Array<{ code: EmployeeType; name: string }>;
   can: { manage: boolean };
 }
@@ -109,6 +113,7 @@ export const EXIT_STATUS: Record<
   approved: { label: 'Accepted', tone: 'success' },
   rejected: { label: 'Not accepted', tone: 'danger' },
   withdrawn: { label: 'Withdrawn', tone: 'neutral' },
+  closed: { label: 'Left', tone: 'neutral' },
 };
 export const EXIT_EVENT: Record<string, string> = {
   submitted: 'Asked',
@@ -122,6 +127,55 @@ export const EXIT_EVENT: Record<string, string> = {
   cleared: 'Cleared',
   all_cleared: 'Every department has cleared',
   reopened: 'Clearance opened again',
+  fnf_submitted: 'Full and final sent for approval',
+  fnf_returned: 'Full and final sent back',
+  fnf_approved: 'Full and final approved',
+  fnf_paid: 'Full and final settled',
+  closed: 'Closed',
 };
 export const dmy = (iso: string | null) =>
   iso ? `${iso.slice(8, 10)}-${iso.slice(5, 7)}-${iso.slice(0, 4)}` : '—';
+
+export interface FnfLine {
+  kind: 'earning' | 'deduction';
+  code: string;
+  label: string;
+  amount: number;
+  note: string | null;
+  fromClearance?: boolean;
+}
+export interface FnfStatement {
+  status: 'draft' | 'submitted' | 'approved' | 'paid';
+  lines: FnfLine[];
+  earnings: number;
+  deductions: number;
+  net: number;
+  preparedBy: string | null;
+  submittedAt: string | null;
+  decidedBy: string | null;
+  decidedAt: string | null;
+  note: string | null;
+  paidOn: string | null;
+  paidMode: string | null;
+  paidReference: string | null;
+  clearancePending: number;
+  may: { edit: boolean; submit: boolean; decide: boolean; pay: boolean };
+}
+export interface ExitRegisterRow {
+  id: string;
+  code: string;
+  name: string;
+  employeeType: string;
+  designation: string | null;
+  department: string | null;
+  exitType: string;
+  reason: string;
+  requestedOn: string;
+  lastDay: string;
+  leftOn: string | null;
+  status: string;
+  noticeWaived: boolean;
+  net: number | null;
+  fnfStatus: string | null;
+  paidOn: string | null;
+}

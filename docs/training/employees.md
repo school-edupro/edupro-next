@@ -109,3 +109,10 @@ For the HR / office staff who keep staff records. Design: docs/design/30-employe
   hand-over, Transport, Hostel, as set up) clears it or notes what is owed. Library books still out and
   unpaid fines show by themselves. Departments clear on the exit page or in the staff app (No-dues to
   clear); Employee management → No-dues clearance shows every exit's progress.
+- **Full and final**: accounts opens the exit and fills the earnings and deductions (the clearance dues are
+  already there), then sends it for approval once every department has cleared. The approver set up
+  approves it or sends it back; accounts marks it paid (or recovered) and prints it.
+- **Close**: on or after the last working day, the office closes the exit. The employee becomes inactive,
+  their sign-in stops, and their classes and subjects end; the page lists what to re-assign. Print the
+  relieving letter and the experience certificate from the exit page. **Exit register** lists who left,
+  with the settlement, and downloads as Excel.

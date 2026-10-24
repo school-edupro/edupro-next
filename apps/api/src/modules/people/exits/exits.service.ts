@@ -23,7 +23,7 @@ import type {
   MyExitDto,
 } from './exits.dto';
 
-type Status = 'pending' | 'sent_back' | 'approved' | 'rejected' | 'withdrawn';
+type Status = 'pending' | 'sent_back' | 'approved' | 'rejected' | 'withdrawn' | 'closed';
 interface Emp {
   id: string;
   code: string;
@@ -64,6 +64,8 @@ interface ExitDb {
   emp_designation: string | null;
   emp_user: string | null;
   waiting_at: string | null;
+  left_on: string | null;
+  handover: Array<{ kind: string; what: string }> | null;
 }
 export interface ExitRow {
   id: string;
@@ -95,6 +97,9 @@ export interface ExitRow {
   decidedBy: string | null;
   decidedAt: string | null;
   waitingAt: string | null;
+  leftOn: string | null;
+  /** what the close ended, to re-assign */
+  handover: Array<{ kind: string; what: string }> | null;
 }
 
 const SELECT = `SELECT x.id::text, x.employee_id::text, x.exit_type, t.name AS type_name, t.notice_applies, x.reason, x.letter_file_id::text,
@@ -102,7 +107,7 @@ const SELECT = `SELECT x.id::text, x.employee_id::text, x.exit_type, t.name AS t
        x.notice_waived, x.status, x.by_self, x.raised_by::text, ru.display_name AS raised_by_name, x.workflow_instance_id::text,
        x.sent_back_note, x.decision_note, du.display_name AS decided_by_name, x.decided_at,
        e.employee_code AS emp_code, e.display_name AS emp_name, e.employee_type::text AS emp_type, e.department AS emp_department,
-       e.designation AS emp_designation, e.user_id::text AS emp_user,
+       e.designation AS emp_designation, e.user_id::text AS emp_user, x.left_on::text, x.handover,
        (SELECT s.name FROM workflow_steps s JOIN workflow_instances i ON i.id = s.instance_id
          WHERE s.instance_id = x.workflow_instance_id AND s.level = i.current_level AND i.status = 'pending' LIMIT 1) AS waiting_at
   FROM employee_exits x JOIN employees e ON e.id = x.employee_id
@@ -147,6 +152,8 @@ function toRow(x: ExitDb): ExitRow {
     decidedBy: x.decided_by_name,
     decidedAt: x.decided_at?.toISOString() ?? null,
     waitingAt: x.waiting_at,
+    leftOn: x.left_on,
+    handover: x.handover,
   };
 }
 

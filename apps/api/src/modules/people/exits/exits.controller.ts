@@ -1,4 +1,5 @@
-import { Body, Controller, Get, HttpCode, Param, Post, Put, Query } from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, Param, Post, Put, Query, Res } from '@nestjs/common';
+import type { FastifyReply } from 'fastify';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { RequirePermission } from '../../../common/access/require-permission.decorator';
 import { AuthenticatedOnly } from '../../../common/auth/decorators';
@@ -7,9 +8,11 @@ import { ReqCtx, type RequestContext } from '../../../common/http/request-contex
 import { PEOPLE } from '../people.permissions';
 import { ExitClearanceService } from './exit-clearance.service';
 import { ExitSetupService } from './exit-setup.service';
+import { ExitSettleService, type LetterKind } from './exit-settle.service';
 import {
   EMPLOYEE_TYPES,
   ClearDto,
+  CloseDto,
   ExitApprovalDto,
   ExitCreateDto,
   ExitDecisionDto,
@@ -17,6 +20,10 @@ import {
   ExitListDto,
   ExitSetupDto,
   ExitWithdrawDto,
+  FnfDecisionDto,
+  FnfLinesDto,
+  FnfPaidDto,
+  RegisterDto,
   MyExitDto,
   ReopenDto,
   type EmployeeType,
@@ -38,7 +45,24 @@ export class ExitsController {
     private readonly exits: ExitsService,
     private readonly setup: ExitSetupService,
     private readonly clearance: ExitClearanceService,
+    private readonly settle: ExitSettleService,
   ) {}
+
+  private static send(
+    reply: FastifyReply,
+    file: { filename: string; bytes: Buffer },
+    type: string,
+    inline: boolean,
+  ) {
+    void reply
+      .header('content-type', type)
+      .header(
+        'content-disposition',
+        `${inline ? 'inline' : 'attachment'}; filename="${file.filename.replace(/[^\w.\- ]+/g, '_')}"`,
+      )
+      .header('cache-control', 'private, no-store')
+      .send(file.bytes);
+  }
 
   @Get('people/exits/setup')
   @ApiOperation({ summary: 'Exit types, notice period per employee type, clearance departments' })
@@ -134,6 +158,131 @@ export class ExitsController {
     @Body() dto: ReopenDto,
   ) {
     return this.clearance.reopen(ctx, id, department, dto.reason);
+  }
+
+  @Get('people/exits/register')
+  @ApiOperation({ summary: 'The exit register: who left or is leaving, with the settlement' })
+  @RequirePermission(PEOPLE.exitView)
+  register(@ReqCtx() ctx: RequestContext, @Query() q: RegisterDto) {
+    return this.settle.register(ctx, q);
+  }
+
+  @Get('people/exits/register.xlsx')
+  @RequirePermission(PEOPLE.exitView)
+  async registerFile(
+    @ReqCtx() ctx: RequestContext,
+    @Query() q: RegisterDto,
+    @Res() reply: FastifyReply,
+  ) {
+    ExitsController.send(
+      reply,
+      await this.settle.registerFile(ctx, q),
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      false,
+    );
+  }
+
+  @Get('people/exits/:id/fnf')
+  @ApiOperation({
+    summary: 'The full and final statement (made for accounts once the exit is accepted)',
+  })
+  // the office, accounts, the employee, an approver (checked in the service)
+  @AuthenticatedOnly()
+  fnf(@ReqCtx() ctx: RequestContext, @Param('id') id: string) {
+    return this.settle.fnf(ctx, id);
+  }
+
+  @Put('people/exits/:id/fnf')
+  @ApiOperation({ summary: 'Save the earnings and deductions of the statement (a draft)' })
+  @RequirePermission(PEOPLE.exitFnf)
+  saveFnf(@ReqCtx() ctx: RequestContext, @Param('id') id: string, @Body() dto: FnfLinesDto) {
+    return this.settle.saveLines(ctx, id, dto);
+  }
+
+  @Post('people/exits/:id/fnf/submit')
+  @HttpCode(200)
+  @RequirePermission(PEOPLE.exitFnf)
+  submitFnf(@ReqCtx() ctx: RequestContext, @Param('id') id: string) {
+    return this.settle.submit(ctx, id);
+  }
+
+  @Post('people/exits/:id/fnf/approve')
+  @HttpCode(200)
+  @ApiOperation({ summary: 'Approve the statement (the approvers set up)' })
+  @AuthenticatedOnly()
+  approveFnf(@ReqCtx() ctx: RequestContext, @Param('id') id: string, @Body() dto: FnfDecisionDto) {
+    return this.settle.decide(ctx, id, 'approve', dto);
+  }
+
+  @Post('people/exits/:id/fnf/return')
+  @HttpCode(200)
+  @ApiOperation({ summary: 'Send the statement back to accounts with a remark' })
+  @AuthenticatedOnly()
+  returnFnf(@ReqCtx() ctx: RequestContext, @Param('id') id: string, @Body() dto: FnfDecisionDto) {
+    return this.settle.decide(ctx, id, 'reject', dto);
+  }
+
+  @Post('people/exits/:id/fnf/paid')
+  @HttpCode(200)
+  @ApiOperation({ summary: 'Mark the approved statement paid (or recovered)' })
+  @RequirePermission(PEOPLE.exitFnf)
+  paidFnf(@ReqCtx() ctx: RequestContext, @Param('id') id: string, @Body() dto: FnfPaidDto) {
+    return this.settle.paid(ctx, id, dto);
+  }
+
+  @Get('people/exits/:id/fnf.pdf')
+  @AuthenticatedOnly()
+  async fnfFile(
+    @ReqCtx() ctx: RequestContext,
+    @Param('id') id: string,
+    @Query('save') save: string | undefined,
+    @Res() reply: FastifyReply,
+  ) {
+    ExitsController.send(
+      reply,
+      await this.settle.fnfFile(ctx, id),
+      'application/pdf',
+      save !== '1',
+    );
+  }
+
+  @Get('people/exits/:id/letters/:kind.pdf')
+  @ApiOperation({
+    summary: 'Acceptance of resignation, relieving letter or experience certificate',
+  })
+  @AuthenticatedOnly()
+  async letterFile(
+    @ReqCtx() ctx: RequestContext,
+    @Param('id') id: string,
+    @Param('kind') kind: string,
+    @Query('save') save: string | undefined,
+    @Res() reply: FastifyReply,
+  ) {
+    if (!['acceptance', 'relieving', 'experience'].includes(kind))
+      throw new DomainError('not-found', 'No such letter', { status: 404 });
+    ExitsController.send(
+      reply,
+      await this.settle.letter(ctx, id, kind as LetterKind),
+      'application/pdf',
+      save !== '1',
+    );
+  }
+
+  @Get('people/exits/:id/close')
+  @ApiOperation({ summary: 'What closing the exit still needs' })
+  @AuthenticatedOnly()
+  closeCheck(@ReqCtx() ctx: RequestContext, @Param('id') id: string) {
+    return this.settle.closeCheck(ctx, id);
+  }
+
+  @Post('people/exits/:id/close')
+  @HttpCode(200)
+  @ApiOperation({
+    summary: 'Close the exit: inactive with the leaving date, sign-ins stopped, assignments ended',
+  })
+  @RequirePermission(PEOPLE.exitManage)
+  close(@ReqCtx() ctx: RequestContext, @Param('id') id: string, @Body() dto: CloseDto) {
+    return this.settle.close(ctx, id, dto);
   }
 
   @Get('people/exits/:id')

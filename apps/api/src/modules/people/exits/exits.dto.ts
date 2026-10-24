@@ -5,6 +5,18 @@ const Id = z.string().regex(/^\d{1,18}$/);
 const Day = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 const Code = z.string().regex(/^[a-z][a-z0-9_]{1,39}$/);
 
+const Approvers = z
+  .array(
+    z.discriminatedUnion('kind', [
+      z.object({ kind: z.literal('office') }),
+      z.object({ kind: z.literal('hod') }),
+      z.object({ kind: z.literal('role'), code: z.string().trim().min(2).max(40) }),
+      z.object({ kind: z.literal('user'), userId: Id }),
+    ]),
+  )
+  .min(1)
+  .max(10);
+
 export const EMPLOYEE_TYPES = ['teaching', 'non_teaching', 'contract', 'visiting'] as const;
 export type EmployeeType = (typeof EMPLOYEE_TYPES)[number];
 
@@ -30,21 +42,12 @@ export const ExitSetupSchema = z.object({
         auto: z.enum(['library', 'assets']).nullable().default(null),
         active: z.boolean().default(true),
         /** Who clears it: the office, the employee's HOD, a role, or named users. */
-        approvers: z
-          .array(
-            z.discriminatedUnion('kind', [
-              z.object({ kind: z.literal('office') }),
-              z.object({ kind: z.literal('hod') }),
-              z.object({ kind: z.literal('role'), code: z.string().trim().min(2).max(40) }),
-              z.object({ kind: z.literal('user'), userId: Id }),
-            ]),
-          )
-          .min(1)
-          .max(10)
-          .default([{ kind: 'office' }]),
+        approvers: Approvers.default([{ kind: 'office' }]),
       }),
     )
     .max(20),
+  /** Who approves the full and final statement (the principal by default). */
+  fnfApprovers: Approvers.optional(),
 });
 export class ExitSetupDto extends createZodDto(ExitSetupSchema) {}
 
@@ -99,7 +102,7 @@ export const ExitDecisionSchema = z.object({
 export class ExitDecisionDto extends createZodDto(ExitDecisionSchema) {}
 
 export const ExitListSchema = z.object({
-  status: z.enum(['pending', 'sent_back', 'approved', 'rejected', 'withdrawn']).optional(),
+  status: z.enum(['pending', 'sent_back', 'approved', 'rejected', 'withdrawn', 'closed']).optional(),
   q: z.string().trim().max(80).optional(),
 });
 export class ExitListDto extends createZodDto(ExitListSchema) {}
@@ -116,3 +119,40 @@ export class ClearDto extends createZodDto(ClearSchema) {}
 
 export const ReopenSchema = z.object({ reason: z.string().trim().max(500).optional() });
 export class ReopenDto extends createZodDto(ReopenSchema) {}
+
+/** The full and final statement as accounts types it (the clearance dues are added by the system). */
+export const FnfLinesSchema = z.object({
+  lines: z
+    .array(
+      z.object({
+        kind: z.enum(['earning', 'deduction']),
+        code: Code,
+        label: z.string().trim().min(2).max(80),
+        amount: z.number().min(0).max(100_000_000),
+        note: z.string().trim().max(200).nullable().optional(),
+      }),
+    )
+    .max(40),
+});
+export class FnfLinesDto extends createZodDto(FnfLinesSchema) {}
+
+export const FnfDecisionSchema = z.object({ note: z.string().trim().max(500).optional() });
+export class FnfDecisionDto extends createZodDto(FnfDecisionSchema) {}
+
+export const FnfPaidSchema = z.object({
+  paidOn: Day.optional(),
+  mode: z.string().trim().min(2).max(40),
+  reference: z.string().trim().max(80).optional(),
+});
+export class FnfPaidDto extends createZodDto(FnfPaidSchema) {}
+
+/** The leaving date: the accepted last working day by default; not later than today. */
+export const CloseSchema = z.object({ leftOn: Day.optional() });
+export class CloseDto extends createZodDto(CloseSchema) {}
+
+export const RegisterSchema = z.object({
+  from: Day.optional(),
+  to: Day.optional(),
+  exitType: Code.optional(),
+});
+export class RegisterDto extends createZodDto(RegisterSchema) {}

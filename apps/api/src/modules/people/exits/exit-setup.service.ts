@@ -149,9 +149,13 @@ export class ExitSetupService {
       const roles = await c.query<{ code: string; name: string }>(
         `SELECT DISTINCT ON (code) code, name FROM roles WHERE school_id IS NULL OR school_id = app.current_school_id() ORDER BY code, school_id NULLS LAST`,
       );
+      const fnf = await c.query<{ fnf_approvers: ClearanceApprover[] }>(
+        `SELECT fnf_approvers FROM employee_exit_settings`,
+      );
       return {
         types,
         noticeDays,
+        fnfApprovers: fnf.rows[0]?.fnf_approvers ?? [{ kind: 'role', code: 'school_admin' }],
         departments: d.rows.map((x) => ({
           code: x.code,
           name: x.name,
@@ -214,8 +218,12 @@ export class ExitSetupService {
         [dto.departments.map((d) => d.code)],
       );
       await c.query(
-        `UPDATE employee_exit_settings SET notice_days = $1::jsonb, updated_at = now(), updated_by = app.current_user_id()`,
-        [JSON.stringify({ ...DEFAULT_NOTICE, ...dto.noticeDays })],
+        `UPDATE employee_exit_settings SET notice_days = $1::jsonb, fnf_approvers = COALESCE($2::jsonb, fnf_approvers),
+                updated_at = now(), updated_by = app.current_user_id()`,
+        [
+          JSON.stringify({ ...DEFAULT_NOTICE, ...dto.noticeDays }),
+          dto.fnfApprovers ? JSON.stringify(dto.fnfApprovers) : null,
+        ],
       );
       await this.audit.stage(ctx, c, {
         action: 'people.exit.setup',

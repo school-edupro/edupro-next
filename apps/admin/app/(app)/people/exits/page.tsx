@@ -4,7 +4,7 @@ import { Notice } from '@/components/Notice';
 import { apiFetch, getMe } from '@/lib/api';
 import { EXIT_STATUS, dmy, type ExitRow, type ExitStatus } from '@/lib/exits';
 
-const ORDER: ExitStatus[] = ['pending', 'sent_back', 'approved', 'rejected', 'withdrawn'];
+const ORDER: ExitStatus[] = ['pending', 'sent_back', 'approved', 'closed', 'rejected', 'withdrawn'];
 
 /** Employee exits (docs/design/38): resignations from the staff app and exits the office recorded. */
 export default async function ExitsPage({

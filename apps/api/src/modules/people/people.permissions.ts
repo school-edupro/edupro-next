@@ -16,6 +16,8 @@ export const PEOPLE = {
   /** Employee exits (0237): see them; create on an employee's behalf and set up. */
   exitView: 'people.exit.view',
   exitManage: 'people.exit.manage',
+  /** Prepare the full and final statement and mark it paid (0239). */
+  exitFnf: 'people.exit.fnf',
   guardianView: 'people.guardian.view',
   guardianEdit: 'people.guardian.edit',
   enrolmentManage: 'people.enrolment.manage',

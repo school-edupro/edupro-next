@@ -146,6 +146,34 @@ export default async function ResignationPage({
               </div>
             ) : null}
           </dl>
+          {open.status === 'approved' ? (
+            <div style={{ marginTop: 'var(--sp-3)' }}>
+              <strong>Papers</strong>
+              <ul className="ep-rp__events">
+                <li>
+                  Acceptance letter{' '}
+                  <FileLinks
+                    url={`/api/exit-files/${open.id}/acceptance`}
+                    saveUrl={`/api/exit-files/${open.id}/acceptance?save=1`}
+                    label="my acceptance letter"
+                  />
+                </li>
+                <li>
+                  Full and final statement{' '}
+                  <FileLinks
+                    url={`/api/exit-files/${open.id}/fnf`}
+                    saveUrl={`/api/exit-files/${open.id}/fnf?save=1`}
+                    label="my full and final statement"
+                  />
+                  <span className="ep-field__help"> (opens once it is approved)</span>
+                </li>
+              </ul>
+              <p className="ep-field__help" style={{ margin: 0 }}>
+                The relieving letter and the experience certificate are given by the office on your
+                last day.
+              </p>
+            </div>
+          ) : null}
           {open.status === 'approved' && mine.clearances.length ? (
             <div style={{ marginTop: 'var(--sp-3)' }}>
               <strong>

@@ -34,7 +34,7 @@ export interface ClearanceRow {
   check: ClearanceCheck | null;
   mayClear: boolean;
 }
-interface Actor {
+export interface Actor {
   userId: string;
   manage: boolean;
   roles: Set<string>;
@@ -76,7 +76,7 @@ export class ExitClearanceService {
     );
   }
 
-  private async actor(c: PoolClient, ctx: RequestContext): Promise<Actor> {
+  async actorOf(c: PoolClient, ctx: RequestContext): Promise<Actor> {
     const roles = await c.query<{ code: string }>(
       `SELECT DISTINCT r.code FROM user_roles ur JOIN roles r ON r.id = ur.role_id
         WHERE ur.user_id = app.current_user_id() AND ur.school_id = app.current_school_id() AND ur.revoked_at IS NULL
@@ -94,7 +94,7 @@ export class ExitClearanceService {
     };
   }
 
-  private may(a: ClearanceApprover[], actor: Actor, department: string | null): boolean {
+  mayAct(a: ClearanceApprover[], actor: Actor, department: string | null): boolean {
     return a.some((x) =>
       x.kind === 'office'
         ? actor.manage
@@ -168,7 +168,7 @@ export class ExitClearanceService {
       [exit.id],
     );
     if (!r.rows.length) return [];
-    const actor = await this.actor(c, ctx);
+    const actor = await this.actorOf(c, ctx);
     const roleNames = new Map(
       (
         await c.query<{ code: string; name: string }>(
@@ -190,7 +190,7 @@ export class ExitClearanceService {
         approvers: x.approvers.map((a) => approverText(a, roleNames)),
         check:
           x.status === 'cleared' ? x.check_result : await this.check(c, exit.employeeId, x.auto),
-        mayClear: exit.open && this.may(x.approvers, actor, exit.department),
+        mayClear: exit.open && this.mayAct(x.approvers, actor, exit.department),
       });
     return out;
   }
@@ -239,7 +239,7 @@ export class ExitClearanceService {
         throw new DomainError('people.clearance_done', `${d.name} has already cleared it`, {
           status: 409,
         });
-      if (!this.may(d.approvers, await this.actor(c, ctx), x.department))
+      if (!this.mayAct(d.approvers, await this.actorOf(c, ctx), x.department))
         throw new DomainError('permission-denied', `You do not clear for ${d.name}`, {
           status: 403,
         });

@@ -2,10 +2,11 @@ import { Badge, Breadcrumbs, Card, PageHeader } from '@edupro/ui';
 import { notFound } from 'next/navigation';
 import { ExitActions } from '@/components/exits/ExitActions';
 import { ExitClearance } from '@/components/exits/ExitClearance';
+import { ExitSettle } from '@/components/exits/ExitSettle';
 import { ViewDownload } from '@/components/admissions/ViewDownload';
 import { Notice } from '@/components/Notice';
 import { ApiError, apiFetch, getMe } from '@/lib/api';
-import { EXIT_EVENT, EXIT_STATUS, dmy, type ExitDetail } from '@/lib/exits';
+import { EXIT_EVENT, EXIT_STATUS, dmy, type ExitDetail, type FnfStatement } from '@/lib/exits';
 
 const STEP: Record<string, string> = {
   pending: 'Waiting',
@@ -32,6 +33,18 @@ export default async function ExitPage({
     if (e instanceof ApiError && e.status === 404) notFound();
     throw e;
   });
+  const settling = ['approved', 'closed'].includes(x.status);
+  const [fnf, close] = settling
+    ? await Promise.all([
+        apiFetch<{ statement: FnfStatement | null }>(`/people/exits/${id}/fnf`)
+          .then((r) => r.statement)
+          .catch(() => null),
+        apiFetch<{ leftOn: string; blockers: string[] }>(`/people/exits/${id}/close`).catch(() => ({
+          leftOn: x.acceptedLastDay ?? x.proposedLastDay,
+          blockers: [],
+        })),
+      ])
+    : [null, null];
   const facts: Array<[string, React.ReactNode]> = [
     ['Exit', x.exitType.name],
     [
@@ -127,6 +140,18 @@ export default async function ExitPage({
             canReopen={x.status === 'approved' && me.permissions.includes('people.exit.manage')}
           />
         </Card>
+      ) : null}
+      {settling && close ? (
+        <div style={{ marginTop: 'var(--sp-4)' }}>
+          <ExitSettle
+            exitId={x.id}
+            exitStatus={x.status}
+            statement={fnf}
+            close={close}
+            handover={x.handover ?? null}
+            canClose={me.permissions.includes('people.exit.manage')}
+          />
+        </div>
       ) : null}
       <Card title="What happened" style={{ marginTop: 'var(--sp-4)' }}>
         <ul className="ep-rp__events">

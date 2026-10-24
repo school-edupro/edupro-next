@@ -432,6 +432,7 @@ const PAGES = [
   '/people/exits',
   '/people/exits/new',
   '/people/exits/clearance',
+  '/people/exits/register',
   '/people/exits/setup',
   '/people/exits/setup?type=non_teaching',
   '/people/recruitment/4',

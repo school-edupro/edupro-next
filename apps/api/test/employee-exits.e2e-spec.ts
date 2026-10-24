@@ -499,4 +499,272 @@ describe('employee exits (e2e)', () => {
       ).toEqual([{ kind: 'user', userId: t2U.id }]);
     });
   });
+
+  describe('part 7: full and final statement, letters, close, register', () => {
+    let exitId: string;
+    let accountant: SeededUser;
+    let librarian: SeededUser;
+    let section: string;
+    const fnf = (u: SeededUser = accountant) =>
+      inject({ method: 'GET', url: `/people/exits/${exitId}/fnf`, headers: h(u) });
+
+    beforeAll(async () => {
+      await withMigrator(async (c) => {
+        exitId = (
+          await c.query<{ id: string }>(
+            `SELECT id::text FROM employee_exits WHERE employee_id = $1 AND status = 'approved'`,
+            [emp.t1],
+          )
+        ).rows[0]!.id;
+        accountant = await seedUser(c, school, `${school.code}-acc`, 'accountant');
+        librarian = (
+          await c.query<{ id: string; sub: string }>(
+            `SELECT id::text, oneauth_sub AS sub FROM users WHERE oneauth_sub = $1`,
+            [`${school.code}-lib`],
+          )
+        ).rows[0] as SeededUser;
+      });
+      const cls = await inject({
+        method: 'POST',
+        url: '/academics/classes',
+        headers: h(),
+        json: { code: 'VII', name: 'Class VII', displayOrder: 7 },
+      });
+      section = (
+        await inject({
+          method: 'POST',
+          url: `/academics/classes/${cls.json().id}/sections`,
+          headers: h(),
+          json: { name: 'A' },
+        })
+      ).json().id;
+      // Ravi is class teacher of VII-A: the close ends it and lists it
+      await withMigrator((c) =>
+        c.query(
+          `INSERT INTO teacher_assignments (school_id, academic_year_id, employee_id, class_section_id, kind, valid_from)
+           VALUES ($1, $2, $3, $4, 'class_teacher', CURRENT_DATE - 30)`,
+          [school.id, school.yearId, emp.t1, section],
+        ),
+      );
+    });
+
+    it('accounts gets a draft with the lines to fill and the clearance dues; it is sent only when all have cleared', async () => {
+      const r = await fnf();
+      expect(r.statusCode).toBe(200);
+      const st = r.json().statement;
+      expect(st.status).toBe('draft');
+      expect(st.lines.map((l: { code: string }) => l.code)).toEqual(
+        expect.arrayContaining(['salary', 'gratuity', 'notice', 'tds', 'dues_it_assets']),
+      );
+      expect(st.may).toMatchObject({ edit: true, submit: false });
+      const early = await inject({
+        method: 'POST',
+        url: `/people/exits/${exitId}/fnf/submit`,
+        headers: h(accountant),
+      });
+      expect(early.statusCode).toBe(409);
+      await inject({
+        method: 'POST',
+        url: `/people/exits/${exitId}/clearance/library`,
+        headers: h(librarian),
+        json: { dues: 450, note: 'Physics not returned' },
+      });
+      const lines = (await fnf()).json().statement.lines as Array<{
+        code: string;
+        kind: string;
+        label: string;
+        amount: number;
+        fromClearance?: boolean;
+      }>;
+      expect(lines.find((l) => l.code === 'dues_library')).toMatchObject({ amount: 450 });
+      const typed = lines
+        .filter((l) => !l.fromClearance)
+        .map((l) => ({
+          ...l,
+          amount:
+            l.code === 'salary'
+              ? 50000
+              : l.code === 'leave_encashment'
+                ? 10000
+                : l.code === 'tds'
+                  ? 2000
+                  : 0,
+        }));
+      const saved = await inject({
+        method: 'PUT',
+        url: `/people/exits/${exitId}/fnf`,
+        headers: h(accountant),
+        json: { lines: typed },
+      });
+      expect(saved.json().statement).toMatchObject({
+        earnings: 60000,
+        deductions: 3650,
+        net: 56350,
+        may: { submit: true },
+      });
+    });
+
+    it('the approver sends it back or approves; accounts cannot change it once sent', async () => {
+      const sent = await inject({
+        method: 'POST',
+        url: `/people/exits/${exitId}/fnf/submit`,
+        headers: h(accountant),
+      });
+      expect(sent.json().statement.status).toBe('submitted');
+      const locked = await inject({
+        method: 'PUT',
+        url: `/people/exits/${exitId}/fnf`,
+        headers: h(accountant),
+        json: { lines: [] },
+      });
+      expect(locked.statusCode).toBe(409);
+      const notHim = await inject({
+        method: 'POST',
+        url: `/people/exits/${exitId}/fnf/approve`,
+        headers: h(accountant),
+        json: {},
+      });
+      expect(notHim.statusCode).toBe(403);
+      const back = await inject({
+        method: 'POST',
+        url: `/people/exits/${exitId}/fnf/return`,
+        headers: h(),
+        json: { note: 'Add the bonus' },
+      });
+      expect(back.json().statement).toMatchObject({ status: 'draft', note: 'Add the bonus' });
+      await inject({
+        method: 'POST',
+        url: `/people/exits/${exitId}/fnf/submit`,
+        headers: h(accountant),
+      });
+      const ok = await inject({
+        method: 'POST',
+        url: `/people/exits/${exitId}/fnf/approve`,
+        headers: h(),
+        json: { note: 'Approved' },
+      });
+      expect(ok.json().statement.status).toBe('approved');
+      const pdf = await inject({
+        method: 'GET',
+        url: `/people/exits/${exitId}/fnf.pdf`,
+        headers: h(t1U),
+      });
+      expect(pdf.statusCode).toBe(200);
+      expect(pdf.headers['content-type']).toBe('application/pdf');
+      const acceptance = await inject({
+        method: 'GET',
+        url: `/people/exits/${exitId}/letters/acceptance.pdf`,
+        headers: h(t1U),
+      });
+      expect(acceptance.statusCode).toBe(200);
+      const tooSoon = await inject({
+        method: 'GET',
+        url: `/people/exits/${exitId}/letters/relieving.pdf`,
+        headers: h(),
+      });
+      expect(tooSoon.statusCode).toBe(409);
+    });
+
+    it('closes on or after the last working day: inactive, sign-ins and roles stopped, class teacher listed', async () => {
+      const check = await inject({
+        method: 'GET',
+        url: `/people/exits/${exitId}/close`,
+        headers: h(),
+      });
+      expect(check.json().blockers.join(' ')).toMatch(/has not come yet/);
+      const notYet = await inject({
+        method: 'POST',
+        url: `/people/exits/${exitId}/close`,
+        headers: h(),
+        json: {},
+      });
+      expect(notYet.statusCode).toBe(409);
+      const r = await inject({
+        method: 'POST',
+        url: `/people/exits/${exitId}/close`,
+        headers: h(),
+        json: { leftOn: day(0) },
+      });
+      expect(r.statusCode).toBe(200);
+      expect(r.json()).toMatchObject({
+        leftOn: day(0),
+        handover: [{ kind: 'Class teacher', what: 'VII-A' }],
+      });
+      const facts = await withMigrator(async (c) => {
+        const e = await c.query<{ status: string; left_on: string }>(
+          `SELECT status::text, left_on::text FROM employees WHERE id = $1`,
+          [emp.t1],
+        );
+        const m = await c.query<{ status: string }>(
+          `SELECT status::text FROM user_school_memberships WHERE user_id = $1 AND person_type = 'employee'`,
+          [t1U.id],
+        );
+        const roles = await c.query<{ n: number }>(
+          `SELECT count(*)::int AS n FROM user_roles WHERE user_id = $1 AND revoked_at IS NULL`,
+          [t1U.id],
+        );
+        const ta = await c.query<{ to: string }>(
+          `SELECT valid_to::text AS to FROM teacher_assignments WHERE employee_id = $1`,
+          [emp.t1],
+        );
+        return { e: e.rows[0], m: m.rows[0]?.status, roles: roles.rows[0]!.n, ta: ta.rows[0]?.to };
+      });
+      expect(facts).toEqual({
+        e: { status: 'inactive', left_on: day(0) },
+        m: 'inactive',
+        roles: 0,
+        ta: day(0),
+      });
+      for (const kind of ['relieving', 'experience'])
+        expect(
+          (
+            await inject({
+              method: 'GET',
+              url: `/people/exits/${exitId}/letters/${kind}.pdf`,
+              headers: h(),
+            })
+          ).statusCode,
+        ).toBe(200);
+    });
+
+    it('marks the statement paid; the register lists the leaver and downloads as Excel', async () => {
+      const paid = await inject({
+        method: 'POST',
+        url: `/people/exits/${exitId}/fnf/paid`,
+        headers: h(accountant),
+        json: { mode: 'bank', reference: 'NEFT778' },
+      });
+      expect(paid.json().statement).toMatchObject({
+        status: 'paid',
+        paidMode: 'bank',
+        paidReference: 'NEFT778',
+      });
+      const reg = await inject({ method: 'GET', url: '/people/exits/register', headers: h() });
+      expect(reg.json().data.find((x: { id: string }) => x.id === exitId)).toMatchObject({
+        code: 'E2',
+        status: 'closed',
+        leftOn: day(0),
+        net: 56350,
+        fnfStatus: 'paid',
+      });
+      const xlsx = await inject({
+        method: 'GET',
+        url: '/people/exits/register.xlsx',
+        headers: h(),
+      });
+      expect(xlsx.statusCode).toBe(200);
+      expect(xlsx.headers['content-type']).toMatch(/spreadsheetml/);
+      const x = await inject({ method: 'GET', url: `/people/exits/${exitId}`, headers: h() });
+      expect(x.json().status).toBe('closed');
+      expect(x.json().events.map((e: { what: string }) => e.what)).toEqual(
+        expect.arrayContaining([
+          'fnf_submitted',
+          'fnf_returned',
+          'fnf_approved',
+          'closed',
+          'fnf_paid',
+        ]),
+      );
+    });
+  });
 });

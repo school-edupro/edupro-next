@@ -23,6 +23,7 @@ export function ExitSetupEditor({ setup }: { setup: ExitSetup }) {
   const [types, setTypes] = useState<TypeRow[]>(setup.types);
   const [notice, setNotice] = useState(setup.noticeDays);
   const [depts, setDepts] = useState<DeptRow[]>(setup.departments);
+  const [fnfBy, setFnfBy] = useState<ClearanceApprover[]>(setup.fnfApprovers);
   const [pending, start] = useTransition();
   const [msg, setMsg] = useState<{ tone: 'success' | 'danger'; text: string } | null>(null);
   const setType = (i: number, patch: Partial<TypeRow>) =>
@@ -261,6 +262,52 @@ export function ExitSetupEditor({ setup }: { setup: ExitSetup }) {
           </button>
         ) : null}
       </div>
+      <div>
+        <h2 className="ep-card__title">Who approves the full and final statement</h2>
+        <label className="ep-check">
+          <input
+            type="checkbox"
+            className="ep-check__input"
+            checked={fnfBy.some((a) => a.kind === 'office')}
+            disabled={!canEdit}
+            onChange={(e) =>
+              setFnfBy((cur) =>
+                e.target.checked
+                  ? [...cur, { kind: 'office' }]
+                  : cur.filter((a) => a.kind !== 'office'),
+              )
+            }
+          />
+          <span className="ep-check__box" aria-hidden="true" />
+          <span className="ep-check__text">The office (exit rights)</span>
+        </label>
+        {canEdit ? (
+          <ChipPicker
+            label="Roles that approve the statement"
+            options={roleOptions}
+            value={fnfBy.flatMap((a) => (a.kind === 'role' ? [a.code] : []))}
+            onChange={(next) =>
+              setFnfBy((cur) => [
+                ...cur.filter((a) => a.kind !== 'role'),
+                ...next.map((code): ClearanceApprover => ({ kind: 'role', code })),
+              ])
+            }
+            help="Accounts prepares it; any one of these approves it before it is paid."
+          />
+        ) : (
+          <p className="ep-field__help">
+            {fnfBy
+              .map((a) =>
+                a.kind === 'role'
+                  ? (setup.roles.find((r) => r.code === a.code)?.name ?? a.code)
+                  : a.kind === 'office'
+                    ? 'The office'
+                    : 'A named person',
+              )
+              .join(', ')}
+          </p>
+        )}
+      </div>
       {msg ? (
         <div
           className={`ep-alert ep-alert--${msg.tone}`}
@@ -295,7 +342,17 @@ export function ExitSetupEditor({ setup }: { setup: ExitSetup }) {
                 const t = withCode(types);
                 used.clear();
                 const d = withCode(depts);
-                const r = await saveExitSetup({ types: t, noticeDays: notice, departments: d });
+                if (!fnfBy.length)
+                  return setMsg({
+                    tone: 'danger',
+                    text: 'Someone must approve the full and final statement',
+                  });
+                const r = await saveExitSetup({
+                  types: t,
+                  noticeDays: notice,
+                  departments: d,
+                  fnfApprovers: fnfBy,
+                });
                 if (r.ok) {
                   setTypes(t);
                   setDepts(d);

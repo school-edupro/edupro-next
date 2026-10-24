@@ -3,7 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { ApiError, apiFetch } from './api';
 import type { ApprovalLevel } from './recruitment';
-import type { EmployeeType, ExitDetail, ExitRow, ExitSetup } from './exits';
+import type { EmployeeType, ExitDetail, ExitRow, ExitSetup, FnfLine, FnfStatement } from './exits';
 
 type Out<T = unknown> = { ok: true; data: T } | { ok: false; error: string };
 const okId = (id: string) => /^\d{1,18}$/.test(id);
@@ -193,4 +193,57 @@ export async function reopenClearance(id: string, department: string, reason?: s
     `/people/exits/${id}`,
     '/people/exits/clearance',
   ]);
+}
+
+const fnfPaths = (id: string) => [`/people/exits/${id}`, '/people/exits/register'];
+
+export async function saveFnf(id: string, lines: FnfLine[]) {
+  if (!okId(id)) return { ok: false as const, error: 'Unknown exit' };
+  return call<{ statement: FnfStatement }>(
+    `/people/exits/${id}/fnf`,
+    'PUT',
+    {
+      lines: lines
+        .filter((l) => !l.fromClearance)
+        .map(({ kind, code, label, amount, note }) => ({ kind, code, label, amount, note })),
+    },
+    fnfPaths(id),
+  );
+}
+
+export async function fnfAction(
+  id: string,
+  action: 'submit' | 'approve' | 'return',
+  note?: string,
+) {
+  if (!okId(id)) return { ok: false as const, error: 'Unknown exit' };
+  return call<{ statement: FnfStatement }>(
+    `/people/exits/${id}/fnf/${action}`,
+    'POST',
+    action === 'submit' ? undefined : { ...(note ? { note } : {}) },
+    fnfPaths(id),
+  );
+}
+
+export async function payFnf(
+  id: string,
+  body: { paidOn?: string; mode: string; reference?: string },
+) {
+  if (!okId(id)) return { ok: false as const, error: 'Unknown exit' };
+  return call<{ statement: FnfStatement }>(
+    `/people/exits/${id}/fnf/paid`,
+    'POST',
+    body,
+    fnfPaths(id),
+  );
+}
+
+export async function closeExit(id: string, leftOn?: string) {
+  if (!okId(id)) return { ok: false as const, error: 'Unknown exit' };
+  return call<{ leftOn: string; handover: Array<{ kind: string; what: string }> }>(
+    `/people/exits/${id}/close`,
+    'POST',
+    leftOn ? { leftOn } : {},
+    [...fnfPaths(id), '/people/exits', '/people/employees'],
+  );
 }
