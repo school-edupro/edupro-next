@@ -473,6 +473,8 @@ test.describe('accessibility (axe)', () => {
   });
 
   test('no serious or critical violations on the full student profile', async ({ page }) => {
+    // every tab of the student page and every section of the full profile: a long walk
+    test.setTimeout(90_000);
     await page.goto('/people/students');
     await page.waitForLoadState('networkidle');
     const href = await page

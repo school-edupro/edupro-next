@@ -66,3 +66,14 @@ the admission ledger), **Enquiries → Conversion report**, and the **Report bui
 4. _A class has no process._ Its registrations wait; give the class a process in Admission set-up (changes
    that reach registrations in progress ask for confirmation).
 5. _Admit says the class has no section._ Create the sections of the session's year under Academics first.
+
+## After Admit: correcting a mistake
+
+- **Wrong name, date of birth, gender or parent's name**: student page → Profile & guardians →
+  **Correct details**. The principal (or the levels set under Approval set-up) approves; old and new
+  values are kept.
+- **Wrong class**: student page → Academics → **Correct class**. Choose the right class-section and,
+  if not from the admission date, the date it applies from; **See what changes** shows the new roll
+  number and the fee before and after. Once approved, the pupil moves, the fee is made again at the new
+  class's rates and money already paid is set against it; anything left over stays as advance on the
+  receipt and is given back on request (Refunds).

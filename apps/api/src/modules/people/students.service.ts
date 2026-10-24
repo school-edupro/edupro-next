@@ -623,6 +623,18 @@ export class StudentsService {
     const tenant = requireTenant(ctx);
     return this.db.tenant(tenant, async (c) => {
       const before = await this.find(tenant, studentId, c);
+      // another class in the same year is a class correction: approval, fees made again (docs/design/37)
+      const other = await c.query(
+        `SELECT 1 FROM enrolments e JOIN class_sections f ON f.id = e.class_section_id JOIN class_sections t ON t.id = $3
+          WHERE e.student_id = $1 AND e.academic_year_id = $2 AND e.status = 'active' AND f.class_id <> t.class_id`,
+        [studentId, dto.academicYearId ?? tenant.academicYearId, dto.classSectionId],
+      );
+      if (other.rowCount)
+        throw new DomainError(
+          'people.class_correction_required',
+          'The pupil is in another class this year: use Correct class on the student page (with approval; the fee is made again)',
+          { status: 409 },
+        );
       const enrolmentId = await this.enrolWith(c, tenant, studentId, dto);
       const after = await this.find(tenant, studentId, c);
       await this.audit.stage(ctx, c, {

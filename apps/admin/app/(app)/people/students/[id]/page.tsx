@@ -21,6 +21,11 @@ import { StudentDocuments, expectedDocuments } from '@/components/StudentDocumen
 import { STUDENT_TABS, StudentHero, type StudentTab } from '@/components/StudentHero';
 import { StudentOverview } from '@/components/StudentOverview';
 import {
+  ClassCorrection,
+  type ClassCorrectionItem,
+  type ClassCorrectionSetup,
+} from '@/components/ClassCorrection';
+import {
   StudentCorrections,
   type CorrectionItem,
   type CorrectionSetup,
@@ -180,6 +185,22 @@ export default async function StudentPage({
             .catch(() => [] as CorrectionItem[]),
         ])
       : [null, [] as CorrectionItem[]];
+  // class corrections (part 2) on the Academics tab
+  const [classSetup, classHistory] =
+    tab === 'academics'
+      ? await Promise.all([
+          apiFetch<ClassCorrectionSetup>('/people/students/class-corrections/setup').catch(
+            () => null,
+          ),
+          apiFetch<{ data: ClassCorrectionItem[] }>(`/people/students/${id}/class-corrections`)
+            .then((r) => r.data)
+            .catch(() => [] as ClassCorrectionItem[]),
+        ])
+      : [null, [] as ClassCorrectionItem[]];
+  // a section move stays within the class; another class is a class correction
+  const ownClass = student.enrolment
+    ? sections.filter((o) => o.label.startsWith(`${student.enrolment!.classCode}-`))
+    : sections;
   // on record, these change only through Correct details
   const lockedHelp = 'Change through Correct details below';
   return (
@@ -486,7 +507,8 @@ export default async function StudentPage({
                     name="classSectionId"
                     label={t('moveSection')}
                     required
-                    options={sections}
+                    options={ownClass}
+                    help={student.enrolment ? 'Another class: Correct class below' : undefined}
                     defaultValue={student.enrolment?.classSectionId}
                   />
                   <InputField
@@ -507,6 +529,19 @@ export default async function StudentPage({
                 </FormActions>
               </form>
             ) : null}
+          </Card>
+        ) : null}
+
+        {tab === 'academics' && classSetup ? (
+          <Card title="Correct class">
+            <ClassCorrection
+              studentId={student.id}
+              currentSectionId={student.enrolment?.classSectionId ?? null}
+              setup={classSetup}
+              history={classHistory}
+              canRequest={can('people.class.correct')}
+              canSetUp={can('workflow.definition.manage')}
+            />
           </Card>
         ) : null}
 

@@ -14,23 +14,16 @@ import { AuditService } from '../../common/audit/audit.service';
 import { DbService } from '../../common/db/db.service';
 import { DomainError } from '../../common/errors/domain-error';
 import { requireTenant, type RequestContext } from '../../common/http/request-context';
-import { WorkflowService, type InstanceRow, type Level } from '../workflow/workflow.service';
+import { WorkflowService, type InstanceRow } from '../workflow/workflow.service';
+import { describeLevels, ensureCorrectionFlow, type CorrectionFlow } from './correction-flows';
 import type { CorrectionRequestDto } from './student-corrections.dto';
 import { StudentProfileService } from './student-profile.service';
 
-export const CORRECTION_FLOW = {
+export const CORRECTION_FLOW: CorrectionFlow = {
   code: 'student_correction',
   entityType: 'student_correction',
-} as const;
-/** A school starts with the principal deciding; the levels are changed under Workflow. */
-const DEFAULT_LEVELS: Level[] = [
-  {
-    level: 1,
-    name: 'Principal approval',
-    resolver: { kind: 'role', roleCode: 'school_admin' },
-    slaHours: 48,
-  },
-];
+  name: 'Student detail correction',
+};
 const KEYS: readonly string[] = CORRECTION_KEYS;
 
 export interface CorrectionChange {
@@ -74,67 +67,18 @@ export class StudentCorrectionsService {
   ) {}
 
   /** The approval levels, made with the principal at one level the first time they are needed. */
-  async ensureFlow(c: PoolClient): Promise<{ id: string; levels: Level[] }> {
-    await c.query(
-      `INSERT INTO workflow_definitions (school_id, code, name, entity_type, levels, created_by, updated_by)
-       SELECT app.current_school_id(), $1, 'Student detail correction', $2, $3::jsonb, app.current_user_id(), app.current_user_id()
-        WHERE NOT EXISTS (SELECT 1 FROM workflow_definitions WHERE code = $1 AND deleted_at IS NULL)`,
-      [CORRECTION_FLOW.code, CORRECTION_FLOW.entityType, JSON.stringify(DEFAULT_LEVELS)],
-    );
-    // switched off under Workflow: corrections have no other way to be decided
-    await c.query(
-      `UPDATE workflow_definitions SET status = 'active', updated_at = now()
-        WHERE code = $1 AND deleted_at IS NULL AND status <> 'active'`,
-      [CORRECTION_FLOW.code],
-    );
-    const r = await c.query<{ id: string; levels: Level[] }>(
-      `SELECT id::text, levels FROM workflow_definitions WHERE code = $1 AND deleted_at IS NULL`,
-      [CORRECTION_FLOW.code],
-    );
-    return r.rows[0]!;
+  ensureFlow(c: PoolClient) {
+    return ensureCorrectionFlow(c, CORRECTION_FLOW);
   }
 
   /** Who decides, level by level (shown beside "Correct details"; changed under Workflow). */
   async setup(ctx: RequestContext) {
     return this.db.tenant(requireTenant(ctx), async (c) => {
       const flow = await this.ensureFlow(c);
-      const roles = await c.query<{ code: string; name: string }>(
-        `SELECT code, name FROM roles WHERE school_id IS NULL OR school_id = app.current_school_id()`,
-      );
-      const users = await c.query<{ id: string; name: string }>(
-        `SELECT id::text, display_name AS name FROM users WHERE id = ANY($1::bigint[])`,
-        [
-          flow.levels.flatMap((l) =>
-            l.resolver.kind === 'named_user'
-              ? [l.resolver.userId]
-              : l.resolver.kind === 'any_of'
-                ? l.resolver.userIds
-                : [],
-          ),
-        ],
-      );
-      const roleName = new Map(roles.rows.map((x) => [x.code, x.name]));
-      const userName = new Map(users.rows.map((x) => [x.id, x.name]));
-      const who = (l: Level): string => {
-        const r = l.resolver;
-        if (r.kind === 'role') return roleName.get(r.roleCode) ?? r.roleCode;
-        if (r.kind === 'any_of')
-          return [
-            ...r.roleCodes.map((x) => roleName.get(x) ?? x),
-            ...r.userIds.map((x) => userName.get(x) ?? 'A named person'),
-          ].join(', ');
-        if (r.kind === 'named_user') return userName.get(r.userId) ?? 'A named person';
-        if (r.kind === 'class_teacher') return 'Class teacher';
-        if (r.kind === 'position' || r.kind === 'staff')
-          return `Designation: ${('designation' in r && r.designation) || 'HOD'}`;
-        return 'The requester’s reporting line';
-      };
       return {
         definitionId: flow.id,
         fields: KEYS.map((k) => ({ key: k, label: PROFILE_FIELD_BY_KEY.get(k)!.label })),
-        levels: [...flow.levels]
-          .sort((a, b) => a.level - b.level)
-          .map((l) => ({ level: l.level, name: l.name, approvers: who(l) })),
+        levels: await describeLevels(c, flow.levels),
       };
     });
   }

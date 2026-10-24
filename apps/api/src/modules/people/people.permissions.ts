@@ -7,6 +7,8 @@ export const PEOPLE = {
   studentDelete: 'people.student.delete',
   /** Ask for a correction of the name, date of birth, gender or parents' names (0232). */
   studentCorrect: 'people.student.correct',
+  /** Ask to correct a student's class: enrolment moved, fees made again (0234). */
+  classCorrect: 'people.class.correct',
   guardianView: 'people.guardian.view',
   guardianEdit: 'people.guardian.edit',
   enrolmentManage: 'people.enrolment.manage',

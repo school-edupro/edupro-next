@@ -43,6 +43,7 @@ import { SearchController } from './search.controller';
 import { SearchService } from './search.service';
 import { StudentCorrectionsController } from './student-corrections.controller';
 import { StudentCorrectionsService } from './student-corrections.service';
+import { ClassCorrectionsService } from './class-corrections.service';
 import { StudentBulkService } from './student-bulk.service';
 import { StudentGridService } from './student-grid.service';
 import { StudentProfileController } from './student-profile.controller';
@@ -97,6 +98,7 @@ import { StudentsService } from './students.service';
     SectionRollService,
     StudentBulkService,
     StudentCorrectionsService,
+    ClassCorrectionsService,
     StudentGridService,
     StudentProfileService,
     StudentsService,
@@ -114,6 +116,7 @@ export class PeopleModule implements OnModuleInit {
     private readonly approval: RecruitmentApprovalService,
     private readonly masters: MastersService,
     private readonly corrections: StudentCorrectionsService,
+    private readonly classCorrections: ClassCorrectionsService,
   ) {}
 
   onModuleInit() {
@@ -124,6 +127,10 @@ export class PeopleModule implements OnModuleInit {
     // a student detail correction decided at the last level, or withdrawn (0232)
     this.workflow.onComplete('student_correction', (c, ctx, instance, outcome) =>
       this.corrections.onDecision(c, ctx, instance, outcome),
+    );
+    // a class correction decided at the last level, or withdrawn (0234)
+    this.workflow.onComplete('class_correction', (c, ctx, instance, outcome) =>
+      this.classCorrections.onDecision(c, ctx, instance, outcome),
     );
     // a department's HOD changed: the vacancies waiting for approval follow at once (0201)
     this.masters.onChange('departments', (ctx) => this.approval.refresh(ctx));

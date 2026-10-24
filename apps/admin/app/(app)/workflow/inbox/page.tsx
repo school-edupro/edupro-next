@@ -97,6 +97,9 @@ export default async function InboxPage({
             {s.instance.entityType === 'student_correction' ? (
               <CorrectionPreview payload={s.instance.payload} />
             ) : null}
+            {s.instance.entityType === 'class_correction' ? (
+              <ClassCorrectionPreview payload={s.instance.payload} />
+            ) : null}
             {s.instance.entityType === 'vacancy' ? (
               <p style={{ marginTop: 'var(--sp-2)' }}>
                 <a href={`/people/recruitment/${s.instance.entityId}`}>{w('viewEntity')}</a>
@@ -151,6 +154,38 @@ function CorrectionPreview({ payload }: { payload: Record<string, unknown> }) {
           <a href={`/people/students/${payload.studentId}?tab=profile`}>
             Open {String(payload.student ?? 'the student')}
             {payload.admissionNo ? ` (${String(payload.admissionNo)})` : ''}
+          </a>
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
+/** A class correction: from and to, the date, the fee due before and after, the advance. */
+function ClassCorrectionPreview({ payload }: { payload: Record<string, unknown> }) {
+  const fee = (payload.fee ?? {}) as {
+    before?: { due: number; charged: number };
+    after?: { due: number; charged: number };
+    advance?: number;
+  };
+  const rs = (n: number | undefined) => `Rs. ${(n ?? 0).toLocaleString('en-IN')}`;
+  const d = String(payload.effectiveFrom ?? '');
+  return (
+    <div style={{ marginTop: 'var(--sp-2)', display: 'grid', gap: 'var(--sp-1)' }}>
+      <p style={{ margin: 0 }}>
+        {String(payload.from ?? '')} → <strong>{String(payload.to ?? '')}</strong> from{' '}
+        {d ? `${d.slice(8, 10)}-${d.slice(5, 7)}-${d.slice(0, 4)}` : ''}
+      </p>
+      <p style={{ margin: 0 }}>
+        Year’s fee {rs(fee.before?.charged)} → {rs(fee.after?.charged)}; due {rs(fee.before?.due)} →{' '}
+        <strong>{rs(fee.after?.due)}</strong>
+        {fee.advance ? `; ${rs(fee.advance)} left as advance` : ''}
+      </p>
+      <p style={{ margin: 0 }}>Reason: {String(payload.reason ?? '')}</p>
+      {typeof payload.studentId === 'string' ? (
+        <p style={{ margin: 0 }}>
+          <a href={`/people/students/${payload.studentId}?tab=academics`}>
+            Open {String(payload.student ?? 'the student')} (every fee line)
           </a>
         </p>
       ) : null}

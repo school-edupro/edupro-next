@@ -68,3 +68,73 @@ export async function correctApplication(
     return problem(e);
   }
 }
+
+export interface ClassOutcome {
+  from: { sectionId: string; label: string };
+  to: { sectionId: string; label: string };
+  rollNo: number;
+  effectiveFrom: string;
+  fee: {
+    lines: Array<{
+      period: string;
+      head: string;
+      ledger: string;
+      before: number | null;
+      after: number | null;
+      paid: number;
+    }>;
+    before: { charged: number; paid: number; due: number };
+    after: { charged: number; paid: number; due: number };
+    freed: number;
+    setAgainst: number;
+    advance: number;
+    kept: Array<{ period: string; head: string; why: string }>;
+  };
+}
+
+export async function previewClassCorrection(
+  studentId: string,
+  body: { toSectionId: string; effectiveFrom?: string },
+): Promise<Out<ClassOutcome>> {
+  if (!okId(studentId)) return { ok: false, error: 'Unknown student' };
+  try {
+    const data = await apiFetch<ClassOutcome>(
+      `/people/students/${studentId}/class-corrections/preview`,
+      { method: 'POST', body: JSON.stringify(body) },
+    );
+    return { ok: true, data };
+  } catch (e) {
+    return problem(e);
+  }
+}
+
+export async function requestClassCorrection(
+  studentId: string,
+  body: { toSectionId: string; effectiveFrom?: string; reason: string },
+): Promise<Out> {
+  if (!okId(studentId)) return { ok: false, error: 'Unknown student' };
+  try {
+    const data = await apiFetch(`/people/students/${studentId}/class-corrections`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    });
+    revalidatePath(`/people/students/${studentId}`);
+    return { ok: true, data };
+  } catch (e) {
+    return problem(e);
+  }
+}
+
+export async function withdrawClassCorrection(studentId: string, id: string): Promise<Out> {
+  if (!okId(studentId) || !okId(id)) return { ok: false, error: 'Unknown correction' };
+  try {
+    const data = await apiFetch(`/people/students/${studentId}/class-corrections/${id}/withdraw`, {
+      method: 'POST',
+      body: JSON.stringify({}),
+    });
+    revalidatePath(`/people/students/${studentId}`);
+    return { ok: true, data };
+  } catch (e) {
+    return problem(e);
+  }
+}
