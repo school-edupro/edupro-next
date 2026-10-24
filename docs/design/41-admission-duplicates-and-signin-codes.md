@@ -15,14 +15,19 @@ checked on the child (name + date of birth, Aadhaar), so twins and siblings stil
 taken back to its unfinished draft instead of a new one; sign-in codes are transactional (sent first,
 never late), with a resend timer and a test switch to show the code on screen.
 
+3. **Closing** — when a session or a class closes, the portal stops new registrations, but a family's
+   draft can still be saved, submitted and paid: save, submit and pay never check that registrations are
+   open.
+
 ## Decisions (asked and answered, 24 Oct 2026)
 
-| #   | Question               | Decision                                                                                                                                                           |
-| --- | ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| 1   | What is a duplicate    | **Same child, same academic year**: first name + date of birth, or the same Aadhaar, in any class; other children of the family may register                       |
-| 2   | A draft already exists | **Open the existing draft**; "Register another child" starts a new one on purpose                                                                                  |
-| 3   | Sign-in codes          | **All four**: codes jump the queue; a code not sent within its validity is not sent late; resend with a timer; an admin switch to show the code on screen (logged) |
-| 4   | The waiting messages   | **Cleared** on 24 Oct: 11,746 cancelled (all test-school messages, Alpha/Beta older than 24 h); 15 of Alpha's from that day kept                                   |
+| #   | Question               | Decision                                                                                                                                                                                                                                                                |
+| --- | ---------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | What is a duplicate    | **Same child, same academic year**: first name + date of birth, or the same Aadhaar, in any class; other children of the family may register                                                                                                                            |
+| 2   | A draft already exists | **Open the existing draft**; "Register another child" starts a new one on purpose                                                                                                                                                                                       |
+| 3   | Sign-in codes          | **All four**: codes jump the queue; a code not sent within its validity is not sent late; resend with a timer; an admin switch to show the code on screen (logged)                                                                                                      |
+| 5   | After closing          | **Everything locks for families** (no new form, no saving or submitting a draft, no registration fee); the **school admin creates a passcode** for a family, sent to them by formatted email; the family signs in, enters the passcode, fills the form and pays the fee |
+| 4   | The waiting messages   | **Cleared** on 24 Oct: 11,746 cancelled (all test-school messages, Alpha/Beta older than 24 h); 15 of Alpha's from that day kept                                                                                                                                        |
 
 Defaults taken (change on request): "live" means submitted and not cancelled, withdrawn or rejected (a
 rejected child may apply again); the check runs on submit, in the portal and at the office desk; an admin
@@ -46,3 +51,15 @@ carries its expiry, and the worker marks it expired instead of sending it late. 
 the code went and "Resend in 30 s" (at most 5 an hour per mobile / email, as today's lock). Admission
 set-up gets "Also show the sign-in code on screen (testing)"; each code shown is recorded, and the
 portal shows a notice while it is on.
+
+**Part 4 — Closed means closed, with a late-entry passcode.** When the session or the class is closed (or
+past its closing time), the portal shows the form read-only with "Registrations closed on 11 Nov 2026":
+no new registration, no save, no submit, no registration-fee payment (corrections the office asked for
+and the admission fee after an offer are not affected). In the session's page the admin gives a
+**late-entry passcode**: the family's email (and mobile), the class, the child's name if known, valid
+until a date (default 3 days). An 8-character code is made, stored hashed, and sent to the family by a
+formatted email (school letterhead: the class, the code, how to use it, the last date). On the portal,
+after signing in, the family enters the passcode on the closed class: it opens that class for that
+family until the date, to start or continue the form, submit and pay. The list shows each passcode
+(given by, sent, used, expired, revoked); the admin can resend or revoke one. Every use is in the
+registration's history and the audit.
