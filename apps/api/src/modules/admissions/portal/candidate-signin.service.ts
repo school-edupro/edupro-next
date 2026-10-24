@@ -16,6 +16,10 @@ export interface AdmissionCandidate {
 
 type Kind = 'mobile' | 'email' | 'number';
 
+/** A new code no sooner than this after the last, and no more than this many an hour (docs/design/41). */
+const RESEND_SECONDS = 30;
+const CODES_PER_HOUR = 5;
+
 const classify = (raw: string): { kind: Kind; value: string } => {
   const v = raw.trim();
   if (/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(v)) return { kind: 'email', value: v.toLowerCase() };
@@ -71,6 +75,7 @@ export class CandidateSigninService {
     const who = classify(identifier);
     const code = String(randomInt(0, 1_000_000)).padStart(6, '0');
     let sentTo: string[] = [];
+    let onScreen = false;
     await this.db.tenant(publicTenant(schoolId), async (c) => {
       let mobile: string | null = who.kind === 'mobile' ? who.value : null;
       let email: string | null = who.kind === 'email' ? who.value : null;
@@ -96,20 +101,35 @@ export class CandidateSigninService {
           email = ap.rows[0].email ?? email;
         }
       }
-      const live = await c.query<{ n: number }>(
-        `SELECT count(*)::int AS n FROM public_otps WHERE mobile = $1 AND purpose = 'admission_v2' AND consumed_at IS NULL AND expires_at > now()`,
-        [who.value],
+      const live = await c.query<{ n: number; hour: number; wait: number }>(
+        `SELECT count(*) FILTER (WHERE consumed_at IS NULL AND expires_at > now())::int AS n,
+                count(*) FILTER (WHERE created_at > now() - interval '1 hour')::int AS hour,
+                COALESCE(ceil(extract(epoch FROM (max(created_at) + make_interval(secs => $2)) - now())), 0)::int AS wait
+           FROM public_otps WHERE mobile = $1 AND purpose = 'admission_v2'`,
+        [who.value, RESEND_SECONDS],
       );
-      if ((live.rows[0]?.n ?? 0) >= 3)
+      const l = live.rows[0];
+      // a new code: not within 30 seconds of the last, at most 5 an hour, 3 alive at once (docs/design/41)
+      if ((l?.wait ?? 0) > 0)
+        throw new DomainError(
+          'otp.too_soon',
+          `A code was just sent: ask for a new one in ${String(l!.wait)} seconds`,
+          { status: 429, extra: { retryAfter: l!.wait } },
+        );
+      if ((l?.hour ?? 0) >= CODES_PER_HOUR || (l?.n ?? 0) >= 3)
         throw new DomainError(
           'otp.too_many',
-          'Too many codes requested; wait for the earlier code to expire',
+          'Too many codes requested; use the last code sent, or try again after an hour',
           { status: 429 },
         );
+      const shown = await c.query<{ on: boolean }>(
+        `SELECT otp_on_screen AS on FROM admission_settings WHERE school_id = app.current_school_id()`,
+      );
+      onScreen = Boolean(shown.rows[0]?.on);
       await c.query(
-        `INSERT INTO public_otps (school_id, mobile, purpose, code_hash, expires_at, ip)
-         VALUES (app.current_school_id(), $1, 'admission_v2', $2, now() + make_interval(mins => $3), $4)`,
-        [who.value, this.hash(code), this.env.OTP_TTL_MINUTES, ip ?? null],
+        `INSERT INTO public_otps (school_id, mobile, purpose, code_hash, expires_at, ip, shown_on_screen)
+         VALUES (app.current_school_id(), $1, 'admission_v2', $2, now() + make_interval(mins => $3), $4, $5)`,
+        [who.value, this.hash(code), this.env.OTP_TTL_MINUTES, ip ?? null, onScreen],
       );
       const n = await c.query<{ n: number }>(`SELECT app.admission_otp_send($1, $2, $3, $4) AS n`, [
         mobile,
@@ -124,7 +144,7 @@ export class CandidateSigninService {
       if (mobile && (ch.includes('sms') || ch.includes('whatsapp')))
         sentTo.push(`mobile ${maskMobile(mobile)}`);
       if (email && ch.includes('email')) sentTo.push(`email ${maskEmail(email)}`);
-      if (!(n.rows[0]?.n ?? 0) && !this.env.AUTH_DEV_BYPASS)
+      if (!(n.rows[0]?.n ?? 0) && !this.env.AUTH_DEV_BYPASS && !onScreen)
         throw new DomainError(
           'otp.channel_unavailable',
           who.kind === 'email'
@@ -139,11 +159,16 @@ export class CandidateSigninService {
             : `mobile ${maskMobile(mobile ?? '0000')}`,
         ];
     });
-    this.log.log(`admission code (${who.kind}) issued (school ${schoolId})`);
+    this.log.log(
+      `admission code (${who.kind}) issued (school ${schoolId})${onScreen ? ', shown on screen' : ''}`,
+    );
     return {
       sent: true,
       sentTo,
       expiresInMinutes: this.env.OTP_TTL_MINUTES,
+      resendAfter: RESEND_SECONDS,
+      // the school shows codes on screen while its email / SMS is set up; recorded on the code
+      ...(onScreen ? { screenCode: code } : {}),
       ...(this.env.AUTH_DEV_BYPASS ? { devCode: code } : {}),
     };
   }

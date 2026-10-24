@@ -602,6 +602,65 @@ describe('online admission (e2e)', () => {
       expect(mini).toMatchObject({ open: true, registrationFee: 500, feeFrom: 0 });
     });
 
+    it('sends sign-in codes first and never late; a new code waits 30 s; codes on screen are recorded (docs/design/41)', async () => {
+      const ask = async (identifier: string) => {
+        const ch = await inject({
+          method: 'POST',
+          url: '/public/admissions/challenge',
+          headers: {},
+        });
+        const nonce = PowService.solve(ch.json().challenge, ch.json().difficulty);
+        return inject({
+          method: 'POST',
+          url: '/public/admission/code',
+          headers: {},
+          json: { schoolCode: school.code, identifier, challenge: ch.json().challenge, nonce },
+        });
+      };
+      const email = `codes.${Date.now()}@example.com`;
+      const first = await ask(email);
+      expect(first.statusCode).toBe(201);
+      expect(first.json()).toMatchObject({ resendAfter: 30 });
+      expect(first.json().screenCode).toBeUndefined();
+      // the code's email: on the urgent queue, with the code's expiry
+      const msg = await withMigrator((c) =>
+        c.query<{ urgent: boolean; expires: boolean }>(
+          `SELECT o.queue = 'urgent' AS urgent, m.expires_at > now() AS expires
+             FROM comms_messages m JOIN jobs_outbox o ON o.payload -> 'payload' ->> 'messageId' = m.id::text
+            WHERE m.school_id = $1 AND m.recipient_address = $2 ORDER BY m.id DESC LIMIT 1`,
+          [school.id, email],
+        ),
+      );
+      expect(msg.rows[0]).toEqual({ urgent: true, expires: true });
+      // asked again at once: the wait is told
+      const soon = await ask(email);
+      expect(soon.statusCode).toBe(429);
+      expect(soon.json().retryAfter).toBeGreaterThan(0);
+      // the school shows codes on screen while its mail is set up: the code comes back, recorded
+      const settings = (
+        await inject({ method: 'GET', url: '/admissions/setup', headers: h() })
+      ).json().settings;
+      const put = (on: boolean) =>
+        inject({
+          method: 'PUT',
+          url: '/admissions/setup/settings',
+          headers: h(),
+          json: {
+            signinChannels: settings.signinChannels,
+            regReceiptPrefix: settings.regReceiptPrefix,
+            admReceiptPrefix: settings.admReceiptPrefix,
+            otpOnScreen: on,
+          },
+        });
+      expect((await put(true)).statusCode).toBe(200);
+      const shown = await ask(`9${String(Date.now()).slice(-9)}`);
+      expect(shown.statusCode).toBe(201);
+      expect(shown.json().screenCode).toMatch(/^\d{6}$/);
+      const after = await put(false);
+      expect(after.json()).toMatchObject({ otpOnScreen: false });
+      expect(after.json().codesShown7d).toBeGreaterThanOrEqual(1);
+    });
+
     it("signs in by mobile and by email; a token never opens another family's registration", async () => {
       tokenA = await signIn(mobileA);
       tokenB = await signIn(emailB);

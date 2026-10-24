@@ -3,6 +3,7 @@ import type { TenantContext } from './index';
 /** Queue names shared by the API (producer through jobs_outbox) and the workers (consumers). */
 export const QUEUES = {
   notifications: 'notifications', // SMS, WhatsApp, email, push deliveries
+  urgent: 'urgent', // sign-in codes: delivered like notifications, ahead of them (docs/design/41)
   exports: 'exports', // PDF, Excel, CSV generation
   rfid: 'rfid', // device event batches to attendance
   reconciliation: 'reconciliation', // gateway settlements versus receipts

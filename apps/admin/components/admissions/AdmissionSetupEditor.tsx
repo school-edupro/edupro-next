@@ -96,6 +96,24 @@ export function AdmissionSetupEditor({
             code goes to every ticked channel the school can send on (SMS needs a DLT template,
             WhatsApp an approved template, email a mail account in Communication set-up).
           </p>
+          <label className="ep-check">
+            <input
+              type="checkbox"
+              className="ep-check__input"
+              disabled={!canEdit}
+              checked={s.otpOnScreen}
+              onChange={(e) => setS({ ...s, otpOnScreen: e.target.checked })}
+            />
+            <span className="ep-check__box" aria-hidden="true" />
+            <span className="ep-check__text">
+              Also show the sign-in code on screen (testing, while email or SMS is being set up)
+            </span>
+          </label>
+          <p className="ep-field__help">
+            Anyone who types a mobile number or email then sees its code, so switch this off before
+            registrations open. Every code shown is recorded
+            {s.codesShown7d ? `: ${String(s.codesShown7d)} in the last 7 days` : ''}.
+          </p>
         </fieldset>
         <div className="ep-as__grid">
           <label className="ep-field">

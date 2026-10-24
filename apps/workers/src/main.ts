@@ -40,13 +40,11 @@ async function main(): Promise<void> {
   publisher.start();
 
   type Processor = (job: Job<JobEnvelope<never>>) => Promise<void>;
+  const notify = notificationProcessor(db, adapters, log, storage) as unknown as Processor;
   const processors: Record<string, Processor> = {
-    [QUEUES.notifications]: notificationProcessor(
-      db,
-      adapters,
-      log,
-      storage,
-    ) as unknown as Processor,
+    [QUEUES.notifications]: notify,
+    // sign-in codes: the same delivery on a queue of their own, never behind bulk messages
+    [QUEUES.urgent]: notify,
     [QUEUES.exports]: exportProcessor({
       db,
       storage,

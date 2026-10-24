@@ -46,7 +46,7 @@ continue with a reason (history and audit).
 and session when there is one; the portal says so. "Register another child" starts a new draft on
 purpose. My registrations lists drafts first with Continue and Delete.
 
-**Part 3 — Sign-in codes that arrive.** Codes are queued ahead of other messages; each code message
+**Part 3 — Sign-in codes that arrive (built 24 Oct 2026, migration 0243).** Codes are queued ahead of other messages; each code message
 carries its expiry, and the worker marks it expired instead of sending it late. The portal shows where
 the code went and "Resend in 30 s" (at most 5 an hour per mobile / email, as today's lock). Admission
 set-up gets "Also show the sign-in code on screen (testing)"; each code shown is recorded, and the

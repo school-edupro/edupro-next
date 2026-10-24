@@ -17,6 +17,8 @@ export const AdmissionSettingsSchema = z.object({
     .max(3),
   regReceiptPrefix: z.string().regex(/^[A-Z]{1,6}$/, 'one to six capital letters'),
   admReceiptPrefix: z.string().regex(/^[A-Z]{1,6}$/, 'one to six capital letters'),
+  /** also show sign-in codes on screen (testing; every code shown is recorded) */
+  otpOnScreen: z.boolean().optional(),
 });
 export class AdmissionSettingsDto extends createZodDto(AdmissionSettingsSchema) {}
 

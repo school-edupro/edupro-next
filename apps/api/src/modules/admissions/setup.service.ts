@@ -18,6 +18,10 @@ export interface AdmissionSettings {
   signinChannels: Array<'email' | 'sms' | 'whatsapp'>;
   regReceiptPrefix: string;
   admReceiptPrefix: string;
+  /** sign-in codes also shown on screen while email / SMS is set up (docs/design/41) */
+  otpOnScreen: boolean;
+  /** codes shown on screen in the last 7 days */
+  codesShown7d: number;
 }
 export interface FeeCategory {
   id: string;
@@ -96,14 +100,21 @@ export class AdmissionSetupService {
       signin_channels: string[];
       reg_receipt_prefix: string;
       adm_receipt_prefix: string;
+      otp_on_screen: boolean;
+      shown: number;
     }>(
-      `SELECT signin_channels, reg_receipt_prefix, adm_receipt_prefix FROM admission_settings WHERE school_id = app.current_school_id()`,
+      `SELECT signin_channels, reg_receipt_prefix, adm_receipt_prefix, otp_on_screen,
+              (SELECT count(*)::int FROM public_otps WHERE purpose = 'admission_v2' AND shown_on_screen
+                  AND created_at > now() - interval '7 days') AS shown
+         FROM admission_settings WHERE school_id = app.current_school_id()`,
     );
     const x = r.rows[0]!;
     return {
       signinChannels: x.signin_channels as AdmissionSettings['signinChannels'],
       regReceiptPrefix: x.reg_receipt_prefix,
       admReceiptPrefix: x.adm_receipt_prefix,
+      otpOnScreen: x.otp_on_screen,
+      codesShown7d: x.shown,
     };
   }
 
@@ -183,9 +194,10 @@ export class AdmissionSetupService {
           { status: 400 },
         );
       await c.query(
-        `UPDATE admission_settings SET signin_channels = $1, reg_receipt_prefix = $2, adm_receipt_prefix = $3, updated_at = now(), updated_by = app.current_user_id()
+        `UPDATE admission_settings SET signin_channels = $1, reg_receipt_prefix = $2, adm_receipt_prefix = $3,
+                otp_on_screen = COALESCE($4, otp_on_screen), updated_at = now(), updated_by = app.current_user_id()
           WHERE school_id = app.current_school_id()`,
-        [dto.signinChannels, dto.regReceiptPrefix, dto.admReceiptPrefix],
+        [dto.signinChannels, dto.regReceiptPrefix, dto.admReceiptPrefix, dto.otpOnScreen ?? null],
       );
       await this.audit.stage(ctx, c, {
         action: 'admissions.setup.settings',

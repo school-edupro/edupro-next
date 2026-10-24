@@ -11021,6 +11021,10 @@ a.ep-pub-foot__item {
   flex-wrap: wrap;
   gap: var(--sp-2);
 }
+.ep-adm-code {
+  font-size: var(--fs-h4);
+  letter-spacing: 0.2em;
+}
 .ep-adm-rowacts {
   display: inline-flex;
   flex-wrap: wrap;

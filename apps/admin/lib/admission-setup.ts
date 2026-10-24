@@ -5,6 +5,10 @@ export interface AdmissionSettings {
   signinChannels: Array<'email' | 'sms' | 'whatsapp'>;
   regReceiptPrefix: string;
   admReceiptPrefix: string;
+  /** sign-in codes also shown on screen (testing, docs/design/41) */
+  otpOnScreen: boolean;
+  /** codes shown on screen in the last 7 days */
+  codesShown7d: number;
 }
 export interface FeeCategory {
   id: string;

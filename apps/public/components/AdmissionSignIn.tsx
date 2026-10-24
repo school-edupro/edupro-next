@@ -17,6 +17,8 @@ export function AdmissionSignIn({ school, returnTo }: { school: string; returnTo
   const [sentTo, setSentTo] = useState<string[]>([]);
   const [minutes, setMinutes] = useState(10);
   const [devCode, setDevCode] = useState<string | null>(null);
+  // the school shows codes on screen while its email / SMS is set up (docs/design/41)
+  const [screenCode, setScreenCode] = useState<string | null>(null);
   const [wait, setWait] = useState(0);
   useEffect(() => {
     if (wait <= 0) return;
@@ -57,12 +59,17 @@ export function AdmissionSignIn({ school, returnTo }: { school: string; returnTo
         }),
       });
       const body = await res.json();
-      if (!res.ok) throw new Error(body.detail ?? body.type ?? 'failed');
+      if (!res.ok) {
+        // asked again too soon: the countdown follows the school's wait
+        if (typeof body.retryAfter === 'number') setWait(body.retryAfter);
+        throw new Error(body.detail ?? body.type ?? 'failed');
+      }
       setSentTo(body.sentTo ?? []);
       setDevCode(body.devCode ?? null);
+      setScreenCode(body.screenCode ?? null);
       if (body.expiresInMinutes) setMinutes(body.expiresInMinutes);
       setCode('');
-      setWait(RESEND_AFTER);
+      setWait(typeof body.resendAfter === 'number' ? body.resendAfter : RESEND_AFTER);
       setStage('code');
     } catch (e) {
       setError((e as Error).message);
@@ -125,6 +132,12 @@ export function AdmissionSignIn({ school, returnTo }: { school: string; returnTo
             {minutes} minutes.
             {devCode ? <span className="ep-kicker"> Development code: {devCode}</span> : null}
           </p>
+          {screenCode ? (
+            <div className="ep-alert ep-alert--warning" role="status">
+              The school is testing its messages: your code is{' '}
+              <strong className="ep-adm-code">{screenCode}</strong>
+            </div>
+          ) : null}
           <label className="ep-field">
             <span className="ep-field__label">Code</span>
             <input
