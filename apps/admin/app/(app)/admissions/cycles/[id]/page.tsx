@@ -148,7 +148,7 @@ export default async function CyclePage({
             <form action={shortlistCycle}>
               <input type="hidden" name="cycleId" value={cycle.id} />
               <p className="ep-field__help">{a('shortlistHelp')}</p>
-              <FormRow columns={3}>
+              <FormRow columns={1}>
                 <SelectField
                   id="sl-class"
                   name="classId"
@@ -173,7 +173,7 @@ export default async function CyclePage({
             <form action={drawCycle}>
               <input type="hidden" name="cycleId" value={cycle.id} />
               <p className="ep-field__help">{a('drawHelp')}</p>
-              <FormRow columns={3}>
+              <FormRow columns={1}>
                 <SelectField
                   id="dr-class"
                   name="classId"
@@ -192,7 +192,7 @@ export default async function CyclePage({
             <form action={requestCycleApprovals}>
               <input type="hidden" name="cycleId" value={cycle.id} />
               <p className="ep-field__help">{a('approval')}</p>
-              <FormRow columns={2}>
+              <FormRow columns={1}>
                 <SelectField
                   id="ap-class"
                   name="classId"

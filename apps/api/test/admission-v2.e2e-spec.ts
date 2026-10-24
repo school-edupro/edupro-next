@@ -136,6 +136,38 @@ describe('online admission (e2e)', () => {
       expect(r3.statusCode).toBe(400);
     });
 
+    it('does not overwrite a save made after the builder opened the form, unless asked', async () => {
+      const opened = (
+        await inject({ method: 'GET', url: `/admissions/forms/${formIx}`, headers: h() })
+      ).json();
+      // someone else saves first
+      const first = await inject({
+        method: 'PUT',
+        url: `/admissions/forms/${formIx}`,
+        headers: h(),
+        json: { name: opened.name, def: opened.def, baseUpdatedAt: opened.updatedAt },
+      });
+      expect(first.statusCode).toBe(200);
+      // the page opened before that save is stopped, and told who saved and when
+      const late = await inject({
+        method: 'PUT',
+        url: `/admissions/forms/${formIx}`,
+        headers: h(),
+        json: { name: opened.name, def: opened.def, baseUpdatedAt: opened.updatedAt },
+      });
+      expect(late.statusCode).toBe(409);
+      expect(late.json().type).toMatch(/stale/);
+      expect(late.json().updatedAt).toBe(first.json().updatedAt);
+      // replacing it on purpose: against the version it was told about
+      const replace = await inject({
+        method: 'PUT',
+        url: `/admissions/forms/${formIx}`,
+        headers: h(),
+        json: { name: opened.name, def: opened.def, baseUpdatedAt: late.json().updatedAt },
+      });
+      expect(replace.statusCode).toBe(200);
+    });
+
     it('edits, copies and archives a form; only managers may change it', async () => {
       const form = (
         await inject({ method: 'GET', url: `/admissions/forms/${formXi}`, headers: h() })

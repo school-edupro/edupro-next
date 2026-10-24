@@ -109,6 +109,9 @@ export function FormBuilder({
   const [dirty, setDirty] = useState(false);
   const [msg, setMsg] = useState<{ tone: 'success' | 'danger'; text: string } | null>(null);
   const [pending, start] = useTransition();
+  // the version this page is editing; a save made elsewhere since then is not overwritten unasked
+  const [base, setBase] = useState(form.updatedAt);
+  const [stale, setStale] = useState<{ updatedAt: string; updatedBy: string | null } | null>(null);
 
   const problems = useMemo(() => defProblems(def), [def]);
   const options = form.options;
@@ -120,12 +123,22 @@ export function FormBuilder({
   const stepFields = def.fields.map((f, i) => ({ f, i })).filter((x) => x.f.step === stepKey);
   const studentField = (key?: string) => meta.studentFields.find((s) => s.key === key);
 
-  const save = () =>
+  const save = (over?: string) =>
     start(async () => {
-      const r = await saveAdmissionForm(form.id, { name, description, def });
+      const r = await saveAdmissionForm(form.id, {
+        name,
+        description,
+        def,
+        baseUpdatedAt: over ?? base,
+      });
       if (r.ok) {
+        setBase(r.data.updatedAt);
+        setStale(null);
         setDirty(false);
         setMsg({ tone: 'success', text: 'Form saved.' });
+      } else if ('stale' in r) {
+        setStale(r.stale);
+        setMsg(null);
       } else setMsg({ tone: 'danger', text: r.error });
     });
 
@@ -411,22 +424,54 @@ export function FormBuilder({
         </div>
       ) : null}
       {canEdit ? (
-        <div className="ep-fb__bar" role="region" aria-label="Save the form">
-          <span className="ep-fb__msg" role={msg?.tone === 'danger' ? 'alert' : 'status'}>
-            {msg
-              ? msg.text
-              : dirty
-                ? 'Unsaved changes'
-                : `Saved ${new Date(form.updatedAt).toLocaleString('en-IN')}${form.updatedBy ? ` by ${form.updatedBy}` : ''}`}
-          </span>
-          <button
-            type="button"
-            className="ep-btn ep-btn--primary"
-            disabled={pending || !dirty || problems.length > 0}
-            onClick={save}
-          >
-            {pending ? 'Saving…' : 'Save form'}
-          </button>
+        <div
+          className={`ep-fb__bar${stale ? ' ep-fb__bar--stale' : ''}`}
+          role="region"
+          aria-label="Save the form"
+        >
+          {stale ? (
+            <>
+              <span className="ep-fb__msg" role="alert">
+                <strong>This form was changed after you opened it</strong>:{' '}
+                {stale.updatedBy ?? 'someone'} saved it at{' '}
+                {new Date(stale.updatedAt).toLocaleString('en-IN')}. Reload to see their version
+                (your changes here are lost), or replace it with yours.
+              </span>
+              <button
+                type="button"
+                className="ep-btn ep-btn--secondary"
+                onClick={() => window.location.reload()}
+              >
+                Reload their version
+              </button>
+              <button
+                type="button"
+                className="ep-btn ep-btn--danger"
+                disabled={pending || problems.length > 0}
+                onClick={() => save(stale.updatedAt)}
+              >
+                {pending ? 'Saving…' : 'Replace with mine'}
+              </button>
+            </>
+          ) : (
+            <>
+              <span className="ep-fb__msg" role={msg?.tone === 'danger' ? 'alert' : 'status'}>
+                {msg
+                  ? msg.text
+                  : dirty
+                    ? 'Unsaved changes'
+                    : `Saved ${new Date(base).toLocaleString('en-IN')}${form.updatedBy ? ` by ${form.updatedBy}` : ''}`}
+              </span>
+              <button
+                type="button"
+                className="ep-btn ep-btn--primary"
+                disabled={pending || !dirty || problems.length > 0}
+                onClick={() => save()}
+              >
+                {pending ? 'Saving…' : 'Save form'}
+              </button>
+            </>
+          )}
         </div>
       ) : null}
 

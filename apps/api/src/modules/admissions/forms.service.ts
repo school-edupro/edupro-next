@@ -303,6 +303,20 @@ export class AdmissionFormsService {
   async update(ctx: RequestContext, id: string, dto: UpdateFormDto) {
     return this.db.tenant(requireTenant(ctx), async (c) => {
       const before = await this.rowWith(c, id);
+      if (dto.baseUpdatedAt) {
+        // locked so two saves cannot both pass the check
+        const now = await c.query<{ updated_at: Date }>(
+          `SELECT updated_at FROM admission_forms WHERE id = $1 FOR UPDATE`,
+          [id],
+        );
+        const at = now.rows[0]!.updated_at;
+        if (at.getTime() !== new Date(dto.baseUpdatedAt).getTime())
+          throw new DomainError(
+            'stale',
+            `This form was changed${before.updatedBy ? ` by ${before.updatedBy}` : ''} after you opened it`,
+            { status: 409, extra: { updatedAt: at.toISOString(), updatedBy: before.updatedBy } },
+          );
+      }
       const def = dto.def as AdmissionFormDef;
       await this.check(c, def);
       await c

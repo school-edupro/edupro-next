@@ -23,10 +23,17 @@ function problem(e: unknown): { ok: false; error: string } {
   throw e;
 }
 
+/**
+ * Saves the builder. `baseUpdatedAt` is the version the builder opened: when someone saved in between,
+ * nothing is written and `stale` says who and when, so the builder can ask before replacing it.
+ */
 export async function saveAdmissionForm(
   id: string,
-  input: { name: string; description: string; def: AdmissionFormDef },
-): Promise<Out<{ id: string; updatedAt: string }>> {
+  input: { name: string; description: string; def: AdmissionFormDef; baseUpdatedAt?: string },
+): Promise<
+  | Out<{ id: string; updatedAt: string }>
+  | { ok: false; error: string; stale: { updatedAt: string; updatedBy: string | null } }
+> {
   if (!okId(id)) return { ok: false, error: 'Unknown form' };
   try {
     const r = await apiFetch<{ id: string; updatedAt: string }>(`/admissions/forms/${id}`, {
@@ -36,6 +43,15 @@ export async function saveAdmissionForm(
     revalidatePath('/admissions/forms');
     return { ok: true, data: { id: r.id, updatedAt: r.updatedAt } };
   } catch (e) {
+    if (e instanceof ApiError && e.problem.type.endsWith('stale'))
+      return {
+        ok: false,
+        error: e.problem.detail ?? 'This form was changed after you opened it',
+        stale: {
+          updatedAt: String(e.problem.updatedAt),
+          updatedBy: (e.problem.updatedBy as string | null) ?? null,
+        },
+      };
     return problem(e);
   }
 }

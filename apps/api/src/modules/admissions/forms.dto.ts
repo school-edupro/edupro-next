@@ -124,6 +124,8 @@ export const UpdateFormSchema = z.object({
   name: z.string().trim().min(2).max(120),
   description: z.string().trim().max(500).optional(),
   def: AdmissionFormDefSchema,
+  // the form's updatedAt when the builder opened it: a newer save in between is not overwritten unasked
+  baseUpdatedAt: z.string().datetime().optional(),
 });
 export class UpdateFormDto extends createZodDto(UpdateFormSchema) {}
 

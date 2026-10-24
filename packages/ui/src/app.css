@@ -10743,9 +10743,17 @@ a.ep-pub-foot__item {
   }
 }
 
+.ep-fb__bar--stale {
+  flex-wrap: wrap;
+  background: var(--status-warning-bg);
+  color: var(--status-warning-text);
+}
+
 /* ---- admission session and set-up (docs/design/39) --------------------------------------------- */
 .ep-sp {
   display: grid;
+  /* one column that may shrink, so a wide table scrolls inside its frame instead of widening the page */
+  grid-template-columns: minmax(0, 1fr);
   gap: var(--sp-3);
 }
 .ep-sp__head {
