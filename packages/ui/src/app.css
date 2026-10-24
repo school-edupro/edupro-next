@@ -10316,10 +10316,11 @@ a.ep-pub-foot__item {
 .ep-af__progress strong {
   color: var(--text-heading);
 }
+/* every tab in sight: the row wraps instead of scrolling sideways (8 tabs on a laptop) */
 .ep-af__tabs {
   display: flex;
-  gap: var(--sp-1);
-  overflow-x: auto;
+  flex-wrap: wrap;
+  gap: 0 var(--sp-1);
   border-bottom: 1px solid var(--border-default);
   padding-bottom: 0;
 }
@@ -10328,7 +10329,7 @@ a.ep-pub-foot__item {
   align-items: center;
   gap: var(--sp-2);
   white-space: nowrap;
-  padding: var(--sp-2) var(--sp-3);
+  padding: var(--sp-2) var(--sp-2);
   border: 0;
   border-bottom: 3px solid transparent;
   background: none;
