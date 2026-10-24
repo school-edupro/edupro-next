@@ -2,6 +2,7 @@
 import { Badge } from '@edupro/ui';
 import { useRouter } from 'next/navigation';
 import { useState, useTransition } from 'react';
+import { ViewDownload } from '@/components/admissions/ViewDownload';
 import type { Selection } from '@/lib/admission-process';
 import { selectionAction } from '@/lib/admission-process-actions';
 
@@ -16,8 +17,9 @@ const dmy = (iso: string | null) =>
     : '';
 
 /**
- * Selection of a class (docs/design/39, part 4): the merit list of candidates at Selection (by marks,
- * then registration date) to offer or wait-list, a replayable draw for a category, the waiting list with
+ * Selection of a class (docs/design/39, part 4): the merit list of candidates at Selection (merit =
+ * form points + marks; equal merit: the older child, then a recorded draw, docs/design/40) to offer or
+ * wait-list, a replayable draw for a category, the waiting list with
  * "offer the next", and the offers made.
  */
 export function SelectionBoard({ data, canManage }: { data: Selection; canManage: boolean }) {
@@ -55,9 +57,19 @@ export function SelectionBoard({ data, canManage }: { data: Selection; canManage
         </div>
       ) : null}
       <section className="ep-card ep-as__card" aria-labelledby="sel-merit">
-        <h2 id="sel-merit" className="ep-as__h">
-          Merit list ({data.merit.length})
-        </h2>
+        <div className="ep-sel__head">
+          <h2 id="sel-merit" className="ep-as__h">
+            Merit list ({data.merit.length})
+          </h2>
+          <ViewDownload
+            href={`/api/admission-merit/${data.session.id}/${data.class.id}`}
+            what={`the merit list of ${data.class.name}`}
+          />
+        </div>
+        <p className="ep-field__help" style={{ margin: 0 }}>
+          {data.tieBreak.rule}
+          {data.tieBreak.seed ? ` Draw seed ${data.tieBreak.seed}.` : ''}
+        </p>
         {data.merit.length === 0 ? (
           <p style={{ margin: 0 }}>Nobody waits at Selection in this class.</p>
         ) : (
@@ -74,12 +86,14 @@ export function SelectionBoard({ data, canManage }: { data: Selection; canManage
                   <th scope="col">Rank</th>
                   <th scope="col">Candidate</th>
                   <th scope="col">Category</th>
+                  <th scope="col">Points</th>
+                  <th scope="col">Marks</th>
                   <th scope="col">Merit</th>
-                  <th scope="col">Registered</th>
+                  <th scope="col">Born</th>
                 </tr>
               </thead>
               <tbody>
-                {data.merit.map((x, i) => (
+                {data.merit.map((x) => (
                   <tr key={x.id}>
                     {canManage ? (
                       <td>
@@ -101,7 +115,17 @@ export function SelectionBoard({ data, canManage }: { data: Selection; canManage
                         </label>
                       </td>
                     ) : null}
-                    <td>{i + 1}</td>
+                    <td>
+                      {x.rank}
+                      {x.tie ? (
+                        <>
+                          {' '}
+                          <Badge tone={x.tie === 'draw' ? 'warning' : 'info'}>
+                            {x.tie === 'draw' ? 'by draw' : 'older first'}
+                          </Badge>
+                        </>
+                      ) : null}
+                    </td>
                     <td>
                       <a href={`/admissions/registrations/${x.id}`}>{x.candidate ?? x.number}</a>
                       <div className="ep-kicker">
@@ -110,8 +134,12 @@ export function SelectionBoard({ data, canManage }: { data: Selection; canManage
                       </div>
                     </td>
                     <td>{x.category ?? '-'}</td>
-                    <td>{x.merit ?? '-'}</td>
-                    <td>{dmy(x.registeredAt)}</td>
+                    <td>{x.points ?? '-'}</td>
+                    <td>{x.marks ?? '-'}</td>
+                    <td>
+                      <strong>{x.merit ?? '-'}</strong>
+                    </td>
+                    <td>{x.dob ? dmy(`${x.dob}T00:00:00+05:30`) : '-'}</td>
                   </tr>
                 ))}
               </tbody>

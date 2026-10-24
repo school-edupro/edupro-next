@@ -53,7 +53,7 @@ registration. The registration page and the candidate's portal show the breakdow
 the office confirms or adjusts a criterion (with a reason, audited). Merit = form points + live
 test / interview marks (`meritOf`), so Selection and the stage lists rank on it.
 
-**Part 4 — Merit list and tie-break.** Selection orders by merit, then date of birth (older first), then
+**Part 4 — Merit list and tie-break (built 24 Oct 2026, migration 0242).** Selection orders by merit, then date of birth (older first), then
 a draw of lots for those still equal (seed recorded on the list, reproducible). The list shows the
 points, marks and total columns and marks tied candidates; the merit list PDF / export carries the
 criteria and the tie-break rule.

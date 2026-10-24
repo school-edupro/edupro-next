@@ -10985,6 +10985,16 @@ a.ep-pub-foot__item {
   font-weight: var(--fw-semibold);
   color: var(--text-heading);
 }
+.ep-sel__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-2);
+}
+.ep-sel__head .ep-as__h {
+  margin: 0;
+}
 .ep-rpts {
   display: grid;
   gap: var(--sp-3);

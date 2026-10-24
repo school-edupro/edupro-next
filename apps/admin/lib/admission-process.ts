@@ -169,7 +169,18 @@ export interface Selection {
     offered: number;
     paid: number;
   }>;
-  merit: SelectionRow[];
+  /** at Selection, in merit-list order (docs/design/40, part 4) */
+  merit: Array<
+    SelectionRow & {
+      rank: number;
+      points: number | null;
+      marks: number | null;
+      dob: string | null;
+      /** how the place among equal merits was settled */
+      tie: 'age' | 'draw' | null;
+    }
+  >;
+  tieBreak: { rule: string; seed: string | null; seededAt: string | null };
   waiting: SelectionRow[];
   offered: SelectionRow[];
 }

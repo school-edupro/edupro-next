@@ -1,4 +1,4 @@
-import { createHash, randomBytes } from 'node:crypto';
+import { randomBytes } from 'node:crypto';
 import { Injectable } from '@nestjs/common';
 import type { PoolClient } from '@edupro/db';
 import { AuditService } from '../../common/audit/audit.service';
@@ -6,7 +6,9 @@ import { DbService } from '../../common/db/db.service';
 import { DomainError } from '../../common/errors/domain-error';
 import { requireTenant, type RequestContext } from '../../common/http/request-context';
 import { AdmissionCoreService } from './admission-core.service';
-import { admitCardPdf } from './admission-pdf';
+import { admitCardPdf, meritListPdf } from './admission-pdf';
+import { classPointRules } from './points-rules';
+import { meritOrder, seededOrder, TIE_RULE } from './merit-order';
 import { slotOf } from './process-engine';
 import { AdmissionProcessService } from './process.service';
 import type {
@@ -28,25 +30,6 @@ const when = (d: Date) =>
     hour: 'numeric',
     minute: '2-digit',
   }).format(d);
-
-/** Deterministic shuffle (mulberry32 seeded from sha256 of the seed): a draw can be replayed and checked. */
-function seededOrder<T>(items: T[], seed: string): T[] {
-  const h = createHash('sha256').update(seed).digest();
-  let a = h.readUInt32LE(0);
-  const rnd = () => {
-    a |= 0;
-    a = (a + 0x6d2b79f5) | 0;
-    let t = Math.imul(a ^ (a >>> 15), 1 | a);
-    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
-  const arr = [...items];
-  for (let i = arr.length - 1; i > 0; i -= 1) {
-    const j = Math.floor(rnd() * (i + 1));
-    [arr[i], arr[j]] = [arr[j]!, arr[i]!];
-  }
-  return arr;
-}
 
 /** Registrations waiting at a stage (of a session, a class when given) that have no slot for it yet. */
 const WAITING_AT = `a.cycle_id = $1 AND a.status::text IN ('registered', 'under_review') AND a.process_steps IS NOT NULL
@@ -568,8 +551,10 @@ export class AdmissionScheduleService {
         class_name: string;
         cycle_name: string;
         offer_days: number;
+        merit_seed: string | null;
+        merit_seed_at: Date | null;
       }>(
-        `SELECT k.seats, cl.name AS class_name, y.name AS cycle_name, y.offer_days FROM admission_class_criteria k
+        `SELECT k.seats, cl.name AS class_name, y.name AS cycle_name, y.offer_days, k.merit_seed, k.merit_seed_at FROM admission_class_criteria k
            JOIN classes cl ON cl.id = k.class_id JOIN admission_cycles y ON y.id = k.cycle_id WHERE k.cycle_id = $1 AND k.class_id = $2`,
         [cycleId, classId],
       );
@@ -603,31 +588,66 @@ export class AdmissionScheduleService {
         at_selection: boolean;
         level_no: number | null;
         levels: number | null;
+        dob: string | null;
+        form_points: string | null;
       }>(
         `SELECT a.id::text, a.application_no AS number, a.candidate_name AS candidate, a.category_id::text, k.name AS category,
-                a.status::text, a.merit::text, a.wait_rank, a.registered_at, a.offer_expires_at,
+                a.status::text, a.merit::text, a.wait_rank, a.registered_at, a.offer_expires_at, a.child_dob::text AS dob, a.form_points::text,
                 st.kind = 'selection' AS at_selection, a.level_no, jsonb_array_length(a.process_steps -> a.stage_no -> 'levels') AS levels
            FROM applications a LEFT JOIN admission_fee_categories k ON k.id = a.category_id
            LEFT JOIN admission_stages st ON st.id = (a.process_steps -> a.stage_no ->> 'stageId')::bigint
           WHERE a.cycle_id = $1 AND a.class_id = $2 AND a.application_no IS NOT NULL
             AND (a.status::text IN ('offered', 'waitlisted', 'fee_paid', 'admitted')
                  OR (a.status::text IN ('registered', 'under_review') AND st.kind = 'selection'))
-          ORDER BY a.merit DESC NULLS LAST, a.registered_at, a.id`,
+          ORDER BY a.merit DESC NULLS LAST, a.child_dob NULLS LAST, a.registered_at, a.id`,
         [cycleId, classId],
       );
-      const pick = (x: (typeof rows.rows)[number]) => ({
+      const pick = (x: (typeof rows.rows)[number]) => {
+        const merit = x.merit !== null ? Number(x.merit) : null;
+        const points = x.form_points !== null ? Number(x.form_points) : null;
+        return {
+          ...base(x),
+          merit,
+          points,
+          // the marks: what the merit has beyond the form's points
+          marks: merit !== null ? Math.round((merit - (points ?? 0)) * 100) / 100 : null,
+          dob: x.dob,
+        };
+      };
+      const base = (x: (typeof rows.rows)[number]) => ({
         id: x.id,
         number: x.number,
         candidate: x.candidate,
         categoryId: x.category_id,
         category: x.category,
         status: x.status,
-        merit: x.merit !== null ? Number(x.merit) : null,
         waitRank: x.wait_rank,
         registeredAt: x.registered_at?.toISOString() ?? null,
         offerExpiresAt: x.offer_expires_at?.toISOString() ?? null,
         level: x.level_no && x.levels && x.levels > 1 ? `${x.level_no} of ${x.levels}` : null,
       });
+      // the merit list: merit, then the older child, then a recorded draw (docs/design/40, part 4)
+      const waiting = rows.rows
+        .filter((x) => ['registered', 'under_review'].includes(x.status))
+        .map(pick);
+      let seed = line.rows[0].merit_seed;
+      let seedAt = line.rows[0].merit_seed_at;
+      let ranked = meritOrder(waiting, seed);
+      if (ranked.needsDraw && !seed) {
+        seed = randomBytes(6).toString('hex');
+        seedAt = new Date();
+        await c.query(
+          `UPDATE admission_class_criteria SET merit_seed = $3, merit_seed_at = $4 WHERE cycle_id = $1 AND class_id = $2`,
+          [cycleId, classId, seed, seedAt],
+        );
+        await this.audit.stage(ctx, c, {
+          action: 'admissions.selection.tie_seed',
+          entityType: 'admission_cycles',
+          entityId: cycleId,
+          after: { classId, seed },
+        });
+        ranked = meritOrder(waiting, seed);
+      }
       const taken = cats.rows.reduce((s, k) => s + k.offered + k.paid, 0);
       return {
         session: { id: cycleId, name: line.rows[0].cycle_name, offerDays: line.rows[0].offer_days },
@@ -646,7 +666,8 @@ export class AdmissionScheduleService {
           offered: k.offered,
           paid: k.paid,
         })),
-        merit: rows.rows.filter((x) => ['registered', 'under_review'].includes(x.status)).map(pick),
+        merit: ranked.order,
+        tieBreak: { rule: TIE_RULE, seed, seededAt: seedAt?.toISOString() ?? null },
         waiting: rows.rows
           .filter((x) => x.status === 'waitlisted')
           .sort((a, b) => (a.wait_rank ?? 1e9) - (b.wait_rank ?? 1e9))
@@ -654,6 +675,55 @@ export class AdmissionScheduleService {
         offered: rows.rows
           .filter((x) => ['offered', 'fee_paid', 'admitted'].includes(x.status))
           .map(pick),
+      };
+    });
+  }
+
+  /** The merit list of a class as an A4 PDF: the criteria, the tie-break rule and seed, the ranks. */
+  async meritList(ctx: RequestContext, cycleId: string, classId: string) {
+    const sel = await this.selection(ctx, cycleId, classId);
+    return this.db.tenant(requireTenant(ctx), async (c) => {
+      const school = await c.query<{
+        name: string;
+        address: string | null;
+        contact: string | null;
+        logo: string | null;
+      }>(
+        `SELECT name, NULLIF(concat_ws(', ', NULLIF(btrim(address->>'line1'), ''), NULLIF(btrim(address->>'city'), ''), NULLIF(btrim(address->>'state'), '')), '') AS address,
+                NULLIF(btrim(contact->>'phone'), '') AS contact, NULLIF(branding->>'logoFileId', '') AS logo
+           FROM schools WHERE id = app.current_school_id()`,
+      );
+      const sc = school.rows[0]!;
+      const criteria = await classPointRules(c, cycleId, classId);
+      const n = (v: number | null) => (v === null ? '-' : String(v));
+      const bytes = await meritListPdf({
+        school: {
+          name: sc.name,
+          address: sc.address,
+          contact: sc.contact ? `Phone ${sc.contact}` : null,
+        },
+        logo: await this.core.fileBytes(c, sc.logo),
+        title: `Merit list: ${sel.class.name}`,
+        subtitle: `${sel.session.name} · ${String(sel.class.seats)} seats, ${String(sel.class.left)} left · ${String(sel.merit.length)} candidates at Selection`,
+        criteria: criteria.map((k) => ({ name: k.name, points: k.points })),
+        tieRule: sel.tieBreak.rule,
+        seed: sel.tieBreak.seed,
+        rows: sel.merit.map((x) => ({
+          rank: x.rank,
+          number: x.number ?? '',
+          candidate: x.candidate ?? '',
+          category: x.category ?? '',
+          points: n(x.points),
+          marks: n(x.marks),
+          merit: n(x.merit),
+          note: x.tie === 'age' ? 'older first' : x.tie === 'draw' ? 'by draw' : '',
+        })),
+        printedAt: when(new Date()),
+      });
+      return {
+        filename: `merit-list-${sel.class.name.replace(/[^A-Za-z0-9]+/g, '-')}.pdf`,
+        contentType: 'application/pdf',
+        base64: bytes.toString('base64'),
       };
     });
   }

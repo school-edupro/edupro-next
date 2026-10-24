@@ -1106,6 +1106,25 @@ describe('online admission (e2e)', () => {
       });
       expect(sel.statusCode).toBe(200);
       expect(sel.json().merit.map((x: { id: string }) => x.id)).toEqual([appA]);
+      // the list shows points, marks and merit; one candidate: no tie, no draw seed yet
+      expect(sel.json().merit[0]).toMatchObject({
+        rank: 1,
+        points: 5,
+        marks: 72,
+        merit: 77,
+        tie: null,
+        dob: '2012-05-01',
+      });
+      expect(sel.json().tieBreak).toMatchObject({ seed: null });
+      expect(sel.json().tieBreak.rule).toMatch(/older child first/);
+      const pdf = await inject({
+        method: 'GET',
+        url: `/admissions/cycles/${cycleId}/selection/${classMini}/merit-list`,
+        headers: h(),
+      });
+      expect(pdf.statusCode).toBe(200);
+      expect(pdf.json().contentType).toBe('application/pdf');
+      expect(Buffer.from(pdf.json().base64, 'base64').subarray(0, 4).toString()).toBe('%PDF');
       const offer = await inject({
         method: 'POST',
         url: `/admissions/cycles/${cycleId}/selection/offer`,

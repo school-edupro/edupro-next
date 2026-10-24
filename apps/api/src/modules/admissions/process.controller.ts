@@ -252,6 +252,20 @@ export class AdmissionProcessController {
     return this.schedule.selection(ctx, id, classId);
   }
 
+  @Get('cycles/:id/selection/:classId/merit-list')
+  @ApiOperation({
+    summary:
+      'The merit list of a class (PDF): criteria, the tie-break rule and its seed, the ranks',
+  })
+  @RequirePermission(ADMISSIONS.applicationView)
+  meritList(
+    @ReqCtx() ctx: RequestContext,
+    @Param('id') id: string,
+    @Param('classId') classId: string,
+  ) {
+    return this.schedule.meritList(ctx, id, classId);
+  }
+
   @Post('cycles/:id/selection/offer')
   @RequirePermission(ADMISSION_SCHEDULE)
   offer(@ReqCtx() ctx: RequestContext, @Param('id') id: string, @Body() dto: SelectIdsDto) {
