@@ -12,6 +12,7 @@ import {
   SelectField,
 } from '@edupro/ui';
 import { getTranslations } from 'next-intl/server';
+import { notFound, redirect } from 'next/navigation';
 import { ExportWatcher } from '@/components/ExportWatcher';
 import { Notice } from '@/components/Notice';
 import { StudentFeeRequests } from '@/components/fees/StudentFeeRequests';
@@ -25,6 +26,7 @@ import {
   type ClassCorrectionItem,
   type ClassCorrectionSetup,
 } from '@/components/ClassCorrection';
+import { StudentMerge, type MergeItem, type MergeSetup } from '@/components/StudentMerge';
 import {
   StudentCorrections,
   type CorrectionItem,
@@ -44,7 +46,7 @@ import {
   unlinkGuardian,
   updateStudent,
 } from '@/lib/actions';
-import { apiFetch, getMe } from '@/lib/api';
+import { ApiError, apiFetch, getMe } from '@/lib/api';
 import type {
   DocumentTemplate,
   Enrolment,
@@ -95,7 +97,20 @@ export default async function StudentPage({
     getTranslations('people.relation'),
     getTranslations('common'),
     getMe(),
-    apiFetch<Student360>(`/people/students/${id}`),
+    apiFetch<Student360>(`/people/students/${id}`).catch(async (e: unknown) => {
+      // a record merged into another (docs/design/37, part 3) opens the one kept
+      if (e instanceof ApiError && e.status === 404) {
+        const m = await apiFetch<{ mergedInto: { id: string } | null }>(
+          `/people/students/${id}/merges`,
+        ).catch(() => null);
+        if (m?.mergedInto)
+          redirect(
+            `/people/students/${m.mergedInto.id}?ok=1&detail=${encodeURIComponent('That record was merged into this one.')}`,
+          );
+        notFound();
+      }
+      throw e;
+    }),
     sectionOptions(),
   ]);
   const can = (perm: string) => me.permissions.includes(perm);
@@ -185,6 +200,16 @@ export default async function StudentPage({
             .catch(() => [] as CorrectionItem[]),
         ])
       : [null, [] as CorrectionItem[]];
+  // merges of duplicate records (part 3) on the Status tab
+  const [mergeSetup, merges] =
+    tab === 'status'
+      ? await Promise.all([
+          apiFetch<MergeSetup>('/people/student-merges/setup').catch(() => null),
+          apiFetch<{ data: MergeItem[] }>(`/people/students/${id}/merges`)
+            .then((r) => r.data)
+            .catch(() => [] as MergeItem[]),
+        ])
+      : [null, [] as MergeItem[]];
   // class corrections (part 2) on the Academics tab
   const [classSetup, classHistory] =
     tab === 'academics'
@@ -540,6 +565,22 @@ export default async function StudentPage({
               setup={classSetup}
               history={classHistory}
               canRequest={can('people.class.correct')}
+              canSetUp={can('workflow.definition.manage')}
+            />
+          </Card>
+        ) : null}
+
+        {tab === 'status' && mergeSetup ? (
+          <Card title="Merge a duplicate record">
+            <StudentMerge
+              student={{
+                id: student.id,
+                name: student.displayName,
+                admissionNo: student.admissionNo,
+              }}
+              setup={mergeSetup}
+              history={merges}
+              canRequest={can('people.student.merge')}
               canSetUp={can('workflow.definition.manage')}
             />
           </Card>

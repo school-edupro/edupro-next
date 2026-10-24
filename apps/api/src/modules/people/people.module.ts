@@ -44,6 +44,8 @@ import { SearchService } from './search.service';
 import { StudentCorrectionsController } from './student-corrections.controller';
 import { StudentCorrectionsService } from './student-corrections.service';
 import { ClassCorrectionsService } from './class-corrections.service';
+import { StudentMergesController } from './student-merges.controller';
+import { StudentMergesService } from './student-merges.service';
 import { StudentBulkService } from './student-bulk.service';
 import { StudentGridService } from './student-grid.service';
 import { StudentProfileController } from './student-profile.controller';
@@ -70,6 +72,7 @@ import { StudentsService } from './students.service';
     EmployeeTransferController,
     SectionRollController,
     StudentCorrectionsController,
+    StudentMergesController,
     StudentProfileController,
     StudentsController,
     EmployeesController,
@@ -99,6 +102,7 @@ import { StudentsService } from './students.service';
     StudentBulkService,
     StudentCorrectionsService,
     ClassCorrectionsService,
+    StudentMergesService,
     StudentGridService,
     StudentProfileService,
     StudentsService,
@@ -117,6 +121,7 @@ export class PeopleModule implements OnModuleInit {
     private readonly masters: MastersService,
     private readonly corrections: StudentCorrectionsService,
     private readonly classCorrections: ClassCorrectionsService,
+    private readonly merges: StudentMergesService,
   ) {}
 
   onModuleInit() {
@@ -131,6 +136,10 @@ export class PeopleModule implements OnModuleInit {
     // a class correction decided at the last level, or withdrawn (0234)
     this.workflow.onComplete('class_correction', (c, ctx, instance, outcome) =>
       this.classCorrections.onDecision(c, ctx, instance, outcome),
+    );
+    // a merge of duplicate records decided at the last level, or withdrawn (0235)
+    this.workflow.onComplete('student_merge', (c, ctx, instance, outcome) =>
+      this.merges.onDecision(c, ctx, instance, outcome),
     );
     // a department's HOD changed: the vacancies waiting for approval follow at once (0201)
     this.masters.onChange('departments', (ctx) => this.approval.refresh(ctx));

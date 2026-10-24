@@ -14,7 +14,7 @@ number once given is never reused: when it changes, the old one is retired and s
 | 1b | Wrong details in a submitted application (before Admit) | Office corrects the application, every change logged with old and new values | Part 1 — built 24 Oct |
 | 2 | Wrong admission number | Already built: change with a reason, history kept (`POST students/:id/admission-no`) | Done |
 | 3 | Wrong class / section (e.g. VII instead of VI) | **Move the enrolment from the admission date** (marks and attendance follow); unpaid demands **re-made at the new class's rates**; money already paid kept as **credit** (excess refundable on request) | Part 2 — built 24 Oct |
-| 4 | Same child admitted twice | **Merge into one record, with approval**: fees, receipts, attendance, marks, library, documents, guardians, transport, hostel moved to the record kept; the other admission number retired and searchable; cannot be undone | Part 3 |
+| 4 | Same child admitted twice | **Merge into one record, with approval**: fees, receipts, attendance, marks, library, documents, guardians, transport, hostel moved to the record kept; the other admission number retired and searchable; cannot be undone | Part 3 — built 24 Oct |
 | 5 | Admitted by mistake | **Cancel the admission with settlement, with approval**: unpaid demands cancelled; paid fees to refund (or kept as the school decides); attendance and marks kept but left out of reports; student and parent logins stopped; record shown "Admission cancelled" | Part 4 |
 
 ## Parts
@@ -84,3 +84,34 @@ Every step is audited; every approval uses the school's own levels (set-up page 
 - API: `GET people/students/class-corrections/setup`, `GET|POST people/students/:id/class-corrections`,
   `POST …/class-corrections/preview`, `POST …/class-corrections/:cid/withdraw`. Tests:
   `class-corrections.e2e-spec.ts` (7 cases).
+
+## Part 3 as built (24 Oct 2026)
+- Migration 0235: `students.merged_into_id` / `merged_at`, `student_merges` (kept and duplicate, the
+  preview kept with the request and the result; one open merge per record on either side) and the right
+  `people.student.merge` (admins, academic coordinator).
+- **Merge a duplicate record** on the student page (Status & certificates tab): find the other record by
+  admission number or name, choose which one stays, **See what changes**, the reason, **Send for
+  approval** (workflow `student_merge`, principal at one level by default).
+- The rules are in `apps/api/src/modules/people/merge-rules.ts`, one per table that points at a student
+  (77 foreign keys and the person columns of files, documents, library, groups, messages, logins). A test
+  fails if a table is added without a rule. Rows move to the kept record; where both hold a row of the
+  same thing the kept record's stays and the duplicate's is removed: an attendance mark of the same day
+  (whichever section), the marks of an exam subject, the enrolment of a year, the fee profile of a year,
+  a link to the same parent, the route of a year, and so on. The duplicate's own status history stays
+  with it.
+- Fees: every receipt moves. A fee line both were charged for (same month and head) keeps the kept
+  record's; what was paid on the duplicate's goes to the kept record's dues in date order and the rest
+  stays as advance on the receipt. The duplicate's other lines move.
+- Not possible while: the duplicate has a correction, fee change, transport request, withdrawal, hostel
+  exit or school transfer waiting; both hold a hostel bed; both were carried forward into the same year;
+  both have an advance refund in progress; the same misc fee is on both; a twin fee line has a waiver on
+  the duplicate. Anything else the database refuses shows as "cannot be done as it stands" in the
+  preview (the preview is the real merge rolled back).
+- On approval, in one transaction: the moves above; the kept record's main parent stays main; the
+  duplicate's pupil login moves when the kept record has none, otherwise it stops; a tag card and photo
+  the kept record lacks come over; the duplicate is closed (inactive, removed, "merged into"), its
+  admission number recorded as an old number of the kept record (search finds it; never given again).
+  Opening the duplicate's page goes to the kept record. Cannot be undone.
+- API: `GET people/student-merges/setup`, `POST people/student-merges/preview`, `POST people/student-merges`,
+  `POST people/student-merges/:id/withdraw`, `GET people/students/:id/merges`. Tests:
+  `student-merges.e2e-spec.ts` (5 cases).

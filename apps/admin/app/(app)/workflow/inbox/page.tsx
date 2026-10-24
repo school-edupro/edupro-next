@@ -7,6 +7,8 @@ import { actOnStep } from '@/lib/actions';
 import { apiFetch } from '@/lib/api';
 import type { InboxItem } from '@/lib/types';
 import { MessagePreview, type PreviewItem } from '@/components/comms/MessagePreview';
+import { MergeOutcomeView } from '@/components/StudentMerge';
+import type { MergeOutcome } from '@/lib/student-correction-actions';
 
 /** S9-01: the approver's inbox; each card is one pending step assigned to the signed-in user. */
 export default async function InboxPage({
@@ -100,6 +102,9 @@ export default async function InboxPage({
             {s.instance.entityType === 'class_correction' ? (
               <ClassCorrectionPreview payload={s.instance.payload} />
             ) : null}
+            {s.instance.entityType === 'student_merge' ? (
+              <MergePreview payload={s.instance.payload} />
+            ) : null}
             {s.instance.entityType === 'vacancy' ? (
               <p style={{ marginTop: 'var(--sp-2)' }}>
                 <a href={`/people/recruitment/${s.instance.entityId}`}>{w('viewEntity')}</a>
@@ -189,6 +194,21 @@ function ClassCorrectionPreview({ payload }: { payload: Record<string, unknown> 
           </a>
         </p>
       ) : null}
+    </div>
+  );
+}
+
+/** A merge of duplicate records: both side by side, what moves and clashes, the fee after. */
+function MergePreview({ payload }: { payload: Record<string, unknown> }) {
+  const o = payload as unknown as MergeOutcome & { reason?: string };
+  return (
+    <div style={{ marginTop: 'var(--sp-2)', display: 'grid', gap: 'var(--sp-2)' }}>
+      <MergeOutcomeView o={{ ...o, logins: o.logins ?? 'none' }} />
+      <p style={{ margin: 0 }}>
+        Reason: {String(o.reason ?? '')}. A merge cannot be undone.{' '}
+        <a href={`/people/students/${o.keep.id}?tab=status`}>Open the kept record</a> ·{' '}
+        <a href={`/people/students/${o.duplicate.id}?tab=status`}>Open the duplicate</a>
+      </p>
     </div>
   );
 }

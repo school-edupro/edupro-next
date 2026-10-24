@@ -77,3 +77,7 @@ the admission ledger), **Enquiries → Conversion report**, and the **Report bui
   number and the fee before and after. Once approved, the pupil moves, the fee is made again at the new
   class's rates and money already paid is set against it; anything left over stays as advance on the
   receipt and is given back on request (Refunds).
+- **The same child admitted twice**: student page → Status & certificates → **Merge a duplicate record**.
+  Find the other record, choose which one stays and **See what changes** (both side by side, what moves,
+  what both hold and the fee after). Once approved, everything moves to the record kept and the other is
+  closed; its admission number still finds the pupil. This cannot be undone.

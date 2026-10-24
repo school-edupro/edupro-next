@@ -138,3 +138,102 @@ export async function withdrawClassCorrection(studentId: string, id: string): Pr
     return problem(e);
   }
 }
+
+export interface MergeSide {
+  id: string;
+  name: string;
+  admissionNo: string;
+  dob: string | null;
+  father: string | null;
+  mother: string | null;
+  classSection: string | null;
+  admittedOn: string | null;
+  due: number;
+}
+export interface MergeOutcome {
+  keep: MergeSide;
+  duplicate: MergeSide;
+  moved: Array<{ area: string; label: string; count: number }>;
+  clashes: Array<{ area: string; label: string; rule: string; count: number }>;
+  fee: { receipts: number; dueAfter: number; freed: number; setAgainst: number; advance: number };
+  logins: 'moved' | 'stopped' | 'none';
+}
+export interface MergePreview {
+  blockers: string[];
+  keep: MergeSide | null;
+  duplicate: MergeSide | null;
+  outcome: MergeOutcome | null;
+}
+
+/** Other records that may be the same child: by admission number or name. */
+export async function findStudents(
+  q: string,
+): Promise<Array<{ id: string; name: string; admissionNo: string; section: string | null }>> {
+  const term = q.trim().slice(0, 80);
+  if (term.length < 2) return [];
+  const r = await apiFetch<{
+    data: Array<{
+      id: string;
+      displayName: string;
+      admissionNo: string;
+      enrolment: { classCode: string; section: string } | null;
+    }>;
+  }>(`/people/students?q=${encodeURIComponent(term)}&size=10`).catch(() => ({ data: [] }));
+  return r.data.map((s) => ({
+    id: s.id,
+    name: s.displayName,
+    admissionNo: s.admissionNo,
+    section: s.enrolment ? `${s.enrolment.classCode}-${s.enrolment.section}` : null,
+  }));
+}
+
+export async function previewMerge(body: {
+  keepId: string;
+  duplicateId: string;
+}): Promise<Out<MergePreview>> {
+  if (!okId(body.keepId) || !okId(body.duplicateId))
+    return { ok: false, error: 'Choose the two records' };
+  try {
+    const data = await apiFetch<MergePreview>('/people/student-merges/preview', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    });
+    return { ok: true, data };
+  } catch (e) {
+    return problem(e);
+  }
+}
+
+export async function requestMerge(body: {
+  keepId: string;
+  duplicateId: string;
+  reason: string;
+}): Promise<Out> {
+  if (!okId(body.keepId) || !okId(body.duplicateId))
+    return { ok: false, error: 'Choose the two records' };
+  try {
+    const data = await apiFetch('/people/student-merges', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    });
+    revalidatePath(`/people/students/${body.keepId}`);
+    revalidatePath(`/people/students/${body.duplicateId}`);
+    return { ok: true, data };
+  } catch (e) {
+    return problem(e);
+  }
+}
+
+export async function withdrawMerge(id: string, studentId: string): Promise<Out> {
+  if (!okId(id)) return { ok: false, error: 'Unknown merge' };
+  try {
+    const data = await apiFetch(`/people/student-merges/${id}/withdraw`, {
+      method: 'POST',
+      body: JSON.stringify({}),
+    });
+    revalidatePath(`/people/students/${studentId}`);
+    return { ok: true, data };
+  } catch (e) {
+    return problem(e);
+  }
+}

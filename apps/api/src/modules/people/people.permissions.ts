@@ -9,6 +9,8 @@ export const PEOPLE = {
   studentCorrect: 'people.student.correct',
   /** Ask to correct a student's class: enrolment moved, fees made again (0234). */
   classCorrect: 'people.class.correct',
+  /** Ask to merge a duplicate student record (0235). */
+  studentMerge: 'people.student.merge',
   guardianView: 'people.guardian.view',
   guardianEdit: 'people.guardian.edit',
   enrolmentManage: 'people.enrolment.manage',
