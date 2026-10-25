@@ -3,6 +3,9 @@ import { randomBytes } from 'node:crypto';
 import { Inject, Injectable } from '@nestjs/common';
 import type { PoolClient } from '@edupro/db';
 import { AuditService } from '../../common/audit/audit.service';
+import { OutboxService } from '../../common/jobs/outbox.service';
+import { QUEUES } from '@edupro/db';
+import ExcelJS from 'exceljs';
 import { DbService } from '../../common/db/db.service';
 import { DomainError } from '../../common/errors/domain-error';
 import { requireTenant, type RequestContext } from '../../common/http/request-context';
@@ -18,6 +21,7 @@ import type {
   BulkDto,
   DeskLinkDto,
   EnquiryDeskDto,
+  EnquiryExportDto,
   InviteDto,
   MoveDto,
   RulesDto,
@@ -64,6 +68,7 @@ export class AdmissionEnquiryService {
     @Inject(ENV) private readonly env: Env,
     private readonly db: DbService,
     private readonly audit: AuditService,
+    private readonly outbox: OutboxService,
   ) {}
 
   private async sourcesWith(c: PoolClient) {
@@ -593,45 +598,180 @@ export class AdmissionEnquiryService {
     });
   }
 
+  /** The leads of the filters in the list's order, at most 5000 (docs/design/46, part 1). */
+  private async exportIds(c: PoolClient, ctx: RequestContext, q: EnquiryExportDto) {
+    const { where, params } = this.filterOf(ctx, q);
+    const r = await c.query<{ id: string }>(
+      // eslint-disable-next-line no-restricted-syntax -- where holds fixed fragments; values are bound parameters
+      `SELECT e.id::text FROM admission_enquiries e WHERE ${where.join(' AND ')}
+        ORDER BY CASE WHEN e.status IN ('new', 'follow_up', 'interested') THEN 0 ELSE 1 END, e.next_follow_up_on NULLS LAST, e.created_at DESC
+        LIMIT 5000`,
+      params,
+    );
+    if (!r.rows.length)
+      throw new DomainError('validation-failed', 'There are no enquiries for these filters.', {
+        status: 400,
+      });
+    return r.rows.map((x) => x.id);
+  }
+
+  /** The words that say which leads a file holds (its title and the PDF's heading). */
+  private async exportTitle(c: PoolClient, q: EnquiryExportDto, n: number) {
+    const name = async (sql: string, id?: string) =>
+      id ? ((await c.query<{ n: string }>(sql, [id])).rows[0]?.n ?? null) : null;
+    return [
+      'Admission enquiries',
+      await name(`SELECT name AS n FROM admission_enquiry_stages WHERE id = $1`, q.stageId),
+      await name(`SELECT name AS n FROM classes WHERE id = $1`, q.classId),
+      await name(`SELECT name AS n FROM admission_enquiry_sources WHERE id = $1`, q.sourceId),
+      q.due
+        ? { today: 'follow-up today', overdue: 'overdue', upcoming: 'follow-up later' }[q.due]
+        : null,
+      q.score ? (q.score === 'none' ? 'not scored' : q.score) : null,
+      q.counsellor === 'me' ? 'mine' : q.counsellor === 'none' ? 'nobody yet' : null,
+      q.q ? `"${q.q}"` : null,
+      `${String(n)} enquiries`,
+    ]
+      .filter(Boolean)
+      .join(' · ');
+  }
+
+  /** The leads of the filters as Excel, at once. */
+  async listXlsx(ctx: RequestContext, q: EnquiryExportDto) {
+    return this.db.tenant(requireTenant(ctx), async (c) => {
+      const ids = await this.exportIds(c, ctx, q);
+      const title = await this.exportTitle(c, q, ids.length);
+      const r = await c.query<Record<string, unknown>>(
+        `SELECT 'ENQ-' || lpad(e.id::text, 6, '0') AS number, e.created_at, e.parent_name, e.child_name, cl.name AS class_name,
+                src.name AS source, st.name AS stage, initcap(e.score) AS score, u.display_name AS counsellor, e.mobile,
+                e.email::text AS email, e.next_follow_up_on::text AS next_follow_up_on, e.first_contact_at, a.application_no AS registration_no,
+                e.locality, e.notes
+           FROM admission_enquiries e
+           LEFT JOIN classes cl ON cl.id = e.class_id LEFT JOIN admission_enquiry_sources src ON src.id = e.source_id
+           LEFT JOIN admission_enquiry_stages st ON st.id = e.stage_id LEFT JOIN users u ON u.id = e.counsellor_user_id
+           LEFT JOIN applications a ON a.id = e.application_id
+          WHERE e.id = ANY($1::bigint[]) ORDER BY array_position($1::bigint[], e.id)`,
+        [ids],
+      );
+      const wb = new ExcelJS.Workbook();
+      const ws = wb.addWorksheet('Enquiries');
+      ws.addRow([title]).font = { bold: true };
+      ws.addRow([]);
+      const cols: Array<[string, string, number]> = [
+        ['number', 'Enquiry', 12],
+        ['created_at', 'Received', 12],
+        ['parent_name', 'Parent', 24],
+        ['child_name', 'Child', 22],
+        ['class_name', 'Class', 12],
+        ['source', 'Source', 16],
+        ['stage', 'Stage', 18],
+        ['score', 'Score', 8],
+        ['counsellor', 'Counsellor', 20],
+        ['mobile', 'Mobile', 13],
+        ['email', 'Email', 28],
+        ['next_follow_up_on', 'Next follow-up', 14],
+        ['first_contact_at', 'First contact', 18],
+        ['registration_no', 'Registration no.', 20],
+        ['locality', 'Locality', 18],
+        ['notes', 'Notes', 40],
+      ];
+      ws.addRow(cols.map((x) => x[1])).font = { bold: true };
+      cols.forEach(([, , w], i) => (ws.getColumn(i + 1).width = w));
+      const ist = (d: unknown, withTime: boolean) =>
+        d instanceof Date
+          ? new Intl.DateTimeFormat('en-IN', {
+              timeZone: 'Asia/Kolkata',
+              day: '2-digit',
+              month: 'short',
+              year: 'numeric',
+              ...(withTime ? { hour: '2-digit', minute: '2-digit' } : {}),
+            }).format(d)
+          : d;
+      for (const row of r.rows)
+        ws.addRow(
+          cols.map(([k]) =>
+            k === 'created_at'
+              ? ist(row[k], false)
+              : k === 'first_contact_at'
+                ? ist(row[k], true)
+                : (row[k] ?? ''),
+          ),
+        );
+      ws.views = [{ state: 'frozen', ySplit: 3 }];
+      return {
+        bytes: Buffer.from(await wb.xlsx.writeBuffer()),
+        filename: `enquiries-${new Date().toISOString().slice(0, 10)}.xlsx`,
+      };
+    });
+  }
+
+  /** The leads of the filters as a PDF through the export queue; returns the export id. */
+  async listPdf(ctx: RequestContext, q: EnquiryExportDto): Promise<{ id: string }> {
+    return this.db.tenant(requireTenant(ctx), async (c) => {
+      const ids = await this.exportIds(c, ctx, q);
+      const r = await c.query<{ id: string }>(
+        `INSERT INTO exports (school_id, dataset, format, params, title, requested_by, request_id)
+         VALUES (app.current_school_id(), 'admission_enquiries', 'pdf', $1::jsonb, $2, app.current_user_id(), app.current_request_id())
+         RETURNING id::text`,
+        [JSON.stringify({ ids }), await this.exportTitle(c, q, ids.length)],
+      );
+      const id = r.rows[0]!.id;
+      await this.outbox.enqueue(c, ctx, QUEUES.exports, 'export.generate', { exportId: id });
+      await this.audit.stage(ctx, c, {
+        action: 'admissions.enquiry.list_export',
+        entityType: 'exports',
+        entityId: id,
+        after: { format: 'pdf', enquiries: ids.length },
+      });
+      return { id };
+    });
+  }
+
+  /** The list's filters as SQL (the list, its Excel and its PDF choose the same leads). */
+  private filterOf(ctx: RequestContext, q: Partial<EnquiryQueryDto>) {
+    const where: string[] = ['TRUE'];
+    const params: unknown[] = [];
+    const add = (sql: string, v: unknown) => {
+      params.push(v);
+      where.push(sql.replaceAll('?', `$${params.length}`));
+    };
+    if (q.status === 'open') where.push(`e.status IN ('new', 'follow_up', 'interested')`);
+    else if (q.status) add('e.status = ?', q.status);
+    if (q.sourceId) add('e.source_id = ?', q.sourceId);
+    if (q.classId) add('e.class_id = ?', q.classId);
+    if (q.cycleId) add('e.cycle_id = ?', q.cycleId);
+    if (q.counsellor === 'me') add('e.counsellor_user_id = ?', ctx.user.id);
+    else if (q.counsellor === 'none') where.push('e.counsellor_user_id IS NULL');
+    else if (q.counsellor) add('e.counsellor_user_id = ?', q.counsellor);
+    if (q.due === 'today')
+      add(
+        `e.status IN ('new', 'follow_up', 'interested') AND e.next_follow_up_on = ?::date`,
+        today(),
+      );
+    if (q.due === 'overdue')
+      add(
+        `e.status IN ('new', 'follow_up', 'interested') AND e.next_follow_up_on < ?::date`,
+        today(),
+      );
+    if (q.due === 'upcoming')
+      add(
+        `e.status IN ('new', 'follow_up', 'interested') AND e.next_follow_up_on > ?::date`,
+        today(),
+      );
+    if (q.stageId) add('e.stage_id = ?', q.stageId);
+    if (q.score === 'none') where.push('e.score IS NULL');
+    else if (q.score) add('e.score = ?', q.score);
+    if (q.q)
+      add(
+        `(e.parent_name ILIKE ? OR e.child_name ILIKE ? OR e.mobile ILIKE ? OR e.email::text ILIKE ?)`,
+        `%${q.q}%`,
+      );
+    return { where, params };
+  }
+
   async list(ctx: RequestContext, q: EnquiryQueryDto) {
     return this.db.tenant(requireTenant(ctx), async (c) => {
-      const where: string[] = ['TRUE'];
-      const params: unknown[] = [];
-      const add = (sql: string, v: unknown) => {
-        params.push(v);
-        where.push(sql.replaceAll('?', `$${params.length}`));
-      };
-      if (q.status === 'open') where.push(`e.status IN ('new', 'follow_up', 'interested')`);
-      else if (q.status) add('e.status = ?', q.status);
-      if (q.sourceId) add('e.source_id = ?', q.sourceId);
-      if (q.classId) add('e.class_id = ?', q.classId);
-      if (q.cycleId) add('e.cycle_id = ?', q.cycleId);
-      if (q.counsellor === 'me') add('e.counsellor_user_id = ?', ctx.user.id);
-      else if (q.counsellor === 'none') where.push('e.counsellor_user_id IS NULL');
-      else if (q.counsellor) add('e.counsellor_user_id = ?', q.counsellor);
-      if (q.due === 'today')
-        add(
-          `e.status IN ('new', 'follow_up', 'interested') AND e.next_follow_up_on = ?::date`,
-          today(),
-        );
-      if (q.due === 'overdue')
-        add(
-          `e.status IN ('new', 'follow_up', 'interested') AND e.next_follow_up_on < ?::date`,
-          today(),
-        );
-      if (q.due === 'upcoming')
-        add(
-          `e.status IN ('new', 'follow_up', 'interested') AND e.next_follow_up_on > ?::date`,
-          today(),
-        );
-      if (q.stageId) add('e.stage_id = ?', q.stageId);
-      if (q.score === 'none') where.push('e.score IS NULL');
-      else if (q.score) add('e.score = ?', q.score);
-      if (q.q)
-        add(
-          `(e.parent_name ILIKE ? OR e.child_name ILIKE ? OR e.mobile ILIKE ? OR e.email::text ILIKE ?)`,
-          `%${q.q}%`,
-        );
+      const { where, params } = this.filterOf(ctx, q);
       const w = where.join(' AND ');
       const total = await c.query<{ n: number }>(
         // eslint-disable-next-line no-restricted-syntax -- w holds fixed fragments; values are bound parameters

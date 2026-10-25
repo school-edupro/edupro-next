@@ -11456,6 +11456,17 @@ a.ep-pub-foot__item {
   }
 }
 /* Enquiries as lead management (docs/design/45, part 2): the board, its cards, the list's bulk bar */
+.ep-lead-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-3);
+  align-items: center;
+  justify-content: space-between;
+  margin: 0 0 var(--sp-3);
+}
+.ep-lead-bar .ep-lead-views {
+  margin: 0;
+}
 .ep-lead-views {
   display: inline-flex;
   gap: var(--sp-1);
@@ -11516,6 +11527,11 @@ a.ep-pub-foot__item {
   margin: 0;
   font-size: var(--fs-body);
   color: var(--text-heading);
+}
+.ep-lead-col__off {
+  color: var(--text-muted);
+  font-size: var(--fs-small);
+  font-weight: var(--fw-regular);
 }
 .ep-lead-col__n {
   color: var(--text-muted);

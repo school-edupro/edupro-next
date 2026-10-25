@@ -50,6 +50,10 @@ export const EnquiryQuerySchema = z.object({
 });
 export class EnquiryQueryDto extends createZodDto(EnquiryQuerySchema) {}
 
+/** The list with its filters as a file (docs/design/46, part 1): no pages. */
+export const EnquiryExportSchema = EnquiryQuerySchema.omit({ page: true, size: true });
+export class EnquiryExportDto extends createZodDto(EnquiryExportSchema) {}
+
 export const FollowUpSchema = z.object({
   mode: z.enum(['call', 'visit', 'email', 'sms', 'whatsapp', 'note']),
   outcome: z.string().trim().min(2).max(1000),

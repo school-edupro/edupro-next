@@ -13,6 +13,7 @@ import {
   BulkDto,
   DeskLinkDto,
   EnquiryDeskDto,
+  EnquiryExportDto,
   EnquiryImportDto,
   InviteDto,
   MoveDto,
@@ -77,6 +78,29 @@ export class AdmissionEnquiryController {
   @RequirePermission(ENQUIRY_MANAGE)
   bulk(@ReqCtx() ctx: RequestContext, @Body() dto: BulkDto) {
     return this.svc.bulk(ctx, dto);
+  }
+
+  @Get('list.xlsx')
+  @ApiOperation({ summary: 'The leads of the filters as Excel (docs/design/46)' })
+  @RequirePermission(ENQUIRY_MANAGE)
+  async listXlsx(
+    @ReqCtx() ctx: RequestContext,
+    @Query() q: EnquiryExportDto,
+    @Res() reply: FastifyReply,
+  ) {
+    const f = await this.svc.listXlsx(ctx, q);
+    void reply
+      .header('content-type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+      .header('content-disposition', `attachment; filename="${f.filename}"`)
+      .send(f.bytes);
+  }
+
+  @Post('export-pdf')
+  @HttpCode(202)
+  @ApiOperation({ summary: 'Queue the leads of the filters as a PDF; returns the export id' })
+  @RequirePermission(ENQUIRY_MANAGE)
+  listPdf(@ReqCtx() ctx: RequestContext, @Body() q: EnquiryExportDto) {
+    return this.svc.listPdf(ctx, q);
   }
 
   @Get('import-format.xlsx')

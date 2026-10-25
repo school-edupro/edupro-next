@@ -1,5 +1,6 @@
 import { Badge, Card, PageHeader } from '@edupro/ui';
 import { notFound } from 'next/navigation';
+import { ExportWatcher } from '@/components/ExportWatcher';
 import { Notice } from '@/components/Notice';
 import { LeadList } from '@/components/admissions/LeadList';
 import { LeadMove } from '@/components/admissions/LeadMove';
@@ -11,6 +12,7 @@ import {
   type EnquiryMeta,
   type EnquiryRow,
 } from '@/lib/admission-enquiry';
+import { exportEnquiriesPdf } from '@/lib/admission-enquiry-actions';
 import { apiFetch, getMe } from '@/lib/api';
 
 type Params = {
@@ -26,6 +28,7 @@ type Params = {
   ok?: string;
   error?: string;
   detail?: string;
+  export?: string;
 };
 const FILTERS = ['stageId', 'due', 'sourceId', 'classId', 'counsellor', 'score', 'q'] as const;
 /** cards a column shows; the rest are a click away in the list */
@@ -65,6 +68,13 @@ export default async function EnquiriesPage({ searchParams }: { searchParams: Pr
     const base = keep({});
     return `${base}${base.includes('?') ? '&' : '?'}page=${String(n)}`;
   };
+  // the export takes the filters on screen (the stage too in the list); every lead of them, not a page
+  const exportFilters: Record<string, string> = {};
+  for (const k of FILTERS) if (sp[k] && !(board && k === 'stageId')) exportFilters[k] = sp[k]!;
+  if (!board) exportFilters.view = 'list';
+  const exportQuery = new URLSearchParams(
+    Object.fromEntries(Object.entries(exportFilters).filter(([k]) => k !== 'view')),
+  ).toString();
   const tile = (title: string, n: number, help: string, href: string) => (
     <a
       key={title}
@@ -113,6 +123,19 @@ export default async function EnquiriesPage({ searchParams }: { searchParams: Pr
         }
       />
       <Notice params={sp} />
+      {sp.export && /^\d{1,18}$/.test(sp.export) ? (
+        <ExportWatcher
+          id={sp.export}
+          format="pdf"
+          labels={{
+            queued: 'PDF requested',
+            ready: 'Download',
+            pending: 'Preparing the PDF…',
+            failed: 'The PDF could not be made',
+            stuck: 'Still waiting: the workers service makes the files; check that it is running.',
+          }}
+        />
+      ) : null}
       <div className="ep-dash-kpis ep-dash-kpis--4" style={{ marginBottom: 'var(--sp-4)' }}>
         {tile(
           'New, not yet contacted',
@@ -140,14 +163,35 @@ export default async function EnquiriesPage({ searchParams }: { searchParams: Pr
         )}
       </div>
 
-      <nav className="ep-lead-views" aria-label="View">
-        <a href={keep({ view: '' })} aria-current={board ? 'page' : undefined}>
-          Board
-        </a>
-        <a href={keep({ view: 'list' })} aria-current={board ? undefined : 'page'}>
-          List
-        </a>
-      </nav>
+      <div className="ep-lead-bar">
+        <nav className="ep-lead-views" aria-label="View">
+          <a href={keep({ view: '' })} aria-current={board ? 'page' : undefined}>
+            Board
+          </a>
+          <a href={keep({ view: 'list' })} aria-current={board ? undefined : 'page'}>
+            List
+          </a>
+        </nav>
+        {list.total ? (
+          <span className="ep-cdash__export">
+            <a
+              className="ep-btn ep-btn--secondary ep-btn--sm"
+              href={`/api/admissions/enquiries-list?${exportQuery}`}
+              download
+            >
+              Excel
+            </a>
+            <form action={exportEnquiriesPdf}>
+              {Object.entries(exportFilters).map(([k, v]) => (
+                <input key={k} type="hidden" name={k} value={v} />
+              ))}
+              <button type="submit" className="ep-btn ep-btn--secondary ep-btn--sm">
+                PDF
+              </button>
+            </form>
+          </span>
+        ) : null}
+      </div>
 
       <Card style={{ marginBottom: 'var(--sp-4)' }}>
         <form method="get" className="ep-lead-filter">
@@ -239,68 +283,74 @@ export default async function EnquiriesPage({ searchParams }: { searchParams: Pr
 
       {board ? (
         <div className="ep-lead-board" tabIndex={0} role="region" aria-label="Leads by stage">
-          {stages.map((s) => {
-            const leads = leadsOf(s.id);
-            const n = countOf(s.id);
-            return (
-              <section
-                key={s.id}
-                className="ep-lead-col"
-                aria-labelledby={`col-${s.id}`}
-                data-kind={s.kind}
-              >
-                <h2 id={`col-${s.id}`} className="ep-lead-col__h">
-                  {s.name} <span className="ep-lead-col__n">{n}</span>
-                </h2>
-                <ul className="ep-lead-col__cards">
-                  {leads.slice(0, PER_COLUMN).map((e) => (
-                    <li key={e.id} className="ep-lead-card" data-late={late(e) || undefined}>
-                      <a href={`/admissions/enquiries/${e.id}`} className="ep-lead-card__name">
-                        {e.childName || e.parentName}
-                      </a>
-                      {e.score ? (
-                        <Badge tone={SCORE_TONE[e.score]}>{SCORE_LABEL[e.score]}</Badge>
-                      ) : null}
-                      <span className="ep-lead-card__line">
-                        {[e.childName ? e.parentName : null, e.className, e.source]
-                          .filter(Boolean)
-                          .join(' · ')}
-                      </span>
-                      <span className="ep-lead-card__line">
-                        {e.counsellor ?? 'Nobody yet'}
-                        {e.nextFollowUpOn && (s.kind === 'open' || s.kind === 'started') ? (
-                          <>
-                            {' · '}
-                            {late(e) ? (
-                              <Badge tone="danger">{dmy(e.nextFollowUpOn)}</Badge>
-                            ) : (
-                              dmy(e.nextFollowUpOn)
-                            )}
-                          </>
+          {/* a stage switched off in set-up still shows while leads are in it */}
+          {(meta.stages ?? [])
+            .filter((s) => s.status === 'active' || countOf(s.id) > 0)
+            .map((s) => {
+              const leads = leadsOf(s.id);
+              const n = countOf(s.id);
+              return (
+                <section
+                  key={s.id}
+                  className="ep-lead-col"
+                  aria-labelledby={`col-${s.id}`}
+                  data-kind={s.kind}
+                >
+                  <h2 id={`col-${s.id}`} className="ep-lead-col__h">
+                    {s.name} <span className="ep-lead-col__n">{n}</span>
+                    {s.status !== 'active' ? (
+                      <span className="ep-lead-col__off"> (switched off)</span>
+                    ) : null}
+                  </h2>
+                  <ul className="ep-lead-col__cards">
+                    {leads.slice(0, PER_COLUMN).map((e) => (
+                      <li key={e.id} className="ep-lead-card" data-late={late(e) || undefined}>
+                        <a href={`/admissions/enquiries/${e.id}`} className="ep-lead-card__name">
+                          {e.childName || e.parentName}
+                        </a>
+                        {e.score ? (
+                          <Badge tone={SCORE_TONE[e.score]}>{SCORE_LABEL[e.score]}</Badge>
                         ) : null}
-                      </span>
-                      {s.kind === 'open' || (s.kind === 'lost' && !e.registrationNo) ? (
-                        <LeadMove
-                          id={e.id}
-                          name={e.childName || e.parentName}
-                          stageId={e.stage?.id ?? null}
-                          stages={stages}
-                        />
-                      ) : e.registrationNo ? (
-                        <span className="ep-kicker">{e.registrationNo}</span>
-                      ) : null}
-                    </li>
-                  ))}
-                </ul>
-                {n > Math.min(leads.length, PER_COLUMN) ? (
-                  <a className="ep-lead-col__more" href={keep({ view: 'list', stageId: s.id })}>
-                    All {n} in the list
-                  </a>
-                ) : null}
-                {n === 0 ? <p className="ep-field__help">No lead here.</p> : null}
-              </section>
-            );
-          })}
+                        <span className="ep-lead-card__line">
+                          {[e.childName ? e.parentName : null, e.className, e.source]
+                            .filter(Boolean)
+                            .join(' · ')}
+                        </span>
+                        <span className="ep-lead-card__line">
+                          {e.counsellor ?? 'Nobody yet'}
+                          {e.nextFollowUpOn && (s.kind === 'open' || s.kind === 'started') ? (
+                            <>
+                              {' · '}
+                              {late(e) ? (
+                                <Badge tone="danger">{dmy(e.nextFollowUpOn)}</Badge>
+                              ) : (
+                                dmy(e.nextFollowUpOn)
+                              )}
+                            </>
+                          ) : null}
+                        </span>
+                        {s.kind === 'open' || (s.kind === 'lost' && !e.registrationNo) ? (
+                          <LeadMove
+                            id={e.id}
+                            name={e.childName || e.parentName}
+                            stageId={e.stage?.id ?? null}
+                            stages={stages}
+                          />
+                        ) : e.registrationNo ? (
+                          <span className="ep-kicker">{e.registrationNo}</span>
+                        ) : null}
+                      </li>
+                    ))}
+                  </ul>
+                  {n > Math.min(leads.length, PER_COLUMN) ? (
+                    <a className="ep-lead-col__more" href={keep({ view: 'list', stageId: s.id })}>
+                      All {n} in the list
+                    </a>
+                  ) : null}
+                  {n === 0 ? <p className="ep-field__help">No lead here.</p> : null}
+                </section>
+              );
+            })}
         </div>
       ) : (
         <Card>

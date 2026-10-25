@@ -3224,6 +3224,46 @@ describe('online admission (e2e)', () => {
       );
     });
 
+    // docs/design/46, part 1: the list's leads as Excel at once and as a queued PDF
+    it('exports the leads of the filters as Excel and queues them as a PDF', async () => {
+      const x = await inject({
+        method: 'GET',
+        url: '/admissions/enquiries/list.xlsx?q=Parent',
+        headers: h(),
+      });
+      expect(x.statusCode).toBe(200);
+      expect(x.headers['content-type']).toMatch(/spreadsheetml/);
+      const wb = new ExcelJS.Workbook();
+      await wb.xlsx.load(x.rawPayload as unknown as ArrayBuffer);
+      const ws = wb.worksheets[0]!;
+      expect(String(ws.getCell('A1').value)).toMatch(
+        /^Admission enquiries · "Parent" · \d+ enquiries$/,
+      );
+      expect(ws.getRow(3).values).toEqual(expect.arrayContaining(['Enquiry', 'Parent', 'Stage']));
+      expect(String(ws.getCell('A4').value)).toMatch(/^ENQ-\d{6}$/);
+      const none = await inject({
+        method: 'GET',
+        url: '/admissions/enquiries/list.xlsx?q=zzzz-nobody',
+        headers: h(),
+      });
+      expect(none.statusCode).toBe(400);
+      const pdf = await inject({
+        method: 'POST',
+        url: '/admissions/enquiries/export-pdf',
+        headers: h(),
+        json: { q: 'Parent' },
+      });
+      expect(pdf.statusCode).toBe(202);
+      const queued = await withMigrator((c) =>
+        c.query<{ dataset: string; ids: number }>(
+          `SELECT dataset, jsonb_array_length(params->'ids') AS ids FROM exports WHERE id = $1`,
+          [pdf.json().id],
+        ),
+      );
+      expect(queued.rows[0]).toMatchObject({ dataset: 'admission_enquiries' });
+      expect(queued.rows[0]!.ids).toBeGreaterThan(0);
+    });
+
     it('imports enquiries from a sheet: a wrong row stops it; duplicates are left out', async () => {
       const format = await inject({
         method: 'GET',
@@ -3285,6 +3325,48 @@ describe('online admission (e2e)', () => {
         await inject({ method: 'GET', url: '/admissions/enquiries?q=Fair%20Parent', headers: h() })
       ).json();
       expect(found.data[0]).toMatchObject({ childName: 'Fair Child', className: 'Class Mini' });
+    });
+
+    it('a new lead lands on the first active stage when "New" is switched off', async () => {
+      const stages = (
+        await inject({ method: 'GET', url: '/admissions/enquiries/meta', headers: h() })
+      ).json().stages as Array<{
+        id: string;
+        code: string;
+        name: string;
+        kind: string;
+        status: string;
+      }>;
+      const keep = stages.filter((x) => x.status === 'active' && x.code !== 'new');
+      const off = await inject({
+        method: 'PUT',
+        url: '/admissions/enquiries/stages',
+        headers: h(),
+        json: { stages: keep.map((x) => ({ id: x.id, name: x.name, kind: x.kind })) },
+      });
+      expect(off.statusCode).toBe(200);
+      try {
+        const e = await inject({
+          method: 'POST',
+          url: '/admissions/enquiries',
+          headers: h(clerk),
+          json: { parentName: 'After New Parent', mobile: `6${String(Date.now() + 7).slice(-9)}` },
+        });
+        expect(e.statusCode).toBe(201);
+        expect(e.json().stageId).toBe(keep.find((x) => x.kind === 'open')!.id);
+      } finally {
+        // New back on, as the other tests expect it
+        await inject({
+          method: 'PUT',
+          url: '/admissions/enquiries/stages',
+          headers: h(),
+          json: {
+            stages: stages
+              .filter((x) => x.status === 'active' || x.code === 'new')
+              .map((x) => ({ id: x.id, name: x.name, kind: x.kind })),
+          },
+        });
+      }
     });
 
     it('replies to the family from the enquiry; the reply is kept with the follow-ups', async () => {

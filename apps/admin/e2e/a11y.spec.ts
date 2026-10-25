@@ -782,7 +782,8 @@ test.describe('accessibility (axe)', () => {
     if (await skip.isVisible()) await skip.click();
     const board = page.getByRole('region', { name: 'Leads by stage' });
     await expect(board).toBeVisible();
-    await expect(board.getByRole('heading', { name: /^New/ })).toBeVisible();
+    // the school's own stages: the columns follow its set-up (renamed, removed), Lost is always there
+    await expect(board.getByRole('heading').first()).toBeVisible();
     await expect(board.getByRole('heading', { name: /^Lost/ })).toBeVisible();
     problems.push(...(await axe('board')));
     await shot('leads-board');
@@ -791,6 +792,13 @@ test.describe('accessibility (axe)', () => {
       .getByRole('link', { name: 'List' })
       .click();
     await page.waitForLoadState('networkidle');
+    // the export of the leads of the filters (docs/design/46, part 1)
+    const excel = page.getByRole('link', { name: 'Excel' });
+    await expect(excel).toHaveAttribute('href', /^\/api\/admissions\/enquiries-list/);
+    const file = await page.request.get((await excel.getAttribute('href'))!);
+    expect(file.status()).toBe(200);
+    expect(file.headers()['content-type']).toMatch(/spreadsheetml/);
+    await expect(page.getByRole('button', { name: 'PDF' })).toBeVisible();
     const first = page.getByRole('checkbox', { name: /^Pick (?!every)/ }).first();
     await first.check();
     await expect(page.getByText('1 picked')).toBeVisible();

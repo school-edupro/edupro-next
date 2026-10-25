@@ -9,7 +9,7 @@ export async function GET(req: NextRequest) {
     const v = (sp.get(key) ?? '').trim();
     if (v && ok(v)) q.set(key, v);
   };
-  pick('desk', (v) => ['parent', 'staff', 'provider', 'hostel'].includes(v));
+  pick('desk', (v) => ['parent', 'staff', 'provider', 'hostel', 'candidate'].includes(v));
   pick('status', (v) =>
     ['open', 'in_progress', 'answered', 'closed', 'active', 'overdue'].includes(v),
   );

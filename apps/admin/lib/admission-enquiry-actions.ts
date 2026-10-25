@@ -251,3 +251,31 @@ export async function saveEnquirySources(
     throw e;
   }
 }
+
+/** Queues the enquiries of the filters on screen as a PDF, back to the page to watch it (docs/design/46). */
+export async function exportEnquiriesPdf(fd: FormData) {
+  const filters: Record<string, string> = {};
+  for (const k of ['view', 'stageId', 'due', 'sourceId', 'classId', 'counsellor', 'score', 'q']) {
+    const v = str(fd, k);
+    if (v) filters[k] = v;
+  }
+  const { view, ...api } = filters;
+  const back = (extra: string) =>
+    `/admissions/enquiries?${new URLSearchParams({ ...(view ? { view } : {}), ...api }).toString()}${extra}`;
+  let id = '';
+  try {
+    id = (
+      await apiFetch<{ id: string }>('/admissions/enquiries/export-pdf', {
+        method: 'POST',
+        body: JSON.stringify(api),
+      })
+    ).id;
+  } catch (e) {
+    if (e instanceof ApiError)
+      redirect(
+        back(`&error=export&detail=${encodeURIComponent(e.problem.detail ?? e.problem.type)}`),
+      );
+    throw e;
+  }
+  redirect(back(`&export=${id}`));
+}

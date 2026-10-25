@@ -1161,6 +1161,45 @@ export const DATASETS: Record<string, DatasetDefinition> = {
       values: [(idList(p.ids) ?? []).filter((x) => /^\d{1,18}$/.test(x))],
     }),
   },
+  admission_enquiries: {
+    id: 'admission_enquiries',
+    title: 'Admission enquiries',
+    // the enquiry API chooses the leads of the filters and queues this itself (params.ids)
+    permission: 'admissions.enquiry.manage',
+    maxRows: 5000,
+    columns: [
+      { key: 'number', header: 'Enquiry', width: 11 },
+      { key: 'created_at', header: 'Received', type: 'date', width: 11 },
+      { key: 'parent_name', header: 'Parent', width: 20 },
+      { key: 'child_name', header: 'Child', width: 18 },
+      { key: 'class_name', header: 'Class', width: 10 },
+      { key: 'source', header: 'Source', width: 12 },
+      { key: 'stage', header: 'Stage', width: 13 },
+      { key: 'score', header: 'Score', width: 7 },
+      { key: 'counsellor', header: 'Counsellor', width: 16 },
+      { key: 'mobile', header: 'Mobile', width: 11 },
+      { key: 'email', header: 'Email', width: 22 },
+      { key: 'next_follow_up_on', header: 'Next follow-up', type: 'date', width: 11 },
+      { key: 'first_contact_at', header: 'First contact', type: 'datetime', width: 14 },
+      { key: 'registration_no', header: 'Registration no.', width: 16 },
+    ],
+    /** The chosen leads (params.ids) in the list's order. */
+    query: (p) => ({
+      text: `SELECT e.id::text AS id, 'ENQ-' || lpad(e.id::text, 6, '0') AS number, e.created_at, e.parent_name, e.child_name,
+                    cl.name AS class_name, src.name AS source, st.name AS stage, initcap(e.score) AS score,
+                    u.display_name AS counsellor, e.mobile, e.email::text AS email, e.next_follow_up_on, e.first_contact_at,
+                    a.application_no AS registration_no
+               FROM admission_enquiries e
+               LEFT JOIN classes cl ON cl.id = e.class_id
+               LEFT JOIN admission_enquiry_sources src ON src.id = e.source_id
+               LEFT JOIN admission_enquiry_stages st ON st.id = e.stage_id
+               LEFT JOIN users u ON u.id = e.counsellor_user_id
+               LEFT JOIN applications a ON a.id = e.application_id
+              WHERE e.id = ANY($1::bigint[])
+              ORDER BY array_position($1::bigint[], e.id)`,
+      values: [(idList(p.ids) ?? []).filter((x) => /^\d{1,18}$/.test(x))],
+    }),
+  },
   visitor_register: {
     id: 'visitor_register',
     title: 'Visitor register',
