@@ -309,6 +309,11 @@ const DICT: Record<string, string> = {
   'Automatic update': 'स्वचालित सूचना',
   'Admit card': 'प्रवेश पत्र',
   'admit card': 'प्रवेश पत्र',
+  Paid: 'भुगतान किया',
+  'No registration yet.': 'अभी कोई पंजीकरण नहीं।',
+  Due: 'देय',
+  'Nothing paid or due for this registration yet.': 'इस पंजीकरण के लिए अभी कुछ भुगतान या देय नहीं।',
+  'due by': 'अंतिम तिथि',
   'Sign in to register for': 'पंजीकरण के लिए साइन इन करें:',
   'New or registered before, sign in with your mobile number or email: the form for this class opens next.':
     'नए हों या पहले पंजीकरण किया हो, अपने मोबाइल नंबर या ईमेल से साइन इन करें: इसके बाद इस कक्षा का फ़ॉर्म खुलेगा।',

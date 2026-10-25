@@ -11412,6 +11412,37 @@ a.ep-pub-foot__item {
   text-align: center;
   color: var(--text-body);
 }
+/* Payments by registration (docs/design/44, part 3) */
+.ep-adm-paytotals {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 11rem), 1fr));
+  gap: var(--sp-3);
+  margin: 0 0 var(--sp-4);
+}
+.ep-adm-paytotals dt {
+  color: var(--text-muted);
+  font-size: var(--fs-small);
+}
+.ep-adm-paytotals dd {
+  margin: var(--sp-1) 0 0;
+  color: var(--text-heading);
+  font-size: var(--fs-h3);
+  font-weight: var(--fw-semibold);
+}
+.ep-adm-payreg {
+  display: grid;
+  gap: var(--sp-3);
+  margin: 0 0 var(--sp-4);
+}
+.ep-adm-payreg__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--sp-2) var(--sp-3);
+}
+.ep-adm-payreg__head .fp-section-title {
+  margin: 0;
+}
 /* Messages by who sent them (docs/design/44, part 2): tabs, filters, what each is and how it came */
 .ep-adm-msgtabs {
   display: flex;

@@ -439,5 +439,15 @@ test('admission: messages by who sent them', async ({ page }) => {
   await filter.getByLabel('Search').fill('zzzz-nothing');
   await filter.getByRole('button', { name: 'Show' }).click();
   await expect(page.getByText('Nothing matches.')).toBeVisible();
+  // Payments by registration (docs/design/44, part 3): the totals, then a section per registration
+  await page.goto(`${BASE}/alpha/admission/payments`);
+  await expect(page.getByRole('heading', { level: 1 })).toHaveText('Payments & receipts');
+  await expect(page.locator('.ep-adm-paytotals dt').first()).toHaveText('Due now');
+  await expect(page.locator('.ep-adm-payreg').first()).toBeVisible();
+  await check('payments');
+  await page.screenshot({
+    path: `${process.env.SHOT_DIR ?? test.info().outputDir}/payments.png`,
+    fullPage: true,
+  });
   expect(problems).toEqual([]);
 });

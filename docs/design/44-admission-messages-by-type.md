@@ -64,7 +64,7 @@ and a button to the place to act (Pay, Admit card, Correct the form, Open the qu
 messages and the header's unread badge use the same groups. Hindi throughout; a phone layout where the
 tabs scroll sideways.
 
-**Part 3 — Payments by registration (portal).** At the top the family's totals (due now, paid). Then a
+**Part 3 — Payments by registration (portal; built 25 Oct 2026).** At the top the family's totals (due now, paid). Then a
 section per registration, latest first: the child, class, session and registration number; its fee
 figures (registration fee and admission fee: amount, paid, due); its dues with Pay (or "Closed"), and
 its receipts as a table with View / Download. A registration with nothing paid or due shows a line, not
