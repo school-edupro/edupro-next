@@ -250,7 +250,7 @@ export async function saveHead(
 /** Queues the desk list (with the filters on screen) as a PDF and returns to the desk to watch it. */
 export async function exportTicketsPdf(fd: FormData) {
   const desk = str(fd, 'desk');
-  const path = `/engagement/helpdesk/${['parent', 'staff', 'provider', 'hostel'].includes(desk) ? desk : 'staff'}`;
+  const path = `/engagement/helpdesk/${['parent', 'staff', 'provider', 'hostel', 'candidate'].includes(desk) ? desk : 'staff'}`;
   const filters: Record<string, string> = {};
   for (const k of ['status', 'view', 'head', 'q']) {
     const v = str(fd, k);

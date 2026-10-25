@@ -4143,6 +4143,12 @@ a.ep-tabs__tab {
 [data-desk='provider'] {
   background: var(--action-accent);
 }
+[data-desk='hostel'] {
+  background: var(--status-warning);
+}
+[data-desk='candidate'] {
+  background: var(--status-info);
+}
 .ep-hd__layout {
   display: grid;
   gap: var(--sp-4);
@@ -11405,6 +11411,48 @@ a.ep-pub-foot__item {
   margin: var(--sp-4) 0 0;
   text-align: center;
   color: var(--text-body);
+}
+/* questions to the school (docs/design/43, part 4): the ask form, the conversation, the rating */
+.ep-adm-ask__form {
+  display: grid;
+  gap: var(--sp-3);
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 16rem), 1fr));
+}
+.ep-adm-ask__wide {
+  grid-column: 1 / -1;
+}
+.ep-adm-help__ask {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+}
+.ep-adm-thread {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: var(--sp-3);
+}
+.ep-adm-thread__msg {
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  padding: var(--sp-3);
+  background: var(--surface-card);
+}
+.ep-adm-thread__msg[data-from='school'] {
+  background: var(--status-info-bg);
+  border-color: var(--border-accent);
+}
+.ep-adm-thread__msg .ep-kicker {
+  margin: 0 0 var(--sp-1);
+}
+.ep-adm-rate {
+  border: 0;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-3);
 }
 /* the classes of the chosen session as a list: one row per class */
 .ep-adm-classlist tbody th {

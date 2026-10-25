@@ -37,14 +37,23 @@ const DESK_LABEL: Record<Desk, string> = {
   staff: 'Staff query',
   provider: 'ERP provider ticket',
   hostel: 'Hostel complaint',
+  candidate: 'Admission query',
 };
-const PREFIX: Record<Desk, string> = { parent: 'Q/', staff: 'S/', provider: 'T/', hostel: 'H/' };
+const PREFIX: Record<Desk, string> = {
+  parent: 'Q/',
+  staff: 'S/',
+  provider: 'T/',
+  hostel: 'H/',
+  candidate: 'A/',
+};
 
 const SELECT = `SELECT q.id::text, q.number, q.desk, q.kind::text, q.category_code, COALESCE(k.name, q.category_code) AS head,
        q.student_id::text, s.display_name AS student_name, s.admission_no,
        (SELECT kk.code || '-' || cs.name FROM enrolments e JOIN class_sections cs ON cs.id = e.class_section_id JOIN classes kk ON kk.id = cs.class_id
          WHERE e.student_id = s.id AND e.academic_year_id = q.academic_year_id AND e.status = 'active' LIMIT 1) AS section,
-       q.raised_by_user_id::text, COALESCE((SELECT e.display_name FROM employees e WHERE e.user_id = q.raised_by_user_id LIMIT 1), ru.display_name) AS raised_by,
+       q.raised_by_user_id::text, COALESCE((SELECT e.display_name FROM employees e WHERE e.user_id = q.raised_by_user_id LIMIT 1), ru.display_name,
+         (SELECT COALESCE(ap.name, 'Family of ' || ca.candidate_name, ap.mobile, ap.email::text) FROM applicants ap WHERE ap.id = q.applicant_id)) AS raised_by,
+       q.application_id::text, ca.application_no, ca.candidate_name, (SELECT cl.name FROM classes cl WHERE cl.id = ca.class_id) AS class_sought,
        q.subject, q.body, q.file_ids, q.status::text, q.provider_status, q.priority, q.module, q.level, q.due_at, q.escalated_at, q.breached_at,
        q.assigned_role, (SELECT r.name FROM roles r WHERE r.code = q.assigned_role AND (r.school_id IS NULL OR r.school_id = q.school_id) AND r.deleted_at IS NULL ORDER BY r.school_id NULLS LAST LIMIT 1) AS assigned_role_name,
        q.assigned_user_id::text, COALESCE((SELECT e.display_name FROM employees e WHERE e.user_id = q.assigned_user_id LIMIT 1), au.display_name) AS assigned_to,
@@ -54,7 +63,8 @@ const SELECT = `SELECT q.id::text, q.number, q.desk, q.kind::text, q.category_co
   LEFT JOIN query_categories k ON k.school_id = q.school_id AND k.desk = q.desk AND k.code = q.category_code
   LEFT JOIN students s ON s.id = q.student_id
   LEFT JOIN users ru ON ru.id = q.raised_by_user_id
-  LEFT JOIN users au ON au.id = q.assigned_user_id`;
+  LEFT JOIN users au ON au.id = q.assigned_user_id
+  LEFT JOIN applications ca ON ca.id = q.application_id`;
 
 export interface TicketRow {
   id: string;
@@ -67,7 +77,15 @@ export interface TicketRow {
   admissionNo: string | null;
   section: string | null;
   raisedBy: string | null;
-  raisedByUserId: string;
+  /** null when a family registering for admission raised it (the admission desk) */
+  raisedByUserId: string | null;
+  /** the admission desk: the registration it is about */
+  registration: {
+    id: string;
+    number: string | null;
+    candidate: string | null;
+    className: string | null;
+  } | null;
   subject: string;
   body: string;
   fileIds: string[];
@@ -104,7 +122,15 @@ const toTicket = (x: Row): TicketRow => ({
   admissionNo: (x.admission_no as string | null) ?? null,
   section: (x.section as string | null) ?? null,
   raisedBy: (x.raised_by as string | null) ?? null,
-  raisedByUserId: String(x.raised_by_user_id),
+  raisedByUserId: (x.raised_by_user_id as string | null) ?? null,
+  registration: x.application_id
+    ? {
+        id: String(x.application_id),
+        number: (x.application_no as string | null) ?? null,
+        candidate: (x.candidate_name as string | null) ?? null,
+        className: (x.class_sought as string | null) ?? null,
+      }
+    : null,
   subject: String(x.subject),
   body: String(x.body),
   fileIds: ((x.file_ids as unknown[]) ?? []).map(String),
@@ -325,7 +351,7 @@ export class HelpdeskService {
   /** The list filters as SQL (what I may see, desk, status, mine / assigned, query type, search). */
   private filterSql(
     me: Me,
-    q: Pick<ListTicketsDto, 'desk' | 'status' | 'view' | 'head' | 'q'>,
+    q: Pick<ListTicketsDto, 'desk' | 'status' | 'view' | 'head' | 'q' | 'applicationId'>,
     params: unknown[],
   ): string {
     const where = [`q.kind <> 'leave'`, this.visible(me, params)];
@@ -351,8 +377,12 @@ export class HelpdeskService {
     if (q.q) {
       params.push(q.q);
       where.push(
-        `concat_ws(' ', q.number, q.subject, s.display_name, s.admission_no, ru.display_name) ILIKE '%' || $${params.length} || '%'`,
+        `concat_ws(' ', q.number, q.subject, s.display_name, s.admission_no, ru.display_name, ca.application_no, ca.candidate_name) ILIKE '%' || $${params.length} || '%'`,
       );
+    }
+    if (q.applicationId) {
+      params.push(q.applicationId);
+      where.push(`q.application_id = $${params.length}::bigint`);
     }
     return where.join(' AND ');
   }
@@ -366,7 +396,8 @@ export class HelpdeskService {
       const w = this.filterSql(me, q, params);
       const total = await c.query<{ n: number }>(
         // eslint-disable-next-line no-restricted-syntax -- fixed fragments with numbered placeholders; values bound
-        `SELECT count(*)::int AS n FROM parent_queries q LEFT JOIN students s ON s.id = q.student_id LEFT JOIN users ru ON ru.id = q.raised_by_user_id WHERE ${w}`,
+        `SELECT count(*)::int AS n FROM parent_queries q LEFT JOIN students s ON s.id = q.student_id LEFT JOIN users ru ON ru.id = q.raised_by_user_id
+           LEFT JOIN applications ca ON ca.id = q.application_id WHERE ${w}`,
         params,
       );
       params.push(q.size, (q.page - 1) * q.size);
@@ -436,7 +467,8 @@ export class HelpdeskService {
           fromRaiser:
             x.author_user_id === t.raisedByUserId ||
             x.author_kind === 'guardian' ||
-            x.author_kind === 'student',
+            x.author_kind === 'student' ||
+            x.author_kind === 'candidate',
           body: String(x.body),
           fileIds: ((x.file_ids as unknown[]) ?? []).map(String),
           isInternal: Boolean(x.is_internal),
@@ -997,6 +1029,7 @@ export class HelpdeskService {
     text: string,
     code: 'helpdesk_reply' | 'helpdesk_resolved' = 'helpdesk_reply',
   ) {
+    if (t.desk === 'candidate') return this.notifyCandidate(c, t, title, text);
     const email =
       t.desk === 'parent'
         ? null
@@ -1005,7 +1038,7 @@ export class HelpdeskService {
               t.raisedByUserId,
             ])
           ).rows[0]?.e ?? null);
-    let users = [t.raisedByUserId];
+    let users = t.raisedByUserId ? [t.raisedByUserId] : [];
     if (t.desk === 'parent' && t.studentId) {
       // every guardian of the child with a login sees the answer
       const g = await c.query<{ id: string }>(
@@ -1026,6 +1059,41 @@ export class HelpdeskService {
       `/queries/${t.id}`,
     ]);
     await this.text(c, code, t, users);
+  }
+
+  /**
+   * The family registering for admission (docs/design/43, part 4): the answer by email and SMS on the
+   * admission letterhead; in the portal it shows unread under Messages until the family opens it.
+   */
+  private async notifyCandidate(c: PoolClient, t: TicketRow, title: string, text: string) {
+    const to = await c.query<{ mobile: string | null; email: string | null }>(
+      `SELECT COALESCE(a.contact_mobile, ap.mobile) AS mobile, COALESCE(a.contact_email, ap.email::text) AS email
+         FROM parent_queries q JOIN applicants ap ON ap.id = q.applicant_id LEFT JOIN applications a ON a.id = q.application_id
+        WHERE q.id = $1`,
+      [t.id],
+    );
+    const x = to.rows[0];
+    if (!x) return;
+    await c.query(
+      `SELECT app.admission_notify($1, $2, $3, $4::jsonb, $5, $6, NULL, $7::jsonb, $8)`,
+      [
+        'admission_message',
+        x.mobile,
+        x.email,
+        JSON.stringify({
+          subject: `${title}: ${t.subject}`.slice(0, 200),
+          message: `${title}. Open the admission portal, Help → My queries, to read it.`,
+          name: t.registration?.candidate ?? '',
+        }),
+        title,
+        text.slice(0, 2000),
+        JSON.stringify([
+          ['Question', `${t.number} · ${t.subject}`],
+          ...(t.registration?.number ? [['Registration', t.registration.number]] : []),
+        ]),
+        'Reply in the admission portal under Help → My queries.',
+      ],
+    );
   }
 
   private mail(t: TicketRow, title: string, text?: string): string {
@@ -1071,13 +1139,16 @@ export class HelpdeskService {
   async assignees(ctx: RequestContext) {
     return this.db.tenant(requireTenant(ctx), async (c) => {
       const staff = await c.query<{ id: string; name: string }>(
+        // one line a person (a user may hold an employee and another membership in the school)
         // eslint-disable-next-line no-restricted-syntax -- USER_ANSWERS is a fixed SQL fragment
-        `SELECT u.id::text, COALESCE(e.display_name, u.display_name) || COALESCE(' · ' || e.employee_code, '') AS name
-           FROM user_school_memberships m JOIN users u ON u.id = m.user_id
-           LEFT JOIN employees e ON e.user_id = u.id AND e.deleted_at IS NULL
-          WHERE m.school_id = app.current_school_id() AND m.status = 'active' AND m.deleted_at IS NULL AND m.person_type IN ('employee', 'external') AND u.deleted_at IS NULL
-            AND ${USER_ANSWERS}
-          ORDER BY 2 LIMIT 2000`,
+        `SELECT * FROM (
+           SELECT DISTINCT ON (u.id) u.id::text, COALESCE(e.display_name, u.display_name) || COALESCE(' · ' || e.employee_code, '') AS name
+             FROM user_school_memberships m JOIN users u ON u.id = m.user_id
+             LEFT JOIN employees e ON e.user_id = u.id AND e.deleted_at IS NULL
+            WHERE m.school_id = app.current_school_id() AND m.status = 'active' AND m.deleted_at IS NULL AND m.person_type IN ('employee', 'external') AND u.deleted_at IS NULL
+              AND ${USER_ANSWERS}
+            ORDER BY u.id, e.id) x
+          ORDER BY x.name LIMIT 2000`,
       );
       const roles = await c.query<{ code: string; name: string; people: string; n: number }>(
         // eslint-disable-next-line no-restricted-syntax -- ROLE_ANSWERS and ROLE_PEOPLE are fixed SQL fragments
@@ -1369,8 +1440,8 @@ export class HelpdeskService {
                 (SELECT round(100.0 * count(*) FILTER (WHERE t.level = 1 AND t.breached_at IS NULL AND t.escalated_at IS NULL) / NULLIF(count(*), 0), 0)::int
                    FROM t WHERE t.desk = d.desk AND t.closed_at >= mo.starts AND t.closed_at < mo.ends) AS within_sla,
                 (SELECT round(avg(t.rating)::numeric, 1)::float FROM t WHERE t.desk = d.desk AND t.closed_at >= mo.starts AND t.closed_at < mo.ends AND t.rating IS NOT NULL) AS rating
-           FROM mo CROSS JOIN (VALUES ('parent'), ('staff'), ('provider'), ('hostel')) AS d(desk)
-          ORDER BY mo.month, array_position(ARRAY['parent', 'staff', 'provider', 'hostel'], d.desk)`,
+           FROM mo CROSS JOIN (VALUES ('parent'), ('staff'), ('provider'), ('hostel'), ('candidate')) AS d(desk)
+          ORDER BY mo.month, array_position(ARRAY['parent', 'staff', 'provider', 'hostel', 'candidate'], d.desk)`,
         params,
       );
       const p2: unknown[] = [];
@@ -1530,6 +1601,7 @@ export class HelpdeskService {
       const ids = await c.query<{ id: string }>(
         // eslint-disable-next-line no-restricted-syntax -- w holds fixed fragments; the limit is a number; values bound
         `SELECT q.id::text FROM parent_queries q LEFT JOIN students s ON s.id = q.student_id LEFT JOIN users ru ON ru.id = q.raised_by_user_id
+           LEFT JOIN applications ca ON ca.id = q.application_id
           WHERE ${w} ORDER BY q.opened_at DESC, q.id DESC LIMIT ${String(EXPORT_MAX)}`,
         params,
       );

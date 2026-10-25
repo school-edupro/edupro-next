@@ -11,6 +11,7 @@ import { REG_STATUS, dmy, rupees, type RegistrationForm } from '@/lib/admission-
 import { whenIst, type JourneyStep, type SlotInfo } from '@/lib/admission-process';
 import type { RegistrationPoints } from '@/lib/admission-setup';
 import { ApiError, apiFetch, getMe } from '@/lib/api';
+import { STATUS_LABEL, STATUS_TONE, type Ticket } from '@/lib/helpdesk';
 
 interface Detail extends RegistrationForm {
   process: {
@@ -111,6 +112,12 @@ export default async function RegistrationPage({
         .then((x) => x.refund)
         .catch(() => null)
     : null;
+  // the family's questions about this registration (docs/design/43, part 4); the helpdesk decides who sees them
+  const queries = await apiFetch<{ data: Ticket[] }>(
+    `/helpdesk/tickets?desk=candidate&applicationId=${r.id}&size=25`,
+  )
+    .then((x) => x.data)
+    .catch(() => [] as Ticket[]);
   return (
     <>
       <PageHeader
@@ -385,6 +392,22 @@ export default async function RegistrationPage({
           </ul>
         </Card>
       </div>
+      {queries.length ? (
+        <Card elevated title="Questions from the family" style={{ marginBottom: 'var(--sp-4)' }}>
+          <ul className="ep-rp__events">
+            {queries.map((q) => (
+              <li key={q.id}>
+                <a href={`/engagement/helpdesk/candidate/${q.id}`}>{q.number}</a> {q.subject}{' '}
+                <Badge tone={STATUS_TONE[q.status]}>{STATUS_LABEL[q.status]}</Badge>
+                <div className="ep-kicker">
+                  {q.head} · {whenIst(q.openedAt)} · with{' '}
+                  {q.assignedTo ?? q.assignedRoleName ?? q.assignedRole ?? '—'}
+                </div>
+              </li>
+            ))}
+          </ul>
+        </Card>
+      ) : null}
       {r.canCorrect || r.answerChanges.length ? (
         <Card elevated title="Corrections by the office" style={{ marginBottom: 'var(--sp-4)' }}>
           <ApplicationCorrect

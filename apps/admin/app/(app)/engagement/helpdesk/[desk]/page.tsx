@@ -36,6 +36,8 @@ const INTRO: Record<string, string> = {
     'Tickets from school staff to the ERP provider. The provider answers here; late tickets reach the provider’s senior person.',
   hostel:
     'Room and maintenance complaints of the hostels, raised by parents in the portal or by wardens and the office. Each goes to the head warden of the hostel (or the owner of its head) and moves up the escalation matrix when late.',
+  candidate:
+    'Questions from families registering for admission, asked in the admission portal about one of their registrations. Each goes to the owner of its head; the answer reaches the family by email and in the portal.',
 };
 
 const SIZES = ['10', '25', '50', '100'];
@@ -65,7 +67,8 @@ export default async function DeskPage({
     apiFetch<TicketList>(`/helpdesk/tickets?${qs({ page: String(page), size })}`),
     apiFetch<{ data: Array<{ code: string; name: string }> }>(`/helpdesk/heads/${desk}`),
   ]);
-  const canRaise = desk !== 'parent' && me.permissions.includes('helpdesk.ticket.raise');
+  const canRaise =
+    desk !== 'parent' && desk !== 'candidate' && me.permissions.includes('helpdesk.ticket.raise');
   const count = list.counts.find((c) => c.desk === desk);
   const pages = Math.max(1, Math.ceil(list.page.total / list.page.size));
   return (
@@ -192,7 +195,13 @@ export default async function DeskPage({
                 <tr>
                   <th scope="col">Number</th>
                   <th scope="col">Subject</th>
-                  <th scope="col">{desk === 'parent' ? 'Student' : 'Raised by'}</th>
+                  <th scope="col">
+                    {desk === 'parent'
+                      ? 'Student'
+                      : desk === 'candidate'
+                        ? 'Candidate'
+                        : 'Raised by'}
+                  </th>
                   <th scope="col">With</th>
                   <th scope="col">Status</th>
                   <th scope="col">Due</th>
@@ -215,7 +224,16 @@ export default async function DeskPage({
                       </div>
                     </td>
                     <td>
-                      {desk === 'parent' ? (
+                      {desk === 'candidate' ? (
+                        <>
+                          {t.registration?.candidate ?? '—'}
+                          <div className="ep-field__help">
+                            {[t.registration?.className, t.registration?.number, t.raisedBy]
+                              .filter(Boolean)
+                              .join(' · ')}
+                          </div>
+                        </>
+                      ) : desk === 'parent' ? (
                         <>
                           {t.studentName}
                           <div className="ep-field__help">

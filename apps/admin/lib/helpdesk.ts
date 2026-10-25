@@ -1,19 +1,21 @@
 /** Helpdesk (0056): parent queries, staff queries, tickets to the ERP provider and hostel complaints (0150). */
-export type Desk = 'parent' | 'staff' | 'provider' | 'hostel';
+export type Desk = 'parent' | 'staff' | 'provider' | 'hostel' | 'candidate';
 export type TicketStatus = 'open' | 'in_progress' | 'answered' | 'closed';
 
-export const DESKS: Desk[] = ['parent', 'staff', 'provider', 'hostel'];
+export const DESKS: Desk[] = ['parent', 'staff', 'provider', 'hostel', 'candidate'];
 export const DESK_LABEL: Record<Desk, string> = {
   parent: 'Parent queries',
   staff: 'Staff queries',
   provider: 'ERP provider tickets',
   hostel: 'Hostel complaints',
+  candidate: 'Admission queries',
 };
 export const DESK_ONE: Record<Desk, string> = {
   parent: 'Parent query',
   staff: 'Staff query',
   provider: 'ERP provider ticket',
   hostel: 'Hostel complaint',
+  candidate: 'Admission query',
 };
 export const STATUS_LABEL: Record<TicketStatus, string> = {
   open: 'Open',
@@ -63,7 +65,15 @@ export interface Ticket {
   admissionNo: string | null;
   section: string | null;
   raisedBy: string | null;
-  raisedByUserId: string;
+  /** null when a family registering for admission raised it */
+  raisedByUserId: string | null;
+  /** the admission desk: the registration it is about (docs/design/43, part 4) */
+  registration?: {
+    id: string;
+    number: string | null;
+    candidate: string | null;
+    className: string | null;
+  } | null;
   subject: string;
   body: string;
   fileIds: string[];

@@ -322,6 +322,11 @@ export const NAV: Array<{
         permission: 'helpdesk.ticket.respond',
       },
       {
+        href: '/engagement/helpdesk/candidate',
+        label: 'admissionQueries',
+        permission: 'helpdesk.ticket.respond',
+      },
+      {
         href: '/engagement/helpdesk/setup',
         label: 'helpdeskSetup',
         permission: 'helpdesk.settings.manage',

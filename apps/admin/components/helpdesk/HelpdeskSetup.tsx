@@ -23,7 +23,8 @@ const blank = (desk: Desk): Draft => ({
   name: '',
   description: '',
   ownerType: desk === 'provider' ? 'provider' : desk === 'parent' ? 'class_teacher' : 'role',
-  ownerRole: desk === 'staff' ? 'school_admin' : desk === 'hostel' ? 'warden' : null,
+  ownerRole:
+    desk === 'staff' || desk === 'candidate' ? 'school_admin' : desk === 'hostel' ? 'warden' : null,
   ownerUserId: null,
   slaHours: desk === 'provider' ? null : 24,
   sortOrder: 50,

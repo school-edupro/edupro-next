@@ -677,6 +677,22 @@ export class CandidatePortalService {
       sizeBytes: number;
     },
   ) {
+    // a file for a question to the school (docs/design/43, part 4): any registration of the family
+    if (dto.fieldKey === 'query_file') {
+      await this.db.tenant(this.t(cand), (c) => this.own(c, cand, dto.applicationId));
+      if (dto.sizeBytes > 5 * 1024 * 1024 || !IMAGE_OR_PDF.test(dto.contentType))
+        throw new DomainError('validation-failed', 'Attach a PDF or a photo of up to 5MB', {
+          status: 400,
+        });
+      return this.files.createUpload(this.ctx(cand), {
+        fileName: dto.fileName,
+        contentType: dto.contentType,
+        sizeBytes: dto.sizeBytes,
+        classification: 'personal',
+        ownerEntityType: 'application',
+        ownerEntityId: dto.applicationId,
+      });
+    }
     const field = await this.db.tenant(this.t(cand), async (c) => {
       const a = await this.own(c, cand, dto.applicationId);
       if (

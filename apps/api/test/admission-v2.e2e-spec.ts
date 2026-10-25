@@ -1798,6 +1798,145 @@ describe('online admission (e2e)', () => {
       expect(bad.statusCode).toBe(400);
     });
   });
+  describe('docs/design/43, part 4: Ask the school', () => {
+    let qid: string;
+
+    it('a family asks about its registration; the admission desk of the Helpdesk gets it', async () => {
+      const opts = await inject({
+        method: 'GET',
+        url: '/public/admission/me/queries/options',
+        headers: pub(tokenA),
+      });
+      expect(opts.statusCode).toBe(200);
+      const heads = (opts.json().heads as Array<{ code: string }>).map((x) => x.code);
+      expect(heads).toEqual(expect.arrayContaining(['fees', 'documents', 'form', 'test', 'other']));
+      expect((opts.json().registrations as Array<{ id: string }>).map((x) => x.id)).toContain(appA);
+      // not the family's registration
+      const foreign = await inject({
+        method: 'POST',
+        url: '/public/admission/me/queries',
+        headers: pub(tokenB),
+        json: {
+          applicationId: appA,
+          categoryCode: 'fees',
+          subject: 'Fee question',
+          body: 'Can I pay in two parts?',
+        },
+      });
+      expect(foreign.statusCode).toBe(404);
+      const asked = await inject({
+        method: 'POST',
+        url: '/public/admission/me/queries',
+        headers: pub(tokenA),
+        json: {
+          applicationId: appA,
+          categoryCode: 'fees',
+          subject: 'Fee question',
+          body: 'Can I pay the admission fee in two parts?',
+        },
+      });
+      expect(asked.statusCode).toBe(201);
+      qid = asked.json().id;
+      expect(asked.json()).toMatchObject({ status: 'open', head: 'Fee and payment' });
+      expect(asked.json().number).toMatch(/^A\//);
+      const desk = await inject({
+        method: 'GET',
+        url: '/helpdesk/tickets?desk=candidate',
+        headers: h(),
+      });
+      expect(desk.statusCode).toBe(200);
+      const t = (
+        desk.json().data as Array<{ id: string; raisedBy: string; registration: { id: string } }>
+      ).find((x) => x.id === qid)!;
+      expect(t.registration.id).toBe(appA);
+      expect(t.raisedBy).toBeTruthy();
+      const byReg = await inject({
+        method: 'GET',
+        url: `/helpdesk/tickets?desk=candidate&applicationId=${appA}`,
+        headers: h(),
+      });
+      expect((byReg.json().data as Array<{ id: string }>).map((x) => x.id)).toContain(qid);
+    });
+
+    it('the school answers; the family reads it, writes back, and rates it once closed', async () => {
+      const take = await inject({
+        method: 'POST',
+        url: `/helpdesk/tickets/${qid}/take-over`,
+        headers: h(),
+      });
+      expect(take.statusCode).toBeLessThan(300);
+      const ans = await inject({
+        method: 'POST',
+        url: `/helpdesk/tickets/${qid}/replies`,
+        headers: h(),
+        json: { body: 'Yes: half now and half before the session starts.' },
+      });
+      expect(ans.statusCode).toBeLessThan(300);
+      expect(ans.json().status).toBe('answered');
+      const list = await inject({
+        method: 'GET',
+        url: '/public/admission/me/queries',
+        headers: pub(tokenA),
+      });
+      expect(list.json().data.find((x: { id: string }) => x.id === qid)).toMatchObject({
+        status: 'answered',
+        unread: true,
+      });
+      const one = await inject({
+        method: 'GET',
+        url: `/public/admission/me/queries/${qid}`,
+        headers: pub(tokenA),
+      });
+      expect(
+        one
+          .json()
+          .replies.map((r: { body: string; fromFamily: boolean }) => [r.fromFamily, r.body]),
+      ).toEqual([[false, 'Yes: half now and half before the session starts.']]);
+      const after = await inject({
+        method: 'GET',
+        url: '/public/admission/me/queries',
+        headers: pub(tokenA),
+      });
+      expect(after.json().unread).toBe(0);
+      const back = await inject({
+        method: 'POST',
+        url: `/public/admission/me/queries/${qid}/reply`,
+        headers: pub(tokenA),
+        json: { body: 'Thank you. By when is the second half due?' },
+      });
+      expect(back.json().status).toBe('open');
+      const close = await inject({
+        method: 'POST',
+        url: `/helpdesk/tickets/${qid}/close`,
+        headers: h(),
+        json: { resolution: 'By 31 March; a reminder goes out a week before.' },
+      });
+      expect(close.statusCode).toBeLessThan(300);
+      const rated = await inject({
+        method: 'POST',
+        url: `/public/admission/me/queries/${qid}/rate`,
+        headers: pub(tokenA),
+        json: { rating: 5 },
+      });
+      expect(rated.json()).toMatchObject({ status: 'closed', rating: 5 });
+      expect(rated.json().you.canReopen).toBe(true);
+      const reopened = await inject({
+        method: 'POST',
+        url: `/public/admission/me/queries/${qid}/reopen`,
+        headers: pub(tokenA),
+        json: { reason: 'One more question about the reminder.' },
+      });
+      expect(reopened.json().status).toBe('open');
+      // someone else's question stays hidden
+      const other = await inject({
+        method: 'GET',
+        url: `/public/admission/me/queries/${qid}`,
+        headers: pub(tokenB),
+      });
+      expect(other.statusCode).toBe(404);
+    });
+  });
+
   describe('part 6: admission fee, Admit and cancellation', () => {
     let sectionA: string;
     let sectionB: string;

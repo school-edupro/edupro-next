@@ -54,7 +54,7 @@ with only classes keep matching by class. Fixes the cross-session leak.
 from templates, through the outbox), logged as a follow-up with the text. The family gets an
 acknowledgement with the enquiry number. The Help page shows "Send an enquiry" only when signed out.
 
-**Part 4 — "Ask the school" for registered families.** A `candidate` desk in the Helpdesk (migration
+**Part 4 — "Ask the school" for registered families (built 25 Oct 2026, migration 0248).** A `candidate` desk in the Helpdesk (migration
 0248): query heads Fee / payment, Documents, Form / technical, Test / interview, Other, each with an owner
 (person or role) and hours; the existing levels, SLA clock and escalation apply. Signed in, Help shows
 "Ask the school" (head, registration, question, a file) and **My queries** (status, the conversation,

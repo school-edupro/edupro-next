@@ -27,6 +27,8 @@ import { ClinicService } from './clinic.service';
 import { FrontOfficeService } from './front-office.service';
 import { FrontOfficeController, GatePassController } from './gatepass.controller';
 import { GatePassService } from './gatepass.service';
+import { CandidateQueriesController } from './candidate-queries.controller';
+import { CandidateQueriesService } from './candidate-queries.service';
 import { HelpdeskController } from './helpdesk.controller';
 import { HelpdeskService } from './helpdesk.service';
 import { EngagementPlusController } from './plus.controller';
@@ -68,6 +70,7 @@ import { QueriesService } from './queries.service';
     DsrController,
     PortalProfileController,
     HelpdeskController,
+    CandidateQueriesController,
     AppointmentsController,
     PublicAppointmentsController,
     VisitorsController,
@@ -79,6 +82,7 @@ import { QueriesService } from './queries.service';
   providers: [
     QueriesService,
     HelpdeskService,
+    CandidateQueriesService,
     AppointmentsService,
     VisitorsService,
     GatePassService,

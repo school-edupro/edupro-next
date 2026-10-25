@@ -728,6 +728,39 @@ test.describe('accessibility (axe)', () => {
     ).toEqual([]);
   });
 
+  // the admission desk of the Helpdesk (docs/design/43, part 4): the families' questions, one opened
+  test('helpdesk: admission queries desk and a question', async ({ page }) => {
+    test.setTimeout(120_000);
+    await page.goto('/engagement/helpdesk/candidate');
+    await page.waitForLoadState('networkidle');
+    const skip = page.getByRole('button', { name: 'Skip' });
+    if (await skip.isVisible()) await skip.click();
+    await expect(page.getByRole('heading', { name: 'Admission queries' }).first()).toBeVisible();
+    await expect(page.getByRole('link', { name: /Raise/ })).toHaveCount(0);
+    const href = await page
+      .locator('a[href^="/engagement/helpdesk/candidate/"]')
+      .evaluateAll((as) =>
+        as
+          .map((a) => a.getAttribute('href') ?? '')
+          .find((h) => /^\/engagement\/helpdesk\/candidate\/\d+$/.test(h)),
+      );
+    test.skip(!href, 'no admission query yet');
+    await page.goto(href!);
+    await page.waitForLoadState('networkidle');
+    await expect(page.getByRole('link', { name: /Class/ }).first()).toBeVisible();
+    await page.screenshot({ path: test.info().outputPath('admission-query.png'), fullPage: true });
+    const r = await new AxeBuilder({ page })
+      .options({ iframes: false })
+      .setLegacyMode()
+      .withTags(['wcag2a', 'wcag2aa'])
+      .analyze();
+    expect(
+      r.violations
+        .filter((v) => v.impact === 'serious' || v.impact === 'critical')
+        .map((v) => `${v.id}: ${v.nodes.map((n) => n.target.join(' ')).join(' | ')}`),
+    ).toEqual([]);
+  });
+
   // the enquiry desk answers (docs/design/43, part 3): the desk set-up, an enquiry with Reply to family
   test('enquiry desk: set-up card and reply to family', async ({ page }) => {
     test.setTimeout(120_000);

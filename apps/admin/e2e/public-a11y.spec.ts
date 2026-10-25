@@ -310,3 +310,66 @@ test('admission enquiry: the number is shown after sending', async ({ page }) =>
       .map((v) => `${v.id}: ${v.nodes.map((n) => n.target.join(' ')).join(' | ')}`),
   ).toEqual([]);
 });
+
+// "Ask the school" (docs/design/43, part 4): a signed-in family asks about its registration and sees it
+test('admission: ask the school about a registration', async ({ page }) => {
+  test.setTimeout(180_000);
+  const problems: string[] = [];
+  const check = async (label: string) => {
+    // the pointer off the buttons: a button under it is measured in its hover colours
+    await page.mouse.move(0, 0);
+    await page.waitForTimeout(400);
+    const r = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa']).analyze();
+    for (const v of r.violations.filter((x) => x.impact === 'serious' || x.impact === 'critical'))
+      problems.push(`${label}: ${v.id} ${v.nodes.map((n) => n.target.join(' ')).join(' | ')}`);
+  };
+  await page.goto(`${BASE}/api/lang?to=en&back=%2Falpha%2Fadmission`);
+  const choose = page.locator('select[name="session"]');
+  if (await choose.count()) {
+    await choose.selectOption({ index: 1 });
+    await page.getByRole('button', { name: 'Continue' }).click();
+  }
+  const pick = page.locator('.ep-adm-classlist a.ep-btn').first();
+  test.skip(!(await pick.count()), 'no class is open for registration');
+  await pick.click();
+  await page.waitForLoadState('networkidle');
+  await page
+    .getByLabel('Mobile number, email or registration number')
+    .fill(`90000${String(Date.now()).slice(-5)}`);
+  await page.getByRole('button', { name: 'Send code' }).click();
+  const dev = page.getByText(/Development code: \d{6}/i);
+  await expect(dev).toBeVisible({ timeout: 60_000 });
+  const code = /(\d{6})/.exec((await dev.textContent()) ?? '')![1]!;
+  await page.getByLabel('Code', { exact: true }).fill(code);
+  await page.getByRole('button', { name: 'Sign in', exact: true }).click();
+  // the form of the class picked opened: the family now has a registration to ask about
+  await page.waitForURL(/\/alpha\/admission\/application\/\d+/, { timeout: 60_000 });
+  await page.goto(`${BASE}/alpha/admission/help`);
+  await expect(page.getByRole('link', { name: 'Send an enquiry' })).toHaveCount(0);
+  await page.getByRole('link', { name: 'Ask the school' }).click();
+  await expect(page.getByRole('heading', { level: 1 })).toHaveText('My queries');
+  await check('my queries');
+  await page.screenshot({
+    path: `${process.env.SHOT_DIR ?? test.info().outputDir}/queries.png`,
+    fullPage: true,
+  });
+  await page.getByLabel('Question about *').selectOption({ label: 'Documents' });
+  await page.getByLabel('Subject *').fill('Birth certificate in Hindi');
+  await page
+    .getByLabel('Your question *')
+    .fill('Our birth certificate is in Hindi. Is a translation needed?');
+  await page.getByRole('button', { name: 'Send the question' }).click();
+  await expect(page.getByText(/Your question is with the school: A\//)).toBeVisible({
+    timeout: 30_000,
+  });
+  await expect(page.getByRole('heading', { level: 1 })).toHaveText('Birth certificate in Hindi');
+  await expect(page.getByRole('heading', { name: 'Write to the school' })).toBeVisible();
+  await check('the question');
+  await page.screenshot({
+    path: `${process.env.SHOT_DIR ?? test.info().outputDir}/query.png`,
+    fullPage: true,
+  });
+  await page.goto(`${BASE}/alpha/admission/queries`);
+  await expect(page.getByRole('link', { name: 'Birth certificate in Hindi' })).toBeVisible();
+  expect(problems).toEqual([]);
+});

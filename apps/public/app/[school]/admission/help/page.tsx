@@ -1,6 +1,6 @@
 import { cookies } from 'next/headers';
 import { notFound } from 'next/navigation';
-import { ADMISSION_COOKIE } from '@/lib/admission';
+import { ADMISSION_COOKIE, admissionFetch } from '@/lib/admission';
 import { t } from '@/lib/i18n';
 import { currentLang } from '@/lib/lang';
 import { schoolProfile } from '@/lib/school';
@@ -51,6 +51,11 @@ export default async function AdmissionHelpPage({
   const profile = await schoolProfile(school);
   if (!profile) notFound();
   const signedIn = Boolean((await cookies()).get(ADMISSION_COOKIE)?.value);
+  const newAnswers = signedIn
+    ? await admissionFetch<{ unread: number }>('/me/queries')
+        .then((x) => x.unread)
+        .catch(() => 0)
+    : 0;
   const lang = await currentLang();
   const w = (en: string) => t(lang, en);
   return (
@@ -110,7 +115,30 @@ export default async function AdmissionHelpPage({
           </dl>
           {/* signed out, a new family's question goes to the enquiry desk (docs/design/43, part 3);
               a registered family asks about its registration by these contacts */}
-          {signedIn ? null : (
+          {signedIn ? (
+            <>
+              <p className="ep-field__help">
+                {w(
+                  'A question about your registration? Ask the school: the answer comes in My queries and by email.',
+                )}
+              </p>
+              <span className="ep-adm-help__ask">
+                <a
+                  className="ep-btn ep-btn--primary ep-btn--sm"
+                  href={`/${school}/admission/queries#ask`}
+                >
+                  {w('Ask the school')}
+                </a>
+                <a
+                  className="ep-btn ep-btn--ghost ep-btn--sm"
+                  href={`/${school}/admission/queries`}
+                >
+                  {w('My queries')}
+                  {newAnswers ? ` (${String(newAnswers)} ${w('new')})` : ''}
+                </a>
+              </span>
+            </>
+          ) : (
             <>
               <p className="ep-field__help">
                 {w('A question about admission? Send it to the school.')}

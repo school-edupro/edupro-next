@@ -151,6 +151,18 @@ export default async function TicketPage({
           ],
         ] as Array<[string, React.ReactNode]>)
       : []),
+    ...(t.registration
+      ? ([
+          [
+            'Registration',
+            <a key="reg" href={`/admissions/registrations/${t.registration.id}`}>
+              {[t.registration.candidate, t.registration.className, t.registration.number]
+                .filter(Boolean)
+                .join(' · ')}
+            </a>,
+          ],
+        ] as Array<[string, React.ReactNode]>)
+      : []),
     ['Raised by', t.raisedBy ?? '—'],
     ['Raised', when(t.openedAt)],
     ['First reply', when(t.firstResponseAt) || '—'],

@@ -10,7 +10,7 @@ export const HELPDESK = {
   provider: 'helpdesk.provider.respond',
 } as const;
 
-export const DeskSchema = z.enum(['parent', 'staff', 'provider', 'hostel']);
+export const DeskSchema = z.enum(['parent', 'staff', 'provider', 'hostel', 'candidate']);
 export type Desk = z.infer<typeof DeskSchema>;
 export const PrioritySchema = z.enum(['low', 'normal', 'high', 'urgent']);
 const Files = z.array(IdSchema).max(5).default([]);
@@ -27,6 +27,11 @@ export const ListTicketsSchema = z.object({
   view: z.enum(['all', 'mine', 'assigned']).default('all'),
   head: z.string().trim().max(40).optional(),
   q: z.string().trim().max(80).optional(),
+  /** the admission desk: the questions about one registration (docs/design/43, part 4) */
+  applicationId: z
+    .string()
+    .regex(/^\d{1,18}$/)
+    .optional(),
   page: z.coerce.number().int().min(1).default(1),
   size: z.coerce.number().int().min(5).max(100).default(25),
 });
