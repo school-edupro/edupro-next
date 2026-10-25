@@ -1402,6 +1402,33 @@ describe('online admission (e2e)', () => {
       expect((await reg(appA)).json()).toMatchObject({ merit: 77, points: { total: 5 } });
     });
 
+    it("gives the family's home in one call: a summary per registration (docs/design/42)", async () => {
+      const d = await inject({
+        method: 'GET',
+        url: '/public/admission/me/dashboard',
+        headers: pub(tokenA),
+      });
+      expect(d.statusCode).toBe(200);
+      const a = d.json().registrations.find((x: { id: string }) => x.id === appA);
+      expect(a).toMatchObject({
+        candidate: 'ASHA VERMA',
+        feeDue: 0,
+        points: { total: 5, confirmed: false },
+        locked: null,
+      });
+      expect(a.number).toBeTruthy();
+      expect(a.steps.length).toBeGreaterThan(0);
+      expect(a.steps.some((s: { state: string }) => s.state === 'current')).toBe(true);
+      // another family sees only its own
+      const b = await inject({
+        method: 'GET',
+        url: '/public/admission/me/dashboard',
+        headers: pub(tokenB),
+      });
+      expect(b.json().registrations.map((x: { id: string }) => x.id)).not.toContain(appA);
+      expect(d.json().parentPortalUrl).toMatch(/^http/);
+    });
+
     it('offers from the merit list with the admission fee; undo; waiting list and the next offer', async () => {
       const sel = await inject({
         method: 'GET',

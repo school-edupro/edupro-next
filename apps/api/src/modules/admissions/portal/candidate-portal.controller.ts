@@ -100,6 +100,14 @@ export class CandidatePortalController {
     return this.portal.me(req.candidate!);
   }
 
+  @Get('me/dashboard')
+  @Public()
+  @UseGuards(AdmissionCandidateGuard)
+  @ApiOperation({ summary: "The family's home: a summary per registration (docs/design/42)" })
+  dashboard(@Req() req: CandidateRequest) {
+    return this.portal.dashboard(req.candidate!);
+  }
+
   @Post('me/applications')
   @Public()
   @UseGuards(AdmissionCandidateGuard)

@@ -296,6 +296,100 @@ export class CandidatePortalService {
     });
   }
 
+  /**
+   * The family's home (docs/design/42, part 2): per registration what a family looks at first — the
+   * candidate, class, number, status, the steps, the next date, what is due, the offer, merit points, a
+   * correction asked, the photo and whether registrations are closed for it. One call for the dashboard.
+   */
+  async dashboard(cand: AdmissionCandidate) {
+    return this.db.tenant(this.t(cand), async (c) => {
+      const ids = await c.query<{ id: string }>(
+        `SELECT id::text FROM applications WHERE applicant_id = $1 ORDER BY (status = 'draft') DESC, created_at DESC`,
+        [cand.id],
+      );
+      const out = [];
+      for (const { id } of ids.rows) {
+        const a = await this.core.row(c, id);
+        const def = await this.core.defOf(c, a);
+        const data = this.core.plainData(def, a.data);
+        const photoField = def.fields.find(
+          (f) => f.type === 'photo' && (f.docKind === 'photo' || /student/.test(f.key)),
+        );
+        const photo =
+          photoField && Array.isArray(data[photoField.key])
+            ? ((data[photoField.key] as string[])[0] ?? null)
+            : null;
+        const extra = await c.query<{
+          form_points: string | null;
+          confirmed: boolean;
+          wait_rank: number | null;
+          closes: Date | null;
+          remark: string | null;
+          due_on: string | null;
+        }>(
+          `SELECT a.form_points::text, a.points_confirmed_at IS NOT NULL AS confirmed, a.wait_rank,
+                  COALESCE(k.closes_at, y.closes_at) AS closes,
+                  (SELECT x.remark FROM admission_corrections x WHERE x.application_id = a.id AND x.status = 'open' ORDER BY x.id DESC LIMIT 1) AS remark,
+                  (SELECT x.due_on::text FROM admission_corrections x WHERE x.application_id = a.id AND x.status = 'open' ORDER BY x.id DESC LIMIT 1) AS due_on
+             FROM applications a JOIN admission_cycles y ON y.id = a.cycle_id
+             LEFT JOIN admission_class_criteria k ON k.cycle_id = a.cycle_id AND k.class_id = a.class_id
+            WHERE a.id = $1`,
+          [id],
+        );
+        const x = extra.rows[0]!;
+        const waiting = a.status === 'draft' || (a.status === 'submitted' && !a.application_no);
+        const open = waiting ? await classOpenFor(c, a.cycle_id, a.class_id, cand.id) : null;
+        const slot = ['registered', 'under_review'].includes(a.status) ? await slotOf(c, id) : null;
+        const steps = (await journey(c, id)).map((s) => ({ name: s.name, state: s.state }));
+        out.push({
+          id,
+          candidate: a.candidate_name,
+          className: a.class_name,
+          classId: a.class_id,
+          cycleId: a.cycle_id,
+          session: a.cycle_name,
+          academicYear: a.year_name,
+          number: a.application_no,
+          admissionNo: a.admission_no,
+          status: a.status,
+          category: a.category_name,
+          progress: a.progress,
+          photoId: photo,
+          hasPdf: Boolean(a.pdf_file_id),
+          feeDue:
+            a.status === 'submitted' && !a.application_no && Number(a.registration_fee ?? 0) > 0
+              ? Number(a.registration_fee)
+              : 0,
+          admissionFeeDue:
+            a.status === 'offered' && Number(a.admission_fee ?? 0) > 0
+              ? Number(a.admission_fee)
+              : 0,
+          offerExpiresAt:
+            a.status === 'offered' ? (a.offer_expires_at?.toISOString() ?? null) : null,
+          waitRank: a.status === 'waitlisted' ? x.wait_rank : null,
+          points:
+            x.form_points !== null
+              ? { total: Number(x.form_points), confirmed: x.confirmed }
+              : null,
+          correction:
+            a.status === 'sent_back' && x.remark ? { remark: x.remark, dueOn: x.due_on } : null,
+          slot: slot
+            ? { stage: slot.stage, startsAt: slot.startsAt, venue: slot.venue, rollNo: slot.rollNo }
+            : null,
+          steps,
+          closesAt: x.closes?.toISOString() ?? null,
+          locked: open && !open.open ? { closedOn: open.closedOn } : null,
+          cancelReason: a.status === 'cancelled' ? a.cancel_reason : null,
+        });
+      }
+      return {
+        family: { name: cand.name, mobile: cand.mobile, email: cand.email },
+        parentPortalUrl: this.env.PARENT_APP_URL,
+        registrations: out,
+      };
+    });
+  }
+
   async get(cand: AdmissionCandidate, id: string) {
     return this.db.tenant(this.t(cand), async (c) => {
       const a = await this.own(c, cand, id);
@@ -722,13 +816,26 @@ export class CandidatePortalService {
 
   async file(cand: AdmissionCandidate, fileId: string) {
     return this.db.tenant(this.t(cand), async (c) => {
-      const f = await c.query<{ owner: string; name: string | null; type: string }>(
-        `SELECT f.owner_entity_id::text AS owner, f.original_name AS name, f.content_type AS type FROM files f
-          WHERE f.id = $1 AND f.owner_entity_type = 'application' AND f.status = 'ready' AND f.deleted_at IS NULL`,
+      const f = await c.query<{ kind: string; owner: string; name: string | null; type: string }>(
+        `SELECT f.owner_entity_type AS kind, f.owner_entity_id::text AS owner, f.original_name AS name, f.content_type AS type
+           FROM files f
+          WHERE f.id = $1 AND f.owner_entity_type IN ('application', 'student') AND f.status = 'ready' AND f.deleted_at IS NULL`,
         [fileId],
       );
       if (!f.rows[0]) throw new DomainError('not-found', 'File not found', { status: 404 });
-      await this.own(c, cand, f.rows[0].owner);
+      if (f.rows[0].kind === 'application') await this.own(c, cand, f.rows[0].owner);
+      else {
+        // on Admit the registration's files pass to the student: still the family's to see, when the
+        // student came from one of its registrations and the file was one of that form's answers
+        const mine = await c.query(
+          `SELECT 1 FROM applications a
+            WHERE a.applicant_id = $1 AND a.student_id = $2
+              AND EXISTS (SELECT 1 FROM jsonb_each(a.data) d
+                           WHERE jsonb_typeof(d.value) = 'array' AND d.value ? $3)`,
+          [cand.id, f.rows[0].owner, fileId],
+        );
+        if (!mine.rowCount) throw new DomainError('not-found', 'File not found', { status: 404 });
+      }
       const bytes = await this.core.fileBytes(c, fileId);
       if (!bytes) throw new DomainError('not-found', 'File not found', { status: 404 });
       return {

@@ -189,3 +189,37 @@ export const dmy = (iso: string | null | undefined) => {
   }).format(d);
 };
 export const rupees = (n: number) => `₹${n.toLocaleString('en-IN')}`;
+
+/** The family's home: a summary per registration (docs/design/42, part 2). */
+export interface PortalDashboardItem {
+  id: string;
+  candidate: string | null;
+  className: string;
+  classId: string;
+  cycleId: string;
+  session: string;
+  academicYear: string;
+  number: string | null;
+  admissionNo: string | null;
+  status: string;
+  category: string | null;
+  progress: number;
+  photoId: string | null;
+  hasPdf: boolean;
+  feeDue: number;
+  admissionFeeDue: number;
+  offerExpiresAt: string | null;
+  waitRank: number | null;
+  points: { total: number; confirmed: boolean } | null;
+  correction: { remark: string; dueOn: string | null } | null;
+  slot: { stage: string; startsAt: string; venue: string; rollNo: number } | null;
+  steps: Array<{ name: string; state: 'done' | 'current' | 'waiting' | 'rejected' }>;
+  closesAt: string | null;
+  locked: { closedOn: string | null } | null;
+  cancelReason: string | null;
+}
+export interface PortalDashboard {
+  family: { name: string | null; mobile: string | null; email: string | null };
+  parentPortalUrl: string;
+  registrations: PortalDashboardItem[];
+}

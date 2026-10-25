@@ -39,7 +39,7 @@ with the open sessions below (classes with dates, date of birth window, fee, mer
 Enquire); signed in, the shell (sidebar with the menu above, top bar with school + session, messages with
 the unread count, हिंदी, sign out; bottom tab bar on phones). The Hindi words for the portal's own text.
 
-**Part 2 — Home dashboard per child.** One API call for the family's dashboard: per registration the
+**Part 2 — Home dashboard per child (built 25 Oct 2026).** One API call for the family's dashboard: per registration the
 candidate, class, session, registration no., status, stage, photo, fee due, next date (test / interview),
 offer and its last date, merit points, correction asked. Home: "Namaste, <family>", a chip per child, the
 child's card (photo, class, registration no., status, View form, Download form PDF), the next-step banner

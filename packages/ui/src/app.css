@@ -11052,6 +11052,47 @@ a.ep-pub-foot__item {
   flex-wrap: wrap;
   gap: var(--sp-2);
 }
+/* the admission portal's home per child (docs/design/42, part 2) */
+.ep-adm-home {
+  display: grid;
+  gap: var(--sp-4);
+  margin-bottom: var(--sp-5);
+  min-width: 0;
+}
+.ep-adm-home .ep-page-title,
+.ep-adm-home .ep-kicker {
+  margin: 0;
+}
+.ep-adm-home .pp-kids {
+  margin: 0;
+}
+.ep-adm-home .ep-rs {
+  margin: 0;
+  padding: var(--sp-4);
+}
+.ep-adm-home__pdf {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-1);
+}
+.ep-adm-next {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-3);
+  align-items: center;
+  justify-content: space-between;
+  margin: 0;
+}
+.ep-adm-empty {
+  display: grid;
+  gap: var(--sp-3);
+  justify-items: start;
+  padding: var(--sp-5);
+}
+.ep-adm-empty p {
+  margin: 0;
+}
+
 /* the admission portal signed out: the sign-in card, then the open classes (docs/design/42) */
 .ep-adm-land {
   display: grid;

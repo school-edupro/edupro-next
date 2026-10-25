@@ -1,4 +1,4 @@
-import { Badge, Card, PageHeader } from '@edupro/ui';
+import { Badge, Card } from '@edupro/ui';
 import { cookies } from 'next/headers';
 import { notFound } from 'next/navigation';
 import { PublicApiError } from '@/lib/api';
@@ -9,9 +9,11 @@ import {
   dmy,
   rupees,
   type PortalInbox,
+  type PortalDashboard,
   type PortalMe,
   type PortalSession,
 } from '@/lib/admission';
+import { AdmissionHome } from '@/components/AdmissionHome';
 import { AdmissionLanding } from '@/components/AdmissionLanding';
 import { ViewDownload } from '@/components/ViewDownload';
 import { t } from '@/lib/i18n';
@@ -49,7 +51,7 @@ export default async function AdmissionPortalPage({
   searchParams,
 }: {
   params: Promise<{ school: string }>;
-  searchParams: Promise<{ session?: string; error?: string; enquiry?: string }>;
+  searchParams: Promise<{ session?: string; error?: string; enquiry?: string; child?: string }>;
 }) {
   const { school } = await params;
   const sp = await searchParams;
@@ -92,16 +94,10 @@ export default async function AdmissionPortalPage({
       />
     );
 
+  // signed in: the family's home first (docs/design/42, part 2)
+  const dash = await admissionFetch<PortalDashboard>('/me/dashboard').catch(() => null);
   return (
     <>
-      <PageHeader
-        kicker={open.school.name}
-        title={t(lang, 'Admission portal')}
-        description={t(
-          lang,
-          'Fill the registration form, pay the registration fee and follow your child’s admission here.',
-        )}
-      />
       {sp.error ? (
         <div
           className="ep-alert ep-alert--danger"
@@ -110,6 +106,17 @@ export default async function AdmissionPortalPage({
         >
           {sp.error}
         </div>
+      ) : null}
+
+      {dash ? (
+        <AdmissionHome
+          school={school}
+          schoolName={open.school.name}
+          data={dash}
+          inbox={inbox}
+          chosen={sp.child}
+          lang={lang}
+        />
       ) : null}
 
       {me ? (
