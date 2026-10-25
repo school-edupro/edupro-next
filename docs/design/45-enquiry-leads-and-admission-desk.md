@@ -57,7 +57,7 @@ first contact is logged in time, `app.enquiry_escalate_due()` (run by the worker
 every five minutes) gives it to level 2 and tells them by email / app. The old single switch becomes
 the first rule.
 
-**Part 4 — The admission desk (admin).** Two halves. **Start for the parent**: class (open ones),
+**Part 4 — The admission desk (admin; built 25 Oct 2026).** Two halves. **Start for the parent**: class (open ones),
 child's name, date of birth, mobile and / or email → the registration is started for the family (its
 draft, the parent's sign-in on that mobile / email) and the parent gets the link (SMS / email) to fill
 it; or "Fill it now" opens the office's form on the same draft. **Find**: by mobile, email,

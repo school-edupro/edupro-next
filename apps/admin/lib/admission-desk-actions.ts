@@ -170,3 +170,51 @@ export async function uploadDeskFile(
     throw e;
   }
 }
+
+/**
+ * A walk-in sent the form link (docs/design/45, part 4): the visit becomes an enquiry of the person at
+ * the desk and the parent gets the link (SMS / email) to fill the form on their phone.
+ */
+export async function sendDeskLink(fd: FormData) {
+  const [cycleId, classId] = str(fd, 'line').split(':');
+  const mobile = str(fd, 'mobile').replace(/\D/g, '');
+  const email = str(fd, 'email').toLowerCase();
+  const parentName = str(fd, 'parentName');
+  const childName = str(fd, 'childName');
+  const childDob = str(fd, 'childDob');
+  if (!cycleId || !classId || !okId(cycleId) || !okId(classId))
+    redirect('/admissions/desk?error=validation-failed&detail=Choose+the+class');
+  if (parentName.length < 2)
+    redirect("/admissions/desk?error=validation-failed&detail=Give+the+parent's+name");
+  if (!mobile && !email)
+    redirect('/admissions/desk?error=validation-failed&detail=Give+the+mobile+or+the+email');
+  let out: { enquiryId: string; sent: number };
+  try {
+    out = await apiFetch<{ enquiryId: string; sent: number }>('/admissions/enquiries/desk-link', {
+      method: 'POST',
+      body: JSON.stringify({
+        cycleId,
+        classId,
+        parentName,
+        ...(childName ? { childName } : {}),
+        ...(/^\d{4}-\d{2}-\d{2}$/.test(childDob) ? { childDob } : {}),
+        ...(mobile ? { mobile } : {}),
+        ...(email ? { email } : {}),
+      }),
+    });
+  } catch (e) {
+    if (e instanceof ApiError)
+      redirect(
+        `/admissions/desk?error=${encodeURIComponent(e.problem.type)}&detail=${encodeURIComponent(
+          String(e.problem.detail ?? '').slice(0, 160),
+        )}`,
+      );
+    throw e;
+  }
+  revalidatePath('/admissions/enquiries');
+  redirect(
+    `/admissions/desk?ok=1&detail=${encodeURIComponent(
+      `The form link went to ${[mobile, email].filter(Boolean).join(' and ')} (${String(out.sent)} message${out.sent === 1 ? '' : 's'}). It is kept as enquiry ENQ-${out.enquiryId.padStart(6, '0')}.`,
+    )}`,
+  );
+}

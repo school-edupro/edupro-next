@@ -192,3 +192,20 @@ export const RulesSchema = z.object({
     .max(40),
 });
 export class RulesDto extends createZodDto(RulesSchema) {}
+
+/** A walk-in at the desk sent the form link (docs/design/45, part 4): an enquiry, then its invitation. */
+export const DeskLinkSchema = z
+  .object({
+    cycleId: IdSchema,
+    classId: IdSchema,
+    parentName: z.string().trim().min(2).max(120),
+    childName: z.string().trim().max(120).optional(),
+    childDob: DateSchema.optional(),
+    mobile: Mobile.optional(),
+    email: z.string().trim().email().max(200).optional(),
+  })
+  .refine((v) => Boolean(v.mobile || v.email), {
+    message: 'Give the mobile or the email',
+    path: ['mobile'],
+  });
+export class DeskLinkDto extends createZodDto(DeskLinkSchema) {}

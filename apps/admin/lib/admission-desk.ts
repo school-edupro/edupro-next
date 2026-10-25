@@ -104,3 +104,29 @@ export const dmy = (iso: string | null | undefined) =>
         year: 'numeric',
       }).format(new Date(iso))
     : '';
+
+/** What the desk's search finds (docs/design/45, part 4). */
+export interface DeskFind {
+  registrations: Array<{
+    id: string;
+    number: string | null;
+    status: string;
+    candidate: string | null;
+    className: string;
+    session: string;
+    mobile: string | null;
+    email: string | null;
+    progress: number;
+    admissionNo: string | null;
+    feeDue: number;
+    createdAt: string;
+  }>;
+  enquiries: Array<{
+    id: string;
+    parentName: string;
+    childName: string | null;
+    mobile: string | null;
+    stage: string | null;
+    counsellor: string | null;
+  }>;
+}

@@ -11,6 +11,7 @@ import {
   EnquiryUpdateDto,
   FollowUpDto,
   BulkDto,
+  DeskLinkDto,
   EnquiryDeskDto,
   EnquiryImportDto,
   InviteDto,
@@ -55,6 +56,13 @@ export class AdmissionEnquiryController {
   @RequirePermission('admissions.setup.manage')
   stages(@ReqCtx() ctx: RequestContext, @Body() dto: StagesDto) {
     return this.svc.saveStages(ctx, dto);
+  }
+
+  @Post('desk-link')
+  @ApiOperation({ summary: 'A walk-in at the desk: an enquiry and the form link to the parent' })
+  @RequirePermission(ENQUIRY_MANAGE)
+  deskLink(@ReqCtx() ctx: RequestContext, @Body() dto: DeskLinkDto) {
+    return this.svc.deskLink(ctx, dto);
   }
 
   @Put('rules')

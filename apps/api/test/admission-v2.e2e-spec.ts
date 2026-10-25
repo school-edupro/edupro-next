@@ -3172,6 +3172,58 @@ describe('online admission (e2e)', () => {
       void mini;
     });
 
+    // docs/design/45, part 4: the admission desk finds any registration and sends a walk-in the link
+    it('the desk finds registrations and enquiries, and sends a walk-in the form link', async () => {
+      const byNo = await inject({
+        method: 'GET',
+        url: '/admissions/desk/find?q=ASHA',
+        headers: h(),
+      });
+      expect(byNo.statusCode).toBe(200);
+      expect(
+        (byNo.json().registrations as Array<{ candidate: string | null }>).some((r) =>
+          /ASHA/i.test(r.candidate ?? ''),
+        ),
+      ).toBe(true);
+      const short = await inject({ method: 'GET', url: '/admissions/desk/find?q=a', headers: h() });
+      expect(short.statusCode).toBe(400);
+      const cycles = (
+        await inject({ method: 'GET', url: '/admissions/enquiries/meta', headers: h() })
+      ).json().cycles as Array<{ id: string; status: string }>;
+      const open = cycles.find((x) => x.status === 'open')!;
+      const link = await inject({
+        method: 'POST',
+        url: '/admissions/enquiries/desk-link',
+        headers: h(clerk),
+        json: {
+          cycleId: open.id,
+          classId: classMini,
+          parentName: 'Counter Parent',
+          childName: 'Counter Child',
+          childDob: '2021-05-04',
+          email: 'counter.parent@example.com',
+        },
+      });
+      expect(link.statusCode).toBe(201);
+      expect(link.json().sent).toBeGreaterThanOrEqual(1);
+      const lead = (
+        await inject({
+          method: 'GET',
+          url: `/admissions/enquiries/${link.json().enquiryId}`,
+          headers: h(clerk),
+        })
+      ).json();
+      expect(lead).toMatchObject({ childName: 'Counter Child', counsellorUserId: clerk.id });
+      expect(lead.firstContactAt).toBeTruthy();
+      expect(lead.invitedAt).toBeTruthy();
+      const found = (
+        await inject({ method: 'GET', url: '/admissions/desk/find?q=Counter', headers: h() })
+      ).json();
+      expect((found.enquiries as Array<{ id: string }>).map((x) => x.id)).toContain(
+        link.json().enquiryId,
+      );
+    });
+
     it('imports enquiries from a sheet: a wrong row stops it; duplicates are left out', async () => {
       const format = await inject({
         method: 'GET',

@@ -65,6 +65,85 @@ export class AdmissionDeskService {
     return { sessions: open.sessions, recent };
   }
 
+  /**
+   * Find at the desk (docs/design/45, part 4): registrations of every family (not only the desk's) by
+   * mobile, email, registration number or the child's name, with where each stands and the fee due;
+   * and the enquiries of the same family.
+   */
+  async find(ctx: RequestContext, q: string) {
+    const words = q.trim();
+    const digits = words.replace(/\D/g, '');
+    return this.db.tenant(requireTenant(ctx), async (c) => {
+      const regs = await c.query<{
+        id: string;
+        number: string | null;
+        status: string;
+        candidate: string | null;
+        class_name: string;
+        cycle_name: string;
+        mobile: string | null;
+        email: string | null;
+        progress: number;
+        fee: string | null;
+        admission_no: string | null;
+        created_at: Date;
+      }>(
+        `SELECT a.id::text, a.application_no AS number, a.status::text, a.candidate_name AS candidate, cl.name AS class_name,
+                y.name AS cycle_name, COALESCE(a.contact_mobile, ap.mobile) AS mobile, COALESCE(a.contact_email, ap.email::text) AS email,
+                a.progress, a.registration_fee::text AS fee, a.admission_no, a.created_at
+           FROM applications a JOIN classes cl ON cl.id = a.class_id JOIN applicants ap ON ap.id = a.applicant_id
+           JOIN admission_cycles y ON y.id = a.cycle_id
+          WHERE a.status::text NOT IN ('withdrawn')
+            AND (a.application_no ILIKE '%' || $1 || '%' OR a.candidate_name ILIKE '%' || $1 || '%'
+                 OR COALESCE(a.contact_email, ap.email::text) ILIKE '%' || $1 || '%'
+                 OR ($2 <> '' AND length($2) >= 4 AND (COALESCE(a.contact_mobile, '') LIKE '%' || $2 || '%' OR COALESCE(ap.mobile, '') LIKE '%' || $2 || '%')))
+          ORDER BY a.created_at DESC LIMIT 25`,
+        [words, digits],
+      );
+      const leads = await c.query<{
+        id: string;
+        parent_name: string;
+        child_name: string | null;
+        mobile: string | null;
+        stage: string | null;
+        counsellor: string | null;
+      }>(
+        `SELECT e.id::text, e.parent_name, e.child_name, e.mobile, s.name AS stage, u.display_name AS counsellor
+           FROM admission_enquiries e LEFT JOIN admission_enquiry_stages s ON s.id = e.stage_id
+           LEFT JOIN users u ON u.id = e.counsellor_user_id
+          WHERE e.parent_name ILIKE '%' || $1 || '%' OR e.child_name ILIKE '%' || $1 || '%' OR e.email::text ILIKE '%' || $1 || '%'
+             OR ($2 <> '' AND length($2) >= 4 AND COALESCE(e.mobile, '') LIKE '%' || $2 || '%')
+          ORDER BY e.created_at DESC LIMIT 10`,
+        [words, digits],
+      );
+      return {
+        registrations: regs.rows.map((x) => ({
+          id: x.id,
+          number: x.number,
+          status: x.status,
+          candidate: x.candidate,
+          className: x.class_name,
+          session: x.cycle_name,
+          mobile: x.mobile,
+          email: x.email,
+          progress: x.progress,
+          admissionNo: x.admission_no,
+          feeDue:
+            x.status === 'submitted' && !x.number && Number(x.fee ?? 0) > 0 ? Number(x.fee) : 0,
+          createdAt: x.created_at.toISOString(),
+        })),
+        enquiries: leads.rows.map((x) => ({
+          id: x.id,
+          parentName: x.parent_name,
+          childName: x.child_name,
+          mobile: x.mobile,
+          stage: x.stage,
+          counsellor: x.counsellor,
+        })),
+      };
+    });
+  }
+
   async start(ctx: RequestContext, dto: DeskStartDto) {
     const tenant = requireTenant(ctx);
     const cand = await this.db.tenant(tenant, async (c) => {

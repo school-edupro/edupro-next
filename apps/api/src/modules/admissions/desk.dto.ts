@@ -54,3 +54,7 @@ export const DeskSlotSchema = z.object({
     .max(20 * 1024 * 1024),
 });
 export class DeskSlotDto extends createZodDto(DeskSlotSchema) {}
+
+/** Find a registration or an enquiry at the desk (docs/design/45, part 4). */
+export const DeskFindSchema = z.object({ q: z.string().trim().min(2).max(80) });
+export class DeskFindDto extends createZodDto(DeskFindSchema) {}

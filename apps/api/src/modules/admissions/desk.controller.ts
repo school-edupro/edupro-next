@@ -1,10 +1,17 @@
-import { Body, Controller, Get, Param, Post, Put } from '@nestjs/common';
+import { Body, Controller, Query, Get, Param, Post, Put } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import type { AdmissionAnswers } from '@edupro/db';
 import { RequirePermission } from '../../common/access/require-permission.decorator';
 import { ReqCtx, type RequestContext } from '../../common/http/request-context';
 import { ADMISSIONS } from './admissions.dto';
-import { DeskFeeDto, DeskSlotDto, DeskStartDto, DeskStepDto, DeskSubmitDto } from './desk.dto';
+import {
+  DeskFeeDto,
+  DeskSlotDto,
+  DeskFindDto,
+  DeskStartDto,
+  DeskStepDto,
+  DeskSubmitDto,
+} from './desk.dto';
 import { AdmissionDeskService } from './desk.service';
 
 export const ADMISSION_ENTER = 'admissions.application.enter';
@@ -25,6 +32,13 @@ export class AdmissionDeskController {
   @RequirePermission(ADMISSION_ENTER)
   overview(@ReqCtx() ctx: RequestContext) {
     return this.desk.overview(ctx);
+  }
+
+  @Get('desk/find')
+  @ApiOperation({ summary: 'Find a registration or an enquiry by mobile, email, number or name' })
+  @RequirePermission(ADMISSION_ENTER)
+  find(@ReqCtx() ctx: RequestContext, @Query() q: DeskFindDto) {
+    return this.desk.find(ctx, q.q);
   }
 
   @Post('desk/applications')

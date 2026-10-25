@@ -16,6 +16,7 @@ import type {
   EnquiryUpdateDto,
   FollowUpDto,
   BulkDto,
+  DeskLinkDto,
   EnquiryDeskDto,
   InviteDto,
   MoveDto,
@@ -1018,6 +1019,45 @@ export class AdmissionEnquiryService {
       return count;
     });
     return { sent, enquiry: await this.get(ctx, id) };
+  }
+
+  /**
+   * A walk-in sent the form link (docs/design/45, part 4): the visit is an enquiry of the person at the
+   * desk (source Walk-in, the visit its first contact), and the invitation goes to the parent's phone /
+   * email; the form starts with the child's name and date of birth.
+   */
+  async deskLink(ctx: RequestContext, dto: DeskLinkDto) {
+    const id = await this.db.tenant(requireTenant(ctx), async (c) => {
+      const sources = await this.sourcesWith(c);
+      const walkIn = sources.find((x) => x.name.toLowerCase() === 'walk-in');
+      const r = await c.query<{ id: string }>(
+        `INSERT INTO admission_enquiries (school_id, cycle_id, class_id, source_id, parent_name, child_name, child_dob, mobile, email,
+                                          counsellor_user_id, assigned_at, next_follow_up_on, created_by)
+         VALUES (app.current_school_id(), $1, $2, $3, $4, $5, $6, $7, $8, $9, now(), CURRENT_DATE + 2, $9)
+         RETURNING id::text`,
+        [
+          dto.cycleId,
+          dto.classId,
+          walkIn?.id ?? null,
+          dto.parentName,
+          dto.childName ?? null,
+          dto.childDob ?? null,
+          dto.mobile ?? null,
+          dto.email?.toLowerCase() ?? null,
+          ctx.user.id,
+        ],
+      );
+      const id = r.rows[0]!.id;
+      await this.arrive(c, id, dto.classId, walkIn?.id ?? null, false);
+      await c.query(
+        `INSERT INTO admission_enquiry_followups (school_id, enquiry_id, mode, outcome, by_user_id)
+         VALUES (app.current_school_id(), $1, 'visit', 'Came to the admission desk', $2)`,
+        [id, ctx.user.id],
+      );
+      return id;
+    });
+    const out = await this.invite(ctx, id, { cycleId: dto.cycleId });
+    return { enquiryId: id, sent: out.sent, link: out.link };
   }
 
   /** The invitation to register: a link that fills the form from the enquiry, by email, SMS and WhatsApp. */

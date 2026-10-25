@@ -11608,6 +11608,40 @@ a.ep-pub-foot__item {
 .ep-lead-score {
   min-width: 9rem;
 }
+/* the admission desk (docs/design/45, part 4): find, then start for the parent */
+.ep-desk-find {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-3);
+  align-items: end;
+  margin: 0 0 var(--sp-3);
+}
+.ep-desk-find .ep-field {
+  flex: 1 1 18rem;
+}
+.ep-desk-sub {
+  display: block;
+  color: var(--text-muted);
+  font-size: var(--fs-small);
+}
+.ep-desk-acts {
+  white-space: nowrap;
+}
+.ep-desk-acts .ep-btn + .ep-btn {
+  margin-left: var(--sp-1);
+}
+.ep-desk-h3 {
+  margin: var(--sp-4) 0 var(--sp-2);
+  font-size: var(--fs-body);
+  color: var(--text-heading);
+}
+.ep-desk-start {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+  align-items: center;
+  grid-column: 1 / -1;
+}
 /* Payments by registration (docs/design/44, part 3) */
 .ep-adm-paytotals {
   display: grid;

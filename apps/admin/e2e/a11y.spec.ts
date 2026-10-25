@@ -728,6 +728,35 @@ test.describe('accessibility (axe)', () => {
     ).toEqual([]);
   });
 
+  // the admission desk (docs/design/45, part 4): find any registration; start for the parent
+  test('admission desk: find and start for the parent', async ({ page }) => {
+    test.setTimeout(120_000);
+    await page.goto('/admissions/desk?q=AARAV');
+    await page.waitForLoadState('networkidle');
+    const tour = page.getByRole('button', { name: 'Skip' });
+    if (await tour.isVisible()) await tour.click();
+    const results = page.getByRole('region', { name: 'Registrations found' });
+    await expect(results).toBeVisible();
+    await expect(results.getByRole('link', { name: /^View the form of / }).first()).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Send the form link' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Fill it now' })).toBeVisible();
+    await expect(page.getByLabel("Child's date of birth")).toBeVisible();
+    await page.screenshot({
+      path: `${process.env.SHOT_DIR ?? test.info().outputDir}/desk.png`,
+      fullPage: true,
+    });
+    const r = await new AxeBuilder({ page })
+      .options({ iframes: false })
+      .setLegacyMode()
+      .withTags(['wcag2a', 'wcag2aa'])
+      .analyze();
+    expect(
+      r.violations
+        .filter((v) => v.impact === 'serious' || v.impact === 'critical')
+        .map((v) => `${v.id}: ${v.nodes.map((n) => n.target.join(' ')).join(' | ')}`),
+    ).toEqual([]);
+  });
+
   // enquiries as lead management (docs/design/45, part 2): the board, the list's bulk bar, a lead, import
   test('enquiries: board, list, a lead and the import', async ({ page }) => {
     test.setTimeout(150_000);
