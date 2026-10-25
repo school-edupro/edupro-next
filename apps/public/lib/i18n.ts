@@ -24,6 +24,7 @@ const DICT: Record<string, string> = {
   'Sign out': 'साइन आउट',
   Admissions: 'प्रवेश',
   'Sign in': 'साइन इन',
+  Select: 'चुनें',
   'Sign in to register': 'पंजीकरण के लिए साइन इन करें',
   'One sign-in for all your children’s registrations. Families who registered before can use the registration number.':
     'आपके सभी बच्चों के पंजीकरण के लिए एक ही साइन-इन। जिन परिवारों ने पहले पंजीकरण किया है वे पंजीकरण संख्या का उपयोग कर सकते हैं।',
@@ -243,6 +244,11 @@ const DICT: Record<string, string> = {
   'Select one': 'चुनें',
   'Classes open for registration': 'पंजीकरण के लिए खुली कक्षाएँ',
   'Sign in to fill the form': 'फ़ॉर्म भरने के लिए साइन इन करें',
+  'Sign in to register for': 'पंजीकरण के लिए साइन इन करें:',
+  'New or registered before, sign in with your mobile number or email: the form for this class opens next.':
+    'नए हों या पहले पंजीकरण किया हो, अपने मोबाइल नंबर या ईमेल से साइन इन करें: इसके बाद इस कक्षा का फ़ॉर्म खुलेगा।',
+  'New or registered before, sign in with your mobile number or email. Select a class above to go straight to its form.':
+    'नए हों या पहले पंजीकरण किया हो, अपने मोबाइल नंबर या ईमेल से साइन इन करें। सीधे फ़ॉर्म पर जाने के लिए ऊपर कक्षा चुनें।',
   'Only for any': 'केवल',
   'technical query': 'तकनीकी प्रश्न',
   'mail to': 'के लिए ईमेल करें',

@@ -23,7 +23,7 @@ export default async function AdmissionPortalPage({
   searchParams,
 }: {
   params: Promise<{ school: string }>;
-  searchParams: Promise<{ session?: string; error?: string; enquiry?: string; child?: string }>;
+  searchParams: Promise<{ session?: string; error?: string; enquiry?: string; child?: string; class?: string }>;
 }) {
   const { school } = await params;
   const sp = await searchParams;
@@ -55,6 +55,7 @@ export default async function AdmissionPortalPage({
         schoolName={open.school.name}
         sessions={sessions}
         chosen={sp.session}
+        picked={sp.class}
         enquiry={enquiry}
         lang={lang}
         error={sp.error}

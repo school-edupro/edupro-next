@@ -1,6 +1,6 @@
 import { Badge } from '@edupro/ui';
 import { AdmissionSignIn } from '@/components/AdmissionSignIn';
-import { dmy, rupees, type PortalSession } from '@/lib/admission';
+import { dmy, type PortalSession } from '@/lib/admission';
 import { t, type Lang } from '@/lib/i18n';
 import type { SchoolProfile } from '@/lib/school';
 
@@ -108,6 +108,7 @@ export function AdmissionLanding({
   schoolName,
   sessions,
   chosen,
+  picked,
   enquiry,
   lang,
   error,
@@ -119,6 +120,8 @@ export function AdmissionLanding({
   sessions: PortalSession[];
   /** the session code from ?session= */
   chosen?: string;
+  /** the class picked from the list (?class=): after sign-in its form opens */
+  picked?: string;
   /** an enquiry's invitation, kept through the session choice */
   enquiry?: string | null;
   lang: Lang;
@@ -135,10 +138,12 @@ export function AdmissionLanding({
     `/${school}/admission${session ? `?session=${encodeURIComponent(session.code)}` : ''}`,
   );
   const years = [...new Set(sessions.map((s) => s.academicYear))];
-  const dob = (from: string | null, to: string | null) =>
-    from || to
-      ? `${from ? `${w('from')} ${dmy(from)}` : ''}${from && to ? ' ' : ''}${to ? `${w('to')} ${dmy(to)}` : ''}`
-      : '-';
+  const pick = session?.classes.find((k) => k.open && k.id === picked);
+  const inv = enquiry ? `&enquiry=${enquiry}` : '';
+  // a class picked: sign-in goes on to its form (the family's draft for it, or a new one)
+  const next = pick
+    ? `/${school}/admission/start?session=${encodeURIComponent(session!.code)}&cycle=${session!.id}&class=${pick.id}${inv}`
+    : returnTo;
   return (
     <div className="ep-adm-split">
       <div className="ep-adm-art" aria-hidden="true">
@@ -266,26 +271,30 @@ export function AdmissionLanding({
                       <thead>
                         <tr>
                           <th scope="col">{w('Class')}</th>
-                          <th scope="col">{w('Registration dates')}</th>
-                          <th scope="col">{w('Date of birth')}</th>
-                          <th scope="col">{w('Registration fee')}</th>
+                          <th scope="col" className="ep-adm-classlist__dates">
+                            {w('Registration dates')}
+                          </th>
                           <th scope="col">{w('Status')}</th>
+                          <th scope="col">
+                            <span className="ep-sr-only">{w('Select')}</span>
+                          </th>
                         </tr>
                       </thead>
                       <tbody>
                         {session.classes.map((k) => (
-                          <tr key={k.id}>
-                            <th scope="row">{k.name}</th>
-                            <td>
+                          <tr
+                            key={k.id}
+                            className={pick?.id === k.id ? 'ep-adm-classlist__picked' : undefined}
+                          >
+                            <th scope="row">
+                              {k.name}
+                              {/* on a phone the dates sit under the class, to keep Select in sight */}
+                              <span className="ep-adm-classlist__when">
+                                {dmy(k.opensAt)} {w('to')} {dmy(k.closesAt)}
+                              </span>
+                            </th>
+                            <td className="ep-adm-classlist__dates">
                               {dmy(k.opensAt)} {w('to')} {dmy(k.closesAt)}
-                            </td>
-                            <td>{dob(k.dobFrom, k.dobTo)}</td>
-                            <td>
-                              {k.registrationFee !== null
-                                ? rupees(k.registrationFee)
-                                : k.feeFrom !== null
-                                  ? `${w('from')} ${rupees(k.feeFrom)}`
-                                  : w('No fee')}
                             </td>
                             <td>
                               <Badge tone={k.open ? 'success' : 'neutral'}>
@@ -295,6 +304,21 @@ export function AdmissionLanding({
                                     ? w('Opens soon')
                                     : w('Closed')}
                               </Badge>
+                            </td>
+                            <td>
+                              {!k.open ? null : pick?.id === k.id ? (
+                                <span className="ep-adm-classlist__chosen" aria-current="true">
+                                  {w('Selected')}
+                                </span>
+                              ) : (
+                                <a
+                                  className="ep-btn ep-btn--secondary ep-btn--sm"
+                                  href={`?session=${encodeURIComponent(session.code)}&class=${k.id}${inv}#sign-in`}
+                                  aria-label={`${w('Select')} ${k.name}`}
+                                >
+                                  {w('Select')}
+                                </a>
+                              )}
                             </td>
                           </tr>
                         ))}
@@ -328,14 +352,18 @@ export function AdmissionLanding({
                   aria-labelledby="adm-signin"
                 >
                   <h2 id="adm-signin" className="ep-adm-split__h2">
-                    {w('Sign in to fill the form')}
+                    {pick ? `${w('Sign in to register for')} ${pick.name}` : w('Sign in')}
                   </h2>
                   <p className="ep-field__help">
-                    {w(
-                      'One sign-in for all your children’s registrations. Families who registered before can use the registration number.',
-                    )}
+                    {pick
+                      ? w(
+                          'New or registered before, sign in with your mobile number or email: the form for this class opens next.',
+                        )
+                      : w(
+                          'New or registered before, sign in with your mobile number or email. Select a class above to go straight to its form.',
+                        )}
                   </p>
-                  <AdmissionSignIn school={school} returnTo={returnTo} lang={lang} />
+                  <AdmissionSignIn school={school} returnTo={next} lang={lang} />
                 </section>
               </>
             ) : null}

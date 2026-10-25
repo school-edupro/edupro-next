@@ -11415,6 +11415,30 @@ a.ep-pub-foot__item {
 .ep-adm-classlist td {
   white-space: nowrap;
 }
+/* the class picked: sign-in goes on to its form */
+.ep-adm-classlist .ep-adm-classlist__picked > * {
+  background: var(--status-info-bg);
+}
+.ep-adm-classlist__when {
+  display: none;
+}
+@media (max-width: 600px) {
+  .ep-adm-classlist .ep-adm-classlist__dates {
+    display: none;
+  }
+  .ep-adm-classlist__when {
+    display: block;
+    font-weight: var(--fw-regular);
+    color: var(--text-body);
+    text-transform: none;
+    letter-spacing: normal;
+    white-space: normal;
+  }
+}
+.ep-adm-classlist__chosen {
+  font-weight: var(--fw-semibold);
+  color: var(--text-heading);
+}
 
 /* links inside the sentence: underlined, not told apart by colour alone */
 .ep-adm-split__foot a {

@@ -252,3 +252,36 @@ for (const width of [1280, 375]) {
     expect(problems).toEqual([]);
   });
 }
+
+// a class picked on the front page: sign-in goes straight on to that class's form
+test('admission: a class picked opens its form after sign-in', async ({ page }) => {
+  test.setTimeout(120_000);
+  await page.goto(`${BASE}/api/lang?to=en&back=%2Falpha%2Fadmission`);
+  const choose = page.locator('select[name="session"]');
+  if (await choose.count()) {
+    await choose.selectOption({ index: 1 });
+    await page.getByRole('button', { name: 'Continue' }).click();
+  }
+  const pick = page.locator('.ep-adm-classlist a.ep-btn').first();
+  test.skip(!(await pick.count()), 'no class is open for registration');
+  const name = ((await pick.getAttribute('aria-label')) ?? '').replace(/^Select /, '');
+  await pick.click();
+  await expect(page.getByRole('heading', { name: `Sign in to register for ${name}` })).toBeVisible();
+  await expect(page.locator('.ep-adm-classlist [aria-current="true"]')).toHaveText('Selected');
+  const problems: string[] = [];
+  const r = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa']).analyze();
+  for (const v of r.violations.filter((x) => x.impact === 'serious' || x.impact === 'critical'))
+    problems.push(`class picked: ${v.id} ${v.nodes.map((n) => n.target.join(' ')).join(' | ')}`);
+  await page
+    .getByLabel('Mobile number, email or registration number')
+    .fill(`90000${String(Date.now()).slice(-5)}`);
+  await page.getByRole('button', { name: 'Send code' }).click();
+  const dev = page.getByText(/Development code: \d{6}/i);
+  await expect(dev).toBeVisible({ timeout: 60_000 });
+  const code = /(\d{6})/.exec((await dev.textContent()) ?? '')![1]!;
+  await page.getByLabel('Code', { exact: true }).fill(code);
+  await page.getByRole('button', { name: 'Sign in', exact: true }).click();
+  await page.waitForURL(/\/alpha\/admission\/application\/\d+/, { timeout: 60_000 });
+  await expect(page.getByText(name).first()).toBeVisible();
+  expect(problems).toEqual([]);
+});
