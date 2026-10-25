@@ -199,14 +199,9 @@ export class AdmissionCoreService {
     );
     const l = line.rows[0];
     // the class line's rules, set on the session (the form's own copies are no longer used)
-    const {
-      ageAsOn: _a,
-      dobFrom: _f,
-      dobTo: _t,
-      pincodePrefixes: _p,
-      passOutBefore: _y,
-      ...formSettings
-    } = def.settings;
+    const formSettings = { ...def.settings };
+    for (const k of ['ageAsOn', 'dobFrom', 'dobTo', 'pincodePrefixes', 'passOutBefore'] as const)
+      delete formSettings[k];
     // each city list follows its state (set in the builder, or the only state field on its tab)
     return linkCityStates({
       ...def,

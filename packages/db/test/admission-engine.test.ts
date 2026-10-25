@@ -74,7 +74,8 @@ describe('admission form engine (docs/design/39)', () => {
   });
 
   it('uses the school wording for the checks', () => {
-    const s = G.settings;
+    // the PIN codes come from the session's class line (merged into the settings by the API)
+    const s = { ...G.settings, pincodePrefixes: ['110', '122', '121', '201', '250', '124'] };
     expect(fieldError(field(G, 'sms_mobile'), { sms_mobile: '5123456789' }, s)).toBe(
       'Invalid mobile number. Must start with 6,7,8 or 9',
     );

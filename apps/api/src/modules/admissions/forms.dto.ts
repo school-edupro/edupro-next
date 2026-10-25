@@ -5,7 +5,6 @@ import { ADMISSION_FIELD_TYPES, OPTION_SOURCES, PRESETS, RULE_OPS } from '@edupr
 const Key = z.string().regex(/^[a-z][a-z0-9_]{0,39}$/, 'a key is small letters, digits and _');
 const Label = z.string().trim().min(1).max(400);
 const Text = z.string().trim().max(4000);
-const Date = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 
 const Rule = z.object({
   logic: z.enum(['all', 'any']).default('all'),
