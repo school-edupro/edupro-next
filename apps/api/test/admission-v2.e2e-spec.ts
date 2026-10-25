@@ -3067,6 +3067,111 @@ describe('online admission (e2e)', () => {
       expect(broken.statusCode).toBe(400);
     });
 
+    // docs/design/45, part 3: assignment rules with escalation
+    it("a rule gives a class's leads to its pool and escalates a lead not contacted in time", async () => {
+      const meta = (
+        await inject({ method: 'GET', url: '/admissions/enquiries/meta', headers: h() })
+      ).json();
+      const rules = meta.rules as Array<Record<string, unknown> & { isDefault: boolean }>;
+      expect(rules.filter((x) => x.isDefault)).toHaveLength(1);
+      const saved = await inject({
+        method: 'PUT',
+        url: '/admissions/enquiries/rules',
+        headers: h(),
+        json: {
+          rules: [
+            {
+              name: 'Mini leads',
+              classIds: [classMini],
+              pool: [clerk.id],
+              firstContactHours: 4,
+              level2Role: 'school_admin',
+              acknowledge: false,
+            },
+            ...rules.map((x) => ({
+              id: x.id,
+              name: x.name,
+              classIds: x.classIds,
+              sourceIds: x.sourceIds,
+              autoAssign: x.autoAssign,
+              pool: x.pool,
+              firstContactHours: x.firstContactHours,
+              level2UserId: x.level2UserId,
+              level2Role: x.level2Role,
+              acknowledge: x.acknowledge,
+              isDefault: x.isDefault,
+            })),
+          ],
+        },
+      });
+      expect(saved.statusCode).toBe(200);
+      const mini = (saved.json() as Array<{ id: string; name: string }>).find(
+        (x) => x.name === 'Mini leads',
+      )!;
+      // two "everything else" rules are refused
+      const two = await inject({
+        method: 'PUT',
+        url: '/admissions/enquiries/rules',
+        headers: h(),
+        json: {
+          rules: [
+            { name: 'A', isDefault: true },
+            { name: 'B', isDefault: true },
+          ],
+        },
+      });
+      expect(two.statusCode).toBe(400);
+      const ch = await inject({ method: 'POST', url: '/public/admissions/challenge', headers: {} });
+      const nonce = PowService.solve(ch.json().challenge, ch.json().difficulty);
+      const web = await inject({
+        method: 'POST',
+        url: '/public/admission/enquiry',
+        headers: {},
+        json: {
+          schoolCode: school.code,
+          challenge: ch.json().challenge,
+          nonce,
+          parentName: 'Rule Parent',
+          classId: classMini,
+          email: 'rule.parent@example.com',
+        },
+      });
+      expect(web.statusCode).toBe(201);
+      const row = (
+        await inject({ method: 'GET', url: '/admissions/enquiries?q=Rule%20Parent', headers: h() })
+      ).json().data[0] as { id: string };
+      const before = (
+        await inject({ method: 'GET', url: `/admissions/enquiries/${row.id}`, headers: h() })
+      ).json();
+      expect(before).toMatchObject({ rule: 'Mini leads', level: 1, counsellorUserId: clerk.id });
+      expect(before.contactDueAt).toBeTruthy();
+      // the first contact is past due: the workers' run gives it to level 2
+      const moved = await withMigrator(async (c) => {
+        await c.query(
+          `UPDATE admission_enquiries SET contact_due_at = now() - interval '1 minute' WHERE id = $1`,
+          [row.id],
+        );
+        await c.query('BEGIN');
+        await c.query(`SELECT set_config('app.school_id', $1, true)`, [school.id]);
+        const r = await c.query<{ n: number }>('SELECT app.enquiry_escalate_due() AS n');
+        await c.query('COMMIT');
+        return r.rows[0]!.n;
+      });
+      expect(moved).toBeGreaterThanOrEqual(1);
+      const after = (
+        await inject({ method: 'GET', url: `/admissions/enquiries/${row.id}`, headers: h() })
+      ).json();
+      expect(after.level).toBe(2);
+      expect(after.escalatedAt).toBeTruthy();
+      expect(after.counsellorUserId).not.toBe(clerk.id);
+      expect(
+        (after.followups as Array<{ outcome: string }>).some((f) =>
+          /^Not contacted within 4 working hours by .+: escalated to /.test(f.outcome),
+        ),
+      ).toBe(true);
+      void mini;
+    });
+
     it('imports enquiries from a sheet: a wrong row stops it; duplicates are left out', async () => {
       const format = await inject({
         method: 'GET',

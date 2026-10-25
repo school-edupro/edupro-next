@@ -15,6 +15,7 @@ import {
   EnquiryImportDto,
   InviteDto,
   MoveDto,
+  RulesDto,
   ReplyDto,
   SourcesDto,
   StagesDto,
@@ -54,6 +55,13 @@ export class AdmissionEnquiryController {
   @RequirePermission('admissions.setup.manage')
   stages(@ReqCtx() ctx: RequestContext, @Body() dto: StagesDto) {
     return this.svc.saveStages(ctx, dto);
+  }
+
+  @Put('rules')
+  @ApiOperation({ summary: "The enquiry desk's assignment rules, with escalation" })
+  @RequirePermission('admissions.setup.manage')
+  rules(@ReqCtx() ctx: RequestContext, @Body() dto: RulesDto) {
+    return this.svc.saveRules(ctx, dto);
   }
 
   @Post('bulk')

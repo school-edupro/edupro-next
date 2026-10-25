@@ -502,6 +502,12 @@ export function maintenanceProcessor({ db, storage, log, migratorUrl }: Maintena
           (c) => c.query<{ n: number }>('SELECT app.helpdesk_escalate_due() AS n'),
         );
         moved += r.rows[0]?.n ?? 0;
+        // admission enquiries not contacted within their rule's hours go to level 2 (docs/design/45)
+        const leads = await db.withTenant(
+          { schoolId: s.id, userId: null, allowedSchoolIds: [s.id] },
+          (c) => c.query<{ n: number }>('SELECT app.enquiry_escalate_due() AS n'),
+        );
+        moved += leads.rows[0]?.n ?? 0;
       }
       if (moved) log.info({ moved }, 'helpdesk escalation run');
       return;

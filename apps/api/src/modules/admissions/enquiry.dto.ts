@@ -168,3 +168,27 @@ export class BulkDto extends createZodDto(BulkSchema) {}
 /** An Excel sheet of enquiries to add (docs/design/45, part 2). */
 export const EnquiryImportSchema = z.object({ fileBase64: z.string().min(100).max(1_400_000) });
 export class EnquiryImportDto extends createZodDto(EnquiryImportSchema) {}
+
+/** The enquiry desk's assignment rules (docs/design/45, part 3), laid out like approval processes. */
+export const RulesSchema = z.object({
+  rules: z
+    .array(
+      z.object({
+        id: IdSchema.optional(),
+        name: z.string().trim().min(2).max(80),
+        classIds: z.array(IdSchema).max(200).default([]),
+        sourceIds: z.array(IdSchema).max(100).default([]),
+        autoAssign: z.boolean().default(true),
+        pool: z.array(IdSchema).max(100).default([]),
+        firstContactHours: z.number().positive().max(999).nullable().default(null),
+        level2UserId: IdSchema.nullable().default(null),
+        level2Role: z.string().trim().max(60).nullable().default(null),
+        acknowledge: z.boolean().default(true),
+        isDefault: z.boolean().default(false),
+        status: z.enum(['active', 'inactive']).default('active'),
+      }),
+    )
+    .min(1)
+    .max(40),
+});
+export class RulesDto extends createZodDto(RulesSchema) {}

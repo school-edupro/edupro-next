@@ -48,7 +48,7 @@ score, due), select rows → assign, move, message, export. The enquiry page gai
 top, the score, Lost with its reason, and one timeline of calls, messages, invitations and changes.
 Import from Excel (the columns of the enquiry form) with duplicates by mobile / email marked.
 
-**Part 3 — Assignment rules with escalation (set-up, migration 0252).** `admission_enquiry_rules`
+**Part 3 — Assignment rules with escalation (built 25 Oct 2026, migrations 0252–0253).** `admission_enquiry_rules`
 (name, classes, sources, counsellor pool, first-contact hours, level 2 person or role, acknowledge, the
 "everything else" rule, active). Admission set-up → Enquiry desk becomes a list of rules with their
 flow ("Pool: A, B, C → first contact in 4 h → Head of admissions"), edited like an approval process.

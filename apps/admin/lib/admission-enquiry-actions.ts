@@ -3,7 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { ApiError, apiFetch } from './api';
-import type { EnquiryStage } from './admission-enquiry';
+import type { EnquiryRule, EnquiryStage } from './admission-enquiry';
 
 const okId = (id: string) => /^\d{1,18}$/.test(id);
 const str = (fd: FormData, k: string) => String(fd.get(k) ?? '').trim();
@@ -142,23 +142,6 @@ export async function replyEnquiry(fd: FormData) {
   );
 }
 
-/** How website enquiries are taken: assigned on arrival (to whom), acknowledged. */
-export async function saveEnquiryDesk(desk: {
-  autoAssign: boolean;
-  counsellors: string[];
-  acknowledge: boolean;
-}) {
-  try {
-    await apiFetch('/admissions/enquiries/desk', { method: 'PUT', body: JSON.stringify(desk) });
-    revalidatePath('/admissions/setup');
-    return { ok: true as const };
-  } catch (e) {
-    if (e instanceof ApiError)
-      return { ok: false as const, error: e.problem.detail ?? e.problem.type };
-    throw e;
-  }
-}
-
 const said = (e: unknown) => {
   if (e instanceof ApiError)
     return { ok: false as const, error: e.problem.detail ?? e.problem.type };
@@ -211,6 +194,20 @@ export async function importEnquiries(fileBase64: string) {
     }>('/admissions/enquiries/import', { method: 'POST', body: JSON.stringify({ fileBase64 }) });
     revalidatePath('/admissions/enquiries');
     return { ok: true as const, ...r };
+  } catch (e) {
+    return said(e);
+  }
+}
+
+/** The enquiry desk's assignment rules, saved together (docs/design/45, part 3). */
+export async function saveEnquiryRules(rules: unknown[]) {
+  try {
+    const data = await apiFetch<EnquiryRule[]>('/admissions/enquiries/rules', {
+      method: 'PUT',
+      body: JSON.stringify({ rules }),
+    });
+    revalidatePath('/admissions/setup');
+    return { ok: true as const, data };
   } catch (e) {
     return said(e);
   }

@@ -19,6 +19,7 @@ import type {
   EnquiryDeskDto,
   InviteDto,
   MoveDto,
+  RulesDto,
   PublicEnquiryDto,
   ReplyDto,
   SourcesDto,
@@ -102,31 +103,224 @@ export class AdmissionEnquiryService {
         counsellors: counsellors.rows,
         desk: await this.deskWith(c),
         stages: await this.stagesWith(c),
+        rules: await this.rulesWith(c),
+        // the roles a lead can escalate to: those whose holders take enquiries
+        roles: (
+          await c.query<{ code: string; name: string }>(
+            `SELECT DISTINCT ON (r.code) r.code, r.name FROM roles r
+               JOIN role_permissions rp ON rp.role_id = r.id AND rp.permission_code = $1
+              WHERE r.deleted_at IS NULL AND (r.school_id IS NULL OR r.school_id = app.current_school_id())
+              ORDER BY r.code, r.school_id NULLS LAST`,
+            [ENQUIRY_MANAGE],
+          )
+        ).rows,
       };
     });
   }
 
   /** How website enquiries are taken: assigned on arrival (to whom) and acknowledged. */
+  /**
+   * How website enquiries are taken, as before (docs/design/43, part 3): now the "everything else" rule's
+   * switch, pool and acknowledgement (docs/design/45, part 3), with the sign-in channels.
+   */
   private async deskWith(c: PoolClient) {
     await c.query(
       `INSERT INTO admission_settings (school_id) VALUES (app.current_school_id()) ON CONFLICT (school_id) DO NOTHING`,
     );
-    const r = await c.query<{
-      enquiry_auto_assign: boolean;
-      enquiry_counsellors: string[];
-      enquiry_acknowledge: boolean;
-      signin_channels: string[];
-    }>(
-      `SELECT enquiry_auto_assign, enquiry_counsellors::text[] AS enquiry_counsellors, enquiry_acknowledge, signin_channels
-         FROM admission_settings WHERE school_id = app.current_school_id()`,
+    const rule = (await this.rulesWith(c)).find((x) => x.isDefault)!;
+    const r = await c.query<{ signin_channels: string[] }>(
+      `SELECT signin_channels FROM admission_settings WHERE school_id = app.current_school_id()`,
     );
-    const x = r.rows[0]!;
     return {
-      autoAssign: x.enquiry_auto_assign,
-      counsellors: x.enquiry_counsellors,
-      acknowledge: x.enquiry_acknowledge,
-      channels: x.signin_channels,
+      autoAssign: rule.autoAssign,
+      counsellors: rule.pool,
+      acknowledge: rule.acknowledge,
+      channels: r.rows[0]!.signin_channels,
     };
+  }
+
+  /** The assignment rules (docs/design/45, part 3); a school without one gets "Every enquiry". */
+  private async rulesWith(c: PoolClient) {
+    await c.query(
+      `INSERT INTO admission_enquiry_rules (school_id, name, is_default, sort_order)
+       SELECT app.current_school_id(), 'Every enquiry', true, 99
+        WHERE NOT EXISTS (SELECT 1 FROM admission_enquiry_rules WHERE is_default AND status = 'active')`,
+    );
+    const r = await c.query<{
+      id: string;
+      name: string;
+      class_ids: string[];
+      source_ids: string[];
+      auto_assign: boolean;
+      pool: string[];
+      first_contact_hours: string | null;
+      level2_user_id: string | null;
+      level2_role: string | null;
+      acknowledge: boolean;
+      is_default: boolean;
+      status: string;
+      level2_name: string | null;
+      leads: number;
+    }>(
+      `SELECT r.id::text, r.name, r.class_ids::text[] AS class_ids, r.source_ids::text[] AS source_ids, r.auto_assign,
+              r.pool::text[] AS pool, r.first_contact_hours::text, r.level2_user_id::text, r.level2_role, r.acknowledge,
+              r.is_default, r.status,
+              COALESCE((SELECT display_name FROM users WHERE id = r.level2_user_id),
+                       (SELECT name FROM roles WHERE code = r.level2_role AND deleted_at IS NULL ORDER BY school_id NULLS LAST LIMIT 1)) AS level2_name,
+              (SELECT count(*)::int FROM admission_enquiries e WHERE e.rule_id = r.id) AS leads
+         FROM admission_enquiry_rules r ORDER BY r.is_default, r.sort_order, r.id`,
+    );
+    return r.rows.map((x) => ({
+      id: x.id,
+      name: x.name,
+      classIds: x.class_ids,
+      sourceIds: x.source_ids,
+      autoAssign: x.auto_assign,
+      pool: x.pool,
+      firstContactHours: x.first_contact_hours === null ? null : Number(x.first_contact_hours),
+      level2UserId: x.level2_user_id,
+      level2Role: x.level2_role,
+      level2Name: x.level2_name,
+      acknowledge: x.acknowledge,
+      isDefault: x.is_default,
+      status: x.status,
+      leads: x.leads,
+    }));
+  }
+
+  /** The rules of the enquiry desk, saved together (docs/design/45, part 3). */
+  async saveRules(ctx: RequestContext, dto: RulesDto) {
+    return this.db.tenant(requireTenant(ctx), async (c) => {
+      const before = await this.rulesWith(c);
+      const live = dto.rules.filter((x) => x.status === 'active');
+      if (live.filter((x) => x.isDefault).length !== 1)
+        throw new DomainError(
+          'validation-failed',
+          'Keep exactly one rule for "everything else" (the enquiries no other rule covers)',
+          { status: 400 },
+        );
+      const people = [
+        ...new Set(
+          dto.rules.flatMap((x) => [...x.pool, ...(x.level2UserId ? [x.level2UserId] : [])]),
+        ),
+      ];
+      if (people.length) {
+        const ok = await c.query<{ id: string }>(
+          // eslint-disable-next-line no-restricted-syntax -- COUNSELLORS is a fixed fragment
+          `SELECT id::text FROM (${COUNSELLORS}) k WHERE id = ANY($1::bigint[])`,
+          [people],
+        );
+        if (ok.rows.length !== people.length)
+          throw new DomainError(
+            'validation-failed',
+            'A person chosen cannot take enquiries (no enquiry permission)',
+            { status: 400 },
+          );
+      }
+      for (const x of dto.rules) {
+        if (x.level2UserId && x.level2Role)
+          throw new DomainError('validation-failed', `${x.name}: level 2 is a person or a role`, {
+            status: 400,
+          });
+        if (x.level2Role) {
+          const role = await c.query(
+            `SELECT 1 FROM roles WHERE code = $1 AND deleted_at IS NULL AND (school_id IS NULL OR school_id = app.current_school_id())`,
+            [x.level2Role],
+          );
+          if (!role.rowCount)
+            throw new DomainError('validation-failed', `${x.name}: unknown role`, { status: 400 });
+        }
+      }
+      // the default first, so the "one default" index never sees two at once
+      await c.query(`UPDATE admission_enquiry_rules SET is_default = false`);
+      const kept: string[] = [];
+      for (const [i, x] of dto.rules.entries()) {
+        if (x.id && !before.some((b) => b.id === x.id))
+          throw new DomainError('not-found', 'Unknown rule', { status: 404 });
+        const vals = [
+          x.name,
+          [...new Set(x.classIds)],
+          [...new Set(x.sourceIds)],
+          x.autoAssign,
+          [...new Set(x.pool)],
+          x.firstContactHours,
+          x.level2UserId,
+          x.level2Role,
+          x.acknowledge,
+          x.isDefault,
+          x.status,
+          i + 1,
+        ];
+        if (x.id) {
+          await c.query(
+            `UPDATE admission_enquiry_rules SET name = $1, class_ids = $2::bigint[], source_ids = $3::bigint[], auto_assign = $4,
+                    pool = $5::bigint[], first_contact_hours = $6, level2_user_id = $7, level2_role = $8, acknowledge = $9,
+                    is_default = $10, status = $11, sort_order = $12
+              WHERE id = $13`,
+            [...vals, x.id],
+          );
+          kept.push(x.id);
+        } else {
+          const r = await c.query<{ id: string }>(
+            `INSERT INTO admission_enquiry_rules (school_id, name, class_ids, source_ids, auto_assign, pool, first_contact_hours,
+                                                  level2_user_id, level2_role, acknowledge, is_default, status, sort_order)
+             VALUES (app.current_school_id(), $1, $2::bigint[], $3::bigint[], $4, $5::bigint[], $6, $7, $8, $9, $10, $11, $12)
+             RETURNING id::text`,
+            vals,
+          );
+          kept.push(r.rows[0]!.id);
+        }
+      }
+      // a rule left out with leads on it is switched off; an unused one goes
+      for (const b of before.filter((b) => !kept.includes(b.id))) {
+        if (b.leads)
+          await c.query(
+            `UPDATE admission_enquiry_rules SET status = 'inactive', is_default = false WHERE id = $1`,
+            [b.id],
+          );
+        else await c.query(`DELETE FROM admission_enquiry_rules WHERE id = $1`, [b.id]);
+      }
+      const after = await this.rulesWith(c);
+      await this.audit.stage(ctx, c, {
+        action: 'admissions.enquiry.rules',
+        entityType: 'admission_enquiry_rules',
+        entityId: ctx.tenant!.schoolId,
+        before: before.map((x) => x.name),
+        after: after.map((x) => x.name),
+      });
+      return after;
+    });
+  }
+
+  /**
+   * A lead's rule on arrival (docs/design/45, part 3): the first active rule covering its class and
+   * source, else "everything else"; given to the pool in turn (when asked and the rule assigns), and
+   * the first contact due within the rule's working hours.
+   */
+  private async arrive(
+    c: PoolClient,
+    id: string,
+    classId: string | null,
+    sourceId: string | null,
+    assign: boolean,
+  ) {
+    const rules = (await this.rulesWith(c)).filter((x) => x.status === 'active');
+    const rule =
+      rules.find(
+        (x) =>
+          !x.isDefault &&
+          (!x.classIds.length || (classId !== null && x.classIds.includes(classId))) &&
+          (!x.sourceIds.length || (sourceId !== null && x.sourceIds.includes(sourceId))),
+      ) ?? rules.find((x) => x.isDefault)!;
+    await c.query(`UPDATE admission_enquiries SET rule_id = $2 WHERE id = $1`, [id, rule.id]);
+    if (assign && rule.autoAssign) await this.assign(c, id, rule.pool);
+    if (rule.firstContactHours)
+      await c.query(
+        `UPDATE admission_enquiries SET contact_due_at = app.helpdesk_add_hours(now(), $2::numeric)
+          WHERE id = $1 AND first_contact_at IS NULL`,
+        [id, rule.firstContactHours],
+      );
+    return rule;
   }
 
   async saveDesk(ctx: RequestContext, dto: EnquiryDeskDto) {
@@ -145,15 +339,16 @@ export class AdmissionEnquiryService {
             { status: 400 },
           );
       }
+      // the "everything else" rule (docs/design/45, part 3)
       await c.query(
-        `UPDATE admission_settings SET enquiry_auto_assign = $1, enquiry_counsellors = $2::bigint[], enquiry_acknowledge = $3,
-                updated_at = now(), updated_by = $4 WHERE school_id = app.current_school_id()`,
-        [dto.autoAssign, [...new Set(dto.counsellors)], dto.acknowledge, ctx.user.id],
+        `UPDATE admission_enquiry_rules SET auto_assign = $1, pool = $2::bigint[], acknowledge = $3
+          WHERE is_default AND status = 'active'`,
+        [dto.autoAssign, [...new Set(dto.counsellors)], dto.acknowledge],
       );
       const after = await this.deskWith(c);
       await this.audit.stage(ctx, c, {
         action: 'admissions.enquiry.desk',
-        entityType: 'admission_settings',
+        entityType: 'admission_enquiry_rules',
         entityId: ctx.tenant!.schoolId,
         before,
         after,
@@ -575,8 +770,13 @@ export class AdmissionEnquiryService {
       score: string | null;
       lost_reason: string | null;
       first_contact_at: Date | null;
+      level: number;
+      contact_due_at: Date | null;
+      escalated_at: Date | null;
+      rule_name: string | null;
     }>(
-      `SELECT e.stage_id::text, e.score, e.lost_reason, e.first_contact_at, e.id::text, e.cycle_id::text, e.class_id::text, e.source_id::text, e.campaign, e.parent_name, e.child_name, e.child_dob::text,
+      `SELECT e.level, e.contact_due_at, e.escalated_at, (SELECT name FROM admission_enquiry_rules WHERE id = e.rule_id) AS rule_name,
+              e.stage_id::text, e.score, e.lost_reason, e.first_contact_at, e.id::text, e.cycle_id::text, e.class_id::text, e.source_id::text, e.campaign, e.parent_name, e.child_name, e.child_dob::text,
               e.mobile, e.email::text, e.locality, e.previous_school, e.notes, e.status, e.counsellor_user_id::text, e.next_follow_up_on::text,
               e.invited_at, e.application_id::text, e.converted_at, e.from_website, e.created_at, u.display_name AS created_by
          FROM admission_enquiries e LEFT JOIN users u ON u.id = e.created_by WHERE e.id = $1`,
@@ -637,6 +837,10 @@ export class AdmissionEnquiryService {
         score: e.score,
         lostReason: e.lost_reason,
         firstContactAt: e.first_contact_at?.toISOString() ?? null,
+        rule: e.rule_name,
+        level: e.level,
+        contactDueAt: e.contact_due_at?.toISOString() ?? null,
+        escalatedAt: e.escalated_at?.toISOString() ?? null,
         stages: await this.stagesWith(c),
         convertedAt: e.converted_at?.toISOString() ?? null,
         followups: followups.rows.map((f) => ({
@@ -680,6 +884,12 @@ export class AdmissionEnquiryService {
          VALUES (app.current_school_id(), $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, COALESCE($13, $15::bigint), COALESCE($14::date, CURRENT_DATE), $15)
          RETURNING id::text`,
         [...this.values(dto), ctx.user.id],
+      );
+      // taken at the desk: the person there has it; the rule is noted for the reports
+      await this.arrive(c, r.rows[0]!.id, dto.classId ?? null, dto.sourceId ?? null, false);
+      await c.query(
+        `UPDATE admission_enquiries SET contact_due_at = NULL WHERE id = $1 AND counsellor_user_id IS NOT NULL`,
+        [r.rows[0]!.id],
       );
       await this.audit.stage(ctx, c, {
         action: 'admissions.enquiry.create',
@@ -917,10 +1127,10 @@ export class AdmissionEnquiryService {
       );
       const id = made.rows[0]!.id;
       const desk = await this.deskWith(c);
-      if (desk.autoAssign) await this.assign(c, id, desk.counsellors);
+      const rule = await this.arrive(c, id, dto.classId ?? null, web?.id ?? null, true);
       // the family's acknowledgement with its number, by the channels the school signs families in with
       let acknowledged = 0;
-      if (desk.acknowledge) {
+      if (rule.acknowledge) {
         const school = await c.query<{ name: string; phone: string | null }>(
           `SELECT name, NULLIF(btrim(contact->>'phone'), '') AS phone FROM schools WHERE id = app.current_school_id()`,
         );
@@ -1140,7 +1350,6 @@ export class AdmissionEnquiryService {
       );
       const hasMobile = new Set(known.rows.map((x) => x.mobile).filter(Boolean));
       const hasEmail = new Set(known.rows.map((x) => x.email).filter(Boolean));
-      const desk = await this.deskWith(c);
       const open = await c.query<{ id: string }>(
         `SELECT id::text FROM admission_cycles WHERE status = 'open' AND deleted_at IS NULL ORDER BY opens_at DESC LIMIT 1`,
       );
@@ -1169,7 +1378,7 @@ export class AdmissionEnquiryService {
             ctx.user.id,
           ],
         );
-        if (desk.autoAssign) await this.assign(c, r.rows[0]!.id, desk.counsellors);
+        await this.arrive(c, r.rows[0]!.id, x.classId, x.sourceId, true);
         added += 1;
       }
       await this.audit.stage(ctx, c, {

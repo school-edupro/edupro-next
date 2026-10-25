@@ -2,7 +2,7 @@ import { PageHeader } from '@edupro/ui';
 import { notFound } from 'next/navigation';
 import { AdmissionSetupEditor } from '@/components/admissions/AdmissionSetupEditor';
 import { CategoryGapsNote } from '@/components/admissions/CategoryGapsNote';
-import { EnquiryDeskEditor } from '@/components/admissions/EnquiryDeskEditor';
+import { EnquiryRulesEditor } from '@/components/admissions/EnquiryRulesEditor';
 import { EnquirySourcesEditor } from '@/components/admissions/EnquirySourcesEditor';
 import { EnquiryStagesEditor } from '@/components/admissions/EnquiryStagesEditor';
 import { ProcessEditor } from '@/components/admissions/ProcessEditor';
@@ -87,9 +87,13 @@ export default async function AdmissionSetupPage({
       </div>
       {enquiryMeta?.desk ? (
         <div style={{ marginTop: 'var(--sp-4)' }}>
-          <EnquiryDeskEditor
-            initial={enquiryMeta.desk}
+          <EnquiryRulesEditor
+            initial={enquiryMeta.rules ?? []}
             counsellors={enquiryMeta.counsellors}
+            classes={enquiryMeta.classes}
+            sources={enquiryMeta.sources.filter((x) => x.status === 'active')}
+            roles={enquiryMeta.roles ?? []}
+            channels={enquiryMeta.desk.channels}
             canEdit={me.permissions.includes('admissions.setup.manage')}
           />
         </div>

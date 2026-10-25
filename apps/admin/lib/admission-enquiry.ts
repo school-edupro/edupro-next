@@ -8,6 +8,23 @@ export interface EnquiryStage {
   status: 'active' | 'inactive' | string;
   leads: number;
 }
+/** An assignment rule of the enquiry desk (docs/design/45, part 3). */
+export interface EnquiryRule {
+  id: string;
+  name: string;
+  classIds: string[];
+  sourceIds: string[];
+  autoAssign: boolean;
+  pool: string[];
+  firstContactHours: number | null;
+  level2UserId: string | null;
+  level2Role: string | null;
+  level2Name: string | null;
+  acknowledge: boolean;
+  isDefault: boolean;
+  status: string;
+  leads: number;
+}
 export const LOST_REASONS = ['Fees', 'Distance', 'Another school', 'No seat', 'Other'];
 export const SCORE_LABEL: Record<string, string> = { hot: 'Hot', warm: 'Warm', cold: 'Cold' };
 export const SCORE_TONE: Record<string, 'danger' | 'warning' | 'info'> = {
@@ -30,6 +47,8 @@ export interface EnquiryMeta {
   counsellors: Array<{ id: string; name: string }>;
   /** the school's stages of a lead (docs/design/45) */
   stages?: EnquiryStage[];
+  rules?: EnquiryRule[];
+  roles?: Array<{ code: string; name: string }>;
   /** how website enquiries are taken (docs/design/43, part 3) */
   desk?: { autoAssign: boolean; counsellors: string[]; acknowledge: boolean; channels: string[] };
 }

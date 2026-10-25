@@ -913,7 +913,17 @@ test.describe('accessibility (axe)', () => {
     await page.goto('/admissions/setup');
     await page.waitForLoadState('networkidle');
     await expect(page.getByRole('heading', { name: 'Enquiry desk' })).toBeVisible();
-    await expect(page.getByLabel(/Give each website enquiry to a counsellor/)).toBeVisible();
+    // the desk's assignment rules (docs/design/45, part 3), like the approval processes
+    const tour = page.getByRole('button', { name: 'Skip' });
+    if (await tour.isVisible()) await tour.click();
+    await expect(page.getByText('Everything else', { exact: true }).first()).toBeVisible();
+    await page.getByRole('button', { name: 'Add a rule' }).click();
+    await expect(page.getByRole('group', { name: 'New rule' })).toBeVisible();
+    await expect(page.getByLabel('First contact within (working hours)')).toBeVisible();
+    await page.getByRole('region', { name: 'Enquiry desk' }).screenshot({
+      path: `${process.env.SHOT_DIR ?? test.info().outputDir}/enquiry-rules.png`,
+    });
+    await page.getByRole('button', { name: 'Cancel' }).click();
     await page.goto('/admissions/enquiries?q=Browser%20Enquiry');
     await page.waitForLoadState('networkidle');
     const href = await page
