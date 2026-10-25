@@ -225,6 +225,19 @@ for (const width of [1280, 375]) {
     await page.goto(`${BASE}/alpha/admission/apply`);
     await expect(page.getByRole('heading', { level: 1 })).toHaveText('Apply for a class');
     await check('apply');
+    // part 4: payments, messages, help
+    for (const [path, title] of [
+      ['payments', 'Payments & receipts'],
+      ['messages', 'Messages'],
+      ['help', 'Help'],
+    ] as const) {
+      await page.goto(`${BASE}/alpha/admission/${path}`);
+      await expect(page.getByRole('heading', { level: 1 })).toHaveText(title);
+      await check(path);
+    }
+    await expect(
+      page.getByRole('navigation', { name: width > 800 ? 'Main menu' : 'Quick menu' }),
+    ).toContainText(width > 800 ? 'Payments & receipts' : 'Payments');
     expect(problems).toEqual([]);
   });
 }

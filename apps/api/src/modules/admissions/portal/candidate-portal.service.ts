@@ -341,6 +341,19 @@ export class CandidatePortalService {
         const open = waiting ? await classOpenFor(c, a.cycle_id, a.class_id, cand.id) : null;
         const slot = ['registered', 'under_review'].includes(a.status) ? await slotOf(c, id) : null;
         const steps = (await journey(c, id)).map((s) => ({ name: s.name, state: s.state }));
+        const receipts = await c.query<{
+          id: string;
+          receipt_no: string;
+          amount: string;
+          received_on: string;
+          head: string;
+          mode: string;
+          status: string;
+        }>(
+          `SELECT m.id::text, m.receipt_no, m.amount::text, m.received_on::text, h.name AS head, m.mode, m.status
+             FROM misc_receipts m JOIN fee_heads h ON h.id = m.head_id WHERE m.application_id = $1 ORDER BY m.id`,
+          [id],
+        );
         out.push({
           id,
           candidate: a.candidate_name,
@@ -380,6 +393,15 @@ export class CandidatePortalService {
           closesAt: x.closes?.toISOString() ?? null,
           locked: open && !open.open ? { closedOn: open.closedOn } : null,
           cancelReason: a.status === 'cancelled' ? a.cancel_reason : null,
+          receipts: receipts.rows.map((r) => ({
+            id: r.id,
+            receiptNo: r.receipt_no,
+            amount: Number(r.amount),
+            date: r.received_on,
+            head: r.head,
+            mode: r.mode,
+            status: r.status,
+          })),
         });
       }
       return {
@@ -770,7 +792,18 @@ export class CandidatePortalService {
           byRequest.set(m.request_id, m);
         }
       }
+      // what the family has opened (docs/design/42, part 4)
+      const reads = await c.query<{ kind: string; item_id: string }>(
+        `SELECT kind, item_id::text FROM applicant_inbox_reads WHERE applicant_id = $1`,
+        [cand.id],
+      );
+      const read = new Set(reads.rows.map((r) => `${r.kind}:${r.item_id}`));
+      const shown = out.slice(0, 100);
+      const unread =
+        notices.rows.filter((n) => !read.has(`notice:${n.id}`)).length +
+        shown.filter((m) => !read.has(`message:${m.id}`)).length;
       return {
+        unread,
         notices: notices.rows.map((n) => ({
           id: n.id,
           kind: n.kind,
@@ -779,17 +812,59 @@ export class CandidatePortalService {
           bodyFormat: n.body_format,
           publishFrom: n.publish_from,
           files: n.files,
+          read: read.has(`notice:${n.id}`),
         })),
-        messages: out.slice(0, 100).map((m) => ({
+        messages: shown.map((m) => ({
           id: m.id,
           channel: m.channel,
           subject: m.subject,
           body: m.body,
           format: m.format,
           at: m.created_at.toISOString(),
+          read: read.has(`message:${m.id}`),
         })),
       };
     });
+  }
+
+  /**
+   * Marks the family's notices / messages read (docs/design/42, part 4): the ones given, or all that the
+   * inbox shows now. Only items of the family's own inbox are kept.
+   */
+  async markRead(
+    cand: AdmissionCandidate,
+    items: Array<{ kind: 'notice' | 'message'; id: string }> | 'all',
+  ) {
+    const inbox = await this.inbox(cand);
+    const mine = new Set([
+      ...inbox.notices.map((n) => `notice:${n.id}`),
+      ...inbox.messages.map((m) => `message:${m.id}`),
+    ]);
+    const list =
+      items === 'all'
+        ? [...mine].map((k) => ({ kind: k.split(':')[0]!, id: k.split(':')[1]! }))
+        : items.filter((x) => mine.has(`${x.kind}:${x.id}`));
+    await this.db.tenant(this.t(cand), async (c) => {
+      for (const x of list)
+        await c.query(
+          `INSERT INTO applicant_inbox_reads (school_id, applicant_id, kind, item_id)
+           VALUES (app.current_school_id(), $1, $2, $3) ON CONFLICT DO NOTHING`,
+          [cand.id, x.kind, x.id],
+        );
+    });
+    return {
+      marked: list.length,
+      unread: Math.max(
+        inbox.unread -
+          list.filter(
+            (x) =>
+              !(x.kind === 'notice'
+                ? inbox.notices.find((n) => n.id === x.id)?.read
+                : inbox.messages.find((m) => m.id === x.id)?.read),
+          ).length,
+        0,
+      ),
+    };
   }
 
   /** A file of a notice the family may read. */

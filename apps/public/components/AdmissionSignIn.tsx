@@ -55,7 +55,12 @@ export function AdmissionSignIn({
       return setError(w('Enter your mobile number, email or registration number.'));
     setBusy(w('Checking your browser…'));
     try {
-      const ch = await fetch('/api/challenge', { method: 'POST' }).then((r) => r.json());
+      const ch = await fetch('/api/challenge', { method: 'POST' })
+        .then((r) => r.json() as Promise<{ challenge?: string; difficulty?: number }>)
+        .catch(() => ({}) as { challenge?: string; difficulty?: number });
+      // the school's server not answering (a restart, the network): say so plainly
+      if (!ch.challenge || !ch.difficulty)
+        throw new Error(w('The school could not be reached. Please try again in a moment.'));
       const nonce = await solve(ch.challenge, ch.difficulty);
       setBusy(w('Sending the code…'));
       const res = await fetch('/api/admission/code', {

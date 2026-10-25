@@ -1686,6 +1686,50 @@ describe('online admission (e2e)', () => {
       const titles = (fam.json().notices as Array<{ title: string }>).map((n) => n.title);
       expect(titles).toContain('Document verification (Mini)');
       expect(titles).not.toContain('Document verification (IX)');
+      // unread until the family opens it (docs/design/42, part 4)
+      const notice = (
+        fam.json().notices as Array<{ id: string; title: string; read: boolean }>
+      ).find((n) => n.title === 'Document verification (Mini)')!;
+      expect(notice.read).toBe(false);
+      expect(fam.json().unread).toBeGreaterThanOrEqual(1);
+      const mark = await inject({
+        method: 'POST',
+        url: '/public/admission/me/inbox/read',
+        headers: pub(tokenA),
+        json: { items: [{ kind: 'notice', id: notice.id }] },
+      });
+      expect(mark.statusCode).toBe(201);
+      expect(mark.json().marked).toBe(1);
+      const again = await inject({
+        method: 'GET',
+        url: '/public/admission/me/inbox',
+        headers: pub(tokenA),
+      });
+      expect(
+        (again.json().notices as Array<{ id: string; read: boolean }>).find(
+          (n) => n.id === notice.id,
+        )!.read,
+      ).toBe(true);
+      // something not in the family's inbox is not marked
+      const foreign = await inject({
+        method: 'POST',
+        url: '/public/admission/me/inbox/read',
+        headers: pub(tokenA),
+        json: { items: [{ kind: 'message', id: '999999999' }] },
+      });
+      expect(foreign.json().marked).toBe(0);
+      await inject({
+        method: 'POST',
+        url: '/public/admission/me/inbox/read',
+        headers: pub(tokenA),
+        json: { all: true },
+      });
+      const none = await inject({
+        method: 'GET',
+        url: '/public/admission/me/inbox',
+        headers: pub(tokenA),
+      });
+      expect(none.json().unread).toBe(0);
       const reach = await inject({
         method: 'POST',
         url: '/academics/notices/reach',

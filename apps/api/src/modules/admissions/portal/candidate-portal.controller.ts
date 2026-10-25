@@ -25,6 +25,7 @@ import {
   CodeVerifyDto,
   PayDto,
   SaveStepDto,
+  InboxReadDto,
   PasscodeUseDto,
   SlotDto,
   StartDto,
@@ -198,6 +199,14 @@ export class CandidatePortalController {
   @ApiOperation({ summary: "The family's messages from the school and the notices for candidates" })
   inbox(@Req() req: CandidateRequest) {
     return this.portal.inbox(req.candidate!);
+  }
+
+  @Post('me/inbox/read')
+  @Public()
+  @UseGuards(AdmissionCandidateGuard)
+  @ApiOperation({ summary: "Marks the family's notices / messages read (or all of them)" })
+  markRead(@Req() req: CandidateRequest, @Body() body: InboxReadDto) {
+    return this.portal.markRead(req.candidate!, body.all ? 'all' : (body.items ?? []));
   }
 
   @Get('me/notices/:id/files/:fileId')

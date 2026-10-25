@@ -161,9 +161,13 @@ export function AdmissionHome({
   const next = r ? nextStep(r, base, data.parentPortalUrl, w) : null;
   const current = r?.steps.find((s) => s.state === 'current');
   const latest = [
-    ...(inbox?.notices ?? []).map((n) => ({ id: `n${n.id}`, title: n.title, at: n.publishFrom })),
+    ...(inbox?.notices ?? []).map((n) => ({
+      id: `notice-${n.id}`,
+      title: n.title,
+      at: n.publishFrom,
+    })),
     ...(inbox?.messages ?? []).map((m) => ({
-      id: `m${m.id}`,
+      id: `message-${m.id}`,
       title: m.subject ?? w('Message from the school'),
       at: m.at,
     })),
@@ -375,7 +379,7 @@ export function AdmissionHome({
                 <ul className="fp-list">
                   {latest.map((m) => (
                     <li key={m.id}>
-                      <a href={`${base}#messages`}>{m.title}</a>
+                      <a href={`${base}/messages?open=${m.id}#${m.id}`}>{m.title}</a>
                       <span className="fp-list__meta">{dmy(m.at)}</span>
                     </li>
                   ))}

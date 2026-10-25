@@ -178,6 +178,57 @@ const DICT: Record<string, string> = {
   Continue: 'जारी रखें',
   'Delete the draft for': 'मसौदा हटाएँ:',
   Delete: 'हटाएँ',
+  'Due now': 'अभी देय',
+  Pay: 'भुगतान करें',
+  reversed: 'वापस',
+  receipt: 'रसीद',
+  new: 'नए',
+  'Mark all as read': 'सब पढ़ा हुआ करें',
+  Unread: 'नहीं पढ़ा',
+  Notice: 'सूचना',
+  Email: 'ईमेल',
+  Message: 'संदेश',
+  Attachment: 'संलग्नक',
+  attachment: 'संलग्नक',
+  'How admission works': 'प्रवेश कैसे होता है',
+  'Contact the school': 'विद्यालय से संपर्क',
+  Phone: 'फ़ोन',
+  Address: 'पता',
+  Website: 'वेबसाइट',
+  'A question about admission? Send it to the school.':
+    'प्रवेश के बारे में प्रश्न? विद्यालय को भेजें।',
+  'Common questions': 'सामान्य प्रश्न',
+  'Sign in with your mobile number or email and the code sent to it.':
+    'अपने मोबाइल नंबर या ईमेल और उस पर भेजे गए कोड से साइन इन करें।',
+  'Choose the class under Apply for a class and fill the form tab by tab; each tab is saved when you press Next.':
+    '"कक्षा के लिए आवेदन" में कक्षा चुनें और फ़ॉर्म टैब-दर-टैब भरें; "आगे" दबाने पर हर टैब सहेजा जाता है।',
+  'Submit the form and pay the registration fee: the registration number and the receipt come by email.':
+    'फ़ॉर्म जमा करें और पंजीकरण शुल्क दें: पंजीकरण संख्या और रसीद ईमेल से आएगी।',
+  'The school checks the documents and may ask for a correction; then the test or interaction, with an admit card.':
+    'विद्यालय दस्तावेज़ जाँचता है और सुधार माँग सकता है; फिर प्रवेश पत्र के साथ परीक्षा या बातचीत।',
+  'If your child is offered a seat, pay the admission fee by its last date.':
+    'यदि आपके बच्चे को सीट मिलती है तो अंतिम तिथि तक प्रवेश शुल्क दें।',
+  'After admission the parent portal takes over: sign in there with the same mobile.':
+    'प्रवेश के बाद अभिभावक पोर्टल में उसी मोबाइल से साइन इन करें।',
+  'I did not get the code.': 'मुझे कोड नहीं मिला।',
+  'Email can take a minute; look in the spam folder too. You can ask for a new code after 30 seconds. Using a registration number sends the code to the mobile and email of that registration.':
+    'ईमेल आने में एक मिनट लग सकता है; स्पैम फ़ोल्डर भी देखें। 30 सेकंड बाद नया कोड माँग सकते हैं। पंजीकरण संख्या से साइन इन करने पर कोड उस पंजीकरण के मोबाइल और ईमेल पर जाता है।',
+  'Can I register more than one child?': 'क्या मैं एक से अधिक बच्चों का पंजीकरण कर सकता हूँ?',
+  'Yes. Use "Register another child" under Apply for a class; each child has their own form. A child can hold one registration per academic year.':
+    'हाँ। "कक्षा के लिए आवेदन" में "दूसरे बच्चे का पंजीकरण करें" चुनें; हर बच्चे का अपना फ़ॉर्म होता है। एक शैक्षणिक वर्ष में एक बच्चे का एक ही पंजीकरण हो सकता है।',
+  'I left the form half filled.': 'मैंने फ़ॉर्म आधा भरा छोड़ दिया।',
+  'Your answers are kept. Open My registrations, or the class under Apply for a class, and continue where you stopped.':
+    'आपके उत्तर सहेजे हुए हैं। "मेरे पंजीकरण" या "कक्षा के लिए आवेदन" खोलें और वहीं से जारी रखें।',
+  'Registrations are closed. Can I still apply?':
+    'पंजीकरण बंद हैं। क्या मैं अब भी आवेदन कर सकता हूँ?',
+  'Only with a late-entry passcode from the school. Ask the school office; enter the passcode under Apply for a class.':
+    'केवल विद्यालय के देर से प्रवेश पासकोड से। विद्यालय कार्यालय से पूछें; पासकोड "कक्षा के लिए आवेदन" में दर्ज करें।',
+  'Is the registration fee refunded?': 'क्या पंजीकरण शुल्क वापस मिलता है?',
+  'The registration fee is not refunded. If an admission is cancelled after the admission fee is paid, the school refunds it as its rules say.':
+    'पंजीकरण शुल्क वापस नहीं होता। प्रवेश शुल्क देने के बाद प्रवेश रद्द होने पर विद्यालय अपने नियमों के अनुसार वापसी करता है।',
+  'The school could not be reached. Please try again in a moment.':
+    'विद्यालय से संपर्क नहीं हो पाया। कृपया थोड़ी देर में फिर कोशिश करें।',
+  Registrations: 'पंजीकरण',
 };
 
 export const t = (lang: Lang, en: string): string => (lang === 'hi' ? (DICT[en] ?? en) : en);

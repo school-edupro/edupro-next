@@ -128,6 +128,8 @@ export interface PortalApplication {
 }
 
 export interface PortalInbox {
+  /** notices and messages not opened yet (docs/design/42, part 4) */
+  unread?: number;
   notices: Array<{
     id: string;
     kind: string;
@@ -136,6 +138,7 @@ export interface PortalInbox {
     bodyFormat: string;
     publishFrom: string;
     files: Array<{ id: string; name: string | null }>;
+    read?: boolean;
   }>;
   messages: Array<{
     id: string;
@@ -144,6 +147,7 @@ export interface PortalInbox {
     body: string;
     format: string;
     at: string;
+    read?: boolean;
   }>;
 }
 
@@ -217,9 +221,40 @@ export interface PortalDashboardItem {
   closesAt: string | null;
   locked: { closedOn: string | null } | null;
   cancelReason: string | null;
+  receipts: Array<{
+    id: string;
+    receiptNo: string;
+    amount: number;
+    date: string;
+    head: string;
+    mode: string;
+    status: string;
+  }>;
 }
 export interface PortalDashboard {
   family: { name: string | null; mobile: string | null; email: string | null };
   parentPortalUrl: string;
   registrations: PortalDashboardItem[];
 }
+
+/** An email or notice written in HTML, shown as plain text (no frames, nothing of it runs). */
+export const htmlToText = (html: string) =>
+  html
+    .replace(/<(style|script|head)[^>]*>[\s\S]*?<\/\1>/gi, '')
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<\/(p|div|tr|h[1-6]|li|table)>/gi, '\n')
+    .replace(/<\/td>/gi, '\n')
+    .replace(/<[^>]+>/g, '')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&middot;/g, '·')
+    .replace(/&mdash;/g, '—')
+    .replace(/&ndash;/g, '–')
+    .replace(/&#(\d+);/g, (_, n: string) => String.fromCharCode(Number(n)))
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/[ \t]+\n/g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();

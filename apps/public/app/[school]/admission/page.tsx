@@ -1,11 +1,9 @@
-import { Card } from '@edupro/ui';
 import { cookies } from 'next/headers';
 import { notFound, redirect } from 'next/navigation';
 import { PublicApiError } from '@/lib/api';
 import {
   ADMISSION_COOKIE,
   admissionFetch,
-  dmy,
   type PortalInbox,
   type PortalDashboard,
   type PortalMe,
@@ -13,31 +11,7 @@ import {
 } from '@/lib/admission';
 import { AdmissionHome } from '@/components/AdmissionHome';
 import { AdmissionLanding } from '@/components/AdmissionLanding';
-import { ViewDownload } from '@/components/ViewDownload';
-import { t } from '@/lib/i18n';
 import { currentLang } from '@/lib/lang';
-
-/** An email or notice written in HTML, shown as plain text (no frames, nothing of it runs). */
-const htmlToText = (html: string) =>
-  html
-    .replace(/<(style|script|head)[^>]*>[\s\S]*?<\/\1>/gi, '')
-    .replace(/<br\s*\/?>/gi, '\n')
-    .replace(/<\/(p|div|tr|h[1-6]|li|table)>/gi, '\n')
-    .replace(/<\/td>/gi, '\n')
-    .replace(/<[^>]+>/g, '')
-    .replace(/&nbsp;/g, ' ')
-    .replace(/&middot;/g, '·')
-    .replace(/&mdash;/g, '—')
-    .replace(/&ndash;/g, '–')
-    .replace(/&#(\d+);/g, (_, n: string) => String.fromCharCode(Number(n)))
-    .replace(/&amp;/g, '&')
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .replace(/&quot;/g, '"')
-    .replace(/&#39;/g, "'")
-    .replace(/[ \t]+\n/g, '\n')
-    .replace(/\n{3,}/g, '\n\n')
-    .trim();
 
 /**
  * The admission portal of a school (docs/design/39, part 3): the open sessions with each class's dates,
@@ -113,62 +87,6 @@ export default async function AdmissionPortalPage({
           lang={lang}
         />
       ) : null}
-
-      <Card
-        elevated
-        id="messages"
-        title={t(lang, 'Messages and notices')}
-        style={{ marginBottom: 'var(--sp-4)' }}
-      >
-        {!inbox || (!inbox.notices.length && !inbox.messages.length) ? (
-          <p style={{ margin: 0 }}>No messages from the school yet.</p>
-        ) : null}
-        {inbox?.notices.length ? (
-          <section aria-label="Notices">
-            <h3 className="ep-kicker" style={{ marginTop: 0 }}>
-              Notices
-            </h3>
-            {inbox.notices.map((n) => (
-              <details key={`n${n.id}`} className="ep-adm-inbox">
-                <summary>
-                  <strong>{n.title}</strong> <span className="ep-kicker">{dmy(n.publishFrom)}</span>
-                </summary>
-                <p style={{ whiteSpace: 'pre-line' }}>
-                  {n.bodyFormat === 'html' ? htmlToText(n.body) : n.body}
-                </p>
-                {n.files.map((f, i) => (
-                  <span
-                    key={f.id}
-                    style={{ display: 'inline-flex', alignItems: 'center', gap: 'var(--sp-1)' }}
-                  >
-                    <span className="ep-kicker">Attachment {i + 1}</span>
-                    <ViewDownload
-                      href={`/api/admission/notice/${n.id}/${f.id}`}
-                      what={`attachment ${String(i + 1)} of ${n.title}`}
-                    />
-                  </span>
-                ))}
-              </details>
-            ))}
-          </section>
-        ) : null}
-        {inbox?.messages.length ? (
-          <section aria-label="Messages">
-            <h3 className="ep-kicker">Messages from the school</h3>
-            {inbox.messages.map((m) => (
-              <details key={`m${m.id}`} className="ep-adm-inbox">
-                <summary>
-                  <strong>{m.subject ?? (m.channel === 'email' ? 'Email' : 'Message')}</strong>{' '}
-                  <span className="ep-kicker">{dmy(m.at)}</span>
-                </summary>
-                <p style={{ whiteSpace: 'pre-line' }}>
-                  {m.format === 'html' ? htmlToText(m.body) : m.body}
-                </p>
-              </details>
-            ))}
-          </section>
-        ) : null}
-      </Card>
     </>
   );
 }

@@ -55,7 +55,7 @@ registration page in the shell with tabs: Overview (status, tracker, slot and ad
 notices of a closed class or a correction), Form (fill or read), Documents (View / Download icons),
 Payments (what is due, Pay, receipts).
 
-**Part 4 — Payments, Messages, Help, finish.** Payments & receipts across the family's registrations (due
+**Part 4 — Payments, Messages, Help, finish (built 25 Oct 2026, migration 0245).** Payments & receipts across the family's registrations (due
 now, paid with receipts). Messages: the school's notices and messages with unread marks. Help: Enquire,
 the school's contact, how the process works, FAQs. Hindi throughout; phone layout and the bottom tab bar
 checked; a11y for the portal pages.

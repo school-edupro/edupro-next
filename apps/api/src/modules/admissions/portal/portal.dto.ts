@@ -67,3 +67,13 @@ export class WithdrawDto extends createZodDto(WithdrawSchema) {}
 /** A late-entry passcode as the family types it (ABCD-EFGH, case and dashes free). */
 export const PasscodeUseSchema = z.object({ code: z.string().trim().min(8).max(20) });
 export class PasscodeUseDto extends createZodDto(PasscodeUseSchema) {}
+
+/** Notices / messages the family opened, or all (docs/design/42, part 4). */
+export const InboxReadSchema = z.object({
+  all: z.boolean().optional(),
+  items: z
+    .array(z.object({ kind: z.enum(['notice', 'message']), id: IdSchema }))
+    .max(200)
+    .optional(),
+});
+export class InboxReadDto extends createZodDto(InboxReadSchema) {}

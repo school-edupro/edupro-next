@@ -8,11 +8,18 @@ const MENU: Array<{ path: string; label: string; icon: IconName }> = [
   { path: '', label: 'Home', icon: 'home' },
   { path: '/registrations', label: 'My registrations', icon: 'users' },
   { path: '/apply', label: 'Apply for a class', icon: 'userPlus' },
-  { path: '#messages', label: 'Messages', icon: 'message' },
-  { path: '/enquire', label: 'Help', icon: 'help' },
+  { path: '/payments', label: 'Payments & receipts', icon: 'wallet' },
+  { path: '/messages', label: 'Messages', icon: 'message' },
+  { path: '/help', label: 'Help', icon: 'help' },
 ];
-/** Phone tab bar: the screens a family opens most. */
-const TABS = MENU.filter((m) => m.path !== '/registrations');
+/** Phone tab bar: every screen but Messages, which the top bar's icon (with its count) opens. */
+const TABS = MENU.filter((m) => m.path !== '/messages');
+/** Short names for the tab bar. */
+const SHORT: Record<string, string> = {
+  'My registrations': 'Registrations',
+  'Apply for a class': 'Apply',
+  'Payments & receipts': 'Payments',
+};
 
 /**
  * The candidate portal's frame after sign-in, laid out like the parent portal (docs/design/42): a navy
@@ -24,6 +31,7 @@ export function AdmissionShell({
   lang,
   currentPath,
   family,
+  unread = 0,
   children,
 }: {
   school: { code: string; name: string };
@@ -32,6 +40,8 @@ export function AdmissionShell({
   currentPath: string;
   /** the signed-in family: a name, else the mobile or email they signed in with */
   family: string;
+  /** notices and messages not opened yet */
+  unread?: number;
   children: ReactNode;
 }) {
   const base = `/${school.code}/admission`;
@@ -93,12 +103,21 @@ export function AdmissionShell({
             {lang === 'hi' ? 'English' : 'हिन्दी'}
           </a>
           <a
-            className="ep-header__icon-btn"
-            href={href('#messages')}
-            aria-label={t(lang, 'Messages')}
+            className="ep-header__icon-btn fp-msgbtn"
+            href={href('/messages')}
+            aria-label={
+              unread
+                ? `${t(lang, 'Messages')}: ${String(unread)} ${t(lang, 'new')}`
+                : t(lang, 'Messages')
+            }
             title={t(lang, 'Messages')}
           >
             <Icon name="message" size={22} />
+            {unread ? (
+              <span className="fp-msgbtn__badge" aria-hidden="true">
+                {unread > 99 ? '99+' : unread}
+              </span>
+            ) : null}
           </a>
           <span className="ep-header__user" title={family}>
             <Icon name="user" size={20} />
@@ -126,7 +145,7 @@ export function AdmissionShell({
             aria-current={isCurrent(m.path) ? 'page' : undefined}
           >
             <Icon name={m.icon} size={22} />
-            <span>{t(lang, m.label === 'Apply for a class' ? 'Apply' : m.label)}</span>
+            <span>{t(lang, SHORT[m.label] ?? m.label)}</span>
           </a>
         ))}
       </nav>

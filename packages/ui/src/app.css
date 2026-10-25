@@ -11123,6 +11123,51 @@ a.ep-pub-foot__item {
   color: var(--status-warning-text);
 }
 
+/* the admission portal's Payments, Messages and Help (docs/design/42, part 4) */
+.ep-adm-pay {
+  display: grid;
+  gap: var(--sp-3);
+  padding: var(--sp-5);
+  margin-bottom: var(--sp-4);
+}
+.ep-adm-pay .fp-section-title {
+  margin: 0;
+}
+.ep-adm-pay__row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-2) var(--sp-4);
+}
+.ep-adm-pay__row > span:first-child {
+  flex: 1 1 16rem;
+  min-width: 0;
+}
+.ep-adm-pay__amt {
+  font-weight: var(--fw-semibold);
+  color: var(--text-heading);
+}
+.ep-adm-help {
+  margin-bottom: var(--sp-4);
+}
+.ep-adm-help .ep-card,
+.ep-adm-faq {
+  padding: var(--sp-5);
+}
+.ep-adm-help__steps {
+  margin: 0;
+  padding-left: var(--sp-5);
+  display: grid;
+  gap: var(--sp-2);
+}
+.ep-adm-faq {
+  display: grid;
+  gap: var(--sp-3);
+}
+.ep-adm-faq p {
+  margin: var(--sp-2) 0 0;
+}
+
 /* the admission portal's home per child (docs/design/42, part 2) */
 .ep-adm-home {
   display: grid;

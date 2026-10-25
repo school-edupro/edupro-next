@@ -129,3 +129,23 @@ export async function usePasscode(fd: FormData) {
   }
   redirect(`/${school}/admission/application/${out.id}`);
 }
+
+/** A notice or message the family opened (docs/design/42, part 4). */
+export async function markInboxRead(kind: 'notice' | 'message', id: string) {
+  if (!/^\d{1,18}$/.test(id)) return;
+  await admissionFetch('/me/inbox/read', {
+    method: 'POST',
+    body: JSON.stringify({ items: [{ kind, id }] }),
+  }).catch(() => undefined);
+}
+
+/** Every notice and message marked read, then back to Messages. */
+export async function markAllInboxRead(fd: FormData) {
+  const school = String(fd.get('school') ?? '').toLowerCase();
+  if (!/^[a-z0-9-]{2,20}$/.test(school)) redirect('/');
+  await admissionFetch('/me/inbox/read', {
+    method: 'POST',
+    body: JSON.stringify({ all: true }),
+  }).catch(() => undefined);
+  redirect(`/${school}/admission/messages`);
+}
