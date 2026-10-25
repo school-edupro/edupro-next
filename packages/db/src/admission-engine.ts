@@ -230,12 +230,18 @@ const text = (v: AdmissionAnswer | undefined): string => {
 
 const num = (x: string) => x !== '' && Number.isFinite(Number(x));
 
+/** A yes / no switch keeps true / false: a rule written "Yes" / "No" (or true / false) matches it. */
+const yesNo = (x: string) =>
+  ['yes', 'true', 'y', '1'].includes(x) ? 'yes' : ['no', 'false', 'n', '0'].includes(x) ? 'no' : x;
+
 function holds(c: AdmissionCondition, v: AdmissionAnswer | undefined): boolean {
-  const have = text(v).trim().toLowerCase();
+  const flag = typeof v === 'boolean';
+  const have = flag ? (v ? 'yes' : 'no') : text(v).trim().toLowerCase();
   const wants = (c.value ?? '')
     .split('|')
     .map((x) => x.trim().toLowerCase())
-    .filter((x) => x !== '');
+    .filter((x) => x !== '')
+    .map((x) => (flag ? yesNo(x) : x));
   const want = wants[0] ?? '';
   const list = Array.isArray(v) ? v.map((x) => x.toLowerCase()) : [have];
   switch (c.op) {

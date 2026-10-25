@@ -5,6 +5,7 @@ import {
   ageOn,
   cleanAnswers,
   conditionsHold,
+  matchCategory,
   pointsTotal,
   workPoints,
   defProblems,
@@ -282,6 +283,29 @@ describe('admission form engine (docs/design/39)', () => {
     expect(conditionsHold(sib, 'all', { siblings: { count: 2, list: [] } })).toBe(true);
     expect(conditionsHold(sib, 'all', { siblings: { count: 0, list: [] } })).toBe(false);
     expect(conditionsHold([{ field: 'x', op: 'lt', value: '5' }], 'all', { x: '' })).toBe(false);
+  });
+
+  it('a yes / no switch (true / false) matches a rule written Yes / No', () => {
+    const ews = [{ field: 'ews', op: 'eq' as const, value: 'Yes' }];
+    // the EWS question added as a switch keeps true: the family is EWS / DG, not General
+    expect(conditionsHold(ews, 'any', { ews: true })).toBe(true);
+    expect(conditionsHold(ews, 'any', { ews: false })).toBe(false);
+    expect(conditionsHold(ews, 'any', { ews: 'Yes' })).toBe(true);
+    expect(conditionsHold([{ field: 'ews', op: 'eq', value: 'No' }], 'any', { ews: false })).toBe(
+      true,
+    );
+    expect(conditionsHold([{ field: 'ews', op: 'eq', value: 'true' }], 'any', { ews: true })).toBe(
+      true,
+    );
+    expect(conditionsHold([{ field: 'ews', op: 'neq', value: 'Yes' }], 'any', { ews: true })).toBe(
+      false,
+    );
+    const cats = [
+      { id: 'g', isDefault: true, logic: 'any' as const, conditions: [] },
+      { id: 'e', isDefault: false, logic: 'any' as const, conditions: ews },
+    ];
+    expect(matchCategory(cats, { ews: true })?.id).toBe('e');
+    expect(matchCategory(cats, { ews: false })?.id).toBe('g');
   });
 
   it('works merit points out per criterion, deductions included', () => {
