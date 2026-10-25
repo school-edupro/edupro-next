@@ -552,68 +552,10 @@ function SettingsPanel({
           onChange={(e) => set({ declaration: e.target.value || undefined })}
         />
       </label>
-      <label className="ep-field">
-        <span className="ep-field__label">Age as on</span>
-        <input
-          className="ep-input"
-          type="date"
-          disabled={!canEdit}
-          value={s.ageAsOn ?? ''}
-          onChange={(e) => set({ ageAsOn: e.target.value || undefined })}
-        />
-        <span className="ep-field__help">
-          Used by "Age as on" fields. The session can also set it per class.
-        </span>
-      </label>
-      <label className="ep-field">
-        <span className="ep-field__label">Date of birth from</span>
-        <input
-          className="ep-input"
-          type="date"
-          disabled={!canEdit}
-          value={s.dobFrom ?? ''}
-          onChange={(e) => set({ dobFrom: e.target.value || undefined })}
-        />
-      </label>
-      <label className="ep-field">
-        <span className="ep-field__label">Date of birth to</span>
-        <input
-          className="ep-input"
-          type="date"
-          disabled={!canEdit}
-          value={s.dobTo ?? ''}
-          onChange={(e) => set({ dobTo: e.target.value || undefined })}
-        />
-      </label>
-      <label className="ep-field">
-        <span className="ep-field__label">PIN codes must start with</span>
-        <input
-          className="ep-input"
-          disabled={!canEdit}
-          value={(s.pincodePrefixes ?? []).join(', ')}
-          placeholder="e.g. 110, 122, 121 (empty = any)"
-          onChange={(e) =>
-            set({
-              pincodePrefixes: e.target.value.split(/[,\s]+/).filter((x) => /^\d{1,6}$/.test(x)),
-            })
-          }
-        />
-      </label>
-      <label className="ep-field">
-        <span className="ep-field__label">Alumni pass-out year must be before</span>
-        <input
-          className="ep-input"
-          inputMode="numeric"
-          disabled={!canEdit}
-          value={s.passOutBefore ?? ''}
-          maxLength={4}
-          onChange={(e) =>
-            set({
-              passOutBefore: /^\d{4}$/.test(e.target.value) ? Number(e.target.value) : undefined,
-            })
-          }
-        />
-      </label>
+      <p className="ep-field__help ep-fb__wide" style={{ margin: 0 }}>
+        Age as on, the date-of-birth range, the PIN codes allowed and the alumni pass-out year are
+        set per class on the admission session (Admission sessions → the session → Classes).
+      </p>
       <label className="ep-field">
         <span className="ep-field__label">Largest upload (MB)</span>
         <input

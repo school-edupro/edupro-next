@@ -96,14 +96,8 @@ export const AdmissionFormDefSchema = z.object({
     title: z.string().trim().max(200).optional(),
     notice: Text.optional(),
     declaration: Text.optional(),
-    ageAsOn: Date.optional(),
-    dobFrom: Date.optional(),
-    dobTo: Date.optional(),
-    pincodePrefixes: z
-      .array(z.string().regex(/^\d{1,6}$/))
-      .max(30)
-      .optional(),
-    passOutBefore: z.number().int().min(1950).max(2100).optional(),
+    // age as on, the DOB range, the PIN codes and the alumni pass-out year are rules of the session's
+    // class line now (Admission sessions → Classes), not of the form
     upperCase: z.boolean().optional(),
     maxFileMb: z.number().int().min(1).max(20).optional(),
   }),

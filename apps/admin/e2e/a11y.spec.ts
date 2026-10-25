@@ -728,6 +728,42 @@ test.describe('accessibility (axe)', () => {
     ).toEqual([]);
   });
 
+  // the class line's rules live on the session (25 Oct 2026): not on the form page
+  test('class rules on the session, not on the form', async ({ page }) => {
+    test.setTimeout(120_000);
+    await page.goto('/admissions/forms/1');
+    await page.waitForLoadState('networkidle');
+    const skip = page.getByRole('button', { name: 'Skip' });
+    if (await skip.isVisible()) await skip.click();
+    for (const gone of [
+      'Age as on',
+      'Date of birth from',
+      'Date of birth to',
+      'PIN codes must start with',
+      'Alumni pass-out year must be before',
+    ])
+      await expect(page.getByLabel(gone, { exact: true })).toHaveCount(0);
+    await page.goto('/admissions/cycles/4');
+    await page.waitForLoadState('networkidle');
+    const pin = page.getByLabel(/: PIN codes must start with/).first();
+    await expect(pin).toBeVisible();
+    await expect(page.getByLabel(/: alumni pass-out year must be before/).first()).toBeVisible();
+    await page.screenshot({
+      path: `${process.env.SHOT_DIR ?? test.info().outputDir}/class-rules.png`,
+      fullPage: true,
+    });
+    const r = await new AxeBuilder({ page })
+      .options({ iframes: false })
+      .setLegacyMode()
+      .withTags(['wcag2a', 'wcag2aa'])
+      .analyze();
+    expect(
+      r.violations
+        .filter((v) => v.impact === 'serious' || v.impact === 'critical')
+        .map((v) => `${v.id}: ${v.nodes.map((n) => n.target.join(' ')).join(' | ')}`),
+    ).toEqual([]);
+  });
+
   // fee categories the form cannot decide (docs/design/43, part 5): the set-up and the session's Fee tab
   test('fee category gaps: set-up and the Fee tab', async ({ page }) => {
     test.setTimeout(120_000);

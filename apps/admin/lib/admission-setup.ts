@@ -50,6 +50,10 @@ export interface SessionClass {
   ageAsOn: string | null;
   dobFrom: string | null;
   dobTo: string | null;
+  /** the PIN codes a family's address may start with (none: any) */
+  pincodePrefixes: string[];
+  /** an alumnus parent's pass-out year must be before this */
+  passOutBefore: number | null;
   notes: string | null;
   status: 'open' | 'closed';
   applications: number;

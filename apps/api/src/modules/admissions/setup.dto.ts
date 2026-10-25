@@ -59,6 +59,13 @@ export const SessionClassesSchema = z.object({
           ageAsOn: DateSchema.nullish(),
           dobFrom: DateSchema.nullish(),
           dobTo: DateSchema.nullish(),
+          /** the PIN codes a family's address may start with (none: any) */
+          pincodePrefixes: z
+            .array(z.string().regex(/^\d{1,6}$/))
+            .max(40)
+            .nullish(),
+          /** an alumnus parent's pass-out year must be before this */
+          passOutBefore: z.number().int().min(1950).max(2100).nullish(),
           notes: z.string().trim().max(500).nullish(),
           status: z.enum(['open', 'closed']).default('open'),
         })

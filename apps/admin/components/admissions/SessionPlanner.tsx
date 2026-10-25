@@ -14,7 +14,21 @@ import { CategoryGapsNote } from './CategoryGapsNote';
 
 type Line = Omit<SessionClass, 'className' | 'formName' | 'applications' | 'registered'> & {
   applications: number;
+  /** the PIN codes as typed ("110, 122"), read on save */
+  pinText?: string;
+  /** the pass-out year as typed, read on save */
+  yearText?: string;
 };
+const year = (l: Line) =>
+  l.yearText !== undefined
+    ? /^\d{4}$/.test(l.yearText.trim())
+      ? Number(l.yearText.trim())
+      : null
+    : l.passOutBefore;
+const pins = (l: Line) =>
+  l.pinText !== undefined
+    ? [...new Set(l.pinText.split(/[,\s]+/).filter((x) => /^\d{1,6}$/.test(x)))]
+    : l.pincodePrefixes;
 
 const local = (iso: string | null) =>
   iso ? new Date(new Date(iso).getTime() + 330 * 60_000).toISOString().slice(0, 16) : '';
@@ -98,6 +112,8 @@ export function SessionPlanner({
           ageAsOn: l.ageAsOn || null,
           dobFrom: l.dobFrom || null,
           dobTo: l.dobTo || null,
+          pincodePrefixes: pins(l),
+          passOutBefore: year(l),
           notes: l.notes || null,
           status: l.status,
         })),
@@ -163,8 +179,10 @@ export function SessionPlanner({
           <p className="ep-field__help">
             Each class takes registrations with its own form. Leave the dates empty to follow the
             session ({new Date(plan.session.opensAt).toLocaleDateString('en-IN')} to{' '}
-            {new Date(plan.session.closesAt).toLocaleDateString('en-IN')}). The date of birth window
-            and &ldquo;age as on&rdquo; here replace the form&rsquo;s.
+            {new Date(plan.session.closesAt).toLocaleDateString('en-IN')}). Each class&rsquo;s rules
+            are set here only: &ldquo;age as on&rdquo;, the date-of-birth window, the PIN codes an
+            address may start with and the year an alumnus parent must have passed out before
+            (empty: no check).
           </p>
           <div className="ep-table-wrap" tabIndex={0} role="region" aria-label="Classes">
             <table className="ep-table ep-table--dense ep-sp__table">
@@ -178,6 +196,8 @@ export function SessionPlanner({
                   <th scope="col">Age as on</th>
                   <th scope="col">Born from</th>
                   <th scope="col">Born to</th>
+                  <th scope="col">PIN codes start with</th>
+                  <th scope="col">Alumni passed out before</th>
                   <th scope="col">Status</th>
                   <th scope="col">Registered</th>
                   <th scope="col">
@@ -270,6 +290,30 @@ export function SessionPlanner({
                         />
                       </td>
                       <td>
+                        <input
+                          className="ep-input"
+                          aria-label={`${name}: PIN codes must start with (empty: any)`}
+                          placeholder="Any"
+                          disabled={!canEdit}
+                          value={l.pinText ?? l.pincodePrefixes.join(', ')}
+                          onChange={(e) => setLine(i, { pinText: e.target.value })}
+                        />
+                      </td>
+                      <td>
+                        <input
+                          className="ep-input ep-sp__num"
+                          aria-label={`${name}: alumni pass-out year must be before`}
+                          inputMode="numeric"
+                          maxLength={4}
+                          placeholder="Any"
+                          disabled={!canEdit}
+                          value={l.yearText ?? (l.passOutBefore ? String(l.passOutBefore) : '')}
+                          onChange={(e) =>
+                            setLine(i, { yearText: e.target.value.replace(/\D/g, '') })
+                          }
+                        />
+                      </td>
+                      <td>
                         <select
                           className="ep-select"
                           aria-label={`${name}: status`}
@@ -328,6 +372,8 @@ export function SessionPlanner({
                         ageAsOn: null,
                         dobFrom: null,
                         dobTo: null,
+                        pincodePrefixes: [],
+                        passOutBefore: null,
                         notes: null,
                         status: 'open',
                         applications: 0,

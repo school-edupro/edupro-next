@@ -300,12 +300,14 @@ export class AdmissionSetupService {
         dob_from: string | null;
         dob_to: string | null;
         notes: string | null;
+        pincode_prefixes: string[] | null;
+        pass_out_before: number | null;
         status: string;
         applications: number;
         registered: number;
       }>(
         `SELECT k.class_id::text, cl.name AS class_name, k.form_id::text, f.name AS form_name, k.seats, k.opens_at, k.closes_at,
-                k.age_as_on::text, k.dob_from::text, k.dob_to::text, k.notes, k.status,
+                k.age_as_on::text, k.dob_from::text, k.dob_to::text, k.notes, k.status, k.pincode_prefixes, k.pass_out_before,
                 (SELECT count(*)::int FROM applications a WHERE a.cycle_id = k.cycle_id AND a.class_id = k.class_id) AS applications,
                 (SELECT count(*)::int FROM applications a WHERE a.cycle_id = k.cycle_id AND a.class_id = k.class_id AND a.application_no IS NOT NULL) AS registered
            FROM admission_class_criteria k JOIN classes cl ON cl.id = k.class_id LEFT JOIN admission_forms f ON f.id = k.form_id
@@ -354,6 +356,8 @@ export class AdmissionSetupService {
           dobFrom: x.dob_from,
           dobTo: x.dob_to,
           notes: x.notes,
+          pincodePrefixes: x.pincode_prefixes ?? [],
+          passOutBefore: x.pass_out_before,
           status: x.status,
           applications: x.applications,
           registered: x.registered,
@@ -401,11 +405,14 @@ export class AdmissionSetupService {
       );
       for (const k of dto.classes)
         await c.query(
-          `INSERT INTO admission_class_criteria (school_id, cycle_id, class_id, form_id, seats, opens_at, closes_at, age_as_on, dob_from, dob_to, notes, status)
-           VALUES (app.current_school_id(), $1, $2, $3, $4, $5::timestamptz, $6::timestamptz, $7::date, $8::date, $9::date, $10, $11)
+          `INSERT INTO admission_class_criteria (school_id, cycle_id, class_id, form_id, seats, opens_at, closes_at, age_as_on, dob_from, dob_to, notes, status,
+                                                 pincode_prefixes, pass_out_before)
+           VALUES (app.current_school_id(), $1, $2, $3, $4, $5::timestamptz, $6::timestamptz, $7::date, $8::date, $9::date, $10, $11, $12::text[], $13)
            ON CONFLICT (cycle_id, class_id) DO UPDATE SET form_id = EXCLUDED.form_id, seats = EXCLUDED.seats, opens_at = EXCLUDED.opens_at,
              closes_at = EXCLUDED.closes_at, age_as_on = EXCLUDED.age_as_on, dob_from = EXCLUDED.dob_from, dob_to = EXCLUDED.dob_to,
-             notes = EXCLUDED.notes, status = EXCLUDED.status`,
+             notes = EXCLUDED.notes, status = EXCLUDED.status,
+             pincode_prefixes = COALESCE(EXCLUDED.pincode_prefixes, CASE WHEN $14 THEN NULL ELSE admission_class_criteria.pincode_prefixes END),
+             pass_out_before = COALESCE(EXCLUDED.pass_out_before, CASE WHEN $15 THEN NULL ELSE admission_class_criteria.pass_out_before END)`,
           [
             id,
             k.classId,
@@ -418,6 +425,11 @@ export class AdmissionSetupService {
             k.dobTo ?? null,
             k.notes ?? null,
             k.status,
+            k.pincodePrefixes?.length ? [...new Set(k.pincodePrefixes)] : null,
+            k.passOutBefore ?? null,
+            // sent and empty: cleared; not sent (an older screen): kept
+            k.pincodePrefixes !== undefined,
+            k.passOutBefore !== undefined,
           ],
         );
       await this.audit.stage(ctx, c, {

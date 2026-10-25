@@ -173,7 +173,8 @@ describe('online admission (e2e)', () => {
         await inject({ method: 'GET', url: `/admissions/forms/${formXi}`, headers: h() })
       ).json();
       const def = structuredClone(form.def);
-      def.settings.dobFrom = '2009-04-01';
+      def.settings.maxFileMb = 8;
+      // the DOB range is the session's (its class line), no longer the form's: not kept
       def.settings.dobTo = '2012-03-31';
       def.fields.push({ key: 'hobby', label: 'Hobby', type: 'text', step: 'other', copy: true });
       const ok = await inject({
@@ -183,7 +184,8 @@ describe('online admission (e2e)', () => {
         json: { name: 'Registration XI', description: 'Written test', def },
       });
       expect(ok.statusCode).toBe(200);
-      expect(ok.json().def.settings.dobTo).toBe('2012-03-31');
+      expect(ok.json().def.settings.maxFileMb).toBe(8);
+      expect(ok.json().def.settings.dobTo).toBeUndefined();
       const denied = await inject({
         method: 'PUT',
         url: `/admissions/forms/${formXi}`,
@@ -414,6 +416,51 @@ describe('online admission (e2e)', () => {
       expect(r.statusCode).toBe(200);
       expect(r.json().classes.map((c: { formId: string }) => c.formId)).toEqual([formIx, formXi]);
       expect(r.json().session.url).toMatch(/\/admission\?session=ADM-T$/);
+      // the PIN codes and the alumni pass-out year are the class line's (moved from the form)
+      const rules = await inject({
+        method: 'PUT',
+        url: `/admissions/cycles/${cycleId}/classes`,
+        headers: h(),
+        json: {
+          classes: r.json().classes.map((k: Record<string, unknown>) => ({
+            classId: k.classId,
+            formId: k.formId,
+            seats: k.seats,
+            ageAsOn: k.ageAsOn,
+            dobFrom: k.dobFrom,
+            dobTo: k.dobTo,
+            status: k.status,
+            ...(k.classId === classIx
+              ? { pincodePrefixes: ['110', '122'], passOutBefore: 2020 }
+              : {}),
+          })),
+        },
+      });
+      expect(rules.statusCode).toBe(200);
+      const ix = (rules.json().classes as Array<Record<string, unknown>>).find(
+        (k) => k.classId === classIx,
+      )!;
+      expect(ix).toMatchObject({ pincodePrefixes: ['110', '122'], passOutBefore: 2020 });
+      // an older screen that does not send them keeps them
+      const kept = await inject({
+        method: 'PUT',
+        url: `/admissions/cycles/${cycleId}/classes`,
+        headers: h(),
+        json: {
+          classes: r.json().classes.map((k: Record<string, unknown>) => ({
+            classId: k.classId,
+            formId: k.formId,
+            seats: k.seats,
+            ageAsOn: k.ageAsOn,
+            dobFrom: k.dobFrom,
+            dobTo: k.dobTo,
+            status: k.status,
+          })),
+        },
+      });
+      expect(
+        (kept.json().classes as Array<Record<string, unknown>>).find((k) => k.classId === classIx),
+      ).toMatchObject({ pincodePrefixes: ['110', '122'], passOutBefore: 2020 });
       const bad = await inject({
         method: 'PUT',
         url: `/admissions/cycles/${cycleId}/classes`,

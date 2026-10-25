@@ -190,19 +190,33 @@ export class AdmissionCoreService {
       age_as_on: string | null;
       dob_from: string | null;
       dob_to: string | null;
+      pincode_prefixes: string[] | null;
+      pass_out_before: number | null;
     }>(
-      `SELECT age_as_on::text, dob_from::text, dob_to::text FROM admission_class_criteria WHERE cycle_id = $1 AND class_id = $2`,
+      `SELECT age_as_on::text, dob_from::text, dob_to::text, pincode_prefixes, pass_out_before
+         FROM admission_class_criteria WHERE cycle_id = $1 AND class_id = $2`,
       [a.cycle_id, a.class_id],
     );
     const l = line.rows[0];
+    // the class line's rules, set on the session (the form's own copies are no longer used)
+    const {
+      ageAsOn: _a,
+      dobFrom: _f,
+      dobTo: _t,
+      pincodePrefixes: _p,
+      passOutBefore: _y,
+      ...formSettings
+    } = def.settings;
     // each city list follows its state (set in the builder, or the only state field on its tab)
     return linkCityStates({
       ...def,
       settings: {
-        ...def.settings,
-        ageAsOn: l?.age_as_on ?? def.settings.ageAsOn,
-        dobFrom: l?.dob_from ?? def.settings.dobFrom,
-        dobTo: l?.dob_to ?? def.settings.dobTo,
+        ...formSettings,
+        ...(l?.age_as_on ? { ageAsOn: l.age_as_on } : {}),
+        ...(l?.dob_from ? { dobFrom: l.dob_from } : {}),
+        ...(l?.dob_to ? { dobTo: l.dob_to } : {}),
+        ...(l?.pincode_prefixes?.length ? { pincodePrefixes: l.pincode_prefixes } : {}),
+        ...(l?.pass_out_before ? { passOutBefore: l.pass_out_before } : {}),
       },
     });
   }

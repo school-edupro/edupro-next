@@ -197,7 +197,6 @@ export const GENERAL_ADMISSION_FORM: AdmissionFormDef = {
       'Filling up the information in this form is not considered as registration unless the registration number is issued after the payment of the registration fee.',
     declaration: DECLARATION_GENERAL,
     upperCase: true,
-    pincodePrefixes: ['110', '122', '121', '201', '250', '124'],
     maxFileMb: 10,
   },
   fields: [
