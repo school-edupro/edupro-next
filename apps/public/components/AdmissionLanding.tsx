@@ -255,44 +255,47 @@ export function AdmissionLanding({
                   <h2 id="adm-classes" className="ep-adm-split__h2">
                     {w('Classes open for registration')}
                   </h2>
-                  <ul className="ep-adm-classes">
-                    {session.classes.map((k) => (
-                      <li key={k.id} className="ep-adm-class">
-                        <div className="ep-adm-class__head">
-                          <strong>{k.name}</strong>
-                          <Badge tone={k.open ? 'success' : 'neutral'}>
-                            {k.open
-                              ? w('Open')
-                              : new Date(k.opensAt).getTime() > Date.now()
-                                ? w('Opens soon')
-                                : w('Closed')}
-                          </Badge>
-                        </div>
-                        <dl>
-                          <div>
-                            <dt>{w('Registration dates')}</dt>
-                            <dd>
+                  <div className="ep-table-wrap ep-adm-classlist">
+                    <table className="ep-table">
+                      <caption className="ep-sr-only">{w('Classes open for registration')}</caption>
+                      <thead>
+                        <tr>
+                          <th scope="col">{w('Class')}</th>
+                          <th scope="col">{w('Registration dates')}</th>
+                          <th scope="col">{w('Date of birth')}</th>
+                          <th scope="col">{w('Registration fee')}</th>
+                          <th scope="col">{w('Status')}</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {session.classes.map((k) => (
+                          <tr key={k.id}>
+                            <th scope="row">{k.name}</th>
+                            <td>
                               {dmy(k.opensAt)} {w('to')} {dmy(k.closesAt)}
-                            </dd>
-                          </div>
-                          <div>
-                            <dt>{w('Date of birth')}</dt>
-                            <dd>{dob(k.dobFrom, k.dobTo)}</dd>
-                          </div>
-                          <div>
-                            <dt>{w('Registration fee')}</dt>
-                            <dd>
+                            </td>
+                            <td>{dob(k.dobFrom, k.dobTo)}</td>
+                            <td>
                               {k.registrationFee !== null
                                 ? rupees(k.registrationFee)
                                 : k.feeFrom !== null
                                   ? `${w('from')} ${rupees(k.feeFrom)}`
                                   : w('No fee')}
-                            </dd>
-                          </div>
-                        </dl>
-                      </li>
-                    ))}
-                  </ul>
+                            </td>
+                            <td>
+                              <Badge tone={k.open ? 'success' : 'neutral'}>
+                                {k.open
+                                  ? w('Open')
+                                  : new Date(k.opensAt).getTime() > Date.now()
+                                    ? w('Opens soon')
+                                    : w('Closed')}
+                              </Badge>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
                   {session.classes.some((k) => k.points?.length) ? (
                     <details className="ep-adm-more ep-adm-points">
                       <summary>{w('Merit points')}</summary>

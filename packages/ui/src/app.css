@@ -11302,6 +11302,9 @@ a.ep-pub-foot__item {
 }
 .ep-adm-split__panel {
   display: grid;
+  /* one column that may shrink: a wide list scrolls in its frame, not the page */
+  grid-template-columns: minmax(0, 1fr);
+  min-width: 0;
   align-content: start;
   gap: var(--sp-4);
   width: min(100%, 44rem);
@@ -11403,6 +11406,16 @@ a.ep-pub-foot__item {
   text-align: center;
   color: var(--text-body);
 }
+/* the classes of the chosen session as a list: one row per class */
+.ep-adm-classlist tbody th {
+  white-space: nowrap;
+  font-weight: var(--fw-semibold);
+  color: var(--text-heading);
+}
+.ep-adm-classlist td {
+  white-space: nowrap;
+}
+
 /* links inside the sentence: underlined, not told apart by colour alone */
 .ep-adm-split__foot a {
   text-decoration: underline;
