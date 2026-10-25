@@ -358,12 +358,22 @@ test('admission: ask the school about a registration', async ({ page }) => {
   await page
     .getByLabel('Your question *')
     .fill('Our birth certificate is in Hindi. Is a translation needed?');
+  // with a file: the upload goes with the question
+  await page.getByLabel('A file, if it helps (PDF or photo, up to 5MB)').setInputFiles({
+    name: 'certificate.png',
+    mimeType: 'image/png',
+    buffer: Buffer.from(
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==',
+      'base64',
+    ),
+  });
   await page.getByRole('button', { name: 'Send the question' }).click();
   await expect(page.getByText(/Your question is with the school: A\//)).toBeVisible({
     timeout: 30_000,
   });
   await expect(page.getByRole('heading', { level: 1 })).toHaveText('Birth certificate in Hindi');
   await expect(page.getByRole('heading', { name: 'Write to the school' })).toBeVisible();
+  await expect(page.getByRole('link', { name: /View file 1/ })).toBeVisible();
   await check('the question');
   await page.screenshot({
     path: `${process.env.SHOT_DIR ?? test.info().outputDir}/query.png`,

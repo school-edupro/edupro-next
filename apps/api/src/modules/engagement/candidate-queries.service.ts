@@ -113,7 +113,7 @@ export class CandidateQueriesService {
     const r = await c.query<{ ok: boolean }>(
       `SELECT (f.status = 'ready' AND f.size_bytes <= 5242880 AND f.content_type ~ '^(application/pdf|image/(png|jpeg|webp))$'
                AND f.owner_entity_type = 'application'
-               AND f.owner_entity_id IN (SELECT id FROM applications WHERE applicant_id = $2)) AS ok
+               AND f.owner_entity_id IN (SELECT id::text FROM applications WHERE applicant_id = $2)) AS ok
          FROM files f WHERE f.id = ANY($1::bigint[]) AND f.deleted_at IS NULL`,
       [ids, cand.id],
     );

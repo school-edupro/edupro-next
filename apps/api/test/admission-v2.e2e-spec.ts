@@ -1911,6 +1911,32 @@ describe('online admission (e2e)', () => {
         },
       });
       expect(foreign.statusCode).toBe(404);
+      // a file with the question: uploaded for the registration, then named on the question
+      const png = Buffer.from(
+        'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==',
+        'base64',
+      );
+      const slot = await inject({
+        method: 'POST',
+        url: '/public/admission/me/files/slot',
+        headers: pub(tokenA),
+        json: {
+          applicationId: appA,
+          fieldKey: 'query_file',
+          fileName: 'fee-slip.png',
+          contentType: 'image/png',
+          sizeBytes: png.length,
+        },
+      });
+      expect(slot.statusCode).toBe(201);
+      const put = await inject({
+        method: 'PUT',
+        url: slot.json().upload.url,
+        headers: {},
+        raw: { body: png, contentType: 'image/png' },
+      });
+      expect(put.statusCode).toBe(200);
+      const fileId = slot.json().file.id as string;
       const asked = await inject({
         method: 'POST',
         url: '/public/admission/me/queries',
@@ -1920,9 +1946,25 @@ describe('online admission (e2e)', () => {
           categoryCode: 'fees',
           subject: 'Fee question',
           body: 'Can I pay the admission fee in two parts?',
+          fileIds: [fileId],
         },
       });
       expect(asked.statusCode).toBe(201);
+      expect(asked.json().fileIds).toEqual([fileId]);
+      const file = await inject({
+        method: 'GET',
+        url: `/public/admission/me/queries/${asked.json().id}/files/${fileId}`,
+        headers: pub(tokenA),
+      });
+      expect(file.statusCode).toBe(200);
+      expect(file.json()).toMatchObject({ contentType: 'image/png' });
+      // another family cannot name it on its own question
+      const theirs = await inject({
+        method: 'GET',
+        url: `/public/admission/me/queries/${asked.json().id}/files/${fileId}`,
+        headers: pub(tokenB),
+      });
+      expect(theirs.statusCode).toBe(404);
       qid = asked.json().id;
       expect(asked.json()).toMatchObject({ status: 'open', head: 'Fee and payment' });
       expect(asked.json().number).toMatch(/^A\//);

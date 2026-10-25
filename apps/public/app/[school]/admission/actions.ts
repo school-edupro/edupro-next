@@ -157,9 +157,11 @@ const problem = (error: unknown) =>
   error instanceof PublicApiError
     ? error.status === 401
       ? 'Your sign-in has ended: sign in again to go on.'
-      : String(
-          (error.problem as { detail?: string; type: string }).detail ?? error.problem.type,
-        ).slice(0, 200)
+      : error.status >= 500
+        ? 'Something went wrong on our side; please try again.'
+        : String(
+            (error.problem as { detail?: string; type: string }).detail ?? error.problem.type,
+          ).slice(0, 200)
     : error instanceof Error
       ? error.message.slice(0, 200)
       : 'Something went wrong';
