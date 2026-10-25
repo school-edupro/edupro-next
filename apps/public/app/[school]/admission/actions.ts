@@ -140,15 +140,22 @@ export async function markInboxRead(kind: 'notice' | 'message', id: string) {
   }).catch(() => undefined);
 }
 
-/** Every notice and message marked read, then back to Messages. */
+/** Every notice and message of the tab shown marked read, then back to that tab (docs/design/44). */
 export async function markAllInboxRead(fd: FormData) {
   const school = String(fd.get('school') ?? '').toLowerCase();
   if (!/^[a-z0-9-]{2,20}$/.test(school)) redirect('/');
+  const group = String(fd.get('group') ?? '');
+  const tab = ['school', 'automatic', 'notice'].includes(group) ? group : '';
   await admissionFetch('/me/inbox/read', {
     method: 'POST',
-    body: JSON.stringify({ all: true }),
+    body: JSON.stringify({ all: true, ...(tab ? { group: tab } : {}) }),
   }).catch(() => undefined);
-  redirect(`/${school}/admission/messages`);
+  const back = String(fd.get('back') ?? '');
+  redirect(
+    /^\?[\w=&%.+-]*$/.test(back)
+      ? `/${school}/admission/messages${back}`
+      : `/${school}/admission/messages`,
+  );
 }
 
 // ---- questions to the school (docs/design/43, part 4) -------------------------------------------------

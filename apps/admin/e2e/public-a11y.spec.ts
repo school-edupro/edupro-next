@@ -383,3 +383,61 @@ test('admission: ask the school about a registration', async ({ page }) => {
   await expect(page.getByRole('link', { name: 'Birth certificate in Hindi' })).toBeVisible();
   expect(problems).toEqual([]);
 });
+
+// Messages by who sent them (docs/design/44, part 2): the tabs with their counts, a tab, the search
+test('admission: messages by who sent them', async ({ page }) => {
+  test.setTimeout(150_000);
+  const problems: string[] = [];
+  const check = async (label: string) => {
+    await page.mouse.move(0, 0);
+    await page.waitForTimeout(400);
+    const r = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa']).analyze();
+    for (const v of r.violations.filter((x) => x.impact === 'serious' || x.impact === 'critical'))
+      problems.push(`${label}: ${v.id} ${v.nodes.map((n) => n.target.join(' ')).join(' | ')}`);
+  };
+  await page.goto(`${BASE}/api/lang?to=en&back=%2Falpha%2Fadmission`);
+  const choose = page.locator('select[name="session"]');
+  if (await choose.count()) {
+    await choose.selectOption({ index: 1 });
+    await page.getByRole('button', { name: 'Continue' }).click();
+  }
+  await page.waitForLoadState('networkidle');
+  // a family with a long history (admitted): its messages fill every tab
+  await page.getByLabel('Mobile number, email or registration number').fill('9811100021');
+  await page.getByRole('button', { name: 'Send code' }).click();
+  const dev = page.getByText(/Development code: \d{6}/i);
+  // a code sent to this family in the last 30 seconds (an earlier run): wait, then ask again
+  const tooSoon = page.getByText(/A code was just sent/);
+  await expect(dev.or(tooSoon)).toBeVisible({ timeout: 60_000 });
+  if (await tooSoon.isVisible()) {
+    await page.waitForTimeout(31_000);
+    await page.getByRole('button', { name: 'Send code' }).click();
+  }
+  await expect(dev).toBeVisible({ timeout: 60_000 });
+  const code = /(\d{6})/.exec((await dev.textContent()) ?? '')![1]!;
+  await page.getByLabel('Code', { exact: true }).fill(code);
+  await page.getByRole('button', { name: 'Sign in', exact: true }).click();
+  await expect(page.locator('.ep-shell')).toBeVisible({ timeout: 30_000 });
+  await page.goto(`${BASE}/alpha/admission/messages`);
+  const tabs = page.getByRole('navigation', { name: 'Messages' });
+  for (const name of ['All', 'From the school', 'Automatic updates', 'Notices'])
+    await expect(tabs.getByRole('link', { name: new RegExp(`^${name}`) })).toBeVisible();
+  await check('messages: all');
+  await page.screenshot({
+    path: `${process.env.SHOT_DIR ?? test.info().outputDir}/messages.png`,
+    fullPage: true,
+  });
+  await tabs.getByRole('link', { name: /^Automatic updates/ }).click();
+  await expect(tabs.getByRole('link', { name: /^Automatic updates/ })).toHaveAttribute(
+    'aria-current',
+    'page',
+  );
+  const tags = page.locator('.ep-adm-msgtag[data-group]');
+  if (await tags.count()) await expect(tags.first()).toHaveText('Automatic update');
+  await check('messages: automatic');
+  const filter = page.getByRole('search');
+  await filter.getByLabel('Search').fill('zzzz-nothing');
+  await filter.getByRole('button', { name: 'Show' }).click();
+  await expect(page.getByText('Nothing matches.')).toBeVisible();
+  expect(problems).toEqual([]);
+});

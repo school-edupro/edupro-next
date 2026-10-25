@@ -127,9 +127,43 @@ export interface PortalApplication {
   cancelReason: string | null;
 }
 
+/** One item of the family's Messages (docs/design/44): a notice, or a message with its copies. */
+export type InboxItem =
+  | {
+      kind: 'notice';
+      id: string;
+      group: 'notice';
+      title: string;
+      body: string;
+      bodyFormat: string;
+      publishFrom: string;
+      files: Array<{ id: string; name: string | null }>;
+      read: boolean;
+    }
+  | {
+      kind: 'message';
+      id: string;
+      group: 'school' | 'automatic';
+      origin: string;
+      code: string | null;
+      channels: string[];
+      channel: string;
+      subject: string | null;
+      body: string;
+      format: string;
+      at: string;
+      read: boolean;
+      registration: { id: string; candidate: string | null; className: string } | null;
+      link: { to: string; action: string } | null;
+    };
+
 export interface PortalInbox {
   /** notices and messages not opened yet (docs/design/42, part 4) */
   unread?: number;
+  /** unread per tab, for the child chosen (docs/design/44) */
+  counts?: { all: number; school: number; automatic: number; notice: number };
+  registrations?: Array<{ id: string; candidate: string | null; className: string }>;
+  items?: InboxItem[];
   notices: Array<{
     id: string;
     kind: string;

@@ -11412,6 +11412,68 @@ a.ep-pub-foot__item {
   text-align: center;
   color: var(--text-body);
 }
+/* Messages by who sent them (docs/design/44, part 2): tabs, filters, what each is and how it came */
+.ep-adm-msgtabs {
+  display: flex;
+  gap: var(--sp-1);
+  overflow-x: auto;
+  border-bottom: 1px solid var(--border-default);
+  margin: 0 0 var(--sp-3);
+}
+.ep-adm-msgtabs__tab {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  white-space: nowrap;
+  padding: var(--sp-2) var(--sp-3);
+  color: var(--text-body);
+  text-decoration: none;
+  border-bottom: 3px solid transparent;
+}
+.ep-adm-msgtabs__tab[aria-current='page'] {
+  color: var(--text-heading);
+  font-weight: var(--fw-semibold);
+  border-bottom-color: var(--action-accent);
+}
+.ep-adm-msgtabs__n {
+  min-width: 1.4rem;
+  padding: 0 var(--sp-1);
+  border-radius: var(--radius-pill);
+  background: var(--status-danger);
+  color: var(--text-inverse);
+  font-size: var(--fs-caption);
+  text-align: center;
+}
+.ep-adm-msgfilter {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: var(--sp-3);
+  margin: 0 0 var(--sp-3);
+}
+.ep-adm-msgfilter .ep-field {
+  min-width: min(100%, 14rem);
+}
+.ep-adm-msgtags {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: var(--sp-1);
+  margin-left: var(--sp-2);
+}
+.ep-adm-msgtag {
+  padding: 0 var(--sp-2);
+  border-radius: var(--radius-pill);
+  background: var(--surface-subtle);
+  color: var(--text-body);
+  font-size: var(--fs-caption);
+}
+.ep-adm-msgtag[data-group='school'] {
+  background: var(--status-info-bg);
+  color: var(--status-info-text);
+}
+.ep-adm-msgact {
+  margin: var(--sp-2) 0 0;
+}
 /* fee categories the form cannot decide (docs/design/43, part 5) */
 .ep-catgaps {
   display: block;

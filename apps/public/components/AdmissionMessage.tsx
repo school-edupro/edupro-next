@@ -15,6 +15,7 @@ export function AdmissionMessage({
   unread: initial,
   unreadLabel,
   open: openAtStart = false,
+  tags,
   children,
 }: {
   kind: 'notice' | 'message';
@@ -26,6 +27,8 @@ export function AdmissionMessage({
   unreadLabel: string;
   /** opened from a link to it (Home's latest messages) */
   open?: boolean;
+  /** what it is and how it came: "Answer to your question", "Email · SMS" (docs/design/44) */
+  tags?: ReactNode;
   children: ReactNode;
 }) {
   const [unread, setUnread] = useState(initial);
@@ -47,7 +50,10 @@ export function AdmissionMessage({
           {unread ? <span className="fp-msg__dot" role="img" aria-label={unreadLabel} /> : null}
           {title}
         </span>
-        <span className="fp-msg__meta">{meta}</span>
+        <span className="fp-msg__meta">
+          {meta}
+          {tags ? <span className="ep-adm-msgtags">{tags}</span> : null}
+        </span>
         <span className="fp-msg__preview">{preview}</span>
       </summary>
       <div className="fp-msg__body">{children}</div>

@@ -56,7 +56,7 @@ question, the admit card); messages sent before 0249 are placed from their templ
 school, `admission_*` → automatic) and the registration found from the address and the time. Filters
 `group`, `applicationId`, `q`; unread counts per group; mark all read per group.
 
-**Part 2 — The Messages page (portal).** Tabs All · From the school · Automatic updates · Notices with
+**Part 2 — The Messages page (portal; built 25 Oct 2026).** Tabs All · From the school · Automatic updates · Notices with
 their unread counts; a channel badge row on every item ("Email · SMS · WhatsApp"); "Answer to your
 question" / "Reply to your enquiry" marks with a link; each automatic update shows the child and class
 and a button to the place to act (Pay, Admit card, Correct the form, Open the question); a child filter
