@@ -1,3 +1,4 @@
+import { messageTag } from './message-tag';
 import { Injectable } from '@nestjs/common';
 import {
   LAYOUT_TYPES,
@@ -677,6 +678,7 @@ export class AdmissionProcessService {
         a.contact_mobile,
         a.contact_email,
         JSON.stringify({
+          ...messageTag('status', { applicationId: a.id }),
           name: a.candidate_name ?? '',
           number: a.application_no ?? '',
           class: a.class_name,

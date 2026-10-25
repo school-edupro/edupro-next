@@ -1,3 +1,4 @@
+import { messageTag } from '../admissions/message-tag';
 import { templateStatus } from './template-status';
 import { Injectable } from '@nestjs/common';
 import ExcelJS from 'exceljs';
@@ -1081,6 +1082,7 @@ export class HelpdeskService {
         x.mobile,
         x.email,
         JSON.stringify({
+          ...messageTag('answer', { applicationId: t.registration?.id, queryId: t.id }),
           subject: `${title}: ${t.subject}`.slice(0, 200),
           message: `${title}. Open the admission portal, Help → My queries, to read it.`,
           name: t.registration?.candidate ?? '',

@@ -45,10 +45,10 @@ registrations; search covers subject and text; a notice for every candidate show
 
 ## Parts
 
-**Part 1 — What each message is (API, migration 0249).** `app.admission_notify` (and
-`app.admission_mail`) take an optional `p_meta JSONB` kept in `comms_messages.variables`:
-`{ "origin": "status" | "answer" | "enquiry_reply", "applicationId", "queryId", "code" }`. Every caller
-passes it: the status emails their registration and code, the helpdesk answer its query and
+**Part 1 — What each message is (API; built 25 Oct 2026, no migration needed).** As built: the variables every admission
+message already keeps carry the tag (`_origin` status / answer / enquiry_reply / enquiry_invite /
+enquiry_ack, `_app`, `_query`, `_nid` shared by the email and SMS copies), so no function changed and no
+migration was needed. Every caller passes it: the status emails their registration and code, the helpdesk answer its query and
 registration, the enquiry reply its origin. The family's inbox returns each item with `group`
 (`school` | `automatic` | `notice`), `channels` (every channel the same message went by), `origin`,
 the registration (`id`, candidate, class) and a `link` (the registration's tab to act on, the

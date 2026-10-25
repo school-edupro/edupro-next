@@ -1,3 +1,4 @@
+import { messageTag } from './message-tag';
 import { randomBytes } from 'node:crypto';
 import { Injectable } from '@nestjs/common';
 import type { PoolClient } from '@edupro/db';
@@ -355,6 +356,7 @@ export class AdmissionScheduleService {
               a.contact_mobile,
               a.contact_email,
               JSON.stringify({
+                ...messageTag('status', { applicationId: a.id }),
                 name: a.candidate_name ?? '',
                 number: a.application_no ?? '',
                 stage: s.stage,

@@ -69,8 +69,19 @@ export const PasscodeUseSchema = z.object({ code: z.string().trim().min(8).max(2
 export class PasscodeUseDto extends createZodDto(PasscodeUseSchema) {}
 
 /** Notices / messages the family opened, or all (docs/design/42, part 4). */
+export const InboxGroupSchema = z.enum(['school', 'automatic', 'notice']);
+/** The family's Messages by who sent it, a child, words in it (docs/design/44, part 1). */
+export const InboxQuerySchema = z.object({
+  group: InboxGroupSchema.optional(),
+  applicationId: IdSchema.optional(),
+  q: z.string().trim().max(80).optional(),
+});
+export class InboxQueryDto extends createZodDto(InboxQuerySchema) {}
+
 export const InboxReadSchema = z.object({
   all: z.boolean().optional(),
+  /** with all: only the tab shown */
+  group: InboxGroupSchema.optional(),
   items: z
     .array(z.object({ kind: z.enum(['notice', 'message']), id: IdSchema }))
     .max(200)

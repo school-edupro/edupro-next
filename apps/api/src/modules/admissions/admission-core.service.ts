@@ -1,3 +1,4 @@
+import { messageTag } from './message-tag';
 import { createHash, randomBytes } from 'node:crypto';
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import {
@@ -649,6 +650,7 @@ export class AdmissionCoreService {
         after.contact_mobile,
         after.contact_email,
         JSON.stringify({
+          ...messageTag('status', { applicationId: after.id }),
           name: after.candidate_name ?? '',
           class: after.class_name,
           school: '',
@@ -801,6 +803,7 @@ export class AdmissionCoreService {
         after.contact_mobile,
         after.contact_email,
         JSON.stringify({
+          ...messageTag('status', { applicationId: after.id }),
           name: after.candidate_name ?? '',
           class: after.class_name,
           school: '',

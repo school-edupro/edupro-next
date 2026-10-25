@@ -2066,6 +2066,70 @@ describe('online admission (e2e)', () => {
     });
   });
 
+  describe('docs/design/44, part 1: Messages by who sent them', () => {
+    it("groups the family's messages, links each to its registration or question, and filters", async () => {
+      const box = (q = '') =>
+        inject({ method: 'GET', url: `/public/admission/me/inbox${q}`, headers: pub(tokenA) }).then(
+          (r) => {
+            expect(r.statusCode).toBe(200);
+            return r.json() as {
+              counts: Record<string, number>;
+              registrations: Array<{ id: string }>;
+              items: Array<{
+                kind: string;
+                id: string;
+                group: string;
+                origin?: string;
+                code?: string | null;
+                channels?: string[];
+                subject?: string | null;
+                title?: string;
+                registration?: { id: string } | null;
+                link?: { to: string; action: string } | null;
+              }>;
+            };
+          },
+        );
+      const all = await box();
+      const groups = new Set(all.items.map((x) => x.group));
+      expect([...groups]).toEqual(expect.arrayContaining(['school', 'automatic', 'notice']));
+      // Compose: from the school
+      const compose = all.items.find((x) => x.subject === 'Orientation for ASHA VERMA')!;
+      expect(compose).toMatchObject({ group: 'school', origin: 'compose', channels: ['email'] });
+      // the answer to Ask the school: from the school, with its question
+      const answer = all.items.find((x) => x.origin === 'answer')!;
+      expect(answer.group).toBe('school');
+      expect(answer.link?.action).toBe('question');
+      expect(answer.registration?.id).toBe(appA);
+      // the offer: an automatic update about Asha's registration, sending the family to pay
+      const offer = all.items.find((x) => x.code === 'admission_offer')!;
+      expect(offer).toMatchObject({ group: 'automatic', registration: { id: appA } });
+      expect(offer.link).toMatchObject({ action: 'pay', to: `application/${appA}?tab=payments` });
+      // filters: one tab, one child, words
+      const auto = await box('?group=automatic');
+      expect(auto.items.every((x) => x.group === 'automatic')).toBe(true);
+      expect(auto.items.length).toBeGreaterThan(0);
+      const child = await box(`?applicationId=${appA}`);
+      expect(child.items.every((x) => x.kind === 'notice' || x.registration?.id === appA)).toBe(
+        true,
+      );
+      const words = await box('?q=orientation');
+      expect(words.items.map((x) => x.subject)).toContain('Orientation for ASHA VERMA');
+      // mark the automatic tab read: the other tabs keep their unread
+      const before = await box();
+      const mark = await inject({
+        method: 'POST',
+        url: '/public/admission/me/inbox/read',
+        headers: pub(tokenA),
+        json: { all: true, group: 'automatic' },
+      });
+      expect(mark.statusCode).toBe(201);
+      const after = await box();
+      expect(after.counts.automatic).toBe(0);
+      expect(after.counts.school).toBe(before.counts.school);
+    });
+  });
+
   describe('part 6: admission fee, Admit and cancellation', () => {
     let sectionA: string;
     let sectionB: string;

@@ -17,6 +17,31 @@ import type { AdmissionCandidate } from './candidate-signin.service';
 import { candidateNoticeMatch } from '../../academics/daily/notice-candidates';
 
 const IMAGE = /^image\/(png|jpeg|webp)$/;
+
+type InboxGroup = 'school' | 'automatic' | 'notice';
+
+/** Where an admission message sends the family to act (docs/design/44, part 1). */
+function linkOf(
+  code: string | null,
+  origin: string,
+  appId: string | null,
+  queryId: string | null,
+): { to: string; action: string } | null {
+  if (origin === 'answer' && queryId) return { to: `queries/${queryId}`, action: 'question' };
+  if (!appId) return code === 'admission_passcode' ? { to: 'apply', action: 'apply' } : null;
+  switch (code) {
+    case 'admission_received':
+    case 'admission_offer':
+      return { to: `application/${appId}?tab=payments`, action: 'pay' };
+    case 'admission_correction':
+      return { to: `application/${appId}?tab=form`, action: 'correct' };
+    case 'admission_schedule':
+      return { to: `/api/admission/admit/${appId}`, action: 'admit_card' };
+    default:
+      return { to: `application/${appId}`, action: 'open' };
+  }
+}
+
 const IMAGE_OR_PDF = /^(application\/pdf|image\/(png|jpeg|webp))$/;
 const MASKED = /^X{4}-X{4}-\w{4}$/;
 
@@ -756,7 +781,10 @@ export class CandidatePortalService {
    * from Compose (one per message, the email when several channels went), the automatic admission emails,
    * and the notices for candidates.
    */
-  async inbox(cand: AdmissionCandidate) {
+  async inbox(
+    cand: AdmissionCandidate,
+    f: { group?: InboxGroup; applicationId?: string; q?: string } = {},
+  ) {
     return this.db.tenant(this.t(cand), async (c) => {
       const notices = await c.query<{
         id: string;
@@ -774,6 +802,8 @@ export class CandidatePortalService {
            ${this.noticesSql} ORDER BY n.is_pinned DESC, n.publish_from DESC, n.id DESC LIMIT 50`,
         [cand.id],
       );
+      // what the school wrote to the family (Compose), and the admission's own messages to its email
+      // and mobile — every channel, so a message sent by email and SMS can show as one item
       const messages = await c.query<{
         id: string;
         request_id: string | null;
@@ -782,66 +812,139 @@ export class CandidatePortalService {
         body: string;
         format: string;
         created_at: Date;
+        code: string | null;
+        vars: Record<string, string> | null;
       }>(
         `WITH fam AS (SELECT id FROM applications WHERE applicant_id = $1),
               addr AS (SELECT lower(email::text) AS a FROM applicants WHERE id = $1 AND email IS NOT NULL
-                       UNION SELECT lower(contact_email) FROM applications WHERE applicant_id = $1 AND contact_email IS NOT NULL)
-         SELECT m.id::text, m.message_request_id::text AS request_id, m.channel::text, m.subject, m.body, m.format, m.created_at
-           FROM comms_messages m
+                       UNION SELECT lower(contact_email) FROM applications WHERE applicant_id = $1 AND contact_email IS NOT NULL),
+              mob AS (SELECT right(regexp_replace(mobile, '\D', '', 'g'), 10) AS m FROM applicants WHERE id = $1 AND mobile IS NOT NULL
+                      UNION SELECT right(regexp_replace(contact_mobile, '\D', '', 'g'), 10) FROM applications WHERE applicant_id = $1 AND contact_mobile IS NOT NULL)
+         SELECT m.id::text, m.message_request_id::text AS request_id, m.channel::text, m.subject, m.body, m.format, m.created_at,
+                t.code, m.variables AS vars
+           FROM comms_messages m LEFT JOIN comms_templates t ON t.id = m.template_id
           WHERE m.id IN (SELECT r.message_id FROM message_request_recipients r
                           WHERE r.person_type = 'candidate' AND r.person_id IN (SELECT id FROM fam) AND r.message_id IS NOT NULL)
-             OR (m.channel = 'email' AND lower(m.recipient_address) IN (SELECT a FROM addr)
-                 AND m.template_id IN (SELECT id FROM comms_templates WHERE left(code, 10) = 'admission_' AND code <> 'admission_otp'))
-          ORDER BY m.created_at DESC, m.id DESC LIMIT 200`,
+             OR (m.message_request_id IS NULL AND left(t.code, 10) = 'admission_' AND t.code <> 'admission_otp'
+                 AND ((m.channel = 'email' AND lower(m.recipient_address) IN (SELECT a FROM addr))
+                   OR (m.channel IN ('sms', 'whatsapp') AND right(regexp_replace(m.recipient_address, '\D', '', 'g'), 10) IN (SELECT m FROM mob))))
+          ORDER BY m.created_at DESC, m.id DESC LIMIT 400`,
         [cand.id],
       );
-      // one entry per compose message: the email when it went by email too
-      const byRequest = new Map<string, (typeof messages.rows)[number]>();
-      const out: Array<(typeof messages.rows)[number]> = [];
+      const regs = await c.query<{ id: string; candidate: string | null; class_name: string }>(
+        `SELECT a.id::text, a.candidate_name AS candidate, cl.name AS class_name
+           FROM applications a JOIN classes cl ON cl.id = a.class_id WHERE a.applicant_id = $1 ORDER BY a.created_at`,
+        [cand.id],
+      );
+      const regOf = new Map(regs.rows.map((r) => [r.id, r]));
+      // one item a message: the copies of one Compose message, or of one automatic message (the same
+      // tag, or before tags the same template, moment and child), the email copy shown
+      const groups = new Map<string, Array<(typeof messages.rows)[number]>>();
       for (const m of messages.rows) {
-        if (!m.request_id) {
-          out.push(m);
-          continue;
-        }
-        const had = byRequest.get(m.request_id);
-        if (!had) {
-          byRequest.set(m.request_id, m);
-          out.push(m);
-        } else if (had.channel !== 'email' && m.channel === 'email') {
-          out[out.indexOf(had)] = m;
-          byRequest.set(m.request_id, m);
-        }
+        const v = m.vars ?? {};
+        const key = m.request_id
+          ? `r:${m.request_id}`
+          : `a:${v._nid ?? `${m.code ?? ''}|${m.created_at.toISOString()}|${v.name ?? ''}`}`;
+        groups.set(key, [...(groups.get(key) ?? []), m]);
       }
-      // what the family has opened (docs/design/42, part 4)
       const reads = await c.query<{ kind: string; item_id: string }>(
         `SELECT kind, item_id::text FROM applicant_inbox_reads WHERE applicant_id = $1`,
         [cand.id],
       );
       const read = new Set(reads.rows.map((r) => `${r.kind}:${r.item_id}`));
-      const shown = out.slice(0, 100);
-      const unread =
-        notices.rows.filter((n) => !read.has(`notice:${n.id}`)).length +
-        shown.filter((m) => !read.has(`message:${m.id}`)).length;
+      const ORDER = ['email', 'whatsapp', 'sms'];
+      const msgItems = [...groups.values()].slice(0, 150).map((copies) => {
+        const shown = [...copies].sort(
+          (a, b) => ORDER.indexOf(a.channel) - ORDER.indexOf(b.channel),
+        )[0]!;
+        const v = shown.vars ?? {};
+        const origin =
+          v._origin ??
+          (shown.request_id
+            ? 'compose'
+            : shown.code === 'admission_message' &&
+                !/^We have your enquiry/i.test(shown.subject ?? '')
+              ? 'answer'
+              : 'status');
+        const group: InboxGroup =
+          shown.request_id || ['answer', 'enquiry_reply', 'enquiry_invite'].includes(origin)
+            ? 'school'
+            : 'automatic';
+        // its registration: the tag, else the family's only one, else the child named in it
+        const reg =
+          (v._app && regOf.get(v._app)) ||
+          (regs.rows.length === 1 ? regs.rows[0] : undefined) ||
+          regs.rows.find(
+            (r) => r.candidate && v.name && r.candidate.toLowerCase() === v.name.toLowerCase(),
+          );
+        return {
+          kind: 'message' as const,
+          id: shown.id,
+          group,
+          origin,
+          code: shown.code,
+          channels: ORDER.filter((ch) => copies.some((x) => x.channel === ch)),
+          channel: shown.channel,
+          subject: shown.subject,
+          body: shown.body,
+          format: shown.format,
+          at: shown.created_at.toISOString(),
+          read: read.has(`message:${shown.id}`),
+          registration: reg
+            ? { id: reg.id, candidate: reg.candidate, className: reg.class_name }
+            : null,
+          link: linkOf(shown.code, origin, reg?.id ?? null, v._query ?? null),
+        };
+      });
+      const noticeItems = notices.rows.map((n) => ({
+        kind: 'notice' as const,
+        id: n.id,
+        group: 'notice' as InboxGroup,
+        title: n.title,
+        body: n.body,
+        bodyFormat: n.body_format,
+        publishFrom: n.publish_from,
+        files: n.files,
+        read: read.has(`notice:${n.id}`),
+      }));
+      // the child chosen: its messages, and every notice (a notice is for the family)
+      const forChild = <T extends { kind: string; registration?: { id: string } | null }>(x: T) =>
+        !f.applicationId || x.kind === 'notice' || x.registration?.id === f.applicationId;
+      const plain = (s: string) => s.replace(/<[^>]+>/g, ' ').toLowerCase();
+      const words = f.q?.toLowerCase();
+      const matches = (x: (typeof msgItems)[number] | (typeof noticeItems)[number]) =>
+        !words || plain(`${'title' in x ? x.title : (x.subject ?? '')} ${x.body}`).includes(words);
+      const child = [...msgItems, ...noticeItems].filter(forChild);
+      const counts = {
+        all: child.filter((x) => !x.read).length,
+        school: child.filter((x) => x.group === 'school' && !x.read).length,
+        automatic: child.filter((x) => x.group === 'automatic' && !x.read).length,
+        notice: child.filter((x) => x.group === 'notice' && !x.read).length,
+      };
+      const at = (x: (typeof child)[number]) => ('at' in x ? x.at : x.publishFrom);
+      const items = child
+        .filter((x) => (!f.group || x.group === f.group) && matches(x))
+        .sort((a, b) => at(b).localeCompare(at(a)))
+        .slice(0, 100);
       return {
-        unread,
-        notices: notices.rows.map((n) => ({
-          id: n.id,
-          kind: n.kind,
-          title: n.title,
-          body: n.body,
-          bodyFormat: n.body_format,
-          publishFrom: n.publish_from,
-          files: n.files,
-          read: read.has(`notice:${n.id}`),
+        unread: msgItems.filter((x) => !x.read).length + noticeItems.filter((x) => !x.read).length,
+        counts,
+        registrations: regs.rows.map((r) => ({
+          id: r.id,
+          candidate: r.candidate,
+          className: r.class_name,
         })),
-        messages: shown.map((m) => ({
+        items,
+        // as before (Home's latest messages)
+        notices: noticeItems.map(({ kind: _k, group: _g, ...n }) => n),
+        messages: msgItems.slice(0, 100).map((m) => ({
           id: m.id,
           channel: m.channel,
           subject: m.subject,
           body: m.body,
           format: m.format,
-          at: m.created_at.toISOString(),
-          read: read.has(`message:${m.id}`),
+          at: m.at,
+          read: m.read,
         })),
       };
     });
@@ -849,11 +952,12 @@ export class CandidatePortalService {
 
   /**
    * Marks the family's notices / messages read (docs/design/42, part 4): the ones given, or all that the
-   * inbox shows now. Only items of the family's own inbox are kept.
+   * inbox shows now (of one tab, when given). Only items of the family's own inbox are kept.
    */
   async markRead(
     cand: AdmissionCandidate,
     items: Array<{ kind: 'notice' | 'message'; id: string }> | 'all',
+    group?: InboxGroup,
   ) {
     const inbox = await this.inbox(cand);
     const mine = new Set([
@@ -862,8 +966,11 @@ export class CandidatePortalService {
     ]);
     const list =
       items === 'all'
-        ? [...mine].map((k) => ({ kind: k.split(':')[0]!, id: k.split(':')[1]! }))
+        ? inbox.items
+            .filter((x) => !group || x.group === group)
+            .map((x) => ({ kind: x.kind, id: x.id }))
         : items.filter((x) => mine.has(`${x.kind}:${x.id}`));
+    const before = new Set(inbox.items.filter((x) => x.read).map((x) => `${x.kind}:${x.id}`));
     await this.db.tenant(this.t(cand), async (c) => {
       for (const x of list)
         await c.query(
@@ -875,13 +982,7 @@ export class CandidatePortalService {
     return {
       marked: list.length,
       unread: Math.max(
-        inbox.unread -
-          list.filter(
-            (x) =>
-              !(x.kind === 'notice'
-                ? inbox.notices.find((n) => n.id === x.id)?.read
-                : inbox.messages.find((m) => m.id === x.id)?.read),
-          ).length,
+        inbox.unread - list.filter((x) => !before.has(`${x.kind}:${x.id}`)).length,
         0,
       ),
     };

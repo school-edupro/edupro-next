@@ -1,3 +1,4 @@
+import { messageTag } from './message-tag';
 import { Injectable } from '@nestjs/common';
 import {
   fieldState,
@@ -159,6 +160,7 @@ export class AdmissionAdmitService {
         after.contact_mobile,
         after.contact_email,
         JSON.stringify({
+          ...messageTag('status', { applicationId: after.id }),
           name: after.candidate_name ?? '',
           number: no,
           class: after.class_name,
@@ -584,6 +586,7 @@ export class AdmissionAdmitService {
       a.contact_mobile,
       a.contact_email,
       JSON.stringify({
+        ...messageTag('status', { applicationId: a.id }),
         name: a.candidate_name ?? '',
         number: a.admission_no ?? '',
         class: `${a.class_name} ${sec.rows[0].name}`,
@@ -767,6 +770,7 @@ export class AdmissionAdmitService {
           a.contact_mobile,
           a.contact_email,
           JSON.stringify({
+            ...messageTag('status', { applicationId: a.id }),
             name: a.candidate_name ?? '',
             number: a.application_no ?? '',
             class: a.class_name,

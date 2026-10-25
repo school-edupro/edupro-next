@@ -1,3 +1,4 @@
+import { messageTag } from './message-tag';
 import { randomBytes } from 'node:crypto';
 import { Inject, Injectable } from '@nestjs/common';
 import type { PoolClient } from '@edupro/db';
@@ -549,6 +550,7 @@ export class AdmissionEnquiryService {
           mobile,
           email,
           JSON.stringify({
+            ...messageTag('enquiry_reply', { applicationId: e.application_id }),
             subject: `Your enquiry ${enquiryNo(id)} at ${school.rows[0]!.name}`,
             message: dto.message,
             name: e.child_name ?? '',
@@ -625,6 +627,7 @@ export class AdmissionEnquiryService {
           e.mobile,
           e.email,
           JSON.stringify({
+            ...messageTag('enquiry_invite'),
             subject: `Register for admission at ${cyc.rows[0].school}`,
             message,
             name: e.child_name ?? '',
@@ -708,6 +711,7 @@ export class AdmissionEnquiryService {
               : null,
             desk.channels.includes('email') ? (dto.email?.toLowerCase() ?? null) : null,
             JSON.stringify({
+              ...messageTag('enquiry_ack'),
               subject: `We have your enquiry ${enquiryNo(id)}`,
               message,
               name: dto.childName ?? '',
