@@ -11052,6 +11052,77 @@ a.ep-pub-foot__item {
   flex-wrap: wrap;
   gap: var(--sp-2);
 }
+/* the admission portal's pages: My registrations, Apply, the registration's tabs (docs/design/42, part 3) */
+.ep-adm-pagehead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--sp-2) var(--sp-4);
+  margin-bottom: var(--sp-4);
+}
+.ep-adm-pagehead .ep-kicker {
+  flex-basis: 100%;
+  margin: 0;
+}
+.ep-adm-pagehead .ep-page-title {
+  margin: 0;
+  margin-right: auto;
+}
+.ep-adm-regs {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 20rem), 1fr));
+  gap: var(--sp-4);
+}
+.ep-adm-reg {
+  display: grid;
+  gap: var(--sp-3);
+  align-content: start;
+  padding: var(--sp-5);
+}
+.ep-adm-reg__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-2);
+}
+.ep-adm-reg__head h2 {
+  margin: 0;
+  font-size: var(--fs-h4);
+}
+.ep-adm-reg__bar {
+  display: inline-block;
+  width: 6rem;
+  height: 0.4rem;
+  margin-right: var(--sp-2);
+  border-radius: var(--radius-pill);
+  background: var(--surface-subtle);
+  vertical-align: middle;
+  overflow: hidden;
+}
+.ep-adm-reg__bar > span {
+  display: block;
+  height: 100%;
+  background: var(--mob-cyan-600);
+}
+.ep-adm-tabs {
+  margin-bottom: var(--sp-4);
+}
+.ep-adm-tabs .ep-fb__view {
+  text-decoration: none;
+}
+.ep-adm-tabs .ep-fb__view[aria-current='page'] {
+  color: var(--text-heading);
+  font-weight: var(--fw-semibold);
+  border-bottom-color: var(--mob-cyan-600);
+}
+.ep-adm-tabs__due {
+  color: var(--status-warning-text);
+}
+
 /* the admission portal's home per child (docs/design/42, part 2) */
 .ep-adm-home {
   display: grid;

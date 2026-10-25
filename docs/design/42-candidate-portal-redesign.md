@@ -48,7 +48,7 @@ by <date> · admitted: open the parent portal), at-a-glance cards (stage, next d
 the tracker of the class's steps, the latest messages, the session's important dates. A family with no
 registration sees "Apply for a class".
 
-**Part 3 — My registrations, Apply, the registration page.** My registrations: cards per registration
+**Part 3 — My registrations, Apply, the registration page (built 25 Oct 2026).** My registrations: cards per registration
 (drafts first, Continue / Delete), with "Register another child". Apply for a class: the open sessions and
 their classes (Continue the form / Register / Register another child), and the late-entry passcode. The
 registration page in the shell with tabs: Overview (status, tracker, slot and admit card, offer, the

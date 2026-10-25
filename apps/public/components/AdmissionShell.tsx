@@ -6,13 +6,13 @@ import { SidebarToggle } from './SidebarToggle';
 /** The portal's menu; Home, the registrations and help are always there (docs/design/42). */
 const MENU: Array<{ path: string; label: string; icon: IconName }> = [
   { path: '', label: 'Home', icon: 'home' },
-  { path: '#registrations', label: 'My registrations', icon: 'users' },
-  { path: '#apply', label: 'Apply for a class', icon: 'userPlus' },
+  { path: '/registrations', label: 'My registrations', icon: 'users' },
+  { path: '/apply', label: 'Apply for a class', icon: 'userPlus' },
   { path: '#messages', label: 'Messages', icon: 'message' },
   { path: '/enquire', label: 'Help', icon: 'help' },
 ];
 /** Phone tab bar: the screens a family opens most. */
-const TABS = MENU.filter((m) => m.path !== '#registrations');
+const TABS = MENU.filter((m) => m.path !== '/registrations');
 
 /**
  * The candidate portal's frame after sign-in, laid out like the parent portal (docs/design/42): a navy

@@ -218,6 +218,13 @@ for (const width of [1280, 375]) {
       page.getByRole('navigation', { name: width > 800 ? 'Main menu' : 'Quick menu' }),
     ).toBeVisible();
     await check('signed in');
+    // part 3: the family's own pages
+    await page.goto(`${BASE}/alpha/admission/registrations`);
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText('My registrations');
+    await check('my registrations');
+    await page.goto(`${BASE}/alpha/admission/apply`);
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText('Apply for a class');
+    await check('apply');
     expect(problems).toEqual([]);
   });
 }

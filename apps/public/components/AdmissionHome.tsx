@@ -44,7 +44,7 @@ function nextStep(
     return {
       tone: 'warning',
       text: `${w('Registrations for this class are closed')}${r.locked.closedOn ? ` (${r.locked.closedOn})` : ''}. ${w('If the school gave you a passcode, enter it under Apply for a class.')}`,
-      href: `${base}#apply`,
+      href: `${base}/apply`,
       cta: w('Enter a passcode'),
     };
   if (r.status === 'draft')
@@ -200,7 +200,7 @@ export function AdmissionHome({
       {!r ? (
         <div className="ep-card ep-adm-empty">
           <p>{w('No registration yet. Choose a class to start one.')}</p>
-          <a className="ep-btn ep-btn--primary" href={`${base}#apply`}>
+          <a className="ep-btn ep-btn--primary" href={`${base}/apply`}>
             {w('Apply for a class')}
           </a>
         </div>

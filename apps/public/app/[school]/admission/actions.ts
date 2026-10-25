@@ -44,7 +44,7 @@ export async function startRegistration(fd: FormData) {
       error instanceof PublicApiError
         ? (error.problem.detail ?? error.problem.type)
         : 'Could not start';
-    redirect(`/${school}/admission?error=${encodeURIComponent(String(msg).slice(0, 160))}`);
+    redirect(`/${school}/admission/apply?error=${encodeURIComponent(String(msg).slice(0, 160))}`);
   }
   redirect(`/${school}/admission/application/${out.id}${out.resumed ? '?resumed=1' : ''}`);
 }
@@ -99,7 +99,7 @@ export async function withdrawRegistration(fd: FormData) {
     method: 'DELETE',
     body: JSON.stringify({}),
   }).catch(() => undefined);
-  redirect(`/${school}/admission`);
+  redirect(`/${school}/admission/registrations`);
 }
 
 /**
@@ -125,7 +125,7 @@ export async function usePasscode(fd: FormData) {
       error instanceof PublicApiError
         ? (error.problem.detail ?? error.problem.type)
         : 'Could not use the passcode';
-    redirect(`/${school}/admission?error=${encodeURIComponent(String(msg).slice(0, 200))}`);
+    redirect(`/${school}/admission/apply?error=${encodeURIComponent(String(msg).slice(0, 200))}`);
   }
   redirect(`/${school}/admission/application/${out.id}`);
 }
