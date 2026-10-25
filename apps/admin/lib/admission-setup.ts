@@ -23,6 +23,21 @@ export interface FeeCategory {
 export interface AdmissionSetup {
   settings: AdmissionSettings;
   categories: FeeCategory[];
+  /** categories the forms of the sessions not closed cannot decide (docs/design/43, part 5) */
+  categoryGaps?: CategoryGap[];
+}
+/** A fee category a session's form cannot decide: the questions it needs are not on the form. */
+export interface CategoryGap {
+  cycleId: string;
+  cycleName: string;
+  categoryId: string;
+  categoryName: string;
+  formId: string;
+  formName: string;
+  classes: string[];
+  missing: string[];
+  /** no family on the form can ever fall in it */
+  never: boolean;
 }
 export interface SessionClass {
   classId: string;
@@ -63,6 +78,7 @@ export interface SessionPlan {
     seats: number | null;
   }>;
   categories: FeeCategory[];
+  categoryGaps?: CategoryGap[];
   allClasses: Array<{ id: string; name: string }>;
   forms: Array<{ id: string; name: string }>;
 }

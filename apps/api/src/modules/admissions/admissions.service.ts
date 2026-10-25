@@ -1,3 +1,4 @@
+import { categoryGaps } from './category-gaps';
 import { Injectable } from '@nestjs/common';
 import {
   DEFAULT_ADMISSION_FORM,
@@ -385,6 +386,20 @@ export class AdmissionsService {
       if (dto.formSchema !== undefined)
         set('form_schema', JSON.stringify(dto.formSchema), '::jsonb');
       if (dto.status !== undefined) set('status', dto.status, '::admission_cycle_status');
+      // opening with a fee category its forms cannot decide: only when the office has seen and accepted it
+      if (dto.status === 'open' && before.status !== 'open' && !dto.confirmCategoryGaps) {
+        const never = (await categoryGaps(c, [id])).filter((g) => g.never);
+        if (never.length)
+          throw new DomainError(
+            'admissions.category_gaps',
+            `${[...new Set(never.map((g) => g.categoryName))].join(', ')}: the form does not ask ${[
+              ...new Set(never.flatMap((g) => g.missing)),
+            ].join(
+              ', ',
+            )}, so these families would pay the default fee. Add the questions to the form, or open anyway.`,
+            { status: 409, extra: { gaps: never } },
+          );
+      }
       params.push(id);
       await c.query(
         // eslint-disable-next-line no-restricted-syntax -- sets holds fixed column assignments; values are bound parameters

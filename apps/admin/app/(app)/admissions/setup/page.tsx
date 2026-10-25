@@ -1,6 +1,7 @@
 import { PageHeader } from '@edupro/ui';
 import { notFound } from 'next/navigation';
 import { AdmissionSetupEditor } from '@/components/admissions/AdmissionSetupEditor';
+import { CategoryGapsNote } from '@/components/admissions/CategoryGapsNote';
 import { EnquiryDeskEditor } from '@/components/admissions/EnquiryDeskEditor';
 import { EnquirySourcesEditor } from '@/components/admissions/EnquirySourcesEditor';
 import { ProcessEditor } from '@/components/admissions/ProcessEditor';
@@ -71,6 +72,7 @@ export default async function AdmissionSetupPage({
         description="How candidates sign in, the receipt series of registration and admission fees, the fee categories decided from the form's answers, and the stages and approval process each class follows."
       />
       <Notice params={sp} />
+      <CategoryGapsNote gaps={setup.categoryGaps ?? []} withSession />
       <AdmissionSetupEditor
         setup={setup}
         formFields={[...fields.entries()].map(([key, label]) => ({ key, label }))}

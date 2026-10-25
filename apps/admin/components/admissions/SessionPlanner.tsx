@@ -10,6 +10,7 @@ import {
   saveSessionRefund,
 } from '@/lib/admission-setup-actions';
 import type { LatePasscode, SessionClass, SessionPlan, SessionPoints } from '@/lib/admission-setup';
+import { CategoryGapsNote } from './CategoryGapsNote';
 
 type Line = Omit<SessionClass, 'className' | 'formName' | 'applications' | 'registered'> & {
   applications: number;
@@ -357,6 +358,7 @@ export function SessionPlanner({
 
       {tab === 'fees' ? (
         <section aria-label="Fee table">
+          <CategoryGapsNote gaps={plan.categoryGaps ?? []} />
           <p className="ep-field__help">
             The registration fee is paid with the form, the admission fee after the offer; 0 means
             no fee. A family&rsquo;s category comes from the form&rsquo;s answers and is confirmed

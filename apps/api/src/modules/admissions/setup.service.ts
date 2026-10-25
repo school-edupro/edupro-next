@@ -1,3 +1,4 @@
+import { categoryGaps } from './category-gaps';
 import { Injectable } from '@nestjs/common';
 import type { AdmissionCondition, PoolClient } from '@edupro/db';
 import { AuditService } from '../../common/audit/audit.service';
@@ -181,6 +182,8 @@ export class AdmissionSetupService {
     return this.db.tenant(requireTenant(ctx), async (c) => ({
       settings: await this.settingsWith(c),
       categories: await this.categoriesWith(c),
+      // fee categories the forms of the sessions not closed cannot decide (docs/design/43, part 5)
+      categoryGaps: await categoryGaps(c),
     }));
   }
 
@@ -363,6 +366,7 @@ export class AdmissionSetupService {
           seats: x.seats,
         })),
         categories: await this.categoriesWith(c),
+        categoryGaps: await categoryGaps(c, [id]),
         allClasses: classes.rows,
         forms: forms.rows,
       };

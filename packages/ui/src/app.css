@@ -11412,6 +11412,23 @@ a.ep-pub-foot__item {
   text-align: center;
   color: var(--text-body);
 }
+/* fee categories the form cannot decide (docs/design/43, part 5) */
+.ep-catgaps {
+  display: block;
+  margin: 0 0 var(--sp-3);
+}
+.ep-catgaps > .ep-field__help {
+  display: block;
+}
+.ep-catgaps ul {
+  margin: var(--sp-2) 0;
+  padding-left: var(--sp-5);
+}
+.ep-catgaps__open,
+.ep-catgaps__confirm {
+  display: grid;
+  gap: var(--sp-3);
+}
 /* questions to the school (docs/design/43, part 4): the ask form, the conversation, the rating */
 .ep-adm-ask__form {
   display: grid;

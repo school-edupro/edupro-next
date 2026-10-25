@@ -305,6 +305,93 @@ describe('online admission (e2e)', () => {
       expect(twoDefaults.statusCode).toBe(400);
     });
 
+    // docs/design/43, part 5: a category whose question the form does not ask is flagged, and opening asks
+    it('flags a fee category the form cannot decide, and opens only when that is confirmed', async () => {
+      const setup = (
+        await inject({ method: 'GET', url: '/admissions/setup', headers: h() })
+      ).json();
+      const original = setup.categories as Array<Record<string, unknown>>;
+      const pointNowhere = original.map((c) =>
+        c.code === 'ews'
+          ? { ...c, conditions: [{ field: 'no_such_question', op: 'eq', value: 'Yes' }] }
+          : c,
+      );
+      const save = (categories: Array<Record<string, unknown>>) =>
+        inject({
+          method: 'PUT',
+          url: '/admissions/setup/categories',
+          headers: h(),
+          json: { categories },
+        });
+      expect((await save(pointNowhere)).statusCode).toBe(200);
+      try {
+        const cyc = await inject({
+          method: 'POST',
+          url: '/admissions/cycles',
+          headers: h(),
+          json: {
+            academicYearId: school.yearId,
+            code: 'ADM-GAP',
+            name: 'Gap check',
+            opensAt: new Date(Date.now() - 86400000).toISOString(),
+            closesAt: new Date(Date.now() + 30 * 86400000).toISOString(),
+          },
+        });
+        expect(cyc.statusCode).toBe(201);
+        const gapCycle = cyc.json().id as string;
+        await inject({
+          method: 'PUT',
+          url: `/admissions/cycles/${gapCycle}/classes`,
+          headers: h(),
+          json: { classes: [{ classId: classIx, formId: formIx, seats: 5, status: 'open' }] },
+        });
+        const plan = (
+          await inject({ method: 'GET', url: `/admissions/cycles/${gapCycle}/plan`, headers: h() })
+        ).json();
+        const gap = (
+          plan.categoryGaps as Array<{
+            categoryName: string;
+            missing: string[];
+            never: boolean;
+            classes: string[];
+          }>
+        ).find((g) => g.missing.includes('no_such_question'))!;
+        expect(gap).toMatchObject({ categoryName: 'EWS / DG', never: true, classes: ['Class IX'] });
+        const listed = (
+          await inject({ method: 'GET', url: '/admissions/setup', headers: h() })
+        ).json();
+        expect(
+          (listed.categoryGaps as Array<{ cycleId: string }>).some((g) => g.cycleId === gapCycle),
+        ).toBe(true);
+        const refused = await inject({
+          method: 'PATCH',
+          url: `/admissions/cycles/${gapCycle}`,
+          headers: h(),
+          json: { status: 'open' },
+        });
+        expect(refused.statusCode).toBe(409);
+        expect(refused.json().type).toMatch(/category_gaps/);
+        expect(refused.json().detail).toMatch(/EWS \/ DG: the form does not ask no_such_question/);
+        const opened = await inject({
+          method: 'PATCH',
+          url: `/admissions/cycles/${gapCycle}`,
+          headers: h(),
+          json: { status: 'open', confirmCategoryGaps: true },
+        });
+        expect(opened.statusCode).toBe(200);
+        expect(opened.json().status).toBe('open');
+        // closed again: the other tests use their own session
+        await inject({
+          method: 'PATCH',
+          url: `/admissions/cycles/${gapCycle}`,
+          headers: h(),
+          json: { status: 'closed' },
+        });
+      } finally {
+        expect((await save(original)).statusCode).toBe(200);
+      }
+    });
+
     it('gives classes their form, seats and window, and a fee per category', async () => {
       const r = await inject({
         method: 'PUT',

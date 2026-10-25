@@ -96,6 +96,8 @@ export const UpdateCycleSchema = z
     criteria: z.array(CriterionSchema).max(30),
     scoreCriteria: z.array(ScoreCriterionSchema).max(30),
     status: z.enum(['draft', 'open', 'closed']),
+    /** open although a fee category cannot be decided by the session's forms (docs/design/43, part 5) */
+    confirmCategoryGaps: z.boolean(),
   })
   .partial()
   .refine((v) => Object.keys(v).length > 0, { message: 'at least one field is required' });

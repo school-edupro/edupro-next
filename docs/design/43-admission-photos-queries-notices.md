@@ -61,7 +61,7 @@ acknowledgement with the enquiry number. The Help page shows "Send an enquiry" o
 reply, reopen within the set days, rate). An answer shows unread in Messages and goes by email. The
 office answers in Helpdesk; the registration page lists its queries.
 
-**Part 5 — Category check.** On the session's Fee tab and in Admission set-up: each category whose
+**Part 5 — Category check (built 25 Oct 2026).** On the session's Fee tab and in Admission set-up: each category whose
 condition names a question missing from a form the session's classes use is flagged ("EWS / DG: the
 form 'IBP registration form 2027-28' has no question `ews` — every family will be charged as General").
 Publishing a session with such a gap asks to confirm. The fix itself (adding the questions) stays with

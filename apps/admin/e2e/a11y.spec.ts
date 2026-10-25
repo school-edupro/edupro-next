@@ -728,6 +728,52 @@ test.describe('accessibility (axe)', () => {
     ).toEqual([]);
   });
 
+  // fee categories the form cannot decide (docs/design/43, part 5): the set-up and the session's Fee tab
+  test('fee category gaps: set-up and the Fee tab', async ({ page }) => {
+    test.setTimeout(120_000);
+    await page.goto('/admissions/setup');
+    await page.waitForLoadState('networkidle');
+    const skip = page.getByRole('button', { name: 'Skip' });
+    if (await skip.isVisible()) await skip.click();
+    const note = page.getByRole('note', { name: 'Fee categories the form cannot decide' });
+    test.skip(!(await note.count()), 'every category is decided by its forms');
+    await expect(note.first()).toBeVisible();
+    await page.goto('/admissions/cycles');
+    await page.waitForLoadState('networkidle');
+    const cycle = await page
+      .locator('a[href^="/admissions/cycles/"]')
+      .evaluateAll((as) =>
+        as
+          .map((a) => a.getAttribute('href') ?? '')
+          .filter((h) => /^\/admissions\/cycles\/\d+$/.test(h)),
+      );
+    let seen = false;
+    for (const c of cycle.slice(0, 6)) {
+      await page.goto(c);
+      await page.waitForLoadState('networkidle');
+      await page.getByRole('tab', { name: 'Fee table' }).click();
+      if (await page.getByRole('note', { name: 'Fee categories the form cannot decide' }).count()) {
+        seen = true;
+        break;
+      }
+    }
+    expect(seen).toBe(true);
+    await page.screenshot({
+      path: `${process.env.SHOT_DIR ?? test.info().outputDir}/fee-gaps.png`,
+      fullPage: true,
+    });
+    const r = await new AxeBuilder({ page })
+      .options({ iframes: false })
+      .setLegacyMode()
+      .withTags(['wcag2a', 'wcag2aa'])
+      .analyze();
+    expect(
+      r.violations
+        .filter((v) => v.impact === 'serious' || v.impact === 'critical')
+        .map((v) => `${v.id}: ${v.nodes.map((n) => n.target.join(' ')).join(' | ')}`),
+    ).toEqual([]);
+  });
+
   // the admission desk of the Helpdesk (docs/design/43, part 4): the families' questions, one opened
   test('helpdesk: admission queries desk and a question', async ({ page }) => {
     test.setTimeout(120_000);

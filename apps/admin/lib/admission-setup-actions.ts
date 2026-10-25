@@ -123,6 +123,7 @@ export async function updateAdmissionSession(fd: FormData) {
     body.closesAt = new Date(str(fd, 'closesAt')).toISOString();
   }
   if (fd.has('status')) body.status = str(fd, 'status');
+  if (fd.get('confirmCategoryGaps') !== null) body.confirmCategoryGaps = true;
   let error = '';
   try {
     if (!okId(id)) throw new Error('Unknown session');

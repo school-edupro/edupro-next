@@ -11,6 +11,7 @@ import {
 } from '@edupro/ui';
 import { getTranslations } from 'next-intl/server';
 import { Notice } from '@/components/Notice';
+import { CategoryGapsNote } from '@/components/admissions/CategoryGapsNote';
 import { SessionPlanner } from '@/components/admissions/SessionPlanner';
 import { drawCycle, requestCycleApprovals, shortlistCycle } from '@/lib/actions';
 import { updateAdmissionSession } from '@/lib/admission-setup-actions';
@@ -43,6 +44,9 @@ export default async function CyclePage({
     : null;
   const canDecide = me.permissions.includes('admissions.application.review');
   const classOptions = cycle.criteria.map((k) => ({ value: k.classId, label: k.classCode }));
+  // a fee category the forms cannot decide: opening asks to confirm it first (docs/design/43, part 5)
+  const neverGaps = (plan.categoryGaps ?? []).filter((g) => g.never);
+  const confirmOpen = cycle.status !== 'open' && neverGaps.length > 0;
   const local = (iso: string) =>
     new Date(new Date(iso).getTime() + 330 * 60_000).toISOString().slice(0, 16);
   return (
@@ -71,7 +75,11 @@ export default async function CyclePage({
             >
               {cycle.status === 'open' ? 'Open' : cycle.status === 'closed' ? 'Closed' : 'Draft'}
             </Badge>
-            {canManage ? (
+            {canManage && confirmOpen ? (
+              <a className="ep-btn ep-btn--sm ep-btn--primary" href="#open-check">
+                Open registrations…
+              </a>
+            ) : canManage ? (
               <form action={updateAdmissionSession}>
                 <input type="hidden" name="id" value={cycle.id} />
                 <input
@@ -99,6 +107,27 @@ export default async function CyclePage({
         }
       />
       <Notice params={sp} />
+      {canManage && confirmOpen ? (
+        <Card title="Before opening registrations" style={{ marginBottom: 'var(--sp-4)' }}>
+          <div id="open-check" className="ep-catgaps__open">
+            <CategoryGapsNote gaps={neverGaps} />
+            <form action={updateAdmissionSession} className="ep-catgaps__confirm">
+              <input type="hidden" name="id" value={cycle.id} />
+              <input type="hidden" name="status" value="open" />
+              <label className="ep-check">
+                <input type="checkbox" name="confirmCategoryGaps" required /> I understand: families
+                in {[...new Set(neverGaps.map((g) => g.categoryName))].join(', ')} will pay the
+                default fee unless the office changes their category at Document check.
+              </label>
+              <div className="ep-form-actions">
+                <button type="submit" className="ep-btn ep-btn--primary">
+                  Open registrations anyway
+                </button>
+              </div>
+            </form>
+          </div>
+        </Card>
+      ) : null}
       <SessionPlanner plan={plan} points={points} passcodes={passcodes} canEdit={canManage} />
       {canManage ? (
         <Card title="Session details" style={{ marginTop: 'var(--sp-5)' }}>
