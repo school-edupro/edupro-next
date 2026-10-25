@@ -4,6 +4,7 @@ import { FileLinks } from '@/components/FileLinks';
 import { Notice as Flash } from '@/components/Notice';
 import { acknowledgeNotice } from '@/lib/actions';
 import { ApiError, apiFetch, getMe } from '@/lib/api';
+import { CANDIDATE_STATUSES } from '@/lib/comms';
 
 interface Notice {
   id: string;
@@ -20,6 +21,8 @@ interface Notice {
   ackRequired?: boolean;
   ackedByMe?: boolean;
   targets: Array<{ type: string; id: string; label: string }>;
+  /** for candidates: the registration statuses it is for (none: every registration) */
+  candidateStatuses?: string[];
   files: Array<{ id: string }>;
 }
 const KIND = { notice: 'Notice', circular: 'Circular', office_order: 'Office order' };
@@ -106,6 +109,14 @@ export default async function NoticeDetailPage({
             {n.targets.length > 60 ? ` and ${String(n.targets.length - 60)} more` : ''}
           </p>
         )}
+        {n.audience === 'candidates' && n.candidateStatuses?.length ? (
+          <p style={{ marginBottom: 0 }}>
+            Status:{' '}
+            {n.candidateStatuses
+              .map((v) => CANDIDATE_STATUSES.find((x) => x.value === v)?.label ?? v)
+              .join(', ')}
+          </p>
+        ) : null}
         {office && n.ackRequired ? (
           <p style={{ marginBottom: 0 }}>
             <a

@@ -180,6 +180,7 @@ export class CompatWritesService {
       ackRequired: false,
       bodyFormat: 'text',
       alsoEmail: false,
+      candidateStatuses: [],
       publish: true,
     } as CreateNoticeDto);
     return { status: true, info: 'Notice published', data: { srno: row.id } };

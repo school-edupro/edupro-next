@@ -1739,6 +1739,64 @@ describe('online admission (e2e)', () => {
       expect(reach.json()).toMatchObject({ students: 0, employees: 0 });
       expect(reach.json().candidates).toBeGreaterThanOrEqual(3);
     });
+
+    it('a notice for candidates by session, class and status (docs/design/43, part 2)', async () => {
+      const mk = (title: string, candidateStatuses: string[]) =>
+        inject({
+          method: 'POST',
+          url: '/academics/notices',
+          headers: h(),
+          json: {
+            title,
+            body: 'Pay the admission fee by Friday.',
+            audience: 'candidates',
+            targets: [
+              { type: 'admission_cycle', id: cycleId },
+              { type: 'admission_class', id: classMini },
+            ],
+            candidateStatuses,
+            publish: true,
+          },
+        });
+      const offered = await mk('Admission fee reminder', ['offered']);
+      expect(offered.statusCode).toBe(201);
+      expect(offered.json().candidateStatuses).toEqual(['offered']);
+      expect((offered.json().targets as Array<{ label: string }>).map((t) => t.label)).toContain(
+        'Candidates: Class Mini',
+      );
+      const waiting = await mk('Waiting list update', ['waitlisted']);
+      expect(waiting.statusCode).toBe(201);
+      const fam = await inject({
+        method: 'GET',
+        url: '/public/admission/me/inbox',
+        headers: pub(tokenA),
+      });
+      const titles = (fam.json().notices as Array<{ title: string }>).map((n) => n.title);
+      // family A's registration is offered a seat: the reminder, not the waiting-list notice
+      expect(titles).toContain('Admission fee reminder');
+      expect(titles).not.toContain('Waiting list update');
+      // a status nobody is in reaches nobody; the offered status reaches family A
+      const count = (statuses: string[]) =>
+        inject({
+          method: 'POST',
+          url: '/academics/notices/reach',
+          headers: h(),
+          json: {
+            audience: 'candidates',
+            targets: [{ type: 'admission_cycle', id: cycleId }],
+            candidateStatuses: statuses,
+          },
+        }).then((r) => r.json().candidates as number);
+      expect(await count(['offered'])).toBeGreaterThanOrEqual(1);
+      expect(await count(['admitted'])).toBe(0);
+      const bad = await inject({
+        method: 'POST',
+        url: '/academics/notices/reach',
+        headers: h(),
+        json: { audience: 'candidates', targets: [], candidateStatuses: ['nonsense'] },
+      });
+      expect(bad.statusCode).toBe(400);
+    });
   });
   describe('part 6: admission fee, Admit and cancellation', () => {
     let sectionA: string;

@@ -7,6 +7,7 @@ export async function noticeReach(input: {
   audience: string;
   targets: Array<{ type: string; id: string }>;
   departments?: string[];
+  candidateStatuses?: string[];
 }): Promise<{ students: number; employees: number; candidates?: number } | null> {
   try {
     return await apiFetch<{ students: number; employees: number; candidates?: number }>(

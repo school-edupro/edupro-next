@@ -21,6 +21,7 @@ import { DAILY } from './daily.permissions';
 import { readSheet, templateSheet } from '../../../common/excel/sheet';
 import { AcademicSettingsService } from './academic-settings.service';
 import { ViewerService, type Viewer } from './viewer.service';
+import { candidateNoticeMatch } from './notice-candidates';
 
 export interface NoticeTarget {
   type: 'class' | 'class_section' | 'student' | 'employee';
@@ -55,6 +56,8 @@ export interface NoticeRow {
   /** Who wrote (uploaded) it. */
   createdBy: string | null;
   targets: NoticeTarget[];
+  /** for candidates: the registration statuses it is for (none: every registration) */
+  candidateStatuses: string[];
   files: AttachedFile[];
   createdAt: string;
 }
@@ -83,11 +86,12 @@ interface Db {
   ack_count: number;
   acked_for: string[] | null;
   acked_by_me: boolean;
+  candidate_statuses: string[] | null;
 }
 
 const SELECT = `SELECT n.id::text, n.kind, n.title, n.body, n.audience, n.publish_from::text, n.publish_until::text, n.is_pinned,
         n.published_at, u.display_name AS published_by, n.created_at,
-        (SELECT cu.display_name FROM users cu WHERE cu.id = n.created_by) AS created_by, n.body_format, n.ack_required, n.publish_at, n.also_email, n.emailed_at, n.emailed_count,
+        (SELECT cu.display_name FROM users cu WHERE cu.id = n.created_by) AS created_by, n.body_format, n.ack_required, n.publish_at, n.also_email, n.emailed_at, n.emailed_count, n.candidate_statuses,
         (SELECT count(*) FROM academic_acks k WHERE k.item_type = 'notice' AND k.item_id = n.id)::int AS ack_count,
         (SELECT array_agg(k.student_id::text) FROM academic_acks k WHERE k.item_type = 'notice' AND k.item_id = n.id AND k.student_id IN (
             SELECT sg.student_id FROM student_guardians sg JOIN guardians g ON g.id = sg.guardian_id WHERE g.user_id = app.current_user_id()
@@ -100,6 +104,7 @@ const SELECT = `SELECT n.id::text, n.kind, n.title, n.body, n.audience, n.publis
                      WHEN 'student' THEN (SELECT s.display_name FROM students s WHERE s.id = t.target_id)
                      WHEN 'employee' THEN (SELECT e.display_name FROM employees e WHERE e.id = t.target_id)
                      WHEN 'admission_class' THEN (SELECT 'Candidates: ' || c.name FROM classes c WHERE c.id = t.target_id)
+                     WHEN 'admission_cycle' THEN (SELECT 'Session: ' || y.name FROM admission_cycles y WHERE y.id = t.target_id)
                    END) ORDER BY t.target_type, t.target_id) FROM notice_targets t WHERE t.notice_id = n.id), '[]'::jsonb) AS targets,
         COALESCE((SELECT jsonb_agg(jsonb_build_object('id', f.id::text, 'name', f.original_name, 'contentType', f.content_type, 'sizeBytes', f.size_bytes) ORDER BY f.id)
                     FROM notice_files nf JOIN files f ON f.id = nf.file_id WHERE nf.notice_id = n.id), '[]'::jsonb) AS files
@@ -121,6 +126,7 @@ const toRow = (r: Db): NoticeRow => ({
   publishedBy: r.published_by,
   createdBy: r.created_by,
   targets: r.targets,
+  candidateStatuses: r.candidate_statuses ?? [],
   files: r.files,
   createdAt: r.created_at.toISOString(),
   bodyFormat: r.body_format,
@@ -385,9 +391,9 @@ export class NoticesService {
       }
       const r = await c.query<{ id: string }>(
         `INSERT INTO notices (school_id, academic_year_id, kind, title, body, audience, publish_from, publish_until, is_pinned, published_at, published_by,
-                              body_format, ack_required, publish_at, also_email, created_by, updated_by)
+                              body_format, ack_required, publish_at, also_email, candidate_statuses, created_by, updated_by)
          VALUES (app.current_school_id(), $1, $2::notice_kind, $3, $4, $5::audience_kind, COALESCE($6::date, CURRENT_DATE), $7::date, $8,
-                 CASE WHEN $9 THEN now() END, CASE WHEN $9 THEN app.current_user_id() END, $10, $11, $12::timestamptz, $13,
+                 CASE WHEN $9 THEN now() END, CASE WHEN $9 THEN app.current_user_id() END, $10, $11, $12::timestamptz, $13, $14::text[],
                  app.current_user_id(), app.current_user_id())
          RETURNING id::text`,
         [
@@ -405,6 +411,11 @@ export class NoticesService {
           dto.ackRequired,
           schoolTime(dto.publishAt),
           dto.alsoEmail,
+          dto.audience === 'candidates' &&
+          dto.kind !== 'office_order' &&
+          dto.candidateStatuses.length
+            ? dto.candidateStatuses
+            : null,
         ],
       );
       const id = r.rows[0]!.id;
@@ -469,6 +480,15 @@ export class NoticesService {
           '::timestamptz',
         );
       if (dto.alsoEmail !== undefined) set('also_email', dto.alsoEmail);
+      if (dto.candidateStatuses !== undefined || dto.audience !== undefined) {
+        const audience = dto.audience ?? before.audience;
+        const statuses = dto.candidateStatuses ?? before.candidateStatuses;
+        set(
+          'candidate_statuses',
+          audience === 'candidates' && statuses.length ? statuses : null,
+          '::text[]',
+        );
+      }
       params.push(id);
       await c.query(
         // eslint-disable-next-line no-restricted-syntax -- sets holds fixed column assignments; values are bound parameters
@@ -526,13 +546,11 @@ export class NoticesService {
          OR EXISTS (SELECT 1 FROM notice_targets t WHERE t.notice_id = $1 AND ((t.target_type = 'employee' AND t.target_id = e.id)
               OR (t.target_type = 'class_section' AND EXISTS (SELECT 1 FROM teacher_assignments ta WHERE ta.employee_id = e.id AND ta.class_section_id = t.target_id AND ta.valid_to IS NULL)))))`;
 
-  /** The families registering for admission a notice is for: open sessions, live registrations, the classes sought. */
-  private static readonly CANDIDATES = `FROM applications a JOIN admission_cycles y ON y.id = a.cycle_id JOIN applicants ap ON ap.id = a.applicant_id
-     WHERE y.status = 'open' AND y.deleted_at IS NULL
-       AND a.status::text IN ('draft', 'submitted', 'registered', 'under_review', 'sent_back', 'waitlisted', 'offered', 'fee_paid')
-       AND EXISTS (SELECT 1 FROM notices n WHERE n.id = $1 AND n.audience = 'candidates')
-       AND (NOT EXISTS (SELECT 1 FROM notice_targets t WHERE t.notice_id = $1)
-         OR EXISTS (SELECT 1 FROM notice_targets t WHERE t.notice_id = $1 AND t.target_type = 'admission_class' AND t.target_id = a.class_id))`;
+  /** The families registering for admission a notice is for: its session, the classes sought, the statuses. */
+  // eslint-disable-next-line no-restricted-syntax -- the candidate match is a fixed fragment
+  private static readonly CANDIDATES = `FROM applications a JOIN applicants ap ON ap.id = a.applicant_id
+     WHERE EXISTS (SELECT 1 FROM notices n WHERE n.id = $1 AND n.audience = 'candidates')
+       AND ${candidateNoticeMatch('$1')}`;
 
   /**
    * A published notice with "also by e-mail": one mail to each guardian and employee it is for, once.
@@ -602,9 +620,11 @@ export class NoticesService {
                     AND (NOT $3 OR e.id = ANY($7::bigint[]) OR e.department = ANY($8::text[])
                          OR EXISTS (SELECT 1 FROM teacher_assignments ta WHERE ta.employee_id = e.id AND ta.class_section_id = ANY($4::bigint[]) AND ta.valid_to IS NULL)))::int AS staff,
                 (SELECT count(*) FROM applications a JOIN admission_cycles y ON y.id = a.cycle_id
-                  WHERE $2 = 'candidates' AND y.status = 'open' AND y.deleted_at IS NULL
-                    AND a.status::text IN ('draft', 'submitted', 'registered', 'under_review', 'sent_back', 'waitlisted', 'offered', 'fee_paid')
-                    AND (NOT $3 OR a.class_id = ANY($9::bigint[])))::int AS candidates`,
+                  WHERE $2 = 'candidates' AND y.deleted_at IS NULL
+                    AND (CASE WHEN cardinality($10::bigint[]) > 0 THEN a.cycle_id = ANY($10::bigint[]) ELSE y.status = 'open' END)
+                    AND (cardinality($9::bigint[]) = 0 OR a.class_id = ANY($9::bigint[]))
+                    AND (CASE WHEN cardinality($11::text[]) = 0 THEN a.status::text NOT IN ('cancelled', 'withdrawn')
+                              ELSE a.status::text = ANY($11::text[]) END))::int AS candidates`,
         [
           yearId,
           audience,
@@ -615,6 +635,8 @@ export class NoticesService {
           of('employee'),
           dto.departments,
           of('admission_class'),
+          of('admission_cycle'),
+          dto.candidateStatuses,
         ],
       );
       return {

@@ -4,6 +4,7 @@ import { apiFetch } from '@/lib/api';
 import { sectionOptions } from '@/lib/sections';
 import type { AdmissionCycle, ClassRow, Employee, Page } from '@/lib/types';
 import type { SessionPlan } from '@/lib/admission-setup';
+import type { CandidateSession } from '@/lib/comms';
 
 /** New notice or office order, composed like Communication → Compose. */
 export default async function NewNoticePage() {
@@ -20,19 +21,33 @@ export default async function NewNoticePage() {
       maxNoticeFiles: 5,
     })),
   ]);
-  // classes of the open admission sessions, for a notice to candidates (online admission)
-  const admissionClasses = await apiFetch<{ data: AdmissionCycle[] }>('/admissions/cycles')
-    .then(async (r) => {
-      const plans = await Promise.all(
+  // the admission sessions with their classes, for a notice to candidates (as Communication → Compose)
+  const candidateSessions: CandidateSession[] = await apiFetch<{ data: AdmissionCycle[] }>(
+    '/admissions/cycles',
+  )
+    .then(async (r) =>
+      Promise.all(
         r.data
-          .filter((c) => c.status === 'open')
-          .map((c) => apiFetch<SessionPlan>(`/admissions/cycles/${c.id}/plan`).catch(() => null)),
-      );
-      const seen = new Map<string, string>();
-      for (const p of plans) for (const k of p?.classes ?? []) seen.set(k.classId, k.className);
-      return [...seen.entries()].map(([value, label]) => ({ value, label }));
-    })
-    .catch(() => [] as Array<{ value: string; label: string }>);
+          // the open sessions first, then the latest closed ones
+          .filter((c) => c.status !== 'draft')
+          .sort((a, b) => Number(b.status === 'open') - Number(a.status === 'open'))
+          .slice(0, 6)
+          .map(async (c) => {
+            const plan = await apiFetch<SessionPlan>(`/admissions/cycles/${c.id}/plan`).catch(
+              () => null,
+            );
+            return {
+              id: c.id,
+              name: c.status === 'open' ? c.name : `${c.name} (closed)`,
+              classes: (plan?.classes ?? []).map((k) => ({
+                value: k.classId,
+                label: k.className,
+              })),
+            };
+          }),
+      ),
+    )
+    .catch(() => [] as CandidateSession[]);
   return (
     <>
       <PageHeader
@@ -51,7 +66,7 @@ export default async function NewNoticePage() {
           label: `${d.name} (${String(d.employees)})`,
         }))}
         maxFiles={settings.maxNoticeFiles}
-        admissionClasses={admissionClasses}
+        candidateSessions={candidateSessions}
         classes={classes.map((k) => ({ value: k.id, label: `${k.code} · ${k.name}` }))}
         sections={sections}
         employees={employees.map((e) => ({

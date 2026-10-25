@@ -1,6 +1,7 @@
 import { createZodDto } from 'nestjs-zod';
 import { z } from 'zod';
 import { IdSchema } from '../classes/classes.dto';
+import { CANDIDATE_NOTICE_STATUSES } from './notice-candidates';
 
 const DateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'must be YYYY-MM-DD');
 const TimeSchema = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, 'must be HH:MM');
@@ -22,7 +23,10 @@ export const TargetTypeSchema = z.enum([
   'student',
   'employee',
   'admission_class',
+  'admission_cycle',
 ]);
+/** the registration statuses a notice for candidates is for (docs/design/43, part 2); none: every one */
+export const CandidateStatusesSchema = z.array(z.enum(CANDIDATE_NOTICE_STATUSES)).max(20);
 export const HolidayKindSchema = z.enum(['holiday', 'vacation', 'working_day']);
 export const AlmanacKindSchema = z.enum(['event', 'exam', 'meeting', 'activity', 'deadline']);
 
@@ -170,6 +174,7 @@ export const CreateNoticeSchema = z
     publishAt: PublishAtSchema.optional(),
     /** Also send it by e-mail to the people it is for, when it is published. */
     alsoEmail: z.boolean().default(false),
+    candidateStatuses: CandidateStatusesSchema.default([]),
   })
   .refine((v) => !v.publishUntil || !v.publishFrom || v.publishUntil >= v.publishFrom, {
     message: 'publishUntil must not be before publishFrom',
@@ -192,6 +197,7 @@ export const UpdateNoticeSchema = z
     ackRequired: z.boolean(),
     publishAt: PublishAtSchema.nullable(),
     alsoEmail: z.boolean(),
+    candidateStatuses: CandidateStatusesSchema,
   })
   .partial()
   .refine((v) => Object.keys(v).length > 0, { message: 'at least one field is required' });
@@ -327,6 +333,7 @@ export const NoticeReachSchema = z.object({
   audience: NoticeAudienceSchema.default('everyone'),
   targets: z.array(TargetSchema).max(2500).default([]),
   departments: z.array(z.string().trim().min(1).max(120)).max(60).default([]),
+  candidateStatuses: CandidateStatusesSchema.default([]),
 });
 export class NoticeReachDto extends createZodDto(NoticeReachSchema) {}
 

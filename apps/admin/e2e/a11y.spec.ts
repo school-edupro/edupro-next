@@ -728,6 +728,43 @@ test.describe('accessibility (axe)', () => {
     ).toEqual([]);
   });
 
+  // a notice for candidates is chosen as in Compose: session, classes, statuses (docs/design/43, part 2)
+  test('notice for candidates: session, classes and status', async ({ page }) => {
+    await page.goto('/academics/notices/new');
+    await page.waitForLoadState('networkidle');
+    // the first-visit tour, when it shows, is closed first
+    const skip = page.getByRole('button', { name: 'Skip' });
+    if (await skip.isVisible()) await skip.click();
+    await page.getByRole('radio', { name: /Candidates/ }).check();
+    const session = page.getByLabel('Admission session *');
+    await expect(session).toBeVisible();
+    await expect(page.getByRole('group', { name: /Classes sought/ })).toBeVisible();
+    const status = page.getByRole('group', { name: /Status \(none: every registration\)/ });
+    await expect(status).toBeVisible();
+    const count = page.getByText(/Reaches \d+ registration\(s\)/);
+    await expect(count).toBeVisible();
+    const every = Number(/\d+/.exec((await count.textContent()) ?? '')![0]);
+    // one status chosen: the count follows (never more than every registration of the session)
+    await status.getByLabel('Admitted').check();
+    await page.waitForTimeout(1000);
+    const admitted = Number(/\d+/.exec((await count.textContent()) ?? '')![0]);
+    expect(admitted).toBeLessThanOrEqual(every);
+    await page.screenshot({
+      path: test.info().outputPath('notice-candidates.png'),
+      fullPage: true,
+    });
+    const r = await new AxeBuilder({ page })
+      .options({ iframes: false })
+      .setLegacyMode()
+      .withTags(['wcag2a', 'wcag2aa'])
+      .analyze();
+    expect(
+      r.violations
+        .filter((v) => v.impact === 'serious' || v.impact === 'critical')
+        .map((v) => `${v.id}: ${v.nodes.map((n) => n.target.join(' ')).join(' | ')}`),
+    ).toEqual([]);
+  });
+
   for (const path of PAGES) {
     test(`no serious or critical violations on ${path}`, async ({ page }) => {
       const res = await page.goto(path);

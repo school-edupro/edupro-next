@@ -43,7 +43,7 @@ key) and `applicationPdf` draws a strip of up to four labelled boxes under the h
 top-right photo goes). Missing photo: an empty box with its label. Same on the admission form PDF and the
 office's copy. No migration.
 
-**Part 2 — Notice → Candidates like Compose.** On `/academics/notices/new` (and edit): Admission session
+**Part 2 — Notice → Candidates like Compose (built 25 Oct 2026, migration 0246).** On `/academics/notices/new` (and edit): Admission session
 (required, searchable), Classes sought (none = every class), Status chips with Filter and "Tick all
 shown", the reach count live. Stored as targets `admission_cycle` + `admission_class` + a status list on
 the notice (migration 0246). The portal's notice match checks session, class and status; old notices

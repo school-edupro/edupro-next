@@ -2,7 +2,9 @@
 import { useEffect, useState } from 'react';
 import { ChipPicker, fileBase64, type ChipOption } from '@/components/ChipPicker';
 import { FilesPick } from '@edupro/ui';
+import { CheckList } from '@/components/comms/CheckList';
 import { HtmlEditor } from '@/components/comms/HtmlEditor';
+import { CANDIDATE_STATUSES, type CandidateSession } from '@/lib/comms';
 import { publishNoticeNow, saveNoticeDraft } from '@/lib/actions';
 import { noticeAudienceFile, noticeReach, searchNoticeStudents } from '@/lib/notice-actions';
 
@@ -167,7 +169,7 @@ export function NoticeCompose({
   employees,
   departments,
   maxFiles,
-  admissionClasses = [],
+  candidateSessions = [],
 }: {
   classes: ChipOption[];
   sections: ChipOption[];
@@ -175,8 +177,8 @@ export function NoticeCompose({
   departments: ChipOption[];
   /** How many attachments the school allows on a notice. */
   maxFiles: number;
-  /** classes taking registrations: a notice for candidates may be only for those seeking them */
-  admissionClasses?: ChipOption[];
+  /** the admission sessions with their classes: a notice for candidates is for one session */
+  candidateSessions?: CandidateSession[];
 }) {
   const [kind, setKind] = useState<Kind>('notice');
   const [who, setWho] = useState<Who>('students');
@@ -196,7 +198,12 @@ export function NoticeCompose({
     employees: number;
     candidates?: number;
   } | null>(null);
-  const [admClassIds, setAdmClassIds] = useState<string[]>([]);
+  // candidates are chosen as in Communication → Compose: the session, the classes sought, the statuses
+  const [cand, setCand] = useState<{ cycleId: string; classIds: string[]; statuses: string[] }>({
+    cycleId: candidateSessions[0]?.id ?? '',
+    classIds: [],
+    statuses: [],
+  });
   const audience: Who = kind === 'office_order' ? 'employees' : who;
   const forCandidates = audience === 'candidates';
   const forStudents = audience !== 'employees' && !forCandidates;
@@ -206,19 +213,27 @@ export function NoticeCompose({
     ...(forStudents || forStaff ? sectionIds.map((id) => ({ type: 'class_section', id })) : []),
     ...(forStaff ? employeeIds.map((id) => ({ type: 'employee', id })) : []),
     ...(forStudents ? students.map((x) => ({ type: 'student', id: x.value })) : []),
-    ...(forCandidates ? admClassIds.map((id) => ({ type: 'admission_class', id })) : []),
+    ...(forCandidates && cand.cycleId ? [{ type: 'admission_cycle', id: cand.cycleId }] : []),
+    ...(forCandidates ? cand.classIds.map((id) => ({ type: 'admission_class', id })) : []),
   ];
   const depts = forStaff ? deptIds : [];
+  const statuses = forCandidates ? cand.statuses : [];
   // an Excel list may name employees beyond the first ones loaded for the picker
   const staffOptions = [
     ...employees,
     ...extraStaff.filter((x) => !employees.some((e) => e.value === x.value)),
   ];
-  const key = JSON.stringify([kind, audience, targets, depts]);
+  const key = JSON.stringify([kind, audience, targets, depts, statuses]);
   useEffect(() => {
     let live = true;
     const t = setTimeout(() => {
-      void noticeReach({ kind, audience, targets, departments: depts }).then((r) => {
+      void noticeReach({
+        kind,
+        audience,
+        targets,
+        departments: depts,
+        candidateStatuses: statuses,
+      }).then((r) => {
         if (live) setReach(r);
       });
     }, 250);
@@ -303,13 +318,56 @@ export function NoticeCompose({
           )}
           <div className="ep-wd__form" style={{ marginTop: 'var(--sp-3)' }}>
             {forCandidates ? (
-              <ChipPicker
-                name="admissionClassIds"
-                label="Only families seeking these classes"
-                options={admissionClasses}
-                value={admClassIds}
-                onChange={setAdmClassIds}
-              />
+              candidateSessions.length ? (
+                <div style={{ display: 'grid', gap: 'var(--sp-3)' }}>
+                  <label className="ep-field" htmlFor="nc-cand-cycle">
+                    <span className="ep-field__label">Admission session *</span>
+                    <select
+                      id="nc-cand-cycle"
+                      className="ep-select"
+                      name="admissionCycleId"
+                      required
+                      value={cand.cycleId}
+                      onChange={(e) =>
+                        setCand({ cycleId: e.target.value, classIds: [], statuses: cand.statuses })
+                      }
+                    >
+                      {candidateSessions.map((x) => (
+                        <option key={x.id} value={x.id}>
+                          {x.name}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <CheckList
+                    id="nc-cand-cls"
+                    legend="Classes sought (none: every class)"
+                    options={candidateSessions.find((x) => x.id === cand.cycleId)?.classes ?? []}
+                    value={cand.classIds}
+                    onChange={(v) => setCand({ ...cand, classIds: v })}
+                  />
+                  <CheckList
+                    id="nc-cand-st"
+                    legend="Status (none: every registration)"
+                    options={CANDIDATE_STATUSES}
+                    value={cand.statuses}
+                    onChange={(v) => setCand({ ...cand, statuses: v })}
+                  />
+                  {cand.classIds.map((id) => (
+                    <input key={id} type="hidden" name="admissionClassIds" value={id} />
+                  ))}
+                  {cand.statuses.map((v) => (
+                    <input key={v} type="hidden" name="candidateStatuses" value={v} />
+                  ))}
+                  <p className="ep-field__help" style={{ margin: 0 }}>
+                    Shows in the admission portal of the families chosen, while their registration
+                    is in a status chosen: a notice for &quot;Registration fee due&quot; stops
+                    showing once the fee is paid.
+                  </p>
+                </div>
+              ) : (
+                <p className="ep-field__help">No admission session yet.</p>
+              )
             ) : null}
             {forStudents ? (
               <>
@@ -366,16 +424,14 @@ export function NoticeCompose({
             ) : null}
           </div>
           <p className="ep-field__help" role="status" style={{ marginBottom: 0 }}>
-            {targets.length === 0 && depts.length === 0
+            {!forCandidates && targets.length === 0 && depts.length === 0
               ? 'Nothing chosen: it goes to all of them. '
               : ''}
             {reach
               ? `Reaches ${[
                   forStudents ? `${String(reach.students)} student(s)` : '',
                   forStaff ? `${String(reach.employees)} employee(s)` : '',
-                  forCandidates
-                    ? `${String(reach.candidates ?? 0)} registration(s) in open sessions`
-                    : '',
+                  forCandidates ? `${String(reach.candidates ?? 0)} registration(s)` : '',
                 ]
                   .filter(Boolean)
                   .join(' and ')}.`

@@ -14,6 +14,7 @@ import { journey, slotOf } from '../process-engine';
 import { publicTenant } from '../public/otp.service';
 import { AdmissionScheduleService } from '../schedule.service';
 import type { AdmissionCandidate } from './candidate-signin.service';
+import { candidateNoticeMatch } from '../../academics/daily/notice-candidates';
 
 const IMAGE = /^image\/(png|jpeg|webp)$/;
 const IMAGE_OR_PDF = /^(application\/pdf|image\/(png|jpeg|webp))$/;
@@ -723,13 +724,16 @@ export class CandidatePortalService {
   }
 
   /** One of the family's own files (an upload or a generated PDF of its application). */
-  /** Notices for candidates that reach this family (no class given, or a class one of its children seeks). */
+  /**
+   * Notices for candidates that reach this family: for everyone registering (nothing chosen), or one of
+   * its registrations is in the session, class and status chosen (docs/design/43, part 2).
+   */
+  // eslint-disable-next-line no-restricted-syntax -- the candidate match is a fixed fragment
   private noticesSql = `FROM notices n
      WHERE n.deleted_at IS NULL AND n.audience = 'candidates' AND n.published_at IS NOT NULL AND n.publish_from <= CURRENT_DATE
        AND (n.publish_until IS NULL OR n.publish_until >= CURRENT_DATE) AND (n.publish_at IS NULL OR n.publish_at <= now())
-       AND (NOT EXISTS (SELECT 1 FROM notice_targets t WHERE t.notice_id = n.id)
-         OR EXISTS (SELECT 1 FROM notice_targets t JOIN applications a ON a.class_id = t.target_id AND a.applicant_id = $1
-                     WHERE t.notice_id = n.id AND t.target_type = 'admission_class'))`;
+       AND ((NOT EXISTS (SELECT 1 FROM notice_targets t WHERE t.notice_id = n.id) AND n.candidate_statuses IS NULL)
+         OR EXISTS (SELECT 1 FROM applications a WHERE a.applicant_id = $1 AND ${candidateNoticeMatch('n.id')}))`;
 
   /**
    * The family's Messages and Notices (docs/design/39, part 5): what the school sent to its registrations

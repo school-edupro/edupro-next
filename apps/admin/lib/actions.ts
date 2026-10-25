@@ -1202,6 +1202,10 @@ async function saveNotice(fd: FormData, publish: boolean) {
       ...fd.getAll('employeeIds').map((id) => ({ type: 'employee', id: String(id) })),
       ...fd.getAll('studentIds').map((id) => ({ type: 'student', id: String(id) })),
       ...fd.getAll('admissionClassIds').map((id) => ({ type: 'admission_class', id: String(id) })),
+      ...fd
+        .getAll('admissionCycleId')
+        .filter(Boolean)
+        .map((id) => ({ type: 'admission_cycle', id: String(id) })),
     ];
     await apiFetch('/academics/notices', {
       method: 'POST',
@@ -1221,6 +1225,7 @@ async function saveNotice(fd: FormData, publish: boolean) {
         ackRequired: fd.get('ackRequired') !== null,
         publishAt: opt(fd, 'publishAt'),
         alsoEmail: fd.get('alsoEmail') !== null,
+        candidateStatuses: fd.getAll('candidateStatuses').map(String).filter(Boolean),
       }),
     });
   });
