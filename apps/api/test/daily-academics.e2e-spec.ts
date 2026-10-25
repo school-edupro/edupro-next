@@ -693,21 +693,39 @@ describe('daily academics and student lifecycle (e2e)', () => {
       headers: h,
     });
     expect(open.json().page.total).toBe(0);
-    // Aarav was the parent's only child here, so the parent's login was revoked with his; the later
-    // gallery checks sign in as that parent, so the membership is restored for them
+    // Aarav was the parent's only child here: the login stays (portal after leaving, 90 days by
+    // default) but the full parent role is set aside for "Former parent". The later gallery checks
+    // sign in as that parent, so the full role is given back for them
     const m = await withMigrator((c) =>
       c.query<{ status: string }>(
         `SELECT status::text FROM user_school_memberships WHERE user_id = $1 AND school_id = $2 AND person_type = 'guardian'`,
         [parent.id, school.id],
       ),
     );
-    expect(m.rows[0]?.status).toBe('inactive');
-    await withMigrator((c) =>
-      c.query(
-        `UPDATE user_school_memberships SET status = 'active' WHERE user_id = $1 AND school_id = $2 AND person_type = 'guardian'`,
+    expect(m.rows[0]?.status).toBe('active');
+    const roles = await withMigrator((c) =>
+      c.query<{ code: string; live: boolean }>(
+        `SELECT r.code, ur.revoked_at IS NULL AS live FROM user_roles ur JOIN roles r ON r.id = ur.role_id
+          WHERE ur.user_id = $1 AND ur.school_id = $2 ORDER BY r.code`,
         [parent.id, school.id],
       ),
     );
+    expect(roles.rows).toEqual([
+      { code: 'former_parent', live: true },
+      { code: 'parent', live: false },
+    ]);
+    await withMigrator(async (c) => {
+      await c.query(
+        `UPDATE user_roles ur SET revoked_at = NULL, revoked_by = NULL FROM roles r
+          WHERE r.id = ur.role_id AND r.code = 'parent' AND ur.user_id = $1 AND ur.school_id = $2`,
+        [parent.id, school.id],
+      );
+      await c.query(
+        `UPDATE user_roles ur SET revoked_at = now() FROM roles r
+          WHERE r.id = ur.role_id AND r.code = 'former_parent' AND ur.user_id = $1 AND ur.school_id = $2`,
+        [parent.id, school.id],
+      );
+    });
   });
 
   // ---- promotions ------------------------------------------------------------------------------
