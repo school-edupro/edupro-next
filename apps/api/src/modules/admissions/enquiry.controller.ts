@@ -9,7 +9,9 @@ import {
   EnquiryReportQueryDto,
   EnquiryUpdateDto,
   FollowUpDto,
+  EnquiryDeskDto,
   InviteDto,
+  ReplyDto,
   SourcesDto,
 } from './enquiry.dto';
 import { AdmissionEnquiryService, ENQUIRY_MANAGE } from './enquiry.service';
@@ -33,6 +35,13 @@ export class AdmissionEnquiryController {
   @RequirePermission('admissions.setup.manage')
   sources(@ReqCtx() ctx: RequestContext, @Body() dto: SourcesDto) {
     return this.svc.saveSources(ctx, dto);
+  }
+
+  @Put('desk')
+  @ApiOperation({ summary: 'How website enquiries are assigned and acknowledged' })
+  @RequirePermission('admissions.setup.manage')
+  desk(@ReqCtx() ctx: RequestContext, @Body() dto: EnquiryDeskDto) {
+    return this.svc.saveDesk(ctx, dto);
   }
 
   @Get('report')
@@ -71,6 +80,13 @@ export class AdmissionEnquiryController {
   @RequirePermission(ENQUIRY_MANAGE)
   followUp(@ReqCtx() ctx: RequestContext, @Param('id') id: string, @Body() dto: FollowUpDto) {
     return this.svc.followUp(ctx, id, dto);
+  }
+
+  @Post(':id/reply')
+  @ApiOperation({ summary: 'Reply to the family by email and / or SMS; kept with the follow-ups' })
+  @RequirePermission(ENQUIRY_MANAGE)
+  reply(@ReqCtx() ctx: RequestContext, @Param('id') id: string, @Body() dto: ReplyDto) {
+    return this.svc.reply(ctx, id, dto);
   }
 
   @Post(':id/invite')

@@ -13,8 +13,10 @@ import type {
   EnquiryReportQueryDto,
   EnquiryUpdateDto,
   FollowUpDto,
+  EnquiryDeskDto,
   InviteDto,
   PublicEnquiryDto,
+  ReplyDto,
   SourcesDto,
 } from './enquiry.dto';
 import { publicTenant } from './public/otp.service';
@@ -33,6 +35,15 @@ const DEFAULT_SOURCES = [
 const today = () => new Date(Date.now() + 330 * 60_000).toISOString().slice(0, 10);
 
 export const ENQUIRY_MANAGE = 'admissions.enquiry.manage';
+
+/** The number a family is given for its enquiry (docs/design/43, part 3). */
+export const enquiryNo = (id: string) => `ENQ-${id.padStart(6, '0')}`;
+
+/** Who may take enquiries in the school: the users holding the enquiry permission. */
+const COUNSELLORS = `SELECT DISTINCT u.id, u.display_name AS name FROM users u
+   JOIN user_roles ur ON ur.user_id = u.id AND ur.school_id = app.current_school_id() AND ur.revoked_at IS NULL
+   JOIN role_permissions rp ON rp.role_id = ur.role_id AND rp.permission_code = 'admissions.enquiry.manage'
+  WHERE u.deleted_at IS NULL`;
 
 /**
  * The enquiry desk (docs/design/39, part 8): enquiries from a walk-in, a phone call, the website or a
@@ -76,14 +87,100 @@ export class AdmissionEnquiryService {
         `SELECT id::text, name FROM classes WHERE deleted_at IS NULL ORDER BY display_order, name`,
       );
       const counsellors = await c.query<{ id: string; name: string }>(
-        `SELECT DISTINCT u.id::text, u.display_name AS name FROM users u
-           JOIN user_roles ur ON ur.user_id = u.id AND ur.school_id = app.current_school_id() AND ur.revoked_at IS NULL
-           JOIN role_permissions rp ON rp.role_id = ur.role_id AND rp.permission_code = $1
-          WHERE u.deleted_at IS NULL ORDER BY u.display_name LIMIT 300`,
-        [ENQUIRY_MANAGE],
+        // eslint-disable-next-line no-restricted-syntax -- COUNSELLORS is a fixed fragment
+        `SELECT id::text, name FROM (${COUNSELLORS}) k ORDER BY name LIMIT 300`,
       );
-      return { sources, cycles: cycles.rows, classes: classes.rows, counsellors: counsellors.rows };
+      return {
+        sources,
+        cycles: cycles.rows,
+        classes: classes.rows,
+        counsellors: counsellors.rows,
+        desk: await this.deskWith(c),
+      };
     });
+  }
+
+  /** How website enquiries are taken: assigned on arrival (to whom) and acknowledged. */
+  private async deskWith(c: PoolClient) {
+    await c.query(
+      `INSERT INTO admission_settings (school_id) VALUES (app.current_school_id()) ON CONFLICT (school_id) DO NOTHING`,
+    );
+    const r = await c.query<{
+      enquiry_auto_assign: boolean;
+      enquiry_counsellors: string[];
+      enquiry_acknowledge: boolean;
+      signin_channels: string[];
+    }>(
+      `SELECT enquiry_auto_assign, enquiry_counsellors::text[] AS enquiry_counsellors, enquiry_acknowledge, signin_channels
+         FROM admission_settings WHERE school_id = app.current_school_id()`,
+    );
+    const x = r.rows[0]!;
+    return {
+      autoAssign: x.enquiry_auto_assign,
+      counsellors: x.enquiry_counsellors,
+      acknowledge: x.enquiry_acknowledge,
+      channels: x.signin_channels,
+    };
+  }
+
+  async saveDesk(ctx: RequestContext, dto: EnquiryDeskDto) {
+    return this.db.tenant(requireTenant(ctx), async (c) => {
+      const before = await this.deskWith(c);
+      if (dto.counsellors.length) {
+        const ok = await c.query<{ id: string }>(
+          // eslint-disable-next-line no-restricted-syntax -- COUNSELLORS is a fixed fragment
+          `SELECT id::text FROM (${COUNSELLORS}) k WHERE id = ANY($1::bigint[])`,
+          [dto.counsellors],
+        );
+        if (ok.rows.length !== new Set(dto.counsellors).size)
+          throw new DomainError(
+            'validation-failed',
+            'A counsellor chosen cannot take enquiries (no enquiry permission)',
+            { status: 400 },
+          );
+      }
+      await c.query(
+        `UPDATE admission_settings SET enquiry_auto_assign = $1, enquiry_counsellors = $2::bigint[], enquiry_acknowledge = $3,
+                updated_at = now(), updated_by = $4 WHERE school_id = app.current_school_id()`,
+        [dto.autoAssign, [...new Set(dto.counsellors)], dto.acknowledge, ctx.user.id],
+      );
+      const after = await this.deskWith(c);
+      await this.audit.stage(ctx, c, {
+        action: 'admissions.enquiry.desk',
+        entityType: 'admission_settings',
+        entityId: ctx.tenant!.schoolId,
+        before,
+        after,
+      });
+      return after;
+    });
+  }
+
+  /**
+   * A website enquiry given to a counsellor on arrival: among those chosen (or everyone who takes
+   * enquiries), the one with the fewest open enquiries; ties go to the one given an enquiry longest ago.
+   */
+  private async assign(c: PoolClient, id: string, chosen: string[]): Promise<string | null> {
+    const k = await c.query<{ id: string; name: string }>(
+      // eslint-disable-next-line no-restricted-syntax -- COUNSELLORS is a fixed fragment
+      `SELECT k.id::text, k.name FROM (${COUNSELLORS}) k
+        WHERE cardinality($1::bigint[]) = 0 OR k.id = ANY($1::bigint[])
+        ORDER BY (SELECT count(*) FROM admission_enquiries e WHERE e.counsellor_user_id = k.id AND e.status IN ('new', 'follow_up', 'interested')),
+                 (SELECT max(e.assigned_at) FROM admission_enquiries e WHERE e.counsellor_user_id = k.id) ASC NULLS FIRST, k.id
+        LIMIT 1`,
+      [chosen],
+    );
+    const who = k.rows[0];
+    if (!who) return null;
+    await c.query(
+      `UPDATE admission_enquiries SET counsellor_user_id = $2, assigned_at = now() WHERE id = $1`,
+      [id, who.id],
+    );
+    await c.query(
+      `INSERT INTO admission_enquiry_followups (school_id, enquiry_id, mode, outcome) VALUES (app.current_school_id(), $1, 'system', $2)`,
+      [id, `Assigned to ${who.name} on arrival`],
+    );
+    return who.name;
   }
 
   async saveSources(ctx: RequestContext, dto: SourcesDto) {
@@ -295,6 +392,7 @@ export class AdmissionEnquiryService {
         : null;
       return {
         id: e.id,
+        number: enquiryNo(e.id),
         cycleId: e.cycle_id,
         classId: e.class_id,
         sourceId: e.source_id,
@@ -381,7 +479,8 @@ export class AdmissionEnquiryService {
       await c.query(
         `UPDATE admission_enquiries SET cycle_id = $1, class_id = $2, source_id = $3, campaign = $4, parent_name = $5, child_name = $6, child_dob = $7,
                 mobile = $8, email = $9, locality = $10, previous_school = $11, notes = $12, counsellor_user_id = $13, next_follow_up_on = $14,
-                status = COALESCE($16, status), updated_at = now()
+                status = COALESCE($16, status), updated_at = now(),
+                assigned_at = CASE WHEN $13::bigint IS DISTINCT FROM counsellor_user_id THEN now() ELSE assigned_at END
           WHERE id = $15`,
         [...this.values(dto), id, dto.status ?? null],
       );
@@ -419,6 +518,70 @@ export class AdmissionEnquiryService {
       );
     });
     return this.get(ctx, id);
+  }
+
+  /**
+   * A reply to the family (docs/design/43, part 3): the message by email and / or SMS (and WhatsApp
+   * where the school sends it), kept with the follow-ups; the enquiry counts as contacted.
+   */
+  async reply(ctx: RequestContext, id: string, dto: ReplyDto) {
+    const sent = await this.db.tenant(requireTenant(ctx), async (c) => {
+      const e = await this.row(c, id);
+      const email = dto.email ? e.email : null;
+      const mobile = dto.mobile ? e.mobile : null;
+      if (!email && !mobile)
+        throw new DomainError(
+          'validation-failed',
+          dto.email && !dto.mobile
+            ? 'The enquiry has no email'
+            : !dto.email && dto.mobile
+              ? 'The enquiry has no mobile'
+              : 'The enquiry has no email or mobile',
+          { status: 400 },
+        );
+      const school = await c.query<{ name: string }>(
+        `SELECT name FROM schools WHERE id = app.current_school_id()`,
+      );
+      const n = await c.query<{ n: number }>(
+        `SELECT app.admission_notify($1, $2, $3, $4::jsonb, $5, $6, NULL, $7::jsonb, $8) AS n`,
+        [
+          'admission_message',
+          mobile,
+          email,
+          JSON.stringify({
+            subject: `Your enquiry ${enquiryNo(id)} at ${school.rows[0]!.name}`,
+            message: dto.message,
+            name: e.child_name ?? '',
+          }),
+          'About your enquiry',
+          dto.message,
+          JSON.stringify([['Enquiry no.', enquiryNo(id)]]),
+          'Reply to this by calling the school office, or send a new enquiry from the admission page.',
+        ],
+      );
+      const count = n.rows[0]?.n ?? 0;
+      if (!count)
+        throw new DomainError(
+          'admissions.reply_not_sent',
+          'Nothing could be sent: check the address and the admission message templates',
+          { status: 409 },
+        );
+      const by = [email ? 'email' : '', mobile ? 'SMS' : ''].filter(Boolean).join(' and ');
+      await c.query(
+        `INSERT INTO admission_enquiry_followups (school_id, enquiry_id, mode, outcome, by_user_id)
+         VALUES (app.current_school_id(), $1, 'reply', $2, $3)`,
+        [id, `Reply by ${by}: ${dto.message}`, ctx.user.id],
+      );
+      await c.query(
+        `UPDATE admission_enquiries SET status = CASE WHEN status = 'new' THEN 'follow_up' ELSE status END, last_contact_at = now(),
+                counsellor_user_id = COALESCE(counsellor_user_id, $2),
+                assigned_at = CASE WHEN counsellor_user_id IS NULL THEN now() ELSE assigned_at END, updated_at = now()
+          WHERE id = $1`,
+        [id, ctx.user.id],
+      );
+      return count;
+    });
+    return { sent, enquiry: await this.get(ctx, id) };
   }
 
   /** The invitation to register: a link that fills the form from the enquiry, by email, SMS and WhatsApp. */
@@ -507,10 +670,11 @@ export class AdmissionEnquiryService {
       const open = await c.query<{ id: string }>(
         `SELECT id::text FROM admission_cycles WHERE status = 'open' AND deleted_at IS NULL ORDER BY opens_at DESC LIMIT 1`,
       );
-      await c.query(
+      const made = await c.query<{ id: string }>(
         `INSERT INTO admission_enquiries (school_id, cycle_id, class_id, source_id, parent_name, child_name, child_dob, mobile, email, locality, notes,
                                           next_follow_up_on, from_website)
-         VALUES (app.current_school_id(), $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, CURRENT_DATE, true)`,
+         VALUES (app.current_school_id(), $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, CURRENT_DATE, true)
+         RETURNING id::text`,
         [
           open.rows[0]?.id ?? null,
           dto.classId ?? null,
@@ -524,7 +688,51 @@ export class AdmissionEnquiryService {
           dto.message ?? null,
         ],
       );
-      return { received: true };
+      const id = made.rows[0]!.id;
+      const desk = await this.deskWith(c);
+      if (desk.autoAssign) await this.assign(c, id, desk.counsellors);
+      // the family's acknowledgement with its number, by the channels the school signs families in with
+      let acknowledged = 0;
+      if (desk.acknowledge) {
+        const school = await c.query<{ name: string; phone: string | null }>(
+          `SELECT name, NULLIF(btrim(contact->>'phone'), '') AS phone FROM schools WHERE id = app.current_school_id()`,
+        );
+        const s = school.rows[0]!;
+        const message = `Dear ${dto.parentName}, we have your admission enquiry ${enquiryNo(id)} at ${s.name}. The admission office will get back to you soon.`;
+        const n = await c.query<{ n: number }>(
+          `SELECT app.admission_notify($1, $2, $3, $4::jsonb, $5, $6, $7, $8::jsonb, $9) AS n`,
+          [
+            'admission_message',
+            desk.channels.some((x) => x === 'sms' || x === 'whatsapp')
+              ? (dto.mobile ?? null)
+              : null,
+            desk.channels.includes('email') ? (dto.email?.toLowerCase() ?? null) : null,
+            JSON.stringify({
+              subject: `We have your enquiry ${enquiryNo(id)}`,
+              message,
+              name: dto.childName ?? '',
+            }),
+            'We have your enquiry',
+            message,
+            enquiryNo(id),
+            JSON.stringify([
+              ['Enquiry no.', enquiryNo(id)],
+              ...(dto.childName ? [['Child', dto.childName]] : []),
+            ]),
+            s.phone ? `Quote the enquiry number when you call the school at ${s.phone}.` : null,
+          ],
+        );
+        acknowledged = n.rows[0]?.n ?? 0;
+        if (acknowledged)
+          await c.query(
+            `INSERT INTO admission_enquiry_followups (school_id, enquiry_id, mode, outcome) VALUES (app.current_school_id(), $1, 'system', $2)`,
+            [
+              id,
+              `Acknowledgement sent (${String(acknowledged)} message${acknowledged === 1 ? '' : 's'})`,
+            ],
+          );
+      }
+      return { received: true, enquiryNo: enquiryNo(id) };
     });
   }
 

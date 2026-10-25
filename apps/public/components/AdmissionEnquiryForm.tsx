@@ -11,7 +11,8 @@ export function AdmissionEnquiryForm({
 }) {
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [done, setDone] = useState(false);
+  // the enquiry number the school gave (docs/design/43, part 3); '' when none came back
+  const [done, setDone] = useState<string | null>(null);
 
   async function sha256Hex(text: string): Promise<string> {
     const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
@@ -47,7 +48,7 @@ export function AdmissionEnquiryForm({
       });
       const body = await res.json();
       if (!res.ok) throw new Error(body.detail ?? body.type ?? 'Not sent');
-      setDone(true);
+      setDone(typeof body.enquiryNo === 'string' ? body.enquiryNo : '');
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -55,10 +56,17 @@ export function AdmissionEnquiryForm({
     }
   }
 
-  if (done)
+  if (done !== null)
     return (
       <div className="ep-alert ep-alert--success" role="status">
-        Thank you. The admission office will call or write to you soon.
+        Thank you.{' '}
+        {done ? (
+          <>
+            Your enquiry number is <strong>{done}</strong>.{' '}
+          </>
+        ) : null}
+        The admission office will call or write to you soon
+        {done ? '; quote the number when you call the school' : ''}.
       </div>
     );
   return (

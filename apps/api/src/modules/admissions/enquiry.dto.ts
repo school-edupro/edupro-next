@@ -61,6 +61,24 @@ export const InviteSchema = z.object({
 });
 export class InviteDto extends createZodDto(InviteSchema) {}
 
+/** A reply to the family from the enquiry (docs/design/43, part 3): by email and / or SMS. */
+export const ReplySchema = z
+  .object({
+    message: z.string().trim().min(2).max(1000),
+    email: z.boolean().default(true),
+    mobile: z.boolean().default(true),
+  })
+  .refine((v) => v.email || v.mobile, { message: 'Choose email or SMS', path: ['email'] });
+export class ReplyDto extends createZodDto(ReplySchema) {}
+
+/** How the desk takes website enquiries: assigned on arrival, to whom, acknowledged. */
+export const EnquiryDeskSchema = z.object({
+  autoAssign: z.boolean(),
+  counsellors: z.array(IdSchema).max(100),
+  acknowledge: z.boolean(),
+});
+export class EnquiryDeskDto extends createZodDto(EnquiryDeskSchema) {}
+
 export const SourcesSchema = z.object({
   sources: z
     .array(

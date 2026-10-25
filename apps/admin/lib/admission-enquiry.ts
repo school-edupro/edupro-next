@@ -4,6 +4,8 @@ export interface EnquiryMeta {
   cycles: Array<{ id: string; name: string; status: string }>;
   classes: Array<{ id: string; name: string }>;
   counsellors: Array<{ id: string; name: string }>;
+  /** how website enquiries are taken (docs/design/43, part 3) */
+  desk?: { autoAssign: boolean; counsellors: string[]; acknowledge: boolean; channels: string[] };
 }
 export interface EnquiryRow {
   id: string;
@@ -24,6 +26,8 @@ export interface EnquiryRow {
 }
 export interface EnquiryDetail {
   id: string;
+  /** ENQ-000123: the number the family was given */
+  number?: string;
   cycleId: string | null;
   classId: string | null;
   sourceId: string | null;
@@ -80,4 +84,5 @@ export const MODE_LABEL: Record<string, string> = {
   note: 'Note',
   invite: 'Invitation',
   system: 'Update',
+  reply: 'Reply to family',
 };

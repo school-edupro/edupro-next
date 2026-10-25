@@ -116,6 +116,48 @@ export async function inviteEnquiry(fd: FormData) {
   );
 }
 
+/** A reply to the family by email and / or SMS (docs/design/43, part 3). */
+export async function replyEnquiry(fd: FormData) {
+  const id = str(fd, 'id');
+  if (!okId(id)) redirect('/admissions/enquiries');
+  let sent = 0;
+  try {
+    sent = (
+      await apiFetch<{ sent: number }>(`/admissions/enquiries/${id}/reply`, {
+        method: 'POST',
+        body: JSON.stringify({
+          message: str(fd, 'message'),
+          email: fd.get('byEmail') !== null,
+          mobile: fd.get('byMobile') !== null,
+        }),
+      })
+    ).sent;
+  } catch (e) {
+    fail(`/admissions/enquiries/${id}`, e);
+  }
+  revalidatePath(`/admissions/enquiries/${id}`);
+  redirect(
+    `/admissions/enquiries/${id}?ok=1&detail=${encodeURIComponent(`Reply sent (${String(sent)} message${sent === 1 ? '' : 's'}).`)}`,
+  );
+}
+
+/** How website enquiries are taken: assigned on arrival (to whom), acknowledged. */
+export async function saveEnquiryDesk(desk: {
+  autoAssign: boolean;
+  counsellors: string[];
+  acknowledge: boolean;
+}) {
+  try {
+    await apiFetch('/admissions/enquiries/desk', { method: 'PUT', body: JSON.stringify(desk) });
+    revalidatePath('/admissions/setup');
+    return { ok: true as const };
+  } catch (e) {
+    if (e instanceof ApiError)
+      return { ok: false as const, error: e.problem.detail ?? e.problem.type };
+    throw e;
+  }
+}
+
 export async function saveEnquirySources(
   sources: Array<{ id?: string; name: string; status: 'active' | 'inactive' }>,
 ) {

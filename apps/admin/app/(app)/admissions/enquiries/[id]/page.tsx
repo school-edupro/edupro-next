@@ -9,7 +9,12 @@ import {
   type EnquiryDetail,
   type EnquiryMeta,
 } from '@/lib/admission-enquiry';
-import { addFollowUp, inviteEnquiry, updateEnquiry } from '@/lib/admission-enquiry-actions';
+import {
+  addFollowUp,
+  inviteEnquiry,
+  replyEnquiry,
+  updateEnquiry,
+} from '@/lib/admission-enquiry-actions';
 import { ApiError, apiFetch, getMe } from '@/lib/api';
 import { whenIst } from '@/lib/admission-process';
 
@@ -39,7 +44,7 @@ export default async function EnquiryPage({
   return (
     <>
       <PageHeader
-        kicker="Admissions · Enquiry"
+        kicker={`Admissions · Enquiry${e.number ? ` ${e.number}` : ''}`}
         title={e.parentName}
         description={[e.childName, e.mobile, e.email].filter(Boolean).join(' · ')}
         actions={
@@ -114,6 +119,54 @@ export default async function EnquiryPage({
             </div>
           </form>
         </Card>
+        <Card elevated title="Reply to family">
+          <form action={replyEnquiry} className="ep-rp__act">
+            <input type="hidden" name="id" value={e.id} />
+            <label className="ep-field">
+              <span className="ep-field__label">Message *</span>
+              <textarea
+                className="ep-input"
+                name="message"
+                rows={4}
+                minLength={2}
+                maxLength={1000}
+                required
+              />
+              <span className="ep-field__help">
+                Goes with the enquiry number{e.number ? ` ${e.number}` : ''}; it is kept in the
+                history below.
+              </span>
+            </label>
+            <fieldset className="ep-cl">
+              <legend className="ep-field__label">Send by</legend>
+              <label className="ep-check">
+                <input
+                  type="checkbox"
+                  name="byEmail"
+                  defaultChecked={Boolean(e.email)}
+                  disabled={!e.email}
+                />{' '}
+                Email{e.email ? ` (${e.email})` : ': no email given'}
+              </label>
+              <label className="ep-check">
+                <input
+                  type="checkbox"
+                  name="byMobile"
+                  defaultChecked={Boolean(e.mobile)}
+                  disabled={!e.mobile}
+                />{' '}
+                SMS / WhatsApp{e.mobile ? ` (${e.mobile})` : ': no mobile given'}
+              </label>
+            </fieldset>
+            <div className="ep-form-actions">
+              <button className="ep-btn ep-btn--primary" type="submit">
+                Send the reply
+              </button>
+            </div>
+          </form>
+        </Card>
+      </div>
+      <div className="ep-rp">
         <Card elevated title="Invite to register">
           {e.application ? (
             <p style={{ margin: 0 }}>The family has registered.</p>
@@ -176,6 +229,8 @@ export default async function EnquiryPage({
             </li>
           </ul>
         </Card>
+      </div>
+      <div className="ep-rp">
         <Card elevated title="Details">
           <form action={updateEnquiry} style={{ display: 'grid', gap: 'var(--sp-3)' }}>
             <input type="hidden" name="id" value={e.id} />

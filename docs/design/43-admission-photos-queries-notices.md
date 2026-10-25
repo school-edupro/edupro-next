@@ -49,13 +49,13 @@ shown", the reach count live. Stored as targets `admission_cycle` + `admission_c
 the notice (migration 0246). The portal's notice match checks session, class and status; old notices
 with only classes keep matching by class. Fixes the cross-session leak.
 
-**Part 3 — Enquiry desk: assign, reply, acknowledge.** A website enquiry is assigned on arrival
+**Part 3 — Enquiry desk: assign, reply, acknowledge (built 25 Oct 2026, migration 0247).** A website enquiry is assigned on arrival
 (Enquiry set-up: on / off, which counsellors). "Reply to family" on the enquiry (email and / or SMS
 from templates, through the outbox), logged as a follow-up with the text. The family gets an
 acknowledgement with the enquiry number. The Help page shows "Send an enquiry" only when signed out.
 
 **Part 4 — "Ask the school" for registered families.** A `candidate` desk in the Helpdesk (migration
-0247): query heads Fee / payment, Documents, Form / technical, Test / interview, Other, each with an owner
+0248): query heads Fee / payment, Documents, Form / technical, Test / interview, Other, each with an owner
 (person or role) and hours; the existing levels, SLA clock and escalation apply. Signed in, Help shows
 "Ask the school" (head, registration, question, a file) and **My queries** (status, the conversation,
 reply, reopen within the set days, rate). An answer shows unread in Messages and goes by email. The

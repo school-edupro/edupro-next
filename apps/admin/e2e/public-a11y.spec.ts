@@ -266,7 +266,9 @@ test('admission: a class picked opens its form after sign-in', async ({ page }) 
   test.skip(!(await pick.count()), 'no class is open for registration');
   const name = ((await pick.getAttribute('aria-label')) ?? '').replace(/^Select /, '');
   await pick.click();
-  await expect(page.getByRole('heading', { name: `Sign in to register for ${name}` })).toBeVisible();
+  await expect(
+    page.getByRole('heading', { name: `Sign in to register for ${name}` }),
+  ).toBeVisible();
   await expect(page.locator('.ep-adm-classlist [aria-current="true"]')).toHaveText('Selected');
   const problems: string[] = [];
   const r = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa']).analyze();
@@ -284,4 +286,27 @@ test('admission: a class picked opens its form after sign-in', async ({ page }) 
   await page.waitForURL(/\/alpha\/admission\/application\/\d+/, { timeout: 60_000 });
   await expect(page.getByText(name).first()).toBeVisible();
   expect(problems).toEqual([]);
+});
+
+// a website enquiry gets its number on screen (docs/design/43, part 3); signed out, Help offers it
+test('admission enquiry: the number is shown after sending', async ({ page }) => {
+  test.setTimeout(120_000);
+  await page.goto(`${BASE}/api/lang?to=en&back=%2Falpha%2Fadmission%2Fhelp`);
+  await expect(page.getByRole('link', { name: 'Send an enquiry' })).toBeVisible();
+  await page.goto(`${BASE}/alpha/admission/enquire`);
+  await page.waitForLoadState('networkidle');
+  await page.getByLabel('Your name').fill('Browser Enquiry Parent');
+  // an address that cannot receive mail: nothing real is sent
+  await page.getByLabel('Email').fill('browser.enquiry@example.invalid');
+  await page.getByLabel('Your question').fill('Is there a school bus from Sector 15?');
+  await page.getByRole('button', { name: /Send/ }).click();
+  await expect(page.getByText(/Your enquiry number is ENQ-\d{6}/)).toBeVisible({
+    timeout: 90_000,
+  });
+  const r = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa']).analyze();
+  expect(
+    r.violations
+      .filter((v) => v.impact === 'serious' || v.impact === 'critical')
+      .map((v) => `${v.id}: ${v.nodes.map((n) => n.target.join(' ')).join(' | ')}`),
+  ).toEqual([]);
 });

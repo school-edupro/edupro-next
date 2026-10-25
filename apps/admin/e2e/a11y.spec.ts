@@ -728,6 +728,45 @@ test.describe('accessibility (axe)', () => {
     ).toEqual([]);
   });
 
+  // the enquiry desk answers (docs/design/43, part 3): the desk set-up, an enquiry with Reply to family
+  test('enquiry desk: set-up card and reply to family', async ({ page }) => {
+    test.setTimeout(120_000);
+    await page.goto('/admissions/setup');
+    await page.waitForLoadState('networkidle');
+    await expect(page.getByRole('heading', { name: 'Enquiry desk' })).toBeVisible();
+    await expect(page.getByLabel(/Give each website enquiry to a counsellor/)).toBeVisible();
+    await page.goto('/admissions/enquiries?q=Browser%20Enquiry');
+    await page.waitForLoadState('networkidle');
+    const href = await page
+      .locator('a[href^="/admissions/enquiries/"]')
+      .evaluateAll((as) =>
+        as
+          .map((a) => a.getAttribute('href') ?? '')
+          .find((h) => /^\/admissions\/enquiries\/\d+$/.test(h)),
+      );
+    test.skip(!href, 'no website enquiry from the browser test yet');
+    await page.goto(href!);
+    await page.waitForLoadState('networkidle');
+    const skip = page.getByRole('button', { name: 'Skip' });
+    if (await skip.isVisible()) await skip.click();
+    await expect(page.getByText(/Enquiry ENQ-\d{6}/)).toBeVisible();
+    await page.getByLabel('Message *').fill('Yes, the bus runs from Sector 15.');
+    await page.getByRole('button', { name: 'Send the reply' }).click();
+    await expect(page.getByText(/Reply sent/)).toBeVisible();
+    await expect(page.getByText('Reply by email: Yes, the bus runs from Sector 15.')).toBeVisible();
+    await page.screenshot({ path: test.info().outputPath('enquiry-reply.png'), fullPage: true });
+    const r = await new AxeBuilder({ page })
+      .options({ iframes: false })
+      .setLegacyMode()
+      .withTags(['wcag2a', 'wcag2aa'])
+      .analyze();
+    expect(
+      r.violations
+        .filter((v) => v.impact === 'serious' || v.impact === 'critical')
+        .map((v) => `${v.id}: ${v.nodes.map((n) => n.target.join(' ')).join(' | ')}`),
+    ).toEqual([]);
+  });
+
   // a notice for candidates is chosen as in Compose: session, classes, statuses (docs/design/43, part 2)
   test('notice for candidates: session, classes and status', async ({ page }) => {
     await page.goto('/academics/notices/new');

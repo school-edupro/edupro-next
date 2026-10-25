@@ -1,4 +1,6 @@
+import { cookies } from 'next/headers';
 import { notFound } from 'next/navigation';
+import { ADMISSION_COOKIE } from '@/lib/admission';
 import { t } from '@/lib/i18n';
 import { currentLang } from '@/lib/lang';
 import { schoolProfile } from '@/lib/school';
@@ -48,6 +50,7 @@ export default async function AdmissionHelpPage({
   const { school } = await params;
   const profile = await schoolProfile(school);
   if (!profile) notFound();
+  const signedIn = Boolean((await cookies()).get(ADMISSION_COOKIE)?.value);
   const lang = await currentLang();
   const w = (en: string) => t(lang, en);
   return (
@@ -105,12 +108,21 @@ export default async function AdmissionHelpPage({
               </div>
             ) : null}
           </dl>
-          <p className="ep-field__help">
-            {w('A question about admission? Send it to the school.')}
-          </p>
-          <a className="ep-btn ep-btn--primary ep-btn--sm" href={`/${school}/admission/enquire`}>
-            {w('Send an enquiry')}
-          </a>
+          {/* signed out, a new family's question goes to the enquiry desk (docs/design/43, part 3);
+              a registered family asks about its registration by these contacts */}
+          {signedIn ? null : (
+            <>
+              <p className="ep-field__help">
+                {w('A question about admission? Send it to the school.')}
+              </p>
+              <a
+                className="ep-btn ep-btn--primary ep-btn--sm"
+                href={`/${school}/admission/enquire`}
+              >
+                {w('Send an enquiry')}
+              </a>
+            </>
+          )}
         </section>
       </div>
       <section className="ep-card ep-adm-faq" aria-labelledby="help-faq">

@@ -1,9 +1,11 @@
 import { PageHeader } from '@edupro/ui';
 import { notFound } from 'next/navigation';
 import { AdmissionSetupEditor } from '@/components/admissions/AdmissionSetupEditor';
+import { EnquiryDeskEditor } from '@/components/admissions/EnquiryDeskEditor';
 import { EnquirySourcesEditor } from '@/components/admissions/EnquirySourcesEditor';
 import { ProcessEditor } from '@/components/admissions/ProcessEditor';
 import { Notice } from '@/components/Notice';
+import type { EnquiryMeta } from '@/lib/admission-enquiry';
 import type { FormDetail, FormListRow } from '@/lib/admission-forms';
 import type { ProcessSetup } from '@/lib/admission-process';
 import type { AdmissionSetup } from '@/lib/admission-setup';
@@ -41,13 +43,10 @@ export default async function AdmissionSetupPage({
     admission_cancelled: 'Admission cancelled',
     admission_message: 'Other messages',
   };
-  const sources = me.permissions.includes('admissions.enquiry.manage')
-    ? await apiFetch<{
-        sources: Array<{ id: string; name: string; status: string; used: number }>;
-      }>('/admissions/enquiries/meta')
-        .then((m) => m.sources)
-        .catch(() => null)
+  const enquiryMeta = me.permissions.includes('admissions.enquiry.manage')
+    ? await apiFetch<EnquiryMeta>('/admissions/enquiries/meta').catch(() => null)
     : null;
+  const sources = enquiryMeta?.sources ?? null;
   const byCode = new Map<string, CommsTemplate[]>();
   for (const t of templates) byCode.set(t.code, [...(byCode.get(t.code) ?? []), t]);
   const details = await Promise.all(
@@ -83,6 +82,15 @@ export default async function AdmissionSetupPage({
           canEdit={me.permissions.includes('admissions.setup.manage')}
         />
       </div>
+      {enquiryMeta?.desk ? (
+        <div style={{ marginTop: 'var(--sp-4)' }}>
+          <EnquiryDeskEditor
+            initial={enquiryMeta.desk}
+            counsellors={enquiryMeta.counsellors}
+            canEdit={me.permissions.includes('admissions.setup.manage')}
+          />
+        </div>
+      ) : null}
       {sources ? (
         <div style={{ marginTop: 'var(--sp-4)' }}>
           <EnquirySourcesEditor

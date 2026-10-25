@@ -2469,5 +2469,115 @@ describe('online admission (e2e)', () => {
       )!;
       expect(mini.enquiries).toBe(3);
     });
+
+    // docs/design/43, part 3: assigned on arrival, acknowledged with a number, answered from the desk
+    const webEnquiry = async (parentName: string) => {
+      const ch = await inject({ method: 'POST', url: '/public/admissions/challenge', headers: {} });
+      const nonce = PowService.solve(ch.json().challenge, ch.json().difficulty);
+      return inject({
+        method: 'POST',
+        url: '/public/admission/enquiry',
+        headers: {},
+        json: {
+          schoolCode: school.code,
+          challenge: ch.json().challenge,
+          nonce,
+          parentName,
+          classId: classMini,
+          email: `${parentName.toLowerCase().replace(/\s+/g, '.')}@example.com`,
+        },
+      });
+    };
+    const findEnquiry = async (q: string) =>
+      (
+        await inject({
+          method: 'GET',
+          url: `/admissions/enquiries?q=${encodeURIComponent(q)}`,
+          headers: h(),
+        })
+      ).json().data[0] as { id: string; counsellor: string | null };
+
+    it('assigns a website enquiry on arrival and acknowledges it with its number', async () => {
+      const desk = await inject({
+        method: 'PUT',
+        url: '/admissions/enquiries/desk',
+        headers: h(),
+        json: { autoAssign: true, counsellors: [clerk.id], acknowledge: true },
+      });
+      expect(desk.statusCode).toBe(200);
+      expect(desk.json()).toMatchObject({ autoAssign: true, counsellors: [clerk.id] });
+      const web = await webEnquiry('Ack Parent');
+      expect(web.statusCode).toBe(201);
+      expect(web.json().enquiryNo).toMatch(/^ENQ-\d{6}$/);
+      const row = await findEnquiry('Ack Parent');
+      const one = await inject({
+        method: 'GET',
+        url: `/admissions/enquiries/${row.id}`,
+        headers: h(),
+      });
+      expect(one.json()).toMatchObject({
+        counsellorUserId: clerk.id,
+        number: web.json().enquiryNo,
+      });
+      const notes = (one.json().followups as Array<{ outcome: string }>).map((f) => f.outcome);
+      expect(notes.some((x) => /^Assigned to .+ on arrival$/.test(x))).toBe(true);
+      expect(notes.some((x) => /^Acknowledgement sent/.test(x))).toBe(true);
+      // switched off: the next one waits unassigned and gets no acknowledgement
+      await inject({
+        method: 'PUT',
+        url: '/admissions/enquiries/desk',
+        headers: h(),
+        json: { autoAssign: false, counsellors: [], acknowledge: false },
+      });
+      await webEnquiry('Quiet Parent');
+      const quiet = await findEnquiry('Quiet Parent');
+      expect(quiet.counsellor).toBeNull();
+      const restore = await inject({
+        method: 'PUT',
+        url: '/admissions/enquiries/desk',
+        headers: h(),
+        json: { autoAssign: true, counsellors: [], acknowledge: true },
+      });
+      expect(restore.statusCode).toBe(200);
+      const wrong = await inject({
+        method: 'PUT',
+        url: '/admissions/enquiries/desk',
+        headers: h(clerk),
+        json: { autoAssign: true, counsellors: [], acknowledge: true },
+      });
+      expect(wrong.statusCode).toBe(403);
+    });
+
+    it('replies to the family from the enquiry; the reply is kept with the follow-ups', async () => {
+      const row = await findEnquiry('Ack Parent');
+      const sent = await inject({
+        method: 'POST',
+        url: `/admissions/enquiries/${row.id}/reply`,
+        headers: h(clerk),
+        json: { message: 'Campus tours run on Saturdays at 10 am.', email: true, mobile: false },
+      });
+      expect(sent.statusCode).toBe(201);
+      expect(sent.json().sent).toBeGreaterThanOrEqual(1);
+      expect(sent.json().enquiry.status).toBe('follow_up');
+      expect(sent.json().enquiry.followups[0]).toMatchObject({
+        mode: 'reply',
+        outcome: 'Reply by email: Campus tours run on Saturdays at 10 am.',
+      });
+      // the enquiry has no mobile: an SMS-only reply is refused
+      const sms = await inject({
+        method: 'POST',
+        url: `/admissions/enquiries/${row.id}/reply`,
+        headers: h(clerk),
+        json: { message: 'Hello', email: false, mobile: true },
+      });
+      expect(sms.statusCode).toBe(400);
+      const none = await inject({
+        method: 'POST',
+        url: `/admissions/enquiries/${row.id}/reply`,
+        headers: h(clerk),
+        json: { message: 'Hello', email: false, mobile: false },
+      });
+      expect(none.statusCode).toBe(400);
+    });
   });
 });
