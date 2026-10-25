@@ -1,9 +1,23 @@
 /** The enquiry desk of admissions (docs/design/39, part 8). */
+/** A stage of a lead (docs/design/45, part 1). */
+export interface EnquiryStage {
+  id: string;
+  code: string;
+  name: string;
+  kind: 'open' | 'started' | 'registered' | 'admitted' | 'lost';
+  status: 'active' | 'inactive' | string;
+  leads: number;
+}
+export const LOST_REASONS = ['Fees', 'Distance', 'Another school', 'No seat', 'Other'];
+export const SCORE_LABEL: Record<string, string> = { hot: 'Hot', warm: 'Warm', cold: 'Cold' };
+
 export interface EnquiryMeta {
   sources: Array<{ id: string; name: string; status: string; used: number }>;
   cycles: Array<{ id: string; name: string; status: string }>;
   classes: Array<{ id: string; name: string }>;
   counsellors: Array<{ id: string; name: string }>;
+  /** the school's stages of a lead (docs/design/45) */
+  stages?: EnquiryStage[];
   /** how website enquiries are taken (docs/design/43, part 3) */
   desk?: { autoAssign: boolean; counsellors: string[]; acknowledge: boolean; channels: string[] };
 }

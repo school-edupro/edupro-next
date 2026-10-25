@@ -9,10 +9,13 @@ import {
   EnquiryReportQueryDto,
   EnquiryUpdateDto,
   FollowUpDto,
+  BulkDto,
   EnquiryDeskDto,
   InviteDto,
+  MoveDto,
   ReplyDto,
   SourcesDto,
+  StagesDto,
 } from './enquiry.dto';
 import { AdmissionEnquiryService, ENQUIRY_MANAGE } from './enquiry.service';
 
@@ -42,6 +45,20 @@ export class AdmissionEnquiryController {
   @RequirePermission('admissions.setup.manage')
   desk(@ReqCtx() ctx: RequestContext, @Body() dto: EnquiryDeskDto) {
     return this.svc.saveDesk(ctx, dto);
+  }
+
+  @Put('stages')
+  @ApiOperation({ summary: "The school's stages of a lead (docs/design/45)" })
+  @RequirePermission('admissions.setup.manage')
+  stages(@ReqCtx() ctx: RequestContext, @Body() dto: StagesDto) {
+    return this.svc.saveStages(ctx, dto);
+  }
+
+  @Post('bulk')
+  @ApiOperation({ summary: 'Many leads at once: assign, move, score' })
+  @RequirePermission(ENQUIRY_MANAGE)
+  bulk(@ReqCtx() ctx: RequestContext, @Body() dto: BulkDto) {
+    return this.svc.bulk(ctx, dto);
   }
 
   @Get('report')
@@ -80,6 +97,13 @@ export class AdmissionEnquiryController {
   @RequirePermission(ENQUIRY_MANAGE)
   followUp(@ReqCtx() ctx: RequestContext, @Param('id') id: string, @Body() dto: FollowUpDto) {
     return this.svc.followUp(ctx, id, dto);
+  }
+
+  @Post(':id/stage')
+  @ApiOperation({ summary: 'Move a lead to an open stage, or to Lost with its reason' })
+  @RequirePermission(ENQUIRY_MANAGE)
+  move(@ReqCtx() ctx: RequestContext, @Param('id') id: string, @Body() dto: MoveDto) {
+    return this.svc.move(ctx, id, dto);
   }
 
   @Post(':id/reply')

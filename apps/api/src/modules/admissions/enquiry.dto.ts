@@ -41,6 +41,9 @@ export const EnquiryQuerySchema = z.object({
   cycleId: IdSchema.optional(),
   counsellor: z.union([z.literal('me'), z.literal('none'), IdSchema]).optional(),
   due: z.enum(['today', 'overdue', 'upcoming']).optional(),
+  /** a stage of the school's (docs/design/45, part 1) */
+  stageId: IdSchema.optional(),
+  score: z.enum(['hot', 'warm', 'cold', 'none']).optional(),
   q: z.string().trim().max(80).optional(),
   page: z.coerce.number().int().min(1).default(1),
   size: z.coerce.number().int().min(1).max(200).default(50),
@@ -120,3 +123,44 @@ export const PublicEnquirySchema = z
     path: ['mobile'],
   });
 export class PublicEnquiryDto extends createZodDto(PublicEnquirySchema) {}
+
+// ---- lead management (docs/design/45, part 1) ------------------------------------------------------
+export const SCORES = ['hot', 'warm', 'cold'] as const;
+export const LOST_REASONS = ['Fees', 'Distance', 'Another school', 'No seat', 'Other'] as const;
+
+/** The school's stages: the four kinds a school must keep (started, registered, admitted, lost) and its open ones. */
+export const StagesSchema = z.object({
+  stages: z
+    .array(
+      z.object({
+        id: IdSchema.optional(),
+        name: z.string().trim().min(1).max(60),
+        kind: z.enum(['open', 'started', 'registered', 'admitted', 'lost']),
+        status: z.enum(['active', 'inactive']).default('active'),
+      }),
+    )
+    .min(5)
+    .max(20),
+});
+export class StagesDto extends createZodDto(StagesSchema) {}
+
+/** A lead moved to a stage (Lost with its reason). */
+export const MoveSchema = z.object({
+  stageId: IdSchema,
+  lostReason: z.string().trim().max(200).optional(),
+});
+export class MoveDto extends createZodDto(MoveSchema) {}
+
+/** Many leads at once: given to a counsellor, moved, scored. */
+export const BulkSchema = z
+  .object({
+    ids: z.array(IdSchema).min(1).max(500),
+    counsellorUserId: IdSchema.nullable().optional(),
+    stageId: IdSchema.optional(),
+    lostReason: z.string().trim().max(200).optional(),
+    score: z.enum([...SCORES, 'none']).optional(),
+  })
+  .refine((v) => v.counsellorUserId !== undefined || v.stageId || v.score, {
+    message: 'Choose what to do',
+  });
+export class BulkDto extends createZodDto(BulkSchema) {}

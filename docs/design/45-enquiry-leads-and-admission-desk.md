@@ -33,10 +33,10 @@ counsellors of the rule marked "everything else", else to nobody (as now when th
 
 ## Parts
 
-**Part 1 — Stages and the lead's facts (API, migration 0250).** `admission_enquiry_stages` (the
+**Part 1 — Stages and the lead's facts (built 25 Oct 2026, migration 0251).** `admission_enquiry_stages` (the
 school's own, sort order, kind `open` / `registered` / `admitted` / `lost`, colour from the tokens),
 seeded with the eight defaults; `admission_enquiries.stage_id`, `score` (hot / warm / cold),
-`lost_reason`, `first_contact_at`, `rule_id`, `level`; the old status kept in step for the reports. A
+`lost_reason`, `first_contact_at` (`rule_id`, `level` come with part 3); the old status kept in step for the reports. A
 registration moves its enquiry to Registration started / Registered / Admitted by itself. List API by
 stage with counts, today's / overdue / new figures, bulk assign / move / score.
 
@@ -48,7 +48,7 @@ score, due), select rows → assign, move, message, export. The enquiry page gai
 top, the score, Lost with its reason, and one timeline of calls, messages, invitations and changes.
 Import from Excel (the columns of the enquiry form) with duplicates by mobile / email marked.
 
-**Part 3 — Assignment rules with escalation (set-up, migration 0251).** `admission_enquiry_rules`
+**Part 3 — Assignment rules with escalation (set-up, migration 0252).** `admission_enquiry_rules`
 (name, classes, sources, counsellor pool, first-contact hours, level 2 person or role, acknowledge, the
 "everything else" rule, active). Admission set-up → Enquiry desk becomes a list of rules with their
 flow ("Pool: A, B, C → first contact in 4 h → Head of admissions"), edited like an approval process.

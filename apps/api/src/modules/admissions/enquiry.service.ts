@@ -14,11 +14,14 @@ import type {
   EnquiryReportQueryDto,
   EnquiryUpdateDto,
   FollowUpDto,
+  BulkDto,
   EnquiryDeskDto,
   InviteDto,
+  MoveDto,
   PublicEnquiryDto,
   ReplyDto,
   SourcesDto,
+  StagesDto,
 } from './enquiry.dto';
 import { publicTenant } from './public/otp.service';
 
@@ -97,6 +100,7 @@ export class AdmissionEnquiryService {
         classes: classes.rows,
         counsellors: counsellors.rows,
         desk: await this.deskWith(c),
+        stages: await this.stagesWith(c),
       };
     });
   }
@@ -184,6 +188,186 @@ export class AdmissionEnquiryService {
     return who.name;
   }
 
+  /** The school's stages of a lead (docs/design/45, part 1), seeded with the eight on first use. */
+  private async stagesWith(c: PoolClient) {
+    await c.query(`SELECT app.enquiry_stages_seed(app.current_school_id())`);
+    const r = await c.query<{
+      id: string;
+      code: string;
+      name: string;
+      kind: string;
+      status: string;
+      leads: number;
+    }>(
+      `SELECT s.id::text, s.code, s.name, s.kind, s.status,
+              (SELECT count(*)::int FROM admission_enquiries e WHERE e.stage_id = s.id) AS leads
+         FROM admission_enquiry_stages s ORDER BY s.sort_order, s.id`,
+    );
+    return r.rows;
+  }
+
+  async saveStages(ctx: RequestContext, dto: StagesDto) {
+    return this.db.tenant(requireTenant(ctx), async (c) => {
+      const before = await this.stagesWith(c);
+      const live = dto.stages.filter((x) => x.status === 'active');
+      for (const kind of ['started', 'registered', 'admitted', 'lost'] as const)
+        if (live.filter((x) => x.kind === kind).length !== 1)
+          throw new DomainError(
+            'validation-failed',
+            `Keep exactly one stage for ${kind === 'started' ? 'a registration started' : kind === 'lost' ? 'lost leads' : `the ${kind}`}`,
+            { status: 400 },
+          );
+      if (!live.some((x) => x.kind === 'open'))
+        throw new DomainError('validation-failed', 'Keep at least one open stage', { status: 400 });
+      for (const [i, x] of dto.stages.entries()) {
+        const had = x.id ? before.find((b) => b.id === x.id) : undefined;
+        if (x.id && !had) throw new DomainError('not-found', 'Unknown stage', { status: 404 });
+        if (had && had.kind !== x.kind)
+          throw new DomainError('validation-failed', `${had.name}: its kind cannot change`, {
+            status: 400,
+          });
+        if (had)
+          await c.query(
+            `UPDATE admission_enquiry_stages SET name = $2, status = $3, sort_order = $4 WHERE id = $1`,
+            [x.id, x.name, x.status, i + 1],
+          );
+        else {
+          const base =
+            x.name
+              .toLowerCase()
+              .replace(/[^a-z0-9]+/g, '_')
+              .replace(/^_+|_+$/g, '')
+              .slice(0, 24) || 'stage';
+          const code = /^[a-z]/.test(base) ? base : `s_${base}`;
+          await c.query(
+            `INSERT INTO admission_enquiry_stages (school_id, code, name, kind, status, sort_order)
+             VALUES (app.current_school_id(), $1 || CASE WHEN EXISTS (SELECT 1 FROM admission_enquiry_stages WHERE code = $1) THEN '_' || ($5::int)::text ELSE '' END, $2, $3, $4, $5::int)`,
+            [code, x.name, x.kind, x.status, i + 1],
+          );
+        }
+      }
+      // a stage left out with leads in it is switched off; an empty one goes
+      const keep = dto.stages.filter((x) => x.id).map((x) => x.id!);
+      for (const b of before.filter((b) => !keep.includes(b.id))) {
+        if (b.leads)
+          await c.query(`UPDATE admission_enquiry_stages SET status = 'inactive' WHERE id = $1`, [
+            b.id,
+          ]);
+        else await c.query(`DELETE FROM admission_enquiry_stages WHERE id = $1`, [b.id]);
+      }
+      const after = await this.stagesWith(c);
+      await this.audit.stage(ctx, c, {
+        action: 'admissions.enquiry.stages',
+        entityType: 'admission_enquiry_stages',
+        entityId: ctx.tenant!.schoolId,
+        before: before.map((x) => x.name),
+        after: after.map((x) => x.name),
+      });
+      return after;
+    });
+  }
+
+  /** A lead moved by hand: an open stage, or Lost with its reason; the registration moves the rest. */
+  private async moveIn(c: PoolClient, ctx: RequestContext, id: string, dto: MoveDto) {
+    const st = await c.query<{ name: string; kind: string; status: string }>(
+      `SELECT name, kind, status FROM admission_enquiry_stages WHERE id = $1`,
+      [dto.stageId],
+    );
+    const s = st.rows[0];
+    if (!s || s.status !== 'active')
+      throw new DomainError('validation-failed', 'Unknown stage', { status: 400 });
+    if (s.kind !== 'open' && s.kind !== 'lost')
+      throw new DomainError(
+        'validation-failed',
+        `${s.name} is set by the registration itself (the family starts, registers, is admitted)`,
+        { status: 400 },
+      );
+    if (s.kind === 'lost' && !dto.lostReason)
+      throw new DomainError('validation-failed', 'Say why the lead is lost', { status: 400 });
+    const e = await this.row(c, id);
+    if (e.application_id && s.kind !== 'lost')
+      throw new DomainError('admissions.enquiry_converted', 'The family has registered already', {
+        status: 409,
+      });
+    await c.query(
+      `UPDATE admission_enquiries SET stage_id = $2, lost_reason = $3, updated_at = now(),
+              next_follow_up_on = CASE WHEN $4 THEN NULL ELSE next_follow_up_on END
+        WHERE id = $1`,
+      [id, dto.stageId, s.kind === 'lost' ? dto.lostReason : null, s.kind === 'lost'],
+    );
+    await c.query(
+      `INSERT INTO admission_enquiry_followups (school_id, enquiry_id, mode, outcome, by_user_id)
+       VALUES (app.current_school_id(), $1, 'note', $2, $3)`,
+      [id, `Moved to ${s.name}${s.kind === 'lost' ? ` (${dto.lostReason})` : ''}`, ctx.user.id],
+    );
+  }
+
+  async move(ctx: RequestContext, id: string, dto: MoveDto) {
+    await this.db.tenant(requireTenant(ctx), (c) => this.moveIn(c, ctx, id, dto));
+    return this.get(ctx, id);
+  }
+
+  /** Many leads at once: given to a counsellor, moved, scored (docs/design/45, part 1). */
+  async bulk(ctx: RequestContext, dto: BulkDto) {
+    return this.db.tenant(requireTenant(ctx), async (c) => {
+      const ids = [...new Set(dto.ids)];
+      const found = await c.query<{ id: string }>(
+        `SELECT id::text FROM admission_enquiries WHERE id = ANY($1::bigint[])`,
+        [ids],
+      );
+      if (found.rowCount !== ids.length)
+        throw new DomainError('not-found', 'An enquiry was not found', { status: 404 });
+      if (dto.counsellorUserId !== undefined) {
+        if (dto.counsellorUserId) {
+          const ok = await c.query(
+            // eslint-disable-next-line no-restricted-syntax -- COUNSELLORS is a fixed fragment
+            `SELECT 1 FROM (${COUNSELLORS}) k WHERE k.id = $1`,
+            [dto.counsellorUserId],
+          );
+          if (!ok.rowCount)
+            throw new DomainError('validation-failed', 'This person does not take enquiries', {
+              status: 400,
+            });
+        }
+        await c.query(
+          `UPDATE admission_enquiries SET counsellor_user_id = $2, updated_at = now(),
+                  assigned_at = CASE WHEN $2::bigint IS DISTINCT FROM counsellor_user_id THEN now() ELSE assigned_at END
+            WHERE id = ANY($1::bigint[])`,
+          [ids, dto.counsellorUserId],
+        );
+      }
+      if (dto.score)
+        await c.query(
+          `UPDATE admission_enquiries SET score = $2, updated_at = now() WHERE id = ANY($1::bigint[])`,
+          [ids, dto.score === 'none' ? null : dto.score],
+        );
+      let skipped = 0;
+      if (dto.stageId)
+        for (const id of ids)
+          try {
+            await c.query('SAVEPOINT lead');
+            await this.moveIn(c, ctx, id, { stageId: dto.stageId, lostReason: dto.lostReason });
+            await c.query('RELEASE SAVEPOINT lead');
+          } catch (e) {
+            await c.query('ROLLBACK TO SAVEPOINT lead');
+            if (!(e instanceof DomainError) || ids.length === 1) throw e;
+            skipped += 1;
+          }
+      await this.audit.stage(ctx, c, {
+        action: 'admissions.enquiry.bulk',
+        entityType: 'admission_enquiries',
+        entityId: ids[0]!,
+        after: {
+          count: ids.length,
+          counsellor: dto.counsellorUserId,
+          stage: dto.stageId,
+          score: dto.score,
+        },
+      });
+      return { done: ids.length - skipped, skipped };
+    });
+  }
+
   async saveSources(ctx: RequestContext, dto: SourcesDto) {
     return this.db.tenant(requireTenant(ctx), async (c) => {
       const before = await this.sourcesWith(c);
@@ -243,6 +427,9 @@ export class AdmissionEnquiryService {
           `e.status IN ('new', 'follow_up', 'interested') AND e.next_follow_up_on > ?::date`,
           today(),
         );
+      if (q.stageId) add('e.stage_id = ?', q.stageId);
+      if (q.score === 'none') where.push('e.score IS NULL');
+      else if (q.score) add('e.score = ?', q.score);
       if (q.q)
         add(
           `(e.parent_name ILIKE ? OR e.child_name ILIKE ? OR e.mobile ILIKE ? OR e.email::text ILIKE ?)`,
@@ -271,6 +458,22 @@ export class AdmissionEnquiryService {
            FROM admission_enquiries`,
         [today(), ctx.user.id],
       );
+      // the same filters without the stage: how many leads each stage holds
+      const sp: unknown[] = [];
+      const sw = where
+        .filter((x) => !x.startsWith('e.stage_id = '))
+        .map((x) =>
+          x.replace(/\$(\d+)/g, (_, n: string) => {
+            sp.push(params[Number(n) - 1]);
+            return `$${String(sp.length)}`;
+          }),
+        )
+        .join(' AND ');
+      const byStage = await c.query<{ stageId: string; leads: number }>(
+        // eslint-disable-next-line no-restricted-syntax -- sw holds fixed fragments; values are bound parameters
+        `SELECT e.stage_id::text AS "stageId", count(*)::int AS leads FROM admission_enquiries e WHERE ${sw} GROUP BY e.stage_id`,
+        sp,
+      );
       params.push(q.size, (q.page - 1) * q.size);
       const r = await c.query<{
         id: string;
@@ -288,13 +491,19 @@ export class AdmissionEnquiryService {
         last_contact_at: Date | null;
         from_website: boolean;
         application_no: string | null;
+        stage_id: string | null;
+        stage: string | null;
+        stage_kind: string | null;
+        score: string | null;
+        first_contact_at: Date | null;
       }>(
         // eslint-disable-next-line no-restricted-syntax -- w holds fixed fragments; values are bound parameters
         `SELECT e.id::text, e.parent_name, e.child_name, cl.name AS class_name, s.name AS source, e.campaign, e.mobile, e.email::text,
                 e.status, e.next_follow_up_on::text, u.display_name AS counsellor, e.created_at, e.last_contact_at, e.from_website,
-                a.application_no
+                a.application_no, e.stage_id::text, st.name AS stage, st.kind AS stage_kind, e.score, e.first_contact_at
            FROM admission_enquiries e LEFT JOIN classes cl ON cl.id = e.class_id LEFT JOIN admission_enquiry_sources s ON s.id = e.source_id
            LEFT JOIN users u ON u.id = e.counsellor_user_id LEFT JOIN applications a ON a.id = e.application_id
+           LEFT JOIN admission_enquiry_stages st ON st.id = e.stage_id
           WHERE ${w}
           ORDER BY CASE WHEN e.status IN ('new', 'follow_up', 'interested') THEN 0 ELSE 1 END, e.next_follow_up_on NULLS LAST, e.created_at DESC
           LIMIT $${params.length - 1} OFFSET $${params.length}`,
@@ -327,7 +536,12 @@ export class AdmissionEnquiryService {
           lastContactAt: x.last_contact_at?.toISOString() ?? null,
           fromWebsite: x.from_website,
           registrationNo: x.application_no,
+          stage: x.stage_id ? { id: x.stage_id, name: x.stage!, kind: x.stage_kind! } : null,
+          score: x.score,
+          firstContactAt: x.first_contact_at?.toISOString() ?? null,
         })),
+        // the leads of each stage under the same filters but the stage (the board's columns)
+        byStage: byStage.rows,
       };
     });
   }
@@ -356,8 +570,12 @@ export class AdmissionEnquiryService {
       from_website: boolean;
       created_at: Date;
       created_by: string | null;
+      stage_id: string | null;
+      score: string | null;
+      lost_reason: string | null;
+      first_contact_at: Date | null;
     }>(
-      `SELECT e.id::text, e.cycle_id::text, e.class_id::text, e.source_id::text, e.campaign, e.parent_name, e.child_name, e.child_dob::text,
+      `SELECT e.stage_id::text, e.score, e.lost_reason, e.first_contact_at, e.id::text, e.cycle_id::text, e.class_id::text, e.source_id::text, e.campaign, e.parent_name, e.child_name, e.child_dob::text,
               e.mobile, e.email::text, e.locality, e.previous_school, e.notes, e.status, e.counsellor_user_id::text, e.next_follow_up_on::text,
               e.invited_at, e.application_id::text, e.converted_at, e.from_website, e.created_at, u.display_name AS created_by
          FROM admission_enquiries e LEFT JOIN users u ON u.id = e.created_by WHERE e.id = $1`,
@@ -414,6 +632,11 @@ export class AdmissionEnquiryService {
         createdAt: e.created_at.toISOString(),
         createdBy: e.created_by,
         application: e.application_id && app ? { id: e.application_id, ...app } : null,
+        stageId: e.stage_id,
+        score: e.score,
+        lostReason: e.lost_reason,
+        firstContactAt: e.first_contact_at?.toISOString() ?? null,
+        stages: await this.stagesWith(c),
         convertedAt: e.converted_at?.toISOString() ?? null,
         followups: followups.rows.map((f) => ({
           id: f.id,

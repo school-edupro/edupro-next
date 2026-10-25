@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { ApiError, apiFetch } from './api';
+import type { EnquiryStage } from './admission-enquiry';
 
 const okId = (id: string) => /^\d{1,18}$/.test(id);
 const str = (fd: FormData, k: string) => String(fd.get(k) ?? '').trim();
@@ -151,6 +152,25 @@ export async function saveEnquiryDesk(desk: {
     await apiFetch('/admissions/enquiries/desk', { method: 'PUT', body: JSON.stringify(desk) });
     revalidatePath('/admissions/setup');
     return { ok: true as const };
+  } catch (e) {
+    if (e instanceof ApiError)
+      return { ok: false as const, error: e.problem.detail ?? e.problem.type };
+    throw e;
+  }
+}
+
+/** The school's stages of a lead (docs/design/45, part 1). */
+export async function saveEnquiryStages(
+  stages: Array<{ id?: string; name: string; kind: string; status: string }>,
+) {
+  try {
+    const data = await apiFetch<EnquiryStage[]>('/admissions/enquiries/stages', {
+      method: 'PUT',
+      body: JSON.stringify({ stages }),
+    });
+    revalidatePath('/admissions/setup');
+    revalidatePath('/admissions/enquiries');
+    return { ok: true as const, data };
   } catch (e) {
     if (e instanceof ApiError)
       return { ok: false as const, error: e.problem.detail ?? e.problem.type };

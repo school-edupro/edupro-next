@@ -4,6 +4,7 @@ import { AdmissionSetupEditor } from '@/components/admissions/AdmissionSetupEdit
 import { CategoryGapsNote } from '@/components/admissions/CategoryGapsNote';
 import { EnquiryDeskEditor } from '@/components/admissions/EnquiryDeskEditor';
 import { EnquirySourcesEditor } from '@/components/admissions/EnquirySourcesEditor';
+import { EnquiryStagesEditor } from '@/components/admissions/EnquiryStagesEditor';
 import { ProcessEditor } from '@/components/admissions/ProcessEditor';
 import { Notice } from '@/components/Notice';
 import type { EnquiryMeta } from '@/lib/admission-enquiry';
@@ -89,6 +90,14 @@ export default async function AdmissionSetupPage({
           <EnquiryDeskEditor
             initial={enquiryMeta.desk}
             counsellors={enquiryMeta.counsellors}
+            canEdit={me.permissions.includes('admissions.setup.manage')}
+          />
+        </div>
+      ) : null}
+      {enquiryMeta?.stages ? (
+        <div style={{ marginTop: 'var(--sp-4)' }}>
+          <EnquiryStagesEditor
+            initial={enquiryMeta.stages}
             canEdit={me.permissions.includes('admissions.setup.manage')}
           />
         </div>

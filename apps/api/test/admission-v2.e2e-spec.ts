@@ -2927,6 +2927,145 @@ describe('online admission (e2e)', () => {
       expect(wrong.statusCode).toBe(403);
     });
 
+    // docs/design/45, part 1: the school's stages of a lead, moved by hand and by the registration
+    it('leads have stages: New, Contacted on the first call, moved, lost with a reason, in bulk', async () => {
+      const meta = (
+        await inject({ method: 'GET', url: '/admissions/enquiries/meta', headers: h() })
+      ).json();
+      const stages = meta.stages as Array<{ id: string; code: string; name: string; kind: string }>;
+      expect(stages.map((x) => x.name)).toEqual([
+        'New',
+        'Contacted',
+        'Interested',
+        'Campus visit',
+        'Registration started',
+        'Registered',
+        'Admitted',
+        'Lost',
+      ]);
+      const by = (code: string) => stages.find((x) => x.code === code)!.id;
+      const e = await inject({
+        method: 'POST',
+        url: '/admissions/enquiries',
+        headers: h(clerk),
+        json: {
+          parentName: 'Lead Parent',
+          childName: 'Lead Child',
+          mobile: `6${String(Date.now()).slice(-9)}`,
+        },
+      });
+      expect(e.statusCode).toBe(201);
+      const id = e.json().id as string;
+      expect(e.json()).toMatchObject({ stageId: by('new'), firstContactAt: null });
+      const call = await inject({
+        method: 'POST',
+        url: `/admissions/enquiries/${id}/followups`,
+        headers: h(clerk),
+        json: { mode: 'call', outcome: 'Spoke to the mother' },
+      });
+      expect(call.json().stageId).toBe(by('contacted'));
+      expect(call.json().firstContactAt).toBeTruthy();
+      const visit = await inject({
+        method: 'POST',
+        url: `/admissions/enquiries/${id}/stage`,
+        headers: h(clerk),
+        json: { stageId: by('campus_visit') },
+      });
+      expect(visit.json()).toMatchObject({ stageId: by('campus_visit'), status: 'follow_up' });
+      // registered and admitted move by themselves
+      const reg = await inject({
+        method: 'POST',
+        url: `/admissions/enquiries/${id}/stage`,
+        headers: h(clerk),
+        json: { stageId: by('registered') },
+      });
+      expect(reg.statusCode).toBe(400);
+      const noReason = await inject({
+        method: 'POST',
+        url: `/admissions/enquiries/${id}/stage`,
+        headers: h(clerk),
+        json: { stageId: by('lost') },
+      });
+      expect(noReason.statusCode).toBe(400);
+      const bulk = await inject({
+        method: 'POST',
+        url: '/admissions/enquiries/bulk',
+        headers: h(clerk),
+        json: { ids: [id], score: 'hot', counsellorUserId: clerk.id },
+      });
+      expect(bulk.json()).toMatchObject({ done: 1, skipped: 0 });
+      const lost = await inject({
+        method: 'POST',
+        url: '/admissions/enquiries/bulk',
+        headers: h(clerk),
+        json: { ids: [id], stageId: by('lost'), lostReason: 'Distance' },
+      });
+      expect(lost.json().done).toBe(1);
+      const one = (
+        await inject({ method: 'GET', url: `/admissions/enquiries/${id}`, headers: h(clerk) })
+      ).json();
+      expect(one).toMatchObject({
+        stageId: by('lost'),
+        status: 'not_interested',
+        score: 'hot',
+        lostReason: 'Distance',
+        counsellorUserId: clerk.id,
+      });
+      const list = (
+        await inject({
+          method: 'GET',
+          url: `/admissions/enquiries?stageId=${by('lost')}`,
+          headers: h(),
+        })
+      ).json();
+      expect(list.data.map((x: { id: string }) => x.id)).toContain(id);
+      expect(
+        (list.byStage as Array<{ stageId: string; leads: number }>).find(
+          (x) => x.stageId === by('lost'),
+        )!.leads,
+      ).toBeGreaterThanOrEqual(1);
+      // the converted enquiry of the invitation test sits in Registered (or Admitted)
+      const converted = (
+        await inject({ method: 'GET', url: '/admissions/enquiries?status=converted', headers: h() })
+      ).json();
+      expect(
+        (converted.data as Array<{ stage: { kind: string } }>).every((x) =>
+          ['registered', 'admitted'].includes(x.stage.kind),
+        ),
+      ).toBe(true);
+      // the school renames a stage and adds one; the four kinds it must keep stay
+      const renamed = await inject({
+        method: 'PUT',
+        url: '/admissions/enquiries/stages',
+        headers: h(),
+        json: {
+          stages: [
+            ...stages.map((x) => ({
+              id: x.id,
+              name: x.code === 'campus_visit' ? 'School tour' : x.name,
+              kind: x.kind,
+            })),
+            { name: 'Test booked', kind: 'open' },
+          ],
+        },
+      });
+      expect(renamed.statusCode).toBe(200);
+      expect((renamed.json() as Array<{ name: string }>).map((x) => x.name)).toEqual(
+        expect.arrayContaining(['School tour', 'Test booked']),
+      );
+      const broken = await inject({
+        method: 'PUT',
+        url: '/admissions/enquiries/stages',
+        headers: h(),
+        json: {
+          stages: stages
+            .filter((x) => x.kind !== 'lost')
+            .map((x) => ({ id: x.id, name: x.name, kind: x.kind })),
+        },
+      });
+      expect(broken.statusCode).toBe(400);
+    });
+
     it('replies to the family from the enquiry; the reply is kept with the follow-ups', async () => {
       const row = await findEnquiry('Ack Parent');
       const sent = await inject({
