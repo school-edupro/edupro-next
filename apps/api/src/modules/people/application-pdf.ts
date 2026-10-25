@@ -12,6 +12,8 @@ export interface ApplicationPdfInput {
   school: { name: string; address: string | null; contact: string | null };
   logo: { contentType: string; bytes: Buffer } | null;
   photo: { contentType: string; bytes: Buffer } | null;
+  /** a labelled strip of photos under the heading in place of the one photo (the admission form) */
+  photos?: Array<{ label: string; file: { contentType: string; bytes: Buffer } | null }>;
   number: string;
   received: string;
   post: string;
@@ -100,7 +102,12 @@ export async function applicationPdf(p: ApplicationPdfInput): Promise<Buffer> {
   const regular = await pdf.embedFont(StandardFonts.Helvetica);
   const bold = await pdf.embedFont(StandardFonts.HelveticaBold);
   const logo = await image(pdf, p.logo);
-  const photo = await image(pdf, p.photo);
+  const photo = p.photos ? null : await image(pdf, p.photo);
+  const strip = p.photos
+    ? await Promise.all(
+        p.photos.map(async (x) => ({ label: x.label, img: await image(pdf, x.file) })),
+      )
+    : null;
   const W = A4[0] - 2 * M;
   let page: PDFPage = pdf.addPage(A4);
   let y = A4[1] - M;
@@ -143,7 +150,7 @@ export async function applicationPdf(p: ApplicationPdfInput): Promise<Buffer> {
   const photoW = 86;
   const photoH = 106;
   const headTop = y + 12;
-  const textW = W - photoW - 16;
+  const textW = strip ? W : W - photoW - 16;
   page.drawText(latin(p.kicker ?? 'APPLICATION FOR'), {
     x: M,
     y,
@@ -167,32 +174,82 @@ export async function applicationPdf(p: ApplicationPdfInput): Promise<Buffer> {
     color: MUTED,
     width: textW,
   });
-  const px = A4[0] - M - photoW;
-  page.drawRectangle({
-    x: px,
-    y: headTop - photoH,
-    width: photoW,
-    height: photoH,
-    borderColor: LINE,
-    borderWidth: 1,
-    color: BAND,
-  });
-  if (photo) {
-    const d = fit(photo, photoW - 6, photoH - 6);
-    page.drawImage(photo, {
-      x: px + (photoW - d.width) / 2,
-      y: headTop - photoH + (photoH - d.height) / 2,
-      ...d,
+  if (strip) {
+    // the photos side by side, each boxed and labelled under it; an empty box when one is missing
+    y -= 8;
+    const bw = 100;
+    const bh = 120;
+    const gap = 28;
+    const shown = strip.slice(0, 4);
+    const left = M + (W - (shown.length * bw + (shown.length - 1) * gap)) / 2;
+    const boxTop = y;
+    shown.forEach((s, i) => {
+      const x = left + i * (bw + gap);
+      page.drawRectangle({
+        x,
+        y: boxTop - bh,
+        width: bw,
+        height: bh,
+        borderColor: LINE,
+        borderWidth: 1,
+        color: BAND,
+      });
+      if (s.img) {
+        const d = fit(s.img, bw - 6, bh - 6);
+        page.drawImage(s.img, {
+          x: x + (bw - d.width) / 2,
+          y: boxTop - bh + (bh - d.height) / 2,
+          ...d,
+        });
+      } else {
+        const none = 'No photo';
+        page.drawText(none, {
+          x: x + (bw - regular.widthOfTextAtSize(none, 8)) / 2,
+          y: boxTop - bh / 2,
+          size: 8,
+          font: regular,
+          color: MUTED,
+        });
+      }
+      const label = latin(s.label).slice(0, 24);
+      page.drawText(label, {
+        x: x + (bw - bold.widthOfTextAtSize(label, 9)) / 2,
+        y: boxTop - bh - 13,
+        size: 9,
+        font: bold,
+        color: NAVY,
+      });
     });
-  } else
-    page.drawText('Photo', {
-      x: px + 28,
-      y: headTop - photoH / 2,
-      size: 9,
-      font: regular,
-      color: MUTED,
+    y = boxTop - bh - 34;
+  } else {
+    const px = A4[0] - M - photoW;
+    page.drawRectangle({
+      x: px,
+      y: headTop - photoH,
+      width: photoW,
+      height: photoH,
+      borderColor: LINE,
+      borderWidth: 1,
+      color: BAND,
     });
-  y = Math.min(y, headTop - photoH) - 18;
+    if (photo) {
+      const d = fit(photo, photoW - 6, photoH - 6);
+      page.drawImage(photo, {
+        x: px + (photoW - d.width) / 2,
+        y: headTop - photoH + (photoH - d.height) / 2,
+        ...d,
+      });
+    } else
+      page.drawText('Photo', {
+        x: px + 28,
+        y: headTop - photoH / 2,
+        size: 9,
+        font: regular,
+        color: MUTED,
+      });
+
+    y = Math.min(y, headTop - photoH) - 18;
+  }
 
   /** A section's heading, kept on the page with what follows it (`keep`: the room that needs). */
   const heading = (title: string, keep = 40) => {

@@ -7,7 +7,7 @@ Edunext, MyClassboard and admission CRMs (LeadSquared, NoPaperForms):
    admission form PDF prints only the student's; the parents' show as "Attached" in the documents list.
 2. **Help → Send an enquiry** — lands on Admissions → Enquiries (lead desk, "from website") with no
    counsellor; follow-ups are office notes only, nothing goes back to the family and the family never
-   sees its question. A *registered* family asking about a fee or a document is treated as a new lead.
+   sees its question. A _registered_ family asking about a fee or a document is treated as a new lead.
 3. **Notice → Candidates** — only a class choice across all open sessions; no session, no status. A
    notice for "Class I" reaches Class I families of every open session (the match checks the class only).
 4. **Fee category** — chosen from form answers (EWS, staff child, siblings, alumni). Form 216
@@ -22,12 +22,12 @@ set-up warns when a rule depends on a question the form does not ask.
 
 ## Decisions (asked and answered, 25 Oct 2026)
 
-| #   | Question            | Decision                                                                                                          |
-| --- | ------------------- | ----------------------------------------------------------------------------------------------------------------- |
-| 1   | PDF photos          | **Photo strip at the top**: Student, Father, Mother (Guardian when given), labelled; empty labelled box if missing |
-| 2   | Queries             | **Two flows**: signed out → Enquiry desk; signed in → "Ask the school" ticket in the Helpdesk, thread in portal    |
-| 3   | Assignment          | **Owner per query head** (Fee / payment, Documents, Form / technical, Test / interview, Other), answer-by hours    |
-| 4   | Category check      | **Included**: warn where a category's condition names a question the session's forms do not have                  |
+| #   | Question       | Decision                                                                                                           |
+| --- | -------------- | ------------------------------------------------------------------------------------------------------------------ |
+| 1   | PDF photos     | **Photo strip at the top**: Student, Father, Mother (Guardian when given), labelled; empty labelled box if missing |
+| 2   | Queries        | **Two flows**: signed out → Enquiry desk; signed in → "Ask the school" ticket in the Helpdesk, thread in portal    |
+| 3   | Assignment     | **Owner per query head** (Fee / payment, Documents, Form / technical, Test / interview, Other), answer-by hours    |
+| 4   | Category check | **Included**: warn where a category's condition names a question the session's forms do not have                   |
 
 Defaults taken (change on request): a candidate notice matches the family's registrations **live** (a
 notice to "Registration fee due" stops showing once the fee is paid); the session is required for a
@@ -37,7 +37,7 @@ admission sign-in set-up.
 
 ## Parts
 
-**Part 1 — Photo strip on the form PDFs.** `formPdf` finds the photo fields by `docKind`
+**Part 1 — Photo strip on the form PDFs (built 25 Oct 2026).** `formPdf` finds the photo fields by `docKind`
 (`photo`, `father_photo`, `mother_photo`, `guardian_photo`; else `student|father|mother|guardian` in the
 key) and `applicationPdf` draws a strip of up to four labelled boxes under the heading (the single
 top-right photo goes). Missing photo: an empty box with its label. Same on the admission form PDF and the

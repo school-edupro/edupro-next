@@ -898,13 +898,25 @@ export class AdmissionCoreService {
     const def = await this.defOf(c, a);
     const data = this.plainData(def, a.data);
     const { head, logo } = await this.school(c);
-    const photoField = def.fields.find(
-      (f) => f.type === 'photo' && (f.docKind === 'photo' || /student/.test(f.key)),
+    // the photo strip: the student, father and mother as the form asks for them, a guardian when given
+    const fileOf = (f: AdmissionField | undefined) =>
+      f && Array.isArray(data[f.key]) ? ((data[f.key] as string[])[0] ?? null) : null;
+    const photoOf = (kind: string, key: RegExp) =>
+      def.fields.find(
+        (f) =>
+          f.type === 'photo' &&
+          fieldState(f, data).shown &&
+          (f.docKind === kind || (!f.docKind && key.test(f.key))),
+      );
+    const strip = [
+      { label: 'Student', field: photoOf('photo', /student|child|candidate/) },
+      { label: 'Father', field: photoOf('father_photo', /father/) },
+      { label: 'Mother', field: photoOf('mother_photo', /mother/) },
+      { label: 'Guardian', field: photoOf('guardian_photo', /guardian/) },
+    ].filter((x) => x.field && (x.label !== 'Guardian' || fileOf(x.field)));
+    const photos = await Promise.all(
+      strip.map(async (x) => ({ label: x.label, file: await this.fileBytes(c, fileOf(x.field)) })),
     );
-    const photoId =
-      photoField && Array.isArray(data[photoField.key])
-        ? (data[photoField.key] as string[])[0]
-        : null;
     const sections = def.steps
       .map((s) => ({
         title: s.title,
@@ -934,7 +946,9 @@ export class AdmissionCoreService {
     const bytes = await applicationPdf({
       school: head,
       logo,
-      photo: await this.fileBytes(c, photoId),
+      photo: null,
+      // no photo field at all (an old form): the one box as before
+      ...(photos.length ? { photos } : {}),
       number: opts.admission
         ? (a.admission_no ?? 'Not yet given')
         : (a.application_no ?? 'Not yet registered'),
