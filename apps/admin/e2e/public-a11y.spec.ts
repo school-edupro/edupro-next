@@ -408,7 +408,10 @@ test('admission: messages by who sent them', async ({ page }) => {
   const dev = page.getByText(/Development code: \d{6}/i);
   // a code sent to this family in the last 30 seconds (an earlier run): wait, then ask again
   const tooSoon = page.getByText(/A code was just sent/);
-  await expect(dev.or(tooSoon)).toBeVisible({ timeout: 60_000 });
+  const tooMany = page.getByText(/Too many codes requested/);
+  await expect(dev.or(tooSoon).or(tooMany)).toBeVisible({ timeout: 60_000 });
+  // the family's codes for this hour are used up (runs one after another): nothing to check now
+  test.skip(await tooMany.isVisible(), 'the test family asked for too many codes this hour');
   if (await tooSoon.isVisible()) {
     await page.waitForTimeout(31_000);
     await page.getByRole('button', { name: 'Send code' }).click();
@@ -447,6 +450,26 @@ test('admission: messages by who sent them', async ({ page }) => {
   await check('payments');
   await page.screenshot({
     path: `${process.env.SHOT_DIR ?? test.info().outputDir}/payments.png`,
+    fullPage: true,
+  });
+  // My registrations as a list (docs/design/44, part 4): the forms in the row, a card on a phone
+  await page.goto(`${BASE}/alpha/admission/registrations`);
+  const table = page.getByRole('table', { name: 'My registrations' });
+  await expect(table).toBeVisible();
+  await expect(
+    table.getByRole('link', { name: /^View the registration form/ }).first(),
+  ).toBeVisible();
+  await expect(table.getByRole('link', { name: /^View the admission form/ }).first()).toBeVisible();
+  await check('registrations');
+  await page.screenshot({
+    path: `${process.env.SHOT_DIR ?? test.info().outputDir}/registrations.png`,
+    fullPage: true,
+  });
+  await page.setViewportSize({ width: 375, height: 800 });
+  await check('registrations @375');
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(375);
+  await page.screenshot({
+    path: `${process.env.SHOT_DIR ?? test.info().outputDir}/registrations-phone.png`,
     fullPage: true,
   });
   expect(problems).toEqual([]);

@@ -70,7 +70,7 @@ figures (registration fee and admission fee: amount, paid, due); its dues with P
 its receipts as a table with View / Download. A registration with nothing paid or due shows a line, not
 an empty table. Uses `/me/dashboard` as it stands.
 
-**Part 4 — My registrations as a list (portal).** A table: child, class (and session), registration
+**Part 4 — My registrations as a list (portal; built 25 Oct 2026).** A table: child, class (and session), registration
 number, status, filled (for drafts), fee due, and the actions — Continue / Open, the registration form
 (View + Download) once submitted, the admission form (View + Download) once admitted, Delete for a
 draft. On a phone each row stacks into a card. The existing PDF routes serve the files.

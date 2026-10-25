@@ -314,6 +314,9 @@ const DICT: Record<string, string> = {
   Due: 'देय',
   'Nothing paid or due for this registration yet.': 'इस पंजीकरण के लिए अभी कुछ भुगतान या देय नहीं।',
   'due by': 'अंतिम तिथि',
+  Forms: 'फ़ॉर्म',
+  'Admission no.': 'प्रवेश संख्या',
+  'the admission form': 'प्रवेश फ़ॉर्म',
   'Sign in to register for': 'पंजीकरण के लिए साइन इन करें:',
   'New or registered before, sign in with your mobile number or email: the form for this class opens next.':
     'नए हों या पहले पंजीकरण किया हो, अपने मोबाइल नंबर या ईमेल से साइन इन करें: इसके बाद इस कक्षा का फ़ॉर्म खुलेगा।',

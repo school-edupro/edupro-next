@@ -11412,6 +11412,49 @@ a.ep-pub-foot__item {
   text-align: center;
   color: var(--text-body);
 }
+/* My registrations as a list (docs/design/44, part 4); on a phone each row is a card */
+.ep-adm-reglist__sub {
+  display: block;
+  color: var(--text-muted);
+  font-size: var(--fs-small);
+}
+.ep-adm-reglist__forms {
+  display: grid;
+  gap: var(--sp-1);
+}
+.ep-adm-reglist__acts {
+  white-space: nowrap;
+}
+.ep-adm-reglist__acts form {
+  display: inline;
+}
+@media (max-width: 720px) {
+  .ep-adm-reglist .ep-table thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+  }
+  .ep-adm-reglist .ep-table,
+  .ep-adm-reglist .ep-table tbody,
+  .ep-adm-reglist .ep-table tr,
+  .ep-adm-reglist .ep-table th,
+  .ep-adm-reglist .ep-table td {
+    display: block;
+    width: 100%;
+  }
+  .ep-adm-reglist .ep-table tr {
+    border-bottom: 1px solid var(--border-default);
+    padding: var(--sp-2) 0;
+  }
+  .ep-adm-reglist .ep-table td[data-label]::before {
+    content: attr(data-label);
+    display: block;
+    color: var(--text-muted);
+    font-size: var(--fs-small);
+  }
+}
 /* Payments by registration (docs/design/44, part 3) */
 .ep-adm-paytotals {
   display: grid;
