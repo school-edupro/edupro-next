@@ -201,8 +201,12 @@ for (const width of [1280, 375]) {
         problems.push(`${label}: ${v.id} ${v.nodes.map((n) => n.target.join(' ')).join(' | ')}`);
     };
     await page.goto(`${BASE}/api/lang?to=en&back=%2Falpha%2Fadmission`);
-    await expect(page.getByRole('heading', { level: 1 })).toHaveText('Admission portal');
-    await expect(page.getByRole('heading', { name: 'Open for registration' })).toBeVisible();
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText(
+      'Registration form for admission',
+    );
+    await expect(
+      page.getByRole('heading', { name: 'Classes open for registration' }),
+    ).toBeVisible();
     await check('signed out');
     await page
       .getByLabel('Mobile number, email or registration number')

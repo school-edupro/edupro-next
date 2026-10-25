@@ -229,6 +229,23 @@ const DICT: Record<string, string> = {
   'The school could not be reached. Please try again in a moment.':
     'विद्यालय से संपर्क नहीं हो पाया। कृपया थोड़ी देर में फिर कोशिश करें।',
   Registrations: 'पंजीकरण',
+  'Registration form for admission': 'प्रवेश हेतु पंजीकरण फ़ॉर्म',
+  'Instructions for filling out the online registration form':
+    'ऑनलाइन पंजीकरण फ़ॉर्म भरने के निर्देश',
+  'Please read the instructions carefully to ensure a smooth registration process.':
+    'सुगम पंजीकरण के लिए कृपया निर्देश ध्यान से पढ़ें।',
+  'Keep the photographs and documents the form asks for ready to upload.':
+    'फ़ॉर्म में माँगे गए फ़ोटो और दस्तावेज़ अपलोड के लिए तैयार रखें।',
+  'Each tab of the form is saved when you press Next; you can finish later.':
+    '"आगे" दबाने पर फ़ॉर्म का हर टैब सहेजा जाता है; आप बाद में पूरा कर सकते हैं।',
+  'Please review the details carefully before submitting the form.':
+    'फ़ॉर्म जमा करने से पहले विवरण ध्यान से जाँच लें।',
+  'Select one': 'चुनें',
+  'Classes open for registration': 'पंजीकरण के लिए खुली कक्षाएँ',
+  'Sign in to fill the form': 'फ़ॉर्म भरने के लिए साइन इन करें',
+  'Only for any': 'केवल',
+  'technical query': 'तकनीकी प्रश्न',
+  'mail to': 'के लिए ईमेल करें',
 };
 
 export const t = (lang: Lang, en: string): string => (lang === 'hi' ? (DICT[en] ?? en) : en);

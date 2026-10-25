@@ -11209,6 +11209,236 @@ a.ep-pub-foot__item {
   margin: 0;
 }
 
+/* the admission portal's front page signed out: a coloured panel with a drawing, the school's form beside it */
+.ep-adm-split {
+  min-height: 100vh;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  background: var(--surface-card);
+}
+.ep-adm-art {
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: var(--sp-8);
+  background: var(--mob-navy-800);
+  border-radius: 0 var(--sp-9) 0 0;
+  overflow: hidden;
+}
+.ep-adm-art::after {
+  content: '';
+  position: absolute;
+  inset: auto var(--sp-6) var(--sp-6) auto;
+  width: 6rem;
+  height: 6rem;
+  background-image: radial-gradient(var(--mob-cyan-500) 0.125rem, transparent 0.16rem);
+  background-size: 1rem 1rem;
+  opacity: 0.6;
+}
+.ep-adm-art__card {
+  width: min(100%, 30rem);
+  aspect-ratio: 1;
+  display: grid;
+  place-items: center;
+  padding: var(--sp-6);
+  border-radius: var(--radius-lg);
+  background: var(--mob-cyan-50);
+  box-shadow: var(--shadow-overlay);
+}
+.ep-adm-art__svg {
+  width: 100%;
+  height: auto;
+}
+.ep-adm-art__soft {
+  fill: var(--surface-card);
+}
+.ep-adm-art__paper {
+  fill: var(--surface-card);
+  stroke: var(--mob-navy-100);
+  stroke-width: 2;
+}
+.ep-adm-art__board {
+  fill: var(--mob-navy-100);
+}
+.ep-adm-art__clip,
+.ep-adm-art__cap {
+  fill: var(--mob-navy-800);
+}
+.ep-adm-art__capband {
+  fill: none;
+  stroke: var(--mob-navy-800);
+  stroke-width: 6;
+  stroke-linecap: round;
+}
+.ep-adm-art__accent,
+.ep-adm-art__tick {
+  fill: var(--mob-cyan-600);
+}
+.ep-adm-art__box {
+  fill: var(--surface-card);
+  stroke: var(--mob-navy-100);
+  stroke-width: 2;
+}
+.ep-adm-art__check {
+  fill: none;
+  stroke: var(--surface-card);
+  stroke-width: 3;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.ep-adm-art__line {
+  fill: var(--mob-navy-100);
+}
+.ep-adm-art__line--light {
+  fill: var(--mob-gray-100);
+}
+.ep-adm-art__pencil {
+  fill: var(--mob-cyan-500);
+}
+.ep-adm-art__ground {
+  fill: var(--mob-navy-100);
+}
+.ep-adm-split__panel {
+  display: grid;
+  align-content: start;
+  gap: var(--sp-4);
+  width: min(100%, 44rem);
+  margin: 0 auto;
+  padding: var(--sp-6) var(--sp-6) var(--sp-8);
+}
+.ep-adm-split__top {
+  display: flex;
+  justify-content: flex-end;
+}
+.ep-adm-brand {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-3);
+  text-align: left;
+}
+.ep-adm-brand__logo {
+  width: 4rem;
+  height: 4rem;
+  object-fit: contain;
+}
+.ep-adm-brand__name {
+  display: block;
+  font-family: var(--font-heading);
+  font-size: var(--fs-h3);
+  color: var(--mob-navy-800);
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+.ep-adm-brand__sub {
+  display: block;
+  color: var(--text-muted);
+  font-size: var(--fs-small);
+  text-transform: uppercase;
+}
+.ep-adm-split__title {
+  margin: var(--sp-4) 0 0;
+  text-align: center;
+  font-family: var(--font-heading);
+  font-size: var(--fs-h2);
+  color: var(--mob-navy-800);
+  text-transform: uppercase;
+}
+.ep-adm-split__session {
+  margin: 0;
+  text-align: center;
+  font-family: var(--font-heading);
+  font-size: var(--fs-h4);
+  font-weight: var(--fw-semibold);
+  color: var(--text-heading);
+}
+.ep-adm-split__h2 {
+  margin: var(--sp-2) 0 var(--sp-2);
+  font-size: var(--fs-h4);
+  color: var(--text-heading);
+}
+.ep-adm-split__lead {
+  margin: 0 0 var(--sp-2);
+  color: var(--text-body);
+}
+.ep-adm-split__instructions {
+  display: grid;
+  gap: var(--sp-2);
+  color: var(--text-body);
+  line-height: 1.6;
+}
+.ep-adm-split__instructions .ep-adm-split__lead {
+  margin: 0;
+}
+.ep-adm-split__steps {
+  margin: 0;
+  padding-left: var(--sp-5);
+  display: grid;
+  gap: var(--sp-1);
+  color: var(--text-body);
+}
+.ep-adm-split__choose {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: flex-end;
+  gap: var(--sp-3);
+}
+.ep-adm-split__choose .ep-field {
+  flex: 0 1 20rem;
+  min-width: 0;
+}
+.ep-adm-split__signin {
+  display: grid;
+  gap: var(--sp-3);
+  padding: var(--sp-5);
+}
+.ep-adm-split__signin .ep-adm-split__h2 {
+  margin: 0;
+}
+.ep-adm-split__foot {
+  margin: var(--sp-4) 0 0;
+  text-align: center;
+  color: var(--text-body);
+}
+/* links inside the sentence: underlined, not told apart by colour alone */
+.ep-adm-split__foot a {
+  text-decoration: underline;
+  text-underline-offset: 0.15em;
+}
+.ep-adm-split__tech {
+  color: var(--status-danger-text);
+}
+@media (max-width: 960px) {
+  .ep-adm-split {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .ep-adm-art {
+    position: relative;
+    height: auto;
+    border-radius: 0 0 var(--sp-8) var(--sp-8);
+    padding: var(--sp-4);
+  }
+  .ep-adm-art__card {
+    width: min(100%, 14rem);
+    padding: var(--sp-3);
+  }
+  .ep-adm-art::after {
+    display: none;
+  }
+  .ep-adm-split__panel {
+    padding: var(--sp-4);
+  }
+  .ep-adm-brand__name {
+    font-size: var(--fs-h4);
+  }
+  .ep-adm-split__title {
+    font-size: var(--fs-h3);
+  }
+}
+
 /* the admission portal signed out: the sign-in card, then the open classes (docs/design/42) */
 .ep-adm-land {
   display: grid;

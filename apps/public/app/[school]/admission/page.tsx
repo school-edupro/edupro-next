@@ -12,6 +12,7 @@ import {
 import { AdmissionHome } from '@/components/AdmissionHome';
 import { AdmissionLanding } from '@/components/AdmissionLanding';
 import { currentLang } from '@/lib/lang';
+import { schoolProfile } from '@/lib/school';
 
 /**
  * The admission portal of a school (docs/design/39, part 3): the open sessions with each class's dates,
@@ -50,8 +51,11 @@ export default async function AdmissionPortalPage({
     return (
       <AdmissionLanding
         school={school}
+        profile={await schoolProfile(school)}
         schoolName={open.school.name}
         sessions={sessions}
+        chosen={sp.session}
+        enquiry={enquiry}
         lang={lang}
         error={sp.error}
         returnTo={`/${school}/admission${enquiry ? `?enquiry=${enquiry}${sp.session ? `&session=${encodeURIComponent(sp.session)}` : ''}` : ''}`}

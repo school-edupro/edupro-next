@@ -21,8 +21,11 @@ export default async function AdmissionLayout({
   const profile = await schoolProfile(school);
   const signedIn = Boolean((await cookies()).get(ADMISSION_COOKIE)?.value);
   const me = signedIn ? await admissionFetch<PortalMe>('/me').catch(() => null) : null;
-  if (!me || !profile) return <SchoolFrame school={profile}>{children}</SchoolFrame>;
   const currentPath = (await headers()).get('x-pathname') ?? `/${school}/admission`;
+  // signed out, the portal's front page is a full screen of its own (the sign-in and the sessions);
+  // the other admission pages (enquiry, help) keep the school's website frame
+  if (!me && profile && currentPath.replace(/\/$/, '') === `/${school}/admission`) return children;
+  if (!me || !profile) return <SchoolFrame school={profile}>{children}</SchoolFrame>;
   const family = me.candidate.name?.trim() || me.candidate.email || me.candidate.mobile || 'Family';
   // the count on the top bar's Messages (docs/design/42, part 4)
   const unread = await admissionFetch<PortalInbox>('/me/inbox')
