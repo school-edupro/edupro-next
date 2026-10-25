@@ -204,6 +204,13 @@ for (const width of [1280, 375]) {
     await expect(page.getByRole('heading', { level: 1 })).toHaveText(
       'Registration form for admission',
     );
+    // several open sessions: the family chooses one, then its classes and the sign-in show
+    const choose = page.locator('select[name="session"]');
+    if (await choose.count()) {
+      await check('choose a session');
+      await choose.selectOption({ index: 1 });
+      await page.getByRole('button', { name: 'Continue' }).click();
+    }
     await expect(
       page.getByRole('heading', { name: 'Classes open for registration' }),
     ).toBeVisible();

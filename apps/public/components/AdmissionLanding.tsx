@@ -255,7 +255,12 @@ export function AdmissionLanding({
                   <h2 id="adm-classes" className="ep-adm-split__h2">
                     {w('Classes open for registration')}
                   </h2>
-                  <div className="ep-table-wrap ep-adm-classlist">
+                  <div
+                    className="ep-table-wrap ep-adm-classlist"
+                    tabIndex={0}
+                    role="region"
+                    aria-label={w('Classes open for registration')}
+                  >
                     <table className="ep-table">
                       <caption className="ep-sr-only">{w('Classes open for registration')}</caption>
                       <thead>
