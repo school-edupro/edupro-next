@@ -1,4 +1,4 @@
-# 44 — Admission portal Messages by type (plan, 25 Oct 2026)
+# 44 — Admission portal Messages by type, Payments by registration, Registrations as a list (plan, 25 Oct 2026)
 
 The admission portal's Messages page (`/<school>/admission/messages`) shows three kinds of thing in one
 list, told apart only by a small "Notice / Email / Message" tag:
@@ -18,14 +18,26 @@ the school, automatic status alerts, notices; a badge for the channel; a child f
 more than one; search; each status alert names the child and links to the place to act; answers link
 back to the question.
 
+Two more pages were asked for in the same round:
+
+- **Payments & receipts** (`/<school>/admission/payments`) lists "Due now" and "Receipts" across all the
+  family's registrations; a family with two children cannot see what belongs to which.
+- **My registrations** (`/<school>/admission/registrations`) shows a card per registration; the form
+  PDF cannot be taken from there.
+
+The best portals show payments per registration (child, class, number) with its total, paid and due,
+and the registrations as a list with the form downloads in the row.
+
 ## Decisions (asked and answered, 25 Oct 2026)
 
-| #   | Question       | Decision                                                                                                                                |
-| --- | -------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
-| 1   | Grouping       | **Tabs by who sent it**: All · From the school · Automatic updates · Notices, each with its unread count; a channel badge on every item |
-| 2   | Answers        | **From the school**, marked "Answer to your question" (or "Reply to your enquiry") with a link to the question                          |
-| 3   | SMS / WhatsApp | **One item with channel badges** ("Email · SMS"); an SMS-only message is its own item with the SMS text                                 |
-| 4   | Extras (all)   | Link to the registration; filter by child; search; "Mark all as read" acts on the tab shown                                             |
+| #   | Question       | Decision                                                                                                                                                                    |
+| --- | -------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | Grouping       | **Tabs by who sent it**: All · From the school · Automatic updates · Notices, each with its unread count; a channel badge on every item                                     |
+| 2   | Answers        | **From the school**, marked "Answer to your question" (or "Reply to your enquiry") with a link to the question                                                              |
+| 3   | SMS / WhatsApp | **One item with channel badges** ("Email · SMS"); an SMS-only message is its own item with the SMS text                                                                     |
+| 4   | Extras (all)   | Link to the registration; filter by child; search; "Mark all as read" acts on the tab shown                                                                                 |
+| 5   | Payments       | **A section per registration**: child · class · registration no.; total fee, paid, due; its dues with Pay, its receipts with View / Download; the family's total at the top |
+| 6   | Registrations  | **A list (table)**; View + Download icons for the registration form once submitted and the admission form once admitted; none for a draft                                   |
 
 Defaults taken (change on request): the tab and filters are in the address (`?tab=school&child=…&q=…`)
 so Home's links and the back button keep them; the child filter shows only with two or more
@@ -51,3 +63,14 @@ and a button to the place to act (Pay, Admit card, Correct the form, Open the qu
 (two or more registrations) and a search box; "Mark all as read" for the tab shown. Home's latest
 messages and the header's unread badge use the same groups. Hindi throughout; a phone layout where the
 tabs scroll sideways.
+
+**Part 3 — Payments by registration (portal).** At the top the family's totals (due now, paid). Then a
+section per registration, latest first: the child, class, session and registration number; its fee
+figures (registration fee and admission fee: amount, paid, due); its dues with Pay (or "Closed"), and
+its receipts as a table with View / Download. A registration with nothing paid or due shows a line, not
+an empty table. Uses `/me/dashboard` as it stands.
+
+**Part 4 — My registrations as a list (portal).** A table: child, class (and session), registration
+number, status, filled (for drafts), fee due, and the actions — Continue / Open, the registration form
+(View + Download) once submitted, the admission form (View + Download) once admitted, Delete for a
+draft. On a phone each row stacks into a card. The existing PDF routes serve the files.
