@@ -184,6 +184,8 @@ export const RulesSchema = z.object({
         sourceIds: z.array(IdSchema).max(100).default([]),
         autoAssign: z.boolean().default(true),
         pool: z.array(IdSchema).max(100).default([]),
+        /** roles whose holders take the leads (docs/design/46, part 2) */
+        poolRoles: z.array(z.string().trim().min(1).max(60)).max(20).default([]),
         firstContactHours: z.number().positive().max(999).nullable().default(null),
         level2UserId: IdSchema.nullable().default(null),
         level2Role: z.string().trim().max(60).nullable().default(null),

@@ -957,6 +957,10 @@ test.describe('accessibility (axe)', () => {
     await page.getByRole('button', { name: 'Add a rule' }).click();
     await expect(page.getByRole('group', { name: 'New rule' })).toBeVisible();
     await expect(page.getByLabel('First contact within (working hours)')).toBeVisible();
+    // a pool by role (docs/design/46, part 2)
+    await expect(
+      page.getByRole('group', { name: 'Roles: whoever holds one when a lead arrives' }),
+    ).toBeVisible();
     await page.getByRole('region', { name: 'Enquiry desk' }).screenshot({
       path: `${process.env.SHOT_DIR ?? test.info().outputDir}/enquiry-rules.png`,
     });
@@ -979,7 +983,9 @@ test.describe('accessibility (axe)', () => {
     await page.getByLabel('Message *').fill('Yes, the bus runs from Sector 15.');
     await page.getByRole('button', { name: 'Send the reply' }).click();
     await expect(page.getByText(/Reply sent/)).toBeVisible();
-    await expect(page.getByText('Reply by email: Yes, the bus runs from Sector 15.')).toBeVisible();
+    await expect(
+      page.getByText('Reply by email: Yes, the bus runs from Sector 15.').first(),
+    ).toBeVisible();
     await page.screenshot({ path: test.info().outputPath('enquiry-reply.png'), fullPage: true });
     const r = await new AxeBuilder({ page })
       .options({ iframes: false })

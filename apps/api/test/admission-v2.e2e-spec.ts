@@ -3264,6 +3264,80 @@ describe('online admission (e2e)', () => {
       expect(queued.rows[0]!.ids).toBeGreaterThan(0);
     });
 
+    // docs/design/46, part 2: a pool by role takes whoever holds the role when the lead arrives
+    it('a rule whose pool is a role gives its leads to the role holders', async () => {
+      const rules = (
+        await inject({ method: 'GET', url: '/admissions/enquiries/meta', headers: h() })
+      ).json().rules as Array<Record<string, unknown> & { status: string }>;
+      const saved = await inject({
+        method: 'PUT',
+        url: '/admissions/enquiries/rules',
+        headers: h(),
+        json: {
+          rules: [
+            {
+              name: 'IX by role',
+              classIds: [classIx],
+              poolRoles: ['academic_coordinator'],
+              acknowledge: false,
+            },
+            ...rules
+              .filter((x) => x.status === 'active')
+              .map((x) => ({
+                id: x.id,
+                name: x.name,
+                classIds: x.classIds,
+                sourceIds: x.sourceIds,
+                autoAssign: x.autoAssign,
+                pool: x.pool,
+                poolRoles: x.poolRoles,
+                firstContactHours: x.firstContactHours,
+                level2UserId: x.level2UserId,
+                level2Role: x.level2Role,
+                acknowledge: x.acknowledge,
+                isDefault: x.isDefault,
+              })),
+          ],
+        },
+      });
+      expect(saved.statusCode).toBe(200);
+      expect(
+        (saved.json() as Array<{ name: string; poolRoles: string[] }>).find(
+          (x) => x.name === 'IX by role',
+        )!.poolRoles,
+      ).toEqual(['academic_coordinator']);
+      const wrong = await inject({
+        method: 'PUT',
+        url: '/admissions/enquiries/rules',
+        headers: h(),
+        json: { rules: [{ name: 'Everything', isDefault: true, poolRoles: ['no_such_role'] }] },
+      });
+      expect(wrong.statusCode).toBe(400);
+      const ch = await inject({ method: 'POST', url: '/public/admissions/challenge', headers: {} });
+      const nonce = PowService.solve(ch.json().challenge, ch.json().difficulty);
+      const web = await inject({
+        method: 'POST',
+        url: '/public/admission/enquiry',
+        headers: {},
+        json: {
+          schoolCode: school.code,
+          challenge: ch.json().challenge,
+          nonce,
+          parentName: 'Role Pool Parent',
+          classId: classIx,
+          email: 'role.pool.parent@example.com',
+        },
+      });
+      expect(web.statusCode).toBe(201);
+      const row = (
+        await inject({ method: 'GET', url: '/admissions/enquiries?q=Role%20Pool', headers: h() })
+      ).json().data[0] as { id: string };
+      const one = (
+        await inject({ method: 'GET', url: `/admissions/enquiries/${row.id}`, headers: h() })
+      ).json();
+      expect(one).toMatchObject({ rule: 'IX by role', counsellorUserId: clerk.id });
+    });
+
     it('imports enquiries from a sheet: a wrong row stops it; duplicates are left out', async () => {
       const format = await inject({
         method: 'GET',

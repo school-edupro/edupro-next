@@ -159,6 +159,7 @@ export class AdmissionEnquiryService {
       source_ids: string[];
       auto_assign: boolean;
       pool: string[];
+      pool_roles: string[];
       first_contact_hours: string | null;
       level2_user_id: string | null;
       level2_role: string | null;
@@ -169,7 +170,7 @@ export class AdmissionEnquiryService {
       leads: number;
     }>(
       `SELECT r.id::text, r.name, r.class_ids::text[] AS class_ids, r.source_ids::text[] AS source_ids, r.auto_assign,
-              r.pool::text[] AS pool, r.first_contact_hours::text, r.level2_user_id::text, r.level2_role, r.acknowledge,
+              r.pool::text[] AS pool, r.pool_roles, r.first_contact_hours::text, r.level2_user_id::text, r.level2_role, r.acknowledge,
               r.is_default, r.status,
               COALESCE((SELECT display_name FROM users WHERE id = r.level2_user_id),
                        (SELECT name FROM roles WHERE code = r.level2_role AND deleted_at IS NULL ORDER BY school_id NULLS LAST LIMIT 1)) AS level2_name,
@@ -183,6 +184,7 @@ export class AdmissionEnquiryService {
       sourceIds: x.source_ids,
       autoAssign: x.auto_assign,
       pool: x.pool,
+      poolRoles: x.pool_roles,
       firstContactHours: x.first_contact_hours === null ? null : Number(x.first_contact_hours),
       level2UserId: x.level2_user_id,
       level2Role: x.level2_role,
@@ -228,6 +230,16 @@ export class AdmissionEnquiryService {
           throw new DomainError('validation-failed', `${x.name}: level 2 is a person or a role`, {
             status: 400,
           });
+        for (const code of x.poolRoles) {
+          const role = await c.query(
+            `SELECT 1 FROM roles WHERE code = $1 AND deleted_at IS NULL AND (school_id IS NULL OR school_id = app.current_school_id())`,
+            [code],
+          );
+          if (!role.rowCount)
+            throw new DomainError('validation-failed', `${x.name}: unknown role ${code}`, {
+              status: 400,
+            });
+        }
         if (x.level2Role) {
           const role = await c.query(
             `SELECT 1 FROM roles WHERE code = $1 AND deleted_at IS NULL AND (school_id IS NULL OR school_id = app.current_school_id())`,
@@ -256,21 +268,22 @@ export class AdmissionEnquiryService {
           x.isDefault,
           x.status,
           i + 1,
+          [...new Set(x.poolRoles)],
         ];
         if (x.id) {
           await c.query(
             `UPDATE admission_enquiry_rules SET name = $1, class_ids = $2::bigint[], source_ids = $3::bigint[], auto_assign = $4,
                     pool = $5::bigint[], first_contact_hours = $6, level2_user_id = $7, level2_role = $8, acknowledge = $9,
-                    is_default = $10, status = $11, sort_order = $12
-              WHERE id = $13`,
+                    is_default = $10, status = $11, sort_order = $12, pool_roles = $13::text[]
+              WHERE id = $14`,
             [...vals, x.id],
           );
           kept.push(x.id);
         } else {
           const r = await c.query<{ id: string }>(
             `INSERT INTO admission_enquiry_rules (school_id, name, class_ids, source_ids, auto_assign, pool, first_contact_hours,
-                                                  level2_user_id, level2_role, acknowledge, is_default, status, sort_order)
-             VALUES (app.current_school_id(), $1, $2::bigint[], $3::bigint[], $4, $5::bigint[], $6, $7, $8, $9, $10, $11, $12)
+                                                  level2_user_id, level2_role, acknowledge, is_default, status, sort_order, pool_roles)
+             VALUES (app.current_school_id(), $1, $2::bigint[], $3::bigint[], $4, $5::bigint[], $6, $7, $8, $9, $10, $11, $12, $13::text[])
              RETURNING id::text`,
             vals,
           );
@@ -319,7 +332,7 @@ export class AdmissionEnquiryService {
           (!x.sourceIds.length || (sourceId !== null && x.sourceIds.includes(sourceId))),
       ) ?? rules.find((x) => x.isDefault)!;
     await c.query(`UPDATE admission_enquiries SET rule_id = $2 WHERE id = $1`, [id, rule.id]);
-    if (assign && rule.autoAssign) await this.assign(c, id, rule.pool);
+    if (assign && rule.autoAssign) await this.assign(c, id, rule.pool, rule.poolRoles);
     if (rule.firstContactHours)
       await c.query(
         `UPDATE admission_enquiries SET contact_due_at = app.helpdesk_add_hours(now(), $2::numeric)
@@ -367,15 +380,22 @@ export class AdmissionEnquiryService {
    * A website enquiry given to a counsellor on arrival: among those chosen (or everyone who takes
    * enquiries), the one with the fewest open enquiries; ties go to the one given an enquiry longest ago.
    */
-  private async assign(c: PoolClient, id: string, chosen: string[]): Promise<string | null> {
+  private async assign(
+    c: PoolClient,
+    id: string,
+    chosen: string[],
+    roles: string[] = [],
+  ): Promise<string | null> {
+    // the people named and the holders today of the roles named (docs/design/46, part 2)
     const k = await c.query<{ id: string; name: string }>(
       // eslint-disable-next-line no-restricted-syntax -- COUNSELLORS is a fixed fragment
       `SELECT k.id::text, k.name FROM (${COUNSELLORS}) k
-        WHERE cardinality($1::bigint[]) = 0 OR k.id = ANY($1::bigint[])
+        WHERE (cardinality($1::bigint[]) = 0 AND cardinality($2::text[]) = 0) OR k.id = ANY($1::bigint[])
+           OR k.id IN (SELECT p.user_id FROM unnest($2::text[]) AS r(code), LATERAL app.helpdesk_role_people(r.code) p)
         ORDER BY (SELECT count(*) FROM admission_enquiries e WHERE e.counsellor_user_id = k.id AND e.status IN ('new', 'follow_up', 'interested')),
                  (SELECT max(e.assigned_at) FROM admission_enquiries e WHERE e.counsellor_user_id = k.id) ASC NULLS FIRST, k.id
         LIMIT 1`,
-      [chosen],
+      [chosen, roles],
     );
     const who = k.rows[0];
     if (!who) return null;

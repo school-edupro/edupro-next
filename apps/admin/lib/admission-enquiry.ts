@@ -16,6 +16,8 @@ export interface EnquiryRule {
   sourceIds: string[];
   autoAssign: boolean;
   pool: string[];
+  /** roles whose holders take the leads (docs/design/46, part 2) */
+  poolRoles: string[];
   firstContactHours: number | null;
   level2UserId: string | null;
   level2Role: string | null;

@@ -15,6 +15,7 @@ const blank = (): Draft => ({
   sourceIds: [],
   autoAssign: true,
   pool: [],
+  poolRoles: [],
   firstContactHours: 4,
   hoursText: '4',
   level2UserId: null,
@@ -68,6 +69,7 @@ export function EnquiryRulesEditor({
           sourceIds: x.sourceIds,
           autoAssign: x.autoAssign,
           pool: x.pool,
+          poolRoles: x.poolRoles,
           firstContactHours: x.firstContactHours,
           level2UserId: x.level2UserId,
           level2Role: x.level2Role,
@@ -132,7 +134,14 @@ export function EnquiryRulesEditor({
               <ol className="ep-pe__flow">
                 <li>
                   {r.autoAssign
-                    ? `In turn: ${nameOf(counsellors, r.pool, 'everyone who takes enquiries')}`
+                    ? `In turn: ${
+                        [
+                          ...r.poolRoles.map(
+                            (code) => roles.find((x) => x.code === code)?.name ?? code,
+                          ),
+                          ...r.pool.map((id) => counsellors.find((x) => x.id === id)?.name ?? '?'),
+                        ].join(', ') || 'everyone who takes enquiries'
+                      }`
                     : 'Waits for someone to take it'}
                 </li>
                 {r.firstContactHours ? (
@@ -212,14 +221,22 @@ export function EnquiryRulesEditor({
               leads)
             </span>
           </label>
-          {draft.autoAssign
-            ? checks(
-                'Counsellors (none: everyone who takes enquiries)',
+          {draft.autoAssign ? (
+            <>
+              {checks(
+                'Roles: whoever holds one when a lead arrives',
+                roles.map((r) => ({ id: r.code, name: r.name })),
+                draft.poolRoles,
+                (v) => setDraft({ ...draft, poolRoles: v }),
+              )}
+              {checks(
+                'And people by name (no role and no person: everyone who takes enquiries)',
                 counsellors,
                 draft.pool,
                 (v) => setDraft({ ...draft, pool: v }),
-              )
-            : null}
+              )}
+            </>
+          ) : null}
           <div className="ep-pe__levels">
             <label className="ep-field">
               <span className="ep-field__label">First contact within (working hours)</span>
