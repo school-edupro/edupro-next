@@ -11455,6 +11455,159 @@ a.ep-pub-foot__item {
     font-size: var(--fs-small);
   }
 }
+/* Enquiries as lead management (docs/design/45, part 2): the board, its cards, the list's bulk bar */
+.ep-lead-views {
+  display: inline-flex;
+  gap: var(--sp-1);
+  margin: 0 0 var(--sp-3);
+  padding: var(--sp-1);
+  border-radius: var(--radius-md);
+  background: var(--surface-subtle);
+}
+.ep-lead-views a {
+  padding: var(--sp-1) var(--sp-4);
+  border-radius: var(--radius-sm);
+  color: var(--text-body);
+  text-decoration: none;
+}
+.ep-lead-views a[aria-current='page'] {
+  background: var(--surface-card);
+  color: var(--text-heading);
+  font-weight: var(--fw-semibold);
+}
+.ep-lead-filter {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 10rem), 1fr));
+  gap: var(--sp-3);
+  align-items: end;
+}
+.ep-lead-filter > * {
+  min-width: 0;
+}
+.ep-lead-filter .ep-select,
+.ep-lead-filter .ep-input {
+  width: 100%;
+}
+.ep-lead-board {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(15rem, 1fr);
+  gap: var(--sp-3);
+  overflow-x: auto;
+  padding-bottom: var(--sp-2);
+  align-items: start;
+}
+.ep-lead-col {
+  display: grid;
+  gap: var(--sp-2);
+  padding: var(--sp-3);
+  border-radius: var(--radius-md);
+  background: var(--surface-subtle);
+  border-top: 3px solid var(--border-accent);
+}
+.ep-lead-col[data-kind='registered'],
+.ep-lead-col[data-kind='admitted'] {
+  border-top-color: var(--status-success);
+}
+.ep-lead-col[data-kind='lost'] {
+  border-top-color: var(--text-muted);
+}
+.ep-lead-col__h {
+  margin: 0;
+  font-size: var(--fs-body);
+  color: var(--text-heading);
+}
+.ep-lead-col__n {
+  color: var(--text-muted);
+  font-weight: var(--fw-regular);
+}
+.ep-lead-col__cards {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: var(--sp-2);
+}
+.ep-lead-card {
+  display: grid;
+  gap: var(--sp-1);
+  padding: var(--sp-2) var(--sp-3);
+  border-radius: var(--radius-sm);
+  background: var(--surface-card);
+  border: 1px solid var(--border-default);
+}
+.ep-lead-card[data-late] {
+  border-left: 3px solid var(--status-danger);
+}
+.ep-lead-card__name {
+  font-weight: var(--fw-semibold);
+}
+.ep-lead-card__line {
+  color: var(--text-muted);
+  font-size: var(--fs-small);
+}
+.ep-lead-col__more {
+  font-size: var(--fs-small);
+}
+.ep-lead-move {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-1);
+  align-items: center;
+}
+.ep-select--sm {
+  min-height: 2rem;
+  padding-block: var(--sp-1);
+  font-size: var(--fs-small);
+}
+.ep-lead-bulk {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+  align-items: center;
+  margin: 0 0 var(--sp-3);
+}
+.ep-lead-path {
+  display: grid;
+  gap: var(--sp-3);
+  margin: 0 0 var(--sp-4);
+}
+.ep-lead-path__steps {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-1);
+}
+.ep-lead-path__steps li {
+  padding: var(--sp-1) var(--sp-3);
+  border-radius: var(--radius-pill);
+  background: var(--surface-subtle);
+  color: var(--text-muted);
+  font-size: var(--fs-small);
+}
+.ep-lead-path__steps li[data-state='done'] {
+  background: var(--status-success-bg);
+  color: var(--text-body);
+}
+.ep-lead-path__steps li[data-state='current'] {
+  background: var(--action-primary);
+  color: var(--text-inverse);
+  font-weight: var(--fw-semibold);
+}
+.ep-lead-path__steps li[data-state='current'][data-kind='lost'] {
+  background: var(--text-muted);
+}
+.ep-lead-path__acts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-3);
+  align-items: end;
+}
+.ep-lead-score {
+  min-width: 9rem;
+}
 /* Payments by registration (docs/design/44, part 3) */
 .ep-adm-paytotals {
   display: grid;

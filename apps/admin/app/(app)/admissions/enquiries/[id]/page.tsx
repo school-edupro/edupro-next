@@ -1,6 +1,8 @@
 import { Badge, Card, PageHeader } from '@edupro/ui';
 import { notFound } from 'next/navigation';
 import { EnquiryFields } from '@/components/admissions/EnquiryFields';
+import { LeadMove } from '@/components/admissions/LeadMove';
+import { LeadScore } from '@/components/admissions/LeadScore';
 import { Notice } from '@/components/Notice';
 import { REG_STATUS, dmy } from '@/lib/admission-desk';
 import {
@@ -54,6 +56,47 @@ export default async function EnquiryPage({
         }
       />
       <Notice params={sp} />
+      {e.stages?.length ? (
+        <section className="ep-card ep-lead-path" aria-label="Stage of the lead">
+          <ol className="ep-lead-path__steps">
+            {e.stages
+              .filter((x) => x.status === 'active' || x.id === e.stageId)
+              .map((x) => {
+                const at = e.stages!.findIndex((y) => y.id === e.stageId);
+                const pos = e.stages!.findIndex((y) => y.id === x.id);
+                const state =
+                  x.id === e.stageId ? 'current' : x.kind !== 'lost' && pos < at ? 'done' : 'todo';
+                return (
+                  <li
+                    key={x.id}
+                    data-state={state}
+                    data-kind={x.kind}
+                    aria-current={state === 'current' ? 'step' : undefined}
+                  >
+                    {x.name}
+                  </li>
+                );
+              })}
+          </ol>
+          <div className="ep-lead-path__acts">
+            {e.lostReason ? <Badge tone="neutral">Lost: {e.lostReason}</Badge> : null}
+            {e.firstContactAt ? (
+              <span className="ep-kicker">First contact {whenIst(e.firstContactAt)}</span>
+            ) : (
+              <Badge tone="warning">Not contacted yet</Badge>
+            )}
+            <LeadScore id={e.id} score={e.score ?? null} />
+            {!e.application ? (
+              <LeadMove
+                id={e.id}
+                name={e.parentName}
+                stageId={e.stageId ?? null}
+                stages={e.stages}
+              />
+            ) : null}
+          </div>
+        </section>
+      ) : null}
       <div className="ep-rp">
         <Card elevated title="Follow-up">
           <p style={{ marginTop: 0 }}>

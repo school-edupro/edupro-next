@@ -164,3 +164,7 @@ export const BulkSchema = z
     message: 'Choose what to do',
   });
 export class BulkDto extends createZodDto(BulkSchema) {}
+
+/** An Excel sheet of enquiries to add (docs/design/45, part 2). */
+export const EnquiryImportSchema = z.object({ fileBase64: z.string().min(100).max(1_400_000) });
+export class EnquiryImportDto extends createZodDto(EnquiryImportSchema) {}

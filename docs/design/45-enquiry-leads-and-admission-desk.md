@@ -40,7 +40,7 @@ seeded with the eight defaults; `admission_enquiries.stage_id`, `score` (hot / w
 registration moves its enquiry to Registration started / Registered / Admitted by itself. List API by
 stage with counts, today's / overdue / new figures, bulk assign / move / score.
 
-**Part 2 — The board and the list (admin).** `/admissions/enquiries`: figures on top (new today,
+**Part 2 — The board and the list (admin; built 25 Oct 2026).** `/admissions/enquiries`: figures on top (new today,
 follow-ups today, overdue, converted this month); Board | List switch. The board: a column per stage,
 cards with child, class, source, owner, next follow-up (red when overdue), score; move with a stage
 menu on the card (and drag where the browser allows). The list: filters (stage, owner, class, source,

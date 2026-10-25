@@ -3,6 +3,7 @@
  * student master, additional student fields). Later parts add their cases here.
  */
 import type { NestFastifyApplication } from '@nestjs/platform-fastify';
+import ExcelJS from 'exceljs';
 import IORedis from 'ioredis';
 import { PowService } from '../src/modules/admissions/public/pow.service';
 import {
@@ -3064,6 +3065,69 @@ describe('online admission (e2e)', () => {
         },
       });
       expect(broken.statusCode).toBe(400);
+    });
+
+    it('imports enquiries from a sheet: a wrong row stops it; duplicates are left out', async () => {
+      const format = await inject({
+        method: 'GET',
+        url: '/admissions/enquiries/import-format.xlsx',
+        headers: h(),
+      });
+      expect(format.statusCode).toBe(200);
+      expect(format.headers['content-type']).toMatch(/spreadsheetml/);
+      const sheet = async (rows: string[][]) => {
+        const wb = new ExcelJS.Workbook();
+        const ws = wb.addWorksheet('Enquiries');
+        ws.addRow([
+          'Parent name *',
+          'Child name',
+          'Child date of birth',
+          'Mobile',
+          'Email',
+          'Class',
+          'Source',
+          'Locality',
+          'Notes',
+        ]);
+        for (const r of rows) ws.addRow(r);
+        return Buffer.from(await wb.xlsx.writeBuffer()).toString('base64');
+      };
+      const fresh = `7${String(Date.now()).slice(-9)}`;
+      const bad = await inject({
+        method: 'POST',
+        url: '/admissions/enquiries/import',
+        headers: h(clerk),
+        json: {
+          fileBase64: await sheet([
+            ['Fair Parent', 'Fair Child', '14-07-2021', fresh, '', 'Class Mini', 'Walk-in', '', ''],
+            ['No Contact', '', '', '', '', '', '', '', ''],
+          ]),
+        },
+      });
+      expect(bad.statusCode).toBe(200);
+      expect(bad.json()).toMatchObject({ added: 0 });
+      expect(bad.json().errors[0]).toMatchObject({
+        row: 3,
+        message: 'give the mobile or the email',
+      });
+      const ok = await inject({
+        method: 'POST',
+        url: '/admissions/enquiries/import',
+        headers: h(clerk),
+        json: {
+          fileBase64: await sheet([
+            ['Fair Parent', 'Fair Child', '14-07-2021', fresh, '', 'Class Mini', 'Walk-in', '', ''],
+            ['Web Parent Again', '', '', '', 'web.parent@example.com', '', '', '', ''],
+            ['Fair Parent Twin', '', '', fresh, '', '', '', '', ''],
+          ]),
+        },
+      });
+      expect(ok.json()).toMatchObject({ added: 1, errors: [] });
+      expect((ok.json().duplicates as Array<{ row: number }>).map((x) => x.row)).toEqual([3, 4]);
+      const found = (
+        await inject({ method: 'GET', url: '/admissions/enquiries?q=Fair%20Parent', headers: h() })
+      ).json();
+      expect(found.data[0]).toMatchObject({ childName: 'Fair Child', className: 'Class Mini' });
     });
 
     it('replies to the family from the enquiry; the reply is kept with the follow-ups', async () => {

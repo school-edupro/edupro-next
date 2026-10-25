@@ -10,6 +10,18 @@ export interface EnquiryStage {
 }
 export const LOST_REASONS = ['Fees', 'Distance', 'Another school', 'No seat', 'Other'];
 export const SCORE_LABEL: Record<string, string> = { hot: 'Hot', warm: 'Warm', cold: 'Cold' };
+export const SCORE_TONE: Record<string, 'danger' | 'warning' | 'info'> = {
+  hot: 'danger',
+  warm: 'warning',
+  cold: 'info',
+};
+/** The enquiry list with what the board needs (docs/design/45, part 2). */
+export interface EnquiryList {
+  total: number;
+  counts: Record<string, number>;
+  data: EnquiryRow[];
+  byStage?: Array<{ stageId: string; leads: number }>;
+}
 
 export interface EnquiryMeta {
   sources: Array<{ id: string; name: string; status: string; used: number }>;
@@ -37,9 +49,19 @@ export interface EnquiryRow {
   lastContactAt: string | null;
   fromWebsite: boolean;
   registrationNo: string | null;
+  /** the lead's stage, score and first contact (docs/design/45) */
+  stage?: { id: string; name: string; kind: EnquiryStage['kind'] } | null;
+  score?: 'hot' | 'warm' | 'cold' | null;
+  firstContactAt?: string | null;
 }
 export interface EnquiryDetail {
   id: string;
+  /** the lead's stage and the school's stages (docs/design/45) */
+  stageId?: string | null;
+  score?: 'hot' | 'warm' | 'cold' | null;
+  lostReason?: string | null;
+  firstContactAt?: string | null;
+  stages?: EnquiryStage[];
   /** ENQ-000123: the number the family was given */
   number?: string;
   cycleId: string | null;

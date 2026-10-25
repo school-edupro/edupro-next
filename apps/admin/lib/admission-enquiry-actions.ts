@@ -159,6 +159,63 @@ export async function saveEnquiryDesk(desk: {
   }
 }
 
+const said = (e: unknown) => {
+  if (e instanceof ApiError)
+    return { ok: false as const, error: e.problem.detail ?? e.problem.type };
+  throw e;
+};
+
+/** A lead moved to a stage (Lost with its reason) from the board or its page (docs/design/45). */
+export async function moveLead(id: string, stageId: string, lostReason?: string) {
+  if (!okId(id) || !okId(stageId)) return { ok: false as const, error: 'Unknown lead' };
+  try {
+    await apiFetch(`/admissions/enquiries/${id}/stage`, {
+      method: 'POST',
+      body: JSON.stringify({ stageId, ...(lostReason ? { lostReason } : {}) }),
+    });
+    revalidatePath('/admissions/enquiries');
+    revalidatePath(`/admissions/enquiries/${id}`);
+    return { ok: true as const };
+  } catch (e) {
+    return said(e);
+  }
+}
+
+/** Many leads at once: given to a counsellor, moved, scored. */
+export async function bulkLeads(dto: {
+  ids: string[];
+  counsellorUserId?: string | null;
+  stageId?: string;
+  lostReason?: string;
+  score?: string;
+}) {
+  try {
+    const r = await apiFetch<{ done: number; skipped: number }>('/admissions/enquiries/bulk', {
+      method: 'POST',
+      body: JSON.stringify(dto),
+    });
+    revalidatePath('/admissions/enquiries');
+    return { ok: true as const, ...r };
+  } catch (e) {
+    return said(e);
+  }
+}
+
+/** Enquiries from an Excel sheet (the format's columns); duplicates left out. */
+export async function importEnquiries(fileBase64: string) {
+  try {
+    const r = await apiFetch<{
+      added: number;
+      duplicates: Array<{ row: number; message: string }>;
+      errors: Array<{ row: number; message: string }>;
+    }>('/admissions/enquiries/import', { method: 'POST', body: JSON.stringify({ fileBase64 }) });
+    revalidatePath('/admissions/enquiries');
+    return { ok: true as const, ...r };
+  } catch (e) {
+    return said(e);
+  }
+}
+
 /** The school's stages of a lead (docs/design/45, part 1). */
 export async function saveEnquiryStages(
   stages: Array<{ id?: string; name: string; kind: string; status: string }>,

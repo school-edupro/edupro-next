@@ -7,6 +7,7 @@ import { DbService } from '../../common/db/db.service';
 import { DomainError } from '../../common/errors/domain-error';
 import { requireTenant, type RequestContext } from '../../common/http/request-context';
 import { ENV, type Env } from '../../config/env';
+import { readSheet, templateSheet } from '../../common/excel/sheet';
 import { enquiryTokenHash } from './enquiry-engine';
 import type {
   EnquiryDto,
@@ -960,6 +961,225 @@ export class AdmissionEnquiryService {
           );
       }
       return { received: true, enquiryNo: enquiryNo(id) };
+    });
+  }
+
+  private static readonly IMPORT_HEADERS = [
+    'Parent name',
+    'Child name',
+    'Child date of birth',
+    'Mobile',
+    'Email',
+    'Class',
+    'Source',
+    'Locality',
+    'Notes',
+  ];
+
+  /** The Excel format of enquiries to add, with the school's classes and sources as drop-downs. */
+  async importFormat(ctx: RequestContext) {
+    const l = await this.db.tenant(requireTenant(ctx), async (c) => ({
+      classes: (
+        await c.query<{ name: string }>(
+          `SELECT name FROM classes WHERE deleted_at IS NULL ORDER BY display_order, name`,
+        )
+      ).rows.map((x) => x.name),
+      sources: (await this.sourcesWith(c)).filter((x) => x.status === 'active').map((x) => x.name),
+    }));
+    return {
+      bytes: await templateSheet({
+        sheet: 'Enquiries',
+        columns: [
+          { header: 'Parent name', width: 26, required: true },
+          { header: 'Child name', width: 24 },
+          { header: 'Child date of birth', width: 16, format: 'date', note: 'dd-mm-yyyy' },
+          {
+            header: 'Mobile',
+            width: 14,
+            format: 'text',
+            note: '10 digits; the mobile or the email',
+          },
+          { header: 'Email', width: 28 },
+          { header: 'Class', width: 16, options: l.classes },
+          { header: 'Source', width: 18, options: l.sources },
+          { header: 'Locality', width: 20 },
+          { header: 'Notes', width: 40 },
+        ],
+        guide: [
+          "One row a family. The parent's name and the mobile or the email are needed.",
+          'A family already among the enquiries of the last year (the same mobile or email) is not added again: the upload lists it as a duplicate.',
+          "Each enquiry added is given to a counsellor as the enquiry desk's rules say.",
+          'If a row is wrong nothing is added: correct the rows listed and upload the sheet again.',
+        ],
+        examples: [
+          [
+            'Rakesh Sharma',
+            'Anaya Sharma',
+            '14-07-2021',
+            '9810000001',
+            '',
+            'Class I',
+            'Newspaper',
+            'Sector 15',
+            'Wants the bus',
+          ],
+        ],
+      }),
+      filename: 'enquiries-format.xlsx',
+      contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    };
+  }
+
+  /**
+   * Enquiries from an Excel sheet (docs/design/45, part 2): every row checked first (nothing is added
+   * when one is wrong); a family already among the last year's enquiries, or twice in the sheet, is a
+   * duplicate and left out; the rest are added and assigned as the desk's rules say.
+   */
+  async importSheet(ctx: RequestContext, fileBase64: string) {
+    const rows = await readSheet(fileBase64, AdmissionEnquiryService.IMPORT_HEADERS);
+    if (!rows.length)
+      throw new DomainError('validation-failed', 'The sheet has no filled row', { status: 400 });
+    if (rows.length > 2000)
+      throw new DomainError('validation-failed', 'Up to 2000 rows at a time', { status: 400 });
+    return this.db.tenant(requireTenant(ctx), async (c) => {
+      const classes = await c.query<{ id: string; name: string }>(
+        `SELECT id::text, lower(name) AS name FROM classes WHERE deleted_at IS NULL`,
+      );
+      const sources = await this.sourcesWith(c);
+      const errors: Array<{ row: number; message: string }> = [];
+      const duplicates: Array<{ row: number; message: string }> = [];
+      const seen = new Set<string>();
+      const ready: Array<{
+        row: number;
+        parent: string;
+        child: string | null;
+        dob: string | null;
+        mobile: string | null;
+        email: string | null;
+        classId: string | null;
+        sourceId: string | null;
+        locality: string | null;
+        notes: string | null;
+      }> = [];
+      for (const { row, cells } of rows) {
+        const v = (k: string) => (cells[k] ?? '').trim();
+        const parent = v('Parent name');
+        const mobile = v('Mobile').replace(/\D/g, '').slice(-10) || null;
+        const email = v('Email').toLowerCase() || null;
+        const problem = (m: string) => errors.push({ row, message: m });
+        if (parent.length < 2) {
+          problem("the parent's name is missing");
+          continue;
+        }
+        if (!mobile && !email) {
+          problem('give the mobile or the email');
+          continue;
+        }
+        if (mobile && !/^[6-9]\d{9}$/.test(mobile)) {
+          problem(`${v('Mobile')} is not a 10-digit mobile number`);
+          continue;
+        }
+        if (email && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
+          problem(`${email} is not an email address`);
+          continue;
+        }
+        const dobText = v('Child date of birth');
+        let dob: string | null = null;
+        if (dobText) {
+          const m = /^(\d{1,2})[-/.](\d{1,2})[-/.](\d{4})$/.exec(dobText);
+          dob = /^\d{4}-\d{2}-\d{2}$/.test(dobText)
+            ? dobText
+            : m
+              ? `${m[3]!}-${m[2]!.padStart(2, '0')}-${m[1]!.padStart(2, '0')}`
+              : null;
+          if (!dob) {
+            problem(`${dobText} is not a date (dd-mm-yyyy)`);
+            continue;
+          }
+        }
+        const cls = v('Class')
+          ? classes.rows.find((x) => x.name === v('Class').toLowerCase())
+          : null;
+        if (v('Class') && !cls) {
+          problem(`no class "${v('Class')}"`);
+          continue;
+        }
+        const src = v('Source')
+          ? sources.find((x) => x.name.toLowerCase() === v('Source').toLowerCase())
+          : null;
+        if (v('Source') && !src) {
+          problem(`no source "${v('Source')}" (add it in Admission set-up)`);
+          continue;
+        }
+        const key = mobile ?? email!;
+        if (seen.has(key)) {
+          duplicates.push({ row, message: `${key} is twice in the sheet` });
+          continue;
+        }
+        seen.add(key);
+        ready.push({
+          row,
+          parent,
+          child: v('Child name') || null,
+          dob,
+          mobile,
+          email,
+          classId: cls?.id ?? null,
+          sourceId: src?.id ?? null,
+          locality: v('Locality') || null,
+          notes: v('Notes') || null,
+        });
+      }
+      if (errors.length) return { added: 0, duplicates, errors };
+      // already an enquiry (the last year), by mobile or email
+      const known = await c.query<{ mobile: string | null; email: string | null }>(
+        `SELECT mobile, lower(email::text) AS email FROM admission_enquiries
+          WHERE created_at > now() - interval '365 days'
+            AND (mobile = ANY($1::text[]) OR lower(email::text) = ANY($2::text[]))`,
+        [ready.map((x) => x.mobile).filter(Boolean), ready.map((x) => x.email).filter(Boolean)],
+      );
+      const hasMobile = new Set(known.rows.map((x) => x.mobile).filter(Boolean));
+      const hasEmail = new Set(known.rows.map((x) => x.email).filter(Boolean));
+      const desk = await this.deskWith(c);
+      const open = await c.query<{ id: string }>(
+        `SELECT id::text FROM admission_cycles WHERE status = 'open' AND deleted_at IS NULL ORDER BY opens_at DESC LIMIT 1`,
+      );
+      let added = 0;
+      for (const x of ready) {
+        if ((x.mobile && hasMobile.has(x.mobile)) || (x.email && hasEmail.has(x.email))) {
+          duplicates.push({ row: x.row, message: `${x.mobile ?? x.email!} is already an enquiry` });
+          continue;
+        }
+        const r = await c.query<{ id: string }>(
+          `INSERT INTO admission_enquiries (school_id, cycle_id, class_id, source_id, parent_name, child_name, child_dob, mobile, email, locality, notes,
+                                            next_follow_up_on, created_by)
+           VALUES (app.current_school_id(), $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, CURRENT_DATE, $11)
+           RETURNING id::text`,
+          [
+            open.rows[0]?.id ?? null,
+            x.classId,
+            x.sourceId,
+            x.parent,
+            x.child,
+            x.dob,
+            x.mobile,
+            x.email,
+            x.locality,
+            x.notes,
+            ctx.user.id,
+          ],
+        );
+        if (desk.autoAssign) await this.assign(c, r.rows[0]!.id, desk.counsellors);
+        added += 1;
+      }
+      await this.audit.stage(ctx, c, {
+        action: 'admissions.enquiry.import',
+        entityType: 'admission_enquiries',
+        entityId: ctx.tenant!.schoolId,
+        after: { added, duplicates: duplicates.length },
+      });
+      duplicates.sort((a, b) => a.row - b.row);
+      return { added, duplicates, errors: [] as Array<{ row: number; message: string }> };
     });
   }
 

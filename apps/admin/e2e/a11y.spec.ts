@@ -728,6 +728,70 @@ test.describe('accessibility (axe)', () => {
     ).toEqual([]);
   });
 
+  // enquiries as lead management (docs/design/45, part 2): the board, the list's bulk bar, a lead, import
+  test('enquiries: board, list, a lead and the import', async ({ page }) => {
+    test.setTimeout(150_000);
+    const shot = (name: string) =>
+      page.screenshot({
+        path: `${process.env.SHOT_DIR ?? test.info().outputDir}/${name}.png`,
+        fullPage: true,
+      });
+    const axe = async (label: string) => {
+      const r = await new AxeBuilder({ page })
+        .options({ iframes: false })
+        .setLegacyMode()
+        .withTags(['wcag2a', 'wcag2aa'])
+        .analyze();
+      return r.violations
+        .filter((v) => v.impact === 'serious' || v.impact === 'critical')
+        .map((v) => `${label} ${v.id}: ${v.nodes.map((n) => n.target.join(' ')).join(' | ')}`);
+    };
+    const problems: string[] = [];
+    await page.goto('/admissions/enquiries');
+    await page.waitForLoadState('networkidle');
+    const skip = page.getByRole('button', { name: 'Skip' });
+    if (await skip.isVisible()) await skip.click();
+    const board = page.getByRole('region', { name: 'Leads by stage' });
+    await expect(board).toBeVisible();
+    await expect(board.getByRole('heading', { name: /^New/ })).toBeVisible();
+    await expect(board.getByRole('heading', { name: /^Lost/ })).toBeVisible();
+    problems.push(...(await axe('board')));
+    await shot('leads-board');
+    await page
+      .getByRole('navigation', { name: 'View' })
+      .getByRole('link', { name: 'List' })
+      .click();
+    await page.waitForLoadState('networkidle');
+    const first = page.getByRole('checkbox', { name: /^Pick (?!every)/ }).first();
+    await first.check();
+    await expect(page.getByText('1 picked')).toBeVisible();
+    await page.getByLabel('What to do').selectOption('score');
+    await expect(page.getByRole('button', { name: 'Apply to 1' })).toBeVisible();
+    problems.push(...(await axe('list')));
+    await shot('leads-list');
+    const lead = await page
+      .locator('a[href^="/admissions/enquiries/"]')
+      .evaluateAll((as) =>
+        as
+          .map((a) => a.getAttribute('href') ?? '')
+          .find((h) => /^\/admissions\/enquiries\/\d+$/.test(h)),
+      );
+    await page.goto(lead!);
+    await page.waitForLoadState('networkidle');
+    await expect(
+      page
+        .getByRole('region', { name: 'Stage of the lead' })
+        .or(page.getByLabel('Stage of the lead')),
+    ).toBeVisible();
+    await expect(page.locator('[aria-current="step"]')).toHaveCount(1);
+    problems.push(...(await axe('lead')));
+    await shot('lead-page');
+    await page.goto('/admissions/enquiries/import');
+    await expect(page.getByRole('link', { name: 'Download the format (.xlsx)' })).toBeVisible();
+    problems.push(...(await axe('import')));
+    expect(problems).toEqual([]);
+  });
+
   // the class line's rules live on the session (25 Oct 2026): not on the form page
   test('class rules on the session, not on the form', async ({ page }) => {
     test.setTimeout(120_000);

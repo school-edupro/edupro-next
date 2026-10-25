@@ -1,4 +1,5 @@
-import { Body, Controller, Get, Param, Post, Put, Query } from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, Param, Post, Put, Query, Res } from '@nestjs/common';
+import type { FastifyReply } from 'fastify';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { RequirePermission } from '../../common/access/require-permission.decorator';
 import { ReqCtx, type RequestContext } from '../../common/http/request-context';
@@ -11,6 +12,7 @@ import {
   FollowUpDto,
   BulkDto,
   EnquiryDeskDto,
+  EnquiryImportDto,
   InviteDto,
   MoveDto,
   ReplyDto,
@@ -59,6 +61,25 @@ export class AdmissionEnquiryController {
   @RequirePermission(ENQUIRY_MANAGE)
   bulk(@ReqCtx() ctx: RequestContext, @Body() dto: BulkDto) {
     return this.svc.bulk(ctx, dto);
+  }
+
+  @Get('import-format.xlsx')
+  @ApiOperation({ summary: 'The Excel format of enquiries to add' })
+  @RequirePermission(ENQUIRY_MANAGE)
+  async importFormat(@ReqCtx() ctx: RequestContext, @Res() reply: FastifyReply) {
+    const f = await this.svc.importFormat(ctx);
+    void reply
+      .header('content-type', f.contentType)
+      .header('content-disposition', `attachment; filename="${f.filename}"`)
+      .send(f.bytes);
+  }
+
+  @Post('import')
+  @HttpCode(200)
+  @ApiOperation({ summary: 'Enquiries from an Excel sheet; duplicates left out' })
+  @RequirePermission(ENQUIRY_MANAGE)
+  importSheet(@ReqCtx() ctx: RequestContext, @Body() dto: EnquiryImportDto) {
+    return this.svc.importSheet(ctx, dto.fileBase64);
   }
 
   @Get('report')
