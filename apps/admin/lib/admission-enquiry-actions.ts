@@ -94,29 +94,6 @@ export async function addFollowUp(fd: FormData) {
   redirect(`/admissions/enquiries/${id}?ok=1&detail=${encodeURIComponent('Follow-up saved.')}`);
 }
 
-export async function inviteEnquiry(fd: FormData) {
-  const id = str(fd, 'id');
-  if (!okId(id)) redirect('/admissions/enquiries');
-  let sent = 0;
-  try {
-    sent = (
-      await apiFetch<{ sent: number }>(`/admissions/enquiries/${id}/invite`, {
-        method: 'POST',
-        body: JSON.stringify({
-          ...(opt(fd, 'cycleId') ? { cycleId: str(fd, 'cycleId') } : {}),
-          ...(opt(fd, 'message') ? { message: str(fd, 'message') } : {}),
-        }),
-      })
-    ).sent;
-  } catch (e) {
-    fail(`/admissions/enquiries/${id}`, e);
-  }
-  revalidatePath(`/admissions/enquiries/${id}`);
-  redirect(
-    `/admissions/enquiries/${id}?ok=1&detail=${encodeURIComponent(`Invitation sent (${String(sent)} message${sent === 1 ? '' : 's'}).`)}`,
-  );
-}
-
 /** A reply to the family by email and / or SMS (docs/design/43, part 3). */
 export async function replyEnquiry(fd: FormData) {
   const id = str(fd, 'id');
@@ -278,4 +255,23 @@ export async function exportEnquiriesPdf(fd: FormData) {
     throw e;
   }
   redirect(back(`&export=${id}`));
+}
+
+/** Invite the family; the link comes back to show once (docs/design/46, part 3). */
+export async function inviteLead(id: string, cycleId: string | null, message: string) {
+  if (!okId(id) || (cycleId && !okId(cycleId)))
+    return { ok: false as const, error: 'Unknown enquiry' };
+  try {
+    const r = await apiFetch<{ link: string; sent: number }>(`/admissions/enquiries/${id}/invite`, {
+      method: 'POST',
+      body: JSON.stringify({
+        ...(cycleId ? { cycleId } : {}),
+        ...(message.trim() ? { message: message.trim() } : {}),
+      }),
+    });
+    revalidatePath(`/admissions/enquiries/${id}`);
+    return { ok: true as const, link: r.link, sent: r.sent };
+  } catch (e) {
+    return said(e);
+  }
 }

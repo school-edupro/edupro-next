@@ -2775,6 +2775,19 @@ describe('online admission (e2e)', () => {
         json: { cycleId, classId: classMini, mobile: mobileF },
       });
       const id = walkIn.json().id as string;
+      // matched when the form begins (docs/design/46, part 3): the lead shows Registration started
+      const begun = (
+        await inject({ method: 'GET', url: `/admissions/enquiries/${e.json().id}`, headers: h() })
+      ).json();
+      const started = (begun.stages as Array<{ id: string; kind: string }>).find(
+        (x) => x.kind === 'started',
+      )!;
+      expect(begun.stageId).toBe(started.id);
+      expect(
+        (begun.followups as Array<{ outcome: string }>).some((f) =>
+          /started the registration form \(matched by mobile\)/.test(f.outcome),
+        ),
+      ).toBe(true);
       await inject({
         method: 'POST',
         url: `/admissions/applications/${id}/form/submit`,
@@ -2804,6 +2817,7 @@ describe('online admission (e2e)', () => {
         headers: h(),
       });
       expect(after.json().status).toBe('converted');
+      expect(after.json().application?.id).toBe(id);
     });
 
     it("takes the website's enquiry form and reports conversion by source and class", async () => {

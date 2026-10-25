@@ -11658,6 +11658,18 @@ a.ep-pub-foot__item {
   align-items: center;
   grid-column: 1 / -1;
 }
+.ep-invite-link {
+  display: grid;
+  gap: var(--sp-2);
+  padding: var(--sp-3);
+  border-radius: var(--radius-md);
+  background: var(--status-success-bg);
+}
+.ep-invite-link__acts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+}
 /* Payments by registration (docs/design/44, part 3) */
 .ep-adm-paytotals {
   display: grid;

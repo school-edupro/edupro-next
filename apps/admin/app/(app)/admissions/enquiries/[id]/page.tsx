@@ -1,6 +1,7 @@
 import { Badge, Card, PageHeader } from '@edupro/ui';
 import { notFound } from 'next/navigation';
 import { EnquiryFields } from '@/components/admissions/EnquiryFields';
+import { InviteBox } from '@/components/admissions/InviteBox';
 import { LeadMove } from '@/components/admissions/LeadMove';
 import { LeadScore } from '@/components/admissions/LeadScore';
 import { Notice } from '@/components/Notice';
@@ -11,12 +12,7 @@ import {
   type EnquiryDetail,
   type EnquiryMeta,
 } from '@/lib/admission-enquiry';
-import {
-  addFollowUp,
-  inviteEnquiry,
-  replyEnquiry,
-  updateEnquiry,
-} from '@/lib/admission-enquiry-actions';
+import { addFollowUp, replyEnquiry, updateEnquiry } from '@/lib/admission-enquiry-actions';
 import { ApiError, apiFetch, getMe } from '@/lib/api';
 import { whenIst } from '@/lib/admission-process';
 
@@ -214,39 +210,15 @@ export default async function EnquiryPage({
           {e.application ? (
             <p style={{ margin: 0 }}>The family has registered.</p>
           ) : (
-            <form action={inviteEnquiry} className="ep-rp__act">
-              <input type="hidden" name="id" value={e.id} />
-              <p style={{ margin: 0 }}>
-                Sends a link to {[e.mobile, e.email].filter(Boolean).join(' and ')} (email, and SMS
-                / WhatsApp where the school has the templates). The form starts with the
-                child&apos;s name and date of birth; the registration counts for this enquiry.
-                {e.invitedAt ? ` Last invited ${dmy(e.invitedAt)}.` : ''}
-              </p>
-              <label className="ep-field">
-                <span className="ep-field__label">Session</span>
-                <select className="ep-select" name="cycleId" defaultValue={e.cycleId ?? ''}>
-                  <option value="">The open one</option>
-                  {meta.cycles
-                    .filter((c) => c.status === 'open')
-                    .map((c) => (
-                      <option key={c.id} value={c.id}>
-                        {c.name}
-                      </option>
-                    ))}
-                </select>
-              </label>
-              <label className="ep-field">
-                <span className="ep-field__label">
-                  Own message (the link is added in the email)
-                </span>
-                <textarea className="ep-input" name="message" rows={2} maxLength={500} />
-              </label>
-              <div className="ep-form-actions">
-                <button className="ep-btn ep-btn--secondary" type="submit">
-                  {e.invitedAt ? 'Invite again' : 'Send the invitation'}
-                </button>
-              </div>
-            </form>
+            <InviteBox
+              id={e.id}
+              to={[e.mobile, e.email].filter(Boolean).join(' and ')}
+              mobile={e.mobile}
+              parentName={e.parentName}
+              cycleId={e.cycleId}
+              cycles={meta.cycles.filter((c) => c.status === 'open')}
+              invitedAt={e.invitedAt ? dmy(e.invitedAt) : null}
+            />
           )}
         </Card>
       </div>

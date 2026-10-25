@@ -34,6 +34,50 @@ export async function startFromEnquiry(
   return { childName: x.child_name, childDob: x.child_dob };
 }
 
+/**
+ * A form begun without the invitation (docs/design/46, part 3): the family's open enquiry of the last
+ * year with the same mobile or email (the same class first), not yet taken by another live form, is
+ * linked at once, so the lead shows "Registration started" (the applications trigger moves it).
+ */
+export async function matchEnquiry(
+  c: PoolClient,
+  appId: string,
+  mobile: string | null,
+  email: string | null,
+  classId: string,
+): Promise<{ childName: string | null; childDob: string | null } | null> {
+  if (!mobile && !email) return null;
+  const e = await c.query<{
+    id: string;
+    child_name: string | null;
+    child_dob: string | null;
+    by: string;
+  }>(
+    `SELECT e.id::text, e.child_name, e.child_dob::text,
+            CASE WHEN $1::text IS NOT NULL AND e.mobile = $1 THEN 'mobile' ELSE 'email' END AS by
+       FROM admission_enquiries e
+      WHERE e.application_id IS NULL AND e.status IN ('new', 'follow_up', 'interested')
+        AND e.created_at > now() - interval '365 days'
+        AND (($1::text IS NOT NULL AND e.mobile = $1) OR ($2::text IS NOT NULL AND lower(e.email::text) = lower($2)))
+        AND NOT EXISTS (SELECT 1 FROM applications x WHERE x.enquiry_id = e.id AND x.id <> $4::bigint
+                         AND x.status::text NOT IN ('withdrawn', 'cancelled'))
+      ORDER BY (e.class_id = $3::bigint) DESC NULLS LAST, e.created_at DESC
+      LIMIT 1`,
+    [mobile, email, classId, appId],
+  );
+  const x = e.rows[0];
+  if (!x) return null;
+  await c.query(`UPDATE applications SET enquiry_id = $2 WHERE id = $1 AND enquiry_id IS NULL`, [
+    appId,
+    x.id,
+  ]);
+  await c.query(
+    `INSERT INTO admission_enquiry_followups (school_id, enquiry_id, mode, outcome) VALUES (app.current_school_id(), $1, 'system', $2)`,
+    [x.id, `The family started the registration form (matched by ${x.by})`],
+  );
+  return { childName: x.child_name, childDob: x.child_dob };
+}
+
 /** A registration made: the enquiry it came from (or one with the same mobile or email) is converted. */
 export async function convertEnquiry(c: PoolClient, appId: string): Promise<void> {
   const a = await c.query<{

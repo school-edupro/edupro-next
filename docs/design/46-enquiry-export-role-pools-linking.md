@@ -21,17 +21,17 @@ NoPaperForms / Meritto:
 
 ## Parts
 
-**Part 1 — Export the list.** On `/admissions/enquiries` (list and board) Excel and PDF of the leads
+**Part 1 — Export the list (built 25 Oct 2026).** On `/admissions/enquiries` (list and board) Excel and PDF of the leads
 matching the filters: ENQ no., received, parent, child, class, source, stage, score, counsellor, mobile,
 email, next follow-up, first contact, registration no.; the PDF on the school's letterhead, queued and
 offered when ready (the helpdesk's way); the filters printed on top.
 
-**Part 2 — Counsellor pools by role (migration 0254).** `admission_enquiry_rules.pool_roles TEXT[]`;
+**Part 2 — Counsellor pools by role (built 25 Oct 2026, migration 0255).** `admission_enquiry_rules.pool_roles TEXT[]`;
 the rule editor offers roles (those that take enquiries) and people; on arrival the pool is the holders
 today of its roles plus its people (none of either: everyone who takes enquiries), shared in turn as now.
 The rule's flow reads "In turn: Front office, Admission counsellor, Meena Iyer".
 
-**Part 3 — The invitation link and early matching.** The invitation's link is kept with the enquiry
+**Part 3 — The invitation link and early matching (built 25 Oct 2026).** The invitation's link is kept with the enquiry
 (only its hash stays in the database; the link is shown once, right after the invitation, and again by
 inviting again): "Copy link" and, on a phone, "Share on WhatsApp". When a family starts a form (portal,
 link or desk), a draft without an enquiry is linked to the open enquiry of the last year with the same

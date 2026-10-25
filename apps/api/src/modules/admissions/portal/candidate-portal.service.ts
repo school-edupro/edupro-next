@@ -8,7 +8,7 @@ import { ENV, type Env } from '../../../config/env';
 import { FilesService } from '../../files/files.service';
 import { PaymentsService } from '../../payments/payments.service';
 import { AdmissionCoreService, type AppRow } from '../admission-core.service';
-import { startFromEnquiry } from '../enquiry-engine';
+import { matchEnquiry, startFromEnquiry } from '../enquiry-engine';
 import { classOpenFor, hashPasscode, plainPasscode } from '../late-entry.service';
 import { journey, slotOf } from '../process-engine';
 import { publicTenant } from '../public/otp.service';
@@ -289,9 +289,12 @@ export class CandidatePortalService {
           JSON.stringify(start),
         ],
       );
-      // started from an enquiry's invitation: linked, and the child's name and birth date filled in
-      if (enquiryToken) {
-        const e = await startFromEnquiry(c, r.rows[0]!.id, enquiryToken);
+      // started from an enquiry's invitation: linked, and the child's name and birth date filled in;
+      // without it, the family's open enquiry with the same mobile / email (docs/design/46, part 3)
+      {
+        const e = enquiryToken
+          ? await startFromEnquiry(c, r.rows[0]!.id, enquiryToken)
+          : await matchEnquiry(c, r.rows[0]!.id, cand.mobile, cand.email, classId);
         if (e) {
           const fill: Record<string, string> = {};
           const [first, ...rest] = (e.childName ?? '').trim().split(/\s+/);

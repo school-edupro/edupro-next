@@ -986,6 +986,16 @@ test.describe('accessibility (axe)', () => {
     await expect(
       page.getByText('Reply by email: Yes, the bus runs from Sector 15.').first(),
     ).toBeVisible();
+    // the invitation's link to copy or share (docs/design/46, part 3); the address cannot receive mail
+    await page.getByRole('button', { name: /^(Send the invitation|Invite again)$/ }).click();
+    await expect(page.getByLabel('The invitation link')).toHaveValue(
+      /\/admission\?session=.+&enquiry=/,
+    );
+    await expect(page.getByRole('button', { name: 'Copy link' })).toBeVisible();
+    await expect(page.getByRole('link', { name: 'Share on WhatsApp' })).toHaveAttribute(
+      'href',
+      /^https:\/\/wa\.me\//,
+    );
     await page.screenshot({ path: test.info().outputPath('enquiry-reply.png'), fullPage: true });
     const r = await new AxeBuilder({ page })
       .options({ iframes: false })
