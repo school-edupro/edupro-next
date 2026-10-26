@@ -410,7 +410,6 @@ const crew = (key: string, header: string, role: string, required = false): Mast
     table: 'transport_drivers',
     column: 'code',
     showLabel: true,
-    // eslint-disable-next-line no-restricted-syntax -- the role is one of three constants above
     filter: `t.role = '${role}' AND t.status = 'active'`,
   },
   required,
@@ -424,6 +423,7 @@ const titlesWith = (column: string): MasterField => ({
   header: 'Books',
   type: 'number',
   readOnly: true,
+  // eslint-disable-next-line no-restricted-syntax -- column is one of the fixed column names the masters pass
   expr: `SELECT count(*) FROM library_titles x WHERE x.${column} = t.id`,
   width: 8,
 });
