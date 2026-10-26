@@ -82,18 +82,28 @@ export async function saveSessionPoints(
   id: string,
   body: {
     session: PointRule[];
-    classes: Array<{ classId: string; own: boolean; rules: PointRule[] }>;
+    max?: number | null;
+    classes: Array<{ classId: string; own: boolean; rules: PointRule[]; max?: number | null }>;
   },
 ) {
   if (!okId(id)) return { ok: false as const, error: 'Unknown session' };
   const clean = (l: PointRule[]) =>
-    l.map(({ name, logic, conditions, points }) => ({ name, logic, conditions, points }));
+    l.map(({ name, logic, conditions, points, kind, spec, cap }) => ({
+      name,
+      logic,
+      conditions,
+      points: kind === 'table' ? 0 : points,
+      kind: kind ?? 'fixed',
+      spec: spec ?? {},
+      cap: cap ?? null,
+    }));
   return call<SessionPoints>(
     `/admissions/cycles/${id}/points`,
     'PUT',
     {
       session: clean(body.session),
-      classes: body.classes.map((k) => ({ ...k, rules: clean(k.rules) })),
+      max: body.max ?? null,
+      classes: body.classes.map((k) => ({ ...k, rules: clean(k.rules), max: k.max ?? null })),
     },
     `/admissions/cycles/${id}`,
   );

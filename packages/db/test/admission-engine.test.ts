@@ -17,6 +17,7 @@ import {
   visibleSteps,
   type AdmissionAnswers,
   type AdmissionField,
+  type PointTables,
 } from '../src/admission-engine';
 import { CLASS_XI_ADMISSION_FORM, GENERAL_ADMISSION_FORM } from '../src/admission-form-templates';
 
@@ -343,5 +344,117 @@ describe('admission form engine (docs/design/39)', () => {
     ]);
     expect(pointsTotal(lines)).toBe(27.5);
     expect(pointsTotal(workPoints([], {}))).toBe(0);
+  });
+
+  // docs/design/48: points read from the school's score tables, capped, checked
+  const tables: PointTables = {
+    qualification: (n) =>
+      ({ 'b.ed': { father: 13, mother: 14 }, 'l.l.b': { father: 13, mother: 14 } })[
+        n.toLowerCase()
+      ] ?? null,
+    locality: (n) => ({ 'sunder vihar': 30, 'beyond 15 km': 20 })[n.toLowerCase()] ?? null,
+    alumni: (school, passout) =>
+      school === 'DPS - Faridabad'
+        ? (({ '12': 12, '10': 12 } as Record<string, number>)[passout] ?? null)
+        : null,
+    most: (table, role) =>
+      table === 'qualification' ? (role === 'mother' ? 14 : 13) : table === 'locality' ? 30 : 12,
+    siblingFound: (nos) => nos.includes('A100'),
+  };
+
+  it('adds both parents from the qualifications table and flags one not in it', () => {
+    const [l] = workPoints(
+      [
+        {
+          name: 'Education',
+          logic: 'all',
+          conditions: [],
+          points: 0,
+          kind: 'table',
+          spec: {
+            table: 'qualification',
+            sources: [
+              { role: 'father', field: 'father_education' },
+              { role: 'mother', field: 'mother_education' },
+            ],
+          },
+        },
+      ],
+      { father_education: 'B.Ed', mother_education: 'L.L.B' },
+      tables,
+    );
+    expect(l).toEqual({ name: 'Education', max: 27, auto: 27, points: 27 });
+    const [m] = workPoints(
+      [
+        {
+          name: 'Education',
+          logic: 'all',
+          conditions: [],
+          points: 0,
+          kind: 'table',
+          spec: {
+            table: 'qualification',
+            sources: [{ role: 'mother', field: 'mother_education' }],
+          },
+        },
+      ],
+      { mother_education: 'PhD' },
+      tables,
+    );
+    expect(m!.points).toBe(0);
+    expect(m!.check).toMatch(/Mother's qualification “PhD” is not in the table/);
+  });
+
+  it('scores the locality, caps alumni together, and checks a sibling and a proof', () => {
+    const lines = workPoints(
+      [
+        {
+          name: 'Distance',
+          logic: 'all',
+          conditions: [],
+          points: 0,
+          kind: 'table',
+          spec: { table: 'locality', sources: [{ role: 'child', field: 'locality' }] },
+        },
+        {
+          name: 'Alumni',
+          logic: 'all',
+          conditions: [],
+          points: 0,
+          kind: 'table',
+          cap: 20,
+          spec: {
+            table: 'alumni_school',
+            school: 'DPS - Faridabad',
+            sources: [
+              { role: 'father', field: '', classField: 'father_alumni_class' },
+              { role: 'mother', field: '', classField: 'mother_alumni_class' },
+            ],
+          },
+        },
+        { name: 'Sibling', logic: 'all', conditions: [], points: 26, kind: 'sibling' },
+        {
+          name: 'Special child',
+          logic: 'all',
+          conditions: [{ field: 'cwsn', op: 'eq', value: 'Yes' }],
+          points: 5,
+          spec: { proof: 'cwsn_certificate' },
+        },
+      ],
+      {
+        locality: 'Sunder Vihar',
+        father_alumni_class: '12',
+        mother_alumni_class: '10',
+        siblings: { count: 1, list: [{ admissionNo: 'B200' }] },
+        cwsn: 'Yes',
+      },
+      tables,
+    );
+    expect(lines.map((l) => l.points)).toEqual([30, 20, 0, 0]);
+    expect(lines[1]!.max).toBe(20);
+    expect(lines[2]!.check).toMatch(/Sibling not found/);
+    expect(lines[3]!.check).toBe('The proof is not uploaded');
+    expect(pointsTotal(lines, 40)).toBe(40);
+    expect(pointsTotal(lines)).toBe(50);
   });
 });

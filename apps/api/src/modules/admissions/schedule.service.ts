@@ -707,7 +707,13 @@ export class AdmissionScheduleService {
         logo: await this.core.fileBytes(c, sc.logo),
         title: `Merit list: ${sel.class.name}`,
         subtitle: `${sel.session.name} · ${String(sel.class.seats)} seats, ${String(sel.class.left)} left · ${String(sel.merit.length)} candidates at Selection`,
-        criteria: criteria.map((k) => ({ name: k.name, points: k.points })),
+        criteria: criteria.map((k) => ({
+          name: k.name,
+          points:
+            k.kind === 'table'
+              ? `from the score table${k.cap ? `, at most ${String(k.cap)}` : ''}`
+              : k.points,
+        })),
         tieRule: sel.tieBreak.rule,
         seed: sel.tieBreak.seed,
         rows: sel.merit.map((x) => ({

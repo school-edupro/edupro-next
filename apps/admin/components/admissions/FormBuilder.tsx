@@ -59,6 +59,9 @@ const SOURCE_LABEL: Record<string, string> = {
   states: 'States (System setup)',
   countries: 'Countries (System setup)',
   houses: 'Houses',
+  qualifications: 'Qualifications (score table)',
+  localities: 'Localities (score table)',
+  alumni_schools: 'Alumni schools (score table)',
 };
 const OP_LABEL: Record<string, string> = {
   eq: 'is',

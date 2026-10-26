@@ -47,7 +47,7 @@ two series may not give the same number (checked on save); the existing `APP/…
 
 ## Parts
 
-**Part 1 — The score tables (API, admin; migration).** Admission set-up gains a **Score tables** tab:
+**Part 1 — The score tables (API, admin; built 26 Oct 2026, migration 0258).** Admission set-up gains a **Score tables** tab:
 **Qualifications** (name, father score, mother score, father weight, mother weight), **Localities**
 (name, distance band, area, score; for a class or every class; for a branch or every branch) and
 **Schools** (school name, pass-out class — 10, 12, Others, Both —, score). Each: search, add, edit,
@@ -55,7 +55,7 @@ archive, Excel import with a check of every row and a sample sheet, Excel export
 offers these tables as option lists (`list: 'qualification' | 'locality' | 'alumni_school'`) so the
 family picks from them; a locality answer may be "Not in the list" with a text box.
 
-**Part 2 — Criteria that read the tables (packages/db engine, API, admin).** A merit criterion gets a
+**Part 2 — Criteria that read the tables (packages/db engine, API, admin; built 26 Oct 2026).** A merit criterion gets a
 kind: **fixed** (today's) or **from a table** (question → table → column: father score, mother score,
 locality score, alumni score). Each criterion may have a **cap**; the session (or class) has a
 **maximum** (e.g. 100). Ready starters for the old formula: Father's education, Mother's education
@@ -63,7 +63,7 @@ locality score, alumni score). Each criterion may have a **cap**; the session (o
 Sibling (checked), Staff ward, Girl child, Special child (CWSN). The breakdown shows each line "x of
 y", the reason a line is 0 ("not in the table"), and the total "of 100".
 
-**Part 3 — Checks, recalculation and the office (API, admin, portal).** Sibling: the admission no.
+**Part 3 — Checks, recalculation and the office (API, admin, portal; built 26 Oct 2026).** Sibling: the admission no.
 answered is looked up in the student master (active, same mobile / guardian, any class): found → the
 points; not found → 0 with "Sibling not found" for Document check. Girl child from the gender answer;
 CWSN needs its certificate uploaded, its points confirmed at Document check. "Not in the list" answers
@@ -72,13 +72,13 @@ are placed by the office (choose the locality / qualification; the points follow
 yet past Document check, showing how many changed. The public admission page shows each class's
 criteria with the tables (distance bands with their localities, qualifications, alumni schools).
 
-**Part 4 — The score report (API, admin).** Admissions → Reports → **Score report**: a row per
+**Part 4 — The score report (API, admin; built 26 Oct 2026).** Admissions → Reports → **Score report**: a row per
 registration of a session and class — registration no., candidate, each criterion's points as a
 column, form points, test / interview marks, total, rank (the merit order of doc 40 with its tie-break)
 — with filters (class, category, status, "has a line to check") and Excel / PDF on the letterhead. The
 same columns are in the Admissions dataset for the lists and the report builder.
 
-**Part 5 — Number series (API, admin; migration).** Admission set-up → **Numbers**: for Registration
+**Part 5 — Number series (API, admin; built 26 Oct 2026, migration 0258).** Admission set-up → **Numbers**: for Registration
 no. and for Admission no., a list of series, each for a session and a class (or every class), and
 optionally a branch / board, a round and a student type: prefix (e.g. `DP1`, `N2026`), start number,
 digits (e.g. 4 → `0001`), the live preview "Next: DP10001", the last number given. A number is taken
@@ -86,3 +86,14 @@ from the most specific series that matches (class + round + type, then class, th
 today's default) under a lock, so two payments at once never share one. Saving refuses a series whose
 numbers would meet another's or one already given. The registration page and the receipts show the
 number as now.
+
+As built (26 Oct 2026): classes do not belong to a branch in EduPro, so a locality is for a class or
+every class (a branch-wise list is a class-wise one); a series' board, round or student type is an
+answer of the form ("only for registrations whose answer is …"). Screens: Admission set-up → **Merit
+score tables** (`/admissions/setup/score-tables`) and **Number series** (`/admissions/setup/numbers`);
+the session's **Merit points** tab (kind, table, cap, total out of, Recalculate); Admissions → **Score
+report**. The engine (`workPoints(criteria, answers, tables)`, `pointsTotal(lines, max)`) reads the
+tables through `pointTablesFor` (apps/api …/score-tables.ts); a line carries `check` when the office
+should look at it. The Admissions dataset gains Form points, Points by criterion and Points to check.
+The office places an answer not in a table by correcting the answer on the registration (docs/design/37,
+case 1b); the points follow.

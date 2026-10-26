@@ -71,6 +71,16 @@ export default async function AdmissionSetupPage({
         kicker="Admissions"
         title="Admission set-up"
         description="How candidates sign in, the receipt series of registration and admission fees, the fee categories decided from the form's answers, and the stages and approval process each class follows."
+        actions={
+          <span style={{ display: 'inline-flex', gap: 'var(--sp-2)', flexWrap: 'wrap' }}>
+            <a className="ep-btn ep-btn--ghost ep-btn--sm" href="/admissions/setup/score-tables">
+              Merit score tables
+            </a>
+            <a className="ep-btn ep-btn--ghost ep-btn--sm" href="/admissions/setup/numbers">
+              Number series
+            </a>
+          </span>
+        }
       />
       <Notice params={sp} />
       <CategoryGapsNote gaps={setup.categoryGaps ?? []} withSession />

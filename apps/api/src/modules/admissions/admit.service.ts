@@ -10,6 +10,7 @@ import {
   validateChanges,
   writeStudentProfile,
   type AdmissionAnswer,
+  type AdmissionAnswers,
   type PoolClient,
   type SiblingAnswer,
 } from '@edupro/db';
@@ -18,6 +19,7 @@ import { DbService } from '../../common/db/db.service';
 import { DomainError } from '../../common/errors/domain-error';
 import { requireTenant, type RequestContext } from '../../common/http/request-context';
 import { AdmissionCoreService, type AppRow } from './admission-core.service';
+import { seriesNumber } from './number-series';
 import type {
   AdmitBulkDto,
   AdmitDto,
@@ -119,7 +121,16 @@ export class AdmissionAdmitService {
   ) {
     const a = await this.core.row(c, appId);
     if (a.status !== 'offered') return;
-    const no = await this.nextAdmissionNo(c);
+    // the session's admission number series for the class (docs/design/48); else the school's series
+    await c.query(
+      `SELECT pg_advisory_xact_lock(hashtext('admission_no:' || app.current_school_id()::text))`,
+    );
+    const no =
+      (await seriesNumber(c, 'admission', {
+        cycle_id: a.cycle_id,
+        class_id: a.class_id,
+        data: a.data as AdmissionAnswers | null,
+      })) ?? (await this.nextAdmissionNo(c));
     await c.query(
       `UPDATE applications SET status = 'fee_paid', admission_no = $2, admission_receipt_id = $3, fee_paid_at = now(), updated_at = now()
         WHERE id = $1`,

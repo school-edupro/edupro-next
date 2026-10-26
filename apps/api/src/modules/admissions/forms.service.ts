@@ -54,6 +54,9 @@ const GEO: Record<string, string> = { cities: 'City', states: 'State', countries
  * Admission forms (docs/design/39, part 1): the form builder's forms — tabs, fields, rules, the
  * mapping to the student master — and the options each field offers from the school's lists and masters.
  */
+/** A locality the school's list does not have: the office places it (docs/design/48). */
+export const NOT_IN_LIST = 'Not in the list';
+
 @Injectable()
 export class AdmissionFormsService {
   constructor(
@@ -80,6 +83,23 @@ export class AdmissionFormsService {
     out['@states'] = out.State ?? [];
     out['@countries'] = out.Country ?? [];
     out['@houses'] = out.House ?? [];
+    // the merit score tables (docs/design/48): the family picks from them so the points can be found
+    const tableNames = async (sql: string) =>
+      (await c.query<{ name: string }>(sql)).rows.map((x) => x.name);
+    out['@qualifications'] = await tableNames(
+      `SELECT name FROM admission_qualifications WHERE status = 'active' ORDER BY lower(name)`,
+    );
+    out['@localities'] = [
+      ...(await tableNames(
+        `SELECT DISTINCT ON (lower(btrim(name))) btrim(name) AS name FROM admission_localities
+          WHERE status = 'active' ORDER BY lower(btrim(name))`,
+      )),
+      NOT_IN_LIST,
+    ];
+    out['@alumni_schools'] = await tableNames(
+      `SELECT DISTINCT ON (lower(btrim(name))) btrim(name) AS name FROM admission_alumni_schools
+        WHERE status = 'active' ORDER BY lower(btrim(name))`,
+    );
     // each state's cities (System setup → cities), for a city list that follows a state field
     const byState = await c.query<{ state: string; cities: string[] }>(
       `SELECT st.name AS state, array_agg(ci.name ORDER BY ci.name) AS cities

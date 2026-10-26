@@ -268,8 +268,8 @@ export interface MeritListInput {
   logo: { contentType: string; bytes: Buffer } | null;
   title: string;
   subtitle: string;
-  /** the criteria the class goes by, with their points */
-  criteria: Array<{ name: string; points: number }>;
+  /** the criteria the class goes by, with their points (or "from the table") */
+  criteria: Array<{ name: string; points: number | string }>;
   tieRule: string;
   seed: string | null;
   rows: Array<{
@@ -397,5 +397,115 @@ export async function meritListPdf(p: MeritListInput): Promise<Buffer> {
   more(40);
   y -= 14;
   page.drawText(latin(`Printed ${p.printedAt}`), { x: M, y, size: 8, font: regular, color: MUTED });
+  return Buffer.from(await pdf.save());
+}
+
+export interface ScoreReportInput {
+  school: SchoolHead;
+  logo: { contentType: string; bytes: Buffer } | null;
+  title: string;
+  subtitle: string;
+  /** the criteria, a column each */
+  criteria: string[];
+  rows: Array<{
+    rank: string;
+    number: string;
+    candidate: string;
+    lines: string[];
+    points: string;
+    marks: string;
+    total: string;
+    check: boolean;
+  }>;
+  printedAt: string;
+}
+
+/** The score report of a class (docs/design/48, part 4): a column per criterion, the total and the rank. */
+export async function scoreReportPdf(p: ScoreReportInput): Promise<Buffer> {
+  const { pdf, page: first, regular, bold } = await start(p.title, p.school, p.logo);
+  let page = first;
+  let y = A4[1] - 124;
+  const W = A4[0] - 2 * M;
+  page.drawText(latin(p.title.toUpperCase()), { x: M, y, size: 13, font: bold, color: NAVY });
+  y -= 16;
+  page.drawText(latin(p.subtitle), { x: M, y, size: 9.5, font: regular, color: MUTED });
+  y -= 22;
+  const fixed = [
+    { h: 'Rank', w: 28 },
+    { h: 'Reg. no.', w: 92 },
+    { h: 'Candidate', w: 96 },
+  ];
+  const tail = [
+    { h: 'Points', w: 34 },
+    { h: 'Marks', w: 32 },
+    { h: 'Total', w: 34 },
+  ];
+  const left = W - [...fixed, ...tail].reduce((n, c) => n + c.w, 0);
+  const each = p.criteria.length ? Math.max(28, left / p.criteria.length) : 0;
+  const cols = [...fixed, ...p.criteria.map((h) => ({ h, w: each })), ...tail];
+  const size = 7.5;
+  const fit = (t: string, w: number, font: PDFFont) => {
+    let s = latin(t);
+    while (s && font.widthOfTextAtSize(s, size) > w - 4) s = s.slice(0, -1);
+    return s;
+  };
+  const head = () => {
+    page.drawRectangle({ x: M, y: y - 4, width: W, height: 16, color: rgb(0.93, 0.96, 0.99) });
+    let x = M + 2;
+    for (const c of cols) {
+      page.drawText(fit(c.h, c.w, bold), { x, y, size, font: bold, color: NAVY });
+      x += c.w;
+    }
+    y -= 18;
+  };
+  head();
+  if (!p.rows.length) {
+    page.drawText('No registration in this class yet.', {
+      x: M + 4,
+      y,
+      size: 9.5,
+      font: regular,
+      color: MUTED,
+    });
+    y -= 14;
+  }
+  for (const r of p.rows) {
+    if (y < 60) {
+      page = pdf.addPage(A4);
+      y = A4[1] - 50;
+      head();
+    }
+    const cells = [r.rank, r.number, r.candidate, ...r.lines, r.points, r.marks, r.total];
+    let x = M + 2;
+    for (const [i, c] of cols.entries()) {
+      const isTotal = i === cols.length - 1;
+      page.drawText(fit(cells[i] ?? '', c.w, isTotal ? bold : regular), {
+        x,
+        y,
+        size,
+        font: isTotal ? bold : regular,
+        color: r.check && i === 2 ? CYAN : INK,
+      });
+      x += c.w;
+    }
+    page.drawLine({
+      start: { x: M, y: y - 5 },
+      end: { x: A4[0] - M, y: y - 5 },
+      thickness: 0.4,
+      color: LINE,
+    });
+    y -= 15;
+  }
+  if (y < 60) {
+    page = pdf.addPage(A4);
+    y = A4[1] - 50;
+  }
+  y -= 14;
+  page.drawText(
+    latin(
+      `Rank: merit (points + marks), then the older child, then a draw. Candidates in blue have a line for the office to check. Printed ${p.printedAt}`,
+    ),
+    { x: M, y, size: 7.5, font: regular, color: MUTED },
+  );
   return Buffer.from(await pdf.save());
 }

@@ -118,8 +118,11 @@ export class CandidatePortalService {
         class_id: string;
         name: string;
         points: string;
+        kind: string;
+        table_name: string | null;
+        cap: string | null;
       }>(
-        `SELECT k.cycle_id::text, k.class_id::text, r.name, r.points::text
+        `SELECT k.cycle_id::text, k.class_id::text, r.name, r.points::text, r.kind, r.spec ->> 'table' AS table_name, r.cap::text
            FROM admission_class_criteria k JOIN admission_cycles y ON y.id = k.cycle_id
            JOIN admission_point_rules r ON r.cycle_id = k.cycle_id
             AND (CASE WHEN k.own_points THEN r.class_id = k.class_id ELSE r.class_id IS NULL END)
@@ -129,7 +132,56 @@ export class CandidatePortalService {
       const pointsOf = (cycleId: string, classId: string) =>
         pts.rows
           .filter((p) => p.cycle_id === cycleId && p.class_id === classId)
-          .map((p) => ({ name: p.name, points: Number(p.points) }));
+          .map((p) => ({
+            name: p.name,
+            points: Number(p.points),
+            // docs/design/48: read from a score table (shown below the classes), at most the cap
+            table: p.kind === 'table' ? p.table_name : null,
+            cap: p.cap !== null ? Number(p.cap) : null,
+          }));
+      // the score tables the open classes' criteria read, for families to see
+      const used = new Set(pts.rows.filter((p) => p.kind === 'table').map((p) => p.table_name));
+      const tables = {
+        qualification: used.has('qualification')
+          ? (
+              await c.query<{ name: string; father: string; mother: string }>(
+                `SELECT name, father_score::text AS father, mother_score::text AS mother
+                   FROM admission_qualifications WHERE status = 'active' ORDER BY father_score DESC, lower(name)`,
+              )
+            ).rows.map((x) => ({
+              name: x.name,
+              father: Number(x.father),
+              mother: Number(x.mother),
+            }))
+          : [],
+        locality: used.has('locality')
+          ? (
+              await c.query<{
+                name: string;
+                band: string | null;
+                score: string;
+                class_name: string | null;
+              }>(
+                `SELECT l.name, l.band, l.score::text, cl.name AS class_name FROM admission_localities l
+                   LEFT JOIN classes cl ON cl.id = l.class_id WHERE l.status = 'active'
+                  ORDER BY cl.display_order NULLS FIRST, l.score DESC, lower(l.name)`,
+              )
+            ).rows.map((x) => ({
+              name: x.name,
+              band: x.band,
+              score: Number(x.score),
+              className: x.class_name,
+            }))
+          : [],
+        alumni_school: used.has('alumni_school')
+          ? (
+              await c.query<{ name: string; passout: string; score: string }>(
+                `SELECT name, passout_class AS passout, score::text FROM admission_alumni_schools
+                  WHERE status = 'active' ORDER BY lower(name), passout_class`,
+              )
+            ).rows.map((x) => ({ name: x.name, passoutClass: x.passout, score: Number(x.score) }))
+          : [],
+      };
       const now = Date.now();
       const sessions = new Map<
         string,
@@ -172,6 +224,7 @@ export class CandidatePortalService {
       return {
         school: { name: s.rows[0]!.name, code: s.rows[0]!.code },
         sessions: [...sessions.values()],
+        scoreTables: tables,
       };
     });
   }

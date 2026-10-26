@@ -28,7 +28,9 @@ import { applicationPdf } from '../people/application-pdf';
 import { admissionReceiptPdf, type SchoolHead } from './admission-pdf';
 import { AdmissionFormsService } from './forms.service';
 import { convertEnquiry } from './enquiry-engine';
-import { classPointRules } from './points-rules';
+import { classPointRules, classPointsMax } from './points-rules';
+import { pointTablesFor, siblingNosOf } from './score-tables';
+import { seriesNumber } from './number-series';
 import { refreshMerit, startProcess } from './process-engine';
 import { AdmissionSetupService } from './setup.service';
 
@@ -364,6 +366,25 @@ export class AdmissionCoreService {
    * The form points of an application worked out again from its answers and its class's criteria
    * (docs/design/40), and its merit with them. Left alone once the office has confirmed the points.
    */
+  /**
+   * The point lines of an application from its live answers, its class's criteria and the school's
+   * score tables (docs/design/48); null when the class has no criteria.
+   */
+  async workedPoints(
+    c: PoolClient,
+    appId: string,
+    cycleId: string,
+    classId: string,
+  ): Promise<ReturnType<typeof workPoints> | null> {
+    const rules = await classPointRules(c, cycleId, classId);
+    if (!rules.length) return null;
+    const fresh = await this.row(c, appId);
+    const def = await this.defOf(c, fresh);
+    const answers = liveAnswers(def, this.plainData(def, fresh.data));
+    const tables = await pointTablesFor(c, classId, siblingNosOf(answers));
+    return workPoints(rules, answers, tables);
+  }
+
   async refreshPoints(c: PoolClient, appId: string): Promise<void> {
     const r = await c.query<{
       cycle_id: string;
@@ -377,16 +398,15 @@ export class AdmissionCoreService {
     );
     const x = r.rows[0];
     if (!x || x.confirmed || x.status === 'draft') return;
-    const rules = await classPointRules(c, x.cycle_id, x.class_id);
-    let lines: ReturnType<typeof workPoints> | null = null;
-    if (rules.length) {
-      const fresh = await this.row(c, appId);
-      const def = await this.defOf(c, fresh);
-      lines = workPoints(rules, liveAnswers(def, this.plainData(def, fresh.data)));
-    }
+    const lines = await this.workedPoints(c, appId, x.cycle_id, x.class_id);
+    const max = await classPointsMax(c, x.cycle_id, x.class_id);
     await c.query(
       `UPDATE applications SET form_points = $2, points_breakdown = $3::jsonb WHERE id = $1`,
-      [appId, lines ? pointsTotal(lines).toFixed(2) : null, lines ? JSON.stringify(lines) : null],
+      [
+        appId,
+        lines ? pointsTotal(lines, max).toFixed(2) : null,
+        lines ? JSON.stringify(lines) : null,
+      ],
     );
     await refreshMerit(c, appId);
   }
@@ -781,6 +801,13 @@ export class AdmissionCoreService {
       `SELECT * FROM app.next_application_no($1)`,
       [a.cycle_id],
     );
+    // the session's number series for the class, when one is set (docs/design/48); else APP/<code>/…
+    const own = await seriesNumber(c, 'registration', {
+      cycle_id: a.cycle_id,
+      class_id: a.class_id,
+      data: a.data as AdmissionAnswers | null,
+    });
+    if (own) no.rows[0]!.application_no = own;
     await c.query(
       `UPDATE applications SET application_no = $2, serial = $3, status = 'registered', registered_at = now(), registration_receipt_id = $4,
               updated_at = now() WHERE id = $1`,

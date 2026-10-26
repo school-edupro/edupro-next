@@ -94,10 +94,25 @@ export interface PointRule {
   logic: 'all' | 'any';
   conditions: AdmissionCondition[];
   points: number;
+  /** docs/design/48: fixed, from a score table, or a sibling checked in the student master */
+  kind?: 'fixed' | 'table' | 'sibling';
+  spec?: {
+    table?: 'qualification' | 'locality' | 'alumni_school';
+    sources?: Array<{
+      role: 'father' | 'mother' | 'child';
+      field: string;
+      classField?: string | null;
+    }>;
+    school?: string | null;
+    proof?: string | null;
+  };
+  cap?: number | null;
 }
 export interface SessionPoints {
   editable: boolean;
   session: PointRule[];
+  /** the most a registration can score (docs/design/48) */
+  max?: number | null;
   classes: Array<{
     classId: string;
     className: string;
@@ -105,15 +120,28 @@ export interface SessionPoints {
     formName: string | null;
     own: boolean;
     rules: PointRule[];
+    max?: number | null;
   }>;
   /** questions of the session's forms, with the forms that ask each */
   fields: Array<{ key: string; label: string; type: string; values: string[]; forms: string[] }>;
+  /** document questions (a proof a criterion may need) */
+  proofs?: Array<{ key: string; label: string }>;
 }
 
 /** A registration's merit points as the office sees them (docs/design/40, part 3). */
 export interface RegistrationPoints {
   total: number;
-  lines: Array<{ name: string; max: number; auto: number; points: number; reason?: string | null }>;
+  lines: Array<{
+    name: string;
+    max: number;
+    auto: number;
+    points: number;
+    reason?: string | null;
+    /** what the office should look at (docs/design/48) */
+    check?: string | null;
+  }>;
+  /** the most a registration can score */
+  max?: number | null;
   confirmedAt: string | null;
   confirmedBy: string | null;
 }

@@ -135,6 +135,11 @@ export const NAV: Array<{
         permission: 'admissions.application.view',
       },
       {
+        href: '/admissions/score-report',
+        label: 'admissionScoreReport',
+        permission: 'admissions.application.view',
+      },
+      {
         href: '/admissions/admit',
         label: 'admissionAdmit',
         permission: 'admissions.application.view',

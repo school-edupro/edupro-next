@@ -40,7 +40,13 @@ export interface PortalClass {
   registrationFee: number | null;
   feeFrom: number | null;
   /** merit points the class goes by (docs/design/40) */
-  points?: Array<{ name: string; points: number }>;
+  points?: Array<{ name: string; points: number; table?: string | null; cap?: number | null }>;
+}
+/** The score tables the open classes' criteria read (docs/design/48), shown to families. */
+export interface PortalScoreTables {
+  qualification: Array<{ name: string; father: number; mother: number }>;
+  locality: Array<{ name: string; band: string | null; score: number; className: string | null }>;
+  alumni_school: Array<{ name: string; passoutClass: string; score: number }>;
 }
 export interface PortalSession {
   id: string;

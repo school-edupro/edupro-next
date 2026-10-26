@@ -1648,6 +1648,264 @@ describe('online admission (e2e)', () => {
       expect((await reg(appA)).json()).toMatchObject({ merit: 77, points: { total: 5 } });
     });
 
+    it('reads points from the score tables with a cap and a maximum; flags an answer not in a table; recalculates; reports (docs/design/48)', async () => {
+      const tables = (
+        url: string,
+        method: 'GET' | 'POST' | 'PUT' | 'DELETE' = 'GET',
+        json?: unknown,
+      ) => inject({ method, url: `/admissions/score-tables${url}`, headers: h(), json });
+      // a locality line named like an answer the mini form asks (gender): the wiring, not the meaning
+      const loc = await tables('/locality', 'POST', { name: 'Female', band: '0-8 km', score: 12 });
+      expect(loc.statusCode).toBe(201);
+      const locId = loc.json().rows.find((r: { name: string }) => r.name === 'Female').id;
+      expect((await tables('/locality', 'POST', { name: 'female', score: 3 })).statusCode).toBe(
+        409,
+      );
+      // a qualifications sheet: a wrong row stops it, then the corrected one goes in
+      const sheet = async (rows: Array<Array<string | number>>) => {
+        const wb = new ExcelJS.Workbook();
+        const ws = wb.addWorksheet('Qualifications');
+        ws.addRow([
+          'Qualification *',
+          'Father score',
+          'Mother score',
+          'Father weight',
+          'Mother weight',
+        ]);
+        for (const r of rows) ws.addRow(r);
+        return Buffer.from(await wb.xlsx.writeBuffer()).toString('base64');
+      };
+      const bad = await tables('/qualification/import', 'POST', {
+        fileBase64: await sheet([
+          ['B.Ed', 13, 14, 0, 0],
+          ['L.L.B', 'many', 14, 0, 0],
+        ]),
+      });
+      expect(bad.statusCode).toBe(400);
+      expect(bad.json().rows[0]).toMatchObject({ row: 3 });
+      const good = await tables('/qualification/import', 'POST', {
+        fileBase64: await sheet([
+          ['B.Ed', 13, 14, 0, 0],
+          ['L.L.B', 13, 14, 0, 0],
+        ]),
+      });
+      expect(good.statusCode).toBe(200);
+      expect(good.json()).toMatchObject({ added: 2, changed: 0 });
+      const out = await tables('/qualification/sheet.xlsx?rows=1');
+      expect(out.statusCode).toBe(200);
+      expect(out.headers['content-type']).toContain('spreadsheetml');
+
+      // a criterion from the table, capped at 10, and the session's total out of 14
+      const now = (
+        await inject({ method: 'GET', url: `/admissions/cycles/${cycleId}/points`, headers: h() })
+      ).json();
+      const plain = now.session.map((x: Record<string, unknown>) => ({
+        name: x.name,
+        logic: x.logic,
+        conditions: x.conditions,
+        points: x.points,
+        kind: x.kind,
+        spec: x.spec,
+        cap: x.cap,
+      }));
+      const classes = now.classes.map((k: { classId: string; own: boolean; rules: unknown[] }) => ({
+        classId: k.classId,
+        own: k.own,
+        rules: k.rules,
+      }));
+      const withTable = await inject({
+        method: 'PUT',
+        url: `/admissions/cycles/${cycleId}/points`,
+        headers: h(),
+        json: {
+          session: [
+            ...plain,
+            {
+              name: 'Distance',
+              logic: 'all',
+              conditions: [],
+              points: 0,
+              kind: 'table',
+              cap: 10,
+              spec: { table: 'locality', sources: [{ role: 'child', field: 'gender' }] },
+            },
+          ],
+          max: 14,
+          classes,
+        },
+      });
+      expect(withTable.statusCode).toBe(200);
+      let p = (await reg(appA)).json().points;
+      expect(p).toMatchObject({ total: 14, max: 14 });
+      expect(p.lines.find((l: { name: string }) => l.name === 'Distance')).toEqual({
+        name: 'Distance',
+        max: 10,
+        auto: 10,
+        points: 10,
+      });
+      // the line taken out of the table: Recalculate flags the answer for the office
+      expect((await tables(`/locality/${locId}`, 'DELETE')).statusCode).toBe(200);
+      const re = await inject({
+        method: 'POST',
+        url: `/admissions/cycles/${cycleId}/points/recalculate`,
+        headers: h(),
+        json: { classId: classMini },
+      });
+      expect(re.statusCode).toBe(200);
+      expect(re.json().recalculated).toBeGreaterThanOrEqual(1);
+      expect(re.json().changed).toBeGreaterThanOrEqual(1);
+      p = (await reg(appA)).json().points;
+      expect(p.total).toBe(5);
+      expect(p.lines.find((l: { name: string }) => l.name === 'Distance')).toMatchObject({
+        points: 0,
+        check: 'Locality “Female” is not in the list for this class',
+      });
+      // the score report: a column per criterion, the line to check, Excel and PDF
+      const q = `cycleId=${cycleId}&classId=${classMini}`;
+      const rep = await inject({
+        method: 'GET',
+        url: `/admissions/score-report?${q}`,
+        headers: h(),
+      });
+      expect(rep.statusCode).toBe(200);
+      expect(rep.json().criteria.map((k: { name: string }) => k.name)).toContain('Distance');
+      expect(rep.json().max).toBe(14);
+      const row = rep.json().rows.find((r: { id: string }) => r.id === appA);
+      expect(row).toMatchObject({ check: true, points: 5 });
+      expect(row.rank).toBeGreaterThanOrEqual(1);
+      const toCheck = await inject({
+        method: 'GET',
+        url: `/admissions/score-report?${q}&check=1`,
+        headers: h(),
+      });
+      expect(toCheck.json().rows.every((r: { check: boolean }) => r.check)).toBe(true);
+      const xlsx = await inject({
+        method: 'GET',
+        url: `/admissions/score-report.xlsx?${q}`,
+        headers: h(),
+      });
+      expect(xlsx.statusCode).toBe(200);
+      const pdf = await inject({
+        method: 'GET',
+        url: `/admissions/score-report.pdf?${q}`,
+        headers: h(),
+      });
+      expect(pdf.statusCode).toBe(200);
+      expect(pdf.headers['content-type']).toBe('application/pdf');
+      // back as it was for the cases after this one
+      const back = await inject({
+        method: 'PUT',
+        url: `/admissions/cycles/${cycleId}/points`,
+        headers: h(),
+        json: { session: plain, max: null, classes },
+      });
+      expect(back.statusCode).toBe(200);
+      expect((await reg(appA)).json()).toMatchObject({ merit: 77, points: { total: 5 } });
+    });
+
+    it('gives registration and admission numbers from the most specific series; refuses a clash (docs/design/48)', async () => {
+      const series = (json: unknown, id?: string) =>
+        inject({
+          method: id ? 'PUT' : 'POST',
+          url: `/admissions/number-series${id ? `/${id}` : ''}`,
+          headers: h(),
+          json,
+        });
+      const base = { kind: 'registration', cycleId, conditions: [], digits: 3 };
+      const all = await series({ ...base, name: 'Every class', prefix: 'RG', nextNo: 1 });
+      expect(all.statusCode).toBe(201);
+      const mini = await series({
+        ...base,
+        classId: classMini,
+        name: 'Mini',
+        prefix: 'MINI',
+        nextNo: 7,
+      });
+      expect(mini.statusCode).toBe(201);
+      const girls = await series({
+        ...base,
+        classId: classMini,
+        name: 'Mini girls',
+        prefix: 'MG',
+        nextNo: 1,
+        digits: 2,
+        conditions: [{ field: 'gender', op: 'eq', value: 'Female' }],
+      });
+      expect(girls.statusCode).toBe(201);
+      const list = girls.json().series as Array<{ id: string; name: string; next: string }>;
+      expect(list.find((x) => x.name === 'Mini')!.next).toBe('MINI007');
+      // the same numbers as another series of the session, or a number already given: refused
+      expect(
+        (await series({ ...base, name: 'Again', prefix: 'MINI', nextNo: 50 })).statusCode,
+      ).toBe(409);
+      const given = await withMigrator(async (c) =>
+        String(
+          (await c.query(`SELECT application_no FROM applications WHERE id = $1`, [appA])).rows[0]
+            .application_no,
+        ),
+      );
+      const m = /^(.*?)(\d+)$/.exec(given)!;
+      expect(
+        (
+          await series({
+            ...base,
+            kind: 'registration',
+            name: 'Taken',
+            prefix: m[1],
+            nextNo: Number(m[2]),
+            digits: m[2]!.length,
+            cycleId,
+            classId: classIx,
+          })
+        ).statusCode,
+      ).toBe(409);
+      // the most specific series that matches gives the next number, each once
+      const { seriesNumber } = await import('../src/modules/admissions/number-series');
+      const take = (data: Record<string, string>) =>
+        withMigrator((c) =>
+          seriesNumber(c as never, 'registration', {
+            cycle_id: cycleId,
+            class_id: classMini,
+            data,
+          }),
+        );
+      expect(await take({ gender: 'Male' })).toBe('MINI007');
+      expect(await take({ gender: 'Male' })).toBe('MINI008');
+      expect(await take({ gender: 'Female' })).toBe('MG01');
+      expect(
+        await withMigrator((c) =>
+          seriesNumber(c as never, 'registration', {
+            cycle_id: cycleId,
+            class_id: classIx,
+            data: {},
+          }),
+        ),
+      ).toBe('RG001');
+      const after = (
+        await inject({ method: 'GET', url: '/admissions/number-series', headers: h() })
+      ).json().series as Array<{
+        id: string;
+        name: string;
+        lastGiven: string | null;
+        given: number;
+      }>;
+      expect(after.find((x) => x.name === 'Mini')).toMatchObject({
+        lastGiven: 'MINI008',
+        given: 2,
+      });
+      // stopped, so the registrations of the cases after this one keep the default numbers
+      for (const s of after)
+        expect(
+          (
+            await inject({
+              method: 'DELETE',
+              url: `/admissions/number-series/${s.id}`,
+              headers: h(),
+            })
+          ).statusCode,
+        ).toBe(200);
+    });
+
     it("gives the family's home in one call: a summary per registration (docs/design/42)", async () => {
       const d = await inject({
         method: 'GET',

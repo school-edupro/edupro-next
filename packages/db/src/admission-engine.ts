@@ -58,6 +58,10 @@ export const OPTION_SOURCES = [
   'states',
   'countries',
   'houses',
+  // the merit score tables (docs/design/48): the family picks from them
+  'qualifications',
+  'localities',
+  'alumni_schools',
 ] as const;
 export type OptionSource = (typeof OPTION_SOURCES)[number];
 
@@ -288,6 +292,36 @@ export interface PointCriterion {
   logic: 'all' | 'any';
   conditions: AdmissionCondition[];
   points: number;
+  /** fixed (conditions → points), from a score table, or a sibling checked in the student master */
+  kind?: 'fixed' | 'table' | 'sibling';
+  spec?: PointSpec;
+  /** the most the criterion gives (a cap cuts, never adds) */
+  cap?: number | null;
+}
+/** What a table or sibling criterion reads, and the proof a fixed one needs (docs/design/48). */
+export interface PointSpec {
+  table?: PointTable;
+  /** the parents (or the child) whose answers are looked up, each its own question */
+  sources?: Array<{
+    role: 'father' | 'mother' | 'child';
+    field: string;
+    classField?: string | null;
+  }>;
+  /** alumni: the school when the form does not ask which (the school itself) */
+  school?: string | null;
+  /** fixed: a document question that must hold a file for the points (a CWSN certificate) */
+  proof?: string | null;
+}
+export type PointTable = 'qualification' | 'locality' | 'alumni_school';
+/** The score tables as the engine reads them (built by the server for a class). */
+export interface PointTables {
+  qualification(name: string): { father: number; mother: number } | null;
+  locality(name: string): number | null;
+  alumni(school: string, passout: string): number | null;
+  /** the most a role can get from a table (for "x of y") */
+  most(table: PointTable, role: 'father' | 'mother' | 'child'): number;
+  /** a sibling admission no. found in the student master (active) */
+  siblingFound(admissionNos: string[]): boolean;
 }
 /** One line of a registration's points: what the criterion gives, what was worked out, what counts. */
 export interface PointLine {
@@ -300,19 +334,101 @@ export interface PointLine {
   points: number;
   /** why the office awarded differently */
   reason?: string | null;
+  /** what the office should look at (an answer not in a table, a sibling not found, no proof) */
+  check?: string | null;
+}
+
+const ROLE: Record<string, string> = { father: "Father's", mother: "Mother's", child: '' };
+const answerOf = (answers: AdmissionAnswers, key: string | null | undefined) => {
+  if (!key) return '';
+  const v = answers[key];
+  return typeof v === 'string' ? v.trim() : typeof v === 'number' ? String(v) : '';
+};
+const hasFile = (v: AdmissionAnswer | undefined) =>
+  Array.isArray(v) ? v.length > 0 : typeof v === 'string' && v.trim() !== '';
+const round2 = (n: number) => Math.round(n * 100) / 100;
+
+/** One criterion's line (the cap applied). */
+function pointLine(r: PointCriterion, answers: AdmissionAnswers, t?: PointTables): PointLine {
+  const kind = r.kind ?? 'fixed';
+  const cap = r.cap && r.cap > 0 ? r.cap : null;
+  const capped = (n: number) => (cap !== null ? Math.min(n, cap) : n);
+  const line = (max: number, got: number, check: string | null = null): PointLine => {
+    const auto = round2(capped(got));
+    const out: PointLine = { name: r.name, max: round2(capped(max)), auto, points: auto };
+    if (check) out.check = check;
+    return out;
+  };
+  // conditions narrow any kind ("only when the father is an alumnus"); a fixed criterion needs some
+  if ((kind === 'fixed' || r.conditions.length) && !conditionsHold(r.conditions, r.logic, answers))
+    return line(kind === 'table' ? tableMost(r, t) : r.points, 0);
+  if (kind === 'sibling') {
+    const v = answers[r.spec?.sources?.[0]?.field ?? 'siblings'];
+    const list = v && typeof v === 'object' && !Array.isArray(v) && 'list' in v ? v.list : [];
+    const nos = (list as SiblingAnswer[])
+      .map((x) => String(x.admissionNo ?? '').trim())
+      .filter(Boolean);
+    if (!nos.length) return line(r.points, 0);
+    if (!t) return line(r.points, r.points);
+    return t.siblingFound(nos)
+      ? line(r.points, r.points)
+      : line(r.points, 0, `Sibling not found in the school (${nos.join(', ')})`);
+  }
+  if (kind === 'table') {
+    const table = r.spec?.table;
+    if (!table || !t) return line(0, 0);
+    let got = 0;
+    const checks: string[] = [];
+    for (const s of r.spec?.sources ?? []) {
+      const who = ROLE[s.role] ? `${ROLE[s.role]} ` : '';
+      if (table === 'qualification') {
+        const a = answerOf(answers, s.field);
+        if (!a) continue;
+        const q = t.qualification(a);
+        if (!q) checks.push(`${who}qualification “${a}” is not in the table`);
+        else got += s.role === 'mother' ? q.mother : q.father;
+      } else if (table === 'locality') {
+        const a = answerOf(answers, s.field);
+        if (!a) continue;
+        const n = t.locality(a);
+        if (n === null) checks.push(`Locality “${a}” is not in the list for this class`);
+        else got += n;
+      } else {
+        const passout = answerOf(answers, s.classField);
+        if (!passout) continue;
+        const school = answerOf(answers, s.field) || (r.spec?.school ?? '').trim();
+        const n = school ? t.alumni(school, passout) : null;
+        if (n === null)
+          checks.push(`${who}alumni school “${school || '?'}” (${passout}) is not in the table`);
+        else got += n;
+      }
+    }
+    return line(tableMost(r, t), got, checks.length ? checks.join('; ') : null);
+  }
+  // fixed: the points, when the proof (if one is asked) is there
+  if (r.spec?.proof && !hasFile(answers[r.spec.proof]))
+    return line(r.points, 0, 'The proof is not uploaded');
+  return line(r.points, r.points);
+}
+
+function tableMost(r: PointCriterion, t?: PointTables): number {
+  if (!t || !r.spec?.table) return 0;
+  return (r.spec.sources ?? []).reduce((n, s) => n + t.most(r.spec!.table!, s.role), 0);
 }
 
 /** The points of a set of answers, a line per criterion (0 when it does not hold). */
-export function workPoints(criteria: PointCriterion[], answers: AdmissionAnswers): PointLine[] {
-  return criteria.map((r) => {
-    const auto = conditionsHold(r.conditions, r.logic, answers) ? r.points : 0;
-    return { name: r.name, max: r.points, auto, points: auto };
-  });
+export function workPoints(
+  criteria: PointCriterion[],
+  answers: AdmissionAnswers,
+  tables?: PointTables,
+): PointLine[] {
+  return criteria.map((r) => pointLine(r, answers, tables));
 }
 
-/** The total of point lines, to two decimals. */
-export function pointsTotal(lines: PointLine[]): number {
-  return Math.round(lines.reduce((n, l) => n + l.points, 0) * 100) / 100;
+/** The total of point lines, to two decimals, no more than the maximum when one is set. */
+export function pointsTotal(lines: PointLine[], max?: number | null): number {
+  const n = Math.round(lines.reduce((t, l) => t + l.points, 0) * 100) / 100;
+  return max && max > 0 ? Math.min(n, max) : n;
 }
 
 /** The fee category of a candidate: the first (in order) whose conditions hold, else the default. */

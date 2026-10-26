@@ -104,21 +104,57 @@ export const SessionSettingsSchema = z.object({
 export class SessionSettingsDto extends createZodDto(SessionSettingsSchema) {}
 
 // ---- merit points (docs/design/40, part 2) ---------------------------------------------------------
-const PointRule = z.object({
-  name: z.string().trim().min(2).max(80),
-  logic: z.enum(['all', 'any']).default('all'),
-  conditions: z.array(Condition).min(1, 'Add at least one condition').max(10),
-  points: z
-    .number()
-    .min(-1000)
-    .max(1000)
-    .refine((n) => n !== 0, { message: 'Points cannot be 0' }),
+const FieldKey = z.string().regex(/^[a-zA-Z][a-zA-Z0-9_]{0,40}$/);
+const PointSpec = z.object({
+  table: z.enum(['qualification', 'locality', 'alumni_school']).optional(),
+  sources: z
+    .array(
+      z.object({
+        role: z.enum(['father', 'mother', 'child']),
+        field: z.union([FieldKey, z.literal('')]),
+        classField: FieldKey.nullable().optional(),
+      }),
+    )
+    .max(3)
+    .optional(),
+  school: z.string().trim().max(120).nullable().optional(),
+  proof: FieldKey.nullable().optional(),
 });
+const PointRule = z
+  .object({
+    name: z.string().trim().min(2).max(80),
+    logic: z.enum(['all', 'any']).default('all'),
+    /** docs/design/48: fixed (conditions → points), from a score table, or a sibling checked */
+    kind: z.enum(['fixed', 'table', 'sibling']).default('fixed'),
+    conditions: z.array(Condition).max(10),
+    points: z.number().min(-1000).max(1000),
+    spec: PointSpec.default({}),
+    cap: z.number().positive().max(1000).nullable().optional(),
+  })
+  .refine((r) => r.kind !== 'fixed' || r.conditions.length > 0, {
+    message: 'Add at least one condition',
+  })
+  .refine((r) => r.kind === 'table' || r.points !== 0, { message: 'Points cannot be 0' })
+  .refine(
+    (r) => r.kind !== 'table' || (Boolean(r.spec.table) && (r.spec.sources?.length ?? 0) > 0),
+    {
+      message: 'Choose the table and the questions it reads',
+    },
+  );
 export const SessionPointsSchema = z.object({
   /** the session's list, used by every class without its own */
   session: z.array(PointRule).max(40),
+  /** the most a registration can score (none: no maximum) */
+  max: z.number().positive().max(10000).nullable().optional(),
   classes: z
-    .array(z.object({ classId: IdSchema, own: z.boolean(), rules: z.array(PointRule).max(40) }))
+    .array(
+      z.object({
+        classId: IdSchema,
+        own: z.boolean(),
+        rules: z.array(PointRule).max(40),
+        max: z.number().positive().max(10000).nullable().optional(),
+      }),
+    )
     .max(40),
 });
 export class SessionPointsDto extends createZodDto(SessionPointsSchema) {}

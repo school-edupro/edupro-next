@@ -14,6 +14,7 @@ import { DbService } from '../../common/db/db.service';
 import { DomainError } from '../../common/errors/domain-error';
 import { requireTenant, type RequestContext } from '../../common/http/request-context';
 import type { Resolver } from '../workflow/workflow.dto';
+import { classPointsMax } from './points-rules';
 import { WorkflowService } from '../workflow/workflow.service';
 import { AdmissionCoreService, type AppRow } from './admission-core.service';
 import { ADMISSIONS } from './admissions.dto';
@@ -1099,8 +1100,10 @@ export class AdmissionProcessService {
     );
     const x = r.rows[0];
     if (!x?.lines) return null;
+    const app = await this.core.row(c, id);
     return {
       total: Number(x.form_points ?? 0),
+      max: await classPointsMax(c, app.cycle_id, app.class_id),
       lines: x.lines,
       confirmedAt: x.confirmed_at?.toISOString() ?? null,
       confirmedBy: x.confirmed_by,
@@ -1158,7 +1161,7 @@ export class AdmissionProcessService {
       }
       if (errors.length)
         throw new DomainError('validation-failed', errors.join('. '), { status: 400 });
-      const total = pointsTotal(lines);
+      const total = pointsTotal(lines, await classPointsMax(c, a.cycle_id, a.class_id));
       await c.query(
         `UPDATE applications SET form_points = $2, points_breakdown = $3::jsonb, points_confirmed_at = now(),
                 points_confirmed_by = app.current_user_id() WHERE id = $1`,

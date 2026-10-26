@@ -7,6 +7,7 @@ import {
   type PortalInbox,
   type PortalDashboard,
   type PortalMe,
+  type PortalScoreTables,
   type PortalSession,
 } from '@/lib/admission';
 import { AdmissionHome } from '@/components/AdmissionHome';
@@ -23,13 +24,20 @@ export default async function AdmissionPortalPage({
   searchParams,
 }: {
   params: Promise<{ school: string }>;
-  searchParams: Promise<{ session?: string; error?: string; enquiry?: string; child?: string; class?: string }>;
+  searchParams: Promise<{
+    session?: string;
+    error?: string;
+    enquiry?: string;
+    child?: string;
+    class?: string;
+  }>;
 }) {
   const { school } = await params;
   const sp = await searchParams;
   const open = await admissionFetch<{
     school: { name: string; code: string };
     sessions: PortalSession[];
+    scoreTables?: PortalScoreTables;
   }>(`/schools/${encodeURIComponent(school)}`, {}, null).catch((error: unknown) => {
     if (error instanceof PublicApiError && error.status === 404) notFound();
     throw error;
@@ -54,6 +62,7 @@ export default async function AdmissionPortalPage({
         profile={await schoolProfile(school)}
         schoolName={open.school.name}
         sessions={sessions}
+        scoreTables={open.scoreTables}
         chosen={sp.session}
         picked={sp.class}
         enquiry={enquiry}

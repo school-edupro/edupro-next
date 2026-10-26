@@ -1,6 +1,6 @@
 import { Badge } from '@edupro/ui';
 import { AdmissionSignIn } from '@/components/AdmissionSignIn';
-import { dmy, type PortalSession } from '@/lib/admission';
+import { dmy, type PortalScoreTables, type PortalSession } from '@/lib/admission';
 import { t, type Lang } from '@/lib/i18n';
 import type { SchoolProfile } from '@/lib/school';
 
@@ -107,6 +107,7 @@ export function AdmissionLanding({
   profile,
   schoolName,
   sessions,
+  scoreTables,
   chosen,
   picked,
   enquiry,
@@ -118,6 +119,8 @@ export function AdmissionLanding({
   profile: SchoolProfile | null;
   schoolName: string;
   sessions: PortalSession[];
+  /** the score tables the criteria read (docs/design/48) */
+  scoreTables?: PortalScoreTables;
   /** the session code from ?session= */
   chosen?: string;
   /** the class picked from the list (?class=): after sign-in its form opens */
@@ -336,12 +339,26 @@ export function AdmissionLanding({
                             <ul>
                               {k.points!.map((p) => (
                                 <li key={p.name}>
-                                  {p.name}: <strong>{p.points}</strong>
+                                  {p.name}:{' '}
+                                  {p.table ? (
+                                    <>
+                                      {w('from the table below')}
+                                      {p.cap ? (
+                                        <>
+                                          {' '}
+                                          ({w('at most')} <strong>{p.cap}</strong>)
+                                        </>
+                                      ) : null}
+                                    </>
+                                  ) : (
+                                    <strong>{p.points}</strong>
+                                  )}
                                 </li>
                               ))}
                             </ul>
                           </div>
                         ))}
+                      <ScoreTablesView tables={scoreTables} w={w} />
                     </details>
                   ) : null}
                 </section>
@@ -384,5 +401,64 @@ export function AdmissionLanding({
         </p>
       </main>
     </div>
+  );
+}
+
+/** The score tables families read the points from: localities, qualifications, alumni schools. */
+function ScoreTablesView({ tables, w }: { tables?: PortalScoreTables; w: (en: string) => string }) {
+  if (!tables) return null;
+  const block = (title: string, head: string[], rows: Array<Array<string | number>>) =>
+    rows.length ? (
+      <div className="ep-adm-points__class">
+        <h3 className="ep-kicker">{title}</h3>
+        <div className="ep-table-wrap">
+          <table className="ep-table">
+            <caption className="ep-sr-only">{title}</caption>
+            <thead>
+              <tr>
+                {head.map((h) => (
+                  <th key={h} scope="col">
+                    {h}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((r, i) => (
+                <tr key={i}>
+                  {r.map((v, j) => (
+                    <td key={j} className={typeof v === 'number' ? 'ep-num' : undefined}>
+                      {v}
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    ) : null;
+  return (
+    <>
+      {block(
+        w('Points by locality'),
+        [w('Locality'), w('Distance band'), w('Score')],
+        tables.locality.map((x) => [
+          x.className ? `${x.name} (${x.className})` : x.name,
+          x.band ?? '',
+          x.score,
+        ]),
+      )}
+      {block(
+        w("Points by parents' qualification"),
+        [w('Qualification'), w('Father'), w('Mother')],
+        tables.qualification.map((x) => [x.name, x.father, x.mother]),
+      )}
+      {block(
+        w('Points for alumni parents'),
+        [w('School'), w('Pass-out class'), w('Score')],
+        tables.alumni_school.map((x) => [x.name, x.passoutClass, x.score]),
+      )}
+    </>
   );
 }

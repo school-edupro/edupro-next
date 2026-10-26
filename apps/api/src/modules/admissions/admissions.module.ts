@@ -39,6 +39,11 @@ import { PublicSchoolController } from './public/public-school.controller';
 import { PublicSchoolService } from './public/public-school.service';
 
 /** Sprint 8: admission cycles, intake desk and the public applicant surface. */
+import { AdmissionScoresController } from './scores.controller';
+import { AdmissionScoreTablesService } from './score-tables.service';
+import { AdmissionScoreReportService } from './score-report.service';
+import { AdmissionNumberSeriesService } from './number-series.service';
+
 @Module({
   imports: [WorkflowModule, PaymentsModule, FilesModule],
   controllers: [
@@ -49,6 +54,7 @@ import { PublicSchoolService } from './public/public-school.service';
     AdmissionProcessController,
     AdmissionAdmitController,
     AdmissionEnquiryController,
+    AdmissionScoresController,
     CandidatePortalController,
     PublicAdmissionsController,
     PublicSchoolController,
@@ -66,6 +72,9 @@ import { PublicSchoolService } from './public/public-school.service';
     AdmissionAdmitService,
     AdmissionGridService,
     AdmissionEnquiryService,
+    AdmissionScoreTablesService,
+    AdmissionScoreReportService,
+    AdmissionNumberSeriesService,
     AdmissionScheduleService,
     CandidatePortalService,
     CandidateSigninService,

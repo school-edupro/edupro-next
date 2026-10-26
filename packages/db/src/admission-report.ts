@@ -36,6 +36,8 @@ const STATUS: Record<string, string> = {
   cancelled: 'Cancelled',
 };
 export const ADMISSION_STATUS_LABELS = Object.values(STATUS);
+/** The status as the lists say it, by its code (registered → Registered). */
+export const ADMISSION_STATUS_BY_CODE: Readonly<Record<string, string>> = STATUS;
 
 const RECORD: ReportFieldDef[] = [
   { key: 'registration_no', label: 'Registration no.', section: 'record', type: 'text' },
@@ -61,6 +63,10 @@ const RECORD: ReportFieldDef[] = [
   { key: 'registered_on', label: 'Registered on', section: 'record', type: 'date' },
   { key: 'progress', label: 'Form filled (%)', section: 'record', type: 'number' },
   { key: 'merit', label: 'Merit (marks)', section: 'record', type: 'number' },
+  // docs/design/48: the form's points and what the office should look at
+  { key: 'form_points', label: 'Form points', section: 'record', type: 'number' },
+  { key: 'points_detail', label: 'Points by criterion', section: 'record', type: 'text' },
+  { key: 'points_check', label: 'Points to check', section: 'record', type: 'text' },
   { key: 'waiting_no', label: 'Waiting list no.', section: 'record', type: 'number' },
   { key: 'registration_fee', label: 'Registration fee', section: 'fees', type: 'number' },
   { key: 'registration_receipt', label: 'Registration receipt', section: 'fees', type: 'text' },
@@ -206,6 +212,8 @@ export async function loadAdmissionReportRows(
     registered_at: Date | null;
     progress: number;
     merit: string | null;
+    form_points: string | null;
+    points_lines: Array<{ name: string; points: number; check?: string | null }> | null;
     wait_rank: number | null;
     registration_fee: string | null;
     reg_receipt: string | null;
@@ -227,7 +235,7 @@ export async function loadAdmissionReportRows(
             a.status::text, CASE WHEN a.status::text IN ('registered', 'under_review', 'sent_back') THEN st.name END AS stage,
             w.level_no, w.levels, w.level, w.level_since, w.due_at,
             k.name AS category, a.entered_by::text, COALESCE(a.contact_mobile, ap.mobile) AS mobile, COALESCE(a.contact_email, ap.email::text) AS email,
-            a.created_at, a.submitted_at, a.registered_at, a.progress, a.merit::text, a.wait_rank, a.registration_fee::text,
+            a.created_at, a.submitted_at, a.registered_at, a.progress, a.merit::text, a.form_points::text, a.points_breakdown AS points_lines, a.wait_rank, a.registration_fee::text,
             rr.receipt_no AS reg_receipt, a.admission_fee::text, ar.receipt_no AS adm_receipt, a.offer_expires_at, a.fee_paid_at,
             rf.amount::text AS refund, rf.status AS refund_status, a.admission_no,
             (SELECT c2.code || '-' || cs.name FROM enrolments e JOIN class_sections cs ON cs.id = e.class_section_id JOIN classes c2 ON c2.id = cs.class_id
@@ -287,6 +295,16 @@ export async function loadAdmissionReportRows(
       registered_on: day(x.registered_at),
       progress: x.progress,
       merit: x.merit !== null ? Number(x.merit) : null,
+      form_points: x.form_points !== null ? Number(x.form_points) : null,
+      points_detail: x.points_lines?.length
+        ? x.points_lines.map((l) => `${l.name} ${String(l.points)}`).join(' · ')
+        : null,
+      points_check: x.points_lines?.some((l) => l.check)
+        ? x.points_lines
+            .filter((l) => l.check)
+            .map((l) => l.check)
+            .join('; ')
+        : null,
       waiting_no: x.status === 'waitlisted' ? x.wait_rank : null,
       registration_fee: x.registration_fee !== null ? Number(x.registration_fee) : null,
       registration_receipt: x.reg_receipt,

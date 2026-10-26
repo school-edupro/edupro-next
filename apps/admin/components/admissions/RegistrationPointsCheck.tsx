@@ -59,7 +59,14 @@ export function RegistrationPointsCheck({
   return (
     <div className="ep-rpts">
       <p className="ep-rpts__sum">
-        <strong>{editing ? total(draft) : points.total} points</strong>
+        <strong>
+          {editing
+            ? points.max
+              ? Math.min(total(draft), points.max)
+              : total(draft)
+            : points.total}{' '}
+          {points.max ? `of ${String(points.max)} ` : ''}points
+        </strong>
         {merit !== null && !editing ? (
           <span className="ep-field__help"> · merit with marks {merit}</span>
         ) : null}{' '}
@@ -71,6 +78,13 @@ export function RegistrationPointsCheck({
           <Badge tone="warning">Not checked yet</Badge>
         )}
       </p>
+      {points.lines.some((l) => l.check) ? (
+        <p className="ep-alert ep-alert--warning" role="status">
+          A line needs a look: an answer not in the score table (place it by correcting the answer
+          on this registration — the points follow), a sibling not found among the students, or a
+          proof not uploaded. Or award the points differently with a reason.
+        </p>
+      ) : null}
       <div className="ep-table-wrap">
         <table className="ep-table ep-table--dense">
           <caption className="ep-sr-only">Merit points by criterion</caption>
@@ -86,7 +100,12 @@ export function RegistrationPointsCheck({
             {shown.map((l, i) => (
               <tr key={l.name}>
                 <th scope="row">
-                  {l.name} <span className="ep-field__help">({l.max})</span>
+                  {l.name} <span className="ep-field__help">(of {l.max})</span>
+                  {l.check ? (
+                    <span className="ep-field__help" style={{ display: 'block' }}>
+                      <Badge tone="warning">Check</Badge> {l.check}
+                    </span>
+                  ) : null}
                 </th>
                 <td>{l.auto}</td>
                 <td>

@@ -52,8 +52,9 @@ export class AdmissionPointsService {
         form_name: string | null;
         def: AdmissionFormDef | null;
         own_points: boolean;
+        points_max: string | null;
       }>(
-        `SELECT k.class_id::text, cl.name AS class_name, k.form_id::text, f.name AS form_name, f.def, k.own_points
+        `SELECT k.class_id::text, cl.name AS class_name, k.form_id::text, f.name AS form_name, f.def, k.own_points, k.points_max::text
            FROM admission_class_criteria k JOIN classes cl ON cl.id = k.class_id LEFT JOIN admission_forms f ON f.id = k.form_id
           WHERE k.cycle_id = $1 ORDER BY cl.display_order, cl.name`,
         [id],
@@ -65,10 +66,13 @@ export class AdmissionPointsService {
         { key: string; label: string; type: string; values: string[]; forms: string[] }
       >();
       const seen = new Set<string>();
+      // document questions, for a criterion that needs its proof uploaded (docs/design/48)
+      const proofs = new Map<string, string>();
       for (const l of lines.rows) {
         if (!l.form_id || !l.def || seen.has(l.form_id)) continue;
         seen.add(l.form_id);
         for (const f of l.def.fields) {
+          if (f.type === 'file' && !proofs.has(f.key)) proofs.set(f.key, f.label);
           if (LAYOUT_TYPES.includes(f.type) || NOT_ASKABLE.has(f.type)) continue;
           const have = fields.get(f.key);
           if (have) {
@@ -88,9 +92,14 @@ export class AdmissionPointsService {
           });
         }
       }
+      const max = await c.query<{ max: string | null }>(
+        `SELECT points_max::text AS max FROM admission_cycles WHERE id = $1`,
+        [id],
+      );
       return {
         editable: y.status !== 'closed',
         session: rules.session,
+        max: max.rows[0]?.max ? Number(max.rows[0].max) : null,
         classes: lines.rows.map((x) => ({
           classId: x.class_id,
           className: x.class_name,
@@ -98,8 +107,10 @@ export class AdmissionPointsService {
           formName: x.form_name,
           own: x.own_points,
           rules: rules.byClass(x.class_id),
+          max: x.points_max !== null ? Number(x.points_max) : null,
         })),
         fields: [...fields.values()],
+        proofs: [...proofs.entries()].map(([key, label]) => ({ key, label })),
       };
     });
   }
@@ -128,16 +139,31 @@ export class AdmissionPointsService {
       const put = async (classId: string | null, list: PointRuleInput[]) => {
         for (const [i, r] of list.entries())
           await c.query(
-            `INSERT INTO admission_point_rules (school_id, cycle_id, class_id, name, logic, conditions, points, sort_order, updated_by)
-             VALUES (app.current_school_id(), $1, $2, $3, $4, $5::jsonb, $6, $7, app.current_user_id())`,
-            [id, classId, r.name, r.logic, JSON.stringify(r.conditions), r.points.toFixed(2), i],
+            `INSERT INTO admission_point_rules (school_id, cycle_id, class_id, name, logic, conditions, points, sort_order, updated_by, kind, spec, cap)
+             VALUES (app.current_school_id(), $1, $2, $3, $4, $5::jsonb, $6, $7, app.current_user_id(), $8, $9::jsonb, $10)`,
+            [
+              id,
+              classId,
+              r.name,
+              r.logic,
+              JSON.stringify(r.conditions),
+              r.points.toFixed(2),
+              i,
+              r.kind,
+              JSON.stringify(r.spec ?? {}),
+              r.cap ?? null,
+            ],
           );
       };
       await put(null, dto.session);
+      await c.query(`UPDATE admission_cycles SET points_max = $2 WHERE id = $1`, [
+        id,
+        dto.max ?? null,
+      ]);
       for (const k of dto.classes) {
         await c.query(
-          `UPDATE admission_class_criteria SET own_points = $3 WHERE cycle_id = $1 AND class_id = $2`,
-          [id, k.classId, k.own],
+          `UPDATE admission_class_criteria SET own_points = $3, points_max = $4 WHERE cycle_id = $1 AND class_id = $2`,
+          [id, k.classId, k.own, k.own ? (k.max ?? null) : null],
         );
         // a class that goes by the session's list keeps no list of its own
         if (k.own) await put(k.classId, k.rules);
