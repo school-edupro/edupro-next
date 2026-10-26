@@ -509,3 +509,77 @@ export async function scoreReportPdf(p: ScoreReportInput): Promise<Buffer> {
   );
   return Buffer.from(await pdf.save());
 }
+
+export interface TablePdfInput {
+  school: SchoolHead;
+  logo: { contentType: string; bytes: Buffer } | null;
+  title: string;
+  subtitle: string;
+  columns: Array<{ h: string; w: number }>;
+  rows: string[][];
+  printedAt: string;
+}
+
+/** A plain list on the letterhead (the merit score tables, docs/design/48): a header row, then rows. */
+export async function tablePdf(p: TablePdfInput): Promise<Buffer> {
+  const { pdf, page: first, regular, bold } = await start(p.title, p.school, p.logo);
+  let page = first;
+  let y = A4[1] - 124;
+  const W = A4[0] - 2 * M;
+  page.drawText(latin(p.title.toUpperCase()), { x: M, y, size: 13, font: bold, color: NAVY });
+  y -= 16;
+  page.drawText(latin(p.subtitle), { x: M, y, size: 9.5, font: regular, color: MUTED });
+  y -= 22;
+  const size = 9;
+  const fit = (t: string, w: number, font: PDFFont) => {
+    let s = latin(t);
+    while (s && font.widthOfTextAtSize(s, size) > w - 6) s = s.slice(0, -1);
+    return s;
+  };
+  const head = () => {
+    page.drawRectangle({ x: M, y: y - 4, width: W, height: 16, color: rgb(0.93, 0.96, 0.99) });
+    let x = M + 4;
+    for (const c of p.columns) {
+      page.drawText(fit(c.h, c.w, bold), { x, y, size, font: bold, color: NAVY });
+      x += c.w;
+    }
+    y -= 18;
+  };
+  head();
+  if (!p.rows.length) {
+    page.drawText('Nothing in the table yet.', {
+      x: M + 4,
+      y,
+      size: 9.5,
+      font: regular,
+      color: MUTED,
+    });
+    y -= 14;
+  }
+  for (const r of p.rows) {
+    if (y < 60) {
+      page = pdf.addPage(A4);
+      y = A4[1] - 50;
+      head();
+    }
+    let x = M + 4;
+    for (const [i, c] of p.columns.entries()) {
+      page.drawText(fit(r[i] ?? '', c.w, regular), { x, y, size, font: regular, color: INK });
+      x += c.w;
+    }
+    page.drawLine({
+      start: { x: M, y: y - 5 },
+      end: { x: A4[0] - M, y: y - 5 },
+      thickness: 0.4,
+      color: LINE,
+    });
+    y -= 15;
+  }
+  if (y < 60) {
+    page = pdf.addPage(A4);
+    y = A4[1] - 50;
+  }
+  y -= 12;
+  page.drawText(latin(`Printed ${p.printedAt}`), { x: M, y, size: 8, font: regular, color: MUTED });
+  return Buffer.from(await pdf.save());
+}

@@ -22,6 +22,14 @@ export interface ScoreTables {
   locality: ScoreRow[];
   alumni_school: ScoreRow[];
   classes: Array<{ id: string; name: string }>;
+  /** the school's lists the tables pick from (Education, Locality, AlumniClass) and the schools named */
+  options: ScoreOptions;
+}
+export interface ScoreOptions {
+  qualification: string[];
+  locality: string[];
+  passout: string[];
+  schools: string[];
 }
 export const TABLE_TITLE: Record<ScoreTableName, string> = {
   qualification: 'Qualifications',

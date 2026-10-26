@@ -30,7 +30,9 @@ export async function pointTablesFor(
     q.rows.map((x) => [x.name, { father: Number(x.father), mother: Number(x.mother) }]),
   );
   const locs = new Map(l.rows.map((x) => [x.name, Number(x.score)]));
-  const schools = new Map(s.rows.map((x) => [`${x.name}|${x.passout}`, Number(x.score)]));
+  const schools = new Map(
+    s.rows.map((x) => [`${x.name}|${passoutKey(x.passout)}`, Number(x.score)]),
+  );
   const max = (ns: number[]) => ns.reduce((m, n) => Math.max(m, n), 0);
   const most: Record<PointTable, Record<string, number>> = {
     qualification: {
@@ -61,10 +63,22 @@ export async function pointTablesFor(
   return {
     qualification: (name) => quals.get(key(name)) ?? null,
     locality: (name) => locs.get(key(name)) ?? null,
-    alumni: (school, passout) => schools.get(`${key(school)}|${key(passout)}`) ?? null,
+    alumni: (school, passout) => schools.get(`${key(school)}|${passoutKey(passout)}`) ?? null,
     most: (table, role) => most[table][role] ?? 0,
     siblingFound: (list) => list.some((n) => found.has(key(n))),
   };
+}
+
+/** A pass-out class however it is written: X, 10, 10th, Class X are one; XII, 12, 12th likewise. */
+export function passoutKey(p: string): string {
+  const v = p
+    .trim()
+    .toLowerCase()
+    .replace(/^class\s+/, '')
+    .replace(/^(\d+)(st|nd|rd|th)$/, '$1');
+  if (v === 'x' || v === '10') return '10';
+  if (v === 'xii' || v === '12') return '12';
+  return v;
 }
 
 /** The sibling admission nos. in a registration's answers (every siblings question). */

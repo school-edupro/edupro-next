@@ -19,6 +19,7 @@ import { AdmissionNumberSeriesService } from './number-series.service';
 import { AdmissionScoreReportService } from './score-report.service';
 import { AdmissionScoreTablesService } from './score-tables.service';
 import {
+  LocalityNamesDto,
   NumberSeriesDto,
   RecalculateDto,
   ScoreImportDto,
@@ -64,6 +65,25 @@ export class AdmissionScoresController {
     @Res() reply: FastifyReply,
   ) {
     send(reply, await this.tables.sheet(ctx, table, rows === '1'));
+  }
+
+  @Get('score-tables/:table/sheet.pdf')
+  @ApiOperation({ summary: 'A score table as a PDF on the letterhead' })
+  @RequirePermission(ADMISSIONS.cycleView)
+  async sheetPdf(
+    @ReqCtx() ctx: RequestContext,
+    @Param('table') table: string,
+    @Res() reply: FastifyReply,
+  ) {
+    send(reply, await this.tables.pdf(ctx, table));
+  }
+
+  @Post('score-tables/locality/master')
+  @HttpCode(200)
+  @ApiOperation({ summary: "Localities added to the school's Locality list (one name a line)" })
+  @RequirePermission(ADMISSION_SETUP)
+  addLocalities(@ReqCtx() ctx: RequestContext, @Body() dto: LocalityNamesDto) {
+    return this.tables.addLocalities(ctx, dto.names);
   }
 
   @Post('score-tables/qualification/from-list')

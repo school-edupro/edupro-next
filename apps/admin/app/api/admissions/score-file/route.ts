@@ -14,7 +14,10 @@ export async function GET(req: NextRequest) {
   const table = q.get('table');
   const report = q.get('report');
   if (table && TABLES.has(table)) {
-    path = `/admissions/score-tables/${table}/sheet.xlsx${q.get('rows') === '1' ? '?rows=1' : ''}`;
+    path =
+      q.get('format') === 'pdf'
+        ? `/admissions/score-tables/${table}/sheet.pdf`
+        : `/admissions/score-tables/${table}/sheet.xlsx${q.get('rows') === '1' ? '?rows=1' : ''}`;
   } else if (
     (report === 'xlsx' || report === 'pdf') &&
     ID.test(q.get('cycleId') ?? '') &&

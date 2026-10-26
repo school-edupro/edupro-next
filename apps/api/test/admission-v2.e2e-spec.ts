@@ -1694,6 +1694,23 @@ describe('online admission (e2e)', () => {
       const out = await tables('/qualification/sheet.xlsx?rows=1');
       expect(out.statusCode).toBe(200);
       expect(out.headers['content-type']).toContain('spreadsheetml');
+      const outPdf = await tables('/qualification/sheet.pdf');
+      expect(outPdf.statusCode).toBe(200);
+      expect(outPdf.headers['content-type']).toBe('application/pdf');
+      // the qualifications added are kept in the Education list the form picks from
+      const listed = (await tables('')).json();
+      expect(listed.options.qualification).toEqual(expect.arrayContaining(['B.Ed', 'L.L.B']));
+      // the locality master: names added once, offered to the table and the form
+      const master = await tables('/locality/master', 'POST', {
+        names: ['Sector 15', 'sector 15', 'Old Town'],
+      });
+      expect(master.statusCode).toBe(200);
+      expect(master.json().options.locality).toEqual(
+        expect.arrayContaining(['Sector 15', 'Old Town']),
+      );
+      expect(
+        master.json().options.locality.filter((x: string) => x.toLowerCase() === 'sector 15'),
+      ).toHaveLength(1);
 
       // a criterion from the table, capped at 10, and the session's total out of 14
       const now = (

@@ -1893,6 +1893,8 @@ export const PROFILE_FIELDS: ProfileField[] = [
 
 /** Default dropdown values, preloaded into each school's `profile_lists` master. */
 export const PROFILE_LIST_DEFAULTS: Record<string, string[]> = {
+  // localities for the merit distance points (docs/design/48): the school adds its own
+  Locality: [],
   House: ['Red', 'Blue', 'Green', 'Yellow'],
   YesNo: ['Yes', 'No'],
   Gender: ['Male', 'Female', 'Other'],

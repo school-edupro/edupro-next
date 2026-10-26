@@ -1,10 +1,12 @@
 import { Injectable } from '@nestjs/common';
-import { loadProfileLists, type PoolClient } from '@edupro/db';
+import { loadProfileLists, PROFILE_LIST_DEFAULTS, type PoolClient } from '@edupro/db';
 import { AuditService } from '../../common/audit/audit.service';
 import { DbService } from '../../common/db/db.service';
 import { DomainError } from '../../common/errors/domain-error';
 import { readSheet, templateSheet, type TemplateColumn } from '../../common/excel/sheet';
 import { requireTenant, type RequestContext } from '../../common/http/request-context';
+import { AdmissionCoreService } from './admission-core.service';
+import { tablePdf } from './admission-pdf';
 import type { ScoreRowDto } from './scores.dto';
 
 export type ScoreTableName = 'qualification' | 'locality' | 'alumni_school';
@@ -48,6 +50,7 @@ export class AdmissionScoreTablesService {
   constructor(
     private readonly db: DbService,
     private readonly audit: AuditService,
+    private readonly core: AdmissionCoreService,
   ) {}
 
   private table(t: string): ScoreTableName {
@@ -106,13 +109,83 @@ export class AdmissionScoreTablesService {
     return r.rows;
   }
 
+  /** The school's lists the tables pick from: Education, Locality, AlumniClass (built-in when empty). */
+  private async optionsWith(c: PoolClient) {
+    const lists = await loadProfileLists(c);
+    const of = (code: string) =>
+      lists[code]?.length ? lists[code]! : (PROFILE_LIST_DEFAULTS[code] ?? []);
+    const school = await c.query<{ name: string }>(
+      `SELECT name FROM schools WHERE id = app.current_school_id()`,
+    );
+    const schools = await c.query<{ name: string }>(
+      `SELECT DISTINCT btrim(name) AS name FROM admission_alumni_schools WHERE status = 'active' ORDER BY 1`,
+    );
+    return {
+      qualification: of('Education'),
+      locality: of('Locality'),
+      passout: of('AlumniClass'),
+      schools: [
+        ...new Set(
+          [school.rows[0]?.name ?? '', ...schools.rows.map((x) => x.name)].filter(Boolean),
+        ),
+      ],
+    };
+  }
+
+  /**
+   * A name used in a table kept in the school's list it belongs to (Education, Locality, AlumniClass),
+   * so the form offers it; a list still on its built-in values gets them first, so none is lost.
+   */
+  private async keepInList(c: PoolClient, code: string, value: string) {
+    const v = value.trim();
+    if (!v) return;
+    const have = await c.query<{ value: string }>(
+      `SELECT value FROM profile_lists WHERE list_code = $1 AND status = 'active'`,
+      [code],
+    );
+    if (have.rows.some((x) => x.value.trim().toLowerCase() === v.toLowerCase())) return;
+    const start = have.rows.length ? [] : (PROFILE_LIST_DEFAULTS[code] ?? []);
+    const values = [...start.filter((x) => x.toLowerCase() !== v.toLowerCase()), v];
+    let order =
+      (
+        await c.query<{ n: number }>(
+          `SELECT COALESCE(max(sort_order), 0)::int AS n FROM profile_lists WHERE list_code = $1`,
+          [code],
+        )
+      ).rows[0]?.n ?? 0;
+    for (const x of values) {
+      order += 1;
+      await c.query(
+        `INSERT INTO profile_lists (school_id, list_code, value, sort_order) VALUES (app.current_school_id(), $1, $2, $3)
+         ON CONFLICT (school_id, list_code, value) DO UPDATE SET status = 'active'`,
+        [code, x, order],
+      );
+    }
+  }
+
   async list(ctx: RequestContext) {
     return this.db.tenant(requireTenant(ctx), async (c) => ({
       qualification: await this.rowsWith(c, 'qualification'),
       locality: await this.rowsWith(c, 'locality'),
       alumni_school: await this.rowsWith(c, 'alumni_school'),
       classes: await this.classesWith(c),
+      options: await this.optionsWith(c),
     }));
+  }
+
+  /** Localities added to the school's Locality list (the master the form and the table pick from). */
+  async addLocalities(ctx: RequestContext, names: string[]) {
+    return this.db.tenant(requireTenant(ctx), async (c) => {
+      const clean = [...new Set(names.map((n) => n.trim()).filter(Boolean))];
+      for (const n of clean) await this.keepInList(c, 'Locality', n);
+      if (clean.length)
+        await this.audit.stage(ctx, c, {
+          action: 'admissions.score_table.localities',
+          entityType: 'profile_lists',
+          after: { added: clean.length },
+        });
+      return { added: clean.length, options: await this.optionsWith(c) };
+    });
   }
 
   /** One row added (id null) or changed; the same name (and class / pass-out class) twice is refused. */
@@ -170,6 +243,11 @@ export class AdmissionScoreTablesService {
       const r = await c.query<{ id: string }>(sql, params);
       await c.query('RELEASE SAVEPOINT score_row');
       if (!r.rows[0]) throw new DomainError('not-found', 'Row not found', { status: 404 });
+      // the name (and the pass-out class) kept in the list the form picks from
+      if (t === 'qualification') await this.keepInList(c, 'Education', name);
+      if (t === 'locality') await this.keepInList(c, 'Locality', name);
+      if (t === 'alumni_school' && d.passoutClass)
+        await this.keepInList(c, 'AlumniClass', d.passoutClass);
       return r.rows[0].id;
     } catch (e) {
       if ((e as { code?: string }).code === '23505') {
@@ -249,10 +327,21 @@ export class AdmissionScoreTablesService {
     });
   }
 
-  private columns(t: ScoreTableName, classes: string[]): TemplateColumn[] {
+  private columns(
+    t: ScoreTableName,
+    classes: string[],
+    o: { qualification: string[]; locality: string[]; passout: string[]; schools: string[] } = {
+      qualification: [],
+      locality: [],
+      passout: [],
+      schools: [],
+    },
+  ): TemplateColumn[] {
+    const pick = (options: string[]) =>
+      options.length ? { options, allowNew: true as const } : {};
     if (t === 'qualification')
       return [
-        { header: 'Qualification', width: 34, required: true },
+        { header: 'Qualification', width: 34, required: true, ...pick(o.qualification) },
         { header: 'Father score', width: 14, format: 'number' },
         { header: 'Mother score', width: 14, format: 'number' },
         { header: 'Father weight', width: 14, format: 'number' },
@@ -260,20 +349,20 @@ export class AdmissionScoreTablesService {
       ];
     if (t === 'locality')
       return [
-        { header: 'Locality', width: 34, required: true },
+        { header: 'Locality', width: 34, required: true, ...pick(o.locality) },
         { header: 'Class', width: 16, options: classes, note: 'empty: every class' },
         { header: 'Distance band', width: 16, note: 'e.g. 0-8 km, 8-15 km, 15-above' },
         { header: 'Area', width: 10 },
         { header: 'Score', width: 10, required: true, format: 'number' },
       ];
     return [
-      { header: 'School', width: 34, required: true },
+      { header: 'School', width: 34, required: true, ...pick(o.schools) },
       {
         header: 'Pass-out class',
         width: 16,
         required: true,
-        options: ['10', '12', 'Both', 'Others'],
-        allowNew: true,
+        note: 'as the form asks it (e.g. X, XII); 10 and X are the same',
+        ...pick(o.passout.length ? o.passout : ['X', 'XII']),
       },
       { header: 'Score', width: 10, required: true, format: 'number' },
     ];
@@ -282,10 +371,19 @@ export class AdmissionScoreTablesService {
   /** The table as an Excel sheet to correct and upload again (the rows in it), or an empty format. */
   async sheet(ctx: RequestContext, table: string, withRows: boolean) {
     const t = this.table(table);
-    const { rows, classes } = await this.db.tenant(requireTenant(ctx), async (c) => ({
-      rows: await this.rowsWith(c, t),
-      classes: await this.classesWith(c),
-    }));
+    const { rows, classes, options, school } = await this.db.tenant(
+      requireTenant(ctx),
+      async (c) => ({
+        rows: await this.rowsWith(c, t),
+        classes: await this.classesWith(c),
+        options: await this.optionsWith(c),
+        school: (
+          await c.query<{ name: string }>(
+            `SELECT name FROM schools WHERE id = app.current_school_id()`,
+          )
+        ).rows[0]?.name,
+      }),
+    );
     const cells = (r: ScoreRow): Array<string | number | null> =>
       t === 'qualification'
         ? [r.name, r.fatherScore!, r.motherScore!, r.fatherWeight!, r.motherWeight!]
@@ -297,6 +395,7 @@ export class AdmissionScoreTablesService {
       columns: this.columns(
         t,
         classes.map((x) => x.name),
+        options,
       ),
       guide: [
         'One row a line of the table. A row whose name (and class, or pass-out class) is already in the table changes it; a new one is added.',
@@ -307,17 +406,17 @@ export class AdmissionScoreTablesService {
       examples:
         t === 'qualification'
           ? [
-              ['B.Ed', 13, 14, 0, 0],
-              ['Senior Secondary', 9, 10, 0, 0],
+              [options.qualification[0] ?? 'Graduate', 13, 14, 0, 0],
+              [options.qualification[1] ?? 'Senior Secondary', 9, 10, 0, 0],
             ]
           : t === 'locality'
             ? [
-                ['Sunder Vihar', '', '8-15 km', 'C', 30],
+                [options.locality[0] ?? 'Sunder Vihar', '', '8-15 km', 'C', 30],
                 ['Beyond 15 km', '', '15-above', 'D', 20],
               ]
             : [
-                ['DPS - Faridabad', '12', 12],
-                ['Others DPS', 'Both', 5],
+                [school ?? 'Our school', 'XII', 12],
+                [school ?? 'Our school', 'X', 10],
               ],
     });
     return {
@@ -325,6 +424,80 @@ export class AdmissionScoreTablesService {
       filename: `${TITLE[t].toLowerCase().replace(/\s+/g, '-')}${withRows ? '' : '-format'}.xlsx`,
       contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
     };
+  }
+
+  /** The table as a PDF on the school's letterhead. */
+  async pdf(ctx: RequestContext, table: string) {
+    const t = this.table(table);
+    return this.db.tenant(requireTenant(ctx), async (c) => {
+      const rows = await this.rowsWith(c, t);
+      const sc = (
+        await c.query<{
+          name: string;
+          address: string | null;
+          contact: string | null;
+          logo: string | null;
+        }>(
+          `SELECT name, NULLIF(concat_ws(', ', NULLIF(btrim(address->>'line1'), ''), NULLIF(btrim(address->>'city'), ''), NULLIF(btrim(address->>'state'), '')), '') AS address,
+                  NULLIF(btrim(contact->>'phone'), '') AS contact, NULLIF(branding->>'logoFileId', '') AS logo
+             FROM schools WHERE id = app.current_school_id()`,
+        )
+      ).rows[0]!;
+      const cols =
+        t === 'qualification'
+          ? [
+              { h: 'Qualification', w: 215 },
+              { h: 'Father score', w: 75 },
+              { h: 'Mother score', w: 75 },
+              { h: 'Father weight', w: 75 },
+              { h: 'Mother weight', w: 75 },
+            ]
+          : t === 'locality'
+            ? [
+                { h: 'Locality', w: 185 },
+                { h: 'Class', w: 90 },
+                { h: 'Distance band', w: 100 },
+                { h: 'Area', w: 60 },
+                { h: 'Score', w: 80 },
+              ]
+            : [
+                { h: 'School', w: 255 },
+                { h: 'Pass-out class', w: 130 },
+                { h: 'Score', w: 130 },
+              ];
+      const bytes = await tablePdf({
+        school: {
+          name: sc.name,
+          address: sc.address,
+          contact: sc.contact ? `Phone ${sc.contact}` : null,
+        },
+        logo: await this.core.fileBytes(c, sc.logo),
+        title: `Merit score table: ${TITLE[t]}`,
+        subtitle: `${String(rows.length)} lines`,
+        columns: cols,
+        rows: rows.map((r) =>
+          (t === 'qualification'
+            ? [r.name, r.fatherScore, r.motherScore, r.fatherWeight, r.motherWeight]
+            : t === 'locality'
+              ? [r.name, r.className ?? 'Every class', r.band ?? '', r.area ?? '', r.score]
+              : [r.name, r.passoutClass, r.score]
+          ).map((v) => String(v ?? '')),
+        ),
+        printedAt: new Intl.DateTimeFormat('en-IN', {
+          timeZone: 'Asia/Kolkata',
+          day: '2-digit',
+          month: 'short',
+          year: 'numeric',
+          hour: '2-digit',
+          minute: '2-digit',
+        }).format(new Date()),
+      });
+      return {
+        bytes,
+        filename: `${TITLE[t].toLowerCase().replace(/\s+/g, '-')}.pdf`,
+        contentType: 'application/pdf',
+      };
+    });
   }
 
   /** A sheet in: every row checked first, then all saved (a row matching one in the table changes it). */

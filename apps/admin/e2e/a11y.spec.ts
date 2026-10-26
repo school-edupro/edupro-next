@@ -19,6 +19,7 @@ const PAGES = [
   '/admissions/setup',
   '/admissions/setup/score-tables',
   '/admissions/setup/score-tables?t=locality',
+  '/admissions/setup/score-tables?t=alumni_school',
   '/admissions/setup/numbers',
   '/admissions/score-report',
   '/admissions/desk',

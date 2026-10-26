@@ -54,6 +54,7 @@ export default async function ScoreTablesPage({
         table={t}
         initial={data[t]}
         classes={data.classes}
+        options={data.options}
         canEdit={me.permissions.includes('admissions.setup.manage')}
       />
     </>

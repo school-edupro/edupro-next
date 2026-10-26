@@ -19,6 +19,11 @@ export const ScoreRowSchema = z.object({
 });
 export class ScoreRowDto extends createZodDto(ScoreRowSchema) {}
 
+export const LocalityNamesSchema = z.object({
+  names: z.array(z.string().trim().min(1).max(80)).min(1).max(500),
+});
+export class LocalityNamesDto extends createZodDto(LocalityNamesSchema) {}
+
 export const ScoreImportSchema = z.object({ fileBase64: z.string().min(100).max(1_400_000) });
 export class ScoreImportDto extends createZodDto(ScoreImportSchema) {}
 

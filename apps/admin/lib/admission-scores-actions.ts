@@ -2,7 +2,7 @@
 /** Merit score tables, Recalculate and number series (docs/design/48). */
 import { revalidatePath } from 'next/cache';
 import { ApiError, apiFetch } from './api';
-import type { NumberSeries, ScoreRow, ScoreTableName } from './admission-scores';
+import type { NumberSeries, ScoreOptions, ScoreRow, ScoreTableName } from './admission-scores';
 
 type Out<T> =
   | { ok: true; data: T }
@@ -84,6 +84,16 @@ export async function qualificationsFromList() {
     '/admissions/score-tables/qualification/from-list',
     'POST',
     {},
+    PAGE,
+  );
+}
+
+/** Localities added to the school's Locality list (the master the table and the form pick from). */
+export async function addLocalities(names: string[]) {
+  return call<{ added: number; options: ScoreOptions }>(
+    '/admissions/score-tables/locality/master',
+    'POST',
+    { names },
     PAGE,
   );
 }

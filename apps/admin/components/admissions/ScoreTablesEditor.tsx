@@ -1,20 +1,26 @@
 'use client';
 import { useMemo, useState, useTransition } from 'react';
 import {
+  addLocalities,
   archiveScoreRow,
   importScoreSheet,
   qualificationsFromList,
   saveScoreRow,
 } from '@/lib/admission-scores-actions';
-import { TABLE_TITLE, type ScoreRow, type ScoreTableName } from '@/lib/admission-scores';
+import {
+  TABLE_TITLE,
+  type ScoreOptions,
+  type ScoreRow,
+  type ScoreTableName,
+} from '@/lib/admission-scores';
 
 const HELP: Record<ScoreTableName, string> = {
   qualification:
-    "Each qualification gives the father's score and the mother's score; an education criterion adds both. Weights are kept for later.",
+    "Each qualification of the school's Education list (the one the form asks) gives the father's score and the mother's score; an education criterion adds both. Weights are kept for later.",
   locality:
-    'The family picks its locality on the form; the locality gives the distance points. A line for one class wins over the one for every class.',
+    'The family picks its locality on the form (from the Locality master below); the locality gives the distance points. A line for one class wins over the one for every class.',
   alumni_school:
-    "The school a parent studied at and the class they passed out of (10, 12, Both, Others) give the alumni points; a criterion adds the father's and the mother's up to its cap.",
+    "The school a parent studied at and the class they passed out of, as the form asks it (the school's AlumniClass list, e.g. X, XII; X and 10 are the same) give the alumni points. A criterion adds the father's and the mother's up to its cap; when the form does not ask which school, the criterion names it.",
 };
 
 type Draft = Omit<ScoreRow, 'id' | 'className'>;
@@ -23,7 +29,7 @@ const empty = (t: ScoreTableName): Draft =>
     ? { name: '', fatherScore: 0, motherScore: 0, fatherWeight: 0, motherWeight: 0 }
     : t === 'locality'
       ? { name: '', classId: null, band: '', area: '', score: 0 }
-      : { name: '', passoutClass: '12', score: 0 };
+      : { name: '', passoutClass: '', score: 0 };
 
 async function base64(file: File) {
   const bytes = new Uint8Array(await file.arrayBuffer());
@@ -41,14 +47,19 @@ export function ScoreTablesEditor({
   table,
   initial,
   classes,
+  options,
   canEdit,
 }: {
   table: ScoreTableName;
   initial: ScoreRow[];
   classes: Array<{ id: string; name: string }>;
+  /** the school's lists the names come from (Education, Locality, AlumniClass) */
+  options: ScoreOptions;
   canEdit: boolean;
 }) {
   const [rows, setRows] = useState(initial);
+  const [opts, setOpts] = useState(options);
+  const [newPlaces, setNewPlaces] = useState('');
   const [q, setQ] = useState('');
   const [draft, setDraft] = useState<Draft>(empty(table));
   const [editing, setEditing] = useState<{ id: string; d: Draft } | null>(null);
@@ -84,10 +95,38 @@ export function ScoreTablesEditor({
   };
   const add = () =>
     start(async () => {
-      if (!draft.name?.trim()) return setMsg({ tone: 'danger', text: 'Give the name first.' });
-      if (done(await saveScoreRow(table, null, draft), `“${draft.name.trim()}” added.`))
+      if (!draft.name?.trim()) return setMsg({ tone: 'danger', text: 'Choose the name first.' });
+      const row =
+        table === 'alumni_school' && !draft.passoutClass
+          ? { ...draft, passoutClass: opts.passout[opts.passout.length - 1] ?? 'XII' }
+          : draft;
+      if (done(await saveScoreRow(table, null, row), `“${draft.name.trim()}” added.`))
         setDraft(empty(table));
     });
+  const addPlaces = () =>
+    start(async () => {
+      const names = newPlaces
+        .split(/\n|,/)
+        .map((x) => x.trim())
+        .filter(Boolean);
+      if (!names.length) return;
+      const r = await addLocalities(names);
+      if (r.ok) {
+        setOpts(r.data.options);
+        setNewPlaces('');
+        setMsg({
+          tone: 'success',
+          text: `${String(r.data.added)} localit${r.data.added === 1 ? 'y' : 'ies'} in the Locality list: choose each below and give its score.`,
+        });
+      } else setMsg({ tone: 'danger', text: r.error });
+    });
+  // the names a dropdown offers: the school's list, and the row's own name if the list lacks it
+  const namesFor = (current: string) => {
+    const list = table === 'qualification' ? opts.qualification : opts.locality;
+    return current && !list.some((x) => x.toLowerCase() === current.toLowerCase())
+      ? [current, ...list]
+      : list;
+  };
   const save = () =>
     start(async () => {
       if (!editing) return;
@@ -142,7 +181,7 @@ export function ScoreTablesEditor({
     );
     return (
       <>
-        <label className="ep-field">
+        <label className="ep-field" style={{ gridColumn: 'span 2', minWidth: 0 }}>
           <span className="ep-field__label">
             {table === 'qualification'
               ? 'Qualification'
@@ -150,13 +189,39 @@ export function ScoreTablesEditor({
                 ? 'Locality'
                 : 'School'}
           </span>
-          <input
-            className="ep-input"
-            maxLength={120}
-            aria-label={`Name${label}`}
-            value={d.name}
-            onChange={(e) => set({ name: e.target.value })}
-          />
+          {table === 'alumni_school' ? (
+            <>
+              <input
+                className="ep-input"
+                maxLength={120}
+                aria-label={`Name${label}`}
+                list={`st-schools${label.replace(/\W/g, '')}`}
+                value={d.name}
+                onChange={(e) => set({ name: e.target.value })}
+              />
+              <datalist id={`st-schools${label.replace(/\W/g, '')}`}>
+                {opts.schools.map((x) => (
+                  <option key={x} value={x} />
+                ))}
+              </datalist>
+            </>
+          ) : (
+            <select
+              className="ep-select"
+              aria-label={`Name${label}`}
+              value={d.name}
+              onChange={(e) => set({ name: e.target.value })}
+            >
+              <option value="">
+                {table === 'qualification' ? 'Choose the qualification' : 'Choose the locality'}
+              </option>
+              {namesFor(d.name).map((x) => (
+                <option key={x} value={x}>
+                  {x}
+                </option>
+              ))}
+            </select>
+          )}
         </label>
         {table === 'qualification' ? (
           <>
@@ -213,10 +278,16 @@ export function ScoreTablesEditor({
               <select
                 className="ep-select"
                 aria-label={`Pass-out class${label}`}
-                value={d.passoutClass ?? '12'}
+                value={d.passoutClass || (opts.passout[opts.passout.length - 1] ?? '')}
                 onChange={(e) => set({ passoutClass: e.target.value })}
               >
-                {['10', '12', 'Both', 'Others'].map((v) => (
+                {[
+                  ...(d.passoutClass &&
+                  !opts.passout.some((x) => x.toLowerCase() === d.passoutClass!.toLowerCase())
+                    ? [d.passoutClass]
+                    : []),
+                  ...opts.passout,
+                ].map((v) => (
                   <option key={v} value={v}>
                     {v}
                   </option>
@@ -263,16 +334,22 @@ export function ScoreTablesEditor({
           <input className="ep-input" value={q} onChange={(e) => setQ(e.target.value)} />
         </label>
         <a
-          className="ep-btn ep-btn--ghost ep-btn--sm"
+          className="ep-btn ep-btn--secondary ep-btn--sm"
           href={`/api/admissions/score-file?table=${table}&rows=1`}
         >
           Export Excel
         </a>
         <a
-          className="ep-btn ep-btn--ghost ep-btn--sm"
+          className="ep-btn ep-btn--secondary ep-btn--sm"
+          href={`/api/admissions/score-file?table=${table}&format=pdf`}
+        >
+          Export PDF
+        </a>
+        <a
+          className="ep-btn ep-btn--secondary ep-btn--sm"
           href={`/api/admissions/score-file?table=${table}`}
         >
-          Excel format
+          Sample Excel
         </a>
         {canEdit && table === 'qualification' ? (
           <button
@@ -285,12 +362,56 @@ export function ScoreTablesEditor({
           </button>
         ) : null}
       </div>
+      {canEdit && table === 'locality' ? (
+        <section
+          className="ep-card"
+          aria-labelledby="st-place-master"
+          style={{ marginBottom: 'var(--sp-3)', background: 'var(--surface-subtle)' }}
+        >
+          <h3 id="st-place-master" className="ep-card__title">
+            Locality master ({opts.locality.length})
+          </h3>
+          <p className="ep-field__help" style={{ marginTop: 0 }}>
+            The localities families choose from on the form and the table below. Add new ones here
+            (one a line, or with commas); rename or switch off at{' '}
+            <a href="/masters/system?tab=profile_lists">System setup → Profile lists</a> (list
+            “Locality”). On the form, give the locality question the list “Locality”.
+          </p>
+          <div
+            style={{
+              display: 'flex',
+              gap: 'var(--sp-2)',
+              alignItems: 'flex-end',
+              flexWrap: 'wrap',
+            }}
+          >
+            <label className="ep-field" style={{ margin: 0, flex: '1 1 320px' }}>
+              <span className="ep-field__label">New localities</span>
+              <textarea
+                className="ep-input"
+                rows={3}
+                placeholder={'Sector 15\nSunder Vihar\nOld Faridabad'}
+                value={newPlaces}
+                onChange={(e) => setNewPlaces(e.target.value)}
+              />
+            </label>
+            <button
+              type="button"
+              className="ep-btn ep-btn--secondary ep-btn--sm"
+              disabled={pending || !newPlaces.trim()}
+              onClick={addPlaces}
+            >
+              Add to the master
+            </button>
+          </div>
+        </section>
+      ) : null}
       {canEdit ? (
         <div style={{ display: 'grid', gap: 'var(--sp-3)', marginBottom: 'var(--sp-3)' }}>
           <div
             style={{
               display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 150px), 1fr))',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 170px), 1fr))',
               gap: 'var(--sp-2)',
               alignItems: 'end',
             }}
