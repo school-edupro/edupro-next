@@ -67,6 +67,8 @@ const RECORD: ReportFieldDef[] = [
   { key: 'form_points', label: 'Form points', section: 'record', type: 'number' },
   { key: 'points_detail', label: 'Points by criterion', section: 'record', type: 'text' },
   { key: 'points_check', label: 'Points to check', section: 'record', type: 'text' },
+  // docs/design/50: every level's decision and remark (who, when)
+  { key: 'level_remarks', label: 'Decisions and remarks', section: 'record', type: 'text' },
   { key: 'waiting_no', label: 'Waiting list no.', section: 'record', type: 'number' },
   { key: 'registration_fee', label: 'Registration fee', section: 'fees', type: 'number' },
   { key: 'registration_receipt', label: 'Registration receipt', section: 'fees', type: 'text' },
@@ -173,6 +175,43 @@ export async function levelDeciders(
   return out;
 }
 
+/**
+ * Every level's latest decision and remark of each registration, as one line (docs/design/50):
+ * "Document check · Approval: approved, papers fine (Anita Deshmukh, 26-10) · Level 2: …".
+ */
+export async function levelRemarks(c: PoolClient, ids: string[]): Promise<Map<string, string>> {
+  const out = new Map<string, string>();
+  if (!ids.length) return out;
+  const r = await c.query<{
+    id: string;
+    stage: string;
+    level_name: string | null;
+    level: number;
+    decision: string;
+    remarks: string | null;
+    by: string | null;
+    at: Date;
+  }>(
+    `SELECT DISTINCT ON (x.application_id, x.stage_id, x.level)
+            x.application_id::text AS id, st.name AS stage, x.level,
+            (SELECT s -> 'levels' -> (x.level - 1) ->> 'name' FROM jsonb_array_elements(a.process_steps) s
+              WHERE s ->> 'stageId' = x.stage_id::text LIMIT 1) AS level_name,
+            x.decision, x.remarks, x.decided_by_name AS by, x.decided_at AS at
+       FROM admission_stage_results x JOIN applications a ON a.id = x.application_id
+       JOIN admission_stages st ON st.id = x.stage_id
+      WHERE x.application_id = ANY($1::bigint[]) AND x.undone_at IS NULL
+      ORDER BY x.application_id, x.stage_id, x.level, x.decided_at DESC`,
+    [ids],
+  );
+  const rows = [...r.rows].sort((a, b) => a.at.getTime() - b.at.getTime());
+  for (const x of rows) {
+    const when = day(x.at)?.split('-').reverse().slice(0, 2).join('-') ?? '';
+    const part = `${x.stage} · ${x.level_name ?? `Level ${String(x.level)}`}: ${x.decision}${x.remarks ? `, ${x.remarks}` : ''} (${x.by ?? '-'}, ${when})`;
+    out.set(x.id, out.has(x.id) ? `${out.get(x.id)!} | ${part}` : part);
+  }
+  return out;
+}
+
 /** The registrations waiting now at a level this user may decide (docs/design/47). */
 export async function admissionWaitingFor(c: PoolClient, userId: string): Promise<Set<string>> {
   const r = await c.query<{ id: string }>(
@@ -254,6 +293,10 @@ export async function loadAdmissionReportRows(
       ORDER BY a.id DESC LIMIT $1`,
     [opts.limit ?? 20000],
   );
+  const remarks = await levelRemarks(
+    c,
+    r.rows.map((x) => x.id),
+  );
   const deciders = await levelDeciders(
     c,
     r.rows.map((x) => x.level),
@@ -299,6 +342,7 @@ export async function loadAdmissionReportRows(
       points_detail: x.points_lines?.length
         ? x.points_lines.map((l) => `${l.name} ${String(l.points)}`).join(' · ')
         : null,
+      level_remarks: remarks.get(x.id) ?? null,
       points_check: x.points_lines?.some((l) => l.check)
         ? x.points_lines
             .filter((l) => l.check)

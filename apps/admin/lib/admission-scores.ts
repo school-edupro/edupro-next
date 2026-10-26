@@ -41,6 +41,8 @@ export interface ScoreReport {
   session: string;
   className: string;
   max: number | null;
+  /** a column per level of the class's process (docs/design/50) */
+  levels: string[];
   criteria: Array<{
     name: string;
     kind: 'fixed' | 'table' | 'sibling';
@@ -60,6 +62,8 @@ export interface ScoreReport {
     confirmed: boolean;
     check: boolean;
     rank: number | null;
+    /** each level's decision and remark, in the order of `levels` */
+    remarks: Array<string | null>;
   }>;
 }
 

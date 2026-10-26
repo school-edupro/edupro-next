@@ -22,6 +22,8 @@ const PAGES = [
   '/admissions/setup/score-tables?t=alumni_school',
   '/admissions/setup/numbers',
   '/admissions/score-report',
+  '/admissions/approvals',
+  '/admissions/approvals?tab=decided',
   '/admissions/desk',
   // a sample registration of scripts/seed-admission-merit.mjs (docs/design/49); a new seed changes the ids
   '/admissions/desk/1339',

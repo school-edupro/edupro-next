@@ -182,7 +182,11 @@ export default async function RegistrationPage({
                   <ul className="ep-rs__levels">
                     {s.levels.map((l) => (
                       <li key={l.no}>
-                        {s.levels.length > 1 ? `${l.name}: ` : ''}
+                        {s.levels.length > 1
+                          ? l.name === `Level ${String(l.no)}`
+                            ? `${l.name}: `
+                            : `Level ${String(l.no)} · ${l.name}: `
+                          : ''}
                         {l.result ? (
                           <>
                             <Badge tone={DECISION[l.result.decision]?.tone ?? 'info'}>
@@ -194,7 +198,9 @@ export default async function RegistrationPage({
                               : ''}
                             {l.result.by ?? ''} · {dmy(l.result.at)}
                             {l.result.remarks ? (
-                              <div className="ep-kicker">{l.result.remarks}</div>
+                              <div className="ep-field__help" style={{ margin: 0 }}>
+                                Remark: {l.result.remarks}
+                              </div>
                             ) : null}
                           </>
                         ) : (

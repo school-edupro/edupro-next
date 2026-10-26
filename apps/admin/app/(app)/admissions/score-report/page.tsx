@@ -174,6 +174,11 @@ export default async function ScoreReportPage({
                     <th scope="col">Form points</th>
                     <th scope="col">Marks</th>
                     <th scope="col">Total</th>
+                    {rep.levels.map((l) => (
+                      <th key={l} scope="col">
+                        {l}
+                      </th>
+                    ))}
                   </tr>
                 </thead>
                 <tbody>
@@ -201,6 +206,11 @@ export default async function ScoreReportPage({
                       <td className="ep-num">
                         <strong>{n(r.merit)}</strong>
                       </td>
+                      {rep.levels.map((l, i) => (
+                        <td key={l} style={{ minWidth: '12rem' }}>
+                          {r.remarks[i] ?? <span className="ep-field__help">-</span>}
+                        </td>
+                      ))}
                     </tr>
                   ))}
                 </tbody>

@@ -36,6 +36,9 @@ const PAGES = [
   '/resignation',
   '/exit-approvals',
   '/no-dues',
+  // docs/design/50: dev-teacher is named in level 1 of the sample registrations' Document check
+  '/admission-approvals',
+  '/admission-approvals?tab=decided',
 ];
 
 for (const sub of ['dev-teacher']) {
@@ -73,4 +76,38 @@ for (const sub of ['dev-teacher']) {
       expect(problems, problems.join('\n')).toEqual([]);
     });
   }
+}
+
+// docs/design/50: the review of a registration waiting for dev-teacher (the first on the list, so a
+// new sample seed does not break it), desktop and phone
+for (const width of [1280, 375]) {
+  test(`teacher admission review @${width}`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 900 });
+    await page.goto(`${BASE}/login`);
+    await page.selectOption('select[name=sub]', 'dev-teacher');
+    await page
+      .locator('select[name=sub]')
+      .evaluate((s) => (s as HTMLSelectElement).form!.requestSubmit());
+    await page.waitForURL((u) => !u.pathname.startsWith('/login'));
+    await page.goto(`${BASE}/admission-approvals`);
+    const first = page.locator('table a[href^="/admission-approvals/"]').first();
+    test.skip((await first.count()) === 0, 'nothing waits for dev-teacher (seed the sample data)');
+    await first.click();
+    await expect(page.getByRole('heading', { name: 'Your decision' })).toBeVisible();
+    await page.mouse.move(0, 0);
+    const r = await new AxeBuilder({ page })
+      .setLegacyMode()
+      .withTags(['wcag2a', 'wcag2aa'])
+      .analyze();
+    const bad = r.violations.filter((v) => v.impact === 'serious' || v.impact === 'critical');
+    expect(
+      bad.map(
+        (v) =>
+          `${v.id}: ${v.help} ${v.nodes
+            .map((n) => n.target.join(' '))
+            .slice(0, 3)
+            .join(' | ')}`,
+      ),
+    ).toEqual([]);
+  });
 }

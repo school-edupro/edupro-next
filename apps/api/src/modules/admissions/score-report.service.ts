@@ -49,6 +49,25 @@ export class AdmissionScoreReportService {
     if (!line.rows[0])
       throw new DomainError('not-found', 'The class is not in that session', { status: 404 });
     const rules = await classPointRules(c, q.cycleId, q.classId);
+    // a column per level of the class's process (docs/design/50): the decision, remark, who
+    const proc = await c.query<{
+      steps: Array<{ stageId: string; levels: Array<{ name: string }> }>;
+    }>(
+      `SELECT p.steps FROM admission_process_classes pc JOIN admission_processes p ON p.id = pc.process_id
+        WHERE pc.class_id = $1 AND p.status = 'active' LIMIT 1`,
+      [q.classId],
+    );
+    const stageNames = new Map(
+      (
+        await c.query<{ id: string; name: string }>(`SELECT id::text, name FROM admission_stages`)
+      ).rows.map((x) => [x.id, x.name]),
+    );
+    const levelCols = (proc.rows[0]?.steps ?? []).flatMap((st) =>
+      st.levels.map((l, i) => ({
+        key: `${st.stageId}:${String(i + 1)}`,
+        label: `${stageNames.get(st.stageId) ?? 'Stage'} · ${l.name}`,
+      })),
+    );
     const max = await classPointsMax(c, q.cycleId, q.classId);
     const r = await c.query<{
       id: string;
@@ -71,6 +90,27 @@ export class AdmissionScoreReportService {
         ORDER BY a.id`,
       [q.cycleId, q.classId, q.categoryId ?? null, q.status ?? null],
     );
+    const decided = await c.query<{
+      id: string;
+      k: string;
+      decision: string;
+      remarks: string | null;
+      by: string | null;
+      at: Date;
+    }>(
+      `SELECT DISTINCT ON (x.application_id, x.stage_id, x.level) x.application_id::text AS id,
+              x.stage_id::text || ':' || x.level AS k, x.decision, x.remarks, x.decided_by_name AS by, x.decided_at AS at
+         FROM admission_stage_results x
+        WHERE x.application_id = ANY($1::bigint[]) AND x.undone_at IS NULL
+        ORDER BY x.application_id, x.stage_id, x.level, x.decided_at DESC`,
+      [r.rows.map((x) => x.id)],
+    );
+    const remarkOf = (id: string, k: string) => {
+      const d = decided.rows.find((x) => x.id === id && x.k === k);
+      return d
+        ? `${d.decision}${d.remarks ? `: ${d.remarks}` : ''} (${d.by ?? '-'}, ${d.at.toISOString().slice(8, 10)}-${d.at.toISOString().slice(5, 7)})`
+        : null;
+    };
     const rows = r.rows.map((x) => {
       const lines = x.lines ?? [];
       const points = x.form_points !== null ? Number(x.form_points) : null;
@@ -92,6 +132,7 @@ export class AdmissionScoreReportService {
         merit,
         confirmed: x.confirmed,
         check: lines.some((l) => Boolean(l.check)),
+        remarks: levelCols.map((col) => remarkOf(x.id, col.key)),
       };
     });
     // the rank among the live ones, as Selection orders them
@@ -108,6 +149,7 @@ export class AdmissionScoreReportService {
       session: line.rows[0].session,
       className: line.rows[0].class_name,
       max,
+      levels: levelCols.map((x) => x.label),
       criteria: rules.map((k) => ({
         name: k.name,
         kind: k.kind,
@@ -140,6 +182,7 @@ export class AdmissionScoreReportService {
       'Marks',
       'Total',
       'To check',
+      ...rep.levels,
     ];
     const h = ws.addRow(head);
     h.font = { bold: true };
@@ -159,6 +202,7 @@ export class AdmissionScoreReportService {
           .map((l) => l?.check)
           .filter(Boolean)
           .join('; '),
+        ...x.remarks.map((m) => m ?? ''),
       ]);
     const bytes = Buffer.from(await wb.xlsx.writeBuffer());
     return {
@@ -202,6 +246,10 @@ export class AdmissionScoreReportService {
           marks: n(x.marks),
           total: n(x.merit),
           check: x.check,
+          note: rep.levels
+            .map((l, i) => (x.remarks[i] ? `${l}: ${x.remarks[i]!}` : null))
+            .filter(Boolean)
+            .join('  |  '),
         })),
         printedAt: ist(new Date()),
       });

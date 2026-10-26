@@ -1445,6 +1445,135 @@ describe('online admission (e2e)', () => {
       expect((await digest()).n).toBe(0);
     });
 
+    it('lets the people a level names decide with no admission permission; every level remark kept (docs/design/50)', async () => {
+      // two roles with no admission right at all name the two levels of Document check
+      const [teacher, accounts] = await withMigrator(async (c) => [
+        await seedUser(c, school, `${stamp('T')}-teacher`, 'subject_teacher'),
+        await seedUser(c, school, `${stamp('A')}-accounts`, 'accountant'),
+      ]);
+      const setup = await inject({ method: 'GET', url: '/admissions/process-setup', headers: h() });
+      const senior = setup.json().processes.find((p: { id: string }) => p.id === processId) as {
+        name: string;
+        classIds: string[];
+        steps: Array<{ stageId: string; levels: Array<Record<string, unknown>> }>;
+      };
+      const original = structuredClone(senior.steps);
+      const named = structuredClone(senior.steps);
+      named[0]!.levels = [
+        { name: 'Teacher check', by: 'role', roleCode: 'subject_teacher' },
+        { name: 'Accounts', by: 'role', roleCode: 'accountant' },
+      ];
+      const put = (steps: unknown) =>
+        inject({
+          method: 'PUT',
+          url: `/admissions/processes/${processId}`,
+          headers: h(),
+          json: { name: senior.name, classIds: senior.classIds, steps, confirm: true },
+        });
+      expect((await put(named)).statusCode).toBe(200);
+      const list = (u: SeededUser, tab = 'waiting') =>
+        inject({ method: 'GET', url: `/admissions/approvals?tab=${tab}`, headers: h(u) });
+      const ids = (r: Awaited<ReturnType<typeof list>>) =>
+        r.json().data.map((x: { id: string }) => x.id);
+      // the teacher (level 1) sees them; the accountant (level 2) nothing yet, and cannot open one
+      expect(ids(await list(teacher))).toEqual(expect.arrayContaining([appWalkIn, appEws]));
+      expect((await list(accounts)).json().waiting).toBe(0);
+      expect(
+        (
+          await inject({
+            method: 'GET',
+            url: `/admissions/approvals/${appWalkIn}`,
+            headers: h(accounts),
+          })
+        ).statusCode,
+      ).toBe(404);
+      const review = await inject({
+        method: 'GET',
+        url: `/admissions/approvals/${appWalkIn}`,
+        headers: h(teacher),
+      });
+      expect(review.statusCode).toBe(200);
+      expect(review.json()).toMatchObject({
+        mayDecide: true,
+        current: { levelName: 'Teacher check' },
+      });
+      expect(review.json().sections.length).toBeGreaterThan(0);
+      const decide = (u: SeededUser, json: Record<string, unknown>) =>
+        inject({
+          method: 'POST',
+          url: `/admissions/approvals/${appWalkIn}/decide`,
+          headers: h(u),
+          json,
+        });
+      // a remark is needed, whatever the decision
+      expect((await decide(teacher, { decision: 'approve', remarks: '' })).statusCode).toBe(400);
+      expect(
+        (await decide(accounts, { decision: 'approve', remarks: 'Too early' })).statusCode,
+      ).toBe(404);
+      const l1 = await decide(teacher, { decision: 'approve', remarks: 'Papers fine' });
+      expect(l1.statusCode).toBe(201);
+      expect(l1.json()).toMatchObject({ mayDecide: false });
+      // level 2 now waits for the accountant, with the teacher's remark
+      const acc = (await list(accounts)).json();
+      const row = acc.data.find((x: { id: string }) => x.id === appWalkIn);
+      expect(row.remarks).toEqual([
+        expect.objectContaining({
+          levelName: 'Teacher check',
+          decision: 'approved',
+          remarks: 'Papers fine',
+        }),
+      ]);
+      expect(
+        (await decide(accounts, { decision: 'approve', remarks: 'Fee received' })).statusCode,
+      ).toBe(201);
+      expect(ids(await list(teacher, 'decided'))).toContain(appWalkIn);
+      const after = (await list(accounts, 'decided'))
+        .json()
+        .data.find((x: { id: string }) => x.id === appWalkIn);
+      expect(after.remarks.map((m: { remarks: string }) => m.remarks)).toEqual([
+        'Papers fine',
+        'Fee received',
+      ]);
+      // the lists and the score report carry both remarks
+      const grid = await inject({
+        method: 'POST',
+        url: '/admissions/registrations/grid',
+        headers: h(),
+        json: {
+          columns: [{ key: 'level_remarks' }],
+          status: 'all',
+          scope: 'registrations',
+          page: 1,
+          size: 200,
+        },
+      });
+      const g = grid.json().rows.find((r: { __id: string }) => r.__id === appWalkIn);
+      expect(g.level_remarks).toContain('Teacher check: approved, Papers fine');
+      expect(g.level_remarks).toContain('Accounts: approved, Fee received');
+      const rep = await inject({
+        method: 'GET',
+        url: `/admissions/score-report?cycleId=${cycleId}&classId=${classMini}`,
+        headers: h(),
+      });
+      expect(rep.json().levels).toEqual(expect.arrayContaining(['Document check · Teacher check']));
+      const rr = rep.json().rows.find((x: { id: string }) => x.id === appWalkIn);
+      expect(rr.remarks.filter(Boolean).join(' ')).toContain('Papers fine');
+      // back as it was for the cases after this one
+      for (let i = 0; i < 2; i += 1)
+        expect(
+          (
+            await inject({
+              method: 'POST',
+              url: `/admissions/registrations/${appWalkIn}/undo`,
+              headers: h(),
+              json: { reason: 'e2e: back to Document check' },
+            })
+          ).statusCode,
+        ).toBe(201);
+      expect((await put(original)).statusCode).toBe(200);
+      expect((await reg(appWalkIn)).json().process).toMatchObject({ stageNo: 0, levelNo: 1 });
+    });
+
     it('sends the form back for correction; the family corrects only those answers and it returns to the same level', async () => {
       const bad = await inject({
         method: 'POST',

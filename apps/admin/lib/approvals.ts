@@ -454,42 +454,41 @@ export async function myApprovals(
           )
           .catch(() => null)
       : null,
-    // admission registrations at a level this user decides (docs/design/47), overdue first
-    has.has('admissions.application.decide') || has.has('admissions.setup.manage')
-      ? apiFetch<{
-          total: number;
-          overdue: number;
-          data: Array<{
-            id: string;
-            number: string | null;
-            candidate: string | null;
-            className: string;
-            stage: string | null;
-            level: string | null;
-            since: string | null;
-            overdue: boolean;
-          }>;
-        }>(`/admissions/registrations/mine?size=${String(Math.max(size, 1))}`)
-          .then((r): ApprovalGroup | null =>
-            r.total
-              ? {
-                  key: 'admission',
-                  title: 'Registrations to decide',
-                  help: `Admission registrations waiting at your level${r.overdue ? ` · ${String(r.overdue)} overdue` : ''}`,
-                  href: '/admissions/registrations?tab=mine',
-                  count: r.total,
-                  items: r.data.map((x) => ({
-                    id: x.id,
-                    title: `${x.candidate ?? x.number ?? 'Registration'} · ${x.className}`,
-                    detail: `${x.stage ?? ''}${x.level ? ` · ${x.level}` : ''}${x.overdue ? ' · overdue' : ''}`,
-                    href: `/admissions/registrations/${x.id}`,
-                    since: x.since,
-                  })),
-                }
-              : null,
-          )
-          .catch(() => null)
-      : null,
+    // admission registrations at a level this user is named in (docs/design/47, 50): anyone may be an
+    // approver, so it is asked for every user (an empty answer adds nothing)
+    apiFetch<{
+      waiting: number;
+      overdue: number;
+      data: Array<{
+        id: string;
+        number: string | null;
+        candidate: string | null;
+        className: string;
+        stage: string | null;
+        level: string | null;
+        since: string | null;
+        overdue: boolean;
+      }>;
+    }>(`/admissions/approvals?tab=waiting&size=${String(Math.max(size, 1))}`)
+      .then((r): ApprovalGroup | null =>
+        r.waiting
+          ? {
+              key: 'admission',
+              title: 'Registrations to decide',
+              help: `Admission registrations waiting at your level${r.overdue ? ` · ${String(r.overdue)} overdue` : ''}`,
+              href: '/admissions/approvals',
+              count: r.waiting,
+              items: r.data.map((x) => ({
+                id: x.id,
+                title: `${x.candidate ?? x.number ?? 'Registration'} · ${x.className}`,
+                detail: `${x.stage ?? ''}${x.level ? ` · ${x.level}` : ''}${x.overdue ? ' · overdue' : ''}`,
+                href: `/admissions/approvals/${x.id}`,
+                since: x.since,
+              })),
+            }
+          : null,
+      )
+      .catch(() => null),
   ]);
   return groups.filter((g): g is ApprovalGroup => g !== null);
 }

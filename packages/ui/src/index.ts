@@ -90,3 +90,9 @@ export {
   type AdmissionFormFillProps,
   type UploadedFile,
 } from './components/AdmissionFormFill';
+export {
+  AdmissionReview,
+  type AdmissionReviewActions,
+  type AdmissionReviewData,
+  type ReviewRemark,
+} from './components/AdmissionReview';

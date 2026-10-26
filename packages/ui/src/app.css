@@ -12159,7 +12159,10 @@ a.ep-pub-foot__item {
 }
 /* the open criterion: name wide, then kind, points and cap side by side */
 .ep-pts2 .ep-pts__rulehead {
-  grid-template-columns: minmax(12rem, 2fr) minmax(12rem, 1fr) minmax(7rem, 0.6fr) minmax(7rem, 0.6fr);
+  grid-template-columns: minmax(12rem, 2fr) minmax(12rem, 1fr) minmax(7rem, 0.6fr) minmax(
+      7rem,
+      0.6fr
+    );
 }
 @media (max-width: 900px) {
   .ep-pts2 .ep-pts__rulehead {
@@ -12460,4 +12463,170 @@ a.ep-pub-foot__item {
 }
 .ep-adm-inbox summary {
   cursor: pointer;
+}
+
+/* the admission approver's review (docs/design/50): candidate, points, documents, form, decision */
+.ep-arv {
+  display: grid;
+  gap: var(--sp-4);
+}
+.ep-arv__head {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: var(--sp-4);
+  align-items: center;
+}
+.ep-arv__photo {
+  width: 4.5rem;
+  height: 5.5rem;
+  object-fit: cover;
+  border-radius: var(--radius-sm);
+  background: var(--surface-subtle);
+  border: 1px solid var(--border-default);
+}
+.ep-arv__name {
+  margin: 0;
+  font-size: var(--fs-h3);
+  color: var(--text-heading);
+}
+.ep-arv__score {
+  display: grid;
+  text-align: right;
+}
+.ep-arv__score strong {
+  font-size: var(--fs-h2);
+  color: var(--text-heading);
+}
+.ep-arv__cols {
+  display: grid;
+  grid-template-columns: minmax(0, 1.6fr) minmax(18rem, 1fr);
+  gap: var(--sp-4);
+  align-items: start;
+}
+.ep-arv__main,
+.ep-arv__side {
+  display: grid;
+  gap: var(--sp-4);
+}
+.ep-arv__side {
+  position: sticky;
+  top: var(--sp-4);
+}
+.ep-arv__h {
+  margin: 0 0 var(--sp-3);
+  font-size: var(--fs-h4);
+  color: var(--text-heading);
+}
+.ep-arv__check {
+  display: block;
+  color: var(--status-warning-text);
+  font-size: var(--fs-small);
+}
+.ep-arv__num {
+  max-width: 6rem;
+}
+.ep-arv__acts,
+.ep-arv__modes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+  margin-top: var(--sp-3);
+}
+.ep-arv__modes {
+  margin: 0 0 var(--sp-3);
+}
+.ep-arv__docs {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: var(--sp-2);
+}
+.ep-arv__docs li {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  align-items: center;
+  padding-bottom: var(--sp-2);
+  border-bottom: 1px solid var(--border-default);
+}
+.ep-arv__sec {
+  border-bottom: 1px solid var(--border-default);
+  padding: var(--sp-2) 0;
+}
+.ep-arv__sec summary {
+  cursor: pointer;
+  font-weight: var(--fw-semibold);
+  color: var(--text-heading);
+}
+.ep-arv__dl {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 14rem), 1fr));
+  gap: var(--sp-2) var(--sp-4);
+  margin: var(--sp-3) 0 0;
+}
+.ep-arv__dl dt {
+  color: var(--text-muted);
+  font-size: var(--fs-small);
+}
+.ep-arv__dl dd {
+  margin: 0;
+}
+.ep-arv__fields {
+  display: grid;
+  gap: var(--sp-1);
+  max-height: 14rem;
+  overflow-y: auto;
+  margin: 0 0 var(--sp-3);
+  padding: var(--sp-2);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+}
+.ep-arv__path {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: var(--sp-3);
+}
+.ep-arv__path > li {
+  padding-left: var(--sp-3);
+  border-left: 3px solid var(--border-default);
+}
+.ep-arv__path > li[data-state='done'] {
+  border-left-color: var(--status-success);
+}
+.ep-arv__path > li[data-state='current'] {
+  border-left-color: var(--border-accent);
+}
+.ep-arv__path > li[data-state='rejected'] {
+  border-left-color: var(--status-danger);
+}
+.ep-arv__path ul {
+  list-style: none;
+  margin: var(--sp-1) 0 0;
+  padding: 0;
+  display: grid;
+  gap: var(--sp-2);
+}
+.ep-arv__path ul li {
+  display: grid;
+  gap: var(--sp-1);
+}
+@media (max-width: 960px) {
+  .ep-arv__cols {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .ep-arv__side {
+    position: static;
+  }
+}
+@media (max-width: 560px) {
+  .ep-arv__head {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+  .ep-arv__score {
+    grid-column: 1 / -1;
+    text-align: left;
+  }
 }

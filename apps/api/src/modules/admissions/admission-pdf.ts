@@ -416,6 +416,8 @@ export interface ScoreReportInput {
     marks: string;
     total: string;
     check: boolean;
+    /** each level's decision and remark, printed under the row (docs/design/50) */
+    note?: string;
   }>;
   printedAt: string;
 }
@@ -487,6 +489,16 @@ export async function scoreReportPdf(p: ScoreReportInput): Promise<Buffer> {
         color: r.check && i === 2 ? CYAN : INK,
       });
       x += c.w;
+    }
+    if (r.note) {
+      y -= 11;
+      page.drawText(fit(r.note, W, regular), {
+        x: M + 30,
+        y,
+        size: 6.5,
+        font: regular,
+        color: MUTED,
+      });
     }
     page.drawLine({
       start: { x: M, y: y - 5 },

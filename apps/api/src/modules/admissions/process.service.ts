@@ -13,7 +13,6 @@ import { AuditService } from '../../common/audit/audit.service';
 import { DbService } from '../../common/db/db.service';
 import { DomainError } from '../../common/errors/domain-error';
 import { requireTenant, type RequestContext } from '../../common/http/request-context';
-import type { Resolver } from '../workflow/workflow.dto';
 import { classPointsMax } from './points-rules';
 import { WorkflowService } from '../workflow/workflow.service';
 import { AdmissionCoreService, type AppRow } from './admission-core.service';
@@ -475,7 +474,11 @@ export class AdmissionProcessService {
     });
   }
 
-  /** May this user decide at the level? Set-up managers may always; otherwise the level's people. */
+  /**
+   * May this user decide at the level? Set-up managers may always; a level for "anyone" takes those with
+   * the decide permission; otherwise being named in the level is enough (docs/design/50) — the same
+   * people `app.admission_level_users` gives the queue and the morning email.
+   */
   private async canAct(
     c: PoolClient,
     ctx: RequestContext,
@@ -483,26 +486,12 @@ export class AdmissionProcessService {
   ): Promise<boolean> {
     if (!level) return false;
     if (ctx.permissions?.has(ADMISSION_SETUP_MANAGE)) return true;
-    if (!ctx.permissions?.has(ADMISSION_DECIDE)) return false;
-    if (level.by === 'anyone') return true;
-    const resolver: Resolver =
-      level.by === 'role'
-        ? ({ kind: 'role', roleCode: level.roleCode ?? '' } as Resolver)
-        : level.by === 'designation'
-          ? ({
-              kind: 'staff',
-              by: 'designation',
-              designation: level.designation ?? '',
-              employeeIds: [],
-            } as unknown as Resolver)
-          : ({
-              kind: 'staff',
-              by: 'employees',
-              employeeIds: level.employeeIds ?? [],
-              designation: null,
-            } as unknown as Resolver);
-    const users = await this.workflow.resolveAssignees(c, resolver, null);
-    return users.includes(ctx.user.id);
+    if (level.by === 'anyone') return ctx.permissions?.has(ADMISSION_DECIDE) ?? false;
+    const r = await c.query<{ ok: boolean }>(
+      `SELECT $2::bigint IN (SELECT app.admission_level_users($1::jsonb)) AS ok`,
+      [JSON.stringify(level), ctx.user.id],
+    );
+    return r.rows[0]?.ok ?? false;
   }
 
   private async processRow(c: PoolClient, id: string) {

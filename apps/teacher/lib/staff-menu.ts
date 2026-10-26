@@ -22,6 +22,8 @@ export interface StaffWaiting {
   exits?: number;
   /** colleagues' no-dues waiting for a department I clear */
   noDues?: number;
+  /** admission registrations at a level I am named in, and those I decided lately (docs/design/50) */
+  admissions?: number;
 }
 export interface StaffGroup {
   id: string;
@@ -172,6 +174,12 @@ export const STAFF_MENU: StaffGroup[] = [
         label: 'My resignation',
         help: 'Ask for resignation, see where it is, withdraw it until it is accepted',
         allowed: always,
+      },
+      {
+        href: '/admission-approvals',
+        label: 'Admission approvals',
+        help: 'Registrations waiting at your level of the admission process: decide with your remark',
+        allowed: (_can, w) => (w.admissions ?? 0) > 0,
       },
       {
         href: '/exit-approvals',
