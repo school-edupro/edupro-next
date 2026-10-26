@@ -184,7 +184,7 @@ export default async function ScoreReportPage({
                         <a href={`/admissions/registrations/${r.id}`}>
                           {r.candidate ?? r.number ?? 'Registration'}
                         </a>
-                        <div className="ep-kicker">
+                        <div className="ep-field__help" style={{ margin: 0, whiteSpace: 'nowrap' }}>
                           {[r.number, r.category, r.status].filter(Boolean).join(' · ')}
                         </div>
                         {r.check ? <Badge tone="warning">Check</Badge> : null}

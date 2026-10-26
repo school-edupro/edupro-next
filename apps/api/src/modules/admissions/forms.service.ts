@@ -50,13 +50,13 @@ export const ADMISSION_DOC_KINDS: Array<{ id: string; label: string }> = [
 
 const GEO: Record<string, string> = { cities: 'City', states: 'State', countries: 'Country' };
 
+/** A locality the school's list does not have: the office places it (docs/design/48). */
+export const NOT_IN_LIST = 'Not in the list';
+
 /**
  * Admission forms (docs/design/39, part 1): the form builder's forms — tabs, fields, rules, the
  * mapping to the student master — and the options each field offers from the school's lists and masters.
  */
-/** A locality the school's list does not have: the office places it (docs/design/48). */
-export const NOT_IN_LIST = 'Not in the list';
-
 @Injectable()
 export class AdmissionFormsService {
   constructor(

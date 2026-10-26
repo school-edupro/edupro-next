@@ -102,7 +102,10 @@ export function RegistrationPointsCheck({
                 <th scope="row">
                   {l.name} <span className="ep-field__help">(of {l.max})</span>
                   {l.check ? (
-                    <span className="ep-field__help" style={{ display: 'block' }}>
+                    <span
+                      className="ep-field__help"
+                      style={{ display: 'block', textTransform: 'none', letterSpacing: 'normal' }}
+                    >
                       <Badge tone="warning">Check</Badge> {l.check}
                     </span>
                   ) : null}

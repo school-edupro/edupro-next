@@ -391,7 +391,12 @@ function pointLine(r: PointCriterion, answers: AdmissionAnswers, t?: PointTables
         const a = answerOf(answers, s.field);
         if (!a) continue;
         const n = t.locality(a);
-        if (n === null) checks.push(`Locality “${a}” is not in the list for this class`);
+        if (n === null)
+          checks.push(
+            a.toLowerCase() === 'not in the list'
+              ? 'The family chose “Not in the list”: place the locality (correct the answer)'
+              : `Locality “${a}” is not in the list for this class`,
+          );
         else got += n;
       } else {
         const passout = answerOf(answers, s.classField);
