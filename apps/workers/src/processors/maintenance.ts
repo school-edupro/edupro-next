@@ -512,6 +512,24 @@ export function maintenanceProcessor({ db, storage, log, migratorUrl }: Maintena
       if (moved) log.info({ moved }, 'helpdesk escalation run');
       return;
     }
+    if (kind === 'admissions.level_digest') {
+      // Admissions (0256, docs/design/47): each approver gets one email a morning listing the
+      // registrations waiting at their levels, overdue first, then those due by tomorrow.
+      const schools = { rows: await schoolsFor(db, job) };
+      let sent = 0;
+      for (const s of schools.rows) {
+        const r = await db.withTenant(
+          { schoolId: s.id, userId: null, allowedSchoolIds: [s.id] },
+          (c) =>
+            c.query<{ n: number }>('SELECT app.admission_level_digest($1) AS n', [
+              process.env.ADMIN_APP_URL ?? 'http://localhost:3000',
+            ]),
+        );
+        sent += r.rows[0]?.n ?? 0;
+      }
+      if (sent) log.info({ sent }, 'admission level digest');
+      return;
+    }
     if (kind === 'hostel.leave_tick') {
       // Hostel (0148): pupils out on hostel leave past their return time and the grace; the database
       // function tells the parent and the head warden once, and the principal / admin past the hours set.

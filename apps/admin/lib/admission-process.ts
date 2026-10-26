@@ -17,6 +17,8 @@ export interface ProcessLevel {
   roleCode?: string | null;
   designation?: string | null;
   employeeIds?: string[];
+  /** days to decide at this level (none: no time limit; docs/design/47) */
+  days?: number | null;
 }
 export interface ProcessStep {
   stageId: string;

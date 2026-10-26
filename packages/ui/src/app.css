@@ -12229,6 +12229,10 @@ a.ep-pub-foot__item {
   padding-left: var(--sp-3);
   border-left: 2px solid var(--border-default);
 }
+.ep-pe__days {
+  display: grid;
+  gap: var(--sp-1);
+}
 .ep-pe__people {
   display: grid;
   gap: var(--sp-1);

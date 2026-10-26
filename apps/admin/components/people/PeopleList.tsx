@@ -106,6 +106,8 @@ export function PeopleList<V extends PeopleListView, R extends PeopleListResult<
   const [columnsOpen, setColumnsOpen] = useState(false);
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [exporting, setExporting] = useState<{ id: string; format: string } | null>(null);
+  // rows ticked for a bulk action (only lists that set `select`); a new page clears them
+  const [picked, setPicked] = useState<ReadonlySet<string>>(new Set());
   const [pending, start] = useTransition();
   const fieldListId = 'sl-fields';
 
@@ -116,6 +118,7 @@ export function PeopleList<V extends PeopleListView, R extends PeopleListResult<
         if (r.ok) {
           setData(r.data);
           setPage(r.data.page);
+          setPicked(new Set());
           setError(null);
         } else setError(r.errors?.join('; ') ?? r.error);
       }),
@@ -238,9 +241,53 @@ export function PeopleList<V extends PeopleListView, R extends PeopleListResult<
   const counts = config.counts(data);
   const from = data.total ? (page - 1) * view.size + 1 : 0;
   const to = Math.min(page * view.size, data.total);
+  const selectable = config.select
+    ? data.rows.filter((r) => config.select!.can(r)).map((r) => String(r.__id))
+    : [];
+  const pickedRows = data.rows.filter((r) => picked.has(String(r.__id)));
+  const tick = (id: string, on: boolean) =>
+    setPicked((p) => {
+      const n = new Set(p);
+      if (on) n.add(id);
+      else n.delete(id);
+      return n;
+    });
+  const tabs = config.statusTabs?.(data) ?? [];
 
   return (
     <div className="ep-sl" aria-busy={pending}>
+      {tabs.length ? (
+        <div
+          role="group"
+          aria-label="Show"
+          style={{
+            display: 'flex',
+            gap: 'var(--sp-2)',
+            flexWrap: 'wrap',
+            marginBottom: 'var(--sp-3)',
+          }}
+        >
+          {tabs.map((t) => (
+            <button
+              key={t.value}
+              type="button"
+              className={`ep-btn ep-btn--sm ${view.status === t.value ? 'ep-btn--primary' : 'ep-btn--ghost'}`}
+              aria-pressed={view.status === t.value}
+              disabled={pending}
+              onClick={() => {
+                setStatus(t.value);
+                setSearch('');
+                apply({ ...view, status: t.value, search: '' });
+              }}
+            >
+              {t.label}{' '}
+              <span className={`ep-badge ep-badge--${t.alert ? 'danger' : 'neutral'}`}>
+                {t.count}
+              </span>
+            </button>
+          ))}
+        </div>
+      ) : null}
       <section className="ep-card ep-sl__filters" aria-label="Search and filters">
         <form
           onSubmit={(e) => {
@@ -417,6 +464,14 @@ export function PeopleList<V extends PeopleListView, R extends PeopleListResult<
         />
       ) : null}
 
+      {config.select && pickedRows.length ? (
+        <div style={{ marginBottom: 'var(--sp-3)' }}>
+          {config.select.bar(pickedRows, () => {
+            setPicked(new Set());
+            load(view, page);
+          })}
+        </div>
+      ) : null}
       <div
         className="ep-table-wrap ep-sl__table"
         tabIndex={0}
@@ -427,6 +482,16 @@ export function PeopleList<V extends PeopleListView, R extends PeopleListResult<
           <thead>
             <tr>
               <th scope="col" className="ep-sl__sticky" aria-sort={ariaSort(primary.key)}>
+                {config.select ? (
+                  <input
+                    type="checkbox"
+                    aria-label={`Tick every ${config.noun.one} on this page that can be ticked`}
+                    disabled={!selectable.length}
+                    checked={selectable.length > 0 && selectable.every((id) => picked.has(id))}
+                    onChange={(e) => setPicked(e.target.checked ? new Set(selectable) : new Set())}
+                    style={{ marginRight: 'var(--sp-2)' }}
+                  />
+                ) : null}
                 <button type="button" className="ep-sl__sort" onClick={() => sortBy(primary.key)}>
                   {config.noun.heading}
                   {sortMark(primary.key)}
@@ -453,24 +518,38 @@ export function PeopleList<V extends PeopleListView, R extends PeopleListResult<
               return (
                 <tr key={id}>
                   <td className="ep-sl__sticky">
-                    <a href={config.rowHref(id, r)} className="ep-sl__who">
-                      {!primary.avatar ? null : r.__photo ? (
-                        // photos pass through the admin's own origin
-                        <img
-                          src={`/api/files/${String(r.__photo)}/view`}
-                          alt=""
-                          className="ep-sl__avatar"
+                    <div
+                      style={config.select ? { display: 'flex', alignItems: 'center' } : undefined}
+                    >
+                      {config.select ? (
+                        <input
+                          type="checkbox"
+                          aria-label={`Tick ${name}`}
+                          disabled={!config.select.can(r)}
+                          checked={picked.has(id)}
+                          onChange={(e) => tick(id, e.target.checked)}
+                          style={{ marginRight: 'var(--sp-2)' }}
                         />
-                      ) : (
-                        <span className="ep-sl__avatar" aria-hidden="true">
-                          {initials(name)}
+                      ) : null}
+                      <a href={config.rowHref(id, r)} className="ep-sl__who">
+                        {!primary.avatar ? null : r.__photo ? (
+                          // photos pass through the admin's own origin
+                          <img
+                            src={`/api/files/${String(r.__photo)}/view`}
+                            alt=""
+                            className="ep-sl__avatar"
+                          />
+                        ) : (
+                          <span className="ep-sl__avatar" aria-hidden="true">
+                            {initials(name)}
+                          </span>
+                        )}
+                        <span>
+                          <strong>{name}</strong>
+                          {config.identity(r)}
                         </span>
-                      )}
-                      <span>
-                        <strong>{name}</strong>
-                        {config.identity(r)}
-                      </span>
-                    </a>
+                      </a>
+                    </div>
                   </td>
                   {data.columns.map((c) => (
                     <td key={c.key} className={c.type === 'number' ? 'ep-num' : undefined}>

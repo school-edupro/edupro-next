@@ -45,6 +45,13 @@ const RECORD: ReportFieldDef[] = [
   { key: 'class_sought', label: 'Class sought', section: 'record', type: 'text' },
   { key: 'status', label: 'Status', section: 'record', type: 'text' },
   { key: 'stage', label: 'Waiting at', section: 'record', type: 'text' },
+  { key: 'level', label: 'Level', section: 'record', type: 'text' },
+  { key: 'level_name', label: 'Level name', section: 'record', type: 'text' },
+  { key: 'deciders', label: 'Who decides', section: 'record', type: 'text' },
+  { key: 'waiting_since', label: 'Waiting since', section: 'record', type: 'date' },
+  { key: 'days_waiting', label: 'Days waiting', section: 'record', type: 'number' },
+  { key: 'due_on', label: 'Decide by', section: 'record', type: 'date' },
+  { key: 'overdue', label: 'Overdue', section: 'record', type: 'text' },
   { key: 'category', label: 'Fee category', section: 'record', type: 'text' },
   { key: 'entered_at', label: 'Registered at', section: 'record', type: 'text' },
   { key: 'mobile', label: 'Mobile', section: 'record', type: 'text' },
@@ -126,6 +133,51 @@ export const ADMISSION_SEARCH_KEYS = [
 const day = (d: Date | null) =>
   d ? new Date(d.getTime() + 330 * 60_000).toISOString().slice(0, 10) : null;
 
+/**
+ * Who may decide at each level (docs/design/47): the names behind `app.admission_level_users`, keyed by
+ * the level's JSON; "anyone" levels say so instead of naming everyone with the decide right.
+ */
+export async function levelDeciders(
+  c: PoolClient,
+  levels: Array<Record<string, unknown> | null>,
+): Promise<Map<string, string>> {
+  const keys = [...new Set(levels.filter((l) => l !== null).map((l) => JSON.stringify(l)))];
+  const out = new Map<string, string>();
+  if (!keys.length) return out;
+  const r = await c.query<{ level: string; names: string[] | null }>(
+    `SELECT l AS level, (SELECT array_agg(u.display_name ORDER BY u.display_name)
+                           FROM app.admission_level_users(l::jsonb) x JOIN users u ON u.id = x) AS names
+       FROM unnest($1::text[]) l`,
+    [keys],
+  );
+  for (const x of r.rows) {
+    const by = (JSON.parse(x.level) as { by?: string }).by;
+    const names = x.names ?? [];
+    out.set(
+      x.level,
+      !names.length
+        ? 'Nobody yet (set-up managers only)'
+        : by === 'anyone'
+          ? 'Anyone who may decide'
+          : names.length > 4
+            ? `${names.slice(0, 4).join(', ')} +${String(names.length - 4)}`
+            : names.join(', '),
+    );
+  }
+  return out;
+}
+
+/** The registrations waiting now at a level this user may decide (docs/design/47). */
+export async function admissionWaitingFor(c: PoolClient, userId: string): Promise<Set<string>> {
+  const r = await c.query<{ id: string }>(
+    `WITH lv AS (SELECT DISTINCT level FROM admission_waiting WHERE level IS NOT NULL)
+     SELECT w.id::text FROM admission_waiting w JOIN lv ON lv.level = w.level
+      WHERE $1::bigint IN (SELECT app.admission_level_users(lv.level))`,
+    [userId],
+  );
+  return new Set(r.rows.map((x) => x.id));
+}
+
 /** One row per registration (drafts included), ID numbers masked unless allowed. */
 export async function loadAdmissionReportRows(
   c: PoolClient,
@@ -140,6 +192,11 @@ export async function loadAdmissionReportRows(
     class_name: string;
     status: string;
     stage: string | null;
+    level_no: number | null;
+    levels: number | null;
+    level: Record<string, unknown> | null;
+    level_since: Date | null;
+    due_at: Date | null;
     category: string | null;
     entered_by: string | null;
     mobile: string | null;
@@ -168,6 +225,7 @@ export async function loadAdmissionReportRows(
   }>(
     `SELECT a.id::text, a.application_no AS number, a.candidate_name AS candidate, y.name AS session, ay.name AS year, cl.name AS class_name,
             a.status::text, CASE WHEN a.status::text IN ('registered', 'under_review', 'sent_back') THEN st.name END AS stage,
+            w.level_no, w.levels, w.level, w.level_since, w.due_at,
             k.name AS category, a.entered_by::text, COALESCE(a.contact_mobile, ap.mobile) AS mobile, COALESCE(a.contact_email, ap.email::text) AS email,
             a.created_at, a.submitted_at, a.registered_at, a.progress, a.merit::text, a.wait_rank, a.registration_fee::text,
             rr.receipt_no AS reg_receipt, a.admission_fee::text, ar.receipt_no AS adm_receipt, a.offer_expires_at, a.fee_paid_at,
@@ -180,6 +238,7 @@ export async function loadAdmissionReportRows(
        LEFT JOIN admission_forms f ON f.id = a.form_id
        LEFT JOIN admission_fee_categories k ON k.id = a.category_id
        LEFT JOIN admission_stages st ON st.id = (a.process_steps -> a.stage_no ->> 'stageId')::bigint
+       LEFT JOIN admission_waiting w ON w.id = a.id
        LEFT JOIN misc_receipts rr ON rr.id = a.registration_receipt_id
        LEFT JOIN misc_receipts ar ON ar.id = a.admission_receipt_id
        LEFT JOIN LATERAL (SELECT x.amount, x.status FROM admission_refunds x WHERE x.application_id = a.id ORDER BY x.id DESC LIMIT 1) rf ON true
@@ -187,7 +246,13 @@ export async function loadAdmissionReportRows(
       ORDER BY a.id DESC LIMIT $1`,
     [opts.limit ?? 20000],
   );
+  const deciders = await levelDeciders(
+    c,
+    r.rows.map((x) => x.level),
+  );
+  const now = Date.now();
   return r.rows.map((x) => {
+    const waiting = x.level !== null;
     const row: ReportRow = {
       __id: x.id,
       registration_no: x.number,
@@ -197,6 +262,22 @@ export async function loadAdmissionReportRows(
       class_sought: x.class_name,
       status: STATUS[x.status] ?? x.status,
       stage: x.stage,
+      level: waiting && x.levels ? `${String(x.level_no)} of ${String(x.levels)}` : null,
+      level_name: waiting ? String(x.level?.name ?? '') || null : null,
+      deciders: waiting ? (deciders.get(JSON.stringify(x.level)) ?? null) : null,
+      waiting_since: waiting ? day(x.level_since) : null,
+      // calendar days in India since the registration reached its level (today: 0)
+      days_waiting:
+        waiting && x.level_since
+          ? Math.max(
+              0,
+              Math.round(
+                (Date.parse(day(new Date(now))!) - Date.parse(day(x.level_since)!)) / 86_400_000,
+              ),
+            )
+          : null,
+      due_on: waiting ? day(x.due_at) : null,
+      overdue: waiting ? (x.due_at && x.due_at.getTime() < now ? 'Yes' : 'No') : null,
       category: x.category,
       entered_at: x.entered_by ? 'School desk' : 'Online',
       mobile: x.mobile,

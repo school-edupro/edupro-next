@@ -1,7 +1,10 @@
 import type { BuilderField, FilterOp } from './report-builder';
 
 /** The admissions list shapes (API admissions/registrations/grid; docs/design/39, part 7). */
-export type AdmissionListStatus = 'in_progress' | 'unfinished' | 'admitted' | 'closed' | 'all';
+export type AdmissionListStatus =
+  'mine' | 'in_progress' | 'unfinished' | 'admitted' | 'closed' | 'all';
+/** Admissions list: every registration, drafts too; Registrations (docs/design/47): submitted ones */
+export type AdmissionListScope = 'list' | 'registrations';
 
 export interface AdmissionListView {
   columns: Array<{ key: string; label?: string | null }>;
@@ -10,6 +13,8 @@ export interface AdmissionListView {
   search?: string;
   status: AdmissionListStatus;
   size: number;
+  /** Waiting for me: a set-up manager sees every registration waiting */
+  includeAll?: boolean;
 }
 export interface AdmissionListQuery extends AdmissionListView {
   page: number;
@@ -22,6 +27,8 @@ export interface AdmissionListResult {
   pages: number;
   stats: {
     total: number;
+    mine: number;
+    overdue: number;
     in_progress: number;
     unfinished: number;
     admitted: number;
@@ -51,6 +58,33 @@ export const DEFAULT_ADMISSION_VIEW: AdmissionListView = {
   size: 50,
 };
 
+/** The registrations list's own first view (docs/design/47): the process columns. */
+export const DEFAULT_REGISTRATIONS_VIEW: AdmissionListView = {
+  columns: [
+    { key: 'class_sought' },
+    { key: 'category' },
+    { key: 'stage' },
+    { key: 'level' },
+    { key: 'deciders' },
+    { key: 'waiting_since' },
+    { key: 'days_waiting' },
+    { key: 'merit' },
+  ],
+  filters: [],
+  sort: [],
+  search: '',
+  status: 'mine',
+  size: 50,
+};
+
+export const REGISTRATION_QUICK_FILTERS: string[] = [
+  'session',
+  'class_sought',
+  'stage',
+  'category',
+  'overdue',
+];
+
 export const ADMISSION_QUICK_FILTERS: string[] = [
   'session',
   'class_sought',
@@ -60,11 +94,15 @@ export const ADMISSION_QUICK_FILTERS: string[] = [
   'entered_at',
 ];
 
-const STATUSES = new Set(['in_progress', 'unfinished', 'admitted', 'closed', 'all']);
+const STATUSES = new Set(['mine', 'in_progress', 'unfinished', 'admitted', 'closed', 'all']);
 
 /** A saved view checked against today's fields (unknown keys and unfinished filters dropped). */
-export function sanitizeAdmissionView(raw: unknown, known: ReadonlySet<string>): AdmissionListView {
-  if (!raw || typeof raw !== 'object') return DEFAULT_ADMISSION_VIEW;
+export function sanitizeAdmissionView(
+  raw: unknown,
+  known: ReadonlySet<string>,
+  base: AdmissionListView = DEFAULT_ADMISSION_VIEW,
+): AdmissionListView {
+  if (!raw || typeof raw !== 'object') return base;
   const v = raw as Partial<AdmissionListView>;
   const filters = (Array.isArray(v.filters) ? v.filters : []).filter((f) => {
     if (!f || !known.has(f.key)) return false;
@@ -73,13 +111,17 @@ export function sanitizeAdmissionView(raw: unknown, known: ReadonlySet<string>):
     return f.op === 'between' ? n >= 2 : n >= 1;
   });
   return {
-    columns: (Array.isArray(v.columns) ? v.columns : DEFAULT_ADMISSION_VIEW.columns).filter(
+    columns: (Array.isArray(v.columns) ? v.columns : base.columns).filter(
       (c) => c && known.has(c.key),
     ),
     filters,
     sort: (Array.isArray(v.sort) ? v.sort : []).filter((s) => s && known.has(s.key)),
     search: typeof v.search === 'string' ? v.search : '',
-    status: STATUSES.has(String(v.status)) ? (v.status as AdmissionListStatus) : 'in_progress',
+    status:
+      STATUSES.has(String(v.status)) && (v.status !== 'mine' || base.status === 'mine')
+        ? (v.status as AdmissionListStatus)
+        : base.status,
     size: [25, 50, 100, 200].includes(Number(v.size)) ? Number(v.size) : 50,
+    includeAll: v.includeAll === true,
   };
 }

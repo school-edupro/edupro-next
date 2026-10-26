@@ -1,31 +1,37 @@
-import { Badge, Card, PageHeader } from '@edupro/ui';
+import { PageHeader } from '@edupro/ui';
 import { notFound } from 'next/navigation';
+import { AdmissionList } from '@/components/admissions/AdmissionList';
 import { Notice } from '@/components/Notice';
-import { REG_STATUS, dmy } from '@/lib/admission-desk';
-import type { ProcessSetup, RegistrationRow } from '@/lib/admission-process';
-import type { AdmissionSetup } from '@/lib/admission-setup';
+import { builderExport, builderSave } from '@/lib/actions';
+import {
+  DEFAULT_REGISTRATIONS_VIEW,
+  sanitizeAdmissionView,
+  type AdmissionListFields,
+  type AdmissionListResult,
+  type AdmissionListStatus,
+} from '@/lib/admission-list';
+import {
+  registrationsBulkDecide,
+  registrationsExport,
+  registrationsLoad,
+  registrationsSaveView,
+} from '@/lib/admission-list-actions';
 import { apiFetch, getMe } from '@/lib/api';
-import type { AdmissionCycle } from '@/lib/types';
+import { reportChoices, type SavedReport } from '@/lib/report-builder';
 
-const SIZE = 50;
-const STATUS_ORDER = [
-  'submitted',
-  'registered',
-  'under_review',
-  'sent_back',
-  'waitlisted',
-  'offered',
-  'fee_paid',
+const TABS = new Set<AdmissionListStatus>([
+  'mine',
+  'in_progress',
+  'unfinished',
   'admitted',
-  'rejected',
-  'withdrawn',
-  'cancelled',
-];
+  'closed',
+  'all',
+]);
 
 /**
- * Registrations of online admission (docs/design/39, part 4): every registration of a session with the
- * stage it waits at (and the level), its category, merit and offer, filtered by session, class, stage,
- * category and status.
+ * Registrations (docs/design/47): the admissions grid on submitted registrations with the process —
+ * waiting at, level, who decides, waiting since, overdue; Waiting for me first, with bulk decide for
+ * those who decide; columns, filters, saved view and Excel / PDF as on the Admissions list.
  */
 export default async function RegistrationsPage({
   searchParams,
@@ -34,221 +40,104 @@ export default async function RegistrationsPage({
     ok?: string;
     error?: string;
     detail?: string;
-    cycleId?: string;
-    classId?: string;
-    stageId?: string;
-    categoryId?: string;
+    tab?: string;
+    all?: string;
+    /** from the dashboard: a session's name and statuses (list labels, | between) */
+    session?: string;
     status?: string;
-    q?: string;
-    page?: string;
   }>;
 }) {
   const sp = await searchParams;
   const me = await getMe();
-  if (!me.permissions.includes('admissions.application.view')) notFound();
-  const page = Math.max(1, Number(sp.page ?? 1) || 1);
-  const q = new URLSearchParams({ size: String(SIZE), page: String(page) });
-  for (const k of ['cycleId', 'classId', 'stageId', 'categoryId', 'status', 'q'] as const)
-    if (sp[k]) q.set(k, sp[k]!);
-  const [cycles, setup, process, list] = await Promise.all([
-    apiFetch<{ data: AdmissionCycle[] }>('/admissions/cycles').then((r) => r.data),
-    apiFetch<AdmissionSetup>('/admissions/setup'),
-    apiFetch<ProcessSetup>('/admissions/process-setup'),
-    apiFetch<{ total: number; data: RegistrationRow[] }>(
-      `/admissions/registrations?${q.toString()}`,
-    ),
+  const can = (p: string) => me.permissions.includes(p);
+  if (!can('admissions.application.view')) notFound();
+  const manager = can('admissions.setup.manage');
+  const decides = can('admissions.application.decide') || manager;
+  const reports = can('reports.builder.use')
+    ? reportChoices(
+        await apiFetch<{ mine: SavedReport[]; shared: SavedReport[] }>('/reports/builder').catch(
+          () => ({ mine: [], shared: [] }),
+        ),
+        'admissions',
+      )
+    : [];
+  const [fields, saved] = await Promise.all([
+    apiFetch<AdmissionListFields>('/admissions/registrations/grid/fields'),
+    apiFetch<{ value: unknown }>('/me/preferences/admissions.registrations').catch(() => ({
+      value: null,
+    })),
   ]);
-  const pages = Math.max(1, Math.ceil(list.total / SIZE));
-  const link = (p: number) => {
-    const n = new URLSearchParams(q);
-    n.delete('size');
-    n.set('page', String(p));
-    return `/admissions/registrations?${n.toString()}`;
+  const kept = sanitizeAdmissionView(
+    saved.value,
+    new Set(fields.fields.map((f) => f.key)),
+    DEFAULT_REGISTRATIONS_VIEW,
+  );
+  // a link (the morning email, the approvals menu) may open a tab; set-up managers may see every one waiting
+  const tab = TABS.has(sp.tab as AdmissionListStatus) ? (sp.tab as AdmissionListStatus) : null;
+  const linked = (sp.session ?? sp.status) !== undefined;
+  const view = {
+    ...kept,
+    ...(tab ? { status: tab, search: '' } : {}),
+    ...(linked
+      ? {
+          status: 'all' as const,
+          search: '',
+          filters: [
+            ...kept.filters.filter((x) => x.key !== 'session' && x.key !== 'status'),
+            ...(sp.session ? [{ key: 'session', op: 'in' as const, values: [sp.session] }] : []),
+            ...(sp.status
+              ? [{ key: 'status', op: 'in' as const, values: sp.status.split('|').slice(0, 10) }]
+              : []),
+          ],
+        }
+      : {}),
+    includeAll: manager && (sp.all === undefined ? Boolean(kept.includeAll) : sp.all === '1'),
   };
+  const initial = await apiFetch<AdmissionListResult>('/admissions/registrations/grid', {
+    method: 'POST',
+    body: JSON.stringify({
+      ...view,
+      scope: 'registrations',
+      search: view.search || undefined,
+      page: 1,
+    }),
+  });
   return (
     <>
       <PageHeader
         kicker="Admissions"
         title="Registrations"
-        description={`Registrations with the stage each waits at; open one to decide. ${String(list.total)} found.`}
+        description="Submitted registrations with the stage and level each waits at and who decides there. Waiting for me lists those you may decide now; tick several at one stage and level to decide them together."
         actions={
-          <span style={{ display: 'inline-flex', gap: 'var(--sp-2)', flexWrap: 'wrap' }}>
-            <a className="ep-btn ep-btn--ghost ep-btn--sm" href="/admissions/schedule">
-              Tests and interviews
+          manager ? (
+            <a
+              className="ep-btn ep-btn--ghost ep-btn--sm"
+              href={`/admissions/registrations?tab=mine&all=${view.includeAll ? '0' : '1'}`}
+            >
+              {view.includeAll
+                ? 'Waiting for me: only my levels'
+                : 'Waiting for me: every registration waiting'}
             </a>
-            <a className="ep-btn ep-btn--ghost ep-btn--sm" href="/admissions/selection">
-              Selection
-            </a>
-          </span>
+          ) : undefined
         }
       />
       <Notice params={sp} />
-      <Card style={{ marginBottom: 'var(--sp-4)' }}>
-        <form
-          method="get"
-          style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 180px), 1fr))',
-            gap: 'var(--sp-3)',
-            alignItems: 'end',
-          }}
-        >
-          <label className="ep-field">
-            <span className="ep-field__label">Session</span>
-            <select className="ep-select" name="cycleId" defaultValue={sp.cycleId ?? ''}>
-              <option value="">All sessions</option>
-              {cycles.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="ep-field">
-            <span className="ep-field__label">Class</span>
-            <select className="ep-select" name="classId" defaultValue={sp.classId ?? ''}>
-              <option value="">All classes</option>
-              {process.classes.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="ep-field">
-            <span className="ep-field__label">Waiting at</span>
-            <select className="ep-select" name="stageId" defaultValue={sp.stageId ?? ''}>
-              <option value="">Any stage</option>
-              {process.stages.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.name}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="ep-field">
-            <span className="ep-field__label">Category</span>
-            <select className="ep-select" name="categoryId" defaultValue={sp.categoryId ?? ''}>
-              <option value="">All categories</option>
-              {setup.categories.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="ep-field">
-            <span className="ep-field__label">Status</span>
-            <select className="ep-select" name="status" defaultValue={sp.status ?? ''}>
-              <option value="">Any status</option>
-              {STATUS_ORDER.map((s) => (
-                <option key={s} value={s}>
-                  {REG_STATUS[s]?.label ?? s}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="ep-field">
-            <span className="ep-field__label">Search</span>
-            <input
-              className="ep-input"
-              name="q"
-              defaultValue={sp.q ?? ''}
-              placeholder="Name, number, mobile"
-            />
-          </label>
-          <div>
-            <button className="ep-btn ep-btn--primary" type="submit">
-              Show
-            </button>
-          </div>
-        </form>
-      </Card>
-      <Card>
-        {list.data.length === 0 ? (
-          <p style={{ margin: 0 }}>No registration matches.</p>
-        ) : (
-          <div className="ep-table-wrap">
-            <table className="ep-table">
-              <caption className="ep-sr-only">Registrations</caption>
-              <thead>
-                <tr>
-                  <th scope="col">Registration no.</th>
-                  <th scope="col">Candidate</th>
-                  <th scope="col">Class</th>
-                  <th scope="col">Category</th>
-                  <th scope="col">Status</th>
-                  <th scope="col">Waiting at</th>
-                  <th scope="col">Merit</th>
-                  <th scope="col">Registered</th>
-                </tr>
-              </thead>
-              <tbody>
-                {list.data.map((r) => {
-                  const st = REG_STATUS[r.status] ?? { label: r.status, tone: 'neutral' as const };
-                  return (
-                    <tr key={r.id}>
-                      <td>
-                        <a href={`/admissions/registrations/${r.id}`}>
-                          {r.number ?? `Form ${r.id}`}
-                        </a>
-                        {r.byOffice ? <div className="ep-kicker">Desk</div> : null}
-                      </td>
-                      <td>
-                        {r.candidate ?? '-'}
-                        {r.mobile ? <div className="ep-kicker">{r.mobile}</div> : null}
-                      </td>
-                      <td>
-                        {r.className}
-                        <div className="ep-kicker">{r.session}</div>
-                      </td>
-                      <td>{r.category ?? '-'}</td>
-                      <td>
-                        <Badge tone={st.tone}>{st.label}</Badge>
-                        {r.waitRank ? <div className="ep-kicker">List no. {r.waitRank}</div> : null}
-                        {r.offerExpiresAt && r.status === 'offered' ? (
-                          <div className="ep-kicker">Pay by {dmy(r.offerExpiresAt)}</div>
-                        ) : null}
-                      </td>
-                      <td>
-                        {r.stage ?? '-'}
-                        {r.level ? <div className="ep-kicker">Level {r.level}</div> : null}
-                      </td>
-                      <td>{r.merit ?? '-'}</td>
-                      <td>{dmy(r.registeredAt ?? r.submittedAt)}</td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
-        {pages > 1 ? (
-          <nav
-            aria-label="Pages"
-            style={{
-              display: 'flex',
-              gap: 'var(--sp-2)',
-              marginTop: 'var(--sp-3)',
-              alignItems: 'center',
-            }}
-          >
-            {page > 1 ? (
-              <a className="ep-btn ep-btn--ghost ep-btn--sm" href={link(page - 1)}>
-                Previous
-              </a>
-            ) : null}
-            <span className="ep-kicker">
-              Page {page} of {pages}
-            </span>
-            {page < pages ? (
-              <a className="ep-btn ep-btn--ghost ep-btn--sm" href={link(page + 1)}>
-                Next
-              </a>
-            ) : null}
-          </nav>
-        ) : null}
-      </Card>
+      <AdmissionList
+        mode="registrations"
+        fields={fields}
+        initial={initial}
+        initialView={view}
+        can={{ builder: can('reports.builder.use'), desk: can('admissions.application.enter') }}
+        reports={reports}
+        bulkDecide={decides ? registrationsBulkDecide : undefined}
+        actions={{
+          load: registrationsLoad,
+          exportFile: registrationsExport,
+          saveReport: builderSave,
+          runReport: builderExport,
+          saveView: registrationsSaveView,
+        }}
+      />
     </>
   );
 }

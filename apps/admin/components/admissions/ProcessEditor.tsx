@@ -496,6 +496,24 @@ export function ProcessEditor({ setup, canEdit }: { setup: ProcessSetup; canEdit
                             onChange={(ids) => setLevel(i, k, { employeeIds: ids })}
                           />
                         ) : null}
+                        <label className="ep-pe__days">
+                          <span className="ep-field__label">Days to decide</span>
+                          <input
+                            className="ep-input"
+                            type="number"
+                            inputMode="numeric"
+                            min={1}
+                            max={90}
+                            placeholder="No limit"
+                            aria-describedby="pe-days-help"
+                            value={l.days ?? ''}
+                            onChange={(e) =>
+                              setLevel(i, k, {
+                                days: e.target.value ? Math.round(Number(e.target.value)) : null,
+                              })
+                            }
+                          />
+                        </label>
                         {s.levels.length > 1 ? (
                           <button
                             type="button"
@@ -510,6 +528,13 @@ export function ProcessEditor({ setup, canEdit }: { setup: ProcessSetup; canEdit
                       </li>
                     ))}
                   </ol>
+                  {i === 0 ? (
+                    <p id="pe-days-help" className="ep-field__help" style={{ margin: 0 }}>
+                      Days to decide: a reminder goes the day before in the morning email to the
+                      level&apos;s people, and a registration past it shows as overdue. Leave empty
+                      for no limit.
+                    </p>
+                  ) : null}
                   {s.levels.length < 5 ? (
                     <button
                       type="button"

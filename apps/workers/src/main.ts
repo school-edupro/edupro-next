@@ -176,6 +176,12 @@ async function main(): Promise<void> {
     { every: 5 * 60 * 1000 },
     { name: 'helpdesk.escalate', data: SYSTEM_ENVELOPE('helpdesk.escalate') },
   );
+  // admissions: one morning email (08:00 IST = 02:30 UTC) of the registrations waiting for each approver
+  await maintenance.upsertJobScheduler(
+    'admissions.level_digest',
+    { pattern: '30 2 * * *' },
+    { name: 'admissions.level_digest', data: SYSTEM_ENVELOPE('admissions.level_digest') },
+  );
   // hostel: pupils late back from hostel leave (parent, head warden; later the principal), every ten minutes
   await maintenance.upsertJobScheduler(
     'hostel.leave_tick',

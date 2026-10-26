@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import {
   ADMISSION_STATUS_LABELS,
   PDF_COLUMN_LIMIT,
+  admissionWaitingFor,
   QUEUES,
   applyReportFilters,
   applyReportSearch,
@@ -17,10 +18,12 @@ import { AuditService } from '../../common/audit/audit.service';
 import { DbService } from '../../common/db/db.service';
 import { DomainError } from '../../common/errors/domain-error';
 import { requireTenant, type RequestContext } from '../../common/http/request-context';
+import type { PoolClient } from '@edupro/db';
 import { OutboxService } from '../../common/jobs/outbox.service';
 import type { AdmissionGridDto, AdmissionGridExportDto } from './grid.dto';
 
 const DS = 'admissions' as const;
+const SETUP_MANAGE = 'admissions.setup.manage';
 const IDENTITY = [
   'registration_no',
   'candidate',
@@ -29,7 +32,15 @@ const IDENTITY = [
   'status',
   'admission_no',
   'mobile',
+  // the process facts the registrations list draws on (docs/design/47)
+  'stage',
+  'level',
+  'days_waiting',
+  'overdue',
 ];
+const DRAFT = 'Form not submitted';
+/** Waiting for me: more than this cannot go into an export's filter */
+const MINE_EXPORT_LIMIT = 200;
 const DEFAULT_SORT = [{ key: 'registration_no', dir: 'desc' as const }];
 const TABS: Record<'in_progress' | 'unfinished' | 'admitted' | 'closed', string[]> = {
   in_progress: [
@@ -76,8 +87,20 @@ export class AdmissionGridService {
     if (errors.length) throw invalid(errors);
   }
 
-  private tab(s: AdmissionGridDto['status']) {
-    return (r: ReportRow) => s === 'all' || TABS[s].includes(String(r.status));
+  private tab(s: AdmissionGridDto['status'], mine: ReadonlySet<string>) {
+    return (r: ReportRow) =>
+      s === 'all' || (s === 'mine' ? mine.has(String(r.__id)) : TABS[s].includes(String(r.status)));
+  }
+
+  /** The registrations waiting for this user (a set-up manager asking for all: every one waiting). */
+  private async mine(c: PoolClient, ctx: RequestContext, includeAll: boolean, rows?: ReportRow[]) {
+    if (includeAll && ctx.permissions?.has(SETUP_MANAGE))
+      return new Set(
+        (rows ?? [])
+          .filter((r) => r.level !== null && r.level !== undefined)
+          .map((r) => String(r.__id)),
+      );
+    return admissionWaitingFor(c, ctx.user.id);
   }
 
   /** Every field that can be a column or a filter, with drop-down values for the filters. */
@@ -100,6 +123,7 @@ export class AdmissionGridService {
         class_sought: classes.rows.map((x) => x.name),
         status: ADMISSION_STATUS_LABELS,
         stage: stages.rows.map((x) => x.name),
+        overdue: ['Yes', 'No'],
         category: categories.rows.map((x) => x.name),
         entered_at: ['Online', 'School desk'],
         refund_status: ['requested', 'approved', 'rejected', 'paid'],
@@ -119,18 +143,26 @@ export class AdmissionGridService {
   async grid(ctx: RequestContext, dto: AdmissionGridDto) {
     this.check(dto);
     return this.db.tenant(requireTenant(ctx), async (c) => {
-      const all = await loadAdmissionReportRows(c, { showSensitive: this.sensitive(ctx) });
+      const loaded = await loadAdmissionReportRows(c, { showSensitive: this.sensitive(ctx) });
+      const all = dto.scope === 'registrations' ? loaded.filter((r) => r.status !== DRAFT) : loaded;
+      const mine = await this.mine(c, ctx, dto.includeAll, all);
       const searching = Boolean(dto.search?.trim());
       const stats = {
         total: all.length,
-        in_progress: all.filter(this.tab('in_progress')).length,
-        unfinished: all.filter(this.tab('unfinished')).length,
-        admitted: all.filter(this.tab('admitted')).length,
-        closed: all.filter(this.tab('closed')).length,
+        mine: all.filter(this.tab('mine', mine)).length,
+        overdue: all.filter((r) => mine.has(String(r.__id)) && r.overdue === 'Yes').length,
+        in_progress: all.filter(this.tab('in_progress', mine)).length,
+        unfinished: all.filter(this.tab('unfinished', mine)).length,
+        admitted: all.filter(this.tab('admitted', mine)).length,
+        closed: all.filter(this.tab('closed', mine)).length,
       };
       const filtered = sortReportRows(
         applyReportFilters(
-          applyReportSearch(searching ? all : all.filter(this.tab(dto.status)), dto.search, DS),
+          applyReportSearch(
+            searching ? all : all.filter(this.tab(dto.status, mine)),
+            dto.search,
+            DS,
+          ),
           dto.filters as ReportFilter[],
           DS,
         ),
@@ -141,7 +173,10 @@ export class AdmissionGridService {
       const page = Math.min(dto.page, pages);
       const keys = [...new Set([...IDENTITY, ...dto.columns.map((x) => x.key)])];
       const rows = filtered.slice((page - 1) * dto.size, page * dto.size).map((r) => {
-        const o: ReportRow = { __id: r.__id ?? null };
+        const o: ReportRow = {
+          __id: r.__id ?? null,
+          __mine: mine.has(String(r.__id)) ? 'yes' : null,
+        };
         for (const k of keys) o[k] = r[k] ?? null;
         return o;
       });
@@ -293,10 +328,38 @@ export class AdmissionGridService {
   async export(ctx: RequestContext, dto: AdmissionGridExportDto) {
     this.check(dto);
     const searching = Boolean(dto.search?.trim());
-    const statusFilters: ReportFilter[] =
-      searching || dto.status === 'all'
+    const tenant = requireTenant(ctx);
+    // Waiting for me is the user's own: it travels to the file as the registration numbers it holds
+    const mineNos =
+      !searching && dto.status === 'mine'
+        ? await this.db.tenant(tenant, async (c) => {
+            const rows = await loadAdmissionReportRows(c, { showSensitive: false });
+            const ids = await this.mine(c, ctx, dto.includeAll, rows);
+            return rows
+              .filter((r) => ids.has(String(r.__id)) && r.registration_no)
+              .map((r) => String(r.registration_no));
+          })
+        : null;
+    if (mineNos && mineNos.length > MINE_EXPORT_LIMIT)
+      throw invalid([
+        `More than ${String(MINE_EXPORT_LIMIT)} registrations wait for you: narrow the list with a filter (class, stage) to export it`,
+      ]);
+    const statusFilters: ReportFilter[] = [
+      ...(searching || dto.status === 'all'
         ? []
-        : [{ key: 'status', op: 'in', values: TABS[dto.status] }];
+        : dto.status === 'mine'
+          ? [
+              {
+                key: 'registration_no',
+                op: 'in' as const,
+                values: mineNos?.length ? mineNos : ['-'],
+              },
+            ]
+          : [{ key: 'status', op: 'in' as const, values: TABS[dto.status] }]),
+      ...(dto.scope === 'registrations'
+        ? [{ key: 'status', op: 'not_in' as const, values: [DRAFT] }]
+        : []),
+    ];
     const columns = [
       { key: 'registration_no' },
       { key: 'candidate', label: 'Candidate' },
@@ -316,9 +379,9 @@ export class AdmissionGridService {
     };
     const errors = validateReportSpec(spec, dto.format);
     if (errors.length) throw invalid(errors);
-    const tenant = requireTenant(ctx);
     return this.db.tenant(tenant, async (c) => {
-      const title = dto.title?.trim() || 'Admissions';
+      const title =
+        dto.title?.trim() || (dto.scope === 'registrations' ? 'Registrations' : 'Admissions');
       const y = await c.query<{ id: string; code: string }>(
         `SELECT id::text, code FROM academic_years WHERE id = $1`,
         [tenant.academicYearId ?? null],

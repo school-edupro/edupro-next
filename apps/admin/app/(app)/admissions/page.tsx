@@ -62,6 +62,15 @@ export default async function AdmissionsDashboardPage({
     `/admissions/overview${sp.cycleId && /^\d{1,18}$/.test(sp.cycleId) ? `?cycleId=${sp.cycleId}` : ''}`,
   );
   const f = o.figures;
+  // registrations waiting for this user's decision (docs/design/47): a line above the figures
+  const decides = ['admissions.application.decide', 'admissions.setup.manage'].some((p) =>
+    me.permissions.includes(p),
+  );
+  const mine = decides
+    ? await apiFetch<{ total: number; overdue: number }>(
+        '/admissions/registrations/mine?size=1',
+      ).catch(() => ({ total: 0, overdue: 0 }))
+    : { total: 0, overdue: 0 };
   const tile = (title: string, value: string | number, help: string, href?: string) => {
     const body = (
       <Card title={title}>
@@ -84,8 +93,12 @@ export default async function AdmissionsDashboardPage({
       <div key={title}>{body}</div>
     );
   };
-  const list = (status: string) =>
-    `/admissions/registrations?cycleId=${o.session?.id ?? ''}&status=${status}`;
+  // the registrations list filtered on this session (and statuses, by their list labels)
+  const list = (status?: string) => {
+    const q = new URLSearchParams({ session: o.session?.name ?? '' });
+    if (status) q.set('status', status);
+    return `/admissions/registrations?${q.toString()}`;
+  };
   return (
     <>
       <PageHeader
@@ -116,6 +129,17 @@ export default async function AdmissionsDashboardPage({
           ) : undefined
         }
       />
+      {mine.total ? (
+        <p
+          className={`ep-alert ep-alert--${mine.overdue ? 'warning' : 'info'}`}
+          style={{ marginBottom: 'var(--sp-4)' }}
+        >
+          {mine.total} registration{mine.total === 1 ? '' : 's'} wait
+          {mine.total === 1 ? 's' : ''} for your decision
+          {mine.overdue ? ` (${String(mine.overdue)} past the time limit)` : ''}.{' '}
+          <a href="/admissions/registrations?tab=mine">Open Waiting for me</a>
+        </p>
+      ) : null}
       {f ? (
         <>
           <div className="ep-dash-kpis ep-dash-kpis--4" style={{ marginBottom: 'var(--sp-4)' }}>
@@ -123,7 +147,7 @@ export default async function AdmissionsDashboardPage({
               'Registered',
               f.registered,
               `${String(f.desk)} at the desk · ${String(f.feeDue)} fee due · ${String(f.drafts)} forms open`,
-              list('registered'),
+              list(),
             )}
             {tile(
               'Fees collected',
@@ -135,22 +159,22 @@ export default async function AdmissionsDashboardPage({
               'In process',
               f.inProcess,
               `${String(f.atTest)} at a test or interview · ${String(f.sentBack)} sent back`,
-              list('under_review'),
+              `/admissions/registrations?tab=in_progress`,
             )}
             {tile(
               'Offered',
               f.offered,
               `${String(f.waitlisted)} on the waiting list`,
-              list('offered'),
+              list('Offered|Waiting list'),
             )}
             {tile('Admission fee paid', f.feePaid, 'waiting to be admitted', '/admissions/admit')}
-            {tile('Admitted', f.admitted, 'in the student master', list('admitted'))}
-            {tile('Not selected', f.rejected, 'closed at a step', list('rejected'))}
+            {tile('Admitted', f.admitted, 'in the student master', list('Admitted'))}
+            {tile('Not selected', f.rejected, 'closed at a step', list('Not selected'))}
             {tile(
               'Cancelled',
               f.cancelled,
               f.refunds ? `refunds paid ${rupees(f.refunds)}` : 'no refund paid',
-              list('cancelled'),
+              list('Cancelled'),
             )}
           </div>
           <Card elevated title="By class" style={{ marginBottom: 'var(--sp-4)' }}>

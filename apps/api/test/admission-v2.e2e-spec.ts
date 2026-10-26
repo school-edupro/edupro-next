@@ -1334,6 +1334,117 @@ describe('online admission (e2e)', () => {
       expect(l2.json().category).toBe('Sibling in school');
     });
 
+    it('lists what waits for each person, decides several at one level, and marks a level past its days (docs/design/47)', async () => {
+      // appA waits at the test; appEws and appWalkIn at Document check, level 1 ("anyone")
+      const mine = await inject({
+        method: 'GET',
+        url: '/admissions/registrations/mine?size=10',
+        headers: h(clerk),
+      });
+      expect(mine.statusCode).toBe(200);
+      const ids = mine.json().data.map((x: { id: string }) => x.id);
+      expect(ids).toEqual(expect.arrayContaining([appA, appEws, appWalkIn]));
+      const grid = await inject({
+        method: 'POST',
+        url: '/admissions/registrations/grid',
+        headers: h(clerk),
+        json: {
+          columns: [
+            { key: 'stage' },
+            { key: 'level' },
+            { key: 'deciders' },
+            { key: 'days_waiting' },
+          ],
+          status: 'mine',
+          scope: 'registrations',
+          page: 1,
+          size: 50,
+        },
+      });
+      expect(grid.statusCode).toBe(201);
+      const walkIn = grid.json().rows.find((r: { __id: string }) => r.__id === appWalkIn);
+      expect(walkIn).toMatchObject({
+        __mine: 'yes',
+        stage: 'Document check',
+        level: '1 of 2',
+        deciders: 'Anyone who may decide',
+        days_waiting: 0,
+      });
+      expect(grid.json().stats.mine).toBeGreaterThanOrEqual(3);
+      // registrations at different stages are not decided together
+      const mixed = await inject({
+        method: 'POST',
+        url: '/admissions/registrations/bulk-decide',
+        headers: h(clerk),
+        json: { ids: [appA, appEws], decision: 'hold' },
+      });
+      expect(mixed.statusCode).toBe(400);
+      const held = await inject({
+        method: 'POST',
+        url: '/admissions/registrations/bulk-decide',
+        headers: h(clerk),
+        json: { ids: [appEws, appWalkIn], decision: 'hold', remarks: 'Waiting for the papers' },
+      });
+      expect(held.statusCode).toBe(201);
+      expect(held.json()).toEqual({ done: 2, failed: [] });
+      const after = await reg(appWalkIn);
+      expect(after.json().process).toMatchObject({ stageNo: 0, levelNo: 1 });
+      // a time limit on the level: past it the registration is overdue, and the morning email lists it
+      const setup = await inject({ method: 'GET', url: '/admissions/process-setup', headers: h() });
+      const senior = setup.json().processes.find((p: { id: string }) => p.id === processId) as {
+        name: string;
+        classIds: string[];
+        steps: Array<{ stageId: string; levels: Array<Record<string, unknown>> }>;
+      };
+      senior.steps[0]!.levels[0]!.days = 2;
+      const saved = await inject({
+        method: 'PUT',
+        url: `/admissions/processes/${processId}`,
+        headers: h(),
+        json: { name: senior.name, classIds: senior.classIds, steps: senior.steps, confirm: true },
+      });
+      expect(saved.statusCode).toBe(200);
+      await withMigrator(async (c) => {
+        await c.query(
+          `UPDATE applications SET level_since = now() - interval '5 days' WHERE id = $1`,
+          [appWalkIn],
+        );
+        await c.query(`UPDATE users SET email = $2 WHERE id = $1`, [
+          admin.id,
+          `adm-${stamp('LD').toLowerCase()}@example.invalid`,
+        ]);
+      });
+      const late = await inject({
+        method: 'GET',
+        url: '/admissions/registrations/mine?size=10',
+        headers: h(),
+      });
+      expect(late.json().overdue).toBe(1);
+      expect(late.json().data[0]).toMatchObject({ id: appWalkIn, overdue: true });
+      const digest = async () =>
+        withMigrator(async (c) => {
+          await c.query('BEGIN');
+          await c.query(`SELECT set_config('app.school_id', $1, true)`, [school.id]);
+          const r = await c.query<{ n: number }>(
+            `SELECT app.admission_level_digest('http://admin.test') AS n`,
+          );
+          const m = await c.query<{ subject: string; body: string }>(
+            `SELECT subject, body FROM comms_messages WHERE school_id = $1 AND recipient_user_id = $2
+                AND variables ->> 'digest' = 'admission_levels' ORDER BY id DESC LIMIT 1`,
+            [school.id, admin.id],
+          );
+          await c.query('COMMIT');
+          return { n: r.rows[0]!.n, mail: m.rows[0] };
+        });
+      const first = await digest();
+      expect(first.n).toBeGreaterThanOrEqual(1);
+      expect(first.mail?.subject).toMatch(/waiting for your decision: \d+ \(1 overdue\)/);
+      expect(first.mail?.body).toContain('Overdue');
+      expect(first.mail?.body).toContain('http://admin.test/admissions/registrations?tab=mine');
+      // once a morning: a second run the same day sends nothing again
+      expect((await digest()).n).toBe(0);
+    });
+
     it('sends the form back for correction; the family corrects only those answers and it returns to the same level', async () => {
       const bad = await inject({
         method: 'POST',

@@ -5,6 +5,7 @@ import { ReqCtx, type RequestContext } from '../../common/http/request-context';
 import { ADMISSIONS } from './admissions.dto';
 import {
   AllotDto,
+  BulkDecideDto,
   DecideDto,
   OfficeCorrectDto,
   PointsCheckDto,
@@ -18,6 +19,7 @@ import {
   SlotResultsDto,
   StagesDto,
   UndoDto,
+  WaitingQueryDto,
 } from './process.dto';
 import {
   ADMISSION_DECIDE,
@@ -122,6 +124,24 @@ export class AdmissionProcessController {
   @RequirePermission(ADMISSIONS.applicationView)
   list(@ReqCtx() ctx: RequestContext, @Query() q: RegistrationsQueryDto) {
     return this.process.list(ctx, q);
+  }
+
+  @Get('registrations/mine')
+  @ApiOperation({
+    summary: 'Registrations waiting at a level this user may decide (oldest first; overdue count)',
+  })
+  @RequirePermission(ADMISSIONS.applicationView)
+  waiting(@ReqCtx() ctx: RequestContext, @Query() q: WaitingQueryDto) {
+    return this.process.waiting(ctx, q);
+  }
+
+  @Post('registrations/bulk-decide')
+  @ApiOperation({
+    summary: 'Approve, reject or hold several registrations waiting at the same stage and level',
+  })
+  @RequirePermission(ADMISSION_DECIDE)
+  bulkDecide(@ReqCtx() ctx: RequestContext, @Body() dto: BulkDecideDto) {
+    return this.process.bulkDecide(ctx, dto);
   }
 
   @Get('registrations/:id')

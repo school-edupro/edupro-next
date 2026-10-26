@@ -18,7 +18,8 @@ export interface ApprovalGroup {
     | 'fee'
     | 'file'
     | 'acr'
-    | 'vacancy';
+    | 'vacancy'
+    | 'admission';
   title: string;
   help: string;
   href: string;
@@ -447,6 +448,42 @@ export async function myApprovals(
                     detail: `${l.leaveTypeLabel} · ${l.fromDate}${l.toDate !== l.fromDate ? ` to ${l.toDate}` : ''} · ${String(l.days)} day${l.days === 1 ? '' : 's'}`,
                     href: `/attendance/leaves?tab=inbox&open=${l.id}`,
                     since: l.appliedAt,
+                  })),
+                }
+              : null,
+          )
+          .catch(() => null)
+      : null,
+    // admission registrations at a level this user decides (docs/design/47), overdue first
+    has.has('admissions.application.decide') || has.has('admissions.setup.manage')
+      ? apiFetch<{
+          total: number;
+          overdue: number;
+          data: Array<{
+            id: string;
+            number: string | null;
+            candidate: string | null;
+            className: string;
+            stage: string | null;
+            level: string | null;
+            since: string | null;
+            overdue: boolean;
+          }>;
+        }>(`/admissions/registrations/mine?size=${String(Math.max(size, 1))}`)
+          .then((r): ApprovalGroup | null =>
+            r.total
+              ? {
+                  key: 'admission',
+                  title: 'Registrations to decide',
+                  help: `Admission registrations waiting at your level${r.overdue ? ` · ${String(r.overdue)} overdue` : ''}`,
+                  href: '/admissions/registrations?tab=mine',
+                  count: r.total,
+                  items: r.data.map((x) => ({
+                    id: x.id,
+                    title: `${x.candidate ?? x.number ?? 'Registration'} · ${x.className}`,
+                    detail: `${x.stage ?? ''}${x.level ? ` · ${x.level}` : ''}${x.overdue ? ' · overdue' : ''}`,
+                    href: `/admissions/registrations/${x.id}`,
+                    since: x.since,
                   })),
                 }
               : null,

@@ -2,6 +2,8 @@ import { messageTag } from './message-tag';
 import { Injectable } from '@nestjs/common';
 import {
   LAYOUT_TYPES,
+  admissionWaitingFor,
+  levelDeciders,
   pointsTotal,
   type AdmissionAnswers,
   type PointLine,
@@ -28,7 +30,9 @@ import {
   type StageKind,
 } from './process-engine';
 import type {
+  BulkDecideDto,
   DecideDto,
+  WaitingQueryDto,
   ProcessDto,
   RegistrationsQueryDto,
   OfficeCorrectDto,
@@ -252,6 +256,8 @@ export class AdmissionProcessService {
           roleCode: l.by === 'role' ? (l.roleCode ?? null) : null,
           designation: l.by === 'designation' ? (l.designation ?? null) : null,
           employeeIds: l.by === 'employees' ? (l.employeeIds ?? []) : [],
+          // kept only when set, so a process saved before time limits compares unchanged
+          ...(l.days ? { days: l.days } : {}),
         })),
       }));
       const stepsChanged = !current || JSON.stringify(current.steps) !== JSON.stringify(steps);
@@ -944,6 +950,116 @@ export class AdmissionProcessService {
       });
     });
     return this.detail(ctx, id);
+  }
+
+  /**
+   * Waiting for me (docs/design/47): the registrations at a level this user may decide, the oldest
+   * first, with how many are past their level's time limit — the header's approvals count reads it.
+   */
+  async waiting(ctx: RequestContext, q: WaitingQueryDto) {
+    return this.db.tenant(requireTenant(ctx), async (c) => {
+      const ids = [...(await admissionWaitingFor(c, ctx.user.id))];
+      if (!ids.length) return { total: 0, overdue: 0, data: [] };
+      const r = await c.query<{
+        id: string;
+        number: string | null;
+        candidate: string | null;
+        class_name: string;
+        stage: string | null;
+        level_no: number;
+        levels: number;
+        level: Record<string, unknown>;
+        level_since: Date | null;
+        due_at: Date | null;
+      }>(
+        `SELECT w.id::text, w.application_no AS number, w.candidate_name AS candidate, cl.name AS class_name,
+                st.name AS stage, w.level_no, w.levels, w.level, w.level_since, w.due_at
+           FROM admission_waiting w JOIN classes cl ON cl.id = w.class_id
+           LEFT JOIN admission_stages st ON st.id = (w.step ->> 'stageId')::bigint
+          WHERE w.id = ANY($1::bigint[])
+          ORDER BY (w.due_at < now()) DESC NULLS LAST, w.level_since NULLS LAST, w.id`,
+        [ids],
+      );
+      const now = Date.now();
+      const names = await levelDeciders(
+        c,
+        r.rows.slice(0, q.size).map((x) => x.level),
+      );
+      return {
+        total: r.rows.length,
+        overdue: r.rows.filter((x) => x.due_at && x.due_at.getTime() < now).length,
+        data: r.rows.slice(0, q.size).map((x) => ({
+          id: x.id,
+          number: x.number,
+          candidate: x.candidate,
+          className: x.class_name,
+          stage: x.stage,
+          level:
+            x.levels > 1
+              ? `${String(x.level.name ?? `Level ${String(x.level_no)}`)} (${String(x.level_no)} of ${String(x.levels)})`
+              : null,
+          deciders: names.get(JSON.stringify(x.level)) ?? null,
+          since: x.level_since?.toISOString() ?? null,
+          dueAt: x.due_at?.toISOString() ?? null,
+          overdue: Boolean(x.due_at && x.due_at.getTime() < now),
+        })),
+      };
+    });
+  }
+
+  /**
+   * Bulk decide (docs/design/47, part 3): registrations waiting at the same stage and level approved,
+   * rejected or held with one remark — each as if opened (rights, the family's notice, the next level);
+   * one that cannot be decided is reported and the others go on.
+   */
+  async bulkDecide(ctx: RequestContext, dto: BulkDecideDto) {
+    return this.db.tenant(requireTenant(ctx), async (c) => {
+      const ids = [...new Set(dto.ids)];
+      const at = await c.query<{
+        id: string;
+        number: string | null;
+        stage: string;
+        level_no: number;
+      }>(
+        `SELECT id::text, application_no AS number, step ->> 'stageId' AS stage, level_no
+           FROM admission_waiting WHERE id = ANY($1::bigint[])`,
+        [ids],
+      );
+      const places = new Set(at.rows.map((x) => `${x.stage}:${String(x.level_no)}`));
+      if (places.size > 1)
+        throw new DomainError(
+          'validation-failed',
+          'Tick registrations waiting at the same stage and level to decide them together',
+          { status: 400 },
+        );
+      const byId = new Map(at.rows.map((x) => [x.id, x]));
+      const done: string[] = [];
+      const failed: Array<{ id: string; number: string | null; reason: string }> = [];
+      for (const id of ids) {
+        const row = byId.get(id);
+        if (!row) {
+          failed.push({ id, number: null, reason: 'Not waiting for a decision' });
+          continue;
+        }
+        await c.query('SAVEPOINT bulk_decide');
+        try {
+          await this.decideWith(c, ctx, id, { decision: dto.decision, remarks: dto.remarks });
+          await this.audit.stage(ctx, c, {
+            action: `admissions.registration.${dto.decision}`,
+            entityType: 'applications',
+            entityId: id,
+            after: { decision: dto.decision, bulk: true },
+          });
+          await c.query('RELEASE SAVEPOINT bulk_decide');
+          done.push(id);
+        } catch (e) {
+          await c.query('ROLLBACK TO SAVEPOINT bulk_decide');
+          if (!(e instanceof DomainError)) throw e;
+          failed.push({ id, number: row.number, reason: e.message });
+        }
+      }
+      return { done: done.length, failed };
+    });
   }
 
   /** Observations sent to the family: only the marked answers open; back to the same level on resubmit. */

@@ -24,6 +24,8 @@ export class StagesDto extends createZodDto(StagesSchema) {}
 const Level = z
   .object({
     name: z.string().trim().min(2).max(60),
+    /** days to decide at this level (none: no time limit; docs/design/47) */
+    days: z.number().int().min(1).max(90).nullable().optional(),
     by: z.enum(['anyone', 'role', 'designation', 'employees']),
     roleCode: z.string().max(60).nullable().optional(),
     designation: z.string().max(120).nullable().optional(),
@@ -73,6 +75,19 @@ export const DecideSchema = z.object({
   categoryId: IdSchema.optional(),
 });
 export class DecideDto extends createZodDto(DecideSchema) {}
+
+/** Several registrations at one stage and level decided alike (docs/design/47, part 3). */
+export const BulkDecideSchema = z.object({
+  ids: z.array(IdSchema).min(1).max(200),
+  decision: z.enum(['approve', 'reject', 'hold']),
+  remarks: Remarks.optional(),
+});
+export class BulkDecideDto extends createZodDto(BulkDecideSchema) {}
+
+export const WaitingQuerySchema = z.object({
+  size: z.coerce.number().int().min(1).max(50).default(10),
+});
+export class WaitingQueryDto extends createZodDto(WaitingQuerySchema) {}
 
 export const SendBackSchema = z.object({
   fields: z

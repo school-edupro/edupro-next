@@ -73,4 +73,16 @@ export interface PeopleListConfig<V extends PeopleListView, R extends PeopleList
   tools: (can: Record<string, boolean>, view: V) => ReactNode;
   /** Once on the first render (e.g. dropping an old browser copy of the view). */
   onMount?: () => void;
+  /** Status buttons with their counts above the filters (the registrations' Waiting for me…). */
+  statusTabs?: (
+    r: R,
+  ) => Array<{ value: V['status']; label: string; count: number; alert?: boolean }>;
+  /**
+   * Rows that may be ticked and the bar shown for the ticked ones (bulk decide); `done` clears the
+   * ticks and loads the page again.
+   */
+  select?: {
+    can: (row: PeopleRow) => boolean;
+    bar: (rows: PeopleRow[], done: () => void) => ReactNode;
+  };
 }

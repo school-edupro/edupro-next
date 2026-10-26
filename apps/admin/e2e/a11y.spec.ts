@@ -20,6 +20,8 @@ const PAGES = [
   '/admissions/desk',
   '/admissions/desk/366',
   '/admissions/registrations',
+  '/admissions/registrations?tab=all',
+  '/admissions/registrations/board',
   '/admissions/registrations/366',
   '/admissions/schedule',
   '/admissions/selection',
