@@ -544,6 +544,37 @@ test.describe('accessibility (axe)', () => {
     }
   });
 
+  test('no serious or critical violations on the session Merit points tab, a criterion open', async ({
+    page,
+  }) => {
+    await page.goto('/admissions/cycles/4');
+    await page.waitForLoadState('networkidle');
+    const skip = page.getByRole('button', { name: 'Skip' });
+    if (await skip.isVisible().catch(() => false)) await skip.click();
+    await page.getByRole('tab', { name: 'Merit points' }).click();
+    await expect(
+      page.getByRole('heading', { name: '1. Which points each class goes by' }),
+    ).toBeVisible();
+    // a criterion added (never saved) and its editor open, the save bar showing
+    await page.getByRole('button', { name: /^Add Child with special needs/ }).click();
+    await expect(page.getByRole('region', { name: 'Unsaved merit points' })).toBeVisible();
+    await page.mouse.move(0, 0);
+    const r = await new AxeBuilder({ page })
+      .setLegacyMode()
+      .withTags(['wcag2a', 'wcag2aa'])
+      .analyze();
+    const bad = r.violations.filter((v) => v.impact === 'serious' || v.impact === 'critical');
+    expect(
+      bad.map(
+        (v) =>
+          `${v.id}: ${v.help} ${v.nodes
+            .map((n) => n.target.join(' '))
+            .slice(0, 3)
+            .join(' | ')}`,
+      ),
+    ).toEqual([]);
+  });
+
   test('no serious or critical violations on the students list and its dialogs', async ({
     page,
   }) => {

@@ -135,6 +135,16 @@ const STARTERS: Array<PointRule & { code: string }> = [
   },
 ];
 
+/** The ready criteria as the Add buttons group them. */
+const GROUPS: Array<{ title: string; codes: string[] }> = [
+  { title: 'From the score tables', codes: ['education', 'distance', 'alumni_table'] },
+  {
+    title: 'Family',
+    codes: ['sibling_checked', 'sibling', 'alumni', 'staff', 'single_parent'],
+  },
+  { title: 'Child', codes: ['girl', 'single_girl', 'cwsn', 'near'] },
+];
+
 type ClassLine = SessionPoints['classes'][number];
 const most = (l: PointRule[]) =>
   l.reduce((n, r) => n + Math.max(0, r.kind === 'table' ? (r.cap ?? 0) : r.points), 0);
@@ -220,7 +230,6 @@ export function MeritPoints({
     setClasses((cur) => cur.map((k) => (k.classId === classId ? { ...k, ...patch } : k)));
     touch();
   };
-  const sessionForms = classes.filter((k) => !k.own && k.formId);
   const recalc = (classId?: string) =>
     start(async () => {
       const r = await recalculatePoints(sessionId, classId);
@@ -232,16 +241,28 @@ export function MeritPoints({
       else setMsg({ tone: 'danger', text: r.error });
     });
 
+  // which list is being edited: the one for every class, or a class's own
+  // opens on a list in use: every class's, or (when every class keeps its own) the first class's
+  const [listOf, setListOf] = useState<string>(() =>
+    initial.classes.some((k) => !k.own)
+      ? 'session'
+      : (initial.classes.find((k) => k.own)?.classId ?? 'session'),
+  );
   if (classes.length === 0)
     return <p className="ep-field__help">Add the classes first: points test their forms.</p>;
+  const ownClasses = classes.filter((k) => k.own);
+  const editing =
+    listOf === 'session' ? null : (ownClasses.find((k) => k.classId === listOf) ?? null);
+  const listRules = editing ? editing.rules : session;
+  const listMax = editing ? (editing.max ?? null) : max;
+  const usersOfSession = classes.filter((k) => !k.own);
 
   return (
-    <div className="ep-pts">
-      <p className="ep-field__help">
-        Points are added to a registration&rsquo;s merit when its form&rsquo;s answers match a
-        criterion; test and interview marks are added on top. The office confirms them at Document
-        check. Use a minus sign to take points away. Families see each class&rsquo;s criteria and
-        points on the admission page.
+    <div className="ep-pts ep-pts2">
+      <p className="ep-field__help" style={{ margin: 0 }}>
+        A registration&rsquo;s merit is its points from these criteria, worked out from the form,
+        plus any test and interview marks. The office confirms the points at Document check, and
+        families see each class&rsquo;s criteria on the admission page.
       </p>
       {!data.editable ? (
         <p className="ep-alert ep-alert--warning" role="status">
@@ -249,144 +270,230 @@ export function MeritPoints({
         </p>
       ) : null}
 
-      <section className="ep-pts__list" aria-labelledby="mp-session">
-        <header className="ep-pts__head">
-          <h3 id="mp-session">Points for every class</h3>
-          <span className="ep-field__help">
-            {session.length
-              ? `${String(session.length)} criteria · up to ${String(most(session))} points`
-              : 'No criteria yet'}
-          </span>
-          <label className="ep-field ep-pts__points">
+      <section className="ep-pts2__card" aria-labelledby="mp-classes">
+        <h3 id="mp-classes" className="ep-pts2__h">
+          1. Which points each class goes by
+        </h3>
+        <div className="ep-table-wrap">
+          <table className="ep-table ep-table--dense">
+            <caption className="ep-sr-only">Classes and their points list</caption>
+            <thead>
+              <tr>
+                <th scope="col">Class</th>
+                <th scope="col">Form</th>
+                <th scope="col">Points list</th>
+                <th scope="col">Up to</th>
+                <th scope="col">
+                  <span className="ep-sr-only">Actions</span>
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {classes.map((k) => {
+                const rules = k.own ? k.rules : session;
+                const cap = k.own ? k.max : max;
+                return (
+                  <tr key={k.classId}>
+                    <td>
+                      <strong>{k.className}</strong>
+                    </td>
+                    <td>{k.formName ?? <span className="ep-field__help">No form yet</span>}</td>
+                    <td>
+                      <label className="ep-field" style={{ margin: 0 }}>
+                        <span className="ep-sr-only">Points list of {k.className}</span>
+                        <select
+                          className="ep-select"
+                          disabled={!canEdit}
+                          value={k.own ? 'own' : 'session'}
+                          onChange={(e) => {
+                            const own = e.target.value === 'own';
+                            // a class starting its own list starts from the one for every class
+                            setClass(k.classId, {
+                              own,
+                              rules:
+                                own && k.rules.length === 0
+                                  ? session.map((r) => ({ ...r }))
+                                  : k.rules,
+                            });
+                            setListOf(own ? k.classId : 'session');
+                          }}
+                        >
+                          <option value="session">The points for every class</option>
+                          <option value="own">Its own points</option>
+                        </select>
+                      </label>
+                    </td>
+                    <td>
+                      {rules.length
+                        ? `${String(rules.length)} criteria · ${String(most(rules))}${cap ? ` (total out of ${String(cap)})` : ''}`
+                        : 'No criteria'}
+                    </td>
+                    <td>
+                      <span
+                        style={{ display: 'inline-flex', gap: 'var(--sp-1)', flexWrap: 'wrap' }}
+                      >
+                        <button
+                          type="button"
+                          className="ep-btn ep-btn--ghost ep-btn--sm"
+                          aria-label={`Show the points ${k.className} goes by`}
+                          onClick={() => setListOf(k.own ? k.classId : 'session')}
+                        >
+                          {k.own ? 'Edit its points' : 'Show'}
+                        </button>
+                        {canManage && !dirty ? (
+                          <button
+                            type="button"
+                            className="ep-btn ep-btn--ghost ep-btn--sm"
+                            disabled={pending}
+                            onClick={() => recalc(k.classId)}
+                          >
+                            Recalculate
+                          </button>
+                        ) : null}
+                      </span>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section className="ep-pts2__card" aria-labelledby="mp-list">
+        <h3 id="mp-list" className="ep-pts2__h">
+          2. The criteria
+        </h3>
+        {ownClasses.length ? (
+          <div role="group" aria-label="Points list to edit" className="ep-pts2__lists">
+            <button
+              type="button"
+              className={`ep-btn ep-btn--sm ${listOf === 'session' ? 'ep-btn--primary' : 'ep-btn--ghost'}`}
+              aria-pressed={listOf === 'session'}
+              onClick={() => setListOf('session')}
+            >
+              {usersOfSession.length
+                ? `For every class (${String(usersOfSession.length)} class${usersOfSession.length === 1 ? '' : 'es'})`
+                : 'For every class (no class uses it)'}
+            </button>
+            {ownClasses.map((k) => (
+              <button
+                key={k.classId}
+                type="button"
+                className={`ep-btn ep-btn--sm ${listOf === k.classId ? 'ep-btn--primary' : 'ep-btn--ghost'}`}
+                aria-pressed={listOf === k.classId}
+                onClick={() => setListOf(k.classId)}
+              >
+                {k.className}&rsquo;s own
+              </button>
+            ))}
+          </div>
+        ) : null}
+        <div className="ep-pts2__summary">
+          <div>
+            <strong>
+              {editing
+                ? `${editing.className}'s own points`
+                : usersOfSession.length
+                  ? `Points for every class (${usersOfSession.map((k) => k.className).join(', ')})`
+                  : 'Points for every class (no class uses them now)'}
+            </strong>
+            <span className="ep-field__help" style={{ display: 'block' }}>
+              {listRules.length
+                ? `${String(listRules.length)} criteria · a registration can get up to ${String(most(listRules))} points`
+                : 'No criteria yet: every registration starts at 0 points.'}
+            </span>
+          </div>
+          <label className="ep-field ep-pts__points" style={{ margin: 0 }}>
             <span className="ep-field__label">Total out of</span>
             <input
               className="ep-input"
               inputMode="decimal"
               placeholder="No maximum"
               disabled={!canEdit}
-              value={max ?? ''}
+              value={listMax ?? ''}
               onChange={(e) => {
-                setMax(numOrNull(e.target.value));
-                touch();
+                const v = numOrNull(e.target.value);
+                if (editing) setClass(editing.classId, { max: v });
+                else {
+                  setMax(v);
+                  touch();
+                }
               }}
             />
           </label>
           {canManage && !dirty ? (
             <button
               type="button"
-              className="ep-btn ep-btn--ghost ep-btn--sm"
+              className="ep-btn ep-btn--secondary ep-btn--sm"
               disabled={pending}
-              onClick={() => recalc()}
+              onClick={() => recalc(editing?.classId)}
             >
-              Recalculate every class
+              {editing ? `Recalculate ${editing.className}` : 'Recalculate every class'}
             </button>
           ) : null}
-        </header>
+        </div>
         <RuleList
-          rules={session}
+          key={listOf}
+          rules={listRules}
           fields={data.fields}
           proofs={data.proofs ?? []}
-          forms={sessionForms.map((k) => ({ id: k.formId!, className: k.className }))}
+          forms={
+            editing
+              ? editing.formId
+                ? [{ id: editing.formId, className: editing.className }]
+                : []
+              : usersOfSession
+                  .filter((k) => k.formId)
+                  .map((k) => ({ id: k.formId!, className: k.className }))
+          }
           canEdit={canEdit}
           onChange={(l) => {
-            setSession(l);
-            touch();
+            if (editing) setClass(editing.classId, { rules: l });
+            else {
+              setSession(l);
+              touch();
+            }
           }}
         />
-      </section>
-
-      <section className="ep-pts__list" aria-labelledby="mp-classes">
-        <header className="ep-pts__head">
-          <h3 id="mp-classes">Classes</h3>
-          <span className="ep-field__help">
-            A class can keep its own criteria instead (Nursery and IX often differ).
-          </span>
-        </header>
-        <ul className="ep-pts__classes">
-          {classes.map((k) => (
-            <li key={k.classId} className="ep-pts__class">
-              <div className="ep-pts__classhead">
-                <strong>{k.className}</strong>
-                <span className="ep-field__help">{k.formName ?? 'No form yet'}</span>
-                <label className="ep-field ep-pts__mode">
-                  <span className="ep-sr-only">Points of {k.className}</span>
-                  <select
-                    className="ep-select"
-                    disabled={!canEdit}
-                    value={k.own ? 'own' : 'session'}
-                    onChange={(e) => {
-                      const own = e.target.value === 'own';
-                      // a class starting its own list starts from the session's
-                      setClass(k.classId, {
-                        own,
-                        rules:
-                          own && k.rules.length === 0 ? session.map((r) => ({ ...r })) : k.rules,
-                      });
-                    }}
-                  >
-                    <option value="session">Uses the points for every class</option>
-                    <option value="own">Has its own points</option>
-                  </select>
-                </label>
-                {k.own ? <Badge tone="info">up to {most(k.rules)} points</Badge> : null}
-                {k.own ? (
-                  <label className="ep-field ep-pts__points">
-                    <span className="ep-field__label">Total out of</span>
-                    <input
-                      className="ep-input"
-                      inputMode="decimal"
-                      placeholder="No maximum"
-                      disabled={!canEdit}
-                      value={k.max ?? ''}
-                      onChange={(e) => setClass(k.classId, { max: numOrNull(e.target.value) })}
-                    />
-                  </label>
-                ) : null}
-                {canManage && !dirty ? (
-                  <button
-                    type="button"
-                    className="ep-btn ep-btn--ghost ep-btn--sm"
-                    disabled={pending}
-                    onClick={() => recalc(k.classId)}
-                  >
-                    Recalculate {k.className}
-                  </button>
-                ) : null}
-              </div>
-              {k.own ? (
-                <RuleList
-                  rules={k.rules}
-                  fields={data.fields}
-                  proofs={data.proofs ?? []}
-                  forms={k.formId ? [{ id: k.formId, className: k.className }] : []}
-                  canEdit={canEdit}
-                  onChange={(l) => setClass(k.classId, { rules: l })}
-                />
-              ) : null}
-            </li>
-          ))}
-        </ul>
       </section>
 
       {msg ? (
         <p
           className={`ep-alert ep-alert--${msg.tone}`}
           role={msg.tone === 'danger' ? 'alert' : 'status'}
+          style={{ margin: 0 }}
         >
           {msg.text}
         </p>
       ) : null}
-      {canEdit ? (
-        <div className="ep-sp__actions">
-          <span className="ep-field__help">{dirty ? 'Unsaved changes' : ''}</span>
-          <button
-            type="button"
-            className="ep-btn ep-btn--primary"
-            disabled={pending || !dirty}
-            onClick={save}
-          >
-            {pending ? 'Saving…' : 'Save merit points'}
-          </button>
+      {canEdit && dirty ? (
+        <div className="ep-pts2__bar" role="region" aria-label="Unsaved merit points">
+          <span>You have unsaved changes to the merit points.</span>
+          <span style={{ display: 'inline-flex', gap: 'var(--sp-2)' }}>
+            <button
+              type="button"
+              className="ep-btn ep-btn--ghost ep-btn--sm"
+              disabled={pending}
+              onClick={() => {
+                setSession(data.session);
+                setMax(data.max ?? null);
+                setClasses(data.classes);
+                setDirty(false);
+                setListOf('session');
+              }}
+            >
+              Discard
+            </button>
+            <button
+              type="button"
+              className="ep-btn ep-btn--primary ep-btn--sm"
+              disabled={pending}
+              onClick={save}
+            >
+              {pending ? 'Saving…' : 'Save merit points'}
+            </button>
+          </span>
         </div>
       ) : null}
     </div>
@@ -430,18 +537,137 @@ function RuleList({
           .filter((f) => !field(c.field)?.forms.includes(f.id))
           .map((f) => `${f.className} does not ask “${field(c.field)?.label ?? c.field}”`),
       );
-  const unused = STARTERS.filter((s) => !rules.some((r) => r.name === s.name));
+  const used = new Set(rules.map((r) => r.name));
+  // one criterion open for changing at a time; the others are a line each
+  const [open, setOpen] = useState<number | null>(null);
+  const label = (key: string | null | undefined) => (key ? (field(key)?.label ?? key) : '');
+  const describe = (r: PointRule) => {
+    const when = r.conditions
+      .map((c) =>
+        c.op === 'empty' || c.op === 'not_empty'
+          ? `${label(c.field)} ${OP[c.op]}`
+          : `${label(c.field)} ${OP[c.op]?.replace(' (a|b)', '')} ${c.value ?? ''}`,
+      )
+      .join(r.logic === 'any' ? ' or ' : ' and ');
+    const kind = r.kind ?? 'fixed';
+    const base =
+      kind === 'table'
+        ? r.spec?.table === 'qualification'
+          ? `${(r.spec.sources ?? []).map((x) => ROLE_NAME[x.role]).join(' + ')} qualification from the Qualifications table`
+          : r.spec?.table === 'locality'
+            ? `The locality's score from the Localities table (${label(r.spec.sources?.[0]?.field) || 'question not chosen'})`
+            : `Each alumni parent (${(r.spec?.sources ?? []).map((x) => ROLE_NAME[x.role]?.toLowerCase()).join(', ')}) from the Alumni schools table${r.spec?.school ? ` · school ${r.spec.school}` : ''}`
+        : kind === 'sibling'
+          ? 'A sibling the family names is found among the school’s students'
+          : when
+            ? `When ${when}`
+            : 'No condition yet';
+    const extra = [
+      kind !== 'fixed' && when ? `only when ${when}` : '',
+      r.spec?.proof ? `needs “${label(r.spec.proof)}” uploaded` : '',
+    ].filter(Boolean);
+    return [base, ...extra].join(' · ');
+  };
+  const pointsText = (r: PointRule) =>
+    r.kind === 'table'
+      ? r.cap
+        ? `up to ${String(r.cap)}`
+        : 'from the table'
+      : `${String(r.points)}${r.cap && r.cap < r.points ? ` (max ${String(r.cap)})` : ''} pts`;
+  const move = (i: number, by: -1 | 1) => {
+    const j = i + by;
+    if (j < 0 || j >= rules.length) return;
+    const next = [...rules];
+    [next[i], next[j]] = [next[j]!, next[i]!];
+    onChange(next);
+    setOpen(null);
+  };
+  const addRule = (r: PointRule) => {
+    onChange([...rules, r]);
+    setOpen(rules.length);
+  };
 
   return (
     <div className="ep-pts__rules">
       {rules.length === 0 ? (
-        <p className="ep-field__help">No criteria: every registration starts at 0 points.</p>
+        <p className="ep-field__help">
+          No criteria yet: every registration starts at 0 points. Add one from the buttons below.
+        </p>
       ) : null}
       <ol className="ep-pts__ol">
         {rules.map((r, i) => {
           const warn = missing(r);
+          if (open !== i)
+            return (
+              <li key={i} className="ep-pts2__row">
+                <span className="ep-pts2__no" aria-hidden="true">
+                  {i + 1}
+                </span>
+                <div className="ep-pts2__what">
+                  <strong>{r.name || 'Unnamed criterion'}</strong>
+                  <span className="ep-field__help">{describe(r)}</span>
+                  {warn.length ? <span className="ep-sp__feewarn">{warn.join('; ')}</span> : null}
+                </div>
+                <Badge tone={r.kind === 'table' ? 'info' : r.points < 0 ? 'warning' : 'success'}>
+                  {pointsText(r)}
+                </Badge>
+                <span className="ep-pts2__acts">
+                  <button
+                    type="button"
+                    className="ep-btn ep-btn--ghost ep-btn--sm"
+                    aria-label={`${canEdit ? 'Change' : 'See'} ${r.name || 'this criterion'}`}
+                    onClick={() => setOpen(i)}
+                  >
+                    {canEdit ? 'Change' : 'See'}
+                  </button>
+                  {canEdit ? (
+                    <>
+                      <button
+                        type="button"
+                        className="ep-btn ep-btn--ghost ep-btn--sm"
+                        aria-label={`Move ${r.name || 'this criterion'} up`}
+                        disabled={i === 0}
+                        onClick={() => move(i, -1)}
+                      >
+                        ↑
+                      </button>
+                      <button
+                        type="button"
+                        className="ep-btn ep-btn--ghost ep-btn--sm"
+                        aria-label={`Move ${r.name || 'this criterion'} down`}
+                        disabled={i === rules.length - 1}
+                        onClick={() => move(i, 1)}
+                      >
+                        ↓
+                      </button>
+                      <button
+                        type="button"
+                        className="ep-btn ep-btn--ghost ep-btn--sm"
+                        aria-label={`Remove ${r.name || 'this criterion'}`}
+                        onClick={() => {
+                          onChange(rules.filter((_, j) => j !== i));
+                          setOpen(null);
+                        }}
+                      >
+                        Remove
+                      </button>
+                    </>
+                  ) : null}
+                </span>
+              </li>
+            );
           return (
-            <li key={i} className="ep-pts__rule">
+            <li key={i} className="ep-pts__rule ep-pts2__open">
+              <div style={{ display: 'flex', justifyContent: 'space-between', gap: 'var(--sp-2)' }}>
+                <strong>Criterion {i + 1}</strong>
+                <button
+                  type="button"
+                  className="ep-btn ep-btn--secondary ep-btn--sm"
+                  onClick={() => setOpen(null)}
+                >
+                  Done
+                </button>
+              </div>
               <div className="ep-pts__rulehead">
                 <label className="ep-field ep-pts__name">
                   <span className="ep-field__label">Criterion</span>
@@ -453,7 +679,7 @@ function RuleList({
                     onChange={(e) => put(i, { name: e.target.value })}
                   />
                 </label>
-                <label className="ep-field ep-pts__points" style={{ minWidth: '13rem' }}>
+                <label className="ep-field ep-pts__points">
                   <span className="ep-field__label">Kind</span>
                   <select
                     className="ep-select"
@@ -508,16 +734,6 @@ function RuleList({
                     onChange={(e) => put(i, { cap: numOrNull(e.target.value) })}
                   />
                 </label>
-                {canEdit ? (
-                  <button
-                    type="button"
-                    className="ep-btn ep-btn--ghost ep-btn--sm"
-                    aria-label={`Remove ${r.name || 'this criterion'}`}
-                    onClick={() => onChange(rules.filter((_, j) => j !== i))}
-                  >
-                    Remove
-                  </button>
-                ) : null}
               </div>
               {r.kind === 'table' ? (
                 <TableSpec
@@ -676,57 +892,61 @@ function RuleList({
         })}
       </ol>
       {canEdit ? (
-        <div className="ep-pts__add">
+        <div className="ep-pts2__add">
+          <span className="ep-field__label">Add a criterion</span>
+          {GROUPS.map((g) => (
+            <div key={g.title} className="ep-pts2__group">
+              <span className="ep-field__help">{g.title}</span>
+              <span className="ep-pts2__chips">
+                {g.codes.map((code) => {
+                  const st = STARTERS.find((x) => x.code === code);
+                  if (!st) return null;
+                  const have = used.has(st.name);
+                  return (
+                    <button
+                      key={code}
+                      type="button"
+                      className="ep-btn ep-btn--ghost ep-btn--sm ep-pts2__chip"
+                      disabled={have}
+                      aria-label={`Add ${st.name}${have ? ' (added)' : ''}`}
+                      onClick={() =>
+                        addRule({
+                          name: st.name,
+                          logic: st.logic,
+                          conditions: structuredClone(st.conditions),
+                          points: st.points,
+                          kind: st.kind ?? 'fixed',
+                          spec: structuredClone(st.spec ?? {}),
+                          cap: st.cap ?? null,
+                        })
+                      }
+                    >
+                      {have ? '✓ ' : '+ '}
+                      {st.name}
+                    </button>
+                  );
+                })}
+              </span>
+            </div>
+          ))}
           <button
             type="button"
             className="ep-btn ep-btn--secondary ep-btn--sm"
+            style={{ justifySelf: 'start' }}
             onClick={() =>
-              onChange([
-                ...rules,
-                {
-                  name: '',
-                  logic: 'all',
-                  conditions: [{ field: fields[0]?.key ?? '', op: 'eq', value: '' }],
-                  points: 10,
-                },
-              ])
+              addRule({
+                name: '',
+                logic: 'all',
+                conditions: [{ field: fields[0]?.key ?? '', op: 'eq', value: '' }],
+                points: 10,
+                kind: 'fixed',
+                spec: {},
+                cap: null,
+              })
             }
           >
-            Add a criterion
+            + Your own criterion
           </button>
-          {unused.length ? (
-            <label className="ep-field ep-pts__starter">
-              <span className="ep-sr-only">Add a ready criterion</span>
-              <select
-                className="ep-select"
-                value=""
-                onChange={(e) => {
-                  const s = STARTERS.find((x) => x.code === e.target.value);
-                  if (!s) return;
-                  onChange([
-                    ...rules,
-                    {
-                      name: s.name,
-                      logic: s.logic,
-                      conditions: structuredClone(s.conditions),
-                      points: s.points,
-                      kind: s.kind ?? 'fixed',
-                      spec: structuredClone(s.spec ?? {}),
-                      cap: s.cap ?? null,
-                    },
-                  ]);
-                }}
-              >
-                <option value="">Add a ready criterion…</option>
-                {unused.map((s) => (
-                  <option key={s.code} value={s.code}>
-                    {s.name} (
-                    {s.kind === 'table' ? 'from a score table' : `${String(s.points)} points`})
-                  </option>
-                ))}
-              </select>
-            </label>
-          ) : null}
         </div>
       ) : null}
     </div>
