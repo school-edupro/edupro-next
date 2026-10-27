@@ -2,6 +2,7 @@
  * Sprint 8 admissions: cycles with criteria and scoring, the public surface (proof of work, OTP, applicant
  * tokens, throttling), applications with age criteria, passcodes, duplicates and scoring, intake desk.
  */
+import { createHash } from 'node:crypto';
 import type { NestFastifyApplication } from '@nestjs/platform-fastify';
 import IORedis from 'ioredis';
 import { PowService } from '../src/modules/admissions/public/pow.service';
@@ -29,6 +30,17 @@ describe('admissions (e2e)', () => {
   let token = '';
   let firstApplication: string;
   const mobile = '9876512345'; // also the guardian mobile of the seeded sibling
+  /** a nonce that surely does not solve the challenge (a fixed one solves difficulty 1 now and then) */
+  const wrongNonce = (challenge: string) => {
+    for (let i = 0; ; i += 1)
+      if (
+        !createHash('sha256')
+          .update(`${challenge}:nope${String(i)}`)
+          .digest('hex')
+          .startsWith('0')
+      )
+        return `nope${String(i)}`;
+  };
   const h = () => headersFor(admin.sub, school.id);
   const applicantHeaders = (t = token) => ({ authorization: `Bearer ${t}` });
   const validData = {
@@ -207,7 +219,12 @@ describe('admissions (e2e)', () => {
       method: 'POST',
       url: '/public/admissions/otp',
       headers: {},
-      json: { schoolCode: school.code, mobile, challenge: ch.json().challenge, nonce: 'nope' },
+      json: {
+        schoolCode: school.code,
+        mobile,
+        challenge: ch.json().challenge,
+        nonce: wrongNonce(ch.json().challenge),
+      },
     });
     expect(unsolved.statusCode).toBe(400);
     expect(unsolved.json()).toMatchObject({ type: 'pow.unsolved' });
