@@ -224,7 +224,12 @@ export class AdmissionApprovalsSheetService {
   }
 
   /** The filled sheet checked row by row; with apply, the good rows decided. */
-  async upload(ctx: RequestContext, body: unknown, apply: boolean) {
+  async upload(
+    ctx: RequestContext,
+    body: unknown,
+    apply: boolean,
+    offerMessage?: { subject?: string; intro?: string; note?: string },
+  ) {
     if (!Buffer.isBuffer(body) || !body.length)
       throw new DomainError('validation-failed', 'Upload the filled sheet (.xlsx)', {
         status: 400,
@@ -282,6 +287,9 @@ export class AdmissionApprovalsSheetService {
     const byNo = new Map(waiting.filter((x) => x.number).map((x) => [x.number!, x]));
     const out: Array<{
       row: number;
+      /** the registration (an offer row is previewed before it is applied) */
+      id: string | null;
+      offer: boolean;
       number: string;
       candidate: string | null;
       decision: string | null;
@@ -300,6 +308,8 @@ export class AdmissionApprovalsSheetService {
       const w = byNo.get(number);
       const line = {
         row: n,
+        id: w?.id ?? null,
+        offer: at.choices[label] === 'offer',
         number,
         candidate: w?.candidate ?? null,
         decision: label || null,
@@ -337,6 +347,7 @@ export class AdmissionApprovalsSheetService {
             decision,
             remarks: remark,
             ...(marks !== null ? { marks } : {}),
+            ...(decision === 'offer' && offerMessage ? { offerMessage } : {}),
           } as never);
           line.status = 'done';
         } catch (e) {

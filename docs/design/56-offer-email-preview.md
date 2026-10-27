@@ -26,8 +26,8 @@ let them change it.
     queued message), and SMS and WhatsApp through `app.send_template` as before.
 - **Fix found on the way (migration 0264):** every admission notice passed `{{school}}` empty, so the
   SMS read "offered admission to Class I at .". `app.admission_notify` now fills in the school's name.
-- **Not covered:** offers made in bulk from Selection (and the next offer from the waiting list) still
-  use the template as it is.
+- **Not covered:** offers made in bulk on the Selection page (and the next offer from the waiting list)
+  still use the template as it is. Excel offers are previewed (below).
 
 Checked:
 
@@ -49,3 +49,22 @@ Checked:
     after it stops), so there is no Update button.
 - The facts table above the preview is gone, because the preview shows the facts.
 - **On a phone:** one column.
+
+## Excel offers previewed (27 Oct 2026)
+
+- On Approvals → Excel decisions, a checked sheet with **Offer** rows shows **Preview the offers and
+  apply N** instead of Apply. It opens the same dialog for the batch:
+  - "Offer admission to N families", with the names it goes to;
+  - the first family as the sample;
+  - **Apply and send N offers** as the button.
+- **The batch's words:** the same for every family. The fields start as the school's template, with
+  `{{name}}`, `{{class}}`, `{{number}}`, `{{amount}}`, `{{due}}` and `{{school}}` filled in for each
+  family when it is sent. The preview shows them filled in for the first family.
+- **API:**
+  - `POST admissions/approvals/:id/offer-preview` (for the approver of that registration).
+  - The preview answers `templates {subject, intro, note, fields}`.
+  - `POST …/approvals/sheet?apply=1&subject=&intro=&note=` passes the words to each offer row.
+  - The sheet's rows answer `id` and `offer`.
+  - Edited words are filled in per family in `makeOffer` and in the preview.
+- **Checked:** admission e2e, 64 pass. They cover `{{name}}` and `{{class}}` filled in on the
+  preview (subject and html) and the template words answered.

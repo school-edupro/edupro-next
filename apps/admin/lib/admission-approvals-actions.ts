@@ -2,6 +2,7 @@
 /** Admission approvers' decisions (docs/design/50). */
 import { revalidatePath } from 'next/cache';
 import { ApiError, apiFetch } from './api';
+import type { OfferPreview } from './admission-process-actions';
 
 type Result = { ok: true } | { ok: false; error: string };
 const okId = (id: string) => /^\d{1,18}$/.test(id);
@@ -95,6 +96,25 @@ export async function approvalReplaceDocument(id: string, fd: FormData): Promise
 }
 
 // ---- decisions by Excel (docs/design/55) -------------------------------------------------------
+/** The offer email of a registration waiting for me, with the changes asked (docs/design/56). */
+export async function approvalOfferPreview(
+  id: string,
+  edits: { subject?: string; intro?: string; note?: string },
+): Promise<{ ok: true; data: OfferPreview } | { ok: false; error: string }> {
+  if (!okId(id)) return { ok: false, error: 'Unknown registration' };
+  try {
+    const data = await apiFetch<OfferPreview>(`/admissions/approvals/${id}/offer-preview`, {
+      method: 'POST',
+      body: JSON.stringify(edits),
+    });
+    return { ok: true, data };
+  } catch (e) {
+    if (e instanceof ApiError)
+      return { ok: false, error: String(e.problem.detail ?? e.problem.type) };
+    throw e;
+  }
+}
+
 export interface SheetResult {
   place: string;
   applied: boolean;
@@ -104,6 +124,8 @@ export interface SheetResult {
   errors: number;
   rows: Array<{
     row: number;
+    id: string | null;
+    offer: boolean;
     number: string;
     candidate: string | null;
     decision: string | null;
@@ -145,13 +167,21 @@ export async function approvalSheetUpload(
 ): Promise<{ ok: true; data: SheetResult } | { ok: false; error: string }> {
   const file = fd.get('file');
   const apply = fd.get('apply') === '1';
+  // the offers' email as changed on the preview: the same words for each family
+  const words = new URLSearchParams();
+  for (const k of ['subject', 'intro', 'note'] as const) {
+    const v = fd.get(k);
+    if (typeof v === 'string' && (k === 'note' ? true : v.trim().length >= 3))
+      words.set(k, v.trim());
+  }
+  if (apply) words.set('apply', '1');
   if (!(file instanceof File) || file.size === 0)
     return { ok: false, error: 'Choose the filled sheet' };
   if (!/\.xlsx$/i.test(file.name)) return { ok: false, error: 'The sheet must be an .xlsx file' };
   if (file.size > 5 * 1024 * 1024) return { ok: false, error: 'The sheet is larger than 5 MB' };
   try {
     const data = await apiFetch<SheetResult>(
-      `/admissions/approvals/sheet${apply ? '?apply=1' : ''}`,
+      `/admissions/approvals/sheet${words.size ? `?${words.toString()}` : ''}`,
       {
         method: 'POST',
         headers: {

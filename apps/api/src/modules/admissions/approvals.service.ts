@@ -484,6 +484,20 @@ export class AdmissionApprovalsService {
     });
   }
 
+  /** The offer email of a registration waiting for this approver, before it goes (docs/design/56). */
+  async offerPreview(
+    ctx: RequestContext,
+    id: string,
+    edits: { subject?: string; intro?: string; note?: string },
+  ) {
+    const a = await this.db.tenant(requireTenant(ctx), (c) => this.access(c, ctx, id));
+    if (!a.mayDecide)
+      throw new DomainError('admissions.not_yours', 'This registration no longer waits for you', {
+        status: 409,
+      });
+    return this.process.offerPreview(ctx, id, edits);
+  }
+
   /** Whether the Admissions menu shows Approvals, and how many wait (docs/design/55). */
   async menu(ctx: RequestContext) {
     return this.db.tenant(requireTenant(ctx), async (c) => {

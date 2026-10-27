@@ -10,10 +10,11 @@ import {
   ApprovalDocumentDto,
   ApprovalDocumentSlotDto,
   ApprovalSheetQueryDto,
+  ApprovalSheetUploadQueryDto,
   ApprovalsQueryDto,
 } from './approvals.dto';
 import { AdmissionApprovalsService } from './approvals.service';
-import { SendBackDto } from './process.dto';
+import { OfferPreviewDto, SendBackDto } from './process.dto';
 
 /** A PDF from the desk's base64 answer, shown in the browser or saved. */
 const pdf = (
@@ -77,10 +78,34 @@ export class AdmissionApprovalsController {
   @AuthenticatedOnly()
   sheetUpload(
     @ReqCtx() ctx: RequestContext,
-    @Query('apply') apply: string | undefined,
+    @Query() q: ApprovalSheetUploadQueryDto,
     @Req() req: FastifyRequest,
   ) {
-    return this.sheet.upload(ctx, req.body, apply === '1');
+    // the offers' email as changed on the preview, the same words for each family (docs/design/56)
+    const offerMessage = {
+      ...(q.subject ? { subject: q.subject } : {}),
+      ...(q.intro ? { intro: q.intro } : {}),
+      ...(q.note !== undefined ? { note: q.note } : {}),
+    };
+    return this.sheet.upload(
+      ctx,
+      req.body,
+      q.apply === '1',
+      Object.keys(offerMessage).length ? offerMessage : undefined,
+    );
+  }
+
+  @Post(':id/offer-preview')
+  @ApiOperation({
+    summary: 'The offer email (and SMS / WhatsApp) of a registration waiting for me',
+  })
+  @AuthenticatedOnly()
+  offerPreview(
+    @ReqCtx() ctx: RequestContext,
+    @Param('id') id: string,
+    @Body() dto: OfferPreviewDto,
+  ) {
+    return this.svc.offerPreview(ctx, id, dto);
   }
 
   @Get('menu')

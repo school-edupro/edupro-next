@@ -2,10 +2,12 @@
 import { useRouter } from 'next/navigation';
 import { useRef, useState, useTransition } from 'react';
 import {
+  approvalOfferPreview,
   approvalSheet,
   approvalSheetUpload,
   type SheetResult,
 } from '@/lib/admission-approvals-actions';
+import { OfferPreviewDialog } from './OfferPreviewDialog';
 
 const STATUS: Record<string, string> = {
   ok: 'Ready',
@@ -29,6 +31,9 @@ export function ApprovalSheet({
   const [error, setError] = useState<string | null>(null);
   const [pending, start] = useTransition();
   const file = useRef<HTMLInputElement>(null);
+  // offers in the sheet are previewed (and their email changed) before they go (docs/design/56)
+  const [offering, setOffering] = useState(false);
+  const offers = (result?.rows ?? []).filter((r) => r.offer && r.status === 'ok' && r.id);
 
   const download = () =>
     start(async () => {
@@ -43,7 +48,7 @@ export function ApprovalSheet({
       a.click();
       setTimeout(() => URL.revokeObjectURL(url), 10_000);
     });
-  const send = (apply: boolean) =>
+  const send = (apply: boolean, message?: { subject?: string; intro?: string; note?: string }) =>
     start(async () => {
       setError(null);
       const f = file.current?.files?.[0];
@@ -51,16 +56,34 @@ export function ApprovalSheet({
       const fd = new FormData();
       fd.set('file', f);
       if (apply) fd.set('apply', '1');
+      for (const [k, v] of Object.entries(message ?? {})) if (v !== undefined) fd.set(k, v);
       const r = await approvalSheetUpload(fd);
       if (!r.ok) return setError(r.error);
       setResult(r.data);
       if (apply) router.refresh();
     });
 
+  const dialog =
+    offering && offers[0]?.id ? (
+      <OfferPreviewDialog
+        id={offers[0].id}
+        open
+        pending={pending}
+        batch={{ names: offers.map((r) => r.candidate ?? r.number) }}
+        fetchPreview={(edits) => approvalOfferPreview(offers[0]!.id!, edits)}
+        onClose={() => setOffering(false)}
+        onSend={(message) => {
+          setOffering(false);
+          send(true, message);
+        }}
+      />
+    ) : null;
+
   if (!places.length)
     return <p style={{ margin: 0 }}>Nothing waits for a decision now, so there is no sheet.</p>;
   return (
     <div className="ep-asheet">
+      {dialog}
       <div className="ep-lead-filter">
         <label className="ep-field ep-asheet__place">
           <span className="ep-field__label">Stage and level</span>
@@ -106,9 +129,11 @@ export function ApprovalSheet({
               type="button"
               className="ep-btn ep-btn--primary"
               disabled={pending}
-              onClick={() => send(true)}
+              onClick={() => (offers.length ? setOffering(true) : send(true))}
             >
-              Apply {result.ok} decision{result.ok === 1 ? '' : 's'}
+              {offers.length
+                ? `Preview the offers and apply ${String(result.ok)}`
+                : `Apply ${String(result.ok)} decision${result.ok === 1 ? '' : 's'}`}
             </button>
           ) : null}
         </span>

@@ -3,6 +3,7 @@ import { useRouter } from 'next/navigation';
 import { useState, useTransition } from 'react';
 import {
   decideRegistration,
+  previewOffer,
   sendBackRegistration,
   undoRegistration,
 } from '@/lib/admission-process-actions';
@@ -97,6 +98,7 @@ export function RegistrationActions({
       {offering ? (
         <OfferPreviewDialog
           id={id}
+          fetchPreview={(edits) => previewOffer(id, edits)}
           open
           pending={pending}
           onClose={() => setOffering(false)}

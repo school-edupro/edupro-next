@@ -92,6 +92,8 @@ export async function decideRegistration(
 }
 export interface OfferPreview {
   amount: number;
+  /** the words with {{name}}, {{class}}… for a batch of offers */
+  templates: { subject: string; intro: string; note: string; fields: string[] };
   email: {
     to: string | null;
     on: boolean;

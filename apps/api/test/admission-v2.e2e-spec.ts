@@ -2463,6 +2463,16 @@ describe('online admission (e2e)', () => {
       );
       expect(mail.rows[0]).toMatchObject({ subject: 'Your seat at our school' });
       expect(mail.rows[0]!.body).toContain('We are delighted to offer a seat.');
+      // the words of a batch name each family: {{name}} and {{class}} filled in on the preview
+      const named = await inject({
+        method: 'POST',
+        url: `/admissions/registrations/${appA}/offer-preview`,
+        headers: h(),
+        json: { subject: 'Offer for {{name}}', intro: 'A seat for {{name}} in {{class}}.' },
+      });
+      expect(named.json().email.subject).not.toContain('{{');
+      expect(named.json().email.html).toMatch(/A seat for \S+.* in Class Mini\./);
+      expect(named.json().templates.intro).toBe('{{name}} is offered admission to {{class}}.');
       const undo2 = await inject({
         method: 'POST',
         url: `/admissions/registrations/${appA}/undo`,

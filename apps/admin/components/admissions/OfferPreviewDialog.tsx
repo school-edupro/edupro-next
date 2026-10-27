@@ -1,7 +1,7 @@
 'use client';
 import { Badge, Dialog } from '@edupro/ui';
 import { useEffect, useRef, useState, useTransition } from 'react';
-import { previewOffer, type OfferPreview } from '@/lib/admission-process-actions';
+import type { OfferPreview } from '@/lib/admission-process-actions';
 
 type Words = { subject: string; intro: string; note: string };
 type Tab = 'email' | 'sms' | 'whatsapp';
@@ -17,12 +17,20 @@ export function OfferPreviewDialog({
   pending,
   onClose,
   onSend,
+  fetchPreview,
+  batch,
 }: {
+  /** the registration previewed (in a batch: the first family, as the sample) */
   id: string;
   open: boolean;
   pending: boolean;
   onClose: () => void;
   onSend: (message: Partial<Words>) => void;
+  fetchPreview: (
+    edits: Partial<Words>,
+  ) => Promise<{ ok: true; data: OfferPreview } | { ok: false; error: string }>;
+  /** offers made together (the Excel sheet): the words name each family with {{name}}, {{class}}… */
+  batch?: { names: string[] };
 }) {
   const [data, setData] = useState<OfferPreview | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -43,16 +51,23 @@ export function OfferPreviewDialog({
       : {};
   const load = (edits: Partial<Words>, first = false) =>
     start(async () => {
-      const r = await previewOffer(id, edits);
+      const r = await fetchPreview(edits);
       if (!r.ok) return setError(r.error);
       setError(null);
       setData(r.data);
       if (first) {
-        const w = {
-          subject: r.data.email.subject,
-          intro: r.data.email.intro,
-          note: r.data.email.note,
-        };
+        // a batch edits the words with the family's facts as {{…}}, filled in for each family
+        const w = batch
+          ? {
+              subject: r.data.templates.subject,
+              intro: r.data.templates.intro,
+              note: r.data.templates.note,
+            }
+          : {
+              subject: r.data.email.subject,
+              intro: r.data.email.intro,
+              note: r.data.email.note,
+            };
         setBase(w);
         setWords(w);
       }
@@ -80,10 +95,18 @@ export function OfferPreviewDialog({
     <Dialog
       open={open}
       size="xl"
-      title="Offer admission: the message to the family"
+      title={
+        batch
+          ? `Offer admission to ${String(batch.names.length)} ${batch.names.length === 1 ? 'family' : 'families'}: the message`
+          : 'Offer admission: the message to the family'
+      }
       onClose={onClose}
       primary={{
-        label: pending ? 'Sending…' : 'Send the offer',
+        label: pending
+          ? 'Sending…'
+          : batch
+            ? `Apply and send ${String(batch.names.length)} offer${batch.names.length === 1 ? '' : 's'}`
+            : 'Send the offer',
         loading: pending,
         onClick: () => {
           if (words.subject.trim().length < 3 || words.intro.trim().length < 3) {
@@ -100,9 +123,16 @@ export function OfferPreviewDialog({
         </p>
       ) : (
         <div className="ep-offer">
+          {batch ? (
+            <p className="ep-field__help" style={{ margin: 0 }}>
+              <strong>Goes to:</strong> {batch.names.slice(0, 8).join(', ')}
+              {batch.names.length > 8 ? ` and ${String(batch.names.length - 8)} more` : ''}. The
+              preview shows the first family; each gets their own name, class, fee and pay-by date.
+            </p>
+          ) : null}
           <div className="ep-offer__to" aria-label="Who hears">
             <span className="ep-field__label" style={{ margin: 0 }}>
-              Goes to
+              {batch ? 'First family' : 'Goes to'}
             </span>
             {(
               [
@@ -127,8 +157,24 @@ export function OfferPreviewDialog({
                 The email&apos;s words {edited ? <Badge tone="info">Changed</Badge> : null}
               </h3>
               <p className="ep-field__help" style={{ margin: 0 }}>
-                For this family only; the school&apos;s template stays as it is. The candidate,
-                class, fee and pay-by date are filled in and cannot be changed.
+                {batch ? (
+                  <>
+                    The same words for every family in this sheet; write{' '}
+                    {data.templates.fields.map((f, i) => (
+                      <span key={f}>
+                        {i ? ', ' : ''}
+                        <code>{`{{${f}}}`}</code>
+                      </span>
+                    ))}{' '}
+                    where each family&apos;s own fact goes. The school&apos;s template stays as it
+                    is.
+                  </>
+                ) : (
+                  <>
+                    For this family only; the school&apos;s template stays as it is. The candidate,
+                    class, fee and pay-by date are filled in and cannot be changed.
+                  </>
+                )}
               </p>
               <label className="ep-field">
                 <span className="ep-field__label">Subject</span>
@@ -209,7 +255,7 @@ export function OfferPreviewDialog({
               {tab === 'email' ? (
                 <div role="tabpanel" id="offer-panel-email" aria-labelledby="offer-tab-email">
                   <p className="ep-field__help" style={{ marginTop: 0 }}>
-                    <strong>Subject:</strong> {words.subject}
+                    <strong>Subject:</strong> {data.email.subject}
                   </p>
                   <iframe
                     title="The email as the family will see it"

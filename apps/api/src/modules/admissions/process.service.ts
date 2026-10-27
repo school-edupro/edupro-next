@@ -768,8 +768,9 @@ export class AdmissionProcessService {
           text ?? '',
         );
       const email = t.rows.find((x) => x.channel === 'email');
-      const intro = edits.intro?.trim() || m.intro;
-      const note = edits.note !== undefined ? edits.note.trim() : m.note;
+      // changed words may name the family with {{name}}, {{class}}, {{amount}}, {{due}} (a batch)
+      const intro = edits.intro?.trim() ? fill(edits.intro.trim()) : m.intro;
+      const note = edits.note !== undefined ? fill(edits.note.trim()) : m.note;
       const html = await c.query<{ html: string }>(
         `SELECT app.school_mail_html('Admissions', $1, $2, NULL, $3::jsonb, $4) AS html`,
         [m.title, intro, JSON.stringify(m.rows), note],
@@ -779,10 +780,17 @@ export class AdmissionProcessService {
       const wa = t.rows.find((x) => x.channel === 'whatsapp');
       return {
         amount,
+        // the words with the family's facts as {{…}}, for a batch of offers (docs/design/56)
+        templates: {
+          subject: email?.subject ?? m.title,
+          intro: '{{name}} is offered admission to {{class}}.',
+          note: m.note,
+          fields: ['name', 'class', 'number', 'amount', 'due', 'school'],
+        },
         email: {
           to: a.contact_email,
           on: Boolean(email && email.status === 'active' && a.contact_email),
-          subject: edits.subject?.trim() || fill(email?.subject ?? m.title),
+          subject: fill(edits.subject?.trim() || email?.subject || m.title),
           intro,
           note,
           rows: m.rows,
@@ -825,6 +833,11 @@ export class AdmissionProcessService {
     }
     // the email as changed on the preview (docs/design/56); SMS and WhatsApp keep their templates
     const vars = await this.varsOf(c, a, m.vars);
+    const fill = (text: string) =>
+      Object.entries(vars).reduce(
+        (out, [k, v]) => out.split(`{{${k}}}`).join(String(v ?? '')),
+        text,
+      );
     const mail = await c.query<{ id: string | null }>(
       `SELECT app.admission_mail($1, $2, $3::jsonb, $4, $5, NULL, $6::jsonb, $7)::text AS id`,
       [
@@ -832,16 +845,16 @@ export class AdmissionProcessService {
         a.contact_email,
         JSON.stringify(vars),
         m.title,
-        edits.intro?.trim() || m.intro,
+        edits.intro?.trim() ? fill(edits.intro.trim()) : m.intro,
         JSON.stringify(m.rows),
-        edits.note !== undefined ? edits.note.trim() : m.note,
+        edits.note !== undefined ? fill(edits.note.trim()) : m.note,
       ],
     );
     const mailId = mail.rows[0]?.id;
     if (mailId && edits.subject?.trim())
       await c.query(`UPDATE comms_messages SET subject = $2 WHERE id = $1`, [
         mailId,
-        edits.subject.trim().slice(0, 200),
+        fill(edits.subject.trim()).slice(0, 200),
       ]);
     if (/^[6-9][0-9]{9}$/.test(a.contact_mobile ?? ''))
       for (const ch of ['sms', 'whatsapp'])

@@ -74,3 +74,12 @@ export const ApprovalSheetQuerySchema = z.object({
   level: z.coerce.number().int().min(1).max(20),
 });
 export class ApprovalSheetQueryDto extends createZodDto(ApprovalSheetQuerySchema) {}
+
+/** The filled sheet: apply=1 decides; an offer's email may carry the words changed on the preview. */
+export const ApprovalSheetUploadQuerySchema = z.object({
+  apply: z.enum(['1', '0']).optional(),
+  subject: z.string().trim().min(3).max(200).optional(),
+  intro: z.string().trim().min(3).max(2000).optional(),
+  note: z.string().trim().max(1000).optional(),
+});
+export class ApprovalSheetUploadQueryDto extends createZodDto(ApprovalSheetUploadQuerySchema) {}
