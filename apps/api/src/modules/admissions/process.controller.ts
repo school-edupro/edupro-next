@@ -15,6 +15,7 @@ import {
   SelectIdsDto,
   SelectionDrawDto,
   SelectionNextDto,
+  SelectionOfferPreviewDto,
   SendBackDto,
   SlotDto,
   SlotResultsDto,
@@ -304,6 +305,39 @@ export class AdmissionProcessController {
   @RequirePermission(ADMISSION_SCHEDULE)
   offer(@ReqCtx() ctx: RequestContext, @Param('id') id: string, @Body() dto: SelectIdsDto) {
     return this.schedule.offer(ctx, id, dto);
+  }
+
+  @Post('cycles/:id/selection/offer-preview')
+  @ApiOperation({ summary: 'A Selection offer before it goes: the email, SMS and WhatsApp' })
+  @RequirePermission(ADMISSION_SCHEDULE)
+  selectionOfferPreview(
+    @ReqCtx() ctx: RequestContext,
+    @Param('id') id: string,
+    @Body() dto: SelectionOfferPreviewDto,
+  ) {
+    return this.schedule.offerPreview(ctx, id, dto);
+  }
+
+  @Post('cycles/:id/selection/draw-preview')
+  @ApiOperation({ summary: 'The draw before it is made: the seed, who is offered, who waits' })
+  @RequirePermission(ADMISSION_SCHEDULE)
+  drawPreview(
+    @ReqCtx() ctx: RequestContext,
+    @Param('id') id: string,
+    @Body() dto: SelectionDrawDto,
+  ) {
+    return this.schedule.drawPreview(ctx, id, dto);
+  }
+
+  @Post('cycles/:id/selection/next-preview')
+  @ApiOperation({ summary: 'Who Offer the next would offer' })
+  @RequirePermission(ADMISSION_SCHEDULE)
+  nextPreview(
+    @ReqCtx() ctx: RequestContext,
+    @Param('id') id: string,
+    @Body() dto: SelectionNextDto,
+  ) {
+    return this.schedule.nextPreview(ctx, id, dto);
   }
 
   @Post('cycles/:id/selection/waitlist')

@@ -17,9 +17,12 @@ import type {
   SelectIdsDto,
   SelectionDrawDto,
   SelectionNextDto,
+  SelectionOfferPreviewDto,
   SlotDto,
   SlotResultsDto,
 } from './process.dto';
+
+type OfferWords = { subject?: string; intro?: string; note?: string };
 
 const when = (d: Date) =>
   new Intl.DateTimeFormat('en-IN', {
@@ -757,6 +760,7 @@ export class AdmissionScheduleService {
     id: string,
     cycleId: string,
     note?: string,
+    edits?: OfferWords,
   ) {
     const a = await this.core.row(c, id);
     if (a.cycle_id !== cycleId)
@@ -780,15 +784,46 @@ export class AdmissionScheduleService {
            FROM applications a WHERE a.id = $1 AND a.process_steps IS NOT NULL AND a.stage_no < jsonb_array_length(a.process_steps)`,
         [id, note ?? 'Offered from the waiting list', ctx.user.id, ctx.user.displayName],
       );
-      await this.process.makeOffer(c, a, ctx.user.id, note ?? 'Offered from the waiting list');
+      await this.process.makeOffer(
+        c,
+        a,
+        ctx.user.id,
+        note ?? 'Offered from the waiting list',
+        edits,
+      );
       return;
     }
-    await this.process.decideWith(c, ctx, id, { decision: 'offer' }, { note });
+    await this.process.decideWith(
+      c,
+      ctx,
+      id,
+      { decision: 'offer', ...(edits ? { offerMessage: edits } : {}) },
+      { note },
+    );
+  }
+
+  /**
+   * A Selection offer before it goes (docs/design/56): the family's email, SMS and WhatsApp with the
+   * words as changed; for several families the first is the sample.
+   */
+  async offerPreview(ctx: RequestContext, cycleId: string, dto: SelectionOfferPreviewDto) {
+    const of = await this.db.tenant(requireTenant(ctx), (c) =>
+      c.query<{ cycle_id: string }>(`SELECT cycle_id::text FROM applications WHERE id = $1`, [
+        dto.applicationId,
+      ]),
+    );
+    if (of.rows[0]?.cycle_id !== cycleId)
+      throw new DomainError('not-found', 'Registration not found in this session', {
+        status: 404,
+      });
+    const { applicationId, ...edits } = dto;
+    return this.process.offerPreview(ctx, applicationId, edits);
   }
 
   async offer(ctx: RequestContext, cycleId: string, dto: SelectIdsDto) {
     await this.db.tenant(requireTenant(ctx), async (c) => {
-      for (const id of dto.applicationIds) await this.offerOne(c, ctx, id, cycleId);
+      for (const id of dto.applicationIds)
+        await this.offerOne(c, ctx, id, cycleId, undefined, dto.offerMessage);
       await this.audit.stage(ctx, c, {
         action: 'admissions.selection.offer',
         entityType: 'admission_cycles',
@@ -813,31 +848,63 @@ export class AdmissionScheduleService {
     return { waitlisted: dto.applicationIds.length };
   }
 
+  /** The draw's order: the candidates at Selection (of a category) shuffled with the seed. */
+  private async drawOrder(c: PoolClient, cycleId: string, dto: SelectionDrawDto, seed: string) {
+    const pool = await c.query<{ id: string; number: string | null; candidate: string | null }>(
+      `SELECT a.id::text, a.application_no AS number, a.candidate_name AS candidate FROM applications a
+         JOIN admission_stages st ON st.id = (a.process_steps -> a.stage_no ->> 'stageId')::bigint
+        WHERE a.cycle_id = $1 AND a.class_id = $2 AND ($3::bigint IS NULL OR a.category_id = $3::bigint)
+          AND a.status::text IN ('registered', 'under_review') AND st.kind = 'selection'
+        ORDER BY a.application_no, a.id`,
+      [cycleId, dto.classId, dto.categoryId ?? null],
+    );
+    if (!pool.rows.length)
+      throw new DomainError(
+        'admissions.nothing_to_draw',
+        'No candidate waits at Selection for this draw',
+        { status: 409 },
+      );
+    return seededOrder(pool.rows, seed);
+  }
+
+  /**
+   * The draw before it is made (docs/design/56): the seed (made here when none is given), who would be
+   * offered and who would wait; nothing changes. The same seed then makes the same draw.
+   */
+  async drawPreview(ctx: RequestContext, cycleId: string, dto: SelectionDrawDto) {
+    const seed = dto.seed ?? randomBytes(8).toString('hex');
+    const order = await this.db.tenant(requireTenant(ctx), (c) =>
+      this.drawOrder(c, cycleId, dto, seed),
+    );
+    return {
+      seed,
+      offered: order.slice(0, dto.seats),
+      waitlisted: order.slice(dto.seats),
+    };
+  }
+
   /** A draw among the candidates at Selection (of a category): the first `seats` offered, the rest wait-listed in order. */
   async draw(ctx: RequestContext, cycleId: string, dto: SelectionDrawDto) {
     const seed = dto.seed ?? randomBytes(8).toString('hex');
     const out = await this.db.tenant(requireTenant(ctx), async (c) => {
-      const pool = await c.query<{ id: string; number: string | null; candidate: string | null }>(
-        `SELECT a.id::text, a.application_no AS number, a.candidate_name AS candidate FROM applications a
-           JOIN admission_stages st ON st.id = (a.process_steps -> a.stage_no ->> 'stageId')::bigint
-          WHERE a.cycle_id = $1 AND a.class_id = $2 AND ($3::bigint IS NULL OR a.category_id = $3::bigint)
-            AND a.status::text IN ('registered', 'under_review') AND st.kind = 'selection'
-          ORDER BY a.application_no, a.id`,
-        [cycleId, dto.classId, dto.categoryId ?? null],
-      );
-      if (!pool.rows.length)
-        throw new DomainError(
-          'admissions.nothing_to_draw',
-          'No candidate waits at Selection for this draw',
-          { status: 409 },
-        );
-      const order = seededOrder(pool.rows, seed);
+      const order = await this.drawOrder(c, cycleId, dto, seed);
+      if (dto.expect) {
+        // the preview's families: someone came or went at Selection since, so the draw is not the one shown
+        const now = order.slice(0, dto.seats).map((x) => x.id);
+        const shown = new Set(dto.expect);
+        if (now.length !== shown.size || now.some((id) => !shown.has(id)))
+          throw new DomainError(
+            'admissions.draw_changed',
+            'The candidates at Selection changed since the preview: draw again',
+            { status: 409 },
+          );
+      }
       const note = `Draw (seed ${seed})`;
       const offered: string[] = [];
       const waitlisted: string[] = [];
       for (const [i, x] of order.entries()) {
         if (i < dto.seats) {
-          await this.offerOne(c, ctx, x.id, cycleId, note);
+          await this.offerOne(c, ctx, x.id, cycleId, note, dto.offerMessage);
           offered.push(x.id);
         } else {
           await this.process.decideWith(c, ctx, x.id, { decision: 'waitlist' }, { note });
@@ -871,21 +938,39 @@ export class AdmissionScheduleService {
     return { seed, ...out };
   }
 
+  /** The first on the waiting list (of a category). */
+  private async nextOn(c: PoolClient, cycleId: string, dto: SelectionNextDto) {
+    const r = await c.query<{ id: string; number: string | null; candidate: string | null }>(
+      `SELECT id::text, application_no AS number, candidate_name AS candidate FROM applications
+        WHERE cycle_id = $1 AND class_id = $2 AND status = 'waitlisted'
+          AND ($3::bigint IS NULL OR category_id = $3::bigint) ORDER BY wait_rank NULLS LAST, id LIMIT 1`,
+      [cycleId, dto.classId, dto.categoryId ?? null],
+    );
+    if (!r.rows[0])
+      throw new DomainError('admissions.list_empty', 'Nobody is on the waiting list', {
+        status: 409,
+      });
+    return r.rows[0];
+  }
+
+  /** Who "Offer the next" would offer, for the preview (docs/design/56). */
+  async nextPreview(ctx: RequestContext, cycleId: string, dto: SelectionNextDto) {
+    return this.db.tenant(requireTenant(ctx), (c) => this.nextOn(c, cycleId, dto));
+  }
+
   /** The next on the waiting list (of a category) is offered the seat. */
   async next(ctx: RequestContext, cycleId: string, dto: SelectionNextDto) {
     return this.db.tenant(requireTenant(ctx), async (c) => {
       await this.lapse(c, cycleId);
-      const r = await c.query<{ id: string }>(
-        `SELECT id::text FROM applications WHERE cycle_id = $1 AND class_id = $2 AND status = 'waitlisted'
-            AND ($3::bigint IS NULL OR category_id = $3::bigint) ORDER BY wait_rank NULLS LAST, id LIMIT 1`,
-        [cycleId, dto.classId, dto.categoryId ?? null],
-      );
-      if (!r.rows[0])
-        throw new DomainError('admissions.list_empty', 'Nobody is on the waiting list', {
-          status: 409,
-        });
-      await this.offerOne(c, ctx, r.rows[0].id, cycleId);
-      return { offered: r.rows[0].id };
+      const x = await this.nextOn(c, cycleId, dto);
+      if (dto.applicationId && dto.applicationId !== x.id)
+        throw new DomainError(
+          'admissions.next_changed',
+          `${x.candidate ?? x.number ?? 'Someone else'} is next on the waiting list now: preview again`,
+          { status: 409 },
+        );
+      await this.offerOne(c, ctx, x.id, cycleId, undefined, dto.offerMessage);
+      return { offered: x.id };
     });
   }
 }

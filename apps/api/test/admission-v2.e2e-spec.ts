@@ -2401,13 +2401,53 @@ describe('online admission (e2e)', () => {
       expect(pdf.statusCode).toBe(200);
       expect(pdf.json().contentType).toBe('application/pdf');
       expect(Buffer.from(pdf.json().base64, 'base64').subarray(0, 4).toString()).toBe('%PDF');
+      // the Selection offer is previewed first, its words naming each family (docs/design/56)
+      const selPreview = await inject({
+        method: 'POST',
+        url: `/admissions/cycles/${cycleId}/selection/offer-preview`,
+        headers: h(),
+        json: { applicationId: appA, subject: 'Offer: a seat for {{name}}' },
+      });
+      expect(selPreview.statusCode).toBe(201);
+      expect(selPreview.json()).toMatchObject({ amount: 20000 });
+      expect(selPreview.json().email.subject).toMatch(/^Offer: a seat for \S/);
+      expect(selPreview.json().email.subject).not.toContain('{{');
+      expect(
+        (
+          await inject({
+            method: 'POST',
+            url: `/admissions/cycles/${cycleId}/selection/offer-preview`,
+            headers: h(),
+            json: { applicationId: '999999999' },
+          })
+        ).statusCode,
+      ).toBe(404);
+      const lastOfferMail = () =>
+        withMigrator((c) =>
+          c.query<{ subject: string; body: string }>(
+            `SELECT m.subject, m.body FROM comms_messages m JOIN comms_templates t ON t.id = m.template_id
+              WHERE m.school_id = $1 AND t.code = 'admission_offer' AND m.channel = 'email'
+              ORDER BY m.id DESC LIMIT 1`,
+            [school.id],
+          ),
+        );
       const offer = await inject({
         method: 'POST',
         url: `/admissions/cycles/${cycleId}/selection/offer`,
         headers: h(),
-        json: { applicationIds: [appA] },
+        json: {
+          applicationIds: [appA],
+          offerMessage: {
+            subject: 'Offer: a seat for {{name}}',
+            intro: '{{name}} has a seat in {{class}}.',
+          },
+        },
       });
       expect(offer.statusCode).toBe(201);
+      const offerMail = (await lastOfferMail()).rows[0]!;
+      expect(offerMail.subject).toMatch(/^Offer: a seat for \S/);
+      expect(offerMail.subject).not.toContain('{{');
+      expect(offerMail.body).toContain('has a seat in Class Mini.');
       let r = await reg(appA);
       expect(r.json()).toMatchObject({ status: 'offered', offer: { admissionFee: 20000 } });
       const fam = await inject({
@@ -2489,14 +2529,38 @@ describe('online admission (e2e)', () => {
       expect(wl.statusCode).toBe(201);
       r = await reg(appA);
       expect(r.json()).toMatchObject({ status: 'waitlisted', waitRank: 1 });
+      // "Offer the next": who it is, then the offer with the words of the preview
+      const nextPreview = await inject({
+        method: 'POST',
+        url: `/admissions/cycles/${cycleId}/selection/next-preview`,
+        headers: h(),
+        json: { classId: classMini },
+      });
+      expect(nextPreview.statusCode).toBe(201);
+      expect(nextPreview.json()).toMatchObject({ id: appA });
+      const moved = await inject({
+        method: 'POST',
+        url: `/admissions/cycles/${cycleId}/selection/next`,
+        headers: h(),
+        json: { classId: classMini, applicationId: appEws },
+      });
+      expect(moved.statusCode).toBe(409);
+      expect(moved.json().type).toBe('admissions.next_changed');
       const next = await inject({
         method: 'POST',
         url: `/admissions/cycles/${cycleId}/selection/next`,
         headers: h(),
-        json: { classId: classMini },
+        json: {
+          classId: classMini,
+          applicationId: appA,
+          offerMessage: { subject: 'Offer from the waiting list' },
+        },
       });
       expect(next.statusCode).toBe(201);
       expect(next.json().offered).toBe(appA);
+      expect((await lastOfferMail()).rows[0]).toMatchObject({
+        subject: 'Offer from the waiting list',
+      });
       r = await reg(appA);
       expect(r.json().status).toBe('offered');
     });
@@ -2508,16 +2572,64 @@ describe('online admission (e2e)', () => {
         const t = await decide(id, { decision: 'approve', marks: 50 });
         expect(t.json().process.current).toMatchObject({ kind: 'selection' });
       }
+      // the draw previewed: nothing changes, the same seed then makes the same draw (docs/design/56)
+      const shown = await inject({
+        method: 'POST',
+        url: `/admissions/cycles/${cycleId}/selection/draw-preview`,
+        headers: h(),
+        json: { classId: classMini, seats: 1, seed: 'fixed-seed' },
+      });
+      expect(shown.statusCode).toBe(201);
+      expect(shown.json().seed).toBe('fixed-seed');
+      expect(shown.json().offered).toHaveLength(1);
+      expect(shown.json().waitlisted).toHaveLength(1);
+      const first = shown.json().offered[0].id as string;
+      const other = shown.json().waitlisted[0].id as string;
+      const random = await inject({
+        method: 'POST',
+        url: `/admissions/cycles/${cycleId}/selection/draw-preview`,
+        headers: h(),
+        json: { classId: classMini, seats: 1 },
+      });
+      expect(random.json().seed).toMatch(/^[0-9a-f]{16}$/);
+      const stale = await inject({
+        method: 'POST',
+        url: `/admissions/cycles/${cycleId}/selection/draw`,
+        headers: h(),
+        json: { classId: classMini, seats: 1, seed: 'fixed-seed', expect: [other] },
+      });
+      expect(stale.statusCode).toBe(409);
+      expect(stale.json().type).toBe('admissions.draw_changed');
       const draw = await inject({
         method: 'POST',
         url: `/admissions/cycles/${cycleId}/selection/draw`,
         headers: h(),
-        json: { classId: classMini, seats: 1, seed: 'fixed-seed' },
+        json: {
+          classId: classMini,
+          seats: 1,
+          seed: 'fixed-seed',
+          expect: [first],
+          offerMessage: { subject: 'Drawn: a seat for {{name}}' },
+        },
       });
       expect(draw.statusCode).toBe(201);
       expect(draw.json().seed).toBe('fixed-seed');
-      expect(draw.json().offered).toHaveLength(1);
-      expect(draw.json().waitlisted).toHaveLength(1);
+      expect(draw.json().offered).toEqual([first]);
+      expect(draw.json().waitlisted).toEqual([other]);
+      // the drawn family's offer carries the words (by email when the family gave one)
+      const drawn = await withMigrator((c) =>
+        c.query<{ channel: string; subject: string | null; email: string | null }>(
+          `SELECT m.channel::text, m.subject, a.contact_email AS email
+             FROM comms_messages m JOIN comms_templates t ON t.id = m.template_id
+             JOIN applications a ON a.id = (m.variables ->> '_app')::bigint
+            WHERE m.school_id = $1 AND t.code = 'admission_offer' AND a.id = $2`,
+          [school.id, first],
+        ),
+      );
+      expect(drawn.rows.length).toBeGreaterThan(0);
+      const drawnMail = drawn.rows.find((x) => x.channel === 'email');
+      expect(Boolean(drawnMail)).toBe(Boolean(drawn.rows[0]!.email));
+      if (drawnMail) expect(drawnMail.subject).toMatch(/^Drawn: a seat for \S/);
       const sel = await inject({
         method: 'GET',
         url: `/admissions/cycles/${cycleId}/selection/${classMini}`,

@@ -3,8 +3,15 @@ import { Badge } from '@edupro/ui';
 import { useRouter } from 'next/navigation';
 import { useState, useTransition } from 'react';
 import { ViewDownload } from '@/components/admissions/ViewDownload';
+import { OfferPreviewDialog } from '@/components/admissions/OfferPreviewDialog';
 import type { Selection } from '@/lib/admission-process';
-import { selectionAction } from '@/lib/admission-process-actions';
+import {
+  selectionAction,
+  selectionDrawPreview,
+  selectionNextPreview,
+  selectionOfferPreview,
+  type SelectionPick,
+} from '@/lib/admission-process-actions';
 
 const dmy = (iso: string | null) =>
   iso
@@ -20,7 +27,8 @@ const dmy = (iso: string | null) =>
  * Selection of a class (docs/design/39, part 4): the merit list of candidates at Selection (merit =
  * form points + marks; equal merit: the older child, then a recorded draw, docs/design/40) to offer or
  * wait-list, a replayable draw for a category, the waiting list with
- * "offer the next", and the offers made.
+ * "offer the next", and the offers made. Every offer shows its message first (docs/design/56): the
+ * email's words may be changed, the same for every family offered together.
  */
 export function SelectionBoard({ data, canManage }: { data: Selection; canManage: boolean }) {
   const router = useRouter();
@@ -31,6 +39,17 @@ export function SelectionBoard({ data, canManage }: { data: Selection; canManage
   const [drawSeats, setDrawSeats] = useState(String(Math.max(data.class.left, 1)));
   const [seed, setSeed] = useState('');
   const [nextCat, setNextCat] = useState('');
+  // an offer waiting on its message: who, and what is sent when the person sends it
+  const [offering, setOffering] = useState<{
+    kind: 'offer' | 'draw' | 'next';
+    ids: string[];
+    names: string[];
+    body: Record<string, unknown>;
+    lead?: string;
+    sendLabel?: string;
+    done: (d: Record<string, unknown>) => string;
+  } | null>(null);
+  const nameOf = (x: SelectionPick) => x.candidate ?? x.number ?? 'A candidate';
   const act = (
     kind: 'offer' | 'waitlist' | 'draw' | 'next',
     body: Record<string, unknown>,
@@ -46,8 +65,51 @@ export function SelectionBoard({ data, canManage }: { data: Selection; canManage
       } else setMsg({ tone: 'danger', text: r.error });
     });
 
+  const preview = (
+    kind: 'draw' | 'next',
+    load: () => Promise<
+      | { ok: true; data: Omit<NonNullable<typeof offering>, 'kind' | 'done'> }
+      | { ok: false; error: string }
+    >,
+    done: (d: Record<string, unknown>) => string,
+  ) =>
+    start(async () => {
+      setMsg(null);
+      const r = await load();
+      if (!r.ok) return setMsg({ tone: 'danger', text: r.error });
+      setOffering({ kind, done, ...r.data });
+    });
+  const drawBody = () => ({
+    classId: data.class.id,
+    seats: Number(drawSeats),
+    ...(drawCat ? { categoryId: drawCat } : {}),
+    ...(seed.trim() ? { seed: seed.trim() } : {}),
+  });
+  const nextBody = () => ({ classId: data.class.id, ...(nextCat ? { categoryId: nextCat } : {}) });
+
   return (
     <div style={{ display: 'grid', gap: 'var(--sp-4)' }}>
+      {offering ? (
+        <OfferPreviewDialog
+          id={offering.ids[0]!}
+          open
+          pending={pending}
+          batch={offering.ids.length > 1 ? { names: offering.names } : undefined}
+          lead={offering.lead}
+          sendLabel={offering.sendLabel}
+          fetchPreview={(edits) => selectionOfferPreview(data.session.id, offering.ids[0]!, edits)}
+          onClose={() => setOffering(null)}
+          onSend={(message) => {
+            const o = offering;
+            setOffering(null);
+            act(
+              o.kind,
+              { ...o.body, ...(Object.keys(message).length ? { offerMessage: message } : {}) },
+              o.done,
+            );
+          }}
+        />
+      ) : null}
       {msg ? (
         <div
           className={`ep-alert ep-alert--${msg.tone}`}
@@ -152,13 +214,17 @@ export function SelectionBoard({ data, canManage }: { data: Selection; canManage
               type="button"
               className="ep-btn ep-btn--primary"
               disabled={pending || !picked.length}
-              onClick={() =>
-                act(
-                  'offer',
-                  { applicationIds: picked },
-                  () => `${String(picked.length)} offered; the families are mailed.`,
-                )
-              }
+              onClick={() => {
+                const rows = data.merit.filter((x) => picked.includes(x.id));
+                setMsg(null);
+                setOffering({
+                  kind: 'offer',
+                  ids: rows.map((x) => x.id),
+                  names: rows.map(nameOf),
+                  body: { applicationIds: rows.map((x) => x.id) },
+                  done: () => `${String(rows.length)} offered; the families are told.`,
+                });
+              }}
             >
               Offer admission ({picked.length})
             </button>
@@ -237,13 +303,28 @@ export function SelectionBoard({ data, canManage }: { data: Selection; canManage
               className="ep-btn ep-btn--primary"
               disabled={pending || !(Number(drawSeats) > 0)}
               onClick={() =>
-                act(
+                preview(
                   'draw',
-                  {
-                    classId: data.class.id,
-                    seats: Number(drawSeats),
-                    ...(drawCat ? { categoryId: drawCat } : {}),
-                    ...(seed.trim() ? { seed: seed.trim() } : {}),
+                  async () => {
+                    const r = await selectionDrawPreview(data.session.id, drawBody());
+                    if (!r.ok) return r;
+                    const { seed: drawn, offered, waitlisted } = r.data;
+                    const waits = waitlisted.map(nameOf);
+                    return {
+                      ok: true as const,
+                      data: {
+                        ids: offered.map((x) => x.id),
+                        names: offered.map(nameOf),
+                        // the same seed makes the same draw; refused if Selection changed meanwhile
+                        body: { ...drawBody(), seed: drawn, expect: offered.map((x) => x.id) },
+                        lead: `Draw with seed ${drawn}: ${offered.map(nameOf).join(', ')} offered${
+                          waits.length
+                            ? `; ${waits.slice(0, 6).join(', ')}${waits.length > 6 ? ` and ${String(waits.length - 6)} more` : ''} go on the waiting list in this order`
+                            : ''
+                        }. Nothing changes until you send.`,
+                        sendLabel: `Draw and send ${String(offered.length)} offer${offered.length === 1 ? '' : 's'}`,
+                      },
+                    };
                   },
                   (d) =>
                     `Draw done with seed ${String(d.seed)}: ${String((d.offered as unknown[]).length)} offered, ${String(
@@ -314,9 +395,22 @@ export function SelectionBoard({ data, canManage }: { data: Selection; canManage
               className="ep-btn ep-btn--secondary"
               disabled={pending}
               onClick={() =>
-                act(
+                preview(
                   'next',
-                  { classId: data.class.id, ...(nextCat ? { categoryId: nextCat } : {}) },
+                  async () => {
+                    const r = await selectionNextPreview(data.session.id, nextBody());
+                    if (!r.ok) return r;
+                    return {
+                      ok: true as const,
+                      data: {
+                        ids: [r.data.id],
+                        names: [nameOf(r.data)],
+                        // refused if someone else is next by the time it is sent
+                        body: { ...nextBody(), applicationId: r.data.id },
+                        lead: `Next on the waiting list: ${nameOf(r.data)}${r.data.number ? ` (${r.data.number})` : ''}.`,
+                      },
+                    };
+                  },
                   () => 'The next on the list is offered.',
                 )
               }

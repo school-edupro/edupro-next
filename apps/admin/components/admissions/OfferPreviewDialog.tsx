@@ -19,6 +19,8 @@ export function OfferPreviewDialog({
   onSend,
   fetchPreview,
   batch,
+  lead,
+  sendLabel,
 }: {
   /** the registration previewed (in a batch: the first family, as the sample) */
   id: string;
@@ -29,8 +31,12 @@ export function OfferPreviewDialog({
   fetchPreview: (
     edits: Partial<Words>,
   ) => Promise<{ ok: true; data: OfferPreview } | { ok: false; error: string }>;
-  /** offers made together (the Excel sheet): the words name each family with {{name}}, {{class}}… */
+  /** offers made together (the Excel sheet, the Selection page): the words name each family with {{name}}, {{class}}… */
   batch?: { names: string[] };
+  /** a line above the message (a draw: its seed and who waits) */
+  lead?: string;
+  /** the send button's words (a draw: "Draw and send …") */
+  sendLabel?: string;
 }) {
   const [data, setData] = useState<OfferPreview | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -104,9 +110,11 @@ export function OfferPreviewDialog({
       primary={{
         label: pending
           ? 'Sending…'
-          : batch
-            ? `Apply and send ${String(batch.names.length)} offer${batch.names.length === 1 ? '' : 's'}`
-            : 'Send the offer',
+          : sendLabel
+            ? sendLabel
+            : batch
+              ? `Apply and send ${String(batch.names.length)} offer${batch.names.length === 1 ? '' : 's'}`
+              : 'Send the offer',
         loading: pending,
         onClick: () => {
           if (words.subject.trim().length < 3 || words.intro.trim().length < 3) {
@@ -123,6 +131,11 @@ export function OfferPreviewDialog({
         </p>
       ) : (
         <div className="ep-offer">
+          {lead ? (
+            <p className="ep-alert ep-alert--info" role="status" style={{ margin: 0 }}>
+              {lead}
+            </p>
+          ) : null}
           {batch ? (
             <p className="ep-field__help" style={{ margin: 0 }}>
               <strong>Goes to:</strong> {batch.names.slice(0, 8).join(', ')}
@@ -159,7 +172,7 @@ export function OfferPreviewDialog({
               <p className="ep-field__help" style={{ margin: 0 }}>
                 {batch ? (
                   <>
-                    The same words for every family in this sheet; write{' '}
+                    The same words for every family; write{' '}
                     {data.templates.fields.map((f, i) => (
                       <span key={f}>
                         {i ? ', ' : ''}

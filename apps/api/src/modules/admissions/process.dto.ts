@@ -66,6 +66,13 @@ export const RegistrationsQuerySchema = z.object({
 });
 export class RegistrationsQueryDto extends createZodDto(RegistrationsQuerySchema) {}
 
+/** An offer's email as the person changed it on the preview (docs/design/56). */
+export const OfferMessageSchema = z.object({
+  subject: z.string().trim().min(3).max(200).optional(),
+  intro: z.string().trim().min(3).max(2000).optional(),
+  note: z.string().trim().max(1000).optional(),
+});
+
 export const DecideSchema = z.object({
   decision: z.enum(['approve', 'reject', 'hold', 'offer', 'waitlist']),
   remarks: Remarks.optional(),
@@ -74,13 +81,7 @@ export const DecideSchema = z.object({
   /** Document check: the fee category confirmed (or changed) */
   categoryId: IdSchema.optional(),
   /** an offer: the email as the person changed it on the preview (docs/design/56) */
-  offerMessage: z
-    .object({
-      subject: z.string().trim().min(3).max(200).optional(),
-      intro: z.string().trim().min(3).max(2000).optional(),
-      note: z.string().trim().max(1000).optional(),
-    })
-    .optional(),
+  offerMessage: OfferMessageSchema.optional(),
 });
 export class DecideDto extends createZodDto(DecideSchema) {}
 
@@ -183,7 +184,11 @@ export const SlotResultsSchema = z.object({
 });
 export class SlotResultsDto extends createZodDto(SlotResultsSchema) {}
 
-export const SelectIdsSchema = z.object({ applicationIds: z.array(IdSchema).min(1).max(5000) });
+export const SelectIdsSchema = z.object({
+  applicationIds: z.array(IdSchema).min(1).max(5000),
+  /** offers: the email's words as changed on the preview, the same for every family (docs/design/56) */
+  offerMessage: OfferMessageSchema.optional(),
+});
 export class SelectIdsDto extends createZodDto(SelectIdsSchema) {}
 
 export const DrawSchema = z.object({
@@ -191,8 +196,21 @@ export const DrawSchema = z.object({
   categoryId: IdSchema.optional(),
   seats: z.number().int().min(1).max(5000),
   seed: z.string().trim().min(1).max(80).optional(),
+  /** the families the preview showed as offered: the draw is refused if it would offer others */
+  expect: z.array(IdSchema).max(5000).optional(),
+  offerMessage: OfferMessageSchema.optional(),
 });
 export class SelectionDrawDto extends createZodDto(DrawSchema) {}
 
-export const NextSchema = z.object({ classId: IdSchema, categoryId: IdSchema.optional() });
+export const NextSchema = z.object({
+  classId: IdSchema,
+  categoryId: IdSchema.optional(),
+  /** the family the preview showed as next: refused if someone else is next now */
+  applicationId: IdSchema.optional(),
+  offerMessage: OfferMessageSchema.optional(),
+});
 export class SelectionNextDto extends createZodDto(NextSchema) {}
+
+/** A Selection offer previewed: the family and the words as changed (docs/design/56). */
+export const SelectionOfferPreviewSchema = OfferPreviewSchema.extend({ applicationId: IdSchema });
+export class SelectionOfferPreviewDto extends createZodDto(SelectionOfferPreviewSchema) {}

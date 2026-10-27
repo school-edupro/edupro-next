@@ -26,8 +26,7 @@ let them change it.
     queued message), and SMS and WhatsApp through `app.send_template` as before.
 - **Fix found on the way (migration 0264):** every admission notice passed `{{school}}` empty, so the
   SMS read "offered admission to Class I at .". `app.admission_notify` now fills in the school's name.
-- **Not covered:** offers made in bulk on the Selection page (and the next offer from the waiting list)
-  still use the template as it is. Excel offers are previewed (below).
+- **Later covered:** Excel offers and every Selection-page offer are previewed too (below).
 
 Checked:
 
@@ -68,3 +67,27 @@ Checked:
   - Edited words are filled in per family in `makeOffer` and in the preview.
 - **Checked:** admission e2e, 64 pass. They cover `{{name}}` and `{{class}}` filled in on the
   preview (subject and html) and the template words answered.
+
+## Selection offers previewed (27 Oct 2026)
+
+Asked: the Selection page's offers go out with the school's words; preview them like the others. The
+user chose all three ways the page offers.
+
+- **Offer admission (N)** on the merit list opens the same dialog for the ticked families: one family
+  is a single offer (its own words), several are a batch (`{{name}}`, `{{class}}`… filled in per
+  family, the first family as the sample).
+- **Offer the next** first asks who is next (`POST …/selection/next-preview`), names them on top of
+  the dialog, and sends with `applicationId`: if someone else is next by then, it is refused
+  (`admissions.next_changed`) and nothing is offered.
+- **Draw** first draws the order (`POST …/selection/draw-preview`, nothing changes; a blank seed gets
+  one made there) and shows the seed, who is offered and who goes on the waiting list in what order;
+  **Draw and send N offers** makes the same draw with that seed and `expect` (the families shown). If the
+  candidates at Selection changed meanwhile, the draw is refused (`admissions.draw_changed`).
+- **API:** `POST admissions/cycles/:id/selection/offer-preview {applicationId, subject?, intro?, note?}`
+  (schedule permission; the registration must be of the session); `selection/offer`, `/draw` and
+  `/next` take `offerMessage {subject?, intro?, note?}`; the words reach each offer through `makeOffer`.
+- **Checked:** admission e2e 64 pass: the Selection preview fills `{{name}}`, a ticked offer's email
+  carries the changed subject and message, "next" refused for the wrong family then sent with the
+  words, the draw previewed (fixed and made seeds), refused with the wrong families, then made with
+  the shown ones. Browser: the Selection page (no candidate at Selection in Alpha, so no offer was
+  made); axe on `/admissions/selection`.

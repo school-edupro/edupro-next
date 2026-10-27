@@ -211,6 +211,46 @@ export async function saveSlotResults(
   ]);
 }
 
+/** A family at Selection, as the previews name them. */
+export interface SelectionPick {
+  id: string;
+  number: string | null;
+  candidate: string | null;
+}
+async function preview<T>(path: string, body: unknown): Promise<Out<T>> {
+  return call<T>(path, 'POST', body, []);
+}
+/** A Selection offer's message before it goes (docs/design/56): the first family as the sample. */
+export async function selectionOfferPreview(
+  cycleId: string,
+  applicationId: string,
+  edits: { subject?: string; intro?: string; note?: string },
+): Promise<{ ok: true; data: OfferPreview } | { ok: false; error: string }> {
+  if (!okId(cycleId) || !okId(applicationId)) return { ok: false, error: 'Unknown registration' };
+  return preview<OfferPreview>(`/admissions/cycles/${cycleId}/selection/offer-preview`, {
+    applicationId,
+    ...edits,
+  });
+}
+/** The draw before it is made: the seed, who would be offered, who would wait (nothing changes). */
+export async function selectionDrawPreview(
+  cycleId: string,
+  body: { classId: string; seats: number; categoryId?: string; seed?: string },
+) {
+  if (!okId(cycleId)) return { ok: false as const, error: 'Unknown session' };
+  return preview<{ seed: string; offered: SelectionPick[]; waitlisted: SelectionPick[] }>(
+    `/admissions/cycles/${cycleId}/selection/draw-preview`,
+    body,
+  );
+}
+/** Who "Offer the next" would offer. */
+export async function selectionNextPreview(
+  cycleId: string,
+  body: { classId: string; categoryId?: string },
+) {
+  if (!okId(cycleId)) return { ok: false as const, error: 'Unknown session' };
+  return preview<SelectionPick>(`/admissions/cycles/${cycleId}/selection/next-preview`, body);
+}
 export async function selectionAction(
   cycleId: string,
   kind: 'offer' | 'waitlist' | 'draw' | 'next',
