@@ -138,15 +138,26 @@ Decided here, change any before building:
   pass; axe on Test results, the registration and the review. Browser: Alpha has no paper yet (the note
   shows); the grid was tried on the test school's own data (typing, the reason box, a refused save).
 
-### Part 3 — interview parameters and entry everywhere
+### Part 3 — interview parameters and entry everywhere — built 27 Oct 2026
 
 - The same papers for Interview stages (parameter, score); the remark column is the panel's remark.
 - Tests and interviews (a slot's candidates) and the review screen take marks by part when the class has
   a paper (the total is worked out); the single marks box stays for classes without one.
 - Admissions list / report builder: Test total, Interview total and % as columns.
 - Tests: API e2e for interview papers; a11y.
+- **As built:** an Interview stage's paper is its parameters (same set-up, same Test results page and
+  sheet). **Tests and interviews**: a slot candidate whose class has a paper gets a box per part
+  (`Communication /10`, `Confidence /10`) instead of one marks box; absent clears them. The
+  **registration page** decision takes marks by part the same way (the total shown as typed). Both
+  send `parts {partId: marks}`: the decision keeps them part by part (`part-marks.ts` `storeMarks`) and
+  records their total; a class without a paper keeps one figure. The **Admissions list / report
+  builder** have Written test marks, Written test %, Written test by subject, Interview marks,
+  Interview %, Interview by parameter (stages of a kind added up; "Absent" when absent). Checked:
+  e2e (an interview slot with parts and an absent candidate held, over-maximum refused, merit = test +
+  interview, the registration decided with parts, the list columns); axe on Tests and interviews;
+  browser on the test school's slot and Interview results.
 
-### Part 4 — results to families after a release date
+### Part 4 — results to families after a release date — built 27 Oct 2026 (migration 0267)
 
 - On the results page: **Release to families** per session, class and stage: a date and time (now or
   later), changeable until it passes, and "Withdraw" before it.
@@ -155,6 +166,19 @@ Decided here, change any before building:
 - Optional **Tell the families** button once released: an email / SMS / WhatsApp from a new template
   `admission_result` (sent by the workers; nothing is sent by itself, there is no scheduler).
 - Tests: API e2e (hidden before, shown after, withdraw), portal a11y.
+- **As built:** `admission_result_releases` (session, class, stage, release time, who set it, when
+  the families were told and how many). Test results → **Results to families**: Not released / Set
+  (goes out on …) / Out (since …, told N families on …); **Release on** (India time) and **Release
+  now**, **Change the time** and **Withdraw** until it passes (then refused: "already out"); once out,
+  **Tell the families** (asks first) sends the existing `admission_result` template (email with the
+  marks by part and the total; SMS and WhatsApp with "Written test: 88 out of 100 (88%)") to every
+  candidate with marks or absent, through the workers. The candidate portal's registration shows
+  "Written test result: 88 out of 100 (88%)" and each part, only for stages whose release has passed
+  (English and Hindi words). API: `PUT admissions/results/release`, `POST …/release/withdraw`,
+  `POST …/release/tell`; the grid answers `release`. Checked: e2e (nothing before, a past time
+  refused, telling refused before, withdraw, released now and shown part by part, no change or
+  withdraw after, told 3 with the email queued, an unreleased interview not shown); browser on the
+  test school (the portal card, the panel Out / Not released); axe on Test results.
 
 ## Not in this plan
 

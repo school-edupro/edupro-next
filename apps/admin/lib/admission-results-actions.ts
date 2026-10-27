@@ -2,7 +2,7 @@
 /** Test and interview results by part (docs/design/57, part 2). */
 import { revalidatePath } from 'next/cache';
 import { ApiError, apiFetch } from './api';
-import type { ResultsSheetResult } from './admission-results';
+import type { ResultsRelease, ResultsSheetResult } from './admission-results';
 
 type Out<T> = { ok: true; data: T } | { ok: false; error: string };
 type File64 = { filename: string; contentType: string; base64: string };
@@ -112,6 +112,56 @@ export async function resultsExport(query: string, format: 'xlsx' | 'pdf'): Prom
   q.set('format', format);
   try {
     return { ok: true, data: await apiFetch<File64>(`/admissions/results/export?${q.toString()}`) };
+  } catch (e) {
+    return problem(e);
+  }
+}
+
+type Place = { cycleId: string; classId: string; stageId: string };
+
+/** The results of a class and stage shown to families from a date and time (now or later). */
+export async function setResultsRelease(
+  p: Place,
+  releaseAt: string,
+): Promise<Out<{ release: ResultsRelease | null }>> {
+  if (!placeOk(p)) return { ok: false, error: 'Choose the session, class and stage' };
+  try {
+    const data = await apiFetch<{ release: ResultsRelease | null }>('/admissions/results/release', {
+      method: 'PUT',
+      body: JSON.stringify({ ...p, releaseAt }),
+    });
+    revalidatePath(PAGE);
+    return { ok: true, data };
+  } catch (e) {
+    return problem(e);
+  }
+}
+
+/** A release withdrawn before its time. */
+export async function withdrawResultsRelease(p: Place): Promise<Out<{ release: null }>> {
+  if (!placeOk(p)) return { ok: false, error: 'Choose the session, class and stage' };
+  try {
+    const data = await apiFetch<{ release: null }>('/admissions/results/release/withdraw', {
+      method: 'POST',
+      body: JSON.stringify(p),
+    });
+    revalidatePath(PAGE);
+    return { ok: true, data };
+  } catch (e) {
+    return problem(e);
+  }
+}
+
+/** The families told the results are out (email, SMS and WhatsApp, sent by the workers). */
+export async function tellResults(p: Place): Promise<Out<{ told: number }>> {
+  if (!placeOk(p)) return { ok: false, error: 'Choose the session, class and stage' };
+  try {
+    const data = await apiFetch<{ told: number }>('/admissions/results/release/tell', {
+      method: 'POST',
+      body: JSON.stringify(p),
+    });
+    revalidatePath(PAGE);
+    return { ok: true, data };
   } catch (e) {
     return problem(e);
   }

@@ -6,6 +6,10 @@ export type Lang = 'en' | 'hi';
 export const LANG_COOKIE = 'edupro_lang';
 
 const DICT: Record<string, string> = {
+  // test and interview results (docs/design/57)
+  result: 'परिणाम',
+  Absent: 'अनुपस्थित',
+  'out of': 'में से',
   'Admission Portal': 'प्रवेश पोर्टल',
   'Admission portal': 'प्रवेश पोर्टल',
   Home: 'होम',

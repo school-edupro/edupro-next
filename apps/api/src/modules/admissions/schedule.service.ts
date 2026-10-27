@@ -11,6 +11,7 @@ import { admitCardPdf, meritListPdf } from './admission-pdf';
 import { classPointRules } from './points-rules';
 import { meritOrder, seededOrder, TIE_RULE } from './merit-order';
 import { slotOf } from './process-engine';
+import { papersIn } from './part-marks';
 import { AdmissionProcessService } from './process.service';
 import type {
   AllotDto,
@@ -245,6 +246,7 @@ export class AdmissionScheduleService {
         number: string | null;
         candidate: string | null;
         class_name: string;
+        class_id: string;
         status: string;
         at_stage: boolean;
         notified_at: Date | null;
@@ -254,7 +256,7 @@ export class AdmissionScheduleService {
         remarks: string | null;
       }>(
         `SELECT x.application_id::text, x.roll_no, a.application_no AS number, a.candidate_name AS candidate, cl.name AS class_name,
-                a.status::text, (a.process_steps -> a.stage_no ->> 'stageId') = x.stage_id::text AS at_stage, x.notified_at,
+                a.class_id::text, a.status::text, (a.process_steps -> a.stage_no ->> 'stageId') = x.stage_id::text AS at_stage, x.notified_at,
                 r.attendance, r.marks::text, r.decision, r.remarks
            FROM admission_slot_allotments x JOIN applications a ON a.id = x.application_id JOIN classes cl ON cl.id = a.class_id
            LEFT JOIN LATERAL (SELECT * FROM admission_stage_results r WHERE r.application_id = a.id AND r.stage_id = x.stage_id
@@ -262,6 +264,21 @@ export class AdmissionScheduleService {
           WHERE x.slot_id = $1 ORDER BY x.roll_no`,
         [id],
       );
+      // a class with a paper takes its marks part by part (docs/design/57)
+      const papers = await papersIn(c, s.stage_id);
+      const byPart = new Map<string, Record<string, number | null>>();
+      if (list.rows.length && papers.size) {
+        const m = await c.query<{ id: string; part_id: string; marks: string | null }>(
+          `SELECT application_id::text AS id, part_id::text, marks::text FROM admission_part_marks
+            WHERE stage_id = $1 AND application_id = ANY($2::bigint[])`,
+          [s.stage_id, list.rows.map((x) => x.application_id)],
+        );
+        for (const x of m.rows)
+          byPart.set(x.id, {
+            ...(byPart.get(x.id) ?? {}),
+            [x.part_id]: x.marks !== null ? Number(x.marks) : null,
+          });
+      }
       const waiting = await c.query<{ n: number }>(
         // eslint-disable-next-line no-restricted-syntax -- WAITING_AT is a constant; values are bound parameters
         `SELECT count(*)::int AS n FROM applications a WHERE ${WAITING_AT}
@@ -294,6 +311,13 @@ export class AdmissionScheduleService {
           notified: Boolean(x.notified_at),
           attendance: x.attendance,
           marks: x.marks !== null ? Number(x.marks) : null,
+          parts:
+            papers.get(x.class_id)?.parts.map((pt) => ({
+              id: pt.id,
+              name: pt.name,
+              maxMarks: pt.maxMarks,
+            })) ?? null,
+          partMarks: byPart.get(x.application_id) ?? {},
           decision: x.decision,
           remarks: x.remarks,
         })),
@@ -444,7 +468,10 @@ export class AdmissionScheduleService {
           decision:
             row.attendance === 'absent' && row.decision === 'approve' ? 'hold' : row.decision,
           attendance: row.attendance ?? null,
-          marks: row.attendance === 'absent' ? null : (row.marks ?? null),
+          // a class with a paper: marks by part, the total decided on (docs/design/57)
+          ...(row.parts
+            ? { parts: row.attendance === 'absent' ? {} : row.parts }
+            : { marks: row.attendance === 'absent' ? null : (row.marks ?? null) }),
           remarks: row.remarks,
         });
         saved += 1;

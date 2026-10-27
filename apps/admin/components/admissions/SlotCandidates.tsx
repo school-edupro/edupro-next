@@ -7,6 +7,8 @@ import { allotSlot, saveSlotResults, unallotSlot } from '@/lib/admission-process
 type Row = {
   attendance: 'present' | 'absent';
   marks: string;
+  /** marks by part when the class has a paper (docs/design/57) */
+  parts: Record<string, string>;
   decision: '' | 'approve' | 'reject' | 'hold';
   remarks: string;
 };
@@ -36,6 +38,12 @@ export function SlotCandidates({
   const fresh = (c: SlotDetail['candidates'][number]): Row => ({
     attendance: (c.attendance as 'present' | 'absent' | null) ?? 'present',
     marks: c.marks !== null ? String(c.marks) : '',
+    parts: Object.fromEntries(
+      (c.parts ?? []).map((pt) => [
+        pt.id,
+        c.partMarks[pt.id] != null ? String(c.partMarks[pt.id]) : '',
+      ]),
+    ),
     decision: '',
     remarks: c.remarks ?? '',
   });
@@ -135,17 +143,44 @@ export function SlotCandidates({
                     </td>
                     {marksStage ? (
                       <td>
-                        <input
-                          className="ep-input"
-                          type="number"
-                          min={0}
-                          max={slot.maxMarks ?? undefined}
-                          step="0.5"
-                          aria-label={`Marks of ${c.candidate ?? c.number ?? ''}`}
-                          value={r.marks}
-                          disabled={done || !canDecide || r.attendance === 'absent'}
-                          onChange={(e) => set(c.applicationId, { marks: e.target.value })}
-                        />
+                        {c.parts ? (
+                          <span className="ep-slot-parts">
+                            {c.parts.map((pt) => (
+                              <label key={pt.id} className="ep-field">
+                                <span className="ep-field__help">
+                                  {pt.name} /{pt.maxMarks}
+                                </span>
+                                <input
+                                  className="ep-input"
+                                  type="number"
+                                  min={0}
+                                  max={pt.maxMarks}
+                                  step="0.5"
+                                  aria-label={`${pt.name} marks of ${c.candidate ?? c.number ?? ''}`}
+                                  value={r.parts[pt.id] ?? ''}
+                                  disabled={done || !canDecide || r.attendance === 'absent'}
+                                  onChange={(e) =>
+                                    set(c.applicationId, {
+                                      parts: { ...r.parts, [pt.id]: e.target.value },
+                                    })
+                                  }
+                                />
+                              </label>
+                            ))}
+                          </span>
+                        ) : (
+                          <input
+                            className="ep-input"
+                            type="number"
+                            min={0}
+                            max={slot.maxMarks ?? undefined}
+                            step="0.5"
+                            aria-label={`Marks of ${c.candidate ?? c.number ?? ''}`}
+                            value={r.marks}
+                            disabled={done || !canDecide || r.attendance === 'absent'}
+                            onChange={(e) => set(c.applicationId, { marks: e.target.value })}
+                          />
+                        )}
                       </td>
                     ) : null}
                     <td>
@@ -220,7 +255,21 @@ export function SlotCandidates({
                     return {
                       applicationId: c.applicationId,
                       attendance: r.attendance,
-                      marks: r.attendance === 'absent' || r.marks === '' ? null : Number(r.marks),
+                      ...(c.parts
+                        ? {
+                            parts: Object.fromEntries(
+                              c.parts.map((pt) => [
+                                pt.id,
+                                r.attendance === 'absent' || (r.parts[pt.id] ?? '') === ''
+                                  ? null
+                                  : Number(r.parts[pt.id]),
+                              ]),
+                            ),
+                          }
+                        : {
+                            marks:
+                              r.attendance === 'absent' || r.marks === '' ? null : Number(r.marks),
+                          }),
                       decision: r.decision as 'approve' | 'reject' | 'hold',
                       ...(r.remarks.trim() ? { remarks: r.remarks.trim() } : {}),
                     };

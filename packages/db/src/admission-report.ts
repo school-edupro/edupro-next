@@ -63,6 +63,13 @@ const RECORD: ReportFieldDef[] = [
   { key: 'registered_on', label: 'Registered on', section: 'record', type: 'date' },
   { key: 'progress', label: 'Form filled (%)', section: 'record', type: 'number' },
   { key: 'merit', label: 'Merit (marks)', section: 'record', type: 'number' },
+  // docs/design/57: the written test and the interview, part by part
+  { key: 'test_marks', label: 'Written test marks', section: 'record', type: 'number' },
+  { key: 'test_percent', label: 'Written test %', section: 'record', type: 'number' },
+  { key: 'test_detail', label: 'Written test by subject', section: 'record', type: 'text' },
+  { key: 'interview_marks', label: 'Interview marks', section: 'record', type: 'number' },
+  { key: 'interview_percent', label: 'Interview %', section: 'record', type: 'number' },
+  { key: 'interview_detail', label: 'Interview by parameter', section: 'record', type: 'text' },
   // docs/design/48: the form's points and what the office should look at
   { key: 'form_points', label: 'Form points', section: 'record', type: 'number' },
   { key: 'points_detail', label: 'Points by criterion', section: 'record', type: 'text' },
@@ -182,6 +189,64 @@ export async function levelDeciders(
  * Every level's latest decision and remark of each registration, as one line (docs/design/50):
  * "Document check · Approval: approved, papers fine (Anita Deshmukh, 26-10) · Level 2: …".
  */
+/** The test and interview marks by part of applications (docs/design/57), the stages of a kind added up. */
+export async function stageMarks(
+  c: PoolClient,
+  ids: string[],
+): Promise<
+  Map<
+    string,
+    Record<
+      'test' | 'interview',
+      { total: number | null; max: number; absent: boolean; detail: string }
+    >
+  >
+> {
+  const out = new Map<
+    string,
+    Record<
+      'test' | 'interview',
+      { total: number | null; max: number; absent: boolean; detail: string }
+    >
+  >();
+  if (!ids.length) return out;
+  const r = await c.query<{
+    id: string;
+    kind: 'test' | 'interview';
+    absent: boolean;
+    total: string | null;
+    max_total: string | null;
+    detail: string | null;
+  }>(
+    `SELECT sm.application_id::text AS id, st.kind, sm.absent, sm.total::text, sm.max_total::text,
+            (SELECT string_agg(m.part_name || ' ' || COALESCE(trim_scale(m.marks)::text, '-') || '/' || trim_scale(m.max_marks)::text,
+                               ' · ' ORDER BY pp.sort_order, m.id)
+               FROM admission_part_marks m JOIN admission_paper_parts pp ON pp.id = m.part_id
+              WHERE m.application_id = sm.application_id AND m.stage_id = sm.stage_id) AS detail
+       FROM admission_stage_marks sm JOIN admission_stages st ON st.id = sm.stage_id
+      WHERE sm.application_id = ANY($1::bigint[]) AND st.kind IN ('test', 'interview') ORDER BY sm.id`,
+    [ids],
+  );
+  for (const x of r.rows) {
+    const o =
+      out.get(x.id) ??
+      ({} as Record<
+        'test' | 'interview',
+        { total: number | null; max: number; absent: boolean; detail: string }
+      >);
+    const had = o[x.kind];
+    const total = x.total !== null ? Number(x.total) : null;
+    o[x.kind] = {
+      total: had && had.total !== null ? (total !== null ? had.total + total : had.total) : total,
+      max: (had?.max ?? 0) + Number(x.max_total ?? 0),
+      absent: (had?.absent ?? true) && x.absent,
+      detail: [had?.detail, x.absent ? 'Absent' : (x.detail ?? '')].filter(Boolean).join('; '),
+    };
+    out.set(x.id, o);
+  }
+  return out;
+}
+
 export async function levelRemarks(c: PoolClient, ids: string[]): Promise<Map<string, string>> {
   const out = new Map<string, string>();
   if (!ids.length) return out;
@@ -309,6 +374,12 @@ export async function loadAdmissionReportRows(
     c,
     r.rows.map((x) => x.level),
   );
+  const marks = await stageMarks(
+    c,
+    r.rows.map((x) => x.id),
+  );
+  const pct = (m: { total: number | null; max: number } | undefined) =>
+    m && m.total !== null && m.max > 0 ? Math.round((m.total / m.max) * 10000) / 100 : null;
   const now = Date.now();
   return r.rows.map((x) => {
     const waiting = x.level !== null;
@@ -358,6 +429,12 @@ export async function loadAdmissionReportRows(
             .join('; ')
         : null,
       waiting_no: x.status === 'waitlisted' ? x.wait_rank : null,
+      test_marks: marks.get(x.id)?.test?.total ?? null,
+      test_percent: pct(marks.get(x.id)?.test),
+      test_detail: marks.get(x.id)?.test?.detail || null,
+      interview_marks: marks.get(x.id)?.interview?.total ?? null,
+      interview_percent: pct(marks.get(x.id)?.interview),
+      interview_detail: marks.get(x.id)?.interview?.detail || null,
       registration_fee: x.registration_fee !== null ? Number(x.registration_fee) : null,
       registration_receipt: x.reg_receipt,
       admission_fee: x.admission_fee !== null ? Number(x.admission_fee) : null,

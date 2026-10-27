@@ -7,7 +7,9 @@ import { ADMISSIONS } from './admissions.dto';
 import { ADMISSION_SCHEDULE } from './process.service';
 import {
   ResultsExportDto,
+  ResultsPlaceDto,
   ResultsQueryDto,
+  ResultsReleaseDto,
   ResultsSaveDto,
   ResultsSheetDto,
   ResultsUploadQueryDto,
@@ -68,6 +70,29 @@ export class AdmissionResultsController {
     @Req() req: FastifyRequest,
   ) {
     return this.svc.upload(ctx, req.body, q.apply === '1');
+  }
+
+  @Put('release')
+  @ApiOperation({
+    summary: 'The results of a class and stage shown to families from a date and time',
+  })
+  @RequirePermission(ADMISSION_SCHEDULE)
+  release(@ReqCtx() ctx: RequestContext, @Body() dto: ResultsReleaseDto) {
+    return this.svc.setRelease(ctx, dto);
+  }
+
+  @Post('release/withdraw')
+  @ApiOperation({ summary: 'A release withdrawn before its time' })
+  @RequirePermission(ADMISSION_SCHEDULE)
+  withdraw(@ReqCtx() ctx: RequestContext, @Body() dto: ResultsPlaceDto) {
+    return this.svc.withdrawRelease(ctx, dto);
+  }
+
+  @Post('release/tell')
+  @ApiOperation({ summary: 'The families told the results are out (email, SMS, WhatsApp)' })
+  @RequirePermission(ADMISSION_SCHEDULE)
+  tell(@ReqCtx() ctx: RequestContext, @Body() dto: ResultsPlaceDto) {
+    return this.svc.tell(ctx, dto);
   }
 
   @Get('export')

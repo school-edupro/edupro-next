@@ -23,6 +23,13 @@ interface Detail extends RegistrationForm {
       name: string;
       kind: 'document_check' | 'test' | 'interview' | 'interaction' | 'selection' | 'custom';
       maxMarks: number | null;
+      /** the class's paper (docs/design/57): marks are entered part by part */
+      paper?: {
+        parts: Array<{ id: string; name: string; maxMarks: number; passMarks: number | null }>;
+        total: number;
+        minPercent: number | null;
+      } | null;
+      partMarks?: { marks: Record<string, number | null>; absent: boolean } | null;
       level: number;
       levels: number;
       levelName: string;

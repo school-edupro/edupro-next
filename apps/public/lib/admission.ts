@@ -124,6 +124,16 @@ export interface PortalApplication {
   } | null;
   offer: { expiresAt: string | null; admissionFee: number } | null;
   waitRank: number | null;
+  /** test and interview marks the school has released (docs/design/57, part 4) */
+  results?: Array<{
+    stage: string;
+    kind: string;
+    absent: boolean;
+    parts: Array<{ name: string; max: number; marks: number | null }>;
+    total: number | null;
+    maxTotal: number | null;
+    percent: number | null;
+  }>;
   correction: { remark: string; dueOn: string | null } | null;
   admissionNo: string | null;
   admissionFeeDue: number;

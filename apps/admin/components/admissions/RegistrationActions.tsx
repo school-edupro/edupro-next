@@ -33,6 +33,13 @@ export function RegistrationActions({
     name: string;
     kind: Kind;
     maxMarks: number | null;
+    /** the class's paper (docs/design/57): marks are entered part by part */
+    paper?: {
+      parts: Array<{ id: string; name: string; maxMarks: number; passMarks: number | null }>;
+      total: number;
+      minPercent: number | null;
+    } | null;
+    partMarks?: { marks: Record<string, number | null>; absent: boolean } | null;
     level: number;
     levels: number;
     levelName: string;
@@ -51,6 +58,19 @@ export function RegistrationActions({
   const [error, setError] = useState<string | null>(null);
   const [remarks, setRemarks] = useState('');
   const [marks, setMarks] = useState('');
+  // marks by part when the class has a paper, starting from what was entered (docs/design/57)
+  const [parts, setParts] = useState<Record<string, string>>(() =>
+    Object.fromEntries(
+      (current?.paper?.parts ?? []).map((pt) => [
+        pt.id,
+        current?.partMarks?.marks[pt.id] != null ? String(current.partMarks.marks[pt.id]) : '',
+      ]),
+    ),
+  );
+  const paper = current?.paper ?? null;
+  const partsTotal = Object.values(parts)
+    .filter((v) => v !== '' && Number.isFinite(Number(v)))
+    .reduce((n, v) => n + Number(v), 0);
   const [attendance, setAttendance] = useState<'present' | 'absent'>('present');
   const [cat, setCat] = useState(categoryId ?? '');
   const [mode, setMode] = useState<'decide' | 'send' | 'undo'>('decide');
@@ -86,7 +106,20 @@ export function RegistrationActions({
         ...(offerMessage && Object.keys(offerMessage).length ? { offerMessage } : {}),
         ...(remarks.trim() ? { remarks: remarks.trim() } : {}),
         ...(current?.kind === 'test' || current?.kind === 'interview'
-          ? { attendance, marks: attendance === 'absent' || marks === '' ? null : Number(marks) }
+          ? paper
+            ? {
+                attendance,
+                parts:
+                  attendance === 'absent'
+                    ? {}
+                    : Object.fromEntries(
+                        paper.parts.map((pt) => [
+                          pt.id,
+                          parts[pt.id] === '' ? null : Number(parts[pt.id]),
+                        ]),
+                      ),
+              }
+            : { attendance, marks: attendance === 'absent' || marks === '' ? null : Number(marks) }
           : {}),
         ...(current?.kind === 'document_check' && cat ? { categoryId: cat } : {}),
       }),
@@ -179,7 +212,30 @@ export function RegistrationActions({
                   <option value="absent">Absent</option>
                 </select>
               </label>
-              {attendance === 'present' ? (
+              {attendance === 'present' && paper ? (
+                <>
+                  {paper.parts.map((pt) => (
+                    <label key={pt.id} className="ep-field">
+                      <span className="ep-field__label">
+                        {pt.name} (out of {pt.maxMarks})
+                      </span>
+                      <input
+                        className="ep-input"
+                        type="number"
+                        min={0}
+                        max={pt.maxMarks}
+                        step="0.5"
+                        value={parts[pt.id] ?? ''}
+                        onChange={(e) => setParts((p) => ({ ...p, [pt.id]: e.target.value }))}
+                      />
+                    </label>
+                  ))}
+                  <span className="ep-field__help" style={{ alignSelf: 'flex-end' }}>
+                    Total {Math.round(partsTotal * 100) / 100} of {paper.total}
+                  </span>
+                </>
+              ) : null}
+              {attendance === 'present' && !paper ? (
                 <label className="ep-field">
                   <span className="ep-field__label">
                     Marks{current.maxMarks ? ` (out of ${String(current.maxMarks)})` : ''}

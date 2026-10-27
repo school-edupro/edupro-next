@@ -29,6 +29,7 @@ import {
   type ProcessStep,
   type StageKind,
 } from './process-engine';
+import { checkParts, marksOf, papersIn, storeMarks } from './part-marks';
 import type {
   BulkDecideDto,
   DecideDto,
@@ -494,6 +495,24 @@ export class AdmissionProcessService {
     return r.rows[0]?.ok ?? false;
   }
 
+  /** The paper of a test or interview for the class, and the marks by part entered so far. */
+  private async paperAt(
+    c: PoolClient,
+    stage: { id: string; kind: string },
+    appId: string,
+    classId: string,
+  ) {
+    if (stage.kind !== 'test' && stage.kind !== 'interview')
+      return { paper: null, partMarks: null };
+    const paper = (await papersIn(c, stage.id)).get(classId) ?? null;
+    if (!paper) return { paper: null, partMarks: null };
+    const m = await marksOf(c, appId, stage.id);
+    return {
+      paper: { parts: paper.parts, total: paper.total, minPercent: paper.minPercent },
+      partMarks: m ? { marks: m.marks, absent: m.absent } : null,
+    };
+  }
+
   /** A class's maximum for a stage: its paper's total (docs/design/57), else the stage's maximum. */
   private async classMax(c: PoolClient, stageId: string, classId: string): Promise<number | null> {
     const r = await c.query<{ m: string | null }>(
@@ -610,6 +629,8 @@ export class AdmissionProcessService {
                   name: stage.name,
                   kind: stage.kind,
                   maxMarks: await this.classMax(c, stage.id, a.class_id),
+                  // the class's paper, and the marks entered so far (docs/design/57)
+                  ...(await this.paperAt(c, stage, a.id, a.class_id)),
                   level: p.level_no ?? 1,
                   levels: step.levels.length,
                   levelName: level?.name ?? '',
@@ -921,7 +942,38 @@ export class AdmissionProcessService {
     // once per stage (another level of the stage that recorded marks keeps them; merit counts them once)
     let marks = dto.marks;
     let attendance = dto.attendance;
-    if (marksStage && dto.marks === undefined) {
+    if (dto.parts !== undefined) {
+      // marks by part of the class's paper (docs/design/57): kept part by part, the total decided on
+      if (!marksStage)
+        throw new DomainError('validation-failed', `${stage.name} takes no marks`, { status: 400 });
+      const paper = (await papersIn(c, stage.id)).get(a.class_id);
+      if (!paper)
+        throw new DomainError(
+          'validation-failed',
+          `${a.class_name} has no paper for ${stage.name}: give one marks figure`,
+          { status: 400 },
+        );
+      checkParts(paper, dto.parts);
+      const absent = dto.attendance === 'absent';
+      const before = await marksOf(c, id, stage.id);
+      const next = Object.fromEntries(
+        paper.parts.map((pt) => [
+          pt.id,
+          dto.parts![pt.id] !== undefined ? dto.parts![pt.id]! : (before?.marks[pt.id] ?? null),
+        ]),
+      );
+      const stored = await storeMarks(
+        c,
+        ctx.user.id,
+        id,
+        stage.id,
+        paper,
+        next,
+        absent,
+        before?.remark ?? null,
+      );
+      marks = stored.total;
+    } else if (marksStage && dto.marks === undefined) {
       const sm = await c.query<{ total: string | null; absent: boolean; has: boolean }>(
         `SELECT m.total::text, m.absent,
                 EXISTS (SELECT 1 FROM admission_stage_results x WHERE x.application_id = m.application_id

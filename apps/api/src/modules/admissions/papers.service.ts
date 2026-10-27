@@ -4,6 +4,7 @@ import { AuditService } from '../../common/audit/audit.service';
 import { DbService } from '../../common/db/db.service';
 import { DomainError } from '../../common/errors/domain-error';
 import { requireTenant, type RequestContext } from '../../common/http/request-context';
+import { papersIn, type Paper } from './part-marks';
 import type { CopyPaperDto, PaperDto } from './process.dto';
 
 /** Parts often written in, beyond the school's own subjects (offered as quick picks). */
@@ -16,19 +17,7 @@ const INTERVIEW_PICKS = [
   'Parent interaction',
 ];
 
-export interface PaperPart {
-  id: string;
-  name: string;
-  maxMarks: number;
-  passMarks: number | null;
-}
-export interface Paper {
-  id: string;
-  minPercent: number | null;
-  parts: PaperPart[];
-  /** the class's maximum for the stage: the sum of the parts */
-  total: number;
-}
+export type { Paper, PaperPart } from './part-marks';
 
 /**
  * Test and interview papers by class (docs/design/57, part 1): a Test or Interview stage's paper for a
@@ -74,41 +63,8 @@ export class AdmissionPapersService {
   }
 
   /** The stage's papers, one per class (none: null). */
-  async papersIn(c: PoolClient, stageId: string): Promise<Map<string, Paper>> {
-    const r = await c.query<{
-      class_id: string;
-      paper_id: string;
-      min_percent: string | null;
-      part_id: string | null;
-      name: string | null;
-      max_marks: string | null;
-      pass_marks: string | null;
-    }>(
-      `SELECT p.class_id::text, p.id::text AS paper_id, p.min_percent::text, pp.id::text AS part_id, pp.name,
-              pp.max_marks::text, pp.pass_marks::text
-         FROM admission_papers p
-         JOIN admission_paper_parts pp ON pp.paper_id = p.id AND pp.status = 'active'
-        WHERE p.stage_id = $1 ORDER BY p.class_id, pp.sort_order, pp.id`,
-      [stageId],
-    );
-    const out = new Map<string, Paper>();
-    for (const x of r.rows) {
-      const p = out.get(x.class_id) ?? {
-        id: x.paper_id,
-        minPercent: x.min_percent !== null ? Number(x.min_percent) : null,
-        parts: [],
-        total: 0,
-      };
-      p.parts.push({
-        id: x.part_id!,
-        name: x.name!,
-        maxMarks: Number(x.max_marks),
-        passMarks: x.pass_marks !== null ? Number(x.pass_marks) : null,
-      });
-      p.total = Math.round((p.total + Number(x.max_marks)) * 100) / 100;
-      out.set(x.class_id, p);
-    }
-    return out;
+  papersIn(c: PoolClient, stageId: string): Promise<Map<string, Paper>> {
+    return papersIn(c, stageId);
   }
 
   /** A Test or Interview stage: every class with its paper, the other marks stages, and quick picks. */

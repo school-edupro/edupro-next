@@ -39,8 +39,17 @@ export interface ResultsView {
     paper: Paper | null;
   };
   slots: Array<{ id: string; label: string }>;
+  /** the marks shown to families from a date and time (docs/design/57, part 4) */
+  release: ResultsRelease | null;
   counts: { all: number; waiting: number; marked: number; below: number };
   rows: ResultRow[];
+}
+export interface ResultsRelease {
+  at: string;
+  passed: boolean;
+  by: string | null;
+  toldAt: string | null;
+  toldCount: number | null;
 }
 export interface ResultsOptions {
   cycles: Array<{

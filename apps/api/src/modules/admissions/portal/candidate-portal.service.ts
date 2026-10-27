@@ -500,6 +500,60 @@ export class CandidatePortalService {
     });
   }
 
+  /** The test and interview marks of a registration whose release time has passed, part by part. */
+  private async releasedResults(c: PoolClient, appId: string, cycleId: string, classId: string) {
+    const r = await c.query<{
+      stage_id: string;
+      stage: string;
+      kind: string;
+      absent: boolean;
+      total: string | null;
+      max_total: string | null;
+    }>(
+      `SELECT sm.stage_id::text, st.name AS stage, st.kind, sm.absent, sm.total::text, sm.max_total::text
+         FROM admission_stage_marks sm JOIN admission_stages st ON st.id = sm.stage_id
+         JOIN admission_result_releases rr ON rr.cycle_id = $2 AND rr.class_id = $3 AND rr.stage_id = sm.stage_id
+                                          AND rr.release_at <= now()
+        WHERE sm.application_id = $1 AND (sm.absent OR sm.total IS NOT NULL)
+        ORDER BY st.sort_order, st.id`,
+      [appId, cycleId, classId],
+    );
+    if (!r.rows.length) return [];
+    const parts = await c.query<{
+      stage_id: string;
+      name: string;
+      max: string;
+      marks: string | null;
+    }>(
+      `SELECT m.stage_id::text, m.part_name AS name, m.max_marks::text AS max, m.marks::text
+         FROM admission_part_marks m JOIN admission_paper_parts pp ON pp.id = m.part_id
+        WHERE m.application_id = $1 AND m.stage_id = ANY($2::bigint[]) ORDER BY pp.sort_order, m.id`,
+      [appId, r.rows.map((x) => x.stage_id)],
+    );
+    return r.rows.map((x) => {
+      const total = x.total !== null ? Number(x.total) : null;
+      const max = x.max_total !== null ? Number(x.max_total) : null;
+      return {
+        stage: x.stage,
+        kind: x.kind,
+        absent: x.absent,
+        parts: x.absent
+          ? []
+          : parts.rows
+              .filter((p) => p.stage_id === x.stage_id)
+              .map((p) => ({
+                name: p.name,
+                max: Number(p.max),
+                marks: p.marks !== null ? Number(p.marks) : null,
+              })),
+        total: x.absent ? null : total,
+        maxTotal: max,
+        percent:
+          !x.absent && total !== null && max ? Math.round((total / max) * 10000) / 100 : null,
+      };
+    });
+  }
+
   async get(cand: AdmissionCandidate, id: string) {
     return this.db.tenant(this.t(cand), async (c) => {
       const a = await this.own(c, cand, id);
@@ -529,6 +583,7 @@ export class CandidatePortalService {
         [id],
       );
       const slot = await slotOf(c, id);
+      const results = await this.releasedResults(c, id, a.cycle_id, a.class_id);
       const x = extra.rows[0]!;
       // closed for this family: the form opens read-only and the fee waits (docs/design/41, part 4)
       const waiting = a.status === 'draft' || (a.status === 'submitted' && !a.application_no);
@@ -539,6 +594,8 @@ export class CandidatePortalService {
         passUntil: open?.passUntil ?? null,
         steps,
         slot: slot && ['registered', 'under_review'].includes(a.status) ? slot : null,
+        // test and interview marks the school has released (docs/design/57, part 4)
+        results,
         offer:
           x.offered_at && a.status === 'offered'
             ? {

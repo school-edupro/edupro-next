@@ -250,6 +250,36 @@ export default async function AdmissionApplicationPage({
                 )}
               </div>
             ) : null}
+            {app.results?.length ? (
+              <div className="ep-adm-results">
+                {app.results.map((r) => (
+                  <section key={r.stage} aria-label={`${r.stage}: ${w('result')}`}>
+                    <p style={{ margin: 0 }}>
+                      <strong>
+                        {r.stage} {w('result')}:
+                      </strong>{' '}
+                      {r.absent ? (
+                        <Badge tone="warning">{w('Absent')}</Badge>
+                      ) : (
+                        <span>
+                          {r.total} {w('out of')} {r.maxTotal}
+                          {r.percent !== null ? ` (${String(r.percent)}%)` : ''}
+                        </span>
+                      )}
+                    </p>
+                    {r.parts.length ? (
+                      <ul className="ep-adm-points__lines">
+                        {r.parts.map((p) => (
+                          <li key={p.name}>
+                            {p.name}: {p.marks ?? '-'} / {p.max}
+                          </li>
+                        ))}
+                      </ul>
+                    ) : null}
+                  </section>
+                ))}
+              </div>
+            ) : null}
             {app.slot ? (
               <div className="ep-alert ep-alert--info" role="status">
                 <strong>{app.slot.stage}</strong>: {whenIst(app.slot.startsAt)} at {app.slot.venue}{' '}

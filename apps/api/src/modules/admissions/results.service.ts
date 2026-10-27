@@ -8,10 +8,12 @@ import { requireTenant, type RequestContext } from '../../common/http/request-co
 import { csvRecords } from '../people/csv';
 import { AdmissionCoreService } from './admission-core.service';
 import { tablePdf } from './admission-pdf';
-import { AdmissionPapersService, type Paper } from './papers.service';
+import { AdmissionPapersService } from './papers.service';
+import { storeMarks, type Paper } from './part-marks';
+import { messageTag } from './message-tag';
 import { refreshMerit } from './process-engine';
 import { AdmissionProcessService } from './process.service';
-import type { ResultsQueryDto, ResultsSaveDto } from './results.dto';
+import type { ResultsQueryDto, ResultsReleaseDto, ResultsSaveDto } from './results.dto';
 
 /** The sheet's own key cell: which session, class and stage it was made for. */
 const KEY = /^EPMARK:(\d{1,18}):(\d{1,18}):(\d{1,18})$/;
@@ -316,6 +318,7 @@ export class AdmissionResultsService {
       );
       return {
         place: at,
+        release: await this.releaseOf(c, q),
         slots: slots.rows.map((s) => ({
           id: s.id,
           label: `${new Intl.DateTimeFormat('en-IN', {
@@ -397,24 +400,17 @@ export class AdmissionResultsService {
     input: Input,
     waitingForMe: Set<string>,
   ) {
-    if (prep.changed) {
-      for (const pt of paper.parts)
-        if (prep.next[pt.id] !== row.marks[pt.id] || !row.marked)
-          await c.query(
-            `INSERT INTO admission_part_marks (school_id, application_id, stage_id, part_id, part_name, max_marks, marks, entered_by)
-             VALUES (app.current_school_id(), $1, $2, $3, $4, $5, $6, $7)
-             ON CONFLICT (application_id, part_id) DO UPDATE SET part_name = EXCLUDED.part_name, max_marks = EXCLUDED.max_marks,
-                    marks = EXCLUDED.marks, entered_by = EXCLUDED.entered_by, entered_at = now()`,
-            [row.id, p.stageId, pt.id, pt.name, pt.maxMarks, prep.next[pt.id], ctx.user.id],
-          );
-      await c.query(
-        `INSERT INTO admission_stage_marks (school_id, application_id, stage_id, absent, total, max_total, remark, updated_by)
-         VALUES (app.current_school_id(), $1, $2, $3, $4, $5, $6, $7)
-         ON CONFLICT (application_id, stage_id) DO UPDATE SET absent = EXCLUDED.absent, total = EXCLUDED.total,
-                max_total = EXCLUDED.max_total, remark = EXCLUDED.remark, updated_by = EXCLUDED.updated_by, updated_at = now()`,
-        [row.id, p.stageId, prep.absent, prep.total, paper.total, prep.remark, ctx.user.id],
+    if (prep.changed)
+      await storeMarks(
+        c,
+        ctx.user.id,
+        row.id,
+        p.stageId,
+        paper,
+        prep.next,
+        prep.absent,
+        prep.remark,
       );
-    }
     if (
       prep.changedMarks &&
       input.reason &&
@@ -802,6 +798,184 @@ export class AdmissionResultsService {
         notFound,
         rows: out,
       };
+    });
+  }
+
+  // ---- results released to families (part 4) --------------------------------------------------------
+  private async releaseOf(c: PoolClient, p: Place) {
+    const r = await c.query<{
+      release_at: Date;
+      passed: boolean;
+      by: string | null;
+      told_at: Date | null;
+      told_count: number | null;
+    }>(
+      `SELECT r.release_at, r.release_at <= now() AS passed, u.display_name AS by, r.told_at, r.told_count
+         FROM admission_result_releases r LEFT JOIN users u ON u.id = r.set_by
+        WHERE r.cycle_id = $1 AND r.class_id = $2 AND r.stage_id = $3`,
+      [p.cycleId, p.classId, p.stageId],
+    );
+    const x = r.rows[0];
+    return x
+      ? {
+          at: x.release_at.toISOString(),
+          passed: x.passed,
+          by: x.by,
+          toldAt: x.told_at?.toISOString() ?? null,
+          toldCount: x.told_count,
+        }
+      : null;
+  }
+
+  /** The results of a class and stage shown to families from a date and time (now or later). */
+  async setRelease(ctx: RequestContext, dto: ResultsReleaseDto) {
+    return this.db.tenant(requireTenant(ctx), async (c) => {
+      const at = await this.placeOf(c, dto);
+      this.needPaper(at);
+      const was = await this.releaseOf(c, dto);
+      if (was?.passed)
+        throw new DomainError(
+          'admissions.results_released',
+          'The results are already out to the families: the release can no longer be changed',
+          { status: 409 },
+        );
+      const when = new Date(dto.releaseAt);
+      if (when.getTime() < Date.now() - 60_000)
+        throw new DomainError(
+          'validation-failed',
+          'The release time has passed: choose now or a later time',
+          { status: 400 },
+        );
+      await c.query(
+        `INSERT INTO admission_result_releases (school_id, cycle_id, class_id, stage_id, release_at, set_by)
+         VALUES (app.current_school_id(), $1, $2, $3, $4, $5)
+         ON CONFLICT (cycle_id, class_id, stage_id) DO UPDATE SET release_at = EXCLUDED.release_at,
+                set_by = EXCLUDED.set_by, set_at = now()`,
+        [dto.cycleId, dto.classId, dto.stageId, when, ctx.user.id],
+      );
+      await this.audit.stage(ctx, c, {
+        action: 'admissions.results.release',
+        entityType: 'admission_stages',
+        entityId: dto.stageId,
+        after: { cycleId: dto.cycleId, classId: dto.classId, releaseAt: when.toISOString() },
+      });
+      return { release: await this.releaseOf(c, dto) };
+    });
+  }
+
+  /** A release withdrawn before its time (the families never saw it). */
+  async withdrawRelease(ctx: RequestContext, p: Place) {
+    return this.db.tenant(requireTenant(ctx), async (c) => {
+      await this.placeOf(c, p);
+      const was = await this.releaseOf(c, p);
+      if (!was) throw new DomainError('not-found', 'No release is set', { status: 404 });
+      if (was.passed)
+        throw new DomainError(
+          'admissions.results_released',
+          'The results are already out to the families: the release can no longer be withdrawn',
+          { status: 409 },
+        );
+      await c.query(
+        `DELETE FROM admission_result_releases WHERE cycle_id = $1 AND class_id = $2 AND stage_id = $3`,
+        [p.cycleId, p.classId, p.stageId],
+      );
+      await this.audit.stage(ctx, c, {
+        action: 'admissions.results.withdraw',
+        entityType: 'admission_stages',
+        entityId: p.stageId,
+        after: { cycleId: p.cycleId, classId: p.classId },
+      });
+      return { release: null };
+    });
+  }
+
+  /**
+   * The families told the results are out (once the release time has passed): each candidate with
+   * marks (or absent) at the stage gets the admission_result message, the marks by part in the email.
+   */
+  async tell(ctx: RequestContext, p: Place) {
+    return this.db.tenant(requireTenant(ctx), async (c) => {
+      const at = await this.placeOf(c, p);
+      const paper = this.needPaper(at);
+      const was = await this.releaseOf(c, p);
+      if (!was?.passed)
+        throw new DomainError(
+          'admissions.results_not_released',
+          'The results are not out yet: tell the families once the release time has passed',
+          { status: 409 },
+        );
+      const r = await c.query<{
+        id: string;
+        number: string | null;
+        candidate: string | null;
+        mobile: string | null;
+        email: string | null;
+        absent: boolean;
+        total: string | null;
+        max_total: string | null;
+      }>(
+        `SELECT a.id::text, a.application_no AS number, a.candidate_name AS candidate, a.contact_mobile AS mobile,
+                a.contact_email AS email, sm.absent, sm.total::text, sm.max_total::text
+           FROM admission_stage_marks sm JOIN applications a ON a.id = sm.application_id
+          WHERE a.cycle_id = $1 AND a.class_id = $2 AND sm.stage_id = $3 AND a.status::text NOT IN ('draft', 'cancelled')
+            AND (sm.absent OR sm.total IS NOT NULL)
+          ORDER BY a.application_no`,
+        [p.cycleId, p.classId, p.stageId],
+      );
+      const parts = await c.query<{ id: string; name: string; max: string; marks: string | null }>(
+        `SELECT m.application_id::text AS id, m.part_name AS name, trim_scale(m.max_marks)::text AS max,
+                trim_scale(m.marks)::text AS marks
+           FROM admission_part_marks m JOIN admission_paper_parts pp ON pp.id = m.part_id
+          WHERE m.stage_id = $1 AND m.application_id = ANY($2::bigint[]) ORDER BY pp.sort_order, m.id`,
+        [p.stageId, r.rows.map((x) => x.id)],
+      );
+      for (const x of r.rows) {
+        const max = x.max_total !== null ? Number(x.max_total) : paper.total;
+        const total = x.total !== null ? Number(x.total) : null;
+        const result = x.absent
+          ? `${at.stage}: absent`
+          : `${at.stage}: ${String(total)} out of ${String(max)} (${String(round2(((total ?? 0) / max) * 100))}%)`;
+        const rows: Array<[string, string]> = x.absent
+          ? [[at.stage, 'Absent']]
+          : [
+              ...parts.rows
+                .filter((y) => y.id === x.id)
+                .map((y): [string, string] => [y.name, `${y.marks ?? '-'} / ${y.max}`]),
+              ['Total', `${String(total)} / ${String(max)}`],
+            ];
+        await c.query(
+          `SELECT app.admission_notify($1, $2, $3, $4::jsonb, $5, $6, NULL, $7::jsonb, $8)`,
+          [
+            'admission_result',
+            x.mobile,
+            x.email,
+            JSON.stringify({
+              ...messageTag('status', { applicationId: x.id }),
+              name: x.candidate ?? '',
+              number: x.number ?? '',
+              class: at.className,
+              school: '',
+              result,
+            }),
+            `${at.stage} result`,
+            `The ${at.stage.toLowerCase()} result of ${x.candidate ?? 'your ward'} is out.`,
+            JSON.stringify(rows),
+            'Sign in to the admission portal for the details.',
+          ],
+        );
+      }
+      await c.query(
+        `UPDATE admission_result_releases SET told_at = now(), told_by = $4, told_count = $5
+          WHERE cycle_id = $1 AND class_id = $2 AND stage_id = $3`,
+        [p.cycleId, p.classId, p.stageId, ctx.user.id, r.rows.length],
+      );
+      await this.audit.stage(ctx, c, {
+        action: 'admissions.results.tell',
+        entityType: 'admission_stages',
+        entityId: p.stageId,
+        after: { cycleId: p.cycleId, classId: p.classId, told: r.rows.length },
+      });
+      return { told: r.rows.length, release: await this.releaseOf(c, p) };
     });
   }
 

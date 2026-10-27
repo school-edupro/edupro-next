@@ -12904,3 +12904,24 @@ a.ep-pub-foot__item {
     grid-template-columns: minmax(0, 1fr);
   }
 }
+
+/* a slot candidate's marks by part (docs/design/57): small boxes side by side, wrapping */
+.ep-slot-parts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+}
+.ep-slot-parts .ep-field {
+  margin: 0;
+  width: 5.5rem;
+}
+
+/* a registration's released test and interview results in the candidate portal (docs/design/57) */
+.ep-adm-results {
+  display: grid;
+  gap: var(--sp-3);
+  margin: var(--sp-3) 0;
+  padding: var(--sp-3);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+}

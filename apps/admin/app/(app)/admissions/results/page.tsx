@@ -1,6 +1,7 @@
 import { KpiTile, PageHeader } from '@edupro/ui';
 import { notFound } from 'next/navigation';
 import { ResultsGrid } from '@/components/admissions/ResultsGrid';
+import { ResultsRelease } from '@/components/admissions/ResultsRelease';
 import { ResultsTools } from '@/components/admissions/ResultsTools';
 import { BANDS, type ResultsOptions, type ResultsView } from '@/lib/admission-results';
 import { apiFetch, getMe } from '@/lib/api';
@@ -174,6 +175,12 @@ export default async function ResultsPage({
               <KpiTile key={label} label={label} value={n} hint={help} />
             ))}
           </div>
+          <ResultsRelease
+            place={place}
+            release={data.release}
+            marked={data.counts.marked}
+            canEdit={canEdit}
+          />
           <ResultsTools place={place} query={query} canEdit={canEdit} />
           <ResultsGrid
             place={place}

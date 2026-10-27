@@ -24,6 +24,13 @@ export class ResultsExportDto extends createZodDto(ResultsExportSchema) {}
 export const ResultsSheetSchema = PlaceSchema;
 export class ResultsSheetDto extends createZodDto(ResultsSheetSchema) {}
 
+/** The results shown to families from a date and time (docs/design/57, part 4). */
+export const ResultsReleaseSchema = PlaceSchema.extend({
+  releaseAt: z.string().datetime({ offset: true }),
+});
+export class ResultsReleaseDto extends createZodDto(ResultsReleaseSchema) {}
+export class ResultsPlaceDto extends createZodDto(PlaceSchema) {}
+
 export const ResultsUploadQuerySchema = z.object({ apply: z.enum(['0', '1']).optional() });
 export class ResultsUploadQueryDto extends createZodDto(ResultsUploadQuerySchema) {}
 

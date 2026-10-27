@@ -81,6 +81,8 @@ export async function decideRegistration(
     decision: 'approve' | 'reject' | 'hold' | 'offer' | 'waitlist';
     remarks?: string;
     marks?: number | null;
+    /** a class with a paper: marks by part (docs/design/57) */
+    parts?: Record<string, number | null>;
     attendance?: 'present' | 'absent' | null;
     categoryId?: string;
     /** an offer: the email as changed on the preview (docs/design/56) */
@@ -195,7 +197,9 @@ export async function saveSlotResults(
   rows: Array<{
     applicationId: string;
     attendance: 'present' | 'absent' | null;
-    marks: number | null;
+    marks?: number | null;
+    /** a class with a paper: marks by part (docs/design/57) */
+    parts?: Record<string, number | null>;
     decision: 'approve' | 'reject' | 'hold';
     remarks?: string;
   }>,

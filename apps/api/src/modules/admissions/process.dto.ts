@@ -82,6 +82,8 @@ export const DecideSchema = z.object({
   categoryId: IdSchema.optional(),
   /** an offer: the email as the person changed it on the preview (docs/design/56) */
   offerMessage: OfferMessageSchema.optional(),
+  /** a test or interview with a paper: marks by part (part id → marks), the total decided on */
+  parts: z.record(IdSchema, z.number().min(0).max(1000).nullable()).optional(),
 });
 export class DecideDto extends createZodDto(DecideSchema) {}
 
@@ -175,6 +177,8 @@ export const SlotResultsSchema = z.object({
         applicationId: IdSchema,
         attendance: z.enum(['present', 'absent']).nullable().optional(),
         marks: z.number().min(0).max(10000).nullable().optional(),
+        /** a class with a paper: marks by part (docs/design/57) */
+        parts: z.record(IdSchema, z.number().min(0).max(1000).nullable()).optional(),
         decision: z.enum(['approve', 'reject', 'hold']),
         remarks: Remarks.optional(),
       }),

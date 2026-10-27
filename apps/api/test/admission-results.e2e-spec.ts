@@ -7,6 +7,7 @@
  */
 import type { NestFastifyApplication } from '@nestjs/platform-fastify';
 import ExcelJS from 'exceljs';
+import { PowService } from '../src/modules/admissions/public/pow.service';
 import {
   createApp,
   headersFor,
@@ -87,6 +88,7 @@ describe('admission test results by part (e2e)', () => {
       name: 'Class IX process',
       steps: [
         { stageId: ids.test, levels: [{ name: 'Test cell', by: 'anyone' }] },
+        { stageId: ids.interview, levels: [{ name: 'Panel', by: 'anyone' }] },
         { stageId: ids.selection, levels: [{ name: 'Committee', by: 'anyone' }] },
       ],
       classIds: [ids.cls],
@@ -386,5 +388,253 @@ describe('admission test results by part (e2e)', () => {
     const p = (await call('GET', `/admissions/results/export?${qs({ format: 'pdf' })}`)).json();
     expect(p.contentType).toBe('application/pdf');
     expect(Buffer.from(p.base64, 'base64').subarray(0, 4).toString()).toBe('%PDF');
+  });
+
+  // ---- part 3: the interview's parameters; marks by part on a slot and on the registration ----------
+  it("an interview slot takes the class's parameters part by part; the decision carries the total", async () => {
+    const iv = await call('PUT', `/admissions/stages/${ids.interview!}/papers/${ids.cls!}`, {
+      parts: [
+        { name: 'Communication', maxMarks: 10 },
+        { name: 'Confidence', maxMarks: 10 },
+      ],
+    });
+    for (const p of iv.json().paper.parts as Array<{ id: string; name: string }>)
+      parts[p.name] = p.id;
+    const slot = await call('POST', `/admissions/cycles/${ids.cycle!}/slots`, {
+      stageId: ids.interview,
+      classId: ids.cls,
+      startsAt: '2027-01-10T10:00:00+05:30',
+      venue: 'Room 1',
+      capacity: 10,
+    });
+    expect(slot.statusCode).toBe(201);
+    ids.slot = slot.json().id as string;
+    const allot = await call('POST', `/admissions/slots/${ids.slot}/allot`, {
+      applicationIds: [apps[0], apps[1]],
+      notify: false,
+    });
+    expect(allot.statusCode).toBe(201);
+    const detail = (await call('GET', `/admissions/slots/${ids.slot}`)).json();
+    expect(detail.candidates[0]).toMatchObject({
+      parts: [
+        { name: 'Communication', maxMarks: 10 },
+        { name: 'Confidence', maxMarks: 10 },
+      ],
+      partMarks: {},
+    });
+    const over = await call('PUT', `/admissions/slots/${ids.slot}/results`, {
+      rows: [
+        {
+          applicationId: apps[0],
+          attendance: 'present',
+          parts: { [parts.Communication!]: 12 },
+          decision: 'approve',
+        },
+      ],
+    });
+    expect(over.statusCode).toBe(400);
+    expect(over.json().detail).toBe('Communication: marks from 0 to 10');
+    const saved = await call('PUT', `/admissions/slots/${ids.slot}/results`, {
+      rows: [
+        {
+          applicationId: apps[0],
+          attendance: 'present',
+          parts: { [parts.Communication!]: 8, [parts.Confidence!]: 9 },
+          decision: 'approve',
+          remarks: 'Confident speaker',
+        },
+        { applicationId: apps[1], attendance: 'absent', parts: {}, decision: 'approve' },
+      ],
+    });
+    expect(saved.statusCode).toBe(200);
+    expect(saved.json().saved).toBe(2);
+    const at = await withMigrator(async (c) => {
+      const r = await c.query<{
+        id: string;
+        decision: string;
+        marks: string | null;
+        attendance: string | null;
+      }>(
+        `SELECT application_id::text AS id, decision, marks::text, attendance FROM admission_stage_results
+          WHERE stage_id = $1 AND undone_at IS NULL ORDER BY application_id`,
+        [ids.interview],
+      );
+      const m = await c.query<{ id: string; merit: string }>(
+        `SELECT id::text, merit::text FROM applications WHERE id = ANY($1::bigint[])`,
+        [apps],
+      );
+      return { results: r.rows, merit: Object.fromEntries(m.rows.map((x) => [x.id, x.merit])) };
+    });
+    expect(at.results).toEqual([
+      { id: apps[0], decision: 'approved', marks: '17.00', attendance: 'present' },
+      // absent: held, no marks
+      { id: apps[1], decision: 'hold', marks: null, attendance: 'absent' },
+    ]);
+    expect(at.merit[apps[0]!]).toBe('105.00');
+    const g = (
+      await call(
+        'GET',
+        `/admissions/results?${new URLSearchParams({ ...place(), stageId: ids.interview! }).toString()}`,
+      )
+    ).json();
+    expect(g.place).toMatchObject({ kind: 'interview', paper: { total: 20 } });
+    expect(g.rows.find((r: { id: string }) => r.id === apps[0])).toMatchObject({
+      total: 17,
+      percent: 85,
+      state: 'selected',
+    });
+  });
+
+  it('the registration page decides with marks by part', async () => {
+    const r = (await call('GET', `/admissions/registrations/${apps[2]!}`)).json();
+    expect(r.process.current).toMatchObject({
+      kind: 'interview',
+      maxMarks: 20,
+      paper: { total: 20, parts: [{ name: 'Communication' }, { name: 'Confidence' }] },
+      partMarks: null,
+    });
+    const d = await call('POST', `/admissions/registrations/${apps[2]!}/decide`, {
+      decision: 'approve',
+      attendance: 'present',
+      parts: { [parts.Communication!]: 6, [parts.Confidence!]: 7 },
+      remarks: 'Fine',
+    });
+    expect(d.statusCode).toBe(201);
+    const a = await app0(apps[2]!);
+    expect(a.merit).toBe('75.00');
+    expect(d.json().process.steps[1].byPart).toMatchObject({
+      parts: [
+        { name: 'Communication', marks: 6 },
+        { name: 'Confidence', marks: 7 },
+      ],
+      total: 13,
+    });
+  });
+
+  it('the Admissions list has the test and interview marks, %, and by part', async () => {
+    const grid = await call('POST', '/admissions/registrations/grid', {
+      columns: [
+        { key: 'test_marks' },
+        { key: 'test_percent' },
+        { key: 'test_detail' },
+        { key: 'interview_marks' },
+        { key: 'interview_percent' },
+        { key: 'interview_detail' },
+      ],
+      status: 'all',
+      page: 1,
+      size: 50,
+    });
+    expect(grid.statusCode).toBe(201);
+    const row = (id: string) => grid.json().rows.find((r: { __id: string }) => r.__id === id);
+    expect(row(apps[0]!)).toMatchObject({
+      test_marks: 88,
+      test_percent: 88,
+      test_detail: 'English 40/50 · Maths 48/50',
+      interview_marks: 17,
+      interview_percent: 85,
+      interview_detail: 'Communication 8/10 · Confidence 9/10',
+    });
+    expect(row(apps[1]!)).toMatchObject({ interview_marks: null, interview_detail: 'Absent' });
+  });
+
+  // ---- part 4: results to families after a release time ---------------------------------------------
+  it('families see the marks only after the release time; the families are told once it has passed', async () => {
+    const mobile = `9${String(Date.now()).slice(-9)}`;
+    await withMigrator(async (c) => {
+      await c.query(
+        `UPDATE applicants SET mobile = $2 WHERE id = (SELECT applicant_id FROM applications WHERE id = $1)`,
+        [apps[0], mobile],
+      );
+      await c.query(
+        `UPDATE applications SET contact_email = 'asha.family@example.invalid' WHERE id = $1`,
+        [apps[0]],
+      );
+    });
+    const ch = await inject({ method: 'POST', url: '/public/admissions/challenge', headers: {} });
+    const nonce = PowService.solve(ch.json().challenge, ch.json().difficulty);
+    const code = await inject({
+      method: 'POST',
+      url: '/public/admission/code',
+      headers: {},
+      json: { schoolCode: school.code, identifier: mobile, challenge: ch.json().challenge, nonce },
+    });
+    expect(code.statusCode).toBe(201);
+    const ok = await inject({
+      method: 'POST',
+      url: '/public/admission/code/verify',
+      headers: {},
+      json: { schoolCode: school.code, identifier: mobile, code: code.json().devCode },
+    });
+    const token = ok.json().token as string;
+    const seen = async () =>
+      (
+        await inject({
+          method: 'GET',
+          url: `/public/admission/me/applications/${apps[0]!}`,
+          headers: { authorization: `Bearer ${token}` },
+        })
+      ).json().results;
+    expect(await seen()).toEqual([]);
+    const past = await call('PUT', '/admissions/results/release', {
+      ...place(),
+      releaseAt: new Date(Date.now() - 3_600_000).toISOString(),
+    });
+    expect(past.statusCode).toBe(400);
+    const later = await call('PUT', '/admissions/results/release', {
+      ...place(),
+      releaseAt: new Date(Date.now() + 3_600_000).toISOString(),
+    });
+    expect(later.statusCode).toBe(200);
+    expect(later.json().release).toMatchObject({ passed: false, toldAt: null });
+    expect(await seen()).toEqual([]);
+    const early = await call('POST', '/admissions/results/release/tell', place());
+    expect(early.statusCode).toBe(409);
+    expect(early.json().type).toBe('admissions.results_not_released');
+    expect((await call('POST', '/admissions/results/release/withdraw', place())).json()).toEqual({
+      release: null,
+    });
+    expect((await grid()).release).toBeNull();
+    const now = await call('PUT', '/admissions/results/release', {
+      ...place(),
+      releaseAt: new Date().toISOString(),
+    });
+    expect(now.statusCode).toBe(200);
+    expect(await seen()).toEqual([
+      {
+        stage: 'Written test',
+        kind: 'test',
+        absent: false,
+        parts: [
+          { name: 'English', max: 50, marks: 40 },
+          { name: 'Maths', max: 50, marks: 48 },
+        ],
+        total: 88,
+        maxTotal: 100,
+        percent: 88,
+      },
+    ]);
+    // out: neither changed nor withdrawn
+    const again = await call('PUT', '/admissions/results/release', {
+      ...place(),
+      releaseAt: new Date(Date.now() + 3_600_000).toISOString(),
+    });
+    expect(again.statusCode).toBe(409);
+    expect((await call('POST', '/admissions/results/release/withdraw', place())).statusCode).toBe(
+      409,
+    );
+    const told = await call('POST', '/admissions/results/release/tell', place());
+    expect(told.statusCode).toBe(201);
+    expect(told.json()).toMatchObject({ told: 3, release: { passed: true, toldCount: 3 } });
+    const mail = await withMigrator((c) =>
+      c.query<{ subject: string }>(
+        `SELECT m.subject FROM comms_messages m JOIN comms_templates t ON t.id = m.template_id
+          WHERE m.school_id = $1 AND t.code = 'admission_result' AND m.channel = 'email' AND m.variables ->> '_app' = $2`,
+        [school.id, apps[0]],
+      ),
+    );
+    expect(mail.rows.map((x) => x.subject)).toEqual(['Admission result of ASHA']);
+    // the interview is not released: the family does not see it
+    expect((await seen()).map((x: { stage: string }) => x.stage)).toEqual(['Written test']);
   });
 });
