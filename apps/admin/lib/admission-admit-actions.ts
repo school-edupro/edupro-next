@@ -41,10 +41,17 @@ const regPaths = (id: string) => [
 
 export async function collectAdmissionFee(
   id: string,
-  body: { mode: string; reference?: string; instrumentNo?: string; bankName?: string },
+  body: {
+    mode: string;
+    reference?: string;
+    instrumentNo?: string;
+    bankName?: string;
+    /** a part (docs/design/53); none: the whole balance */
+    amount?: number;
+  },
 ) {
   if (!okId(id)) return { ok: false as const, error: 'Unknown registration' };
-  return call<{ receiptNo: string | null; admissionNo: string }>(
+  return call<{ receiptNo: string | null; admissionNo: string | null; balance?: number }>(
     `/admissions/registrations/${id}/admission-fee`,
     'POST',
     body,

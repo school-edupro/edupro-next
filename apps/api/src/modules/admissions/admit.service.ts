@@ -224,7 +224,18 @@ export class AdmissionAdmitService {
       a.id,
       rec.id,
     ]);
-    await this.feePaid(c, a.id, rec.id, {});
+    // the balance after any parts at the counter (docs/design/53); it clears the fee
+    const { paid } = await this.core.admissionPaid(c, a.id);
+    if (paid + 0.005 >= Number(a.admission_fee ?? 0)) await this.feePaid(c, a.id, rec.id, {});
+    else
+      await this.core.event(
+        c,
+        a.id,
+        'offered',
+        'offered',
+        `Admission fee of ${money(amount)} received online (receipt ${rec.receiptNo}); balance ${money(Number(a.admission_fee ?? 0) - paid)}`,
+        {},
+      );
   }
 
   /** The admission fee taken at the counter (or confirmed when none is due). */
@@ -244,11 +255,22 @@ export class AdmissionAdmitService {
           },
         );
       const fee = Number(a.admission_fee ?? 0);
+      // the admission fee may come in parts (docs/design/53): any amount up to the balance; the
+      // admission number with the part that clears it
+      const before = await this.core.admissionPaid(c, id);
+      const balance = Math.round((fee - before.paid) * 100) / 100;
+      const amount = dto.amount ?? balance;
+      if (fee > 0 && !(amount > 0 && amount <= balance))
+        throw new DomainError(
+          'validation-failed',
+          `Take between ₹1 and the balance of ${money(balance)}`,
+          { status: 400 },
+        );
       let rec: { id: string; receiptNo: string } | null = null;
       if (fee > 0)
         rec = await this.core.postReceipt(c, a, {
           kind: 'admission',
-          amount: fee,
+          amount,
           mode: dto.mode,
           reference: dto.reference ?? null,
           instrumentNo: dto.instrumentNo ?? null,
@@ -259,17 +281,35 @@ export class AdmissionAdmitService {
           modeLabel: dto.modeLabel ?? null,
           instrumentDate: dto.instrumentDate ?? null,
         });
-      await this.feePaid(c, id, rec?.id ?? null, { actorUser: ctx.user.id });
+      const left = fee > 0 ? Math.round((balance - amount) * 100) / 100 : 0;
+      if (left > 0)
+        await this.core.event(
+          c,
+          id,
+          'offered',
+          'offered',
+          `Admission fee part of ${money(amount)} received (receipt ${rec!.receiptNo}); balance ${money(left)}`,
+          { actorUser: ctx.user.id },
+        );
+      else await this.feePaid(c, id, rec?.id ?? null, { actorUser: ctx.user.id });
       await this.audit.stage(ctx, c, {
         action: 'admissions.admission_fee.collect',
         entityType: 'applications',
         entityId: id,
-        after: { amount: fee, mode: dto.mode, receiptNo: rec?.receiptNo ?? null },
+        after: {
+          amount: fee > 0 ? amount : 0,
+          fee,
+          balance: left,
+          mode: dto.mode,
+          receiptNo: rec?.receiptNo ?? null,
+        },
       });
       return {
         receiptId: rec?.id ?? null,
         receiptNo: rec?.receiptNo ?? null,
         admissionNo: (await this.core.row(c, id)).admission_no,
+        paid: fee > 0 ? before.paid + amount : 0,
+        balance: left,
       };
     });
     return out;
@@ -692,19 +732,19 @@ export class AdmissionAdmitService {
   // ---- cancellation and refund ------------------------------------------------------------------
   /** What cancelling would do: the refund of the admission fee less the session's deduction. */
   private async refundPlan(c: PoolClient, a: AppRow) {
-    if (!a.admission_receipt_id) return null;
-    const r = await c.query<{ amount: string; status: string; pct: string }>(
-      `SELECT m.amount::text, m.status, y.refund_deduction_pct::text AS pct FROM misc_receipts m
-         JOIN applications a ON a.id = $2 JOIN admission_cycles y ON y.id = a.cycle_id WHERE m.id = $1`,
-      [a.admission_receipt_id, a.id],
+    // every admission-fee receipt still posted: one payment, or the parts (docs/design/53)
+    const got = await this.core.admissionPaid(c, a.id);
+    if (!(got.paid > 0) || !got.lastReceiptId) return null;
+    const y = await c.query<{ pct: string }>(
+      `SELECT y.refund_deduction_pct::text AS pct FROM admission_cycles y WHERE y.id = $1`,
+      [a.cycle_id],
     );
-    const x = r.rows[0];
-    if (!x || x.status !== 'posted' || !(Number(x.amount) > 0)) return null;
-    const paid = Number(x.amount);
-    const pct = Number(x.pct);
+    const paid = got.paid;
+    const pct = Number(y.rows[0]?.pct ?? 0);
     const deduction = Math.round(paid * pct) / 100;
     return {
-      receiptId: a.admission_receipt_id,
+      receiptId: a.admission_receipt_id ?? got.lastReceiptId,
+      parts: got.parts,
       paid,
       pct,
       deduction,
@@ -717,7 +757,10 @@ export class AdmissionAdmitService {
       const a = await this.core.row(c, id);
       return {
         status: a.status,
-        refund: ['fee_paid', 'admitted'].includes(a.status) ? await this.refundPlan(c, a) : null,
+        // parts paid while still offered are refunded too (docs/design/53)
+        refund: ['fee_paid', 'admitted', 'offered'].includes(a.status)
+          ? await this.refundPlan(c, a)
+          : null,
       };
     });
   }
@@ -741,7 +784,7 @@ export class AdmissionAdmitService {
           { status: 409 },
         );
       let refund: { id: string; amount: number } | null = null;
-      if (['fee_paid', 'admitted'].includes(a.status)) {
+      if (['fee_paid', 'admitted', 'offered'].includes(a.status)) {
         const plan = await this.refundPlan(c, a);
         if (plan) {
           const r = await c.query<{ id: string }>(
@@ -774,7 +817,7 @@ export class AdmissionAdmitService {
         id,
         a.status,
         'cancelled',
-        `${['fee_paid', 'admitted'].includes(a.status) ? 'Admission' : 'Registration'} cancelled: ${dto.reason}${refund ? ` · refund of ${money(refund.amount)} sent for approval` : ''}`,
+        `${['fee_paid', 'admitted'].includes(a.status) ? 'Admission' : 'Registration'} cancelled: ${dto.reason}${refund ? ` · refund of ${money(refund.amount)} (of the admission fee paid) sent for approval` : ''}`,
         { actorUser: ctx.user.id },
       );
       await c.query(

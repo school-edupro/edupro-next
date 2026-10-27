@@ -67,7 +67,10 @@ export interface RegistrationForm {
   admissionNo: string | null;
   /** The pupil made at Admit. */
   studentId?: string | null;
+  /** the balance of the admission fee after any parts paid (docs/design/53) */
   admissionFeeDue: number;
+  admissionFeePaid?: number;
+  admissionFee?: number;
   offerExpiresAt: string | null;
   hasAdmissionForm: boolean;
   cancelledAt: string | null;

@@ -41,6 +41,8 @@ export const DeskFeeSchema = z.object({
     .regex(/^\d{4}-\d{2}-\d{2}$/)
     .optional(),
   remarks: z.string().trim().max(300).optional(),
+  /** a part of the admission fee (docs/design/53); none: the whole balance */
+  amount: z.number().positive().max(10_000_000).optional(),
   modeLabel: z.string().trim().max(60).optional(),
   instrumentDate: z
     .string()

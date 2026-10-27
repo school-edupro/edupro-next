@@ -52,7 +52,7 @@ Defaults (change on request):
 
 ## Parts
 
-**Part 1 — Engine and API.**
+**Part 1 — Engine and API — built 27 Oct 2026.**
 
 - The paid amount is the sum of the registration's posted admission-fee receipts (`misc_receipts` on
   the admission head, status posted; bounced and reversed ones are left out).
@@ -66,23 +66,61 @@ Defaults (change on request):
 - The counter, the Fee due report, the registration page and the Admission fee collection report show
   paid and balance.
 
-**Part 2 — Counter (admin).**
+**Part 2 — Counter (admin) — built 27 Oct 2026.**
 
 - The admission fee's Amount is editable (the balance shown, any amount up to it) on the Post receipt
   card.
 - The table shows "Admission fee: ₹Y balance of ₹Z (₹X paid)".
 - The receipt PDF prints the total, the paid to date and the balance.
 
-**Part 3 — Office and portal screens.**
+**Part 3 — Office and portal screens — built 27 Oct 2026.**
 
 - The registration page's fee box shows the parts with View / Download.
 - Cancel shows the refund worked out from the parts.
 - The portal's Payments page shows the paid amount and the balance.
 - The Fee due ready-made report gets a Paid column and a Balance column.
 
-**Part 4 — Tests.**
+**Part 4 — Tests — built 27 Oct 2026.**
 
 - e2e: two parts; then the admission number on the last part; a part over the balance is refused.
 - e2e: a cancel with one part paid gives a refund request of the parts less the deduction %.
 - e2e: a bounced part restores the balance.
 - a11y for the counter and the registration page, and a browser check.
+
+## As built (27 Oct 2026)
+
+**Rules and API:**
+
+- `AdmissionCoreService.admissionPaid` adds up the posted receipts on the `ADMFEE` head.
+- Admit's `collect` takes an optional `amount`, from 1 up to the balance. A part leaves the registration
+  Offered, with an event saying the balance; the part that clears the fee runs `feePaid`.
+- The counter sends `amount` for the admission fee only; the registration fee is still taken in full.
+- An online payment takes the balance and gives the admission number only when the fee is cleared.
+- The refund plan sums the parts and returns `parts`. Cancel and its preview make the refund for an
+  Offered registration with parts paid.
+- Undoing the selection is refused while parts are paid.
+
+**Screens and reports:**
+
+- The receipt PDF prints the total, the amount paid to date, the balance, the mode's own name, and the
+  cheque or draft number, date and bank.
+- The Admissions dataset gains **Admission fee paid** and **Admission fee balance**, and the admission
+  receipt column lists every part.
+- The Fee due ready-made report shows Total, Paid and Balance.
+- Admin:
+  - The counter's Post receipt takes any amount up to the balance, and its rows show "balance of ₹Z
+    (₹X paid)".
+  - The registration page's admission fee box takes a part, and its cancel text names the parts.
+- The parent portal's What is due and Payments show the balance, and paying online takes it.
+
+**Checked:**
+
+- Admission e2e: 63 pass.
+  - On a fee over the balance, the part is refused; one part then gives no admission number and the
+    receipt prints; the last part gives the number.
+  - Two parts, the second bounced: the balance grows back, and undo is refused.
+  - A cancel refunds the 6,000 paid less 10% = 5,400.
+- Reports and misc fee e2e: 33 pass. db: 57 pass. API unit: 4 pass.
+- a11y: the counter and the registration and desk pages pass. Their ids moved to 1404, because the sample
+  reseed removed 1339.
+- Dev school 1 has no Offered registration with a fee, so the browser shows no part to take there.

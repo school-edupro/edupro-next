@@ -18,6 +18,7 @@ export function RegistrationOffice({
   id,
   status,
   admissionFee,
+  admissionPaid = 0,
   sections,
   refund,
   canCollect,
@@ -30,8 +31,10 @@ export function RegistrationOffice({
   /** The pupil made at Admit: the admission is then cancelled on the student page. */
   studentId?: string | null;
   admissionFee: number;
+  /** parts of the admission fee already paid (docs/design/53) */
+  admissionPaid?: number;
   sections: Array<{ id: string; name: string; capacity: number | null; enrolled: number }>;
-  refund: { paid: number; pct: number; deduction: number; amount: number } | null;
+  refund: { paid: number; parts?: number; pct: number; deduction: number; amount: number } | null;
   canCollect: boolean;
   canAdmit: boolean;
   canCancel: boolean;
@@ -41,6 +44,8 @@ export function RegistrationOffice({
   const [msg, setMsg] = useState<{ tone: 'success' | 'danger'; text: string } | null>(null);
   const [mode, setMode] = useState('cash');
   const [reference, setReference] = useState('');
+  const balance = Math.max(0, Math.round((admissionFee - admissionPaid) * 100) / 100);
+  const [take, setTake] = useState(balance.toFixed(2));
   const [sectionId, setSectionId] = useState(sections[0]?.id ?? '');
   const [roll, setRoll] = useState('');
   const [reason, setReason] = useState('');
@@ -57,7 +62,10 @@ export function RegistrationOffice({
           <p style={{ margin: 0 }}>
             {admissionFee > 0 ? (
               <>
-                Admission fee due: <strong>{rupees(admissionFee)}</strong>
+                Admission fee due: <strong>{rupees(balance)}</strong>
+                {admissionPaid > 0
+                  ? ` (balance of ${rupees(admissionFee)}; ${rupees(admissionPaid)} paid)`
+                  : ''}
               </>
             ) : (
               'No admission fee is due for this category: confirm the admission to give the admission number.'
@@ -65,6 +73,18 @@ export function RegistrationOffice({
           </p>
           {admissionFee > 0 ? (
             <div className="ep-rp__row">
+              <label className="ep-field">
+                <span className="ep-field__label">Amount (a part may be taken)</span>
+                <input
+                  className="ep-input"
+                  type="number"
+                  min={1}
+                  max={balance}
+                  step="0.01"
+                  value={take}
+                  onChange={(e) => setTake(e.target.value)}
+                />
+              </label>
               <label className="ep-field">
                 <span className="ep-field__label">Mode</span>
                 <select
@@ -98,8 +118,17 @@ export function RegistrationOffice({
               disabled={pending}
               onClick={() =>
                 start(async () => {
+                  const part = Number(take);
+                  if (admissionFee > 0 && !(part > 0 && part <= balance + 0.004)) {
+                    setMsg({
+                      tone: 'danger',
+                      text: `Take between ₹1 and the balance of ${rupees(balance)}.`,
+                    });
+                    return;
+                  }
                   const r = await collectAdmissionFee(id, {
                     mode,
+                    ...(admissionFee > 0 ? { amount: Math.round(part * 100) / 100 } : {}),
                     ...(reference.trim()
                       ? ['cheque', 'dd'].includes(mode)
                         ? { instrumentNo: reference.trim() }
@@ -108,13 +137,15 @@ export function RegistrationOffice({
                   });
                   if (r.ok)
                     done(
-                      `Admission no. ${r.data.admissionNo}${r.data.receiptNo ? `; receipt ${r.data.receiptNo}` : ''}.`,
+                      r.data.admissionNo
+                        ? `Admission no. ${r.data.admissionNo}${r.data.receiptNo ? `; receipt ${r.data.receiptNo}` : ''}.`
+                        : `Receipt ${r.data.receiptNo ?? ''}: part taken; balance ${rupees(r.data.balance ?? 0)} still due.`,
                     );
                   else setMsg({ tone: 'danger', text: r.error });
                 })
               }
             >
-              {admissionFee > 0 ? `Take ${rupees(admissionFee)}` : 'Confirm the admission'}
+              {admissionFee > 0 ? `Take ${rupees(Number(take) || 0)}` : 'Confirm the admission'}
             </button>
           </div>
         </section>
@@ -199,7 +230,7 @@ export function RegistrationOffice({
           <section className="ep-rp__act" aria-label="Cancel">
             <p style={{ margin: 0 }}>
               {refund
-                ? `The admission fee of ${rupees(refund.paid)} is refunded less ${String(refund.pct)}% (${rupees(refund.deduction)}): ${rupees(refund.amount)}, after the refund approvers agree.`
+                ? `The admission fee paid, ${rupees(refund.paid)}${refund.parts && refund.parts > 1 ? ` in ${String(refund.parts)} parts` : ''}, is refunded less ${String(refund.pct)}% (${rupees(refund.deduction)}): ${rupees(refund.amount)}, after the refund approvers agree. The registration fee is not refunded.`
                 : 'The registration fee is not refunded.'}
             </p>
             <label className="ep-field">

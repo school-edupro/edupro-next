@@ -15,6 +15,8 @@ export function AdmissionReceiptForm({
   kind,
   head,
   amount,
+  fee,
+  paid,
   modes,
   banks,
   today,
@@ -23,7 +25,11 @@ export function AdmissionReceiptForm({
   id: string;
   kind: 'registration' | 'admission';
   head: string;
+  /** the balance due now */
   amount: number;
+  /** the whole fee and what is paid of it (the admission fee may come in parts, docs/design/53) */
+  fee: number;
+  paid: number;
   modes: CounterMode[];
   banks: string[];
   today: string;
@@ -40,7 +46,9 @@ export function AdmissionReceiptForm({
   const cheque = modeKind === 'cheque' || modeKind === 'dd';
   const cash = modeKind === 'cash';
   const star = (on: boolean) => (on ? ' *' : '');
-  const rupees = `₹${amount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}`;
+  const inr = (n: number) => `₹${n.toLocaleString('en-IN', { minimumFractionDigits: 2 })}`;
+  const parts = kind === 'admission';
+  const [take, setTake] = useState(amount.toFixed(2));
 
   if (done)
     return (
@@ -65,8 +73,14 @@ export function AdmissionReceiptForm({
         const fd = new FormData(e.currentTarget);
         const s = (k: string) => String(fd.get(k) ?? '').trim();
         start(async () => {
+          const value = Number(take);
+          if (parts && !(value > 0 && value <= amount + 0.004)) {
+            setError(`Take between ₹1 and the balance of ${inr(amount)}.`);
+            return;
+          }
           const r = await counterCollect(id, {
             kind,
+            ...(parts ? { amount: Math.round(value * 100) / 100 } : {}),
             mode: modeKind,
             ...(mode && mode.label !== mode.kind ? { modeLabel: mode.label } : {}),
             receivedOn: s('receivedOn'),
@@ -86,6 +100,7 @@ export function AdmissionReceiptForm({
               r.data.receiptNo ? `Receipt ${r.data.receiptNo} saved` : 'Saved',
               r.data.number ? `registration no. ${r.data.number}` : null,
               r.data.admissionNo ? `admission no. ${r.data.admissionNo}` : null,
+              r.data.balance ? `balance ${inr(r.data.balance)} still due` : null,
             ]
               .filter(Boolean)
               .join('; '),
@@ -98,10 +113,25 @@ export function AdmissionReceiptForm({
       <div className="ep-afc__grid">
         <label className="ep-field">
           <span className="ep-field__label">Amount (₹) *</span>
-          <input className="ep-input" value={amount.toFixed(2)} readOnly aria-readonly="true" />
+          {parts ? (
+            <input
+              className="ep-input"
+              name="amount"
+              type="number"
+              min={1}
+              max={amount}
+              step="0.01"
+              required
+              value={take}
+              onChange={(e) => setTake(e.target.value)}
+            />
+          ) : (
+            <input className="ep-input" value={amount.toFixed(2)} readOnly aria-readonly="true" />
+          )}
           <span className="ep-field__help">
-            Due on {head.toLowerCase()}: {rupees}. Taken in full; the amount follows the class and
-            fee category.
+            {parts
+              ? `${paid > 0 ? `Balance ${inr(amount)} of ${inr(fee)} (${inr(paid)} paid)` : `Admission fee ${inr(fee)}`}. A part may be taken; the admission number comes when the fee is fully paid.`
+              : `Due on ${head.toLowerCase()}: ${inr(amount)}. Taken in full.`}
           </span>
         </label>
         <label className="ep-field">

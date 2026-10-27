@@ -74,6 +74,9 @@ const RECORD: ReportFieldDef[] = [
   { key: 'registration_receipt', label: 'Registration receipt', section: 'fees', type: 'text' },
   { key: 'admission_fee', label: 'Admission fee', section: 'fees', type: 'number' },
   { key: 'admission_receipt', label: 'Admission receipt', section: 'fees', type: 'text' },
+  // the admission fee in parts (docs/design/53): what is paid so far and the balance
+  { key: 'admission_paid', label: 'Admission fee paid', section: 'fees', type: 'number' },
+  { key: 'admission_balance', label: 'Admission fee balance', section: 'fees', type: 'number' },
   { key: 'offer_last_date', label: 'Offer: pay by', section: 'fees', type: 'date' },
   { key: 'fee_paid_on', label: 'Admission fee paid on', section: 'fees', type: 'date' },
   { key: 'refund', label: 'Refund', section: 'fees', type: 'number' },
@@ -258,6 +261,7 @@ export async function loadAdmissionReportRows(
     reg_receipt: string | null;
     admission_fee: string | null;
     adm_receipt: string | null;
+    adm_paid: string | null;
     offer_expires_at: Date | null;
     fee_paid_at: Date | null;
     refund: string | null;
@@ -275,7 +279,8 @@ export async function loadAdmissionReportRows(
             w.level_no, w.levels, w.level, w.level_since, w.due_at,
             k.name AS category, a.entered_by::text, COALESCE(a.contact_mobile, ap.mobile) AS mobile, COALESCE(a.contact_email, ap.email::text) AS email,
             a.created_at, a.submitted_at, a.registered_at, a.progress, a.merit::text, a.form_points::text, a.points_breakdown AS points_lines, a.wait_rank, a.registration_fee::text,
-            rr.receipt_no AS reg_receipt, a.admission_fee::text, ar.receipt_no AS adm_receipt, a.offer_expires_at, a.fee_paid_at,
+            rr.receipt_no AS reg_receipt, a.admission_fee::text, COALESCE(ap2.receipts, ar.receipt_no) AS adm_receipt, ap2.paid::text AS adm_paid,
+            a.offer_expires_at, a.fee_paid_at,
             rf.amount::text AS refund, rf.status AS refund_status, a.admission_no,
             (SELECT c2.code || '-' || cs.name FROM enrolments e JOIN class_sections cs ON cs.id = e.class_section_id JOIN classes c2 ON c2.id = cs.class_id
               WHERE e.student_id = a.student_id AND e.academic_year_id = y.academic_year_id ORDER BY e.id DESC LIMIT 1) AS class_section,
@@ -288,6 +293,9 @@ export async function loadAdmissionReportRows(
        LEFT JOIN admission_waiting w ON w.id = a.id
        LEFT JOIN misc_receipts rr ON rr.id = a.registration_receipt_id
        LEFT JOIN misc_receipts ar ON ar.id = a.admission_receipt_id
+       LEFT JOIN LATERAL (SELECT sum(m.amount) AS paid, string_agg(m.receipt_no, ', ' ORDER BY m.id) AS receipts
+                            FROM misc_receipts m JOIN fee_heads h ON h.id = m.head_id
+                           WHERE m.application_id = a.id AND h.code = 'ADMFEE' AND m.status = 'posted') ap2 ON true
        LEFT JOIN LATERAL (SELECT x.amount, x.status FROM admission_refunds x WHERE x.application_id = a.id ORDER BY x.id DESC LIMIT 1) rf ON true
       WHERE a.form_id IS NOT NULL AND y.deleted_at IS NULL
       ORDER BY a.id DESC LIMIT $1`,
@@ -354,6 +362,11 @@ export async function loadAdmissionReportRows(
       registration_receipt: x.reg_receipt,
       admission_fee: x.admission_fee !== null ? Number(x.admission_fee) : null,
       admission_receipt: x.adm_receipt,
+      admission_paid: x.adm_paid !== null ? Number(x.adm_paid) : null,
+      admission_balance:
+        x.admission_fee !== null && ['offered', 'fee_paid', 'admitted'].includes(x.status)
+          ? Math.max(0, Number(x.admission_fee) - Number(x.adm_paid ?? 0))
+          : null,
       offer_last_date: x.status === 'offered' ? day(x.offer_expires_at) : null,
       fee_paid_on: day(x.fee_paid_at),
       refund: x.refund !== null ? Number(x.refund) : null,

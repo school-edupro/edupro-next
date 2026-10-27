@@ -455,9 +455,15 @@ export class CandidatePortalService {
             a.status === 'submitted' && !a.application_no && Number(a.registration_fee ?? 0) > 0
               ? Number(a.registration_fee)
               : 0,
+          // the balance after any parts paid at the school counter (docs/design/53)
           admissionFeeDue:
             a.status === 'offered' && Number(a.admission_fee ?? 0) > 0
-              ? Number(a.admission_fee)
+              ? Math.max(
+                  0,
+                  Math.round(
+                    (Number(a.admission_fee) - (await this.core.admissionPaid(c, id)).paid) * 100,
+                  ) / 100,
+                )
               : 0,
           offerExpiresAt:
             a.status === 'offered' ? (a.offer_expires_at?.toISOString() ?? null) : null,
@@ -685,7 +691,16 @@ export class CandidatePortalService {
           'The offer has lapsed; please contact the school',
           { status: 409 },
         );
-      const fee = registration ? Number(a.registration_fee) : Number(a.admission_fee);
+      // the admission fee's balance after any parts paid at the school counter (docs/design/53)
+      const fee = registration
+        ? Number(a.registration_fee)
+        : Math.round(
+            (Number(a.admission_fee) - (await this.core.admissionPaid(c, a.id)).paid) * 100,
+          ) / 100;
+      if (!(fee > 0))
+        throw new DomainError('admissions.nothing_due', 'Nothing is due on this registration', {
+          status: 409,
+        });
       const intent = await this.payments.createIntent(c, {
         purpose: 'admission_fee',
         entityType: registration ? 'admission_registration' : 'admission_offer',

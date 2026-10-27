@@ -18,6 +18,7 @@ export async function counterCollect(
     receivedOn?: string;
     remarks?: string;
     modeLabel?: string;
+    amount?: number;
   },
 ): Promise<
   Result<{
@@ -25,6 +26,7 @@ export async function counterCollect(
     receiptNo: string | null;
     number?: string | null;
     admissionNo?: string | null;
+    balance?: number;
   }>
 > {
   if (!/^\d{1,18}$/.test(id) || !MODES.has(input.mode))
@@ -35,6 +37,7 @@ export async function counterCollect(
       receiptNo: string | null;
       number?: string | null;
       admissionNo?: string | null;
+      balance?: number;
     }>(`/fees/admission-counter/${id}/collect`, { method: 'POST', body: JSON.stringify(input) });
     revalidatePath('/fees/cashier/admission');
     return { ok: true, data };

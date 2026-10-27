@@ -263,29 +263,37 @@ export class AdmissionReadyReportsService {
         };
       }
       case 'fee_due':
+        // the admission fee may be part paid (docs/design/53): the total, what is paid, the balance
         return {
           title,
           columns: [
-            { h: 'Registration no.', w: 92 },
-            { h: 'Candidate', w: 90 },
-            { h: 'Class', w: 44 },
-            { h: 'Category', w: 56 },
-            { h: 'Fee', w: 72 },
-            { h: 'Amount', w: 50 },
-            { h: 'Pay by', w: 52 },
-            { h: 'Mobile', w: 59 },
+            { h: 'Registration no.', w: 86 },
+            { h: 'Candidate', w: 88 },
+            { h: 'Class', w: 40 },
+            { h: 'Fee', w: 60 },
+            { h: 'Total', w: 46 },
+            { h: 'Paid', w: 44 },
+            { h: 'Balance', w: 48 },
+            { h: 'Pay by', w: 48 },
+            { h: 'Mobile', w: 55 },
           ],
           rows: all
-            .filter((r) => st(r) === 'Registration fee due' || st(r) === 'Offered')
+            .filter(
+              (r) =>
+                st(r) === 'Registration fee due' ||
+                (st(r) === 'Offered' && Number(r.admission_balance ?? r.admission_fee ?? 0) > 0),
+            )
             .map((r) => {
               const reg = st(r) === 'Registration fee due';
+              const total = reg ? r.registration_fee : r.admission_fee;
               return [
                 txt(r.registration_no),
                 txt(r.candidate),
                 txt(r.class_sought),
-                txt(r.category),
                 reg ? 'Registration fee' : 'Admission fee',
-                money(reg ? r.registration_fee : r.admission_fee),
+                money(total),
+                reg ? money(0) : money(r.admission_paid ?? 0),
+                money(reg ? total : (r.admission_balance ?? total)),
                 reg ? '' : dmy(r.offer_last_date),
                 txt(r.mobile),
               ];

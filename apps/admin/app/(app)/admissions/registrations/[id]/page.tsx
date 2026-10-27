@@ -105,9 +105,16 @@ export default async function RegistrationPage({
           .then((x) => x.sections)
           .catch(() => [])
       : [];
-  const refund = ['fee_paid', 'admitted'].includes(r.status)
+  // parts of the admission fee paid while still offered are refunded too (docs/design/53)
+  const refund = ['fee_paid', 'admitted', 'offered'].includes(r.status)
     ? await apiFetch<{
-        refund: { paid: number; pct: number; deduction: number; amount: number } | null;
+        refund: {
+          paid: number;
+          parts?: number;
+          pct: number;
+          deduction: number;
+          amount: number;
+        } | null;
       }>(`/admissions/registrations/${r.id}/cancel`)
         .then((x) => x.refund)
         .catch(() => null)
@@ -255,6 +262,7 @@ export default async function RegistrationPage({
             id={r.id}
             status={r.status}
             admissionFee={r.offer?.admissionFee ?? 0}
+            admissionPaid={r.admissionFeePaid ?? 0}
             sections={sections}
             refund={refund}
             canCollect={can('admissions.fee.collect')}

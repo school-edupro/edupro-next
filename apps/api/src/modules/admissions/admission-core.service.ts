@@ -735,6 +735,27 @@ export class AdmissionCoreService {
     );
   }
 
+  /**
+   * What is paid of the admission fee (docs/design/53): every posted receipt on the admission head of
+   * this registration (parts at the counter, or one online payment); bounced and reversed ones not.
+   */
+  async admissionPaid(
+    c: PoolClient,
+    appId: string,
+  ): Promise<{ paid: number; parts: number; lastReceiptId: string | null }> {
+    const r = await c.query<{ paid: string; parts: number; last: string | null }>(
+      `SELECT COALESCE(sum(m.amount), 0)::text AS paid, count(*)::int AS parts, max(m.id)::text AS last
+         FROM misc_receipts m JOIN fee_heads h ON h.id = m.head_id
+        WHERE m.application_id = $1 AND h.code = 'ADMFEE' AND m.status = 'posted'`,
+      [appId],
+    );
+    return {
+      paid: Number(r.rows[0]?.paid ?? 0),
+      parts: r.rows[0]?.parts ?? 0,
+      lastReceiptId: r.rows[0]?.last ?? null,
+    };
+  }
+
   /** A fee receipt in the fee module: the admission ledger head, the session's own series. */
   async postReceipt(
     c: PoolClient,
@@ -1032,10 +1053,19 @@ export class AdmissionCoreService {
       mode: string;
       reference: string | null;
       head: string;
+      head_code: string;
       application_id: string | null;
       status: string;
+      mode_label: string | null;
+      instrument_no: string | null;
+      instrument_date: string | null;
+      bank_name: string | null;
+      paid_to_date: string;
     }>(
-      `SELECT m.receipt_no, m.received_on::text, m.amount::text, m.mode, m.reference, h.name AS head, m.application_id::text, m.status
+      `SELECT m.receipt_no, m.received_on::text, m.amount::text, m.mode, m.reference, h.name AS head, h.code AS head_code,
+              m.application_id::text, m.status, m.mode_label, m.instrument_no, m.instrument_date::text, m.bank_name,
+              (SELECT COALESCE(sum(p.amount), 0) FROM misc_receipts p WHERE p.application_id = m.application_id
+                  AND p.head_id = m.head_id AND p.status = 'posted' AND p.id <= m.id)::text AS paid_to_date
          FROM misc_receipts m JOIN fee_heads h ON h.id = m.head_id WHERE m.id = $1`,
       [receiptId],
     );
@@ -1057,9 +1087,39 @@ export class AdmissionCoreService {
         ['Registration no.', a.application_no ?? 'Given on payment'],
         ['Academic year', a.year_name],
         ['Fee', x.head],
-        ['Paid by', x.mode === 'online' ? 'Online payment' : x.mode.toUpperCase()],
+        // the admission fee in parts (docs/design/53): the total, what is paid with this receipt, the balance
+        ...(x.head_code === 'ADMFEE' && Number(a.admission_fee ?? 0) > 0
+          ? ([
+              ['Admission fee (total)', money(Number(a.admission_fee))],
+              ['Paid to date', money(Number(x.paid_to_date))],
+              ['Balance', money(Math.max(0, Number(a.admission_fee) - Number(x.paid_to_date)))],
+            ] as Array<[string, string]>)
+          : []),
+        [
+          'Paid by',
+          x.mode === 'online' ? 'Online payment' : (x.mode_label ?? x.mode.toUpperCase()),
+        ],
+        ...(x.instrument_no
+          ? ([
+              [
+                x.mode === 'dd' ? 'Draft' : 'Cheque',
+                [
+                  x.instrument_no,
+                  x.instrument_date
+                    ? `${x.instrument_date.slice(8, 10)}-${x.instrument_date.slice(5, 7)}-${x.instrument_date.slice(0, 4)}`
+                    : null,
+                  x.bank_name,
+                ]
+                  .filter(Boolean)
+                  .join(' · '),
+              ],
+            ] as Array<[string, string]>)
+          : []),
         ['Reference', x.reference ?? ''],
-        ['Status', x.status === 'reversed' ? 'Reversed' : 'Received'],
+        [
+          'Status',
+          x.status === 'reversed' ? 'Reversed' : x.status === 'bounced' ? 'Bounced' : 'Received',
+        ],
       ],
       amount: money(Number(x.amount)),
       words: `Rupees ${amountInWords(Number(x.amount)).replace(/\b[a-z]/g, (ch) => ch.toUpperCase())} Only`,
@@ -1212,8 +1272,16 @@ export class AdmissionCoreService {
       admissionNo: a.admission_no,
       // the pupil made at Admit (corrections and cancellation then happen on the student page)
       studentId: a.student_id ?? null,
-      admissionFeeDue:
-        a.status === 'offered' && Number(a.admission_fee ?? 0) > 0 ? Number(a.admission_fee) : 0,
+      // the balance after any parts paid at the counter (docs/design/53)
+      ...(await (async () => {
+        const fee = a.status === 'offered' ? Number(a.admission_fee ?? 0) : 0;
+        const { paid } = fee > 0 ? await this.admissionPaid(c, a.id) : { paid: 0 };
+        return {
+          admissionFeeDue: Math.max(0, Math.round((fee - paid) * 100) / 100),
+          admissionFeePaid: paid,
+          admissionFee: fee,
+        };
+      })()),
       offerExpiresAt: a.offer_expires_at?.toISOString() ?? null,
       hasAdmissionForm: Boolean(a.admission_no),
       cancelledAt: a.cancelled_at?.toISOString() ?? null,

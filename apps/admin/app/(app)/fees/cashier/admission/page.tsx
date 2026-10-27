@@ -21,7 +21,10 @@ interface Found {
   due: {
     kind: 'registration' | 'admission';
     head: string;
+    /** the balance (the whole fee when nothing is paid yet) */
     amount: number;
+    fee: number;
+    paid: number;
     note: string | null;
     lapsed: boolean;
   } | null;
@@ -174,6 +177,8 @@ export default async function AdmissionCounterPage({
               kind={chosen.due.kind}
               head={chosen.due.head}
               amount={chosen.due.amount}
+              fee={chosen.due.fee}
+              paid={chosen.due.paid}
               modes={modes.length ? modes : FALLBACK_MODES}
               banks={options.banks}
               today={ist}
@@ -239,6 +244,11 @@ export default async function AdmissionCounterPage({
                       {r.due ? (
                         <>
                           {r.due.head}: <strong>{rupees(r.due.amount)}</strong>
+                          {r.due.paid > 0 ? (
+                            <div className="ep-field__help" style={{ margin: 0 }}>
+                              balance of {rupees(r.due.fee)} ({rupees(r.due.paid)} paid)
+                            </div>
+                          ) : null}
                           {r.due.note ? (
                             <div className="ep-field__help" style={{ margin: 0 }}>
                               {r.due.note}

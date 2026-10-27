@@ -1283,6 +1283,13 @@ export class AdmissionProcessService {
           'Decisions cannot be undone at this stage of the admission',
           { status: 409 },
         );
+      // parts of the admission fee are paid (docs/design/53): cancel with a refund instead
+      if ((await this.core.admissionPaid(c, id)).paid > 0)
+        throw new DomainError(
+          'admissions.cannot_undo',
+          'Part of the admission fee is paid: cancel the registration (the parts are refunded) instead of undoing the selection',
+          { status: 409 },
+        );
       const p = await this.processRow(c, id);
       const admin = ctx.permissions?.has(ADMISSION_SETUP_MANAGE);
       let ids: string[];

@@ -20,8 +20,14 @@ interface Row {
   mobile: string | null;
   registration_fee: string | null;
   admission_fee: string | null;
+  /** what is paid of the admission fee so far (parts, docs/design/53) */
+  paid: string | null;
   offer_expires_at: Date | null;
 }
+
+/** The admission fee paid so far: posted receipts on the admission head (docs/design/53). */
+const PAID = `(SELECT COALESCE(sum(m.amount), 0) FROM misc_receipts m JOIN fee_heads h ON h.id = m.head_id
+                WHERE m.application_id = a.id AND h.code = 'ADMFEE' AND m.status = 'posted')::text AS paid`;
 
 const istDate = (d: Date) =>
   new Intl.DateTimeFormat('en-IN', {
@@ -53,15 +59,22 @@ export class AdmissionCounterService {
         kind: 'registration' as const,
         head: 'Registration fee',
         amount: reg,
+        fee: reg,
+        paid: 0,
         note: null,
         lapsed: false,
       };
-    if (r.status === 'offered' && adm > 0) {
+    const paid = Number(r.paid ?? 0);
+    const balance = Math.round((adm - paid) * 100) / 100;
+    if (r.status === 'offered' && balance > 0) {
       const lapsed = r.offer_expires_at && r.offer_expires_at.getTime() < Date.now();
       return {
         kind: 'admission' as const,
         head: 'Admission fee',
-        amount: adm,
+        // the balance: any part of it may be taken (docs/design/53)
+        amount: balance,
+        fee: adm,
+        paid,
         note: r.offer_expires_at
           ? lapsed
             ? `The offer lapsed on ${istDate(r.offer_expires_at)}; the admission office renews it first`
@@ -78,10 +91,12 @@ export class AdmissionCounterService {
     const digits = words.replace(/\D/g, '');
     return this.db.tenant(requireTenant(ctx), async (c) => {
       const r = await c.query<Row>(
+        // eslint-disable-next-line no-restricted-syntax -- PAID is a fixed fragment; values are bound parameters
         `SELECT a.id::text, a.application_no AS number, a.admission_no, a.status::text, a.candidate_name AS candidate,
                 cl.name AS class_name, y.name AS session, k.name AS category,
                 COALESCE(NULLIF(btrim(a.data->>'father_name'), ''), NULLIF(btrim(a.data->>'mother_name'), ''), ap.name) AS parent,
-                COALESCE(a.contact_mobile, ap.mobile) AS mobile, a.registration_fee::text, a.admission_fee::text, a.offer_expires_at
+                COALESCE(a.contact_mobile, ap.mobile) AS mobile, a.registration_fee::text, a.admission_fee::text, a.offer_expires_at,
+                ${PAID}
            FROM applications a JOIN classes cl ON cl.id = a.class_id JOIN applicants ap ON ap.id = a.applicant_id
            JOIN admission_cycles y ON y.id = a.cycle_id LEFT JOIN admission_fee_categories k ON k.id = a.category_id
           WHERE a.status::text <> 'draft'
@@ -89,7 +104,9 @@ export class AdmissionCounterService {
                  OR a.candidate_name ILIKE '%' || $1 || '%' OR COALESCE(a.contact_email, ap.email::text) ILIKE '%' || $1 || '%'
                  OR (length($2) >= 4 AND (COALESCE(a.contact_mobile, '') LIKE '%' || $2 || '%' OR ap.mobile LIKE '%' || $2 || '%')))
             AND (NOT $3 OR (a.status::text = 'submitted' AND a.application_no IS NULL AND COALESCE(a.registration_fee, 0) > 0)
-                 OR (a.status::text = 'offered' AND COALESCE(a.admission_fee, 0) > 0))
+                 OR (a.status::text = 'offered' AND COALESCE(a.admission_fee, 0) > (SELECT COALESCE(sum(m.amount), 0)
+                      FROM misc_receipts m JOIN fee_heads h ON h.id = m.head_id
+                     WHERE m.application_id = a.id AND h.code = 'ADMFEE' AND m.status = 'posted')))
           ORDER BY a.updated_at DESC LIMIT 50`,
         [words, digits, onlyDue],
       );
@@ -193,9 +210,10 @@ export class AdmissionCounterService {
       });
     const row = await this.db.tenant(requireTenant(ctx), async (c) => {
       const r = await c.query<Row>(
+        // eslint-disable-next-line no-restricted-syntax -- PAID is a fixed fragment; values are bound parameters
         `SELECT a.id::text, a.application_no AS number, a.admission_no, a.status::text, a.registration_fee::text,
                 a.admission_fee::text, a.offer_expires_at, a.candidate_name AS candidate, '' AS class_name, '' AS session,
-                NULL AS category, NULL AS parent, NULL AS mobile
+                NULL AS category, NULL AS parent, NULL AS mobile, ${PAID}
            FROM applications a WHERE a.id = $1`,
         [id],
       );
@@ -208,11 +226,21 @@ export class AdmissionCounterService {
         status: 409,
       });
     if (kind === 'registration') {
+      if (pay.amount !== undefined && Math.abs(pay.amount - due.amount) > 0.004)
+        throw new DomainError('validation-failed', 'The registration fee is taken in full', {
+          status: 400,
+        });
       const out = await this.desk.collect(ctx, id, pay);
       return { receiptId: out.receiptId, receiptNo: out.receiptNo, number: out.number };
     }
     const out = await this.admit.collect(ctx, id, pay);
-    return { receiptId: out.receiptId, receiptNo: out.receiptNo, admissionNo: out.admissionNo };
+    return {
+      receiptId: out.receiptId,
+      receiptNo: out.receiptNo,
+      admissionNo: out.admissionNo,
+      paid: out.paid,
+      balance: out.balance,
+    };
   }
 
   async receiptPdf(ctx: RequestContext, id: string, receiptId: string) {

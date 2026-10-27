@@ -2960,7 +2960,37 @@ describe('online admission (e2e)', () => {
         headers: h(accountant),
       });
       const row = due.json().data.find((x: { id: string }) => x.id === second);
-      expect(row).toMatchObject({ due: { kind: 'admission' } });
+      expect(row).toMatchObject({ due: { kind: 'admission', paid: 0 } });
+      // in parts (docs/design/53): more than the balance is refused; a part leaves the balance due
+      const whole = row.due.amount as number;
+      const part = Math.floor(whole / 2);
+      const collect = (json: Record<string, unknown>) =>
+        inject({
+          method: 'POST',
+          url: `/fees/admission-counter/${second}/collect`,
+          headers: h(accountant),
+          json: { kind: 'admission', mode: 'cash', ...json },
+        });
+      expect((await collect({ amount: whole + 1 })).statusCode).toBe(400);
+      const first = await collect({ amount: part });
+      expect(first.statusCode).toBe(201);
+      expect(first.json()).toMatchObject({ admissionNo: null, paid: part, balance: whole - part });
+      const after = (
+        await inject({
+          method: 'GET',
+          url: '/fees/admission-counter?due=1',
+          headers: h(accountant),
+        })
+      )
+        .json()
+        .data.find((x: { id: string }) => x.id === second);
+      expect(after.due).toMatchObject({ amount: whole - part, paid: part, fee: whole });
+      const slip = await inject({
+        method: 'GET',
+        url: `/fees/admission-counter/${second}/receipts/${first.json().receiptId as string}/pdf`,
+        headers: h(accountant),
+      });
+      expect(slip.statusCode).toBe(200);
       const fee = await inject({
         method: 'POST',
         url: `/fees/admission-counter/${second}/collect`,
@@ -2976,6 +3006,7 @@ describe('online admission (e2e)', () => {
       });
       expect(fee.statusCode).toBe(201);
       expect(fee.json().admissionNo).toBeTruthy();
+      expect(fee.json()).toMatchObject({ paid: whole, balance: 0 });
       const twice = await inject({
         method: 'POST',
         url: `/admissions/registrations/${second}/admission-fee`,
@@ -3198,6 +3229,76 @@ describe('online admission (e2e)', () => {
       });
       expect(cancel.statusCode).toBe(201);
       expect(cancel.json()).toMatchObject({ status: 'cancelled', refund: null });
+    });
+  });
+  describe('docs/design/53: the admission fee in parts', () => {
+    it('refunds the parts paid when an offered registration is cancelled; a bounced part does not count', async () => {
+      // an offered registration with a fee, made directly from one cancelled before its fee (the
+      // selection flow is tested above)
+      const id = await withMigrator(async (c) => {
+        const r = await c.query<{ id: string }>(
+          `UPDATE applications SET status = 'offered', admission_fee = 15000, offer_expires_at = now() + interval '7 days',
+                  cancelled_at = NULL, cancel_reason = NULL
+            WHERE id = (SELECT a.id FROM applications a WHERE a.cycle_id = $1 AND a.status = 'cancelled'
+                           AND NOT EXISTS (SELECT 1 FROM misc_receipts m JOIN fee_heads h ON h.id = m.head_id
+                                            WHERE m.application_id = a.id AND h.code = 'ADMFEE')
+                         ORDER BY a.id DESC LIMIT 1)
+            RETURNING id::text`,
+          [cycleId],
+        );
+        return r.rows[0]!.id;
+      });
+      const take = (amount: number) =>
+        inject({
+          method: 'POST',
+          url: `/fees/admission-counter/${id}/collect`,
+          headers: h(accountant),
+          json: { kind: 'admission', mode: 'cash', amount },
+        });
+      const one = await take(6000);
+      expect(one.json()).toMatchObject({ admissionNo: null, balance: 9000 });
+      const two = await take(3000);
+      expect(two.json()).toMatchObject({ admissionNo: null, balance: 6000 });
+      // the 3,000 part bounced in the fee module: the balance grows back
+      await withMigrator((c) =>
+        c.query(`UPDATE misc_receipts SET status = 'bounced' WHERE id = $1`, [
+          two.json().receiptId,
+        ]),
+      );
+      const row = (
+        await inject({
+          method: 'GET',
+          url: '/fees/admission-counter?due=1',
+          headers: h(accountant),
+        })
+      )
+        .json()
+        .data.find((x: { id: string }) => x.id === id);
+      expect(row.due).toMatchObject({ amount: 9000, paid: 6000 });
+      // undoing the selection is refused while parts are paid
+      const undo = await inject({
+        method: 'POST',
+        url: `/admissions/registrations/${id}/undo`,
+        headers: h(),
+        json: { reason: 'Wrong selection' },
+      });
+      expect(undo.statusCode).toBe(409);
+      expect(undo.json().detail).toMatch(/Part of the admission fee is paid/);
+      // the parts paid (6,000) less the session's 10% are refunded on cancel
+      const preview = await inject({
+        method: 'GET',
+        url: `/admissions/registrations/${id}/cancel`,
+        headers: h(),
+      });
+      expect(preview.json().refund).toMatchObject({ paid: 6000, pct: 10, amount: 5400, parts: 1 });
+      const cancel = await inject({
+        method: 'POST',
+        url: `/admissions/registrations/${id}/cancel`,
+        headers: h(),
+        json: { reason: 'Took admission elsewhere' },
+      });
+      expect(cancel.statusCode).toBe(201);
+      expect(cancel.json()).toMatchObject({ status: 'cancelled', refund: { amount: 5400 } });
     });
   });
   describe('part 7: reports and dashboard', () => {
