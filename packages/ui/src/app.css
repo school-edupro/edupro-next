@@ -1031,6 +1031,18 @@
 .ep-dialog[data-size='lg'] .ep-dialog__body {
   width: min(92vw, 760px);
 }
+.ep-dialog[data-size='xl'] .ep-dialog__body {
+  width: min(96vw, 1180px);
+  max-height: 92vh;
+  display: flex;
+  flex-direction: column;
+}
+.ep-dialog[data-size='xl'] .ep-dialog__content {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  margin-bottom: var(--sp-4);
+}
 .ep-dialog__content {
   margin: var(--sp-3) 0 var(--sp-5);
   font-size: var(--fs-small);
@@ -12767,7 +12779,38 @@ a.ep-pub-foot__item {
   display: grid;
   gap: var(--sp-4);
 }
-.ep-offer__part {
+.ep-offer__to {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+  align-items: center;
+}
+.ep-offer__chip {
+  display: inline-flex;
+  gap: var(--sp-2);
+  align-items: center;
+  padding: var(--sp-1) var(--sp-3);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-pill);
+  background: var(--surface-subtle);
+  font-size: var(--fs-small);
+}
+.ep-offer__chip[data-off='true'] {
+  color: var(--text-muted);
+  text-decoration: line-through;
+}
+.ep-offer__grid {
+  display: grid;
+  gap: var(--sp-5);
+  grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
+  align-items: start;
+}
+@media (max-width: 56rem) {
+  .ep-offer__grid {
+    grid-template-columns: 1fr;
+  }
+}
+.ep-offer__edit {
   display: grid;
   gap: var(--sp-3);
 }
@@ -12776,18 +12819,32 @@ a.ep-pub-foot__item {
   font-size: var(--fs-body);
   color: var(--text-heading);
 }
+.ep-offer__tabs {
+  display: flex;
+  gap: var(--sp-2);
+  margin-bottom: var(--sp-3);
+}
 .ep-offer__frame {
+  display: block;
   width: 100%;
-  min-height: 26rem;
+  height: min(62vh, 40rem);
   border: 1px solid var(--border-default);
   border-radius: var(--radius-md);
   background: var(--surface-card);
 }
-.ep-offer__text {
+.ep-offer__phone {
+  max-width: 24rem;
+  padding: var(--sp-4);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-lg);
+  background: var(--surface-subtle);
+}
+.ep-offer__bubble {
   margin: 0;
   padding: var(--sp-3);
-  background: var(--surface-subtle);
   border-radius: var(--radius-md);
+  background: var(--surface-card);
+  box-shadow: var(--shadow-card);
   white-space: pre-wrap;
 }
 

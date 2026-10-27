@@ -35,3 +35,17 @@ Checked:
   names the school), then the offer sent with a changed subject and message, with the queued email
   checked.
 - Browser: the dialog and its email preview, opened on registration 1398 and closed without sending.
+
+## Rebuilt (27 Oct 2026, asked on the screen)
+
+- **The dialog:** a wide dialog (`Dialog size="xl"`, new: up to 1180 px and 92 % of the height) that
+  scrolls inside, so the buttons are always in view.
+- **"Goes to" row:** Email, SMS and WhatsApp with each recipient, struck through when not sent, plus the
+  fee and the pay-by date.
+- **Two panes:**
+  - **The email's words** on the left: Subject, Message, Closing line, a "Changed" badge and "Back
+    to the school's words".
+  - **The preview** on the right, with Email / SMS / WhatsApp tabs. It follows the typing (600 ms
+    after it stops), so there is no Update button.
+- The facts table above the preview is gone, because the preview shows the facts.
+- **On a phone:** one column.

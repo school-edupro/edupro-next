@@ -15,7 +15,8 @@ export interface DialogProps {
     loading?: boolean;
   };
   secondaryLabel?: string;
-  size?: 'sm' | 'md' | 'lg';
+  /** xl: a wide editor that scrolls inside, the buttons always in view */
+  size?: 'sm' | 'md' | 'lg' | 'xl';
 }
 
 /** Native <dialog> for focus trapping and Escape handling; overlay shadow token; 250 ms fade. */
