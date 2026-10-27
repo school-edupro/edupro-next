@@ -28,6 +28,8 @@ export default async function FeeApprovalPage({
   const canManage = me.permissions.includes('workflow.definition.manage');
   // the hostel withdrawal's levels are made with the standard two the first time they are shown
   if (canView) await apiFetch('/hostel/withdrawal-approval').catch(() => null);
+  // and the admission fee refund's (docs/design/54)
+  if (canView) await apiFetch('/admissions/refunds/approval-levels').catch(() => null);
   const [defs, options] = canView
     ? await Promise.all([
         apiFetch<{ data: WorkflowDefinition[] }>('/workflow/definitions').then((r) => r.data),
@@ -38,6 +40,7 @@ export default async function FeeApprovalPage({
     : [[], { roles: [], designations: [], people: [] } as WorkflowOptions];
   const def = defs.find((d) => d.entityType === 'fee_profile_change') ?? null;
   const hostel = defs.find((d) => d.entityType === 'hostel_withdrawal') ?? null;
+  const admissionRefund = defs.find((d) => d.entityType === 'admission_refund') ?? null;
   const role = (code: string) => options.roles.find((r) => r.code === code)?.name ?? code;
   const person = (id: string) => options.people.find((p) => p.id === id)?.name ?? `person ${id}`;
   const who = (r: WorkflowResolver): string =>
@@ -206,6 +209,34 @@ export default async function FeeApprovalPage({
             })
           ) : (
             <Card>The hostel withdrawal levels could not be read.</Card>
+          )}
+          <h2
+            id="admission-refund"
+            style={{
+              margin: 'var(--sp-5) 0 var(--sp-2)',
+              fontFamily: 'var(--font-heading)',
+              fontSize: 'var(--fs-h3)',
+              color: 'var(--text-heading)',
+            }}
+          >
+            Admission fee refund
+          </h2>
+          <p className="ep-field__help">
+            The refund of an admission fee when a registration or an admission is cancelled
+            (Admissions, or Cancel admission on the student page): the amount paid less the
+            session&rsquo;s deduction. It waits at these levels in order (the Workflow inbox, Fees →
+            Refunds → Admission refunds); after the last one, Accounts pay it out with a voucher.
+          </p>
+          {admissionRefund ? (
+            flow(admissionRefund, {
+              title: 'How an admission fee refund is approved now',
+              creators: 'Asked by',
+              result: 'Approved: Accounts pay it with a voucher',
+              off: 'While this is switched off, a refund approver (Approve, reject and pay out refunds) decides an admission fee refund in one step.',
+              edit: 'Change the levels',
+            })
+          ) : (
+            <Card>The admission fee refund levels could not be read.</Card>
           )}
         </>
       )}

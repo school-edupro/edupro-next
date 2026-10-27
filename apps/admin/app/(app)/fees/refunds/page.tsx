@@ -13,6 +13,7 @@ import {
 } from '@edupro/ui';
 import { getTranslations } from 'next-intl/server';
 import { Notice } from '@/components/Notice';
+import { RefundTabs } from '@/components/fees/RefundTabs';
 import { decideRefund } from '@/lib/actions';
 import {
   FilterInput,
@@ -79,6 +80,7 @@ export default async function RefundsPage({
   return (
     <>
       <PageHeader kicker={t('kicker')} title={t('title')} description={t('description')} />
+      <RefundTabs current="pupils" />
       <Notice params={sp} />
       <Card>
         <FilterRow clearHref="/fees/refunds">

@@ -33,6 +33,11 @@ export class CancelDto extends createZodDto(CancelSchema) {}
 export const RefundsQuerySchema = z.object({
   status: z.enum(['requested', 'approved', 'rejected', 'paid']).optional(),
   cycleId: IdSchema.optional(),
+  /** only those waiting at my level */
+  mine: z
+    .enum(['1', '0'])
+    .optional()
+    .transform((v) => v === '1'),
 });
 export class RefundsQueryDto extends createZodDto(RefundsQuerySchema) {}
 

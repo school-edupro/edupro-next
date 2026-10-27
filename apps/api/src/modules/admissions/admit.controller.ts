@@ -1,4 +1,7 @@
-import { Body, Controller, Get, Param, Post, Query } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, Query, Res } from '@nestjs/common';
+import type { FastifyReply } from 'fastify';
+import { AuthenticatedOnly } from '../../common/auth/decorators';
+import { AdmissionRefundsService } from './refunds.service';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { RequirePermission } from '../../common/access/require-permission.decorator';
 import { ReqCtx, type RequestContext } from '../../common/http/request-context';
@@ -11,12 +14,7 @@ import {
   RefundPayDto,
   RefundsQueryDto,
 } from './admit.dto';
-import {
-  ADMISSION_ADMIT,
-  ADMISSION_CANCEL,
-  AdmissionAdmitService,
-  REFUND_APPROVE,
-} from './admit.service';
+import { ADMISSION_ADMIT, ADMISSION_CANCEL, AdmissionAdmitService } from './admit.service';
 import { ADMISSION_FEE } from './desk.controller';
 import { DeskFeeDto } from './desk.dto';
 
@@ -25,7 +23,10 @@ import { DeskFeeDto } from './desk.dto';
 @ApiBearerAuth()
 @Controller('admissions')
 export class AdmissionAdmitController {
-  constructor(private readonly svc: AdmissionAdmitService) {}
+  constructor(
+    private readonly svc: AdmissionAdmitService,
+    private readonly refundsSvc: AdmissionRefundsService,
+  ) {}
 
   @Post('registrations/:id/admission-fee')
   @ApiOperation({
@@ -88,22 +89,53 @@ export class AdmissionAdmitController {
     return this.svc.cancel(ctx, id, dto);
   }
 
+  // admission fee refunds (docs/design/54): the levels of Fees → Approval decide; Accounts pay
   @Get('refunds')
-  @RequirePermission(ADMISSIONS.applicationView)
+  @AuthenticatedOnly()
   refunds(@ReqCtx() ctx: RequestContext, @Query() q: RefundsQueryDto) {
-    return this.svc.refunds(ctx, q);
+    return this.refundsSvc.list(ctx, q);
+  }
+
+  @Get('refunds/approval-levels')
+  @ApiOperation({ summary: 'Makes sure the refund approval levels exist (Fees → Approval edits them)' })
+  @AuthenticatedOnly()
+  refundLevels(@ReqCtx() ctx: RequestContext) {
+    return this.refundsSvc.approvalFlow(ctx);
   }
 
   @Post('refunds/:id/decide')
-  @ApiOperation({ summary: 'The fee refund approvers approve or reject an admission fee refund' })
-  @RequirePermission(REFUND_APPROVE)
+  @ApiOperation({
+    summary: 'The level waiting (or, levels off, a refund approver) decides a refund',
+  })
+  @AuthenticatedOnly()
   decide(@ReqCtx() ctx: RequestContext, @Param('id') id: string, @Body() dto: RefundDecisionDto) {
-    return this.svc.decideRefund(ctx, id, dto);
+    return this.refundsSvc.decide(ctx, id, dto);
   }
 
   @Post('refunds/:id/pay')
-  @RequirePermission(REFUND_APPROVE)
+  @ApiOperation({ summary: 'Accounts pay an approved refund out: the voucher' })
+  @AuthenticatedOnly()
   pay(@ReqCtx() ctx: RequestContext, @Param('id') id: string, @Body() dto: RefundPayDto) {
-    return this.svc.payRefund(ctx, id, dto);
+    return this.refundsSvc.pay(ctx, id, dto);
+  }
+
+  @Get('refunds/:id/voucher.pdf')
+  @ApiOperation({ summary: 'The refund voucher (download=1 saves it)' })
+  @AuthenticatedOnly()
+  async voucher(
+    @ReqCtx() ctx: RequestContext,
+    @Param('id') id: string,
+    @Query('download') download: string | undefined,
+    @Res() reply: FastifyReply,
+  ) {
+    const f = await this.refundsSvc.voucher(ctx, id);
+    void reply
+      .header('content-type', f.contentType)
+      .header(
+        'content-disposition',
+        `${download === '1' ? 'attachment' : 'inline'}; filename="${f.filename}"`,
+      )
+      .header('cache-control', 'private, no-store')
+      .send(Buffer.from(f.base64, 'base64'));
   }
 }

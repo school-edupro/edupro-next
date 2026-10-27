@@ -95,6 +95,7 @@ export async function decideAdmissionRefund(id: string, approve: boolean, note?:
   if (!okId(id)) return { ok: false as const, error: 'Unknown refund' };
   return call(`/admissions/refunds/${id}/decide`, 'POST', { approve, ...(note ? { note } : {}) }, [
     '/admissions/refunds',
+    '/fees/refunds/admission',
   ]);
 }
 export async function payAdmissionRefund(
@@ -102,5 +103,8 @@ export async function payAdmissionRefund(
   body: { mode: string; reference?: string; paidOn?: string },
 ) {
   if (!okId(id)) return { ok: false as const, error: 'Unknown refund' };
-  return call(`/admissions/refunds/${id}/pay`, 'POST', body, ['/admissions/refunds']);
+  return call(`/admissions/refunds/${id}/pay`, 'POST', body, [
+    '/admissions/refunds',
+    '/fees/refunds/admission',
+  ]);
 }

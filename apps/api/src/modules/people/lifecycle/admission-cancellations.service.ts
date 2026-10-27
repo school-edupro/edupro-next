@@ -1,3 +1,4 @@
+import { startRefundFlow } from '../../admissions/refunds.service';
 import { Injectable } from '@nestjs/common';
 import type { PoolClient } from 'pg';
 import { AuditService } from '../../../common/audit/audit.service';
@@ -225,10 +226,10 @@ export class AdmissionCancellationsService {
 
     // an online admission: the registration is cancelled; its admission fee refunded less the deduction
     if (af) {
-      if (settlement === 'refund' && af.receiptId && af.refund > 0)
-        await c.query(
+      if (settlement === 'refund' && af.receiptId && af.refund > 0) {
+        const made = await c.query<{ id: string }>(
           `INSERT INTO admission_refunds (school_id, application_id, receipt_id, paid_amount, deduction_pct, deduction, amount, reason, requested_by)
-           VALUES (app.current_school_id(), $1, $2, $3, $4, $5, $6, $7, app.current_user_id())`,
+           VALUES (app.current_school_id(), $1, $2, $3, $4, $5, $6, $7, app.current_user_id()) RETURNING id::text`,
           [
             af.applicationId,
             af.receiptId,
@@ -239,6 +240,9 @@ export class AdmissionCancellationsService {
             `Admission cancelled: ${reason}`.slice(0, 500),
           ],
         );
+        // the approval levels of Fees → Approval (docs/design/54)
+        await startRefundFlow(this.workflow, c, ctx, made.rows[0]!.id);
+      }
       await c.query(
         `UPDATE applications SET status = 'cancelled', cancelled_at = now(), cancel_reason = $2, updated_at = now() WHERE id = $1`,
         [af.applicationId, reason.slice(0, 500)],
@@ -303,7 +307,8 @@ export class AdmissionCancellationsService {
   ): Promise<CancelOutcome> {
     await c.query('SAVEPOINT cancel_preview');
     try {
-      const { withdrawalId: _w, ...out } = await this.run(c, ctx, input);
+      const { withdrawalId, ...out } = await this.run(c, ctx, input);
+      void withdrawalId; // a preview has no withdrawal to show
       return out;
     } finally {
       await c.query('ROLLBACK TO SAVEPOINT cancel_preview');

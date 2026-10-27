@@ -121,6 +121,8 @@ export interface ReceiptInput {
   amount: string;
   words: string;
   note?: string;
+  /** "Receipt no." unless named (a refund voucher, docs/design/54) */
+  numberLabel?: string;
 }
 
 /** A registration or admission fee receipt. */
@@ -129,7 +131,7 @@ export async function admissionReceiptPdf(p: ReceiptInput): Promise<Buffer> {
   let y = A4[1] - 130;
   page.drawText(latin(p.title.toUpperCase()), { x: M, y, size: 10, font: bold, color: CYAN });
   y -= 22;
-  page.drawText(latin(`Receipt no. ${p.receiptNo}`), {
+  page.drawText(latin(`${p.numberLabel ?? 'Receipt no.'} ${p.receiptNo}`), {
     x: M,
     y,
     size: 14,

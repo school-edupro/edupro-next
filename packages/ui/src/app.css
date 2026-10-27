@@ -12731,3 +12731,15 @@ a.ep-pub-foot__item {
   justify-content: space-between;
 }
 
+/* ---- Admission fee refunds (docs/design/54) ---------------------------------------------------- */
+.ep-arf__act {
+  display: grid;
+  gap: var(--sp-2);
+  min-width: min(100%, 14rem);
+}
+.ep-arf__btns {
+  display: flex;
+  gap: var(--sp-2);
+  flex-wrap: wrap;
+}
+

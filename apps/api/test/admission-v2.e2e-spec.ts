@@ -3192,20 +3192,54 @@ describe('online admission (e2e)', () => {
         json: { mode: 'bank' },
       });
       expect(early.statusCode).toBe(409);
-      const ok = await inject({
-        method: 'POST',
-        url: `/admissions/refunds/${r.id}/decide`,
-        headers: h(),
-        json: { approve: true },
+      // the levels of Fees → Approval (docs/design/54): Accounts check, then the Principal
+      const decide = (who: typeof accountant | undefined, json: Record<string, unknown>) =>
+        inject({
+          method: 'POST',
+          url: `/admissions/refunds/${r.id}/decide`,
+          headers: who ? h(who) : h(),
+          json,
+        });
+      expect((await decide(undefined, { approve: true })).statusCode).toBe(403);
+      expect((await decide(accountant, { approve: false })).statusCode).toBe(400);
+      const level1 = await decide(accountant, { approve: true, note: 'Receipt checked' });
+      expect(level1.statusCode).toBe(201);
+      expect(level1.json()).toMatchObject({ status: 'requested' });
+      expect(level1.json().approval.waitingWith).toMatch(/^Principal approval/);
+      // Accounts see it on Fees → Refunds without the admission rights
+      const forAccounts = await inject({
+        method: 'GET',
+        url: '/admissions/refunds?status=requested',
+        headers: h(accountant),
       });
+      expect(forAccounts.statusCode).toBe(200);
+      const ok = await decide(undefined, { approve: true, note: 'Agreed' });
       expect(ok.json().status).toBe('approved');
+      expect((await decide(accountant, { approve: true })).statusCode).toBe(409);
+      expect(
+        (
+          await inject({
+            method: 'POST',
+            url: `/admissions/refunds/${r.id}/pay`,
+            headers: h(accountant),
+            json: { mode: 'bank' },
+          })
+        ).statusCode,
+      ).toBe(400);
       const paid = await inject({
         method: 'POST',
         url: `/admissions/refunds/${r.id}/pay`,
-        headers: h(),
+        headers: h(accountant),
         json: { mode: 'bank', reference: 'NEFT123' },
       });
       expect(paid.json().status).toBe('paid');
+      const voucher = await inject({
+        method: 'GET',
+        url: `/admissions/refunds/${r.id}/voucher.pdf`,
+        headers: h(accountant),
+      });
+      expect(voucher.statusCode).toBe(200);
+      expect(voucher.rawPayload.subarray(0, 4).toString()).toBe('%PDF');
       const fam = await inject({
         method: 'GET',
         url: `/public/admission/me/applications/${appA}`,
@@ -3291,6 +3325,12 @@ describe('online admission (e2e)', () => {
         headers: h(),
       });
       expect(preview.json().refund).toMatchObject({ paid: 6000, pct: 10, amount: 5400, parts: 1 });
+      await withMigrator((c) =>
+        c.query(
+          `UPDATE workflow_definitions SET status = 'inactive' WHERE school_id = $1 AND code = 'admission_refund'`,
+          [school.id],
+        ),
+      );
       const cancel = await inject({
         method: 'POST',
         url: `/admissions/registrations/${id}/cancel`,
@@ -3299,6 +3339,22 @@ describe('online admission (e2e)', () => {
       });
       expect(cancel.statusCode).toBe(201);
       expect(cancel.json()).toMatchObject({ status: 'cancelled', refund: { amount: 5400 } });
+      // the levels were switched off for this one (docs/design/54): a refund approver decides it at once
+      const refundId = cancel.json().refund.id as string;
+      const off = await inject({
+        method: 'POST',
+        url: `/admissions/refunds/${refundId}/decide`,
+        headers: h(),
+        json: { approve: false, note: 'Paid by mistake: kept' },
+      });
+      expect(off.statusCode).toBe(201);
+      expect(off.json()).toMatchObject({ status: 'rejected', approval: null });
+      await withMigrator((c) =>
+        c.query(
+          `UPDATE workflow_definitions SET status = 'active' WHERE school_id = $1 AND code = 'admission_refund'`,
+          [school.id],
+        ),
+      );
     });
   });
   describe('part 7: reports and dashboard', () => {

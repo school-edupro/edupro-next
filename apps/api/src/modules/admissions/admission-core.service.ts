@@ -915,7 +915,7 @@ export class AdmissionCoreService {
     await this.register(c, a.id, rec.id);
   }
 
-  private async school(
+  async school(
     c: PoolClient,
   ): Promise<{ head: SchoolHead; logo: { contentType: string; bytes: Buffer } | null }> {
     const s = (
@@ -1128,7 +1128,7 @@ export class AdmissionCoreService {
   }
 
   /** A generated PDF kept as a file of the application (attached to emails, opened later). */
-  private async storePdf(
+  async storePdf(
     c: PoolClient,
     appId: string,
     name: string,

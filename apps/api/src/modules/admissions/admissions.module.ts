@@ -16,6 +16,7 @@ import { AdmissionCounterController } from './counter.controller';
 import { AdmissionCounterService } from './counter.service';
 import { AdmissionReadyReportsController } from './ready-reports.controller';
 import { AdmissionReadyReportsService } from './ready-reports.service';
+import { AR_FLOW, AdmissionRefundsService } from './refunds.service';
 import { AdmissionEnquiryController } from './enquiry.controller';
 import { AdmissionEnquiryService } from './enquiry.service';
 import { AdmissionScheduleService } from './schedule.service';
@@ -82,6 +83,7 @@ import { AdmissionNumberSeriesService } from './number-series.service';
     AdmissionGridService,
     AdmissionReadyReportsService,
     AdmissionCounterService,
+    AdmissionRefundsService,
     AdmissionEnquiryService,
     AdmissionScoreTablesService,
     AdmissionApprovalsService,
@@ -120,9 +122,14 @@ export class AdmissionsModule implements OnModuleInit {
     private readonly payments: PaymentsService,
     private readonly core: AdmissionCoreService,
     private readonly admit: AdmissionAdmitService,
+    private readonly refunds: AdmissionRefundsService,
   ) {}
 
   onModuleInit(): void {
+    // docs/design/54: an admission fee refund rides the levels of Fees → Approval
+    this.workflow.onComplete(AR_FLOW.entityType, (c, ctx, instance, outcome) =>
+      this.refunds.onApprovalComplete(c, ctx, instance, outcome),
+    );
     this.workflow.onComplete('application', (c, ctx, instance, outcome) =>
       this.decisions.onApprovalComplete(c, ctx, instance, outcome),
     );

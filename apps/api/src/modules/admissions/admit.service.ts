@@ -1,4 +1,6 @@
 import { messageTag } from './message-tag';
+import { startRefundFlow } from './refunds.service';
+import { WorkflowService } from '../workflow/workflow.service';
 import { Injectable } from '@nestjs/common';
 import {
   fieldState,
@@ -20,14 +22,7 @@ import { DomainError } from '../../common/errors/domain-error';
 import { requireTenant, type RequestContext } from '../../common/http/request-context';
 import { AdmissionCoreService, type AppRow } from './admission-core.service';
 import { seriesNumber } from './number-series';
-import type {
-  AdmitBulkDto,
-  AdmitDto,
-  CancelDto,
-  RefundDecisionDto,
-  RefundPayDto,
-  RefundsQueryDto,
-} from './admit.dto';
+import type { AdmitBulkDto, AdmitDto, CancelDto } from './admit.dto';
 import type { DeskFeeDto } from './desk.dto';
 
 const DOC_KINDS = new Set([
@@ -83,6 +78,7 @@ export class AdmissionAdmitService {
     private readonly db: DbService,
     private readonly core: AdmissionCoreService,
     private readonly audit: AuditService,
+    private readonly workflow: WorkflowService,
   ) {}
 
   /** The school's admission number series continued (prefix kept), never one given before. */
@@ -802,6 +798,8 @@ export class AdmissionAdmitService {
             ],
           );
           refund = { id: r.rows[0]!.id, amount: plan.amount };
+          // the approval levels of Fees → Approval (docs/design/54)
+          await startRefundFlow(this.workflow, c, ctx, refund.id);
         }
       }
       await c.query(
@@ -856,128 +854,6 @@ export class AdmissionAdmitService {
         after: { reason: dto.reason, refund: refund?.amount ?? null },
       });
       return { status: 'cancelled', refund };
-    });
-  }
-
-  async refunds(ctx: RequestContext, q: RefundsQueryDto) {
-    return this.db.tenant(requireTenant(ctx), async (c) => {
-      const r = await c.query<{
-        id: string;
-        application_id: string;
-        number: string | null;
-        admission_no: string | null;
-        candidate: string | null;
-        class_name: string;
-        receipt_no: string;
-        paid_amount: string;
-        deduction_pct: string;
-        deduction: string;
-        amount: string;
-        reason: string;
-        status: string;
-        requested_at: Date;
-        requested_by: string | null;
-        decided_at: Date | null;
-        decided_by: string | null;
-        decision_note: string | null;
-        mode: string | null;
-        reference: string | null;
-        paid_on: string | null;
-      }>(
-        `SELECT f.id::text, f.application_id::text, a.application_no AS number, a.admission_no, a.candidate_name AS candidate, cl.name AS class_name,
-                m.receipt_no, f.paid_amount::text, f.deduction_pct::text, f.deduction::text, f.amount::text, f.reason, f.status, f.requested_at,
-                ur.display_name AS requested_by, f.decided_at, ud.display_name AS decided_by, f.decision_note, f.mode, f.reference, f.paid_on::text
-           FROM admission_refunds f JOIN applications a ON a.id = f.application_id JOIN classes cl ON cl.id = a.class_id
-           JOIN misc_receipts m ON m.id = f.receipt_id LEFT JOIN users ur ON ur.id = f.requested_by LEFT JOIN users ud ON ud.id = f.decided_by
-          WHERE ($1::text IS NULL OR f.status = $1) AND ($2::bigint IS NULL OR a.cycle_id = $2::bigint)
-          ORDER BY f.requested_at DESC LIMIT 500`,
-        [q.status ?? null, q.cycleId ?? null],
-      );
-      return {
-        data: r.rows.map((x) => ({
-          id: x.id,
-          applicationId: x.application_id,
-          number: x.number,
-          admissionNo: x.admission_no,
-          candidate: x.candidate,
-          className: x.class_name,
-          receiptNo: x.receipt_no,
-          paidAmount: Number(x.paid_amount),
-          deductionPct: Number(x.deduction_pct),
-          deduction: Number(x.deduction),
-          amount: Number(x.amount),
-          reason: x.reason,
-          status: x.status,
-          requestedAt: x.requested_at.toISOString(),
-          requestedBy: x.requested_by,
-          decidedAt: x.decided_at?.toISOString() ?? null,
-          decidedBy: x.decided_by,
-          decisionNote: x.decision_note,
-          mode: x.mode,
-          reference: x.reference,
-          paidOn: x.paid_on,
-        })),
-      };
-    });
-  }
-
-  async decideRefund(ctx: RequestContext, id: string, dto: RefundDecisionDto) {
-    return this.db.tenant(requireTenant(ctx), async (c) => {
-      const r = await c.query<{ status: string; requested_by: string | null }>(
-        `SELECT status, requested_by::text FROM admission_refunds WHERE id = $1 FOR UPDATE`,
-        [id],
-      );
-      if (!r.rows[0]) throw new DomainError('not-found', 'Refund not found', { status: 404 });
-      if (r.rows[0].status !== 'requested')
-        throw new DomainError('admissions.refund_decided', 'This refund is already decided', {
-          status: 409,
-        });
-      await c.query(
-        `UPDATE admission_refunds SET status = $2, decided_by = $3, decided_at = now(), decision_note = $4 WHERE id = $1`,
-        [id, dto.approve ? 'approved' : 'rejected', ctx.user.id, dto.note ?? null],
-      );
-      await this.audit.stage(ctx, c, {
-        action: dto.approve ? 'admissions.refund.approve' : 'admissions.refund.reject',
-        entityType: 'admission_refunds',
-        entityId: id,
-        after: { note: dto.note ?? null },
-      });
-      return { status: dto.approve ? 'approved' : 'rejected' };
-    });
-  }
-
-  async payRefund(ctx: RequestContext, id: string, dto: RefundPayDto) {
-    return this.db.tenant(requireTenant(ctx), async (c) => {
-      const r = await c.query<{ status: string; application_id: string; amount: string }>(
-        `SELECT status, application_id::text, amount::text FROM admission_refunds WHERE id = $1 FOR UPDATE`,
-        [id],
-      );
-      if (!r.rows[0]) throw new DomainError('not-found', 'Refund not found', { status: 404 });
-      if (r.rows[0].status !== 'approved')
-        throw new DomainError('admissions.refund_not_approved', 'Approve the refund first', {
-          status: 409,
-        });
-      await c.query(
-        `UPDATE admission_refunds SET status = 'paid', mode = $2, reference = $3, paid_on = COALESCE($4::date, (now() AT TIME ZONE 'Asia/Kolkata')::date), paid_by = $5 WHERE id = $1`,
-        [id, dto.mode, dto.reference ?? null, dto.paidOn ?? null, ctx.user.id],
-      );
-      await this.core.event(
-        c,
-        r.rows[0].application_id,
-        'cancelled',
-        'cancelled',
-        `Admission fee refund of ${money(Number(r.rows[0].amount))} paid (${dto.mode})`,
-        {
-          actorUser: ctx.user.id,
-        },
-      );
-      await this.audit.stage(ctx, c, {
-        action: 'admissions.refund.pay',
-        entityType: 'admission_refunds',
-        entityId: id,
-        after: { mode: dto.mode, reference: dto.reference ?? null },
-      });
-      return { status: 'paid' };
     });
   }
 }

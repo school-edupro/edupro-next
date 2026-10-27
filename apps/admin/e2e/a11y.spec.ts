@@ -28,6 +28,9 @@ const PAGES = [
   '/admissions/approvals/1404',
   // Fees → Cashier, admission fees (docs/design/52)
   '/fees/cashier/admission',
+  // admission fee refunds through the levels of Fees → Approval (docs/design/54)
+  '/fees/refunds/admission',
+  '/fees/refunds/admission?view=all',
   '/fees/cashier/admission?due=0&q=GOEL',
   '/admissions/desk',
   // a sample registration of scripts/seed-admission-merit.mjs (docs/design/49); a new seed changes the ids
