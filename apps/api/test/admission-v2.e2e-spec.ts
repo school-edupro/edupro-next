@@ -3361,6 +3361,36 @@ describe('online admission (e2e)', () => {
       });
       expect(preview.statusCode).toBe(201);
       expect(preview.json().total).toBe(1);
+      // saved like any report (0260: the dataset check once refused it), then offered on the list
+      const saved = await inject({
+        method: 'POST',
+        url: '/reports/builder',
+        headers: h(),
+        json: {
+          name: `Admitted ${stamp('R')}`,
+          spec: {
+            dataset: 'admissions',
+            columns: [{ key: 'registration_no' }, { key: 'candidate' }],
+          },
+        },
+      });
+      expect({
+        status: saved.statusCode,
+        body: saved.statusCode === 201 ? null : saved.json(),
+      }).toEqual({
+        status: 201,
+        body: null,
+      });
+      expect(saved.json().spec.dataset).toBe('admissions');
+      expect(
+        (
+          await inject({
+            method: 'DELETE',
+            url: `/reports/builder/${saved.json().id as string}`,
+            headers: h(),
+          })
+        ).statusCode,
+      ).toBe(200);
     });
 
     it('reports the admission fee collection with refunds, and the day book shows both', async () => {
