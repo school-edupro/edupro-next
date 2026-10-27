@@ -1014,6 +1014,13 @@ describe('online admission (e2e)', () => {
         json: { kind: 'admission', mode: 'cash' },
       });
       expect(wrongKind.statusCode).toBe(409);
+      const future = await inject({
+        method: 'POST',
+        url: `/fees/admission-counter/${id}/collect`,
+        headers: h(accountant),
+        json: { kind: 'registration', mode: 'cash', receivedOn: '2099-01-01' },
+      });
+      expect(future.statusCode).toBe(400);
       const fee = await inject({
         method: 'POST',
         url: `/fees/admission-counter/${id}/collect`,
@@ -2958,7 +2965,14 @@ describe('online admission (e2e)', () => {
         method: 'POST',
         url: `/fees/admission-counter/${second}/collect`,
         headers: h(accountant),
-        json: { kind: 'admission', mode: 'cheque', instrumentNo: '004512', bankName: 'SBI' },
+        json: {
+          kind: 'admission',
+          mode: 'cheque',
+          instrumentNo: '004512',
+          instrumentDate: new Date(Date.now() + 330 * 60_000).toISOString().slice(0, 10),
+          bankName: 'SBI',
+          remarks: 'Paid by the father at the counter',
+        },
       });
       expect(fee.statusCode).toBe(201);
       expect(fee.json().admissionNo).toBeTruthy();

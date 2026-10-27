@@ -1,8 +1,9 @@
 import { Badge, Card, PageHeader } from '@edupro/ui';
 import { notFound } from 'next/navigation';
 import { FileLinks } from '@/components/FileLinks';
-import { AdmissionCounterCollect } from '@/components/fees/AdmissionCounterCollect';
+import { AdmissionReceiptForm } from '@/components/fees/AdmissionReceiptForm';
 import { CashierTabs } from '@/components/fees/CashierTabs';
+import type { CounterMode } from '@/components/fees/PostReceiptForm';
 import { rupees } from '@/lib/admission-desk';
 import { apiFetch, getMe } from '@/lib/api';
 
@@ -49,6 +50,26 @@ interface Today {
   }>;
 }
 
+/** When the mode master cannot be read: the counter's own modes. */
+const FALLBACK_MODES: CounterMode[] = (
+  [
+    ['cash', 'Cash'],
+    ['upi', 'UPI'],
+    ['card', 'Card'],
+    ['cheque', 'Cheque'],
+    ['dd', 'Demand draft'],
+    ['bank', 'Bank transfer'],
+  ] as const
+).map(([code, label]) => ({
+  code,
+  kind: code,
+  label,
+  needReference: false,
+  needInstrumentNo: code === 'cheque' || code === 'dd',
+  needInstrumentDate: false,
+  needBank: false,
+}));
+
 const MODE: Record<string, string> = {
   cash: 'Cash',
   upi: 'UPI',
@@ -67,7 +88,7 @@ const MODE: Record<string, string> = {
 export default async function AdmissionCounterPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string; due?: string }>;
+  searchParams: Promise<{ q?: string; due?: string; collect?: string }>;
 }) {
   const sp = await searchParams;
   const me = await getMe();
@@ -75,12 +96,26 @@ export default async function AdmissionCounterPage({
   if (!can('admissions.fee.collect')) notFound();
   const q = (sp.q ?? '').trim().slice(0, 80);
   const due = sp.due === '0' ? '0' : '1';
-  const [found, today] = await Promise.all([
+  const search = new URLSearchParams({ ...(q ? { q } : {}), ...(due === '0' ? { due } : {}) });
+  const back = `/fees/cashier/admission${search.size ? `?${search.toString()}` : ''}`;
+  const collectId = /^\d{1,18}$/.test(sp.collect ?? '') ? sp.collect! : null;
+  const [found, today, modes, options] = await Promise.all([
     apiFetch<{ data: Found[] }>(
       `/fees/admission-counter?${new URLSearchParams({ q, due }).toString()}`,
     ).then((r) => r.data),
     apiFetch<Today>('/fees/admission-counter/today'),
+    // the school's payment modes and banks, as at the pupils' counter (online is not a counter mode)
+    collectId
+      ? apiFetch<{ data: Array<CounterMode & { atCounter: boolean }> }>('/fees/payment-modes')
+          .then((r) => r.data.filter((m) => m.atCounter && m.kind !== 'online'))
+          .catch(() => FALLBACK_MODES)
+      : Promise.resolve([] as CounterMode[]),
+    collectId
+      ? apiFetch<{ banks: string[] }>('/fees/cashier/options').catch(() => ({ banks: [] }))
+      : Promise.resolve({ banks: [] as string[] }),
   ]);
+  const chosen = collectId ? found.find((r) => r.id === collectId && r.due && !r.due.lapsed) : null;
+  const ist = new Date(Date.now() + 330 * 60_000).toISOString().slice(0, 10);
   return (
     <>
       <PageHeader
@@ -120,6 +155,37 @@ export default async function AdmissionCounterPage({
           </span>
         </form>
       </Card>
+      {chosen?.due ? (
+        <div id="post-receipt">
+          <Card title="Post receipt" style={{ marginBottom: 'var(--sp-4)' }}>
+            <p className="ep-afc__who">
+              <strong>{chosen.candidate ?? '-'}</strong> ·{' '}
+              {chosen.admissionNo ?? chosen.number ?? 'number not yet given'} · {chosen.className} ·{' '}
+              {chosen.category ?? 'General'}
+              {chosen.parent || chosen.mobile ? (
+                <span className="ep-field__help" style={{ display: 'block', margin: 0 }}>
+                  {[chosen.parent, chosen.mobile].filter(Boolean).join(' · ')}
+                  {chosen.due.note ? ` · ${chosen.due.note}` : ''}
+                </span>
+              ) : null}
+            </p>
+            <AdmissionReceiptForm
+              id={chosen.id}
+              kind={chosen.due.kind}
+              head={chosen.due.head}
+              amount={chosen.due.amount}
+              modes={modes.length ? modes : FALLBACK_MODES}
+              banks={options.banks}
+              today={ist}
+              back={back}
+            />
+          </Card>
+        </div>
+      ) : collectId ? (
+        <p className="ep-alert ep-alert--warning" role="status">
+          Nothing is due on that registration now.
+        </p>
+      ) : null}
       <Card style={{ marginBottom: 'var(--sp-4)' }}>
         <p className="ep-field__help" style={{ marginTop: 0 }}>
           {found.length === 0
@@ -180,14 +246,20 @@ export default async function AdmissionCounterPage({
                           ) : null}
                           {r.due.lapsed ? (
                             <Badge tone="danger">Offer lapsed</Badge>
+                          ) : r.id === chosen?.id ? (
+                            <Badge tone="info">Post receipt is open above</Badge>
                           ) : (
-                            <AdmissionCounterCollect
-                              id={r.id}
-                              kind={r.due.kind}
-                              head={r.due.head}
-                              amount={r.due.amount}
-                              candidate={r.candidate ?? 'this registration'}
-                            />
+                            <div className="ep-afc__done">
+                              <a
+                                className="ep-btn ep-btn--primary ep-btn--sm"
+                                href={`/fees/cashier/admission?${new URLSearchParams({
+                                  ...Object.fromEntries(search),
+                                  collect: r.id,
+                                }).toString()}#post-receipt`}
+                              >
+                                Collect {rupees(r.due.amount)}
+                              </a>
+                            </div>
                           )}
                         </>
                       ) : (

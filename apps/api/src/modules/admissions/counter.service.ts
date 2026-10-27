@@ -7,7 +7,6 @@ import { AdmissionAdmitService } from './admit.service';
 import type { DeskFeeDto } from './desk.dto';
 import { AdmissionDeskService } from './desk.service';
 
-
 interface Row {
   id: string;
   number: string | null;
@@ -187,6 +186,11 @@ export class AdmissionCounterService {
     dto: DeskFeeDto & { kind: 'registration' | 'admission' },
   ) {
     const { kind, ...pay } = dto;
+    const today = new Date(Date.now() + 330 * 60_000).toISOString().slice(0, 10);
+    if (pay.receivedOn && pay.receivedOn > today)
+      throw new DomainError('validation-failed', 'The receipt date cannot be in the future', {
+        status: 400,
+      });
     const row = await this.db.tenant(requireTenant(ctx), async (c) => {
       const r = await c.query<Row>(
         `SELECT a.id::text, a.application_no AS number, a.admission_no, a.status::text, a.registration_fee::text,

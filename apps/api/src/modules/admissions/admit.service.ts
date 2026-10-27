@@ -255,6 +255,9 @@ export class AdmissionAdmitService {
           bankName: dto.bankName ?? null,
           receivedOn: dto.receivedOn ?? null,
           receivedBy: ctx.user.id,
+          remarks: dto.remarks ?? null,
+          modeLabel: dto.modeLabel ?? null,
+          instrumentDate: dto.instrumentDate ?? null,
         });
       await this.feePaid(c, id, rec?.id ?? null, { actorUser: ctx.user.id });
       await this.audit.stage(ctx, c, {

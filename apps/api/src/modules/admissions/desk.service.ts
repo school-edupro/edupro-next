@@ -258,6 +258,9 @@ export class AdmissionDeskService {
         bankName: dto.bankName ?? null,
         receivedOn: dto.receivedOn ?? null,
         receivedBy: ctx.user.id,
+        remarks: dto.remarks ?? null,
+        modeLabel: dto.modeLabel ?? null,
+        instrumentDate: dto.instrumentDate ?? null,
       });
       await this.core.register(c, id, rec.id);
       return {

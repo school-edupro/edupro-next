@@ -40,6 +40,12 @@ export const DeskFeeSchema = z.object({
     .string()
     .regex(/^\d{4}-\d{2}-\d{2}$/)
     .optional(),
+  remarks: z.string().trim().max(300).optional(),
+  modeLabel: z.string().trim().max(60).optional(),
+  instrumentDate: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/)
+    .optional(),
 });
 export class DeskFeeDto extends createZodDto(DeskFeeSchema) {}
 

@@ -13,7 +13,11 @@ export async function counterCollect(
     mode: string;
     reference?: string;
     instrumentNo?: string;
+    instrumentDate?: string;
     bankName?: string;
+    receivedOn?: string;
+    remarks?: string;
+    modeLabel?: string;
   },
 ): Promise<
   Result<{

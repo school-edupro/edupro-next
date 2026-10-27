@@ -745,9 +745,14 @@ export class AdmissionCoreService {
       mode: string;
       reference?: string | null;
       instrumentNo?: string | null;
+      instrumentDate?: string | null;
       bankName?: string | null;
       receivedOn?: string | null;
       receivedBy?: string | null;
+      /** the cashier's own note, after the fee's (docs/design/52) */
+      remarks?: string | null;
+      /** the school's own name of the payment mode (the mode master), e.g. "Paytm" for UPI */
+      modeLabel?: string | null;
     },
   ): Promise<{ id: string; receiptNo: string }> {
     const settings = await this.setup.settingsWith(c);
@@ -767,9 +772,9 @@ export class AdmissionCoreService {
     const session = a.year_name.replace(/^Session\s+/i, '').replace(/\s+/g, '');
     const r = await c.query<{ id: string; receipt_no: string }>(
       `INSERT INTO misc_receipts (school_id, academic_year_id, financial_year_id, receipt_no, payer_kind, payer_name, payer_mobile, head_id,
-                                  amount, received_on, mode, reference, instrument_no, bank_name, remarks, received_by, application_id)
+                                  amount, received_on, mode, reference, instrument_no, bank_name, remarks, received_by, application_id, mode_label, instrument_date)
        VALUES (app.current_school_id(), $1, $2, app.next_admission_receipt_no($3, $4), 'other', $5, $6, $7, $8,
-               COALESCE($9::date, (now() AT TIME ZONE 'Asia/Kolkata')::date), $10, $11, $12, $13, $14, $15, $16)
+               COALESCE($9::date, (now() AT TIME ZONE 'Asia/Kolkata')::date), $10, $11, $12, $13, $14, $15, $16, $17, $18::date)
        RETURNING id::text, receipt_no`,
       [
         a.year_id,
@@ -785,9 +790,13 @@ export class AdmissionCoreService {
         p.reference ?? null,
         p.instrumentNo ?? null,
         p.bankName ?? null,
-        `${p.kind === 'registration' ? 'Registration' : 'Admission'} fee · ${a.class_name} · ${a.cycle_code}`,
+        `${p.kind === 'registration' ? 'Registration' : 'Admission'} fee · ${a.class_name} · ${a.cycle_code}${
+          p.remarks?.trim() ? ` · ${p.remarks.trim()}` : ''
+        }`,
         p.receivedBy ?? null,
         a.id,
+        p.modeLabel?.trim() || null,
+        p.instrumentDate ?? null,
       ],
     );
     return { id: r.rows[0]!.id, receiptNo: r.rows[0]!.receipt_no };
