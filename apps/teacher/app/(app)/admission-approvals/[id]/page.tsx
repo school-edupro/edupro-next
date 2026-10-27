@@ -2,7 +2,12 @@ import { AdmissionReview, PageHeader, type AdmissionReviewData } from '@edupro/u
 import { notFound } from 'next/navigation';
 import { ApiError } from '@edupro/bff';
 import { bff } from '@/lib/bff';
-import { approvalDecide, approvalCorrect, approvalSendBack } from '../actions';
+import {
+  approvalDecide,
+  approvalCorrect,
+  approvalReplaceDocument,
+  approvalSendBack,
+} from '../actions';
 
 /** The review of a registration waiting at my level (docs/design/50). */
 export default async function AdmissionApprovalPage({
@@ -38,6 +43,7 @@ export default async function AdmissionApprovalPage({
           decide: approvalDecide.bind(null, id),
           sendBack: approvalSendBack.bind(null, id),
           correct: approvalCorrect.bind(null, id),
+          replaceDocument: approvalReplaceDocument.bind(null, id),
         }}
       />
     </>

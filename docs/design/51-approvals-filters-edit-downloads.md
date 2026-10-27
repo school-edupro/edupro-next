@@ -67,3 +67,13 @@ proxy all of a registration's files through one route (`/api/admission-approvals
 receipts/…`). The seed script's `--files` gave the 50 sample registrations their own placeholder
 uploads (the seed makes them for new ones). Checked: Anita changed a mother's qualification, the
 points went 41 → 49 with the change logged, then set back.
+
+**Follow-up (27 Oct 2026, asked on the screens):**
+
+- Export Excel / PDF failed with 404 because the running API was older than the export route. It works after the restart, in both apps.
+- The filter row now uses the Mobilise filter layout (`ep-lead-filter`, as on Enquiries), the same as the other lists. "Overdue only" became a **Due** drop-down (All / Overdue only), so it lines up with the other fields.
+- **Approvers may replace a document or photo**, which changes decision 2 (documents were the family's only). On the review, each document has **Replace** (or **Upload** when none was given):
+  - The approver gives a file and a reason. A photo field takes a JPEG or PNG; other fields take a PDF, JPEG or PNG, at most 5 MB.
+  - The flow is `POST admissions/approvals/:id/documents/:key/slot` (an upload owned by the registration), then the bytes, then `POST …/documents/:key {fileId, reason}`.
+  - The API checks the file by its first bytes. The answer then points to the new file, and the change is kept in the change list with the reason and who made it. The old file stays in storage, and the points are worked out again.
+  - This is allowed only while the registration waits at the approver's level.

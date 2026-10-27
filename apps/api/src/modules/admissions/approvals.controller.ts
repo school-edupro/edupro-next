@@ -3,7 +3,13 @@ import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import type { FastifyReply } from 'fastify';
 import { AuthenticatedOnly } from '../../common/auth/decorators';
 import { ReqCtx, type RequestContext } from '../../common/http/request-context';
-import { ApprovalCorrectDto, ApprovalDecideDto, ApprovalsQueryDto } from './approvals.dto';
+import {
+  ApprovalCorrectDto,
+  ApprovalDecideDto,
+  ApprovalDocumentDto,
+  ApprovalDocumentSlotDto,
+  ApprovalsQueryDto,
+} from './approvals.dto';
 import { AdmissionApprovalsService } from './approvals.service';
 import { SendBackDto } from './process.dto';
 
@@ -86,6 +92,32 @@ export class AdmissionApprovalsController {
   @AuthenticatedOnly()
   correct(@ReqCtx() ctx: RequestContext, @Param('id') id: string, @Body() dto: ApprovalCorrectDto) {
     return this.svc.correct(ctx, id, dto);
+  }
+
+  @Post(':id/documents/:key/slot')
+  @ApiOperation({
+    summary: 'Upload slot for a document the approver puts in (PDF, PNG, JPEG; 5 MB)',
+  })
+  @AuthenticatedOnly()
+  documentSlot(
+    @ReqCtx() ctx: RequestContext,
+    @Param('id') id: string,
+    @Param('key') key: string,
+    @Body() dto: ApprovalDocumentSlotDto,
+  ) {
+    return this.svc.documentSlot(ctx, id, key, dto);
+  }
+
+  @Post(':id/documents/:key')
+  @ApiOperation({ summary: "The uploaded file takes the family's place, with the reason" })
+  @AuthenticatedOnly()
+  replaceDocument(
+    @ReqCtx() ctx: RequestContext,
+    @Param('id') id: string,
+    @Param('key') key: string,
+    @Body() dto: ApprovalDocumentDto,
+  ) {
+    return this.svc.replaceDocument(ctx, id, key, dto);
   }
 
   @Get(':id/form.pdf')

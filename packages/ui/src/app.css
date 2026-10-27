@@ -12547,8 +12547,33 @@ a.ep-pub-foot__item {
   justify-content: space-between;
   gap: var(--sp-3);
   align-items: center;
+  flex-wrap: wrap;
   padding-bottom: var(--sp-2);
   border-bottom: 1px solid var(--border-default);
+}
+.ep-arv__docs li > span:first-child {
+  flex: 1 1 12rem;
+}
+.ep-arv__docact {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  flex-wrap: wrap;
+}
+.ep-arv__swap {
+  flex: 1 1 100%;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 14rem), 1fr));
+  gap: var(--sp-3);
+  align-items: end;
+  padding: var(--sp-3);
+  background: var(--surface-subtle);
+  border-radius: var(--radius-md);
+}
+.ep-arv__swapbtns {
+  display: flex;
+  gap: var(--sp-2);
+  flex-wrap: wrap;
 }
 .ep-arv__sec {
   border-bottom: 1px solid var(--border-default);

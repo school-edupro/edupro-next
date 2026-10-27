@@ -66,6 +66,8 @@ export interface AdmissionReviewData {
   documents: Array<{
     key: string;
     label: string;
+    /** what the approver may put in its place: a photo only, or a photo or PDF */
+    accept?: 'image' | 'image_pdf';
     files: Array<{ id: string; name: string; contentType: string }>;
   }>;
   remarks: ReviewRemark[];
@@ -99,6 +101,8 @@ export interface AdmissionReviewActions {
   decide: (input: { decision: 'approve' | 'hold' | 'reject'; remarks: string }) => Promise<Result>;
   sendBack: (input: { fields: string[]; remark: string; dueOn?: string }) => Promise<Result>;
   correct: (input: { answers: Record<string, unknown>; reason: string }) => Promise<Result>;
+  /** put in a document or photo in place of the family's (PDF, PNG, JPEG; 5 MB) */
+  replaceDocument?: (fd: FormData) => Promise<Result>;
 }
 
 const DECISION: Record<string, string> = {
@@ -276,6 +280,9 @@ export function AdmissionReview({
   );
   const [why, setWhy] = useState('');
   const [noPhoto, setNoPhoto] = useState(false);
+  const [swap, setSwap] = useState<string | null>(null);
+  const [swapFile, setSwapFile] = useState<File | null>(null);
+  const [swapWhy, setSwapWhy] = useState('');
   const [pending, start] = useTransition();
   const url = (path: string, download?: boolean) =>
     `${baseUrl}/${path}${download ? '?download=1' : ''}`;
@@ -325,6 +332,44 @@ export function AdmissionReview({
         out[k] = f.type === 'yesno' ? v === 'Yes' : f.type === 'number' && v !== '' ? Number(v) : v;
       }
       const r = await actions.correct({ answers: out, reason: why.trim() });
+      if (r.ok) window.location.reload();
+      else setMsg({ tone: 'danger', text: r.error });
+    });
+
+  const replaceDoc = (key: string, accept: 'image' | 'image_pdf') =>
+    start(async () => {
+      if (!actions.replaceDocument) return;
+      if (!swapFile) {
+        setMsg({ tone: 'danger', text: 'Choose the file to put in.' });
+        return;
+      }
+      const okType =
+        swapFile.type === 'image/jpeg' ||
+        swapFile.type === 'image/png' ||
+        (accept === 'image_pdf' && swapFile.type === 'application/pdf');
+      if (!okType) {
+        setMsg({
+          tone: 'danger',
+          text:
+            accept === 'image'
+              ? 'Choose a photo (JPEG or PNG).'
+              : 'Choose a PDF, JPEG or PNG file.',
+        });
+        return;
+      }
+      if (swapFile.size > 5 * 1024 * 1024) {
+        setMsg({ tone: 'danger', text: 'Choose a file of at most 5 MB.' });
+        return;
+      }
+      if (swapWhy.trim().length < 3) {
+        setMsg({ tone: 'danger', text: 'Give the reason for the change.' });
+        return;
+      }
+      const fd = new FormData();
+      fd.set('key', key);
+      fd.set('reason', swapWhy.trim());
+      fd.set('file', swapFile);
+      const r = await actions.replaceDocument(fd);
       if (r.ok) window.location.reload();
       else setMsg({ tone: 'danger', text: r.error });
     });
@@ -461,20 +506,84 @@ export function AdmissionReview({
               {data.documents.map((d) => (
                 <li key={d.key}>
                   <span>{d.label}</span>
-                  {d.files.length ? (
-                    <span style={{ display: 'inline-flex', gap: 'var(--sp-2)' }}>
-                      {d.files.map((f, i) => (
-                        <FileIcons
-                          key={f.id}
-                          view={url(`files/${f.id}`)}
-                          save={url(`files/${f.id}`, true)}
-                          label={`${d.label}${d.files.length > 1 ? ` ${String(i + 1)}` : ''}`}
+                  <span className="ep-arv__docact">
+                    {d.files.length ? (
+                      <span style={{ display: 'inline-flex', gap: 'var(--sp-2)' }}>
+                        {d.files.map((f, i) => (
+                          <FileIcons
+                            key={f.id}
+                            view={url(`files/${f.id}`)}
+                            save={url(`files/${f.id}`, true)}
+                            label={`${d.label}${d.files.length > 1 ? ` ${String(i + 1)}` : ''}`}
+                          />
+                        ))}
+                      </span>
+                    ) : (
+                      <span className="ep-arv__check">Not uploaded</span>
+                    )}
+                    {data.mayDecide && actions.replaceDocument ? (
+                      <button
+                        type="button"
+                        className="ep-btn ep-btn--ghost ep-btn--sm"
+                        aria-expanded={swap === d.key}
+                        aria-controls={`arv-swap-${d.key}`}
+                        onClick={() => {
+                          setSwap(swap === d.key ? null : d.key);
+                          setSwapFile(null);
+                          setSwapWhy('');
+                        }}
+                      >
+                        {d.files.length ? 'Replace' : 'Upload'}
+                      </button>
+                    ) : null}
+                  </span>
+                  {swap === d.key ? (
+                    <div id={`arv-swap-${d.key}`} className="ep-arv__swap">
+                      <label className="ep-field">
+                        <span className="ep-field__label">
+                          New file for {d.label} (
+                          {d.accept === 'image' ? 'JPEG or PNG' : 'PDF, JPEG or PNG'}, up to 5 MB)
+                        </span>
+                        <input
+                          className="ep-input"
+                          type="file"
+                          accept={
+                            d.accept === 'image'
+                              ? 'image/jpeg,image/png'
+                              : 'application/pdf,image/jpeg,image/png'
+                          }
+                          onChange={(e) => setSwapFile(e.target.files?.[0] ?? null)}
                         />
-                      ))}
-                    </span>
-                  ) : (
-                    <span className="ep-arv__check">Not uploaded</span>
-                  )}
+                      </label>
+                      <label className="ep-field">
+                        <span className="ep-field__label">Reason for the change (required)</span>
+                        <input
+                          className="ep-input"
+                          value={swapWhy}
+                          maxLength={500}
+                          onChange={(e) => setSwapWhy(e.target.value)}
+                          placeholder="e.g. The family gave a clearer copy at the desk"
+                        />
+                      </label>
+                      <div className="ep-arv__swapbtns">
+                        <button
+                          type="button"
+                          className="ep-btn ep-btn--primary ep-btn--sm"
+                          disabled={pending}
+                          onClick={() => replaceDoc(d.key, d.accept ?? 'image_pdf')}
+                        >
+                          {pending ? 'Saving…' : 'Save the file'}
+                        </button>
+                        <button
+                          type="button"
+                          className="ep-btn ep-btn--ghost ep-btn--sm"
+                          onClick={() => setSwap(null)}
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  ) : null}
                 </li>
               ))}
             </ul>

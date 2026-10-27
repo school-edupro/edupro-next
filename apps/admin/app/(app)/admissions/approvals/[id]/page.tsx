@@ -3,6 +3,7 @@ import { notFound } from 'next/navigation';
 import {
   approvalDecide,
   approvalCorrect,
+  approvalReplaceDocument,
   approvalSendBack,
 } from '@/lib/admission-approvals-actions';
 import { ApiError, apiFetch } from '@/lib/api';
@@ -41,6 +42,7 @@ export default async function AdmissionApprovalPage({
           decide: approvalDecide.bind(null, id),
           sendBack: approvalSendBack.bind(null, id),
           correct: approvalCorrect.bind(null, id),
+          replaceDocument: approvalReplaceDocument.bind(null, id),
         }}
       />
     </>

@@ -1,4 +1,5 @@
-import { Injectable } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
+import type { StorageDriver } from '@edupro/storage';
 import {
   LAYOUT_TYPES,
   admissionWaitingFor,
@@ -23,6 +24,20 @@ import { AdmissionFormsService } from './forms.service';
 import { ADMISSION_SETUP_MANAGE, AdmissionProcessService } from './process.service';
 import type { SendBackDto } from './process.dto';
 import { AdmissionSetupService } from './setup.service';
+import { FilesService } from '../files/files.service';
+import { STORAGE_DRIVER } from '../files/storage';
+
+/** The largest document an approver may put in (5 MB). */
+const MAX_DOC = 5 * 1024 * 1024;
+const IMAGES = new Set(['image/jpeg', 'image/png']);
+const DOCS = new Set(['image/jpeg', 'image/png', 'application/pdf']);
+/** What a file really is, from its first bytes (the name and the browser's word are not trusted). */
+function sniff(b: Buffer): 'application/pdf' | 'image/png' | 'image/jpeg' | null {
+  if (b.subarray(0, 4).toString('latin1') === '%PDF') return 'application/pdf';
+  if (b[0] === 0x89 && b.subarray(1, 4).toString('latin1') === 'PNG') return 'image/png';
+  if (b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff) return 'image/jpeg';
+  return null;
+}
 
 /** How long a decided registration stays in "Decided by me" (read-only). */
 const DECIDED_DAYS = 30;
@@ -75,6 +90,8 @@ export class AdmissionApprovalsService {
     private readonly process: AdmissionProcessService,
     private readonly desk: AdmissionDeskService,
     private readonly setup: AdmissionSetupService,
+    private readonly files: FilesService,
+    @Inject(STORAGE_DRIVER) private readonly storage: StorageDriver,
   ) {}
 
   /** Waiting at a level this user is named in (may decide), or decided by them lately (may look). */
@@ -306,6 +323,7 @@ export class AdmissionApprovalsService {
         return {
           key: f.key,
           label: f.label,
+          accept: f.type === 'photo' || f.accept === 'image' ? 'image' : 'image_pdf',
           files: ids.map((x) => ({
             id: x,
             name: files[x]?.name ?? 'File',
@@ -444,6 +462,124 @@ export class AdmissionApprovalsService {
       }
     });
     return { changed: out.changed, review: await this.review(ctx, id) };
+  }
+
+  /** The document or photo field an approver may put a file in: asked and shown on this form. */
+  private async docField(c: PoolClient, ctx: RequestContext, id: string, key: string) {
+    const a = await this.access(c, ctx, id);
+    if (!a.mayDecide)
+      throw new DomainError('admissions.not_yours', 'This registration no longer waits for you', {
+        status: 409,
+      });
+    const row = await this.core.row(c, id);
+    const def = await this.core.defOf(c, row);
+    const answers = this.core.plainData(def, row.data);
+    const f = def.fields.find((x) => x.key === key && (x.type === 'file' || x.type === 'photo'));
+    if (!f || !fieldState(f, answers).shown)
+      throw new DomainError('not-found', 'That document is not asked on this form', {
+        status: 404,
+      });
+    return { row, answers, f, imagesOnly: f.type === 'photo' || f.accept === 'image' };
+  }
+
+  /**
+   * An upload slot for a document or photo the approver puts in place of the family's: a PDF, PNG or
+   * JPEG (a photo field: PNG or JPEG) of at most 5 MB, owned by the registration.
+   */
+  async documentSlot(
+    ctx: RequestContext,
+    id: string,
+    key: string,
+    dto: { fileName: string; contentType: string; sizeBytes: number },
+  ) {
+    await this.db.tenant(requireTenant(ctx), async (c) => {
+      const { imagesOnly } = await this.docField(c, ctx, id, key);
+      const okType = imagesOnly ? IMAGES.has(dto.contentType) : DOCS.has(dto.contentType);
+      if (!okType)
+        throw new DomainError(
+          'validation-failed',
+          imagesOnly ? 'Choose a photo (JPEG or PNG)' : 'Choose a PDF, JPEG or PNG file',
+          { status: 400 },
+        );
+      if (dto.sizeBytes > MAX_DOC)
+        throw new DomainError('validation-failed', 'Choose a file of at most 5 MB', {
+          status: 400,
+        });
+    });
+    return this.files.createUpload(ctx, {
+      fileName: dto.fileName,
+      contentType: dto.contentType,
+      sizeBytes: dto.sizeBytes,
+      classification: 'personal',
+      ownerEntityType: 'application',
+      ownerEntityId: id,
+    });
+  }
+
+  /**
+   * The uploaded file takes the family's place (docs/design/51 follow-up): checked by its content, the
+   * answer points to it, the change is kept (old and new file, reason, who) and the old file stays;
+   * points are worked out again (a CWSN certificate may now count).
+   */
+  async replaceDocument(
+    ctx: RequestContext,
+    id: string,
+    key: string,
+    dto: { fileId: string; reason: string },
+  ) {
+    const tenant = requireTenant(ctx);
+    const owned = await this.db.tenant(tenant, async (c) => {
+      await this.docField(c, ctx, id, key);
+      const r = await c.query<{ status: string }>(
+        `SELECT status::text FROM files WHERE id = $1 AND owner_entity_type = 'application' AND owner_entity_id = $2
+            AND deleted_at IS NULL`,
+        [dto.fileId, id],
+      );
+      return r.rows[0];
+    });
+    if (!owned) throw new DomainError('not-found', 'Upload not found', { status: 404 });
+    if (owned.status !== 'ready') await this.files.complete(ctx, dto.fileId);
+    await this.db.tenant(tenant, async (c) => {
+      const { answers, f, imagesOnly } = await this.docField(c, ctx, id, key);
+      const file = await c.query<{ object_key: string; name: string; status: string }>(
+        `SELECT object_key, original_name AS name, status::text FROM files WHERE id = $1`,
+        [dto.fileId],
+      );
+      const bytes = await this.storage.read(file.rows[0]!.object_key);
+      const type = sniff(bytes);
+      if (
+        file.rows[0]!.status !== 'ready' ||
+        !type ||
+        bytes.length > MAX_DOC ||
+        (imagesOnly && type === 'application/pdf')
+      )
+        throw new DomainError(
+          'validation-failed',
+          imagesOnly ? 'Choose a photo (JPEG or PNG)' : 'Choose a PDF, JPEG or PNG file',
+          { status: 400 },
+        );
+      const before = Array.isArray(answers[key]) ? (answers[key] as unknown[]).map(String) : [];
+      await c.query(
+        `UPDATE applications SET data = jsonb_set(coalesce(data, '{}'::jsonb), ARRAY[$2::text], $3::jsonb), updated_at = now()
+          WHERE id = $1`,
+        [id, key, JSON.stringify([dto.fileId])],
+      );
+      await c.query(
+        `INSERT INTO application_answer_changes (school_id, application_id, field_key, label, old_value, new_value, reason, changed_by)
+         VALUES (app.current_school_id(), $1, $2, $3, $4, $5, $6, $7)`,
+        [
+          id,
+          key,
+          f.label,
+          before.length ? "the family's file" : 'none',
+          `a new file (${file.rows[0]!.name})`,
+          dto.reason,
+          ctx.user?.id ?? null,
+        ],
+      );
+      await this.core.refreshPoints(c, id);
+    });
+    return this.review(ctx, id);
   }
 
   /** The registration form PDF of a registration the approver may see. */

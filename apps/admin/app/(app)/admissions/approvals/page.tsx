@@ -81,17 +81,9 @@ export default async function AdmissionApprovalsPage({
         </a>
       </nav>
       <Card style={{ marginBottom: 'var(--sp-4)' }}>
-        <form
-          method="get"
-          style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 170px), 1fr))',
-            gap: 'var(--sp-3)',
-            alignItems: 'end',
-          }}
-        >
+        <form method="get" className="ep-lead-filter">
           <input type="hidden" name="tab" value={tab} />
-          <label className="ep-field" style={{ margin: 0 }}>
+          <label className="ep-field">
             <span className="ep-field__label">Search</span>
             <input
               className="ep-input"
@@ -100,7 +92,7 @@ export default async function AdmissionApprovalsPage({
               placeholder="Name, registration no., mobile"
             />
           </label>
-          <label className="ep-field" style={{ margin: 0 }}>
+          <label className="ep-field">
             <span className="ep-field__label">Session</span>
             <select className="ep-select" name="cycleId" defaultValue={sp.cycleId ?? ''}>
               <option value="">All sessions</option>
@@ -111,7 +103,7 @@ export default async function AdmissionApprovalsPage({
               ))}
             </select>
           </label>
-          <label className="ep-field" style={{ margin: 0 }}>
+          <label className="ep-field">
             <span className="ep-field__label">Class</span>
             <select className="ep-select" name="classId" defaultValue={sp.classId ?? ''}>
               <option value="">All classes</option>
@@ -122,7 +114,7 @@ export default async function AdmissionApprovalsPage({
               ))}
             </select>
           </label>
-          <label className="ep-field" style={{ margin: 0 }}>
+          <label className="ep-field">
             <span className="ep-field__label">Stage</span>
             <select className="ep-select" name="stage" defaultValue={sp.stage ?? ''}>
               <option value="">Any stage</option>
@@ -133,7 +125,7 @@ export default async function AdmissionApprovalsPage({
               ))}
             </select>
           </label>
-          <label className="ep-field" style={{ margin: 0 }}>
+          <label className="ep-field">
             <span className="ep-field__label">Level</span>
             <select className="ep-select" name="level" defaultValue={sp.level ?? ''}>
               <option value="">Any level</option>
@@ -144,7 +136,7 @@ export default async function AdmissionApprovalsPage({
               ))}
             </select>
           </label>
-          <label className="ep-field" style={{ margin: 0 }}>
+          <label className="ep-field">
             <span className="ep-field__label">Fee category</span>
             <select className="ep-select" name="categoryId" defaultValue={sp.categoryId ?? ''}>
               <option value="">All categories</option>
@@ -155,7 +147,7 @@ export default async function AdmissionApprovalsPage({
               ))}
             </select>
           </label>
-          <label className="ep-field" style={{ margin: 0 }}>
+          <label className="ep-field">
             <span className="ep-field__label">Status</span>
             <select className="ep-select" name="status" defaultValue={sp.status ?? ''}>
               <option value="">Any status</option>
@@ -166,20 +158,27 @@ export default async function AdmissionApprovalsPage({
               ))}
             </select>
           </label>
-          <label className="ep-field" style={{ margin: 0 }}>
+          <label className="ep-field">
             <span className="ep-field__label">
               {tab === 'decided' ? 'Decided from' : 'Waiting since, from'}
             </span>
             <input className="ep-input" type="date" name="from" defaultValue={sp.from ?? ''} />
           </label>
-          <label className="ep-field" style={{ margin: 0 }}>
+          <label className="ep-field">
             <span className="ep-field__label">to</span>
             <input className="ep-input" type="date" name="to" defaultValue={sp.to ?? ''} />
           </label>
           {tab === 'waiting' ? (
-            <label className="ep-check">
-              <input type="checkbox" name="overdue" value="1" defaultChecked={sp.overdue === '1'} />
-              <span>Overdue only</span>
+            <label className="ep-field">
+              <span className="ep-field__label">Due</span>
+              <select
+                className="ep-select"
+                name="overdue"
+                defaultValue={sp.overdue === '1' ? '1' : ''}
+              >
+                <option value="">All</option>
+                <option value="1">Overdue only</option>
+              </select>
             </label>
           ) : null}
           <span style={{ display: 'inline-flex', gap: 'var(--sp-2)' }}>

@@ -43,3 +43,22 @@ export const ApprovalCorrectSchema = z.object({
   reason: z.string().trim().min(3, 'Give the reason for the change').max(500),
 });
 export class ApprovalCorrectDto extends createZodDto(ApprovalCorrectSchema) {}
+
+/** An upload slot for a document or photo the approver puts in place of the family's. */
+export const ApprovalDocumentSlotSchema = z.object({
+  fileName: z.string().trim().min(1).max(200),
+  contentType: z.enum(['application/pdf', 'image/jpeg', 'image/png']),
+  sizeBytes: z
+    .number()
+    .int()
+    .min(1)
+    .max(5 * 1024 * 1024),
+});
+export class ApprovalDocumentSlotDto extends createZodDto(ApprovalDocumentSlotSchema) {}
+
+/** The uploaded file takes the family's place, with the reason. */
+export const ApprovalDocumentSchema = z.object({
+  fileId: z.string().regex(/^\d{1,18}$/),
+  reason: z.string().trim().min(3, 'Give the reason for the change').max(500),
+});
+export class ApprovalDocumentDto extends createZodDto(ApprovalDocumentSchema) {}

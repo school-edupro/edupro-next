@@ -672,7 +672,11 @@ describe('online admission (e2e)', () => {
           name: 'Mini registration',
           def: {
             steps: [def.steps[0]],
-            fields: def.fields.filter((f: { key: string }) => keep.includes(f.key)),
+            fields: [
+              ...def.fields.filter((f: { key: string }) => keep.includes(f.key)),
+              // an optional document, for the approver's swap (docs/design/51 follow-up)
+              { key: 'proof_doc', label: 'Proof of address', type: 'file', step: def.steps[0].key },
+            ],
             settings: def.settings,
           },
         },
@@ -1584,6 +1588,55 @@ describe('online admission (e2e)', () => {
         reason: 'e2e: back as it was',
       });
       expect(undoEws.json().review.category).toBe(before.category);
+      // the approver puts in a document in place of the family's: a slot, the bytes, the swap
+      const doc = (before.documents as Array<{ key: string; label: string }>)[0];
+      expect(doc).toBeTruthy();
+      const onePx = Buffer.from(
+        'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==',
+        'base64',
+      );
+      const docSlot = (who: typeof teacher, contentType = 'image/png') =>
+        inject({
+          method: 'POST',
+          url: `/admissions/approvals/${appWalkIn}/documents/${doc!.key}/slot`,
+          headers: h(who),
+          json: { fileName: 'clearer-copy.png', contentType, sizeBytes: onePx.length },
+        });
+      expect((await docSlot(accounts)).statusCode).toBe(404);
+      expect((await docSlot(teacher, 'text/plain')).statusCode).toBe(400);
+      const ds = await docSlot(teacher);
+      expect(ds.statusCode).toBe(201);
+      expect(
+        (
+          await inject({
+            method: 'PUT',
+            url: ds.json().upload.url,
+            headers: {},
+            raw: { body: onePx, contentType: 'image/png' },
+          })
+        ).statusCode,
+      ).toBe(200);
+      const swapped = await inject({
+        method: 'POST',
+        url: `/admissions/approvals/${appWalkIn}/documents/${doc!.key}`,
+        headers: h(teacher),
+        json: { fileId: ds.json().file.id, reason: 'Clearer copy given at the desk' },
+      });
+      expect(swapped.statusCode).toBe(201);
+      const docAfter = swapped.json();
+      expect(docAfter.documents.find((x: { key: string }) => x.key === doc!.key).files[0].id).toBe(
+        ds.json().file.id,
+      );
+      expect(docAfter.changes[0]).toMatchObject({
+        label: doc!.label,
+        reason: 'Clearer copy given at the desk',
+      });
+      const shown = await inject({
+        method: 'GET',
+        url: `/admissions/approvals/${appWalkIn}/files/${ds.json().file.id as string}`,
+        headers: h(teacher),
+      });
+      expect(shown.statusCode).toBe(200);
       // a remark is needed, whatever the decision
       expect((await decide(teacher, { decision: 'approve', remarks: '' })).statusCode).toBe(400);
       expect(
