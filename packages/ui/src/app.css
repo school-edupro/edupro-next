@@ -12762,3 +12762,32 @@ a.ep-pub-foot__item {
   flex-wrap: wrap;
 }
 
+/* ---- Offer preview (docs/design/56) ------------------------------------------------------------ */
+.ep-offer {
+  display: grid;
+  gap: var(--sp-4);
+}
+.ep-offer__part {
+  display: grid;
+  gap: var(--sp-3);
+}
+.ep-offer__h {
+  margin: 0;
+  font-size: var(--fs-body);
+  color: var(--text-heading);
+}
+.ep-offer__frame {
+  width: 100%;
+  min-height: 26rem;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  background: var(--surface-card);
+}
+.ep-offer__text {
+  margin: 0;
+  padding: var(--sp-3);
+  background: var(--surface-subtle);
+  border-radius: var(--radius-md);
+  white-space: pre-wrap;
+}
+

@@ -2425,6 +2425,51 @@ describe('online admission (e2e)', () => {
       expect(undo.statusCode).toBe(201);
       expect(undo.json()).toMatchObject({ status: 'under_review', offer: null });
       expect(undo.json().process.current).toMatchObject({ kind: 'selection' });
+      // the offer email is previewed first and may be changed for this family (docs/design/56)
+      const preview = await inject({
+        method: 'POST',
+        url: `/admissions/registrations/${appA}/offer-preview`,
+        headers: h(),
+        json: { intro: 'We are delighted to offer a seat.' },
+      });
+      expect(preview.statusCode).toBe(201);
+      expect(preview.json()).toMatchObject({
+        amount: 20000,
+        email: { intro: 'We are delighted to offer a seat.' },
+      });
+      expect(preview.json().email.html).toContain('We are delighted to offer a seat.');
+      expect(preview.json().sms.text).toContain(school.code);
+      const sent = await inject({
+        method: 'POST',
+        url: `/admissions/registrations/${appA}/decide`,
+        headers: h(),
+        json: {
+          decision: 'offer',
+          remarks: 'First on merit',
+          offerMessage: {
+            subject: 'Your seat at our school',
+            intro: 'We are delighted to offer a seat.',
+          },
+        },
+      });
+      expect(sent.statusCode).toBe(201);
+      const mail = await withMigrator((c) =>
+        c.query<{ subject: string; body: string }>(
+          `SELECT m.subject, m.body FROM comms_messages m JOIN comms_templates t ON t.id = m.template_id
+            WHERE m.school_id = $1 AND t.code = 'admission_offer' AND m.channel = 'email'
+            ORDER BY m.id DESC LIMIT 1`,
+          [school.id],
+        ),
+      );
+      expect(mail.rows[0]).toMatchObject({ subject: 'Your seat at our school' });
+      expect(mail.rows[0]!.body).toContain('We are delighted to offer a seat.');
+      const undo2 = await inject({
+        method: 'POST',
+        url: `/admissions/registrations/${appA}/undo`,
+        headers: h(),
+        json: { reason: 'Back to the list for the next step' },
+      });
+      expect(undo2.statusCode).toBe(201);
       const wl = await inject({
         method: 'POST',
         url: `/admissions/cycles/${cycleId}/selection/waitlist`,

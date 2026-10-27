@@ -83,10 +83,44 @@ export async function decideRegistration(
     marks?: number | null;
     attendance?: 'present' | 'absent' | null;
     categoryId?: string;
+    /** an offer: the email as changed on the preview (docs/design/56) */
+    offerMessage?: { subject?: string; intro?: string; note?: string };
   },
 ) {
   if (!okId(id)) return { ok: false as const, error: 'Unknown registration' };
   return call(`/admissions/registrations/${id}/decide`, 'POST', body, regPaths(id));
+}
+export interface OfferPreview {
+  amount: number;
+  email: {
+    to: string | null;
+    on: boolean;
+    subject: string;
+    intro: string;
+    note: string;
+    rows: Array<[string, string]>;
+    html: string;
+  };
+  sms: { to: string | null; on: boolean; text: string };
+  whatsapp: { to: string | null; on: boolean; text: string };
+}
+/** The offer email (and the SMS / WhatsApp text) before it goes, with the person's changes. */
+export async function previewOffer(
+  id: string,
+  edits: { subject?: string; intro?: string; note?: string },
+): Promise<{ ok: true; data: OfferPreview } | { ok: false; error: string }> {
+  if (!okId(id)) return { ok: false, error: 'Unknown registration' };
+  try {
+    const data = await apiFetch<OfferPreview>(`/admissions/registrations/${id}/offer-preview`, {
+      method: 'POST',
+      body: JSON.stringify(edits),
+    });
+    return { ok: true, data };
+  } catch (e) {
+    if (e instanceof ApiError)
+      return { ok: false, error: String(e.problem.detail ?? e.problem.type) };
+    throw e;
+  }
 }
 export async function sendBackRegistration(
   id: string,

@@ -6,6 +6,7 @@ import {
   sendBackRegistration,
   undoRegistration,
 } from '@/lib/admission-process-actions';
+import { OfferPreviewDialog } from './OfferPreviewDialog';
 
 type Kind = 'document_check' | 'test' | 'interview' | 'interaction' | 'selection' | 'custom';
 type Decision = 'approve' | 'reject' | 'hold' | 'offer' | 'waitlist';
@@ -59,6 +60,8 @@ export function RegistrationActions({
   const [reason, setReason] = useState('');
   const [toStep, setToStep] = useState('');
   const [showUndo, setShowUndo] = useState(false);
+  // an offer is previewed first: the family's email may be changed (docs/design/56)
+  const [offering, setOffering] = useState(false);
 
   const run = (fn: () => Promise<{ ok: boolean; error?: string }>) =>
     start(async () => {
@@ -72,10 +75,14 @@ export function RegistrationActions({
         router.refresh();
       } else setError(r.error ?? 'Not saved');
     });
-  const decide = (decision: Decision) =>
+  const decide = (
+    decision: Decision,
+    offerMessage?: { subject?: string; intro?: string; note?: string },
+  ) =>
     run(() =>
       decideRegistration(id, {
         decision,
+        ...(offerMessage && Object.keys(offerMessage).length ? { offerMessage } : {}),
         ...(remarks.trim() ? { remarks: remarks.trim() } : {}),
         ...(current?.kind === 'test' || current?.kind === 'interview'
           ? { attendance, marks: attendance === 'absent' || marks === '' ? null : Number(marks) }
@@ -87,6 +94,18 @@ export function RegistrationActions({
 
   return (
     <div className="ep-rp__act">
+      {offering ? (
+        <OfferPreviewDialog
+          id={id}
+          open
+          pending={pending}
+          onClose={() => setOffering(false)}
+          onSend={(message) => {
+            setOffering(false);
+            decide('offer', message);
+          }}
+        />
+      ) : null}
       {current ? (
         <p style={{ margin: 0 }}>
           Waiting at <strong>{current.name}</strong>
@@ -193,7 +212,7 @@ export function RegistrationActions({
                   type="button"
                   className="ep-btn ep-btn--primary"
                   disabled={pending}
-                  onClick={() => decide('offer')}
+                  onClick={() => setOffering(true)}
                 >
                   Offer admission
                 </button>

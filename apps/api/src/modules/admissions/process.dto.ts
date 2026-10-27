@@ -73,8 +73,24 @@ export const DecideSchema = z.object({
   attendance: z.enum(['present', 'absent']).nullable().optional(),
   /** Document check: the fee category confirmed (or changed) */
   categoryId: IdSchema.optional(),
+  /** an offer: the email as the person changed it on the preview (docs/design/56) */
+  offerMessage: z
+    .object({
+      subject: z.string().trim().min(3).max(200).optional(),
+      intro: z.string().trim().min(3).max(2000).optional(),
+      note: z.string().trim().max(1000).optional(),
+    })
+    .optional(),
 });
 export class DecideDto extends createZodDto(DecideSchema) {}
+
+/** The offer email previewed, with the person's changes (docs/design/56). */
+export const OfferPreviewSchema = z.object({
+  subject: z.string().trim().max(200).optional(),
+  intro: z.string().trim().max(2000).optional(),
+  note: z.string().trim().max(1000).optional(),
+});
+export class OfferPreviewDto extends createZodDto(OfferPreviewSchema) {}
 
 /** Several registrations at one stage and level decided alike (docs/design/47, part 3). */
 export const BulkDecideSchema = z.object({

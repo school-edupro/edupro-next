@@ -689,8 +689,8 @@ export class AdmissionProcessService {
     );
   }
 
-  /** The offer: the admission fee of the class and category, open for the session's days, mailed. */
-  async makeOffer(c: PoolClient, a: AppRow, actorUser: string | null, note = 'Admission offered') {
+  /** The admission fee an offer asks: the class and category's, else the default category's. */
+  private async offerFee(c: PoolClient, a: AppRow) {
     const fee = await c.query<{ fee: string | null }>(
       `SELECT COALESCE(
                 (SELECT admission_fee FROM admission_fees WHERE cycle_id = $1 AND class_id = $2 AND category_id = $3),
@@ -698,7 +698,119 @@ export class AdmissionProcessService {
                   WHERE f.cycle_id = $1 AND f.class_id = $2), 0)::text AS fee`,
       [a.cycle_id, a.class_id, a.category_id],
     );
-    const amount = Number(fee.rows[0]?.fee ?? 0);
+    return Number(fee.rows[0]?.fee ?? 0);
+  }
+
+  /** The offer's notice: what the email, SMS and WhatsApp say (the email's words may be changed). */
+  private offerMessage(a: AppRow, amount: number, due: string) {
+    return {
+      code: 'admission_offer',
+      vars: { amount: amount.toLocaleString('en-IN'), due },
+      title: 'Admission offered',
+      intro: `${a.candidate_name ?? 'Your ward'} is offered admission to ${a.class_name}.`,
+      rows: [
+        ['Candidate', a.candidate_name ?? ''],
+        ['Registration no.', a.application_no ?? ''],
+        ['Class', a.class_name],
+        ['Admission fee', `Rs ${amount.toLocaleString('en-IN')}`],
+        ['Pay by', due],
+      ] as Array<[string, string]>,
+      note: 'Pay the admission fee in the admission portal or at the school office before the last date; the offer lapses after it.',
+    };
+  }
+
+  private async varsOf(c: PoolClient, a: AppRow, extra: Record<string, string>) {
+    const school = await c.query<{ name: string }>(
+      `SELECT name FROM schools WHERE id = app.current_school_id()`,
+    );
+    return {
+      ...messageTag('status', { applicationId: a.id }),
+      name: a.candidate_name ?? '',
+      number: a.application_no ?? '',
+      class: a.class_name,
+      school: school.rows[0]?.name ?? '',
+      ...extra,
+    };
+  }
+
+  /**
+   * The offer email before it goes (docs/design/56): the subject, the email as the family will see it,
+   * and the SMS and WhatsApp texts (from the school's approved templates, not changed here).
+   */
+  async offerPreview(
+    ctx: RequestContext,
+    id: string,
+    edits: { subject?: string; intro?: string; note?: string },
+  ) {
+    return this.db.tenant(requireTenant(ctx), async (c) => {
+      const a = await this.core.row(c, id);
+      const amount = await this.offerFee(c, a);
+      const days = await c.query<{ due: Date }>(
+        `SELECT now() + make_interval(days => y.offer_days) AS due FROM admission_cycles y WHERE y.id = $1`,
+        [a.cycle_id],
+      );
+      const m = this.offerMessage(a, amount, ist(days.rows[0]!.due));
+      const vars = await this.varsOf(c, a, m.vars);
+      await c.query(`SELECT app.admission_seed_templates(app.current_school_id())`);
+      const t = await c.query<{
+        channel: string;
+        subject: string | null;
+        body: string;
+        status: string;
+      }>(
+        `SELECT channel::text, subject, body, status::text FROM comms_templates
+          WHERE code = $1 AND deleted_at IS NULL`,
+        [m.code],
+      );
+      const fill = (text: string | null) =>
+        Object.entries(vars).reduce(
+          (out, [k, v]) => out.split(`{{${k}}}`).join(String(v ?? '')),
+          text ?? '',
+        );
+      const email = t.rows.find((x) => x.channel === 'email');
+      const intro = edits.intro?.trim() || m.intro;
+      const note = edits.note !== undefined ? edits.note.trim() : m.note;
+      const html = await c.query<{ html: string }>(
+        `SELECT app.school_mail_html('Admissions', $1, $2, NULL, $3::jsonb, $4) AS html`,
+        [m.title, intro, JSON.stringify(m.rows), note],
+      );
+      const mobileOk = /^[6-9][0-9]{9}$/.test(a.contact_mobile ?? '');
+      const sms = t.rows.find((x) => x.channel === 'sms');
+      const wa = t.rows.find((x) => x.channel === 'whatsapp');
+      return {
+        amount,
+        email: {
+          to: a.contact_email,
+          on: Boolean(email && email.status === 'active' && a.contact_email),
+          subject: edits.subject?.trim() || fill(email?.subject ?? m.title),
+          intro,
+          note,
+          rows: m.rows,
+          html: html.rows[0]!.html,
+        },
+        sms: {
+          to: a.contact_mobile,
+          on: Boolean(sms && sms.status === 'active' && mobileOk),
+          text: fill(sms?.body ?? ''),
+        },
+        whatsapp: {
+          to: a.contact_mobile,
+          on: Boolean(wa && wa.status === 'active' && mobileOk),
+          text: fill(wa?.body ?? ''),
+        },
+      };
+    });
+  }
+
+  /** The offer: the admission fee of the class and category, open for the session's days, mailed. */
+  async makeOffer(
+    c: PoolClient,
+    a: AppRow,
+    actorUser: string | null,
+    note = 'Admission offered',
+    edits?: { subject?: string; intro?: string; note?: string },
+  ) {
+    const amount = await this.offerFee(c, a);
     const r = await c.query<{ expires: Date }>(
       `UPDATE applications a SET status = 'offered', offered_at = now(), wait_rank = NULL, admission_fee = $2,
               offer_expires_at = now() + make_interval(days => y.offer_days), decided_at = now(), decided_by = $3, updated_at = now()
@@ -706,23 +818,39 @@ export class AdmissionProcessService {
       [a.id, amount.toFixed(2), actorUser],
     );
     await this.core.event(c, a.id, a.status, 'offered', note, { actorUser });
-    const due = ist(r.rows[0]!.expires);
-    await this.notify(
-      c,
-      a,
-      'admission_offer',
-      { amount: amount.toLocaleString('en-IN'), due },
-      'Admission offered',
-      `${a.candidate_name ?? 'Your ward'} is offered admission to ${a.class_name}.`,
+    const m = this.offerMessage(a, amount, ist(r.rows[0]!.expires));
+    if (!edits || !(edits.subject || edits.intro || edits.note !== undefined)) {
+      await this.notify(c, a, m.code, m.vars, m.title, m.intro, m.rows, m.note);
+      return;
+    }
+    // the email as changed on the preview (docs/design/56); SMS and WhatsApp keep their templates
+    const vars = await this.varsOf(c, a, m.vars);
+    const mail = await c.query<{ id: string | null }>(
+      `SELECT app.admission_mail($1, $2, $3::jsonb, $4, $5, NULL, $6::jsonb, $7)::text AS id`,
       [
-        ['Candidate', a.candidate_name ?? ''],
-        ['Registration no.', a.application_no ?? ''],
-        ['Class', a.class_name],
-        ['Admission fee', `Rs ${amount.toLocaleString('en-IN')}`],
-        ['Pay by', due],
+        m.code,
+        a.contact_email,
+        JSON.stringify(vars),
+        m.title,
+        edits.intro?.trim() || m.intro,
+        JSON.stringify(m.rows),
+        edits.note !== undefined ? edits.note.trim() : m.note,
       ],
-      'Pay the admission fee in the admission portal or at the school office before the last date; the offer lapses after it.',
     );
+    const mailId = mail.rows[0]?.id;
+    if (mailId && edits.subject?.trim())
+      await c.query(`UPDATE comms_messages SET subject = $2 WHERE id = $1`, [
+        mailId,
+        edits.subject.trim().slice(0, 200),
+      ]);
+    if (/^[6-9][0-9]{9}$/.test(a.contact_mobile ?? ''))
+      for (const ch of ['sms', 'whatsapp'])
+        await c.query(`SELECT app.send_template($1, $2, $3, $4::jsonb)`, [
+          m.code,
+          ch,
+          a.contact_mobile,
+          JSON.stringify(vars),
+        ]);
   }
 
   /** One decision at the level the registration waits at (used by the page, slots and selection). */
@@ -922,7 +1050,8 @@ export class AdmissionProcessService {
       },
     );
     // every step done: the offer (a process ending at Selection offers there)
-    if (pl.done) await this.makeOffer(c, await this.core.row(c, id), ctx.user.id);
+    if (pl.done)
+      await this.makeOffer(c, await this.core.row(c, id), ctx.user.id, undefined, dto.offerMessage);
   }
 
   async decide(ctx: RequestContext, id: string, dto: DecideDto) {

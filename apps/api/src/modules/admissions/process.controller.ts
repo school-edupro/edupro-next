@@ -6,6 +6,7 @@ import { ADMISSIONS } from './admissions.dto';
 import {
   AllotDto,
   BulkDecideDto,
+  OfferPreviewDto,
   DecideDto,
   OfficeCorrectDto,
   PointsCheckDto,
@@ -160,6 +161,19 @@ export class AdmissionProcessController {
   })
   decide(@ReqCtx() ctx: RequestContext, @Param('id') id: string, @Body() dto: DecideDto) {
     return this.process.decide(ctx, id, dto);
+  }
+
+  @Post('registrations/:id/offer-preview')
+  @ApiOperation({
+    summary: 'The offer email (and SMS / WhatsApp text) before it goes, with the changes asked',
+  })
+  @RequirePermission(ADMISSION_DECIDE)
+  offerPreview(
+    @ReqCtx() ctx: RequestContext,
+    @Param('id') id: string,
+    @Body() dto: OfferPreviewDto,
+  ) {
+    return this.process.offerPreview(ctx, id, dto);
   }
 
   @Post('registrations/:id/send-back')
