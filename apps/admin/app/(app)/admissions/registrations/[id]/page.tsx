@@ -8,7 +8,7 @@ import { RegistrationPointsCheck } from '@/components/admissions/RegistrationPoi
 import { ViewDownload } from '@/components/admissions/ViewDownload';
 import { Notice } from '@/components/Notice';
 import { REG_STATUS, dmy, rupees, type RegistrationForm } from '@/lib/admission-desk';
-import { whenIst, type JourneyStep, type SlotInfo } from '@/lib/admission-process';
+import { marksLine, whenIst, type JourneyStep, type SlotInfo } from '@/lib/admission-process';
 import type { RegistrationPoints } from '@/lib/admission-setup';
 import { ApiError, apiFetch, getMe } from '@/lib/api';
 import { STATUS_LABEL, STATUS_TONE, type Ticket } from '@/lib/helpdesk';
@@ -174,6 +174,11 @@ export default async function RegistrationPage({
                   </span>
                   <span>
                     <span className="ep-rs__name">{s.name}</span>{' '}
+                    {s.byPart ? (
+                      <span className="ep-field__help" style={{ display: 'block', margin: 0 }}>
+                        {marksLine(s.byPart)}
+                      </span>
+                    ) : null}
                     <span className="ep-sr-only">
                       (
                       {s.state === 'done'

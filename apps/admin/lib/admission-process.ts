@@ -70,8 +70,25 @@ export interface JourneyStep {
   kind: StageKind;
   maxMarks: number | null;
   state: 'done' | 'current' | 'waiting' | 'rejected';
+  /** marks by part of a test or interview (docs/design/57) */
+  byPart?: StageMarks | null;
   levels: JourneyLevel[];
 }
+export interface StageMarks {
+  parts: Array<{ name: string; max: number; marks: number | null }>;
+  total: number | null;
+  maxTotal: number | null;
+  absent: boolean;
+  remark: string | null;
+}
+/** "English 40/50 · Maths 48/50 · total 88/100", or "Absent". */
+export const marksLine = (m: StageMarks) =>
+  m.absent
+    ? 'Absent'
+    : [
+        ...m.parts.map((p) => `${p.name} ${p.marks ?? '-'}/${String(p.max)}`),
+        ...(m.total !== null ? [`total ${String(m.total)}/${String(m.maxTotal ?? '-')}`] : []),
+      ].join(' · ');
 export interface RegistrationRow {
   id: string;
   number: string | null;

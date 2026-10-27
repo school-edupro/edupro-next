@@ -535,7 +535,7 @@ export class AdmissionProcessService {
         maskSecrets: !ctx.permissions?.has('people.sensitive.view'),
       });
       const p = await this.processRow(c, id);
-      const steps = await journey(c, id);
+      const steps = await journey(c, id, { marks: true });
       const stages = await stagesById(c);
       const at = p.stage_no ?? 0;
       const step = p.steps?.[at];
@@ -917,6 +917,25 @@ export class AdmissionProcessService {
       throw new DomainError('validation-failed', `Marks cannot be more than ${max}`, {
         status: 400,
       });
+    // marks entered part by part on Test results (docs/design/57): the decision carries their total,
+    // once per stage (another level of the stage that recorded marks keeps them; merit counts them once)
+    let marks = dto.marks;
+    let attendance = dto.attendance;
+    if (marksStage && dto.marks === undefined) {
+      const sm = await c.query<{ total: string | null; absent: boolean; has: boolean }>(
+        `SELECT m.total::text, m.absent,
+                EXISTS (SELECT 1 FROM admission_stage_results x WHERE x.application_id = m.application_id
+                          AND x.stage_id = m.stage_id AND x.level <> $3 AND x.undone_at IS NULL
+                          AND x.marks IS NOT NULL) AS has
+           FROM admission_stage_marks m WHERE m.application_id = $1 AND m.stage_id = $2`,
+        [id, step.stageId, levelNo],
+      );
+      const x = sm.rows[0];
+      if (x && !x.has) {
+        marks = x.total !== null ? Number(x.total) : null;
+        attendance = attendance ?? (x.absent ? 'absent' : null);
+      }
+    }
     if ((dto.decision === 'offer' || dto.decision === 'waitlist') && stage.kind !== 'selection')
       throw new DomainError(
         'validation-failed',
@@ -974,8 +993,8 @@ export class AdmissionProcessService {
         step.stageId,
         levelNo,
         decision,
-        dto.attendance ?? null,
-        dto.marks ?? null,
+        attendance ?? null,
+        marks ?? null,
         marksStage ? max : null,
         dto.remarks ?? null,
         ctx.user.id,
@@ -984,10 +1003,8 @@ export class AdmissionProcessService {
     );
     const label = `${stage.name}${step.levels.length > 1 ? ` (${level?.name ?? `level ${levelNo}`})` : ''}`;
     const extra = [
-      dto.attendance === 'absent' ? 'absent' : null,
-      dto.marks !== undefined && dto.marks !== null
-        ? `marks ${dto.marks}${max ? `/${max}` : ''}`
-        : null,
+      attendance === 'absent' ? 'absent' : null,
+      marks !== undefined && marks !== null ? `marks ${marks}${max ? `/${max}` : ''}` : null,
       dto.remarks ? dto.remarks : null,
     ]
       .filter(Boolean)

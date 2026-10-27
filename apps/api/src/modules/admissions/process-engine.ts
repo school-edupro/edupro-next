@@ -159,6 +159,8 @@ export interface JourneyStep {
   kind: StageKind;
   maxMarks: number | null;
   state: 'done' | 'current' | 'waiting' | 'rejected';
+  /** marks by part of a test or interview (docs/design/57), for the office only */
+  byPart?: StageMarks | null;
   levels: Array<{
     no: number;
     name: string;
@@ -179,8 +181,61 @@ export interface JourneyStep {
   }>;
 }
 
-/** The steps with their levels and decisions, for the office's stepper and the family's progress. */
-export async function journey(c: PoolClient, appId: string): Promise<JourneyStep[]> {
+/** A candidate's marks in the parts of a stage's paper, the total and absent (docs/design/57). */
+export interface StageMarks {
+  parts: Array<{ name: string; max: number; marks: number | null }>;
+  total: number | null;
+  maxTotal: number | null;
+  absent: boolean;
+  remark: string | null;
+}
+
+/** The marks by part of an application, by stage. */
+async function marksByStage(c: PoolClient, appId: string): Promise<Map<string, StageMarks>> {
+  const sm = await c.query<{
+    stage_id: string;
+    absent: boolean;
+    total: string | null;
+    max_total: string | null;
+    remark: string | null;
+  }>(
+    `SELECT stage_id::text, absent, total::text, max_total::text, remark FROM admission_stage_marks WHERE application_id = $1`,
+    [appId],
+  );
+  const out = new Map<string, StageMarks>();
+  if (!sm.rows.length) return out;
+  const pm = await c.query<{ stage_id: string; name: string; max: string; marks: string | null }>(
+    `SELECT m.stage_id::text, m.part_name AS name, m.max_marks::text AS max, m.marks::text
+       FROM admission_part_marks m JOIN admission_paper_parts p ON p.id = m.part_id
+      WHERE m.application_id = $1 ORDER BY p.sort_order, m.id`,
+    [appId],
+  );
+  for (const x of sm.rows)
+    out.set(x.stage_id, {
+      parts: pm.rows
+        .filter((p) => p.stage_id === x.stage_id)
+        .map((p) => ({
+          name: p.name,
+          max: Number(p.max),
+          marks: p.marks !== null ? Number(p.marks) : null,
+        })),
+      total: x.total !== null ? Number(x.total) : null,
+      maxTotal: x.max_total !== null ? Number(x.max_total) : null,
+      absent: x.absent,
+      remark: x.remark,
+    });
+  return out;
+}
+
+/**
+ * The steps with their levels and decisions, for the office's stepper and the family's progress. The
+ * marks by part come only when asked (the office): the family sees them after their release.
+ */
+export async function journey(
+  c: PoolClient,
+  appId: string,
+  opts: { marks?: boolean } = {},
+): Promise<JourneyStep[]> {
   const a = await c.query<{ steps: ProcessStep[] | null; status: string; stage_no: number | null }>(
     `SELECT process_steps AS steps, status::text, stage_no FROM applications WHERE id = $1`,
     [appId],
@@ -191,6 +246,7 @@ export async function journey(c: PoolClient, appId: string): Promise<JourneyStep
   const last = latest(await resultsOf(c, appId));
   const at = a.rows[0]!.stage_no ?? 0;
   const rejected = a.rows[0]!.status === 'rejected';
+  const marks = opts.marks ? await marksByStage(c, appId) : null;
   return steps.map((s, i) => {
     const st = stages.get(s.stageId);
     return {
@@ -199,6 +255,7 @@ export async function journey(c: PoolClient, appId: string): Promise<JourneyStep
       kind: st?.kind ?? 'custom',
       maxMarks: st?.max_marks !== null && st?.max_marks !== undefined ? Number(st.max_marks) : null,
       state: i < at ? 'done' : i === at ? (rejected ? 'rejected' : 'current') : 'waiting',
+      ...(marks ? { byPart: marks.get(s.stageId) ?? null } : {}),
       levels: s.levels.map((l, j) => {
         const r = last.get(`${s.stageId}:${j + 1}`);
         return {

@@ -1,5 +1,13 @@
 /** Minimal RFC 4180 parser: quoted fields, doubled quotes, CRLF or LF line ends. Header row required. */
 export function parseCsv(text: string): { header: string[]; rows: string[][] } {
+  const records = csvRecords(text);
+  const nonEmpty = records.filter((r) => r.some((v) => v.trim() !== ''));
+  const header = (nonEmpty.shift() ?? []).map((h) => h.trim().toLowerCase().replace(/\s+/g, '_'));
+  return { header, rows: nonEmpty.map((r) => r.map((v) => v.trim())) };
+}
+
+/** Every record of a CSV text as it stands (empty lines kept, so line n is record n - 1). */
+export function csvRecords(text: string): string[][] {
   const records: string[][] = [];
   let field = '';
   let record: string[] = [];
@@ -30,7 +38,5 @@ export function parseCsv(text: string): { header: string[]; rows: string[][] } {
     record.push(field);
     records.push(record);
   }
-  const nonEmpty = records.filter((r) => r.some((v) => v.trim() !== ''));
-  const header = (nonEmpty.shift() ?? []).map((h) => h.trim().toLowerCase().replace(/\s+/g, '_'));
-  return { header, rows: nonEmpty.map((r) => r.map((v) => v.trim())) };
+  return records;
 }

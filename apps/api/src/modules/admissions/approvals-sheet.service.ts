@@ -99,9 +99,12 @@ export class AdmissionApprovalsSheetService {
       stage: string;
       kind: string;
       max_marks: string | null;
+      has_paper: boolean;
     }>(
       `SELECT y.name AS cycle, cl.name AS class_name, st.name AS stage, st.kind,
-              app.admission_stage_max(st.id, cl.id)::text AS max_marks
+              app.admission_stage_max(st.id, cl.id)::text AS max_marks,
+              EXISTS (SELECT 1 FROM admission_papers p JOIN admission_paper_parts pp ON pp.paper_id = p.id AND pp.status = 'active'
+                       WHERE p.stage_id = st.id AND p.class_id = cl.id) AS has_paper
          FROM admission_cycles y, classes cl, admission_stages st WHERE y.id = $1 AND cl.id = $2 AND st.id = $3`,
       [p.cycleId, p.classId, p.stageId],
     );
@@ -109,7 +112,8 @@ export class AdmissionApprovalsSheetService {
     if (!x) throw new DomainError('not-found', 'That stage is not set up', { status: 404 });
     return {
       ...x,
-      maxMarks: x.max_marks !== null ? Number(x.max_marks) : null,
+      // a class with a paper takes its marks part by part on Test results (docs/design/57)
+      maxMarks: x.max_marks !== null && !x.has_paper ? Number(x.max_marks) : null,
       choices: DECISIONS[x.kind === 'selection' ? 'selection' : 'other']!,
     };
   }
@@ -157,7 +161,7 @@ export class AdmissionApprovalsSheetService {
       ws.getCell('A1').value = `Approval sheet: ${at.stage} · ${level}`;
       ws.getCell('A1').font = { bold: true, size: 13 };
       ws.getCell('A2').value =
-        `${at.cycle} · ${at.class_name} · made ${new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })} by ${ctx.user.displayName}. Fill Decision and Remark; leave Decision empty to skip a row.`;
+        `${at.cycle} · ${at.class_name} · made ${new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })} by ${ctx.user.displayName}. Fill Decision and Remark; leave Decision empty to skip a row.${at.has_paper ? ' Marks are entered part by part on Test results; a decision here carries their total.' : ''}`;
       ws.getCell('A3').value = `EPAPPR:${p.cycleId}:${p.classId}:${p.stageId}:${String(p.level)}`;
       ws.getCell('B3').value = 'Do not change row 3 or the Registration no. column.';
       ws.getCell('A3').font = { color: { argb: 'FF888888' }, size: 8 };

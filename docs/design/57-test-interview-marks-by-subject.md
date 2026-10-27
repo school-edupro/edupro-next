@@ -83,7 +83,7 @@ Decided here, change any before building:
   Checked: `admission-papers.e2e-spec.ts` 4 pass, the admission suites (86) pass, axe on the page and
   on Admission set-up; browser: rows typed and not saved (no paper made in Alpha).
 
-### Part 2 — the results sheet and grid (the DPS Result Report)
+### Part 2 — the results sheet and grid (the DPS Result Report) — built 27 Oct 2026
 
 - New page **Admissions → Test results** (`/admissions/results`): session, class, stage (Test or
   Interview), slot (optional); filters registration no. / name, % band (0-10 … 91-100), Below cut-off,
@@ -104,6 +104,39 @@ Decided here, change any before building:
   (marks come from the results sheet).
 - Tests: API e2e (sheet built per class, upload checks, apply with Select / Hold / blank, absent,
   merit = points + total, correction with reason), a11y on the page.
+- **As built (migration 0266):** `admission_part_marks` (a mark per part, the part's name and maximum
+  kept) and `admission_stage_marks` (absent, total, out of, remark per candidate and stage). Page
+  **Admissions → Test results** (`/admissions/results`): session, class, stage, slot, name / number,
+  % band, cut-off and "stands" filters; four figures (candidates, waiting, marked, below cut-off); the
+  grid with a box per part, Absent, the total and % as typed, where the candidate stands (Waiting, Held,
+  Selected, Not selected, Sent back) with "Below cut-off", Decision (Marks only / Select / Hold) for
+  those waiting, Remark; **Save N changes** saves every changed row, each on its own (an error stays on
+  its row). A decided candidate's marks change only with a reason (a box appears); the decision's
+  marks follow, merit is worked again and the registration's history says "marks corrected to … ·
+  reason". **Sheet and downloads**: Download the sheet (the candidates waiting, held or sent back; a
+  column per part `English (50)` with 0..max checks, Absent (Y), Total and % as formulas, Decision
+  Select / Hold, Remark; key `EPMARK:` in A3), upload .xlsx or .csv → **Check** (each row Ready /
+  Skipped / Error, and "Registration numbers not found in this class and stage") → **Save N rows**;
+  Export Excel / Export PDF (letterhead, A4) of the grid as filtered. A blank cell in the sheet is not
+  changed; Select needs marks and is refused for an absent candidate (Hold them). A decision is made at
+  the level the candidate waits at, through the same rules as the review (an admin not named in the
+  level is written into the remark: "by … for …"); without a remark it reads "Test results".
+- A class with no paper shows a note pointing to Test and interview papers (one marks figure stays on
+  Tests and interviews and the review, as before).
+- A decision made elsewhere (the review, Excel decisions) after marks were uploaded carries their
+  total, once per stage. The Excel decisions sheet (doc 55) leaves out its Marks column for a class
+  with a paper.
+- The registration page and the approval review (admin and staff app) show each stage's marks by part
+  ("English 40/50 · Maths 48/50 · total 88/100"); the candidate portal does not (part 4 releases them).
+  The merit list and score report keep showing the total.
+- API: `GET admissions/results/options`, `GET admissions/results`, `PUT admissions/results`,
+  `GET/POST admissions/results/sheet` (`?apply=1`), `GET admissions/results/export?format=xlsx|pdf`;
+  reading needs the registrations, saving and the sheet the tests and interviews right.
+- Checked: `admission-results.e2e-spec.ts` 7 pass (no paper, screen save with errors and filters,
+  sheet check then apply with Select / Hold / absent and an unknown number, correction with reason,
+  review decision carrying the total, CSV, the registration's marks, exports); all admission suites
+  pass; axe on Test results, the registration and the review. Browser: Alpha has no paper yet (the note
+  shows); the grid was tried on the test school's own data (typing, the reason box, a refused save).
 
 ### Part 3 — interview parameters and entry everywhere
 

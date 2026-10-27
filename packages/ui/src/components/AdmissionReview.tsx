@@ -35,6 +35,13 @@ export interface AdmissionReviewData {
     stageId: string;
     name: string;
     state: 'done' | 'current' | 'waiting' | 'rejected';
+    /** marks by part of a test or interview (docs/design/57) */
+    byPart?: {
+      parts: Array<{ name: string; max: number; marks: number | null }>;
+      total: number | null;
+      maxTotal: number | null;
+      absent: boolean;
+    } | null;
     levels: Array<{
       no: number;
       name: string;
@@ -833,6 +840,22 @@ export function AdmissionReview({
               {data.path.map((st) => (
                 <li key={st.stageId} data-state={st.state}>
                   <strong>{st.name}</strong>
+                  {st.byPart ? (
+                    <span className="ep-field__help" style={{ display: 'block', margin: 0 }}>
+                      {st.byPart.absent
+                        ? 'Absent'
+                        : [
+                            ...st.byPart.parts.map(
+                              (p) => `${p.name} ${p.marks ?? '-'}/${String(p.max)}`,
+                            ),
+                            ...(st.byPart.total !== null
+                              ? [
+                                  `total ${String(st.byPart.total)}/${String(st.byPart.maxTotal ?? '-')}`,
+                                ]
+                              : []),
+                          ].join(' · ')}
+                    </span>
+                  ) : null}
                   <ul>
                     {st.levels.map((l) => (
                       <li key={l.no}>
