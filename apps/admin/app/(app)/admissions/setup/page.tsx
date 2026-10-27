@@ -79,6 +79,9 @@ export default async function AdmissionSetupPage({
             <a className="ep-btn ep-btn--ghost ep-btn--sm" href="/admissions/setup/numbers">
               Number series
             </a>
+            <a className="ep-btn ep-btn--ghost ep-btn--sm" href="/admissions/setup/papers">
+              Test and interview papers
+            </a>
           </span>
         }
       />

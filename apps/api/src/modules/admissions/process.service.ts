@@ -494,6 +494,15 @@ export class AdmissionProcessService {
     return r.rows[0]?.ok ?? false;
   }
 
+  /** A class's maximum for a stage: its paper's total (docs/design/57), else the stage's maximum. */
+  private async classMax(c: PoolClient, stageId: string, classId: string): Promise<number | null> {
+    const r = await c.query<{ m: string | null }>(
+      `SELECT app.admission_stage_max($1, $2)::text AS m`,
+      [stageId, classId],
+    );
+    return r.rows[0]?.m != null ? Number(r.rows[0].m) : null;
+  }
+
   private async processRow(c: PoolClient, id: string) {
     const r = await c.query<{
       steps: ProcessStep[] | null;
@@ -600,7 +609,7 @@ export class AdmissionProcessService {
                   stageId: stage.id,
                   name: stage.name,
                   kind: stage.kind,
-                  maxMarks: stage.max_marks !== null ? Number(stage.max_marks) : null,
+                  maxMarks: await this.classMax(c, stage.id, a.class_id),
                   level: p.level_no ?? 1,
                   levels: step.levels.length,
                   levelName: level?.name ?? '',
@@ -902,7 +911,8 @@ export class AdmissionProcessService {
     const marksStage = stage.kind === 'test' || stage.kind === 'interview';
     if (dto.marks !== undefined && dto.marks !== null && !marksStage)
       throw new DomainError('validation-failed', `${stage.name} takes no marks`, { status: 400 });
-    const max = stage.max_marks !== null ? Number(stage.max_marks) : null;
+    // the class's paper total when it has one (docs/design/57), else the stage's maximum
+    const max = marksStage ? await this.classMax(c, stage.id, a.class_id) : null;
     if (dto.marks !== undefined && dto.marks !== null && max !== null && dto.marks > max)
       throw new DomainError('validation-failed', `Marks cannot be more than ${max}`, {
         status: 400,

@@ -100,7 +100,8 @@ export class AdmissionApprovalsSheetService {
       kind: string;
       max_marks: string | null;
     }>(
-      `SELECT y.name AS cycle, cl.name AS class_name, st.name AS stage, st.kind, st.max_marks::text
+      `SELECT y.name AS cycle, cl.name AS class_name, st.name AS stage, st.kind,
+              app.admission_stage_max(st.id, cl.id)::text AS max_marks
          FROM admission_cycles y, classes cl, admission_stages st WHERE y.id = $1 AND cl.id = $2 AND st.id = $3`,
       [p.cycleId, p.classId, p.stageId],
     );

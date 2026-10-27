@@ -191,23 +191,37 @@ export function ProcessEditor({ setup, canEdit }: { setup: ProcessSetup; canEdit
                   </td>
                   <td>
                     {s.kind === 'test' || s.kind === 'interview' ? (
-                      <input
-                        className="ep-input"
-                        type="number"
-                        min={1}
-                        aria-label="Maximum marks"
-                        value={s.maxMarks ?? ''}
-                        disabled={!canEdit}
-                        onChange={(e) =>
-                          setStages((cur) =>
-                            cur.map((x, j) =>
-                              j === i
-                                ? { ...x, maxMarks: e.target.value ? Number(e.target.value) : null }
-                                : x,
-                            ),
-                          )
-                        }
-                      />
+                      <>
+                        <input
+                          className="ep-input"
+                          type="number"
+                          min={1}
+                          aria-label="Maximum marks"
+                          value={s.maxMarks ?? ''}
+                          disabled={!canEdit}
+                          onChange={(e) =>
+                            setStages((cur) =>
+                              cur.map((x, j) =>
+                                j === i
+                                  ? {
+                                      ...x,
+                                      maxMarks: e.target.value ? Number(e.target.value) : null,
+                                    }
+                                  : x,
+                              ),
+                            )
+                          }
+                        />
+                        {s.id ? (
+                          <a
+                            className="ep-field__help"
+                            href={`/admissions/setup/papers?stage=${s.id}`}
+                            style={{ display: 'block', marginTop: 'var(--sp-1)' }}
+                          >
+                            Papers by class
+                          </a>
+                        ) : null}
+                      </>
                     ) : (
                       '-'
                     )}

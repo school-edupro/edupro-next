@@ -6,6 +6,8 @@ import { ADMISSIONS } from './admissions.dto';
 import {
   AllotDto,
   BulkDecideDto,
+  CopyPaperDto,
+  PaperDto,
   OfferPreviewDto,
   DecideDto,
   OfficeCorrectDto,
@@ -31,6 +33,7 @@ import {
 } from './process.service';
 import { AdmissionGridExportDto, AdmissionGridDto } from './grid.dto';
 import { AdmissionGridService } from './grid.service';
+import { AdmissionPapersService } from './papers.service';
 import { AdmissionScheduleService } from './schedule.service';
 
 /**
@@ -46,6 +49,7 @@ export class AdmissionProcessController {
     private readonly process: AdmissionProcessService,
     private readonly schedule: AdmissionScheduleService,
     private readonly gridSvc: AdmissionGridService,
+    private readonly papersSvc: AdmissionPapersService,
   ) {}
 
   // ---- the admissions list (part 7) -----------------------------------------------------------------
@@ -94,6 +98,37 @@ export class AdmissionProcessController {
   @RequirePermission(ADMISSION_SETUP_MANAGE)
   saveStages(@ReqCtx() ctx: RequestContext, @Body() dto: StagesDto) {
     return this.process.saveStages(ctx, dto);
+  }
+
+  // ---- test and interview papers by class (docs/design/57, part 1) ---------------------------------
+  @Get('stages/:id/papers')
+  @ApiOperation({
+    summary: 'A test or interview stage: each class with its paper (parts, maximum)',
+  })
+  @RequirePermission(ADMISSIONS.cycleView)
+  papers(@ReqCtx() ctx: RequestContext, @Param('id') id: string) {
+    return this.papersSvc.list(ctx, id);
+  }
+
+  @Put('stages/:id/papers/:classId')
+  @ApiOperation({
+    summary: "A class's paper saved: its parts and minimum total % (none: no paper)",
+  })
+  @RequirePermission(ADMISSION_SETUP_MANAGE)
+  savePaper(
+    @ReqCtx() ctx: RequestContext,
+    @Param('id') id: string,
+    @Param('classId') classId: string,
+    @Body() dto: PaperDto,
+  ) {
+    return this.papersSvc.save(ctx, id, classId, dto);
+  }
+
+  @Post('stages/:id/papers/copy')
+  @ApiOperation({ summary: "A class's paper copied to other classes" })
+  @RequirePermission(ADMISSION_SETUP_MANAGE)
+  copyPaper(@ReqCtx() ctx: RequestContext, @Param('id') id: string, @Body() dto: CopyPaperDto) {
+    return this.papersSvc.copy(ctx, id, dto);
   }
 
   @Post('processes')

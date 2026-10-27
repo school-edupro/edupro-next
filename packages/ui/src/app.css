@@ -12848,3 +12848,59 @@ a.ep-pub-foot__item {
   white-space: pre-wrap;
 }
 
+
+/* test and interview papers by class (docs/design/57): the classes beside the chosen class's paper */
+.ep-papers {
+  display: grid;
+  grid-template-columns: minmax(12rem, 16rem) minmax(0, 1fr);
+  gap: var(--sp-4);
+  align-items: start;
+}
+.ep-papers__classes {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: var(--sp-1);
+}
+.ep-papers__classes a {
+  display: block;
+  padding: var(--sp-2) var(--sp-3);
+  border-radius: var(--radius-sm);
+  color: var(--text-body);
+  text-decoration: none;
+}
+.ep-papers__classes a[aria-current='page'] {
+  background: var(--surface-subtle);
+  color: var(--text-heading);
+  font-weight: var(--fw-semibold);
+}
+.ep-papers__classes small {
+  display: block;
+  color: var(--text-muted);
+  font-weight: var(--fw-regular);
+}
+.ep-papers__row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+  align-items: flex-end;
+}
+.ep-papers__row .ep-field {
+  margin: 0;
+  flex: 0 1 7rem;
+  min-width: 5rem;
+}
+.ep-papers__row .ep-field:first-child {
+  flex: 1 1 12rem;
+}
+.ep-papers__tools {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: var(--sp-1);
+}
+@media (max-width: 56rem) {
+  .ep-papers {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

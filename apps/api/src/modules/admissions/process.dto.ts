@@ -211,6 +211,36 @@ export const NextSchema = z.object({
 });
 export class SelectionNextDto extends createZodDto(NextSchema) {}
 
+/** A class's test or interview paper: its parts and the minimum total % (docs/design/57). */
+export const PaperSchema = z.object({
+  minPercent: z.number().gt(0).max(100).nullable().optional(),
+  parts: z
+    .array(
+      z
+        .object({
+          id: IdSchema.optional(),
+          name: z.string().trim().min(1).max(60),
+          maxMarks: z.number().gt(0).max(1000),
+          passMarks: z.number().min(0).max(1000).nullable().optional(),
+        })
+        .refine(
+          (p) => p.passMarks === undefined || p.passMarks === null || p.passMarks <= p.maxMarks,
+          {
+            message: 'A pass mark cannot be more than the maximum',
+            path: ['passMarks'],
+          },
+        ),
+    )
+    .max(30),
+});
+export class PaperDto extends createZodDto(PaperSchema) {}
+
+export const CopyPaperSchema = z.object({
+  fromClassId: IdSchema,
+  toClassIds: z.array(IdSchema).min(1).max(100),
+});
+export class CopyPaperDto extends createZodDto(CopyPaperSchema) {}
+
 /** A Selection offer previewed: the family and the words as changed (docs/design/56). */
 export const SelectionOfferPreviewSchema = OfferPreviewSchema.extend({ applicationId: IdSchema });
 export class SelectionOfferPreviewDto extends createZodDto(SelectionOfferPreviewSchema) {}

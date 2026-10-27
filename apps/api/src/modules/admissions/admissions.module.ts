@@ -10,6 +10,7 @@ import { AdmissionAdmitController } from './admit.controller';
 import { AdmissionAdmitService } from './admit.service';
 import { AdmissionDeskController } from './desk.controller';
 import { AdmissionProcessController } from './process.controller';
+import { AdmissionPapersService } from './papers.service';
 import { AdmissionProcessService } from './process.service';
 import { AdmissionGridService } from './grid.service';
 import { AdmissionApprovalsSheetService } from './approvals-sheet.service';
@@ -80,6 +81,7 @@ import { AdmissionNumberSeriesService } from './number-series.service';
     AdmissionCoreService,
     AdmissionDeskService,
     AdmissionProcessService,
+    AdmissionPapersService,
     AdmissionAdmitService,
     AdmissionGridService,
     AdmissionReadyReportsService,

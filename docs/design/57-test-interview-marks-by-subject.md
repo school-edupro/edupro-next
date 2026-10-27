@@ -60,7 +60,7 @@ Decided here, change any before building:
 
 ## Parts
 
-### Part 1 — papers in Admission set-up (migration 0265)
+### Part 1 — papers in Admission set-up (migration 0265) — built 27 Oct 2026
 
 - Admission set-up → Stages: a Test or Interview stage gets **Papers by class**: pick a class, add parts
   (name, maximum, pass mark optional), order them, minimum total % (optional); **Copy from class**;
@@ -69,6 +69,19 @@ Decided here, change any before building:
   `admission_papers (stage_id, class_id, min_percent)`; audited.
 - API: `GET/PUT admissions/stages/:id/papers[/:classId]`, copy.
 - Tests: API e2e (save, copy, maximum = sum, a part in use is switched off not deleted).
+- **As built:** page **Admission set-up → Test and interview papers** (`/admissions/setup/papers`,
+  also linked as "Papers by class" under each Test / Interview stage): stage tabs, the classes on the
+  left (each "N subjects · out of T" or "One figure · out of M"), the chosen class's paper on the right
+  (name with quick picks: the school's scholastic subjects plus Mental Ability, General Knowledge,
+  Reasoning; for an interview Communication, Confidence, General awareness, Behaviour, Parent
+  interaction), Up / Down / Remove, the total as it is typed, minimum total %, **Save the paper**, and
+  **Copy this paper to** ticked classes (their parts replaced). Saving no parts leaves the class on one
+  figure. API `GET admissions/stages/:id/papers`, `PUT …/papers/:classId` (answers `{paper}`),
+  `POST …/papers/copy {fromClassId, toClassIds}`; set-up managers change, `admissions.cycle.view` reads.
+  `app.admission_stage_max(stage, class)` gives the class's maximum, now used by decisions (marks
+  checked against it), the registration review, the Excel decisions sheet and a slot of one class.
+  Checked: `admission-papers.e2e-spec.ts` 4 pass, the admission suites (86) pass, axe on the page and
+  on Admission set-up; browser: rows typed and not saved (no paper made in Alpha).
 
 ### Part 2 — the results sheet and grid (the DPS Result Report)
 

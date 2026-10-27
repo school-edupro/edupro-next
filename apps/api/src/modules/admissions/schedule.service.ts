@@ -225,7 +225,8 @@ export class AdmissionScheduleService {
       capacity: number;
       notes: string | null;
     }>(
-      `SELECT s.id::text, s.cycle_id::text, y.name AS cycle_name, s.stage_id::text, st.name AS stage, st.kind, st.max_marks::text,
+      `SELECT s.id::text, s.cycle_id::text, y.name AS cycle_name, s.stage_id::text, st.name AS stage, st.kind,
+              app.admission_stage_max(s.stage_id, s.class_id)::text AS max_marks,
               s.class_id::text, cl.name AS class_name, s.starts_at, s.minutes, s.venue, s.capacity, s.notes
          FROM admission_slots s JOIN admission_stages st ON st.id = s.stage_id JOIN admission_cycles y ON y.id = s.cycle_id
          LEFT JOIN classes cl ON cl.id = s.class_id WHERE s.id = $1`,
