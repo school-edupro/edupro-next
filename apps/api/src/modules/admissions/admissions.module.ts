@@ -12,6 +12,10 @@ import { AdmissionDeskController } from './desk.controller';
 import { AdmissionProcessController } from './process.controller';
 import { AdmissionProcessService } from './process.service';
 import { AdmissionGridService } from './grid.service';
+import { AdmissionCounterController } from './counter.controller';
+import { AdmissionCounterService } from './counter.service';
+import { AdmissionReadyReportsController } from './ready-reports.controller';
+import { AdmissionReadyReportsService } from './ready-reports.service';
 import { AdmissionEnquiryController } from './enquiry.controller';
 import { AdmissionEnquiryService } from './enquiry.service';
 import { AdmissionScheduleService } from './schedule.service';
@@ -49,6 +53,8 @@ import { AdmissionNumberSeriesService } from './number-series.service';
 @Module({
   imports: [WorkflowModule, PaymentsModule, FilesModule],
   controllers: [
+    AdmissionReadyReportsController,
+    AdmissionCounterController,
     AdmissionsController,
     AdmissionFormsController,
     AdmissionSetupController,
@@ -74,6 +80,8 @@ import { AdmissionNumberSeriesService } from './number-series.service';
     AdmissionProcessService,
     AdmissionAdmitService,
     AdmissionGridService,
+    AdmissionReadyReportsService,
+    AdmissionCounterService,
     AdmissionEnquiryService,
     AdmissionScoreTablesService,
     AdmissionApprovalsService,

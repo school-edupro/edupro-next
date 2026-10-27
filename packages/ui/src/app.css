@@ -12693,3 +12693,44 @@ a.ep-pub-foot__item {
     text-align: left;
   }
 }
+
+/* ---- Fees → Cashier, admission fees (docs/design/52) ------------------------------------------- */
+.ep-afc__collect {
+  margin-top: var(--sp-2);
+}
+.ep-afc__form {
+  display: grid;
+  gap: var(--sp-2);
+  margin-top: var(--sp-2);
+  padding: var(--sp-3);
+  background: var(--surface-subtle);
+  border-radius: var(--radius-md);
+  min-width: min(100%, 16rem);
+}
+.ep-afc__btns {
+  display: flex;
+  gap: var(--sp-2);
+  flex-wrap: wrap;
+}
+.ep-afc__done {
+  display: flex;
+  gap: var(--sp-2);
+  align-items: center;
+  flex-wrap: wrap;
+  margin-top: var(--sp-2);
+  color: var(--text-body);
+}
+.ep-afc__receipts {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: var(--sp-1);
+}
+.ep-afc__receipts li {
+  display: flex;
+  gap: var(--sp-2);
+  align-items: center;
+  justify-content: space-between;
+}
+

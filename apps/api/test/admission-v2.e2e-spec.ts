@@ -24,6 +24,7 @@ describe('online admission (e2e)', () => {
   let school: SeededSchool;
   let admin: SeededUser;
   let clerk: SeededUser;
+  let accountant: SeededUser;
   let formIx: string;
   let formXi: string;
   let cycleId: string;
@@ -47,6 +48,7 @@ describe('online admission (e2e)', () => {
       school = await seedSchool(c, `${s}A`);
       admin = await seedUser(c, school, `${s}-admin`, 'school_admin');
       clerk = await seedUser(c, school, `${s}-coord`, 'academic_coordinator');
+      accountant = await seedUser(c, school, `${s}-acct`, 'accountant');
     });
     app = await createApp();
     inject = injector(app);
@@ -974,15 +976,76 @@ describe('online admission (e2e)', () => {
         json: { mode: 'cash' },
       });
       expect(noRight.statusCode).toBe(403);
+      // Accounts take it at Fees → Cashier (docs/design/52): found by mobile, the fee essentials only
+      const counter = (q: string, due = '1') =>
+        inject({
+          method: 'GET',
+          url: `/fees/admission-counter?q=${q}&due=${due}`,
+          headers: h(accountant),
+        });
+      expect(
+        (
+          await inject({
+            method: 'GET',
+            url: `/admissions/applications/${id}/form`,
+            headers: h(accountant),
+          })
+        ).statusCode,
+      ).toBe(403);
+      expect((await counter('9876500011')).statusCode).toBe(200);
+      expect(
+        (
+          await inject({
+            method: 'GET',
+            url: '/fees/admission-counter',
+            headers: h(clerk),
+          })
+        ).statusCode,
+      ).toBe(403);
+      const atCounter = (await counter('9876500011'))
+        .json()
+        .data.find((x: { id: string }) => x.id === id);
+      expect(atCounter).toMatchObject({ due: { kind: 'registration' } });
+      expect(JSON.stringify(atCounter)).not.toMatch(/111122223333|answers/);
+      const wrongKind = await inject({
+        method: 'POST',
+        url: `/fees/admission-counter/${id}/collect`,
+        headers: h(accountant),
+        json: { kind: 'admission', mode: 'cash' },
+      });
+      expect(wrongKind.statusCode).toBe(409);
       const fee = await inject({
         method: 'POST',
-        url: `/admissions/applications/${id}/registration-fee`,
-        headers: h(),
-        json: { mode: 'cash' },
+        url: `/fees/admission-counter/${id}/collect`,
+        headers: h(accountant),
+        json: { kind: 'registration', mode: 'cash' },
       });
       expect(fee.statusCode).toBe(201);
       expect(fee.json().receiptNo).toMatch(/^REG\//);
       expect(fee.json().number).toBeTruthy();
+      const mine = await inject({
+        method: 'GET',
+        url: '/fees/admission-counter/today',
+        headers: h(accountant),
+      });
+      expect(mine.json().data.map((x: { id: string }) => x.id)).toContain(fee.json().receiptId);
+      const slip = await inject({
+        method: 'GET',
+        url: `/fees/admission-counter/${id}/receipts/${fee.json().receiptId as string}/pdf`,
+        headers: h(accountant),
+      });
+      expect(slip.statusCode).toBe(200);
+      expect(slip.rawPayload.subarray(0, 4).toString()).toBe('%PDF');
+      expect(
+        (
+          await inject({
+            method: 'POST',
+            url: `/fees/admission-counter/${id}/collect`,
+            headers: h(accountant),
+            json: { kind: 'registration', mode: 'cash' },
+          })
+        ).statusCode,
+      ).toBe(409);
       const twice = await inject({
         method: 'POST',
         url: `/admissions/applications/${id}/registration-fee`,
@@ -2883,11 +2946,19 @@ describe('online admission (e2e)', () => {
         json: { mode: 'cash' },
       });
       expect(noRight.statusCode).toBe(403);
+      // at Fees → Cashier by Accounts (docs/design/52): in full, the admission number with it
+      const due = await inject({
+        method: 'GET',
+        url: '/fees/admission-counter?due=1',
+        headers: h(accountant),
+      });
+      const row = due.json().data.find((x: { id: string }) => x.id === second);
+      expect(row).toMatchObject({ due: { kind: 'admission' } });
       const fee = await inject({
         method: 'POST',
-        url: `/admissions/registrations/${second}/admission-fee`,
-        headers: h(),
-        json: { mode: 'cash' },
+        url: `/fees/admission-counter/${second}/collect`,
+        headers: h(accountant),
+        json: { kind: 'admission', mode: 'cheque', instrumentNo: '004512', bankName: 'SBI' },
       });
       expect(fee.statusCode).toBe(201);
       expect(fee.json().admissionNo).toBeTruthy();
@@ -3193,6 +3264,76 @@ describe('online admission (e2e)', () => {
       });
       expect(exp.statusCode).toBe(201);
       expect(exp.json().spec.dataset).toBe('admissions');
+    });
+
+    it('makes the ready-made admission reports for the list view at once (docs/design/52)', async () => {
+      const ready = await inject({
+        method: 'GET',
+        url: '/admissions/registrations/grid/ready-made',
+        headers: h(),
+      });
+      expect(ready.json().reports.map((r: { key: string }) => r.key)).toEqual([
+        'register',
+        'class_summary',
+        'category_count',
+        'fee_due',
+        'admitted',
+        'merit',
+      ]);
+      const view = { columns: [], filters: [], sort: [], status: 'all', size: 50, page: 1 };
+      for (const key of [
+        'register',
+        'class_summary',
+        'category_count',
+        'fee_due',
+        'admitted',
+        'merit',
+      ])
+        for (const format of ['xlsx', 'pdf']) {
+          const r = await inject({
+            method: 'POST',
+            url: `/admissions/registrations/grid/ready-made/${key}`,
+            headers: h(),
+            json: { ...view, format },
+          });
+          expect({ key, format, status: r.statusCode }).toEqual({ key, format, status: 201 });
+          const head = Buffer.from(r.json().base64 as string, 'base64')
+            .subarray(0, 4)
+            .toString();
+          expect(head).toBe(format === 'pdf' ? '%PDF' : 'PK\u0003\u0004');
+        }
+      // the list's filters reach the report: a class nobody sought leaves only the total line
+      const none = await inject({
+        method: 'POST',
+        url: '/admissions/registrations/grid/ready-made/register',
+        headers: h(),
+        json: {
+          ...view,
+          filters: [{ key: 'class_sought', op: 'in', values: ['No such class'] }],
+          format: 'xlsx',
+        },
+      });
+      expect(none.statusCode).toBe(201);
+      expect(
+        (
+          await inject({
+            method: 'POST',
+            url: '/admissions/registrations/grid/ready-made/nothing',
+            headers: h(),
+            json: { ...view, format: 'xlsx' },
+          })
+        ).statusCode,
+      ).toBe(404);
+      expect(
+        (
+          await inject({
+            method: 'POST',
+            url: '/admissions/registrations/grid/ready-made/register',
+            headers: h(accountant),
+            json: { ...view, format: 'xlsx' },
+          })
+        ).statusCode,
+      ).toBe(403);
     });
 
     it('offers the Admissions dataset in the report builder', async () => {

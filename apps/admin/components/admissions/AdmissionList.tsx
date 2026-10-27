@@ -352,8 +352,14 @@ export function AdmissionList(props: {
       format: 'xlsx' | 'pdf',
       runtime: ReportRuntime,
     ) => Promise<Result<{ exportId: string; format: string }>>;
+    runReady?: (
+      key: string,
+      q: AdmissionListQuery & { format: 'xlsx' | 'pdf' },
+    ) => Promise<Result<{ filename: string; contentType: string; base64: string }>>;
   };
   reports?: ReportChoice[];
+  /** ready-made admission reports (docs/design/52) */
+  ready?: Array<{ key: string; name: string; description: string }>;
   /** the registrations list (docs/design/47) and, for those who decide, bulk decide */
   mode?: 'list' | 'registrations';
   bulkDecide?: BulkDecide;

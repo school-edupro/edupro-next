@@ -1,6 +1,6 @@
 import { Body, Controller, Get, Param, Post, Query } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
-import { DATASETS } from '@edupro/db';
+import { DATASETS, mayUseDataset } from '@edupro/db';
 import { RequirePermission } from '../../common/access/require-permission.decorator';
 import { ReqCtx, requireTenant, type RequestContext } from '../../common/http/request-context';
 import { CreateExportDto, ListExportsQueryDto, RowsQueryDto } from './reports.dto';
@@ -20,7 +20,7 @@ export class ReportsController {
     const held = ctx.permissions ?? new Set<string>();
     return {
       data: Object.values(DATASETS)
-        .filter((d) => held.has(d.permission))
+        .filter((d) => mayUseDataset(held, d))
         .map((d) => ({
           id: d.id,
           title: d.title,

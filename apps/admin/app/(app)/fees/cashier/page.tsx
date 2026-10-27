@@ -1,7 +1,8 @@
 import { Badge, Button, Card, InputField, PageHeader } from '@edupro/ui';
 import { redirect } from 'next/navigation';
+import { CashierTabs } from '@/components/fees/CashierTabs';
 import { Notice } from '@/components/Notice';
-import { apiFetch } from '@/lib/api';
+import { apiFetch, getMe } from '@/lib/api';
 
 interface Found {
   id: string;
@@ -28,6 +29,7 @@ export default async function CashierPage({
   }>;
 }) {
   const sp = await searchParams;
+  const me = await getMe();
   // old links to the counter with a pupil chosen go to the pupil's fee page
   if (sp.studentId && /^\d+$/.test(sp.studentId)) redirect(`/fees/ledger/${sp.studentId}?tab=pay`);
   const q = (sp.q ?? '').trim();
@@ -45,6 +47,11 @@ export default async function CashierPage({
         kicker="Fees"
         title="Cashier"
         description="Find the pupil by name or admission number, then take the payment and print the receipt."
+      />
+      <CashierTabs
+        current="pupils"
+        pupils
+        admission={me.permissions.includes('admissions.fee.collect')}
       />
       <Notice params={sp} />
       <Card title="Find the pupil">

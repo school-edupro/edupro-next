@@ -26,6 +26,9 @@ const PAGES = [
   '/admissions/approvals?tab=decided',
   // a sample registration's review (scripts/seed-admission-merit.mjs); a new seed changes the ids
   '/admissions/approvals/1404',
+  // Fees → Cashier, admission fees (docs/design/52)
+  '/fees/cashier/admission',
+  '/fees/cashier/admission?due=0&q=GOEL',
   '/admissions/desk',
   // a sample registration of scripts/seed-admission-merit.mjs (docs/design/49); a new seed changes the ids
   '/admissions/desk/1339',

@@ -11,6 +11,7 @@ import {
 import {
   admissionListExport,
   admissionListLoad,
+  admissionListReady,
   admissionListSaveView,
 } from '@/lib/admission-list-actions';
 import { apiFetch, getMe } from '@/lib/api';
@@ -38,9 +39,12 @@ export default async function AdmissionListPage({
         'admissions',
       )
     : [];
-  const [fields, saved] = await Promise.all([
+  const [fields, saved, ready] = await Promise.all([
     apiFetch<AdmissionListFields>('/admissions/registrations/grid/fields'),
     apiFetch<{ value: unknown }>('/me/preferences/admissions.list').catch(() => ({ value: null })),
+    apiFetch<{ reports: Array<{ key: string; name: string; description: string }> }>(
+      '/admissions/registrations/grid/ready-made',
+    ).catch(() => ({ reports: [] })),
   ]);
   const view = sanitizeAdmissionView(saved.value, new Set(fields.fields.map((f) => f.key)));
   const initial = await apiFetch<AdmissionListResult>('/admissions/registrations/grid', {
@@ -61,11 +65,13 @@ export default async function AdmissionListPage({
         initialView={view}
         can={{ builder: can('reports.builder.use'), desk: can('admissions.application.enter') }}
         reports={reports}
+        ready={ready.reports}
         actions={{
           load: admissionListLoad,
           exportFile: admissionListExport,
           saveReport: builderSave,
           runReport: builderExport,
+          runReady: admissionListReady,
           saveView: admissionListSaveView,
         }}
       />

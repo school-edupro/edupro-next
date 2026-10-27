@@ -59,6 +59,7 @@ export function PeopleList<V extends PeopleListView, R extends PeopleListResult<
   initialView,
   can,
   reports = [],
+  ready = [],
   actions,
 }: {
   config: PeopleListConfig<V, R>;
@@ -68,6 +69,8 @@ export function PeopleList<V extends PeopleListView, R extends PeopleListResult<
   can: Record<string, boolean>;
   /** saved reports of this list's kind (mine, then shared with me) to download for the view */
   reports?: ReportChoice[];
+  /** ready-made reports of this list (docs/design/52), made at once for the view */
+  ready?: Array<{ key: string; name: string; description: string }>;
   actions: {
     load: (q: PeopleListQuery<V>) => Promise<Result<R>>;
     saveView: (v: V) => Promise<void>;
@@ -88,6 +91,10 @@ export function PeopleList<V extends PeopleListView, R extends PeopleListResult<
       format: 'xlsx' | 'pdf',
       runtime: ReportRuntime,
     ) => Promise<Result<{ exportId: string; format: string }>>;
+    runReady?: (
+      key: string,
+      q: PeopleListQuery<V> & { format: 'xlsx' | 'pdf' },
+    ) => Promise<Result<{ filename: string; contentType: string; base64: string }>>;
   };
 }) {
   const router = useRouter();
@@ -177,20 +184,23 @@ export function PeopleList<V extends PeopleListView, R extends PeopleListResult<
   const ariaSort = (key: string): 'ascending' | 'descending' | 'none' =>
     view.sort[0]?.key === key ? (view.sort[0].dir === 'asc' ? 'ascending' : 'descending') : 'none';
 
+  // a file made at once, straight to the browser's downloads
+  const save = (f: { filename: string; contentType: string; base64: string }) => {
+    const bytes = Uint8Array.from(atob(f.base64), (ch) => ch.charCodeAt(0));
+    const url = URL.createObjectURL(new Blob([bytes], { type: f.contentType }));
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = f.filename;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 10_000);
+  };
   const doExport = (format: 'xlsx' | 'pdf') =>
     start(async () => {
       if (actions.download) {
         const d = await actions.download({ ...view, page: 1, format });
         if (!d.ok) return setError(d.errors?.join('; ') ?? d.error);
         setError(null);
-        // the file straight to the browser's downloads
-        const bytes = Uint8Array.from(atob(d.data.base64), (ch) => ch.charCodeAt(0));
-        const url = URL.createObjectURL(new Blob([bytes], { type: d.data.contentType }));
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = d.data.filename;
-        a.click();
-        setTimeout(() => URL.revokeObjectURL(url), 10_000);
+        save(d.data);
         return;
       }
       if (!actions.exportFile) return;
@@ -206,8 +216,18 @@ export function PeopleList<V extends PeopleListView, R extends PeopleListResult<
   const [runId, setRunId] = useState('');
   const [runFormat, setRunFormat] = useState<'xlsx' | 'pdf'>('xlsx');
   const [runLabel, setRunLabel] = useState('');
+  const savedReports = can.builder && actions.runReport ? reports : [];
+  const readyReports = actions.runReady ? ready : [];
   const runReport = () =>
     start(async () => {
+      if (runId.startsWith('ready:') && actions.runReady) {
+        const d = await actions.runReady(runId.slice(6), { ...view, page: 1, format: runFormat });
+        if (!d.ok) return setError(d.errors?.join('; ') ?? d.error);
+        setError(null);
+        setRunOpen(false);
+        save(d.data);
+        return;
+      }
       const choice = reports.find((r) => r.id === runId);
       if (!choice || !actions.runReport) return setError('Choose a saved report.');
       const r = await actions.runReport(choice.id, runFormat, runtimeOf(config.viewToSpec(view)));
@@ -409,12 +429,13 @@ export function PeopleList<V extends PeopleListView, R extends PeopleListResult<
           >
             Export PDF
           </button>
-          {can.builder && reports.length && actions.runReport ? (
+          {savedReports.length || readyReports.length ? (
             <button
               type="button"
               className="ep-btn ep-btn--secondary ep-btn--sm"
               onClick={() => {
-                if (!runId) setRunId(reports[0]!.id);
+                if (!runId)
+                  setRunId(readyReports[0] ? `ready:${readyReports[0].key}` : savedReports[0]!.id);
                 setRunOpen(true);
               }}
               disabled={pending}
@@ -649,7 +670,7 @@ export function PeopleList<V extends PeopleListView, R extends PeopleListResult<
         <Dialog
           open
           size="sm"
-          title="Download a saved report"
+          title={readyReports.length ? 'Download a report' : 'Download a saved report'}
           onClose={() => setRunOpen(false)}
           primary={{ label: 'Download', loading: pending, onClick: runReport }}
         >
@@ -665,8 +686,10 @@ export function PeopleList<V extends PeopleListView, R extends PeopleListResult<
                   .filter(Boolean)
                   .join(', ')})`
               : ''}
-            . The report&apos;s own filters apply too; a filter on the same field here replaces the
-            report&apos;s. The saved report does not change.
+            .
+            {runId.startsWith('ready:')
+              ? ''
+              : " The report's own filters apply too; a filter on the same field here replaces the report's. The saved report does not change."}
           </p>
           <label className="ep-field" htmlFor="sl-run-report">
             <span className="ep-field__label">Report</span>
@@ -676,13 +699,37 @@ export function PeopleList<V extends PeopleListView, R extends PeopleListResult<
               value={runId}
               onChange={(e) => setRunId(e.target.value)}
             >
-              {reports.map((r) => (
-                <option key={r.id} value={r.id}>
-                  {r.sharedBy ? `${r.name} (shared by ${r.sharedBy})` : r.name}
-                </option>
-              ))}
+              {readyReports.length ? (
+                <optgroup label="Ready-made">
+                  {readyReports.map((r) => (
+                    <option key={r.key} value={`ready:${r.key}`}>
+                      {r.name}
+                    </option>
+                  ))}
+                </optgroup>
+              ) : null}
+              {savedReports.length ? (
+                <optgroup label="My and shared reports">
+                  {savedReports.map((r) => (
+                    <option key={r.id} value={r.id}>
+                      {r.sharedBy ? `${r.name} (shared by ${r.sharedBy})` : r.name}
+                    </option>
+                  ))}
+                </optgroup>
+              ) : null}
             </select>
           </label>
+          {runId.startsWith('ready:') ? (
+            <p className="ep-field__help" style={{ margin: 0 }}>
+              {readyReports.find((r) => `ready:${r.key}` === runId)?.description}
+            </p>
+          ) : null}
+          {readyReports.length && !savedReports.length && can.builder ? (
+            <p className="ep-field__help" style={{ margin: 0 }}>
+              Want your own columns? Arrange the list and use <strong>Save as report</strong>; it
+              then shows here too.
+            </p>
+          ) : null}
           <fieldset className="ep-field" style={{ border: 0, padding: 0, margin: 0 }}>
             <legend className="ep-field__label">File</legend>
             <div style={{ display: 'flex', gap: 'var(--sp-4)' }}>

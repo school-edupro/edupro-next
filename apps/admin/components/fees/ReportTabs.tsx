@@ -65,6 +65,12 @@ export function ReportTabs({ current }: { current: ReportKey }) {
               {label}
             </a>
           ))}
+          {g.title === 'Collection' ? (
+            // registration and admission fees taken at the counter (docs/design/52)
+            <a className="ep-btn ep-btn--sm ep-btn--ghost" href="/admissions/fee-collection">
+              Admission fees
+            </a>
+          ) : null}
         </div>
       ))}
     </nav>

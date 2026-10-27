@@ -45,7 +45,12 @@ export default async function AdmissionFeeCollectionPage({
 }) {
   const sp = await searchParams;
   const me = await getMe();
-  if (!me.permissions.includes('admissions.application.view')) notFound();
+  // the admission office, and Accounts who take these fees at the counter (docs/design/52)
+  if (
+    !me.permissions.includes('admissions.application.view') &&
+    !me.permissions.includes('fees.ledger.view')
+  )
+    notFound();
   const from = /^\d{4}-\d{2}-\d{2}$/.test(sp.from ?? '') ? sp.from! : `${today().slice(0, 8)}01`;
   const to = /^\d{4}-\d{2}-\d{2}$/.test(sp.to ?? '') ? sp.to! : today();
   const params = new URLSearchParams({ from, to });
@@ -54,7 +59,9 @@ export default async function AdmissionFeeCollectionPage({
     params.set('kind', sp.kind);
   if (sp.mode && /^[a-z_]{2,20}$/.test(sp.mode)) params.set('mode', sp.mode);
   const [cycles, data] = await Promise.all([
-    apiFetch<{ data: AdmissionCycle[] }>('/admissions/cycles').then((r) => r.data),
+    apiFetch<{ data: AdmissionCycle[] }>('/admissions/cycles')
+      .then((r) => r.data)
+      .catch(() => [] as AdmissionCycle[]),
     apiFetch<{ rows: Row[]; truncated: boolean }>(
       `/reports/datasets/admission_fee_collection/rows?${params.toString()}&limit=5000`,
     ),

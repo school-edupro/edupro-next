@@ -13,6 +13,7 @@ import {
 import {
   registrationsBulkDecide,
   registrationsExport,
+  registrationsReady,
   registrationsLoad,
   registrationsSaveView,
 } from '@/lib/admission-list-actions';
@@ -61,11 +62,14 @@ export default async function RegistrationsPage({
         'admissions',
       )
     : [];
-  const [fields, saved] = await Promise.all([
+  const [fields, saved, ready] = await Promise.all([
     apiFetch<AdmissionListFields>('/admissions/registrations/grid/fields'),
     apiFetch<{ value: unknown }>('/me/preferences/admissions.registrations').catch(() => ({
       value: null,
     })),
+    apiFetch<{ reports: Array<{ key: string; name: string; description: string }> }>(
+      '/admissions/registrations/grid/ready-made',
+    ).catch(() => ({ reports: [] })),
   ]);
   const kept = sanitizeAdmissionView(
     saved.value,
@@ -129,12 +133,14 @@ export default async function RegistrationsPage({
         initialView={view}
         can={{ builder: can('reports.builder.use'), desk: can('admissions.application.enter') }}
         reports={reports}
+        ready={ready.reports}
         bulkDecide={decides ? registrationsBulkDecide : undefined}
         actions={{
           load: registrationsLoad,
           exportFile: registrationsExport,
           saveReport: builderSave,
           runReport: builderExport,
+          runReady: registrationsReady,
           saveView: registrationsSaveView,
         }}
       />

@@ -20,11 +20,21 @@ export interface DatasetQuery {
   values: unknown[];
 }
 
+/** Whether a holder of these permissions may run the dataset. */
+export function mayUseDataset(
+  held: { has(p: string): boolean },
+  d: Pick<DatasetDefinition, 'permission' | 'orPermissions'>,
+): boolean {
+  return held.has(d.permission) || (d.orPermissions ?? []).some((p) => held.has(p));
+}
+
 export interface DatasetDefinition {
   id: string;
   title: string;
   /** Permission the requester must hold. */
   permission: string;
+  /** … or any of these instead (a report two teams use, e.g. admission fees for Accounts). */
+  orPermissions?: string[];
   /** Scope type the API resolves into params.sectionIds when the requester is scoped. */
   scope?: 'class_section';
   columns: DatasetColumn[];
@@ -661,6 +671,8 @@ export const DATASETS: Record<string, DatasetDefinition> = {
     id: 'admission_fee_collection',
     title: 'Admission fee collection',
     permission: 'admissions.application.view',
+    // Accounts take these fees at the counter (docs/design/52)
+    orPermissions: ['fees.ledger.view'],
     maxRows: 50_000,
     columns: [
       { key: 'on_date', header: 'Date', type: 'date', width: 12 },

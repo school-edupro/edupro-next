@@ -54,6 +54,39 @@ async function exportFile(
   }
 }
 
+/** A ready-made admission report for the view, made at once (docs/design/52, part 1). */
+async function ready(
+  key: string,
+  q: AdmissionListQuery & { format: 'xlsx' | 'pdf' },
+  scope: AdmissionListScope,
+): Promise<Result<{ filename: string; contentType: string; base64: string }>> {
+  if (!/^[a-z_]{3,30}$/.test(key)) return { ok: false, error: 'Unknown report' };
+  try {
+    const data = await apiFetch<{ filename: string; contentType: string; base64: string }>(
+      `/admissions/registrations/grid/ready-made/${key}`,
+      {
+        method: 'POST',
+        body: JSON.stringify({ ...q, scope, search: q.search || undefined }),
+      },
+    );
+    return { ok: true, data };
+  } catch (error) {
+    return listError(error);
+  }
+}
+export async function admissionListReady(
+  key: string,
+  q: AdmissionListQuery & { format: 'xlsx' | 'pdf' },
+) {
+  return ready(key, q, 'list');
+}
+export async function registrationsReady(
+  key: string,
+  q: AdmissionListQuery & { format: 'xlsx' | 'pdf' },
+) {
+  return ready(key, q, 'registrations');
+}
+
 export async function admissionListLoad(q: AdmissionListQuery) {
   return load(q, 'list');
 }

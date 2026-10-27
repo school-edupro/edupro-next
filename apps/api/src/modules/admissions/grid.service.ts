@@ -140,6 +140,33 @@ export class AdmissionGridService {
     });
   }
 
+  /**
+   * Every row of a list view, searched, filtered and sorted as on screen: the ready-made reports run on
+   * it (docs/design/52).
+   */
+  async viewRows(ctx: RequestContext, dto: AdmissionGridDto): Promise<ReportRow[]> {
+    this.check(dto);
+    return this.db.tenant(requireTenant(ctx), async (c) => {
+      const loaded = await loadAdmissionReportRows(c, { showSensitive: this.sensitive(ctx) });
+      const all = dto.scope === 'registrations' ? loaded.filter((r) => r.status !== DRAFT) : loaded;
+      const mine = await this.mine(c, ctx, dto.includeAll, all);
+      const searching = Boolean(dto.search?.trim());
+      return sortReportRows(
+        applyReportFilters(
+          applyReportSearch(
+            searching ? all : all.filter(this.tab(dto.status, mine)),
+            dto.search,
+            DS,
+          ),
+          dto.filters as ReportFilter[],
+          DS,
+        ),
+        dto.sort.length ? dto.sort : DEFAULT_SORT,
+        DS,
+      );
+    });
+  }
+
   async grid(ctx: RequestContext, dto: AdmissionGridDto) {
     this.check(dto);
     return this.db.tenant(requireTenant(ctx), async (c) => {

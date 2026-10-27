@@ -5,6 +5,7 @@ import {
   rendererOrNull,
   type PoolClient,
   type TenantContext,
+  mayUseDataset,
 } from '@edupro/db';
 import { ScopePolicy } from '../../common/access/scope.policy';
 import { AuditService } from '../../common/audit/audit.service';
@@ -99,7 +100,7 @@ export class ReportsService {
     const tenant = requireTenant(ctx);
     const dataset = datasetOrNull(datasetId);
     if (!dataset) throw new DomainError('not-found', 'Unknown dataset');
-    if (!ctx.permissions?.has(dataset.permission)) {
+    if (!mayUseDataset(ctx.permissions ?? new Set<string>(), dataset)) {
       throw new DomainError(
         'permission-denied',
         `Exporting ${dataset.title} requires ${dataset.permission}`,

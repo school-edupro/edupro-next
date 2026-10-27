@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { datasetOrNull, isValidCron, nextCronRun, rendererOrNull } from '@edupro/db';
+import { datasetOrNull, isValidCron, nextCronRun, rendererOrNull, mayUseDataset } from '@edupro/db';
 import { createZodDto } from 'nestjs-zod';
 import { z } from 'zod';
 import { AuditService } from '../../common/audit/audit.service';
@@ -90,7 +90,7 @@ export class SchedulesService {
   private validate(ctx: RequestContext, dto: ScheduleDto) {
     const def = datasetOrNull(dto.dataset) ?? rendererOrNull(dto.dataset);
     if (!def) throw new DomainError('validation-failed', 'Unknown dataset', { status: 400 });
-    if (!ctx.permissions?.has(def.permission))
+    if (!mayUseDataset(ctx.permissions ?? new Set<string>(), def))
       throw new DomainError('permission-denied', `${def.title} requires ${def.permission}`, {
         status: 403,
       });

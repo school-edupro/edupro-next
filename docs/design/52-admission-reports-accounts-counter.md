@@ -51,7 +51,7 @@ Defaults taken (change on request):
 
 ## Parts
 
-**Part 1 — Ready-made admission reports and Download report (admin).**
+**Part 1 — Ready-made admission reports and Download report (admin) — built 27 Oct 2026.**
 
 The Admissions list's Download report is always shown. It has two groups:
 
@@ -67,7 +67,7 @@ The Admissions list's Download report is always shown. It has two groups:
 Each report runs for the list's current filters, as Excel or PDF through the report builder's export.
 When no saved report exists, a short line points to "Save as report".
 
-**Part 2 — Counter API for Accounts.**
+**Part 2 — Counter API for Accounts — built 27 Oct 2026.**
 
 - `GET fees/admission-counter?q=` (permission `admissions.fee.collect`) finds registrations by
   registration / admission no., candidate name, or parent mobile / email. It returns only the fee
@@ -79,7 +79,7 @@ When no saved report exists, a short line points to "Save as report".
 - `GET fees/admission-counter/:id/receipts/:receiptId/pdf` gives the receipt.
 - Every receipt is audited.
 
-**Part 3 — Fees → Cashier "Admission fees" tab (admin).**
+**Part 3 — Fees → Cashier "Admission fees" tab (admin) — built 27 Oct 2026.**
 
 - A search box (searchable) and a results table: candidate, number, class, category, due, amount.
 - **Collect** opens the payment form (mode, reference, instrument no., bank; amount shown, not editable).
@@ -88,10 +88,58 @@ When no saved report exists, a short line points to "Save as report".
 - Fees → Reports gets the Admission fee collection link for `fees.ledger.view`.
 - Accounts sees no Admissions menu.
 
-**Part 4 — Tests and check.**
+**Part 4 — Tests and check — done 27 Oct 2026.**
 
 - e2e: the accountant (dev-accounts) finds a registration, sees no form answers, takes the registration
   fee (number given) and then the admission fee; it is refused twice and refused when nothing is due;
   the office's desk still works.
 - a11y for the tab and the Download report dialog.
 - A browser check as dev-accounts.
+
+## As built (27 Oct 2026)
+
+**Ready-made reports (part 1):**
+
+- `GET admissions/registrations/grid/ready-made` lists them, and `POST …/ready-made/:key` (the list's
+  view plus `format`) runs one. Both need `admissions.application.view`.
+- The API makes the file at once, as an Excel or a letterhead PDF (the same `tablePdf` as the approvals
+  export), so no workers are needed. It comes back as base64, and the browser saves it.
+- The rows are the list's own: `AdmissionGridService.viewRows` (tab, filters, search, sort).
+- The Registrations page has the same Download report.
+- The summaries count registrations. Headers are kept short so they fit the PDF.
+
+**Counter (parts 2-3):**
+
+- The routes are `GET fees/admission-counter?q=&due=1|0`, `GET …/today`, `POST …/:id/collect
+{kind, mode, …}` and `GET …/:id/receipts/:receiptId/pdf`, all on `admissions.fee.collect`.
+- Collecting goes through the desk's and admit's own `collect`, so the rules are unchanged. A wrong kind
+  or nothing due gives 409.
+- Parent = the form's father / mother name, else the applicant's name. A lapsed offer shows "Offer
+  lapsed" with no Collect.
+- The admin page is `/fees/cashier/admission`, with tabs on both cashier pages (Pupils' fees / Admission
+  fees).
+- Receipts use the View and Download icons through `/api/admission-counter/<id>/receipts/<rid>`. The
+  CSS prefix is `ep-afc`.
+
+**Report for Accounts:**
+
+- Datasets may name `orPermissions`, checked by `mayUseDataset` in packages/db.
+- `admission_fee_collection` also opens for `fees.ledger.view`, as does the page
+  `/admissions/fee-collection`.
+- Fees → Reports → Collection links to it as "Admission fees".
+
+**Checked:**
+
+- Admission e2e: 62 pass.
+  - The accountant finds a registration by mobile and sees no form answers.
+  - The wrong kind of fee is refused.
+  - The registration fee is taken and gives the number; a second take is refused.
+  - The receipt PDF and today's list work.
+  - The admission fee is taken by cheque and gives the admission number.
+  - The clerk is refused, and so is the accountant on the ready-made reports.
+  - All 12 report files (6 reports × Excel and PDF) are made.
+- Reports e2e: 24 pass. db: 57 pass.
+- a11y: the counter, the cashier, the lists and the fee collection page pass.
+- Browser, as dev-accounts: no Admissions menu, the counter and the fee collection report open; the
+  admin's Download report dialog saves the PDF.
+- Dev school 1 has no registration with a fee due now, so no money was taken on dev data.
