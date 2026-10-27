@@ -3,9 +3,24 @@ import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import type { FastifyReply } from 'fastify';
 import { AuthenticatedOnly } from '../../common/auth/decorators';
 import { ReqCtx, type RequestContext } from '../../common/http/request-context';
-import { ApprovalDecideDto, ApprovalsQueryDto } from './approvals.dto';
+import { ApprovalCorrectDto, ApprovalDecideDto, ApprovalsQueryDto } from './approvals.dto';
 import { AdmissionApprovalsService } from './approvals.service';
-import { PointsCheckDto, SendBackDto } from './process.dto';
+import { SendBackDto } from './process.dto';
+
+/** A PDF from the desk's base64 answer, shown in the browser or saved. */
+const pdf = (
+  reply: FastifyReply,
+  f: { filename: string; contentType: string; base64: string },
+  download: boolean,
+) =>
+  void reply
+    .header('content-type', f.contentType)
+    .header(
+      'content-disposition',
+      `${download ? 'attachment' : 'inline'}; filename="${f.filename}"`,
+    )
+    .header('cache-control', 'private, no-store')
+    .send(Buffer.from(f.base64, 'base64'));
 
 /**
  * Admission approvers (docs/design/50): open to any signed-in staff; each registration is checked —
@@ -24,6 +39,21 @@ export class AdmissionApprovalsController {
   @AuthenticatedOnly()
   list(@ReqCtx() ctx: RequestContext, @Query() q: ApprovalsQueryDto) {
     return this.svc.list(ctx, q);
+  }
+
+  @Get('export')
+  @ApiOperation({ summary: 'The list as filtered, to Excel (format=xlsx) or PDF (format=pdf)' })
+  @AuthenticatedOnly()
+  async export(
+    @ReqCtx() ctx: RequestContext,
+    @Query() q: ApprovalsQueryDto,
+    @Res() reply: FastifyReply,
+  ) {
+    const f = await this.svc.export(ctx, q);
+    void reply
+      .header('content-type', f.contentType)
+      .header('content-disposition', `attachment; filename="${f.filename}"`)
+      .send(f.bytes);
   }
 
   @Get(':id')
@@ -49,13 +79,38 @@ export class AdmissionApprovalsController {
     return this.svc.sendBack(ctx, id, dto);
   }
 
-  @Post(':id/points')
+  @Post(':id/correct')
   @ApiOperation({
-    summary: 'Confirm the merit points, awarding a criterion differently with a reason',
+    summary: 'Correct answers (with a reason); points and fee category are worked out again',
   })
   @AuthenticatedOnly()
-  points(@ReqCtx() ctx: RequestContext, @Param('id') id: string, @Body() dto: PointsCheckDto) {
-    return this.svc.points(ctx, id, dto);
+  correct(@ReqCtx() ctx: RequestContext, @Param('id') id: string, @Body() dto: ApprovalCorrectDto) {
+    return this.svc.correct(ctx, id, dto);
+  }
+
+  @Get(':id/form.pdf')
+  @ApiOperation({ summary: 'The registration form PDF' })
+  @AuthenticatedOnly()
+  async formPdf(
+    @ReqCtx() ctx: RequestContext,
+    @Param('id') id: string,
+    @Query('download') download: string | undefined,
+    @Res() reply: FastifyReply,
+  ) {
+    pdf(reply, await this.svc.formPdf(ctx, id), download === '1');
+  }
+
+  @Get(':id/receipts/:receiptId/pdf')
+  @ApiOperation({ summary: 'A payment receipt of the registration' })
+  @AuthenticatedOnly()
+  async receiptPdf(
+    @ReqCtx() ctx: RequestContext,
+    @Param('id') id: string,
+    @Param('receiptId') receiptId: string,
+    @Query('download') download: string | undefined,
+    @Res() reply: FastifyReply,
+  ) {
+    pdf(reply, await this.svc.receiptPdf(ctx, id, receiptId), download === '1');
   }
 
   @Get(':id/files/:fileId')

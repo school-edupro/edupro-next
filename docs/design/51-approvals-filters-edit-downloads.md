@@ -33,29 +33,37 @@ address (`?class=…&stage=…`) so the back button keeps them.
 
 ## Parts
 
-**Part 1 — Filters and export (API, admin, staff app).** `GET admissions/approvals` takes
+**Part 1 — Filters and export (API, admin, staff app) — built 27 Oct 2026.** `GET admissions/approvals` takes
 `cycleId`, `classId`, `stage`, `level`, `categoryId`, `status`, `q`, `from`, `to`, `overdue`; the
 answer gains the choices for each filter. `GET admissions/approvals/export.xlsx|.pdf` with the same
 filters. Both apps: a filter row (searchable drop-downs, dates, Overdue only, Clear) and Export Excel /
 Export PDF buttons.
 
-**Part 2 — Edit the form on the review (API, packages/ui).** `POST admissions/approvals/:id/correct`
+**Part 2 — Edit the form on the review (API, packages/ui) — built 27 Oct 2026.** `POST admissions/approvals/:id/correct`
 (answers + reason) through the office's correction (`officeCorrect`: checked against the form, each
 change kept), allowed while the registration waits at the approver's level. The review's "The form"
 section gets **Edit answers**: the tab's questions as inputs (the form's own types: text, date,
 select from its list, yes / no, number), one reason, Save; the change list ("Mother education:
 Graduate → Post Graduate, by Anita, 27 Oct") under the form.
 
-**Part 3 — Points and category follow the answers (API, packages/ui).** After an approver's edit the
+**Part 3 — Points and category follow the answers (API, packages/ui) — built 27 Oct 2026.** After an approver's edit the
 points are worked out again (an approver's edit clears a confirmation, so they follow) and the fee
 category is matched again from the answers (General when none); the history records "Fee category
 changed to General after a correction". The review drops "Check or award differently" and the
 category drop-down for approvers; the approve call no longer sends a category. The office's
 registration page keeps both.
 
-**Part 4 — Downloads and the sample files.** On the review: **Registration form** (View / Download,
+**Part 4 — Downloads and the sample files — built 27 Oct 2026.** On the review: **Registration form** (View / Download,
 the same PDF as the office's) and each **payment receipt** (View / Download), through
-`admissions/approvals/:id/form.pdf` and `…/receipts/:receiptId.pdf`, checked like the documents.
+`admissions/approvals/:id/form.pdf` and `…/receipts/:receiptId/pdf`, checked like the documents.
 The sample seed (`scripts/seed-admission-merit.mjs`) makes a small placeholder image and PDF per
 registration as its own uploads (owner = the registration), so the portal and the review show real
 files; the existing 50 are given theirs without reseeding.
+
+As built (27 Oct 2026): filters are worked on the tab's rows (the choices come back as `options`);
+`GET admissions/approvals/export?format=xlsx|pdf`; `POST …/:id/correct` (the approvals points route is
+gone: approvers do not award differently); `…/:id/form.pdf`, `…/:id/receipts/:receiptId/pdf`; the apps
+proxy all of a registration's files through one route (`/api/admission-approvals/<id>/files|form|
+receipts/…`). The seed script's `--files` gave the 50 sample registrations their own placeholder
+uploads (the seed makes them for new ones). Checked: Anita changed a mother's qualification, the
+points went 41 → 49 with the change logged, then set back.

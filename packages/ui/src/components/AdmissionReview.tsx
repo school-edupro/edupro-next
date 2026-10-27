@@ -70,19 +70,35 @@ export interface AdmissionReviewData {
   }>;
   remarks: ReviewRemark[];
   fields: Array<{ key: string; label: string }>;
+  /** the answers the approver may change, tab by tab (docs/design/51) */
+  edit: Array<{
+    title: string;
+    fields: Array<{
+      key: string;
+      label: string;
+      type: string;
+      required: boolean;
+      options: string[] | null;
+      value: string | string[];
+    }>;
+  }>;
+  changes: Array<{
+    id: string;
+    label: string;
+    from: string | null;
+    to: string | null;
+    reason: string;
+    by: string | null;
+    at: string;
+  }>;
+  receipts: Array<{ id: string; receiptNo: string; amount: number; date: string; head: string }>;
+  hasForm: boolean;
 }
 type Result = { ok: true } | { ok: false; error: string };
 export interface AdmissionReviewActions {
-  decide: (input: {
-    decision: 'approve' | 'hold' | 'reject';
-    remarks: string;
-    categoryId?: string;
-  }) => Promise<Result>;
+  decide: (input: { decision: 'approve' | 'hold' | 'reject'; remarks: string }) => Promise<Result>;
   sendBack: (input: { fields: string[]; remark: string; dueOn?: string }) => Promise<Result>;
-  points: (input: {
-    action: 'confirm';
-    lines: Array<{ name: string; points: number; reason?: string }>;
-  }) => Promise<Result>;
+  correct: (input: { answers: Record<string, unknown>; reason: string }) => Promise<Result>;
 }
 
 const DECISION: Record<string, string> = {
@@ -146,37 +162,127 @@ function FileIcons({ view, save, label }: { view: string; save: string; label: s
   );
 }
 
+type Field = AdmissionReviewData['edit'][number]['fields'][number];
+
+/** One answer as an input of the form's own kind (docs/design/51). */
+function AnswerInput({
+  f,
+  value,
+  onChange,
+}: {
+  f: Field;
+  value: string | string[];
+  onChange: (v: string | string[]) => void;
+}) {
+  const text = Array.isArray(value) ? value.join(', ') : value;
+  if (f.type === 'select' || f.type === 'radio' || f.type === 'yesno') {
+    const options = f.type === 'yesno' ? ['Yes', 'No'] : (f.options ?? []);
+    return (
+      <select
+        className="ep-select"
+        aria-label={f.label}
+        value={text}
+        onChange={(e) => onChange(e.target.value)}
+      >
+        <option value="">Choose…</option>
+        {text && !options.includes(text) ? <option value={text}>{text}</option> : null}
+        {options.map((o) => (
+          <option key={o} value={o}>
+            {o}
+          </option>
+        ))}
+      </select>
+    );
+  }
+  if (f.type === 'checkbox' && f.options?.length) {
+    const list = Array.isArray(value) ? value : value ? [value] : [];
+    return (
+      <span className="ep-arv__ticks">
+        {f.options.map((o) => (
+          <label key={o} className="ep-check">
+            <input
+              type="checkbox"
+              checked={list.includes(o)}
+              onChange={(e) =>
+                onChange(e.target.checked ? [...list, o] : list.filter((x) => x !== o))
+              }
+            />
+            <span>{o}</span>
+          </label>
+        ))}
+      </span>
+    );
+  }
+  if (f.type === 'textarea')
+    return (
+      <textarea
+        className="ep-input"
+        rows={3}
+        aria-label={f.label}
+        value={text}
+        onChange={(e) => onChange(e.target.value)}
+      />
+    );
+  return (
+    <input
+      className="ep-input"
+      aria-label={f.label}
+      type={
+        f.type === 'date'
+          ? 'date'
+          : f.type === 'email'
+            ? 'email'
+            : f.type === 'number'
+              ? 'number'
+              : f.type === 'mobile'
+                ? 'tel'
+                : 'text'
+      }
+      value={text}
+      onChange={(e) => onChange(e.target.value)}
+    />
+  );
+}
+
 /**
- * The review of a registration waiting at an approver's level (docs/design/50), the same in the admin
- * and the staff app: the candidate, the points (awarded differently with a reason), the documents, the
- * answers by tab, the stage path with every level's remark, and the decision with its remark.
+ * The review of a registration waiting at an approver's level (docs/design/50, 51), the same in the
+ * admin and the staff app: the candidate, the points (worked out from the answers), the registration
+ * form and receipts, the documents, the answers by tab (editable, with a reason), the stage path with
+ * every level's remark, and the decision with its remark.
  */
 export function AdmissionReview({
   data,
-  fileBase,
+  baseUrl,
   backHref,
   actions,
 }: {
   data: AdmissionReviewData;
-  /** where this registration's documents are served: `${fileBase}/<file id>` (?download=1 saves it) */
-  fileBase: string;
+  /**
+   * where this registration's files are served: `${baseUrl}/files/<id>`, `${baseUrl}/form`,
+   * `${baseUrl}/receipts/<id>` (?download=1 saves a copy)
+   */
+  baseUrl: string;
   backHref: string;
   actions: AdmissionReviewActions;
 }) {
   const [remarks, setRemarks] = useState('');
-  const [categoryId, setCategoryId] = useState(data.categoryId ?? '');
   const [msg, setMsg] = useState<{ tone: 'success' | 'danger'; text: string } | null>(null);
-  const [mode, setMode] = useState<'decide' | 'send' | 'points'>('decide');
+  const [mode, setMode] = useState<'decide' | 'send'>('decide');
   const [fields, setFields] = useState<string[]>([]);
   const [dueOn, setDueOn] = useState('');
-  const [lines, setLines] = useState(
-    (data.points?.lines ?? []).map((l) => ({ ...l, reason: l.reason ?? '' })),
+  const [editing, setEditing] = useState(false);
+  const [answers, setAnswers] = useState<Record<string, string | string[]>>(() =>
+    Object.fromEntries(data.edit.flatMap((t) => t.fields.map((f) => [f.key, f.value]))),
   );
-  const [pending, start] = useTransition();
+  const [why, setWhy] = useState('');
   const [noPhoto, setNoPhoto] = useState(false);
-  const atDocs = data.current?.kind === 'document_check';
-  const fileUrl = (fileId: string, download?: boolean) =>
-    `${fileBase}/${fileId}${download ? '?download=1' : ''}`;
+  const [pending, start] = useTransition();
+  const url = (path: string, download?: boolean) =>
+    `${baseUrl}/${path}${download ? '?download=1' : ''}`;
+  const original = new Map(data.edit.flatMap((t) => t.fields.map((f) => [f.key, f])));
+  const changedKeys = [...original.keys()].filter(
+    (k) => JSON.stringify(answers[k] ?? '') !== JSON.stringify(original.get(k)!.value),
+  );
 
   const decide = (decision: 'approve' | 'hold' | 'reject') =>
     start(async () => {
@@ -184,11 +290,7 @@ export function AdmissionReview({
         setMsg({ tone: 'danger', text: 'Write a remark first (at least 3 letters).' });
         return;
       }
-      const r = await actions.decide({
-        decision,
-        remarks: remarks.trim(),
-        ...(atDocs && categoryId && categoryId !== data.categoryId ? { categoryId } : {}),
-      });
+      const r = await actions.decide({ decision, remarks: remarks.trim() });
       if (r.ok) window.location.assign(`${backHref}?ok=${decision}`);
       else setMsg({ tone: 'danger', text: r.error });
     });
@@ -206,21 +308,23 @@ export function AdmissionReview({
       if (r.ok) window.location.assign(`${backHref}?ok=sent-back`);
       else setMsg({ tone: 'danger', text: r.error });
     });
-  const savePoints = () =>
+  const saveAnswers = () =>
     start(async () => {
-      const changed = lines.filter((l) => l.points !== l.auto);
-      if (changed.some((l) => l.reason.trim().length < 3)) {
-        setMsg({ tone: 'danger', text: 'Give the reason for each criterion awarded differently.' });
+      if (!changedKeys.length) {
+        setMsg({ tone: 'danger', text: 'Nothing has changed yet.' });
         return;
       }
-      const r = await actions.points({
-        action: 'confirm',
-        lines: lines.map((l) => ({
-          name: l.name,
-          points: l.points,
-          ...(l.points !== l.auto ? { reason: l.reason.trim() } : {}),
-        })),
-      });
+      if (why.trim().length < 3) {
+        setMsg({ tone: 'danger', text: 'Give the reason for the change.' });
+        return;
+      }
+      const out: Record<string, unknown> = {};
+      for (const k of changedKeys) {
+        const f = original.get(k)!;
+        const v = answers[k];
+        out[k] = f.type === 'yesno' ? v === 'Yes' : f.type === 'number' && v !== '' ? Number(v) : v;
+      }
+      const r = await actions.correct({ answers: out, reason: why.trim() });
       if (r.ok) window.location.reload();
       else setMsg({ tone: 'danger', text: r.error });
     });
@@ -231,7 +335,7 @@ export function AdmissionReview({
         {data.photoFileId && !noPhoto ? (
           <img
             className="ep-arv__photo"
-            src={fileUrl(data.photoFileId)}
+            src={url(`files/${data.photoFileId}`)}
             alt=""
             onError={() => setNoPhoto(true)}
           />
@@ -290,158 +394,204 @@ export function AdmissionReview({
                     <tr>
                       <th scope="col">Criterion</th>
                       <th scope="col">Of</th>
-                      <th scope="col">From the form</th>
-                      <th scope="col">Counts</th>
-                      {mode === 'points' ? <th scope="col">Reason</th> : null}
+                      <th scope="col">Points</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {(mode === 'points' ? lines : data.points.lines).map((l, i) => (
+                    {data.points.lines.map((l) => (
                       <tr key={l.name}>
                         <td>
                           {l.name}
                           {l.check ? <span className="ep-arv__check">Check: {l.check}</span> : null}
-                          {l.reason && mode !== 'points' ? (
+                          {l.reason ? (
                             <span className="ep-field__help" style={{ display: 'block' }}>
-                              Awarded differently: {l.reason}
+                              Awarded by the office: {l.reason}
                             </span>
                           ) : null}
                         </td>
                         <td className="ep-num">{l.max}</td>
-                        <td className="ep-num">{l.auto}</td>
                         <td className="ep-num">
-                          {mode === 'points' ? (
-                            <input
-                              className="ep-input ep-arv__num"
-                              inputMode="decimal"
-                              aria-label={`Points for ${l.name}`}
-                              value={Number.isNaN(l.points) ? '' : l.points}
-                              onChange={(e) => {
-                                const t = e.target.value.replace(/[^\d.-]/g, '');
-                                setLines((cur) =>
-                                  cur.map((x, j) =>
-                                    j === i
-                                      ? { ...x, points: t === '' || t === '-' ? 0 : Number(t) }
-                                      : x,
-                                  ),
-                                );
-                              }}
-                            />
-                          ) : (
-                            <strong>{l.points}</strong>
-                          )}
+                          <strong>{l.points}</strong>
                         </td>
-                        {mode === 'points' ? (
-                          <td>
-                            <input
-                              className="ep-input"
-                              aria-label={`Reason for ${l.name}`}
-                              disabled={l.points === l.auto}
-                              value={l.reason ?? ''}
-                              maxLength={300}
-                              onChange={(e) =>
-                                setLines((cur) =>
-                                  cur.map((x, j) =>
-                                    j === i ? { ...x, reason: e.target.value } : x,
-                                  ),
-                                )
-                              }
-                            />
-                          </td>
-                        ) : null}
                       </tr>
                     ))}
                   </tbody>
                 </table>
               </div>
               <p className="ep-field__help" style={{ marginBottom: 0 }}>
-                {data.points.confirmedAt
-                  ? `Confirmed${data.points.confirmedBy ? ` by ${data.points.confirmedBy}` : ''}.`
-                  : 'Worked out from the form; not confirmed yet.'}
+                Worked out from the answers: correct an answer below and the points and the fee
+                category follow.
                 {data.merit !== null ? ` Merit with marks: ${String(data.merit)}.` : ''}
               </p>
-              {data.mayDecide && atDocs ? (
-                mode === 'points' ? (
-                  <div className="ep-arv__acts">
-                    <button
-                      type="button"
-                      className="ep-btn ep-btn--primary ep-btn--sm"
-                      disabled={pending}
-                      onClick={savePoints}
-                    >
-                      Confirm the points
-                    </button>
-                    <button
-                      type="button"
-                      className="ep-btn ep-btn--ghost ep-btn--sm"
-                      onClick={() => setMode('decide')}
-                    >
-                      Cancel
-                    </button>
-                  </div>
-                ) : (
-                  <div className="ep-arv__acts">
-                    <button
-                      type="button"
-                      className="ep-btn ep-btn--secondary ep-btn--sm"
-                      onClick={() => setMode('points')}
-                    >
-                      Check or award differently
-                    </button>
-                  </div>
-                )
-              ) : null}
             </section>
           ) : null}
 
           <section className="ep-card" aria-labelledby="arv-docs">
             <h3 id="arv-docs" className="ep-arv__h">
-              Documents
+              Registration form, receipts and documents
             </h3>
-            {data.documents.length === 0 ? (
-              <p className="ep-field__help">No documents asked.</p>
-            ) : (
-              <ul className="ep-arv__docs">
-                {data.documents.map((d) => (
-                  <li key={d.key}>
-                    <span>{d.label}</span>
-                    {d.files.length ? (
-                      <span style={{ display: 'inline-flex', gap: 'var(--sp-2)' }}>
-                        {d.files.map((f, i) => (
-                          <FileIcons
-                            key={f.id}
-                            view={fileUrl(f.id)}
-                            save={fileUrl(f.id, true)}
-                            label={`${d.label}${d.files.length > 1 ? ` ${String(i + 1)}` : ''}`}
-                          />
-                        ))}
-                      </span>
-                    ) : (
-                      <span className="ep-arv__check">Not uploaded</span>
-                    )}
-                  </li>
-                ))}
-              </ul>
-            )}
+            <ul className="ep-arv__docs">
+              {data.hasForm ? (
+                <li>
+                  <span>
+                    <strong>Registration form</strong>
+                  </span>
+                  <FileIcons
+                    view={url('form')}
+                    save={url('form', true)}
+                    label="Registration form"
+                  />
+                </li>
+              ) : null}
+              {data.receipts.map((r) => (
+                <li key={r.id}>
+                  <span>
+                    <strong>Receipt {r.receiptNo}</strong>
+                    <span className="ep-field__help" style={{ display: 'block' }}>
+                      {r.head} · ₹{r.amount.toLocaleString('en-IN')} · {r.date}
+                    </span>
+                  </span>
+                  <FileIcons
+                    view={url(`receipts/${r.id}`)}
+                    save={url(`receipts/${r.id}`, true)}
+                    label={`Receipt ${r.receiptNo}`}
+                  />
+                </li>
+              ))}
+              {data.documents.map((d) => (
+                <li key={d.key}>
+                  <span>{d.label}</span>
+                  {d.files.length ? (
+                    <span style={{ display: 'inline-flex', gap: 'var(--sp-2)' }}>
+                      {d.files.map((f, i) => (
+                        <FileIcons
+                          key={f.id}
+                          view={url(`files/${f.id}`)}
+                          save={url(`files/${f.id}`, true)}
+                          label={`${d.label}${d.files.length > 1 ? ` ${String(i + 1)}` : ''}`}
+                        />
+                      ))}
+                    </span>
+                  ) : (
+                    <span className="ep-arv__check">Not uploaded</span>
+                  )}
+                </li>
+              ))}
+            </ul>
+            {!data.receipts.length ? (
+              <p className="ep-field__help" style={{ marginBottom: 0 }}>
+                No payment receipt yet.
+              </p>
+            ) : null}
           </section>
 
           <section className="ep-card" aria-labelledby="arv-form">
-            <h3 id="arv-form" className="ep-arv__h">
-              The form
-            </h3>
-            {data.sections.map((s, i) => (
-              <details key={s.title} className="ep-arv__sec" open={i === 0}>
-                <summary>{s.title}</summary>
-                <dl className="ep-arv__dl">
-                  {s.items.map((x) => (
-                    <div key={x.label}>
-                      <dt>{x.label}</dt>
-                      <dd>{x.value}</dd>
+            <div className="ep-arv__headrow">
+              <h3 id="arv-form" className="ep-arv__h">
+                The form
+              </h3>
+              {data.mayDecide && data.edit.length && !editing ? (
+                <button
+                  type="button"
+                  className="ep-btn ep-btn--secondary ep-btn--sm"
+                  onClick={() => setEditing(true)}
+                >
+                  Edit answers
+                </button>
+              ) : null}
+            </div>
+            {editing ? (
+              <>
+                {data.edit.map((t, i) => (
+                  <details key={t.title} className="ep-arv__sec" open={i === 0}>
+                    <summary>{t.title}</summary>
+                    <div className="ep-arv__edit">
+                      {t.fields.map((f) => (
+                        <label key={f.key} className="ep-field" style={{ margin: 0 }}>
+                          <span className="ep-field__label">
+                            {f.label}
+                            {f.required ? ' *' : ''}
+                            {changedKeys.includes(f.key) ? ' (changed)' : ''}
+                          </span>
+                          <AnswerInput
+                            f={f}
+                            value={answers[f.key] ?? ''}
+                            onChange={(v) => setAnswers((cur) => ({ ...cur, [f.key]: v }))}
+                          />
+                        </label>
+                      ))}
                     </div>
+                  </details>
+                ))}
+                <div className="ep-arv__save">
+                  <label className="ep-field" style={{ margin: 0, flex: '1 1 18rem' }}>
+                    <span className="ep-field__label">
+                      Reason for the change (required) · {changedKeys.length} changed
+                    </span>
+                    <input
+                      className="ep-input"
+                      maxLength={500}
+                      value={why}
+                      onChange={(e) => setWhy(e.target.value)}
+                    />
+                  </label>
+                  <button
+                    type="button"
+                    className="ep-btn ep-btn--primary"
+                    disabled={pending}
+                    onClick={saveAnswers}
+                  >
+                    Save the answers
+                  </button>
+                  <button
+                    type="button"
+                    className="ep-btn ep-btn--ghost"
+                    onClick={() => {
+                      setEditing(false);
+                      setAnswers(
+                        Object.fromEntries(
+                          data.edit.flatMap((t) => t.fields.map((f) => [f.key, f.value])),
+                        ),
+                      );
+                    }}
+                  >
+                    Cancel
+                  </button>
+                </div>
+                <p className="ep-field__help" style={{ marginBottom: 0 }}>
+                  Documents and photos stay the family&rsquo;s: use Send back to ask for a new one.
+                </p>
+              </>
+            ) : (
+              data.sections.map((sct, i) => (
+                <details key={sct.title} className="ep-arv__sec" open={i === 0}>
+                  <summary>{sct.title}</summary>
+                  <dl className="ep-arv__dl">
+                    {sct.items.map((x) => (
+                      <div key={x.label}>
+                        <dt>{x.label}</dt>
+                        <dd>{x.value}</dd>
+                      </div>
+                    ))}
+                  </dl>
+                </details>
+              ))
+            )}
+            {data.changes.length ? (
+              <div className="ep-arv__changes">
+                <h4 className="ep-field__label">Changes to the answers</h4>
+                <ul>
+                  {data.changes.map((x) => (
+                    <li key={x.id}>
+                      <strong>{x.label}</strong>: {x.from || '-'} → {x.to || '-'}
+                      <span className="ep-field__help" style={{ display: 'block' }}>
+                        {x.reason} · {x.by ?? ''} · {dmy(x.at)}
+                      </span>
+                    </li>
                   ))}
-                </dl>
-              </details>
-            ))}
+                </ul>
+              </div>
+            ) : null}
           </section>
         </div>
 
@@ -454,8 +604,8 @@ export function AdmissionReview({
               <div role="group" aria-label="What to do" className="ep-arv__modes">
                 <button
                   type="button"
-                  className={`ep-btn ep-btn--sm ${mode !== 'send' ? 'ep-btn--primary' : 'ep-btn--ghost'}`}
-                  aria-pressed={mode !== 'send'}
+                  className={`ep-btn ep-btn--sm ${mode === 'decide' ? 'ep-btn--primary' : 'ep-btn--ghost'}`}
+                  aria-pressed={mode === 'decide'}
                   onClick={() => setMode('decide')}
                 >
                   Decide
@@ -469,22 +619,9 @@ export function AdmissionReview({
                   Send back to the family
                 </button>
               </div>
-              {atDocs && mode !== 'send' && data.categories.length ? (
-                <label className="ep-field">
-                  <span className="ep-field__label">Fee category</span>
-                  <select
-                    className="ep-select"
-                    value={categoryId}
-                    onChange={(e) => setCategoryId(e.target.value)}
-                  >
-                    {data.categories.map((k) => (
-                      <option key={k.id} value={k.id}>
-                        {k.name}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-              ) : null}
+              <p className="ep-field__help" style={{ marginTop: 0 }}>
+                Fee category: <strong>{data.category ?? 'General'}</strong> (from the answers)
+              </p>
               {mode === 'send' ? (
                 <fieldset className="ep-arv__fields">
                   <legend className="ep-field__label">What must the family correct?</legend>
@@ -541,7 +678,7 @@ export function AdmissionReview({
                   <button
                     type="button"
                     className="ep-btn ep-btn--primary"
-                    disabled={pending}
+                    disabled={pending || editing}
                     onClick={() => decide('approve')}
                   >
                     Approve
@@ -549,7 +686,7 @@ export function AdmissionReview({
                   <button
                     type="button"
                     className="ep-btn ep-btn--secondary"
-                    disabled={pending}
+                    disabled={pending || editing}
                     onClick={() => decide('hold')}
                   >
                     Hold
@@ -557,13 +694,18 @@ export function AdmissionReview({
                   <button
                     type="button"
                     className="ep-btn ep-btn--danger"
-                    disabled={pending}
+                    disabled={pending || editing}
                     onClick={() => decide('reject')}
                   >
                     Reject
                   </button>
                 </div>
               )}
+              {editing ? (
+                <p className="ep-field__help" style={{ marginBottom: 0 }}>
+                  Save or cancel the answers you are changing before deciding.
+                </p>
+              ) : null}
             </section>
           ) : null}
 
@@ -572,14 +714,16 @@ export function AdmissionReview({
               Decisions and remarks
             </h3>
             <ol className="ep-arv__path">
-              {data.path.map((s) => (
-                <li key={s.stageId} data-state={s.state}>
-                  <strong>{s.name}</strong>
+              {data.path.map((st) => (
+                <li key={st.stageId} data-state={st.state}>
+                  <strong>{st.name}</strong>
                   <ul>
-                    {s.levels.map((l) => (
+                    {st.levels.map((l) => (
                       <li key={l.no}>
                         <span className="ep-field__help">
-                          {s.levels.length > 1 ? `Level ${String(l.no)} · ` : ''}
+                          {st.levels.length > 1 && l.name !== `Level ${String(l.no)}`
+                            ? `Level ${String(l.no)} · `
+                            : ''}
                           {l.name}
                         </span>
                         {l.result ? (
@@ -592,7 +736,7 @@ export function AdmissionReview({
                           </span>
                         ) : (
                           <span className="ep-field__help">
-                            {s.state === 'current' ? 'Waiting' : '-'}
+                            {st.state === 'current' ? 'Waiting' : '-'}
                           </span>
                         )}
                       </li>

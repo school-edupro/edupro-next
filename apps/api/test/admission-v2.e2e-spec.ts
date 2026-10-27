@@ -1505,6 +1505,85 @@ describe('online admission (e2e)', () => {
           headers: h(u),
           json,
         });
+      // docs/design/51: filters, export, the form PDF, and an edit the category and points follow
+      const byClass = await inject({
+        method: 'GET',
+        url: `/admissions/approvals?classId=${classMini}&q=${encodeURIComponent(String(review.json().candidate).slice(0, 4))}`,
+        headers: h(teacher),
+      });
+      expect(byClass.json().data.map((x: { id: string }) => x.id)).toContain(appWalkIn);
+      expect(byClass.json().options.classes.map((x: { id: string }) => x.id)).toContain(classMini);
+      const none = await inject({
+        method: 'GET',
+        url: '/admissions/approvals?q=zzzz-nobody',
+        headers: h(teacher),
+      });
+      expect(none.json()).toMatchObject({ total: 0, data: [] });
+      for (const format of ['xlsx', 'pdf']) {
+        const ex = await inject({
+          method: 'GET',
+          url: `/admissions/approvals/export?format=${format}`,
+          headers: h(teacher),
+        });
+        expect(ex.statusCode).toBe(200);
+        expect(ex.headers['content-type']).toContain(
+          format === 'pdf' ? 'application/pdf' : 'spreadsheetml',
+        );
+      }
+      const formPdf = await inject({
+        method: 'GET',
+        url: `/admissions/approvals/${appWalkIn}/form.pdf`,
+        headers: h(teacher),
+      });
+      expect(formPdf.statusCode).toBe(200);
+      expect(formPdf.headers['content-type']).toBe('application/pdf');
+      expect(
+        (
+          await inject({
+            method: 'GET',
+            url: `/admissions/approvals/${appWalkIn}/form.pdf`,
+            headers: h(accounts),
+          })
+        ).statusCode,
+      ).toBe(404);
+      const before = review.json();
+      expect(
+        before.edit.flatMap((t: { fields: Array<{ key: string }> }) => t.fields.map((f) => f.key)),
+      ).toContain('ews');
+      const correct = (json: Record<string, unknown>) =>
+        inject({
+          method: 'POST',
+          url: `/admissions/approvals/${appWalkIn}/correct`,
+          headers: h(teacher),
+          json,
+        });
+      expect((await correct({ answers: { ews: 'Yes' } })).statusCode).toBe(400);
+      const fixed = await correct({
+        answers: { ews: 'Yes' },
+        reason: 'EWS certificate seen at the desk',
+      });
+      expect({
+        status: fixed.statusCode,
+        body: fixed.statusCode === 201 ? null : fixed.json(),
+      }).toEqual({
+        status: 201,
+        body: null,
+      });
+      expect(fixed.json().changed.map((x: { key: string }) => x.key)).toEqual(['ews']);
+      expect(fixed.json().review.category).toBe('EWS / DG');
+      expect(fixed.json().review.changes[0]).toMatchObject({
+        reason: 'EWS certificate seen at the desk',
+      });
+      // back as it was
+      const undoEws = await correct({
+        answers: {
+          ews: before.edit
+            .flatMap((t: { fields: Array<{ key: string; value: string }> }) => t.fields)
+            .find((f: { key: string }) => f.key === 'ews').value,
+        },
+        reason: 'e2e: back as it was',
+      });
+      expect(undoEws.json().review.category).toBe(before.category);
       // a remark is needed, whatever the decision
       expect((await decide(teacher, { decision: 'approve', remarks: '' })).statusCode).toBe(400);
       expect(

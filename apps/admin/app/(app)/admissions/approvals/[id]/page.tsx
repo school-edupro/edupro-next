@@ -2,7 +2,7 @@ import { AdmissionReview, PageHeader, type AdmissionReviewData } from '@edupro/u
 import { notFound } from 'next/navigation';
 import {
   approvalDecide,
-  approvalPoints,
+  approvalCorrect,
   approvalSendBack,
 } from '@/lib/admission-approvals-actions';
 import { ApiError, apiFetch } from '@/lib/api';
@@ -26,7 +26,7 @@ export default async function AdmissionApprovalPage({
       <PageHeader
         kicker="Admission approvals"
         title={data.candidate ?? 'Registration'}
-        description="Look at the form, the documents and the points, then decide with your remark."
+        description="Look at the form, the documents and the points; correct an answer if needed, then decide with your remark."
         actions={
           <a className="ep-btn ep-btn--ghost ep-btn--sm" href="/admissions/approvals">
             All approvals
@@ -36,11 +36,11 @@ export default async function AdmissionApprovalPage({
       <AdmissionReview
         data={data}
         backHref="/admissions/approvals"
-        fileBase={`/api/admission-approvals/${id}/files`}
+        baseUrl={`/api/admission-approvals/${id}`}
         actions={{
           decide: approvalDecide.bind(null, id),
           sendBack: approvalSendBack.bind(null, id),
-          points: approvalPoints.bind(null, id),
+          correct: approvalCorrect.bind(null, id),
         }}
       />
     </>

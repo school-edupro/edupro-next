@@ -4,6 +4,7 @@
  *
  *   node scripts/seed-admission-merit.mjs --yes      clear Alpha's registrations, seed 50, check
  *   node scripts/seed-admission-merit.mjs --check    only the check
+ *   node scripts/seed-admission-merit.mjs --files    give the sample registrations their own files
  *
  * Needs the local database (DATABASE_MIGRATOR_URL on localhost) and the API on :4000 (the points are
  * worked out by EduPro's own Recalculate). Writes answers and numbers directly, so no message is queued
@@ -13,6 +14,8 @@
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
+import { mkdirSync, writeFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const require = createRequire(join(root, 'package.json'));
@@ -36,7 +39,7 @@ if (!/@(localhost|127\.0\.0\.1)(:\d+)?\//.test(url)) {
   console.error('Refused: DATABASE_MIGRATOR_URL is not the local database.');
   process.exit(1);
 }
-if (!args.has('--yes') && !args.has('--check')) {
+if (!args.has('--yes') && !args.has('--check') && !args.has('--files')) {
   console.error(
     'This deletes every registration of school 1. Run with --yes (or --check to only check).',
   );
@@ -69,6 +72,101 @@ const tenant = async () => {
     [SCHOOL, `{${SCHOOL}}`],
   );
 };
+
+// ---- the registrations' own files (docs/design/51) ----------------------------------------------------
+// a small grey photo and a one-page PDF, stored as uploads of the registration, so the family's portal
+// and the approver's review show them like any upload
+const PNG = Buffer.from(
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mN8/5+hHgAHggJ/PchI7wAAAABJRU5ErkJggg==',
+  'base64',
+);
+const pdfOf = (title) => {
+  const text = `BT /F1 18 Tf 72 720 Td (${title.replace(/[()\\]/g, '')}) Tj 0 -28 Td /F1 11 Tf (Sample document for testing - docs/design/49) Tj ET`;
+  const objs = [
+    '<< /Type /Catalog /Pages 2 0 R >>',
+    '<< /Type /Pages /Kids [3 0 R] /Count 1 >>',
+    '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >>',
+    `<< /Length ${text.length} >>\nstream\n${text}\nendstream`,
+    '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>',
+  ];
+  let out = '%PDF-1.4\n';
+  const at = [];
+  objs.forEach((o, i) => {
+    at.push(out.length);
+    out += `${i + 1} 0 obj\n${o}\nendobj\n`;
+  });
+  const xref = out.length;
+  out += `xref\n0 ${objs.length + 1}\n0000000000 65535 f \n${at.map((n) => `${String(n).padStart(10, '0')} 00000 n \n`).join('')}`;
+  out += `trailer\n<< /Size ${objs.length + 1} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF\n`;
+  return Buffer.from(out, 'latin1');
+};
+const UPLOADS = join(root, process.env.STORAGE_LOCAL_DIR ?? '.data/uploads');
+async function ownFile(appId, key, label) {
+  const photo = /photo/.test(key);
+  const bytes = photo ? PNG : pdfOf(label);
+  const ext = photo ? 'png' : 'pdf';
+  const now = new Date();
+  const objectKey = `school-${SCHOOL}/${now.getUTCFullYear()}/${String(now.getUTCMonth() + 1).padStart(2, '0')}/sample-${appId}-${key}.${ext}`;
+  mkdirSync(dirname(join(UPLOADS, objectKey)), { recursive: true });
+  writeFileSync(join(UPLOADS, objectKey), bytes);
+  const r = await q(
+    `INSERT INTO files (school_id, bucket, object_key, content_type, size_bytes, sha256, original_name, owner_entity_type,
+                        owner_entity_id, classification, status, storage_driver)
+     VALUES ($1, 'local', $2, $3, $4, $5, $6, 'application', $7, 'sensitive', 'ready', 'local') RETURNING id::text`,
+    [
+      SCHOOL,
+      objectKey,
+      photo ? 'image/png' : 'application/pdf',
+      bytes.length,
+      createHash('sha256').update(bytes).digest('hex'),
+      `${key}.${ext}`,
+      appId,
+    ],
+  );
+  return r[0].id;
+}
+/** Every file answer of a registration that is not its own upload made its own (a sample file). */
+async function ownFiles(appId, data, def) {
+  const fileKeys = def.fields
+    .filter((f) => f.type === 'file' || f.type === 'photo')
+    .map((f) => [f.key, f.label]);
+  const owned = new Set(
+    (
+      await q(
+        `SELECT id::text FROM files WHERE owner_entity_type = 'application' AND owner_entity_id = $1`,
+        [appId],
+      )
+    ).map((x) => x.id),
+  );
+  let changed = false;
+  for (const [key, label] of fileKeys) {
+    const v = data[key];
+    if (!Array.isArray(v) || !v.length || v.every((x) => owned.has(String(x)))) continue;
+    data[key] = [await ownFile(appId, key, label)];
+    changed = true;
+  }
+  return changed;
+}
+async function fixFiles() {
+  await c.query('BEGIN');
+  await tenant();
+  const apps = await q(
+    `SELECT a.id::text, a.data, COALESCE(a.form_snapshot, f.def) AS def FROM applications a
+                          LEFT JOIN admission_forms f ON f.id = a.form_id WHERE a.school_id = $1 AND a.cycle_id = $2`,
+    [SCHOOL, CYCLE],
+  );
+  let n = 0;
+  for (const a of apps)
+    if (await ownFiles(a.id, a.data, a.def)) {
+      await c.query(`UPDATE applications SET data = $2::jsonb WHERE id = $1`, [
+        a.id,
+        JSON.stringify(a.data),
+      ]);
+      n += 1;
+    }
+  await c.query('COMMIT');
+  return n;
+}
 
 // ---- clear -------------------------------------------------------------------------------------------
 async function clear() {
@@ -580,7 +678,8 @@ try {
     const r = await api('POST', `/admissions/cycles/${CYCLE}/points/recalculate`, {});
     console.log(`Points worked out by EduPro for ${r.recalculated} registrations`);
   }
-  const bad = await check();
+  if (args.has('--files')) console.log('Registrations given their own files:', await fixFiles());
+  const bad = args.has('--files') && !args.has('--check') && !args.has('--yes') ? 0 : await check();
   process.exitCode = bad ? 2 : 0;
 } catch (e) {
   await c.query('ROLLBACK').catch(() => {});

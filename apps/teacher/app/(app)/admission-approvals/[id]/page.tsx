@@ -2,7 +2,7 @@ import { AdmissionReview, PageHeader, type AdmissionReviewData } from '@edupro/u
 import { notFound } from 'next/navigation';
 import { ApiError } from '@edupro/bff';
 import { bff } from '@/lib/bff';
-import { approvalDecide, approvalPoints, approvalSendBack } from '../actions';
+import { approvalDecide, approvalCorrect, approvalSendBack } from '../actions';
 
 /** The review of a registration waiting at my level (docs/design/50). */
 export default async function AdmissionApprovalPage({
@@ -23,7 +23,7 @@ export default async function AdmissionApprovalPage({
       <PageHeader
         kicker="Admission approvals"
         title={data.candidate ?? 'Registration'}
-        description="Look at the form, the documents and the points, then decide with your remark."
+        description="Look at the form, the documents and the points; correct an answer if needed, then decide with your remark."
         actions={
           <a className="ep-btn ep-btn--ghost ep-btn--sm" href="/admission-approvals">
             All approvals
@@ -33,11 +33,11 @@ export default async function AdmissionApprovalPage({
       <AdmissionReview
         data={data}
         backHref="/admission-approvals"
-        fileBase={`/api/admission-approvals/${id}/files`}
+        baseUrl={`/api/admission-approvals/${id}`}
         actions={{
           decide: approvalDecide.bind(null, id),
           sendBack: approvalSendBack.bind(null, id),
-          points: approvalPoints.bind(null, id),
+          correct: approvalCorrect.bind(null, id),
         }}
       />
     </>

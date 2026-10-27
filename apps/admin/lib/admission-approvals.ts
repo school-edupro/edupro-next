@@ -22,7 +22,55 @@ export interface ApprovalList {
   waiting: number;
   decided: number;
   overdue: number;
+  total: number;
+  options: {
+    sessions: Array<{ id: string; name: string }>;
+    classes: Array<{ id: string; name: string }>;
+    categories: Array<{ id: string; name: string }>;
+    stages: string[];
+    levels: string[];
+    statuses: string[];
+  };
   data: ApprovalRow[];
+}
+
+/** The filters the list takes (docs/design/51), kept in the address. */
+export const FILTER_KEYS = [
+  'tab',
+  'cycleId',
+  'classId',
+  'categoryId',
+  'status',
+  'stage',
+  'level',
+  'q',
+  'from',
+  'to',
+  'overdue',
+] as const;
+export type ApprovalFilters = Partial<Record<(typeof FILTER_KEYS)[number], string>>;
+
+/** The filters from the address, checked, as the API query. */
+export function approvalsQuery(sp: Record<string, string | undefined>): URLSearchParams {
+  const q = new URLSearchParams();
+  const ok: Record<string, RegExp> = {
+    tab: /^(waiting|decided)$/,
+    cycleId: /^\d{1,18}$/,
+    classId: /^\d{1,18}$/,
+    categoryId: /^\d{1,18}$/,
+    status: /^[a-z_]{3,20}$/,
+    stage: /^.{1,80}$/,
+    level: /^.{1,120}$/,
+    q: /^.{1,80}$/,
+    from: /^\d{4}-\d{2}-\d{2}$/,
+    to: /^\d{4}-\d{2}-\d{2}$/,
+    overdue: /^1$/,
+  };
+  for (const k of FILTER_KEYS) {
+    const v = sp[k]?.trim();
+    if (v && ok[k]!.test(v)) q.set(k, v);
+  }
+  return q;
 }
 
 export const DECISION_LABEL: Record<string, string> = {

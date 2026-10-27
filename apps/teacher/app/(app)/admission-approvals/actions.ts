@@ -31,7 +31,7 @@ async function post(path: string, body: unknown): Promise<Result> {
 
 export async function approvalDecide(
   id: string,
-  input: { decision: 'approve' | 'hold' | 'reject'; remarks: string; categoryId?: string },
+  input: { decision: 'approve' | 'hold' | 'reject'; remarks: string },
 ) {
   if (!okId(id)) return { ok: false as const, error: 'Unknown registration' };
   return post(`/admissions/approvals/${id}/decide`, input);
@@ -43,10 +43,11 @@ export async function approvalSendBack(
   if (!okId(id)) return { ok: false as const, error: 'Unknown registration' };
   return post(`/admissions/approvals/${id}/send-back`, input);
 }
-export async function approvalPoints(
+/** Answers corrected by the approver, with a reason; points and fee category follow (docs/design/51). */
+export async function approvalCorrect(
   id: string,
-  input: { action: 'confirm'; lines: Array<{ name: string; points: number; reason?: string }> },
+  input: { answers: Record<string, unknown>; reason: string },
 ) {
   if (!okId(id)) return { ok: false as const, error: 'Unknown registration' };
-  return post(`/admissions/approvals/${id}/points`, input);
+  return post(`/admissions/approvals/${id}/correct`, input);
 }
