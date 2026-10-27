@@ -1,3 +1,6 @@
+/** Not a permission: Shell grants it when the API says Approvals has something for this person. */
+export const APPROVALS_MENU = 'menu:admission-approvals';
+
 /** Navigation is projected from permissions (ADR-004 point 10). Labels come from the message catalogue (S4-01). */
 export const NAV: Array<{
   section: string;
@@ -109,10 +112,11 @@ export const NAV: Array<{
         label: 'admissionEnquiries',
         permission: 'admissions.enquiry.manage',
       },
+      // docs/design/55: admission admins, and anyone named in an approval level (Shell asks the API)
       {
-        href: '/admissions/registrations',
-        label: 'registrations',
-        permission: 'admissions.application.view',
+        href: '/admissions/approvals',
+        label: 'admissionApprovals',
+        permission: APPROVALS_MENU,
       },
       {
         href: '/admissions/list',

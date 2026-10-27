@@ -35,9 +35,6 @@ const PAGES = [
   '/admissions/desk',
   // a sample registration of scripts/seed-admission-merit.mjs (docs/design/49); a new seed changes the ids
   '/admissions/desk/1404',
-  '/admissions/registrations',
-  '/admissions/registrations?tab=all',
-  '/admissions/registrations/board',
   '/admissions/registrations/1404',
   '/admissions/schedule',
   '/admissions/selection',

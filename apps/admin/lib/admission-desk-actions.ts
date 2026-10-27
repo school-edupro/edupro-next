@@ -97,39 +97,6 @@ export async function submitDeskForm(
 }
 
 /** The registration fee taken at the counter: a receipt in the fee module and the registration number. */
-export async function collectRegistrationFee(fd: FormData) {
-  const id = str(fd, 'id');
-  if (!okId(id)) redirect('/admissions/desk');
-  const mode = str(fd, 'mode');
-  const reference = str(fd, 'reference');
-  const instrumentNo = str(fd, 'instrumentNo');
-  const bankName = str(fd, 'bankName');
-  let out: { receiptNo: string; number: string };
-  try {
-    out = await apiFetch(`/admissions/applications/${id}/registration-fee`, {
-      method: 'POST',
-      body: JSON.stringify({
-        mode,
-        ...(reference ? { reference } : {}),
-        ...(instrumentNo ? { instrumentNo } : {}),
-        ...(bankName ? { bankName } : {}),
-      }),
-    });
-  } catch (e) {
-    if (e instanceof ApiError)
-      redirect(
-        `/admissions/desk/${id}?error=${encodeURIComponent(e.problem.type)}&detail=${encodeURIComponent(
-          String(e.problem.detail ?? '').slice(0, 160),
-        )}`,
-      );
-    throw e;
-  }
-  revalidatePath(`/admissions/desk/${id}`);
-  redirect(
-    `/admissions/desk/${id}?ok=1&detail=${encodeURIComponent(`Receipt ${out.receiptNo}; registration no. ${out.number}`)}`,
-  );
-}
-
 /** One upload of a form filled at the desk: a slot owned by the application, then the bytes. */
 export async function uploadDeskFile(
   fd: FormData,

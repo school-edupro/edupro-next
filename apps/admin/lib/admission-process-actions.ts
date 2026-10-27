@@ -64,7 +64,7 @@ export async function saveProcess(
     id ? `/admissions/processes/${id}` : '/admissions/processes',
     id ? 'PUT' : 'POST',
     body,
-    ['/admissions/setup', '/admissions/registrations'],
+    ['/admissions/setup', '/admissions/list'],
   );
 }
 export async function archiveProcess(id: string) {
@@ -74,7 +74,7 @@ export async function archiveProcess(id: string) {
   ]);
 }
 
-const regPaths = (id: string) => [`/admissions/registrations/${id}`, '/admissions/registrations'];
+const regPaths = (id: string) => [`/admissions/registrations/${id}`, '/admissions/list'];
 export async function decideRegistration(
   id: string,
   body: {
@@ -171,7 +171,7 @@ export async function saveSlotResults(
     slot: SlotDetail;
   }>(`/admissions/slots/${id}/results`, 'PUT', { rows }, [
     `/admissions/schedule/${id}`,
-    '/admissions/registrations',
+    '/admissions/list',
   ]);
 }
 
@@ -185,6 +185,6 @@ export async function selectionAction(
     `/admissions/cycles/${cycleId}/selection/${kind}`,
     'POST',
     body,
-    ['/admissions/selection', '/admissions/registrations'],
+    ['/admissions/selection', '/admissions/list'],
   );
 }

@@ -97,7 +97,7 @@ export default async function AdmissionsDashboardPage({
   const list = (status?: string) => {
     const q = new URLSearchParams({ session: o.session?.name ?? '' });
     if (status) q.set('status', status);
-    return `/admissions/registrations?${q.toString()}`;
+    return `/admissions/list?${q.toString()}`;
   };
   return (
     <>
@@ -137,7 +137,7 @@ export default async function AdmissionsDashboardPage({
           {mine.total} registration{mine.total === 1 ? '' : 's'} wait
           {mine.total === 1 ? 's' : ''} for your decision
           {mine.overdue ? ` (${String(mine.overdue)} past the time limit)` : ''}.{' '}
-          <a href="/admissions/registrations?tab=mine">Open Waiting for me</a>
+          <a href="/admissions/approvals">Open Approvals</a>
         </p>
       ) : null}
       {f ? (
@@ -159,7 +159,7 @@ export default async function AdmissionsDashboardPage({
               'In process',
               f.inProcess,
               `${String(f.atTest)} at a test or interview · ${String(f.sentBack)} sent back`,
-              `/admissions/registrations?tab=in_progress`,
+              `/admissions/list?tab=in_progress`,
             )}
             {tile(
               'Offered',

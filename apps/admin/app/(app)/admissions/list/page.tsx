@@ -7,6 +7,7 @@ import {
   sanitizeAdmissionView,
   type AdmissionListFields,
   type AdmissionListResult,
+  type AdmissionListStatus,
 } from '@/lib/admission-list';
 import {
   admissionListExport,
@@ -17,6 +18,14 @@ import {
 import { apiFetch, getMe } from '@/lib/api';
 import { reportChoices, type SavedReport } from '@/lib/report-builder';
 
+const TABS = new Set<AdmissionListStatus>([
+  'in_progress',
+  'unfinished',
+  'admitted',
+  'closed',
+  'all',
+]);
+
 /**
  * The admissions list (docs/design/39, part 7): every registration with the columns each user wants from
  * the registration, the fees, the admission and the form's answers; quick and more filters on any field;
@@ -25,7 +34,14 @@ import { reportChoices, type SavedReport } from '@/lib/report-builder';
 export default async function AdmissionListPage({
   searchParams,
 }: {
-  searchParams: Promise<{ ok?: string; error?: string; detail?: string }>;
+  searchParams: Promise<{
+    ok?: string;
+    error?: string;
+    detail?: string;
+    tab?: string;
+    session?: string;
+    status?: string;
+  }>;
 }) {
   const sp = await searchParams;
   const me = await getMe();
@@ -46,7 +62,27 @@ export default async function AdmissionListPage({
       '/admissions/registrations/grid/ready-made',
     ).catch(() => ({ reports: [] })),
   ]);
-  const view = sanitizeAdmissionView(saved.value, new Set(fields.fields.map((f) => f.key)));
+  const kept = sanitizeAdmissionView(saved.value, new Set(fields.fields.map((f) => f.key)));
+  // a link (the admissions dashboard) may open a tab, or a session and statuses (docs/design/55)
+  const tab = TABS.has(sp.tab as AdmissionListStatus) ? (sp.tab as AdmissionListStatus) : null;
+  const linked = (sp.session ?? sp.status) !== undefined;
+  const view = {
+    ...kept,
+    ...(tab ? { status: tab, search: '' } : {}),
+    ...(linked
+      ? {
+          status: 'all' as const,
+          search: '',
+          filters: [
+            ...kept.filters.filter((x) => x.key !== 'session' && x.key !== 'status'),
+            ...(sp.session ? [{ key: 'session', op: 'in' as const, values: [sp.session] }] : []),
+            ...(sp.status
+              ? [{ key: 'status', op: 'in' as const, values: sp.status.split('|').slice(0, 10) }]
+              : []),
+          ],
+        }
+      : {}),
+  };
   const initial = await apiFetch<AdmissionListResult>('/admissions/registrations/grid', {
     method: 'POST',
     body: JSON.stringify({ ...view, search: view.search || undefined, page: 1 }),

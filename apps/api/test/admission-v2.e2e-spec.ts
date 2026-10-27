@@ -1053,10 +1053,18 @@ describe('online admission (e2e)', () => {
           })
         ).statusCode,
       ).toBe(409);
-      const twice = await inject({
+      // only Accounts take money (docs/design/55): the School Admin no longer may
+      const byAdmin = await inject({
         method: 'POST',
         url: `/admissions/applications/${id}/registration-fee`,
         headers: h(),
+        json: { mode: 'cash' },
+      });
+      expect(byAdmin.statusCode).toBe(403);
+      const twice = await inject({
+        method: 'POST',
+        url: `/admissions/applications/${id}/registration-fee`,
+        headers: h(accountant),
         json: { mode: 'cash' },
       });
       expect(twice.statusCode).toBe(409);
@@ -1514,7 +1522,7 @@ describe('online admission (e2e)', () => {
       expect(first.n).toBeGreaterThanOrEqual(1);
       expect(first.mail?.subject).toMatch(/waiting for your decision: \d+ \(1 overdue\)/);
       expect(first.mail?.body).toContain('Overdue');
-      expect(first.mail?.body).toContain('http://admin.test/admissions/registrations?tab=mine');
+      expect(first.mail?.body).toContain('http://admin.test/admissions/approvals');
       // once a morning: a second run the same day sends nothing again
       expect((await digest()).n).toBe(0);
     });
@@ -1774,6 +1782,91 @@ describe('online admission (e2e)', () => {
         ).toBe(201);
       expect((await put(original)).statusCode).toBe(200);
       expect((await reg(appWalkIn)).json().process).toMatchObject({ stageNo: 0, levelNo: 1 });
+    });
+
+    it('shows an admin every level and lets them decide on behalf; decisions by Excel (docs/design/55)', async () => {
+      // the admin sees every registration waiting, with who holds it
+      const all = await inject({ method: 'GET', url: '/admissions/approvals', headers: h() });
+      expect(all.statusCode).toBe(200);
+      expect(all.json().all).toBe(true);
+      const menu = await inject({ method: 'GET', url: '/admissions/approvals/menu', headers: h() });
+      expect(menu.json()).toMatchObject({ show: true, all: true });
+      const waiting = all.json().data as Array<{ id: string; waitingWith: string | null }>;
+      expect(waiting.length).toBeGreaterThan(0);
+      // a sheet of the first one's stage and level
+      const opts = await inject({
+        method: 'GET',
+        url: '/admissions/approvals/sheet/options',
+        headers: h(),
+      });
+      const place = (opts.json().data as Array<{ value: string; count: number }>)[0]!;
+      const [cycle, cls, stage, level] = place.value.split(':');
+      const sheet = await inject({
+        method: 'GET',
+        url: `/admissions/approvals/sheet?cycleId=${cycle!}&classId=${cls!}&stageId=${stage!}&level=${level!}`,
+        headers: h(),
+      });
+      expect(sheet.statusCode).toBe(200);
+      expect(sheet.json().rows).toBe(place.count);
+      const wb = new ExcelJS.Workbook();
+      await wb.xlsx.load(
+        Buffer.from(sheet.json().base64 as string, 'base64') as unknown as ArrayBuffer,
+      );
+      const ws = wb.worksheets[0]!;
+      const head = (ws.getRow(5).values as unknown[]).map((v) => String(v ?? ''));
+      const dCol = head.indexOf('Decision');
+      const rCol = head.indexOf('Remark');
+      const number = String(ws.getRow(6).getCell(1).value);
+      ws.getRow(6).getCell(dCol).value = 'Hold';
+      ws.getRow(6).getCell(rCol).value = 'x';
+      const upload = async (apply: boolean) =>
+        inject({
+          method: 'POST',
+          url: `/admissions/approvals/sheet${apply ? '?apply=1' : ''}`,
+          headers: h(),
+          raw: {
+            body: Buffer.from(await wb.xlsx.writeBuffer()),
+            contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+          },
+        });
+      const bad = await upload(false);
+      expect(bad.statusCode).toBe(201);
+      expect(bad.json()).toMatchObject({ errors: 1, ok: 0 });
+      ws.getRow(6).getCell(rCol).value = 'Waiting for the transfer certificate';
+      const check = await upload(false);
+      expect(check.json()).toMatchObject({ errors: 0, ok: 1, applied: false });
+      const done = await upload(true);
+      expect(done.json()).toMatchObject({ done: 1, applied: true });
+      // the remark keeps that the admin decided for the level (when not named in it)
+      const id = (
+        await withMigrator((c) =>
+          c.query<{ id: string }>(
+            `SELECT id::text FROM applications WHERE application_no = $1 AND school_id = $2`,
+            [number, school.id],
+          ),
+        )
+      ).rows[0]!.id;
+      const remark = await withMigrator((c) =>
+        c.query<{ remarks: string }>(
+          `SELECT remarks FROM admission_stage_results WHERE application_id = $1 AND undone_at IS NULL
+            ORDER BY decided_at DESC LIMIT 1`,
+          [id],
+        ),
+      );
+      expect(remark.rows[0]!.remarks).toMatch(/^Waiting for the transfer certificate/);
+      // a sheet not made here is refused
+      const foreign = new ExcelJS.Workbook();
+      foreign.addWorksheet('x').getCell('A1').value = 'hello';
+      const refused = await inject({
+        method: 'POST',
+        url: '/admissions/approvals/sheet',
+        headers: h(),
+        raw: {
+          body: Buffer.from(await foreign.xlsx.writeBuffer()),
+          contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        },
+      });
+      expect(refused.statusCode).toBe(400);
     });
 
     it('sends the form back for correction; the family corrects only those answers and it returns to the same level', async () => {
@@ -3010,7 +3103,7 @@ describe('online admission (e2e)', () => {
       const twice = await inject({
         method: 'POST',
         url: `/admissions/registrations/${second}/admission-fee`,
-        headers: h(),
+        headers: h(accountant),
         json: { mode: 'cash' },
       });
       expect(twice.statusCode).toBe(409);
@@ -3731,7 +3824,7 @@ describe('online admission (e2e)', () => {
       const fee = await inject({
         method: 'POST',
         url: `/admissions/applications/${id}/registration-fee`,
-        headers: h(),
+        headers: h(accountant),
         json: { mode: 'cash' },
       });
       expect(fee.statusCode).toBe(201);
@@ -3797,7 +3890,7 @@ describe('online admission (e2e)', () => {
       await inject({
         method: 'POST',
         url: `/admissions/applications/${id}/registration-fee`,
-        headers: h(),
+        headers: h(accountant),
         json: { mode: 'upi' },
       });
       const after = await inject({

@@ -22,6 +22,9 @@ export const ApprovalsQuerySchema = z.object({
   from: Day.optional(),
   to: Day.optional(),
   overdue: z.enum(['1']).optional(),
+  // docs/design/55: an admin narrows to who holds it, or to their own levels
+  person: z.string().trim().max(80).optional(),
+  mine: z.enum(['1']).optional(),
   format: z.enum(['xlsx', 'pdf']).optional(),
 });
 export class ApprovalsQueryDto extends createZodDto(ApprovalsQuerySchema) {}
@@ -62,3 +65,12 @@ export const ApprovalDocumentSchema = z.object({
   reason: z.string().trim().min(3, 'Give the reason for the change').max(500),
 });
 export class ApprovalDocumentDto extends createZodDto(ApprovalDocumentSchema) {}
+
+/** The approval sheet of one level (docs/design/55). */
+export const ApprovalSheetQuerySchema = z.object({
+  cycleId: Id,
+  classId: Id,
+  stageId: Id,
+  level: z.coerce.number().int().min(1).max(20),
+});
+export class ApprovalSheetQueryDto extends createZodDto(ApprovalSheetQuerySchema) {}

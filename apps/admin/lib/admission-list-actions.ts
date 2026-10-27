@@ -80,54 +80,12 @@ export async function admissionListReady(
 ) {
   return ready(key, q, 'list');
 }
-export async function registrationsReady(
-  key: string,
-  q: AdmissionListQuery & { format: 'xlsx' | 'pdf' },
-) {
-  return ready(key, q, 'registrations');
-}
 
 export async function admissionListLoad(q: AdmissionListQuery) {
   return load(q, 'list');
 }
 export async function admissionListExport(q: AdmissionListQuery & { format: 'xlsx' | 'pdf' }) {
   return exportFile(q, 'list');
-}
-
-/** The registrations list (docs/design/47): the same grid on submitted registrations. */
-export async function registrationsLoad(q: AdmissionListQuery) {
-  return load(q, 'registrations');
-}
-export async function registrationsExport(q: AdmissionListQuery & { format: 'xlsx' | 'pdf' }) {
-  return exportFile(q, 'registrations');
-}
-export async function registrationsSaveView(v: AdmissionListView): Promise<void> {
-  await apiFetch('/me/preferences/admissions.registrations', {
-    method: 'PUT',
-    body: JSON.stringify({ value: v }),
-  });
-}
-
-/** Bulk decide (docs/design/47, part 3): one decision for registrations at one stage and level. */
-export async function registrationsBulkDecide(input: {
-  ids: string[];
-  decision: 'approve' | 'reject' | 'hold';
-  remarks?: string;
-}): Promise<
-  Result<{ done: number; failed: Array<{ id: string; number: string | null; reason: string }> }>
-> {
-  try {
-    const data = await apiFetch<{
-      done: number;
-      failed: Array<{ id: string; number: string | null; reason: string }>;
-    }>('/admissions/registrations/bulk-decide', {
-      method: 'POST',
-      body: JSON.stringify({ ...input, remarks: input.remarks?.trim() || undefined }),
-    });
-    return { ok: true, data };
-  } catch (error) {
-    return listError(error);
-  }
 }
 
 /** The view this user keeps for the admissions list (never shared). */

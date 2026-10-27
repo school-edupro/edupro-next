@@ -75,7 +75,7 @@ Defaults taken (change on request):
 
 ## Parts
 
-**Part 1 — Approvals for admins and the menu (API, admin).**
+**Part 1 — Approvals for admins and the menu (API, admin) — built 27 Oct 2026.**
 
 - `GET admissions/approvals` for a set-up manager lists every registration waiting at any level. It
   gains the filter `person` (who holds it) and a column "Waiting with". An admin's decision at a level
@@ -85,7 +85,7 @@ Defaults taken (change on request):
 - The dashboard's "Waiting for me" links and the morning email (a migration replacing
   `admissions.level_digest`'s link) point to `/admissions/approvals`.
 
-**Part 2 — Fees by Accounts only (API, admin, migration).**
+**Part 2 — Fees by Accounts only (API, admin, migration) — built 27 Oct 2026.**
 
 - A migration removes `admissions.fee.collect` from School Admin and Group Admin (the template roles
   and the schools' copies).
@@ -95,7 +95,7 @@ Defaults taken (change on request):
 - The API routes `…/registration-fee` and `…/admission-fee` stay, for the counter and the tests, behind
   `admissions.fee.collect`.
 
-**Part 3 — Decisions by Excel (API, admin).**
+**Part 3 — Decisions by Excel (API, admin) — built 27 Oct 2026.**
 
 - `GET admissions/approvals/sheet?cycleId&classId&stageId&level` makes the xlsx: drop-downs, a locked
   key column, and the level's columns.
@@ -103,7 +103,7 @@ Defaults taken (change on request):
   previews. It returns rows with status `ok`, `skipped` or `error` and the reason.
 - Approvals gets **Excel decisions**: pick, Download the sheet, Upload, the preview table, Apply.
 
-**Part 4 — Remove the Registrations list and board; tests.**
+**Part 4 — Remove the Registrations list and board; tests — built 27 Oct 2026.**
 
 - Delete `/admissions/registrations` (page), `/admissions/registrations/board`, their components and
   actions (registrations load / export / ready / save view / bulk decide), and the menu item.
@@ -116,3 +116,60 @@ Defaults taken (change on request):
   - School Admin can no longer take a fee, and Accounts can;
   - the sheet round trip: download, fill, preview with an error row, apply.
 - a11y for Approvals with the sheet panel; the removed pages give 404; a browser check.
+
+## As built (27 Oct 2026)
+
+**Approvals for admins and the menu (part 1):**
+
+- `GET admissions/approvals` for `admissions.setup.manage` lists every row of `admission_waiting`. It
+  answers `all`, `mine`, and per row `waitingWith` (`levelDeciders`) and `namedMe`; the filters
+  `person` and `mine=1` are new.
+- An admin's decision at a level they are not named in gets " (by <name> for <level>)" added to the
+  remark. A send-back is not marked, because its remark goes to the family. The review shows "Deciding
+  for <level> (<people>)" (`onBehalf`).
+- `GET admissions/approvals/menu` answers `{show, count, mine, all}`. Shell grants the item
+  `menu:admission-approvals` when it shows; the label is "Approvals".
+- The dashboard's links go to `/admissions/list?…` (the list now takes `tab`, `session` and `status`
+  in the address) and to `/admissions/approvals`.
+
+**Fees by Accounts only (part 2):**
+
+- Migration 0263 removes `admissions.fee.collect` from `school_admin` and `group_admin` (only the
+  accountant template has it), and the morning email links to `/admissions/approvals`.
+- The desk and the registration page show the fee due as information.
+- A zero fee is confirmed through `POST admissions/registrations/:id/confirm`
+  (`admissions.application.admit`).
+- The permission cache keeps the old rights until the API restarts.
+
+**Decisions by Excel (part 3):**
+
+- `approvals-sheet.service.ts` has `GET admissions/approvals/sheet/options`, `GET …/sheet`
+  (base64 xlsx) and `POST …/sheet[?apply=1]` (xlsx as the body).
+- The sheet:
+  - The key is in A3 (`EPAPPR:cycle:class:stage:level`), with headers on row 5.
+  - The sheet is protected except the Decision, Remark and Marks cells.
+  - The Decision drop-down is Approve / Hold / Reject (a selection stage: Offer / Waiting list / Hold
+    / Reject), and Marks (of N) is there when the stage has a maximum.
+- Rows are applied through `AdmissionApprovalsService.decide`, so access, on behalf, events and
+  messages are as on the page.
+- Not built: Send back by sheet, since it needs the answers to correct; it stays on the page.
+- On the admin's Approvals page the "Excel decisions" panel opens on click. It is not in the staff app
+  yet.
+
+**Removed (part 4):**
+
+- The pages `/admissions/registrations` and `/registrations/board`.
+- `registrationsConfig` and the bulk-decide bar in `AdmissionList`, the `registrations*` actions,
+  `DEFAULT_REGISTRATIONS_VIEW` and `REGISTRATION_QUICK_FILTERS`, the menu label and their a11y lines.
+- The registration page `/admissions/registrations/<id>` stays; its back link goes to the Admissions
+  list.
+
+**Checked:**
+
+- Admission and cancellation e2e: 64 + 3 pass. They cover the admin seeing every level; the menu;
+  Accounts taking fees and the School Admin refused (403); the sheet with an error row, then fixed,
+  checked and applied (the remark kept); a sheet not made here refused; the email link.
+- Withdrawals, reports, misc fees, RLS and access: 76 pass. API unit: 4 pass.
+- a11y: admissions, approvals (with the panel), the list, desk and registration pass.
+- Browser: Approvals sits in the Admissions menu, the admin sees 43 waiting with who holds each, and
+  the sheet downloads.

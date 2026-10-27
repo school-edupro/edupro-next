@@ -12743,3 +12743,22 @@ a.ep-pub-foot__item {
   flex-wrap: wrap;
 }
 
+/* ---- Approvals: decisions by Excel (docs/design/55) -------------------------------------------- */
+.ep-asheet {
+  display: grid;
+  gap: var(--sp-3);
+}
+.ep-asheet__place {
+  grid-column: span 2;
+}
+@media (max-width: 40rem) {
+  .ep-asheet__place {
+    grid-column: auto;
+  }
+}
+.ep-asheet__btns {
+  display: inline-flex;
+  gap: var(--sp-2);
+  flex-wrap: wrap;
+}
+

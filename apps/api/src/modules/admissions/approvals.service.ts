@@ -3,6 +3,7 @@ import type { StorageDriver } from '@edupro/storage';
 import {
   LAYOUT_TYPES,
   admissionWaitingFor,
+  levelDeciders,
   answerText,
   fieldState,
   liveAnswers,
@@ -166,7 +167,14 @@ export class AdmissionApprovalsService {
    */
   async list(ctx: RequestContext, q: ApprovalsQueryDto) {
     return this.db.tenant(requireTenant(ctx), async (c) => {
-      const waiting = [...(await admissionWaitingFor(c, ctx.user.id))];
+      // an admission admin sees every registration waiting, at any level (docs/design/55)
+      const manager = ctx.permissions?.has(ADMISSION_SETUP_MANAGE) ?? false;
+      const named = await admissionWaitingFor(c, ctx.user.id);
+      const waiting = manager
+        ? (await c.query<{ id: string }>(`SELECT id::text FROM admission_waiting`)).rows.map(
+            (x) => x.id,
+          )
+        : [...named];
       const decidedRows = (
         await c.query<{ id: string; at: Date }>(
           `SELECT x.application_id::text AS id, max(x.decided_at) AS at FROM admission_stage_results x
@@ -198,11 +206,13 @@ export class AdmissionApprovalsService {
             level_name: string | null;
             level_since: Date | null;
             due_at: Date | null;
+            level_json: Record<string, unknown> | null;
           }>(
             `SELECT a.id::text, a.application_no AS number, a.candidate_name AS candidate, a.contact_mobile AS mobile,
                     a.class_id::text, cl.name AS class_name, a.cycle_id::text, y.name AS session,
                     a.category_id::text, k.name AS category, a.status::text, a.form_points::text, a.merit::text,
-                    st.name AS stage, w.level_no, w.levels, w.level ->> 'name' AS level_name, a.level_since, w.due_at
+                    st.name AS stage, w.level_no, w.levels, w.level ->> 'name' AS level_name, a.level_since, w.due_at,
+                    w.level AS level_json
                FROM applications a JOIN classes cl ON cl.id = a.class_id JOIN admission_cycles y ON y.id = a.cycle_id
                LEFT JOIN admission_fee_categories k ON k.id = a.category_id
                LEFT JOIN admission_waiting w ON w.id = a.id
@@ -213,6 +223,13 @@ export class AdmissionApprovalsService {
           )
         : { rows: [] };
       const now = Date.now();
+      // who each registration waits with (the level's people), for the admin's view
+      const holders = await levelDeciders(
+        c,
+        r.rows.map((x) => x.level_json),
+      );
+      const withOf = (x: (typeof r.rows)[number]) =>
+        x.level_json ? (holders.get(JSON.stringify(x.level_json)) ?? null) : null;
       const levelOf = (x: (typeof r.rows)[number]) =>
         x.level_no && x.levels
           ? `${x.level_name ?? `Level ${String(x.level_no)}`}${x.levels > 1 ? ` (${String(x.level_no)} of ${String(x.levels)})` : ''}`
@@ -247,6 +264,9 @@ export class AdmissionApprovalsService {
         if (q.stage && x.stage !== q.stage) return false;
         if (q.level && levelOf(x) !== q.level) return false;
         if (q.overdue && !(x.due_at && x.due_at.getTime() < now)) return false;
+        if (q.person && !(withOf(x) ?? '').toLowerCase().includes(q.person.trim().toLowerCase()))
+          return false;
+        if (q.mine && !named.has(x.id)) return false;
         if (
           text &&
           ![x.candidate, x.number, x.mobile].some((v) => (v ?? '').toLowerCase().includes(text))
@@ -263,6 +283,8 @@ export class AdmissionApprovalsService {
         rows.map((x) => x.id),
       );
       return {
+        all: manager,
+        mine: named.size,
         waiting: waiting.length,
         decided: decidedRows.length,
         overdue:
@@ -283,6 +305,8 @@ export class AdmissionApprovalsService {
           merit: x.merit !== null ? Number(x.merit) : null,
           stage: x.stage,
           level: levelOf(x),
+          waitingWith: withOf(x),
+          namedMe: named.has(x.id),
           since: x.level_since?.toISOString() ?? null,
           decidedAt: decidedAt.get(x.id)?.toISOString() ?? null,
           dueAt: x.due_at?.toISOString() ?? null,
@@ -295,7 +319,30 @@ export class AdmissionApprovalsService {
 
   /** The review: the candidate, the answers by tab, the documents, the points and the stage path. */
   async review(ctx: RequestContext, id: string) {
-    const { mayDecide } = await this.db.tenant(requireTenant(ctx), (c) => this.access(c, ctx, id));
+    const { mayDecide, onBehalf } = await this.db.tenant(requireTenant(ctx), async (c) => {
+      const a = await this.access(c, ctx, id);
+      // an admin at a level not theirs decides on its people's behalf (docs/design/55)
+      if (!a.mayDecide || (await admissionWaitingFor(c, ctx.user.id)).has(id))
+        return { ...a, onBehalf: null };
+      const w = await c.query<{
+        name: string | null;
+        level_no: number | null;
+        level: Record<string, unknown> | null;
+      }>(
+        `SELECT w.level ->> 'name' AS name, w.level_no, w.level FROM admission_waiting w WHERE w.id = $1`,
+        [id],
+      );
+      const x = w.rows[0];
+      const people = x?.level
+        ? (await levelDeciders(c, [x.level])).get(JSON.stringify(x.level))
+        : null;
+      return {
+        ...a,
+        onBehalf: x
+          ? `${x.name ?? `Level ${String(x.level_no ?? '')}`}${people ? ` (${people})` : ''}`
+          : null,
+      };
+    });
     const d = await this.process.detail(ctx, id);
     const def = d.def as AdmissionFormDef;
     const answers = d.answers as AdmissionAnswers;
@@ -345,6 +392,7 @@ export class AdmissionApprovalsService {
       categories: d.categories,
       photoFileId: photo ?? null,
       mayDecide: mayDecide && d.process.canAct,
+      onBehalf,
       current: d.process.current,
       path: d.process.steps,
       points: d.points,
@@ -409,8 +457,55 @@ export class AdmissionApprovalsService {
       throw new DomainError('admissions.not_yours', 'This registration no longer waits for you', {
         status: 409,
       });
-    await this.process.decide(ctx, id, dto);
+    await this.process.decide(ctx, id, await this.onBehalf(ctx, id, dto));
     return this.review(ctx, id);
+  }
+
+  /**
+   * An admission admin deciding at a level they are not named in (docs/design/55): the remark keeps
+   * "by <admin> for <level>", so the level's people and the history see it was done on their behalf.
+   */
+  private async onBehalf<T extends { remarks?: string }>(
+    ctx: RequestContext,
+    id: string,
+    dto: T,
+  ): Promise<T> {
+    return this.db.tenant(requireTenant(ctx), async (c) => {
+      if ((await admissionWaitingFor(c, ctx.user.id)).has(id)) return dto;
+      const w = await c.query<{ name: string | null; level_no: number | null }>(
+        `SELECT w.level ->> 'name' AS name, w.level_no FROM admission_waiting w WHERE w.id = $1`,
+        [id],
+      );
+      const level = w.rows[0]?.name ?? `Level ${String(w.rows[0]?.level_no ?? '')}`;
+      const note = ` (by ${ctx.user.displayName} for ${level})`;
+      if (dto.remarks !== undefined)
+        return { ...dto, remarks: `${dto.remarks}${note}`.slice(0, 1000) };
+      return dto;
+    });
+  }
+
+  /** Whether the Admissions menu shows Approvals, and how many wait (docs/design/55). */
+  async menu(ctx: RequestContext) {
+    return this.db.tenant(requireTenant(ctx), async (c) => {
+      const manager = ctx.permissions?.has(ADMISSION_SETUP_MANAGE) ?? false;
+      const named = await admissionWaitingFor(c, ctx.user.id);
+      const all = manager
+        ? (await c.query<{ n: number }>(`SELECT count(*)::int AS n FROM admission_waiting`))
+            .rows[0]!.n
+        : named.size;
+      const inLevel =
+        manager ||
+        named.size > 0 ||
+        (
+          await c.query<{ yes: boolean }>(
+            `SELECT EXISTS (
+               SELECT 1 FROM admission_processes p, jsonb_array_elements(p.steps) s, jsonb_array_elements(s -> 'levels') l
+                WHERE p.status = 'active' AND $1::bigint IN (SELECT app.admission_level_users(l))) AS yes`,
+            [ctx.user.id],
+          )
+        ).rows[0]!.yes;
+      return { show: inLevel, count: all, mine: named.size, all: manager };
+    });
   }
 
   async sendBack(ctx: RequestContext, id: string, dto: SendBackDto) {
@@ -419,6 +514,7 @@ export class AdmissionApprovalsService {
       throw new DomainError('admissions.not_yours', 'This registration no longer waits for you', {
         status: 409,
       });
+    // the remark goes to the family, so it is not marked as on behalf
     await this.process.sendBack(ctx, id, dto);
     return { ok: true };
   }

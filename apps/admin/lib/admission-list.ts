@@ -58,33 +58,6 @@ export const DEFAULT_ADMISSION_VIEW: AdmissionListView = {
   size: 50,
 };
 
-/** The registrations list's own first view (docs/design/47): the process columns. */
-export const DEFAULT_REGISTRATIONS_VIEW: AdmissionListView = {
-  columns: [
-    { key: 'class_sought' },
-    { key: 'category' },
-    { key: 'stage' },
-    { key: 'level' },
-    { key: 'deciders' },
-    { key: 'waiting_since' },
-    { key: 'days_waiting' },
-    { key: 'merit' },
-  ],
-  filters: [],
-  sort: [],
-  search: '',
-  status: 'mine',
-  size: 50,
-};
-
-export const REGISTRATION_QUICK_FILTERS: string[] = [
-  'session',
-  'class_sought',
-  'stage',
-  'category',
-  'overdue',
-];
-
 export const ADMISSION_QUICK_FILTERS: string[] = [
   'session',
   'class_sought',

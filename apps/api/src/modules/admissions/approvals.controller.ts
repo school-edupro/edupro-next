@@ -1,6 +1,7 @@
-import { Body, Controller, Get, Param, Post, Query, Res } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, Query, Req, Res } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
-import type { FastifyReply } from 'fastify';
+import type { FastifyReply, FastifyRequest } from 'fastify';
+import { AdmissionApprovalsSheetService } from './approvals-sheet.service';
 import { AuthenticatedOnly } from '../../common/auth/decorators';
 import { ReqCtx, type RequestContext } from '../../common/http/request-context';
 import {
@@ -8,6 +9,7 @@ import {
   ApprovalDecideDto,
   ApprovalDocumentDto,
   ApprovalDocumentSlotDto,
+  ApprovalSheetQueryDto,
   ApprovalsQueryDto,
 } from './approvals.dto';
 import { AdmissionApprovalsService } from './approvals.service';
@@ -36,7 +38,10 @@ const pdf = (
 @ApiBearerAuth()
 @Controller('admissions/approvals')
 export class AdmissionApprovalsController {
-  constructor(private readonly svc: AdmissionApprovalsService) {}
+  constructor(
+    private readonly svc: AdmissionApprovalsService,
+    private readonly sheet: AdmissionApprovalsSheetService,
+  ) {}
 
   @Get()
   @ApiOperation({
@@ -45,6 +50,44 @@ export class AdmissionApprovalsController {
   @AuthenticatedOnly()
   list(@ReqCtx() ctx: RequestContext, @Query() q: ApprovalsQueryDto) {
     return this.svc.list(ctx, q);
+  }
+
+  // decisions by Excel (docs/design/55): where a sheet can be made, the sheet, the filled sheet back
+  @Get('sheet/options')
+  @ApiOperation({
+    summary: 'Each session, class, stage and level with registrations waiting for me',
+  })
+  @AuthenticatedOnly()
+  sheetOptions(@ReqCtx() ctx: RequestContext) {
+    return this.sheet.options(ctx);
+  }
+
+  @Get('sheet')
+  @ApiOperation({ summary: 'The approval sheet of one level (xlsx, as base64)' })
+  @AuthenticatedOnly()
+  sheetFile(@ReqCtx() ctx: RequestContext, @Query() q: ApprovalSheetQueryDto) {
+    return this.sheet.sheet(ctx, q);
+  }
+
+  @Post('sheet')
+  @ApiOperation({
+    summary:
+      'The filled sheet (xlsx as the body): checked row by row; apply=1 decides the good rows',
+  })
+  @AuthenticatedOnly()
+  sheetUpload(
+    @ReqCtx() ctx: RequestContext,
+    @Query('apply') apply: string | undefined,
+    @Req() req: FastifyRequest,
+  ) {
+    return this.sheet.upload(ctx, req.body, apply === '1');
+  }
+
+  @Get('menu')
+  @ApiOperation({ summary: 'Whether the Admissions menu shows Approvals, and how many wait' })
+  @AuthenticatedOnly()
+  menu(@ReqCtx() ctx: RequestContext) {
+    return this.svc.menu(ctx);
   }
 
   @Get('export')

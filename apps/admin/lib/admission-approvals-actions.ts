@@ -93,3 +93,78 @@ export async function approvalReplaceDocument(id: string, fd: FormData): Promise
   }
   return post(`/admissions/approvals/${id}/documents/${key}`, { fileId, reason });
 }
+
+// ---- decisions by Excel (docs/design/55) -------------------------------------------------------
+export interface SheetResult {
+  place: string;
+  applied: boolean;
+  ok: number;
+  done: number;
+  skipped: number;
+  errors: number;
+  rows: Array<{
+    row: number;
+    number: string;
+    candidate: string | null;
+    decision: string | null;
+    status: 'ok' | 'skipped' | 'error' | 'done';
+    reason: string | null;
+  }>;
+}
+const problem = (e: unknown) =>
+  e instanceof ApiError ? String(e.problem.detail ?? e.problem.type) : null;
+
+/** The approval sheet of one level ("cycle:class:stage:level"), to save in the browser. */
+export async function approvalSheet(
+  place: string,
+): Promise<
+  | { ok: true; data: { filename: string; contentType: string; base64: string; rows: number } }
+  | { ok: false; error: string }
+> {
+  const m = /^(\d{1,18}):(\d{1,18}):(\d{1,18}):(\d{1,2})$/.exec(place);
+  if (!m) return { ok: false, error: 'Choose the stage and level' };
+  try {
+    const q = new URLSearchParams({ cycleId: m[1]!, classId: m[2]!, stageId: m[3]!, level: m[4]! });
+    const data = await apiFetch<{
+      filename: string;
+      contentType: string;
+      base64: string;
+      rows: number;
+    }>(`/admissions/approvals/sheet?${q.toString()}`);
+    return { ok: true, data };
+  } catch (e) {
+    const p = problem(e);
+    if (p) return { ok: false, error: p };
+    throw e;
+  }
+}
+
+/** The filled sheet checked (apply = false) or decided (apply = true). */
+export async function approvalSheetUpload(
+  fd: FormData,
+): Promise<{ ok: true; data: SheetResult } | { ok: false; error: string }> {
+  const file = fd.get('file');
+  const apply = fd.get('apply') === '1';
+  if (!(file instanceof File) || file.size === 0)
+    return { ok: false, error: 'Choose the filled sheet' };
+  if (!/\.xlsx$/i.test(file.name)) return { ok: false, error: 'The sheet must be an .xlsx file' };
+  if (file.size > 5 * 1024 * 1024) return { ok: false, error: 'The sheet is larger than 5 MB' };
+  try {
+    const data = await apiFetch<SheetResult>(
+      `/admissions/approvals/sheet${apply ? '?apply=1' : ''}`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        },
+        body: Buffer.from(await file.arrayBuffer()),
+      },
+    );
+    if (apply) revalidatePath('/admissions/approvals');
+    return { ok: true, data };
+  } catch (e) {
+    const p = problem(e);
+    if (p) return { ok: false, error: p };
+    throw e;
+  }
+}

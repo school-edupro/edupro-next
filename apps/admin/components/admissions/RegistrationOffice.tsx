@@ -4,7 +4,7 @@ import { useState, useTransition } from 'react';
 import {
   admitRegistration,
   cancelRegistration,
-  collectAdmissionFee,
+  confirmNoFeeAdmission,
 } from '@/lib/admission-admit-actions';
 
 const rupees = (n: number) => `₹${n.toLocaleString('en-IN')}`;
@@ -21,7 +21,6 @@ export function RegistrationOffice({
   admissionPaid = 0,
   sections,
   refund,
-  canCollect,
   canAdmit,
   canCancel,
   studentId,
@@ -35,17 +34,13 @@ export function RegistrationOffice({
   admissionPaid?: number;
   sections: Array<{ id: string; name: string; capacity: number | null; enrolled: number }>;
   refund: { paid: number; parts?: number; pct: number; deduction: number; amount: number } | null;
-  canCollect: boolean;
   canAdmit: boolean;
   canCancel: boolean;
 }) {
   const router = useRouter();
   const [pending, start] = useTransition();
   const [msg, setMsg] = useState<{ tone: 'success' | 'danger'; text: string } | null>(null);
-  const [mode, setMode] = useState('cash');
-  const [reference, setReference] = useState('');
   const balance = Math.max(0, Math.round((admissionFee - admissionPaid) * 100) / 100);
-  const [take, setTake] = useState(balance.toFixed(2));
   const [sectionId, setSectionId] = useState(sections[0]?.id ?? '');
   const [roll, setRoll] = useState('');
   const [reason, setReason] = useState('');
@@ -57,97 +52,44 @@ export function RegistrationOffice({
 
   return (
     <div className="ep-rp__act">
-      {status === 'offered' && canCollect ? (
+      {status === 'offered' ? (
+        // only Accounts take money, at Fees → Cashier (docs/design/55); a zero fee is confirmed here
         <section className="ep-rp__act" aria-label="Admission fee">
-          <p style={{ margin: 0 }}>
-            {admissionFee > 0 ? (
-              <>
-                Admission fee due: <strong>{rupees(balance)}</strong>
-                {admissionPaid > 0
-                  ? ` (balance of ${rupees(admissionFee)}; ${rupees(admissionPaid)} paid)`
-                  : ''}
-              </>
-            ) : (
-              'No admission fee is due for this category: confirm the admission to give the admission number.'
-            )}
-          </p>
           {admissionFee > 0 ? (
-            <div className="ep-rp__row">
-              <label className="ep-field">
-                <span className="ep-field__label">Amount (a part may be taken)</span>
-                <input
-                  className="ep-input"
-                  type="number"
-                  min={1}
-                  max={balance}
-                  step="0.01"
-                  value={take}
-                  onChange={(e) => setTake(e.target.value)}
-                />
-              </label>
-              <label className="ep-field">
-                <span className="ep-field__label">Mode</span>
-                <select
-                  className="ep-select"
-                  value={mode}
-                  onChange={(e) => setMode(e.target.value)}
-                >
-                  <option value="cash">Cash</option>
-                  <option value="upi">UPI</option>
-                  <option value="card">Card</option>
-                  <option value="cheque">Cheque</option>
-                  <option value="dd">Demand draft</option>
-                  <option value="bank">Bank transfer</option>
-                </select>
-              </label>
-              <label className="ep-field">
-                <span className="ep-field__label">Reference / cheque no.</span>
-                <input
-                  className="ep-input"
-                  maxLength={80}
-                  value={reference}
-                  onChange={(e) => setReference(e.target.value)}
-                />
-              </label>
-            </div>
-          ) : null}
-          <div className="ep-form-actions">
-            <button
-              type="button"
-              className="ep-btn ep-btn--primary"
-              disabled={pending}
-              onClick={() =>
-                start(async () => {
-                  const part = Number(take);
-                  if (admissionFee > 0 && !(part > 0 && part <= balance + 0.004)) {
-                    setMsg({
-                      tone: 'danger',
-                      text: `Take between ₹1 and the balance of ${rupees(balance)}.`,
-                    });
-                    return;
-                  }
-                  const r = await collectAdmissionFee(id, {
-                    mode,
-                    ...(admissionFee > 0 ? { amount: Math.round(part * 100) / 100 } : {}),
-                    ...(reference.trim()
-                      ? ['cheque', 'dd'].includes(mode)
-                        ? { instrumentNo: reference.trim() }
-                        : { reference: reference.trim() }
-                      : {}),
-                  });
-                  if (r.ok)
-                    done(
-                      r.data.admissionNo
-                        ? `Admission no. ${r.data.admissionNo}${r.data.receiptNo ? `; receipt ${r.data.receiptNo}` : ''}.`
-                        : `Receipt ${r.data.receiptNo ?? ''}: part taken; balance ${rupees(r.data.balance ?? 0)} still due.`,
-                    );
-                  else setMsg({ tone: 'danger', text: r.error });
-                })
-              }
-            >
-              {admissionFee > 0 ? `Take ${rupees(Number(take) || 0)}` : 'Confirm the admission'}
-            </button>
-          </div>
+            <p className="ep-alert ep-alert--info" style={{ margin: 0 }}>
+              Admission fee due: <strong>{rupees(balance)}</strong>
+              {admissionPaid > 0
+                ? ` (balance of ${rupees(admissionFee)}; ${rupees(admissionPaid)} paid)`
+                : ''}
+              . Accounts collect it at Fees → Cashier → Admission fees (in full or in parts); the
+              admission number comes when it is fully paid.
+            </p>
+          ) : (
+            <>
+              <p style={{ margin: 0 }}>
+                No admission fee is due for this category: confirm the admission to give the
+                admission number.
+              </p>
+              {canAdmit ? (
+                <div className="ep-form-actions">
+                  <button
+                    type="button"
+                    className="ep-btn ep-btn--primary"
+                    disabled={pending}
+                    onClick={() =>
+                      start(async () => {
+                        const r = await confirmNoFeeAdmission(id);
+                        if (r.ok) done(`Admission no. ${r.data.admissionNo}.`);
+                        else setMsg({ tone: 'danger', text: r.error });
+                      })
+                    }
+                  >
+                    Confirm the admission
+                  </button>
+                </div>
+              ) : null}
+            </>
+          )}
         </section>
       ) : null}
 

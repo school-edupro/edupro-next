@@ -13,12 +13,19 @@ export interface ApprovalRow {
   merit: number | null;
   stage: string | null;
   level: string | null;
+  /** the level's people (docs/design/55, for the admin's view) */
+  waitingWith?: string | null;
+  /** waiting at a level I am named in */
+  namedMe?: boolean;
   since: string | null;
   dueAt: string | null;
   overdue: boolean;
   remarks: ReviewRemark[];
 }
 export interface ApprovalList {
+  /** an admission admin: every registration waiting, at any level */
+  all?: boolean;
+  mine?: number;
   waiting: number;
   decided: number;
   overdue: number;
@@ -47,6 +54,8 @@ export const FILTER_KEYS = [
   'from',
   'to',
   'overdue',
+  'person',
+  'mine',
 ] as const;
 export type ApprovalFilters = Partial<Record<(typeof FILTER_KEYS)[number], string>>;
 
@@ -65,6 +74,8 @@ export function approvalsQuery(sp: Record<string, string | undefined>): URLSearc
     from: /^\d{4}-\d{2}-\d{2}$/,
     to: /^\d{4}-\d{2}-\d{2}$/,
     overdue: /^1$/,
+    person: /^.{1,80}$/,
+    mine: /^1$/,
   };
   for (const k of FILTER_KEYS) {
     const v = sp[k]?.trim();

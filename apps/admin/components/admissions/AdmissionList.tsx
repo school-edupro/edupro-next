@@ -1,7 +1,5 @@
 'use client';
-import { useState, useTransition } from 'react';
 import { PeopleList, ddmmyyyy } from '../people/PeopleList';
-import type { PeopleRow } from '@/lib/people-list';
 import type { PeopleListConfig } from '@/lib/people-list';
 import type {
   ReportChoice,
@@ -13,8 +11,6 @@ import type {
 import {
   ADMISSION_QUICK_FILTERS,
   DEFAULT_ADMISSION_VIEW,
-  DEFAULT_REGISTRATIONS_VIEW,
-  REGISTRATION_QUICK_FILTERS,
   type AdmissionListFields,
   type AdmissionListQuery,
   type AdmissionListResult,
@@ -137,201 +133,6 @@ const ADMISSIONS: PeopleListConfig<AdmissionListView, AdmissionListResult> = {
   ),
 };
 
-type BulkDecide = (input: {
-  ids: string[];
-  decision: 'approve' | 'reject' | 'hold';
-  remarks?: string;
-}) => Promise<
-  Result<{ done: number; failed: Array<{ id: string; number: string | null; reason: string }> }>
->;
-
-/** One decision for the ticked registrations, which must wait at the same stage and level. */
-function BulkDecideBar({
-  rows,
-  done,
-  decide,
-}: {
-  rows: PeopleRow[];
-  done: () => void;
-  decide: BulkDecide;
-}) {
-  const [decision, setDecision] = useState<'approve' | 'reject' | 'hold'>('approve');
-  const [remarks, setRemarks] = useState('');
-  const [msg, setMsg] = useState<{ tone: 'success' | 'warning' | 'danger'; text: string } | null>(
-    null,
-  );
-  const [pending, start] = useTransition();
-  const places = new Set(rows.map((r) => `${String(r.stage ?? '')} · ${String(r.level ?? '')}`));
-  const mixed = places.size > 1;
-  const at = String(rows[0]?.stage ?? '');
-  const level = rows[0]?.level ? ` (level ${String(rows[0].level)})` : '';
-  const go = () =>
-    start(async () => {
-      const r = await decide({ ids: rows.map((x) => String(x.__id)), decision, remarks });
-      if (!r.ok) return setMsg({ tone: 'danger', text: r.errors?.join('; ') ?? r.error });
-      const f = r.data.failed;
-      setMsg({
-        tone: f.length ? 'warning' : 'success',
-        text: `${String(r.data.done)} decided.${
-          f.length
-            ? ` Not decided: ${f.map((x) => `${x.number ?? x.id} (${x.reason})`).join('; ')}`
-            : ''
-        }`,
-      });
-      setRemarks('');
-      done();
-    });
-  return (
-    <section className="ep-card" aria-label="Decide the ticked registrations">
-      <p style={{ margin: '0 0 var(--sp-2)' }}>
-        <strong>{rows.length} ticked</strong>
-        {mixed ? null : ` · waiting at ${at}${level}`}
-      </p>
-      {mixed ? (
-        <p className="ep-alert ep-alert--warning" role="alert" style={{ margin: 0 }}>
-          The ticked registrations wait at different stages or levels ({[...places].join(', ')}).
-          Tick those at one stage and level to decide them together.
-        </p>
-      ) : (
-        <div
-          style={{ display: 'flex', gap: 'var(--sp-3)', alignItems: 'flex-end', flexWrap: 'wrap' }}
-        >
-          <label className="ep-field" style={{ margin: 0 }}>
-            <span className="ep-field__label">Decision</span>
-            <select
-              className="ep-select"
-              value={decision}
-              onChange={(e) => setDecision(e.target.value as typeof decision)}
-            >
-              <option value="approve">Approve</option>
-              <option value="hold">Hold</option>
-              <option value="reject">Reject (not selected)</option>
-            </select>
-          </label>
-          <label className="ep-field" style={{ margin: 0, flex: '1 1 260px' }}>
-            <span className="ep-field__label">Remarks (for every one ticked)</span>
-            <input
-              className="ep-input"
-              value={remarks}
-              maxLength={1000}
-              onChange={(e) => setRemarks(e.target.value)}
-            />
-          </label>
-          <button
-            type="button"
-            className={`ep-btn ep-btn--sm ${decision === 'reject' ? 'ep-btn--danger' : 'ep-btn--primary'}`}
-            disabled={pending}
-            onClick={go}
-          >
-            {pending ? 'Deciding…' : `Decide ${String(rows.length)}`}
-          </button>
-        </div>
-      )}
-      <p className="ep-field__help" style={{ margin: 'var(--sp-2) 0 0' }}>
-        Each is decided as if opened: only at levels you may decide, the family is told as usual,
-        and marks, corrections and offers are given one by one on the registration.
-      </p>
-      {msg ? (
-        <p
-          className={`ep-alert ep-alert--${msg.tone}`}
-          role="status"
-          style={{ margin: 'var(--sp-2) 0 0' }}
-        >
-          {msg.text}
-        </p>
-      ) : null}
-    </section>
-  );
-}
-
-const REG_TABS: Array<{ value: AdmissionListView['status']; label: string }> = [
-  { value: 'mine', label: 'Waiting for me' },
-  { value: 'in_progress', label: 'In process' },
-  { value: 'unfinished', label: 'Fee due' },
-  { value: 'admitted', label: 'Fee paid / admitted' },
-  { value: 'closed', label: 'Closed' },
-  { value: 'all', label: 'All' },
-];
-
-/** The registrations list (docs/design/47): the admissions grid with the process and its queue. */
-function registrationsConfig(
-  decide: BulkDecide | undefined,
-): PeopleListConfig<AdmissionListView, AdmissionListResult> {
-  return {
-    ...ADMISSIONS,
-    noun: { one: 'registration', many: 'registrations', heading: 'Candidate' },
-    defaultView: DEFAULT_REGISTRATIONS_VIEW,
-    quickFilters: REGISTRATION_QUICK_FILTERS,
-    statuses: REG_TABS,
-    defaultStatus: 'mine',
-    searchedAllNote: 'search looks in every registration, whatever its status or level',
-    report: { name: 'Registrations', description: 'Saved from the registrations list' },
-    viewToSpec: (v) => {
-      const spec = ADMISSIONS.viewToSpec(v);
-      return {
-        ...spec,
-        filters: [...spec.filters, { key: 'status', op: 'not_in', values: ['Form not submitted'] }],
-      };
-    },
-    statusTabs: ({ stats: s }) => [
-      { value: 'mine', label: 'Waiting for me', count: s.mine, alert: s.overdue > 0 },
-      { value: 'in_progress', label: 'In process', count: s.in_progress },
-      { value: 'unfinished', label: 'Fee due', count: s.unfinished },
-      { value: 'admitted', label: 'Fee paid / admitted', count: s.admitted },
-      { value: 'closed', label: 'Closed', count: s.closed },
-      { value: 'all', label: 'All', count: s.total },
-    ],
-    counts: ({ stats: s }) => [
-      ['Waiting for me', s.mine],
-      ['Overdue', s.overdue],
-      ['In process', s.in_progress],
-      ['Total', s.total],
-    ],
-    statusCell: (r) => (
-      <>
-        <span className={`ep-badge ep-badge--${TONE(String(r.status ?? ''))}`}>
-          {String(r.status ?? '')}
-        </span>
-        {r.overdue === 'Yes' ? <span className="ep-badge ep-badge--danger">Overdue</span> : null}
-        {r.stage ? (
-          <span className="ep-sl__sub">
-            {String(r.stage)}
-            {r.level ? ` · level ${String(r.level)}` : ''}
-          </span>
-        ) : null}
-      </>
-    ),
-    tools: (can, view) => (
-      <>
-        <a
-          className="ep-btn ep-btn--ghost ep-btn--sm"
-          href={`/admissions/registrations/board${view.status === 'mine' ? '?mine=1' : ''}`}
-        >
-          Board view
-        </a>
-        <a className="ep-btn ep-btn--ghost ep-btn--sm" href="/admissions/schedule">
-          Tests and interviews
-        </a>
-        <a className="ep-btn ep-btn--ghost ep-btn--sm" href="/admissions/selection">
-          Selection
-        </a>
-        {can.desk ? (
-          <a className="ep-btn ep-btn--primary ep-btn--sm" href="/admissions/desk">
-            Register a walk-in
-          </a>
-        ) : null}
-      </>
-    ),
-    select: decide
-      ? {
-          can: (r) => r.__mine === 'yes',
-          bar: (rows, done) => <BulkDecideBar rows={rows} done={done} decide={decide} />,
-        }
-      : undefined,
-  };
-}
-
-/** The admissions list: the shared people list on the Admissions dataset. */
 export function AdmissionList(props: {
   fields: AdmissionListFields;
   initial: AdmissionListResult;
@@ -360,11 +161,6 @@ export function AdmissionList(props: {
   reports?: ReportChoice[];
   /** ready-made admission reports (docs/design/52) */
   ready?: Array<{ key: string; name: string; description: string }>;
-  /** the registrations list (docs/design/47) and, for those who decide, bulk decide */
-  mode?: 'list' | 'registrations';
-  bulkDecide?: BulkDecide;
 }) {
-  const { mode = 'list', bulkDecide, ...rest } = props;
-  const config = mode === 'registrations' ? registrationsConfig(bulkDecide) : ADMISSIONS;
-  return <PeopleList config={config} {...rest} />;
+  return <PeopleList config={ADMISSIONS} {...props} />;
 }

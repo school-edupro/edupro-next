@@ -12,6 +12,7 @@ import { AdmissionDeskController } from './desk.controller';
 import { AdmissionProcessController } from './process.controller';
 import { AdmissionProcessService } from './process.service';
 import { AdmissionGridService } from './grid.service';
+import { AdmissionApprovalsSheetService } from './approvals-sheet.service';
 import { AdmissionCounterController } from './counter.controller';
 import { AdmissionCounterService } from './counter.service';
 import { AdmissionReadyReportsController } from './ready-reports.controller';
@@ -84,6 +85,7 @@ import { AdmissionNumberSeriesService } from './number-series.service';
     AdmissionReadyReportsService,
     AdmissionCounterService,
     AdmissionRefundsService,
+    AdmissionApprovalsSheetService,
     AdmissionEnquiryService,
     AdmissionScoreTablesService,
     AdmissionApprovalsService,

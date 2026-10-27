@@ -35,7 +35,7 @@ async function call<T>(
 }
 const regPaths = (id: string) => [
   `/admissions/registrations/${id}`,
-  '/admissions/registrations',
+  '/admissions/list',
   '/admissions/admit',
 ];
 
@@ -55,6 +55,16 @@ export async function collectAdmissionFee(
     `/admissions/registrations/${id}/admission-fee`,
     'POST',
     body,
+    regPaths(id),
+  );
+}
+/** No admission fee due: the office confirms the admission (docs/design/55). */
+export async function confirmNoFeeAdmission(id: string) {
+  if (!okId(id)) return { ok: false as const, error: 'Unknown registration' };
+  return call<{ admissionNo: string }>(
+    `/admissions/registrations/${id}/confirm`,
+    'POST',
+    {},
     regPaths(id),
   );
 }
@@ -79,7 +89,7 @@ export async function admitBulk(
     results: Array<{ applicationId: string; ok: boolean; error?: string }>;
   }>('/admissions/admit-bulk', 'POST', { items, ...(joinedOn ? { joinedOn } : {}) }, [
     '/admissions/admit',
-    '/admissions/registrations',
+    '/admissions/list',
   ]);
 }
 export async function cancelRegistration(id: string, reason: string) {

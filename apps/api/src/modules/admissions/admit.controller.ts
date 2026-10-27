@@ -38,6 +38,13 @@ export class AdmissionAdmitController {
     return this.svc.collect(ctx, id, dto);
   }
 
+  @Post('registrations/:id/confirm')
+  @ApiOperation({ summary: 'Confirm an admission with no admission fee due: the admission number' })
+  @RequirePermission(ADMISSION_ADMIT)
+  confirm(@ReqCtx() ctx: RequestContext, @Param('id') id: string) {
+    return this.svc.confirmNoFee(ctx, id);
+  }
+
   @Get('registrations/:id/admission-form')
   @RequirePermission(ADMISSIONS.applicationView)
   admissionForm(@ReqCtx() ctx: RequestContext, @Param('id') id: string) {

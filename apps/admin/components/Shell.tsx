@@ -10,7 +10,7 @@ import { Tour } from './Tour';
 import { AccountMenu, ContextMenu, LanguageMenu } from './HeaderMenus';
 import { HeaderKeys } from './HeaderKeys';
 import { SidebarToggle } from './SidebarToggle';
-import { NAV } from '@/lib/nav';
+import { APPROVALS_MENU, NAV } from '@/lib/nav';
 
 export async function Shell({
   me,
@@ -36,6 +36,11 @@ export async function Shell({
       }))
     : [];
   const allowed = new Set(me.permissions);
+  // Admissions → Approvals: admission admins and the people named in an approval level (docs/design/55)
+  const approvalsMenu = await apiFetch<{ show: boolean }>('/admissions/approvals/menu').catch(
+    () => ({ show: false }),
+  );
+  if (approvalsMenu.show) allowed.add(APPROVALS_MENU);
   // a menu entry that opens a sub-page (the notices report) still stands for its whole section
   const SECTION_OF: Record<string, string> = { '/academics/notices/report': '/academics/notices' };
   const ALSO: Record<string, string[]> = {

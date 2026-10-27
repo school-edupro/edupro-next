@@ -95,6 +95,8 @@ export interface AdmissionReviewData {
   }>;
   receipts: Array<{ id: string; receiptNo: string; amount: number; date: string; head: string }>;
   hasForm: boolean;
+  /** an admin deciding at a level not theirs: the level and its people (docs/design/55) */
+  onBehalf?: string | null;
 }
 type Result = { ok: true } | { ok: false; error: string };
 export interface AdmissionReviewActions {
@@ -710,6 +712,11 @@ export function AdmissionReview({
               <h3 id="arv-decide" className="ep-arv__h">
                 Your decision
               </h3>
+              {data.onBehalf ? (
+                <p className="ep-alert ep-alert--info" style={{ margin: 0 }}>
+                  Deciding for {data.onBehalf}: your remark keeps that it was on their behalf.
+                </p>
+              ) : null}
               <div role="group" aria-label="What to do" className="ep-arv__modes">
                 <button
                   type="button"

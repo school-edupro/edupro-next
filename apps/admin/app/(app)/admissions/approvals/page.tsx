@@ -8,6 +8,7 @@ import {
   type ApprovalList,
   type ApprovalRow,
 } from '@/lib/admission-approvals';
+import { ApprovalSheet } from '@/components/admissions/ApprovalSheet';
 import { apiFetch } from '@/lib/api';
 
 const OK: Record<string, string> = {
@@ -37,7 +38,15 @@ export default async function AdmissionApprovalsPage({
   const sp = await searchParams;
   const tab = sp.tab === 'decided' ? 'decided' : 'waiting';
   const q = approvalsQuery({ ...sp, tab });
-  const list = await apiFetch<ApprovalList>(`/admissions/approvals?${q.toString()}&size=500`);
+  const [list, places] = await Promise.all([
+    apiFetch<ApprovalList>(`/admissions/approvals?${q.toString()}&size=500`),
+    // decisions by Excel (docs/design/55): the levels with registrations waiting for me
+    apiFetch<{ data: Array<{ value: string; label: string; count: number }> }>(
+      '/admissions/approvals/sheet/options',
+    )
+      .then((r) => r.data)
+      .catch(() => []),
+  ]);
   const cols = remarkColumns(list.data);
   const remarkAt = (r: ApprovalRow, col: string) =>
     r.remarks.find((m) => `${m.stage} · ${m.levelName}` === col);
@@ -48,7 +57,11 @@ export default async function AdmissionApprovalsPage({
       <PageHeader
         kicker="Admissions"
         title="Admission approvals"
-        description="Registrations waiting for your decision at the levels you are named in. Open one to see the form, the documents and the points, correct an answer if needed, and decide with your remark."
+        description={
+          list.all
+            ? 'Every registration waiting at any approval level, and who holds it. You may decide for an absent approver: the remark keeps that it was done on their behalf. Open one to see the form, the documents and the points.'
+            : 'Registrations waiting for your decision at the levels you are named in. Open one to see the form, the documents and the points, correct an answer if needed, and decide with your remark.'
+        }
         actions={
           <span style={{ display: 'inline-flex', gap: 'var(--sp-2)', flexWrap: 'wrap' }}>
             <a
@@ -73,13 +86,29 @@ export default async function AdmissionApprovalsPage({
       ) : null}
       <nav className="ep-lead-views" aria-label="Show" style={{ marginBottom: 'var(--sp-3)' }}>
         <a href={BASE} aria-current={tab === 'waiting' ? 'page' : undefined}>
-          Waiting for me ({list.waiting}
+          {list.all ? 'Waiting' : 'Waiting for me'} ({list.waiting}
           {list.overdue ? `, ${String(list.overdue)} overdue` : ''})
         </a>
         <a href={`${BASE}?tab=decided`} aria-current={tab === 'decided' ? 'page' : undefined}>
           Decided by me ({list.decided})
         </a>
       </nav>
+      {tab === 'waiting' && places.length ? (
+        <details
+          className="ep-card"
+          style={{ marginBottom: 'var(--sp-4)', padding: 'var(--sp-4)' }}
+        >
+          <summary>
+            <strong>Excel decisions</strong>{' '}
+            <span className="ep-field__help">
+              download the sheet of a stage and level, fill the decisions, upload, check and apply
+            </span>
+          </summary>
+          <div style={{ marginTop: 'var(--sp-3)' }}>
+            <ApprovalSheet places={places} />
+          </div>
+        </details>
+      ) : null}
       <Card style={{ marginBottom: 'var(--sp-4)' }}>
         <form method="get" className="ep-lead-filter">
           <input type="hidden" name="tab" value={tab} />
@@ -168,6 +197,26 @@ export default async function AdmissionApprovalsPage({
             <span className="ep-field__label">to</span>
             <input className="ep-input" type="date" name="to" defaultValue={sp.to ?? ''} />
           </label>
+          {list.all && tab === 'waiting' ? (
+            <>
+              <label className="ep-field">
+                <span className="ep-field__label">Waiting with</span>
+                <input
+                  className="ep-input"
+                  name="person"
+                  defaultValue={sp.person ?? ''}
+                  placeholder="Approver's name"
+                />
+              </label>
+              <label className="ep-field">
+                <span className="ep-field__label">Levels</span>
+                <select className="ep-select" name="mine" defaultValue={sp.mine === '1' ? '1' : ''}>
+                  <option value="">Every level</option>
+                  <option value="1">Only mine ({list.mine ?? 0})</option>
+                </select>
+              </label>
+            </>
+          ) : null}
           {tab === 'waiting' ? (
             <label className="ep-field">
               <span className="ep-field__label">Due</span>
@@ -221,6 +270,7 @@ export default async function AdmissionApprovalsPage({
                   <th scope="col">Class</th>
                   <th scope="col">Points</th>
                   <th scope="col">{tab === 'waiting' ? 'Waiting at' : 'Status'}</th>
+                  {list.all && tab === 'waiting' ? <th scope="col">Waiting with</th> : null}
                   {cols.map((c) => (
                     <th key={c} scope="col">
                       {c}
@@ -253,6 +303,16 @@ export default async function AdmissionApprovalsPage({
                         (STATUS_LABEL[r.status] ?? r.status)
                       )}
                     </td>
+                    {list.all && tab === 'waiting' ? (
+                      <td>
+                        {r.waitingWith ?? '-'}
+                        {r.namedMe ? (
+                          <div>
+                            <Badge tone="info">You</Badge>
+                          </div>
+                        ) : null}
+                      </td>
+                    ) : null}
                     {cols.map((c) => {
                       const m = remarkAt(r, c);
                       return (

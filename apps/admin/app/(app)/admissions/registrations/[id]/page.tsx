@@ -137,8 +137,8 @@ export default async function RegistrationPage({
         }
         actions={
           <span style={{ display: 'inline-flex', gap: 'var(--sp-2)', flexWrap: 'wrap' }}>
-            <a className="ep-btn ep-btn--ghost ep-btn--sm" href="/admissions/registrations">
-              Registrations
+            <a className="ep-btn ep-btn--ghost ep-btn--sm" href="/admissions/list">
+              Admissions list
             </a>
             {r.enteredByOffice || r.feeDue > 0 ? (
               <a className="ep-btn ep-btn--ghost ep-btn--sm" href={`/admissions/desk/${r.id}`}>
@@ -265,7 +265,6 @@ export default async function RegistrationPage({
             admissionPaid={r.admissionFeePaid ?? 0}
             sections={sections}
             refund={refund}
-            canCollect={can('admissions.fee.collect')}
             canAdmit={can('admissions.application.admit')}
             canCancel={can('admissions.application.cancel')}
             studentId={r.studentId}

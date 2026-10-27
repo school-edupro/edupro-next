@@ -3,7 +3,6 @@ import { notFound } from 'next/navigation';
 import { DeskForm } from '@/components/admissions/DeskForm';
 import { ViewDownload } from '@/components/admissions/ViewDownload';
 import { Notice } from '@/components/Notice';
-import { collectRegistrationFee } from '@/lib/admission-desk-actions';
 import { REG_STATUS, dmy, rupees, type RegistrationForm } from '@/lib/admission-desk';
 import { ApiError, apiFetch, getMe } from '@/lib/api';
 
@@ -28,7 +27,6 @@ export default async function DeskRegistrationPage({
   );
   const st = REG_STATUS[app.status] ?? { label: app.status, tone: 'neutral' as const };
   const editing = app.status === 'draft' || (app.status === 'submitted' && !app.number);
-  const canCollect = me.permissions.includes('admissions.fee.collect');
   return (
     <>
       <PageHeader
@@ -76,52 +74,12 @@ export default async function DeskRegistrationPage({
             <p>{app.progress}% of the form is filled; each tab is saved on Next.</p>
           ) : null}
           {app.feeDue > 0 ? (
-            canCollect ? (
-              <form action={collectRegistrationFee} style={{ display: 'grid', gap: 'var(--sp-3)' }}>
-                <input type="hidden" name="id" value={app.id} />
-                <p style={{ margin: 0 }}>
-                  Registration fee due: <strong>{rupees(app.feeDue)}</strong>
-                </p>
-                <div
-                  style={{
-                    display: 'grid',
-                    gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 260px), 1fr))',
-                    gap: 'var(--sp-3)',
-                  }}
-                >
-                  <label className="ep-field">
-                    <span className="ep-field__label">Mode</span>
-                    <select className="ep-select" name="mode" defaultValue="cash">
-                      <option value="cash">Cash</option>
-                      <option value="upi">UPI</option>
-                      <option value="card">Card</option>
-                      <option value="cheque">Cheque</option>
-                      <option value="dd">Demand draft</option>
-                      <option value="bank">Bank transfer</option>
-                    </select>
-                  </label>
-                  <label className="ep-field">
-                    <span className="ep-field__label">Reference (UPI / card / transfer)</span>
-                    <input className="ep-input" name="reference" maxLength={80} />
-                  </label>
-                  <label className="ep-field">
-                    <span className="ep-field__label">Cheque / DD no.</span>
-                    <input className="ep-input" name="instrumentNo" maxLength={40} />
-                  </label>
-                  <label className="ep-field">
-                    <span className="ep-field__label">Bank</span>
-                    <input className="ep-input" name="bankName" maxLength={80} />
-                  </label>
-                </div>
-                <div>
-                  <button className="ep-btn ep-btn--primary" type="submit">
-                    Take {rupees(app.feeDue)} and register
-                  </button>
-                </div>
-              </form>
-            ) : (
-              <p>Registration fee due: {rupees(app.feeDue)}. The fee counter takes it.</p>
-            )
+            // only Accounts take money, at Fees → Cashier (docs/design/55)
+            <p className="ep-alert ep-alert--info" style={{ margin: 0 }}>
+              Registration fee due: <strong>{rupees(app.feeDue)}</strong>. Send the family to the
+              fee counter: Accounts collect it at Fees → Cashier → Admission fees, and the
+              registration number comes with the receipt.
+            </p>
           ) : null}
         </Card>
         <Card elevated title="Documents">

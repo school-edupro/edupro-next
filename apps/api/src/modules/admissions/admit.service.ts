@@ -234,6 +234,33 @@ export class AdmissionAdmitService {
       );
   }
 
+  /**
+   * No admission fee is due (a category with fee 0): the admission office confirms the admission and
+   * the admission number comes (docs/design/55: money itself is taken only by Accounts).
+   */
+  async confirmNoFee(ctx: RequestContext, id: string) {
+    return this.db.tenant(requireTenant(ctx), async (c) => {
+      const a = await this.core.row(c, id);
+      if (a.status !== 'offered')
+        throw new DomainError('admissions.nothing_due', 'No admission offer waits here', {
+          status: 409,
+        });
+      if (Number(a.admission_fee ?? 0) > 0)
+        throw new DomainError(
+          'admissions.fee_due',
+          'An admission fee is due: Accounts collect it at Fees → Cashier',
+          { status: 409 },
+        );
+      await this.feePaid(c, id, null, { actorUser: ctx.user.id });
+      await this.audit.stage(ctx, c, {
+        action: 'admissions.admission.confirm_no_fee',
+        entityType: 'applications',
+        entityId: id,
+      });
+      return { admissionNo: (await this.core.row(c, id)).admission_no };
+    });
+  }
+
   /** The admission fee taken at the counter (or confirmed when none is due). */
   async collect(ctx: RequestContext, id: string, dto: DeskFeeDto) {
     const out = await this.db.tenant(requireTenant(ctx), async (c) => {
