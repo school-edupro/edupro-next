@@ -79,6 +79,8 @@ export class AdmissionScoreReportService {
       key: string;
       stageId: string;
       stage: string;
+      /** the stage's own kind (test, interview…), for the report's views */
+      stageKind: string;
       label: string;
       max: number | null;
       kind: 'part' | 'total' | 'stage';
@@ -95,6 +97,7 @@ export class AdmissionScoreReportService {
             key: `${x.id}:${pt.id}`,
             stageId: x.id,
             stage: x.name,
+            stageKind: x.kind,
             label: pt.name,
             max: pt.maxMarks,
             kind: 'part',
@@ -103,6 +106,7 @@ export class AdmissionScoreReportService {
           key: `${x.id}:total`,
           stageId: x.id,
           stage: x.name,
+          stageKind: x.kind,
           label: `${x.name} total`,
           max: paper.total,
           kind: 'total',
@@ -112,6 +116,7 @@ export class AdmissionScoreReportService {
           key: `${x.id}:stage`,
           stageId: x.id,
           stage: x.name,
+          stageKind: x.kind,
           label: x.name,
           max: x.max_marks !== null ? Number(x.max_marks) : null,
           kind: 'stage',
@@ -313,11 +318,10 @@ export class AdmissionScoreReportService {
       .sort((a, b) => (a.rank ?? 1e9) - (b.rank ?? 1e9) || Number(a.id) - Number(b.id));
     // the report's views (docs/design/62): the merit list, and each stage with marks
     const views = [
-      { id: 'merit', name: 'Merit list' },
-      ...[...new Map(markCols.map((x) => [x.stageId, x.stage] as const))].map(([id, name]) => ({
-        id,
-        name,
-      })),
+      { id: 'merit', name: 'Merit list', kind: 'merit' },
+      ...[
+        ...new Map(markCols.map((x) => [x.stageId, { name: x.stage, kind: x.stageKind }] as const)),
+      ].map(([id, x]) => ({ id, ...x })),
     ];
     const view = views.find((x) => x.id === (q.view ?? 'merit'));
     if (!view)

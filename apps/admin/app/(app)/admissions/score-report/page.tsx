@@ -1,5 +1,6 @@
 import { Badge, Card, PageHeader } from '@edupro/ui';
 import { notFound } from 'next/navigation';
+import { ReportViewSelect } from '@/components/admissions/ReportViewSelect';
 import { SessionClassPicker } from '@/components/admissions/SessionClassPicker';
 import type { ScoreReport, ScoreReportOptions } from '@/lib/admission-scores';
 import type { AdmissionSetup } from '@/lib/admission-setup';
@@ -81,12 +82,29 @@ export default async function ScoreReportPage({
         })
       : null;
   const merit = !rep || rep.view.id === 'merit';
-  const viewHref = (id: string) => {
-    const v = new URLSearchParams(q);
-    if (id === 'merit') v.delete('view');
-    else v.set('view', id);
-    return `/admissions/score-report?${v.toString()}`;
-  };
+  // the Report filter: the merit list, then each written test and interview of the class (one the
+  // class has none of is shown, not offered), then any other stage with marks
+  const reportOptions = rep
+    ? [
+        { value: 'merit', label: 'Merit list' },
+        ...(['test', 'interview'] as const).flatMap((kind) => {
+          const mine = rep.views.filter((v) => v.kind === kind);
+          const word = kind === 'test' ? 'Written test' : 'Interview';
+          return mine.length
+            ? mine.map((v) => ({ value: v.id, label: `${v.name} result` }))
+            : [
+                {
+                  value: `none-${kind}`,
+                  label: `${word} result (not in ${rep.className}'s process)`,
+                  disabled: true,
+                },
+              ];
+        }),
+        ...rep.views
+          .filter((v) => !['merit', 'test', 'interview'].includes(v.kind))
+          .map((v) => ({ value: v.id, label: `${v.name} result` })),
+      ]
+    : [];
   const n = (v: number | null) => (v === null ? '-' : String(v));
   return (
     <>
@@ -146,6 +164,9 @@ export default async function ScoreReportPage({
               {viewId !== 'merit' ? <input type="hidden" name="view" value={viewId} /> : null}
             </>
           ) : null}
+          {rep ? (
+            <ReportViewSelect value={rep.view.id} options={reportOptions} query={q.toString()} />
+          ) : null}
           <label className="ep-field">
             <span className="ep-field__label">Name or registration no.</span>
             <input name="q" className="ep-input" maxLength={80} defaultValue={search} />
@@ -195,23 +216,6 @@ export default async function ScoreReportPage({
         <p className="ep-card">No admission session with classes yet.</p>
       ) : (
         <Card>
-          {rep.views.length > 1 ? (
-            <nav
-              className="ep-lead-views"
-              aria-label="Report"
-              style={{ marginBottom: 'var(--sp-3)' }}
-            >
-              {rep.views.map((v) => (
-                <a
-                  key={v.id}
-                  href={viewHref(v.id)}
-                  aria-current={rep.view.id === v.id ? 'page' : undefined}
-                >
-                  {v.id === 'merit' ? v.name : `${v.name} result`}
-                </a>
-              ))}
-            </nav>
-          ) : null}
           <p className="ep-field__help" style={{ marginTop: 0 }}>
             {rep.className} · {rep.session} · {rep.rows.length}{' '}
             {search || sp.status || sp.categoryId || sp.check === '1' ? 'matching ' : ''}

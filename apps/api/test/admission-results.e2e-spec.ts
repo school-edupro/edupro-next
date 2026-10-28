@@ -1091,14 +1091,14 @@ describe('admission test results by part (e2e)', () => {
   it("the score report's views: the merit list, the written test's result and the interview's", async () => {
     const q = new URLSearchParams({ cycleId: ids.cycle!, classId: ids.cls! }).toString();
     const merit = (await call('GET', `/admissions/score-report?${q}`)).json();
-    expect(merit.view).toEqual({ id: 'merit', name: 'Merit list' });
+    expect(merit.view).toEqual({ id: 'merit', name: 'Merit list', kind: 'merit' });
     expect(merit.views).toEqual([
-      { id: 'merit', name: 'Merit list' },
-      { id: ids.test, name: 'Written test' },
-      { id: ids.interview, name: 'Interview' },
+      { id: 'merit', name: 'Merit list', kind: 'merit' },
+      { id: ids.test, name: 'Written test', kind: 'test' },
+      { id: ids.interview, name: 'Interview', kind: 'interview' },
     ]);
     const wt = (await call('GET', `/admissions/score-report?${q}&view=${ids.test!}`)).json();
-    expect(wt.view).toEqual({ id: ids.test, name: 'Written test' });
+    expect(wt.view).toEqual({ id: ids.test, name: 'Written test', kind: 'test' });
     expect(wt.criteria).toEqual([]);
     expect(wt.marks.map((m: { label: string }) => m.label)).toEqual([
       'English',

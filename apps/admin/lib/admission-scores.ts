@@ -41,8 +41,8 @@ export interface ScoreReport {
   session: string;
   className: string;
   /** the merit list, or a Written test / Interview stage's result (docs/design/62) */
-  view: { id: string; name: string };
-  views: Array<{ id: string; name: string }>;
+  view: { id: string; name: string; kind: string };
+  views: Array<{ id: string; name: string; kind: string }>;
   max: number | null;
   /** a column per level of the class's process (docs/design/50) */
   levels: string[];

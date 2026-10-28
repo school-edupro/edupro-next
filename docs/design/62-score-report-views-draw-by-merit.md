@@ -101,3 +101,7 @@ Changing how the merit total is made; slips in languages other than English.
 - Tests: admission-draw e2e 8 (merit totals, level-1 confirmation and undo, blank slips, merit
   details), admission-results 17, admission-v2 updated (points confirmed by the Document check
   approval); all admission suites + permission coverage 116; a11y draw (4) and score report (3).
+- Follow-up (asked 28 Oct): the view is a **Report** filter in the filter row (a select that applies at
+  once, the other filters kept) instead of the links above the table: Merit list, Written test
+  result, Interview result; a result the class has no stage for is listed but greyed out ("not in
+  Class VI's process"). Each view carries its stage's `kind`.
