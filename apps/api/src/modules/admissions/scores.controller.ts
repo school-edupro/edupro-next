@@ -141,6 +141,16 @@ export class AdmissionScoresController {
     return this.report.recalculate(ctx, id, dto.classId);
   }
 
+  @Get('score-report/options')
+  @ApiOperation({
+    summary:
+      'Sessions with their classes and registration counts (the report opens where there are some)',
+  })
+  @RequirePermission(ADMISSIONS.applicationView)
+  scoreReportOptions(@ReqCtx() ctx: RequestContext) {
+    return this.report.options(ctx);
+  }
+
   @Get('score-report')
   @ApiOperation({ summary: "A class's registrations with each criterion's points, total and rank" })
   @RequirePermission(ADMISSIONS.applicationView)

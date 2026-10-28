@@ -22,6 +22,7 @@ const PAGES = [
   '/admissions/setup/score-tables?t=alumni_school',
   '/admissions/setup/numbers',
   '/admissions/score-report',
+  '/admissions/score-report?cycleId=4&classId=172&q=a',
   '/admissions/approvals',
   '/admissions/approvals?tab=decided',
   // a sample registration's review (scripts/seed-admission-merit.mjs); a new seed changes the ids

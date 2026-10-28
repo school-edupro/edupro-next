@@ -40,6 +40,8 @@ export const ScoreReportQuerySchema = z.object({
     .optional(),
   /** only registrations with a line the office should look at */
   check: z.enum(['1']).optional(),
+  /** a name or registration no. (docs/design/61) */
+  q: z.string().trim().max(80).optional(),
 });
 export class ScoreReportQueryDto extends createZodDto(ScoreReportQuerySchema) {}
 

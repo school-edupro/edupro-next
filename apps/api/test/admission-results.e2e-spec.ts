@@ -1002,4 +1002,88 @@ describe('admission test results by part (e2e)', () => {
     expect(String(one.worksheets[0]!.getRow(3).getCell(1).value)).toMatch(/^Slot: .* Room 1$/);
     expect(await pagesOf({ slotId: ids.slot! })).toBe(1);
   });
+
+  // ---- docs/design/61, part 1: the score report by subject ------------------------------------------
+  it('the score report has a column per subject and parameter with stage totals; search keeps the rank', async () => {
+    const o = (await call('GET', '/admissions/score-report/options')).json();
+    expect(o.cycles).toEqual([
+      expect.objectContaining({
+        id: ids.cycle,
+        registrations: 3,
+        classes: [{ id: ids.cls, name: 'Class IX', registrations: 3 }],
+      }),
+    ]);
+    const q = new URLSearchParams({ cycleId: ids.cycle!, classId: ids.cls! }).toString();
+    const rep = (await call('GET', `/admissions/score-report?${q}`)).json();
+    expect(
+      rep.marks.map((m: { stage: string; label: string; max: number; kind: string }) => [
+        m.stage,
+        m.label,
+        m.max,
+        m.kind,
+      ]),
+    ).toEqual([
+      ['Written test', 'English', 50, 'part'],
+      ['Written test', 'Maths', 50, 'part'],
+      ['Written test', 'Written test total', 100, 'total'],
+      ['Interview', 'Communication', 10, 'part'],
+      ['Interview', 'Confidence', 10, 'part'],
+      ['Interview', 'Interview total', 20, 'total'],
+    ]);
+    // the cells are the grid's marks, part by part, and the totals (AB when absent)
+    for (const [stageId, at] of [
+      [ids.test!, 0],
+      [ids.interview!, 3],
+    ] as const) {
+      const g = (
+        await call(
+          'GET',
+          `/admissions/results?${new URLSearchParams({ ...place(), stageId }).toString()}`,
+        )
+      ).json();
+      const partIds = (g.place.paper.parts as Array<{ id: string }>).map((x) => x.id);
+      for (const row of rep.rows as Array<{ id: string; cells: unknown[] }>) {
+        const gr = (
+          g.rows as Array<{
+            id: string;
+            absent: boolean;
+            total: number | null;
+            marks: Record<string, number | null>;
+          }>
+        ).find((x) => x.id === row.id);
+        if (!gr) continue;
+        expect(row.cells.slice(at, at + partIds.length)).toEqual(
+          partIds.map((pid) => (gr.absent ? 'AB' : (gr.marks[pid] ?? null))),
+        );
+        expect(row.cells[at + partIds.length]).toEqual(gr.absent ? 'AB' : gr.total);
+      }
+    }
+    // a name: the class's rank kept
+    const asha = (rep.rows as Array<{ candidate: string; rank: number | null }>).find(
+      (x) => x.candidate === 'ASHA',
+    )!;
+    const one = (await call('GET', `/admissions/score-report?${q}&q=ash`)).json();
+    expect(
+      one.rows.map((x: { candidate: string; rank: number | null }) => [x.candidate, x.rank]),
+    ).toEqual([['ASHA', asha.rank]]);
+    expect(
+      (await call('GET', `/admissions/score-report?${q}&q=${encodeURIComponent(nos[1]!)}`)).json()
+        .rows,
+    ).toHaveLength(1);
+    // the downloads carry the same columns
+    const x = await call('GET', `/admissions/score-report.xlsx?${q}`);
+    const wb = new ExcelJS.Workbook();
+    await wb.xlsx.load(x.rawPayload as unknown as ArrayBuffer);
+    const head = (wb.worksheets[0]!.getRow(4).values as unknown[]).map(String);
+    expect(head).toEqual(
+      expect.arrayContaining([
+        'Written test · English (50)',
+        'Written test total (100)',
+        'Interview total (20)',
+      ]),
+    );
+    const pdf = await call('GET', `/admissions/score-report.pdf?${q}&q=ash`);
+    expect(pdf.statusCode).toBe(200);
+    expect(pdf.rawPayload.subarray(0, 4).toString()).toBe('%PDF');
+  });
 });

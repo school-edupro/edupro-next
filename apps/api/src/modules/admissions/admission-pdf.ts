@@ -28,14 +28,16 @@ async function start(
   title: string,
   school: SchoolHead,
   logo: { contentType: string; bytes: Buffer } | null,
+  /** the page: A4 upright unless given (landscape for wide lists) */
+  size: [number, number] = A4,
 ) {
   const pdf = await PDFDocument.create();
   pdf.setTitle(latin(title));
   pdf.setAuthor(latin(school.name));
   const regular = await pdf.embedFont(StandardFonts.Helvetica);
   const bold = await pdf.embedFont(StandardFonts.HelveticaBold);
-  const page = pdf.addPage(A4);
-  page.drawRectangle({ x: 0, y: A4[1] - 96, width: A4[0], height: 96, color: NAVY });
+  const page = pdf.addPage(size);
+  page.drawRectangle({ x: 0, y: size[1] - 96, width: size[0], height: 96, color: NAVY });
   let x = M;
   if (logo) {
     try {
@@ -44,7 +46,7 @@ async function start(
           ? await pdf.embedPng(new Uint8Array(logo.bytes))
           : await pdf.embedJpg(new Uint8Array(logo.bytes));
       const s = Math.min(56 / img.width, 56 / img.height);
-      page.drawImage(img, { x: M, y: A4[1] - 76, width: img.width * s, height: img.height * s });
+      page.drawImage(img, { x: M, y: size[1] - 76, width: img.width * s, height: img.height * s });
       x = M + 70;
     } catch {
       // no logo rather than no receipt
@@ -52,7 +54,7 @@ async function start(
   }
   page.drawText(latin(school.name), {
     x,
-    y: A4[1] - 44,
+    y: size[1] - 44,
     size: 18,
     font: bold,
     color: rgb(1, 1, 1),
@@ -60,7 +62,7 @@ async function start(
   if (school.address)
     page.drawText(latin(school.address).slice(0, 110), {
       x,
-      y: A4[1] - 62,
+      y: size[1] - 62,
       size: 9,
       font: regular,
       color: rgb(0.85, 0.89, 0.95),
@@ -68,7 +70,7 @@ async function start(
   if (school.contact)
     page.drawText(latin(school.contact).slice(0, 110), {
       x,
-      y: A4[1] - 75,
+      y: size[1] - 75,
       size: 9,
       font: regular,
       color: rgb(0.85, 0.89, 0.95),
@@ -409,13 +411,15 @@ export interface ScoreReportInput {
   subtitle: string;
   /** the criteria, a column each */
   criteria: string[];
+  /** the marks: a column per subject or parameter and each stage's total (docs/design/61) */
+  marks: string[];
   rows: Array<{
     rank: string;
     number: string;
     candidate: string;
     lines: string[];
     points: string;
-    marks: string;
+    marks: string[];
     total: string;
     check: boolean;
     /** each level's decision and remark, printed under the row (docs/design/50) */
@@ -426,14 +430,6 @@ export interface ScoreReportInput {
 
 /** The score report of a class (docs/design/48, part 4): a column per criterion, the total and the rank. */
 export async function scoreReportPdf(p: ScoreReportInput): Promise<Buffer> {
-  const { pdf, page: first, regular, bold } = await start(p.title, p.school, p.logo);
-  let page = first;
-  let y = A4[1] - 124;
-  const W = A4[0] - 2 * M;
-  page.drawText(latin(p.title.toUpperCase()), { x: M, y, size: 13, font: bold, color: NAVY });
-  y -= 16;
-  page.drawText(latin(p.subtitle), { x: M, y, size: 9.5, font: regular, color: MUTED });
-  y -= 22;
   const fixed = [
     { h: 'Rank', w: 28 },
     { h: 'Reg. no.', w: 92 },
@@ -441,26 +437,60 @@ export async function scoreReportPdf(p: ScoreReportInput): Promise<Buffer> {
   ];
   const tail = [
     { h: 'Points', w: 34 },
-    { h: 'Marks', w: 32 },
     { h: 'Total', w: 34 },
   ];
-  const left = W - [...fixed, ...tail].reduce((n, c) => n + c.w, 0);
-  const each = p.criteria.length ? Math.max(28, left / p.criteria.length) : 0;
-  const cols = [...fixed, ...p.criteria.map((h) => ({ h, w: each })), ...tail];
-  const size = 7.5;
+  const narrow = p.criteria.length + p.marks.length;
+  const base = [...fixed, ...tail].reduce((n, c) => n + c.w, 0);
+  // upright A4 while every criterion and mark gets 28 points; landscape beyond (docs/design/61)
+  const size: [number, number] = base + narrow * 28 <= A4[0] - 2 * M ? A4 : [A4[1], A4[0]];
+  const W = size[0] - 2 * M;
+  const each = narrow ? Math.max(20, (W - base) / narrow) : 0;
+  const cols = [
+    ...fixed,
+    ...p.criteria.map((h) => ({ h, w: each })),
+    tail[0]!,
+    ...p.marks.map((h) => ({ h, w: each })),
+    tail[1]!,
+  ];
+  const { pdf, page: first, regular, bold } = await start(p.title, p.school, p.logo, size);
+  let page = first;
+  let y = size[1] - 124;
+  page.drawText(latin(p.title.toUpperCase()), { x: M, y, size: 13, font: bold, color: NAVY });
+  y -= 16;
+  page.drawText(latin(p.subtitle), { x: M, y, size: 9.5, font: regular, color: MUTED });
+  y -= 22;
+  const fs = 7.5;
   const fit = (t: string, w: number, font: PDFFont) => {
     let s = latin(t);
-    while (s && font.widthOfTextAtSize(s, size) > w - 4) s = s.slice(0, -1);
+    while (s && font.widthOfTextAtSize(s, fs) > w - 4) s = s.slice(0, -1);
     return s;
   };
+  // a heading on two lines when it needs them (the criteria and subjects are long)
+  const lines2 = (t: string, w: number) => {
+    const out: string[] = [];
+    let cur = '';
+    for (const word of latin(t).split(/\s+/).filter(Boolean)) {
+      const next = cur ? `${cur} ${word}` : word;
+      if (cur && bold.widthOfTextAtSize(next, fs) > w - 4) {
+        out.push(cur);
+        cur = word;
+      } else cur = next;
+    }
+    if (cur) out.push(cur);
+    return out.length > 2
+      ? [out[0]!, fit(out.slice(1).join(' '), w, bold)]
+      : out.map((l) => fit(l, w, bold));
+  };
   const head = () => {
-    page.drawRectangle({ x: M, y: y - 4, width: W, height: 16, color: rgb(0.93, 0.96, 0.99) });
+    page.drawRectangle({ x: M, y: y - 12, width: W, height: 24, color: rgb(0.93, 0.96, 0.99) });
     let x = M + 2;
     for (const c of cols) {
-      page.drawText(fit(c.h, c.w, bold), { x, y, size, font: bold, color: NAVY });
+      lines2(c.h, c.w).forEach((l, k) =>
+        page.drawText(l, { x, y: y - k * 8.5, size: fs, font: bold, color: NAVY }),
+      );
       x += c.w;
     }
-    y -= 18;
+    y -= 26;
   };
   head();
   if (!p.rows.length) {
@@ -475,18 +505,18 @@ export async function scoreReportPdf(p: ScoreReportInput): Promise<Buffer> {
   }
   for (const r of p.rows) {
     if (y < 60) {
-      page = pdf.addPage(A4);
-      y = A4[1] - 50;
+      page = pdf.addPage(size);
+      y = size[1] - 50;
       head();
     }
-    const cells = [r.rank, r.number, r.candidate, ...r.lines, r.points, r.marks, r.total];
+    const cells = [r.rank, r.number, r.candidate, ...r.lines, r.points, ...r.marks, r.total];
     let x = M + 2;
     for (const [i, c] of cols.entries()) {
       const isTotal = i === cols.length - 1;
       page.drawText(fit(cells[i] ?? '', c.w, isTotal ? bold : regular), {
         x,
         y,
-        size,
+        size: fs,
         font: isTotal ? bold : regular,
         color: r.check && i === 2 ? CYAN : INK,
       });
@@ -504,15 +534,15 @@ export async function scoreReportPdf(p: ScoreReportInput): Promise<Buffer> {
     }
     page.drawLine({
       start: { x: M, y: y - 5 },
-      end: { x: A4[0] - M, y: y - 5 },
+      end: { x: size[0] - M, y: y - 5 },
       thickness: 0.4,
       color: LINE,
     });
     y -= 15;
   }
   if (y < 60) {
-    page = pdf.addPage(A4);
-    y = A4[1] - 50;
+    page = pdf.addPage(size);
+    y = size[1] - 50;
   }
   y -= 14;
   page.drawText(

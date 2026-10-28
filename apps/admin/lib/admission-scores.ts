@@ -43,6 +43,13 @@ export interface ScoreReport {
   max: number | null;
   /** a column per level of the class's process (docs/design/50) */
   levels: string[];
+  /** the marks: a column per subject or parameter, each stage's total; one for a stage without a paper (docs/design/61) */
+  marks: Array<{
+    stage: string;
+    label: string;
+    max: number | null;
+    kind: 'part' | 'total' | 'stage';
+  }>;
   criteria: Array<{
     name: string;
     kind: 'fixed' | 'table' | 'sibling';
@@ -58,6 +65,8 @@ export interface ScoreReport {
     lines: Array<{ points: number; max: number; check: string | null } | null>;
     points: number | null;
     marks: number | null;
+    /** the marks in the order of `marks` (AB: absent) */
+    cells: Array<number | 'AB' | null>;
     merit: number | null;
     confirmed: boolean;
     check: boolean;
@@ -96,3 +105,13 @@ export interface NumberSeriesSetup {
 /** A series' number as it will be given ("DP1" + 1, 4 digits → DP10001). */
 export const seriesText = (prefix: string, n: number, digits: number) =>
   `${prefix}${String(Math.max(0, Math.trunc(n || 0))).padStart(digits, '0')}`;
+
+/** The score report's sessions and classes with their registrations (docs/design/61). */
+export interface ScoreReportOptions {
+  cycles: Array<{
+    id: string;
+    name: string;
+    registrations: number;
+    classes: Array<{ id: string; name: string; registrations: number }>;
+  }>;
+}

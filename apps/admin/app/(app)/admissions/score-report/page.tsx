@@ -1,6 +1,7 @@
 import { Badge, Card, PageHeader } from '@edupro/ui';
 import { notFound } from 'next/navigation';
-import type { NumberSeriesSetup, ScoreReport } from '@/lib/admission-scores';
+import { SessionClassPicker } from '@/components/admissions/SessionClassPicker';
+import type { ScoreReport, ScoreReportOptions } from '@/lib/admission-scores';
 import type { AdmissionSetup } from '@/lib/admission-setup';
 import { apiFetch, getMe } from '@/lib/api';
 
@@ -30,20 +31,33 @@ export default async function ScoreReportPage({
     categoryId?: string;
     status?: string;
     check?: string;
+    q?: string;
   }>;
 }) {
   const sp = await searchParams;
   const me = await getMe();
   if (!me.permissions.includes('admissions.application.view')) notFound();
-  const [numbers, setup] = await Promise.all([
-    apiFetch<NumberSeriesSetup>('/admissions/number-series'),
+  const [opts, setup] = await Promise.all([
+    apiFetch<ScoreReportOptions>('/admissions/score-report/options'),
     apiFetch<AdmissionSetup>('/admissions/setup'),
   ]);
+  // the session and class with registrations first (docs/design/61)
   const cycle =
-    numbers.cycles.find((y) => y.id === sp.cycleId) ??
-    numbers.cycles.find((y) => y.classes.length) ??
-    numbers.cycles[0];
-  const cls = cycle?.classes.find((k) => k.id === sp.classId) ?? cycle?.classes[0];
+    opts.cycles.find((y) => y.id === sp.cycleId) ??
+    opts.cycles.find((y) => y.registrations > 0) ??
+    opts.cycles.find((y) => y.classes.length) ??
+    opts.cycles[0];
+  const cls =
+    cycle?.classes.find((k) => k.id === sp.classId) ??
+    cycle?.classes.find((k) => k.registrations > 0) ??
+    cycle?.classes[0];
+  const search = (sp.q ?? '').trim().slice(0, 80);
+  // the filters a session or class change keeps
+  const keep: Record<string, string> = {};
+  if (sp.categoryId && ID.test(sp.categoryId)) keep.categoryId = sp.categoryId;
+  if (sp.status && /^[a-z_]{3,20}$/.test(sp.status)) keep.status = sp.status;
+  if (sp.check === '1') keep.check = '1';
+  if (search) keep.q = search;
   const q = new URLSearchParams();
   if (cycle && cls) {
     q.set('cycleId', cycle.id);
@@ -51,6 +65,7 @@ export default async function ScoreReportPage({
     if (sp.categoryId && ID.test(sp.categoryId)) q.set('categoryId', sp.categoryId);
     if (sp.status && /^[a-z_]{3,20}$/.test(sp.status)) q.set('status', sp.status);
     if (sp.check === '1') q.set('check', '1');
+    if (search) q.set('q', search);
   }
   const rep = cycle && cls ? await apiFetch<ScoreReport>(`/admissions/score-report?${q}`) : null;
   const n = (v: number | null) => (v === null ? '-' : String(v));
@@ -89,25 +104,31 @@ export default async function ScoreReportPage({
             alignItems: 'end',
           }}
         >
+          {cycle && cls ? (
+            <>
+              <SessionClassPicker
+                cycles={opts.cycles.map((y) => ({
+                  id: y.id,
+                  name: y.name,
+                  count: y.registrations,
+                  classes: y.classes.map((k) => ({
+                    id: k.id,
+                    name: k.name,
+                    count: k.registrations,
+                  })),
+                }))}
+                cycleId={cycle.id}
+                classId={cls.id}
+                path="/admissions/score-report"
+                keep={keep}
+              />
+              <input type="hidden" name="cycleId" value={cycle.id} />
+              <input type="hidden" name="classId" value={cls.id} />
+            </>
+          ) : null}
           <label className="ep-field">
-            <span className="ep-field__label">Session</span>
-            <select className="ep-select" name="cycleId" defaultValue={cycle?.id ?? ''}>
-              {numbers.cycles.map((y) => (
-                <option key={y.id} value={y.id}>
-                  {y.name}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="ep-field">
-            <span className="ep-field__label">Class</span>
-            <select className="ep-select" name="classId" defaultValue={cls?.id ?? ''}>
-              {(cycle?.classes ?? []).map((k) => (
-                <option key={k.id} value={k.id}>
-                  {k.name}
-                </option>
-              ))}
-            </select>
+            <span className="ep-field__label">Name or registration no.</span>
+            <input name="q" className="ep-input" maxLength={80} defaultValue={search} />
           </label>
           <label className="ep-field">
             <span className="ep-field__label">Category</span>
@@ -135,10 +156,18 @@ export default async function ScoreReportPage({
             <input type="checkbox" name="check" value="1" defaultChecked={sp.check === '1'} />
             <span>Only those with a line to check</span>
           </label>
-          <div>
+          <div style={{ display: 'flex', gap: 'var(--sp-2)' }}>
             <button className="ep-btn ep-btn--primary" type="submit">
               Show
             </button>
+            {cycle && cls && Object.keys(keep).length ? (
+              <a
+                className="ep-btn ep-btn--ghost"
+                href={`/admissions/score-report?${new URLSearchParams({ cycleId: cycle.id, classId: cls.id }).toString()}`}
+              >
+                Clear
+              </a>
+            ) : null}
           </div>
         </form>
       </Card>
@@ -147,7 +176,9 @@ export default async function ScoreReportPage({
       ) : (
         <Card>
           <p className="ep-field__help" style={{ marginTop: 0 }}>
-            {rep.className} · {rep.session} · {rep.rows.length} registrations
+            {rep.className} · {rep.session} · {rep.rows.length}{' '}
+            {search || sp.status || sp.categoryId || sp.check === '1' ? 'matching ' : ''}
+            registrations
             {rep.max ? ` · points out of ${String(rep.max)}` : ''}. Change the criteria on the
             session&rsquo;s Merit points tab.
           </p>
@@ -172,7 +203,28 @@ export default async function ScoreReportPage({
                       </th>
                     ))}
                     <th scope="col">Form points</th>
-                    <th scope="col">Marks</th>
+                    {rep.marks.map((m, i) => (
+                      <th key={i} scope="col" className="ep-num">
+                        {m.kind === 'part' ? (
+                          <>
+                            <span
+                              className="ep-field__help"
+                              style={{ margin: 0, display: 'block' }}
+                            >
+                              {m.stage}
+                            </span>
+                            {m.label}
+                          </>
+                        ) : (
+                          m.label
+                        )}
+                        {m.max !== null ? (
+                          <span className="ep-field__help" style={{ margin: 0, display: 'block' }}>
+                            of {m.max}
+                          </span>
+                        ) : null}
+                      </th>
+                    ))}
                     <th scope="col">Total</th>
                     {rep.levels.map((l) => (
                       <th key={l} scope="col">
@@ -202,7 +254,17 @@ export default async function ScoreReportPage({
                         </td>
                       ))}
                       <td className="ep-num">{n(r.points)}</td>
-                      <td className="ep-num">{n(r.marks)}</td>
+                      {r.cells.map((v, i) =>
+                        rep.marks[i]?.kind === 'part' ? (
+                          <td key={i} className="ep-num">
+                            {v === null ? '-' : String(v)}
+                          </td>
+                        ) : (
+                          <td key={i} className="ep-num">
+                            <strong>{v === null ? '-' : String(v)}</strong>
+                          </td>
+                        ),
+                      )}
                       <td className="ep-num">
                         <strong>{n(r.merit)}</strong>
                       </td>

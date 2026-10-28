@@ -8,6 +8,7 @@ import { requireTenant, type RequestContext } from '../../common/http/request-co
 import { AdmissionCoreService } from './admission-core.service';
 import { scoreReportPdf } from './admission-pdf';
 import { meritOrder } from './merit-order';
+import { papersIn } from './part-marks';
 import { classPointRules, classPointsMax } from './points-rules';
 import type { ScoreReportQueryDto } from './scores.dto';
 
@@ -34,6 +35,149 @@ export class AdmissionScoreReportService {
     private readonly core: AdmissionCoreService,
     private readonly audit: AuditService,
   ) {}
+
+  /**
+   * The sessions with their classes and how many registrations each has (docs/design/61): the report
+   * opens where there are some.
+   */
+  async options(ctx: RequestContext) {
+    return this.db.tenant(requireTenant(ctx), async (c) => {
+      const cycles = await c.query<{ id: string; name: string }>(
+        `SELECT id::text, name FROM admission_cycles WHERE deleted_at IS NULL ORDER BY opens_at DESC, id DESC`,
+      );
+      const classes = await c.query<{ cycle_id: string; id: string; name: string; n: number }>(
+        `SELECT k.cycle_id::text, cl.id::text, cl.name,
+                (SELECT count(*)::int FROM applications a WHERE a.cycle_id = k.cycle_id AND a.class_id = k.class_id
+                    AND a.form_id IS NOT NULL AND a.status::text <> 'draft') AS n
+           FROM admission_class_criteria k JOIN classes cl ON cl.id = k.class_id
+          ORDER BY cl.display_order, cl.name`,
+      );
+      return {
+        cycles: cycles.rows.map((y) => {
+          const mine = classes.rows.filter((k) => k.cycle_id === y.id);
+          return {
+            ...y,
+            registrations: mine.reduce((t, k) => t + k.n, 0),
+            classes: mine.map((k) => ({ id: k.id, name: k.name, registrations: k.n })),
+          };
+        }),
+      };
+    });
+  }
+
+  /**
+   * The marks columns of a class (docs/design/61): for each Written test / Interview stage of its
+   * process (or any stage with a maximum), the paper's subjects or parameters and the stage total;
+   * a stage without a paper, one column.
+   */
+  private async markColumnsOf(c: PoolClient, classId: string, steps: Array<{ stageId: string }>) {
+    const st = await c.query<{ id: string; name: string; kind: string; max_marks: string | null }>(
+      `SELECT id::text, name, kind, max_marks::text FROM admission_stages WHERE id = ANY($1::bigint[])`,
+      [steps.map((x) => x.stageId)],
+    );
+    const cols: Array<{
+      key: string;
+      stageId: string;
+      stage: string;
+      label: string;
+      max: number | null;
+      kind: 'part' | 'total' | 'stage';
+    }> = [];
+    for (const step of steps) {
+      const x = st.rows.find((y) => y.id === step.stageId);
+      if (!x || (!['test', 'interview'].includes(x.kind) && x.max_marks === null)) continue;
+      const paper = ['test', 'interview'].includes(x.kind)
+        ? ((await papersIn(c, x.id)).get(classId) ?? null)
+        : null;
+      if (paper) {
+        for (const pt of paper.parts)
+          cols.push({
+            key: `${x.id}:${pt.id}`,
+            stageId: x.id,
+            stage: x.name,
+            label: pt.name,
+            max: pt.maxMarks,
+            kind: 'part',
+          });
+        cols.push({
+          key: `${x.id}:total`,
+          stageId: x.id,
+          stage: x.name,
+          label: `${x.name} total`,
+          max: paper.total,
+          kind: 'total',
+        });
+      } else
+        cols.push({
+          key: `${x.id}:stage`,
+          stageId: x.id,
+          stage: x.name,
+          label: x.name,
+          max: x.max_marks !== null ? Number(x.max_marks) : null,
+          kind: 'stage',
+        });
+    }
+    return cols;
+  }
+
+  /** Each registration's marks for the columns: by part, the stage totals (AB when absent). */
+  private async markCellsOf(
+    c: PoolClient,
+    ids: string[],
+    cols: Awaited<ReturnType<AdmissionScoreReportService['markColumnsOf']>>,
+  ) {
+    const out = new Map<string, Map<string, number | 'AB'>>();
+    const put = (id: string, k: string, v: number | 'AB') => {
+      if (!out.has(id)) out.set(id, new Map());
+      out.get(id)!.set(k, v);
+    };
+    if (!ids.length || !cols.length) return out;
+    const stages = [...new Set(cols.map((x) => x.stageId))];
+    const parts = await c.query<{
+      id: string;
+      stage_id: string;
+      part_id: string;
+      marks: string | null;
+    }>(
+      `SELECT application_id::text AS id, stage_id::text, part_id::text, marks::text FROM admission_part_marks
+        WHERE application_id = ANY($1::bigint[]) AND stage_id = ANY($2::bigint[])`,
+      [ids, stages],
+    );
+    for (const x of parts.rows)
+      if (x.marks !== null) put(x.id, `${x.stage_id}:${x.part_id}`, Number(x.marks));
+    const totals = await c.query<{
+      id: string;
+      stage_id: string;
+      absent: boolean;
+      total: string | null;
+    }>(
+      `SELECT application_id::text AS id, stage_id::text, absent, total::text FROM admission_stage_marks
+        WHERE application_id = ANY($1::bigint[]) AND stage_id = ANY($2::bigint[])`,
+      [ids, stages],
+    );
+    for (const x of totals.rows) {
+      if (x.absent) {
+        put(x.id, `${x.stage_id}:total`, 'AB');
+        for (const col of cols)
+          if (col.stageId === x.stage_id && col.kind === 'part') put(x.id, col.key, 'AB');
+      } else if (x.total !== null) put(x.id, `${x.stage_id}:total`, Number(x.total));
+    }
+    // a stage without a paper: the latest marks of each level, added (as merit counts them)
+    const plain = await c.query<{ id: string; stage_id: string; marks: string; absent: boolean }>(
+      `SELECT id, stage_id, sum(marks)::text AS marks, bool_or(attendance = 'absent') AS absent FROM (
+         SELECT DISTINCT ON (x.application_id, x.stage_id, x.level) x.application_id::text AS id, x.stage_id::text,
+                x.marks, x.attendance
+           FROM admission_stage_results x
+          WHERE x.application_id = ANY($1::bigint[]) AND x.stage_id = ANY($2::bigint[]) AND x.undone_at IS NULL
+            AND (x.marks IS NOT NULL OR x.attendance = 'absent')
+          ORDER BY x.application_id, x.stage_id, x.level, x.decided_at DESC) y
+        GROUP BY id, stage_id`,
+      [ids, cols.filter((x) => x.kind === 'stage').map((x) => x.stageId)],
+    );
+    for (const x of plain.rows)
+      put(x.id, `${x.stage_id}:stage`, x.absent && Number(x.marks) === 0 ? 'AB' : Number(x.marks));
+    return out;
+  }
 
   private async reportWith(c: PoolClient, q: ScoreReportQueryDto) {
     const line = await c.query<{
@@ -68,6 +212,7 @@ export class AdmissionScoreReportService {
         label: `${stageNames.get(st.stageId) ?? 'Stage'} · ${l.name}`,
       })),
     );
+    const markCols = await this.markColumnsOf(c, q.classId, proc.rows[0]?.steps ?? []);
     const max = await classPointsMax(c, q.cycleId, q.classId);
     const r = await c.query<{
       id: string;
@@ -105,6 +250,11 @@ export class AdmissionScoreReportService {
         ORDER BY x.application_id, x.stage_id, x.level, x.decided_at DESC`,
       [r.rows.map((x) => x.id)],
     );
+    const cells = await this.markCellsOf(
+      c,
+      r.rows.map((x) => x.id),
+      markCols,
+    );
     const remarkOf = (id: string, k: string) => {
       const d = decided.rows.find((x) => x.id === id && x.k === k);
       return d
@@ -129,6 +279,7 @@ export class AdmissionScoreReportService {
         }),
         points,
         marks: merit !== null ? Math.round((merit - (points ?? 0)) * 100) / 100 : null,
+        cells: markCols.map((col) => cells.get(x.id)?.get(col.key) ?? null),
         merit,
         confirmed: x.confirmed,
         check: lines.some((l) => Boolean(l.check)),
@@ -144,12 +295,22 @@ export class AdmissionScoreReportService {
     const all = rows
       .map((x) => ({ ...x, rank: rank.get(x.id) ?? null }))
       .filter((x) => !q.check || x.check)
+      // a name or registration no.: the rank stays the class's (docs/design/61)
+      .filter((x) => {
+        const t = (q.q ?? '').trim().toLowerCase();
+        return (
+          !t ||
+          (x.candidate ?? '').toLowerCase().includes(t) ||
+          (x.number ?? '').toLowerCase().includes(t)
+        );
+      })
       .sort((a, b) => (a.rank ?? 1e9) - (b.rank ?? 1e9) || Number(a.id) - Number(b.id));
     return {
       session: line.rows[0].session,
       className: line.rows[0].class_name,
       max,
       levels: levelCols.map((x) => x.label),
+      marks: markCols.map(({ stage, label, max, kind }) => ({ stage, label, max, kind })),
       criteria: rules.map((k) => ({
         name: k.name,
         kind: k.kind,
@@ -179,7 +340,11 @@ export class AdmissionScoreReportService {
       'Status',
       ...rep.criteria.map((k) => k.name),
       'Form points',
-      'Marks',
+      ...rep.marks.map((m) =>
+        m.kind === 'part'
+          ? `${m.stage} · ${m.label}${m.max !== null ? ` (${String(m.max)})` : ''}`
+          : `${m.label}${m.max !== null ? ` (${String(m.max)})` : ''}`,
+      ),
       'Total',
       'To check',
       ...rep.levels,
@@ -196,7 +361,7 @@ export class AdmissionScoreReportService {
         x.status,
         ...x.lines.map((l) => (l ? l.points : '')),
         x.points ?? '',
-        x.marks ?? '',
+        ...x.cells.map((v) => v ?? ''),
         x.merit ?? '',
         x.lines
           .map((l) => l?.check)
@@ -237,13 +402,19 @@ export class AdmissionScoreReportService {
         title: `Score report: ${rep.className}`,
         subtitle: `${rep.session} · ${String(rep.rows.length)} registrations${rep.max ? ` · points out of ${String(rep.max)}` : ''}`,
         criteria: rep.criteria.map((k) => k.name),
+        // the PDF's narrow columns: a part by its name, a stage's total by the stage
+        marks: rep.marks.map((m) =>
+          m.kind === 'part'
+            ? `${m.label}${m.max !== null ? ` (${String(m.max)})` : ''}`
+            : `${m.stage}${m.max !== null ? ` (${String(m.max)})` : ''}`,
+        ),
         rows: rep.rows.map((x) => ({
           rank: x.rank !== null ? String(x.rank) : '-',
           number: x.number ?? '',
           candidate: x.candidate ?? '',
           lines: x.lines.map((l) => (l ? String(l.points) : '-')),
           points: n(x.points),
-          marks: n(x.marks),
+          marks: x.cells.map((v) => (v === null ? '-' : String(v))),
           total: n(x.merit),
           check: x.check,
           note: rep.levels
