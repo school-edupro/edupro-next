@@ -505,6 +505,19 @@ describe('admission test results by part (e2e)', () => {
       )
     ).json();
     expect(slotSheet.rows).toBe(2);
+    // the slot page's Marks tab: the grid of the slot's candidates only, with where each stands
+    const slotGrid = (
+      await call(
+        'GET',
+        `/admissions/results?${new URLSearchParams({ ...ivPlace, slotId: ids.slot }).toString()}`,
+      )
+    ).json();
+    expect(slotGrid.rows).toHaveLength(2);
+    expect(
+      slotGrid.rows.every(
+        (r: { slotId: string; current: unknown }) => r.slotId === ids.slot && 'current' in r,
+      ),
+    ).toBe(true);
     expect(slotSheet.filename).toBe('Results-Interview-Class-IX-slot-' + ids.slot + '.xlsx');
     expect(
       (

@@ -22,15 +22,21 @@ const DECIDED: Record<string, string> = {
 
 /** The candidates of a slot: allot the next waiting, then attendance, marks and the decision for each. */
 export function SlotCandidates({
-  slot,
+  slot: whole,
+  only,
   canAllot,
   canDecide,
 }: {
   slot: SlotDetail;
+  /** these candidates only (the slot page's Marks tab: those of classes with no paper) */
+  only?: string[];
   canAllot: boolean;
   canDecide: boolean;
 }) {
   const router = useRouter();
+  const slot = only
+    ? { ...whole, candidates: whole.candidates.filter((c) => only.includes(c.applicationId)) }
+    : whole;
   const [pending, start] = useTransition();
   const [msg, setMsg] = useState<{ tone: 'success' | 'danger'; text: string } | null>(null);
   const [notify, setNotify] = useState(true);
@@ -53,7 +59,8 @@ export function SlotCandidates({
   );
   const marksStage = slot.kind === 'test' || slot.kind === 'interview';
   const room = slot.capacity - slot.candidates.length;
-  const open = slot.candidates.filter((c) => c.atStage && !c.decision);
+  // a held candidate stays open: marks and the decision may change (docs/design/58)
+  const open = slot.candidates.filter((c) => c.atStage && (!c.decision || c.decision === 'hold'));
   const set = (id: string, patch: Partial<Row>) =>
     setRows((r) => ({ ...r, [id]: { ...(r[id] ?? rows[id]!), ...patch } }));
 
@@ -115,7 +122,7 @@ export function SlotCandidates({
             <tbody>
               {slot.candidates.map((c) => {
                 const r = rows[c.applicationId]!;
-                const done = Boolean(c.decision) || !c.atStage;
+                const done = (Boolean(c.decision) && c.decision !== 'hold') || !c.atStage;
                 return (
                   <tr key={c.applicationId}>
                     <td>{c.rollNo}</td>
@@ -184,8 +191,15 @@ export function SlotCandidates({
                       </td>
                     ) : null}
                     <td>
-                      {c.decision ? (
-                        (DECIDED[c.decision] ?? c.decision)
+                      {c.decision && c.decision !== 'hold' ? (
+                        <>
+                          {DECIDED[c.decision] ?? c.decision}
+                          <div className="ep-field__help" style={{ margin: 0 }}>
+                            <a href={`/admissions/registrations/${c.applicationId}`}>
+                              Change on the registration
+                            </a>
+                          </div>
+                        </>
                       ) : (
                         <select
                           className="ep-select"
@@ -202,6 +216,11 @@ export function SlotCandidates({
                           <option value="reject">Not selected</option>
                         </select>
                       )}
+                      {c.decision === 'hold' ? (
+                        <div className="ep-field__help" style={{ margin: 0 }}>
+                          On hold now
+                        </div>
+                      ) : null}
                     </td>
                     <td>
                       <input
