@@ -36,8 +36,15 @@ export class ResultsSheetDto extends createZodDto(ResultsSheetSchema) {}
 /** The results shown to families from a date and time (docs/design/57, part 4). */
 export const ResultsReleaseSchema = PlaceSchema.extend({
   releaseAt: z.string().datetime({ offset: true }),
+  /** needed once the results are out to the families (docs/design/59) */
+  reason: z.string().trim().min(3).max(300).optional(),
 });
 export class ResultsReleaseDto extends createZodDto(ResultsReleaseSchema) {}
+/** A release taken back: once out, with a reason (docs/design/59). */
+export const ResultsWithdrawSchema = PlaceSchema.extend({
+  reason: z.string().trim().min(3).max(300).optional(),
+});
+export class ResultsWithdrawDto extends createZodDto(ResultsWithdrawSchema) {}
 export class ResultsPlaceDto extends createZodDto(PlaceSchema) {}
 
 export const ResultsUploadQuerySchema = z.object({ apply: z.enum(['0', '1']).optional() });

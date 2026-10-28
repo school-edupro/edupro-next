@@ -313,6 +313,7 @@ export default async function ResultsPage({
           <ResultsRelease
             place={place}
             release={data.release}
+            log={data.releaseLog ?? []}
             marked={data.counts.marked}
             canEdit={canEdit}
           />

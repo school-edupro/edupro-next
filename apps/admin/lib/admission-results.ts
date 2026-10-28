@@ -45,8 +45,22 @@ export interface ResultsView {
   slots: Array<{ id: string; label: string }>;
   /** the marks shown to families from a date and time (docs/design/57, part 4) */
   release: ResultsRelease | null;
+  /** the release's history, newest first (docs/design/59) */
+  releaseLog: ResultsReleaseLog[];
   counts: { all: number; waiting: number; marked: number; below: number };
   rows: ResultRow[];
+}
+/** A step of a release's history: set, moved, taken back, families told (docs/design/59). */
+export interface ResultsReleaseLog {
+  what: 'set' | 'moved' | 'taken_back' | 'told';
+  from: string | null;
+  to: string | null;
+  /** the families could see the marks when it was done */
+  wasOut: boolean;
+  toldCount: number | null;
+  reason: string | null;
+  by: string | null;
+  at: string;
 }
 export interface ResultsRelease {
   at: string;

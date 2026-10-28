@@ -144,12 +144,17 @@ type Place = { cycleId: string; classId: string; stageId: string };
 export async function setResultsRelease(
   p: Place,
   releaseAt: string,
+  /** needed once the results are out (docs/design/59) */
+  reason?: string,
 ): Promise<Out<{ release: ResultsRelease | null }>> {
   if (!placeOk(p)) return { ok: false, error: 'Choose the session, class and stage' };
+  const why = reason?.trim();
+  if (why !== undefined && why.length > 0 && why.length < 3)
+    return { ok: false, error: 'Write the reason (3 characters or more)' };
   try {
     const data = await apiFetch<{ release: ResultsRelease | null }>('/admissions/results/release', {
       method: 'PUT',
-      body: JSON.stringify({ ...p, releaseAt }),
+      body: JSON.stringify({ ...p, releaseAt, ...(why ? { reason: why } : {}) }),
     });
     revalidatePath(PAGE);
     return { ok: true, data };
@@ -158,13 +163,19 @@ export async function setResultsRelease(
   }
 }
 
-/** A release withdrawn before its time. */
-export async function withdrawResultsRelease(p: Place): Promise<Out<{ release: null }>> {
+/** A release taken back (once out, with a reason: docs/design/59). */
+export async function withdrawResultsRelease(
+  p: Place,
+  reason?: string,
+): Promise<Out<{ release: null }>> {
   if (!placeOk(p)) return { ok: false, error: 'Choose the session, class and stage' };
+  const why = reason?.trim();
+  if (why !== undefined && why.length > 0 && why.length < 3)
+    return { ok: false, error: 'Write the reason (3 characters or more)' };
   try {
     const data = await apiFetch<{ release: null }>('/admissions/results/release/withdraw', {
       method: 'POST',
-      body: JSON.stringify(p),
+      body: JSON.stringify({ ...p, ...(why ? { reason: why } : {}) }),
     });
     revalidatePath(PAGE);
     return { ok: true, data };

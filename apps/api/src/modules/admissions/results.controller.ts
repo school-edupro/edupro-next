@@ -15,6 +15,7 @@ import {
   ResultsSessionExportDto,
   ResultsSheetDto,
   ResultsUploadQueryDto,
+  ResultsWithdrawDto,
 } from './results.dto';
 import { AdmissionResultsService } from './results.service';
 
@@ -103,9 +104,9 @@ export class AdmissionResultsController {
   }
 
   @Post('release/withdraw')
-  @ApiOperation({ summary: 'A release withdrawn before its time' })
+  @ApiOperation({ summary: 'A release taken back (once out, with a reason)' })
   @RequirePermission(ADMISSION_SCHEDULE)
-  withdraw(@ReqCtx() ctx: RequestContext, @Body() dto: ResultsPlaceDto) {
+  withdraw(@ReqCtx() ctx: RequestContext, @Body() dto: ResultsWithdrawDto) {
     return this.svc.withdrawRelease(ctx, dto);
   }
 

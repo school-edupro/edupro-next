@@ -2,7 +2,7 @@
 import { Badge } from '@edupro/ui';
 import { useRouter } from 'next/navigation';
 import { useState, useTransition } from 'react';
-import type { ResultsRelease as Release } from '@/lib/admission-results';
+import type { ResultsRelease as Release, ResultsReleaseLog } from '@/lib/admission-results';
 import {
   setResultsRelease,
   tellResults,
@@ -19,19 +19,34 @@ const when = (iso: string) =>
     minute: '2-digit',
   }).format(new Date(iso));
 
+/** A step of the history in words. */
+const stepWords = (x: ResultsReleaseLog) => {
+  const out = x.wasOut ? ' (families could see the marks)' : '';
+  if (x.what === 'set') return `Set for ${x.to ? when(x.to) : '-'}`;
+  if (x.what === 'moved')
+    return `Moved${x.from ? ` from ${when(x.from)}` : ''} to ${x.to ? when(x.to) : '-'}${out}`;
+  if (x.what === 'taken_back')
+    return `Taken back${x.from ? ` (it was for ${when(x.from)})` : ''}${out}`;
+  return `${String(x.toldCount ?? 0)} families told`;
+};
+
 /**
  * Results to families (docs/design/57, part 4), the DPS "Adm Unlock": from a date and time the
- * candidate portal shows each part's marks, the total and %. Changed or withdrawn until it passes;
- * once out, the families may be told by email, SMS and WhatsApp.
+ * candidate portal shows each part's marks, the total and %. Changed or withdrawn freely until it
+ * passes; once out, moved or taken back with a reason (a later time hides the marks again until then,
+ * docs/design/59), and the families may be told by email, SMS and WhatsApp. Every step is in the
+ * history.
  */
 export function ResultsRelease({
   place,
   release,
+  log,
   marked,
   canEdit,
 }: {
   place: { cycleId: string; classId: string; stageId: string };
   release: Release | null;
+  log: ResultsReleaseLog[];
   /** candidates with marks (or absent): who would be told */
   marked: number;
   canEdit: boolean;
@@ -39,6 +54,9 @@ export function ResultsRelease({
   const router = useRouter();
   const [pending, start] = useTransition();
   const [at, setAt] = useState('');
+  const [reason, setReason] = useState('');
+  const out = Boolean(release?.passed);
+  const why = reason.trim();
   const [asking, setAsking] = useState(false);
   const [msg, setMsg] = useState<{ tone: 'success' | 'danger'; text: string } | null>(null);
   const run = (job: () => Promise<{ ok: true; text: string } | { ok: false; error: string }>) =>
@@ -50,13 +68,14 @@ export function ResultsRelease({
     });
   const release_ = (iso: string) =>
     run(async () => {
-      const r = await setResultsRelease(place, iso);
+      const r = await setResultsRelease(place, iso, out ? why : undefined);
+      if (r.ok) setReason('');
       return r.ok
         ? {
             ok: true as const,
             text: r.data.release?.passed
               ? 'The results are out: families see them in the admission portal.'
-              : `The results go out on ${when(iso)}.`,
+              : `The results go out on ${when(iso)}${out ? '; until then families no longer see them' : ''}.`,
           }
         : r;
     });
@@ -90,10 +109,12 @@ export function ResultsRelease({
           </>
         )}
       </p>
-      {canEdit && !release?.passed ? (
+      {canEdit ? (
         <div className="ep-lead-filter">
           <label className="ep-field">
-            <span className="ep-field__label">Release on (India time)</span>
+            <span className="ep-field__label">
+              {out ? 'Move to (India time)' : 'Release on (India time)'}
+            </span>
             <input
               className="ep-input"
               type="datetime-local"
@@ -101,40 +122,67 @@ export function ResultsRelease({
               onChange={(e) => setAt(e.target.value)}
             />
           </label>
+          {out ? (
+            <label className="ep-field" style={{ minWidth: '16rem' }}>
+              <span className="ep-field__label">Reason (needed: the results are out)</span>
+              <input
+                className="ep-input"
+                maxLength={300}
+                value={reason}
+                onChange={(e) => setReason(e.target.value)}
+              />
+            </label>
+          ) : null}
           <span style={{ display: 'inline-flex', gap: 'var(--sp-2)', alignItems: 'flex-end' }}>
             <button
               type="button"
               className="ep-btn ep-btn--secondary"
-              disabled={pending || !at}
+              disabled={pending || !at || (out && why.length < 3)}
               onClick={() => release_(`${at}:00+05:30`)}
             >
-              {release ? 'Change the time' : 'Release at this time'}
+              {out ? 'Move to this time' : release ? 'Change the time' : 'Release at this time'}
             </button>
-            <button
-              type="button"
-              className="ep-btn ep-btn--primary"
-              disabled={pending}
-              onClick={() => release_(new Date().toISOString())}
-            >
-              Release now
-            </button>
+            {!out ? (
+              <button
+                type="button"
+                className="ep-btn ep-btn--primary"
+                disabled={pending}
+                onClick={() => release_(new Date().toISOString())}
+              >
+                Release now
+              </button>
+            ) : null}
             {release ? (
               <button
                 type="button"
                 className="ep-btn ep-btn--ghost"
-                disabled={pending}
+                disabled={pending || (out && why.length < 3)}
                 onClick={() =>
                   run(async () => {
-                    const r = await withdrawResultsRelease(place);
-                    return r.ok ? { ok: true as const, text: 'The release is withdrawn.' } : r;
+                    const r = await withdrawResultsRelease(place, out ? why : undefined);
+                    if (r.ok) setReason('');
+                    return r.ok
+                      ? {
+                          ok: true as const,
+                          text: out
+                            ? 'Taken back: families no longer see the marks.'
+                            : 'The release is withdrawn.',
+                        }
+                      : r;
                   })
                 }
               >
-                Withdraw
+                {out ? 'Take back' : 'Withdraw'}
               </button>
             ) : null}
           </span>
         </div>
+      ) : null}
+      {canEdit && out ? (
+        <p className="ep-field__help" style={{ marginTop: 0 }}>
+          A later time hides the marks from the families until then; they are told again only when
+          you press Tell the families.
+        </p>
       ) : null}
       {canEdit && release?.passed ? (
         asking ? (
@@ -189,6 +237,22 @@ export function ResultsRelease({
         >
           {msg.text}
         </p>
+      ) : null}
+      {log.length ? (
+        <details style={{ marginTop: 'var(--sp-3)' }}>
+          <summary>History ({log.length})</summary>
+          <ul
+            className="ep-field__help"
+            style={{ margin: 'var(--sp-2) 0 0', paddingLeft: '1.2rem' }}
+          >
+            {log.map((x, i) => (
+              <li key={`${x.at}-${String(i)}`}>
+                {when(x.at)} · {x.by ?? 'someone'}: {stepWords(x)}
+                {x.reason ? ` · reason: ${x.reason}` : ''}
+              </li>
+            ))}
+          </ul>
+        </details>
       ) : null}
     </section>
   );

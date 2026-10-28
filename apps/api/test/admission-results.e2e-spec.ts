@@ -651,9 +651,10 @@ describe('admission test results by part (e2e)', () => {
     const early = await call('POST', '/admissions/results/release/tell', place());
     expect(early.statusCode).toBe(409);
     expect(early.json().type).toBe('admissions.results_not_released');
-    expect((await call('POST', '/admissions/results/release/withdraw', place())).json()).toEqual({
-      release: null,
-    });
+    // before its time: taken back without a reason
+    expect(
+      (await call('POST', '/admissions/results/release/withdraw', place())).json().release,
+    ).toBeNull();
     expect((await grid()).release).toBeNull();
     const now = await call('PUT', '/admissions/results/release', {
       ...place(),
@@ -674,15 +675,6 @@ describe('admission test results by part (e2e)', () => {
         percent: 88,
       },
     ]);
-    // out: neither changed nor withdrawn
-    const again = await call('PUT', '/admissions/results/release', {
-      ...place(),
-      releaseAt: new Date(Date.now() + 3_600_000).toISOString(),
-    });
-    expect(again.statusCode).toBe(409);
-    expect((await call('POST', '/admissions/results/release/withdraw', place())).statusCode).toBe(
-      409,
-    );
     const told = await call('POST', '/admissions/results/release/tell', place());
     expect(told.statusCode).toBe(201);
     expect(told.json()).toMatchObject({ told: 3, release: { passed: true, toldCount: 3 } });
@@ -694,8 +686,76 @@ describe('admission test results by part (e2e)', () => {
       ),
     );
     expect(mail.rows.map((x) => x.subject)).toEqual(['Admission result of ASHA']);
+    // out: moved later only with a reason (docs/design/59); the marks leave the portal until then
+    const bare = await call('PUT', '/admissions/results/release', {
+      ...place(),
+      releaseAt: new Date(Date.now() + 3_600_000).toISOString(),
+    });
+    expect(bare.statusCode).toBe(400);
+    expect(bare.json().type).toBe('admissions.reason_required');
+    const moved = await call('PUT', '/admissions/results/release', {
+      ...place(),
+      releaseAt: new Date(Date.now() + 3_600_000).toISOString(),
+      reason: 'Paper rechecking',
+    });
+    expect(moved.statusCode).toBe(200);
+    expect(moved.json().release).toMatchObject({ passed: false, toldAt: null, toldCount: null });
+    expect(await seen()).toEqual([]);
+    expect((await call('POST', '/admissions/results/release/tell', place())).statusCode).toBe(409);
+    // back out at once
+    expect(
+      (
+        await call('PUT', '/admissions/results/release', {
+          ...place(),
+          releaseAt: new Date().toISOString(),
+          reason: 'Rechecked',
+        })
+      ).json().release,
+    ).toMatchObject({ passed: true });
+    expect(await seen()).toHaveLength(1);
     // the interview is not released: the family does not see it
     expect((await seen()).map((x: { stage: string }) => x.stage)).toEqual(['Written test']);
+    // out: taken back only with a reason
+    const keep = await call('POST', '/admissions/results/release/withdraw', place());
+    expect(keep.statusCode).toBe(400);
+    expect(keep.json().type).toBe('admissions.reason_required');
+    const back = await call('POST', '/admissions/results/release/withdraw', {
+      ...place(),
+      reason: 'Wrong class released',
+    });
+    expect(back.statusCode).toBe(201);
+    expect(back.json().release).toBeNull();
+    expect(await seen()).toEqual([]);
+    expect(
+      (
+        await call('PUT', '/admissions/results/release', {
+          ...place(),
+          releaseAt: new Date().toISOString(),
+        })
+      ).statusCode,
+    ).toBe(200);
+    // the history, newest first
+    const log = (await grid()).releaseLog as Array<{
+      what: string;
+      wasOut: boolean;
+      reason: string | null;
+      by: string | null;
+    }>;
+    expect(log.map((x) => x.what)).toEqual([
+      'set',
+      'taken_back',
+      'moved',
+      'moved',
+      'told',
+      'set',
+      'taken_back',
+      'set',
+    ]);
+    expect(log[1]).toMatchObject({ wasOut: true, reason: 'Wrong class released' });
+    expect(log[3]).toMatchObject({ wasOut: true, reason: 'Paper rechecking' });
+    expect(log[6]).toMatchObject({ wasOut: false, reason: null });
+    expect(log.every((x) => x.by)).toBe(true);
+    expect(await seen()).toHaveLength(1);
   });
 
   // ---- docs/design/58, part 1: change after upload, one candidate or many by Excel -----------------

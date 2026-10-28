@@ -14,7 +14,12 @@ import { storeMarks, type Paper } from './part-marks';
 import { messageTag } from './message-tag';
 import { place, refreshMerit } from './process-engine';
 import { AdmissionProcessService } from './process.service';
-import type { ResultsQueryDto, ResultsReleaseDto, ResultsSaveDto } from './results.dto';
+import type {
+  ResultsQueryDto,
+  ResultsReleaseDto,
+  ResultsSaveDto,
+  ResultsWithdrawDto,
+} from './results.dto';
 
 /** The sheet's own key cell: which session, class and stage it was made for. */
 const KEY = /^EPMARK:(\d{1,18}):(\d{1,18}):(\d{1,18})$/;
@@ -409,6 +414,7 @@ export class AdmissionResultsService {
       return {
         place: at,
         release: await this.releaseOf(c, q),
+        releaseLog: await this.releaseLogOf(c, q),
         slots: slots.rows.map((s) => ({
           id: s.id,
           label: `${new Intl.DateTimeFormat('en-IN', {
@@ -1003,6 +1009,67 @@ export class AdmissionResultsService {
   }
 
   // ---- results released to families (part 4) --------------------------------------------------------
+  /** The release's history, newest first (docs/design/59): set, moved, taken back, told. */
+  private async releaseLogOf(c: PoolClient, p: Place) {
+    const r = await c.query<{
+      what: 'set' | 'moved' | 'taken_back' | 'told';
+      from_at: Date | null;
+      to_at: Date | null;
+      was_out: boolean;
+      told_count: number | null;
+      reason: string | null;
+      by: string | null;
+      at: Date;
+    }>(
+      `SELECT l.what, l.from_at, l.to_at, l.was_out, l.told_count, l.reason, u.display_name AS by, l.at
+         FROM admission_result_release_log l LEFT JOIN users u ON u.id = l.by_user
+        WHERE l.cycle_id = $1 AND l.class_id = $2 AND l.stage_id = $3 ORDER BY l.at DESC, l.id DESC LIMIT 50`,
+      [p.cycleId, p.classId, p.stageId],
+    );
+    return r.rows.map((x) => ({
+      what: x.what,
+      from: x.from_at?.toISOString() ?? null,
+      to: x.to_at?.toISOString() ?? null,
+      wasOut: x.was_out,
+      toldCount: x.told_count,
+      reason: x.reason,
+      by: x.by,
+      at: x.at.toISOString(),
+    }));
+  }
+
+  private async logRelease(
+    c: PoolClient,
+    ctx: RequestContext,
+    p: Place,
+    x: {
+      what: 'set' | 'moved' | 'taken_back' | 'told';
+      from?: Date | string | null;
+      to?: Date | string | null;
+      wasOut?: boolean;
+      toldCount?: number;
+      reason?: string | null;
+    },
+  ) {
+    await c.query(
+      `INSERT INTO admission_result_release_log (school_id, cycle_id, class_id, stage_id, what, from_at, to_at, was_out,
+                                                 told_count, reason, by_user)
+       VALUES (app.current_school_id(), $1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+      [
+        p.cycleId,
+        p.classId,
+        p.stageId,
+        x.what,
+        x.from ?? null,
+        x.to ?? null,
+        x.wasOut ?? false,
+        x.toldCount ?? null,
+        x.reason ?? null,
+        ctx.user.id,
+      ],
+    );
+  }
+
   private async releaseOf(c: PoolClient, p: Place) {
     const r = await c.query<{
       release_at: Date;
@@ -1028,17 +1095,22 @@ export class AdmissionResultsService {
       : null;
   }
 
-  /** The results of a class and stage shown to families from a date and time (now or later). */
+  /**
+   * The results of a class and stage shown to families from a date and time (now or later). Once they
+   * are out the time may still be moved, with a reason (docs/design/59): a later time hides the marks
+   * from the families again until then, and the families may be told again once it passes.
+   */
   async setRelease(ctx: RequestContext, dto: ResultsReleaseDto) {
     return this.db.tenant(requireTenant(ctx), async (c) => {
       const at = await this.placeOf(c, dto);
       this.needPaper(at);
       const was = await this.releaseOf(c, dto);
-      if (was?.passed)
+      const reason = dto.reason?.trim() || null;
+      if (was?.passed && !reason)
         throw new DomainError(
-          'admissions.results_released',
-          'The results are already out to the families: the release can no longer be changed',
-          { status: 409 },
+          'admissions.reason_required',
+          'The results are already out to the families: give the reason for changing the time',
+          { status: 400 },
         );
       const when = new Date(dto.releaseAt);
       if (when.getTime() < Date.now() - 60_000)
@@ -1047,46 +1119,78 @@ export class AdmissionResultsService {
           'The release time has passed: choose now or a later time',
           { status: 400 },
         );
+      // out, now hidden again until the new time: the families may be told once more when it passes
+      const hidden = Boolean(was?.passed) && when.getTime() > Date.now();
       await c.query(
         `INSERT INTO admission_result_releases (school_id, cycle_id, class_id, stage_id, release_at, set_by)
          VALUES (app.current_school_id(), $1, $2, $3, $4, $5)
          ON CONFLICT (cycle_id, class_id, stage_id) DO UPDATE SET release_at = EXCLUDED.release_at,
-                set_by = EXCLUDED.set_by, set_at = now()`,
-        [dto.cycleId, dto.classId, dto.stageId, when, ctx.user.id],
+                set_by = EXCLUDED.set_by, set_at = now(),
+                told_at = CASE WHEN $6 THEN NULL ELSE admission_result_releases.told_at END,
+                told_by = CASE WHEN $6 THEN NULL ELSE admission_result_releases.told_by END,
+                told_count = CASE WHEN $6 THEN NULL ELSE admission_result_releases.told_count END`,
+        [dto.cycleId, dto.classId, dto.stageId, when, ctx.user.id, hidden],
       );
+      await this.logRelease(c, ctx, dto, {
+        what: was ? 'moved' : 'set',
+        from: was?.at ?? null,
+        to: when,
+        wasOut: was?.passed ?? false,
+        reason,
+      });
       await this.audit.stage(ctx, c, {
         action: 'admissions.results.release',
         entityType: 'admission_stages',
         entityId: dto.stageId,
-        after: { cycleId: dto.cycleId, classId: dto.classId, releaseAt: when.toISOString() },
+        before: was ? { releaseAt: was.at, out: was.passed } : null,
+        after: {
+          cycleId: dto.cycleId,
+          classId: dto.classId,
+          releaseAt: when.toISOString(),
+          ...(reason ? { reason } : {}),
+        },
       });
-      return { release: await this.releaseOf(c, dto) };
+      return {
+        release: await this.releaseOf(c, dto),
+        releaseLog: await this.releaseLogOf(c, dto),
+      };
     });
   }
 
-  /** A release withdrawn before its time (the families never saw it). */
-  async withdrawRelease(ctx: RequestContext, p: Place) {
+  /**
+   * A release taken back: before its time the families never saw the marks; once out, it needs a
+   * reason and the marks leave the admission portal (docs/design/59).
+   */
+  async withdrawRelease(ctx: RequestContext, dto: ResultsWithdrawDto) {
     return this.db.tenant(requireTenant(ctx), async (c) => {
-      await this.placeOf(c, p);
-      const was = await this.releaseOf(c, p);
+      await this.placeOf(c, dto);
+      const was = await this.releaseOf(c, dto);
       if (!was) throw new DomainError('not-found', 'No release is set', { status: 404 });
-      if (was.passed)
+      const reason = dto.reason?.trim() || null;
+      if (was.passed && !reason)
         throw new DomainError(
-          'admissions.results_released',
-          'The results are already out to the families: the release can no longer be withdrawn',
-          { status: 409 },
+          'admissions.reason_required',
+          'The results are already out to the families: give the reason for taking them back',
+          { status: 400 },
         );
       await c.query(
         `DELETE FROM admission_result_releases WHERE cycle_id = $1 AND class_id = $2 AND stage_id = $3`,
-        [p.cycleId, p.classId, p.stageId],
+        [dto.cycleId, dto.classId, dto.stageId],
       );
+      await this.logRelease(c, ctx, dto, {
+        what: 'taken_back',
+        from: was.at,
+        wasOut: was.passed,
+        reason,
+      });
       await this.audit.stage(ctx, c, {
         action: 'admissions.results.withdraw',
         entityType: 'admission_stages',
-        entityId: p.stageId,
-        after: { cycleId: p.cycleId, classId: p.classId },
+        entityId: dto.stageId,
+        before: { releaseAt: was.at, out: was.passed },
+        after: { cycleId: dto.cycleId, classId: dto.classId, ...(reason ? { reason } : {}) },
       });
-      return { release: null };
+      return { release: null, releaseLog: await this.releaseLogOf(c, dto) };
     });
   }
 
@@ -1170,13 +1274,23 @@ export class AdmissionResultsService {
           WHERE cycle_id = $1 AND class_id = $2 AND stage_id = $3`,
         [p.cycleId, p.classId, p.stageId, ctx.user.id, r.rows.length],
       );
+      await this.logRelease(c, ctx, p, {
+        what: 'told',
+        to: was.at,
+        wasOut: true,
+        toldCount: r.rows.length,
+      });
       await this.audit.stage(ctx, c, {
         action: 'admissions.results.tell',
         entityType: 'admission_stages',
         entityId: p.stageId,
         after: { cycleId: p.cycleId, classId: p.classId, told: r.rows.length },
       });
-      return { told: r.rows.length, release: await this.releaseOf(c, p) };
+      return {
+        told: r.rows.length,
+        release: await this.releaseOf(c, p),
+        releaseLog: await this.releaseLogOf(c, p),
+      };
     });
   }
 
