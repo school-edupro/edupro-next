@@ -4,7 +4,7 @@ import { useRouter } from 'next/navigation';
 import { useState, useTransition } from 'react';
 import { ViewDownload } from '@/components/admissions/ViewDownload';
 import type { SlotDetail } from '@/lib/admission-process';
-import { allotSlot, unallotSlot } from '@/lib/admission-process-actions';
+import { allotSlot, notifySlot, unallotSlot } from '@/lib/admission-process-actions';
 
 const DECIDED: Record<string, [string, 'success' | 'warning' | 'danger' | 'info']> = {
   approved: ['Passed', 'success'],
@@ -16,8 +16,9 @@ const DECIDED: Record<string, [string, 'success' | 'warning' | 'danger' | 'info'
 
 /**
  * A slot's allotment (docs/design/58, part 2): the next candidates waiting for the stage allotted up to
- * the room left (the schedule mailed to the families when ticked), each candidate's admit card, and a
- * candidate not yet decided taken out of the slot.
+ * the room left, or one by one by name (the schedule mailed to the families when ticked), each
+ * candidate's admit card, and a candidate not yet decided taken out of the slot. Candidates given the
+ * slot automatically are not mailed: Mail the schedule sends it to those not yet told (docs/design/59).
  */
 export function SlotAllotment({ slot, canAllot }: { slot: SlotDetail; canAllot: boolean }) {
   const router = useRouter();
@@ -26,6 +27,13 @@ export function SlotAllotment({ slot, canAllot }: { slot: SlotDetail; canAllot: 
   const [msg, setMsg] = useState<{ tone: 'success' | 'danger'; text: string } | null>(null);
   const room = slot.capacity - slot.candidates.length;
   const next = Math.min(room, slot.waiting);
+  const unmailed = slot.candidates.filter((c) => !c.notified).length;
+  const allot = (applicationIds?: string[]) =>
+    start(async () => {
+      const r = await allotSlot(slot.id, { notify, ...(applicationIds ? { applicationIds } : {}) });
+      setMsg(r.ok ? { tone: 'success', text: 'Allotted.' } : { tone: 'danger', text: r.error });
+      if (r.ok) router.refresh();
+    });
 
   return (
     <div style={{ display: 'grid', gap: 'var(--sp-3)' }}>
@@ -49,18 +57,88 @@ export function SlotAllotment({ slot, canAllot }: { slot: SlotDetail; canAllot: 
             type="button"
             className="ep-btn ep-btn--primary ep-btn--sm"
             disabled={pending || next <= 0}
-            onClick={() =>
-              start(async () => {
-                const r = await allotSlot(slot.id, { notify });
-                setMsg(
-                  r.ok ? { tone: 'success', text: 'Allotted.' } : { tone: 'danger', text: r.error },
-                );
-                if (r.ok) router.refresh();
-              })
-            }
+            onClick={() => allot()}
           >
             Allot the next {next}
           </button>
+          {unmailed ? (
+            <button
+              type="button"
+              className="ep-btn ep-btn--secondary ep-btn--sm"
+              disabled={pending}
+              onClick={() =>
+                start(async () => {
+                  const r = await notifySlot(slot.id);
+                  setMsg(
+                    r.ok
+                      ? {
+                          tone: 'success',
+                          text: `Schedule mailed to ${String(r.data.mailed)} ${r.data.mailed === 1 ? 'family' : 'families'} (the messages go out with the workers).`,
+                        }
+                      : { tone: 'danger', text: r.error },
+                  );
+                  if (r.ok) router.refresh();
+                })
+              }
+            >
+              Mail the schedule ({unmailed})
+            </button>
+          ) : null}
+        </div>
+      ) : null}
+      {slot.waitingList.length ? (
+        <div>
+          <h3 className="ep-card__title" style={{ fontSize: 'var(--fs-h5)' }}>
+            Waiting for {slot.stage} without a slot ({slot.waiting})
+          </h3>
+          <p className="ep-field__help" style={{ marginTop: 0 }}>
+            New candidates take the earliest slot with room by themselves; these are still without
+            one.
+          </p>
+          <ul
+            style={{
+              margin: 0,
+              paddingLeft: 0,
+              listStyle: 'none',
+              display: 'grid',
+              gap: 'var(--sp-1)',
+            }}
+          >
+            {slot.waitingList.map((w) => {
+              const who = w.candidate ?? w.number ?? 'the candidate';
+              return (
+                <li
+                  key={w.applicationId}
+                  style={{
+                    display: 'flex',
+                    gap: 'var(--sp-2)',
+                    alignItems: 'center',
+                    flexWrap: 'wrap',
+                  }}
+                >
+                  <a href={`/admissions/registrations/${w.applicationId}`}>{who}</a>
+                  <span className="ep-field__help" style={{ margin: 0 }}>
+                    {w.number} · {w.className}
+                  </span>
+                  {canAllot ? (
+                    <button
+                      type="button"
+                      className="ep-btn ep-btn--ghost ep-btn--sm"
+                      disabled={pending || room <= 0}
+                      onClick={() => allot([w.applicationId])}
+                    >
+                      Allot<span className="ep-sr-only"> {who}</span>
+                    </button>
+                  ) : null}
+                </li>
+              );
+            })}
+          </ul>
+          {canAllot && room <= 0 ? (
+            <p className="ep-field__help" style={{ marginBottom: 0 }}>
+              This slot is full: raise its capacity in Slot details, or make another slot.
+            </p>
+          ) : null}
         </div>
       ) : null}
       {slot.candidates.length ? (

@@ -10,7 +10,7 @@ import { AdmissionCoreService } from './admission-core.service';
 import { admitCardPdf, meritListPdf } from './admission-pdf';
 import { classPointRules } from './points-rules';
 import { meritOrder, seededOrder, TIE_RULE } from './merit-order';
-import { slotOf } from './process-engine';
+import { slotOf, slotWhen } from './process-engine';
 import { papersIn } from './part-marks';
 import { AdmissionProcessService } from './process.service';
 import type {
@@ -25,16 +25,7 @@ import type {
 
 type OfferWords = { subject?: string; intro?: string; note?: string };
 
-const when = (d: Date) =>
-  new Intl.DateTimeFormat('en-IN', {
-    timeZone: 'Asia/Kolkata',
-    weekday: 'short',
-    day: '2-digit',
-    month: 'short',
-    year: 'numeric',
-    hour: 'numeric',
-    minute: '2-digit',
-  }).format(d);
+const when = slotWhen;
 
 /** Registrations waiting at a stage (of a session, a class when given) that have no slot for it yet. */
 const WAITING_AT = `a.cycle_id = $1 AND a.status::text IN ('registered', 'under_review') AND a.process_steps IS NOT NULL
@@ -285,6 +276,20 @@ export class AdmissionScheduleService {
             AND NOT EXISTS (SELECT 1 FROM admission_slot_allotments x WHERE x.application_id = a.id AND x.stage_id = $2::bigint)`,
         [s.cycle_id, s.stage_id, s.class_id],
       );
+      // the first of them by name, to allot one by one (docs/design/59)
+      const waitingList = await c.query<{
+        id: string;
+        number: string | null;
+        candidate: string | null;
+        class_name: string;
+      }>(
+        // eslint-disable-next-line no-restricted-syntax -- WAITING_AT is a constant; values are bound parameters
+        `SELECT a.id::text, a.application_no AS number, a.candidate_name AS candidate, cl.name AS class_name
+           FROM applications a JOIN classes cl ON cl.id = a.class_id WHERE ${WAITING_AT}
+            AND NOT EXISTS (SELECT 1 FROM admission_slot_allotments x WHERE x.application_id = a.id AND x.stage_id = $2::bigint)
+          ORDER BY a.registered_at, a.id LIMIT 100`,
+        [s.cycle_id, s.stage_id, s.class_id],
+      );
       return {
         id: s.id,
         session: { id: s.cycle_id, name: s.cycle_name },
@@ -300,6 +305,12 @@ export class AdmissionScheduleService {
         capacity: s.capacity,
         notes: s.notes,
         waiting: waiting.rows[0]?.n ?? 0,
+        waitingList: waitingList.rows.map((x) => ({
+          applicationId: x.id,
+          number: x.number,
+          candidate: x.candidate,
+          className: x.class_name,
+        })),
         candidates: list.rows.map((x) => ({
           applicationId: x.application_id,
           rollNo: x.roll_no,
@@ -377,38 +388,7 @@ export class AdmissionScheduleService {
             actorUser: ctx.user.id,
           },
         );
-        if (dto.notify) {
-          await c.query(
-            `SELECT app.admission_notify($1, $2, $3, $4::jsonb, $5, $6, NULL, $7::jsonb, $8)`,
-            [
-              'admission_schedule',
-              a.contact_mobile,
-              a.contact_email,
-              JSON.stringify({
-                ...messageTag('status', { applicationId: a.id }),
-                name: a.candidate_name ?? '',
-                number: a.application_no ?? '',
-                stage: s.stage,
-                when: when(s.starts_at),
-                venue: s.venue,
-              }),
-              `${s.stage}: ${when(s.starts_at)}`,
-              `The ${s.stage.toLowerCase()} of ${a.candidate_name ?? 'your ward'} is scheduled.`,
-              JSON.stringify([
-                ['Candidate', a.candidate_name ?? ''],
-                ['Registration no.', a.application_no ?? ''],
-                ['Roll no.', String(roll.rows[0]!.n)],
-                ['Date and time', when(s.starts_at)],
-                ['Venue', s.venue],
-              ]),
-              'Download the admit card from the admission portal and bring it with you.',
-            ],
-          );
-          await c.query(
-            `UPDATE admission_slot_allotments SET notified_at = now() WHERE application_id = $1 AND stage_id = $2`,
-            [row.id, s.stage_id],
-          );
-        }
+        if (dto.notify) await this.mailSchedule(c, s, a, roll.rows[0]!.n);
       }
       await this.audit.stage(ctx, c, {
         action: 'admissions.slot.allot',
@@ -418,6 +398,77 @@ export class AdmissionScheduleService {
       });
     });
     return this.slot(ctx, id);
+  }
+
+  /** The schedule mailed to a candidate's family (email, SMS, WhatsApp by the workers), marked as sent. */
+  private async mailSchedule(
+    c: PoolClient,
+    s: { stage: string; stage_id: string; starts_at: Date; venue: string },
+    a: {
+      id: string;
+      contact_mobile: string | null;
+      contact_email: string | null;
+      candidate_name: string | null;
+      application_no: string | null;
+    },
+    roll: number,
+  ) {
+    await c.query(
+      `SELECT app.admission_notify($1, $2, $3, $4::jsonb, $5, $6, NULL, $7::jsonb, $8)`,
+      [
+        'admission_schedule',
+        a.contact_mobile,
+        a.contact_email,
+        JSON.stringify({
+          ...messageTag('status', { applicationId: a.id }),
+          name: a.candidate_name ?? '',
+          number: a.application_no ?? '',
+          stage: s.stage,
+          when: when(s.starts_at),
+          venue: s.venue,
+        }),
+        `${s.stage}: ${when(s.starts_at)}`,
+        `The ${s.stage.toLowerCase()} of ${a.candidate_name ?? 'your ward'} is scheduled.`,
+        JSON.stringify([
+          ['Candidate', a.candidate_name ?? ''],
+          ['Registration no.', a.application_no ?? ''],
+          ['Roll no.', String(roll)],
+          ['Date and time', when(s.starts_at)],
+          ['Venue', s.venue],
+        ]),
+        'Download the admit card from the admission portal and bring it with you.',
+      ],
+    );
+    await c.query(
+      `UPDATE admission_slot_allotments SET notified_at = now() WHERE application_id = $1 AND stage_id = $2`,
+      [a.id, s.stage_id],
+    );
+  }
+
+  /**
+   * The schedule mailed to every candidate of the slot not yet told (a slot given automatically sends
+   * nothing, docs/design/59): once each.
+   */
+  async notify(ctx: RequestContext, id: string) {
+    const sent = await this.db.tenant(requireTenant(ctx), async (c) => {
+      const s = await this.slotRow(c, id);
+      const due = await c.query<{ id: string; roll_no: number }>(
+        `SELECT x.application_id::text AS id, x.roll_no FROM admission_slot_allotments x JOIN applications a ON a.id = x.application_id
+          WHERE x.slot_id = $1 AND x.notified_at IS NULL AND a.status::text NOT IN ('draft', 'cancelled', 'withdrawn')
+          ORDER BY x.roll_no`,
+        [id],
+      );
+      for (const x of due.rows)
+        await this.mailSchedule(c, s, await this.core.row(c, x.id), x.roll_no);
+      await this.audit.stage(ctx, c, {
+        action: 'admissions.slot.notify',
+        entityType: 'admission_slots',
+        entityId: id,
+        after: { mailed: due.rows.length },
+      });
+      return due.rows.length;
+    });
+    return { mailed: sent, slot: await this.slot(ctx, id) };
   }
 
   async unallot(ctx: RequestContext, id: string, applicationId: string) {

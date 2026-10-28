@@ -81,3 +81,26 @@ Decided here, change any before building:
 
 Moving candidates between slots automatically; a waiting list per slot; automatic messages when a
 release is moved.
+
+## As built (28 Oct 2026)
+
+- **Part 1** (a609eb6): migration 0269 `admission_result_release_log` (what set / moved / taken_back /
+  told, from, to, was_out, told_count, reason 3-300, by, at; existing releases and tells backfilled).
+  `PUT admissions/results/release` takes `reason`, required once out (`admissions.reason_required`,
+  400); moving an out release to a later time clears told_at / told_by / told_count. `POST
+  release/withdraw` takes `reason`, required once out. Set, move, take-back and Tell are logged;
+  `GET admissions/results` (and the release calls) return `releaseLog`, newest first. The page: once
+  out, "Move to (India time)" + Reason + Move to this time / Take back; a note that a later time hides
+  the marks until then; History (N) under the box.
+- **Part 2**: `autoSlot(c, appId, actor)` in process-engine runs from `place()` (every decision, undo,
+  process change, a process starting at such a stage); `decideWith` calls it after its own history
+  line (`place(…, { slot: false })`). Stages taking slots: Written test, Interview **and Interaction**
+  (slots exist for all three). Earliest slot of the class or every class whose India date is today or
+  later, class's own first at the same time, room checked with the slot row locked; next roll number
+  of the stage; history "Interview: <when> at <venue> (roll no. N) · given automatically"; no message.
+  Slot detail has `waitingList` (first 100); `POST admissions/slots/:id/notify` mails the schedule to
+  the slot's candidates not yet told (once each; `mailSchedule` shared with Allot). Allotment tab:
+  Mail the schedule (N), Waiting for <stage> without a slot with Allot per candidate (full: raise the
+  capacity); Marks tab notes waiting candidates. Tests: `admission-auto-slots` e2e (3), all admission
+  suites 104; a11y slot 143 tabs and slot 159.
+- Slot 159's Ishaan and Ayaan are still waiting (they passed before this change): Allot on the slot.

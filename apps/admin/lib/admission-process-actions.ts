@@ -183,6 +183,16 @@ export async function allotSlot(id: string, body: { applicationIds?: string[]; n
     `/admissions/schedule/${id}`,
   ]);
 }
+/** The schedule mailed to the slot's candidates not yet told (docs/design/59). */
+export async function notifySlot(id: string) {
+  if (!okId(id)) return { ok: false as const, error: 'Unknown slot' };
+  return call<{ mailed: number; slot: SlotDetail }>(
+    `/admissions/slots/${id}/notify`,
+    'POST',
+    undefined,
+    [`/admissions/schedule/${id}`],
+  );
+}
 export async function unallotSlot(id: string, applicationId: string) {
   if (!okId(id) || !okId(applicationId)) return { ok: false as const, error: 'Unknown slot' };
   return call<SlotDetail>(

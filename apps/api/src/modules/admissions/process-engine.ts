@@ -111,10 +111,95 @@ export async function refreshMerit(c: PoolClient, appId: string): Promise<void> 
   );
 }
 
-/** Recomputes the place of an application in its steps (after a decision, an undo or a process change). */
+/** A slot's date and time as families and the history read it (India time). */
+export const slotWhen = (d: Date) =>
+  new Intl.DateTimeFormat('en-IN', {
+    timeZone: 'Asia/Kolkata',
+    weekday: 'short',
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  }).format(d);
+
+/**
+ * A candidate come to a stage taking slots (Written test, Interview, Interaction) without a slot for it
+ * goes into the earliest slot of their class (or for every class) dated today or later, India date,
+ * with room (docs/design/59, part 2): the next roll number of the stage and a line in the history; no
+ * message (the office mails the schedule from the slot). No slot with room: they wait. Returns the
+ * slot taken.
+ */
+export async function autoSlot(
+  c: PoolClient,
+  appId: string,
+  actorUser: string | null,
+): Promise<string | null> {
+  const a = await c.query<{ cycle_id: string; class_id: string; status: string; stage_id: string }>(
+    `SELECT a.cycle_id::text, a.class_id::text, a.status::text, st.id::text AS stage_id
+       FROM applications a JOIN admission_stages st ON st.id::text = (a.process_steps -> a.stage_no ->> 'stageId')
+      WHERE a.id = $1 AND a.status::text IN ('registered', 'under_review') AND st.kind IN ('test', 'interview', 'interaction')
+        AND NOT EXISTS (SELECT 1 FROM admission_slot_allotments x WHERE x.application_id = a.id AND x.stage_id = st.id)`,
+    [appId],
+  );
+  const x = a.rows[0];
+  if (!x) return null;
+  // the class's own slot before an every-class one at the same time
+  const slots = await c.query<{ id: string; starts_at: Date; venue: string; stage: string }>(
+    `SELECT s.id::text, s.starts_at, s.venue, st.name AS stage
+       FROM admission_slots s JOIN admission_stages st ON st.id = s.stage_id
+      WHERE s.cycle_id = $1 AND s.stage_id = $2 AND (s.class_id IS NULL OR s.class_id = $3)
+        AND (s.starts_at AT TIME ZONE 'Asia/Kolkata')::date >= (now() AT TIME ZONE 'Asia/Kolkata')::date
+      ORDER BY s.starts_at, s.class_id IS NULL, s.id`,
+    [x.cycle_id, x.stage_id, x.class_id],
+  );
+  for (const s of slots.rows) {
+    // locked: two decisions at once do not overfill a slot
+    const room = await c.query<{ room: number }>(
+      `SELECT s.capacity - (SELECT count(*)::int FROM admission_slot_allotments y WHERE y.slot_id = s.id) AS room
+         FROM admission_slots s WHERE s.id = $1 FOR UPDATE`,
+      [s.id],
+    );
+    if ((room.rows[0]?.room ?? 0) <= 0) continue;
+    const roll = await c.query<{ n: number }>(
+      `SELECT COALESCE(max(y.roll_no), 0)::int + 1 AS n FROM admission_slot_allotments y JOIN admission_slots s ON s.id = y.slot_id
+        WHERE s.cycle_id = $1 AND y.stage_id = $2`,
+      [x.cycle_id, x.stage_id],
+    );
+    const n = roll.rows[0]!.n;
+    const put = await c.query(
+      `INSERT INTO admission_slot_allotments (school_id, slot_id, stage_id, application_id, roll_no)
+       VALUES (app.current_school_id(), $1, $2, $3, $4) ON CONFLICT (application_id, stage_id) DO NOTHING`,
+      [s.id, x.stage_id, appId, n],
+    );
+    if (!put.rowCount) return null;
+    await c.query(
+      `INSERT INTO application_events (school_id, application_id, from_status, to_status, note, actor_user_id)
+       VALUES (app.current_school_id(), $1, $2::application_status, $2::application_status, $3, $4)`,
+      [
+        appId,
+        x.status,
+        `${s.stage}: ${slotWhen(s.starts_at)} at ${s.venue} (roll no. ${String(n)}) · given automatically`.slice(
+          0,
+          500,
+        ),
+        actorUser,
+      ],
+    );
+    return s.id;
+  }
+  return null;
+}
+
+/**
+ * Recomputes the place of an application in its steps (after a decision, an undo or a process change);
+ * come to a stage taking slots, it takes one (docs/design/59) unless the caller does that itself after
+ * its own history lines.
+ */
 export async function place(
   c: PoolClient,
   appId: string,
+  opts: { slot?: boolean; actorUser?: string | null } = {},
 ): Promise<{ stageNo: number; levelNo: number; done: boolean }> {
   const a = await c.query<{ steps: ProcessStep[] | null }>(
     `SELECT process_steps AS steps FROM applications WHERE id = $1`,
@@ -131,6 +216,7 @@ export async function place(
       WHERE id = $1`,
     [appId, p.stageNo, p.levelNo, meritOf(results)],
   );
+  if (opts.slot !== false) await autoSlot(c, appId, opts.actorUser ?? null);
   return { ...p, done: steps.length > 0 && p.stageNo >= steps.length };
 }
 

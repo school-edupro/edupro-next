@@ -41,6 +41,8 @@ const PAGES = [
   '/admissions/schedule/143?tab=excel',
   '/admissions/schedule/143?tab=allot',
   '/admissions/schedule/143?tab=details',
+  '/admissions/schedule/159',
+  '/admissions/schedule/159?tab=allot',
   '/admissions/selection',
   '/admissions/setup/papers',
   '/admissions/setup/papers?view=list',

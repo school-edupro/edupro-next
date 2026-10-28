@@ -149,6 +149,13 @@ export interface SlotDetail {
   capacity: number;
   notes: string | null;
   waiting: number;
+  /** the first candidates waiting for the stage without a slot (docs/design/59) */
+  waitingList: Array<{
+    applicationId: string;
+    number: string | null;
+    candidate: string | null;
+    className: string;
+  }>;
   candidates: Array<{
     applicationId: string;
     rollNo: number;

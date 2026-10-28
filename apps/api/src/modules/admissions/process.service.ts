@@ -18,6 +18,7 @@ import { WorkflowService } from '../workflow/workflow.service';
 import { AdmissionCoreService, type AppRow } from './admission-core.service';
 import { ADMISSIONS } from './admissions.dto';
 import {
+  autoSlot,
   IN_PROCESS,
   journey,
   place,
@@ -1061,7 +1062,8 @@ export class AdmissionProcessService {
     ]
       .filter(Boolean)
       .join(' · ');
-    const pl = await place(c, id);
+    // the slot of a next test, interview or interaction comes after the decision's own history line
+    const pl = await place(c, id, { slot: false });
     if (decision === 'rejected') {
       await c.query(
         `UPDATE applications SET status = 'rejected', decided_at = now(), decided_by = $2, updated_at = now() WHERE id = $1`,
@@ -1141,6 +1143,7 @@ export class AdmissionProcessService {
         actorUser: ctx.user.id,
       },
     );
+    await autoSlot(c, id, ctx.user.id);
     // every step done: the offer (a process ending at Selection offers there)
     if (pl.done)
       await this.makeOffer(c, await this.core.row(c, id), ctx.user.id, undefined, dto.offerMessage);

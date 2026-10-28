@@ -316,6 +316,13 @@ export class AdmissionProcessController {
     return this.schedule.allot(ctx, id, dto);
   }
 
+  @Post('slots/:id/notify')
+  @ApiOperation({ summary: "The schedule mailed to the slot's candidates not yet told" })
+  @RequirePermission(ADMISSION_SCHEDULE)
+  notify(@ReqCtx() ctx: RequestContext, @Param('id') id: string) {
+    return this.schedule.notify(ctx, id);
+  }
+
   @Delete('slots/:id/candidates/:applicationId')
   @RequirePermission(ADMISSION_SCHEDULE)
   unallot(

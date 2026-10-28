@@ -128,6 +128,15 @@ export default async function SlotPage({
 
       {tab === 'marks' ? (
         <>
+          {slot.waiting ? (
+            <p className="ep-alert ep-alert--info" role="status">
+              <span>
+                {slot.waiting} {slot.waiting === 1 ? 'candidate waits' : 'candidates wait'} for{' '}
+                {slot.stage} without a slot: see{' '}
+                <a href={href('allot')}>Allotment and admit cards</a>.
+              </span>
+            </p>
+          ) : null}
           {grids.map((g) =>
             g.data.place.paper ? (
               <div key={g.classId} style={{ marginBottom: 'var(--sp-4)' }}>
