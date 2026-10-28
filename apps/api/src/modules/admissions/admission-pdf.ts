@@ -529,6 +529,8 @@ export interface TablePdfInput {
   logo: { contentType: string; bytes: Buffer } | null;
   title: string;
   subtitle: string;
+  /** heading lines under the subtitle (a slot's date, venue and note), wrapped to the page */
+  lines?: string[];
   columns: Array<{ h: string; w: number }>;
   rows: string[][];
   printedAt: string;
@@ -543,7 +545,24 @@ export async function tablePdf(p: TablePdfInput): Promise<Buffer> {
   page.drawText(latin(p.title.toUpperCase()), { x: M, y, size: 13, font: bold, color: NAVY });
   y -= 16;
   page.drawText(latin(p.subtitle), { x: M, y, size: 9.5, font: regular, color: MUTED });
-  y -= 22;
+  if (p.lines?.length) {
+    y -= 15;
+    for (const line of p.lines) {
+      // word by word to the page's width
+      let cur = '';
+      for (const w of latin(line).split(' ')) {
+        const next = cur ? `${cur} ${w}` : w;
+        if (cur && bold.widthOfTextAtSize(next, 9.5) > A4[0] - 2 * M) {
+          page.drawText(cur, { x: M, y, size: 9.5, font: bold, color: INK });
+          y -= 13;
+          cur = w;
+        } else cur = next;
+      }
+      if (cur) page.drawText(cur, { x: M, y, size: 9.5, font: bold, color: INK });
+      y -= 13;
+    }
+    y -= 9;
+  } else y -= 22;
   const size = 9;
   const fit = (t: string, w: number, font: PDFFont) => {
     let s = latin(t);

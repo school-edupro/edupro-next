@@ -12,7 +12,7 @@ import { tablePdf } from './admission-pdf';
 import { AdmissionPapersService } from './papers.service';
 import { storeMarks, type Paper } from './part-marks';
 import { messageTag } from './message-tag';
-import { place, refreshMerit } from './process-engine';
+import { place, refreshMerit, slotWhen } from './process-engine';
 import { AdmissionProcessService } from './process.service';
 import type {
   ResultsQueryDto,
@@ -95,6 +95,8 @@ export interface ResultRow {
 interface Table {
   title: string;
   subtitle: string;
+  /** heading lines: the slot's date, duration, venue and note (docs/design/60) */
+  lines?: string[];
   columns: Array<{ h: string; w: number }>;
   rows: string[][];
 }
@@ -1368,15 +1370,19 @@ export class AdmissionResultsService {
     return out;
   }
 
-  /** A class and stage's rows as a list: roll no., candidate, a column per part, total, %, cut-off. */
+  /**
+   * A class and stage's rows as a list: roll no., candidate, a column per part, total, %, cut-off; with
+   * `slot`, a Slot column (the session download, docs/design/60); `lines` head a slot's section.
+   */
   private tableOf(
     at: { cycle: string; className: string; stage: string },
     paper: Paper,
     list: ResultRow[],
+    opts: { slot?: boolean; lines?: string[] } = {},
   ): Table {
     const parts = paper.parts;
     // A4 is 515 points wide inside the margins: the parts share what the fixed columns leave
-    const fixed = [28, 64, 96];
+    const fixed = opts.slot ? [28, 60, 86, 74] : [28, 64, 96];
     const tail = [36, 34, 36, 52];
     const room = 515 - [...fixed, ...tail].reduce((n, w) => n + w, 0);
     const each = Math.max(22, Math.floor(room / Math.max(parts.length, 1)));
@@ -1384,6 +1390,7 @@ export class AdmissionResultsService {
       'Roll no.',
       'Registration no.',
       'Candidate',
+      ...(opts.slot ? ['Slot'] : []),
       ...parts.map((pt) => `${pt.name} (${String(pt.maxMarks)})`),
       'Total',
       '%',
@@ -1393,6 +1400,7 @@ export class AdmissionResultsService {
     return {
       title: `${at.stage} results · ${at.className}`,
       subtitle: `${at.cycle} · ${String(list.length)} candidate${list.length === 1 ? '' : 's'} · out of ${String(paper.total)}`,
+      ...(opts.lines?.length ? { lines: opts.lines } : {}),
       columns: heads.map((h, i) => ({
         h,
         w:
@@ -1406,6 +1414,7 @@ export class AdmissionResultsService {
         r.rollNo !== null ? String(r.rollNo) : '',
         r.number ?? '',
         r.candidate ?? '',
+        ...(opts.slot ? [r.slot ?? 'No slot'] : []),
         ...parts.map((pt) =>
           r.absent ? 'AB' : r.marks[pt.id] != null ? String(r.marks[pt.id]) : '',
         ),
@@ -1422,6 +1431,7 @@ export class AdmissionResultsService {
     const ws = wb.addWorksheet(name);
     ws.addRow([t.title]).font = { bold: true };
     ws.addRow([t.subtitle]);
+    for (const line of t.lines ?? []) ws.addRow([line]).font = { bold: true };
     ws.addRow([]);
     ws.addRow(t.columns.map((x) => x.h)).font = { bold: true };
     t.columns.forEach(
@@ -1463,18 +1473,87 @@ export class AdmissionResultsService {
     return Buffer.from(await all.save());
   }
 
-  /** The grid as filtered, as Excel or a letterhead PDF. */
+  /**
+   * The rows by slot (docs/design/60): a section per slot in time order with its heading (date and time,
+   * duration, venue, note), the candidates without a slot last; rows with no slot at all: one plain
+   * section.
+   */
+  private async slotSections(c: PoolClient, rows: ResultRow[]) {
+    const ids = [...new Set(rows.map((r) => r.slotId).filter((x): x is string => Boolean(x)))];
+    if (!ids.length) return [{ name: 'Results', lines: [] as string[], rows }];
+    const slots = await c.query<{
+      id: string;
+      starts_at: Date;
+      minutes: number;
+      venue: string;
+      notes: string | null;
+    }>(
+      `SELECT id::text, starts_at, minutes, venue, notes FROM admission_slots WHERE id = ANY($1::bigint[])
+        ORDER BY starts_at, id`,
+      [ids],
+    );
+    const short = new Intl.DateTimeFormat('en-IN', {
+      timeZone: 'Asia/Kolkata',
+      day: '2-digit',
+      month: 'short',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false,
+    });
+    const out = slots.rows.map((x) => ({
+      name: short.format(x.starts_at).replace(/[:,]/g, (ch) => (ch === ':' ? '.' : '')),
+      lines: [
+        `Slot: ${slotWhen(x.starts_at)} · ${String(x.minutes)} minutes · ${x.venue}`,
+        ...(x.notes ? [`Note: ${x.notes}`] : []),
+      ],
+      rows: rows.filter((r) => r.slotId === x.id),
+    }));
+    const none = rows.filter((r) => !r.slotId);
+    if (none.length)
+      out.push({
+        name: 'No slot',
+        lines: ['No slot: not allotted to a slot of this stage'],
+        rows: none,
+      });
+    return out;
+  }
+
+  /** A worksheet name: 31 characters at most, none of \ / ? * [ ] :, unique in the workbook. */
+  private sheetName(used: Set<string>, wanted: string) {
+    const base =
+      wanted
+        .replace(/[\\/?*[\]:]+/g, ' ')
+        .slice(0, 26)
+        .trim() || 'Sheet';
+    let name = base;
+    for (let i = 2; used.has(name.toLowerCase()); i++) name = `${base} (${String(i)})`;
+    used.add(name.toLowerCase());
+    return name;
+  }
+
+  /**
+   * The grid as filtered, as Excel or a letterhead PDF: a section per slot with its date, venue and
+   * note (docs/design/60): a page each in the PDF, a sheet each in Excel.
+   */
   async export(ctx: RequestContext, q: ResultsQueryDto & { format: 'xlsx' | 'pdf' }) {
     const data = await this.list(ctx, q);
     const paper = data.place.paper;
     if (!paper) this.needPaper(data.place);
-    const t = this.tableOf(data.place, paper!, data.rows);
+    const sections = await this.db.tenant(requireTenant(ctx), (c) =>
+      this.slotSections(c, data.rows),
+    );
+    const tables = sections.map((x) => ({
+      name: x.name,
+      table: this.tableOf(data.place, paper!, x.rows, { lines: x.lines }),
+    }));
     const file = `results-${data.place.stage}-${data.place.className}`
       .toLowerCase()
       .replace(/[^\w-]+/g, '-');
     if (q.format === 'xlsx') {
       const wb = new ExcelJS.Workbook();
-      this.sheetOf(wb, 'Results', t);
+      const used = new Set<string>();
+      for (const x of tables)
+        this.sheetOf(wb, tables.length === 1 ? 'Results' : this.sheetName(used, x.name), x.table);
       return {
         filename: `${file}.xlsx`,
         contentType: XLSX,
@@ -1484,7 +1563,12 @@ export class AdmissionResultsService {
     return this.db.tenant(requireTenant(ctx), async (c) => ({
       filename: `${file}.pdf`,
       contentType: 'application/pdf',
-      base64: (await this.pdfOf(c, [t])).toString('base64'),
+      base64: (
+        await this.pdfOf(
+          c,
+          tables.map((x) => x.table),
+        )
+      ).toString('base64'),
     }));
   }
 
@@ -1500,7 +1584,7 @@ export class AdmissionResultsService {
         .filter((x) => x.paper && x.rows.length)
         .map((x) => ({
           name: `${x.row.className} ${x.row.stage}`,
-          table: this.tableOf({ cycle, ...x.row }, x.paper!, x.rows),
+          table: this.tableOf({ cycle, ...x.row }, x.paper!, x.rows, { slot: true }),
         }));
       if (!lists.length)
         throw new DomainError(
@@ -1548,17 +1632,7 @@ export class AdmissionResultsService {
         const wb = new ExcelJS.Workbook();
         this.sheetOf(wb, 'Overview', overview);
         const used = new Set(['overview']);
-        for (const l of lists) {
-          // a sheet's name: 31 characters at most, none of \ / ? * [ ] :, and unique
-          const base = l.name
-            .replace(/[\\/?*[\]:]+/g, ' ')
-            .slice(0, 26)
-            .trim();
-          let name = base;
-          for (let i = 2; used.has(name.toLowerCase()); i++) name = `${base} (${String(i)})`;
-          used.add(name.toLowerCase());
-          this.sheetOf(wb, name, l.table);
-        }
+        for (const l of lists) this.sheetOf(wb, this.sheetName(used, l.name), l.table);
         return {
           filename: `${file}.xlsx`,
           contentType: XLSX,

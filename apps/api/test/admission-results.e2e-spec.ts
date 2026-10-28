@@ -918,7 +918,9 @@ describe('admission test results by part (e2e)', () => {
       String(view.rows[0].candidates),
     ]);
     expect(wb.worksheets[1]!.name).toBe(`Class IX ${String(view.rows[0].stage)}`.slice(0, 26));
-    expect((wb.worksheets[1]!.getRow(4).values as unknown[]).slice(4, 6)).toEqual([
+    // the session download names each candidate's slot (docs/design/60)
+    expect((wb.worksheets[1]!.getRow(4).values as unknown[]).slice(4, 7)).toEqual([
+      'Slot',
       'English (50)',
       'Maths (50)',
     ]);
@@ -928,5 +930,76 @@ describe('admission test results by part (e2e)', () => {
     expect(p.contentType).toBe('application/pdf');
     const pdf = await PDFDocument.load(Buffer.from(p.base64, 'base64'));
     expect(pdf.getPageCount()).toBeGreaterThanOrEqual(3);
+  });
+
+  // ---- docs/design/60, part 1: the class download by slot --------------------------------------------
+  it('the class download has a section per slot with its date, venue and note; one slot chosen: its own', async () => {
+    const iv = { ...place(), stageId: ids.interview! };
+    const sheetOf = async (x: Record<string, string>) => {
+      const r = (
+        await call(
+          'GET',
+          `/admissions/results/export?${new URLSearchParams({ ...iv, ...x, format: 'xlsx' }).toString()}`,
+        )
+      ).json();
+      const wb = new ExcelJS.Workbook();
+      await wb.xlsx.load(Buffer.from(r.base64, 'base64') as unknown as ArrayBuffer);
+      return wb;
+    };
+    const pagesOf = async (x: Record<string, string>) => {
+      const r = (
+        await call(
+          'GET',
+          `/admissions/results/export?${new URLSearchParams({ ...iv, ...x, format: 'pdf' }).toString()}`,
+        )
+      ).json();
+      return (await PDFDocument.load(Buffer.from(r.base64, 'base64'))).getPageCount();
+    };
+    // all three sat in Room 1 (the third given the slot automatically, docs/design/59): one moves to
+    // a second slot, one is taken out of the slots
+    const second = await call('POST', `/admissions/cycles/${ids.cycle!}/slots`, {
+      stageId: ids.interview,
+      classId: ids.cls,
+      startsAt: '2027-01-11T09:30:00+05:30',
+      venue: 'Room 2',
+      capacity: 10,
+    });
+    await withMigrator(async (c) => {
+      await c.query(`UPDATE admission_slots SET notes = 'Bring the admit card' WHERE id = $1`, [
+        ids.slot,
+      ]);
+      await c.query(
+        `UPDATE admission_slot_allotments SET slot_id = $2 WHERE application_id = $1 AND stage_id = $3`,
+        [apps[1], second.json().id, ids.interview],
+      );
+      await c.query(
+        `DELETE FROM admission_slot_allotments WHERE application_id = $1 AND stage_id = $2`,
+        [apps[2], ids.interview],
+      );
+    });
+    const all = await sheetOf({});
+    expect(all.worksheets.map((w) => w.name)).toEqual(['10 Jan 10.00', '11 Jan 09.30', 'No slot']);
+    const first = all.worksheets[0]!;
+    expect(String(first.getRow(2).getCell(1).value)).toContain('1 candidate ·');
+    expect(first.getRow(3).getCell(1).value).toBe(
+      'Slot: Sun, 10 Jan, 2027, 10:00 am · 60 minutes · Room 1',
+    );
+    expect(first.getRow(4).getCell(1).value).toBe('Note: Bring the admit card');
+    expect((first.getRow(6).values as unknown[]).slice(1, 3)).toEqual([
+      'Roll no.',
+      'Registration no.',
+    ]);
+    expect(all.worksheets[1]!.getRow(3).getCell(1).value).toBe(
+      'Slot: Mon, 11 Jan, 2027, 9:30 am · 60 minutes · Room 2',
+    );
+    expect(all.worksheets[2]!.getRow(3).getCell(1).value).toBe(
+      'No slot: not allotted to a slot of this stage',
+    );
+    expect(await pagesOf({})).toBe(3);
+    // one slot chosen: that slot's heading only
+    const one = await sheetOf({ slotId: ids.slot! });
+    expect(one.worksheets.map((w) => w.name)).toEqual(['Results']);
+    expect(String(one.worksheets[0]!.getRow(3).getCell(1).value)).toMatch(/^Slot: .* Room 1$/);
+    expect(await pagesOf({ slotId: ids.slot! })).toBe(1);
   });
 });
