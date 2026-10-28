@@ -33,10 +33,10 @@ const dmy = (iso: string | null) =>
     : '-';
 
 /**
- * Draw of lots (docs/design/60, 62), the nursery practice: the candidates of a class tied on a merit
- * total (form points + test and interview marks), their points confirmed at Document check, get a
- * printed slip each (twins one), with the school's own heading and details; the slips drawn by hand are
- * entered in order: the first seats offered, the rest wait-listed.
+ * Draw of lots (docs/design/60, 62), the nursery practice: the registered candidates of a class sharing
+ * a total of the form's merit points (test and interview marks not added) get a printed slip each
+ * (twins one), whether or not Document check has approved them yet, with the school's own heading and
+ * details; the slips drawn by hand are entered in order: the first seats offered, the rest wait-listed.
  */
 export default async function DrawPage({
   searchParams,
@@ -48,15 +48,15 @@ export default async function DrawPage({
   if (!me.permissions.includes('admissions.application.view')) notFound();
   const canEdit = me.permissions.includes('admissions.schedule.manage');
   const opts = await apiFetch<DrawOptions>('/admissions/draw/options');
-  // the session and class with candidates on the merit list first
+  // the session and class with registered candidates on points first
   const cycle =
     opts.cycles.find((y) => y.id === sp.cycleId) ??
-    opts.cycles.find((y) => y.classes.some((k) => k.withMerit > 0)) ??
+    opts.cycles.find((y) => y.classes.some((k) => k.withPoints > 0)) ??
     opts.cycles.find((y) => y.classes.length) ??
     opts.cycles[0];
   const cls =
     cycle?.classes.find((k) => k.id === sp.classId) ??
-    cycle?.classes.find((k) => k.withMerit > 0) ??
+    cycle?.classes.find((k) => k.withPoints > 0) ??
     cycle?.classes[0];
   const categoryId = opts.categories.some((k) => k.id === okId(sp.categoryId))
     ? sp.categoryId!
@@ -66,7 +66,7 @@ export default async function DrawPage({
     <PageHeader
       kicker="Admissions"
       title="Draw of lots"
-      description="Where the seats run out inside one merit total (form points + test and interview marks), the candidates of that total are drawn by lot in front of the parents. Print their slips (points confirmed at Document check level 1; twins share a slip), draw them by hand, then enter the drawn order: the first seats are offered and the rest wait-listed in that order."
+      description="Where the seats run out inside one total of the form's merit points (test and interview marks are not added), the registered candidates with that total are drawn by lot in front of the parents. Print their slips (every registered candidate; twins share a slip), draw them by hand, then enter the drawn order: the first seats are offered and the rest wait-listed in that order."
     />
   );
   if (!cycle || !cls)
@@ -83,22 +83,22 @@ export default async function DrawPage({
   const totals = await apiFetch<DrawTotals>(
     `/admissions/draw/totals?${new URLSearchParams(place).toString()}`,
   );
-  const drawable = totals.totals.filter((t) => t.confirmed > 0);
+  const drawable = totals.totals.filter((t) => t.candidates > 0);
 
   let body: React.ReactNode = null;
   if (tab === 'slips') {
-    const merit =
-      totals.totals.find((t) => t.merit === sp.merit)?.merit ??
-      drawable[0]?.merit ??
-      totals.totals[0]?.merit ??
+    const points =
+      totals.totals.find((t) => t.points === sp.points)?.points ??
+      drawable[0]?.points ??
+      totals.totals[0]?.points ??
       null;
-    const group = merit
+    const group = points
       ? await apiFetch<DrawGroup>(
-          `/admissions/draw/group?${new URLSearchParams({ ...place, merit }).toString()}`,
+          `/admissions/draw/group?${new URLSearchParams({ ...place, points }).toString()}`,
         )
       : null;
     const slipsHref = group
-      ? `/api/admission-draw/slips?${new URLSearchParams({ ...place, merit: group.merit }).toString()}`
+      ? `/api/admission-draw/slips?${new URLSearchParams({ ...place, points: group.points }).toString()}`
       : '';
     // each slip's number: twins not split share one
     const slipNo = new Map<string, number>();
@@ -119,29 +119,30 @@ export default async function DrawPage({
     );
     body = (
       <>
-        <Card elevated title={`Merit totals · ${cls.name}`}>
+        <Card elevated title={`Points totals · ${cls.name}`}>
           {totals.totals.length ? (
             <div
               className="ep-table-wrap"
               tabIndex={0}
               role="region"
-              aria-label="Merit totals (scrolls sideways)"
+              aria-label="Points totals (scrolls sideways)"
             >
               <table className="ep-table ep-table--dense">
                 <caption className="ep-sr-only">
-                  Each merit total of {cls.name}: candidates confirmed and not yet
+                  Each points total of {cls.name}: registered candidates, and how many are confirmed
                 </caption>
                 <thead>
                   <tr>
                     <th scope="col" className="ep-num">
-                      Merit total
+                      Points
+                    </th>
+                    <th scope="col" className="ep-num">
+                      Candidates
                     </th>
                     <th scope="col" className="ep-num">
                       Confirmed
                     </th>
-                    <th scope="col" className="ep-num">
-                      Not confirmed yet
-                    </th>
+
                     <th scope="col">
                       <span className="ep-sr-only">Open</span>
                     </th>
@@ -149,21 +150,21 @@ export default async function DrawPage({
                 </thead>
                 <tbody>
                   {totals.totals.map((t) => (
-                    <tr key={t.merit} aria-current={t.merit === merit ? 'true' : undefined}>
+                    <tr key={t.points} aria-current={t.points === points ? 'true' : undefined}>
                       <th scope="row" className="ep-num">
-                        {t.merit}
+                        {t.points}
                       </th>
+                      <td className="ep-num">{t.candidates}</td>
                       <td className="ep-num">{t.confirmed}</td>
-                      <td className="ep-num">{t.unconfirmed || '-'}</td>
                       <td>
-                        {t.merit === merit ? (
+                        {t.points === points ? (
                           <Badge tone="info">Shown below</Badge>
                         ) : (
                           <a
                             className="ep-btn ep-btn--ghost ep-btn--sm"
-                            href={href('slips', { merit: t.merit })}
+                            href={href('slips', { points: t.points })}
                           >
-                            Open<span className="ep-sr-only"> merit {t.merit}</span>
+                            Open<span className="ep-sr-only"> {t.points} points</span>
                           </a>
                         )}
                       </td>
@@ -174,8 +175,8 @@ export default async function DrawPage({
             </div>
           ) : (
             <p style={{ margin: 0 }}>
-              No candidate of {cls.name} is on the merit list yet (the points come from the form and
-              are confirmed at Document check level 1; the marks are added after each test).
+              No registered candidate of {cls.name} has merit points yet (the points come from the
+              registration form).
             </p>
           )}
         </Card>
@@ -195,7 +196,7 @@ export default async function DrawPage({
               }}
             >
               <h2 id="draw-group-h" className="ep-card__title" style={{ margin: 0 }}>
-                Merit {group.merit} · {group.candidates.length} candidate
+                {group.points} points · {group.candidates.length} candidate
                 {group.candidates.length === 1 ? '' : 's'} · {group.slips} slip
                 {group.slips === 1 ? '' : 's'}
               </h2>
@@ -215,23 +216,6 @@ export default async function DrawPage({
                 </span>
               ) : null}
             </div>
-            {group.unconfirmed.length ? (
-              <p className="ep-alert ep-alert--warning" role="status">
-                <span>
-                  {group.unconfirmed.length} more at merit {group.merit}{' '}
-                  {group.unconfirmed.length === 1 ? 'has' : 'have'} no slip until Document check
-                  level 1 approves {group.unconfirmed.length === 1 ? 'it' : 'them'} (that confirms
-                  the points):{' '}
-                  {group.unconfirmed.map((x, i) => (
-                    <span key={x.id}>
-                      {i ? ', ' : ''}
-                      <a href={`/admissions/registrations/${x.id}`}>{x.candidate ?? x.number}</a>
-                    </span>
-                  ))}
-                  .
-                </span>
-              </p>
-            ) : null}
             {group.twins.length ? (
               <div style={{ marginBottom: 'var(--sp-3)' }}>
                 <h3 className="ep-card__title" style={{ fontSize: 'var(--fs-h5)' }}>
@@ -283,7 +267,10 @@ export default async function DrawPage({
                         </td>
                         <td>
                           {x.candidate ?? '-'}{' '}
-                          {twinOf.has(x.id) ? <Badge tone="info">Twin</Badge> : null}
+                          {twinOf.has(x.id) ? <Badge tone="info">Twin</Badge> : null}{' '}
+                          {x.confirmed ? null : (
+                            <Badge tone="warning">Points not confirmed yet</Badge>
+                          )}
                         </td>
                         <td>{x.father ?? '-'}</td>
                         <td>{dmy(x.dob)}</td>
@@ -297,7 +284,7 @@ export default async function DrawPage({
                 </table>
               </div>
             ) : (
-              <p style={{ margin: 0 }}>Nobody of this total has confirmed points yet.</p>
+              <p style={{ margin: 0 }}>No registered candidate has this total.</p>
             )}
           </section>
         ) : null}
@@ -311,8 +298,8 @@ export default async function DrawPage({
           </h2>
           <ol style={{ margin: 0, paddingLeft: '1.2rem', display: 'grid', gap: 'var(--sp-1)' }}>
             <li>
-              Choose the merit total where the seats run out (the merit list on the Score report
-              shows it), check the candidates and twins above.
+              Choose the points total where the seats run out (the Score report's merit list shows
+              the points), check the candidates and twins above.
             </li>
             <li>
               Press <strong>Print slips</strong>: the slips open as an A4 PDF. In the print window
@@ -395,11 +382,11 @@ export default async function DrawPage({
                 cycleId={cycle.id}
                 classId={cls.id}
                 categoryId={categoryId}
-                totals={drawable.map((t) => ({ merit: t.merit, slips: t.confirmed }))}
+                totals={drawable.map((t) => ({ points: t.points, slips: t.candidates }))}
               />
             ) : (
               <p style={{ margin: 0 }}>
-                No candidate of {cls.name} is ready to draw (points confirmed, on the merit list).
+                No registered candidate of {cls.name} has merit points to draw.
               </p>
             )}
           </Card>
@@ -418,7 +405,7 @@ export default async function DrawPage({
                   <tr>
                     <th scope="col">When</th>
                     <th scope="col" className="ep-num">
-                      Merit
+                      Points
                     </th>
                     <th scope="col">Category</th>
                     <th scope="col" className="ep-num">
@@ -438,7 +425,7 @@ export default async function DrawPage({
                   {records.map((r) => (
                     <tr key={r.id}>
                       <td>{whenIst(r.at)}</td>
-                      <td className="ep-num">{r.merit}</td>
+                      <td className="ep-num">{r.points}</td>
                       <td>{r.category ?? 'Every category'}</td>
                       <td className="ep-num">
                         {r.seats}
@@ -450,7 +437,7 @@ export default async function DrawPage({
                       <td>
                         <ViewDownload
                           href={`/api/admission-draw/result/${r.id}`}
-                          what={`the result of the merit ${r.merit} draw`}
+                          what={`the result of the ${r.points} points draw`}
                         />
                       </td>
                     </tr>

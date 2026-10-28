@@ -12,9 +12,9 @@ const PlaceSchema = z.object({
 });
 export class DrawPlaceDto extends createZodDto(PlaceSchema) {}
 
-/** One merit total of the group: form points + test and interview marks (docs/design/62). */
-const Merit = z.string().regex(/^-?\d{1,7}(\.\d{1,2})?$/, 'A merit total');
-export const DrawGroupSchema = PlaceSchema.extend({ merit: Merit });
+/** One total of the form's merit points (test and interview marks not added, docs/design/62). */
+const Points = z.string().regex(/^-?\d{1,7}(\.\d{1,2})?$/, 'A points total');
+export const DrawGroupSchema = PlaceSchema.extend({ points: Points });
 export class DrawGroupDto extends createZodDto(DrawGroupSchema) {}
 
 /** Twins confirmed on one slip, or split onto a slip each. */

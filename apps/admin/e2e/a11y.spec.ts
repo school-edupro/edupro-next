@@ -53,7 +53,7 @@ const PAGES = [
   '/admissions/setup/papers?view=list',
   '/admissions/results',
   '/admissions/draw',
-  '/admissions/draw?cycleId=4&classId=169&merit=101',
+  '/admissions/draw?cycleId=4&classId=164&points=64',
   '/admissions/draw?cycleId=4&classId=164&tab=settings',
   '/admissions/draw?cycleId=4&classId=164&tab=record',
   '/admissions/results?cycleId=4&classId=172&stageId=12',

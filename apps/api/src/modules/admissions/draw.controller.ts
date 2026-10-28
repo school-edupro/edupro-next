@@ -17,7 +17,7 @@ import { AdmissionDrawService } from './draw.service';
 import { ADMISSION_SCHEDULE } from './process.service';
 
 /**
- * Draw of lots (docs/design/60): the candidates sharing a merit total, their slips, the slips'
+ * Draw of lots (docs/design/60): the candidates sharing a points total, their slips, the slips'
  * settings and twins. Reading and printing need the registrations; settings and twins are the
  * admission office's (the tests, interviews and selection right).
  */
@@ -35,21 +35,21 @@ export class AdmissionDrawController {
   }
 
   @Get('totals')
-  @ApiOperation({ summary: 'Each merit total of a class: candidates confirmed and not yet' })
+  @ApiOperation({ summary: 'Each points total of a class: candidates confirmed and not yet' })
   @RequirePermission(ADMISSIONS.applicationView)
   totals(@ReqCtx() ctx: RequestContext, @Query() q: DrawPlaceDto) {
     return this.svc.totals(ctx, q);
   }
 
   @Get('group')
-  @ApiOperation({ summary: 'The candidates of a merit total, twins and the slips they make' })
+  @ApiOperation({ summary: 'The candidates of a points total, twins and the slips they make' })
   @RequirePermission(ADMISSIONS.applicationView)
   group(@ReqCtx() ctx: RequestContext, @Query() q: DrawGroupDto) {
     return this.svc.group(ctx, q);
   }
 
   @Get('slips')
-  @ApiOperation({ summary: 'The draw slips of a merit total (PDF, base64)' })
+  @ApiOperation({ summary: 'The draw slips of a points total (PDF, base64)' })
   @RequirePermission(ADMISSIONS.applicationView)
   slips(@ReqCtx() ctx: RequestContext, @Query() q: DrawGroupDto) {
     return this.svc.slips(ctx, q);

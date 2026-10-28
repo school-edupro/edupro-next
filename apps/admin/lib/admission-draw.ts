@@ -1,4 +1,4 @@
-/** Draw of lots: slips for a merit total, their settings, the hand draw recorded (docs/design/60, 62). */
+/** Draw of lots: slips for a total of the form's merit points, their settings, the hand draw recorded (docs/design/60, 62). */
 
 export const SLIP_FIELDS = [
   ['photo', 'Photo'],
@@ -21,8 +21,8 @@ export interface DrawOptions {
   cycles: Array<{
     id: string;
     name: string;
-    /** withMerit: candidates on the merit list who may still be drawn */
-    classes: Array<{ id: string; name: string; withMerit: number }>;
+    /** withPoints: registered candidates with merit points who may still be drawn */
+    classes: Array<{ id: string; name: string; withPoints: number }>;
   }>;
   categories: Array<{ id: string; name: string }>;
 }
@@ -33,7 +33,7 @@ export interface DrawPlace {
 }
 export interface DrawTotals {
   place: DrawPlace;
-  totals: Array<{ merit: string; confirmed: number; unconfirmed: number }>;
+  totals: Array<{ points: string; candidates: number; confirmed: number }>;
 }
 export interface DrawTwin {
   ids: string[];
@@ -41,7 +41,7 @@ export interface DrawTwin {
 }
 export interface DrawGroup {
   place: DrawPlace;
-  merit: string;
+  points: string;
   candidates: Array<{
     id: string;
     number: string;
@@ -51,9 +51,11 @@ export interface DrawGroup {
     category: string | null;
     stage: string | null;
     points: string;
+    merit: string | null;
     meritNo: string | null;
+    /** Document check has confirmed the points (a slip prints either way) */
+    confirmed: boolean;
   }>;
-  unconfirmed: Array<{ id: string; number: string; candidate: string | null }>;
   twins: DrawTwin[];
   slips: number;
 }
@@ -87,7 +89,7 @@ export interface DrawPlan {
 }
 export interface DrawRecord {
   id: string;
-  merit: string;
+  points: string;
   category: string | null;
   seats: number;
   offered: number;

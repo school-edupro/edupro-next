@@ -57,7 +57,7 @@ export function DrawPicker({
           {(cycle?.classes ?? []).map((k) => (
             <option key={k.id} value={k.id}>
               {k.name}
-              {k.withMerit ? ` · ${String(k.withMerit)} on the merit list` : ''}
+              {k.withPoints ? ` · ${String(k.withPoints)} on points` : ''}
             </option>
           ))}
         </select>

@@ -105,3 +105,11 @@ Changing how the merit total is made; slips in languages other than English.
   once, the other filters kept) instead of the links above the table: Merit list, Written test
   result, Interview result; a result the class has no stage for is listed but greyed out ("not in
   Class VI's process"). Each view carries its stage's `kind`.
+- Change (asked 28 Oct, after part 2): **the draw works on the form's merit points only** (test and
+  interview marks are not added) and **slips print for every registered candidate** (registered or
+  under review, with points), Document check level 1 approval is not needed. Totals list points,
+  candidates and how many are confirmed; a candidate whose points are not confirmed yet is badged on the
+  page but gets a slip. Level 1 approval still confirms the points (0272 stays). `points` is again the
+  draw's field (DTO, totals, group, slips, check, record, records; options `withPoints`); a slip's
+  Merit total detail shows the candidate's own merit. Recording a drawn slip still needs the candidate
+  at Selection (offers are made there).

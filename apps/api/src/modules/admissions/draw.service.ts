@@ -28,7 +28,7 @@ const ELIGIBLE = `a.cycle_id = $1 AND a.class_id = $2 AND ($3::bigint IS NULL OR
 
 /** The slip as the legacy one was, until the school sets its own. */
 const DEFAULTS = {
-  heading: 'Draw slip - {class} (merit {merit})',
+  heading: 'Draw slip - {class} ({points} points)',
   fields: ['name', 'father', 'number', 'sno', 'session', 'draw'] as SlipField[],
   drawAt: null as string | null,
   venue: null as string | null,
@@ -72,9 +72,10 @@ const dmy = (iso: string | null) =>
     : null;
 
 /**
- * Draw of lots (docs/design/60, 62): the candidates of a class (and category) sharing a merit total
- * confirmed at Document check, twins on one slip (found by the same date of birth and family mobile,
- * confirmed or split by the office), and the slips printed with the school's settings.
+ * Draw of lots (docs/design/60, 62): the registered candidates of a class (and category) sharing a total
+ * of the form's merit points (test and interview marks not added; Document check need not have
+ * approved them), twins on one slip (found by the same date of birth and family mobile, confirmed or
+ * split by the office), and the slips printed with the school's settings.
  */
 @Injectable()
 export class AdmissionDrawService {
@@ -96,10 +97,10 @@ export class AdmissionDrawService {
         `SELECT k.cycle_id::text, cl.id::text, cl.name FROM admission_class_criteria k JOIN classes cl ON cl.id = k.class_id
           ORDER BY cl.display_order, cl.name`,
       );
-      // candidates on the merit list who may still be drawn: the page opens where there are some
+      // registered candidates with merit points who may still be drawn: the page opens where there are some
       const counts = await c.query<{ cycle_id: string; class_id: string; n: number }>(
         `SELECT cycle_id::text, class_id::text, count(*)::int AS n FROM applications
-          WHERE merit IS NOT NULL AND application_no IS NOT NULL AND status::text IN ('registered', 'under_review')
+          WHERE form_points IS NOT NULL AND application_no IS NOT NULL AND status::text IN ('registered', 'under_review')
           GROUP BY 1, 2`,
       );
       const n = (cycleId: string, classId: string) =>
@@ -112,7 +113,7 @@ export class AdmissionDrawService {
           ...y,
           classes: classes.rows
             .filter((k) => k.cycle_id === y.id)
-            .map((k) => ({ id: k.id, name: k.name, withMerit: n(y.id, k.id) })),
+            .map((k) => ({ id: k.id, name: k.name, withPoints: n(y.id, k.id) })),
         })),
         categories: categories.rows,
       };
@@ -137,26 +138,25 @@ export class AdmissionDrawService {
   }
 
   /**
-   * Each merit total of the group (form points + marks, the merit list's order, docs/design/62):
-   * candidates whose points Document check confirmed, and not yet.
+   * Each total of the form's merit points (docs/design/62): the registered candidates with it, and how
+   * many of them Document check has confirmed (for the office's eye; every one gets a slip).
    */
   async totals(ctx: RequestContext, p: DrawPlaceDto) {
     return this.db.tenant(requireTenant(ctx), async (c) => {
       const place = await this.placeOf(c, p);
-      const r = await c.query<{ merit: string; confirmed: number; unconfirmed: number }>(
+      const r = await c.query<{ points: string; candidates: number; confirmed: number }>(
         // eslint-disable-next-line no-restricted-syntax -- ELIGIBLE is a constant; values are bound parameters
-        `SELECT trim_scale(a.merit)::text AS merit,
-                count(*) FILTER (WHERE a.points_confirmed_at IS NOT NULL)::int AS confirmed,
-                count(*) FILTER (WHERE a.points_confirmed_at IS NULL)::int AS unconfirmed
-           FROM applications a WHERE ${ELIGIBLE} AND a.merit IS NOT NULL
-          GROUP BY a.merit ORDER BY a.merit DESC`,
+        `SELECT trim_scale(a.form_points)::text AS points, count(*)::int AS candidates,
+                count(*) FILTER (WHERE a.points_confirmed_at IS NOT NULL)::int AS confirmed
+           FROM applications a WHERE ${ELIGIBLE} AND a.form_points IS NOT NULL
+          GROUP BY a.form_points ORDER BY a.form_points DESC`,
         [p.cycleId, p.classId, p.categoryId ?? null],
       );
       return { place, totals: r.rows };
     });
   }
 
-  /** The candidates of a merit total, in registration order. */
+  /** The candidates of a points total, in registration order. */
   private async candidatesOf(c: PoolClient, p: DrawGroupDto): Promise<Candidate[]> {
     const r = await c.query<{
       id: string;
@@ -182,9 +182,9 @@ export class AdmissionDrawService {
          FROM applications a LEFT JOIN admission_fee_categories k ON k.id = a.category_id
          LEFT JOIN admission_forms f ON f.id = a.form_id
          LEFT JOIN admission_stages st ON st.id::text = (a.process_steps -> a.stage_no ->> 'stageId')
-        WHERE ${ELIGIBLE} AND a.merit = $4::numeric
+        WHERE ${ELIGIBLE} AND a.form_points = $4::numeric
         ORDER BY a.application_no, a.id`,
-      [p.cycleId, p.classId, p.categoryId ?? null, p.merit],
+      [p.cycleId, p.classId, p.categoryId ?? null, p.points],
     );
     return r.rows.map(({ stage_kind, def, ...x }) => ({
       ...x,
@@ -259,20 +259,19 @@ export class AdmissionDrawService {
   }
 
   /**
-   * A merit total's candidates: those confirmed at Document check (on the slips), those not yet
-   * (named, not printed), the twins, and how many slips that makes.
+   * A points total's candidates, every registered one on the slips (whether or not Document check has
+   * confirmed the points yet), the twins, and how many slips that makes.
    */
   async group(ctx: RequestContext, p: DrawGroupDto) {
     return this.db.tenant(requireTenant(ctx), async (c) => {
       const place = await this.placeOf(c, p);
-      const all = await this.candidatesOf(c, p);
-      const ready = all.filter((x) => x.confirmed);
+      const ready = await this.candidatesOf(c, p);
       const twins = await this.twinsOf(c, ready);
       const joined = twins.filter((t) => t.state !== 'split');
       const meritNo = await this.meritNos(c, p.cycleId, p.classId);
       return {
         place,
-        merit: p.merit,
+        points: p.points,
         candidates: ready.map((x) => ({
           id: x.id,
           number: x.number,
@@ -280,13 +279,12 @@ export class AdmissionDrawService {
           father: this.answer(x, 'father_name'),
           dob: x.dob,
           points: x.points,
+          merit: x.merit,
           meritNo: meritNo.get(x.id) ?? null,
+          confirmed: x.confirmed,
           category: x.category,
           stage: x.stage,
         })),
-        unconfirmed: all
-          .filter((x) => !x.confirmed)
-          .map((x) => ({ id: x.id, number: x.number, candidate: x.candidate })),
         twins,
         slips: ready.length - joined.reduce((n, t) => n + t.ids.length - 1, 0),
       };
@@ -497,15 +495,15 @@ export class AdmissionDrawService {
     });
   }
 
-  /** The slips of a merit total as a PDF: one per candidate, twins on one. */
+  /** The slips of a points total as a PDF: one per registered candidate, twins on one. */
   async slips(ctx: RequestContext, p: DrawGroupDto) {
     return this.db.tenant(requireTenant(ctx), async (c) => {
       const place = await this.placeOf(c, p);
-      const ready = (await this.candidatesOf(c, p)).filter((x) => x.confirmed);
+      const ready = await this.candidatesOf(c, p);
       if (!ready.length)
         throw new DomainError(
           'admissions.nothing_to_draw',
-          'No candidate of this merit total has points confirmed at Document check',
+          'No registered candidate has this points total',
           { status: 409 },
         );
       const twins = (await this.twinsOf(c, ready)).filter((t) => t.state !== 'split');
@@ -514,8 +512,8 @@ export class AdmissionDrawService {
       const fill = (t: string) =>
         t
           // {points} kept from the first slips: the group's total either way
-          .replaceAll('{merit}', p.merit)
-          .replaceAll('{points}', p.merit)
+          .replaceAll('{points}', p.points)
+          .replaceAll('{merit}', p.points)
           .replaceAll('{class}', place.className)
           .replaceAll('{category}', place.category ?? '')
           .replaceAll('{session}', place.cycle)
@@ -553,7 +551,7 @@ export class AdmissionDrawService {
           mother: this.answer(x, 'mother_name'),
           dob: dmy(x.dob),
           points: x.points,
-          merit: p.merit,
+          merit: x.merit,
           meritNo: meritNo.get(x.id) ?? null,
           category: x.category,
           photos,
@@ -572,10 +570,10 @@ export class AdmissionDrawService {
         footer: settings.footer ? fill(settings.footer) : null,
         perPage: settings.perPage,
         slips,
-        title: `Draw slips - ${place.className} - merit ${p.merit}`,
+        title: `Draw slips - ${place.className} - ${p.points} points`,
       });
       return {
-        filename: `draw-slips-${place.className}-merit-${p.merit}.pdf`
+        filename: `draw-slips-${place.className}-${p.points}-points.pdf`
           .toLowerCase()
           .replace(/[^\w.-]+/g, '-'),
         contentType: 'application/pdf',
@@ -587,12 +585,12 @@ export class AdmissionDrawService {
 
   // ---- the draw made by hand (part 3) -------------------------------------------------------------
   /**
-   * The drawn order checked against the slips: each number a slip of this merit total (a twin slip by
+   * The drawn order checked against the slips: each number a slip of this points total (a twin slip by
    * either number), none twice, every drawn candidate at Selection; the first `seats` offered (a twin
    * slip at the boundary offers both), the rest wait-listed in drawn order; slips not drawn stay.
    */
   private async planOf(c: PoolClient, dto: DrawRecordDto) {
-    const ready = (await this.candidatesOf(c, dto)).filter((x) => x.confirmed);
+    const ready = await this.candidatesOf(c, dto);
     const twins = (await this.twinsOf(c, ready)).filter((t) => t.state !== 'split');
     const slips: Array<{ ids: string[]; numbers: string[]; names: string[]; at: Candidate[] }> = [];
     const done = new Set<string>();
@@ -616,7 +614,7 @@ export class AdmissionDrawService {
       const n = raw.trim();
       if (!n) continue;
       const i = byNumber.get(n.toUpperCase());
-      if (i === undefined) errors.push(`${n}: not a slip of merit ${dto.merit} here`);
+      if (i === undefined) errors.push(`${n}: not a slip of ${dto.points} points here`);
       else if (drawn.includes(i)) errors.push(`${n}: drawn twice`);
       else drawn.push(i);
     }
@@ -680,7 +678,7 @@ export class AdmissionDrawService {
           { status: 400 },
         );
       for (const sl of plan.order) {
-        const note = `Draw of lots by slips (merit ${dto.merit}), slip ${String(sl.rank)} drawn`;
+        const note = `Draw of lots by slips (${dto.points} points), slip ${String(sl.rank)} drawn`;
         for (const [k, id] of sl.ids.entries())
           if (sl.outcome === 'offered')
             // a twin on the same slip is offered even past the last seat
@@ -697,7 +695,7 @@ export class AdmissionDrawService {
           dto.cycleId,
           dto.classId,
           dto.categoryId ?? null,
-          dto.merit,
+          dto.points,
           dto.seats,
           JSON.stringify(plan.order),
           plan.order.filter((x) => x.outcome === 'offered').reduce((n, x) => n + x.ids.length, 0),
@@ -715,7 +713,7 @@ export class AdmissionDrawService {
         after: {
           classId: dto.classId,
           className: place.className,
-          merit: dto.merit,
+          points: dto.points,
           seats: dto.seats,
           order: plan.order.map((x) => x.numbers.join(' & ')),
         },
@@ -729,7 +727,7 @@ export class AdmissionDrawService {
     return this.db.tenant(requireTenant(ctx), async (c) => {
       const r = await c.query<{
         id: string;
-        merit: string;
+        points: string;
         category: string | null;
         seats: number;
         offered: number;
@@ -738,7 +736,7 @@ export class AdmissionDrawService {
         by: string | null;
         at: Date;
       }>(
-        `SELECT d.id::text, trim_scale(d.points)::text AS merit, k.name AS category, d.seats, d.offered, d.waitlisted,
+        `SELECT d.id::text, trim_scale(d.points)::text AS points, k.name AS category, d.seats, d.offered, d.waitlisted,
                 d.extra_seats, u.display_name AS by, d.drawn_at AS at
            FROM admission_hand_draws d LEFT JOIN admission_fee_categories k ON k.id = d.category_id
            LEFT JOIN users u ON u.id = d.drawn_by
@@ -747,7 +745,7 @@ export class AdmissionDrawService {
       );
       return r.rows.map((x) => ({
         id: x.id,
-        merit: x.merit,
+        points: x.points,
         category: x.category,
         seats: x.seats,
         offered: x.offered,
@@ -787,7 +785,7 @@ export class AdmissionDrawService {
         school: head,
         logo,
         title: `Draw of lots result · ${x.class_name}`,
-        subtitle: `${x.cycle}${x.category ? ` · ${x.category}` : ''} · merit ${x.points} · ${String(x.seats)} seat${x.seats === 1 ? '' : 's'}`,
+        subtitle: `${x.cycle}${x.category ? ` · ${x.category}` : ''} · ${x.points} points · ${String(x.seats)} seat${x.seats === 1 ? '' : 's'}`,
         lines: [`Drawn ${slotWhen(x.at)}${x.by ? ` · recorded by ${x.by}` : ''}`],
         columns: [
           { h: 'Drawn', w: 44 },
@@ -804,7 +802,7 @@ export class AdmissionDrawService {
         printedAt: slotWhen(new Date()),
       });
       return {
-        filename: `draw-result-${x.class_name}-merit-${x.points}.pdf`
+        filename: `draw-result-${x.class_name}-${x.points}-points.pdf`
           .toLowerCase()
           .replace(/[^\w.-]+/g, '-'),
         contentType: 'application/pdf',

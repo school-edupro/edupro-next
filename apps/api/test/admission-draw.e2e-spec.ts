@@ -1,6 +1,6 @@
 /**
- * Draw of lots (docs/design/60, parts 2-3; 62): the merit totals of a class with candidates confirmed at
- * Document check; a total's slips (twins on one slip, found by the same date of birth and family mobile,
+ * Draw of lots (docs/design/60, parts 2-3; 62): the totals of the form's merit points of a class's registered
+ * candidates (test marks not added; Document check need not have approved them); a total's slips (twins on one slip, found by the same date of birth and family mobile,
  * confirmed or split); the slips' settings per session with a class's own; the hand draw recorded in
  * drawn order: the first seats offered (a twin slip both), the rest wait-listed in order.
  */
@@ -149,30 +149,31 @@ describe('admission draw of lots slips (e2e)', () => {
           ).statusCode,
         ).toBe(201);
     }
-    // the points (and the merit: no test in this class), confirmed by the Document check approval
+    // the form's points; ESHU's merit as if 15 test marks were added (the draw does not use them)
     await withMigrator(async (c) => {
       for (const [name, points] of people)
-        await c.query(`UPDATE applications SET form_points = $2, merit = $2 WHERE id = $1`, [
+        await c.query(`UPDATE applications SET form_points = $2, merit = $3 WHERE id = $1`, [
           apps[name],
           points,
+          name === 'ESHU' ? points + 15 : points,
         ]);
     });
   });
   afterAll(async () => app.close());
 
-  it('lists each points total with the candidates confirmed and not yet', async () => {
+  it('lists each points total with its registered candidates and how many are confirmed', async () => {
     const o = (await call('GET', '/admissions/draw/options')).json();
     expect(o.cycles).toEqual([
       expect.objectContaining({
         id: ids.cycle,
-        classes: [{ id: ids.cls, name: 'Nursery', withMerit: 7 }],
+        classes: [{ id: ids.cls, name: 'Nursery', withPoints: 7 }],
       }),
     ]);
     expect(o.categories).toEqual(expect.arrayContaining([{ id: ids.general, name: 'General' }]));
     const t = (await call('GET', `/admissions/draw/totals?${qs()}`)).json();
     expect(t.totals).toEqual([
-      { merit: '80', confirmed: 1, unconfirmed: 0 },
-      { merit: '70', confirmed: 5, unconfirmed: 1 },
+      { points: '80', candidates: 1, confirmed: 1 },
+      { points: '70', candidates: 6, confirmed: 5 },
     ]);
     expect(
       (await call('GET', `/admissions/draw/totals?${qs({ categoryId: ids.general! })}`)).json()
@@ -180,14 +181,15 @@ describe('admission draw of lots slips (e2e)', () => {
     ).toHaveLength(2);
   });
 
-  it('a total: the confirmed on slips, twins on one, the unconfirmed named', async () => {
-    const g = (await call('GET', `/admissions/draw/group?${qs({ merit: '70' })}`)).json();
+  it('a total: every registered candidate on a slip (confirmed or not), twins on one; marks not added', async () => {
+    const g = (await call('GET', `/admissions/draw/group?${qs({ points: '70' })}`)).json();
     expect(g.candidates.map((x: { candidate: string }) => x.candidate)).toEqual([
       'ANU',
       'BINU',
       'CHINU',
       'DINU',
       'ESHU',
+      'FIZA',
     ]);
     expect(g.candidates[0]).toMatchObject({
       father: 'FATHER ANU',
@@ -195,16 +197,22 @@ describe('admission draw of lots slips (e2e)', () => {
       points: '70',
       meritNo: expect.stringMatching(/^[2-6]$/),
     });
-    expect(g.unconfirmed).toEqual([{ id: apps.FIZA, number: nos.FIZA, candidate: 'FIZA' }]);
+    expect(g.candidates.find((x: { candidate: string }) => x.candidate === 'FIZA')).toMatchObject({
+      confirmed: false,
+    });
+    expect(g.candidates.find((x: { candidate: string }) => x.candidate === 'ESHU')).toMatchObject({
+      points: '70',
+      merit: '85',
+    });
     expect(g.twins).toEqual([{ ids: [apps.CHINU, apps.DINU], state: 'found' }]);
-    expect(g.slips).toBe(4);
+    expect(g.slips).toBe(5);
     // the default slips: 4 a page
-    const p = (await call('GET', `/admissions/draw/slips?${qs({ merit: '70' })}`)).json();
-    expect(p).toMatchObject({ slips: 4, contentType: 'application/pdf' });
-    expect(p.filename).toBe('draw-slips-nursery-merit-70.pdf');
-    expect(await pages(p)).toBe(1);
-    // nobody confirmed at 60
-    expect((await call('GET', `/admissions/draw/slips?${qs({ merit: '60' })}`)).statusCode).toBe(
+    const p = (await call('GET', `/admissions/draw/slips?${qs({ points: '70' })}`)).json();
+    expect(p).toMatchObject({ slips: 5, contentType: 'application/pdf' });
+    expect(p.filename).toBe('draw-slips-nursery-70-points.pdf');
+    expect(await pages(p)).toBe(2);
+    // nobody at 60
+    expect((await call('GET', `/admissions/draw/slips?${qs({ points: '60' })}`)).statusCode).toBe(
       409,
     );
   });
@@ -232,8 +240,8 @@ describe('admission draw of lots slips (e2e)', () => {
     expect(session.statusCode).toBe(200);
     expect(await get()).toMatchObject({ from: 'session', settings: { perPage: 2 } });
     const slips = async () =>
-      pages((await call('GET', `/admissions/draw/slips?${qs({ merit: '70' })}`)).json());
-    expect(await slips()).toBe(2);
+      pages((await call('GET', `/admissions/draw/slips?${qs({ points: '70' })}`)).json());
+    expect(await slips()).toBe(3);
     expect(
       (
         await call('PUT', '/admissions/draw/settings', {
@@ -272,34 +280,34 @@ describe('admission draw of lots slips (e2e)', () => {
         state,
       });
     expect((await twins('split')).statusCode).toBe(200);
-    let g = (await call('GET', `/admissions/draw/group?${qs({ merit: '70' })}`)).json();
+    let g = (await call('GET', `/admissions/draw/group?${qs({ points: '70' })}`)).json();
     expect(g.twins).toEqual([{ ids: [apps.CHINU, apps.DINU], state: 'split' }]);
-    expect(g.slips).toBe(5);
+    expect(g.slips).toBe(6);
     await twins('paired');
-    g = (await call('GET', `/admissions/draw/group?${qs({ merit: '70' })}`)).json();
+    g = (await call('GET', `/admissions/draw/group?${qs({ points: '70' })}`)).json();
     expect(g.twins).toEqual([{ ids: [apps.CHINU, apps.DINU], state: 'paired' }]);
-    expect(g.slips).toBe(4);
+    expect(g.slips).toBe(5);
   });
 
   it('the drawn order is checked: unknown or repeated numbers named; seats beyond those left refused', async () => {
     const r = await call('POST', '/admissions/draw/check', {
       cycleId: ids.cycle,
       classId: ids.cls,
-      merit: '70',
+      points: '70',
       seats: 2,
       numbers: [nos.ESHU, 'NOPE/1', nos.ESHU, '  ', nos.GUNU],
     });
     expect(r.statusCode).toBe(201);
     expect(r.json().errors).toEqual([
-      'NOPE/1: not a slip of merit 70 here',
+      'NOPE/1: not a slip of 70 points here',
       `${nos.ESHU!}: drawn twice`,
-      `${nos.GUNU!}: not a slip of merit 70 here`,
+      `${nos.GUNU!}: not a slip of 70 points here`,
     ]);
     expect(r.json().seatsLeft).toBe(10);
     const many = await call('POST', '/admissions/draw/check', {
       cycleId: ids.cycle,
       classId: ids.cls,
-      merit: '70',
+      points: '70',
       seats: 11,
       numbers: [nos.ESHU],
     });
@@ -310,7 +318,7 @@ describe('admission draw of lots slips (e2e)', () => {
     const body = {
       cycleId: ids.cycle,
       classId: ids.cls,
-      merit: '70',
+      points: '70',
       seats: 2,
       // a twin slip drawn by the second twin's number
       numbers: [nos.ESHU, nos.DINU, nos.ANU],
@@ -329,7 +337,10 @@ describe('admission draw of lots slips (e2e)', () => {
       [3, 'ANU', 'waitlisted'],
     ]);
     expect(check.extraSeats).toBe(1);
-    expect(check.notDrawn).toEqual([{ numbers: [nos.BINU], names: ['BINU'] }]);
+    expect(check.notDrawn).toEqual([
+      { numbers: [nos.BINU], names: ['BINU'] },
+      { numbers: [nos.FIZA], names: ['FIZA'] },
+    ]);
     const rec = await call('POST', '/admissions/draw/record', body);
     expect(rec.statusCode).toBe(201);
     for (const n of ['ESHU', 'CHINU', 'DINU'])
@@ -340,7 +351,7 @@ describe('admission draw of lots slips (e2e)', () => {
     expect(list).toEqual([
       expect.objectContaining({
         id: rec.json().id,
-        merit: '70',
+        points: '70',
         seats: 2,
         offered: 3,
         waitlisted: 1,
@@ -350,13 +361,13 @@ describe('admission draw of lots slips (e2e)', () => {
     const pdf = (
       await call('GET', `/admissions/draw/records/${rec.json().id as string}/pdf`)
     ).json();
-    expect(pdf.filename).toBe('draw-result-nursery-merit-70.pdf');
+    expect(pdf.filename).toBe('draw-result-nursery-70-points.pdf');
     expect(await pages(pdf)).toBe(1);
     // the history says how the seat came
     const reg = (await call('GET', `/admissions/registrations/${apps.DINU!}`)).json();
     expect(
       (reg.events as Array<{ note: string }>).some((e) =>
-        e.note.includes('Draw of lots by slips (merit 70), slip 2 drawn'),
+        e.note.includes('Draw of lots by slips (70 points), slip 2 drawn'),
       ),
     ).toBe(true);
     // drawn again: those offered or wait-listed are no longer slips
@@ -368,26 +379,26 @@ describe('admission draw of lots slips (e2e)', () => {
   it("Document check's first approval confirms the points; undoing it clears them", async () => {
     const totals = async () =>
       (await call('GET', `/admissions/draw/totals?${qs()}`)).json().totals as Array<{
-        merit: string;
+        points: string;
+        candidates: number;
         confirmed: number;
-        unconfirmed: number;
       }>;
-    expect((await totals()).find((x) => x.merit === '80')).toEqual({
-      merit: '80',
+    expect((await totals()).find((x) => x.points === '80')).toEqual({
+      points: '80',
+      candidates: 1,
       confirmed: 1,
-      unconfirmed: 0,
     });
     const undo = await call('POST', `/admissions/registrations/${apps.GUNU!}/undo`, {
       reason: 'Approved by mistake',
     });
     expect(undo.statusCode).toBe(201);
-    expect((await totals()).find((x) => x.merit === '80')).toEqual({
-      merit: '80',
+    expect((await totals()).find((x) => x.points === '80')).toEqual({
+      points: '80',
+      candidates: 1,
       confirmed: 0,
-      unconfirmed: 1,
     });
     await call('POST', `/admissions/registrations/${apps.GUNU!}/decide`, { decision: 'approve' });
-    expect((await totals()).find((x) => x.merit === '80')!.confirmed).toBe(1);
+    expect((await totals()).find((x) => x.points === '80')!.confirmed).toBe(1);
   });
 
   it('blank slips print in the layout; merit no. and merit total are details a slip may show', async () => {
@@ -411,8 +422,8 @@ describe('admission draw of lots slips (e2e)', () => {
         })
       ).statusCode,
     ).toBe(200);
-    // ANU and BINU remain at merit 70 (the rest were drawn)
-    const p = (await call('GET', `/admissions/draw/slips?${qs({ merit: '70' })}`)).json();
-    expect(p.slips).toBe(1);
+    // BINU and FIZA remain at 70 points (the rest were drawn); FIZA's points not yet confirmed
+    const p = (await call('GET', `/admissions/draw/slips?${qs({ points: '70' })}`)).json();
+    expect(p.slips).toBe(2);
   });
 });

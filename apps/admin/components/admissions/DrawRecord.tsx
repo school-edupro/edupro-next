@@ -21,11 +21,11 @@ export function DrawRecord({
   cycleId: string;
   classId: string;
   categoryId: string;
-  totals: Array<{ merit: string; slips: number }>;
+  totals: Array<{ points: string; slips: number }>;
 }) {
   const router = useRouter();
   const [pending, start] = useTransition();
-  const [merit, setMerit] = useState(totals[0]?.merit ?? '');
+  const [points, setPoints] = useState(totals[0]?.points ?? '');
   const [seats, setSeats] = useState('');
   const [numbers, setNumbers] = useState('');
   const [plan, setPlan] = useState<DrawPlan | null>(null);
@@ -35,7 +35,7 @@ export function DrawRecord({
     cycleId,
     classId,
     ...(categoryId ? { categoryId } : {}),
-    merit,
+    points,
     seats: Number(seats),
     numbers: numbers
       .split(/\r?\n/)
@@ -80,18 +80,18 @@ export function DrawRecord({
       ) : null}
       <div className="ep-lead-filter" style={{ margin: 0 }}>
         <label className="ep-field">
-          <span className="ep-field__label">Merit total drawn</span>
+          <span className="ep-field__label">Points total drawn</span>
           <select
             className="ep-select"
-            value={merit}
+            value={points}
             onChange={(e) => {
-              setMerit(e.target.value);
+              setPoints(e.target.value);
               changed();
             }}
           >
             {totals.map((t) => (
-              <option key={t.merit} value={t.merit}>
-                Merit {t.merit} · {t.slips} candidate{t.slips === 1 ? '' : 's'}
+              <option key={t.points} value={t.points}>
+                {t.points} points · {t.slips} candidate{t.slips === 1 ? '' : 's'}
               </option>
             ))}
           </select>
@@ -133,7 +133,7 @@ export function DrawRecord({
         <button
           type="button"
           className="ep-btn ep-btn--secondary"
-          disabled={pending || !merit || !(Number(seats) >= 1) || !numbers.trim()}
+          disabled={pending || !points || !(Number(seats) >= 1) || !numbers.trim()}
           onClick={() =>
             start(async () => {
               setMsg(null);

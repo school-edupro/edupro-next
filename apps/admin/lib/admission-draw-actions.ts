@@ -75,7 +75,7 @@ type DrawBody = {
   cycleId: string;
   classId: string;
   categoryId?: string;
-  merit: string;
+  points: string;
   seats: number;
   numbers: string[];
   offerMessage?: { subject?: string; intro?: string; note?: string };
@@ -84,13 +84,13 @@ const bodyOk = (b: DrawBody) =>
   okId(b.cycleId) &&
   okId(b.classId) &&
   (!b.categoryId || okId(b.categoryId)) &&
-  /^-?\d{1,7}(\.\d{1,2})?$/.test(b.merit) &&
+  /^-?\d{1,7}(\.\d{1,2})?$/.test(b.points) &&
   Number.isInteger(b.seats) &&
   b.seats >= 1;
 
 /** The drawn order checked: who would be offered, who waits, what is wrong (nothing changes). */
 export async function checkDraw(b: DrawBody): Promise<Out<DrawPlan>> {
-  if (!bodyOk(b)) return { ok: false, error: 'Choose the merit total and the seats' };
+  if (!bodyOk(b)) return { ok: false, error: 'Choose the points total and the seats' };
   try {
     return {
       ok: true,
@@ -106,6 +106,6 @@ export async function checkDraw(b: DrawBody): Promise<Out<DrawPlan>> {
 
 /** The hand draw recorded: the first seats offered (the offer email), the rest wait-listed. */
 export async function recordDraw(b: DrawBody): Promise<Out<DrawPlan & { id: string }>> {
-  if (!bodyOk(b)) return { ok: false, error: 'Choose the merit total and the seats' };
+  if (!bodyOk(b)) return { ok: false, error: 'Choose the points total and the seats' };
   return call<DrawPlan & { id: string }>('/admissions/draw/record', 'POST', b);
 }
