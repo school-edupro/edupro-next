@@ -11,7 +11,8 @@ type Draft = {
   marks: Record<string, string>;
   absent: boolean;
   remark: string;
-  decision: '' | 'select' | 'hold';
+  /** the decision on the screen: the present one until changed ('' while waiting: marks only) */
+  decision: '' | 'select' | 'hold' | 'reject';
   reason: string;
 };
 const STATE_TONE = {
@@ -57,7 +58,7 @@ export function ResultsGrid({
     ),
     absent: r.absent,
     remark: r.remark ?? '',
-    decision: '',
+    decision: r.current ?? '',
     reason: '',
   });
   const now = (r: ResultRow) => drafts[r.id] ?? base(r);
@@ -68,9 +69,16 @@ export function ResultsGrid({
     paper.parts.some(
       (pt) => (d.marks[pt.id] ?? '') !== (r.marks[pt.id] != null ? String(r.marks[pt.id]) : ''),
     );
+  const decisionChanged = (r: ResultRow, d: Draft) => d.decision !== (r.current ?? '');
+  /** a selected or not-selected candidate's change asks why (docs/design/58) */
+  const needsReason = (r: ResultRow, d: Draft) =>
+    (r.state === 'selected' || r.state === 'rejected') &&
+    (marksChanged(r, d) || decisionChanged(r, d));
   const dirty = (r: ResultRow) => {
     const d = drafts[r.id];
-    return Boolean(d && (marksChanged(r, d) || d.remark !== (r.remark ?? '') || d.decision !== ''));
+    return Boolean(
+      d && (marksChanged(r, d) || d.remark !== (r.remark ?? '') || decisionChanged(r, d)),
+    );
   };
   /** the total, % and cut-off of what is on the screen */
   const figures = (d: Draft) => {
@@ -107,7 +115,7 @@ export function ResultsGrid({
             ),
             absent: d.absent,
             remark: d.remark.trim() || null,
-            ...(d.decision ? { decision: d.decision } : {}),
+            ...(d.decision && decisionChanged(row, d) ? { decision: d.decision } : {}),
             ...(d.reason.trim() ? { reason: d.reason.trim() } : {}),
           };
         }),
@@ -240,31 +248,40 @@ export function ResultsGrid({
                     </td>
                     {canEdit ? (
                       <td>
-                        {open ? (
+                        {open || decided ? (
                           <select
                             className="ep-select"
                             aria-label={`Decision for ${who}`}
                             value={d.decision}
+                            disabled={Boolean(decided && r.laterStage)}
+                            title={
+                              decided && r.laterStage
+                                ? `Decided at ${r.laterStage} since: undo it there first`
+                                : undefined
+                            }
                             onChange={(e) =>
                               edit(r, { decision: e.target.value as Draft['decision'] })
                             }
                           >
-                            <option value="">Marks only</option>
+                            {r.state === 'waiting' ? <option value="">Marks only</option> : null}
                             <option value="select">Select</option>
                             <option value="hold">Hold</option>
+                            <option value="reject">Not selected</option>
                           </select>
-                        ) : decided && marksChanged(r, d) ? (
+                        ) : (
+                          <span className="ep-field__help">-</span>
+                        )}
+                        {needsReason(r, d) ? (
                           <input
                             className="ep-input"
-                            aria-label={`Why the marks of ${who} change`}
+                            style={{ marginTop: 'var(--sp-1)' }}
+                            aria-label={`Why ${who}'s marks or decision change`}
                             placeholder="Reason for the change"
                             maxLength={300}
                             value={d.reason}
                             onChange={(e) => edit(r, { reason: e.target.value })}
                           />
-                        ) : (
-                          <span className="ep-field__help">{decided ? 'Decided' : '-'}</span>
-                        )}
+                        ) : null}
                       </td>
                     ) : null}
                     <td>

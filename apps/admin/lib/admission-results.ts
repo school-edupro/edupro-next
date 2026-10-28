@@ -28,6 +28,10 @@ export interface ResultRow {
   below: boolean;
   remark: string | null;
   decision: { decision: string; by: string | null; at: string } | null;
+  /** the decision at this stage in the page's words (none while waiting) */
+  current: 'select' | 'hold' | 'reject' | null;
+  /** a later stage that has decided: the decision here can no longer change */
+  laterStage: string | null;
   marked: boolean;
 }
 export interface ResultsView {
@@ -76,6 +80,8 @@ export interface ResultsSheetResult {
     decision: string | null;
     status: 'ok' | 'skipped' | 'error' | 'done';
     reason: string | null;
+    /** what the row changes, in words */
+    change: string | null;
   }>;
 }
 export const BANDS = [

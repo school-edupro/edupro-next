@@ -189,7 +189,7 @@ export function ResultsTools({
                   <th scope="col">Row</th>
                   <th scope="col">Registration</th>
                   <th scope="col">Total</th>
-                  <th scope="col">Decision</th>
+                  <th scope="col">What changes</th>
                   <th scope="col">Result</th>
                 </tr>
               </thead>
@@ -204,7 +204,7 @@ export function ResultsTools({
                       </div>
                     </td>
                     <td className="ep-num">{r.total ?? '-'}</td>
-                    <td>{r.decision ?? '-'}</td>
+                    <td>{r.change ?? r.decision ?? '-'}</td>
                     <td>
                       <strong>{STATUS[r.status]}</strong>
                       {r.reason ? (

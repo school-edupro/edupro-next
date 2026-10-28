@@ -11,7 +11,7 @@ import { tablePdf } from './admission-pdf';
 import { AdmissionPapersService } from './papers.service';
 import { storeMarks, type Paper } from './part-marks';
 import { messageTag } from './message-tag';
-import { refreshMerit } from './process-engine';
+import { place, refreshMerit } from './process-engine';
 import { AdmissionProcessService } from './process.service';
 import type { ResultsQueryDto, ResultsReleaseDto, ResultsSaveDto } from './results.dto';
 
@@ -58,15 +58,26 @@ export interface ResultRow {
   below: boolean;
   remark: string | null;
   decision: { decision: string; by: string | null; at: string } | null;
+  /** the decision at this stage in the page's words (none while waiting) */
+  current: Choice | null;
+  /** a later stage that has decided: a decision here can no longer change */
+  laterStage: string | null;
   /** any marks (or absent) entered */
   marked: boolean;
 }
+/** A decision as the grid and the sheet offer it (docs/design/58). */
+type Choice = 'select' | 'hold' | 'reject';
+const CHOICE_WORDS: Record<Choice, string> = {
+  select: 'Selected',
+  hold: 'Held',
+  reject: 'Not selected',
+};
 interface Input {
   /** undefined: not changed; null: none */
   marks: Record<string, number | null | undefined>;
   absent?: boolean;
   remark?: string | null;
-  decision?: 'select' | 'hold' | null;
+  decision?: Choice | null;
   reason?: string;
 }
 type Prepared =
@@ -79,7 +90,11 @@ type Prepared =
       total: number | null;
       changedMarks: boolean;
       changed: boolean;
-      decision: 'approve' | 'hold' | null;
+      decision: 'approve' | 'hold' | 'reject' | null;
+      /** a decided candidate's decision changes: the stage's decision is undone first */
+      undo: boolean;
+      /** what changes, in words (the sheet's check) */
+      words: string;
     };
 
 /**
@@ -178,11 +193,17 @@ export class AdmissionResultsService {
       total: string | null;
       max_total: string | null;
       remark: string | null;
+      later_stage: string | null;
     }>(
       `SELECT a.id::text, a.application_no AS number, a.candidate_name AS candidate, a.status::text, a.stage_no,
               (e.ord - 1)::int AS idx, a.process_steps -> a.stage_no -> 'levels' -> (a.level_no - 1) ->> 'name' AS level_name,
               k.name AS category, al.roll_no, al.slot_id::text, sl.starts_at, sl.venue,
-              m.absent, m.total::text, m.max_total::text, m.remark
+              m.absent, m.total::text, m.max_total::text, m.remark,
+              (SELECT st2.name FROM admission_stage_results x JOIN admission_stages st2 ON st2.id = x.stage_id
+                WHERE x.application_id = a.id AND x.undone_at IS NULL
+                  AND x.stage_id::text IN (SELECT y.step ->> 'stageId' FROM jsonb_array_elements(a.process_steps)
+                                             WITH ORDINALITY y(step, ord) WHERE y.ord > e.ord)
+                ORDER BY x.decided_at DESC LIMIT 1) AS later_stage
          FROM applications a
          CROSS JOIN LATERAL (SELECT x.ord FROM jsonb_array_elements(a.process_steps) WITH ORDINALITY x(step, ord)
                               WHERE x.step ->> 'stageId' = $3 LIMIT 1) e
@@ -276,6 +297,15 @@ export class AdmissionResultsService {
         below,
         remark: x.remark,
         decision: d ? { decision: d.decision, by: d.by, at: d.at.toISOString() } : null,
+        current:
+          state === 'selected'
+            ? 'select'
+            : state === 'rejected'
+              ? 'reject'
+              : state === 'held'
+                ? 'hold'
+                : null,
+        laterStage: x.later_stage,
         marked: absent || Object.values(byPart).some((v) => v !== null),
       };
     });
@@ -342,6 +372,8 @@ export class AdmissionResultsService {
 
   /** A row's input checked against the paper and where the candidate stands; nothing written. */
   private prepare(row: ResultRow, input: Input, paper: Paper, fromSheet: boolean): Prepared {
+    if (input.decision && !['select', 'hold', 'reject'].includes(input.decision))
+      return { error: 'Decision must be Select, Hold or Not selected' };
     for (const k of Object.keys(input.marks))
       if (!paper.parts.some((pt) => pt.id === k)) return { error: 'A part not on the paper' };
     const next: Record<string, number | null> = {};
@@ -365,27 +397,50 @@ export class AdmissionResultsService {
     const changedMarks =
       absent !== row.absent || paper.parts.some((pt) => next[pt.id] !== row.marks[pt.id]);
     const changed = changedMarks || remark !== row.remark;
-    const decision =
-      input.decision === 'select' ? 'approve' : input.decision === 'hold' ? 'hold' : null;
-    const open = row.state === 'waiting' || row.state === 'held';
-    if (decision && !open)
+    // a decision the same as the present one changes nothing (docs/design/58)
+    const want = input.decision && input.decision !== row.current ? input.decision : null;
+    const decided = row.state === 'selected' || row.state === 'rejected';
+    const reason = input.reason?.trim() ?? '';
+    const need = fromSheet ? 'write the Reason for change' : 'give the reason';
+    if (want && row.state === 'sent_back')
+      return { error: 'Sent back to the family: decide when it is back' };
+    if ((want || changed) && row.state === 'other')
+      return { error: 'Past this stage: nothing changed here' };
+    if (want && decided && row.laterStage)
+      return { error: `Decided at ${row.laterStage} since: undo it there first` };
+    if (want && decided && reason.length < 3)
       return {
-        error:
-          row.state === 'sent_back'
-            ? 'Sent back to the family: decide when it is back'
-            : 'Already decided at this stage',
+        error: `Already ${CHOICE_WORDS[row.current!].toLowerCase()}: ${need} for the new decision`,
       };
-    if (decision === 'approve' && absent)
+    if (changedMarks && decided && reason.length < 3)
+      return {
+        error: `Already ${CHOICE_WORDS[row.current!].toLowerCase()}: ${need} for changing the marks`,
+      };
+    if (want === 'select' && absent)
       return { error: 'Absent: Hold the candidate, or clear Absent' };
-    if (decision === 'approve' && total === null) return { error: 'Enter the marks before Select' };
-    if (changedMarks && (row.state === 'selected' || row.state === 'rejected') && !input.reason)
-      return {
-        error: fromSheet
-          ? 'Already decided at this stage: correct the marks on the Test results page, with a reason'
-          : 'Already decided at this stage: give the reason for changing the marks',
-      };
-    if (changed && row.state === 'other') return { error: 'Past this stage: marks not changed' };
-    return { next, absent, remark, total, changedMarks, changed, decision };
+    if (want === 'select' && total === null) return { error: 'Enter the marks before Select' };
+    const words = [
+      want
+        ? row.current
+          ? `Decision ${CHOICE_WORDS[row.current]} → ${CHOICE_WORDS[want]}`
+          : CHOICE_WORDS[want]
+        : null,
+      changedMarks ? (absent ? 'Absent' : 'Marks changed') : null,
+      !changedMarks && remark !== row.remark ? 'Remark changed' : null,
+    ]
+      .filter(Boolean)
+      .join(' · ');
+    return {
+      next,
+      absent,
+      remark,
+      total,
+      changedMarks,
+      changed,
+      decision: want === 'select' ? 'approve' : want,
+      undo: Boolean(want && decided),
+      words: words || 'No change',
+    };
   }
 
   /** A prepared row written: marks by part, the stage's total, a correction, a decision. */
@@ -411,11 +466,10 @@ export class AdmissionResultsService {
         prep.absent,
         prep.remark,
       );
-    if (
-      prep.changedMarks &&
-      input.reason &&
-      (row.state === 'selected' || row.state === 'rejected')
-    ) {
+    const decided = row.state === 'selected' || row.state === 'rejected';
+    let waitLevel = row.level;
+    // a held or decided candidate's marks: the stage's live decisions carry the new total (merit follows)
+    if (prep.changedMarks && row.decision) {
       // the decision's marks follow (the levels that recorded them, else the latest), and so the merit
       const fixed = await c.query(
         `UPDATE admission_stage_results SET marks = $3, max_marks = $4, attendance = CASE WHEN $5 THEN 'absent' ELSE attendance END
@@ -430,26 +484,59 @@ export class AdmissionResultsService {
           [row.id, p.stageId, prep.total, paper.total],
         );
       await refreshMerit(c, row.id);
+      if (decided) {
+        const a = await this.core.row(c, row.id);
+        await this.core.event(
+          c,
+          row.id,
+          a.status,
+          a.status,
+          `${stageName}: marks corrected to ${prep.absent ? 'absent' : `${String(prep.total ?? '-')}/${String(paper.total)}`} · ${input.reason ?? ''}`,
+          { actorUser: ctx.user.id },
+        );
+      }
+    }
+    if (prep.undo) {
+      // the stage's last decision undone with the reason; the candidate waits at that level again
       const a = await this.core.row(c, row.id);
+      await c.query(
+        `UPDATE admission_stage_results SET undone_at = now(), undone_by = $2, undo_reason = $3
+          WHERE id = (SELECT id FROM admission_stage_results WHERE application_id = $1 AND stage_id = $4
+                        AND undone_at IS NULL ORDER BY decided_at DESC, id DESC LIMIT 1)`,
+        [row.id, ctx.user.id, input.reason, p.stageId],
+      );
+      await c.query(
+        `UPDATE applications SET status = 'under_review', decided_at = NULL, decided_by = NULL, updated_at = now() WHERE id = $1`,
+        [row.id],
+      );
+      await place(c, row.id);
       await this.core.event(
         c,
         row.id,
         a.status,
-        a.status,
-        `${stageName}: marks corrected to ${prep.absent ? 'absent' : `${String(prep.total ?? '-')}/${String(paper.total)}`} · ${input.reason}`,
+        'under_review',
+        `${stageName}: ${CHOICE_WORDS[row.current!]} undone · ${input.reason ?? ''}`,
         { actorUser: ctx.user.id },
       );
+      const lv = await c.query<{ name: string | null }>(
+        `SELECT process_steps -> stage_no -> 'levels' -> (level_no - 1) ->> 'name' AS name FROM applications WHERE id = $1`,
+        [row.id],
+      );
+      waitLevel = lv.rows[0]?.name ?? row.level;
     }
     if (prep.decision) {
       // an admin deciding at a level they are not named in: the remark says so (docs/design/55)
       const behalf = waitingForMe.has(row.id)
         ? ''
-        : ` (by ${ctx.user.displayName} for ${row.level ?? 'the level'})`;
+        : ` (by ${ctx.user.displayName} for ${waitLevel ?? 'the level'})`;
       await this.process.decideWith(c, ctx, row.id, {
         decision: prep.decision,
         marks: prep.absent ? null : prep.total,
         attendance: prep.absent ? 'absent' : 'present',
-        remarks: `${prep.remark ?? 'Test results'}${behalf}`.slice(0, 1000),
+        remarks: `${(prep.undo ? input.reason : prep.remark) ?? 'Test results'}${behalf}`.slice(
+          0,
+          1000,
+        ),
       });
     }
   }
@@ -482,6 +569,7 @@ export class AdmissionResultsService {
           continue;
         }
         if (!prep.changed && !prep.decision) continue;
+        // (a decided candidate's changes are logged with the reason in the registration's history)
         await c.query('SAVEPOINT result_row');
         try {
           await this.write(c, ctx, dto, at.stage, paper, row, prep, input, mine);
@@ -527,10 +615,9 @@ export class AdmissionResultsService {
           minute: '2-digit',
         }).format(s.rows[0].starts_at)} · ${s.rows[0].venue}`;
       }
+      // everyone who reached the stage, decided ones too (docs/design/58), with what they have now
       const rows = (await this.rowsIn(c, p, paper)).filter(
-        (r) =>
-          (r.state === 'waiting' || r.state === 'held' || r.state === 'sent_back') &&
-          (!p.slotId || r.slotId === p.slotId),
+        (r) => r.state !== 'other' && (!p.slotId || r.slotId === p.slotId),
       );
       const wb = new ExcelJS.Workbook();
       const ws = wb.addWorksheet('Results');
@@ -538,7 +625,7 @@ export class AdmissionResultsService {
         `Results sheet: ${at.stage} · ${at.className}${slot ? ` · slot ${slot}` : ''}`;
       ws.getCell('A1').font = { bold: true, size: 13 };
       ws.getCell('A2').value =
-        `${at.cycle} · made ${new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })} by ${ctx.user.displayName}. Fill the marks (a blank cell is not changed), Absent (Y), Decision (Select or Hold, blank: marks only) and Remark. Candidates already decided are corrected on the Test results page.`;
+        `${at.cycle} · made ${new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })} by ${ctx.user.displayName}. Change what needs changing: marks (a blank cell is not changed), Absent (Y), Decision (Select, Hold or Not selected; blank: marks only) and Remark. A candidate already selected or not selected needs a Reason for change. Rows left as they are change nothing.`;
       ws.getCell('A3').value = `EPMARK:${p.cycleId}:${p.classId}:${p.stageId}`;
       ws.getCell('A3').font = { color: { argb: 'FF888888' }, size: 8 };
       ws.getCell('B3').value = 'Do not change row 3, the headings or the Registration no. column.';
@@ -554,6 +641,7 @@ export class AdmissionResultsService {
         '%',
         'Decision',
         'Remark',
+        'Reason for change',
       ];
       const hr = ws.getRow(HEAD_ROW);
       hr.values = head;
@@ -561,7 +649,11 @@ export class AdmissionResultsService {
       head.forEach(
         (h, i) =>
           (ws.getColumn(i + 1).width =
-            i < 2 ? 24 : h === 'Remark' ? 36 : Math.max(10, h.length + 2)),
+            i < 2
+              ? 24
+              : h === 'Remark' || h === 'Reason for change'
+                ? 36
+                : Math.max(10, h.length + 2)),
       );
       const first = 5;
       const lastPart = first + parts.length - 1;
@@ -571,6 +663,12 @@ export class AdmissionResultsService {
       const cPct = cTotal + 1;
       const cDecision = cPct + 1;
       const cRemark = cDecision + 1;
+      const cReason = cRemark + 1;
+      const SHEET_CHOICE: Record<Choice, string> = {
+        select: 'Select',
+        hold: 'Hold',
+        reject: 'Not selected',
+      };
       rows.forEach((x, i) => {
         const n = HEAD_ROW + 1 + i;
         const row = ws.getRow(n);
@@ -589,6 +687,7 @@ export class AdmissionResultsService {
           formula: `IF(${col(cTotal)}${String(n)}="","",ROUND(${col(cTotal)}${String(n)}/${String(paper.total)}*100,2))`,
         };
         if (x.remark) row.getCell(cRemark).value = x.remark;
+        if (x.current) row.getCell(cDecision).value = SHEET_CHOICE[x.current];
         paper.parts.forEach((pt, j) => {
           const cell = row.getCell(first + j);
           cell.dataValidation = {
@@ -613,12 +712,12 @@ export class AdmissionResultsService {
           row.getCell(cDecision).dataValidation = {
             type: 'list',
             allowBlank: true,
-            formulae: ['"Select,Hold"'],
+            formulae: ['"Select,Hold,Not selected"'],
             showErrorMessage: true,
             errorTitle: 'Decision',
-            error: 'Select or Hold, or leave it blank',
+            error: 'Select, Hold or Not selected, or leave it blank',
           };
-        for (const k of [cAbsent, cDecision, cRemark])
+        for (const k of [cAbsent, cDecision, cRemark, cReason])
           row.getCell(k).protection = { locked: false };
       });
       await ws.protect('', {
@@ -704,6 +803,8 @@ export class AdmissionResultsService {
       const cAbsent = find('Absent (Y)');
       const cDecision = find('Decision');
       const cRemark = find('Remark');
+      // a sheet made before docs/design/58 has no reason column: decided candidates then cannot change
+      const cReason = find('Reason for change');
       if (cNo < 0 || cAbsent < 0 || cDecision < 0 || cRemark < 0 || cParts.some((x) => x < 0))
         throw new DomainError(
           'validation-failed',
@@ -721,6 +822,8 @@ export class AdmissionResultsService {
         decision: string | null;
         status: 'ok' | 'skipped' | 'error' | 'done';
         reason: string | null;
+        /** what the row changes, in words */
+        change: string | null;
       }> = [];
       const notFound: string[] = [];
       const seen = new Set<string>();
@@ -736,6 +839,7 @@ export class AdmissionResultsService {
           decision: cell(n, cDecision) || null,
           status: 'ok' as 'ok' | 'skipped' | 'error' | 'done',
           reason: null as string | null,
+          change: null as string | null,
         };
         out.push(line);
         if (seen.has(number)) {
@@ -760,11 +864,20 @@ export class AdmissionResultsService {
           else marks[pt.id] = num;
         });
         const absentText = cell(n, cAbsent).toUpperCase();
-        const decisionText = cell(n, cDecision).toLowerCase();
+        const decisionText = cell(n, cDecision).toLowerCase().replace(/\s+/g, ' ');
+        const SHEET_WORDS: Record<string, Choice> = {
+          select: 'select',
+          selected: 'select',
+          hold: 'hold',
+          held: 'hold',
+          'not selected': 'reject',
+          reject: 'reject',
+          rejected: 'reject',
+        };
         if (absentText && !['Y', 'YES', 'N', 'NO'].includes(absentText))
           bad ??= 'Absent must be Y or blank';
-        if (decisionText && decisionText !== 'select' && decisionText !== 'hold')
-          bad ??= 'Decision must be Select or Hold';
+        if (decisionText && !SHEET_WORDS[decisionText])
+          bad ??= 'Decision must be Select, Hold or Not selected';
         if (bad) {
           line.status = 'error';
           line.reason = bad;
@@ -775,7 +888,8 @@ export class AdmissionResultsService {
           marks,
           ...(absentText ? { absent: absentText === 'Y' || absentText === 'YES' } : {}),
           ...(remark ? { remark } : {}),
-          decision: decisionText ? (decisionText as 'select' | 'hold') : null,
+          decision: decisionText ? SHEET_WORDS[decisionText]! : null,
+          ...(cReason >= 0 && cell(n, cReason) ? { reason: cell(n, cReason) } : {}),
         };
         const prep = this.prepare(r, input, paper, true);
         if (prep.error !== undefined) {
@@ -784,9 +898,10 @@ export class AdmissionResultsService {
           continue;
         }
         line.total = prep.total;
+        line.change = prep.words;
         if (!prep.changed && !prep.decision) {
           line.status = 'skipped';
-          line.reason = 'Nothing to change';
+          line.reason = 'No change';
           continue;
         }
         if (!apply) continue;

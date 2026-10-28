@@ -44,7 +44,7 @@ export const ResultsSaveSchema = PlaceSchema.extend({
         marks: z.record(IdSchema, z.number().min(0).max(1000).nullable()),
         absent: z.boolean().optional(),
         remark: z.string().trim().max(500).nullable().optional(),
-        decision: z.enum(['select', 'hold']).nullable().optional(),
+        decision: z.enum(['select', 'hold', 'reject']).nullable().optional(),
         /** a candidate already decided at the stage: why the marks change */
         reason: z.string().trim().min(3).max(300).optional(),
       }),

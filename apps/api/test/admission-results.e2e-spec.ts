@@ -261,6 +261,7 @@ describe('admission test results by part (e2e)', () => {
       '%',
       'Decision',
       'Remark',
+      'Reason for change',
     ]);
     expect(ws.getRow(6).getCell(5).value).toBe(40);
     // ASHA: Select (marks kept); BALU: Maths 35 and Hold; CHITRA: absent, Hold; a number not in the class
@@ -291,8 +292,8 @@ describe('admission test results by part (e2e)', () => {
     expect(await rowOf(apps[0]!)).toMatchObject({ state: 'selected' });
     expect(await rowOf(apps[1]!)).toMatchObject({ state: 'held', total: 45, below: true });
     expect(await rowOf(apps[2]!)).toMatchObject({ state: 'held', absent: true, total: null });
-    // the decided candidate is no longer in a new sheet
-    expect((await call('GET', `/admissions/results/sheet?${qs()}`)).json().rows).toBe(2);
+    // decided candidates stay on a new sheet, to be changed again with a reason (docs/design/58)
+    expect((await call('GET', `/admissions/results/sheet?${qs()}`)).json().rows).toBe(3);
   });
 
   it("a decided candidate's marks change only with a reason; the decision's marks and merit follow", async () => {
@@ -301,7 +302,7 @@ describe('admission test results by part (e2e)', () => {
       rows: [{ applicationId: apps[0], marks: { [parts.Maths!]: 48 } }],
     });
     expect(no.json().errors[0].error).toBe(
-      'Already decided at this stage: give the reason for changing the marks',
+      'Already selected: give the reason for changing the marks',
     );
     const yes = await call('PUT', '/admissions/results', {
       ...place(),
@@ -503,13 +504,13 @@ describe('admission test results by part (e2e)', () => {
         `/admissions/results/sheet?${new URLSearchParams({ ...ivPlace, slotId: ids.slot }).toString()}`,
       )
     ).json();
-    expect(slotSheet.rows).toBe(1);
+    expect(slotSheet.rows).toBe(2);
     expect(slotSheet.filename).toBe('Results-Interview-Class-IX-slot-' + ids.slot + '.xlsx');
     expect(
       (
         await call('GET', `/admissions/results/sheet?${new URLSearchParams(ivPlace).toString()}`)
       ).json().rows,
-    ).toBe(2);
+    ).toBe(3);
     expect(
       (
         await call(
@@ -676,5 +677,115 @@ describe('admission test results by part (e2e)', () => {
     expect(mail.rows.map((x) => x.subject)).toEqual(['Admission result of ASHA']);
     // the interview is not released: the family does not see it
     expect((await seen()).map((x: { stage: string }) => x.stage)).toEqual(['Written test']);
+  });
+
+  // ---- docs/design/58, part 1: change after upload, one candidate or many by Excel -----------------
+  it("a decided candidate's decision changes with a reason; a later stage stops it", async () => {
+    const iv = { ...place(), stageId: ids.interview! };
+    const save = (stageId: string, row: Record<string, unknown>) =>
+      call('PUT', '/admissions/results', { ...place(), stageId, rows: [row] });
+    // CHITRA was selected at the interview (13 of 20): Selected -> Hold needs the reason
+    const bare = await save(ids.interview!, {
+      applicationId: apps[2],
+      marks: {},
+      decision: 'hold',
+    });
+    expect(bare.json().errors[0].error).toBe(
+      'Already selected: give the reason for the new decision',
+    );
+    const held = await save(ids.interview!, {
+      applicationId: apps[2],
+      marks: {},
+      decision: 'hold',
+      reason: 'Panel asked to see her again',
+    });
+    expect(held.json()).toEqual({ saved: 1, errors: [] });
+    const g = (
+      await call('GET', `/admissions/results?${new URLSearchParams(iv).toString()}`)
+    ).json();
+    expect(g.rows.find((r: { id: string }) => r.id === apps[2])).toMatchObject({
+      state: 'held',
+      current: 'hold',
+      total: 13,
+    });
+    const hist = await withMigrator((c) =>
+      c.query<{ note: string }>(
+        `SELECT note FROM application_events WHERE application_id = $1 ORDER BY id DESC LIMIT 2`,
+        [apps[2]],
+      ),
+    );
+    expect(hist.rows.map((x) => x.note)).toContain(
+      'Interview: Selected undone · Panel asked to see her again',
+    );
+    // the written test was decided before the interview: it can no longer change here
+    const later = await save(ids.test!, {
+      applicationId: apps[0],
+      marks: {},
+      decision: 'hold',
+      reason: 'Re-check',
+    });
+    expect(later.json().errors[0].error).toBe('Decided at Interview since: undo it there first');
+  });
+
+  it('a sheet uploaded again changes several candidates; decided ones need the reason', async () => {
+    const iv = { ...place(), stageId: ids.interview! };
+    const dl = (
+      await call('GET', `/admissions/results/sheet?${new URLSearchParams(iv).toString()}`)
+    ).json();
+    expect(dl.rows).toBe(3);
+    const wb = new ExcelJS.Workbook();
+    await wb.xlsx.load(Buffer.from(dl.base64, 'base64') as unknown as ArrayBuffer);
+    const ws = wb.worksheets[0]!;
+    expect((ws.getRow(5).values as unknown[]).slice(1).map(String).slice(-3)).toEqual([
+      'Decision',
+      'Remark',
+      'Reason for change',
+    ]);
+    const rowOfNo = (no: string) => {
+      for (let n = 6; n <= ws.rowCount; n += 1)
+        if (String(ws.getRow(n).getCell(1).value) === no) return ws.getRow(n);
+      throw new Error(no);
+    };
+    const asha = rowOfNo(nos[0]!);
+    const balu = rowOfNo(nos[1]!);
+    const chitra = rowOfNo(nos[2]!);
+    // the decisions as they stand are filled in
+    expect([asha.getCell(10).value, balu.getCell(10).value, chitra.getCell(10).value]).toEqual([
+      'Select',
+      'Hold',
+      'Hold',
+    ]);
+    // ASHA (selected): Communication 8 -> 9, first without a reason
+    asha.getCell(5).value = 9;
+    // BALU (held, absent): not selected
+    balu.getCell(10).value = 'Not selected';
+    // CHITRA (held): Communication 6 -> 7 and selected
+    chitra.getCell(5).value = 7;
+    chitra.getCell(10).value = 'Select';
+    const first = await upload(Buffer.from(await wb.xlsx.writeBuffer()), false, XLSX);
+    const line = (no: string) => first.json().rows.find((r: { number: string }) => r.number === no);
+    expect(line(nos[0]!)).toMatchObject({
+      status: 'error',
+      reason: 'Already selected: write the Reason for change for changing the marks',
+    });
+    expect(line(nos[1]!)).toMatchObject({ status: 'ok', change: 'Decision Held → Not selected' });
+    expect(line(nos[2]!)).toMatchObject({
+      status: 'ok',
+      change: 'Decision Held → Selected · Marks changed',
+      total: 14,
+    });
+    asha.getCell(12).value = 'Panel re-scored';
+    const done = await upload(Buffer.from(await wb.xlsx.writeBuffer()), true, XLSX);
+    expect(done.json()).toMatchObject({ done: 3, errors: 0 });
+    const g = (
+      await call('GET', `/admissions/results?${new URLSearchParams(iv).toString()}`)
+    ).json();
+    const by = (id: string) => g.rows.find((r: { id: string }) => r.id === id);
+    expect(by(apps[0]!)).toMatchObject({ state: 'selected', total: 18 });
+    expect(by(apps[1]!)).toMatchObject({ state: 'rejected', current: 'reject' });
+    expect(by(apps[2]!)).toMatchObject({ state: 'selected', total: 14 });
+    // merit follows: ASHA 88 + 18, CHITRA 62 + 14
+    expect((await app0(apps[0]!)).merit).toBe('106.00');
+    expect((await app0(apps[2]!)).merit).toBe('76.00');
   });
 });

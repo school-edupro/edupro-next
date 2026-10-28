@@ -35,7 +35,7 @@ export async function saveResults(body: {
     marks: Record<string, number | null>;
     absent?: boolean;
     remark?: string | null;
-    decision?: 'select' | 'hold' | null;
+    decision?: 'select' | 'hold' | 'reject' | null;
     reason?: string;
   }>;
 }): Promise<Out<{ saved: number; errors: Array<{ applicationId: string; error: string }> }>> {
