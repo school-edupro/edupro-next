@@ -8,6 +8,7 @@ import {
   BulkDecideDto,
   CopyPaperDto,
   PaperDto,
+  PaperItemsDto,
   OfferPreviewDto,
   DecideDto,
   OfficeCorrectDto,
@@ -98,6 +99,28 @@ export class AdmissionProcessController {
   @RequirePermission(ADMISSION_SETUP_MANAGE)
   saveStages(@ReqCtx() ctx: RequestContext, @Body() dto: StagesDto) {
     return this.process.saveStages(ctx, dto);
+  }
+
+  // ---- the school's test subjects and interview parameters (docs/design/57, follow-up) -------------
+  @Get('paper-items')
+  @ApiOperation({ summary: "The school's test subjects and interview parameters" })
+  @RequirePermission(ADMISSIONS.cycleView)
+  paperItems(@ReqCtx() ctx: RequestContext) {
+    return this.papersSvc.items(ctx);
+  }
+
+  @Put('paper-items')
+  @ApiOperation({ summary: 'The list saved (an entry a paper uses is switched off, not deleted)' })
+  @RequirePermission(ADMISSION_SETUP_MANAGE)
+  savePaperItems(@ReqCtx() ctx: RequestContext, @Body() dto: PaperItemsDto) {
+    return this.papersSvc.saveItems(ctx, dto);
+  }
+
+  @Post('paper-items/import-subjects')
+  @ApiOperation({ summary: "The school's scholastic subjects added to the list" })
+  @RequirePermission(ADMISSION_SETUP_MANAGE)
+  importPaperSubjects(@ReqCtx() ctx: RequestContext) {
+    return this.papersSvc.importSubjects(ctx);
   }
 
   // ---- test and interview papers by class (docs/design/57, part 1) ---------------------------------

@@ -145,6 +145,23 @@ describe('admission test results by part (e2e)', () => {
     const sheet = await call('GET', `/admissions/results/sheet?${qs()}`);
     expect(sheet.statusCode).toBe(409);
     expect(sheet.json().type).toBe('admissions.no_paper');
+    // the paper's subjects come from the school's list (docs/design/57, follow-up)
+    const list = (await call('GET', '/admissions/paper-items')).json().items as Array<{
+      id: string;
+      name: string;
+      kind: string;
+    }>;
+    expect(
+      (
+        await call('PUT', '/admissions/paper-items', {
+          items: [
+            ...list.map(({ id, name, kind }) => ({ id, name, kind })),
+            { name: 'English', kind: 'test' },
+            { name: 'Maths', kind: 'test' },
+          ],
+        })
+      ).statusCode,
+    ).toBe(200);
     const paper = await call('PUT', `/admissions/stages/${ids.test!}/papers/${ids.cls!}`, {
       minPercent: 40,
       parts: [

@@ -223,9 +223,15 @@ export const PaperSchema = z.object({
       z
         .object({
           id: IdSchema.optional(),
-          name: z.string().trim().min(1).max(60),
+          /** the entry of the school's list (docs/design/57, follow-up); else its name */
+          itemId: IdSchema.optional(),
+          name: z.string().trim().min(1).max(60).optional(),
           maxMarks: z.number().gt(0).max(1000),
           passMarks: z.number().min(0).max(1000).nullable().optional(),
+        })
+        .refine((p) => p.itemId !== undefined || p.name !== undefined, {
+          message: 'Pick the subject or parameter',
+          path: ['itemId'],
         })
         .refine(
           (p) => p.passMarks === undefined || p.passMarks === null || p.passMarks <= p.maxMarks,
@@ -238,6 +244,22 @@ export const PaperSchema = z.object({
     .max(30),
 });
 export class PaperDto extends createZodDto(PaperSchema) {}
+
+/** The school's test subjects and interview parameters (docs/design/57, follow-up). */
+export const PaperItemsSchema = z.object({
+  items: z
+    .array(
+      z.object({
+        id: IdSchema.optional(),
+        name: z.string().trim().min(1).max(60),
+        kind: z.enum(['test', 'interview', 'both']),
+        maxMarks: z.number().gt(0).max(1000).nullable().optional(),
+        status: z.enum(['active', 'inactive']).default('active'),
+      }),
+    )
+    .max(300),
+});
+export class PaperItemsDto extends createZodDto(PaperItemsSchema) {}
 
 export const CopyPaperSchema = z.object({
   fromClassId: IdSchema,

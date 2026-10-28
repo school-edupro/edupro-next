@@ -4,12 +4,17 @@ import { useState, useTransition } from 'react';
 import type { Paper, PapersView } from '@/lib/admission-papers';
 import { copyPaper, savePaper } from '@/lib/admission-papers-actions';
 
-type Row = { key: string; id?: string; name: string; maxMarks: string; passMarks: string };
+type Row = { key: string; id?: string; itemId: string; maxMarks: string; passMarks: string };
 let seq = 0;
-const rowOf = (p?: { id?: string; name: string; maxMarks: number; passMarks: number | null }) => ({
+const rowOf = (p?: {
+  id?: string;
+  itemId: string | null;
+  maxMarks: number;
+  passMarks: number | null;
+}) => ({
   key: `r${String(++seq)}`,
   ...(p?.id ? { id: p.id } : {}),
-  name: p?.name ?? '',
+  itemId: p?.itemId ?? '',
   maxMarks: p ? String(p.maxMarks) : '',
   passMarks: p?.passMarks !== null && p?.passMarks !== undefined ? String(p.passMarks) : '',
 });
@@ -24,7 +29,7 @@ export function PaperEditor({
   classId,
   className,
   paper,
-  picks,
+  items,
   others,
   canEdit,
 }: {
@@ -32,7 +37,8 @@ export function PaperEditor({
   classId: string;
   className: string;
   paper: Paper | null;
-  picks: string[];
+  /** the school's list for this stage (Subjects and parameters) */
+  items: PapersView['items'];
   others: Array<{ id: string; name: string; has: boolean }>;
   canEdit: boolean;
 }) {
@@ -47,7 +53,7 @@ export function PaperEditor({
   const isTest = stage.kind === 'test';
   const part = isTest ? 'Subject' : 'Parameter';
   const total = rows.reduce((n, r) => n + (Number(r.maxMarks) > 0 ? Number(r.maxMarks) : 0), 0);
-  const listId = `paper-picks-${classId}`;
+  const nameOf = (itemId: string) => items.find((x) => x.id === itemId)?.name ?? '';
 
   const set = (i: number, patch: Partial<Row>) =>
     setRows((cur) => cur.map((r, j) => (j === i ? { ...r, ...patch } : r)));
@@ -60,12 +66,12 @@ export function PaperEditor({
     });
   /** what is wrong before saving, in words */
   const problem = (): string | null => {
-    const names = new Set<string>();
+    const picked = new Set<string>();
     for (const r of rows) {
-      const n = r.name.trim();
-      if (!n) return `Give every ${part.toLowerCase()} a name.`;
-      if (names.has(n.toLowerCase())) return `Two ${part.toLowerCase()}s are called ${n}.`;
-      names.add(n.toLowerCase());
+      if (!r.itemId) return `Pick every ${part.toLowerCase()} from the list.`;
+      const n = nameOf(r.itemId);
+      if (picked.has(r.itemId)) return `${n} is on the paper twice.`;
+      picked.add(r.itemId);
       const max = Number(r.maxMarks);
       if (!(max > 0) || max > 1000) return `${n}: the maximum is from 1 to 1000.`;
       if (r.passMarks !== '' && !(Number(r.passMarks) >= 0 && Number(r.passMarks) <= max))
@@ -84,7 +90,7 @@ export function PaperEditor({
         minPercent: rows.length && minPercent !== '' ? Number(minPercent) : null,
         parts: rows.map((x) => ({
           ...(x.id ? { id: x.id } : {}),
-          name: x.name.trim(),
+          itemId: x.itemId,
           maxMarks: Number(x.maxMarks),
           passMarks: x.passMarks === '' ? null : Number(x.passMarks),
         })),
@@ -120,11 +126,6 @@ export function PaperEditor({
           ? `${className} is marked out of ${String(total)}: the sum of its ${part.toLowerCase()}s.`
           : `No paper: ${className} takes one marks figure out of the stage's ${String(stage.maxMarks ?? '-')}. Add ${isTest ? 'subjects' : 'parameters'} to mark it part by part.`}
       </p>
-      <datalist id={listId}>
-        {picks.map((p) => (
-          <option key={p} value={p} />
-        ))}
-      </datalist>
       {rows.length ? (
         <ol
           style={{ margin: 0, padding: 0, listStyle: 'none', display: 'grid', gap: 'var(--sp-3)' }}
@@ -135,14 +136,29 @@ export function PaperEditor({
                 <span className="ep-field__label">
                   {part} {i + 1}
                 </span>
-                <input
-                  className="ep-input"
-                  list={listId}
-                  maxLength={60}
-                  value={r.name}
+                <select
+                  className="ep-select"
+                  value={r.itemId}
                   disabled={!canEdit}
-                  onChange={(e) => set(i, { name: e.target.value })}
-                />
+                  onChange={(e) => {
+                    const item = items.find((x) => x.id === e.target.value);
+                    // an entry's usual maximum fills an empty Maximum
+                    set(i, {
+                      itemId: e.target.value,
+                      ...(r.maxMarks === '' && item?.maxMarks
+                        ? { maxMarks: String(item.maxMarks) }
+                        : {}),
+                    });
+                  }}
+                >
+                  <option value="">Pick a {part.toLowerCase()}</option>
+                  {items.map((x) => (
+                    <option key={x.id} value={x.id} disabled={x.off && x.id !== r.itemId}>
+                      {x.name}
+                      {x.off ? ' (switched off)' : ''}
+                    </option>
+                  ))}
+                </select>
               </label>
               <label className="ep-field">
                 <span className="ep-field__label">Maximum</span>
@@ -176,7 +192,7 @@ export function PaperEditor({
                     type="button"
                     className="ep-btn ep-btn--ghost ep-btn--sm"
                     disabled={i === 0}
-                    aria-label={`Move ${r.name || `${part.toLowerCase()} ${String(i + 1)}`} up`}
+                    aria-label={`Move ${nameOf(r.itemId) || `${part.toLowerCase()} ${String(i + 1)}`} up`}
                     onClick={() => move(i, -1)}
                   >
                     Up
@@ -185,7 +201,7 @@ export function PaperEditor({
                     type="button"
                     className="ep-btn ep-btn--ghost ep-btn--sm"
                     disabled={i === rows.length - 1}
-                    aria-label={`Move ${r.name || `${part.toLowerCase()} ${String(i + 1)}`} down`}
+                    aria-label={`Move ${nameOf(r.itemId) || `${part.toLowerCase()} ${String(i + 1)}`} down`}
                     onClick={() => move(i, 1)}
                   >
                     Down
@@ -193,7 +209,7 @@ export function PaperEditor({
                   <button
                     type="button"
                     className="ep-btn ep-btn--ghost ep-btn--sm"
-                    aria-label={`Remove ${r.name || `${part.toLowerCase()} ${String(i + 1)}`}`}
+                    aria-label={`Remove ${nameOf(r.itemId) || `${part.toLowerCase()} ${String(i + 1)}`}`}
                     onClick={() => setRows((cur) => cur.filter((_, j) => j !== i))}
                   >
                     Remove
@@ -213,7 +229,10 @@ export function PaperEditor({
             onClick={() => setRows((cur) => [...cur, rowOf()])}
           >
             Add a {part.toLowerCase()}
-          </button>
+          </button>{' '}
+          <a className="ep-field__help" href="/admissions/setup/papers?view=list">
+            Not on the list? Add it under Subjects and parameters
+          </a>
         </div>
       ) : null}
       {rows.length ? (

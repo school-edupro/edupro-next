@@ -39,6 +39,7 @@ const PAGES = [
   '/admissions/schedule',
   '/admissions/selection',
   '/admissions/setup/papers',
+  '/admissions/setup/papers?view=list',
   '/admissions/results',
   '/admissions/admit',
   '/admissions/refunds',

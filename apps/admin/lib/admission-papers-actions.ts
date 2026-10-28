@@ -2,7 +2,7 @@
 /** Test and interview papers by class (docs/design/57, part 1). */
 import { revalidatePath } from 'next/cache';
 import { ApiError, apiFetch } from './api';
-import type { Paper } from './admission-papers';
+import type { Paper, PaperItemsView } from './admission-papers';
 
 type Out<T> = { ok: true; data: T } | { ok: false; error: string };
 const okId = (id: string) => /^\d{1,18}$/.test(id);
@@ -34,7 +34,7 @@ export async function savePaper(
   classId: string,
   body: {
     minPercent: number | null;
-    parts: Array<{ id?: string; name: string; maxMarks: number; passMarks: number | null }>;
+    parts: Array<{ id?: string; itemId: string; maxMarks: number; passMarks: number | null }>;
   },
 ) {
   if (!okId(stageId) || !okId(classId)) return { ok: false as const, error: 'Unknown class' };
@@ -53,4 +53,26 @@ export async function copyPaper(stageId: string, fromClassId: string, toClassIds
     fromClassId,
     toClassIds,
   });
+}
+
+/** The school's test subjects and interview parameters saved (an entry in use is switched off). */
+export async function savePaperItems(
+  items: Array<{
+    id?: string;
+    name: string;
+    kind: 'test' | 'interview' | 'both';
+    maxMarks: number | null;
+    status: 'active' | 'inactive';
+  }>,
+) {
+  return call<PaperItemsView>('/admissions/paper-items', 'PUT', { items });
+}
+
+/** The school's scholastic subjects not on the list added to it. */
+export async function importPaperSubjects() {
+  return call<PaperItemsView & { added: number }>(
+    '/admissions/paper-items/import-subjects',
+    'POST',
+    {},
+  );
 }

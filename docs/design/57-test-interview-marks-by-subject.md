@@ -180,6 +180,38 @@ Decided here, change any before building:
   withdraw after, told 3 with the email queued, an unreleased interview not shown); browser on the
   test school (the portal card, the panel Out / Not released); axe on Test results.
 
+## Follow-up: the school's list of subjects and parameters (28 Oct 2026, migration 0268)
+
+Asked: on Test and interview papers, which master do the subjects and parameters come from? Until now
+the name box was free text with suggestions (the Academics subjects, plus a few fixed in the code).
+The user asked for a master in Admission set-up.
+
+- **Subjects and parameters** is a tab of Test and interview papers
+  (`/admissions/setup/papers?view=list`): each entry has a name, what it is used for (Written test,
+  Interview or Both), an optional usual maximum, and on / off. An entry a paper uses is switched off,
+  never deleted (its papers keep it; new papers cannot pick it); an entry not in use is removed.
+- **First use** fills the list with the school's active scholastic subjects (Masters → Academics →
+  Subjects) for the written test, plus Mental Ability, General Knowledge, Reasoning, and for the
+  interview Communication, Confidence, General awareness, Behaviour, Parent interaction. The school
+  changes it from there. **Add them for the written test** brings in subjects added to the Academics
+  master later (a note lists those not on the list).
+- **The paper editor** picks each part from the list for that stage (a searchable drop-down; no free
+  text). Picking an entry with a usual maximum fills an empty Maximum box. "Not on the list?" leads to
+  the tab.
+- **Renaming** an entry renames it on every paper (a trigger on `admission_paper_items`); marks already
+  entered keep the name they were entered under. An entry used by a written test paper cannot become
+  interview-only, and the other way round.
+- Data: `admission_paper_items` (name unique per school, kind, max_marks, status, sort_order);
+  `admission_paper_parts.item_id`. The migration made an entry for every part already written in and
+  linked it.
+- API: `GET/PUT admissions/paper-items`, `POST admissions/paper-items/import-subjects`; a paper's
+  parts are sent as `itemId` (a name is still accepted and matched to the list).
+- Checked: papers e2e 5 pass (the first fill, adding, twice refused, only set-up managers; a part not
+  on the list or not for the stage refused; a rename reaching the paper; a kind that no longer fits
+  refused; an entry in use switched off and refused on a new paper; subjects added in one go), all
+  admission suites 98 pass, axe on both views; browser in Alpha (the list filled from its subjects; the
+  drop-down on the Written test paper; nothing saved).
+
 ## Not in this plan
 
 Per-subject markers, panel members' separate scores, grades instead of marks, automatic rejection by

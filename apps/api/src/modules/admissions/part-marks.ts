@@ -4,6 +4,8 @@ import { DomainError } from '../../common/errors/domain-error';
 /** A part of a paper: a test's subject or an interview's parameter (docs/design/57). */
 export interface PaperPart {
   id: string;
+  /** the school's list entry it is (docs/design/57, follow-up) */
+  itemId: string | null;
   name: string;
   maxMarks: number;
   passMarks: number | null;
@@ -25,11 +27,13 @@ export async function papersIn(c: PoolClient, stageId: string): Promise<Map<stri
     paper_id: string;
     min_percent: string | null;
     part_id: string;
+    item_id: string | null;
     name: string;
     max_marks: string;
     pass_marks: string | null;
   }>(
-    `SELECT p.class_id::text, p.id::text AS paper_id, p.min_percent::text, pp.id::text AS part_id, pp.name,
+    `SELECT p.class_id::text, p.id::text AS paper_id, p.min_percent::text, pp.id::text AS part_id,
+            pp.item_id::text, pp.name,
             pp.max_marks::text, pp.pass_marks::text
        FROM admission_papers p
        JOIN admission_paper_parts pp ON pp.paper_id = p.id AND pp.status = 'active'
@@ -46,6 +50,7 @@ export async function papersIn(c: PoolClient, stageId: string): Promise<Map<stri
     };
     p.parts.push({
       id: x.part_id,
+      itemId: x.item_id,
       name: x.name,
       maxMarks: Number(x.max_marks),
       passMarks: x.pass_marks !== null ? Number(x.pass_marks) : null,

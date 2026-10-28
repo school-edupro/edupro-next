@@ -74,7 +74,44 @@ describe('admission test and interview papers by class (e2e)', () => {
   });
   afterAll(async () => app.close());
 
-  it('lists every class without a paper, the stage maximum, and quick picks', async () => {
+  it("the school's list starts with its subjects and the usual extras; set-up managers change it", async () => {
+    const first = (await call('GET', '/admissions/paper-items')).json();
+    const kinds = Object.fromEntries(
+      (first.items as Array<{ name: string; kind: string }>).map((i) => [i.name, i.kind]),
+    );
+    expect(kinds).toMatchObject({
+      English: 'test',
+      Mathematics: 'test',
+      'Mental Ability': 'test',
+      Communication: 'interview',
+    });
+    expect(first.subjects).toEqual([]);
+    const items = first.items as Array<{ id: string; name: string; kind: string }>;
+    const keep = items.map(({ id, name, kind }) => ({ id, name, kind }));
+    const added = await call('PUT', '/admissions/paper-items', {
+      items: [
+        ...keep,
+        { name: 'Science', kind: 'test', maxMarks: 30 },
+        { name: 'Group discussion', kind: 'both' },
+      ],
+    });
+    expect(added.statusCode).toBe(200);
+    expect(added.json().items.find((i: { name: string }) => i.name === 'Science')).toMatchObject({
+      kind: 'test',
+      maxMarks: 30,
+      used: 0,
+    });
+    const twice = await call('PUT', '/admissions/paper-items', {
+      items: [...keep, { name: 'english', kind: 'test' }],
+    });
+    expect(twice.statusCode).toBe(400);
+    expect(twice.json().detail).toBe('english is on the list twice');
+    expect(
+      (await call('PUT', '/admissions/paper-items', { items: keep }, coordinator)).statusCode,
+    ).toBe(403);
+  });
+
+  it('lists every class without a paper, the stage maximum, and the list for the stage', async () => {
     const r = await call('GET', `/admissions/stages/${ids.test!}/papers`);
     expect(r.statusCode).toBe(200);
     expect(r.json().stage).toMatchObject({ kind: 'test', maxMarks: 100 });
@@ -84,12 +121,14 @@ describe('admission test and interview papers by class (e2e)', () => {
       'Class X',
     ]);
     expect(r.json().classes.every((k: { paper: unknown }) => k.paper === null)).toBe(true);
-    expect(r.json().picks).toEqual(
-      expect.arrayContaining(['English', 'Mathematics', 'Mental Ability']),
+    const names = (x: { items: Array<{ name: string }> }) => x.items.map((i) => i.name);
+    expect(names(r.json())).toEqual(
+      expect.arrayContaining(['English', 'Mathematics', 'Mental Ability', 'Science']),
     );
-    expect(
-      (await call('GET', `/admissions/stages/${ids.interview!}/papers`)).json().picks,
-    ).toContain('Communication');
+    expect(names(r.json())).not.toContain('Communication');
+    const iv = names((await call('GET', `/admissions/stages/${ids.interview!}/papers`)).json());
+    expect(iv).toEqual(expect.arrayContaining(['Communication', 'Group discussion']));
+    expect(iv).not.toContain('English');
     // a document check has no paper
     expect((await call('GET', `/admissions/stages/${ids.document_check!}/papers`)).statusCode).toBe(
       400,
@@ -126,7 +165,18 @@ describe('admission test and interview papers by class (e2e)', () => {
       ],
     });
     expect(twice.statusCode).toBe(400);
-    expect(twice.json().detail).toBe('Two parts are called english');
+    expect(twice.json().detail).toBe('English is on the paper twice');
+    // only the list's entries, and only those for the stage
+    const missing = await call('PUT', `/admissions/stages/${ids.test!}/papers/${ids.IX!}`, {
+      parts: [{ name: 'Hindi Dictation', maxMarks: 20 }],
+    });
+    expect(missing.json().detail).toBe(
+      'Hindi Dictation is not on Subjects and parameters: add it there first',
+    );
+    const wrong = await call('PUT', `/admissions/stages/${ids.test!}/papers/${ids.IX!}`, {
+      parts: [{ name: 'Communication', maxMarks: 10 }],
+    });
+    expect(wrong.json().detail).toBe('Communication is not for the written test');
     const over = await call('PUT', `/admissions/stages/${ids.test!}/papers/${ids.IX!}`, {
       parts: [{ name: 'English', maxMarks: 50, passMarks: 60 }],
     });
@@ -143,15 +193,44 @@ describe('admission test and interview papers by class (e2e)', () => {
     ).toBe(403);
   });
 
-  it('renames and reorders a part in place; a part taken off is switched off, not deleted', async () => {
+  it('a list entry renamed renames its parts; reorders; a part taken off is switched off, not deleted', async () => {
+    const list = (await call('GET', '/admissions/paper-items')).json().items as Array<{
+      id: string;
+      name: string;
+      kind: string;
+    }>;
+    const renamed = await call('PUT', '/admissions/paper-items', {
+      items: list.map(({ id, name, kind }) => ({
+        id,
+        name: name === 'Mathematics' ? 'Maths' : name,
+        kind,
+      })),
+    });
+    expect(renamed.statusCode).toBe(200);
     const before = (await call('GET', `/admissions/stages/${ids.test!}/papers`)).json();
     const paper = before.classes.find((k: { id: string }) => k.id === ids.IX).paper;
-    const [eng, mat, sci] = paper.parts as Array<{ id: string }>;
+    expect(paper.parts.map((p: { name: string }) => p.name)).toEqual([
+      'English',
+      'Maths',
+      'Science',
+    ]);
+    const [eng, mat, sci] = paper.parts as Array<{ id: string; itemId: string }>;
+    // an entry on a written test paper cannot become interview-only
+    const misfit = await call('PUT', '/admissions/paper-items', {
+      items: list.map(({ id, name, kind }) => ({
+        id,
+        name: name === 'Mathematics' ? 'Maths' : name,
+        kind: name === 'Mathematics' ? 'interview' : kind,
+      })),
+    });
+    expect(misfit.json().detail).toBe(
+      'Maths is on a written test paper: keep it for the written test or both',
+    );
     const r = await call('PUT', `/admissions/stages/${ids.test!}/papers/${ids.IX!}`, {
       minPercent: null,
       parts: [
-        { id: mat!.id, name: 'Maths', maxMarks: 60 },
-        { id: eng!.id, name: 'English', maxMarks: 50, passMarks: 15 },
+        { id: mat!.id, itemId: mat!.itemId, maxMarks: 60 },
+        { id: eng!.id, itemId: eng!.itemId, maxMarks: 50, passMarks: 15 },
       ],
     });
     expect(r.statusCode).toBe(200);
@@ -166,15 +245,65 @@ describe('admission test and interview papers by class (e2e)', () => {
       ]),
     );
     expect(science.rows[0]!.status).toBe('inactive');
-    // a part may take back a name left by one switched off
+    // a part may take back an entry left by one switched off
     const again = await call('PUT', `/admissions/stages/${ids.test!}/papers/${ids.IX!}`, {
       parts: [
-        { id: mat!.id, name: 'Maths', maxMarks: 60 },
-        { id: eng!.id, name: 'English', maxMarks: 50, passMarks: 15 },
-        { name: 'Science', maxMarks: 30 },
+        { id: mat!.id, itemId: mat!.itemId, maxMarks: 60 },
+        { id: eng!.id, itemId: eng!.itemId, maxMarks: 50, passMarks: 15 },
+        { itemId: sci!.itemId, maxMarks: 30 },
       ],
     });
     expect(again.json().paper.total).toBe(140);
+    // an entry in use taken off the list is switched off: its papers keep it, new papers cannot pick it
+    const now = (await call('GET', '/admissions/paper-items')).json().items as Array<{
+      id: string;
+      name: string;
+      kind: string;
+    }>;
+    const off = await call('PUT', '/admissions/paper-items', {
+      items: now
+        .filter((i) => i.name !== 'Science')
+        .map(({ id, name, kind }) => ({ id, name, kind })),
+    });
+    expect(off.json().items.find((i: { name: string }) => i.name === 'Science')).toMatchObject({
+      status: 'inactive',
+      used: 1,
+    });
+    const page = (await call('GET', `/admissions/stages/${ids.test!}/papers`)).json();
+    expect(page.items.find((i: { name: string }) => i.name === 'Science')).toMatchObject({
+      off: true,
+    });
+    const refused = await call('PUT', `/admissions/stages/${ids.test!}/papers/${ids.I!}`, {
+      parts: [{ itemId: sci!.itemId, maxMarks: 30 }],
+    });
+    expect(refused.json().detail).toBe('Science is switched off on the list');
+    await call('PUT', '/admissions/paper-items', {
+      items: off
+        .json()
+        .items.map(({ id, name, kind }: { id: string; name: string; kind: string }) => ({
+          id,
+          name,
+          kind,
+          status: 'active',
+        })),
+    });
+    // the school's subjects not on the list yet are added in one go
+    await withMigrator((c) =>
+      c.query(`INSERT INTO subjects (school_id, code, name) VALUES ($1, 'HIN', 'Hindi')`, [
+        school.id,
+      ]),
+    );
+    // (Mathematics too: the list calls it Maths now)
+    expect((await call('GET', '/admissions/paper-items')).json().subjects).toEqual([
+      'Hindi',
+      'Mathematics',
+    ]);
+    const imp = await call('POST', '/admissions/paper-items/import-subjects');
+    expect(imp.json()).toMatchObject({ added: 2, subjects: [] });
+    expect(imp.json().items.find((i: { name: string }) => i.name === 'Hindi')).toMatchObject({
+      kind: 'test',
+      status: 'active',
+    });
   });
 
   it('copies a paper to other classes; an empty paper leaves the stage maximum', async () => {
