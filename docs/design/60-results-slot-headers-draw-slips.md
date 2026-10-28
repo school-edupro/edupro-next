@@ -103,3 +103,35 @@ Decided here, change any before building:
 
 Video of the draw; EWS / DG government lottery integration; parents viewing the draw result in the
 portal (the offer email tells the offered ones).
+
+## As built (28 Oct 2026)
+
+- **Part 1** (a4cf4df): `slotSections()` in results.service groups the class download by slot (time
+  order; "No slot" last; none with a slot = one plain section). Each section's heading lines: "Slot:
+  <date and time> · N minutes · <venue>" and "Note: …"; the subtitle counts its candidates. `tablePdf`
+  takes `lines` (wrapped, bold) under the subtitle; the PDF merges a page set per section; Excel has a
+  sheet per slot named "10 Jan 10.00" (one section: "Results"). Session download: a Slot column.
+- **Part 2 + 3** (this commit): migrations 0270 (`admission_draw_settings`, unique per session and
+  class-or-none; `admission_twin_pairs`, paired / split) and 0271 (`admission_hand_draws`, the drawn
+  slips as JSON with outcome). API `admissions/draw/*`: options (classes with `withPoints`), totals,
+  group, slips (PDF), twins (PUT), settings (GET / PUT / DELETE for a class's own), check, record,
+  records, records/:id/pdf. Eligible: registered or under review with points; slips only for points
+  confirmed. Twins: the same date of birth and the last 10 digits of the family mobile, joined with
+  pairs the office confirmed, minus those split. Slips PDF (`draw-slips-pdf.ts`, pdf-lib): 2 (one
+  across) / 4 / 6 / 8 a page with dashed cut lines, logo and school name, heading with {points},
+  {class}, {category}, {session}, session and draw lines, the chosen details (name and reg. no. wrap
+  to two lines; text shrinks to fit the slip), photos (the student's; twins both), a Code 128 barcode
+  of the first registration no., the footer. Record: numbers in drawn order (either twin's number);
+  errors for unknown, repeated, not at Selection, seats beyond those left; the first seats offered with
+  the Selection offer email (previewed with the Selection preview), a twin slip's second twin offered
+  past the last seat (`offerOne(..., { overRoom })`); the rest wait-listed in drawn order; history
+  "Draw of lots by slips (70 points), slip 2 drawn"; result PDF on the letterhead.
+- Admin: Admissions → **Draw of lots** (`/admissions/draw`): pickers (session, class with "N on
+  points", category); Slips (points totals, a total's candidates with slip numbers and twins, the
+  unconfirmed named with links, View / Download slips), Slip settings (every class or this class only,
+  heading, details, draw date and venue, slips per page, footer, logo; "Use the session's settings"),
+  Record the draw (points, seats, numbers typed or scanned, Check, Record with the offer preview;
+  draws recorded with View / Download result).
+- Tests: admission-draw e2e 6, admission-results 15; all admission suites + permission coverage 112;
+  a11y for the four draw views. Alpha has no confirmed points yet, so the slips print was checked with
+  sample data (4 and 8 a page, 2 a page, a twin slip).

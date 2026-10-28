@@ -139,6 +139,11 @@ export const NAV: Array<{
         permission: 'admissions.application.view',
       },
       {
+        href: '/admissions/draw',
+        label: 'admissionDraw',
+        permission: 'admissions.application.view',
+      },
+      {
         href: '/admissions/selection',
         label: 'admissionSelection',
         permission: 'admissions.application.view',

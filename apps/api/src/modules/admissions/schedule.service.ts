@@ -820,7 +820,7 @@ export class AdmissionScheduleService {
   }
 
   /** Seats a category may still offer: its own quota, and the class's seats left. */
-  private async room(c: PoolClient, cycleId: string, classId: string, categoryId: string | null) {
+  async room(c: PoolClient, cycleId: string, classId: string, categoryId: string | null) {
     const r = await c.query<{ class_left: number; cat_left: number | null }>(
       `SELECT k.seats - (SELECT count(*)::int FROM applications a WHERE a.cycle_id = $1 AND a.class_id = $2 AND a.status IN ('offered', 'fee_paid', 'admitted')) AS class_left,
               (SELECT f.seats - (SELECT count(*)::int FROM applications a WHERE a.cycle_id = $1 AND a.class_id = $2 AND a.category_id = f.category_id
@@ -834,20 +834,23 @@ export class AdmissionScheduleService {
     return Math.max(Math.min(x.class_left, x.cat_left ?? x.class_left), 0);
   }
 
-  private async offerOne(
+  /** One candidate offered the seat (a Selection offer, a draw): the email with the school's words. */
+  async offerOne(
     c: PoolClient,
     ctx: RequestContext,
     id: string,
     cycleId: string,
     note?: string,
     edits?: OfferWords,
+    /** a twin on the same draw slip: offered even when the seats are full (docs/design/60) */
+    opts: { overRoom?: boolean } = {},
   ) {
     const a = await this.core.row(c, id);
     if (a.cycle_id !== cycleId)
       throw new DomainError('validation-failed', 'A candidate is not of this session', {
         status: 400,
       });
-    if ((await this.room(c, cycleId, a.class_id, a.category_id)) <= 0)
+    if (!opts.overRoom && (await this.room(c, cycleId, a.class_id, a.category_id)) <= 0)
       throw new DomainError(
         'admissions.no_seats',
         `No seat left for ${a.candidate_name ?? a.application_no} (${a.category_name ?? 'category'})`,

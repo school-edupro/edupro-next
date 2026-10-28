@@ -10,7 +10,7 @@ const INK = rgb(0.043, 0.122, 0.227);
 const MUTED = rgb(0.357, 0.4, 0.463);
 const LINE = rgb(0.851, 0.878, 0.918);
 
-const latin = (s: string) =>
+export const latin = (s: string) =>
   s
     .replace(/₹/g, 'Rs ')
     .replace(/[‐-―]/g, '-')
