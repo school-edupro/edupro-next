@@ -79,3 +79,25 @@ Decided here, change any before building:
 ## Not in this plan
 
 Changing how the merit total is made; slips in languages other than English.
+
+## As built (28 Oct 2026)
+
+- **Part 1** (d10b016): `view` on the score report (`merit` or a stage id) and its downloads; the
+  report gives `views` (Merit list, then each Written test / Interview stage with marks in the class's
+  process) and `view`. A stage view: those who reached the stage (or have marks there), its parts and
+  total, %, the rank by the total (equal totals share it; cancelled / withdrawn not ranked), only that
+  stage's levels. Page: "Merit list | Written test result | Interview result" links above the table.
+  Excel headed "<stage> result: <class>", PDF the stage's columns with % last.
+- **Part 2**: migration 0272 confirms the points of live Document check level-1 approvals (Alpha: 14
+  confirmed) and lets slips show `merit` and `merit_no`. `decideWith` confirms the points on Document
+  check level 1 approval (if not already); `undo` of that approval clears them. The draw groups by
+  `applications.merit` (form points + marks): `merit` replaces `points` in totals, group, slips,
+  check, record (the hand-draw table's `points` column holds the merit total), options `withMerit`;
+  group candidates carry their form points and merit no. (`meritOrder` with the class's seed, as the
+  score report ranks); slip details Form points, Merit total, Merit no.; heading `{merit}` (`{points}`
+  filled the same); default heading "Draw slip - {class} (merit {merit})". `GET admissions/draw/blank`
+  (pages 1-20) prints empty slips in the class's layout. Page: Print slips (N) and Download buttons,
+  "How to print the slips and hold the draw" steps, Blank slips (pages) form.
+- Tests: admission-draw e2e 8 (merit totals, level-1 confirmation and undo, blank slips, merit
+  details), admission-results 17, admission-v2 updated (points confirmed by the Document check
+  approval); all admission suites + permission coverage 116; a11y draw (4) and score report (3).

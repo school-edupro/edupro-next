@@ -33,9 +33,10 @@ const dmy = (iso: string | null) =>
     : '-';
 
 /**
- * Draw of lots (docs/design/60), the nursery practice: the candidates of a class sharing a points total
- * confirmed at Document check get a printed slip each (twins one), with the school's own heading and
- * details; the slips drawn by hand are entered in order: the first seats offered, the rest wait-listed.
+ * Draw of lots (docs/design/60, 62), the nursery practice: the candidates of a class tied on a merit
+ * total (form points + test and interview marks), their points confirmed at Document check, get a
+ * printed slip each (twins one), with the school's own heading and details; the slips drawn by hand are
+ * entered in order: the first seats offered, the rest wait-listed.
  */
 export default async function DrawPage({
   searchParams,
@@ -47,15 +48,15 @@ export default async function DrawPage({
   if (!me.permissions.includes('admissions.application.view')) notFound();
   const canEdit = me.permissions.includes('admissions.schedule.manage');
   const opts = await apiFetch<DrawOptions>('/admissions/draw/options');
-  // the session and class with candidates on points first
+  // the session and class with candidates on the merit list first
   const cycle =
     opts.cycles.find((y) => y.id === sp.cycleId) ??
-    opts.cycles.find((y) => y.classes.some((k) => k.withPoints > 0)) ??
+    opts.cycles.find((y) => y.classes.some((k) => k.withMerit > 0)) ??
     opts.cycles.find((y) => y.classes.length) ??
     opts.cycles[0];
   const cls =
     cycle?.classes.find((k) => k.id === sp.classId) ??
-    cycle?.classes.find((k) => k.withPoints > 0) ??
+    cycle?.classes.find((k) => k.withMerit > 0) ??
     cycle?.classes[0];
   const categoryId = opts.categories.some((k) => k.id === okId(sp.categoryId))
     ? sp.categoryId!
@@ -65,7 +66,7 @@ export default async function DrawPage({
     <PageHeader
       kicker="Admissions"
       title="Draw of lots"
-      description="Where the seats run out inside one points total, the candidates of that total are drawn by lot in front of the parents. Print their slips (points confirmed at Document check; twins share a slip), draw them by hand, then enter the drawn order: the first seats are offered and the rest wait-listed in that order."
+      description="Where the seats run out inside one merit total (form points + test and interview marks), the candidates of that total are drawn by lot in front of the parents. Print their slips (points confirmed at Document check level 1; twins share a slip), draw them by hand, then enter the drawn order: the first seats are offered and the rest wait-listed in that order."
     />
   );
   if (!cycle || !cls)
@@ -86,16 +87,19 @@ export default async function DrawPage({
 
   let body: React.ReactNode = null;
   if (tab === 'slips') {
-    const points =
-      totals.totals.find((t) => t.points === sp.points)?.points ??
-      drawable[0]?.points ??
-      totals.totals[0]?.points ??
+    const merit =
+      totals.totals.find((t) => t.merit === sp.merit)?.merit ??
+      drawable[0]?.merit ??
+      totals.totals[0]?.merit ??
       null;
-    const group = points
+    const group = merit
       ? await apiFetch<DrawGroup>(
-          `/admissions/draw/group?${new URLSearchParams({ ...place, points }).toString()}`,
+          `/admissions/draw/group?${new URLSearchParams({ ...place, merit }).toString()}`,
         )
       : null;
+    const slipsHref = group
+      ? `/api/admission-draw/slips?${new URLSearchParams({ ...place, merit: group.merit }).toString()}`
+      : '';
     // each slip's number: twins not split share one
     const slipNo = new Map<string, number>();
     if (group) {
@@ -115,22 +119,22 @@ export default async function DrawPage({
     );
     body = (
       <>
-        <Card elevated title={`Points totals · ${cls.name}`}>
+        <Card elevated title={`Merit totals · ${cls.name}`}>
           {totals.totals.length ? (
             <div
               className="ep-table-wrap"
               tabIndex={0}
               role="region"
-              aria-label="Points totals (scrolls sideways)"
+              aria-label="Merit totals (scrolls sideways)"
             >
               <table className="ep-table ep-table--dense">
                 <caption className="ep-sr-only">
-                  Each points total of {cls.name}: candidates confirmed and not yet
+                  Each merit total of {cls.name}: candidates confirmed and not yet
                 </caption>
                 <thead>
                   <tr>
                     <th scope="col" className="ep-num">
-                      Points
+                      Merit total
                     </th>
                     <th scope="col" className="ep-num">
                       Confirmed
@@ -145,21 +149,21 @@ export default async function DrawPage({
                 </thead>
                 <tbody>
                   {totals.totals.map((t) => (
-                    <tr key={t.points} aria-current={t.points === points ? 'true' : undefined}>
+                    <tr key={t.merit} aria-current={t.merit === merit ? 'true' : undefined}>
                       <th scope="row" className="ep-num">
-                        {t.points}
+                        {t.merit}
                       </th>
                       <td className="ep-num">{t.confirmed}</td>
                       <td className="ep-num">{t.unconfirmed || '-'}</td>
                       <td>
-                        {t.points === points ? (
+                        {t.merit === merit ? (
                           <Badge tone="info">Shown below</Badge>
                         ) : (
                           <a
                             className="ep-btn ep-btn--ghost ep-btn--sm"
-                            href={href('slips', { points: t.points })}
+                            href={href('slips', { merit: t.merit })}
                           >
-                            Open<span className="ep-sr-only"> {t.points} points</span>
+                            Open<span className="ep-sr-only"> merit {t.merit}</span>
                           </a>
                         )}
                       </td>
@@ -170,8 +174,8 @@ export default async function DrawPage({
             </div>
           ) : (
             <p style={{ margin: 0 }}>
-              No candidate of {cls.name} has points yet (the points come from the form and are
-              confirmed at Document check).
+              No candidate of {cls.name} is on the merit list yet (the points come from the form and
+              are confirmed at Document check level 1; the marks are added after each test).
             </p>
           )}
         </Card>
@@ -191,28 +195,33 @@ export default async function DrawPage({
               }}
             >
               <h2 id="draw-group-h" className="ep-card__title" style={{ margin: 0 }}>
-                {group.points} points · {group.candidates.length} candidate
+                Merit {group.merit} · {group.candidates.length} candidate
                 {group.candidates.length === 1 ? '' : 's'} · {group.slips} slip
                 {group.slips === 1 ? '' : 's'}
               </h2>
               {group.candidates.length ? (
-                <span style={{ display: 'inline-flex', gap: 'var(--sp-2)', alignItems: 'center' }}>
-                  <span className="ep-field__help" style={{ margin: 0 }}>
-                    Slips
-                  </span>
-                  <ViewDownload
-                    href={`/api/admission-draw/slips?${new URLSearchParams({ ...place, points: group.points }).toString()}`}
-                    what={`the draw slips of ${cls.name}, ${group.points} points`}
-                  />
+                <span style={{ display: 'inline-flex', flexWrap: 'wrap', gap: 'var(--sp-2)' }}>
+                  <a
+                    className="ep-btn ep-btn--primary"
+                    href={slipsHref}
+                    target="_blank"
+                    rel="noopener"
+                  >
+                    Print slips ({group.slips})
+                  </a>
+                  <a className="ep-btn ep-btn--secondary" href={`${slipsHref}&save=1`}>
+                    Download
+                  </a>
                 </span>
               ) : null}
             </div>
             {group.unconfirmed.length ? (
               <p className="ep-alert ep-alert--warning" role="status">
                 <span>
-                  {group.unconfirmed.length} more with {group.points} points{' '}
-                  {group.unconfirmed.length === 1 ? 'has' : 'have'} no slip until the points are
-                  confirmed at Document check:{' '}
+                  {group.unconfirmed.length} more at merit {group.merit}{' '}
+                  {group.unconfirmed.length === 1 ? 'has' : 'have'} no slip until Document check
+                  level 1 approves {group.unconfirmed.length === 1 ? 'it' : 'them'} (that confirms
+                  the points):{' '}
                   {group.unconfirmed.map((x, i) => (
                     <span key={x.id}>
                       {i ? ', ' : ''}
@@ -255,6 +264,12 @@ export default async function DrawPage({
                       <th scope="col">Candidate</th>
                       <th scope="col">Father</th>
                       <th scope="col">Date of birth</th>
+                      <th scope="col" className="ep-num">
+                        Points
+                      </th>
+                      <th scope="col" className="ep-num">
+                        Merit no.
+                      </th>
                       <th scope="col">Category</th>
                       <th scope="col">At</th>
                     </tr>
@@ -272,6 +287,8 @@ export default async function DrawPage({
                         </td>
                         <td>{x.father ?? '-'}</td>
                         <td>{dmy(x.dob)}</td>
+                        <td className="ep-num">{x.points}</td>
+                        <td className="ep-num">{x.meritNo ?? '-'}</td>
                         <td>{x.category ?? '-'}</td>
                         <td>{x.stage ?? '-'}</td>
                       </tr>
@@ -284,6 +301,68 @@ export default async function DrawPage({
             )}
           </section>
         ) : null}
+        <section
+          className="ep-card"
+          aria-labelledby="draw-print-h"
+          style={{ marginTop: 'var(--sp-4)' }}
+        >
+          <h2 id="draw-print-h" className="ep-card__title">
+            How to print the slips and hold the draw
+          </h2>
+          <ol style={{ margin: 0, paddingLeft: '1.2rem', display: 'grid', gap: 'var(--sp-1)' }}>
+            <li>
+              Choose the merit total where the seats run out (the merit list on the Score report
+              shows it), check the candidates and twins above.
+            </li>
+            <li>
+              Press <strong>Print slips</strong>: the slips open as an A4 PDF. In the print window
+              choose A4, <strong>Actual size / 100 %</strong> (not &ldquo;Fit to page&rdquo;),
+              portrait, on plain white paper.
+            </li>
+            <li>
+              Cut along the dashed lines, fold each slip twice so the name does not show, and put
+              them all in the box in front of the parents.
+            </li>
+            <li>Draw the slips one by one and read out each name; keep them in the order drawn.</li>
+            <li>
+              Open{' '}
+              <a href={href('record')} style={{ textDecoration: 'underline' }}>
+                Record the draw
+              </a>
+              : enter the seats to fill and scan each slip&apos;s barcode (or type its registration
+              no.) in the order drawn. Check, then Record: the first seats are offered and the rest
+              wait-listed in that order.
+            </li>
+          </ol>
+          <p className="ep-field__help">
+            The slip&apos;s heading, details, draw date and venue, slips per page and footer are in{' '}
+            <a href={href('settings')}>Slip settings</a>.
+          </p>
+          <form
+            method="get"
+            action="/api/admission-draw/blank"
+            target="_blank"
+            style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--sp-2)', alignItems: 'end' }}
+          >
+            <input type="hidden" name="cycleId" value={cycle.id} />
+            <input type="hidden" name="classId" value={cls.id} />
+            <label className="ep-field" style={{ margin: 0 }}>
+              <span className="ep-field__label">Blank slips: pages</span>
+              <input
+                className="ep-input"
+                type="number"
+                name="pages"
+                min={1}
+                max={20}
+                defaultValue={1}
+                style={{ width: '6rem' }}
+              />
+            </label>
+            <button type="submit" className="ep-btn ep-btn--secondary">
+              Print blank slips
+            </button>
+          </form>
+        </section>
       </>
     );
   } else if (tab === 'settings') {
@@ -316,10 +395,12 @@ export default async function DrawPage({
                 cycleId={cycle.id}
                 classId={cls.id}
                 categoryId={categoryId}
-                totals={drawable.map((t) => ({ points: t.points, slips: t.confirmed }))}
+                totals={drawable.map((t) => ({ merit: t.merit, slips: t.confirmed }))}
               />
             ) : (
-              <p style={{ margin: 0 }}>No candidate of {cls.name} has confirmed points to draw.</p>
+              <p style={{ margin: 0 }}>
+                No candidate of {cls.name} is ready to draw (points confirmed, on the merit list).
+              </p>
             )}
           </Card>
         ) : null}
@@ -337,7 +418,7 @@ export default async function DrawPage({
                   <tr>
                     <th scope="col">When</th>
                     <th scope="col" className="ep-num">
-                      Points
+                      Merit
                     </th>
                     <th scope="col">Category</th>
                     <th scope="col" className="ep-num">
@@ -357,7 +438,7 @@ export default async function DrawPage({
                   {records.map((r) => (
                     <tr key={r.id}>
                       <td>{whenIst(r.at)}</td>
-                      <td className="ep-num">{r.points}</td>
+                      <td className="ep-num">{r.merit}</td>
                       <td>{r.category ?? 'Every category'}</td>
                       <td className="ep-num">
                         {r.seats}
@@ -369,7 +450,7 @@ export default async function DrawPage({
                       <td>
                         <ViewDownload
                           href={`/api/admission-draw/result/${r.id}`}
-                          what={`the result of the ${r.points} points draw`}
+                          what={`the result of the merit ${r.merit} draw`}
                         />
                       </td>
                     </tr>

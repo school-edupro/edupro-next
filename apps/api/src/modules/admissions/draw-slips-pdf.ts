@@ -28,6 +28,8 @@ export const SLIP_FIELDS = [
   'number',
   'sno',
   'points',
+  'merit',
+  'merit_no',
   'category',
   'session',
   'draw',
@@ -43,8 +45,13 @@ export interface Slip {
   mother: string | null;
   dob: string | null;
   points: string;
+  /** the merit total and the place in the merit list (docs/design/62) */
+  merit: string;
+  meritNo: string | null;
   category: string | null;
   photos: Array<{ contentType: string; bytes: Buffer }>;
+  /** an empty slip to fill by hand: the details with lines to write on */
+  blank?: boolean;
 }
 
 export interface SlipsInput {
@@ -134,9 +141,13 @@ export async function drawSlipsPdf(p: SlipsInput): Promise<Buffer> {
       ['number', 'Reg. No.', s.numbers.join(' & '), true],
       ['sno', 'S.No.', String(s.sno), false],
       ['points', 'Points', s.points, false],
+      ['merit', 'Merit total', s.merit, false],
+      ['merit_no', 'Merit no.', s.meritNo, false],
       ['category', 'Category', s.category, false],
     ];
-    return all.filter(([k]) => show.has(k)).map(([, l, v, two]) => [l, v ?? '-', two]);
+    return all
+      .filter(([k]) => show.has(k))
+      .map(([, l, v, two]) => [l, s.blank ? '' : (v ?? '-'), two]);
   }
 
   async function slip(page: PDFPage, s: Slip, x: number, top: number, w: number, h: number) {
@@ -164,7 +175,7 @@ export async function drawSlipsPdf(p: SlipsInput): Promise<Buffer> {
       show.has('draw') && p.draw ? `Draw: ${p.draw}` : null,
     ].filter((v): v is string => Boolean(v));
     const rows = details(s);
-    const number = s.numbers[0] ?? '';
+    const number = s.blank ? '' : (s.numbers[0] ?? '');
 
     // the largest text that fits the slip
     const sizes = (fs: number) => {
@@ -175,9 +186,11 @@ export async function drawSlipsPdf(p: SlipsInput): Promise<Buffer> {
       const labelW = Math.max(...rows.map(([l]) => bold.widthOfTextAtSize(`${l}:`, fs)), 0) + 8;
       const valueW = inner - labelW - (photoW ? photoW + 6 : 0);
       const heading = wrap(p.heading.toUpperCase(), bold, fs + 0.5, inner, 2);
-      const values = rows.map(([, v, two]) =>
-        two ? wrap(v, regular, fs, valueW, 2) : [fit(v, regular, fs, valueW)],
-      );
+      const values = rows.map(([, v, two]) => {
+        // an empty value still takes its line (a blank slip)
+        const lines = two ? wrap(v, regular, fs, valueW, 2) : [fit(v, regular, fs, valueW)];
+        return lines.length ? lines : [''];
+      });
       const notes = p.footer ? wrap(p.footer, regular, fs - 1.5, inner, 2) : [];
       const barH = number ? fs * 2.4 : 0;
       const height =
@@ -267,6 +280,13 @@ export async function drawSlipsPdf(p: SlipsInput): Promise<Buffer> {
     });
     rows.forEach(([label], j) => {
       page.drawText(latin(`${label}:`), { x: left, y: y - fs, size: fs, font: bold, color: INK });
+      if (s.blank)
+        page.drawLine({
+          start: { x: left + z.labelW, y: y - fs - 2 },
+          end: { x: left + z.labelW + z.valueW, y: y - fs - 2 },
+          thickness: 0.5,
+          color: LINE,
+        });
       for (const line of z.values[j]!) {
         page.drawText(line, {
           x: left + z.labelW,

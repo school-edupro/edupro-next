@@ -12,9 +12,9 @@ const PlaceSchema = z.object({
 });
 export class DrawPlaceDto extends createZodDto(PlaceSchema) {}
 
-/** One points total of the group. */
-const Points = z.string().regex(/^-?\d{1,7}(\.\d{1,2})?$/, 'A points total');
-export const DrawGroupSchema = PlaceSchema.extend({ points: Points });
+/** One merit total of the group: form points + test and interview marks (docs/design/62). */
+const Merit = z.string().regex(/^-?\d{1,7}(\.\d{1,2})?$/, 'A merit total');
+export const DrawGroupSchema = PlaceSchema.extend({ merit: Merit });
 export class DrawGroupDto extends createZodDto(DrawGroupSchema) {}
 
 /** Twins confirmed on one slip, or split onto a slip each. */
@@ -58,3 +58,11 @@ export const DrawRecordSchema = DrawGroupSchema.extend({
 export class DrawRecordDto extends createZodDto(DrawRecordSchema) {}
 export const DrawRecordsQuerySchema = z.object({ cycleId: IdSchema, classId: IdSchema });
 export class DrawRecordsQueryDto extends createZodDto(DrawRecordsQuerySchema) {}
+
+/** Blank slips in the class's layout, to fill by hand (docs/design/62). */
+export const DrawBlankSchema = z.object({
+  cycleId: IdSchema,
+  classId: IdSchema,
+  pages: z.coerce.number().int().min(1).max(20).default(1),
+});
+export class DrawBlankDto extends createZodDto(DrawBlankSchema) {}

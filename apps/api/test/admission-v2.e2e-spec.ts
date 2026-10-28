@@ -1993,7 +1993,8 @@ describe('online admission (e2e)', () => {
 
     it('works merit points out from the answers; the office confirms or awards differently with a reason (docs/design/40)', async () => {
       const r = await reg(appA);
-      expect(r.json().points).toMatchObject({ total: 5, confirmedAt: null });
+      // passing Document check's first level confirmed them (docs/design/62)
+      expect(r.json().points).toMatchObject({ total: 5, confirmedAt: expect.any(String) });
       expect(r.json().points.lines).toEqual([
         { name: 'Sibling studies here', max: 20, auto: 0, points: 0 },
         { name: 'Girl child', max: 5, auto: 5, points: 5 },

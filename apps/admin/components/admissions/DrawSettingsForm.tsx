@@ -17,7 +17,7 @@ const toLocal = (iso: string | null) => {
 };
 
 /**
- * The draw slip's settings (docs/design/60): the heading (with {points}, {class}, {category},
+ * The draw slip's settings (docs/design/60, 62): the heading (with {merit}, {class}, {category},
  * {session}), the details shown, the draw's date and venue, the footer note, slips per A4 page and the
  * logo; saved for the whole session, or as the class's own.
  */
@@ -121,7 +121,8 @@ export function DrawSettingsForm({
           onChange={(e) => setS({ ...s, heading: e.target.value })}
         />
         <span className="ep-field__help">
-          {'{points}'}, {'{class}'}, {'{category}'} and {'{session}'} are filled in on each slip.
+          {'{merit}'} (the merit total), {'{class}'}, {'{category}'} and {'{session}'} are filled in
+          on each slip.
         </span>
       </label>
       <fieldset className="ep-field" style={{ border: 0, padding: 0, margin: 0 }}>

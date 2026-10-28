@@ -1054,6 +1054,13 @@ export class AdmissionProcessService {
         ctx.user.displayName,
       ],
     );
+    // Document check's first level confirms the points as they stand (docs/design/62)
+    if (stage.kind === 'document_check' && levelNo === 1 && decision === 'approved')
+      await c.query(
+        `UPDATE applications SET points_confirmed_at = COALESCE(points_confirmed_at, now()),
+                points_confirmed_by = COALESCE(points_confirmed_by, $2) WHERE id = $1`,
+        [id, ctx.user.id],
+      );
     const label = `${stage.name}${step.levels.length > 1 ? ` (${level?.name ?? `level ${levelNo}`})` : ''}`;
     const extra = [
       attendance === 'absent' ? 'absent' : null,
@@ -1552,6 +1559,17 @@ export class AdmissionProcessService {
         `UPDATE admission_stage_results SET undone_at = now(), undone_by = $2, undo_reason = $3 WHERE id = ANY($1::bigint[])`,
         [ids, ctx.user.id, dto.reason],
       );
+      // Document check's first approval undone: the points are no longer confirmed (docs/design/62)
+      const level1 = await c.query(
+        `SELECT 1 FROM admission_stage_results x JOIN admission_stages st ON st.id = x.stage_id
+          WHERE x.id = ANY($1::bigint[]) AND st.kind = 'document_check' AND x.level = 1 AND x.decision = 'approved'`,
+        [ids],
+      );
+      if (level1.rowCount)
+        await c.query(
+          `UPDATE applications SET points_confirmed_at = NULL, points_confirmed_by = NULL WHERE id = $1`,
+          [id],
+        );
       await c.query(
         `UPDATE applications SET status = 'under_review', wait_rank = NULL, offered_at = NULL, offer_expires_at = NULL, admission_fee = NULL,
                 decided_at = NULL, decided_by = NULL, updated_at = now() WHERE id = $1`,

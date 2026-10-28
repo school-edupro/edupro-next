@@ -1,4 +1,4 @@
-/** Draw of lots: slips for a points total, their settings, the hand draw recorded (docs/design/60). */
+/** Draw of lots: slips for a merit total, their settings, the hand draw recorded (docs/design/60, 62). */
 
 export const SLIP_FIELDS = [
   ['photo', 'Photo'],
@@ -8,7 +8,9 @@ export const SLIP_FIELDS = [
   ['dob', 'Date of birth'],
   ['number', 'Registration no.'],
   ['sno', 'S.No.'],
-  ['points', 'Points'],
+  ['points', 'Form points'],
+  ['merit', 'Merit total'],
+  ['merit_no', 'Merit no.'],
   ['category', 'Category'],
   ['session', 'Session'],
   ['draw', 'Draw date and venue'],
@@ -19,8 +21,8 @@ export interface DrawOptions {
   cycles: Array<{
     id: string;
     name: string;
-    /** withPoints: candidates with points who may still be drawn */
-    classes: Array<{ id: string; name: string; withPoints: number }>;
+    /** withMerit: candidates on the merit list who may still be drawn */
+    classes: Array<{ id: string; name: string; withMerit: number }>;
   }>;
   categories: Array<{ id: string; name: string }>;
 }
@@ -31,7 +33,7 @@ export interface DrawPlace {
 }
 export interface DrawTotals {
   place: DrawPlace;
-  totals: Array<{ points: string; confirmed: number; unconfirmed: number }>;
+  totals: Array<{ merit: string; confirmed: number; unconfirmed: number }>;
 }
 export interface DrawTwin {
   ids: string[];
@@ -39,7 +41,7 @@ export interface DrawTwin {
 }
 export interface DrawGroup {
   place: DrawPlace;
-  points: string;
+  merit: string;
   candidates: Array<{
     id: string;
     number: string;
@@ -48,6 +50,8 @@ export interface DrawGroup {
     dob: string | null;
     category: string | null;
     stage: string | null;
+    points: string;
+    meritNo: string | null;
   }>;
   unconfirmed: Array<{ id: string; number: string; candidate: string | null }>;
   twins: DrawTwin[];
@@ -83,7 +87,7 @@ export interface DrawPlan {
 }
 export interface DrawRecord {
   id: string;
-  points: string;
+  merit: string;
   category: string | null;
   seats: number;
   offered: number;
