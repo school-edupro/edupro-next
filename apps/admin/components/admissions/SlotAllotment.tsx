@@ -5,6 +5,7 @@ import { useState, useTransition } from 'react';
 import { ViewDownload } from '@/components/admissions/ViewDownload';
 import type { SlotDetail } from '@/lib/admission-process';
 import { allotSlot, notifySlot, unallotSlot } from '@/lib/admission-process-actions';
+import { useSlotFilter } from '@/components/admissions/SlotFilter';
 
 const DECIDED: Record<string, [string, 'success' | 'warning' | 'danger' | 'info']> = {
   approved: ['Passed', 'success'],
@@ -25,6 +26,8 @@ export function SlotAllotment({ slot, canAllot }: { slot: SlotDetail; canAllot: 
   const [pending, start] = useTransition();
   const [notify, setNotify] = useState(true);
   const [msg, setMsg] = useState<{ tone: 'success' | 'danger'; text: string } | null>(null);
+  // on the slot page: only the candidates its search and filters show (docs/design/61)
+  const filter = useSlotFilter();
   const room = slot.capacity - slot.candidates.length;
   const next = Math.min(room, slot.waiting);
   const unmailed = slot.candidates.filter((c) => !c.notified).length;
@@ -165,62 +168,64 @@ export function SlotAllotment({ slot, canAllot }: { slot: SlotDetail; canAllot: 
               </tr>
             </thead>
             <tbody>
-              {slot.candidates.map((c) => {
-                const d = c.decision ? DECIDED[c.decision] : null;
-                const who = c.candidate ?? c.number ?? 'the candidate';
-                return (
-                  <tr key={c.applicationId}>
-                    <td className="ep-num">{c.rollNo}</td>
-                    <td>
-                      <a href={`/admissions/registrations/${c.applicationId}`}>{who}</a>
-                      <div className="ep-field__help" style={{ margin: 0 }}>
-                        {c.number}
-                      </div>
-                    </td>
-                    <td>{c.className}</td>
-                    <td>
-                      {d ? (
-                        <Badge tone={d[1]}>{d[0]}</Badge>
-                      ) : c.atStage ? (
-                        <Badge tone="info">Waiting</Badge>
-                      ) : (
-                        <Badge tone="neutral">Moved on</Badge>
-                      )}
-                      {c.notified ? null : (
-                        <div className="ep-field__help" style={{ margin: 0 }}>
-                          Schedule not mailed
-                        </div>
-                      )}
-                    </td>
-                    <td>
-                      <ViewDownload
-                        href={`/api/admission-desk/admit/${c.applicationId}`}
-                        what={`the admit card of ${who}`}
-                      />
-                    </td>
-                    {canAllot ? (
+              {slot.candidates
+                .filter((c) => !filter || filter.visible.has(c.applicationId))
+                .map((c) => {
+                  const d = c.decision ? DECIDED[c.decision] : null;
+                  const who = c.candidate ?? c.number ?? 'the candidate';
+                  return (
+                    <tr key={c.applicationId}>
+                      <td className="ep-num">{c.rollNo}</td>
                       <td>
-                        {!c.decision ? (
-                          <button
-                            type="button"
-                            className="ep-btn ep-btn--ghost ep-btn--sm"
-                            disabled={pending}
-                            onClick={() =>
-                              start(async () => {
-                                const r = await unallotSlot(slot.id, c.applicationId);
-                                if (r.ok) router.refresh();
-                                else setMsg({ tone: 'danger', text: r.error });
-                              })
-                            }
-                          >
-                            Remove<span className="ep-sr-only"> {who}</span>
-                          </button>
-                        ) : null}
+                        <a href={`/admissions/registrations/${c.applicationId}`}>{who}</a>
+                        <div className="ep-field__help" style={{ margin: 0 }}>
+                          {c.number}
+                        </div>
                       </td>
-                    ) : null}
-                  </tr>
-                );
-              })}
+                      <td>{c.className}</td>
+                      <td>
+                        {d ? (
+                          <Badge tone={d[1]}>{d[0]}</Badge>
+                        ) : c.atStage ? (
+                          <Badge tone="info">Waiting</Badge>
+                        ) : (
+                          <Badge tone="neutral">Moved on</Badge>
+                        )}
+                        {c.notified ? null : (
+                          <div className="ep-field__help" style={{ margin: 0 }}>
+                            Schedule not mailed
+                          </div>
+                        )}
+                      </td>
+                      <td>
+                        <ViewDownload
+                          href={`/api/admission-desk/admit/${c.applicationId}`}
+                          what={`the admit card of ${who}`}
+                        />
+                      </td>
+                      {canAllot ? (
+                        <td>
+                          {!c.decision ? (
+                            <button
+                              type="button"
+                              className="ep-btn ep-btn--ghost ep-btn--sm"
+                              disabled={pending}
+                              onClick={() =>
+                                start(async () => {
+                                  const r = await unallotSlot(slot.id, c.applicationId);
+                                  if (r.ok) router.refresh();
+                                  else setMsg({ tone: 'danger', text: r.error });
+                                })
+                              }
+                            >
+                              Remove<span className="ep-sr-only"> {who}</span>
+                            </button>
+                          ) : null}
+                        </td>
+                      ) : null}
+                    </tr>
+                  );
+                })}
             </tbody>
           </table>
         </div>

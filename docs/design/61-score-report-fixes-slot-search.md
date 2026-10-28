@@ -63,3 +63,23 @@ Decided here, change any before building:
 ## Not in this plan
 
 Saved filter sets; searching across every slot of a session (Test results does that).
+
+## As built (28 Oct 2026)
+
+- **Part 1** (416a1df): `GET admissions/score-report/options` (sessions and classes with registration
+  counts); the page opens on the session and class with registrations and `SessionClassPicker` applies
+  Session and Class at once (other filters kept). `q` (name or registration no.) on the report and its
+  Excel / PDF; the rank stays the class's. `marks` columns: per Written test / Interview stage of the
+  class's process, the paper's parts (with maximum) and "<stage> total" (AB when absent); a stage
+  without a paper (or another stage with a maximum) one column of its latest marks per level; rows carry
+  `cells`. Excel headings "Written test · English (50)"; PDF upright while every narrow column gets 28
+  points, landscape beyond, headings on two lines, a stage's total headed "<stage> (<max>)".
+- **Part 2**: `SlotFilter.tsx` (provider, bar, `useSlotFilter`): search (name or registration no.
+  contains, roll no. exact), Stands (All / To decide / On hold / Decided), Marks (Any / No marks yet /
+  Absent), Below cut-off, Class (when the slot has more than one); "Showing x of y", Clear; kept in the
+  address (`q`, `stands`, `marks`, `below`, `cls`, replaced in place). On the Marks tab the class grids
+  (`ResultsGrid`) and the one-figure table (`SlotCandidates`) show only matching rows; the Allotment
+  tab's list (`SlotAllotment`) too. The Test results page's grid is unaffected (no provider).
+- Tests: admission-results e2e 16 (score report columns against the grids, search, downloads); all
+  admission suites + permission coverage 113; a11y score report (2 views), slot pages (8 views incl.
+  filtered); browser on Class IX (subjects 10/15/12/6/7 = 50 for Myra) and slot 143.

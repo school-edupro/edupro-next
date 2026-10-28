@@ -4,6 +4,11 @@ import { ResultsGrid } from '@/components/admissions/ResultsGrid';
 import { ResultsTools } from '@/components/admissions/ResultsTools';
 import { SlotAllotment } from '@/components/admissions/SlotAllotment';
 import { SlotCandidates } from '@/components/admissions/SlotCandidates';
+import {
+  SlotFilterBar,
+  SlotFilterProvider,
+  type SlotItem,
+} from '@/components/admissions/SlotFilter';
 import { SlotForm } from '@/components/admissions/SlotForm';
 import { Notice } from '@/components/Notice';
 import { whenIst, type SlotDetail } from '@/lib/admission-process';
@@ -68,7 +73,7 @@ export default async function SlotPage({
     stageId: slot.stageId,
   });
   const grids =
-    tab === 'marks' && marksStage
+    (tab === 'marks' || tab === 'allot') && marksStage
       ? await Promise.all(
           paperClasses.map(async ([classId, className]) => ({
             classId,
@@ -79,6 +84,33 @@ export default async function SlotPage({
           })),
         )
       : [];
+  // the candidates as the search and quick filters see them (docs/design/61)
+  const byRow = new Map(grids.flatMap((g) => g.data.rows.map((r) => [r.id, r] as const)));
+  const items: SlotItem[] = slot.candidates.map((c) => {
+    const g = byRow.get(c.applicationId);
+    return {
+      id: c.applicationId,
+      text: `${c.candidate ?? ''} ${c.number ?? ''}`.toLowerCase(),
+      roll: String(c.rollNo),
+      classId: c.classId,
+      stands:
+        c.decision === 'hold'
+          ? 'held'
+          : (c.decision && c.decision !== 'hold') || !c.atStage
+            ? 'decided'
+            : 'todecide',
+      marked: g
+        ? g.marked
+        : c.attendance === 'absent' ||
+          c.marks !== null ||
+          Object.values(c.partMarks).some((v) => v !== null),
+      absent: g ? g.absent : c.attendance === 'absent',
+      below: g?.below ?? false,
+    };
+  });
+  const slotClasses = [
+    ...new Map(slot.candidates.map((c) => [c.classId, c.className] as const)),
+  ].map(([id, name]) => ({ id, name }));
   const meta =
     tab === 'details'
       ? await apiFetch<{
@@ -127,7 +159,8 @@ export default async function SlotPage({
       </nav>
 
       {tab === 'marks' ? (
-        <>
+        <SlotFilterProvider items={items} classes={slotClasses}>
+          {slot.candidates.length ? <SlotFilterBar /> : null}
           {slot.waiting ? (
             <p className="ep-alert ep-alert--info" role="status">
               <span>
@@ -177,7 +210,7 @@ export default async function SlotPage({
               <a href={href('allot')}>Allotment and admit cards</a>.
             </p>
           ) : null}
-        </>
+        </SlotFilterProvider>
       ) : null}
 
       {tab === 'excel' ? (
@@ -202,9 +235,12 @@ export default async function SlotPage({
       ) : null}
 
       {tab === 'allot' ? (
-        <Card elevated title="Allotment and admit cards">
-          <SlotAllotment slot={slot} canAllot={canManage} />
-        </Card>
+        <SlotFilterProvider items={items} classes={slotClasses}>
+          {slot.candidates.length ? <SlotFilterBar /> : null}
+          <Card elevated title="Allotment and admit cards">
+            <SlotAllotment slot={slot} canAllot={canManage} />
+          </Card>
+        </SlotFilterProvider>
       ) : null}
 
       {tab === 'details' ? (

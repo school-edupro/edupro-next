@@ -3,6 +3,7 @@ import { useRouter } from 'next/navigation';
 import { useState, useTransition } from 'react';
 import type { SlotDetail } from '@/lib/admission-process';
 import { allotSlot, saveSlotResults, unallotSlot } from '@/lib/admission-process-actions';
+import { useSlotFilter } from '@/components/admissions/SlotFilter';
 
 type Row = {
   attendance: 'present' | 'absent';
@@ -34,6 +35,8 @@ export function SlotCandidates({
   canDecide: boolean;
 }) {
   const router = useRouter();
+  // on the slot page: only the candidates its search and filters show (docs/design/61)
+  const filter = useSlotFilter();
   const slot = only
     ? { ...whole, candidates: whole.candidates.filter((c) => only.includes(c.applicationId)) }
     : whole;
@@ -120,139 +123,143 @@ export function SlotCandidates({
               </tr>
             </thead>
             <tbody>
-              {slot.candidates.map((c) => {
-                const r = rows[c.applicationId]!;
-                const done = (Boolean(c.decision) && c.decision !== 'hold') || !c.atStage;
-                return (
-                  <tr key={c.applicationId}>
-                    <td>{c.rollNo}</td>
-                    <td>
-                      <a href={`/admissions/registrations/${c.applicationId}`}>
-                        {c.candidate ?? c.number}
-                      </a>
-                      <div className="ep-kicker">
-                        {c.number} · {c.className}
-                      </div>
-                    </td>
-                    <td>
-                      <select
-                        className="ep-select"
-                        aria-label={`Attendance of ${c.candidate ?? c.number ?? ''}`}
-                        value={r.attendance}
-                        disabled={done || !canDecide}
-                        onChange={(e) =>
-                          set(c.applicationId, { attendance: e.target.value as Row['attendance'] })
-                        }
-                      >
-                        <option value="present">Present</option>
-                        <option value="absent">Absent</option>
-                      </select>
-                    </td>
-                    {marksStage ? (
+              {slot.candidates
+                .filter((c) => !filter || filter.visible.has(c.applicationId))
+                .map((c) => {
+                  const r = rows[c.applicationId]!;
+                  const done = (Boolean(c.decision) && c.decision !== 'hold') || !c.atStage;
+                  return (
+                    <tr key={c.applicationId}>
+                      <td>{c.rollNo}</td>
                       <td>
-                        {c.parts ? (
-                          <span className="ep-slot-parts">
-                            {c.parts.map((pt) => (
-                              <label key={pt.id} className="ep-field">
-                                <span className="ep-field__help">
-                                  {pt.name} /{pt.maxMarks}
-                                </span>
-                                <input
-                                  className="ep-input"
-                                  type="number"
-                                  min={0}
-                                  max={pt.maxMarks}
-                                  step="0.5"
-                                  aria-label={`${pt.name} marks of ${c.candidate ?? c.number ?? ''}`}
-                                  value={r.parts[pt.id] ?? ''}
-                                  disabled={done || !canDecide || r.attendance === 'absent'}
-                                  onChange={(e) =>
-                                    set(c.applicationId, {
-                                      parts: { ...r.parts, [pt.id]: e.target.value },
-                                    })
-                                  }
-                                />
-                              </label>
-                            ))}
-                          </span>
-                        ) : (
-                          <input
-                            className="ep-input"
-                            type="number"
-                            min={0}
-                            max={slot.maxMarks ?? undefined}
-                            step="0.5"
-                            aria-label={`Marks of ${c.candidate ?? c.number ?? ''}`}
-                            value={r.marks}
-                            disabled={done || !canDecide || r.attendance === 'absent'}
-                            onChange={(e) => set(c.applicationId, { marks: e.target.value })}
-                          />
-                        )}
+                        <a href={`/admissions/registrations/${c.applicationId}`}>
+                          {c.candidate ?? c.number}
+                        </a>
+                        <div className="ep-kicker">
+                          {c.number} · {c.className}
+                        </div>
                       </td>
-                    ) : null}
-                    <td>
-                      {c.decision && c.decision !== 'hold' ? (
-                        <>
-                          {DECIDED[c.decision] ?? c.decision}
-                          <div className="ep-field__help" style={{ margin: 0 }}>
-                            <a href={`/admissions/registrations/${c.applicationId}`}>
-                              Change on the registration
-                            </a>
-                          </div>
-                        </>
-                      ) : (
+                      <td>
                         <select
                           className="ep-select"
-                          aria-label={`Decision for ${c.candidate ?? c.number ?? ''}`}
-                          value={r.decision}
+                          aria-label={`Attendance of ${c.candidate ?? c.number ?? ''}`}
+                          value={r.attendance}
                           disabled={done || !canDecide}
                           onChange={(e) =>
-                            set(c.applicationId, { decision: e.target.value as Row['decision'] })
-                          }
-                        >
-                          <option value="">Not yet</option>
-                          <option value="approve">Pass</option>
-                          <option value="hold">Hold</option>
-                          <option value="reject">Not selected</option>
-                        </select>
-                      )}
-                      {c.decision === 'hold' ? (
-                        <div className="ep-field__help" style={{ margin: 0 }}>
-                          On hold now
-                        </div>
-                      ) : null}
-                    </td>
-                    <td>
-                      <input
-                        className="ep-input"
-                        aria-label={`Remarks for ${c.candidate ?? c.number ?? ''}`}
-                        maxLength={1000}
-                        value={r.remarks}
-                        disabled={done || !canDecide}
-                        onChange={(e) => set(c.applicationId, { remarks: e.target.value })}
-                      />
-                    </td>
-                    <td>
-                      {canAllot && !c.decision ? (
-                        <button
-                          type="button"
-                          className="ep-btn ep-btn--ghost ep-btn--sm"
-                          disabled={pending}
-                          onClick={() =>
-                            start(async () => {
-                              const x = await unallotSlot(slot.id, c.applicationId);
-                              if (x.ok) router.refresh();
-                              else setMsg({ tone: 'danger', text: x.error });
+                            set(c.applicationId, {
+                              attendance: e.target.value as Row['attendance'],
                             })
                           }
                         >
-                          Remove
-                        </button>
+                          <option value="present">Present</option>
+                          <option value="absent">Absent</option>
+                        </select>
+                      </td>
+                      {marksStage ? (
+                        <td>
+                          {c.parts ? (
+                            <span className="ep-slot-parts">
+                              {c.parts.map((pt) => (
+                                <label key={pt.id} className="ep-field">
+                                  <span className="ep-field__help">
+                                    {pt.name} /{pt.maxMarks}
+                                  </span>
+                                  <input
+                                    className="ep-input"
+                                    type="number"
+                                    min={0}
+                                    max={pt.maxMarks}
+                                    step="0.5"
+                                    aria-label={`${pt.name} marks of ${c.candidate ?? c.number ?? ''}`}
+                                    value={r.parts[pt.id] ?? ''}
+                                    disabled={done || !canDecide || r.attendance === 'absent'}
+                                    onChange={(e) =>
+                                      set(c.applicationId, {
+                                        parts: { ...r.parts, [pt.id]: e.target.value },
+                                      })
+                                    }
+                                  />
+                                </label>
+                              ))}
+                            </span>
+                          ) : (
+                            <input
+                              className="ep-input"
+                              type="number"
+                              min={0}
+                              max={slot.maxMarks ?? undefined}
+                              step="0.5"
+                              aria-label={`Marks of ${c.candidate ?? c.number ?? ''}`}
+                              value={r.marks}
+                              disabled={done || !canDecide || r.attendance === 'absent'}
+                              onChange={(e) => set(c.applicationId, { marks: e.target.value })}
+                            />
+                          )}
+                        </td>
                       ) : null}
-                    </td>
-                  </tr>
-                );
-              })}
+                      <td>
+                        {c.decision && c.decision !== 'hold' ? (
+                          <>
+                            {DECIDED[c.decision] ?? c.decision}
+                            <div className="ep-field__help" style={{ margin: 0 }}>
+                              <a href={`/admissions/registrations/${c.applicationId}`}>
+                                Change on the registration
+                              </a>
+                            </div>
+                          </>
+                        ) : (
+                          <select
+                            className="ep-select"
+                            aria-label={`Decision for ${c.candidate ?? c.number ?? ''}`}
+                            value={r.decision}
+                            disabled={done || !canDecide}
+                            onChange={(e) =>
+                              set(c.applicationId, { decision: e.target.value as Row['decision'] })
+                            }
+                          >
+                            <option value="">Not yet</option>
+                            <option value="approve">Pass</option>
+                            <option value="hold">Hold</option>
+                            <option value="reject">Not selected</option>
+                          </select>
+                        )}
+                        {c.decision === 'hold' ? (
+                          <div className="ep-field__help" style={{ margin: 0 }}>
+                            On hold now
+                          </div>
+                        ) : null}
+                      </td>
+                      <td>
+                        <input
+                          className="ep-input"
+                          aria-label={`Remarks for ${c.candidate ?? c.number ?? ''}`}
+                          maxLength={1000}
+                          value={r.remarks}
+                          disabled={done || !canDecide}
+                          onChange={(e) => set(c.applicationId, { remarks: e.target.value })}
+                        />
+                      </td>
+                      <td>
+                        {canAllot && !c.decision ? (
+                          <button
+                            type="button"
+                            className="ep-btn ep-btn--ghost ep-btn--sm"
+                            disabled={pending}
+                            onClick={() =>
+                              start(async () => {
+                                const x = await unallotSlot(slot.id, c.applicationId);
+                                if (x.ok) router.refresh();
+                                else setMsg({ tone: 'danger', text: x.error });
+                              })
+                            }
+                          >
+                            Remove
+                          </button>
+                        ) : null}
+                      </td>
+                    </tr>
+                  );
+                })}
             </tbody>
           </table>
         </div>

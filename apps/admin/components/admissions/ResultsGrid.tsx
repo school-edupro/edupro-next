@@ -5,6 +5,7 @@ import { useState, useTransition } from 'react';
 import type { Paper } from '@/lib/admission-papers';
 import { STATE_WORDS, type ResultRow } from '@/lib/admission-results';
 import { saveResults } from '@/lib/admission-results-actions';
+import { useSlotFilter } from '@/components/admissions/SlotFilter';
 
 /** What the screen holds for a row: the marks as typed, absent, remark, a decision, a reason. */
 type Draft = {
@@ -51,6 +52,9 @@ export function ResultsGrid({
   const [drafts, setDrafts] = useState<Record<string, Draft>>({});
   const [msg, setMsg] = useState<{ tone: 'success' | 'danger'; text: string } | null>(null);
   const [failed, setFailed] = useState<Record<string, string>>({});
+  // on the slot page: only the rows its search and filters show (docs/design/61)
+  const filter = useSlotFilter();
+  const shown = filter ? rows.filter((r) => filter.visible.has(r.id)) : rows;
 
   const base = (r: ResultRow): Draft => ({
     marks: Object.fromEntries(
@@ -175,7 +179,14 @@ export function ResultsGrid({
               </tr>
             </thead>
             <tbody>
-              {rows.map((r) => {
+              {!shown.length ? (
+                <tr>
+                  <td colSpan={paper.parts.length + (canEdit ? 7 : 6)}>
+                    No candidate of this class matches the search.
+                  </td>
+                </tr>
+              ) : null}
+              {shown.map((r) => {
                 const d = now(r);
                 const f = figures(d);
                 const decided = r.state === 'selected' || r.state === 'rejected';

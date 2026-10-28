@@ -44,6 +44,8 @@ const PAGES = [
   '/admissions/schedule/143?tab=details',
   '/admissions/schedule/159',
   '/admissions/schedule/159?tab=allot',
+  '/admissions/schedule/143?q=a&stands=decided&below=1',
+  '/admissions/schedule/143?tab=allot&q=myra',
   '/admissions/selection',
   '/admissions/setup/papers',
   '/admissions/setup/papers?view=list',
