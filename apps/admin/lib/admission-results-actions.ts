@@ -120,6 +120,24 @@ export async function resultsExport(query: string, format: 'xlsx' | 'pdf'): Prom
   }
 }
 
+/** The whole session: an overview, then each class and stage (docs/design/58, part 3). */
+export async function resultsSessionExport(
+  cycleId: string,
+  format: 'xlsx' | 'pdf',
+): Promise<Out<File64>> {
+  if (!okId(cycleId)) return { ok: false, error: 'Choose the session' };
+  try {
+    return {
+      ok: true,
+      data: await apiFetch<File64>(
+        `/admissions/results/export-session?${new URLSearchParams({ cycleId, format }).toString()}`,
+      ),
+    };
+  } catch (e) {
+    return problem(e);
+  }
+}
+
 type Place = { cycleId: string; classId: string; stageId: string };
 
 /** The results of a class and stage shown to families from a date and time (now or later). */

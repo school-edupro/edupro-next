@@ -89,3 +89,34 @@ Decided here, change any before building:
 
 Changing a decision at a later stage from here; locking a session's results as final; marks entry by
 subject teachers.
+
+## As built (28 Oct 2026)
+
+- **Part 1** (dc04317): `ResultRow.current` (select / hold / reject) and `laterStage`; the grid's
+  Decision is on every open or decided row, Hold included; a decided candidate's change (marks or
+  decision) shows one Reason box (3+ characters). A decision change undoes the stage's latest live
+  result with the reason (event "<stage>: Selected undone · <reason>"), sets the candidate back under
+  review at the stage, then decides anew; refused with "Decided at <stage> since: undo it there
+  first" when a later stage has a live result. The sheet lists every candidate who reached the stage
+  (or the slot's), prefilled with their marks and decision, and a **Reason for change** column; Check
+  says per row "No change", "Marks changed", "Decision Held → Selected · Marks changed" or the error.
+- **Part 2** (7559338): `/admissions/schedule/:id?tab=marks|excel|allot|details`. A KPI strip
+  (allotted of capacity, marked, to decide with held, decided). Marks: the Test results grid of each
+  class with a paper, filtered to the slot (`GET admissions/results?…&slotId`); classes without a
+  paper keep the one-figure table (`SlotCandidates only=…`), held candidates editable there too and a
+  decided one links to its registration. Excel: the slot's sheet per class. Allotment and admit cards:
+  `SlotAllotment` (allot the next N with the mail tick, admit card View / Download, remove an
+  undecided candidate). Slot details: the slot form (read-only text without the schedule right).
+- **Part 3**: `GET admissions/results/options` gives each session and class `candidates` (reached a
+  test or interview: the grid's own reach); the page opens on the first session with candidates.
+  Pickers (`ResultsPicker`) navigate on change; Class "Every class (overview)" (no `classId`) shows
+  `GET admissions/results/overview?cycleId` — per class × active Test / Interview stage reached:
+  out of (or No paper with a link to set it), candidates, marked x of y (Done), waiting, held,
+  selected, not selected, below cut-off, release (Out / From …), Open. Downloads at the top of the
+  picker bar: the class as filtered (Excel, PDF) when a class is open, and the session always
+  (`GET admissions/results/export-session?cycleId&format`: Excel = an Overview sheet then a sheet per
+  class and stage with a paper and candidates, names ≤ 26 characters and unique; PDF = the overview
+  page then each list, merged with pdf-lib). No paper with candidates anywhere → 409. The secondary
+  filters (slot, name, %, cut-off, stands) stay a form with Show.
+- Tests: admission-results e2e 14 (options counts, overview against each grid, session Excel sheets
+  and PDF pages, the slot's grid); a11y on the four slot tabs and both Test results views.

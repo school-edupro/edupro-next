@@ -21,6 +21,14 @@ export class ResultsQueryDto extends createZodDto(ResultsQuerySchema) {}
 export const ResultsExportSchema = ResultsQuerySchema.extend({ format: z.enum(['xlsx', 'pdf']) });
 export class ResultsExportDto extends createZodDto(ResultsExportSchema) {}
 
+/** A session's overview and its whole export (docs/design/58, part 3). */
+export const ResultsOverviewSchema = z.object({ cycleId: IdSchema });
+export class ResultsOverviewDto extends createZodDto(ResultsOverviewSchema) {}
+export const ResultsSessionExportSchema = ResultsOverviewSchema.extend({
+  format: z.enum(['xlsx', 'pdf']),
+});
+export class ResultsSessionExportDto extends createZodDto(ResultsSessionExportSchema) {}
+
 /** The class's sheet; with a slot, only that slot's candidates (the Tests and interviews page). */
 export const ResultsSheetSchema = PlaceSchema.extend({ slotId: IdSchema.optional() });
 export class ResultsSheetDto extends createZodDto(ResultsSheetSchema) {}

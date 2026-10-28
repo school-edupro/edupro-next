@@ -45,6 +45,7 @@ const PAGES = [
   '/admissions/setup/papers',
   '/admissions/setup/papers?view=list',
   '/admissions/results',
+  '/admissions/results?cycleId=4&classId=172&stageId=12',
   '/admissions/admit',
   '/admissions/refunds',
   '/admissions/list',

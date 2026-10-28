@@ -60,7 +60,9 @@ export interface ResultsOptions {
     id: string;
     name: string;
     status: string;
-    classes: Array<{ id: string; name: string }>;
+    /** candidates who reached a test or interview (docs/design/58, part 3) */
+    candidates: number;
+    classes: Array<{ id: string; name: string; candidates: number }>;
   }>;
   stages: Array<{ id: string; name: string; kind: string }>;
 }
@@ -96,3 +98,26 @@ export const BANDS = [
   '81-90',
   '91-100',
 ];
+
+/** A class and stage of a session's overview (docs/design/58, part 3). */
+export interface ResultsOverviewRow {
+  classId: string;
+  className: string;
+  stageId: string;
+  stage: string;
+  kind: 'test' | 'interview';
+  /** the paper's total; null: no paper for the class */
+  outOf: number | null;
+  candidates: number;
+  marked: number | null;
+  waiting: number;
+  held: number;
+  selected: number;
+  rejected: number;
+  below: number | null;
+  release: { at: string; passed: boolean } | null;
+}
+export interface ResultsOverview {
+  cycle: string;
+  rows: ResultsOverviewRow[];
+}

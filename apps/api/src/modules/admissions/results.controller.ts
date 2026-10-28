@@ -7,10 +7,12 @@ import { ADMISSIONS } from './admissions.dto';
 import { ADMISSION_SCHEDULE } from './process.service';
 import {
   ResultsExportDto,
+  ResultsOverviewDto,
   ResultsPlaceDto,
   ResultsQueryDto,
   ResultsReleaseDto,
   ResultsSaveDto,
+  ResultsSessionExportDto,
   ResultsSheetDto,
   ResultsUploadQueryDto,
 } from './results.dto';
@@ -32,6 +34,25 @@ export class AdmissionResultsController {
   @RequirePermission(ADMISSIONS.applicationView)
   options(@ReqCtx() ctx: RequestContext) {
     return this.svc.options(ctx);
+  }
+
+  @Get('overview')
+  @ApiOperation({
+    summary:
+      "A session's classes and stages: candidates, marked, waiting, decided, cut-off, release",
+  })
+  @RequirePermission(ADMISSIONS.applicationView)
+  overview(@ReqCtx() ctx: RequestContext, @Query() q: ResultsOverviewDto) {
+    return this.svc.overview(ctx, q.cycleId);
+  }
+
+  @Get('export-session')
+  @ApiOperation({
+    summary: 'The whole session: an overview, then each class and stage (Excel or PDF, base64)',
+  })
+  @RequirePermission(ADMISSIONS.applicationView)
+  exportSession(@ReqCtx() ctx: RequestContext, @Query() q: ResultsSessionExportDto) {
+    return this.svc.exportSession(ctx, q);
   }
 
   @Get()

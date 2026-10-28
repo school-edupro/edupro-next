@@ -3,23 +3,13 @@ import { useRouter } from 'next/navigation';
 import { useRef, useState, useTransition } from 'react';
 import type { ResultsSheetResult } from '@/lib/admission-results';
 import { resultsExport, resultsSheet, resultsSheetUpload } from '@/lib/admission-results-actions';
+import { saveFile as save } from '@/lib/save-file';
 
 const STATUS: Record<string, string> = {
   ok: 'Ready',
   done: 'Saved',
   skipped: 'Skipped',
   error: 'Error',
-};
-
-/** A base64 file from the server saved in the browser. */
-const save = (f: { filename: string; contentType: string; base64: string }) => {
-  const bytes = Uint8Array.from(atob(f.base64), (ch) => ch.charCodeAt(0));
-  const url = URL.createObjectURL(new Blob([bytes], { type: f.contentType }));
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = f.filename;
-  a.click();
-  setTimeout(() => URL.revokeObjectURL(url), 10_000);
 };
 
 /**
@@ -34,6 +24,7 @@ export function ResultsTools({
   slotId,
   title = 'Sheet and downloads',
   help,
+  exports = true,
 }: {
   place: { cycleId: string; classId: string; stageId: string };
   query: string;
@@ -42,6 +33,8 @@ export function ResultsTools({
   slotId?: string;
   title?: string;
   help?: string;
+  /** the grid's Excel and PDF here (the Test results page has them at the top) */
+  exports?: boolean;
 }) {
   const router = useRouter();
   const [pending, start] = useTransition();
@@ -135,27 +128,29 @@ export function ResultsTools({
             </span>
           </>
         ) : null}
-        <span style={{ display: 'inline-flex', gap: 'var(--sp-2)', alignItems: 'flex-end' }}>
-          {(['xlsx', 'pdf'] as const).map((f) => (
-            <button
-              key={f}
-              type="button"
-              style={{ whiteSpace: 'nowrap' }}
-              className="ep-btn ep-btn--secondary"
-              disabled={pending}
-              onClick={() =>
-                run(async () => {
-                  const r = await resultsExport(query, f);
-                  if (!r.ok) return r.error;
-                  save(r.data);
-                  return null;
-                })
-              }
-            >
-              {f === 'xlsx' ? 'Export Excel' : 'Export PDF'}
-            </button>
-          ))}
-        </span>
+        {exports ? (
+          <span style={{ display: 'inline-flex', gap: 'var(--sp-2)', alignItems: 'flex-end' }}>
+            {(['xlsx', 'pdf'] as const).map((f) => (
+              <button
+                key={f}
+                type="button"
+                style={{ whiteSpace: 'nowrap' }}
+                className="ep-btn ep-btn--secondary"
+                disabled={pending}
+                onClick={() =>
+                  run(async () => {
+                    const r = await resultsExport(query, f);
+                    if (!r.ok) return r.error;
+                    save(r.data);
+                    return null;
+                  })
+                }
+              >
+                {f === 'xlsx' ? 'Export Excel' : 'Export PDF'}
+              </button>
+            ))}
+          </span>
+        ) : null}
       </div>
       {error ? (
         <p className="ep-alert ep-alert--danger" role="alert">

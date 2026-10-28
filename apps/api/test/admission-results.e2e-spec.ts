@@ -7,6 +7,7 @@
  */
 import type { NestFastifyApplication } from '@nestjs/platform-fastify';
 import ExcelJS from 'exceljs';
+import { PDFDocument } from 'pdf-lib';
 import { PowService } from '../src/modules/admissions/public/pow.service';
 import {
   createApp,
@@ -135,8 +136,13 @@ describe('admission test results by part (e2e)', () => {
 
   it('needs a paper for the class; lists the sessions, classes and stages', async () => {
     const o = (await call('GET', '/admissions/results/options')).json();
+    // each session and class with the candidates who reached a test or interview (docs/design/58)
     expect(o.cycles).toEqual([
-      expect.objectContaining({ id: ids.cycle, classes: [{ id: ids.cls, name: 'Class IX' }] }),
+      expect.objectContaining({
+        id: ids.cycle,
+        candidates: 3,
+        classes: [{ id: ids.cls, name: 'Class IX', candidates: 3 }],
+      }),
     ]);
     expect(o.stages.map((x: { kind: string }) => x.kind)).toEqual(['test', 'interview']);
     const none = await grid();
@@ -800,5 +806,67 @@ describe('admission test results by part (e2e)', () => {
     // merit follows: ASHA 88 + 18, CHITRA 62 + 14
     expect((await app0(apps[0]!)).merit).toBe('106.00');
     expect((await app0(apps[2]!)).merit).toBe('76.00');
+  });
+
+  // ---- docs/design/58, part 3: the session's overview and its whole export --------------------------
+  it("the session's overview matches each grid; the whole session exports as Excel and PDF", async () => {
+    const o = await call('GET', `/admissions/results/overview?cycleId=${ids.cycle!}`);
+    expect(o.statusCode).toBe(200);
+    const view = o.json();
+    expect(view.cycle).toBe('Admissions 2027-28');
+    expect(view.rows.map((r: { kind: string; outOf: number }) => [r.kind, r.outOf])).toEqual([
+      ['test', 100],
+      ['interview', 20],
+    ]);
+    for (const r of view.rows) {
+      const g = (
+        await call(
+          'GET',
+          `/admissions/results?${new URLSearchParams({ ...place(), stageId: r.stageId }).toString()}`,
+        )
+      ).json();
+      expect(r).toMatchObject({
+        classId: ids.cls,
+        className: 'Class IX',
+        candidates: g.counts.all,
+        marked: g.counts.marked,
+        below: g.counts.below,
+      });
+      expect(r.waiting + r.held).toBe(g.counts.waiting);
+    }
+    expect((await call('GET', '/admissions/results/overview?cycleId=999999999')).statusCode).toBe(
+      404,
+    );
+
+    const x = (
+      await call('GET', `/admissions/results/export-session?cycleId=${ids.cycle!}&format=xlsx`)
+    ).json();
+    expect(x.filename).toBe('results-admissions-2027-28.xlsx');
+    const wb = new ExcelJS.Workbook();
+    await wb.xlsx.load(Buffer.from(x.base64, 'base64') as unknown as ArrayBuffer);
+    expect(wb.worksheets).toHaveLength(3);
+    expect(wb.worksheets[0]!.name).toBe('Overview');
+    expect((wb.worksheets[0]!.getRow(4).values as unknown[]).slice(1, 4)).toEqual([
+      'Class',
+      'Stage',
+      'Out of',
+    ]);
+    expect((wb.worksheets[0]!.getRow(5).values as unknown[]).slice(1, 5)).toEqual([
+      'Class IX',
+      view.rows[0].stage,
+      '100',
+      String(view.rows[0].candidates),
+    ]);
+    expect(wb.worksheets[1]!.name).toBe(`Class IX ${String(view.rows[0].stage)}`.slice(0, 26));
+    expect((wb.worksheets[1]!.getRow(4).values as unknown[]).slice(4, 6)).toEqual([
+      'English (50)',
+      'Maths (50)',
+    ]);
+    const p = (
+      await call('GET', `/admissions/results/export-session?cycleId=${ids.cycle!}&format=pdf`)
+    ).json();
+    expect(p.contentType).toBe('application/pdf');
+    const pdf = await PDFDocument.load(Buffer.from(p.base64, 'base64'));
+    expect(pdf.getPageCount()).toBeGreaterThanOrEqual(3);
   });
 });

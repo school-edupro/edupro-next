@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { admissionWaitingFor, type PoolClient } from '@edupro/db';
 import ExcelJS from 'exceljs';
+import { PDFDocument } from 'pdf-lib';
 import { AuditService } from '../../common/audit/audit.service';
 import { DbService } from '../../common/db/db.service';
 import { DomainError } from '../../common/errors/domain-error';
@@ -22,6 +23,26 @@ const MAX_ROWS = 2000;
 const MAX_BYTES = 5 * 1024 * 1024;
 const XLSX = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
 const round2 = (n: number) => Math.round(n * 100) / 100;
+/**
+ * The candidates who reached a Test or Interview stage: a row per candidate and stage (the session's
+ * candidate counts and overview, docs/design/58 part 3). The same reach as the grid's rows.
+ */
+const REACHED = `FROM applications a
+   CROSS JOIN LATERAL jsonb_array_elements(a.process_steps) WITH ORDINALITY x(step, ord)
+   JOIN admission_stages st ON st.id::text = x.step ->> 'stageId' AND st.kind IN ('test', 'interview')
+        AND st.status = 'active'
+  WHERE a.application_no IS NOT NULL AND a.status::text NOT IN ('draft', 'cancelled')
+    AND a.stage_no >= x.ord - 1`;
+/** A class with no paper: where its candidates stand, without marks by part. */
+const NO_PAPER: Paper = { id: '', minPercent: null, parts: [], total: 0 };
+const ISTDATE = new Intl.DateTimeFormat('en-IN', {
+  timeZone: 'Asia/Kolkata',
+  day: '2-digit',
+  month: 'short',
+  year: 'numeric',
+  hour: '2-digit',
+  minute: '2-digit',
+});
 
 /** Where a candidate stands at the stage. */
 type State = 'waiting' | 'held' | 'selected' | 'rejected' | 'sent_back' | 'other';
@@ -64,6 +85,32 @@ export interface ResultRow {
   laterStage: string | null;
   /** any marks (or absent) entered */
   marked: boolean;
+}
+/** A list ready for Excel or the letterhead PDF. */
+interface Table {
+  title: string;
+  subtitle: string;
+  columns: Array<{ h: string; w: number }>;
+  rows: string[][];
+}
+/** A class and stage of the session's overview (docs/design/58, part 3). */
+export interface OverviewRow {
+  classId: string;
+  className: string;
+  stageId: string;
+  stage: string;
+  kind: 'test' | 'interview';
+  /** the paper's total; null: the class has no paper for the stage */
+  outOf: number | null;
+  candidates: number;
+  /** marks (or absent) entered; null without a paper */
+  marked: number | null;
+  waiting: number;
+  held: number;
+  selected: number;
+  rejected: number;
+  below: number | null;
+  release: { at: string; passed: boolean } | null;
 }
 /** A decision as the grid and the sheet offer it (docs/design/58). */
 type Choice = 'select' | 'hold' | 'reject';
@@ -115,7 +162,11 @@ export class AdmissionResultsService {
     private readonly process: AdmissionProcessService,
   ) {}
 
-  /** The sessions with their classes, and the Test and Interview stages, for the page's choices. */
+  /**
+   * The sessions with their classes, and the Test and Interview stages, for the page's choices; each
+   * session and class with the candidates who reached a Test or Interview stage (the page opens on the
+   * session that has some, docs/design/58 part 3).
+   */
   async options(ctx: RequestContext) {
     return this.db.tenant(requireTenant(ctx), async (c) => {
       const cycles = await c.query<{ id: string; name: string; status: string }>(
@@ -129,12 +180,21 @@ export class AdmissionResultsService {
         `SELECT id::text, name, kind FROM admission_stages WHERE kind IN ('test', 'interview') AND status = 'active'
           ORDER BY sort_order, id`,
       );
+      const reached = await c.query<{ cycle_id: string; class_id: string; n: number }>(
+        // eslint-disable-next-line no-restricted-syntax -- REACHED is a fixed fragment
+        `SELECT a.cycle_id::text, a.class_id::text, count(DISTINCT a.id)::int AS n ${REACHED} GROUP BY 1, 2`,
+      );
+      const n = (cycleId: string, classId?: string) =>
+        reached.rows
+          .filter((x) => x.cycle_id === cycleId && (!classId || x.class_id === classId))
+          .reduce((t, x) => t + x.n, 0);
       return {
         cycles: cycles.rows.map((y) => ({
           ...y,
+          candidates: n(y.id),
           classes: classes.rows
             .filter((k) => k.cycle_id === y.id)
-            .map((k) => ({ id: k.id, name: k.name })),
+            .map((k) => ({ id: k.id, name: k.name, candidates: n(y.id, k.id) })),
         })),
         stages: stages.rows,
       };
@@ -1120,15 +1180,93 @@ export class AdmissionResultsService {
     });
   }
 
-  /** The grid as filtered, as Excel or a letterhead PDF. */
-  async export(ctx: RequestContext, q: ResultsQueryDto & { format: 'xlsx' | 'pdf' }) {
-    const data = await this.list(ctx, q);
-    const paper = data.place.paper;
-    if (!paper) this.needPaper(data.place);
-    const parts = paper!.parts;
-    const title = `${data.place.stage} results · ${data.place.className}`;
-    const subtitle = `${data.place.cycle} · ${String(data.rows.length)} candidate${data.rows.length === 1 ? '' : 's'} · out of ${String(paper!.total)}`;
-    const columns = [
+  // ---- the session's overview and exports (docs/design/58, part 3) ---------------------------------------
+  /**
+   * Where a session's marks stand: each class and Test / Interview stage its candidates reach, with how
+   * many reached it, are marked, wait (or are held), are decided and fall below the cut-off, the class's
+   * paper (or none) and the release to families.
+   */
+  async overview(ctx: RequestContext, cycleId: string) {
+    return this.db.tenant(requireTenant(ctx), async (c) => {
+      const cycle = await this.cycleName(c, cycleId);
+      return { cycle, rows: (await this.progressIn(c, cycleId)).map((x) => x.row) };
+    });
+  }
+
+  private async cycleName(c: PoolClient, cycleId: string) {
+    const y = await c.query<{ name: string }>(
+      `SELECT name FROM admission_cycles WHERE id = $1 AND deleted_at IS NULL`,
+      [cycleId],
+    );
+    if (!y.rows[0])
+      throw new DomainError('not-found', 'No such admission session', { status: 404 });
+    return y.rows[0].name;
+  }
+
+  /** Each class and stage of the session with candidates: the overview row, its rows and paper. */
+  private async progressIn(c: PoolClient, cycleId: string) {
+    const pairs = await c.query<{
+      class_id: string;
+      class_name: string;
+      stage_id: string;
+      stage: string;
+      kind: 'test' | 'interview';
+    }>(
+      // eslint-disable-next-line no-restricted-syntax -- REACHED is a fixed fragment
+      `SELECT p.class_id::text, cl.name AS class_name, st.id::text AS stage_id, st.name AS stage, st.kind
+         FROM (SELECT a.class_id, st.id AS stage_id ${REACHED} AND a.cycle_id = $1 GROUP BY 1, 2) p
+         JOIN admission_class_criteria k ON k.cycle_id = $1 AND k.class_id = p.class_id
+         JOIN classes cl ON cl.id = p.class_id JOIN admission_stages st ON st.id = p.stage_id
+        ORDER BY cl.display_order, cl.name, st.sort_order, st.id`,
+      [cycleId],
+    );
+    const papers = new Map<string, Map<string, Paper>>();
+    const out: Array<{ row: OverviewRow; rows: ResultRow[]; paper: Paper | null }> = [];
+    for (const x of pairs.rows) {
+      if (!papers.has(x.stage_id))
+        papers.set(x.stage_id, await this.papers.papersIn(c, x.stage_id));
+      const paper = papers.get(x.stage_id)!.get(x.class_id) ?? null;
+      const at = { cycleId, classId: x.class_id, stageId: x.stage_id };
+      const rows = await this.rowsIn(c, at, paper ?? NO_PAPER);
+      const count = (f: (r: ResultRow) => boolean) => rows.filter(f).length;
+      const release = paper ? await this.releaseOf(c, at) : null;
+      out.push({
+        row: {
+          classId: x.class_id,
+          className: x.class_name,
+          stageId: x.stage_id,
+          stage: x.stage,
+          kind: x.kind,
+          outOf: paper?.total ?? null,
+          candidates: rows.length,
+          marked: paper ? count((r) => r.marked) : null,
+          waiting: count((r) => r.state === 'waiting'),
+          held: count((r) => r.state === 'held'),
+          selected: count((r) => r.state === 'selected'),
+          rejected: count((r) => r.state === 'rejected'),
+          below: paper ? count((r) => r.below) : null,
+          release: release ? { at: release.at, passed: release.passed } : null,
+        },
+        rows,
+        paper,
+      });
+    }
+    return out;
+  }
+
+  /** A class and stage's rows as a list: roll no., candidate, a column per part, total, %, cut-off. */
+  private tableOf(
+    at: { cycle: string; className: string; stage: string },
+    paper: Paper,
+    list: ResultRow[],
+  ): Table {
+    const parts = paper.parts;
+    // A4 is 515 points wide inside the margins: the parts share what the fixed columns leave
+    const fixed = [28, 64, 96];
+    const tail = [36, 34, 36, 52];
+    const room = 515 - [...fixed, ...tail].reduce((n, w) => n + w, 0);
+    const each = Math.max(22, Math.floor(room / Math.max(parts.length, 1)));
+    const heads = [
       'Roll no.',
       'Registration no.',
       'Candidate',
@@ -1138,88 +1276,185 @@ export class AdmissionResultsService {
       'Cut-off',
       'Stands',
     ];
-    const rows = data.rows.map((r) => [
-      r.rollNo !== null ? String(r.rollNo) : '',
-      r.number ?? '',
-      r.candidate ?? '',
-      ...parts.map((pt) =>
-        r.absent ? 'AB' : r.marks[pt.id] != null ? String(r.marks[pt.id]) : '',
-      ),
-      r.absent ? 'Absent' : r.total !== null ? String(r.total) : '',
-      r.percent !== null ? String(r.percent) : '',
-      r.below ? 'Below' : '',
-      STATE_WORDS[r.state],
-    ]);
+    return {
+      title: `${at.stage} results · ${at.className}`,
+      subtitle: `${at.cycle} · ${String(list.length)} candidate${list.length === 1 ? '' : 's'} · out of ${String(paper.total)}`,
+      columns: heads.map((h, i) => ({
+        h,
+        w:
+          i < fixed.length
+            ? fixed[i]!
+            : i < fixed.length + parts.length
+              ? each
+              : tail[i - fixed.length - parts.length]!,
+      })),
+      rows: list.map((r) => [
+        r.rollNo !== null ? String(r.rollNo) : '',
+        r.number ?? '',
+        r.candidate ?? '',
+        ...parts.map((pt) =>
+          r.absent ? 'AB' : r.marks[pt.id] != null ? String(r.marks[pt.id]) : '',
+        ),
+        r.absent ? 'Absent' : r.total !== null ? String(r.total) : '',
+        r.percent !== null ? String(r.percent) : '',
+        r.below ? 'Below' : '',
+        STATE_WORDS[r.state],
+      ]),
+    };
+  }
+
+  /** A list as a worksheet: the title, the subtitle, the column heads, the rows. */
+  private sheetOf(wb: ExcelJS.Workbook, name: string, t: Table) {
+    const ws = wb.addWorksheet(name);
+    ws.addRow([t.title]).font = { bold: true };
+    ws.addRow([t.subtitle]);
+    ws.addRow([]);
+    ws.addRow(t.columns.map((x) => x.h)).font = { bold: true };
+    t.columns.forEach(
+      (x, i) => (ws.getColumn(i + 1).width = x.w >= 90 ? 28 : Math.max(10, x.h.length + 2)),
+    );
+    for (const r of t.rows) ws.addRow(r);
+  }
+
+  /** Lists on the school's letterhead, one after another in one PDF. */
+  private async pdfOf(c: PoolClient, tables: Table[]) {
+    const sc = (
+      await c.query<{
+        name: string;
+        address: string | null;
+        contact: string | null;
+        logo: string | null;
+      }>(
+        `SELECT name, NULLIF(concat_ws(', ', NULLIF(btrim(address->>'line1'), ''), NULLIF(btrim(address->>'city'), ''), NULLIF(btrim(address->>'state'), '')), '') AS address,
+                NULLIF(btrim(contact->>'phone'), '') AS contact, NULLIF(branding->>'logoFileId', '') AS logo
+           FROM schools WHERE id = app.current_school_id()`,
+      )
+    ).rows[0]!;
+    const school = {
+      name: sc.name,
+      address: sc.address,
+      contact: sc.contact ? `Phone ${sc.contact}` : null,
+    };
+    const logo = await this.core.fileBytes(c, sc.logo);
+    const printedAt = ISTDATE.format(new Date());
+    const parts = [];
+    for (const t of tables) parts.push(await tablePdf({ school, logo, ...t, printedAt }));
+    if (parts.length === 1) return parts[0]!;
+    const all = await PDFDocument.create();
+    all.setTitle(tables[0]!.title);
+    for (const bytes of parts) {
+      const one = await PDFDocument.load(new Uint8Array(bytes));
+      for (const pg of await all.copyPages(one, one.getPageIndices())) all.addPage(pg);
+    }
+    return Buffer.from(await all.save());
+  }
+
+  /** The grid as filtered, as Excel or a letterhead PDF. */
+  async export(ctx: RequestContext, q: ResultsQueryDto & { format: 'xlsx' | 'pdf' }) {
+    const data = await this.list(ctx, q);
+    const paper = data.place.paper;
+    if (!paper) this.needPaper(data.place);
+    const t = this.tableOf(data.place, paper!, data.rows);
     const file = `results-${data.place.stage}-${data.place.className}`
       .toLowerCase()
       .replace(/[^\w-]+/g, '-');
     if (q.format === 'xlsx') {
       const wb = new ExcelJS.Workbook();
-      const ws = wb.addWorksheet('Results');
-      ws.addRow([title]).font = { bold: true };
-      ws.addRow([subtitle]);
-      ws.addRow([]);
-      ws.addRow(columns).font = { bold: true };
-      columns.forEach(
-        (h, i) => (ws.getColumn(i + 1).width = i === 2 ? 28 : Math.max(10, h.length + 2)),
-      );
-      for (const r of rows) ws.addRow(r);
+      this.sheetOf(wb, 'Results', t);
       return {
         filename: `${file}.xlsx`,
         contentType: XLSX,
         base64: Buffer.from(await wb.xlsx.writeBuffer()).toString('base64'),
       };
     }
+    return this.db.tenant(requireTenant(ctx), async (c) => ({
+      filename: `${file}.pdf`,
+      contentType: 'application/pdf',
+      base64: (await this.pdfOf(c, [t])).toString('base64'),
+    }));
+  }
+
+  /**
+   * The whole session's results: the overview first, then every class and stage with a paper and
+   * candidates (Excel: a sheet each; PDF: a section each).
+   */
+  async exportSession(ctx: RequestContext, q: { cycleId: string; format: 'xlsx' | 'pdf' }) {
     return this.db.tenant(requireTenant(ctx), async (c) => {
-      const sc = (
-        await c.query<{
-          name: string;
-          address: string | null;
-          contact: string | null;
-          logo: string | null;
-        }>(
-          `SELECT name, NULLIF(concat_ws(', ', NULLIF(btrim(address->>'line1'), ''), NULLIF(btrim(address->>'city'), ''), NULLIF(btrim(address->>'state'), '')), '') AS address,
-                  NULLIF(btrim(contact->>'phone'), '') AS contact, NULLIF(branding->>'logoFileId', '') AS logo
-             FROM schools WHERE id = app.current_school_id()`,
-        )
-      ).rows[0]!;
-      // A4 is 515 points wide inside the margins: the parts share what the fixed columns leave
-      const fixed = [28, 64, 96];
-      const tail = [36, 34, 36, 52];
-      const room = 515 - [...fixed, ...tail].reduce((n, w) => n + w, 0);
-      const each = Math.max(22, Math.floor(room / Math.max(parts.length, 1)));
-      const bytes = await tablePdf({
-        school: {
-          name: sc.name,
-          address: sc.address,
-          contact: sc.contact ? `Phone ${sc.contact}` : null,
-        },
-        logo: await this.core.fileBytes(c, sc.logo),
-        title,
-        subtitle,
-        columns: columns.map((h, i) => ({
-          h,
-          w:
-            i < fixed.length
-              ? fixed[i]!
-              : i < fixed.length + parts.length
-                ? each
-                : tail[i - fixed.length - parts.length]!,
-        })),
-        rows,
-        printedAt: new Intl.DateTimeFormat('en-IN', {
-          timeZone: 'Asia/Kolkata',
-          day: '2-digit',
-          month: 'short',
-          year: 'numeric',
-          hour: '2-digit',
-          minute: '2-digit',
-        }).format(new Date()),
-      });
+      const cycle = await this.cycleName(c, q.cycleId);
+      const all = await this.progressIn(c, q.cycleId);
+      const lists = all
+        .filter((x) => x.paper && x.rows.length)
+        .map((x) => ({
+          name: `${x.row.className} ${x.row.stage}`,
+          table: this.tableOf({ cycle, ...x.row }, x.paper!, x.rows),
+        }));
+      if (!lists.length)
+        throw new DomainError(
+          'admissions.no_paper',
+          'No class of this session has a paper with candidates yet: nothing to export',
+          { status: 409 },
+        );
+      const dash = (n: number | null) => (n === null ? '-' : String(n));
+      const overview: Table = {
+        title: `Test results · ${cycle}`,
+        subtitle: `${String(all.length)} class and stage list${all.length === 1 ? '' : 's'} · ${String(lists.length)} with marks below`,
+        columns: [
+          { h: 'Class', w: 70 },
+          { h: 'Stage', w: 70 },
+          { h: 'Out of', w: 36 },
+          { h: 'Candidates', w: 46 },
+          { h: 'Marked', w: 40 },
+          { h: 'Waiting', w: 40 },
+          { h: 'Held', w: 32 },
+          { h: 'Selected', w: 42 },
+          { h: 'Not selected', w: 46 },
+          { h: 'Below cut-off', w: 44 },
+          { h: 'Released', w: 49 },
+        ],
+        rows: all.map(({ row: o }) => [
+          o.className,
+          o.stage,
+          o.outOf === null ? 'No paper' : String(o.outOf),
+          String(o.candidates),
+          dash(o.marked),
+          String(o.waiting),
+          String(o.held),
+          String(o.selected),
+          String(o.rejected),
+          dash(o.below),
+          o.release
+            ? o.release.passed
+              ? 'Out'
+              : `From ${ISTDATE.format(new Date(o.release.at))}`
+            : '-',
+        ]),
+      };
+      const file = `results-${cycle}`.toLowerCase().replace(/[^\w-]+/g, '-');
+      if (q.format === 'xlsx') {
+        const wb = new ExcelJS.Workbook();
+        this.sheetOf(wb, 'Overview', overview);
+        const used = new Set(['overview']);
+        for (const l of lists) {
+          // a sheet's name: 31 characters at most, none of \ / ? * [ ] :, and unique
+          const base = l.name
+            .replace(/[\\/?*[\]:]+/g, ' ')
+            .slice(0, 26)
+            .trim();
+          let name = base;
+          for (let i = 2; used.has(name.toLowerCase()); i++) name = `${base} (${String(i)})`;
+          used.add(name.toLowerCase());
+          this.sheetOf(wb, name, l.table);
+        }
+        return {
+          filename: `${file}.xlsx`,
+          contentType: XLSX,
+          base64: Buffer.from(await wb.xlsx.writeBuffer()).toString('base64'),
+        };
+      }
       return {
         filename: `${file}.pdf`,
         contentType: 'application/pdf',
-        base64: bytes.toString('base64'),
+        base64: (await this.pdfOf(c, [overview, ...lists.map((l) => l.table)])).toString('base64'),
       };
     });
   }
