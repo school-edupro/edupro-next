@@ -26,15 +26,17 @@ const stepWords = (x: ResultsReleaseLog) => {
   if (x.what === 'moved')
     return `Moved${x.from ? ` from ${when(x.from)}` : ''} to ${x.to ? when(x.to) : '-'}${out}`;
   if (x.what === 'taken_back')
-    return `Taken back${x.from ? ` (it was for ${when(x.from)})` : ''}${out}`;
+    return x.wasOut
+      ? `Revoked: families stopped seeing the marks${x.from ? ` (published ${when(x.from)})` : ''}`
+      : `Withdrawn before publishing${x.from ? ` (it was for ${when(x.from)})` : ''}`;
   return `${String(x.toldCount ?? 0)} families told`;
 };
 
 /**
  * Results to families (docs/design/57, part 4), the DPS "Adm Unlock": from a date and time the
  * candidate portal shows each part's marks, the total and %. Changed or withdrawn freely until it
- * passes; once out, moved or taken back with a reason (a later time hides the marks again until then,
- * docs/design/59), and the families may be told by email, SMS and WhatsApp. Every step is in the
+ * passes; once published, revoked or moved with a reason (a later time hides the marks again until
+ * then, docs/design/59), and the families may be told by email, SMS and WhatsApp. Every step is in the
  * history.
  */
 export function ResultsRelease({
@@ -57,7 +59,13 @@ export function ResultsRelease({
   const [reason, setReason] = useState('');
   const out = Boolean(release?.passed);
   const why = reason.trim();
-  const [asking, setAsking] = useState(false);
+  // once published: one action at a time (revoke, move, tell), each confirmed
+  const [mode, setMode] = useState<'revoke' | 'move' | 'tell' | null>(null);
+  const close = () => {
+    setMode(null);
+    setReason('');
+    setAt('');
+  };
   const [msg, setMsg] = useState<{ tone: 'success' | 'danger'; text: string } | null>(null);
   const run = (job: () => Promise<{ ok: true; text: string } | { ok: false; error: string }>) =>
     start(async () => {
@@ -69,7 +77,7 @@ export function ResultsRelease({
   const release_ = (iso: string) =>
     run(async () => {
       const r = await setResultsRelease(place, iso, out ? why : undefined);
-      if (r.ok) setReason('');
+      if (r.ok) close();
       return r.ok
         ? {
             ok: true as const,
@@ -89,8 +97,8 @@ export function ResultsRelease({
         {release ? (
           release.passed ? (
             <>
-              <Badge tone="success">Out</Badge> Families see the marks in the admission portal since{' '}
-              {when(release.at)}
+              <Badge tone="success">Published</Badge> Families see the marks in the admission portal
+              since {when(release.at)}
               {release.by ? ` (set by ${release.by})` : ''}.
               {release.toldAt
                 ? ` Told ${String(release.toldCount ?? 0)} families on ${when(release.toldAt)}.`
@@ -109,12 +117,10 @@ export function ResultsRelease({
           </>
         )}
       </p>
-      {canEdit ? (
+      {canEdit && !out ? (
         <div className="ep-lead-filter">
           <label className="ep-field">
-            <span className="ep-field__label">
-              {out ? 'Move to (India time)' : 'Release on (India time)'}
-            </span>
+            <span className="ep-field__label">Release on (India time)</span>
             <input
               className="ep-input"
               type="datetime-local"
@@ -122,112 +128,185 @@ export function ResultsRelease({
               onChange={(e) => setAt(e.target.value)}
             />
           </label>
-          {out ? (
-            <label className="ep-field" style={{ minWidth: '16rem' }}>
-              <span className="ep-field__label">Reason (needed: the results are out)</span>
-              <input
-                className="ep-input"
-                maxLength={300}
-                value={reason}
-                onChange={(e) => setReason(e.target.value)}
-              />
-            </label>
-          ) : null}
           <span style={{ display: 'inline-flex', gap: 'var(--sp-2)', alignItems: 'flex-end' }}>
             <button
               type="button"
               className="ep-btn ep-btn--secondary"
-              disabled={pending || !at || (out && why.length < 3)}
+              disabled={pending || !at}
               onClick={() => release_(`${at}:00+05:30`)}
             >
-              {out ? 'Move to this time' : release ? 'Change the time' : 'Release at this time'}
+              {release ? 'Change the time' : 'Release at this time'}
             </button>
-            {!out ? (
-              <button
-                type="button"
-                className="ep-btn ep-btn--primary"
-                disabled={pending}
-                onClick={() => release_(new Date().toISOString())}
-              >
-                Release now
-              </button>
-            ) : null}
+            <button
+              type="button"
+              className="ep-btn ep-btn--primary"
+              disabled={pending}
+              onClick={() => release_(new Date().toISOString())}
+            >
+              Release now
+            </button>
             {release ? (
               <button
                 type="button"
                 className="ep-btn ep-btn--ghost"
-                disabled={pending || (out && why.length < 3)}
+                disabled={pending}
                 onClick={() =>
                   run(async () => {
-                    const r = await withdrawResultsRelease(place, out ? why : undefined);
-                    if (r.ok) setReason('');
-                    return r.ok
-                      ? {
-                          ok: true as const,
-                          text: out
-                            ? 'Taken back: families no longer see the marks.'
-                            : 'The release is withdrawn.',
-                        }
-                      : r;
+                    const r = await withdrawResultsRelease(place);
+                    return r.ok ? { ok: true as const, text: 'The release is withdrawn.' } : r;
                   })
                 }
               >
-                {out ? 'Take back' : 'Withdraw'}
+                Withdraw
               </button>
             ) : null}
           </span>
         </div>
       ) : null}
-      {canEdit && out ? (
-        <p className="ep-field__help" style={{ marginTop: 0 }}>
-          A later time hides the marks from the families until then; they are told again only when
-          you press Tell the families.
-        </p>
-      ) : null}
-      {canEdit && release?.passed ? (
-        asking ? (
-          <div className="ep-alert ep-alert--warning" role="alert">
-            <span>
-              Send the result to {marked} {marked === 1 ? 'family' : 'families'} by email, SMS and
-              WhatsApp now?{' '}
-              <button
-                type="button"
-                className="ep-btn ep-btn--primary ep-btn--sm"
-                disabled={pending}
-                onClick={() => {
-                  setAsking(false);
-                  run(async () => {
-                    const r = await tellResults(place);
-                    return r.ok
-                      ? {
-                          ok: true as const,
-                          text: `${String(r.data.told)} families told (the messages go out with the workers).`,
-                        }
-                      : r;
-                  });
-                }}
-              >
-                Send
-              </button>{' '}
-              <button
-                type="button"
-                className="ep-btn ep-btn--ghost ep-btn--sm"
-                onClick={() => setAsking(false)}
-              >
-                Cancel
-              </button>
-            </span>
-          </div>
-        ) : (
+      {canEdit && out && mode === null ? (
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--sp-2)' }}>
+          <button
+            type="button"
+            className="ep-btn ep-btn--danger"
+            disabled={pending}
+            onClick={() => setMode('revoke')}
+          >
+            Revoke published marks
+          </button>
+          <button
+            type="button"
+            className="ep-btn ep-btn--secondary"
+            disabled={pending}
+            onClick={() => setMode('move')}
+          >
+            Move the time
+          </button>
           <button
             type="button"
             className="ep-btn ep-btn--secondary"
             disabled={pending || marked === 0}
-            onClick={() => setAsking(true)}
+            onClick={() => setMode('tell')}
           >
             Tell the families
           </button>
-        )
+        </div>
+      ) : null}
+      {canEdit && out && mode === 'revoke' ? (
+        <div className="ep-alert ep-alert--warning" role="group" aria-labelledby="rs-rev-h">
+          <div style={{ display: 'grid', gap: 'var(--sp-2)', width: '100%' }}>
+            <p id="rs-rev-h" style={{ margin: 0 }}>
+              <strong>Revoke the published marks?</strong> Families stop seeing them in the
+              admission portal at once. You can publish them again later with a new time.
+            </p>
+            <label className="ep-field" style={{ margin: 0 }}>
+              <span className="ep-field__label">Reason for revoking (needed)</span>
+              <input
+                className="ep-input"
+                maxLength={300}
+                value={reason}
+                autoFocus
+                onChange={(e) => setReason(e.target.value)}
+              />
+            </label>
+            <span style={{ display: 'inline-flex', gap: 'var(--sp-2)' }}>
+              <button
+                type="button"
+                className="ep-btn ep-btn--danger"
+                disabled={pending || why.length < 3}
+                onClick={() =>
+                  run(async () => {
+                    const r = await withdrawResultsRelease(place, why);
+                    if (r.ok) close();
+                    return r.ok
+                      ? {
+                          ok: true as const,
+                          text: 'Revoked: families no longer see the marks. Set a time to publish them again.',
+                        }
+                      : r;
+                  })
+                }
+              >
+                Revoke now
+              </button>
+              <button type="button" className="ep-btn ep-btn--ghost" onClick={close}>
+                Cancel
+              </button>
+            </span>
+          </div>
+        </div>
+      ) : null}
+      {canEdit && out && mode === 'move' ? (
+        <div className="ep-alert ep-alert--info" role="group" aria-labelledby="rs-move-h">
+          <div style={{ display: 'grid', gap: 'var(--sp-2)', width: '100%' }}>
+            <p id="rs-move-h" style={{ margin: 0 }}>
+              <strong>Move the time.</strong> A later time hides the marks from the families until
+              then; they are told again only when you press Tell the families.
+            </p>
+            <div className="ep-lead-filter" style={{ margin: 0 }}>
+              <label className="ep-field">
+                <span className="ep-field__label">New time (India time)</span>
+                <input
+                  className="ep-input"
+                  type="datetime-local"
+                  value={at}
+                  onChange={(e) => setAt(e.target.value)}
+                />
+              </label>
+              <label className="ep-field" style={{ minWidth: '16rem' }}>
+                <span className="ep-field__label">Reason (needed)</span>
+                <input
+                  className="ep-input"
+                  maxLength={300}
+                  value={reason}
+                  onChange={(e) => setReason(e.target.value)}
+                />
+              </label>
+            </div>
+            <span style={{ display: 'inline-flex', gap: 'var(--sp-2)' }}>
+              <button
+                type="button"
+                className="ep-btn ep-btn--primary"
+                disabled={pending || !at || why.length < 3}
+                onClick={() => release_(`${at}:00+05:30`)}
+              >
+                Move to this time
+              </button>
+              <button type="button" className="ep-btn ep-btn--ghost" onClick={close}>
+                Cancel
+              </button>
+            </span>
+          </div>
+        </div>
+      ) : null}
+      {canEdit && out && mode === 'tell' ? (
+        <div className="ep-alert ep-alert--warning" role="alert">
+          <span>
+            Send the result to {marked} {marked === 1 ? 'family' : 'families'} by email, SMS and
+            WhatsApp now?{' '}
+            <button
+              type="button"
+              className="ep-btn ep-btn--primary ep-btn--sm"
+              disabled={pending}
+              onClick={() => {
+                close();
+                run(async () => {
+                  const r = await tellResults(place);
+                  return r.ok
+                    ? {
+                        ok: true as const,
+                        text: `${String(r.data.told)} families told (the messages go out with the workers).`,
+                      }
+                    : r;
+                });
+              }}
+            >
+              Send
+            </button>{' '}
+            <button type="button" className="ep-btn ep-btn--ghost ep-btn--sm" onClick={close}>
+              Cancel
+            </button>
+          </span>
+        </div>
       ) : null}
       {msg ? (
         <p

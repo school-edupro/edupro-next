@@ -104,3 +104,7 @@ release is moved.
   capacity); Marks tab notes waiting candidates. Tests: `admission-auto-slots` e2e (3), all admission
   suites 104; a11y slot 143 tabs and slot 159.
 - Slot 159's Ishaan and Ayaan are still waiting (they passed before this change): Allot on the slot.
+- Follow-up (asked 28 Oct, "revoke publish mark"): once published, the box shows **Published** and
+  three buttons: **Revoke published marks** (red; a panel with the reason and Revoke now), **Move the
+  time** (a panel with the new time and the reason) and **Tell the families** (confirm). The history
+  says "Revoked: families stopped seeing the marks" (or "Withdrawn before publishing").
