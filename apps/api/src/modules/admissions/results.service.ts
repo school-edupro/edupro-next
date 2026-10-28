@@ -504,16 +504,38 @@ export class AdmissionResultsService {
   }
 
   /** The class's sheet: the candidates who may still be marked or decided, a column per part. */
-  async sheet(ctx: RequestContext, p: Place) {
+  async sheet(ctx: RequestContext, p: Place & { slotId?: string }) {
     return this.db.tenant(requireTenant(ctx), async (c) => {
       const at = await this.placeOf(c, p);
       const paper = this.needPaper(at);
+      // a slot's sheet: only its candidates (Tests and interviews)
+      let slot: string | null = null;
+      if (p.slotId) {
+        const s = await c.query<{ starts_at: Date; venue: string }>(
+          `SELECT starts_at, venue FROM admission_slots WHERE id = $1 AND cycle_id = $2 AND stage_id = $3`,
+          [p.slotId, p.cycleId, p.stageId],
+        );
+        if (!s.rows[0])
+          throw new DomainError('not-found', 'Slot not found in this session and stage', {
+            status: 404,
+          });
+        slot = `${new Intl.DateTimeFormat('en-IN', {
+          timeZone: 'Asia/Kolkata',
+          day: '2-digit',
+          month: 'short',
+          hour: '2-digit',
+          minute: '2-digit',
+        }).format(s.rows[0].starts_at)} · ${s.rows[0].venue}`;
+      }
       const rows = (await this.rowsIn(c, p, paper)).filter(
-        (r) => r.state === 'waiting' || r.state === 'held' || r.state === 'sent_back',
+        (r) =>
+          (r.state === 'waiting' || r.state === 'held' || r.state === 'sent_back') &&
+          (!p.slotId || r.slotId === p.slotId),
       );
       const wb = new ExcelJS.Workbook();
       const ws = wb.addWorksheet('Results');
-      ws.getCell('A1').value = `Results sheet: ${at.stage} · ${at.className}`;
+      ws.getCell('A1').value =
+        `Results sheet: ${at.stage} · ${at.className}${slot ? ` · slot ${slot}` : ''}`;
       ws.getCell('A1').font = { bold: true, size: 13 };
       ws.getCell('A2').value =
         `${at.cycle} · made ${new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })} by ${ctx.user.displayName}. Fill the marks (a blank cell is not changed), Absent (Y), Decision (Select or Hold, blank: marks only) and Remark. Candidates already decided are corrected on the Test results page.`;
@@ -605,7 +627,11 @@ export class AdmissionResultsService {
         formatColumns: true,
       });
       return {
-        filename: `Results-${at.stage}-${at.className}.xlsx`.replace(/[^\w.-]+/g, '-'),
+        filename:
+          `Results-${at.stage}-${at.className}${p.slotId ? `-slot-${p.slotId}` : ''}.xlsx`.replace(
+            /[^\w.-]+/g,
+            '-',
+          ),
         contentType: XLSX,
         base64: Buffer.from(await wb.xlsx.writeBuffer()).toString('base64'),
         rows: rows.length,

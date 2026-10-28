@@ -212,6 +212,16 @@ The user asked for a master in Admission set-up.
   admission suites 98 pass, axe on both views; browser in Alpha (the list filled from its subjects; the
   drop-down on the Written test paper; nothing saved).
 
+## Follow-up: marks by Excel on a slot (28 Oct 2026)
+
+Asked on a slot of Tests and interviews: where is the bulk Excel upload of marks by subject? It was
+only on Test results. Now a slot's page also has **Marks by Excel** (for each of its classes with a
+paper): **Download the sheet** gives the same class sheet with only this slot's candidates still to be
+marked or decided (`GET admissions/results/sheet?…&slotId=`; file `Results-<stage>-<class>-slot-<id>`),
+and the upload, Check, Save and the exports work as on Test results. Checked: e2e (the slot's sheet has
+its one open candidate, the class sheet two, a slot of another stage refused); axe on the slot page;
+browser on Alpha's slot 143 (nothing downloaded or uploaded).
+
 ## Not in this plan
 
 Per-subject markers, panel members' separate scores, grades instead of marks, automatic rejection by

@@ -311,6 +311,7 @@ export class AdmissionScheduleService {
           notified: Boolean(x.notified_at),
           attendance: x.attendance,
           marks: x.marks !== null ? Number(x.marks) : null,
+          classId: x.class_id,
           parts:
             papers.get(x.class_id)?.parts.map((pt) => ({
               id: pt.id,

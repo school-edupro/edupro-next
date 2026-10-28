@@ -21,7 +21,8 @@ export class ResultsQueryDto extends createZodDto(ResultsQuerySchema) {}
 export const ResultsExportSchema = ResultsQuerySchema.extend({ format: z.enum(['xlsx', 'pdf']) });
 export class ResultsExportDto extends createZodDto(ResultsExportSchema) {}
 
-export const ResultsSheetSchema = PlaceSchema;
+/** The class's sheet; with a slot, only that slot's candidates (the Tests and interviews page). */
+export const ResultsSheetSchema = PlaceSchema.extend({ slotId: IdSchema.optional() });
 export class ResultsSheetDto extends createZodDto(ResultsSheetSchema) {}
 
 /** The results shown to families from a date and time (docs/design/57, part 4). */

@@ -495,6 +495,29 @@ describe('admission test results by part (e2e)', () => {
       )
     ).json();
     expect(g.place).toMatchObject({ kind: 'interview', paper: { total: 20 } });
+    // the slot's own sheet (Tests and interviews): only its candidates still to be marked or decided
+    const ivPlace = { ...place(), stageId: ids.interview! };
+    const slotSheet = (
+      await call(
+        'GET',
+        `/admissions/results/sheet?${new URLSearchParams({ ...ivPlace, slotId: ids.slot }).toString()}`,
+      )
+    ).json();
+    expect(slotSheet.rows).toBe(1);
+    expect(slotSheet.filename).toBe('Results-Interview-Class-IX-slot-' + ids.slot + '.xlsx');
+    expect(
+      (
+        await call('GET', `/admissions/results/sheet?${new URLSearchParams(ivPlace).toString()}`)
+      ).json().rows,
+    ).toBe(2);
+    expect(
+      (
+        await call(
+          'GET',
+          `/admissions/results/sheet?${new URLSearchParams({ ...place(), slotId: ids.slot }).toString()}`,
+        )
+      ).statusCode,
+    ).toBe(404);
     expect(g.rows.find((r: { id: string }) => r.id === apps[0])).toMatchObject({
       total: 17,
       percent: 85,

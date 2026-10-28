@@ -160,6 +160,7 @@ export interface SlotDetail {
     notified: boolean;
     attendance: string | null;
     marks: number | null;
+    classId: string;
     /** the candidate's class paper (docs/design/57): marks part by part */
     parts: Array<{ id: string; name: string; maxMarks: number }> | null;
     partMarks: Record<string, number | null>;

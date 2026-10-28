@@ -57,8 +57,11 @@ export async function resultsSheet(p: {
   cycleId: string;
   classId: string;
   stageId: string;
+  /** a slot's sheet: only its candidates */
+  slotId?: string;
 }): Promise<Out<File64 & { rows: number }>> {
-  if (!placeOk(p)) return { ok: false, error: 'Choose the session, class and stage' };
+  if (!placeOk(p) || (p.slotId !== undefined && !okId(p.slotId)))
+    return { ok: false, error: 'Choose the session, class and stage' };
   try {
     return {
       ok: true,

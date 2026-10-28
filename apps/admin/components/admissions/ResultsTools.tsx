@@ -31,10 +31,17 @@ export function ResultsTools({
   place,
   query,
   canEdit,
+  slotId,
+  title = 'Sheet and downloads',
+  help,
 }: {
   place: { cycleId: string; classId: string; stageId: string };
   query: string;
   canEdit: boolean;
+  /** a slot's sheet: only its candidates (Tests and interviews) */
+  slotId?: string;
+  title?: string;
+  help?: string;
 }) {
   const router = useRouter();
   const [pending, start] = useTransition();
@@ -65,12 +72,17 @@ export function ResultsTools({
   return (
     <section
       className="ep-card"
-      aria-labelledby="rs-sheet-h"
+      aria-labelledby={`rs-sheet-h-${place.classId}`}
       style={{ marginBottom: 'var(--sp-4)' }}
     >
-      <h2 id="rs-sheet-h" className="ep-card__title">
-        Sheet and downloads
+      <h2 id={`rs-sheet-h-${place.classId}`} className="ep-card__title">
+        {title}
       </h2>
+      {help ? (
+        <p className="ep-field__help" style={{ marginTop: 0 }}>
+          {help}
+        </p>
+      ) : null}
       <div className="ep-lead-filter">
         {canEdit ? (
           <>
@@ -81,7 +93,7 @@ export function ResultsTools({
                 disabled={pending}
                 onClick={() =>
                   run(async () => {
-                    const r = await resultsSheet(place);
+                    const r = await resultsSheet({ ...place, ...(slotId ? { slotId } : {}) });
                     if (!r.ok) return r.error;
                     save(r.data);
                     return null;

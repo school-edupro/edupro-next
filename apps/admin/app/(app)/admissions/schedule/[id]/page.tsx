@@ -1,5 +1,6 @@
 import { Card, PageHeader } from '@edupro/ui';
 import { notFound } from 'next/navigation';
+import { ResultsTools } from '@/components/admissions/ResultsTools';
 import { SlotCandidates } from '@/components/admissions/SlotCandidates';
 import { SlotForm } from '@/components/admissions/SlotForm';
 import { Notice } from '@/components/Notice';
@@ -54,6 +55,29 @@ export default async function SlotPage({
           }
         />
       </Card>
+      {canManage
+        ? // marks by Excel for the slot's classes with a paper (docs/design/57): only this slot's candidates
+          [
+            ...new Map(
+              slot.candidates.filter((c) => c.parts).map((c) => [c.classId, c.className] as const),
+            ),
+          ].map(([classId, className], _i, all) => (
+            <ResultsTools
+              key={classId}
+              place={{ cycleId: slot.session.id, classId, stageId: slot.stageId }}
+              query={new URLSearchParams({
+                cycleId: slot.session.id,
+                classId,
+                stageId: slot.stageId,
+                slotId: slot.id,
+              }).toString()}
+              canEdit={canManage}
+              slotId={slot.id}
+              title={`Marks by Excel${all.length > 1 ? ` · ${className}` : ''}`}
+              help={`The sheet lists this slot's ${className} candidates still to be marked or decided, with a column per ${slot.kind === 'interview' ? 'parameter' : 'subject'}. Fill the marks, Absent (Y), Decision (Select or Hold) and Remark, then Check and Save. Every candidate of the class is on Admissions → Test results.`}
+            />
+          ))
+        : null}
       {canManage ? (
         <Card elevated title="The slot">
           <SlotForm
