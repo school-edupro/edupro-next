@@ -225,10 +225,12 @@ export class AdmissionScoreReportService {
       merit: string | null;
       lines: PointLine[] | null;
       confirmed: boolean;
+      steps: Array<{ stageId: string }> | null;
+      stage_no: number;
     }>(
       `SELECT a.id::text, a.application_no AS number, a.candidate_name AS candidate, k.name AS category, a.status::text,
               a.child_dob AS dob, a.form_points::text, a.merit::text, a.points_breakdown AS lines,
-              a.points_confirmed_at IS NOT NULL AS confirmed
+              a.points_confirmed_at IS NOT NULL AS confirmed, a.process_steps AS steps, a.stage_no
          FROM applications a LEFT JOIN admission_fee_categories k ON k.id = a.category_id
         WHERE a.cycle_id = $1 AND a.class_id = $2 AND a.form_id IS NOT NULL AND a.status::text <> 'draft'
           AND ($3::bigint IS NULL OR a.category_id = $3) AND ($4::text IS NULL OR a.status::text = $4)
@@ -284,6 +286,10 @@ export class AdmissionScoreReportService {
         confirmed: x.confirmed,
         check: lines.some((l) => Boolean(l.check)),
         remarks: levelCols.map((col) => remarkOf(x.id, col.key)),
+        // where the registration is in its process, for a stage's view
+        steps: (x.steps ?? []).map((y) => y.stageId),
+        stageNo: x.stage_no,
+        cancelled: ['cancelled', 'withdrawn'].includes(x.status),
       };
     });
     // the rank among the live ones, as Selection orders them
@@ -305,19 +311,91 @@ export class AdmissionScoreReportService {
         );
       })
       .sort((a, b) => (a.rank ?? 1e9) - (b.rank ?? 1e9) || Number(a.id) - Number(b.id));
-    return {
+    // the report's views (docs/design/62): the merit list, and each stage with marks
+    const views = [
+      { id: 'merit', name: 'Merit list' },
+      ...[...new Map(markCols.map((x) => [x.stageId, x.stage] as const))].map(([id, name]) => ({
+        id,
+        name,
+      })),
+    ];
+    const view = views.find((x) => x.id === (q.view ?? 'merit'));
+    if (!view)
+      throw new DomainError('not-found', 'That stage has no marks in this class', { status: 404 });
+    const base = {
       session: line.rows[0].session,
       className: line.rows[0].class_name,
       max,
-      levels: levelCols.map((x) => x.label),
-      marks: markCols.map(({ stage, label, max, kind }) => ({ stage, label, max, kind })),
-      criteria: rules.map((k) => ({
-        name: k.name,
-        kind: k.kind,
-        cap: k.cap,
-        points: k.points,
-      })),
-      rows: all,
+      views,
+      view,
+    };
+    if (view.id === 'merit')
+      return {
+        ...base,
+        levels: levelCols.map((x) => x.label),
+        marks: markCols.map(({ stage, label, max, kind }) => ({ stage, label, max, kind })),
+        criteria: rules.map((k) => ({
+          name: k.name,
+          kind: k.kind,
+          cap: k.cap,
+          points: k.points,
+        })),
+        rows: all.map(({ steps: _s, stageNo: _n, cancelled: _c, ...x }) => ({
+          ...x,
+          total: x.merit,
+          percent: null as number | null,
+        })),
+      };
+    // a stage's result: its parts and total, the % and the rank by its total (equal totals share it)
+    const at = markCols.flatMap((col, i) => (col.stageId === view.id ? [i] : []));
+    const totalAt = at.find((i) => markCols[i]!.kind !== 'part')!;
+    const outOf = markCols[totalAt]!.max;
+    const levelAt = levelCols.flatMap((col, i) => (col.key.startsWith(`${view.id}:`) ? [i] : []));
+    const sat = all
+      .filter((x) => {
+        const idx = x.steps.indexOf(view.id);
+        return (idx >= 0 && x.stageNo >= idx) || at.some((i) => x.cells[i] !== null);
+      })
+      .map((x) => {
+        const total = x.cells[totalAt] ?? null;
+        return {
+          ...x,
+          total: typeof total === 'number' ? total : null,
+          absent: total === 'AB',
+          percent:
+            typeof total === 'number' && outOf ? Math.round((total / outOf) * 10000) / 100 : null,
+        };
+      });
+    const scores = sat
+      .filter((x) => !x.cancelled && x.total !== null)
+      .map((x) => x.total!)
+      .sort((a, b) => b - a);
+    return {
+      ...base,
+      levels: levelAt.map((i) => levelCols[i]!.label),
+      marks: at.map((i) => {
+        const { stage, label, max, kind } = markCols[i]!;
+        return { stage, label, max, kind };
+      }),
+      criteria: [] as Array<{
+        name: string;
+        kind: 'fixed' | 'table' | 'sibling';
+        cap: number | null;
+        points: number;
+      }>,
+      rows: sat
+        .map(({ steps: _s, stageNo: _n, cancelled, ...x }) => ({
+          ...x,
+          cells: at.map((i) => x.cells[i] ?? null),
+          remarks: levelAt.map((i) => x.remarks[i] ?? null),
+          rank: !cancelled && x.total !== null ? scores.indexOf(x.total) + 1 : null,
+        }))
+        .sort(
+          (a, b) =>
+            (a.rank ?? 1e9) - (b.rank ?? 1e9) ||
+            (a.number ?? '').localeCompare(b.number ?? '') ||
+            Number(a.id) - Number(b.id),
+        ),
     };
   }
 
@@ -329,50 +407,79 @@ export class AdmissionScoreReportService {
     const rep = await this.report(ctx, q);
     const wb = new ExcelJS.Workbook();
     const ws = wb.addWorksheet('Score report');
-    ws.addRow([`Score report: ${rep.className} · ${rep.session}`]).font = { bold: true };
+    ws.addRow([
+      `${rep.view.id === 'merit' ? 'Score report' : `${rep.view.name} result`}: ${rep.className} · ${rep.session}`,
+    ]).font = { bold: true };
     ws.addRow([`${String(rep.rows.length)} registrations · printed ${ist(new Date())}`]);
     ws.addRow([]);
-    const head = [
-      'Rank',
-      'Registration no.',
-      'Candidate',
-      'Category',
-      'Status',
-      ...rep.criteria.map((k) => k.name),
-      'Form points',
-      ...rep.marks.map((m) =>
-        m.kind === 'part'
-          ? `${m.stage} · ${m.label}${m.max !== null ? ` (${String(m.max)})` : ''}`
-          : `${m.label}${m.max !== null ? ` (${String(m.max)})` : ''}`,
-      ),
-      'Total',
-      'To check',
-      ...rep.levels,
-    ];
+    const merit = rep.view.id === 'merit';
+    const head = merit
+      ? [
+          'Rank',
+          'Registration no.',
+          'Candidate',
+          'Category',
+          'Status',
+          ...rep.criteria.map((k) => k.name),
+          'Form points',
+          ...rep.marks.map((m) =>
+            m.kind === 'part'
+              ? `${m.stage} · ${m.label}${m.max !== null ? ` (${String(m.max)})` : ''}`
+              : `${m.label}${m.max !== null ? ` (${String(m.max)})` : ''}`,
+          ),
+          'Total',
+          'To check',
+          ...rep.levels,
+        ]
+      : [
+          'Rank',
+          'Registration no.',
+          'Candidate',
+          'Category',
+          'Status',
+          ...rep.marks.map((m) => `${m.label}${m.max !== null ? ` (${String(m.max)})` : ''}`),
+          '%',
+          ...rep.levels,
+        ];
     const h = ws.addRow(head);
     h.font = { bold: true };
     head.forEach((_, i) => (ws.getColumn(i + 1).width = i === 2 ? 26 : i === 1 ? 22 : 14));
     for (const x of rep.rows)
-      ws.addRow([
-        x.rank ?? '',
-        x.number ?? '',
-        x.candidate ?? '',
-        x.category ?? '',
-        x.status,
-        ...x.lines.map((l) => (l ? l.points : '')),
-        x.points ?? '',
-        ...x.cells.map((v) => v ?? ''),
-        x.merit ?? '',
-        x.lines
-          .map((l) => l?.check)
-          .filter(Boolean)
-          .join('; '),
-        ...x.remarks.map((m) => m ?? ''),
-      ]);
+      ws.addRow(
+        merit
+          ? [
+              x.rank ?? '',
+              x.number ?? '',
+              x.candidate ?? '',
+              x.category ?? '',
+              x.status,
+              ...x.lines.map((l) => (l ? l.points : '')),
+              x.points ?? '',
+              ...x.cells.map((v) => v ?? ''),
+              x.merit ?? '',
+              x.lines
+                .map((l) => l?.check)
+                .filter(Boolean)
+                .join('; '),
+              ...x.remarks.map((m) => m ?? ''),
+            ]
+          : [
+              x.rank ?? '',
+              x.number ?? '',
+              x.candidate ?? '',
+              x.category ?? '',
+              x.status,
+              ...x.cells.map((v) => v ?? ''),
+              x.percent ?? '',
+              ...x.remarks.map((m) => m ?? ''),
+            ],
+      );
     const bytes = Buffer.from(await wb.xlsx.writeBuffer());
     return {
       bytes,
-      filename: `score-report-${rep.className.replace(/[^A-Za-z0-9]+/g, '-')}.xlsx`,
+      filename: `score-report-${rep.className}${rep.view.id === 'merit' ? '' : `-${rep.view.name}`}`
+        .replace(/[^A-Za-z0-9]+/g, '-')
+        .concat('.xlsx'),
       contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
     };
   }
@@ -399,7 +506,8 @@ export class AdmissionScoreReportService {
           contact: sc.contact ? `Phone ${sc.contact}` : null,
         },
         logo: await this.core.fileBytes(c, sc.logo),
-        title: `Score report: ${rep.className}`,
+        mode: rep.view.id === 'merit' ? 'merit' : 'stage',
+        title: `${rep.view.id === 'merit' ? 'Score report' : `${rep.view.name} result`}: ${rep.className}`,
         subtitle: `${rep.session} · ${String(rep.rows.length)} registrations${rep.max ? ` · points out of ${String(rep.max)}` : ''}`,
         criteria: rep.criteria.map((k) => k.name),
         // the PDF's narrow columns: a part by its name, a stage's total by the stage
@@ -415,7 +523,8 @@ export class AdmissionScoreReportService {
           lines: x.lines.map((l) => (l ? String(l.points) : '-')),
           points: n(x.points),
           marks: x.cells.map((v) => (v === null ? '-' : String(v))),
-          total: n(x.merit),
+          // a stage's result: its % in the last column
+          total: rep.view.id === 'merit' ? n(x.merit) : n(x.percent),
           check: x.check,
           note: rep.levels
             .map((l, i) => (x.remarks[i] ? `${l}: ${x.remarks[i]!}` : null))
@@ -426,7 +535,10 @@ export class AdmissionScoreReportService {
       });
       return {
         bytes,
-        filename: `score-report-${rep.className.replace(/[^A-Za-z0-9]+/g, '-')}.pdf`,
+        filename:
+          `score-report-${rep.className}${rep.view.id === 'merit' ? '' : `-${rep.view.name}`}`
+            .replace(/[^A-Za-z0-9]+/g, '-')
+            .concat('.pdf'),
         contentType: 'application/pdf',
       };
     });

@@ -42,6 +42,8 @@ export const ScoreReportQuerySchema = z.object({
   check: z.enum(['1']).optional(),
   /** a name or registration no. (docs/design/61) */
   q: z.string().trim().max(80).optional(),
+  /** the merit list (default), or one Written test / Interview stage's result (docs/design/62) */
+  view: z.union([z.literal('merit'), IdSchema]).optional(),
 });
 export class ScoreReportQueryDto extends createZodDto(ScoreReportQuerySchema) {}
 

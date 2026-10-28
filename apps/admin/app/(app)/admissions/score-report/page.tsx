@@ -32,6 +32,7 @@ export default async function ScoreReportPage({
     status?: string;
     check?: string;
     q?: string;
+    view?: string;
   }>;
 }) {
   const sp = await searchParams;
@@ -58,6 +59,8 @@ export default async function ScoreReportPage({
   if (sp.status && /^[a-z_]{3,20}$/.test(sp.status)) keep.status = sp.status;
   if (sp.check === '1') keep.check = '1';
   if (search) keep.q = search;
+  const viewId = sp.view && (sp.view === 'merit' || ID.test(sp.view)) ? sp.view : 'merit';
+  if (viewId !== 'merit') keep.view = viewId;
   const q = new URLSearchParams();
   if (cycle && cls) {
     q.set('cycleId', cycle.id);
@@ -66,8 +69,24 @@ export default async function ScoreReportPage({
     if (sp.status && /^[a-z_]{3,20}$/.test(sp.status)) q.set('status', sp.status);
     if (sp.check === '1') q.set('check', '1');
     if (search) q.set('q', search);
+    if (viewId !== 'merit') q.set('view', viewId);
   }
-  const rep = cycle && cls ? await apiFetch<ScoreReport>(`/admissions/score-report?${q}`) : null;
+  // a stage no longer in the class's process: back to the merit list
+  const rep =
+    cycle && cls
+      ? await apiFetch<ScoreReport>(`/admissions/score-report?${q}`).catch(async (e: unknown) => {
+          if (viewId === 'merit') throw e;
+          q.delete('view');
+          return apiFetch<ScoreReport>(`/admissions/score-report?${q}`);
+        })
+      : null;
+  const merit = !rep || rep.view.id === 'merit';
+  const viewHref = (id: string) => {
+    const v = new URLSearchParams(q);
+    if (id === 'merit') v.delete('view');
+    else v.set('view', id);
+    return `/admissions/score-report?${v.toString()}`;
+  };
   const n = (v: number | null) => (v === null ? '-' : String(v));
   return (
     <>
@@ -124,6 +143,7 @@ export default async function ScoreReportPage({
               />
               <input type="hidden" name="cycleId" value={cycle.id} />
               <input type="hidden" name="classId" value={cls.id} />
+              {viewId !== 'merit' ? <input type="hidden" name="view" value={viewId} /> : null}
             </>
           ) : null}
           <label className="ep-field">
@@ -175,12 +195,30 @@ export default async function ScoreReportPage({
         <p className="ep-card">No admission session with classes yet.</p>
       ) : (
         <Card>
+          {rep.views.length > 1 ? (
+            <nav
+              className="ep-lead-views"
+              aria-label="Report"
+              style={{ marginBottom: 'var(--sp-3)' }}
+            >
+              {rep.views.map((v) => (
+                <a
+                  key={v.id}
+                  href={viewHref(v.id)}
+                  aria-current={rep.view.id === v.id ? 'page' : undefined}
+                >
+                  {v.id === 'merit' ? v.name : `${v.name} result`}
+                </a>
+              ))}
+            </nav>
+          ) : null}
           <p className="ep-field__help" style={{ marginTop: 0 }}>
             {rep.className} · {rep.session} · {rep.rows.length}{' '}
             {search || sp.status || sp.categoryId || sp.check === '1' ? 'matching ' : ''}
             registrations
-            {rep.max ? ` · points out of ${String(rep.max)}` : ''}. Change the criteria on the
-            session&rsquo;s Merit points tab.
+            {merit
+              ? `${rep.max ? ` · points out of ${String(rep.max)}` : ''}. Change the criteria on the session’s Merit points tab.`
+              : ` who reached ${rep.view.name}, ranked by its total (equal totals share a rank).`}
           </p>
           {rep.rows.length === 0 ? (
             <p>No registration matches.</p>
@@ -202,7 +240,7 @@ export default async function ScoreReportPage({
                         {k.name}
                       </th>
                     ))}
-                    <th scope="col">Form points</th>
+                    {merit ? <th scope="col">Form points</th> : null}
                     {rep.marks.map((m, i) => (
                       <th key={i} scope="col" className="ep-num">
                         {m.kind === 'part' ? (
@@ -225,7 +263,7 @@ export default async function ScoreReportPage({
                         ) : null}
                       </th>
                     ))}
-                    <th scope="col">Total</th>
+                    <th scope="col">{merit ? 'Total' : '%'}</th>
                     {rep.levels.map((l) => (
                       <th key={l} scope="col">
                         {l}
@@ -247,13 +285,15 @@ export default async function ScoreReportPage({
                         {r.check ? <Badge tone="warning">Check</Badge> : null}
                         {r.confirmed ? <Badge tone="success">Confirmed</Badge> : null}
                       </td>
-                      {r.lines.map((l, i) => (
-                        <td key={i} className="ep-num" title={l?.check ?? undefined}>
-                          {l ? `${String(l.points)}` : '-'}
-                          {l?.check ? <span className="ep-sr-only"> ({l.check})</span> : null}
-                        </td>
-                      ))}
-                      <td className="ep-num">{n(r.points)}</td>
+                      {merit
+                        ? r.lines.map((l, i) => (
+                            <td key={i} className="ep-num" title={l?.check ?? undefined}>
+                              {l ? `${String(l.points)}` : '-'}
+                              {l?.check ? <span className="ep-sr-only"> ({l.check})</span> : null}
+                            </td>
+                          ))
+                        : null}
+                      {merit ? <td className="ep-num">{n(r.points)}</td> : null}
                       {r.cells.map((v, i) =>
                         rep.marks[i]?.kind === 'part' ? (
                           <td key={i} className="ep-num">
@@ -266,7 +306,7 @@ export default async function ScoreReportPage({
                         ),
                       )}
                       <td className="ep-num">
-                        <strong>{n(r.merit)}</strong>
+                        <strong>{merit ? n(r.merit) : n(r.percent)}</strong>
                       </td>
                       {rep.levels.map((l, i) => (
                         <td key={l} style={{ minWidth: '12rem' }}>

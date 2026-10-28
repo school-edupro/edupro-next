@@ -1086,4 +1086,67 @@ describe('admission test results by part (e2e)', () => {
     expect(pdf.statusCode).toBe(200);
     expect(pdf.rawPayload.subarray(0, 4).toString()).toBe('%PDF');
   });
+
+  // ---- docs/design/62, part 1: the score report's views --------------------------------------------
+  it("the score report's views: the merit list, the written test's result and the interview's", async () => {
+    const q = new URLSearchParams({ cycleId: ids.cycle!, classId: ids.cls! }).toString();
+    const merit = (await call('GET', `/admissions/score-report?${q}`)).json();
+    expect(merit.view).toEqual({ id: 'merit', name: 'Merit list' });
+    expect(merit.views).toEqual([
+      { id: 'merit', name: 'Merit list' },
+      { id: ids.test, name: 'Written test' },
+      { id: ids.interview, name: 'Interview' },
+    ]);
+    const wt = (await call('GET', `/admissions/score-report?${q}&view=${ids.test!}`)).json();
+    expect(wt.view).toEqual({ id: ids.test, name: 'Written test' });
+    expect(wt.criteria).toEqual([]);
+    expect(wt.marks.map((m: { label: string }) => m.label)).toEqual([
+      'English',
+      'Maths',
+      'Written test total',
+    ]);
+    // ranked by the written total, high to low; equal totals share a rank; the % of 100
+    const g = (await grid()).rows as Array<{ id: string; total: number | null; absent: boolean }>;
+    const rows = wt.rows as Array<{
+      id: string;
+      total: number | null;
+      rank: number | null;
+      percent: number | null;
+    }>;
+    for (const r of rows) {
+      const gr = g.find((x) => x.id === r.id)!;
+      expect(r.total).toBe(gr.absent ? null : gr.total);
+      expect(r.percent).toBe(r.total);
+      const t = r.total;
+      if (t !== null)
+        expect(r.rank).toBe(
+          g.filter((x) => !x.absent && x.total !== null && x.total > t).length + 1,
+        );
+    }
+    expect(wt.rows[0].rank).toBe(1);
+    const iv = (await call('GET', `/admissions/score-report?${q}&view=${ids.interview!}`)).json();
+    expect(iv.marks.map((m: { label: string }) => m.label)).toEqual([
+      'Communication',
+      'Confidence',
+      'Interview total',
+    ]);
+    expect(iv.levels.every((l: string) => l.startsWith('Interview'))).toBe(true);
+    expect((await call('GET', `/admissions/score-report?${q}&view=999999`)).statusCode).toBe(404);
+    // the downloads follow the view
+    const x = await call('GET', `/admissions/score-report.xlsx?${q}&view=${ids.test!}`);
+    const wb = new ExcelJS.Workbook();
+    await wb.xlsx.load(x.rawPayload as unknown as ArrayBuffer);
+    expect(String(wb.worksheets[0]!.getRow(1).getCell(1).value)).toMatch(
+      /^Written test result: Class IX/,
+    );
+    expect((wb.worksheets[0]!.getRow(4).values as unknown[]).slice(6, 10)).toEqual([
+      'English (50)',
+      'Maths (50)',
+      'Written test total (100)',
+      '%',
+    ]);
+    const pdf = await call('GET', `/admissions/score-report.pdf?${q}&view=${ids.interview!}`);
+    expect(pdf.statusCode).toBe(200);
+    expect(pdf.headers['content-disposition']).toContain('score-report-Class-IX-Interview.pdf');
+  });
 });

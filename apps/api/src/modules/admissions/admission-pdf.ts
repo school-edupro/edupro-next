@@ -413,6 +413,8 @@ export interface ScoreReportInput {
   criteria: string[];
   /** the marks: a column per subject or parameter and each stage's total (docs/design/61) */
   marks: string[];
+  /** the merit list (points, marks, total) or one stage's result (its marks and %, docs/design/62) */
+  mode?: 'merit' | 'stage';
   rows: Array<{
     rank: string;
     number: string;
@@ -435,11 +437,18 @@ export async function scoreReportPdf(p: ScoreReportInput): Promise<Buffer> {
     { h: 'Reg. no.', w: 92 },
     { h: 'Candidate', w: 96 },
   ];
-  const tail = [
-    { h: 'Points', w: 34 },
-    { h: 'Total', w: 34 },
-  ];
-  const narrow = p.criteria.length + p.marks.length;
+  const stage = p.mode === 'stage';
+  const tail = stage
+    ? [
+        { h: '', w: 0 },
+        { h: '%', w: 34 },
+      ]
+    : [
+        { h: 'Points', w: 34 },
+        { h: 'Total', w: 34 },
+      ];
+  const criteria = stage ? [] : p.criteria;
+  const narrow = criteria.length + p.marks.length;
   const base = [...fixed, ...tail].reduce((n, c) => n + c.w, 0);
   // upright A4 while every criterion and mark gets 28 points; landscape beyond (docs/design/61)
   const size: [number, number] = base + narrow * 28 <= A4[0] - 2 * M ? A4 : [A4[1], A4[0]];
@@ -447,8 +456,8 @@ export async function scoreReportPdf(p: ScoreReportInput): Promise<Buffer> {
   const each = narrow ? Math.max(20, (W - base) / narrow) : 0;
   const cols = [
     ...fixed,
-    ...p.criteria.map((h) => ({ h, w: each })),
-    tail[0]!,
+    ...criteria.map((h) => ({ h, w: each })),
+    ...(stage ? [] : [tail[0]!]),
     ...p.marks.map((h) => ({ h, w: each })),
     tail[1]!,
   ];
@@ -509,7 +518,9 @@ export async function scoreReportPdf(p: ScoreReportInput): Promise<Buffer> {
       y = size[1] - 50;
       head();
     }
-    const cells = [r.rank, r.number, r.candidate, ...r.lines, r.points, ...r.marks, r.total];
+    const cells = stage
+      ? [r.rank, r.number, r.candidate, ...r.marks, r.total]
+      : [r.rank, r.number, r.candidate, ...r.lines, r.points, ...r.marks, r.total];
     let x = M + 2;
     for (const [i, c] of cols.entries()) {
       const isTotal = i === cols.length - 1;
@@ -547,7 +558,9 @@ export async function scoreReportPdf(p: ScoreReportInput): Promise<Buffer> {
   y -= 14;
   page.drawText(
     latin(
-      `Rank: merit (points + marks), then the older child, then a draw. Candidates in blue have a line for the office to check. Printed ${p.printedAt}`,
+      stage
+        ? `Rank: by the stage's total, high to low; equal totals share a rank. AB: absent. Printed ${p.printedAt}`
+        : `Rank: merit (points + marks), then the older child, then a draw. Candidates in blue have a line for the office to check. Printed ${p.printedAt}`,
     ),
     { x: M, y, size: 7.5, font: regular, color: MUTED },
   );

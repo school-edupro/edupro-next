@@ -30,6 +30,8 @@ export async function GET(req: NextRequest) {
     if (st && /^[a-z_]{3,20}$/.test(st)) p.set('status', st);
     const text = (q.get('q') ?? '').trim().slice(0, 80);
     if (text) p.set('q', text);
+    const view = q.get('view');
+    if (view && (view === 'merit' || ID.test(view))) p.set('view', view);
     if (q.get('check') === '1') p.set('check', '1');
     path = `/admissions/score-report.${report}?${p.toString()}`;
   } else return NextResponse.json({ type: 'not-found' }, { status: 404 });

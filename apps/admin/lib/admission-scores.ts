@@ -40,6 +40,9 @@ export const TABLE_TITLE: Record<ScoreTableName, string> = {
 export interface ScoreReport {
   session: string;
   className: string;
+  /** the merit list, or a Written test / Interview stage's result (docs/design/62) */
+  view: { id: string; name: string };
+  views: Array<{ id: string; name: string }>;
   max: number | null;
   /** a column per level of the class's process (docs/design/50) */
   levels: string[];
@@ -68,6 +71,10 @@ export interface ScoreReport {
     /** the marks in the order of `marks` (AB: absent) */
     cells: Array<number | 'AB' | null>;
     merit: number | null;
+    /** the merit (merit list) or the stage's total (a stage's view) */
+    total: number | null;
+    /** a stage's view: the total as % of its maximum */
+    percent: number | null;
     confirmed: boolean;
     check: boolean;
     rank: number | null;
