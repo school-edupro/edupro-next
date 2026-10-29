@@ -237,3 +237,37 @@ export async function saveMarkCode(fd: FormData) {
 export async function installGradeScalePresets() {
   return run('/exams/masters', () => apiFetch('/exams/grade-scales/presets', { method: 'POST' }));
 }
+
+// ---- submit, verify, reopen (docs/design/65, part 2) ----------------------------------------------
+/** submit | verify | send-back | reopen for one section's subject; back to the page it came from. */
+export async function markEntryStatus(fd: FormData) {
+  const examId = str(fd, 'examId');
+  const action = str(fd, 'action');
+  const backTo = str(fd, 'back') || `/exams/${examId}/status`;
+  if (!['submit', 'verify', 'send-back', 'reopen'].includes(action))
+    back(backTo, 'validation-failed', 'Unknown step');
+  const note = str(fd, 'note');
+  const done: Record<string, string> = {
+    submit: 'Submitted for verification',
+    verify: 'Verified and locked',
+    'send-back': 'Sent back to the teacher',
+    reopen: 'Reopened',
+  };
+  return run(
+    backTo,
+    () =>
+      apiFetch(`/exams/${examId}/entry-status/${action}`, {
+        method: 'POST',
+        body: JSON.stringify({
+          classSectionId: str(fd, 'classSectionId'),
+          subjectId: str(fd, 'subjectId'),
+          ...(action === 'send-back' || action === 'reopen'
+            ? { note }
+            : note
+              ? { remark: note }
+              : {}),
+        }),
+      }),
+    done[action],
+  );
+}

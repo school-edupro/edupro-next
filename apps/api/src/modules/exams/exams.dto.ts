@@ -14,6 +14,9 @@ export const EXAMS = {
   attendanceEnter: 'exams.attendance.enter',
   healthEnter: 'exams.health.enter',
   healthView: 'exams.health.view',
+  /** docs/design/65 part 2 */
+  marksVerify: 'exams.marks.verify',
+  resultPublish: 'exams.result.publish',
 } as const;
 
 const DateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'must be YYYY-MM-DD');
@@ -348,3 +351,20 @@ export const PutPartMarksSchema = z.object({
     .max(300),
 });
 export class PutPartMarksDto extends createZodDto(PutPartMarksSchema) {}
+
+// ---- submit, verify, publish (docs/design/65, part 2) ----------------------------------------------
+export const EntryStatusQuerySchema = z.object({ classId: IdSchema.optional() });
+export class EntryStatusQueryDto extends createZodDto(EntryStatusQuerySchema) {}
+export const EntryStatusActionSchema = z.object({
+  classSectionId: IdSchema,
+  subjectId: IdSchema,
+  remark: z.string().trim().max(500).optional(),
+});
+export class EntryStatusActionDto extends createZodDto(EntryStatusActionSchema) {}
+export const EntryStatusNoteSchema = z.object({
+  classSectionId: IdSchema,
+  subjectId: IdSchema,
+  /** why: sent back to the teacher, or reopened after verification */
+  note: z.string().trim().min(3, 'Give the reason (3 letters or more)').max(500),
+});
+export class EntryStatusNoteDto extends createZodDto(EntryStatusNoteSchema) {}

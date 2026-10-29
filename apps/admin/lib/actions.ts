@@ -3449,7 +3449,7 @@ export async function rcSaveTemplate(fd: FormData) {
 
 export async function rcCreateRelease(fd: FormData) {
   const templates: Record<string, string> = {};
-  for (const band of ['primary', 'middle', 'secondary', 'senior']) {
+  for (const band of ['pre_primary', 'primary', 'middle', 'secondary', 'senior']) {
     const v = str(fd, `template:${band}`);
     if (v) templates[band] = v;
   }
@@ -3473,7 +3473,20 @@ export async function rcSetReleaseStatus(fd: FormData) {
   return run(`/exams/report-cards?release=${id}`, () =>
     apiFetch(`/exams/report-cards/releases/${id}`, {
       method: 'PATCH',
-      body: JSON.stringify({ status: str(fd, 'status') }),
+      // withdrawing published results needs a reason (docs/design/65)
+      body: JSON.stringify({ status: str(fd, 'status'), reason: opt(fd, 'reason') }),
+    }),
+  );
+}
+
+/** One student's card held back (with a reason) or shown again (docs/design/65). */
+export async function rcHoldCard(fd: FormData) {
+  const id = str(fd, 'id');
+  const held = str(fd, 'held') === 'yes';
+  return run(`/exams/report-cards?release=${id}&section=${str(fd, 'classSectionId')}`, () =>
+    apiFetch(`/exams/report-cards/releases/${id}/holds`, {
+      method: 'PUT',
+      body: JSON.stringify({ studentId: str(fd, 'studentId'), held, reason: opt(fd, 'reason') }),
     }),
   );
 }

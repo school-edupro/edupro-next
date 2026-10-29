@@ -14,7 +14,7 @@ import { rcInstallDefaults, rcSaveTemplate } from '@/lib/actions';
 import { apiFetch, getMe } from '@/lib/api';
 import type { ReportCardTemplate } from '@/lib/types';
 
-const BANDS = ['primary', 'middle', 'secondary', 'senior'];
+const BANDS = ['pre_primary', 'primary', 'middle', 'secondary', 'senior'];
 
 /** Sprint 17: the report-card designer (layout JSON, CSS, optional HTML body) with preview. */
 export default async function ReportCardTemplatesPage({

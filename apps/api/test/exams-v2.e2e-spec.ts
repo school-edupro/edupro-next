@@ -488,4 +488,231 @@ describe('examinations v2 (e2e)', () => {
     const chitra = fill.json().rows.find((r: { name: string }) => r.name === 'Chitra Exam');
     expect(chitra.subjects).toHaveLength(4);
   });
+
+  // ---- part 2: submit, verify, publish ------------------------------------------------------------
+  const status = (
+    action: string,
+    u: SeededUser,
+    subjectId: string,
+    extra: Record<string, unknown> = {},
+  ) =>
+    call(u, 'POST', `/exams/${examId}/entry-status/${action}`, {
+      classSectionId: section,
+      subjectId,
+      ...extra,
+    });
+
+  it('the teacher submits a subject once every student who takes it has marks; entry stops meanwhile', async () => {
+    await withMigrator((c) =>
+      c.query(
+        `DELETE FROM mark_entries WHERE student_id = $1 AND exam_subject_id = (SELECT id FROM exam_subjects WHERE exam_id = $2 AND subject_id = $3)`,
+        [student.Dev, examId, subject.ENG],
+      ),
+    );
+    const short = await status('submit', clerk, subject.ENG!);
+    expect(short.statusCode).toBe(409);
+    expect(short.json()).toMatchObject({ type: 'exams.marks_missing' });
+    expect(short.json().detail).toBe('1 of 4 students have no marks or code yet');
+    expect((await marks(subject.ENG!, [{ studentId: student.Dev, marks: 20 }])).statusCode).toBe(
+      200,
+    );
+    const sub = await status('submit', clerk, subject.ENG!);
+    expect(sub.statusCode).toBe(201);
+    expect(sub.json()).toMatchObject({
+      status: 'submitted',
+      submittedBy: clerk.sub,
+      takers: 4,
+      entered: 4,
+    });
+    const change = await marks(subject.ENG!, [{ studentId: student.Dev, marks: 25 }]);
+    expect(change.statusCode).toBe(409);
+    expect(change.json().detail).toContain('submitted for verification');
+    const sheet = (
+      await call(
+        clerk,
+        'GET',
+        `/exams/${examId}/marks?classSectionId=${section}&subjectId=${subject.ENG}`,
+      )
+    ).json();
+    expect(sheet.status).toMatchObject({ status: 'submitted', submittedBy: clerk.sub });
+    expect((await status('submit', clerk, subject.ENG!)).statusCode).toBe(409);
+  });
+
+  it('the one who submitted does not verify; the verifier locks the marks and the results follow', async () => {
+    const own = await status('verify', clerk, subject.ENG!);
+    expect(own.statusCode).toBe(403);
+    expect(own.json().type).toBe('exams.not_verifier');
+    await withMigrator((c) => c.query(`DELETE FROM exam_results WHERE exam_id = $1`, [examId]));
+    const ok = await status('verify', admin, subject.ENG!, {
+      remark: 'Checked with the answer sheets',
+    });
+    expect(ok.statusCode).toBe(201);
+    expect(ok.json()).toMatchObject({ status: 'verified', verifiedBy: admin.sub });
+    expect(ok.json().history[0]).toMatchObject({
+      from: 'submitted',
+      to: 'verified',
+      by: admin.sub,
+    });
+    // worked out again on verifying
+    expect(await result('Dev')).toMatchObject({ result: 'fail' });
+    const locked = await marks(subject.ENG!, [{ studentId: student.Dev, marks: 25 }]);
+    expect(locked.json().detail).toContain('verified and locked');
+  });
+
+  it('sends back with a remark; reopening needs the unlock right and a reason, kept in the history', async () => {
+    expect((await status('submit', clerk, subject.MAT!)).statusCode).toBe(201);
+    expect((await status('send-back', admin, subject.MAT!)).statusCode).toBe(400);
+    const back = await status('send-back', admin, subject.MAT!, { note: 'Check Bhanu' });
+    expect(back.json()).toMatchObject({ status: 'open', remark: 'Check Bhanu' });
+    expect((await marks(subject.MAT!, [{ studentId: student.Bhanu, marks: 55 }])).statusCode).toBe(
+      200,
+    );
+    expect((await status('reopen', clerk, subject.ENG!, { note: 'Typo' })).statusCode).toBe(403);
+    expect((await status('reopen', admin, subject.ENG!)).statusCode).toBe(400);
+    const re = await status('reopen', admin, subject.ENG!, { note: 'Re-check Dev' });
+    expect(re.json()).toMatchObject({ status: 'open' });
+    expect(re.json().history.map((x: { to: string }) => x.to)).toEqual([
+      'open',
+      'verified',
+      'submitted',
+    ]);
+    expect(re.json().history[0].note).toBe('Reopened: Re-check Dev');
+    expect((await marks(subject.ENG!, [{ studentId: student.Dev, marks: 34 }])).statusCode).toBe(
+      200,
+    );
+  });
+
+  it('lists the marks waiting for a verifier and the status of every section and subject', async () => {
+    for (const x of [subject.ENG, subject.MAT, subject.AI, subject.ART])
+      expect((await status('submit', clerk, x!)).statusCode).toBe(201);
+    const waiting = (await call(admin, 'GET', '/exams/entry-status/waiting')).json().data as Array<{
+      subjectCode: string;
+      canVerify: boolean;
+    }>;
+    expect(waiting.map((x) => x.subjectCode).sort()).toEqual(['AI', 'ART', 'ENG', 'MAT']);
+    // the clerk verifies nothing
+    expect((await call(clerk, 'GET', '/exams/entry-status/waiting')).json().data).toEqual([]);
+    for (const x of [subject.AI, subject.ART])
+      expect((await status('verify', admin, x!)).statusCode).toBe(201);
+    const all = (await call(admin, 'GET', `/exams/${examId}/entry-status`)).json();
+    expect(all.counts).toEqual({ total: 4, open: 0, submitted: 2, verified: 2, missing: 0 });
+    expect(
+      (all.data as Array<{ subjectCode: string; takers: number }>).map((x) => [
+        x.subjectCode,
+        x.takers,
+      ]),
+    ).toEqual(
+      expect.arrayContaining([
+        ['AI', 2],
+        ['ART', 3],
+        ['ENG', 4],
+      ]),
+    );
+  });
+
+  it('the principal publishes: families told, a held card stays closed, reopening waits for a withdrawal', async () => {
+    const parent = await withMigrator(async (c) => {
+      const u = await seedUser(c, school, `${s}-parent`, 'parent', 'guardian');
+      const g = await c.query<{ id: string }>(
+        `INSERT INTO guardians (school_id, first_name, last_name, mobile, email, user_id)
+         VALUES ($1, 'Ravi', 'Exam', $2, $3, $4) RETURNING id::text`,
+        [school.id, `98${String(Date.now()).slice(-8)}`, `${s.toLowerCase()}@example.com`, u.id],
+      );
+      for (const k of [student.Asha, student.Bhanu])
+        await c.query(
+          `INSERT INTO student_guardians (school_id, student_id, guardian_id, relation, is_primary) VALUES ($1, $2, $3, 'father', true)`,
+          [school.id, k, g.rows[0]!.id],
+        );
+      return u;
+    });
+    for (const x of [subject.ENG, subject.MAT])
+      expect((await status('verify', admin, x!)).statusCode).toBe(201);
+    const rel = await call(admin, 'POST', '/exams/report-cards/releases', {
+      termCode: 'T1',
+      name: 'Term 1',
+      examIds: [examId],
+    });
+    expect(rel.statusCode).toBe(201);
+    const id = rel.json().id as string;
+    expect(rel.json()).toMatchObject({ status: 'draft', unverified: 0 });
+    const url = `/exams/report-cards/releases/${id}`;
+    const sent = await inject({
+      method: 'PATCH',
+      url,
+      headers: h(admin),
+      json: { status: 'submitted' },
+    });
+    expect(sent.json().submittedAt).toBeTruthy();
+    expect(
+      (await call(admin, 'PUT', `${url}/holds`, { studentId: student.Bhanu, held: true }))
+        .statusCode,
+    ).toBe(400);
+    const held = await call(admin, 'PUT', `${url}/holds`, {
+      studentId: student.Bhanu,
+      held: true,
+      reason: 'Meet the class teacher first',
+    });
+    expect(held.json().held).toBe(1);
+    const pub = await inject({
+      method: 'PATCH',
+      url,
+      headers: h(admin),
+      json: { status: 'released' },
+    });
+    expect(pub.statusCode).toBe(200);
+    // Asha's father by e-mail (SMS goes once the school gives the template its DLT id); Bhanu's card is
+    // held: no message for him
+    expect(pub.json()).toMatchObject({ status: 'released', notifiedCount: 1 });
+    const msgs = await withMigrator(
+      async (c) =>
+        (
+          await c.query<{ channel: string; body: string }>(
+            `SELECT m.channel::text, m.body FROM comms_messages m JOIN comms_templates t ON t.id = m.template_id
+            WHERE m.school_id = $1 AND t.code = 'result_published' ORDER BY m.channel`,
+            [school.id],
+          )
+        ).rows,
+    );
+    expect(msgs.map((m) => m.channel)).toEqual(['email']);
+    expect(msgs[0]!.body).toContain('Term 1 result of Asha Exam');
+    const mine = (await call(parent, 'GET', '/exams/mine/results')).json().children as Array<{
+      student: { name: string };
+      terms: Array<{ held: boolean; withheld: boolean }>;
+    }>;
+    expect(mine.find((x) => x.student.name === 'Asha Exam')!.terms[0]).toMatchObject({
+      held: false,
+    });
+    expect(mine.find((x) => x.student.name === 'Bhanu Exam')!.terms[0]).toMatchObject({
+      held: true,
+      withheld: true,
+    });
+    const pdf = await call(parent, 'POST', `/exams/mine/report-cards/${id}/${student.Bhanu}/pdf`);
+    expect(pdf.statusCode).toBe(409);
+    expect(pdf.json().type).toBe('report_card.held');
+    const reopen = await status('reopen', admin, subject.AI!, { note: 'A late correction' });
+    expect(reopen.statusCode).toBe(409);
+    expect(reopen.json().type).toBe('exams.result_published');
+    expect(
+      (await inject({ method: 'PATCH', url, headers: h(admin), json: { status: 'withdrawn' } }))
+        .statusCode,
+    ).toBe(400);
+    const wd = await inject({
+      method: 'PATCH',
+      url,
+      headers: h(admin),
+      json: { status: 'withdrawn', reason: 'A mark of AI to correct' },
+    });
+    expect(wd.json()).toMatchObject({
+      status: 'withdrawn',
+      withdrawnReason: 'A mark of AI to correct',
+    });
+    expect(
+      (await status('reopen', admin, subject.AI!, { note: 'A late correction' })).statusCode,
+    ).toBe(201);
+    // the clerk can neither publish nor withdraw
+    expect(
+      (await inject({ method: 'PATCH', url, headers: h(clerk), json: { status: 'released' } }))
+        .statusCode,
+    ).toBe(403);
+  });
 });

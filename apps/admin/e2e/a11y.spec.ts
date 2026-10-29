@@ -250,6 +250,7 @@ const PAGES = [
   '/academics/subjects',
   '/exams/5',
   '/exams/5/marks',
+  '/exams/5/status',
   '/exams/subject-choices',
   '/insights/assistant',
   '/insights/alerts',

@@ -87,3 +87,36 @@ export async function savePartMarks(fd: FormData) {
   }
   redirect(`${back}&ok=1`);
 }
+
+/**
+ * Submit a section's marks for verification, or (the class teacher) verify or send them back
+ * (docs/design/65, part 2); back to the page the form came from.
+ */
+export async function entryStep(fd: FormData) {
+  const examId = str(fd, 'examId');
+  const action = str(fd, 'action');
+  const back = str(fd, 'back') || '/marks';
+  const sep = back.includes('?') ? '&' : '?';
+  if (!['submit', 'verify', 'send-back'].includes(action))
+    redirect(`${back}${sep}error=validation-failed`);
+  const note = str(fd, 'note');
+  try {
+    await bff.api.fetch(`/exams/${examId}/entry-status/${action}`, {
+      method: 'POST',
+      body: JSON.stringify({
+        classSectionId: str(fd, 'classSectionId'),
+        subjectId: str(fd, 'subjectId'),
+        ...(action === 'send-back' ? { note } : {}),
+      }),
+    });
+  } catch (error) {
+    if (error instanceof ApiError) {
+      const detail = typeof error.problem.detail === 'string' ? error.problem.detail : '';
+      redirect(
+        `${back}${sep}error=${encodeURIComponent(error.problem.type)}&detail=${encodeURIComponent(detail.slice(0, 160))}`,
+      );
+    }
+    throw error;
+  }
+  redirect(`${back}${sep}ok=1&detail=${encodeURIComponent(action)}`);
+}

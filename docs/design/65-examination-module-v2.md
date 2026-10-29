@@ -188,3 +188,52 @@ Decided here, change any before building:
 Exam timetable / date sheet, admit cards, seating plan, invigilation, question papers, answer-sheet
 tracking, re-evaluation, exam fee, supplementary (compartment) exam marks, physical-education test
 batteries (AAHPERD), ICSE / state board cards, moving the old module's mark history in (ETL).
+
+## As built (29 Oct 2026)
+
+- **Part 1** (45b957b, migration 0276): `student_subjects` (year, student, subject, kind, stream) and
+  `app.student_subject_kind()` (no choices recorded = every subject, as before); `mark_codes` seeded
+  per school on first use (`app.mark_codes_seed`: AB zero + fails the subject; ML, EX, NA, OD, L, NEW
+  ADM out of the maximum; a school's own code: zero / exclude / fixed / percent / pro-rata, pro-rata
+  is out of the maximum in one exam); `mark_entries.code` and `.grade` (one of marks, code, grade;
+  absent / exempt kept and following AB / EX); `exam_subjects.max_marks` may be 0 (grade-only, its own
+  `grade_scale_id` or the class's); `exam_classes` locks for indicators, remarks, attendance, health
+  (marks stay per subject); `class_band` `pre_primary` (only when set on the class). `app.enter_marks`
+  takes codes and grades and refuses a subject the student does not take; `app.compute_exam_results`
+  leaves out subjects not taken, additional and grade-only ones and applies each code's treatment.
+  API: `GET/PUT exams/mark-codes`, `POST exams/grade-scales/presets` (CBSE_8POINT, PRIMARY_6POINT,
+  CO_SCHOLASTIC_3; the HPC levels come with part 5), `PUT exams/:id/class-locks` (opening needs
+  `exams.marks.unlock`), `GET exams/:id/marks/excel`, `POST exams/:id/marks/upload` (preview; `apply`
+  saves only without errors; a part takes marks or AB), `exams/subject-choices` (sections, list, put,
+  defaults, excel, upload). The marks sheet gives `codes`, `grades`, each row's `code`, `grade` and
+  `taken`; the register sheet and the report card show a code in place of marks and a grade-only
+  subject's grade. Admin: Exams → an exam → Marks entry (any section / subject / part, codes, grades,
+  Excel), Subject choices (menu), grade scale per subject and entry locks on the exam page, Marks codes
+  and Add the ready-made scales on Exam types and scales. Teacher app: a Code column instead of the AB /
+  EX ticks, grades for grade-only subjects, "Does not take the subject". Template designer fix: the
+  check accepts `hpc_descriptors`, `mode`, `columns`, `descriptors` and the `pre_primary` band.
+- School admins hold `exams.marks.unlock` and not `exams.marks.enter` (the separation of duties kept),
+  so the admin marks screen is read-only for them; the exam office or teachers with the entry right
+  enter there.
+- **Part 2** (migration 0277): `exam_entry_status` (exam subject × section: open / submitted /
+  verified, by / at, remark) with `exam_entry_status_log`; rights `exams.marks.verify` (school and
+  group admins, academic coordinators) and `exams.result.publish` (school and group admins);
+  `app.enter_marks` refuses a student whose section's entry is not open. API (`exam-status.service.ts`):
+  `GET exams/:id/entry-status` (every section × subject: takers, entered, status, counts),
+  `GET exams/entry-status/waiting`, `POST exams/:id/entry-status/submit` (every student who takes it
+  entered), `verify` (the class teacher or a coordinator of the section, or the verify right; the one
+  who submitted only with the verify right; the exam's results worked out again), `send-back` (a note),
+  `reopen` (`exams.marks.unlock` and a reason; refused while a release with the exam is published).
+  Releases: draft → submitted ("Send to the principal") → released (`exams.result.publish`: families
+  told by SMS and e-mail through the `result_published` template, `notified_count`) → withdrawn (a
+  reason); `unverified` and `held` on a release; `PUT exams/report-cards/releases/:id/holds` holds one
+  student's card (a reason): no message, the family sees it withheld and the PDF is refused
+  (`report_card.held`). SMS goes once the school gives the template its DLT id (as every SMS).
+  Admin: Marks status page per exam (figures, filters, Submit / Verify / Send back / Reopen), the
+  status and the steps on the marks screen, Send to the principal / Publish / Withdraw (reason) and Hold
+  on Report cards, the pre-primary band in releases and templates. Teacher app: the sheet's status and
+  Submit for verification; Verify marks (class teachers) with Verify and Send back.
+- Tests: exams-v2 e2e 13 (presets, codes, grade-only, choices, codes and grades, results, type locks,
+  marks and choices by Excel, submit, verify, send back, reopen, waiting, publish with a held card and
+  a withdrawal); sprint 14-18, 20, exam parts, permission coverage 66; db rls and report card; etl
+  exams; a11y exam pages (marks, status, subject choices, report cards, masters) and the teacher app.

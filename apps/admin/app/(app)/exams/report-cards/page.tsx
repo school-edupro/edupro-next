@@ -11,12 +11,30 @@ import {
 } from '@edupro/ui';
 import { getTranslations } from 'next-intl/server';
 import { Notice } from '@/components/Notice';
-import { rcCreateRelease, rcRenderBatch, rcRenderOne, rcSetReleaseStatus } from '@/lib/actions';
+import {
+  rcCreateRelease,
+  rcHoldCard,
+  rcRenderBatch,
+  rcRenderOne,
+  rcSetReleaseStatus,
+} from '@/lib/actions';
 import { apiFetch, getMe } from '@/lib/api';
 import { sectionOptions } from '@/lib/sections';
 import type { Exam, ReportCardRelease, ReportCardStatus, ReportCardTemplate } from '@/lib/types';
 
-const BANDS = ['primary', 'middle', 'secondary', 'senior'] as const;
+const BANDS = ['pre_primary', 'primary', 'middle', 'secondary', 'senior'] as const;
+const STATUS_TONE: Record<string, 'success' | 'danger' | 'warning' | 'neutral'> = {
+  released: 'success',
+  withdrawn: 'danger',
+  submitted: 'warning',
+  draft: 'neutral',
+};
+const STATUS_LABEL: Record<string, string> = {
+  draft: 'Draft',
+  submitted: 'With the principal',
+  released: 'Published',
+  withdrawn: 'Withdrawn',
+};
 
 /** Sprint 17: term releases and batch rendering of report cards. */
 export default async function ReportCardsPage({
@@ -42,6 +60,7 @@ export default async function ReportCardsPage({
     sectionOptions(),
   ]);
   const canManage = me.permissions.includes('exams.report_card.manage');
+  const canPublish = me.permissions.includes('exams.result.publish');
   const release = releases.find((x) => x.id === sp.release) ?? releases[0] ?? null;
   const sectionId = sp.section ?? sections[0]?.value;
   const cards =
@@ -125,7 +144,7 @@ export default async function ReportCardsPage({
                   key={b}
                   id={`t-${b}`}
                   name={`template:${b}`}
-                  label={b}
+                  label={b === 'pre_primary' ? 'pre-primary' : b}
                   options={[
                     { value: '', label: '— default —' },
                     ...templates
@@ -177,16 +196,8 @@ export default async function ReportCardsPage({
                 key: 's',
                 header: r('status'),
                 render: (x) => (
-                  <Badge
-                    tone={
-                      x.status === 'released'
-                        ? 'success'
-                        : x.status === 'withdrawn'
-                          ? 'danger'
-                          : 'neutral'
-                    }
-                  >
-                    {x.status}
+                  <Badge tone={STATUS_TONE[x.status] ?? 'neutral'}>
+                    {STATUS_LABEL[x.status] ?? x.status}
                   </Badge>
                 ),
               },
@@ -199,24 +210,50 @@ export default async function ReportCardsPage({
               {
                 key: 'a',
                 header: '',
-                render: (x) =>
-                  canManage ? (
-                    <form action={rcSetReleaseStatus}>
-                      <input type="hidden" name="id" value={x.id} />
-                      <input
-                        type="hidden"
-                        name="status"
-                        value={x.status === 'released' ? 'withdrawn' : 'released'}
-                      />
-                      <Button
-                        type="submit"
-                        size="sm"
-                        variant={x.status === 'released' ? 'ghost' : 'secondary'}
+                render: (x) => (
+                  <span style={{ display: 'inline-flex', gap: 'var(--sp-1)', flexWrap: 'wrap' }}>
+                    {canManage && (x.status === 'draft' || x.status === 'withdrawn') ? (
+                      <form action={rcSetReleaseStatus}>
+                        <input type="hidden" name="id" value={x.id} />
+                        <input type="hidden" name="status" value="submitted" />
+                        <Button type="submit" size="sm" variant="secondary">
+                          Send to the principal
+                        </Button>
+                      </form>
+                    ) : null}
+                    {canPublish && x.status !== 'released' ? (
+                      <form action={rcSetReleaseStatus}>
+                        <input type="hidden" name="id" value={x.id} />
+                        <input type="hidden" name="status" value="released" />
+                        <Button type="submit" size="sm">
+                          Publish
+                        </Button>
+                      </form>
+                    ) : null}
+                    {canPublish && x.status === 'released' ? (
+                      <form
+                        action={rcSetReleaseStatus}
+                        style={{ display: 'inline-flex', gap: 'var(--sp-1)' }}
                       >
-                        {x.status === 'released' ? r('withdraw') : r('release')}
-                      </Button>
-                    </form>
-                  ) : null,
+                        <input type="hidden" name="id" value={x.id} />
+                        <input type="hidden" name="status" value="withdrawn" />
+                        <input
+                          className="ep-input"
+                          name="reason"
+                          aria-label={`Why withdraw ${x.name}`}
+                          placeholder="Reason"
+                          required
+                          minLength={3}
+                          maxLength={500}
+                          style={{ width: 140 }}
+                        />
+                        <Button type="submit" size="sm" variant="ghost">
+                          {r('withdraw')}
+                        </Button>
+                      </form>
+                    ) : null}
+                  </span>
+                ),
               },
             ]}
             rows={releases}
@@ -246,6 +283,25 @@ export default async function ReportCardsPage({
               </form>
             }
           >
+            <p style={{ marginTop: 0 }}>
+              <Badge tone={STATUS_TONE[release.status] ?? 'neutral'}>
+                {STATUS_LABEL[release.status] ?? release.status}
+              </Badge>{' '}
+              {release.status === 'released'
+                ? `Families told: ${String(release.notifiedCount ?? 0)} messages.`
+                : release.status === 'submitted'
+                  ? 'Waiting for the principal to publish.'
+                  : release.status === 'withdrawn' && release.withdrawnReason
+                    ? `Withdrawn: ${release.withdrawnReason}`
+                    : ''}
+              {release.held ? ` ${String(release.held)} card(s) held back.` : ''}
+            </p>
+            {release.unverified ? (
+              <p className="ep-alert ep-alert--warning" style={{ marginTop: 0 }}>
+                {release.unverified} section × subject marks of these exams are not verified yet
+                (see each exam&rsquo;s Marks status). Publish when they are.
+              </p>
+            ) : null}
             {canManage && sectionId ? (
               <form action={rcRenderBatch} style={{ marginBottom: 'var(--sp-3)' }}>
                 <input type="hidden" name="id" value={release.id} />
@@ -273,12 +329,14 @@ export default async function ReportCardsPage({
                 {
                   key: 'w',
                   header: r('withheld'),
-                  render: (x) =>
-                    x.withheld ? (
-                      <Badge tone="danger">{x.withheldReason ?? r('withheld')}</Badge>
-                    ) : (
-                      ''
-                    ),
+                  render: (x) => (
+                    <>
+                      {x.withheld ? (
+                        <Badge tone="danger">{x.withheldReason ?? r('withheld')}</Badge>
+                      ) : null}
+                      {x.heldReason ? <Badge tone="warning">Held: {x.heldReason}</Badge> : null}
+                    </>
+                  ),
                 },
                 {
                   key: 'e',
@@ -306,6 +364,32 @@ export default async function ReportCardsPage({
                       >
                         {r('preview')}
                       </a>
+                      {canManage ? (
+                        <form
+                          action={rcHoldCard}
+                          style={{ display: 'inline-flex', gap: 'var(--sp-1)' }}
+                        >
+                          <input type="hidden" name="id" value={release.id} />
+                          <input type="hidden" name="classSectionId" value={sectionId ?? ''} />
+                          <input type="hidden" name="studentId" value={x.studentId} />
+                          <input type="hidden" name="held" value={x.heldReason ? 'no' : 'yes'} />
+                          {x.heldReason ? null : (
+                            <input
+                              className="ep-input"
+                              name="reason"
+                              aria-label={`Why hold the card of ${x.name}`}
+                              placeholder="Reason to hold"
+                              required
+                              minLength={3}
+                              maxLength={300}
+                              style={{ width: 130 }}
+                            />
+                          )}
+                          <Button type="submit" size="sm" variant="ghost">
+                            {x.heldReason ? 'Show again' : 'Hold'}
+                          </Button>
+                        </form>
+                      ) : null}
                       {canManage ? (
                         <form action={rcRenderOne}>
                           <input type="hidden" name="id" value={release.id} />

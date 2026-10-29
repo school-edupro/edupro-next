@@ -95,10 +95,22 @@ export const CreateReleaseSchema = z.object({
 export class CreateReleaseDto extends createZodDto(CreateReleaseSchema) {}
 
 export const UpdateReleaseSchema = CreateReleaseSchema.omit({ termCode: true })
-  .extend({ status: z.enum(['draft', 'released', 'withdrawn']) })
+  .extend({
+    status: z.enum(['draft', 'submitted', 'released', 'withdrawn']),
+    /** withdrawing published results needs a reason (docs/design/65) */
+    reason: z.string().trim().max(500),
+  })
   .partial()
   .refine((v) => Object.keys(v).length > 0, { message: 'at least one field is required' });
 export class UpdateReleaseDto extends createZodDto(UpdateReleaseSchema) {}
 
 export const RenderBatchSchema = z.object({ classSectionId: IdSchema });
 export class RenderBatchDto extends createZodDto(RenderBatchSchema) {}
+
+/** One student's card held back by the school, or shown again (docs/design/65). */
+export const HoldSchema = z.object({
+  studentId: IdSchema,
+  held: z.boolean(),
+  reason: z.string().trim().max(300).optional(),
+});
+export class HoldDto extends createZodDto(HoldSchema) {}

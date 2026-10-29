@@ -47,10 +47,17 @@ export interface ReleaseRow {
   templates: Record<string, string>;
   hideDefaulters: boolean;
   defaulterMin: string;
-  status: 'draft' | 'released' | 'withdrawn';
+  status: 'draft' | 'submitted' | 'released' | 'withdrawn';
   releasedAt: string | null;
   createdAt: string;
   cards: { rendered: number; withheld: number };
+  /** docs/design/65 part 2: sent to the principal, withdrawn with a reason, families told, holds */
+  submittedAt: string | null;
+  withdrawnReason: string | null;
+  notifiedCount: number;
+  held: number;
+  /** sections × subjects of the release's exams whose marks are not verified yet */
+  unverified: number;
 }
 
 const T_COLS = `id::text, code, name, band::text, layout, body_html, styles_css, page_width, page_height, version, status::text, updated_at`;
@@ -72,7 +79,14 @@ const toTemplate = (r: Record<string, unknown>): TemplateRow => ({
 const R_COLS = `r.id::text, r.term_code, r.name, r.exam_ids::text[] AS exam_ids, r.templates, r.hide_defaulters, r.defaulter_min::text, r.status, r.released_at, r.created_at,
   (SELECT jsonb_agg(jsonb_build_object('id', e.id::text, 'code', e.code, 'name', e.name) ORDER BY array_position(r.exam_ids, e.id)) FROM exams e WHERE e.id = ANY(r.exam_ids)) AS exams,
   (SELECT count(*) FROM report_cards c WHERE c.release_id = r.id AND c.rendered_at IS NOT NULL)::int AS rendered,
-  (SELECT count(*) FROM report_cards c WHERE c.release_id = r.id AND c.withheld)::int AS withheld`;
+  (SELECT count(*) FROM report_cards c WHERE c.release_id = r.id AND c.withheld)::int AS withheld,
+  r.submitted_at, r.withdrawn_reason, r.notified_count,
+  (SELECT count(*) FROM report_card_holds h WHERE h.release_id = r.id)::int AS held,
+  (SELECT count(*) FROM exam_subjects es
+     JOIN class_sections cs ON cs.class_id = es.class_id AND cs.academic_year_id = r.academic_year_id AND cs.deleted_at IS NULL AND cs.status = 'active'
+     LEFT JOIN exam_entry_status st ON st.exam_subject_id = es.id AND st.class_section_id = cs.id
+    WHERE es.exam_id = ANY(r.exam_ids) AND COALESCE(st.status, 'open') <> 'verified'
+      AND EXISTS (SELECT 1 FROM enrolments en WHERE en.class_section_id = cs.id AND en.status = 'active'))::int AS unverified`;
 const toRelease = (r: Record<string, unknown>): ReleaseRow => ({
   id: String(r.id),
   termCode: String(r.term_code),
@@ -86,6 +100,11 @@ const toRelease = (r: Record<string, unknown>): ReleaseRow => ({
   releasedAt: r.released_at ? new Date(r.released_at as string).toISOString() : null,
   createdAt: new Date(r.created_at as string).toISOString(),
   cards: { rendered: Number(r.rendered), withheld: Number(r.withheld) },
+  submittedAt: r.submitted_at ? new Date(r.submitted_at as string).toISOString() : null,
+  withdrawnReason: (r.withdrawn_reason as string | null) ?? null,
+  notifiedCount: Number(r.notified_count ?? 0),
+  held: Number(r.held ?? 0),
+  unverified: Number(r.unverified ?? 0),
 });
 
 /**
@@ -313,7 +332,35 @@ export class ReportCardsService {
   }
 
   async updateRelease(ctx: RequestContext, id: string, dto: UpdateReleaseDto): Promise<ReleaseRow> {
+    // docs/design/65 part 2: the principal publishes and withdraws (with a reason); the office sends it on
+    if (
+      (dto.status === 'released' || dto.status === 'withdrawn') &&
+      !ctx.permissions?.has('exams.result.publish')
+    )
+      throw new DomainError(
+        'permission-denied',
+        'Publishing and withdrawing results needs exams.result.publish (the principal)',
+        { status: 403 },
+      );
+    if (dto.status === 'withdrawn' && !dto.reason?.trim())
+      throw new DomainError('validation-failed', 'Give the reason for withdrawing the results', {
+        status: 400,
+      });
     return this.db.tenant(requireTenant(ctx), async (c) => {
+      const before = await this.findRelease(c, id);
+      if (!before) throw new DomainError('not-found', 'Release not found', { status: 404 });
+      const from: Record<string, ReleaseRow['status'][]> = {
+        submitted: ['draft', 'withdrawn'],
+        released: ['draft', 'submitted', 'withdrawn'],
+        withdrawn: ['released'],
+        draft: ['submitted', 'withdrawn', 'draft'],
+      };
+      if (dto.status && dto.status !== before.status && !from[dto.status]!.includes(before.status))
+        throw new DomainError(
+          'report_card.status',
+          `A ${before.status} release cannot become ${dto.status}`,
+          { status: 409 },
+        );
       const sets: string[] = ['updated_at = now()'];
       const params: unknown[] = [];
       const add = (col: string, v: unknown, cast = '') => {
@@ -329,6 +376,12 @@ export class ReportCardsService {
         add('status', dto.status);
         if (dto.status === 'released')
           sets.push('released_at = now()', 'released_by = app.current_user_id()');
+        if (dto.status === 'submitted')
+          sets.push('submitted_at = now()', 'submitted_by = app.current_user_id()');
+        if (dto.status === 'withdrawn') {
+          sets.push('withdrawn_at = now()', 'withdrawn_by = app.current_user_id()');
+          add('withdrawn_reason', dto.reason!.trim());
+        }
       }
       params.push(id);
       const r = await c.query(
@@ -338,6 +391,14 @@ export class ReportCardsService {
       );
       if (r.rowCount === 0)
         throw new DomainError('not-found', 'Release not found', { status: 404 });
+      // published: the families are told (once per publishing)
+      if (dto.status === 'released' && before.status !== 'released') {
+        const n = await this.tellFamilies(c, id);
+        await c.query(
+          `UPDATE report_card_releases SET notified_at = now(), notified_count = $2 WHERE id = $1`,
+          [id, n],
+        );
+      }
       await this.audit.stage(ctx, c, {
         action: `exams.report_card.release_${dto.status ?? 'update'}`,
         entityType: 'report_card_releases',
@@ -380,14 +441,98 @@ export class ReportCardsService {
     return { exportId: exp.id, status: exp.status };
   }
 
+  /**
+   * The families of the release's classes (guardians who take notifications), but not those whose card
+   * is held, get the result message by SMS and e-mail. Returns the messages queued.
+   */
+  private async tellFamilies(c: PoolClient, releaseId: string): Promise<number> {
+    await c.query(`SELECT app.exam_seed_templates(app.current_school_id())`);
+    const r = await c.query<{
+      name: string;
+      term: string;
+      school: string;
+      mobile: string | null;
+      email: string | null;
+      user_id: string | null;
+    }>(
+      `SELECT DISTINCT ON (s.id, g.id) s.display_name AS name, r.name AS term,
+              (SELECT name FROM schools WHERE id = app.current_school_id()) AS school,
+              g.mobile, g.email::text AS email, g.user_id::text
+         FROM report_card_releases r
+         JOIN exam_classes ec ON ec.exam_id = ANY(r.exam_ids)
+         JOIN class_sections cs ON cs.class_id = ec.class_id AND cs.academic_year_id = r.academic_year_id AND cs.deleted_at IS NULL
+         JOIN enrolments en ON en.class_section_id = cs.id AND en.academic_year_id = r.academic_year_id AND en.status = 'active'
+         JOIN students s ON s.id = en.student_id AND s.deleted_at IS NULL
+         JOIN student_guardians sg ON sg.student_id = s.id AND sg.receives_notifications
+         JOIN guardians g ON g.id = sg.guardian_id AND g.deleted_at IS NULL
+        WHERE r.id = $1
+          AND NOT EXISTS (SELECT 1 FROM report_card_holds h WHERE h.release_id = r.id AND h.student_id = s.id)
+        ORDER BY s.id, g.id`,
+      [releaseId],
+    );
+    let n = 0;
+    for (const x of r.rows) {
+      const vars = JSON.stringify({ name: x.name, term: x.term, school: x.school });
+      for (const [channel, to] of [
+        ['sms', /^[6-9][0-9]{9}$/.test(x.mobile ?? '') ? x.mobile : null],
+        ['email', x.email],
+      ] as const) {
+        if (!to) continue;
+        const m = await c.query<{ id: string | null }>(
+          `SELECT app.send_template('result_published', $1, $2, $3::jsonb, $4)::text AS id`,
+          [channel, to, vars, x.user_id],
+        );
+        if (m.rows[0]?.id) n += 1;
+      }
+    }
+    return n;
+  }
+
+  /** One student's card held back by the school (the old "Report Card Hide"), or shown again. */
+  async setHold(
+    ctx: RequestContext,
+    releaseId: string,
+    dto: { studentId: string; held: boolean; reason?: string },
+  ) {
+    if (dto.held && !(dto.reason && dto.reason.trim().length >= 3))
+      throw new DomainError('validation-failed', 'Give the reason for holding the card', {
+        status: 400,
+      });
+    return this.db.tenant(requireTenant(ctx), async (c) => {
+      const rel = await this.findRelease(c, releaseId);
+      if (!rel) throw new DomainError('not-found', 'Release not found', { status: 404 });
+      if (dto.held)
+        await c.query(
+          `INSERT INTO report_card_holds (school_id, release_id, student_id, reason, held_by)
+           VALUES (app.current_school_id(), $1, $2, $3, app.current_user_id())
+           ON CONFLICT (release_id, student_id) DO UPDATE SET reason = EXCLUDED.reason, held_by = EXCLUDED.held_by, held_at = now()`,
+          [releaseId, dto.studentId, dto.reason!.trim()],
+        );
+      else
+        await c.query(`DELETE FROM report_card_holds WHERE release_id = $1 AND student_id = $2`, [
+          releaseId,
+          dto.studentId,
+        ]);
+      await this.audit.stage(ctx, c, {
+        action: dto.held ? 'exams.report_card.hold' : 'exams.report_card.unhold',
+        entityType: 'report_card_releases',
+        entityId: releaseId,
+        after: dto,
+      });
+      return (await this.findRelease(c, releaseId))!;
+    });
+  }
+
   /** Per-pupil status of a release for one section (rendered, withheld, export id). */
   async cards(ctx: RequestContext, releaseId: string, classSectionId: string) {
     return this.db.tenant(requireTenant(ctx), async (c) => {
       const r = await c.query<Record<string, unknown>>(
         `SELECT s.id::text AS student_id, s.display_name AS name, s.admission_no, e.roll_no,
-                rc.export_id::text, rc.withheld, rc.withheld_reason, rc.rendered_at, x.status AS export_status
+                rc.export_id::text, rc.withheld, rc.withheld_reason, rc.rendered_at, x.status AS export_status,
+                h.reason AS held_reason
            FROM enrolments e JOIN students s ON s.id = e.student_id AND s.deleted_at IS NULL
            LEFT JOIN report_cards rc ON rc.release_id = $1 AND rc.student_id = s.id
+           LEFT JOIN report_card_holds h ON h.release_id = $1 AND h.student_id = s.id
            LEFT JOIN exports x ON x.id = rc.export_id
           WHERE e.class_section_id = $2 AND e.academic_year_id = app.current_academic_year_id() AND e.status = 'active'
           ORDER BY e.roll_no NULLS LAST, s.display_name`,
@@ -403,6 +548,8 @@ export class ReportCardsService {
         withheld: Boolean(x.withheld),
         withheldReason: (x.withheld_reason as string | null) ?? null,
         renderedAt: x.rendered_at ? new Date(x.rendered_at as string).toISOString() : null,
+        /** held back by the school for this student (docs/design/65) */
+        heldReason: (x.held_reason as string | null) ?? null,
       }));
     });
   }
@@ -419,7 +566,8 @@ export class ReportCardsService {
           `SELECT r.id::text, r.term_code, r.name, r.hide_defaulters, r.defaulter_min::text, r.released_at,
                   (SELECT jsonb_agg(jsonb_build_object('code', e.code, 'name', e.name, 'pct', x.pct::text, 'grade', x.grade, 'result', x.result, 'rank', x.rank_in_section) ORDER BY array_position(r.exam_ids, e.id))
                      FROM exams e LEFT JOIN exam_results x ON x.exam_id = e.id AND x.student_id = $1 WHERE e.id = ANY(r.exam_ids) AND e.show_on_portal) AS exams,
-                  rc.withheld, rc.export_id::text
+                  rc.withheld, rc.export_id::text,
+                  EXISTS (SELECT 1 FROM report_card_holds h WHERE h.release_id = r.id AND h.student_id = $1) AS held
              FROM report_card_releases r
              LEFT JOIN report_cards rc ON rc.release_id = r.id AND rc.student_id = $1
             WHERE r.academic_year_id = app.current_academic_year_id() AND r.status = 'released'
@@ -433,8 +581,10 @@ export class ReportCardsService {
             termCode: String(r.term_code),
             name: String(r.name),
             releasedAt: r.released_at ? new Date(r.released_at as string).toISOString() : null,
-            exams: (r.exams as unknown[]) ?? [],
-            withheld: Boolean(r.withheld),
+            exams: r.held ? [] : ((r.exams as unknown[]) ?? []),
+            withheld: Boolean(r.withheld) || Boolean(r.held),
+            /** held back by the school: the office tells the family why (docs/design/65) */
+            held: Boolean(r.held),
           })),
         });
       }
@@ -451,6 +601,16 @@ export class ReportCardsService {
       const rel = await this.findRelease(c, releaseId);
       if (!rel || rel.status !== 'released')
         throw new DomainError('not-found', 'Report card not found', { status: 404 });
+      const held = await c.query(
+        `SELECT 1 FROM report_card_holds WHERE release_id = $1 AND student_id = $2`,
+        [releaseId, studentId],
+      );
+      if (held.rowCount)
+        throw new DomainError(
+          'report_card.held',
+          'The school has held this report card: please contact the class teacher or the office',
+          { status: 409 },
+        );
       if (rel.hideDefaulters) {
         const data = await loadReportCardData(c, {
           studentId,

@@ -7,6 +7,8 @@ import { BoardResultsService } from './board-results.service';
 import { ExamEntryController } from './exam-entry.controller';
 import { ExamEntryService } from './exam-entry.service';
 import { ExamResultsService } from './exam-results.service';
+import { ExamStatusController } from './exam-status.controller';
+import { ExamStatusService } from './exam-status.service';
 import { ExamsController } from './exams.controller';
 import { ExamsService } from './exams.service';
 import { FamilyResultsController, ReportCardsController } from './report-cards.controller';
@@ -22,6 +24,7 @@ import { SubjectChoicesService } from './subject-choices.service';
   imports: [DailyAcademicsModule, ReportsModule],
   controllers: [
     SubjectChoicesController,
+    ExamStatusController,
     ExamsController,
     ExamEntryController,
     ReportCardsController,
@@ -35,6 +38,7 @@ import { SubjectChoicesService } from './subject-choices.service';
     ReportCardsService,
     BoardResultsService,
     SubjectChoicesService,
+    ExamStatusService,
     AuditService,
   ],
   exports: [ExamsService, ExamEntryService, ExamResultsService, ReportCardsService],

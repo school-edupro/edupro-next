@@ -89,6 +89,15 @@ export interface MarksSheet {
   /** the school's active marks codes, and the grades a grade-only subject takes */
   codes: Array<{ code: string; name: string }>;
   grades: string[];
+  /** the section's entry of this subject: open → submitted → verified (docs/design/65, part 2) */
+  status: {
+    status: 'open' | 'submitted' | 'verified';
+    submittedBy: string | null;
+    submittedAt: string | null;
+    verifiedBy: string | null;
+    verifiedAt: string | null;
+    remark: string | null;
+  };
   rows: MarkRow[];
 }
 
@@ -102,6 +111,8 @@ const MARKS_ERRORS: Record<string, string> = {
   'exams.marks_out_of_range': 'Marks must be between 0 and the maximum',
   'exams.entry_locked': 'Marks entry is locked for this subject',
   'exams.student_not_in_class': 'A student is not in this class this year',
+  'exams.entry_submitted':
+    'The marks of this section are submitted: the verifier sends them back before they change',
 };
 const asMarksError = (error: unknown): unknown => {
   const e = error as { code?: string; message?: string; detail?: string };
@@ -116,7 +127,7 @@ const asMarksError = (error: unknown): unknown => {
 };
 const num = (v: string | number) => String(Number(v));
 
-interface Kind {
+export interface Kind {
   permission: string;
   /** Subject teachers qualify only with a matching subject; the register kinds need the class teacher. */
   subjectAware: boolean;
@@ -125,7 +136,7 @@ interface Kind {
   label?: string;
 }
 
-const MARKS: Kind = { permission: EXAMS.marksEnter, subjectAware: true };
+export const MARKS: Kind = { permission: EXAMS.marksEnter, subjectAware: true };
 const INDICATORS: Kind = {
   permission: EXAMS.indicatorEnter,
   subjectAware: false,
@@ -165,7 +176,7 @@ export class ExamEntryService {
     private readonly scopes: ScopePolicy,
   ) {}
 
-  private year(tenant: TenantContext): string {
+  year(tenant: TenantContext): string {
     if (!tenant.academicYearId)
       throw new DomainError('year.not_selected', 'No academic year is active or selected', {
         status: 409,
@@ -173,7 +184,7 @@ export class ExamEntryService {
     return tenant.academicYearId;
   }
 
-  private async exam(c: PoolClient, id: string, yearId: string) {
+  async exam(c: PoolClient, id: string, yearId: string) {
     const r = await c.query<{ id: string; code: string; name: string; marks_locked: boolean }>(
       `SELECT id::text, code, name, marks_locked FROM exams WHERE id = $1 AND academic_year_id = $2 AND deleted_at IS NULL`,
       [id, yearId],
@@ -183,7 +194,7 @@ export class ExamEntryService {
     return r.rows[0];
   }
 
-  private async section(c: PoolClient, sectionId: string, yearId: string, examId: string) {
+  async section(c: PoolClient, sectionId: string, yearId: string, examId: string) {
     const r = await c.query<{ id: string; class_id: string; code: string }>(
       `SELECT cs.id::text, cs.class_id::text, k.code || '-' || cs.name AS code
          FROM class_sections cs JOIN classes k ON k.id = cs.class_id
@@ -199,7 +210,7 @@ export class ExamEntryService {
   }
 
   /** Mirrors AttendanceService.assertMayMark: scope first, then the live assignment for scoped teachers. */
-  private async assertMayEnter(
+  async assertMayEnter(
     c: PoolClient,
     tenant: TenantContext,
     yearId: string,
@@ -255,6 +266,23 @@ export class ExamEntryService {
         status: 409,
         extra: { studentId: stranger.studentId },
       });
+  }
+
+  /** Marks of a section's subject change only while its entry is open (docs/design/65, part 2). */
+  async assertEntryOpen(c: PoolClient, examSubjectId: string, sectionId: string) {
+    const r = await c.query<{ status: string }>(
+      `SELECT status FROM exam_entry_status WHERE exam_subject_id = $1 AND class_section_id = $2`,
+      [examSubjectId, sectionId],
+    );
+    const st = r.rows[0]?.status;
+    if (st && st !== 'open')
+      throw new DomainError(
+        'exams.entry_submitted',
+        st === 'verified'
+          ? 'The marks are verified and locked: reopening needs the unlock right and a reason'
+          : 'The marks are submitted for verification: the verifier sends them back before they change',
+        { status: 409 },
+      );
   }
 
   /** An entry type locked on the exam's class (docs/design/65). */
@@ -389,7 +417,7 @@ export class ExamEntryService {
   }
 
   // ---- marks -------------------------------------------------------------------------------------
-  private async examSubject(c: PoolClient, examId: string, classId: string, subjectId: string) {
+  async examSubject(c: PoolClient, examId: string, classId: string, subjectId: string) {
     const r = await c.query<{
       id: string;
       subject_id: string;
@@ -449,6 +477,27 @@ export class ExamEntryService {
       const codes = await c.query<{ code: string; name: string }>(
         `SELECT code, name FROM mark_codes WHERE status = 'active' ORDER BY sort_order, code`,
       );
+      const st = await c.query<{
+        status: 'open' | 'submitted' | 'verified';
+        submitted_by: string | null;
+        submitted_at: Date | null;
+        verified_by: string | null;
+        verified_at: Date | null;
+        remark: string | null;
+      }>(
+        `SELECT st.status, su.display_name AS submitted_by, st.submitted_at, vu.display_name AS verified_by, st.verified_at, st.remark
+           FROM exam_entry_status st LEFT JOIN users su ON su.id = st.submitted_by LEFT JOIN users vu ON vu.id = st.verified_by
+          WHERE st.exam_subject_id = $1 AND st.class_section_id = $2`,
+        [es.id, section.id],
+      );
+      const status = {
+        status: st.rows[0]?.status ?? ('open' as const),
+        submittedBy: st.rows[0]?.submitted_by ?? null,
+        submittedAt: st.rows[0]?.submitted_at?.toISOString() ?? null,
+        verifiedBy: st.rows[0]?.verified_by ?? null,
+        verifiedAt: st.rows[0]?.verified_at?.toISOString() ?? null,
+        remark: st.rows[0]?.remark ?? null,
+      };
       const grades = es.scale_id
         ? (
             await c.query<{ grade: string }>(
@@ -508,6 +557,7 @@ export class ExamEntryService {
         section: { id: section.id, code: section.code },
         codes: codes.rows,
         grades,
+        status,
         rows: r.rows.map((x) => ({
           studentId: x.student_id,
           name: x.name,
@@ -544,6 +594,7 @@ export class ExamEntryService {
           { status: 409 },
         );
       await this.assertMayEnter(c, tenant, yearId, section.id, MARKS, dto.subjectId);
+      await this.assertEntryOpen(c, es.id, section.id);
       this.assertRoster(dto.rows, await this.roster(c, yearId, section.id));
       const r = await c
         .query<{ o_inserted: number; o_updated: number }>(
@@ -613,6 +664,7 @@ export class ExamEntryService {
         if (!(error instanceof DomainError) || !part.subject_id) throw error;
         await this.assertMayEnter(c, tenant, yearId, section.id, MARKS, part.es_subject);
       }
+      await this.assertEntryOpen(c, part.es_id, section.id);
       this.assertRoster(dto.rows, await this.roster(c, yearId, section.id));
       for (const r of dto.rows) {
         const marks = r.absent ? null : (r.marks ?? null);

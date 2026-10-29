@@ -56,6 +56,9 @@ export default async function ExamPage({
             <a className="ep-btn ep-btn--secondary ep-btn--sm" href={`/exams/${exam.id}/marks`}>
               Marks entry
             </a>
+            <a className="ep-btn ep-btn--ghost ep-btn--sm" href={`/exams/${exam.id}/status`}>
+              Marks status
+            </a>
             <a className="ep-btn ep-btn--ghost ep-btn--sm" href="/exams/subject-choices">
               Subject choices
             </a>

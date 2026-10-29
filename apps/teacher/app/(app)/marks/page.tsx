@@ -3,7 +3,7 @@ import { redirect } from 'next/navigation';
 import { ApiError } from '@edupro/bff';
 import { bff } from '@/lib/bff';
 import { currentLang, t } from '@/lib/i18n';
-import { saveMarks, savePartMarks } from './actions';
+import { entryStep, saveMarks, savePartMarks } from './actions';
 
 interface Exam {
   id: string;
@@ -50,6 +50,8 @@ interface Sheet {
   section: { id: string; code: string };
   codes?: Array<{ code: string; name: string }>;
   grades?: string[];
+  /** open → submitted → verified (docs/design/65, part 2) */
+  status?: { status: 'open' | 'submitted' | 'verified'; remark: string | null };
   rows: Array<{
     studentId: string;
     name: string;
@@ -74,6 +76,9 @@ const ERRORS: Record<string, string> = {
   'exams.subject_not_taken': 'A pupil does not take this subject; leave the row empty.',
   'exams.unknown_code': 'That is not a marks code of the school.',
   'exams.grade_not_allowed': "That grade is not on the subject's scale.",
+  'exams.entry_submitted':
+    'The marks are submitted or verified; they change only after they are sent back.',
+  'exams.marks_missing': 'Some pupils have no marks or code yet.',
   'scope-denied': 'You are not allowed to enter marks for this section.',
   'validation-failed': 'Some values were not accepted.',
 };
@@ -150,7 +155,9 @@ export default async function MarksPage({
       else throw error;
     }
   }
-  const locked = !!sheet && (sheet.exam.marksLocked || sheet.examSubject.entryLocked);
+  const stage = sheet?.status?.status ?? 'open';
+  const locked =
+    !!sheet && (sheet.exam.marksLocked || sheet.examSubject.entryLocked || stage !== 'open');
   const part = chosen?.partId
     ? ((sheet?.examSubject.parts ?? []).find((p) => p.id === chosen.partId) ?? null)
     : null;
@@ -185,8 +192,10 @@ export default async function MarksPage({
           role="status"
           style={{ marginBottom: 'var(--sp-3)' }}
         >
-          {t(lang, 'Marks saved')}
-          {sp.detail ? ` (${sp.detail})` : ''}.
+          {sp.detail === 'submit'
+            ? t(lang, 'Submitted for verification')
+            : `${t(lang, 'Marks saved')}${sp.detail ? ` (${sp.detail})` : ''}`}
+          .
         </div>
       ) : null}
       {sp.error ? (
@@ -389,6 +398,55 @@ export default async function MarksPage({
               </p>
             )}
           </form>
+          <div
+            style={{
+              display: 'flex',
+              gap: 'var(--sp-3)',
+              alignItems: 'center',
+              flexWrap: 'wrap',
+              marginTop: 'var(--sp-3)',
+            }}
+          >
+            <Badge
+              tone={
+                stage === 'verified' ? 'success' : stage === 'submitted' ? 'warning' : 'neutral'
+              }
+            >
+              {t(
+                lang,
+                stage === 'verified' ? 'Verified' : stage === 'submitted' ? 'Submitted' : 'Open',
+              )}
+            </Badge>
+            {sheet.status?.remark ? (
+              <span className="ep-field__help" style={{ margin: 0 }}>
+                {sheet.status.remark}
+              </span>
+            ) : null}
+            {stage === 'open' &&
+            !sheet.exam.marksLocked &&
+            !sheet.examSubject.entryLocked &&
+            entered === takers.length &&
+            takers.length > 0 ? (
+              <form action={entryStep}>
+                <input type="hidden" name="examId" value={exam.id} />
+                <input type="hidden" name="classSectionId" value={chosen.classSectionId} />
+                <input type="hidden" name="subjectId" value={chosen.subjectId} />
+                <input type="hidden" name="action" value="submit" />
+                <input
+                  type="hidden"
+                  name="back"
+                  value={`/marks?exam=${exam.id}&pick=${encodeURIComponent(chosen.value)}`}
+                />
+                <Button type="submit" variant="secondary">
+                  {t(lang, 'Submit for verification')}
+                </Button>
+              </form>
+            ) : stage === 'open' ? (
+              <span className="ep-field__help" style={{ margin: 0 }}>
+                {t(lang, 'Submit once every pupil has marks or a code.')}
+              </span>
+            ) : null}
+          </div>
         </Card>
       ) : null}
     </main>

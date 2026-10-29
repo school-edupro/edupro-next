@@ -1,5 +1,10 @@
 import { Badge, Breadcrumbs, Button, Card, PageHeader } from '@edupro/ui';
 import { notFound } from 'next/navigation';
+import {
+  EntryStatusActions,
+  EntryStatusBadge,
+  type EntryStatus,
+} from '@/components/exams/EntryStatusActions';
 import { ExcelUpload } from '@/components/exams/ExcelUpload';
 import { Notice } from '@/components/Notice';
 import { saveExamMarks, saveExamPartMarks, uploadExamMarks } from '@/lib/exam-entry-actions';
@@ -40,6 +45,7 @@ interface Sheet {
   section: { id: string; code: string };
   codes: Array<{ code: string; name: string }>;
   grades: string[];
+  status: EntryStatus;
   rows: Array<{
     studentId: string;
     name: string;
@@ -108,7 +114,22 @@ export default async function ExamMarksPage({
       )
     : null;
   const canEnter = me.permissions.includes('exams.marks.enter');
-  const locked = !!sheet && (sheet.exam.marksLocked || sheet.examSubject.entryLocked);
+  // submitted or verified marks are closed too (docs/design/65, part 2)
+  const locked =
+    !!sheet &&
+    (sheet.exam.marksLocked || sheet.examSubject.entryLocked || sheet.status.status !== 'open');
+  const verifier = chosen
+    ? await apiFetch<{
+        data: Array<{ classSectionId: string; subjectId: string; canVerify: boolean }>;
+      }>(`/exams/${id}/entry-status`)
+        .then(
+          (x) =>
+            x.data.find(
+              (y) => y.classSectionId === chosen.classSectionId && y.subjectId === chosen.subjectId,
+            )?.canVerify ?? false,
+        )
+        .catch(() => false)
+    : false;
   const part = chosen?.partId
     ? (sheet?.examSubject.parts.find((p) => p.id === chosen.partId) ?? null)
     : null;
@@ -186,13 +207,40 @@ export default async function ExamMarksPage({
             elevated
             title={`${sheet.section.code} · ${es.name}${part ? ` · ${part.name}` : ''}`}
             actions={
-              locked ? (
+              sheet.exam.marksLocked || es.entryLocked ? (
                 <Badge tone="warning">Locked</Badge>
               ) : (
                 <Badge tone="neutral">{taken.length} students</Badge>
               )
             }
           >
+            <div
+              style={{
+                display: 'flex',
+                gap: 'var(--sp-3)',
+                alignItems: 'center',
+                flexWrap: 'wrap',
+                marginBottom: 'var(--sp-3)',
+              }}
+            >
+              <EntryStatusBadge s={sheet.status} />
+              <EntryStatusActions
+                examId={exam.id}
+                classSectionId={chosen.classSectionId}
+                subjectId={chosen.subjectId}
+                status={sheet.status.status}
+                back={backTo}
+                missing={
+                  taken.length -
+                  (part
+                    ? taken.filter((r) => r.marks !== null || r.code || r.grade).length
+                    : entered)
+                }
+                canSubmit={canEnter && !sheet.exam.marksLocked && !es.entryLocked}
+                canVerify={verifier}
+                canReopen={me.permissions.includes('exams.marks.unlock')}
+              />
+            </div>
             <form action={part ? saveExamPartMarks : saveExamMarks}>
               <input type="hidden" name="examId" value={exam.id} />
               <input type="hidden" name="classSectionId" value={chosen.classSectionId} />
@@ -298,9 +346,11 @@ export default async function ExamMarksPage({
                 </div>
               ) : (
                 <p className="ep-field__help">
-                  {locked
-                    ? 'Entry is locked for this subject; open it on the exam page.'
-                    : 'You may view these marks only: they are entered by the teachers or the exam office (the marks entry right); admins open and lock entry.'}
+                  {sheet.status.status !== 'open'
+                    ? 'The marks are submitted or verified: the verifier sends them back (or one with the unlock right reopens them) before they change.'
+                    : locked
+                      ? 'Entry is locked for this subject; open it on the exam page.'
+                      : 'You may view these marks only: they are entered by the teachers or the exam office (the marks entry right); admins open and lock entry.'}
                 </p>
               )}
             </form>

@@ -1,10 +1,11 @@
-import { Body, Controller, Get, Param, Patch, Post, Query } from '@nestjs/common';
+import { Body, Controller, Get, Param, Patch, Post, Put, Query } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { RequirePermission } from '../../common/access/require-permission.decorator';
 import { ReqCtx, type RequestContext } from '../../common/http/request-context';
 import {
   CreateReleaseDto,
   CreateTemplateDto,
+  HoldDto,
   PreviewDto,
   RenderBatchDto,
   REPORT_CARDS,
@@ -89,6 +90,13 @@ export class ReportCardsController {
     @Body() body: UpdateReleaseDto,
   ) {
     return this.cards.updateRelease(ctx, id, body);
+  }
+
+  @Put('releases/:id/holds')
+  @ApiOperation({ summary: "Hold one student's card back (with a reason), or show it again" })
+  @RequirePermission(REPORT_CARDS.manage)
+  hold(@ReqCtx() ctx: RequestContext, @Param('id') id: string, @Body() body: HoldDto) {
+    return this.cards.setHold(ctx, id, body);
   }
 
   @Get('releases/:id/cards')

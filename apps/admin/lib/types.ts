@@ -2351,10 +2351,16 @@ export interface ReportCardRelease {
   templates: Record<string, string>;
   hideDefaulters: boolean;
   defaulterMin: string;
-  status: 'draft' | 'released' | 'withdrawn';
+  status: 'draft' | 'submitted' | 'released' | 'withdrawn';
   releasedAt: string | null;
   createdAt: string;
   cards: { rendered: number; withheld: number };
+  /** docs/design/65 part 2 */
+  submittedAt?: string | null;
+  withdrawnReason?: string | null;
+  notifiedCount?: number;
+  held?: number;
+  unverified?: number;
 }
 export interface ReportCardStatus {
   studentId: string;
@@ -2366,6 +2372,8 @@ export interface ReportCardStatus {
   withheld: boolean;
   withheldReason: string | null;
   renderedAt: string | null;
+  /** held back by the school (docs/design/65) */
+  heldReason?: string | null;
 }
 export interface VehiclePosition {
   vehicleId: string;

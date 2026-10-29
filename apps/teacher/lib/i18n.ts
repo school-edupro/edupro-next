@@ -599,6 +599,26 @@ const DICT: Record<string, string> = {
     'एक विद्यार्थी यह विषय नहीं लेता; पंक्ति खाली छोड़ें।',
   'That is not a marks code of the school.': 'यह विद्यालय का अंक कोड नहीं है।',
   "That grade is not on the subject's scale.": 'यह ग्रेड विषय के पैमाने में नहीं है।',
+  Verified: 'सत्यापित',
+  Submitted: 'जमा किया',
+  'Submit for verification': 'सत्यापन के लिए जमा करें',
+  'Submit once every pupil has marks or a code.':
+    'सभी विद्यार्थियों के अंक या कोड भरने पर जमा करें।',
+  'Submitted for verification': 'सत्यापन के लिए जमा किया गया',
+  'The marks are submitted or verified; they change only after they are sent back.':
+    'अंक जमा या सत्यापित हैं; वापस भेजे जाने पर ही बदलेंगे।',
+  'Some pupils have no marks or code yet.': 'कुछ विद्यार्थियों के अंक या कोड अभी नहीं भरे हैं।',
+  'Verify marks': 'अंक सत्यापित करें',
+  'Marks your sections’ teachers submitted. Open the sheet to check it, then verify (the marks lock) or send them back with what to correct.':
+    'आपके अनुभागों के शिक्षकों द्वारा जमा अंक। शीट खोलकर जाँचें, फिर सत्यापित करें (अंक लॉक हो जाएँगे) या सुधार हेतु वापस भेजें।',
+  'Verified and locked': 'सत्यापित और लॉक',
+  'Sent back to the teacher': 'शिक्षक को वापस भेजा गया',
+  'Nothing waits for you to verify.': 'आपके सत्यापन हेतु कुछ लंबित नहीं है।',
+  'submitted by': 'जमा करने वाले',
+  'Open the sheet': 'शीट खोलें',
+  Verify: 'सत्यापित करें',
+  'What to correct': 'क्या सुधारना है',
+  'Send back': 'वापस भेजें',
 };
 
 /** Translates a known English string; unknown strings fall back to English. */
