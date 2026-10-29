@@ -23,6 +23,8 @@ interface Row {
   /** what is paid of the admission fee so far (parts, docs/design/53) */
   paid: string | null;
   offer_expires_at: Date | null;
+  /** money carried in from another school not used yet (docs/design/64) */
+  credit: string;
 }
 
 /** The admission fee paid so far: posted receipts on the admission head (docs/design/53). */
@@ -96,7 +98,7 @@ export class AdmissionCounterService {
                 cl.name AS class_name, y.name AS session, k.name AS category,
                 COALESCE(NULLIF(btrim(a.data->>'father_name'), ''), NULLIF(btrim(a.data->>'mother_name'), ''), ap.name) AS parent,
                 COALESCE(a.contact_mobile, ap.mobile) AS mobile, a.registration_fee::text, a.admission_fee::text, a.offer_expires_at,
-                ${PAID}
+                a.transfer_credit::text AS credit, ${PAID}
            FROM applications a JOIN classes cl ON cl.id = a.class_id JOIN applicants ap ON ap.id = a.applicant_id
            JOIN admission_cycles y ON y.id = a.cycle_id LEFT JOIN admission_fee_categories k ON k.id = a.category_id
           WHERE a.status::text <> 'draft'
@@ -142,6 +144,7 @@ export class AdmissionCounterService {
           parent: x.parent,
           mobile: x.mobile,
           due: this.due(x),
+          credit: Number(x.credit),
           receipts: receipts.rows
             .filter((m) => m.application_id === x.id)
             .map((m) => ({

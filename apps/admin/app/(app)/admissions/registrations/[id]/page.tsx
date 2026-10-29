@@ -3,6 +3,10 @@ import { notFound } from 'next/navigation';
 import { ApplicationCorrect, type AnswerChange } from '@/components/admissions/ApplicationCorrect';
 import { DeskForm } from '@/components/admissions/DeskForm';
 import { RegistrationActions } from '@/components/admissions/RegistrationActions';
+import {
+  RegistrationMove,
+  type RegistrationMoveRow,
+} from '@/components/admissions/RegistrationMove';
 import { RegistrationOffice } from '@/components/admissions/RegistrationOffice';
 import { RegistrationPointsCheck } from '@/components/admissions/RegistrationPointsCheck';
 import { ViewDownload } from '@/components/admissions/ViewDownload';
@@ -65,6 +69,9 @@ interface Detail extends RegistrationForm {
   }>;
   answerChanges: AnswerChange[];
   canCorrect: boolean;
+  /** moved between the schools of the group, and the credit it brought (docs/design/64) */
+  moves?: RegistrationMoveRow[];
+  credit?: number;
 }
 
 const DECISION: Record<string, { label: string; tone: 'success' | 'danger' | 'warning' | 'info' }> =
@@ -126,6 +133,12 @@ export default async function RegistrationPage({
         .then((x) => x.refund)
         .catch(() => null)
     : null;
+  // the group's other schools a registration may move to (docs/design/64)
+  const targets = can('admissions.application.move')
+    ? await apiFetch<{ data: Array<{ id: string; name: string }> }>('/admissions/moves/targets')
+        .then((x) => x.data)
+        .catch(() => [])
+    : [];
   // the family's questions about this registration (docs/design/43, part 4); the helpdesk decides who sees them
   const queries = await apiFetch<{ data: Ticket[] }>(
     `/helpdesk/tickets?desk=candidate&applicationId=${r.id}&size=25`,
@@ -280,6 +293,16 @@ export default async function RegistrationPage({
             canAdmit={can('admissions.application.admit')}
             canCancel={can('admissions.application.cancel')}
             studentId={r.studentId}
+          />
+          <RegistrationMove
+            id={r.id}
+            status={r.status}
+            number={r.number}
+            moves={r.moves ?? []}
+            credit={r.credit ?? 0}
+            targets={targets}
+            canMove={can('admissions.application.move')}
+            canUseCredit={can('admissions.fee.collect')}
           />
         </Card>
       </div>

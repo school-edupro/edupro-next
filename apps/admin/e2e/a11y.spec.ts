@@ -59,6 +59,8 @@ const PAGES = [
   '/admissions/results?cycleId=4&classId=172&stageId=12',
   '/admissions/admit',
   '/admissions/refunds',
+  '/admissions/moves',
+  '/admissions/moves?box=all',
   '/admissions/list',
   '/admissions/fee-collection',
   '/admissions/enquiries',

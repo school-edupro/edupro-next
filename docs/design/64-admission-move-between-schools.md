@@ -85,3 +85,55 @@ Decided here, change any before building:
 
 Moves to schools outside the group; admitted students (the existing transfer); moving several
 candidates at once.
+
+## As built (29 Oct 2026)
+
+- **Migrations**: 0274 `admission_moves` (both schools see a row, like `school_transfers`; one open move
+  per registration; snapshot of the candidate, answers as kept with ID numbers encrypted, the form's
+  fields, the files, the family's login and the receipts; money columns `carried`, `to_registration`,
+  `difference_due`, `credit`; `missing`), permission `admissions.application.move` (roles that may
+  cancel), receipt and refund mode `transfer`, `applications.transfer_credit`, and
+  `app.admission_move_close()` (SECURITY DEFINER: the first school's side inside the receiving school's
+  accept). 0275 checks the money again on accept (`money_changed`). The credit is a column on the
+  registration, not an `admission_credits` table.
+- **API** (`moves.service.ts`, `moves.controller.ts`): `GET admissions/moves/targets`, `POST
+  admissions/registrations/:id/move` (registered and later, not admitted / cancelled / withdrawn; a
+  line in its history), `GET admissions/moves?box=incoming|outgoing|all` (with the waiting counts),
+  `GET admissions/moves/:id`, `GET admissions/moves/:id/options` (the receiving school's sessions and
+  classes with a form; the same class name suggested), `POST admissions/moves/:id/preview` (the whole
+  accept run and rolled back: fee, category, carried, to the registration fee, difference, credit, the
+  answers to ask), `POST .../accept`, `.../refuse`, `.../withdraw` (with a reason), `GET
+  admissions/moves/export?format=xlsx|pdf` (the register of moves).
+- **Accept**: the family's login by mobile (found or made); a fresh draft; the same child already
+  registered there stops it; answers by the same key and type, else by what the field maps to; ID
+  numbers decrypted and kept encrypted again; photos and documents copied into this school's storage;
+  `core.adopt` keeps what the form accepts and returns what it needs; `core.submitMoved` (category,
+  registration fee, points); a receipt of mode `transfer` ("Inter-school transfer", reference "Move N
+  from <school>") for the registration fee; a higher fee: `registration_fee` becomes the difference and
+  the registration waits for it (the counter / portal take it; then the number, which is copied to the
+  move); else `core.register(..., { silent: true })` at once; the rest in `transfer_credit`. Then the
+  first school's registration is cancelled "Moved to <school> (registration N): reason", its open
+  correction closed, and each receipt closed by an `admission_refunds` line (paid, mode `transfer`,
+  reference "Move N to <school>") that Fees → Refunds lists. Accept stops if that registration was
+  admitted / cancelled meanwhile, or money was taken or reversed after asking.
+- **Answers the copy lacks**: a correction (doc 37) once registered (`core.moveCorrection`): at once on
+  accept, or when the difference is paid.
+- **Credit**: used when admission is offered (`makeOffer` → `admit.applyCredit`: an admission fee
+  receipt of mode `transfer`; cleared, the admission number and the fee-paid message instead of the
+  offer; partly, the offer message shows the credit and what is left to pay); the online payment of the
+  balance uses it too; `POST admissions/registrations/:id/use-credit` for Accounts
+  (`admissions.fee.collect`); the portal asks for the balance less the credit; the counter rows carry
+  `credit`.
+- **Message**: one from the receiving school: registered (`admission_registered`, with the form and
+  receipt PDFs) or the difference to pay (`admission_received` with the difference); rows name the
+  first school, the old number, the money and any answers to complete.
+- **Admin**: registration page "Move to another school" (school, reason), the waiting / moved lines,
+  Withdraw, the credit and "Use the credit"; Admissions → Moves between schools (Coming here / Sent from
+  here / All, Excel, PDF view / download); a move's page (what was sent, the receipts carried, Accept or
+  refuse with the session, class and the preview; Withdraw for the first school).
+- **Not built**: refunding credit left after the admission fee (it stays on the registration).
+- Tests: admission-moves e2e 10 (targets / outsider, admitted refused, request and visibility, preview
+  keeps nothing, equal fee with copy / files / login / correction / transfer-out line, higher fee paid
+  at the counter, lower fee credit used at the offer, refuse and withdraw, duplicate child and money
+  changed, register Excel / PDF); all admission suites + permission coverage + school transfer 133;
+  db rls; a11y moves pages and registration 1404.

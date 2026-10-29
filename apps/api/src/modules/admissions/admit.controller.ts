@@ -38,6 +38,16 @@ export class AdmissionAdmitController {
     return this.svc.collect(ctx, id, dto);
   }
 
+  @Post('registrations/:id/use-credit')
+  @ApiOperation({
+    summary:
+      'Pay the admission fee from the credit carried in from another school (docs/design/64)',
+  })
+  @RequirePermission(ADMISSION_FEE)
+  useCredit(@ReqCtx() ctx: RequestContext, @Param('id') id: string) {
+    return this.svc.useCredit(ctx, id);
+  }
+
   @Post('registrations/:id/confirm')
   @ApiOperation({ summary: 'Confirm an admission with no admission fee due: the admission number' })
   @RequirePermission(ADMISSION_ADMIT)
@@ -104,7 +114,9 @@ export class AdmissionAdmitController {
   }
 
   @Get('refunds/approval-levels')
-  @ApiOperation({ summary: 'Makes sure the refund approval levels exist (Fees → Approval edits them)' })
+  @ApiOperation({
+    summary: 'Makes sure the refund approval levels exist (Fees → Approval edits them)',
+  })
   @AuthenticatedOnly()
   refundLevels(@ReqCtx() ctx: RequestContext) {
     return this.refundsSvc.approvalFlow(ctx);

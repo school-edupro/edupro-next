@@ -223,6 +223,8 @@ export class AdmissionAdmitService {
     // the balance after any parts at the counter (docs/design/53); it clears the fee
     const { paid } = await this.core.admissionPaid(c, a.id);
     if (paid + 0.005 >= Number(a.admission_fee ?? 0)) await this.feePaid(c, a.id, rec.id, {});
+    // the family paid the balance less the credit carried in (docs/design/64): the credit clears it
+    else if ((await this.applyCredit(c, a.id, {})).cleared) return;
     else
       await this.core.event(
         c,
@@ -232,6 +234,90 @@ export class AdmissionAdmitService {
         `Admission fee of ${money(amount)} received online (receipt ${rec.receiptNo}); balance ${money(Number(a.admission_fee ?? 0) - paid)}`,
         {},
       );
+  }
+
+  /**
+   * Credit carried in from another school of the group (docs/design/64) paid into the admission fee of
+   * an offer: a receipt of mode "transfer" for what the balance takes; the admission number when it
+   * clears the fee. Nothing happens without an offer, credit or a balance.
+   */
+  async applyCredit(
+    c: PoolClient,
+    id: string,
+    who: { actorUser?: string | null },
+  ): Promise<{ used: number; receiptNo: string | null; cleared: boolean }> {
+    const none = { used: 0, receiptNo: null, cleared: false };
+    const credit = await this.core.creditOf(c, id);
+    if (!(credit > 0)) return none;
+    const a = await this.core.row(c, id);
+    if (a.status !== 'offered') return none;
+    const { paid } = await this.core.admissionPaid(c, id);
+    const balance = Math.round((Number(a.admission_fee ?? 0) - paid) * 100) / 100;
+    if (!(balance > 0)) return none;
+    const used = Math.min(credit, balance);
+    const from = await c.query<{ ref: string }>(
+      `SELECT 'Move ' || id || ' from ' || (snapshot->>'fromSchool') AS ref FROM admission_moves
+        WHERE to_application_id = $1 AND status = 'accepted' ORDER BY id DESC LIMIT 1`,
+      [id],
+    );
+    const rec = await this.core.postReceipt(c, a, {
+      kind: 'admission',
+      amount: used,
+      mode: 'transfer',
+      modeLabel: 'Inter-school transfer',
+      reference: from.rows[0]?.ref.slice(0, 120) ?? null,
+      remarks: 'credit carried over',
+      receivedBy: who.actorUser ?? null,
+    });
+    await c.query(
+      `UPDATE applications SET transfer_credit = transfer_credit - $2, updated_at = now() WHERE id = $1`,
+      [id, used.toFixed(2)],
+    );
+    const left = Math.round((balance - used) * 100) / 100;
+    if (left > 0)
+      await this.core.event(
+        c,
+        id,
+        'offered',
+        'offered',
+        `Credit of ${money(used)} carried over used for the admission fee (receipt ${rec.receiptNo}); balance ${money(left)}`,
+        who,
+      );
+    else await this.feePaid(c, id, rec.id, who);
+    return { used, receiptNo: rec.receiptNo, cleared: left <= 0 };
+  }
+
+  /** The office uses the credit on an offer (the counter, or the registration page). */
+  async useCredit(ctx: RequestContext, id: string) {
+    return this.db.tenant(requireTenant(ctx), async (c) => {
+      const a = await this.core.row(c, id);
+      if (a.status !== 'offered')
+        throw new DomainError(
+          'admissions.nothing_due',
+          'The credit is used on an admission offer',
+          {
+            status: 409,
+          },
+        );
+      if (a.offer_expires_at && a.offer_expires_at.getTime() < Date.now())
+        throw new DomainError(
+          'admissions.offer_lapsed',
+          `The offer lapsed on ${istDate(a.offer_expires_at)}; renew it from Selection first`,
+          { status: 409 },
+        );
+      const out = await this.applyCredit(c, id, { actorUser: ctx.user.id });
+      if (!out.used)
+        throw new DomainError('admissions.no_credit', 'No credit or no admission fee is left', {
+          status: 409,
+        });
+      await this.audit.stage(ctx, c, {
+        action: 'admissions.admission_fee.credit',
+        entityType: 'applications',
+        entityId: id,
+        after: { used: out.used, receiptNo: out.receiptNo, cleared: out.cleared },
+      });
+      return { ...out, admissionNo: (await this.core.row(c, id)).admission_no };
+    });
   }
 
   /**

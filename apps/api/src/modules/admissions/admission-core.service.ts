@@ -10,6 +10,7 @@ import {
   fieldState,
   formErrors,
   formProgress,
+  isEmptyAnswer,
   LAYOUT_TYPES,
   linkCityStates,
   liveAnswers,
@@ -554,7 +555,7 @@ export class AdmissionCoreService {
   }
 
   /** Stops a second live registration of the same child in the year, unless an admin lets it through. */
-  private async guardSameChild(
+  async guardSameChild(
     c: PoolClient,
     a: AppRow,
     opts: {
@@ -756,6 +757,15 @@ export class AdmissionCoreService {
     };
   }
 
+  /** Money carried in from another school of the group not used yet (docs/design/64). */
+  async creditOf(c: PoolClient, appId: string): Promise<number> {
+    const r = await c.query<{ credit: string }>(
+      `SELECT transfer_credit::text AS credit FROM applications WHERE id = $1`,
+      [appId],
+    );
+    return Number(r.rows[0]?.credit ?? 0);
+  }
+
   /** A fee receipt in the fee module: the admission ledger head, the session's own series. */
   async postReceipt(
     c: PoolClient,
@@ -824,9 +834,15 @@ export class AdmissionCoreService {
   }
 
   /** Registration number, status, the form PDF kept, and the email with the form and the receipt. */
-  async register(c: PoolClient, appId: string, receiptId: string | null): Promise<void> {
+  async register(
+    c: PoolClient,
+    appId: string,
+    receiptId: string | null,
+    /** silent: the caller sends its own message (a registration moved in, docs/design/64) */
+    opts: { silent?: boolean } = {},
+  ): Promise<Array<{ fileId: string; name: string }>> {
     const a = await this.row(c, appId);
-    if (a.application_no) return;
+    if (a.application_no) return [];
     const no = await c.query<{ application_no: string; serial: number }>(
       `SELECT * FROM app.next_application_no($1)`,
       [a.cycle_id],
@@ -863,6 +879,10 @@ export class AdmissionCoreService {
       const rec = await this.storeReceiptPdf(c, receiptId);
       if (rec) attachments.push(rec);
     }
+    if (opts.silent) {
+      await this.moveCorrection(c, appId, false);
+      return attachments;
+    }
     await c.query(
       `SELECT app.admission_notify('admission_registered', $1, $2, $3::jsonb, $4, $5, $6, $7::jsonb, $8, $9::jsonb)`,
       [
@@ -888,6 +908,133 @@ export class AdmissionCoreService {
         JSON.stringify(attachments),
       ],
     );
+    // a registration moved in that waited for the fee difference: its number on the move, and the
+    // answers its copy lacked
+    await c.query(
+      `UPDATE admission_moves SET snapshot = jsonb_set(snapshot, '{to,number}', to_jsonb($2::text))
+        WHERE to_application_id = $1 AND status = 'accepted' AND snapshot ? 'to'`,
+      [appId, after.application_no],
+    );
+    await this.moveCorrection(c, appId, true);
+    return attachments;
+  }
+
+  /**
+   * A registration moved in from another school of the group (docs/design/64): the copied answers are
+   * kept where this school's form takes them; an answer it refuses (an option it does not offer, a
+   * wrong format) is dropped. Returns the fields left unanswered that the form needs.
+   */
+  async adopt(c: PoolClient, a: AppRow, answers: AdmissionAnswers): Promise<string[]> {
+    const def = await this.defOf(c, a);
+    const options = await this.forms.optionsWith(c);
+    const optionsOf = (f: AdmissionField, x: AdmissionAnswers) =>
+      AdmissionFormsService.optionsOf(f, options, x);
+    const given: AdmissionAnswers = {};
+    for (const f of def.fields)
+      if (!LAYOUT_TYPES.includes(f.type) && f.key in answers) given[f.key] = answers[f.key];
+    let clean = { ...given, ...cleanAnswers(def, given) };
+    for (const k of Object.keys(formErrors(def, clean, optionsOf)))
+      if (!isEmptyAnswer(given[k])) delete given[k];
+    clean = { ...given, ...cleanAnswers(def, given) };
+    await this.writeData(c, a, def, clean, formProgress(def, clean));
+    return Object.keys(formErrors(def, clean, optionsOf));
+  }
+
+  /** A registration moved in: submitted with this school's category and registration fee. */
+  async submitMoved(
+    c: PoolClient,
+    appId: string,
+    note: string,
+    who: { actorUser?: string | null },
+  ): Promise<{ fee: number; category: string | null }> {
+    const fresh = await this.row(c, appId);
+    const def = await this.defOf(c, fresh);
+    const cat = matchCategory(
+      await this.setup.categoriesWith(c, true),
+      this.plainData(def, fresh.data),
+    );
+    const fee = await this.registrationFee(c, fresh.cycle_id, fresh.class_id, cat?.id ?? null);
+    await c.query(
+      `UPDATE applications SET status = 'submitted', submitted_at = now(), form_snapshot = $2::jsonb,
+              form_id = COALESCE(form_id, (SELECT form_id FROM admission_class_criteria WHERE cycle_id = $3 AND class_id = $4)),
+              category_id = $5, registration_fee = $6, updated_at = now()
+        WHERE id = $1`,
+      [appId, JSON.stringify(def), fresh.cycle_id, fresh.class_id, cat?.id ?? null, fee.toFixed(2)],
+    );
+    await this.event(
+      c,
+      appId,
+      'draft',
+      'submitted',
+      `${note}${cat ? ` · category ${cat.name}` : ''}`,
+      who,
+    );
+    await this.refreshPoints(c, appId);
+    return { fee, category: cat?.name ?? null };
+  }
+
+  /**
+   * A registration moved in whose copy lacked answers this school's form needs: once registered, they
+   * are asked of the family as a correction (once). Returns the fields' names, or null.
+   */
+  async moveCorrection(c: PoolClient, appId: string, notify: boolean): Promise<string[] | null> {
+    const m = await c.query<{ missing: string[]; school: string | null }>(
+      `SELECT missing, snapshot->>'fromSchool' AS school FROM admission_moves
+        WHERE to_application_id = $1 AND status = 'accepted' AND cardinality(missing) > 0`,
+      [appId],
+    );
+    const x = m.rows[0];
+    if (!x) return null;
+    const asked = await c.query(`SELECT 1 FROM admission_corrections WHERE application_id = $1`, [
+      appId,
+    ]);
+    if (asked.rowCount) return null;
+    const a = await this.row(c, appId);
+    const def = await this.defOf(c, a);
+    const names = x.missing.map((k) => def.fields.find((f) => f.key === k)?.label ?? k);
+    const remark = `This school's form asks for answers the registration moved from ${x.school ?? 'the other school'} did not have`;
+    await c.query(
+      `INSERT INTO admission_corrections (school_id, application_id, level, fields, remark, created_by)
+       VALUES (app.current_school_id(), $1, COALESCE((SELECT level_no FROM applications WHERE id = $1), 1), $2, $3, app.current_user_id())`,
+      [appId, x.missing, remark],
+    );
+    await c.query(
+      `UPDATE applications SET status = 'sent_back', updated_at = now() WHERE id = $1`,
+      [appId],
+    );
+    await this.event(
+      c,
+      appId,
+      a.status,
+      'sent_back',
+      `Sent to the family for the answers this school's form asks for: ${names.join(', ')}`,
+      {},
+    );
+    if (notify)
+      await c.query(
+        `SELECT app.admission_notify('admission_correction', $1, $2, $3::jsonb, $4, $5, NULL, $6::jsonb, $7)`,
+        [
+          a.contact_mobile,
+          a.contact_email,
+          JSON.stringify({
+            ...messageTag('status', { applicationId: a.id }),
+            name: a.candidate_name ?? '',
+            number: a.application_no ?? '',
+            school: '',
+            due: 'soon',
+            remark,
+          }),
+          'Please complete the registration form',
+          `The school asks you to complete the registration form of ${a.candidate_name ?? 'your ward'}.`,
+          JSON.stringify([
+            ['Registration no.', a.application_no ?? ''],
+            ['What to complete', names.join(', ')],
+            ['Remark', remark],
+          ]),
+          'Sign in to the admission portal: only the marked answers can be changed. Submit again when done.',
+        ],
+      );
+    return names;
   }
 
   /** Online registration fee paid (payment intent of kind admission_registration). */

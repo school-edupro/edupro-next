@@ -56,6 +56,8 @@ import { AdmissionApprovalsService } from './approvals.service';
 import { AdmissionScoreTablesService } from './score-tables.service';
 import { AdmissionScoreReportService } from './score-report.service';
 import { AdmissionNumberSeriesService } from './number-series.service';
+import { AdmissionMovesController } from './moves.controller';
+import { AdmissionMovesService } from './moves.service';
 
 @Module({
   imports: [WorkflowModule, PaymentsModule, FilesModule],
@@ -73,6 +75,7 @@ import { AdmissionNumberSeriesService } from './number-series.service';
     AdmissionResultsController,
     AdmissionDrawController,
     AdmissionApprovalsController,
+    AdmissionMovesController,
     CandidatePortalController,
     PublicAdmissionsController,
     PublicSchoolController,
@@ -101,6 +104,7 @@ import { AdmissionNumberSeriesService } from './number-series.service';
     AdmissionApprovalsService,
     AdmissionScoreReportService,
     AdmissionNumberSeriesService,
+    AdmissionMovesService,
     AdmissionScheduleService,
     CandidatePortalService,
     CandidateSigninService,

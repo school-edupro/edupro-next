@@ -16,6 +16,8 @@ import { requireTenant, type RequestContext } from '../../common/http/request-co
 import { classPointsMax } from './points-rules';
 import { WorkflowService } from '../workflow/workflow.service';
 import { AdmissionCoreService, type AppRow } from './admission-core.service';
+import { AdmissionAdmitService } from './admit.service';
+import { movesOf } from './moves.service';
 import { ADMISSIONS } from './admissions.dto';
 import {
   autoSlot,
@@ -78,6 +80,7 @@ export class AdmissionProcessService {
     private readonly core: AdmissionCoreService,
     private readonly workflow: WorkflowService,
     private readonly audit: AuditService,
+    private readonly admit: AdmissionAdmitService,
   ) {}
 
   // ---- set-up -----------------------------------------------------------------------------------
@@ -677,6 +680,9 @@ export class AdmissionProcessService {
         canCorrect:
           ctx.permissions?.has(ADMISSIONS.applicationReview) === true &&
           !['draft', 'admitted', 'cancelled', 'withdrawn'].includes(a.status),
+        // moved between the schools of the group, and the credit it brought (docs/design/64)
+        moves: await movesOf(c, id),
+        credit: await this.core.creditOf(c, id),
         events: events.rows.map((e) => ({
           id: e.id,
           status: e.to_status,
@@ -733,10 +739,11 @@ export class AdmissionProcessService {
   }
 
   /** The offer's notice: what the email, SMS and WhatsApp say (the email's words may be changed). */
-  private offerMessage(a: AppRow, amount: number, due: string) {
+  private offerMessage(a: AppRow, amount: number, due: string, credit = 0) {
+    const toPay = Math.round((amount - credit) * 100) / 100;
     return {
       code: 'admission_offer',
-      vars: { amount: amount.toLocaleString('en-IN'), due },
+      vars: { amount: toPay.toLocaleString('en-IN'), due },
       title: 'Admission offered',
       intro: `${a.candidate_name ?? 'Your ward'} is offered admission to ${a.class_name}.`,
       rows: [
@@ -744,6 +751,13 @@ export class AdmissionProcessService {
         ['Registration no.', a.application_no ?? ''],
         ['Class', a.class_name],
         ['Admission fee', `Rs ${amount.toLocaleString('en-IN')}`],
+        // money carried in from another school paid part of it (docs/design/64)
+        ...(credit > 0
+          ? [
+              ['Paid from the credit carried over', `Rs ${credit.toLocaleString('en-IN')}`],
+              ['To pay', `Rs ${toPay.toLocaleString('en-IN')}`],
+            ]
+          : []),
         ['Pay by', due],
       ] as Array<[string, string]>,
       note: 'Pay the admission fee in the admission portal or at the school office before the last date; the offer lapses after it.',
@@ -857,7 +871,11 @@ export class AdmissionProcessService {
       [a.id, amount.toFixed(2), actorUser],
     );
     await this.core.event(c, a.id, a.status, 'offered', note, { actorUser });
-    const m = this.offerMessage(a, amount, ist(r.rows[0]!.expires));
+    // credit carried in from another school pays the fee first (docs/design/64); cleared, the family
+    // gets the admission number's message instead of the offer
+    const credit = await this.admit.applyCredit(c, a.id, { actorUser });
+    if (credit.cleared) return;
+    const m = this.offerMessage(a, amount, ist(r.rows[0]!.expires), credit.used);
     if (!edits || !(edits.subject || edits.intro || edits.note !== undefined)) {
       await this.notify(c, a, m.code, m.vars, m.title, m.intro, m.rows, m.note);
       return;

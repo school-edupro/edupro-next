@@ -461,7 +461,10 @@ export class CandidatePortalService {
               ? Math.max(
                   0,
                   Math.round(
-                    (Number(a.admission_fee) - (await this.core.admissionPaid(c, id)).paid) * 100,
+                    (Number(a.admission_fee) -
+                      (await this.core.admissionPaid(c, id)).paid -
+                      (await this.core.creditOf(c, id))) *
+                      100,
                   ) / 100,
                 )
               : 0,
@@ -752,7 +755,11 @@ export class CandidatePortalService {
       const fee = registration
         ? Number(a.registration_fee)
         : Math.round(
-            (Number(a.admission_fee) - (await this.core.admissionPaid(c, a.id)).paid) * 100,
+            (Number(a.admission_fee) -
+              (await this.core.admissionPaid(c, a.id)).paid -
+              // credit carried in from another school is used when the payment comes (docs/design/64)
+              (await this.core.creditOf(c, a.id))) *
+              100,
           ) / 100;
       if (!(fee > 0))
         throw new DomainError('admissions.nothing_due', 'Nothing is due on this registration', {
