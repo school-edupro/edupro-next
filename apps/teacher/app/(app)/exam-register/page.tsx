@@ -3,7 +3,7 @@ import { redirect } from 'next/navigation';
 import { ApiError } from '@edupro/bff';
 import { bff } from '@/lib/bff';
 import { currentLang, t } from '@/lib/i18n';
-import { saveAttendance, saveHealth, saveRemarks } from './actions';
+import { attendanceFromDaily, saveAttendance, saveHealth, saveRemarks } from './actions';
 
 interface Exam {
   id: string;
@@ -363,6 +363,50 @@ export default async function ExamRegisterPage({
               </p>
             )}
           </form>
+          {!locked ? (
+            <form
+              action={attendanceFromDaily}
+              style={{
+                display: 'flex',
+                gap: 'var(--sp-3)',
+                alignItems: 'flex-end',
+                flexWrap: 'wrap',
+                marginTop: 'var(--sp-4)',
+                borderTop: '1px solid var(--border-default)',
+                paddingTop: 'var(--sp-3)',
+              }}
+            >
+              <input type="hidden" name="examId" value={exam.id} />
+              <input type="hidden" name="classSectionId" value={chosen.classSectionId} />
+              <p className="ep-field__help" style={{ margin: 0, flexBasis: '100%' }}>
+                {t(
+                  lang,
+                  'Count exam attendance from daily attendance (empty dates: from the start of the session to the last day of the exam).',
+                )}
+              </p>
+              <label className="ep-field">
+                <span className="ep-field__label">{t(lang, 'From')}</span>
+                <input className="ep-input" type="date" name="from" />
+              </label>
+              <label className="ep-field">
+                <span className="ep-field__label">{t(lang, 'To')}</span>
+                <input className="ep-input" type="date" name="to" />
+              </label>
+              <label className="ep-check" htmlFor="att-overwrite">
+                <input
+                  id="att-overwrite"
+                  className="ep-check__input"
+                  type="checkbox"
+                  name="overwrite"
+                />
+                <span className="ep-check__box" aria-hidden="true" />{' '}
+                {t(lang, 'Replace what is entered')}
+              </label>
+              <Button type="submit" variant="secondary">
+                {t(lang, 'Count from daily attendance')}
+              </Button>
+            </form>
+          ) : null}
         </Card>
       ) : null}
     </main>

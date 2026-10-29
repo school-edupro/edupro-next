@@ -366,3 +366,12 @@ batteries (AAHPERD), ICSE / state board cards, moving the old module's mark hist
   locked result scheme, Exams → Remark categories (categories and the bank), an exam's Remarks page;
   the tick boxes of the exam pages show their box. Teacher app: Remarks.
 - Tests: exam-promotion-remarks e2e 5; renderer 14; a11y the new pages and the teacher walk.
+- **Validation (29 Oct 2026)**, the plan checked item by item against the code; two gaps closed:
+  exam attendance counted from daily attendance (`POST exams/:id/attendance/from-daily`: the days
+  marked and present between two dates, default the session's start to the exam's last day, present
+  as daily attendance counts it: P, L, H, OD, SB, SR; entered rows kept unless `overwrite`; the class
+  teacher's right and the attendance lock; teacher app exam register "Count from daily attendance"),
+  and verifying marks now works out again the term results of every locked result scheme that reads
+  the exam and was worked out already (`MarkSchemesService.recomputeForExam` in the verifier's
+  transaction). Tests: exam-promotion-remarks e2e 7. The process for the school:
+  `docs/playbooks/examinations-process.md`.

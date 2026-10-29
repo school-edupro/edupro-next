@@ -75,3 +75,31 @@ export async function saveHealth(fd: FormData) {
     );
   await put(fd, 'health', { rows }, 'health records saved');
 }
+
+/** docs/design/65: exam attendance counted from daily attendance between two dates. */
+export async function attendanceFromDaily(fd: FormData) {
+  const back = `/exam-register?exam=${str(fd, 'examId')}&section=${str(fd, 'classSectionId')}`;
+  let out: { filled: number; kept: number; noDays: number; from: string; to: string } | undefined;
+  try {
+    out = await bff.api.fetch(`/exams/${str(fd, 'examId')}/attendance/from-daily`, {
+      method: 'POST',
+      body: JSON.stringify({
+        classSectionId: str(fd, 'classSectionId'),
+        ...(str(fd, 'from') ? { from: str(fd, 'from') } : {}),
+        ...(str(fd, 'to') ? { to: str(fd, 'to') } : {}),
+        overwrite: fd.get('overwrite') !== null,
+      }),
+    });
+  } catch (error) {
+    if (error instanceof ApiError) {
+      const detail = typeof error.problem.detail === 'string' ? error.problem.detail : '';
+      redirect(
+        `${back}&error=${encodeURIComponent(error.problem.type)}&detail=${encodeURIComponent(detail.slice(0, 120))}`,
+      );
+    }
+    throw error;
+  }
+  redirect(
+    `${back}&ok=1&detail=${encodeURIComponent(`${String(out!.filled)} counted (${out!.from} to ${out!.to}), ${String(out!.kept)} kept as entered`)}`,
+  );
+}

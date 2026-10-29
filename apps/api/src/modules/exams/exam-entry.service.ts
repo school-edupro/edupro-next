@@ -11,6 +11,7 @@ import {
   type EntryQueryDto,
   type MarksUploadDto,
   type PutExamAttendanceDto,
+  type AttendanceFromDailyDto,
   type PutHealthDto,
   type PutIndicatorsDto,
   type PutMarksDto,
@@ -1115,6 +1116,72 @@ export class ExamEntryService {
         after: { classSectionId: section.id, rows: dto.rows.length, changed: n },
       });
       return { changed: n };
+    });
+  }
+
+  /**
+   * Exam attendance counted from daily attendance (docs/design/65): for each student of the section,
+   * the days marked between two dates and the days present as daily attendance counts them (present,
+   * late, half day, on duty, stay back, short leave). Students already entered keep theirs unless
+   * `overwrite`; the class teacher corrects any row after.
+   */
+  async attendanceFromDaily(ctx: RequestContext, examId: string, dto: AttendanceFromDailyDto) {
+    const tenant = requireTenant(ctx);
+    const yearId = this.year(tenant);
+    return this.db.tenant(tenant, async (c) => {
+      const section = await this.openForRegister(
+        c,
+        tenant,
+        yearId,
+        examId,
+        dto.classSectionId,
+        ATTENDANCE,
+      );
+      const range = await c.query<{ from: string; to: string }>(
+        `SELECT COALESCE($3::date, y.start_date)::text AS from,
+                COALESCE($4::date, LEAST(COALESCE(e.ends_on, (now() AT TIME ZONE 'Asia/Kolkata')::date), y.end_date))::text AS to
+           FROM exams e JOIN academic_years y ON y.id = $2 WHERE e.id = $1`,
+        [examId, yearId, dto.from ?? null, dto.to ?? null],
+      );
+      const { from, to } = range.rows[0]!;
+      const roster = await this.roster(c, yearId, section.id);
+      const counted = await c.query<{ student_id: string; days: number; present: number }>(
+        `SELECT m.student_id::text, count(*)::int AS days,
+                count(*) FILTER (WHERE m.code::text IN ('P', 'L', 'H', 'OD', 'SB', 'SR'))::int AS present
+           FROM attendance_marks m JOIN attendance_sessions a ON a.id = m.session_id
+          WHERE a.academic_year_id = $1 AND a.kind = 'day' AND a.on_date BETWEEN $2::date AND $3::date
+            AND m.student_id = ANY($4::bigint[])
+          GROUP BY m.student_id`,
+        [yearId, from, to, roster.map((r) => r.studentId)],
+      );
+      const by = new Map(counted.rows.map((x) => [x.student_id, x]));
+      let filled = 0;
+      let kept = 0;
+      let noDays = 0;
+      for (const r of roster) {
+        const x = by.get(r.studentId);
+        if (!x || x.days === 0) {
+          noDays += 1;
+          continue;
+        }
+        const u = await c.query(
+          `INSERT INTO exam_attendance (school_id, exam_id, student_id, days_present, days_total, entered_by)
+           VALUES (app.current_school_id(), $1, $2, $3, $4, app.current_user_id())
+           ON CONFLICT (exam_id, student_id) DO UPDATE SET days_present = EXCLUDED.days_present, days_total = EXCLUDED.days_total,
+             entered_by = app.current_user_id()
+           WHERE $5::boolean`,
+          [examId, r.studentId, x.present, x.days, dto.overwrite],
+        );
+        if (u.rowCount) filled += 1;
+        else kept += 1;
+      }
+      await this.audit.stage(ctx, c, {
+        action: 'exams.attendance.from_daily',
+        entityType: 'exams',
+        entityId: examId,
+        after: { classSectionId: section.id, from, to, filled, kept, noDays },
+      });
+      return { from, to, filled, kept, noDays };
     });
   }
 

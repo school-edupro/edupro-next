@@ -12,6 +12,7 @@ import {
   PromotionProposalsQueryDto,
   RegisterSheetQueryDto,
   PutExamAttendanceDto,
+  AttendanceFromDailyDto,
   PutHealthDto,
   PutIndicatorsDto,
   PutMarksDto,
@@ -150,6 +151,17 @@ export class ExamEntryController {
   @RequirePermission(EXAMS.remarkEnter, { description: 'Enter exam remarks' })
   putRemarks(@ReqCtx() ctx: RequestContext, @Param('id') id: string, @Body() dto: PutRemarksDto) {
     return this.entry.putRemarks(ctx, id, dto);
+  }
+
+  @Post(':id/attendance/from-daily')
+  @ApiOperation({ summary: 'Count exam attendance from daily attendance between two dates' })
+  @RequirePermission(EXAMS.attendanceEnter)
+  attendanceFromDaily(
+    @ReqCtx() ctx: RequestContext,
+    @Param('id') id: string,
+    @Body() dto: AttendanceFromDailyDto,
+  ) {
+    return this.entry.attendanceFromDaily(ctx, id, dto);
   }
 
   @Put(':id/attendance')

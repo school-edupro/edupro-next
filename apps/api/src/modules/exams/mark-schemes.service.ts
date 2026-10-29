@@ -553,6 +553,39 @@ export class MarkSchemesService {
           'Only a locked result scheme makes term results',
           { status: 409 },
         );
+      const counts = await this.computeIn(c, yearId, id, s);
+      await this.audit.stage(ctx, c, {
+        action: 'exams.scheme.compute',
+        entityType: 'mark_schemes',
+        entityId: id,
+        after: counts,
+      });
+      return { ...(await this.view(c, await this.find(c, id))), counts };
+    });
+  }
+
+  /**
+   * Verified marks change the term results (docs/design/65): every locked result scheme of the year
+   * that reads the exam and was worked out already is worked out again (in the verifier's transaction).
+   */
+  async recomputeForExam(c: PoolClient, yearId: string, examId: string): Promise<string[]> {
+    const r = await c.query<{ id: string }>(
+      `SELECT id::text FROM mark_schemes
+        WHERE academic_year_id = $1 AND purpose = 'result' AND status = 'locked' AND deleted_at IS NULL AND computed_at IS NOT NULL
+          AND EXISTS (SELECT 1 FROM jsonb_array_elements(def->'exams') x WHERE x->>'examId' = $2::text)`,
+      [yearId, examId],
+    );
+    for (const x of r.rows) await this.computeIn(c, yearId, x.id, await this.find(c, x.id, true));
+    return r.rows.map((x) => x.id);
+  }
+
+  private async computeIn(
+    c: PoolClient,
+    yearId: string,
+    id: string,
+    s: Row,
+  ): Promise<Record<string, number>> {
+    {
       await c.query(`DELETE FROM term_results WHERE scheme_id = $1`, [id]);
       const printed = s.def.columns.filter((x) => !x.hidden).map((x) => x.key);
       const counts: Record<string, number> = {};
@@ -591,14 +624,8 @@ export class MarkSchemesService {
         }
       }
       await c.query(`UPDATE mark_schemes SET computed_at = now() WHERE id = $1`, [id]);
-      await this.audit.stage(ctx, c, {
-        action: 'exams.scheme.compute',
-        entityType: 'mark_schemes',
-        entityId: id,
-        after: counts,
-      });
-      return { ...(await this.view(c, await this.find(c, id))), counts };
-    });
+      return counts;
+    }
   }
 
   /** Any scheme's sheet for a section or a class: by roll, or as a merit list. */

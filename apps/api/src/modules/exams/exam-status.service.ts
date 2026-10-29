@@ -7,6 +7,7 @@ import { DomainError } from '../../common/errors/domain-error';
 import { requireTenant, type RequestContext } from '../../common/http/request-context';
 import { ExamEntryService, MARKS } from './exam-entry.service';
 import { EXAMS, type EntryStatusActionDto, type EntryStatusNoteDto } from './exams.dto';
+import { MarkSchemesService } from './mark-schemes.service';
 
 type Status = 'open' | 'submitted' | 'verified';
 
@@ -87,6 +88,7 @@ export class ExamStatusService {
     private readonly audit: AuditService,
     private readonly scopes: ScopePolicy,
     private readonly entry: ExamEntryService,
+    private readonly schemes: MarkSchemesService,
   ) {}
 
   /** Sections whose marks the caller verifies: null = every section (the verify right, unscoped). */
@@ -311,7 +313,11 @@ export class ExamStatusService {
         );
       await this.move(c, es.id, section.id, 'submitted', to, note);
       // verified marks make the results: worked out again at once
-      if (to === 'verified') await c.query(`SELECT app.compute_exam_results($1)`, [examId]);
+      if (to === 'verified') {
+        await c.query(`SELECT app.compute_exam_results($1)`, [examId]);
+        // and the term results of the locked result schemes that read the exam (docs/design/65)
+        await this.schemes.recomputeForExam(c, yearId, examId);
+      }
       await this.audit.stage(ctx, c, {
         action: to === 'verified' ? 'exams.marks.verify' : 'exams.marks.send_back',
         entityType: 'exam_subjects',

@@ -686,6 +686,11 @@ const DICT: Record<string, string> = {
     'प्रत्येक विद्यार्थी और श्रेणी के लिए एक टिप्पणी; रिपोर्ट कार्ड पर छपती है।',
   'There is no remark category for you to write in this section.':
     'इस अनुभाग में आपके लिखने के लिए कोई टिप्पणी श्रेणी नहीं है।',
+  'Count exam attendance from daily attendance (empty dates: from the start of the session to the last day of the exam).':
+    'दैनिक उपस्थिति से परीक्षा उपस्थिति गिनें (तिथियाँ खाली: सत्र के आरंभ से परीक्षा के अंतिम दिन तक)।',
+  From: 'से',
+  'Replace what is entered': 'जो भरा है उसे बदलें',
+  'Count from daily attendance': 'दैनिक उपस्थिति से गिनें',
 };
 
 /** Translates a known English string; unknown strings fall back to English. */

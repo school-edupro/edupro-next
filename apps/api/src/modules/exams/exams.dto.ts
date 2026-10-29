@@ -303,6 +303,23 @@ export const PutExamAttendanceSchema = z.object({
 });
 export class PutExamAttendanceDto extends createZodDto(PutExamAttendanceSchema) {}
 
+/** docs/design/65: exam attendance counted from daily attendance between two dates */
+export const AttendanceFromDailySchema = z
+  .object({
+    classSectionId: IdSchema,
+    /** default: the start of the academic year */
+    from: DateSchema.optional(),
+    /** default: the exam's last day, or today */
+    to: DateSchema.optional(),
+    /** replace what is already entered (else only the students without it) */
+    overwrite: z.boolean().default(false),
+  })
+  .refine((x) => !x.from || !x.to || x.from <= x.to, {
+    message: 'The first day comes before the last',
+    path: ['to'],
+  });
+export class AttendanceFromDailyDto extends createZodDto(AttendanceFromDailySchema) {}
+
 export const PutHealthSchema = z.object({
   classSectionId: IdSchema,
   recordedOn: DateSchema.optional(),

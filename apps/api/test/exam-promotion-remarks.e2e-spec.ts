@@ -432,4 +432,105 @@ describe('promotion proposals and remark categories (e2e)', () => {
       '<div class="k">Promotion</div><div class="v">Retained in Class VI</div>',
     );
   });
+
+  it('counts exam attendance from daily attendance; what is entered stays unless replaced', async () => {
+    await withMigrator(async (c) => {
+      const codes: Record<string, string[]> = { Asha: ['P', 'P', 'A'], Bhanu: ['P', 'L', 'H'] };
+      for (const [d, day] of ['2026-07-01', '2026-07-02', '2026-07-03'].entries()) {
+        const sess = await c.query<{ id: string }>(
+          `INSERT INTO attendance_sessions (school_id, academic_year_id, class_section_id, on_date, kind)
+           VALUES ($1, $2, $3, $4::date, 'day') RETURNING id::text`,
+          [school.id, school.yearId, section.A, day],
+        );
+        for (const [who, list] of Object.entries(codes))
+          await c.query(
+            `INSERT INTO attendance_marks (school_id, session_id, student_id, code) VALUES ($1, $2, $3, $4::attendance_code)`,
+            [school.id, sess.rows[0]!.id, student[who], list[d]],
+          );
+      }
+    });
+    expect(
+      (
+        await call(admin, 'PUT', `/exams/${examId}/class-locks`, {
+          classId: klass.VI,
+          remarks: false,
+        })
+      ).statusCode,
+    ).toBe(200);
+    // Asha's typed in first
+    expect(
+      (
+        await call(classTeacher, 'PUT', `/exams/${examId}/attendance`, {
+          classSectionId: section.A,
+          rows: [{ studentId: student.Asha, daysPresent: 5, daysTotal: 6 }],
+        })
+      ).statusCode,
+    ).toBe(200);
+    const count = (overwrite: boolean) =>
+      call(classTeacher, 'POST', `/exams/${examId}/attendance/from-daily`, {
+        classSectionId: section.A,
+        from: '2026-07-01',
+        to: '2026-07-31',
+        overwrite,
+      });
+    const first = await count(false);
+    expect(first.statusCode).toBe(201);
+    expect(first.json()).toEqual({
+      from: '2026-07-01',
+      to: '2026-07-31',
+      filled: 1,
+      kept: 1,
+      noDays: 2,
+    });
+    const reg = async () =>
+      (
+        await call(classTeacher, 'GET', `/exams/${examId}/register?classSectionId=${section.A!}`)
+      ).json().rows as Array<{
+        studentId: string;
+        daysPresent: number | null;
+        daysTotal: number | null;
+      }>;
+    const att = (rows: Awaited<ReturnType<typeof reg>>, who: string) => {
+      const r = rows.find((x) => x.studentId === student[who])!;
+      return [r.daysPresent, r.daysTotal];
+    };
+    // late and half day count as present, as daily attendance counts them
+    expect(att(await reg(), 'Bhanu')).toEqual([3, 3]);
+    expect(att(await reg(), 'Asha')).toEqual([5, 6]);
+    expect((await count(true)).json()).toMatchObject({ filled: 2, kept: 0 });
+    expect(att(await reg(), 'Asha')).toEqual([2, 3]);
+    // a subject teacher does not fill the class's register
+    expect(
+      (
+        await call(englishTeacher, 'POST', `/exams/${examId}/attendance/from-daily`, {
+          classSectionId: section.A,
+        })
+      ).statusCode,
+    ).toBe(403);
+  });
+
+  it('works the term results out again when changed marks are verified', async () => {
+    const before = await proposals();
+    expect(of(before.rows, 'Bhanu').result).toBe('compartment');
+    // English is still open: Bhanu's mark is corrected, then submitted and verified
+    expect(
+      (
+        await call(classTeacher, 'PUT', `/exams/${examId}/marks`, {
+          classSectionId: section.A,
+          subjectId: subject.ENG,
+          rows: [{ studentId: student.Bhanu, marks: 40 }],
+        })
+      ).statusCode,
+    ).toBe(200);
+    expect(of((await proposals()).rows, 'Bhanu').result).toBe('compartment');
+    const step = (u: SeededUser, what: string) =>
+      call(u, 'POST', `/exams/${examId}/entry-status/${what}`, {
+        classSectionId: section.A,
+        subjectId: subject.ENG,
+      });
+    expect((await step(classTeacher, 'submit')).statusCode).toBe(201);
+    expect((await step(admin, 'verify')).statusCode).toBe(201);
+    const after = await proposals();
+    expect(of(after.rows, 'Bhanu')).toMatchObject({ result: 'pass', proposal: 'promote' });
+  });
 });
