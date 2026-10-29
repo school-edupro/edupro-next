@@ -375,3 +375,17 @@ batteries (AAHPERD), ICSE / state board cards, moving the old module's mark hist
   the exam and was worked out already (`MarkSchemesService.recomputeForExam` in the verifier's
   transaction). Tests: exam-promotion-remarks e2e 7. The process for the school:
   `docs/playbooks/examinations-process.md`.
+- Admin: an exam's **Attendance** page (count from daily attendance, correct any student; the
+  attendance right and lock), so the office corrects it as planned.
+- **Open after validation** (an independent review of the plan against the code, 29 Oct 2026), built
+  differently or not yet, for a decision: publishing tells families by SMS and e-mail, not by an app
+  notice; a release covers a term's exams for every class (one per year and term), so some classes
+  cannot be published before the others; a student with no subject choices recorded takes every
+  subject of the class (the plan said the compulsory ones; "Fill the class's subjects" records the
+  defaults); verified is the locked state (no fourth "locked"); signatures go by classes, not bands;
+  the release states are draft / submitted / released / withdrawn; no Excel on the indicator and
+  remark grids or the teacher marks grid; the teacher app has no marks-pending list (admin Marks
+  status and the Missing marks report have it); a scheme has no "who may use it"; per-exam ranks are
+  dense (1, 2, 2, 3) while scheme ranks are competition ranks (1, 2, 2, 4); the attendance count
+  defaults to the session's start, not the term's; tests do not check the old cards' numbers for the
+  IX and XII presets, nor render the X, XI, XII and I-II cards.

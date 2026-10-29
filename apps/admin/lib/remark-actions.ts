@@ -130,3 +130,52 @@ export async function sendPromotions(fd: FormData) {
     `${String(out!.decisions)} promotion decisions and ${String(out!.cards)} cards changed`,
   );
 }
+
+// ---- exam attendance (the office corrects it) ---------------------------------------------------
+/** Days present and working days per student of a section (empty rows skipped). */
+export async function saveExamAttendance(fd: FormData) {
+  const examId = str(fd, 'examId');
+  const backTo = str(fd, 'back') || `/exams/${examId}/attendance`;
+  const rows = fd
+    .getAll('studentId')
+    .map(String)
+    .filter((id) => str(fd, `p-${id}`) !== '' && str(fd, `t-${id}`) !== '')
+    .map((studentId) => ({
+      studentId,
+      daysPresent: Number(str(fd, `p-${studentId}`)),
+      daysTotal: Number(str(fd, `t-${studentId}`)),
+    }));
+  if (!rows.length) back(backTo, 'validation-failed', 'Nothing to save');
+  return run(backTo, () =>
+    apiFetch(`/exams/${examId}/attendance`, {
+      method: 'PUT',
+      body: JSON.stringify({ classSectionId: str(fd, 'classSectionId'), rows }),
+    }),
+  );
+}
+
+/** Exam attendance counted from daily attendance between two dates. */
+export async function countExamAttendance(fd: FormData) {
+  const examId = str(fd, 'examId');
+  const backTo = str(fd, 'back') || `/exams/${examId}/attendance`;
+  let out: { filled: number; kept: number; from: string; to: string } | undefined;
+  try {
+    out = await apiFetch(`/exams/${examId}/attendance/from-daily`, {
+      method: 'POST',
+      body: JSON.stringify({
+        classSectionId: str(fd, 'classSectionId'),
+        ...(str(fd, 'from') ? { from: str(fd, 'from') } : {}),
+        ...(str(fd, 'to') ? { to: str(fd, 'to') } : {}),
+        overwrite: fd.get('overwrite') !== null,
+      }),
+    });
+  } catch (error) {
+    if (error instanceof ApiError) back(backTo, error.problem.type, detailOf(error));
+    throw error;
+  }
+  back(
+    backTo,
+    'ok',
+    `${String(out!.filled)} counted (${out!.from} to ${out!.to}), ${String(out!.kept)} kept as entered`,
+  );
+}

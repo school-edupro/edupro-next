@@ -260,6 +260,7 @@ const PAGES = [
   '/exams/indicators',
   '/exams/remarks',
   '/exams/5/remarks',
+  '/exams/5/attendance',
   '/insights/assistant',
   '/insights/alerts',
   // Sprint 16

@@ -71,6 +71,9 @@ export default async function ExamPage({
             <a className="ep-btn ep-btn--ghost ep-btn--sm" href={`/exams/${exam.id}/remarks`}>
               Remarks
             </a>
+            <a className="ep-btn ep-btn--ghost ep-btn--sm" href={`/exams/${exam.id}/attendance`}>
+              Attendance
+            </a>
             <a className="ep-btn ep-btn--ghost ep-btn--sm" href={`/exams/${exam.id}/reports`}>
               Reports
             </a>
