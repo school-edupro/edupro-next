@@ -1100,6 +1100,8 @@ describe('admission test results by part (e2e)', () => {
     const wt = (await call('GET', `/admissions/score-report?${q}&view=${ids.test!}`)).json();
     expect(wt.view).toEqual({ id: ids.test, name: 'Written test', kind: 'test' });
     expect(wt.criteria).toEqual([]);
+    // every registration of the class, as the merit list (docs/design/63)
+    expect(wt.rows).toHaveLength(merit.rows.length);
     expect(wt.marks.map((m: { label: string }) => m.label)).toEqual([
       'English',
       'Maths',

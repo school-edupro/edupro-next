@@ -222,7 +222,7 @@ export default async function ScoreReportPage({
             registrations
             {merit
               ? `${rep.max ? ` · points out of ${String(rep.max)}` : ''}. Change the criteria on the session’s Merit points tab.`
-              : ` who reached ${rep.view.name}, ranked by its total (equal totals share a rank).`}
+              : `: every registered candidate; ranked by the ${rep.view.name} total (equal totals share a rank), those not yet marked after them.`}
           </p>
           {rep.rows.length === 0 ? (
             <p>No registration matches.</p>

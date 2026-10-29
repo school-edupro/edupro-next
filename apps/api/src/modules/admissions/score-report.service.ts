@@ -355,21 +355,17 @@ export class AdmissionScoreReportService {
     const totalAt = at.find((i) => markCols[i]!.kind !== 'part')!;
     const outOf = markCols[totalAt]!.max;
     const levelAt = levelCols.flatMap((col, i) => (col.key.startsWith(`${view.id}:`) ? [i] : []));
-    const sat = all
-      .filter((x) => {
-        const idx = x.steps.indexOf(view.id);
-        return (idx >= 0 && x.stageNo >= idx) || at.some((i) => x.cells[i] !== null);
-      })
-      .map((x) => {
-        const total = x.cells[totalAt] ?? null;
-        return {
-          ...x,
-          total: typeof total === 'number' ? total : null,
-          absent: total === 'AB',
-          percent:
-            typeof total === 'number' && outOf ? Math.round((total / outOf) * 10000) / 100 : null,
-        };
-      });
+    // every registration of the class, those not yet marked too (docs/design/63)
+    const sat = all.map((x) => {
+      const total = x.cells[totalAt] ?? null;
+      return {
+        ...x,
+        total: typeof total === 'number' ? total : null,
+        absent: total === 'AB',
+        percent:
+          typeof total === 'number' && outOf ? Math.round((total / outOf) * 10000) / 100 : null,
+      };
+    });
     const scores = sat
       .filter((x) => !x.cancelled && x.total !== null)
       .map((x) => x.total!)
@@ -388,15 +384,16 @@ export class AdmissionScoreReportService {
         points: number;
       }>,
       rows: sat
-        .map(({ steps: _s, stageNo: _n, cancelled, ...x }) => ({
+        .map(({ steps: _s, stageNo: _n, ...x }) => ({
           ...x,
           cells: at.map((i) => x.cells[i] ?? null),
           remarks: levelAt.map((i) => x.remarks[i] ?? null),
-          rank: !cancelled && x.total !== null ? scores.indexOf(x.total) + 1 : null,
+          rank: !x.cancelled && x.total !== null ? scores.indexOf(x.total) + 1 : null,
         }))
         .sort(
           (a, b) =>
             (a.rank ?? 1e9) - (b.rank ?? 1e9) ||
+            Number(a.cancelled) - Number(b.cancelled) ||
             (a.number ?? '').localeCompare(b.number ?? '') ||
             Number(a.id) - Number(b.id),
         ),

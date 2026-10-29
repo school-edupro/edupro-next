@@ -75,3 +75,24 @@ Decided here, change any before building:
 ## Not in this plan
 
 Renumbering admission numbers; number formats for receipts or other documents.
+
+## As built (29 Oct 2026)
+
+- **Part 1**: migration 0273 (prefix up to 40 characters; `applications.previous_numbers`).
+  `number-series.ts`: `fillPrefix` ({SESSION} = academic year without "Session ", {YYYY}, {YY},
+  {CLASS} = class code), `seriesPlace`, `seriesPick` (the most specific series, nothing locked),
+  `seriesPreview`, and `seriesNumber` filling the placeholders; unknown `{…}` refused on save. A
+  series for every class with {CLASS} keeps one running number for the session (each class its own
+  code); its sample shows the first class (`perClass`). `POST admissions/number-series/test` and
+  `POST admissions/number-series/:id/renumber` (preview; apply needs a reason; registration series
+  only; registrations of the session / class not admitted whose best series it is, in registration
+  order; numbers already in the series stay; old number appended to `previous_numbers`, history line
+  "Registration no. A → B (renumbered from “name”): reason"). Searches (registrations list, desk,
+  counter, approvals, Admissions list grid) match old numbers. Page: How it works (open while there
+  is no series), form opens on the session with registrations, placeholder buttons + live sample, the
+  missing-name hint, Renumber (old → new list, reason), Test a series (number, session, class, the
+  answers the series look at).
+- **Part 2**: a score report stage view lists every registration of the class (ranked first, then
+  those not yet marked, cancelled / withdrawn last). Alpha Class IX written test: 15 rows, 3 ranked.
+- Tests: admission-number-series e2e 4; all admission suites + permission coverage 120; a11y numbers
+  page and score report views.
