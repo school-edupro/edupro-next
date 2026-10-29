@@ -71,6 +71,14 @@ export default async function MarkSchemePage({
                 Merit by division
               </a>
             ) : null}
+            {s.status === 'locked' && s.purpose === 'result' ? (
+              <a
+                className="ep-btn ep-btn--ghost ep-btn--sm"
+                href={`/exams/schemes/${s.id}/promotion`}
+              >
+                Promotion proposals
+              </a>
+            ) : null}
             {canManage && s.status === 'draft' && !s.problems.length
               ? step('lock', 'Lock this version', 'primary')
               : null}

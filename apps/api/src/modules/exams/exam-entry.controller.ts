@@ -48,8 +48,9 @@ export class ExamEntryController {
 
   @Get('remark-bank')
   @RequirePermission(EXAMS.masterView)
-  async remarkBank(@ReqCtx() ctx: RequestContext) {
-    return { data: await this.entry.remarkBank(ctx) };
+  async remarkBank(@ReqCtx() ctx: RequestContext, @Query('all') all?: string) {
+    // all=1: the inactive ones too (the setup page)
+    return { data: await this.entry.remarkBank(ctx, all === '1') };
   }
 
   @Put('remark-bank')

@@ -48,6 +48,19 @@
    subject's), the subject teachers' analysis, the upload status and the missing marks; each with
    Excel and PDF. A locked result scheme's page has **Merit by division**. The report builder has the
    exam marks, exam results and term results datasets for your own reports.
+7. **Promotion proposals** (a locked result scheme of the final term): passed → promote to the next
+   class, compartment → held for review (the card says "subject to compartment"), failed → retain,
+   absent or incomplete → review, the last class → passed out. Choose next year's section, tick and
+   send: the decisions go to **People → Promotions** (applied there) and the cards' "Promoted to" is
+   filled.
+
+## Remarks by category
+
+**Exams → Remark categories**: name the categories (the old A / B / C / D lists and "any other"),
+tie one to a subject (its subject teacher writes it too), to some classes, and choose free text or the
+listed remarks only; put remarks in the bank under each category. Teachers write them in the teacher
+app **Remarks** (or **Exams → open exam → Remarks**): one per student and category. The remarks lock
+of the class closes them; the report card prints them under the remarks.
 
 ## Five common questions
 

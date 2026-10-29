@@ -69,6 +69,10 @@ export interface ReportCardSection {
   areas?: string[];
   /** co_scholastic, attendance: these exams' columns only (by code) */
   examCodes?: string[];
+  /** remarks (docs/design/65 part 7): these categories only (codes; none: every category) */
+  categories?: string[];
+  /** remarks: the class teacher's general remark too (default true) */
+  general?: boolean;
 }
 
 export interface ReportCardLayout {
@@ -426,10 +430,18 @@ function health(d: ReportCardData, s: ReportCardSection): string {
 }
 
 function remarks(d: ReportCardData, s: ReportCardSection): string {
-  const text =
-    d.remarks.map((r) => `<div><strong>${esc(r.exam)}:</strong> ${esc(r.remark)}</div>`).join('') ||
-    '&nbsp;';
-  return `<h2>${esc(s.title ?? 'Remarks')}</h2><div class="remark">${text}</div>`;
+  const general =
+    s.general === false
+      ? ''
+      : d.remarks
+          .map((r) => `<div><strong>${esc(r.exam)}:</strong> ${esc(r.remark)}</div>`)
+          .join('');
+  // docs/design/65 part 7: one remark per category
+  const items = (d.remarkItems ?? [])
+    .filter((x) => !s.categories?.length || s.categories.includes(x.code))
+    .map((x) => `<div><strong>${esc(x.category)}:</strong> ${esc(x.text)}</div>`)
+    .join('');
+  return `<h2>${esc(s.title ?? 'Remarks')}</h2><div class="remark">${general + items || '&nbsp;'}</div>`;
 }
 
 function result(d: ReportCardData, s: ReportCardSection): string {
@@ -557,7 +569,7 @@ function promotion(d: ReportCardData, s: ReportCardSection): string {
       : '';
   const tile = (k: string, v: string) =>
     `<div class="tile"><div class="k">${esc(k)}</div><div class="v">${esc(v)}</div></div>`;
-  return `${s.title ? `<h2>${esc(s.title)}</h2>` : ''}<div class="result">${res ? tile('Result', res) : ''}${last?.division ? tile('Division', last.division) : ''}${d.promotedTo ? tile('Promoted to', d.promotedTo) : ''}</div>`;
+  return `${s.title ? `<h2>${esc(s.title)}</h2>` : ''}<div class="result">${res ? tile('Result', res) : ''}${last?.division ? tile('Division', last.division) : ''}${d.promotedTo ? tile(/^(retained|detained|not promoted)/i.test(d.promotedTo) ? 'Promotion' : 'Promoted to', d.promotedTo) : ''}</div>`;
 }
 
 function seal(d: ReportCardData): string {

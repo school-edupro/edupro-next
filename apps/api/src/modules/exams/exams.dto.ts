@@ -22,6 +22,11 @@ export const EXAMS = {
 } as const;
 
 const DateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'must be YYYY-MM-DD');
+const CategoryCode = z
+  .string()
+  .trim()
+  .toUpperCase()
+  .regex(/^[A-Z0-9_-]{1,12}$/, 'up to 12 capital letters or digits');
 const Code = z
   .string()
   .trim()
@@ -365,12 +370,71 @@ export const UpsertRemarkBankSchema = z.object({
         text: z.string().trim().min(3).max(600),
         classId: IdSchema.nullable().optional(),
         sortOrder: z.number().int().min(0).max(1000).default(0),
+        /** docs/design/65 part 7: the category the remark is offered in */
+        categoryCode: CategoryCode.nullable().optional(),
+        status: z.enum(['active', 'inactive']).default('active'),
       }),
     )
     .min(1)
     .max(200),
 });
 export class UpsertRemarkBankDto extends createZodDto(UpsertRemarkBankSchema) {}
+
+/** docs/design/65 part 7: a remark category (the old A / B / C / D lists and "any other") */
+export const UpsertRemarkCategorySchema = z.object({
+  code: CategoryCode,
+  name: z.string().trim().min(2).max(60),
+  /** a subject's remarks: its subject teacher writes them too */
+  subjectId: IdSchema.nullable().optional(),
+  classIds: z.array(IdSchema).max(40).default([]),
+  /** false: only the bank's remarks of the category */
+  freeText: z.boolean().default(true),
+  sortOrder: z.number().int().min(0).max(1000).default(0),
+  status: z.enum(['active', 'inactive']).default('active'),
+});
+export class UpsertRemarkCategoryDto extends createZodDto(UpsertRemarkCategorySchema) {}
+
+export const PutRemarkItemsSchema = z.object({
+  classSectionId: IdSchema,
+  rows: z
+    .array(
+      z.object({
+        studentId: IdSchema,
+        categoryId: IdSchema,
+        /** empty: removed */
+        text: z.string().trim().max(600).nullable(),
+        bankCode: z.string().trim().max(20).nullable().optional(),
+      }),
+    )
+    .min(1)
+    .max(3000),
+});
+export class PutRemarkItemsDto extends createZodDto(PutRemarkItemsSchema) {}
+
+/** docs/design/65 part 7: promotion proposals from a locked result scheme's term results */
+export const SchemePromotionQuerySchema = z.object({
+  classId: IdSchema.optional(),
+  classSectionId: IdSchema.optional(),
+  toYearId: IdSchema.optional(),
+});
+export class SchemePromotionQueryDto extends createZodDto(SchemePromotionQuerySchema) {}
+export const SendPromotionsSchema = z.object({
+  /** none: only the cards' "Promoted to" (next year is not set up yet) */
+  toYearId: IdSchema.nullable().optional(),
+  rows: z
+    .array(
+      z.object({
+        studentId: IdSchema,
+        decision: z.enum(['promote', 'retain', 'graduate', 'review']),
+        toClassSectionId: IdSchema.nullable().optional(),
+        /** the card's "Promoted to"; empty: none */
+        promotedTo: z.string().trim().max(40).nullable().optional(),
+      }),
+    )
+    .min(1)
+    .max(500),
+});
+export class SendPromotionsDto extends createZodDto(SendPromotionsSchema) {}
 
 // ---- Sprint 16: results, analysis, promotion proposals ------------------------------------------
 export const RegisterSheetQuerySchema = z.object({ classSectionId: IdSchema });

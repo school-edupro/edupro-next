@@ -113,6 +113,8 @@ export interface ReportCardData {
   codes?: Array<{ code: string; name: string }>;
   participation?: string | null;
   promotedTo?: string | null;
+  /** docs/design/65 part 7: remarks by category (the term's last one of each) */
+  remarkItems?: Array<{ code: string; category: string; subject: string | null; text: string }>;
   /** docs/design/65 part 5: the Holistic Progress Card (a class whose set in the term is an HPC) */
   hpc?: ReportCardHpc | null;
 }
@@ -462,7 +464,7 @@ export async function loadReportCardData(
 
   const rem = await c.query<{ exam: string; remark: string }>(
     `SELECT e.code AS exam, r.remark FROM exam_remarks r JOIN exams e ON e.id = r.exam_id
-      WHERE r.exam_id = ANY($1::bigint[]) AND r.student_id = $2 ORDER BY array_position($1::bigint[], r.exam_id)`,
+      WHERE r.exam_id = ANY($1::bigint[]) AND r.student_id = $2 AND r.remark IS NOT NULL ORDER BY array_position($1::bigint[], r.exam_id)`,
     [input.examIds, input.studentId],
   );
   const att = await c.query<{ exam: string; days_present: number; days_total: number }>(
@@ -631,6 +633,18 @@ export async function loadReportCardData(
     codes: mc.rows,
     participation: extra.rows.find((x) => x.participation)?.participation ?? null,
     promotedTo: extra.rows.find((x) => x.promoted_to)?.promoted_to ?? null,
+    remarkItems: (
+      await c.query<{ code: string; category: string; subject: string | null; text: string }>(
+        `SELECT x.code, x.category, x.subject, x.text FROM (
+           SELECT DISTINCT ON (rc.id) rc.code, rc.name AS category, sub.name AS subject, i.text, rc.sort_order
+             FROM exam_remark_items i JOIN remark_categories rc ON rc.id = i.category_id AND rc.status = 'active'
+             LEFT JOIN subjects sub ON sub.id = rc.subject_id
+            WHERE i.exam_id = ANY($1::bigint[]) AND i.student_id = $2
+            ORDER BY rc.id, array_position($1::bigint[], i.exam_id) DESC) x
+          ORDER BY x.sort_order, x.code`,
+        [input.examIds, input.studentId],
+      )
+    ).rows,
     hpc: await loadHpc(c, input.examIds, s.class_id, input.studentId),
     fees: { balance: fmt(balance), defaulter: balance > input.defaulterMin },
     today: localDate(new Date())!,

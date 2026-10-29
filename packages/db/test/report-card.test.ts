@@ -166,3 +166,42 @@ describe('the holistic progress card (docs/design/65, part 5)', () => {
     expect(none).not.toContain('My portfolio');
   });
 });
+
+describe('remarks by category and promotion (docs/design/65, part 7)', () => {
+  const remarks = (section: Parameters<typeof reportCardBody>[1]['sections'][number]) => {
+    const d = sampleReportCardData('middle');
+    d.remarkItems = [
+      { code: 'ENG', category: 'English', subject: 'English', text: 'Reads with expression.' },
+      { code: 'GEN', category: 'General', subject: null, text: 'A helpful classmate.' },
+    ];
+    return reportCardBody(d, { sections: [section] });
+  };
+
+  it('prints the general remark and each category, or some categories only', () => {
+    const all = remarks({ type: 'remarks' });
+    expect(all).toContain('<strong>English:</strong> Reads with expression.');
+    expect(all).toContain('<strong>General:</strong> A helpful classmate.');
+    const english = remarks({
+      type: 'remarks',
+      title: 'English remarks',
+      categories: ['ENG'],
+      general: false,
+    });
+    expect(english).toContain('Reads with expression.');
+    expect(english).not.toContain('A helpful classmate.');
+    expect(english).not.toContain(sampleReportCardData('middle').remarks[0]!.remark);
+  });
+
+  it('labels a retained student’s line as Promotion', () => {
+    const d = sampleReportCardData('middle');
+    d.promotedTo = 'Retained in Class VII';
+    const html = reportCardBody(d, { sections: [{ type: 'promotion' }] });
+    expect(html).toContain(
+      '<div class="k">Promotion</div><div class="v">Retained in Class VII</div>',
+    );
+    d.promotedTo = 'Class VIII, subject to compartment';
+    expect(reportCardBody(d, { sections: [{ type: 'promotion' }] })).toContain(
+      '<div class="k">Promoted to</div>',
+    );
+  });
+});

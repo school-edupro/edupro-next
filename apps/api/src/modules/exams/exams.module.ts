@@ -9,6 +9,9 @@ import { BoardResultsService } from './board-results.service';
 import { ExamAnalysisController } from './exam-analysis.controller';
 import { ExamAnalysisService } from './exam-analysis.service';
 import { ExamEntryController } from './exam-entry.controller';
+import { ExamRemarksController } from './exam-remarks.controller';
+import { RemarkCategoriesService } from './remark-categories.service';
+import { SchemePromotionService } from './scheme-promotion.service';
 import { ExamEntryService } from './exam-entry.service';
 import { ExamResultsService } from './exam-results.service';
 import { ExamStatusController } from './exam-status.controller';
@@ -37,6 +40,7 @@ import { SubjectChoicesService } from './subject-choices.service';
     HpcController,
     FamilyHpcController,
     ExamAnalysisController,
+    ExamRemarksController,
     ExamsController,
     ExamEntryController,
     ReportCardsController,
@@ -55,6 +59,8 @@ import { SubjectChoicesService } from './subject-choices.service';
     ReportCardSignaturesService,
     HpcService,
     ExamAnalysisService,
+    RemarkCategoriesService,
+    SchemePromotionService,
     AuditService,
   ],
   exports: [ExamsService, ExamEntryService, ExamResultsService, ReportCardsService],

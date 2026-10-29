@@ -258,6 +258,8 @@ const PAGES = [
   '/exams/subject-choices',
   '/exams/schemes',
   '/exams/indicators',
+  '/exams/remarks',
+  '/exams/5/remarks',
   '/insights/assistant',
   '/insights/alerts',
   // Sprint 16

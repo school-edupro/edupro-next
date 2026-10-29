@@ -549,8 +549,8 @@ export function SchemeEditor({
             onChange={(v) =>
               setDef((d) => ({ ...d, result: { ...d.result, partsEach: v.target.checked } }))
             }
-          />{' '}
-          Theory and practical must each pass
+          />
+          <span className="ep-check__box" aria-hidden="true" /> Theory and practical must each pass
         </label>
         <label className="ep-check" htmlFor={`ca-${id}`}>
           <input
@@ -565,8 +565,9 @@ export function SchemeEditor({
                 result: { ...d.result, countAdditional: v.target.checked },
               }))
             }
-          />{' '}
-          Additional subjects count in the total
+          />
+          <span className="ep-check__box" aria-hidden="true" /> Additional subjects count in the
+          total
         </label>
       </div>
       <div className="ep-rp__row">

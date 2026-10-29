@@ -147,8 +147,8 @@ export function SignatureForm({
                     e.target.checked ? [...c, k.id] : c.filter((x) => x !== k.id),
                   )
                 }
-              />{' '}
-              {k.code}
+              />
+              <span className="ep-check__box" aria-hidden="true" /> {k.code}
             </label>
           ))}
         </div>
@@ -173,8 +173,8 @@ export function SignatureForm({
               type="checkbox"
               checked={active}
               onChange={(e) => setActive(e.target.checked)}
-            />{' '}
-            In use
+            />
+            <span className="ep-check__box" aria-hidden="true" /> In use
           </label>
         ) : null}
       </div>

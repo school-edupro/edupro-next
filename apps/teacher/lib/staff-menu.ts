@@ -95,6 +95,12 @@ export const STAFF_MENU: StaffGroup[] = [
         allowed: (can) => can('exams.indicator.enter'),
       },
       {
+        href: '/remarks',
+        label: 'Remarks',
+        help: 'Remarks by category for your sections (a subject teacher, their subject’s)',
+        allowed: (can) => can('exams.remark.enter') || can('exams.marks.enter'),
+      },
+      {
         href: '/exam-register',
         label: 'Exam register',
         help: 'Remarks, exam attendance, height and weight',

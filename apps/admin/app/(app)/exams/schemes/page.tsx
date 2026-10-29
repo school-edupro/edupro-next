@@ -164,8 +164,8 @@ export default async function MarkSchemesPage({
                         type="checkbox"
                         name="classId"
                         value={k.id}
-                      />{' '}
-                      {k.code}
+                      />
+                      <span className="ep-check__box" aria-hidden="true" /> {k.code}
                     </label>
                   ))}
                 </div>

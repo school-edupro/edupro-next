@@ -68,6 +68,9 @@ export default async function ExamPage({
             <a className="ep-btn ep-btn--ghost ep-btn--sm" href={`/exams/${exam.id}/indicators`}>
               Indicators and HPC
             </a>
+            <a className="ep-btn ep-btn--ghost ep-btn--sm" href={`/exams/${exam.id}/remarks`}>
+              Remarks
+            </a>
             <a className="ep-btn ep-btn--ghost ep-btn--sm" href={`/exams/${exam.id}/reports`}>
               Reports
             </a>
@@ -306,8 +309,8 @@ export default async function ExamPage({
                       type="checkbox"
                       name={k}
                       defaultChecked={Boolean(on)}
-                    />{' '}
-                    {label}
+                    />
+                    <span className="ep-check__box" aria-hidden="true" /> {label}
                   </label>
                 ))}
               </div>

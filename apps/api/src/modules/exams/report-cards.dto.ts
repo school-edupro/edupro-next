@@ -75,6 +75,9 @@ const SectionSchema = z.object({
     .optional(),
   areas: z.array(z.string().trim().max(60)).max(10).optional(),
   examCodes: z.array(z.string().trim().max(20)).max(12).optional(),
+  /** docs/design/65 part 7: remarks' categories (codes) and whether the general remark prints */
+  categories: z.array(z.string().trim().max(12)).max(12).optional(),
+  general: z.boolean().optional(),
 });
 export const LayoutSchema = z.object({
   sections: z.array(SectionSchema).min(1).max(12),

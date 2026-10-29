@@ -673,6 +673,19 @@ const DICT: Record<string, string> = {
   'Language and literacy': 'भाषा और साक्षरता',
   'Aesthetic and cultural development': 'सौंदर्य और सांस्कृतिक विकास',
   'Positive learning habits': 'सीखने की सकारात्मक आदतें',
+  Remarks: 'टिप्पणियाँ',
+  'Remarks by category for your sections (a subject teacher, their subject’s)':
+    'अपने अनुभागों की श्रेणीवार टिप्पणियाँ (विषय अध्यापक, अपने विषय की)',
+  'Remarks are locked; ask the coordinator to reopen them.':
+    'टिप्पणियाँ लॉक हैं; समन्वयक से इन्हें फिर खोलने को कहें।',
+  'You write only your own sections’ remarks (a subject teacher, their subject’s).':
+    'आप केवल अपने अनुभागों की टिप्पणियाँ लिखते हैं (विषय अध्यापक, अपने विषय की)।',
+  'This category takes one of its listed remarks only.':
+    'इस श्रेणी में केवल सूची की टिप्पणी चुनी जा सकती है।',
+  'One remark per pupil and category; the report card prints them.':
+    'प्रत्येक विद्यार्थी और श्रेणी के लिए एक टिप्पणी; रिपोर्ट कार्ड पर छपती है।',
+  'There is no remark category for you to write in this section.':
+    'इस अनुभाग में आपके लिखने के लिए कोई टिप्पणी श्रेणी नहीं है।',
 };
 
 /** Translates a known English string; unknown strings fall back to English. */

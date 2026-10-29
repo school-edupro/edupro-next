@@ -181,7 +181,10 @@ export default async function ExamIndicatorsPage({
         <Card>
           <p style={{ margin: 0 }}>
             {sheet.section.code} has no indicator set in this exam: choose one on{' '}
-            <a href={`/exams/${exam.id}`}>the exam&rsquo;s page</a>.
+            <a href={`/exams/${exam.id}`} style={{ textDecoration: 'underline' }}>
+              the exam&rsquo;s page
+            </a>
+            .
           </p>
         </Card>
       ) : null}

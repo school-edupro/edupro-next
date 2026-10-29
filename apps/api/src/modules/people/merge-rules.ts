@@ -228,6 +228,48 @@ export const MERGE_RULES: MergeRule[] = [
     rule: 'the kept record’s report card',
   },
   { table: 'board_results', col: 'student_id', area: 'marks', how: 'move' },
+  // examinations v2 (docs/design/65)
+  {
+    table: 'student_subjects',
+    col: 'student_id',
+    area: 'marks',
+    how: 'keep',
+    key: ['academic_year_id', 'subject_id'],
+    rule: 'the kept record’s subject choices',
+  },
+  {
+    table: 'report_card_holds',
+    col: 'student_id',
+    area: 'marks',
+    how: 'keep',
+    key: ['release_id'],
+    rule: 'the kept record’s held report cards',
+  },
+  {
+    table: 'term_results',
+    col: 'student_id',
+    area: 'marks',
+    how: 'keep',
+    key: ['scheme_id'],
+    rule: 'the kept record’s term results',
+  },
+  {
+    table: 'hpc_feedback',
+    col: 'student_id',
+    area: 'marks',
+    how: 'keep',
+    key: ['exam_id', 'kind'],
+    rule: 'the kept record’s progress-card words',
+  },
+  { table: 'portfolio_items', col: 'student_id', area: 'marks', how: 'move' },
+  {
+    table: 'exam_remark_items',
+    col: 'student_id',
+    area: 'marks',
+    how: 'keep',
+    key: ['exam_id', 'category_id'],
+    rule: 'the kept record’s remarks by category',
+  },
 
   // ---- library -----------------------------------------------------------------------------------
   {

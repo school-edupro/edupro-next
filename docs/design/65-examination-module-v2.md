@@ -338,4 +338,31 @@ batteries (AAHPERD), ICSE / state board cards, moving the old module's mark hist
   toppers' filters, teachers, status and missing, Excel and PDF of each, divisions refused for a
   draft, the datasets); all exam suites + report builder + permission coverage 98; db 73; a11y the
   report pages.
-- Not done: promotion proposals from the term results (part 3) and remark categories (part 4).
+- Not done then: promotion proposals from the term results (part 3) and remark categories (part 4);
+  built as part 7.
+- **Part 7** (asked 29 Oct 2026: compartment held for review; proposals go to People → Promotions and
+  the card; a subject's remarks by its subject teacher too; migration 0282). Promotion:
+  `GET exams/schemes/:id/promotion` (a locked result scheme; `classId`, `classSectionId`, `toYearId`,
+  default the next year): per student the term result, the proposal (pass → promote to the next class
+  by display order; compartment → review, card "Class VII, subject to compartment"; fail → retain,
+  card "Retained in Class VI"; absent / incomplete → review; the last class → graduate), next year's
+  section (the same letter, else the class's first), the decision there now and the card's text;
+  `POST exams/schemes/:id/promotion` (`people.promotion.manage`): promote / retain / graduate go to
+  `promotion_decisions` (not an applied one; promote and retain need the section), review changes no
+  decision; the text goes to `exam_remarks.promoted_to` of the scheme's last exam (a row with nothing
+  else goes when emptied); without a next year only the cards. `exam_remarks.remark` may now be empty
+  (a row holding only "promoted to"). The card prints a retained student's line as "Promotion".
+  Remark categories: `remark_categories` (code, name, subject, classes, free text or the list only,
+  order, status), `remark_bank.category_id`, `exam_remark_items` (exam, student, category, text, bank
+  code); `GET/PUT exams/remark-categories`, the bank takes `categoryCode` and `status`
+  (`GET exams/remark-bank?all=1` lists the unused too; the register's list keeps the general remarks
+  only), `GET exams/:id/remark-items` (the class's categories, each with `may` for the caller and its
+  list), `PUT exams/:id/remark-items` (the class teacher or a coordinator any category, a subject
+  teacher their subject's for their sections; the list-only check; the remarks lock; empty removes).
+  Card data `remarkItems` (the term's last per category); the `remarks` section prints them after the
+  general remark, `categories` and `general` choose. The student merge rules now cover
+  `student_subjects`, `report_card_holds`, `term_results`, `hpc_feedback`, `portfolio_items` and
+  `exam_remark_items` (the merge test had caught parts 1-5's tables). Admin: Promotion proposals on a
+  locked result scheme, Exams → Remark categories (categories and the bank), an exam's Remarks page;
+  the tick boxes of the exam pages show their box. Teacher app: Remarks.
+- Tests: exam-promotion-remarks e2e 5; renderer 14; a11y the new pages and the teacher walk.

@@ -143,7 +143,7 @@ export const INDICATORS: Kind = {
   lock: 'indicators_locked',
   label: 'Indicator',
 };
-const REMARKS: Kind = {
+export const REMARKS: Kind = {
   permission: EXAMS.remarkEnter,
   subjectAware: false,
   lock: 'remarks_locked',
@@ -982,7 +982,8 @@ export class ExamEntryService {
         [section.id, yearId, examId, health],
       );
       const bank = await c.query<{ code: string; text: string }>(
-        `SELECT code, text FROM remark_bank WHERE status = 'active' AND (class_id IS NULL OR class_id = $1) ORDER BY sort_order, code`,
+        `SELECT code, text FROM remark_bank WHERE status = 'active' AND category_id IS NULL AND (class_id IS NULL OR class_id = $1)
+          ORDER BY sort_order, code`,
         [section.class_id],
       );
       return {
@@ -1053,7 +1054,7 @@ export class ExamEntryService {
            VALUES (app.current_school_id(), $1, $2, $3, $4, $5, $6, app.current_user_id())
            ON CONFLICT (exam_id, student_id) DO UPDATE SET remark = EXCLUDED.remark, bank_code = EXCLUDED.bank_code,
              participation = EXCLUDED.participation, promoted_to = EXCLUDED.promoted_to, entered_by = app.current_user_id()
-           WHERE exam_remarks.remark <> EXCLUDED.remark OR exam_remarks.bank_code IS DISTINCT FROM EXCLUDED.bank_code
+           WHERE exam_remarks.remark IS DISTINCT FROM EXCLUDED.remark OR exam_remarks.bank_code IS DISTINCT FROM EXCLUDED.bank_code
               OR exam_remarks.participation IS DISTINCT FROM EXCLUDED.participation
               OR exam_remarks.promoted_to IS DISTINCT FROM EXCLUDED.promoted_to`,
           [
@@ -1355,7 +1356,7 @@ export class ExamEntryService {
     });
   }
 
-  async remarkBank(ctx: RequestContext) {
+  async remarkBank(ctx: RequestContext, all = false) {
     return this.db.tenant(requireTenant(ctx), async (c) => {
       const r = await c.query<{
         id: string;
@@ -1364,9 +1365,13 @@ export class ExamEntryService {
         class_id: string | null;
         class_code: string | null;
         sort_order: number;
+        category_code: string | null;
+        status: string;
       }>(
-        `SELECT b.id::text, b.code, b.text, b.class_id::text, k.code AS class_code, b.sort_order
-           FROM remark_bank b LEFT JOIN classes k ON k.id = b.class_id WHERE b.status = 'active' ORDER BY b.sort_order, b.code`,
+        `SELECT b.id::text, b.code, b.text, b.class_id::text, k.code AS class_code, b.sort_order, rc.code AS category_code, b.status::text
+           FROM remark_bank b LEFT JOIN classes k ON k.id = b.class_id LEFT JOIN remark_categories rc ON rc.id = b.category_id
+          WHERE b.status = 'active' OR $1 ORDER BY rc.sort_order NULLS FIRST, b.sort_order, b.code`,
+        [all],
       );
       return r.rows.map((x) => ({
         id: x.id,
@@ -1375,6 +1380,9 @@ export class ExamEntryService {
         classId: x.class_id,
         classCode: x.class_code,
         sortOrder: x.sort_order,
+        /** docs/design/65 part 7: the category the remark is offered in (none: the general remark) */
+        categoryCode: x.category_code,
+        status: x.status,
       }));
     });
   }
@@ -1382,10 +1390,21 @@ export class ExamEntryService {
   async upsertRemarkBank(ctx: RequestContext, dto: UpsertRemarkBankDto) {
     return this.db.tenant(requireTenant(ctx), async (c) => {
       for (const e of dto.entries) {
+        if (e.categoryCode) {
+          const k = await c.query(`SELECT 1 FROM remark_categories WHERE code = $1`, [
+            e.categoryCode,
+          ]);
+          if (!k.rowCount)
+            throw new DomainError('not-found', `No remark category ${e.categoryCode}`, {
+              status: 404,
+            });
+        }
         await c.query(
-          `INSERT INTO remark_bank (school_id, code, text, class_id, sort_order) VALUES (app.current_school_id(), $1, $2, $3, $4)
-           ON CONFLICT (school_id, code) DO UPDATE SET text = EXCLUDED.text, class_id = EXCLUDED.class_id, sort_order = EXCLUDED.sort_order, status = 'active'`,
-          [e.code, e.text, e.classId ?? null, e.sortOrder],
+          `INSERT INTO remark_bank (school_id, code, text, class_id, sort_order, category_id, status)
+           VALUES (app.current_school_id(), $1, $2, $3, $4, (SELECT id FROM remark_categories WHERE code = $5), $6::row_status)
+           ON CONFLICT (school_id, code) DO UPDATE SET text = EXCLUDED.text, class_id = EXCLUDED.class_id, sort_order = EXCLUDED.sort_order,
+             category_id = EXCLUDED.category_id, status = EXCLUDED.status`,
+          [e.code, e.text, e.classId ?? null, e.sortOrder, e.categoryCode ?? null, e.status],
         );
       }
       await this.audit.stage(ctx, c, {
