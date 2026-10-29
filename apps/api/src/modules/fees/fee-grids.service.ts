@@ -1,4 +1,3 @@
-/* eslint-disable no-restricted-syntax -- SQL fragments here are constants assembled in code; every value is a bound parameter */
 import { Injectable } from '@nestjs/common';
 import type { PoolClient } from 'pg';
 import { AuditService } from '../../common/audit/audit.service';

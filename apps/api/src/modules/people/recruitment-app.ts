@@ -104,5 +104,6 @@ export function appFilter(q: {
   }
   if (q.match) where.push(`a.employee_match IS NOT NULL`);
   if (q.ids?.length) where.push(`a.id = ANY(${arg(q.ids)}::bigint[])`);
+  // eslint-disable-next-line no-restricted-syntax -- the conditions are fixed fragments built above; values are bound parameters
   return { sql: where.length ? `WHERE ${where.join(' AND ')}` : '', args };
 }
