@@ -61,6 +61,18 @@ export function NumberSeriesEditor({
   const [msg, setMsg] = useState<{ tone: 'success' | 'danger'; text: string } | null>(null);
   const [pending, start] = useTransition();
   const cycle = initial.cycles.find((y) => y.id === draft?.cycleId);
+  // a name left empty: made from the series' choices (the example in the box was taken for a value)
+  const autoName = draft
+    ? [
+        KIND[draft.kind],
+        cycle?.classes.find((k) => k.id === draft.classId)?.name ?? 'every class',
+        draft.prefix.trim() || null,
+      ]
+        .filter(Boolean)
+        .join(' · ')
+        .slice(0, 80)
+    : '';
+  const nameOf = (d: Draft) => (d.name.trim().length >= 2 ? d.name.trim() : autoName);
   const q = (key: string) => questions.find((x) => x.key === key);
 
   const save = () =>
@@ -70,7 +82,7 @@ export function NumberSeriesEditor({
         kind: draft.kind,
         cycleId: draft.cycleId,
         classId: draft.classId,
-        name: draft.name.trim(),
+        name: nameOf(draft),
         prefix: draft.prefix.trim(),
         nextNo: draft.nextNo,
         digits: draft.digits,
@@ -207,11 +219,11 @@ export function NumberSeriesEditor({
               </select>
             </label>
             <label className="ep-field">
-              <span className="ep-field__label">Name</span>
+              <span className="ep-field__label">Name (optional)</span>
               <input
                 className="ep-input"
                 maxLength={80}
-                placeholder="e.g. DP1 Round 1 External"
+                placeholder={autoName}
                 value={draft.name}
                 onChange={(e) => setDraft({ ...draft, name: e.target.value })}
               />
@@ -402,7 +414,7 @@ export function NumberSeriesEditor({
             <button
               type="button"
               className="ep-btn ep-btn--primary"
-              disabled={pending || draft.name.trim().length < 2 || !draft.cycleId}
+              disabled={pending || !draft.cycleId}
               onClick={save}
             >
               {pending ? 'Saving…' : 'Save'}
@@ -413,7 +425,7 @@ export function NumberSeriesEditor({
           </div>
           {draft.name.trim().length < 2 ? (
             <p className="ep-field__help" role="status" style={{ marginBottom: 0 }}>
-              Write a name for the series (2 letters or more) to save it.
+              No name written: it is saved as &ldquo;{autoName}&rdquo;.
             </p>
           ) : null}
         </section>
