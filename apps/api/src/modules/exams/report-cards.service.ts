@@ -6,6 +6,7 @@ import {
   reportCardDocument,
   sampleReportCardData,
   DEFAULT_LAYOUTS,
+  DPS_NOIDA_TEMPLATES,
   type ClassBand,
 } from '@edupro/db';
 import { AuditService } from '../../common/audit/audit.service';
@@ -14,6 +15,7 @@ import { DomainError } from '../../common/errors/domain-error';
 import { requireTenant, type RequestContext } from '../../common/http/request-context';
 import { ViewerService } from '../academics/daily/viewer.service';
 import { ReportsService } from '../reports/reports.service';
+import { ReportCardSignaturesService } from './report-card-signatures.service';
 import type {
   CreateReleaseDto,
   CreateTemplateDto,
@@ -119,6 +121,7 @@ export class ReportCardsService {
     private readonly audit: AuditService,
     private readonly reports: ReportsService,
     private readonly viewer: ViewerService,
+    private readonly signatures: ReportCardSignaturesService,
   ) {}
 
   // ---- templates ---------------------------------------------------------------------------------
@@ -159,6 +162,30 @@ export class ReportCardsService {
       });
       const r = await c.query<Record<string, unknown>>(
         // eslint-disable-next-line no-restricted-syntax -- fixed fragments (constant SELECT or registry names); values are bound
+        `SELECT ${T_COLS} FROM report_card_templates WHERE deleted_at IS NULL ORDER BY band, code`,
+      );
+      return r.rows.map(toTemplate);
+    });
+  }
+
+  /** The DPS Noida cards (docs/design/65, part 4) as templates; one the school already has stays. */
+  async installDps(ctx: RequestContext): Promise<TemplateRow[]> {
+    return this.db.tenant(requireTenant(ctx), async (c) => {
+      for (const t of DPS_NOIDA_TEMPLATES)
+        await c.query(
+          `INSERT INTO report_card_templates (school_id, code, name, band, layout)
+           VALUES (app.current_school_id(), $1, $2, $3::class_band, $4::jsonb)
+           ON CONFLICT (school_id, code) DO NOTHING`,
+          [t.code, t.name, t.band, JSON.stringify(t.layout)],
+        );
+      await this.audit.stage(ctx, c, {
+        action: 'exams.report_card.templates_dps',
+        entityType: 'report_card_templates',
+        entityId: 'dps',
+        after: { codes: DPS_NOIDA_TEMPLATES.map((t) => t.code) },
+      });
+      const r = await c.query<Record<string, unknown>>(
+        // eslint-disable-next-line no-restricted-syntax -- T_COLS is a constant
         `SELECT ${T_COLS} FROM report_card_templates WHERE deleted_at IS NULL ORDER BY band, code`,
       );
       return r.rows.map(toTemplate);
@@ -266,6 +293,7 @@ export class ReportCardsService {
             status: 404,
           });
         });
+        await this.signatures.fill(data.signatures ?? []);
         return { html: reportCardDocument(like, [{ data }]) };
       }
       return {
@@ -680,16 +708,18 @@ export class ReportCardsService {
     classSectionId: string,
   ): Promise<void> {
     await this.db.tenant(requireTenant(ctx), async (c) => {
-      const k = await c.query<{ band: string | null; display_order: number }>(
-        `SELECT k.band::text, k.display_order FROM class_sections cs JOIN classes k ON k.id = cs.class_id WHERE cs.id = $1`,
+      const k = await c.query<{ band: string | null; display_order: number; class_id: string }>(
+        `SELECT k.band::text, k.display_order, k.id::text AS class_id FROM class_sections cs JOIN classes k ON k.id = cs.class_id WHERE cs.id = $1`,
         [classSectionId],
       );
       if (!k.rows[0]) throw new DomainError('not-found', 'Section not found', { status: 404 });
       const band = bandFor(k.rows[0].band, k.rows[0].display_order);
-      const t = rel.templates[band]
+      // the class's own template first (docs/design/65), then the band's
+      const chosen = rel.templates[`class_${k.rows[0].class_id}`] ?? rel.templates[band];
+      const t = chosen
         ? await c.query(
             `SELECT 1 FROM report_card_templates WHERE id = $1 AND status = 'active' AND deleted_at IS NULL`,
-            [rel.templates[band]],
+            [chosen],
           )
         : await c.query(
             `SELECT 1 FROM report_card_templates WHERE band = $1::class_band AND status = 'active' AND deleted_at IS NULL LIMIT 1`,

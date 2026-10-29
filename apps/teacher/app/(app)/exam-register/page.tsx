@@ -28,6 +28,8 @@ interface Register {
     rollNo: number | null;
     remark: string | null;
     bankCode: string | null;
+    participation?: string | null;
+    promotedTo?: string | null;
     daysPresent: number | null;
     daysTotal: number | null;
     health: {
@@ -233,6 +235,26 @@ export default async function ExamRegisterPage({
                           maxLength={600}
                           disabled={locked}
                           style={{ minWidth: 220 }}
+                        />
+                        <input
+                          className="ep-input"
+                          name={`participation-${r.studentId}`}
+                          aria-label={`${t(lang, 'Took part in')} · ${r.name}`}
+                          placeholder={t(lang, 'Took part in')}
+                          defaultValue={r.participation ?? ''}
+                          maxLength={300}
+                          disabled={locked}
+                          style={{ minWidth: 220, marginTop: 'var(--sp-1)' }}
+                        />
+                        <input
+                          className="ep-input"
+                          name={`promoted-${r.studentId}`}
+                          aria-label={`${t(lang, 'Promoted to')} · ${r.name}`}
+                          placeholder={t(lang, 'Promoted to (final term)')}
+                          defaultValue={r.promotedTo ?? ''}
+                          maxLength={40}
+                          disabled={locked}
+                          style={{ minWidth: 160, marginTop: 'var(--sp-1)' }}
                         />
                       </td>
                       <td style={{ whiteSpace: 'nowrap' }}>

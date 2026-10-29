@@ -224,6 +224,9 @@ export const PutRemarksSchema = z.object({
         studentId: IdSchema,
         remark: z.string().trim().min(1).max(600),
         bankCode: z.string().trim().max(20).optional(),
+        /** docs/design/65 part 4: what the student took part in; the class promoted to */
+        participation: z.string().trim().max(300).nullable().optional(),
+        promotedTo: z.string().trim().max(40).nullable().optional(),
       }),
     )
     .min(1)

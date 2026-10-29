@@ -45,6 +45,8 @@ export interface ReportCardData {
     rollNo: number | null;
     className: string;
     classCode: string;
+    /** the class (a release may choose a template per class, docs/design/65) */
+    classId?: string;
     section: string;
     band: ClassBand;
     dob: string | null;
@@ -93,6 +95,48 @@ export interface ReportCardData {
   } | null;
   fees: { balance: string; defaulter: boolean };
   today: string;
+  /**
+   * docs/design/65 part 4: the student's term results made by the locked result schemes (each term's
+   * printed columns per subject), signatures by role (images filled by the renderer), the class
+   * teacher, the marks codes for the evaluation key, what the student took part in, promoted to.
+   */
+  termResults?: ReportCardTermResult[];
+  signatures?: Array<{
+    role: string;
+    label: string;
+    personName: string | null;
+    objectKey: string | null;
+    contentType: string | null;
+    dataUri: string | null;
+  }>;
+  classTeacher?: string | null;
+  codes?: Array<{ code: string; name: string }>;
+  participation?: string | null;
+  promotedTo?: string | null;
+}
+
+export interface ReportCardTermResult {
+  term: string;
+  name: string;
+  columns: Array<{ key: string; label: string; total: boolean }>;
+  subjects: Array<{
+    code: string;
+    name: string;
+    kind: string;
+    values: Record<string, { v: number | null; max: number; code?: string } | null>;
+    total: number | null;
+    max: number;
+    grade: string | null;
+    status: string;
+  }>;
+  total: number | null;
+  max: number;
+  pct: number | null;
+  grade: string | null;
+  division: string | null;
+  result: string;
+  rankInSection: number | null;
+  rankInClass: number | null;
 }
 
 const fmt = (n: number) => n.toFixed(2);
@@ -403,6 +447,60 @@ export async function loadReportCardData(
       WHERE student_id = $1 ORDER BY (exam_id = ANY($2::bigint[])) DESC, recorded_on DESC LIMIT 1`,
     [input.studentId, input.examIds],
   );
+  // docs/design/65 part 4: term results, signatures, the class teacher, codes, participation
+  const tr = await c.query<{
+    term_code: string;
+    name: string;
+    def: { columns: Array<{ key: string; label: string; hidden?: boolean; total?: boolean }> };
+    subjects: ReportCardTermResult['subjects'];
+    total: string | null;
+    max_total: string;
+    pct: string | null;
+    grade: string | null;
+    division: string | null;
+    result: string;
+    rank_in_section: number | null;
+    rank_in_class: number | null;
+  }>(
+    `SELECT t.term_code, m.name, m.def, t.subjects, t.total::text, t.max_total::text, t.pct::text, t.grade, t.division, t.result,
+            t.rank_in_section, t.rank_in_class
+       FROM term_results t JOIN mark_schemes m ON m.id = t.scheme_id AND m.status = 'locked' AND m.deleted_at IS NULL
+      WHERE t.student_id = $1 AND t.academic_year_id = app.current_academic_year_id()
+      ORDER BY t.term_code`,
+    [input.studentId],
+  );
+  const sig = await c.query<{
+    role: string;
+    label: string;
+    person_name: string | null;
+    object_key: string | null;
+    content_type: string | null;
+  }>(
+    `SELECT DISTINCT ON (x.role) x.role, x.label, x.person_name, f.object_key, f.content_type
+       FROM report_card_signatures x LEFT JOIN files f ON f.id = x.file_id AND f.deleted_at IS NULL
+      WHERE x.status = 'active' AND (cardinality(x.class_ids) = 0 OR $1::bigint = ANY(x.class_ids))
+      ORDER BY x.role, (cardinality(x.class_ids) > 0) DESC, x.sort_order, x.id`,
+    [s.class_id],
+  );
+  const ct = await c.query<{ name: string }>(
+    `SELECT concat_ws(' ', em.first_name, em.last_name) AS name
+       FROM enrolments en JOIN teacher_assignments ta ON ta.class_section_id = en.class_section_id AND ta.kind = 'class_teacher'
+                         AND ta.valid_to IS NULL AND ta.academic_year_id = en.academic_year_id
+       JOIN employees em ON em.id = ta.employee_id
+      WHERE en.student_id = $1 AND en.academic_year_id = app.current_academic_year_id() AND en.status = 'active'
+      ORDER BY ta.id LIMIT 1`,
+    [input.studentId],
+  );
+  const mc = await c.query<{ code: string; name: string }>(
+    `SELECT code, name FROM mark_codes WHERE status = 'active' ORDER BY sort_order, code`,
+  );
+  const extra = await c.query<{ participation: string | null; promoted_to: string | null }>(
+    `SELECT r.participation, r.promoted_to FROM exam_remarks r
+      WHERE r.exam_id = ANY($1::bigint[]) AND r.student_id = $2
+      ORDER BY array_position($1::bigint[], r.exam_id) DESC`,
+    [input.examIds, input.studentId],
+  );
+  const num = (v: string | null) => (v === null ? null : Number(v));
   const fee = await c.query<{ balance: string }>(
     `SELECT COALESCE(sum(balance), 0)::text AS balance FROM mart.fee_dues WHERE student_id = $1 AND academic_year_id = app.current_academic_year_id() AND due_on <= CURRENT_DATE`,
     [input.studentId],
@@ -428,6 +526,7 @@ export async function loadReportCardData(
       rollNo: s.roll_no,
       className: s.class_name,
       classCode: s.class_code,
+      classId: s.class_id,
       section: s.section,
       band,
       dob: localDate(s.dob),
@@ -467,6 +566,37 @@ export async function loadReportCardData(
           recordedOn: localDate(hr.rows[0].recorded_on),
         }
       : null,
+    termResults: tr.rows.map((t) => ({
+      term: t.term_code,
+      name: t.name,
+      columns: t.def.columns
+        .filter((x) => !x.hidden)
+        .map((x) => ({ key: x.key, label: x.label, total: Boolean(x.total) })),
+      // additional subjects printed last
+      subjects: [...t.subjects].sort(
+        (a, b) => Number(a.kind === 'additional') - Number(b.kind === 'additional'),
+      ),
+      total: num(t.total),
+      max: Number(t.max_total),
+      pct: num(t.pct),
+      grade: t.grade,
+      division: t.division,
+      result: t.result,
+      rankInSection: t.rank_in_section,
+      rankInClass: t.rank_in_class,
+    })),
+    signatures: sig.rows.map((x) => ({
+      role: x.role,
+      label: x.label,
+      personName: x.person_name,
+      objectKey: x.object_key,
+      contentType: x.content_type,
+      dataUri: null,
+    })),
+    classTeacher: ct.rows[0]?.name ?? null,
+    codes: mc.rows,
+    participation: extra.rows.find((x) => x.participation)?.participation ?? null,
+    promotedTo: extra.rows.find((x) => x.promoted_to)?.promoted_to ?? null,
     fees: { balance: fmt(balance), defaulter: balance > input.defaulterMin },
     today: localDate(new Date())!,
   };
@@ -595,5 +725,73 @@ export function sampleReportCardData(band: ClassBand = 'primary'): ReportCardDat
     },
     fees: { balance: '0.00', defaulter: false },
     today: '2026-09-28',
+    // the DPS Noida cards' parts (docs/design/65 part 4): two terms of a VI-VIII scheme, signatures
+    termResults: ['T1', 'T2'].map((term, i) => {
+      const cols = [
+        { key: 'PT', label: 'Periodic test (15)', total: false },
+        { key: 'SE', label: 'Subject enrichment (5)', total: false },
+        { key: 'TERM', label: term === 'T1' ? 'Half-yearly (80)' : 'Yearly (80)', total: false },
+        { key: 'TOT', label: 'Marks obtained (100)', total: true },
+      ];
+      const row = (code: string, name: string, pt: number, se: number, ex: number) => ({
+        code,
+        name,
+        kind: 'compulsory',
+        values: {
+          PT: { v: pt, max: 15 },
+          SE: { v: se, max: 5 },
+          TERM: { v: ex, max: 80 },
+          TOT: { v: Math.round(pt + se + ex), max: 100 },
+        },
+        total: Math.round(pt + se + ex),
+        max: 100,
+        grade: pt + se + ex >= 81 ? 'A2' : 'B1',
+        status: 'pass',
+      });
+      const subjects = [
+        row('ENG', 'English', 12.75 + i, 4.5, 62 + i * 4),
+        row('MAT', 'Mathematics', 14, 5, 70 - i * 2),
+      ];
+      const total = subjects.reduce((a, x) => a + (x.total ?? 0), 0);
+      return {
+        term,
+        name: term === 'T1' ? 'Term 1' : 'Term 2',
+        columns: cols,
+        subjects,
+        total,
+        max: 200,
+        pct: total / 2,
+        grade: 'A2',
+        division: 'First',
+        result: 'pass',
+        rankInSection: 3 - i,
+        rankInClass: 5 - i,
+      };
+    }),
+    signatures: [
+      {
+        role: 'class_teacher',
+        label: 'Class teacher',
+        personName: null,
+        objectKey: null,
+        contentType: null,
+        dataUri: null,
+      },
+      {
+        role: 'principal',
+        label: 'Principal',
+        personName: null,
+        objectKey: null,
+        contentType: null,
+        dataUri: null,
+      },
+    ],
+    classTeacher: 'Meera Joshi',
+    codes: [
+      { code: 'AB', name: 'Absent' },
+      { code: 'ML', name: 'Medical leave' },
+    ],
+    participation: 'Inter-house debate, science exhibition',
+    promotedTo: band === 'senior' ? null : 'Class VIII',
   };
 }

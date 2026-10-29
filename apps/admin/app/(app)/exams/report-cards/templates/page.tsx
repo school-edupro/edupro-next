@@ -11,6 +11,7 @@ import {
 import { getTranslations } from 'next-intl/server';
 import { Notice } from '@/components/Notice';
 import { rcInstallDefaults, rcSaveTemplate } from '@/lib/actions';
+import { installDpsCards } from '@/lib/exam-entry-actions';
 import { apiFetch, getMe } from '@/lib/api';
 import type { ReportCardTemplate } from '@/lib/types';
 
@@ -56,6 +57,11 @@ export default async function ReportCardTemplatesPage({
               <form action={rcInstallDefaults}>
                 <Button type="submit" variant="secondary" size="sm">
                   {r('installDefaults')}
+                </Button>
+              </form>
+              <form action={installDpsCards}>
+                <Button type="submit" variant="secondary" size="sm">
+                  Install the DPS Noida cards
                 </Button>
               </form>
             </span>

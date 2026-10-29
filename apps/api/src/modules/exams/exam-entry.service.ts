@@ -867,6 +867,8 @@ export class ExamEntryService {
         roll_no: number | null;
         remark: string | null;
         bank_code: string | null;
+        participation: string | null;
+        promoted_to: string | null;
         days_present: number | null;
         days_total: number | null;
         height_cm: string | null;
@@ -876,7 +878,7 @@ export class ExamEntryService {
         recorded_on: string | null;
       }>(
         `SELECT s.id::text AS student_id, s.display_name AS name, s.admission_no, e.roll_no,
-                rm.remark, rm.bank_code, ea.days_present, ea.days_total,
+                rm.remark, rm.bank_code, rm.participation, rm.promoted_to, ea.days_present, ea.days_total,
                 CASE WHEN $4 THEN h.height_cm::text END AS height_cm, CASE WHEN $4 THEN h.weight_kg::text END AS weight_kg,
                 CASE WHEN $4 THEN h.bmi::text END AS bmi, CASE WHEN $4 THEN h.blood_group END AS blood_group, h.recorded_on::text
            FROM enrolments e JOIN students s ON s.id = e.student_id AND s.deleted_at IS NULL
@@ -903,6 +905,8 @@ export class ExamEntryService {
           rollNo: x.roll_no,
           remark: x.remark,
           bankCode: x.bank_code,
+          participation: x.participation,
+          promotedTo: x.promoted_to,
           daysPresent: x.days_present,
           daysTotal: x.days_total,
           health: health
@@ -953,11 +957,21 @@ export class ExamEntryService {
       let n = 0;
       for (const r of dto.rows) {
         const u = await c.query(
-          `INSERT INTO exam_remarks (school_id, exam_id, student_id, remark, bank_code, entered_by)
-           VALUES (app.current_school_id(), $1, $2, $3, $4, app.current_user_id())
-           ON CONFLICT (exam_id, student_id) DO UPDATE SET remark = EXCLUDED.remark, bank_code = EXCLUDED.bank_code, entered_by = app.current_user_id()
-           WHERE exam_remarks.remark <> EXCLUDED.remark OR exam_remarks.bank_code IS DISTINCT FROM EXCLUDED.bank_code`,
-          [examId, r.studentId, r.remark, r.bankCode ?? null],
+          `INSERT INTO exam_remarks (school_id, exam_id, student_id, remark, bank_code, participation, promoted_to, entered_by)
+           VALUES (app.current_school_id(), $1, $2, $3, $4, $5, $6, app.current_user_id())
+           ON CONFLICT (exam_id, student_id) DO UPDATE SET remark = EXCLUDED.remark, bank_code = EXCLUDED.bank_code,
+             participation = EXCLUDED.participation, promoted_to = EXCLUDED.promoted_to, entered_by = app.current_user_id()
+           WHERE exam_remarks.remark <> EXCLUDED.remark OR exam_remarks.bank_code IS DISTINCT FROM EXCLUDED.bank_code
+              OR exam_remarks.participation IS DISTINCT FROM EXCLUDED.participation
+              OR exam_remarks.promoted_to IS DISTINCT FROM EXCLUDED.promoted_to`,
+          [
+            examId,
+            r.studentId,
+            r.remark,
+            r.bankCode ?? null,
+            r.participation?.trim() || null,
+            r.promotedTo?.trim() || null,
+          ],
         );
         n += u.rowCount ?? 0;
       }

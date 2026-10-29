@@ -18,7 +18,15 @@ export type ReportCardSectionType =
   | 'result'
   | 'grade_scale'
   | 'signatures'
-  | 'hpc_descriptors';
+  | 'hpc_descriptors'
+  // docs/design/65 part 4 (the DPS Noida cards)
+  | 'term_marks'
+  | 'cover'
+  | 'participation'
+  | 'promotion'
+  | 'seal'
+  | 'evaluation_key'
+  | 'page_break';
 
 export interface ReportCardSection {
   type: ReportCardSectionType;
@@ -47,6 +55,16 @@ export interface ReportCardSection {
   }>;
   /** hpc_descriptors: grade → descriptor text */
   descriptors?: Record<string, string>;
+  /** term_marks: the terms printed side by side (codes; none: every term worked out) */
+  terms?: string[];
+  /** term_marks: grades only (the primary learning record) */
+  gradesOnly?: boolean;
+  /** signatures: by role, with the image and name set up (principal, coordinator, class_teacher ...) */
+  roles?: string[];
+  /** co_scholastic: these indicator areas only (Discipline, Participation ...) */
+  areas?: string[];
+  /** co_scholastic, attendance: these exams' columns only (by code) */
+  examCodes?: string[];
 }
 
 export interface ReportCardLayout {
@@ -201,6 +219,16 @@ export const REPORT_CARD_CSS = `
   .rc .scale { display: flex; flex-wrap: wrap; gap: 4px 10px; color: #52606D; font-size: 9px; margin-top: 4px; }
   .rc .withheld { border: 2px dashed #9B2C2C; color: #9B2C2C; padding: 12px; text-align: center; font-weight: 600; margin-top: 12px; }
   .page-break { page-break-after: always; break-after: page; }
+  .rc .cover { text-align: center; padding: 48px 24px; }
+  .rc .cover h1 { font-size: 22px; margin: 8px 0; }
+  .rc .cover .term { font-size: 15px; font-weight: 600; margin-bottom: 20px; }
+  .rc .cover img.big, .rc .cover .big { width: 120px; height: 150px; object-fit: cover; border: 1px solid #CBD2D9; margin: 12px auto; display: block; }
+  .rc .cover .name { font-size: 18px; font-weight: 700; margin-top: 10px; }
+  .rc .sign img { max-height: 36px; max-width: 120px; display: block; margin: 0 auto 2px; }
+  .rc .sign .who { display: block; color: #1F2933; font-size: 9px; }
+  .rc .seal { width: 90px; height: 90px; border: 1px dashed #9AA5B1; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: #9AA5B1; font-size: 9px; margin: 8px 0 0 auto; }
+  .rc img.seal { border: 0; object-fit: contain; }
+  .rc .key { color: #52606D; font-size: 9px; margin-top: 4px; }
 `;
 
 const esc = (v: unknown): string =>
@@ -344,16 +372,21 @@ function hpcDescriptors(d: ReportCardData, s: ReportCardSection): string {
 }
 
 function coScholastic(d: ReportCardData, s: ReportCardSection): string {
-  if (d.indicators.length === 0) return '';
-  const head = d.exams.map((e) => `<th class="ctr">${esc(e.code)}</th>`).join('');
-  const rows = d.indicators
+  // docs/design/65 part 4: some areas only (Discipline), some exams' columns only (the term exams)
+  const areas = d.indicators.filter((a) => !s.areas?.length || s.areas.includes(a.area));
+  if (areas.length === 0) return '';
+  const cols = d.exams
+    .map((e, i) => ({ e, i }))
+    .filter((x) => !s.examCodes?.length || s.examCodes.includes(x.e.code));
+  const head = cols.map(({ e }) => `<th class="ctr">${esc(e.code)}</th>`).join('');
+  const rows = areas
     .map(
       (a) =>
-        `<tr><td colspan="${d.exams.length + 1}" style="font-weight:600;background:#E6EEF8">${esc(a.area)}</td></tr>` +
+        `<tr><td colspan="${cols.length + 1}" style="font-weight:600;background:#E6EEF8">${esc(a.area)}</td></tr>` +
         a.items
           .map(
             (i) =>
-              `<tr><td>${esc(i.name)}</td>${i.grades.map((g) => `<td class="ctr">${esc(g ?? '')}</td>`).join('')}</tr>`,
+              `<tr><td>${esc(i.name)}</td>${cols.map(({ i: k }) => `<td class="ctr">${esc(i.grades[k] ?? '')}</td>`).join('')}</tr>`,
           )
           .join(''),
     )
@@ -362,8 +395,9 @@ function coScholastic(d: ReportCardData, s: ReportCardSection): string {
 }
 
 function attendance(d: ReportCardData, s: ReportCardSection): string {
-  if (d.attendance.length === 0) return '';
-  return `<h2>${esc(s.title ?? 'Attendance')}</h2><table><thead><tr><th>Exam</th><th class="num">Days present</th><th class="num">Working days</th><th class="num">%</th></tr></thead><tbody>${d.attendance
+  const rows = d.attendance.filter((a) => !s.examCodes?.length || s.examCodes.includes(a.exam));
+  if (rows.length === 0) return '';
+  return `<h2>${esc(s.title ?? 'Attendance')}</h2><table><thead><tr><th>Exam</th><th class="num">Days present</th><th class="num">Working days</th><th class="num">%</th></tr></thead><tbody>${rows
     .map(
       (a) =>
         `<tr><td>${esc(a.exam)}</td><td class="num">${a.present}</td><td class="num">${a.total}</td><td class="num">${esc(a.pct)}</td></tr>`,
@@ -398,12 +432,138 @@ function result(d: ReportCardData, s: ReportCardSection): string {
 
 function gradeScale(d: ReportCardData): string {
   if (d.gradeScale.length === 0) return '';
-  return `<div class="scale">${d.gradeScale.map((g) => `<span><strong>${esc(g.grade)}</strong> ${esc(g.minPct.replace(/\.00$/, ''))}–${esc(g.maxPct)}%${g.remark ? ` ${esc(g.remark)}` : ''}</span>`).join('')}</div>`;
+  return `<div class="scale">${d.gradeScale.map((g) => `<span><strong>${esc(g.grade)}</strong> ${esc(g.minPct.replace(/\.00$/, ''))}–${esc(g.maxPct.replace(/\.00$/, ''))}%${g.remark ? ` ${esc(g.remark)}` : ''}</span>`).join('')}</div>`;
 }
 
-function signatures(s: ReportCardSection): string {
+function signatures(s: ReportCardSection, d?: ReportCardData): string {
+  // docs/design/65 part 4: by role, with the image and the name set up; a role not set up prints its name
+  if (s.roles?.length && d) {
+    const NAMES: Record<string, string> = {
+      principal: 'Principal',
+      vice_principal: 'Vice principal',
+      headmistress: 'Headmistress',
+      coordinator: 'Coordinator',
+      class_teacher: 'Class teacher',
+      exam_incharge: 'Exam in-charge',
+      parent: 'Parent',
+    };
+    const cells = s.roles.map((role) => {
+      const x = (d.signatures ?? []).find((g) => g.role === role);
+      const who = x?.personName ?? (role === 'class_teacher' ? (d.classTeacher ?? null) : null);
+      return `<div>${x?.dataUri ? `<img src="${x.dataUri}" alt="" />` : ''}${esc(x?.label ?? NAMES[role] ?? role)}${who ? `<span class="who">${esc(who)}</span>` : ''}</div>`;
+    });
+    return `<div class="sign">${cells.join('')}</div>`;
+  }
   const labels = s.labels?.length ? s.labels : ['Class teacher', 'Parent', 'Principal'];
   return `<div class="sign">${labels.map((l) => `<div>${esc(l)}</div>`).join('')}</div>`;
+}
+
+const fmtV = (c: { v: number | null; code?: string } | null | undefined): string =>
+  !c ? '' : c.code && (c.v === null || c.v === 0) ? c.code : c.v === null ? '' : String(c.v);
+
+/** docs/design/65 part 4: the terms' marks side by side, from the result schemes (no cumulative column). */
+function termMarks(d: ReportCardData, s: ReportCardSection): string {
+  const terms = (d.termResults ?? []).filter((t) => !s.terms?.length || s.terms.includes(t.term));
+  const title = `<h2>${esc(s.title ?? 'Scholastic areas')}</h2>`;
+  if (!terms.length)
+    return `${title}<div class="remark">The term results are not worked out yet.</div>`;
+  const subjects: Array<{ code: string; name: string; kind: string }> = [];
+  for (const t of terms)
+    for (const x of t.subjects)
+      if (!subjects.some((y) => y.code === x.code))
+        subjects.push({ code: x.code, name: x.name, kind: x.kind });
+  const cols = (t: (typeof terms)[number]) => (s.gradesOnly ? [] : t.columns);
+  const head1 = terms
+    .map((t) => `<th class="ctr" colspan="${cols(t).length + 1}">${esc(t.name)}</th>`)
+    .join('');
+  const head2 = terms
+    .map(
+      (t) =>
+        `${cols(t)
+          .map((c) => `<th class="num">${esc(c.label)}</th>`)
+          .join('')}<th class="ctr">Grade</th>`,
+    )
+    .join('');
+  const body = subjects
+    .map((sub) => {
+      const cells = terms
+        .map((t) => {
+          const x = t.subjects.find((y) => y.code === sub.code);
+          return `${cols(t)
+            .map((c) => `<td class="num">${esc(fmtV(x?.values[c.key]))}</td>`)
+            .join('')}<td class="ctr">${esc(x?.grade ?? '')}</td>`;
+        })
+        .join('');
+      return `<tr><td>${esc(sub.name)}${sub.kind === 'additional' ? ' <span class="meta">(additional)</span>' : ''}</td>${cells}</tr>`;
+    })
+    .join('');
+  const line = (label: string, v: (t: (typeof terms)[number]) => string) =>
+    `<tr class="tot"><td>${esc(label)}</td>${terms.map((t) => `<td class="num" colspan="${cols(t).length + 1}">${esc(v(t))}</td>`).join('')}</tr>`;
+  const foot = s.gradesOnly
+    ? ''
+    : line('Total', (t) => `${t.total ?? '-'} / ${t.max}`) +
+      line('Percentage', (t) => (t.pct === null ? '-' : `${t.pct}%`)) +
+      line('Grade', (t) => t.grade ?? '-') +
+      (s.showRank === false
+        ? ''
+        : line('Rank in section', (t) => (t.rankInSection ? String(t.rankInSection) : '-')));
+  return `${title}<table><thead><tr><th rowspan="2">Subject</th>${head1}</tr><tr>${head2}</tr></thead><tbody>${body}${foot}</tbody></table>`;
+}
+
+const RESULT_WORDS: Record<string, string> = {
+  pass: 'PASS',
+  compartment: 'COMPARTMENT',
+  fail: 'NEEDS IMPROVEMENT',
+  absent: 'ABSENT',
+  incomplete: 'INCOMPLETE',
+};
+
+/** The learning record's cover: the school, the year, the photo and the student (then a page break). */
+function cover(d: ReportCardData, s: ReportCardSection): string {
+  const logo = d.school.logoDataUri
+    ? `<img src="${d.school.logoDataUri}" alt="" style="max-height:60px" />`
+    : '';
+  const photo = d.student.photoDataUri
+    ? `<img class="big" src="${d.student.photoDataUri}" alt="" />`
+    : '<div class="big"></div>';
+  return `<div class="cover">${logo}<h1>${esc(d.school.name)}</h1><div class="meta">${esc(d.school.address)}</div><div class="term">${esc(s.title ?? 'Learning record')} · ${esc(d.release.academicYear)}</div>${photo}<div class="name">${esc(d.student.name)}</div><div>Class ${esc(d.student.classCode)}-${esc(d.student.section)}${d.student.rollNo ? ` · Roll ${d.student.rollNo}` : ''} · Admission no ${esc(d.student.admissionNo)}</div></div><div class="page-break"></div>`;
+}
+
+function participation(d: ReportCardData, s: ReportCardSection): string {
+  return `<h2>${esc(s.title ?? 'I participated in')}</h2><div class="remark">${d.participation ? esc(d.participation) : '&nbsp;'}</div>`;
+}
+
+/** The final result and the class the student is promoted to. */
+function promotion(d: ReportCardData, s: ReportCardSection): string {
+  const last = (d.termResults ?? [])[(d.termResults ?? []).length - 1];
+  const res = last
+    ? (RESULT_WORDS[last.result] ?? last.result)
+    : d.term.result === 'pass'
+      ? 'PASS'
+      : '';
+  const tile = (k: string, v: string) =>
+    `<div class="tile"><div class="k">${esc(k)}</div><div class="v">${esc(v)}</div></div>`;
+  return `${s.title ? `<h2>${esc(s.title)}</h2>` : ''}<div class="result">${res ? tile('Result', res) : ''}${last?.division ? tile('Division', last.division) : ''}${d.promotedTo ? tile('Promoted to', d.promotedTo) : ''}</div>`;
+}
+
+function seal(d: ReportCardData): string {
+  const x = (d.signatures ?? []).find((g) => g.role === 'seal');
+  return x?.dataUri
+    ? `<img class="seal" src="${x.dataUri}" alt="School seal" />`
+    : '<div class="seal">School seal</div>';
+}
+
+/** The evaluation key: the grades, the marks codes and how the term's marks are made. */
+function evaluationKey(d: ReportCardData, s: ReportCardSection): string {
+  const t = (d.termResults ?? [])[0];
+  const how = t
+    ? t.columns
+        .filter((c) => !c.total)
+        .map((c) => c.label)
+        .join(' + ')
+    : '';
+  const total = t?.columns.find((c) => c.total)?.label;
+  return `<h2>${esc(s.title ?? 'Evaluation key')}</h2>${gradeScale(d)}${how ? `<div class="key">${esc(how)}${total ? ` = ${esc(total)}` : ''}</div>` : ''}${(d.codes ?? []).length ? `<div class="key">${(d.codes ?? []).map((c) => `${esc(c.code)} ${esc(c.name)}`).join(' · ')}</div>` : ''}`;
 }
 
 /** One pupil's card body (no page frame). */
@@ -438,7 +598,21 @@ export function reportCardBody(
       case 'grade_scale':
         return gradeScale(d);
       case 'signatures':
-        return signatures(s);
+        return signatures(s, d);
+      case 'term_marks':
+        return termMarks(d, s);
+      case 'cover':
+        return cover(d, s);
+      case 'participation':
+        return participation(d, s);
+      case 'promotion':
+        return promotion(d, s);
+      case 'seal':
+        return seal(d);
+      case 'evaluation_key':
+        return evaluationKey(d, s);
+      case 'page_break':
+        return '<div class="page-break"></div>';
       default:
         return '';
     }
@@ -483,3 +657,158 @@ export function reportCardDocument(
     pageHeight: t.pageHeight,
   });
 }
+
+/**
+ * The DPS Noida report cards (docs/design/65 part 4) as layouts on this engine; installed as templates
+ * (codes dps_*) and chosen per class on a release (IX and X differ in the same band).
+ */
+const SIGN = ['class_teacher', 'coordinator', 'principal'];
+export const DPS_NOIDA_TEMPLATES: Array<{
+  code: string;
+  name: string;
+  band: ReportCardData['student']['band'];
+  layout: ReportCardLayout;
+}> = [
+  {
+    code: 'dps_i_ii',
+    name: 'DPS Noida I-II learning record',
+    band: 'primary',
+    layout: {
+      subtitle: 'Learning record',
+      sections: [
+        { type: 'cover', title: 'Learning curve' },
+        { type: 'header' },
+        { type: 'student', showPhoto: false },
+        { type: 'hpc_descriptors', title: 'What I learnt' },
+        { type: 'co_scholastic', title: 'Co-scholastic areas' },
+        { type: 'health' },
+        { type: 'attendance' },
+        { type: 'participation' },
+        { type: 'remarks', title: "Class teacher's remarks" },
+        { type: 'promotion' },
+        { type: 'signatures', roles: SIGN },
+        { type: 'evaluation_key' },
+      ],
+    },
+  },
+  {
+    code: 'dps_iii_v',
+    name: 'DPS Noida III-V learning record',
+    band: 'primary',
+    layout: {
+      subtitle: 'Learning record',
+      sections: [
+        { type: 'cover', title: 'Learning curve' },
+        { type: 'header' },
+        { type: 'student', showPhoto: false },
+        { type: 'term_marks', title: 'Scholastic areas', gradesOnly: true },
+        { type: 'co_scholastic', title: 'Co-scholastic areas' },
+        { type: 'page_break' },
+        { type: 'health' },
+        { type: 'attendance' },
+        { type: 'participation' },
+        { type: 'remarks', title: "Class teacher's remarks" },
+        { type: 'promotion' },
+        { type: 'signatures', roles: SIGN },
+        { type: 'evaluation_key' },
+      ],
+    },
+  },
+  {
+    code: 'dps_vi_viii',
+    name: 'DPS Noida VI-VIII (Term 1 and Term 2)',
+    band: 'middle',
+    layout: {
+      subtitle: 'Report card',
+      sections: [
+        { type: 'header' },
+        { type: 'student', showPhoto: true },
+        { type: 'term_marks', title: 'Scholastic areas', terms: ['T1', 'T2'] },
+        { type: 'co_scholastic', title: 'Co-scholastic areas and discipline' },
+        { type: 'attendance' },
+        { type: 'health' },
+        { type: 'remarks', title: "Class teacher's remarks" },
+        { type: 'promotion' },
+        { type: 'signatures', roles: SIGN },
+        { type: 'seal' },
+        { type: 'evaluation_key' },
+      ],
+    },
+  },
+  {
+    code: 'dps_ix',
+    name: 'DPS Noida IX',
+    band: 'secondary',
+    layout: {
+      subtitle: 'Report card',
+      sections: [
+        { type: 'header' },
+        { type: 'student', showPhoto: true },
+        { type: 'term_marks', title: 'Part 1 · Scholastic areas' },
+        { type: 'co_scholastic', title: 'Part 2 · Co-scholastic areas' },
+        { type: 'co_scholastic', title: 'Part 3 · Discipline', areas: ['Discipline'] },
+        { type: 'participation', title: 'Part 4 · Participation' },
+        { type: 'attendance', title: 'Part 5 · Attendance' },
+        { type: 'remarks', title: "Class teacher's remarks" },
+        { type: 'signatures', roles: SIGN },
+        { type: 'seal' },
+        { type: 'evaluation_key' },
+      ],
+    },
+  },
+  {
+    code: 'dps_x',
+    name: 'DPS Noida X (pre-term / mid-term)',
+    band: 'secondary',
+    layout: {
+      subtitle: 'Report card',
+      sections: [
+        { type: 'header' },
+        { type: 'student', showPhoto: true },
+        { type: 'term_marks', title: 'Scholastic areas' },
+        { type: 'co_scholastic', title: 'Co-scholastic areas' },
+        { type: 'attendance' },
+        { type: 'remarks', title: "Class teacher's remarks" },
+        { type: 'signatures', roles: SIGN },
+        { type: 'evaluation_key' },
+      ],
+    },
+  },
+  {
+    code: 'dps_xi',
+    name: 'DPS Noida XI',
+    band: 'senior',
+    layout: {
+      subtitle: 'Report card',
+      sections: [
+        { type: 'header' },
+        { type: 'student', showPhoto: true },
+        { type: 'term_marks', title: 'Scholastic areas' },
+        { type: 'co_scholastic', title: 'Co-scholastic areas' },
+        { type: 'attendance' },
+        { type: 'remarks', title: "Class teacher's remarks" },
+        { type: 'promotion' },
+        { type: 'signatures', roles: SIGN },
+        { type: 'seal' },
+        { type: 'evaluation_key' },
+      ],
+    },
+  },
+  {
+    code: 'dps_xii',
+    name: 'DPS Noida XII (pre-term / mid-term)',
+    band: 'senior',
+    layout: {
+      subtitle: 'Report card',
+      sections: [
+        { type: 'header' },
+        { type: 'student', showPhoto: true },
+        { type: 'term_marks', title: 'Scholastic areas' },
+        { type: 'attendance' },
+        { type: 'remarks', title: "Class teacher's remarks" },
+        { type: 'signatures', roles: SIGN },
+        { type: 'evaluation_key' },
+      ],
+    },
+  },
+];

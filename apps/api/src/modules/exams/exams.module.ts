@@ -1,7 +1,9 @@
 import { Module } from '@nestjs/common';
 import { AuditService } from '../../common/audit/audit.service';
 import { DailyAcademicsModule } from '../academics/daily/daily.module';
+import { FilesModule } from '../files/files.module';
 import { ReportsModule } from '../reports/reports.module';
+import { ReportCardSignaturesService } from './report-card-signatures.service';
 import { BoardResultsController } from './board-results.controller';
 import { BoardResultsService } from './board-results.service';
 import { ExamEntryController } from './exam-entry.controller';
@@ -23,7 +25,7 @@ import { SubjectChoicesService } from './subject-choices.service';
  * Sprint 16: results. Sprint 17: report cards (templates, releases, batch render, family read).
  */
 @Module({
-  imports: [DailyAcademicsModule, ReportsModule],
+  imports: [DailyAcademicsModule, ReportsModule, FilesModule],
   controllers: [
     SubjectChoicesController,
     ExamStatusController,
@@ -43,6 +45,7 @@ import { SubjectChoicesService } from './subject-choices.service';
     SubjectChoicesService,
     ExamStatusService,
     MarkSchemesService,
+    ReportCardSignaturesService,
     AuditService,
   ],
   exports: [ExamsService, ExamEntryService, ExamResultsService, ReportCardsService],

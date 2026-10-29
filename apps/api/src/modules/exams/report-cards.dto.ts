@@ -24,6 +24,13 @@ const SectionSchema = z.object({
     'grade_scale',
     'signatures',
     'hpc_descriptors',
+    'term_marks',
+    'cover',
+    'participation',
+    'promotion',
+    'seal',
+    'evaluation_key',
+    'page_break',
   ]),
   title: z.string().trim().max(80).optional(),
   showGrades: z.boolean().optional(),
@@ -46,6 +53,25 @@ const SectionSchema = z.object({
     .optional(),
   /** hpc_descriptors: grade → descriptor text */
   descriptors: z.record(z.string().max(10), z.string().max(200)).optional(),
+  /** docs/design/65 part 4: term_marks' terms and grades only; signatures by role; co-scholastic areas; exams */
+  terms: z.array(z.string().trim().max(12)).max(6).optional(),
+  gradesOnly: z.boolean().optional(),
+  roles: z
+    .array(
+      z.enum([
+        'principal',
+        'vice_principal',
+        'headmistress',
+        'coordinator',
+        'class_teacher',
+        'exam_incharge',
+        'parent',
+      ]),
+    )
+    .max(5)
+    .optional(),
+  areas: z.array(z.string().trim().max(60)).max(10).optional(),
+  examCodes: z.array(z.string().trim().max(20)).max(12).optional(),
 });
 export const LayoutSchema = z.object({
   sections: z.array(SectionSchema).min(1).max(12),
@@ -88,7 +114,18 @@ export const CreateReleaseSchema = z.object({
   name: z.string().trim().min(2).max(120),
   examIds: z.array(IdSchema).min(1).max(12),
   /** template id per band; a band without one uses the active template of that band */
-  templates: z.record(BandSchema, IdSchema).default({}),
+  // a band's template, or a class's own (class_<id>) before its band's (docs/design/65)
+  templates: z
+    .record(
+      z
+        .string()
+        .regex(
+          /^(pre_primary|primary|middle|secondary|senior|class_\d{1,18})$/,
+          'a band or class_<id>',
+        ),
+      IdSchema,
+    )
+    .default({}),
   hideDefaulters: z.boolean().default(false),
   defaulterMin: z.coerce.number().min(0).default(0),
 });
@@ -114,3 +151,29 @@ export const HoldSchema = z.object({
   reason: z.string().trim().max(300).optional(),
 });
 export class HoldDto extends createZodDto(HoldSchema) {}
+
+/** A signature (or the school seal) for the cards: the role, the words under it, an image (docs/design/65). */
+export const SignatureSchema = z.object({
+  role: z.enum([
+    'principal',
+    'vice_principal',
+    'headmistress',
+    'coordinator',
+    'class_teacher',
+    'exam_incharge',
+    'seal',
+  ]),
+  label: z.string().trim().min(2).max(60),
+  personName: z.string().trim().max(80).nullable().optional(),
+  classIds: z.array(IdSchema).max(30).default([]),
+  sortOrder: z.number().int().min(0).max(100).default(0),
+  status: z.enum(['active', 'inactive']).default('active'),
+  /** a PNG or JPEG, base64, up to 300 KB */
+  image: z
+    .object({
+      contentType: z.enum(['image/png', 'image/jpeg']),
+      base64: z.string().min(10).max(420_000),
+    })
+    .optional(),
+});
+export class SignatureDto extends createZodDto(SignatureSchema) {}

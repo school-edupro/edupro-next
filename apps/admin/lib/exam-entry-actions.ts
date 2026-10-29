@@ -357,3 +357,51 @@ export async function markSchemeStep(fd: FormData) {
     { lock: 'Locked', 'new-version': 'A new version to change', remove: 'Removed' }[step],
   );
 }
+
+// ---- the DPS Noida cards (docs/design/65, part 4) -------------------------------------------------
+export async function installDpsCards() {
+  return run(
+    '/exams/report-cards/templates',
+    () => apiFetch('/exams/report-cards/templates/dps', { method: 'POST' }),
+    'The DPS Noida cards are installed: choose them per class on the release',
+  );
+}
+
+export async function saveSignature(
+  id: string | null,
+  body: {
+    role: string;
+    label: string;
+    personName?: string | null;
+    classIds: string[];
+    status?: 'active' | 'inactive';
+    image?: { contentType: 'image/png' | 'image/jpeg'; base64: string };
+  },
+): Promise<Out<unknown>> {
+  if (id && !okId(id)) return { ok: false, error: 'Unknown signature' };
+  const out = await call(
+    id ? `/exams/report-cards/signatures/${id}` : '/exams/report-cards/signatures',
+    id ? 'PUT' : 'POST',
+    body,
+  );
+  if (out.ok) revalidatePath('/exams/report-cards/signatures');
+  return out;
+}
+
+/** The template of each class on a release (class_<id>), the band ones kept. */
+export async function setReleaseClassTemplates(fd: FormData) {
+  const id = str(fd, 'releaseId');
+  const templates: Record<string, string> = {};
+  for (const [k, v] of fd.entries())
+    if (/^(tpl:)(pre_primary|primary|middle|secondary|senior|class_\d{1,18})$/.test(k) && String(v))
+      templates[k.slice(4)] = String(v);
+  return run(
+    `/exams/report-cards?release=${id}`,
+    () =>
+      apiFetch(`/exams/report-cards/releases/${id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ templates }),
+      }),
+    'Templates saved',
+  );
+}

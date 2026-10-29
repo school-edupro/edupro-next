@@ -355,4 +355,150 @@ describe('mark schemes and registers (e2e)', () => {
       ).statusCode,
     ).toBe(403);
   });
+
+  // ---- part 4: the DPS Noida cards ------------------------------------------------------------------
+  const PNG =
+    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=';
+
+  it('installs the DPS Noida cards; signatures by role with images, the seal', async () => {
+    const t = await call(admin, 'POST', '/exams/report-cards/templates/dps');
+    expect(t.statusCode).toBe(201);
+    const dps = (t.json().data as Array<{ id: string; code: string; band: string }>).filter((x) =>
+      x.code.startsWith('dps_'),
+    );
+    expect(dps.map((x) => x.code)).toEqual(
+      expect.arrayContaining([
+        'dps_i_ii',
+        'dps_iii_v',
+        'dps_vi_viii',
+        'dps_ix',
+        'dps_x',
+        'dps_xi',
+        'dps_xii',
+      ]),
+    );
+    ids.dpsMiddle = dps.find((x) => x.code === 'dps_vi_viii')!.id;
+    const url = '/exams/report-cards/signatures';
+    expect(
+      (
+        await call(admin, 'POST', url, {
+          role: 'principal',
+          label: 'Principal',
+          image: {
+            contentType: 'image/png',
+            base64: Buffer.from('not a png at all').toString('base64'),
+          },
+        })
+      ).statusCode,
+    ).toBe(400);
+    const p = await call(admin, 'POST', url, {
+      role: 'principal',
+      label: 'Principal',
+      personName: 'R. Kapoor',
+      image: { contentType: 'image/png', base64: PNG },
+    });
+    expect(p.statusCode).toBe(201);
+    await call(admin, 'POST', url, {
+      role: 'seal',
+      label: 'School seal',
+      image: { contentType: 'image/png', base64: PNG },
+    });
+    // the class's own coordinator before a general one
+    await call(admin, 'POST', url, { role: 'coordinator', label: 'Coordinator' });
+    await call(admin, 'POST', url, {
+      role: 'coordinator',
+      label: 'Coordinator (Middle wing)',
+      classIds: [classId],
+    });
+    const list = (await call(admin, 'GET', url)).json().data as Array<{
+      id: string;
+      role: string;
+      hasImage: boolean;
+    }>;
+    expect(
+      list
+        .filter((x) => x.hasImage)
+        .map((x) => x.role)
+        .sort(),
+    ).toEqual(['principal', 'seal']);
+    const img = await call(
+      admin,
+      'GET',
+      `${url}/${list.find((x) => x.role === 'principal')!.id}/image`,
+    );
+    expect(img.json()).toMatchObject({ contentType: 'image/png', base64: PNG });
+    expect((await call(clerk, 'POST', url, { role: 'seal', label: 'Mine' })).statusCode).toBe(403);
+  });
+
+  it('the class teacher writes what the student took part in and the class promoted to', async () => {
+    const r = await call(clerk, 'PUT', `/exams/${exam.T1!}/remarks`, {
+      classSectionId: section.A,
+      rows: [
+        {
+          studentId: student.Asha,
+          remark: 'Works steadily and helps others.',
+          participation: 'Inter-house debate',
+          promotedTo: 'Class VII',
+        },
+      ],
+    });
+    expect(r.statusCode).toBe(200);
+    const reg = (
+      await call(clerk, 'GET', `/exams/${exam.T1!}/register?classSectionId=${section.A}`)
+    ).json();
+    expect(reg.rows.find((x: { name: string }) => x.name === 'Asha Scheme')).toMatchObject({
+      participation: 'Inter-house debate',
+      promotedTo: 'Class VII',
+    });
+  });
+
+  it('a release takes a template per class; the card shows the term result, signatures and promotion', async () => {
+    expect(
+      (
+        await call(admin, 'POST', '/exams/report-cards/releases', {
+          termCode: 'T1X',
+          name: 'Wrong key',
+          examIds: [exam.T1],
+          templates: { 'class-6': ids.dpsMiddle },
+        })
+      ).statusCode,
+    ).toBe(400);
+    const rel = await call(admin, 'POST', '/exams/report-cards/releases', {
+      termCode: 'T1',
+      name: 'Term 1',
+      examIds: [exam.MT1, exam.MT2, exam.SE1, exam.SE2, exam.T1],
+      templates: { [`class_${classId}`]: ids.dpsMiddle },
+    });
+    expect(rel.statusCode).toBe(201);
+    ids.release = rel.json().id;
+    const pv = await call(
+      admin,
+      'POST',
+      `/exams/report-cards/templates/${ids.dpsMiddle!}/preview`,
+      {
+        releaseId: ids.release,
+        studentId: student.Asha,
+      },
+    );
+    expect(pv.statusCode).toBe(201);
+    const html = pv.json().html as string;
+    expect(html).toContain('Term 1 result');
+    expect(html).toContain('Periodic test (15)');
+    // English 79 and Maths 100 of the scheme's term result
+    expect(html).toContain('<td class="num">79</td>');
+    expect(html).toContain('179 / 200');
+    expect(html).toContain('Promoted to');
+    expect(html).toContain('Class VII');
+    expect(html).toContain(`data:image/png;base64,${PNG}`);
+    expect(html).toContain('R. Kapoor');
+    expect(html).toContain('Coordinator (Middle wing)');
+    expect(html).toContain(
+      'Periodic test (15) + Subject enrichment (5) + Term exam (80) = Marks obtained (100)',
+    );
+    // the batch finds the class's template
+    const batch = await call(admin, 'POST', `/exams/report-cards/releases/${ids.release!}/render`, {
+      classSectionId: section.A,
+    });
+    expect(batch.statusCode).toBe(201);
+  });
 });

@@ -30,7 +30,13 @@ async function put(fd: FormData, path: string, body: Record<string, unknown>, wh
 
 export async function saveRemarks(fd: FormData) {
   const rows = ids(fd, 'remark-')
-    .map((studentId) => ({ studentId, remark: str(fd, `remark-${studentId}`) }))
+    .map((studentId) => ({
+      studentId,
+      remark: str(fd, `remark-${studentId}`),
+      // the DPS Noida cards (docs/design/65): what the pupil took part in, the class promoted to
+      participation: str(fd, `participation-${studentId}`) || null,
+      promotedTo: str(fd, `promoted-${studentId}`) || null,
+    }))
     .filter((r) => r.remark);
   if (!rows.length)
     redirect(

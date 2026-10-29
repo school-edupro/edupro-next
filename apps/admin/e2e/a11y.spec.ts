@@ -268,6 +268,7 @@ const PAGES = [
   '/workflow/definitions?new=1',
   '/exams/report-cards',
   '/exams/report-cards/templates',
+  '/exams/report-cards/signatures',
   '/transport/gps',
   '/library',
   '/library/circulation',

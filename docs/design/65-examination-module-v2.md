@@ -237,3 +237,45 @@ batteries (AAHPERD), ICSE / state board cards, moving the old module's mark hist
   marks and choices by Excel, submit, verify, send back, reopen, waiting, publish with a held card and
   a withdrawal); sprint 14-18, 20, exam parts, permission coverage 66; db rls and report card; etl
   exams; a11y exam pages (marks, status, subject choices, report cards, masters) and the teacher app.
+- **Part 3** (a7e85dd, migration 0278): the engine `packages/db/src/mark-scheme.ts` (`computeScheme`,
+  `schemeProblems`, `roundBy`, `SCHEME_PRESETS`): columns raw (an exam's marks, or a part by name;
+  `wholeIfNoParts`), average (all or best N; with a maximum, the average % of it), sum (a code's
+  out-of-the-maximum part leaves the maximum too), convert, attendance slabs (from the exams' attendance
+  days); a maximum may be "rest" (what the other sources of the marks obtained leave of its `target`);
+  the exams' marks are worked out first, then pro-rata codes (the student's share of the subject's other
+  exams), then the columns made from them. Rounding none / two / whole (half up) / half_kept / up. A
+  blocking code (AB) makes the subject and the result "absent"; a missing mark "incomplete" (no rank);
+  compartment up to N subjects; divisions only for a pass; competition ranks by total or % in section and
+  class among the ranked. Ready-made DPS_VI_VIII, DPS_IX, DPS_X, DPS_XI (theory and practical each),
+  DPS_XII (all six subjects count). Tables `mark_schemes` (purpose result / register, term code, classes,
+  `def` JSON, draft / locked / superseded, versions with `previous_id`) and `term_results`. Locking a
+  result scheme refuses another locked one holding a class for the term; locking a new version
+  supersedes the one it came from (its term results go). API `exams/schemes` (presets, list, get,
+  create from a preset with `examMap` or from `def`, put while a draft, delete a draft, lock,
+  new-version, compute, register `?classSectionId|classId&view=marks|merit&format=json|xlsx|pdf`).
+  Admin: Exams → Mark schemes and registers (list, new from a ready-made scheme with its exams mapped
+  or blank), a scheme's page (the column editor, result rules, divisions, attendance slabs, grade
+  scale; Lock, Work out the term results, New version, Remove), the register (section or class, by
+  roll or merit list, Excel, PDF view / download). Not done: promotion proposals from term results.
+- **Part 4** (migration 0279): `report_card_signatures` (role principal / vice principal /
+  headmistress / coordinator / class teacher / exam in-charge / seal, label, name, image, classes; a
+  class's own first), `exam_remarks.participation` and `.promoted_to`. The card data carries the
+  student's term results (the locked result schemes' printed columns), signatures (images embedded by
+  the worker and the preview), the class teacher, the marks codes, participation and promoted to; the
+  student's class id. New card sections: `term_marks` (terms side by side, `terms`, `gradesOnly`),
+  `cover` (the learning record's first page), `participation`, `promotion` (result, division, promoted
+  to), `signatures` by `roles`, `seal`, `evaluation_key` (grades, how the marks are made, the codes),
+  `page_break`; `co_scholastic` takes `areas` and `examCodes`, `attendance` `examCodes`. The template
+  designer accepts them. `DPS_NOIDA_TEMPLATES`: dps_i_ii and dps_iii_v (learning record, primary),
+  dps_vi_viii (Term 1 and Term 2, middle), dps_ix (Parts 1-5) and dps_x (secondary), dps_xi and dps_xii
+  (senior); `POST exams/report-cards/templates/dps` installs them. A release's `templates` takes
+  `class_<id>` keys before the band's (the API check, the batch and the worker). Signatures API
+  (`exams/report-cards/signatures`, PNG / JPEG up to 300 KB, checked by its first bytes). Admin:
+  Install the DPS Noida cards (templates page), Signatures and seal (with View / Download of the image),
+  Template of each class on a release. Teacher app: exam register "Took part in" and "Promoted to".
+  Not done: remark categories (the class teacher's remark is one text with the bank); they go with
+  part 5's teacher feedback.
+- Tests: mark-scheme unit 10; report-card renderer 10 (the DPS cards); exam-schemes e2e 8 (schemes,
+  term results, register, DPS install, signatures, remarks, a card preview with the term result and a
+  per-class template); all exam suites + permission coverage 74; db rls; workers 41; a11y schemes,
+  report cards, templates, signatures, the teacher app (exam register added).

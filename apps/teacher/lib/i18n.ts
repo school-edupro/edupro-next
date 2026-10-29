@@ -619,6 +619,9 @@ const DICT: Record<string, string> = {
   Verify: 'सत्यापित करें',
   'What to correct': 'क्या सुधारना है',
   'Send back': 'वापस भेजें',
+  'Took part in': 'भाग लिया',
+  'Promoted to': 'पदोन्नत कक्षा',
+  'Promoted to (final term)': 'पदोन्नत कक्षा (अंतिम सत्र)',
 };
 
 /** Translates a known English string; unknown strings fall back to English. */

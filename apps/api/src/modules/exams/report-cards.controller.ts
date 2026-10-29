@@ -6,12 +6,14 @@ import {
   CreateReleaseDto,
   CreateTemplateDto,
   HoldDto,
+  SignatureDto,
   PreviewDto,
   RenderBatchDto,
   REPORT_CARDS,
   UpdateReleaseDto,
   UpdateTemplateDto,
 } from './report-cards.dto';
+import { ReportCardSignaturesService } from './report-card-signatures.service';
 import { ReportCardsService } from './report-cards.service';
 
 /** Sprint 17: report-card templates, term releases, batch render; the family's results and card. */
@@ -19,7 +21,48 @@ import { ReportCardsService } from './report-cards.service';
 @ApiBearerAuth()
 @Controller('exams/report-cards')
 export class ReportCardsController {
-  constructor(private readonly cards: ReportCardsService) {}
+  constructor(
+    private readonly cards: ReportCardsService,
+    private readonly signatures: ReportCardSignaturesService,
+  ) {}
+
+  @Post('templates/dps')
+  @ApiOperation({
+    summary: 'Install the DPS Noida report cards (I-II, III-V, VI-VIII, IX, X, XI, XII)',
+  })
+  @RequirePermission(REPORT_CARDS.manage)
+  async installDps(@ReqCtx() ctx: RequestContext) {
+    return { data: await this.cards.installDps(ctx) };
+  }
+
+  @Get('signatures')
+  @ApiOperation({ summary: 'Signatures (and the seal) the cards print, by role' })
+  @RequirePermission(REPORT_CARDS.view)
+  signaturesList(@ReqCtx() ctx: RequestContext) {
+    return this.signatures.list(ctx);
+  }
+
+  @Post('signatures')
+  @RequirePermission(REPORT_CARDS.manage)
+  signatureCreate(@ReqCtx() ctx: RequestContext, @Body() body: SignatureDto) {
+    return this.signatures.create(ctx, body);
+  }
+
+  @Put('signatures/:id')
+  @RequirePermission(REPORT_CARDS.manage)
+  signatureUpdate(
+    @ReqCtx() ctx: RequestContext,
+    @Param('id') id: string,
+    @Body() body: SignatureDto,
+  ) {
+    return this.signatures.update(ctx, id, body);
+  }
+
+  @Get('signatures/:id/image')
+  @RequirePermission(REPORT_CARDS.view)
+  signatureImage(@ReqCtx() ctx: RequestContext, @Param('id') id: string) {
+    return this.signatures.imageOf(ctx, id);
+  }
 
   @Get('templates')
   @RequirePermission(REPORT_CARDS.view, {

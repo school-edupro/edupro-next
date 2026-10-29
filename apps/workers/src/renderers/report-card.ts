@@ -68,8 +68,14 @@ async function loadRelease(c: Q, id: string): Promise<Release> {
   };
 }
 
-async function templateFor(c: Q, rel: Release, band: string): Promise<TemplateLike> {
-  const byId = rel.templates[band];
+async function templateFor(
+  c: Q,
+  rel: Release,
+  band: string,
+  classId?: string | null,
+): Promise<TemplateLike> {
+  // a template chosen for the class first (IX and X differ in one band), then the band's (docs/design/65)
+  const byId = (classId ? rel.templates[`class_${classId}`] : undefined) ?? rel.templates[band];
   const r = await c.query<{
     id: string;
     layout: Record<string, unknown>;
@@ -113,6 +119,8 @@ async function pupilCard(
     data.student.photoObjectKey,
     data.student.photoContentType,
   );
+  for (const g of data.signatures ?? [])
+    g.dataUri = await photoDataUri(storage, g.objectKey, g.contentType);
   const withheld =
     rel.hideDefaulters && data.fees.defaulter
       ? `Report card withheld: fee dues of ₹${data.fees.balance} are pending. Please contact the accounts office.`
@@ -148,7 +156,7 @@ export async function renderReportCard(
   return db.withTenant(tenantForJob(envelope), async (c) => {
     const rel = await loadRelease(c as Q, releaseId);
     const card = await pupilCard(c as Q, storage, rel, studentId);
-    const t = await templateFor(c as Q, rel, card.data.student.band);
+    const t = await templateFor(c as Q, rel, card.data.student.band, card.data.student.classId);
     await recordCard(c as Q, rel, studentId, exportId, card.withheld);
     return { html: reportCardDocument(t, [card]), width: t.pageWidth, height: t.pageHeight };
   });
@@ -166,12 +174,17 @@ export async function renderReportCardBatch(
   const classSectionId = String(params.classSectionId ?? '');
   return db.withTenant(tenantForJob(envelope), async (c) => {
     const rel = await loadRelease(c as Q, releaseId);
-    const k = await c.query<{ band: string | null; display_order: number }>(
-      `SELECT k.band::text, k.display_order FROM class_sections cs JOIN classes k ON k.id = cs.class_id WHERE cs.id = $1`,
+    const k = await c.query<{ band: string | null; display_order: number; class_id: string }>(
+      `SELECT k.band::text, k.display_order, k.id::text AS class_id FROM class_sections cs JOIN classes k ON k.id = cs.class_id WHERE cs.id = $1`,
       [classSectionId],
     );
     if (!k.rows[0]) throw new Error(`section ${classSectionId} not found`);
-    const t = await templateFor(c as Q, rel, bandFor(k.rows[0].band, k.rows[0].display_order));
+    const t = await templateFor(
+      c as Q,
+      rel,
+      bandFor(k.rows[0].band, k.rows[0].display_order),
+      k.rows[0].class_id,
+    );
     const pupils = await c.query<{ id: string }>(
       `SELECT s.id::text FROM enrolments e JOIN students s ON s.id = e.student_id AND s.deleted_at IS NULL
         WHERE e.class_section_id = $1 AND e.academic_year_id = app.current_academic_year_id() AND e.status = 'active'

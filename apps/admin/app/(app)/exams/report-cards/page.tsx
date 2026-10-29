@@ -18,6 +18,7 @@ import {
   rcRenderOne,
   rcSetReleaseStatus,
 } from '@/lib/actions';
+import { setReleaseClassTemplates } from '@/lib/exam-entry-actions';
 import { apiFetch, getMe } from '@/lib/api';
 import { sectionOptions } from '@/lib/sections';
 import type { Exam, ReportCardRelease, ReportCardStatus, ReportCardTemplate } from '@/lib/types';
@@ -61,6 +62,15 @@ export default async function ReportCardsPage({
   ]);
   const canManage = me.permissions.includes('exams.report_card.manage');
   const canPublish = me.permissions.includes('exams.result.publish');
+  // the classes a release's exams are set for (a template may be chosen for each)
+  const classesOf = (rel: ReportCardRelease) => {
+    const out: Array<{ classId: string; classCode: string }> = [];
+    for (const e of exams.filter((x) => rel.examIds.includes(x.id)))
+      for (const k of e.classes ?? [])
+        if (!out.some((y) => y.classId === k.classId))
+          out.push({ classId: k.classId, classCode: k.classCode });
+    return out;
+  };
   const release = releases.find((x) => x.id === sp.release) ?? releases[0] ?? null;
   const sectionId = sp.section ?? sections[0]?.value;
   const cards =
@@ -79,6 +89,9 @@ export default async function ReportCardsPage({
           <span style={{ display: 'inline-flex', gap: 'var(--sp-2)' }}>
             <a className="ep-btn ep-btn--ghost ep-btn--sm" href="/exams/report-cards/templates">
               {r('designer')}
+            </a>
+            <a className="ep-btn ep-btn--ghost ep-btn--sm" href="/exams/report-cards/signatures">
+              Signatures and seal
             </a>
             {canManage ? (
               <a className="ep-btn ep-btn--primary ep-btn--sm" href="/exams/report-cards?new=1">
@@ -296,6 +309,49 @@ export default async function ReportCardsPage({
                     : ''}
               {release.held ? ` ${String(release.held)} card(s) held back.` : ''}
             </p>
+            {canManage ? (
+              <details style={{ marginBottom: 'var(--sp-3)' }}>
+                <summary>Template of each class</summary>
+                <form action={setReleaseClassTemplates} className="ep-rp__act">
+                  <input type="hidden" name="releaseId" value={release.id} />
+                  <p className="ep-field__help" style={{ margin: 0 }}>
+                    A class&rsquo;s own template comes before its band&rsquo;s (Class IX and Class X
+                    print different DPS Noida cards).
+                  </p>
+                  {Object.entries(release.templates)
+                    .filter(([k]) => !k.startsWith('class_'))
+                    .map(([k, v]) => (
+                      <input key={k} type="hidden" name={`tpl:${k}`} value={v} />
+                    ))}
+                  <div className="ep-rp__row">
+                    {classesOf(release).map((k) => (
+                      <label key={k.classId} className="ep-field">
+                        <span className="ep-field__label">{k.classCode}</span>
+                        <select
+                          className="ep-select"
+                          name={`tpl:class_${k.classId}`}
+                          defaultValue={release.templates[`class_${k.classId}`] ?? ''}
+                        >
+                          <option value="">The band&rsquo;s</option>
+                          {templates
+                            .filter((x) => x.status === 'active')
+                            .map((x) => (
+                              <option key={x.id} value={x.id}>
+                                {x.name}
+                              </option>
+                            ))}
+                        </select>
+                      </label>
+                    ))}
+                  </div>
+                  <div className="ep-form-actions">
+                    <Button type="submit" size="sm" variant="secondary">
+                      Save the templates
+                    </Button>
+                  </div>
+                </form>
+              </details>
+            ) : null}
             {release.unverified ? (
               <p className="ep-alert ep-alert--warning" style={{ marginTop: 0 }}>
                 {release.unverified} section × subject marks of these exams are not verified yet
