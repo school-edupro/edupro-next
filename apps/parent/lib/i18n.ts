@@ -1106,6 +1106,13 @@ const DICT: Record<string, string> = {
   'A form waits for your answer': 'एक फ़ॉर्म आपके उत्तर की प्रतीक्षा में है',
   'forms wait for your answer': 'फ़ॉर्म आपके उत्तर की प्रतीक्षा में हैं',
   'Answer now': 'अभी उत्तर दें',
+  'Thank you: your feedback is saved for the progress card.':
+    'धन्यवाद: आपकी प्रतिक्रिया प्रगति कार्ड के लिए सहेज ली गई है।',
+  'Your feedback for the progress card': 'प्रगति कार्ड के लिए आपकी प्रतिक्रिया',
+  'What your child enjoys, does at home and has learnt: it is printed on the card as you write it.':
+    'आपके बच्चे को क्या अच्छा लगता है, घर पर क्या करता है और क्या सीखा: यह कार्ड पर वैसा ही छपता है जैसा आप लिखते हैं।',
+  'The progress card is closed for changes.': 'प्रगति कार्ड अब बदलाव के लिए बंद है।',
+  'Save my feedback': 'मेरी प्रतिक्रिया सहेजें',
 };
 
 /** Translates a known English string; unknown strings fall back to English. */

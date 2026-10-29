@@ -113,6 +113,39 @@ export interface ReportCardData {
   codes?: Array<{ code: string; name: string }>;
   participation?: string | null;
   promotedTo?: string | null;
+  /** docs/design/65 part 5: the Holistic Progress Card (a class whose set in the term is an HPC) */
+  hpc?: ReportCardHpc | null;
+}
+
+export interface ReportCardHpcItem {
+  code: string;
+  name: string;
+  kind: 'level' | 'text';
+  description: string | null;
+  /** the level per HPC exam of the term (ReportCardHpc.exams) */
+  levels: Array<string | null>;
+  /** the last written observation */
+  note: string | null;
+  /** what the last level means for this item */
+  descriptor: string | null;
+  children: ReportCardHpcItem[];
+}
+
+export interface ReportCardHpc {
+  /** the term's exams with the HPC, in order (codes) */
+  exams: string[];
+  levels: string[];
+  levelWords: Record<string, string>;
+  areas: Array<{ area: string; items: ReportCardHpcItem[] }>;
+  feedback: { self: string | null; parent: string | null; teacher: string | null };
+  /** up to six photos, images filled by the renderer */
+  portfolio: Array<{
+    caption: string | null;
+    indicator: string | null;
+    objectKey: string | null;
+    contentType: string | null;
+    dataUri: string | null;
+  }>;
 }
 
 export interface ReportCardTermResult {
@@ -409,6 +442,7 @@ export async function loadReportCardData(
        FROM exam_indicator_sets es JOIN indicators i ON i.set_id = es.set_id
        LEFT JOIN indicator_entries ie ON ie.exam_id = es.exam_id AND ie.indicator_id = i.id AND ie.student_id = $3
       WHERE es.exam_id = ANY($1::bigint[]) AND es.class_id = $2
+        AND NOT EXISTS (SELECT 1 FROM indicators ch WHERE ch.parent_id = i.id)
       ORDER BY i.area NULLS LAST, i.sort_order, i.code`,
     [input.examIds, s.class_id, input.studentId],
   );
@@ -597,8 +631,121 @@ export async function loadReportCardData(
     codes: mc.rows,
     participation: extra.rows.find((x) => x.participation)?.participation ?? null,
     promotedTo: extra.rows.find((x) => x.promoted_to)?.promoted_to ?? null,
+    hpc: await loadHpc(c, input.examIds, s.class_id, input.studentId),
     fees: { balance: fmt(balance), defaulter: balance > input.defaulterMin },
     today: localDate(new Date())!,
+  };
+}
+
+/** docs/design/65 part 5: the HPC of the term's exams whose class set is one (the last exam's set). */
+async function loadHpc(
+  c: PoolClient,
+  examIds: string[],
+  classId: string,
+  studentId: string,
+): Promise<ReportCardHpc | null> {
+  const sets = await c.query<{
+    exam_id: string;
+    code: string;
+    set_id: string;
+    grades: string[];
+    level_words: Record<string, string>;
+  }>(
+    `SELECT es.exam_id::text, e.code, s.id::text AS set_id, s.grades, s.level_words
+       FROM exam_indicator_sets es JOIN indicator_sets s ON s.id = es.set_id AND s.kind = 'hpc' AND s.deleted_at IS NULL
+       JOIN exams e ON e.id = es.exam_id
+      WHERE es.exam_id = ANY($1::bigint[]) AND es.class_id = $2
+      ORDER BY array_position($1::bigint[], es.exam_id)`,
+    [examIds, classId],
+  );
+  if (!sets.rows.length) return null;
+  const last = sets.rows[sets.rows.length - 1]!;
+  const hpcExams = sets.rows.map((x) => x.exam_id);
+  const items = await c.query<{
+    id: string;
+    code: string;
+    name: string;
+    area: string | null;
+    parent_id: string | null;
+    kind: 'level' | 'text';
+    description: string | null;
+    descriptors: Record<string, string>;
+  }>(
+    `SELECT id::text, code, name, area, parent_id::text, kind, description, descriptors FROM indicators
+      WHERE set_id = $1 ORDER BY sort_order, code`,
+    [last.set_id],
+  );
+  // entries by the item's code (an exam may use another copy of the set)
+  const ent = await c.query<{
+    exam_id: string;
+    code: string;
+    grade: string | null;
+    note: string | null;
+  }>(
+    `SELECT ie.exam_id::text, i.code, ie.grade, ie.note FROM indicator_entries ie JOIN indicators i ON i.id = ie.indicator_id
+      WHERE ie.exam_id = ANY($1::bigint[]) AND ie.student_id = $2`,
+    [hpcExams, studentId],
+  );
+  const node = (i: (typeof items.rows)[number]): ReportCardHpcItem => {
+    const levels = hpcExams.map(
+      (ex) => ent.rows.find((e) => e.exam_id === ex && e.code === i.code)?.grade ?? null,
+    );
+    const notes = hpcExams
+      .map((ex) => ent.rows.find((e) => e.exam_id === ex && e.code === i.code)?.note ?? null)
+      .filter(Boolean);
+    const lastLevel = [...levels].reverse().find((l) => l) ?? null;
+    return {
+      code: i.code,
+      name: i.name,
+      kind: i.kind,
+      description: i.description,
+      levels,
+      note: (notes[notes.length - 1] as string | undefined) ?? null,
+      descriptor: lastLevel ? (i.descriptors?.[lastLevel] ?? null) : null,
+      children: items.rows.filter((ch) => ch.parent_id === i.id).map(node),
+    };
+  };
+  const areas = new Map<string, ReportCardHpcItem[]>();
+  for (const i of items.rows.filter((x) => !x.parent_id)) {
+    const area = i.area ?? 'Progress';
+    if (!areas.has(area)) areas.set(area, []);
+    areas.get(area)!.push(node(i));
+  }
+  const fb = await c.query<{ kind: 'self' | 'parent' | 'teacher'; text: string }>(
+    `SELECT DISTINCT ON (kind) kind, text FROM hpc_feedback WHERE exam_id = ANY($1::bigint[]) AND student_id = $2
+      ORDER BY kind, array_position($1::bigint[], exam_id) DESC`,
+    [hpcExams, studentId],
+  );
+  const pf = await c.query<{
+    caption: string | null;
+    indicator: string | null;
+    object_key: string | null;
+    content_type: string | null;
+  }>(
+    `SELECT p.caption, i.name AS indicator, f.object_key, f.content_type
+       FROM portfolio_items p JOIN files f ON f.id = p.file_id AND f.deleted_at IS NULL
+       LEFT JOIN indicators i ON i.id = p.indicator_id
+      WHERE p.exam_id = ANY($1::bigint[]) AND p.student_id = $2 AND p.deleted_at IS NULL
+      ORDER BY p.created_at DESC LIMIT 6`,
+    [hpcExams, studentId],
+  );
+  return {
+    exams: sets.rows.map((x) => x.code),
+    levels: last.grades,
+    levelWords: last.level_words ?? {},
+    areas: [...areas.entries()].map(([area, list]) => ({ area, items: list })),
+    feedback: {
+      self: fb.rows.find((x) => x.kind === 'self')?.text ?? null,
+      parent: fb.rows.find((x) => x.kind === 'parent')?.text ?? null,
+      teacher: fb.rows.find((x) => x.kind === 'teacher')?.text ?? null,
+    },
+    portfolio: pf.rows.reverse().map((x) => ({
+      caption: x.caption,
+      indicator: x.indicator,
+      objectKey: x.object_key,
+      contentType: x.content_type,
+      dataUri: null,
+    })),
   };
 }
 
@@ -793,5 +940,84 @@ export function sampleReportCardData(band: ClassBand = 'primary'): ReportCardDat
     ],
     participation: 'Inter-house debate, science exhibition',
     promotedTo: band === 'senior' ? null : 'Class VIII',
+    hpc: band === 'pre_primary' || band === 'primary' ? sampleHpc() : null,
+  };
+}
+
+function sampleHpc(): ReportCardHpc {
+  const item = (
+    code: string,
+    name: string,
+    levels: Array<string | null>,
+    descriptor: string | null = null,
+  ): ReportCardHpcItem => ({
+    code,
+    name,
+    kind: 'level',
+    description: null,
+    levels,
+    note: null,
+    descriptor,
+    children: [],
+  });
+  return {
+    exams: ['T1', 'T2'],
+    levels: ['Beginner', 'Progressing', 'Proficient'],
+    levelWords: { Beginner: 'Stream', Progressing: 'Mountain', Proficient: 'Sky' },
+    areas: [
+      {
+        area: 'Physical development',
+        items: [
+          {
+            ...item('PD3', 'Has a fit and flexible body', [null, null]),
+            children: [
+              item('PD3A', 'Runs, jumps, climbs and balances with control', [
+                'Progressing',
+                'Proficient',
+              ]),
+              item(
+                'PD3B',
+                'Uses the fingers with control',
+                ['Beginner', 'Progressing'],
+                'Holds a crayon; tears paper with help',
+              ),
+            ],
+          },
+        ],
+      },
+      {
+        area: 'Language and literacy',
+        items: [
+          {
+            ...item('LL1', 'Talks and listens well', [null, null]),
+            children: [
+              item('LL1A', 'Listens and answers; speaks in full sentences', [
+                'Progressing',
+                'Progressing',
+              ]),
+              {
+                ...item('LL1N', 'What the teacher noticed', [null, null]),
+                kind: 'text',
+                note: 'Retells a story in her own words with joy',
+              },
+            ],
+          },
+        ],
+      },
+    ],
+    feedback: {
+      self: 'I like drawing and playing with my friends. I can count to fifty.',
+      parent: 'She reads picture books at home every evening.',
+      teacher: 'A cheerful learner who helps her friends.',
+    },
+    portfolio: [
+      {
+        caption: 'My drawing of a tree',
+        indicator: null,
+        objectKey: null,
+        contentType: null,
+        dataUri: null,
+      },
+    ],
   };
 }

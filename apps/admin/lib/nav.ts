@@ -472,6 +472,7 @@ export const NAV: Array<{
       { href: '/exams/masters', label: 'examTypes', permission: 'exams.master.view' },
       { href: '/exams/subject-choices', label: 'subjectChoices', permission: 'exams.marks.view' },
       { href: '/exams/schemes', label: 'markSchemes', permission: 'exams.master.view' },
+      { href: '/exams/indicators', label: 'indicatorSets', permission: 'exams.master.view' },
       { href: '/masters/exams', label: 'examsSetup', permission: 'exams.master.view' },
       { href: '/exams/report-cards', label: 'reportCards', permission: 'exams.report_card.view' },
       {

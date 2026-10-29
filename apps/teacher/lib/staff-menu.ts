@@ -89,6 +89,12 @@ export const STAFF_MENU: StaffGroup[] = [
         allowed: (can) => can('exams.marks.verify') || can('exams.remark.enter'),
       },
       {
+        href: '/indicators',
+        label: 'Indicators and progress card',
+        help: 'Rate your section on the indicators and the progress card',
+        allowed: (can) => can('exams.indicator.enter'),
+      },
+      {
         href: '/exam-register',
         label: 'Exam register',
         help: 'Remarks, exam attendance, height and weight',

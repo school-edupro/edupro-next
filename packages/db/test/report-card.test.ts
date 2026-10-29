@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   DEFAULT_LAYOUTS,
   DPS_NOIDA_TEMPLATES,
+  HPC_TEMPLATES,
   reportCardBody,
   reportCardDocument,
 } from '../src/report-card-html';
@@ -127,5 +128,41 @@ describe('the DPS Noida cards (docs/design/65, part 4)', () => {
     );
     expect(discipline).toContain('Discipline');
     expect(discipline).not.toContain('Health and physical education');
+  });
+});
+
+describe('the holistic progress card (docs/design/65, part 5)', () => {
+  const t = HPC_TEMPLATES[0]!;
+  const doc = (data = sampleReportCardData('pre_primary')) =>
+    reportCardDocument(
+      { layout: t.layout, bodyHtml: null, stylesCss: '', pageWidth: '210mm', pageHeight: '297mm' },
+      [{ data }],
+    );
+
+  it('prints domains, goals as headings and competencies with the level per term and its word', () => {
+    const html = doc();
+    expect(t.band).toBe('pre_primary');
+    expect(html).toContain('<h2>My progress</h2>');
+    expect(html).toContain('<th class="ctr">T1</th><th class="ctr">T2</th>');
+    expect(html).toContain('<td class="goal" colspan="4">Has a fit and flexible body</td>');
+    expect(html).toContain(
+      '<td class="sub">Runs, jumps, climbs and balances with control</td><td class="ctr"><span class="lvl">Progressing<small>Mountain</small></span></td><td class="ctr"><span class="lvl">Proficient<small>Sky</small></span></td>',
+    );
+    expect(html).toContain('Holds a crayon; tears paper with help');
+    // a written item spans the level columns
+    expect(html).toContain('<td colspan="3">Retells a story in her own words with joy</td>');
+    expect(html).toContain('<span><strong>Beginner</strong> Stream</span>');
+  });
+
+  it('prints the three voices and the portfolio; nothing without the HPC', () => {
+    const html = doc();
+    expect(html).toContain('<div class="k">All about me</div>');
+    expect(html).toContain('She reads picture books at home every evening.');
+    expect(html).toContain('A cheerful learner who helps her friends.');
+    expect(html).toContain('<figcaption>My drawing of a tree</figcaption>');
+    const none = doc({ ...sampleReportCardData('pre_primary'), hpc: null });
+    expect(none).not.toContain('My progress');
+    expect(none).not.toContain('All about me');
+    expect(none).not.toContain('My portfolio');
   });
 });

@@ -15,6 +15,7 @@ const PAGES = [
   '/attendance',
   '/marks',
   '/verify-marks',
+  '/indicators',
   '/exam-register',
   '/bus-attendance',
   '/documents',

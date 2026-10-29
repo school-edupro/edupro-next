@@ -12,6 +12,7 @@ import { getTranslations } from 'next-intl/server';
 import { Notice } from '@/components/Notice';
 import { lockExamSubjects, setExamParts, setExamSubjects, updateExam } from '@/lib/actions';
 import { setClassLocks } from '@/lib/exam-entry-actions';
+import { assignIndicatorSet } from '@/lib/hpc-actions';
 import { apiFetch, getMe } from '@/lib/api';
 import type { Exam, ExamClass, ExamSubject, GradeScale, SubjectRow } from '@/lib/types';
 
@@ -25,7 +26,7 @@ export default async function ExamPage({
 }) {
   const { id } = await params;
   const sp = await searchParams;
-  const [t, x, me, exam, subjects, scales] = await Promise.all([
+  const [t, x, me, exam, subjects, scales, sets] = await Promise.all([
     getTranslations('pages.exams_detail'),
     getTranslations('exams'),
     getMe(),
@@ -36,6 +37,11 @@ export default async function ExamPage({
     apiFetch<{ data: GradeScale[] }>('/exams/grade-scales')
       .then((r) => r.data)
       .catch(() => [] as GradeScale[]),
+    apiFetch<{ data: Array<{ id: string; code: string; name: string; kind: string }> }>(
+      '/exams/indicator-sets',
+    )
+      .then((r) => r.data)
+      .catch(() => []),
   ]);
   const canUnlock = me.permissions.includes('exams.marks.unlock');
   const canManage = me.permissions.includes('exams.master.manage');
@@ -58,6 +64,9 @@ export default async function ExamPage({
             </a>
             <a className="ep-btn ep-btn--ghost ep-btn--sm" href={`/exams/${exam.id}/status`}>
               Marks status
+            </a>
+            <a className="ep-btn ep-btn--ghost ep-btn--sm" href={`/exams/${exam.id}/indicators`}>
+              Indicators and HPC
             </a>
             <a className="ep-btn ep-btn--ghost ep-btn--sm" href="/exams/subject-choices">
               Subject choices
@@ -302,6 +311,34 @@ export default async function ExamPage({
               <FormActions>
                 <Button type="submit" variant="secondary">
                   Save the locks
+                </Button>
+              </FormActions>
+            </form>
+          ) : null}
+          {canManage ? (
+            <form action={assignIndicatorSet} style={{ marginTop: 'var(--sp-4)' }}>
+              <input type="hidden" name="examId" value={exam.id} />
+              <input type="hidden" name="classId" value={classId} />
+              <h3 className="ep-cdash__h3">Indicators or progress card</h3>
+              <SelectField
+                id="setId"
+                name="setId"
+                label="The set the class uses in this exam"
+                defaultValue={klass?.indicatorSetId ?? ''}
+                options={[
+                  { value: '', label: 'None' },
+                  ...sets.map((k) => ({
+                    value: k.id,
+                    label: `${k.name} · ${k.code}${k.kind === 'hpc' ? ' (progress card)' : ''}`,
+                  })),
+                ]}
+              />
+              <p className="ep-field__help" style={{ marginTop: 0 }}>
+                Sets are made under <a href="/exams/indicators">Indicators and HPC</a>.
+              </p>
+              <FormActions>
+                <Button type="submit" variant="secondary">
+                  Save the set
                 </Button>
               </FormActions>
             </form>

@@ -137,7 +137,7 @@ export interface Kind {
 }
 
 export const MARKS: Kind = { permission: EXAMS.marksEnter, subjectAware: true };
-const INDICATORS: Kind = {
+export const INDICATORS: Kind = {
   permission: EXAMS.indicatorEnter,
   subjectAware: false,
   lock: 'indicators_locked',
@@ -237,7 +237,7 @@ export class ExamEntryService {
       );
   }
 
-  private async roster(c: PoolClient, yearId: string, sectionId: string): Promise<RosterStudent[]> {
+  async roster(c: PoolClient, yearId: string, sectionId: string): Promise<RosterStudent[]> {
     const r = await c.query<{
       student_id: string;
       name: string;
@@ -258,7 +258,7 @@ export class ExamEntryService {
     }));
   }
 
-  private assertRoster(rows: Array<{ studentId: string }>, roster: RosterStudent[]) {
+  assertRoster(rows: Array<{ studentId: string }>, roster: RosterStudent[]) {
     const ids = new Set(roster.map((r) => r.studentId));
     const stranger = rows.find((r) => !ids.has(r.studentId));
     if (stranger)
@@ -286,7 +286,7 @@ export class ExamEntryService {
   }
 
   /** An entry type locked on the exam's class (docs/design/65). */
-  private async assertTypeOpen(c: PoolClient, examId: string, classId: string, kind: Kind) {
+  async assertTypeOpen(c: PoolClient, examId: string, classId: string, kind: Kind) {
     if (!kind.lock) return;
     const r = await c.query<{ locked: boolean }>(
       // eslint-disable-next-line no-restricted-syntax -- the column is one of the fixed lock names above
@@ -730,6 +730,58 @@ export class ExamEntryService {
   }
 
   // ---- indicators --------------------------------------------------------------------------------
+  /** The class's set in the exam with its items (docs/design/65 part 5: a tree, levels or text). */
+  async classSet(c: PoolClient, examId: string, classId: string) {
+    const set = await c.query<{
+      id: string;
+      code: string;
+      name: string;
+      grades: string[];
+      kind: 'indicators' | 'hpc';
+      level_words: Record<string, string>;
+    }>(
+      `SELECT s.id::text, s.code, s.name, s.grades, s.kind, s.level_words FROM exam_indicator_sets x JOIN indicator_sets s ON s.id = x.set_id
+        WHERE x.exam_id = $1 AND x.class_id = $2 AND s.deleted_at IS NULL`,
+      [examId, classId],
+    );
+    const s = set.rows[0];
+    if (!s) return null;
+    const ind = await c.query<{
+      id: string;
+      code: string;
+      name: string;
+      area: string | null;
+      parent_id: string | null;
+      kind: 'level' | 'text';
+      description: string | null;
+      descriptors: Record<string, string>;
+    }>(
+      `SELECT id::text, code, name, area, parent_id::text, kind, description, descriptors FROM indicators WHERE set_id = $1 ORDER BY sort_order, code`,
+      [s.id],
+    );
+    const parents = new Set(ind.rows.map((i) => i.parent_id).filter(Boolean));
+    return {
+      id: s.id,
+      code: s.code,
+      name: s.name,
+      grades: s.grades,
+      kind: s.kind,
+      levelWords: s.level_words,
+      indicators: ind.rows.map((i) => ({
+        id: i.id,
+        code: i.code,
+        name: i.name,
+        area: i.area,
+        parentId: i.parent_id,
+        kind: i.kind,
+        description: i.description,
+        descriptors: i.descriptors,
+        /** has items under it: a heading, not entered */
+        heading: parents.has(i.id),
+      })),
+    };
+  }
+
   async indicators(ctx: RequestContext, examId: string, q: EntryQueryDto) {
     const tenant = requireTenant(ctx);
     const yearId = this.year(tenant);
@@ -737,27 +789,12 @@ export class ExamEntryService {
       const exam = await this.exam(c, examId, yearId);
       const section = await this.section(c, q.classSectionId, yearId, examId);
       await this.scopes.assert(tenant, EXAMS.marksView, 'class_section', section.id);
-      const set = await c.query<{
-        id: string;
-        code: string;
-        name: string;
-        grades: string[];
-      }>(
-        `SELECT s.id::text, s.code, s.name, s.grades FROM exam_indicator_sets x JOIN indicator_sets s ON s.id = x.set_id
-          WHERE x.exam_id = $1 AND x.class_id = $2 AND s.deleted_at IS NULL`,
-        [examId, section.class_id],
-      );
-      const ind = set.rows[0]
-        ? await c.query<{ id: string; code: string; name: string; area: string | null }>(
-            `SELECT id::text, code, name, area FROM indicators WHERE set_id = $1 ORDER BY sort_order, code`,
-            [set.rows[0].id],
-          )
-        : { rows: [] };
+      const set = await this.classSet(c, examId, section.class_id);
       const roster = await this.roster(c, yearId, section.id);
       const entries = await c.query<{
         student_id: string;
         indicator_id: string;
-        grade: string;
+        grade: string | null;
         note: string | null;
       }>(
         `SELECT ie.student_id::text, ie.indicator_id::text, ie.grade, ie.note FROM indicator_entries ie
@@ -765,25 +802,66 @@ export class ExamEntryService {
           WHERE ie.exam_id = $1`,
         [examId, section.id, yearId],
       );
-      const byStudent = new Map<string, Record<string, { grade: string; note: string | null }>>();
+      const byStudent = new Map<
+        string,
+        Record<string, { grade: string | null; note: string | null }>
+      >();
       for (const e of entries.rows) {
         const m = byStudent.get(e.student_id) ?? {};
         m[e.indicator_id] = { grade: e.grade, note: e.note };
         byStudent.set(e.student_id, m);
       }
+      // the HPC's words (the child's, the parent's, the teacher's) and portfolio photos per student
+      const fb = new Map<string, Record<string, { text: string; byFamily: boolean }>>();
+      const photos = new Map<string, number>();
+      if (set?.kind === 'hpc') {
+        const f = await c.query<{
+          student_id: string;
+          kind: string;
+          text: string;
+          by_family: boolean;
+        }>(
+          `SELECT student_id::text, kind, text, by_family FROM hpc_feedback WHERE exam_id = $1 AND student_id = ANY($2::bigint[])`,
+          [examId, roster.map((r) => r.studentId)],
+        );
+        for (const x of f.rows) {
+          const m = fb.get(x.student_id) ?? {};
+          m[x.kind] = { text: x.text, byFamily: x.by_family };
+          fb.set(x.student_id, m);
+        }
+        const p = await c.query<{ student_id: string; n: number }>(
+          `SELECT student_id::text, count(*)::int AS n FROM portfolio_items
+            WHERE exam_id = $1 AND student_id = ANY($2::bigint[]) AND deleted_at IS NULL GROUP BY student_id`,
+          [examId, roster.map((r) => r.studentId)],
+        );
+        for (const x of p.rows) photos.set(x.student_id, x.n);
+      }
+      const lock = await c.query<{ locked: boolean }>(
+        `SELECT indicators_locked AS locked FROM exam_classes WHERE exam_id = $1 AND class_id = $2`,
+        [examId, section.class_id],
+      );
       return {
         exam: { id: exam.id, code: exam.code, name: exam.name, marksLocked: exam.marks_locked },
         section: { id: section.id, code: section.code },
-        set: set.rows[0]
+        locked: exam.marks_locked || Boolean(lock.rows[0]?.locked),
+        set: set
           ? {
-              id: set.rows[0].id,
-              code: set.rows[0].code,
-              name: set.rows[0].name,
-              grades: set.rows[0].grades,
+              id: set.id,
+              code: set.code,
+              name: set.name,
+              grades: set.grades,
+              kind: set.kind,
+              levelWords: set.levelWords,
             }
           : null,
-        indicators: ind.rows,
-        rows: roster.map((s) => ({ ...s, grades: byStudent.get(s.studentId) ?? {} })),
+        indicators: set?.indicators ?? [],
+        rows: roster.map((s) => ({
+          ...s,
+          grades: byStudent.get(s.studentId) ?? {},
+          ...(set?.kind === 'hpc'
+            ? { feedback: fb.get(s.studentId) ?? {}, photos: photos.get(s.studentId) ?? 0 }
+            : {}),
+        })),
       };
     });
   }
@@ -799,32 +877,36 @@ export class ExamEntryService {
         throw new DomainError('exams.entry_locked', 'The exam is locked', { status: 409 });
       await this.assertTypeOpen(c, examId, section.class_id, INDICATORS);
       await c.query(`SELECT app.assert_year_open($1, 'exams')`, [yearId]);
-      const set = await c.query<{ id: string; grades: string[] }>(
-        `SELECT s.id::text, s.grades FROM exam_indicator_sets x JOIN indicator_sets s ON s.id = x.set_id WHERE x.exam_id = $1 AND x.class_id = $2`,
-        [examId, section.class_id],
-      );
-      if (!set.rows[0])
+      const set = await this.classSet(c, examId, section.class_id);
+      if (!set)
         throw new DomainError(
           'exams.no_indicator_set',
           'No indicator set is assigned to this class',
-          {
-            status: 409,
-          },
+          { status: 409 },
         );
-      const valid = await c.query<{ id: string }>(
-        `SELECT id::text FROM indicators WHERE set_id = $1`,
-        [set.rows[0].id],
-      );
-      const validIds = new Set(valid.rows.map((v) => v.id));
-      const grades = new Set(set.rows[0].grades);
+      const items = new Map(set.indicators.map((i) => [i.id, i]));
+      const grades = new Set(set.grades);
       this.assertRoster(dto.rows, await this.roster(c, yearId, section.id));
       for (const r of dto.rows) {
-        if (!validIds.has(r.indicatorId))
+        const it = items.get(r.indicatorId);
+        if (!it)
           throw new DomainError('exams.indicator_not_in_set', 'Indicator is not in the class set', {
             status: 409,
             extra: { indicatorId: r.indicatorId },
           });
-        if (!grades.has(r.grade))
+        if (it.heading)
+          throw new DomainError(
+            'exams.indicator_heading',
+            `${it.name} is a heading: its items are entered`,
+            { status: 409, extra: { indicatorId: r.indicatorId } },
+          );
+        if (r.grade && it.kind === 'text')
+          throw new DomainError(
+            'exams.indicator_text',
+            `${it.name} takes a written observation, not a level`,
+            { status: 409, extra: { indicatorId: r.indicatorId } },
+          );
+        if (r.grade && !grades.has(r.grade))
           throw new DomainError('exams.grade_not_allowed', `Grade ${r.grade} is not in the set`, {
             status: 409,
             extra: { grade: r.grade, allowed: [...grades] },
@@ -832,12 +914,22 @@ export class ExamEntryService {
       }
       let n = 0;
       for (const r of dto.rows) {
+        const grade = r.grade || null;
+        const note = r.note?.trim() || null;
+        if (!grade && !note) {
+          const d = await c.query(
+            `DELETE FROM indicator_entries WHERE exam_id = $1 AND indicator_id = $2 AND student_id = $3`,
+            [examId, r.indicatorId, r.studentId],
+          );
+          n += d.rowCount ?? 0;
+          continue;
+        }
         const u = await c.query(
           `INSERT INTO indicator_entries (school_id, exam_id, indicator_id, student_id, grade, note, entered_by)
            VALUES (app.current_school_id(), $1, $2, $3, $4, $5, app.current_user_id())
            ON CONFLICT (exam_id, indicator_id, student_id) DO UPDATE SET grade = EXCLUDED.grade, note = EXCLUDED.note, entered_by = app.current_user_id()
-           WHERE indicator_entries.grade <> EXCLUDED.grade OR indicator_entries.note IS DISTINCT FROM EXCLUDED.note`,
-          [examId, r.indicatorId, r.studentId, r.grade, r.note ?? null],
+           WHERE indicator_entries.grade IS DISTINCT FROM EXCLUDED.grade OR indicator_entries.note IS DISTINCT FROM EXCLUDED.note`,
+          [examId, r.indicatorId, r.studentId, grade, note],
         );
         n += u.rowCount ?? 0;
       }
@@ -1084,71 +1176,148 @@ export class ExamEntryService {
 
   // ---- masters: indicator sets, exam ↔ set, remark bank -----------------------------------------
   async indicatorSets(ctx: RequestContext) {
-    return this.db.tenant(requireTenant(ctx), async (c) => {
-      const sets = await c.query<{
-        id: string;
-        code: string;
-        name: string;
-        grades: string[];
-        status: string;
-      }>(
-        `SELECT id::text, code, name, grades, status::text FROM indicator_sets WHERE deleted_at IS NULL ORDER BY code`,
-      );
-      const ind = await c.query<{
-        id: string;
-        set_id: string;
-        code: string;
-        name: string;
-        area: string | null;
-        sort_order: number;
-      }>(
-        `SELECT id::text, set_id::text, code, name, area, sort_order FROM indicators ORDER BY set_id, sort_order, code`,
-      );
-      return sets.rows.map((s) => ({
-        ...s,
-        indicators: ind.rows
-          .filter((i) => i.set_id === s.id)
-          .map((i) => ({
-            id: i.id,
-            code: i.code,
-            name: i.name,
-            area: i.area,
-            sortOrder: i.sort_order,
-          })),
-      }));
-    });
+    return this.db.tenant(requireTenant(ctx), async (c) => this.setsOf(c));
   }
 
+  private async setsOf(c: PoolClient) {
+    const sets = await c.query<{
+      id: string;
+      code: string;
+      name: string;
+      grades: string[];
+      status: string;
+      kind: string;
+      level_words: Record<string, string>;
+    }>(
+      `SELECT id::text, code, name, grades, status::text, kind, level_words FROM indicator_sets WHERE deleted_at IS NULL ORDER BY code`,
+    );
+    const ind = await c.query<{
+      id: string;
+      set_id: string;
+      code: string;
+      name: string;
+      area: string | null;
+      sort_order: number;
+      parent_code: string | null;
+      kind: string;
+      description: string | null;
+      descriptors: Record<string, string>;
+    }>(
+      `SELECT i.id::text, i.set_id::text, i.code, i.name, i.area, i.sort_order, p.code AS parent_code, i.kind, i.description, i.descriptors
+         FROM indicators i LEFT JOIN indicators p ON p.id = i.parent_id ORDER BY i.set_id, i.sort_order, i.code`,
+    );
+    return sets.rows.map(({ level_words, ...s }) => ({
+      ...s,
+      levelWords: level_words,
+      indicators: ind.rows
+        .filter((i) => i.set_id === s.id)
+        .map((i) => ({
+          id: i.id,
+          code: i.code,
+          name: i.name,
+          area: i.area,
+          sortOrder: i.sort_order,
+          parentCode: i.parent_code,
+          kind: i.kind,
+          description: i.description,
+          descriptors: i.descriptors,
+        })),
+    }));
+  }
+
+  /** A set with its items; docs/design/65 part 5: an item under another (one level deep), levels or text. */
   async upsertIndicatorSet(ctx: RequestContext, dto: UpsertIndicatorSetDto) {
     return this.db.tenant(requireTenant(ctx), async (c) => {
-      const s = await c.query<{ id: string }>(
-        `INSERT INTO indicator_sets (school_id, code, name, grades, created_by, updated_by)
-         VALUES (app.current_school_id(), $1, $2, $3, app.current_user_id(), app.current_user_id())
-         ON CONFLICT (school_id, code) WHERE deleted_at IS NULL DO UPDATE SET name = EXCLUDED.name, grades = EXCLUDED.grades, updated_by = app.current_user_id()
-         RETURNING id::text`,
-        [dto.code, dto.name, dto.grades],
-      );
-      const setId = s.rows[0]!.id;
-      const codes = dto.indicators.map((i) => i.code);
-      await c.query(`DELETE FROM indicators WHERE set_id = $1 AND NOT (code = ANY($2::text[]))`, [
-        setId,
-        codes,
-      ]);
-      for (const i of dto.indicators) {
-        await c.query(
-          `INSERT INTO indicators (school_id, set_id, code, name, area, sort_order) VALUES (app.current_school_id(), $1, $2, $3, $4, $5)
-           ON CONFLICT (set_id, code) DO UPDATE SET name = EXCLUDED.name, area = EXCLUDED.area, sort_order = EXCLUDED.sort_order`,
-          [setId, i.code, i.name, i.area ?? null, i.sortOrder],
-        );
-      }
+      const id = await this.writeSet(c, dto);
       await this.audit.stage(ctx, c, {
         action: 'exams.indicator_set.upsert',
         entityType: 'indicator_sets',
-        entityId: setId,
-        after: dto,
+        entityId: id,
+        after: { code: dto.code, kind: dto.kind, grades: dto.grades, items: dto.indicators.length },
       });
-      return { id: setId };
+      return { id };
     });
+  }
+
+  async writeSet(c: PoolClient, dto: UpsertIndicatorSetDto) {
+    const codes = new Set<string>();
+    for (const i of dto.indicators) {
+      if (codes.has(i.code))
+        throw new DomainError('validation-failed', `The code ${i.code} is used twice`, {
+          status: 400,
+        });
+      codes.add(i.code);
+    }
+    const byCode = new Map(dto.indicators.map((i) => [i.code, i]));
+    for (const i of dto.indicators) {
+      if (!i.parentCode) continue;
+      const p = byCode.get(i.parentCode);
+      if (!p || p.code === i.code)
+        throw new DomainError(
+          'validation-failed',
+          `${i.code}: no item ${i.parentCode} to go under`,
+          {
+            status: 400,
+          },
+        );
+      if (p.parentCode)
+        throw new DomainError(
+          'validation-failed',
+          `${i.code}: ${p.code} is itself under another item (three levels at most: area, item, sub-item)`,
+          { status: 400 },
+        );
+    }
+    for (const [lvl] of Object.entries(dto.levelWords))
+      if (!dto.grades.includes(lvl))
+        throw new DomainError('validation-failed', `${lvl} is not one of the levels`, {
+          status: 400,
+        });
+    const s = await c.query<{ id: string }>(
+      `INSERT INTO indicator_sets (school_id, code, name, grades, kind, level_words, created_by, updated_by)
+       VALUES (app.current_school_id(), $1, $2, $3, $4, $5::jsonb, app.current_user_id(), app.current_user_id())
+       ON CONFLICT (school_id, code) WHERE deleted_at IS NULL DO UPDATE
+         SET name = EXCLUDED.name, grades = EXCLUDED.grades, kind = EXCLUDED.kind, level_words = EXCLUDED.level_words,
+             updated_by = app.current_user_id()
+       RETURNING id::text`,
+      [dto.code, dto.name, dto.grades, dto.kind, JSON.stringify(dto.levelWords)],
+    );
+    const setId = s.rows[0]!.id;
+    await c.query(`DELETE FROM indicators WHERE set_id = $1 AND NOT (code = ANY($2::text[]))`, [
+      setId,
+      [...codes],
+    ]);
+    // the items first, then who goes under whom
+    for (const i of dto.indicators) {
+      await c.query(
+        `INSERT INTO indicators (school_id, set_id, code, name, area, sort_order, kind, description, descriptors)
+         VALUES (app.current_school_id(), $1, $2, $3, $4, $5, $6, $7, $8::jsonb)
+         ON CONFLICT (set_id, code) DO UPDATE SET name = EXCLUDED.name, area = EXCLUDED.area, sort_order = EXCLUDED.sort_order,
+           kind = EXCLUDED.kind, description = EXCLUDED.description, descriptors = EXCLUDED.descriptors`,
+        [
+          setId,
+          i.code,
+          i.name,
+          i.area ?? null,
+          i.sortOrder,
+          i.kind,
+          i.description ?? null,
+          JSON.stringify(i.descriptors),
+        ],
+      );
+    }
+    await c.query(
+      `UPDATE indicators i SET parent_id = p.id
+         FROM jsonb_to_recordset($2::jsonb) AS x(code TEXT, "parentCode" TEXT)
+         LEFT JOIN indicators p ON p.set_id = $1 AND p.code = x."parentCode"
+        WHERE i.set_id = $1 AND i.code = x.code AND i.parent_id IS DISTINCT FROM p.id`,
+      [
+        setId,
+        JSON.stringify(
+          dto.indicators.map((i) => ({ code: i.code, parentCode: i.parentCode ?? null })),
+        ),
+      ],
+    );
+    return setId;
   }
 
   async setExamIndicatorSet(ctx: RequestContext, examId: string, dto: SetExamIndicatorSetDto) {

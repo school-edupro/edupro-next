@@ -35,6 +35,13 @@ export class ReportCardsController {
     return { data: await this.cards.installDps(ctx) };
   }
 
+  @Post('templates/hpc')
+  @ApiOperation({ summary: 'Install the holistic progress card (Balvatika to II)' })
+  @RequirePermission(REPORT_CARDS.manage)
+  async installHpc(@ReqCtx() ctx: RequestContext) {
+    return { data: await this.cards.installDps(ctx, 'hpc') };
+  }
+
   @Get('signatures')
   @ApiOperation({ summary: 'Signatures (and the seal) the cards print, by role' })
   @RequirePermission(REPORT_CARDS.view)

@@ -5,7 +5,7 @@
  * layout renderer while keeping the page frame. Batch rendering concatenates one page per pupil.
  */
 import { documentHtml, renderTemplate } from './template-engine';
-import type { ReportCardData } from './report-card-data';
+import type { ReportCardData, ReportCardHpcItem } from './report-card-data';
 
 export type ReportCardSectionType =
   | 'header'
@@ -26,7 +26,11 @@ export type ReportCardSectionType =
   | 'promotion'
   | 'seal'
   | 'evaluation_key'
-  | 'page_break';
+  | 'page_break'
+  // docs/design/65 part 5 (the HPC)
+  | 'hpc_record'
+  | 'hpc_feedback'
+  | 'portfolio';
 
 export interface ReportCardSection {
   type: ReportCardSectionType;
@@ -229,6 +233,16 @@ export const REPORT_CARD_CSS = `
   .rc .seal { width: 90px; height: 90px; border: 1px dashed #9AA5B1; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: #9AA5B1; font-size: 9px; margin: 8px 0 0 auto; }
   .rc img.seal { border: 0; object-fit: contain; }
   .rc .key { color: #52606D; font-size: 9px; margin-top: 4px; }
+  .rc td.goal { font-weight: 600; background: #F0F4F8 !important; }
+  .rc td.sub { padding-left: 16px; }
+  .rc .lvl { font-weight: 600; } .rc .lvl small { display: block; font-weight: 400; color: #52606D; font-size: 8.5px; }
+  .rc .words { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+  .rc .words .remark { min-height: 64px; }
+  .rc .words .k { color: #007A94; font-family: Poppins, Arial, sans-serif; font-weight: 600; font-size: 10px; margin-bottom: 2px; }
+  .rc .folio { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+  .rc .folio figure { margin: 0; border: 1px solid #CBD2D9; border-radius: 6px; padding: 4px; text-align: center; }
+  .rc .folio img, .rc .folio .ph { width: 100%; height: 110px; object-fit: cover; background: #F5F7FA; display: block; border-radius: 4px; }
+  .rc .folio figcaption { font-size: 9px; color: #52606D; margin-top: 2px; }
 `;
 
 const esc = (v: unknown): string =>
@@ -566,6 +580,67 @@ function evaluationKey(d: ReportCardData, s: ReportCardSection): string {
   return `<h2>${esc(s.title ?? 'Evaluation key')}</h2>${gradeScale(d)}${how ? `<div class="key">${esc(how)}${total ? ` = ${esc(total)}` : ''}</div>` : ''}${(d.codes ?? []).length ? `<div class="key">${(d.codes ?? []).map((c) => `${esc(c.code)} ${esc(c.name)}`).join(' · ')}</div>` : ''}`;
 }
 
+/** docs/design/65 part 5: the HPC's domains, goals and competencies with the level per exam. */
+function hpcRecord(d: ReportCardData, s: ReportCardSection): string {
+  const h = d.hpc;
+  if (!h) return '';
+  const many = h.exams.length > 1;
+  const head = many
+    ? h.exams.map((x) => `<th class="ctr">${esc(x)}</th>`).join('')
+    : '<th class="ctr">Level</th>';
+  const cols = Math.max(h.exams.length, 1);
+  const lvl = (l: string | null) =>
+    l
+      ? `<span class="lvl">${esc(l)}${h.levelWords[l] ? `<small>${esc(h.levelWords[l])}</small>` : ''}</span>`
+      : '';
+  const row = (i: ReportCardHpcItem, sub: boolean): string => {
+    const name = `<td${sub ? ' class="sub"' : ''}>${esc(i.name)}</td>`;
+    if (i.kind === 'text')
+      return `<tr>${name}<td colspan="${cols + 1}">${esc(i.note ?? '')}</td></tr>`;
+    return `<tr>${name}${(many ? i.levels : [i.levels[i.levels.length - 1] ?? null]).map((l) => `<td class="ctr">${lvl(l)}</td>`).join('')}<td>${esc(i.descriptor ?? i.note ?? '')}</td></tr>`;
+  };
+  const body = h.areas
+    .map(
+      (a) =>
+        `<tr><td colspan="${cols + 2}" style="font-weight:600;background:#E6EEF8">${esc(a.area)}</td></tr>` +
+        a.items
+          .map((i) =>
+            i.children.length
+              ? `<tr><td class="goal" colspan="${cols + 2}">${esc(i.name)}</td></tr>${i.children.map((ch) => row(ch, true)).join('')}`
+              : row(i, false),
+          )
+          .join(''),
+    )
+    .join('');
+  const legend = h.levels
+    .map(
+      (l) =>
+        `<span><strong>${esc(l)}</strong>${h.levelWords[l] ? ` ${esc(h.levelWords[l])}` : ''}</span>`,
+    )
+    .join('');
+  return `<h2>${esc(s.title ?? 'My progress')}</h2><table><thead><tr><th>Domain and competency</th>${head}<th>What it means</th></tr></thead><tbody>${body}</tbody></table><div class="scale">${legend}</div>`;
+}
+
+/** The child's own words, the parent's and the teacher's. */
+function hpcFeedback(d: ReportCardData, s: ReportCardSection): string {
+  const f = d.hpc?.feedback;
+  if (!f) return '';
+  const box = (k: string, v: string | null) =>
+    `<div><div class="k">${esc(k)}</div><div class="remark">${v ? esc(v) : '&nbsp;'}</div></div>`;
+  return `<h2>${esc(s.title ?? 'In our words')}</h2><div class="words">${box('All about me', f.self)}${box('My parent says', f.parent)}${box('My teacher says', f.teacher)}</div>`;
+}
+
+function portfolio(d: ReportCardData, s: ReportCardSection): string {
+  const p = d.hpc?.portfolio ?? [];
+  if (!p.length) return '';
+  return `<h2>${esc(s.title ?? 'My portfolio')}</h2><div class="folio">${p
+    .map(
+      (x) =>
+        `<figure>${x.dataUri ? `<img src="${x.dataUri}" alt="${esc(x.caption ?? 'Portfolio photo')}" />` : '<div class="ph"></div>'}<figcaption>${esc(x.caption ?? x.indicator ?? '')}</figcaption></figure>`,
+    )
+    .join('')}</div>`;
+}
+
 /** One pupil's card body (no page frame). */
 export function reportCardBody(
   d: ReportCardData,
@@ -613,6 +688,12 @@ export function reportCardBody(
         return evaluationKey(d, s);
       case 'page_break':
         return '<div class="page-break"></div>';
+      case 'hpc_record':
+        return hpcRecord(d, s);
+      case 'hpc_feedback':
+        return hpcFeedback(d, s);
+      case 'portfolio':
+        return portfolio(d, s);
       default:
         return '';
     }
@@ -808,6 +889,34 @@ export const DPS_NOIDA_TEMPLATES: Array<{
         { type: 'remarks', title: "Class teacher's remarks" },
         { type: 'signatures', roles: SIGN },
         { type: 'evaluation_key' },
+      ],
+    },
+  },
+];
+
+/**
+ * The Holistic Progress Card for Balvatika to Class II (docs/design/65 part 5, after NCERT's HPC for
+ * the foundational stage): the domains' competencies with the level per term, the child's, parent's
+ * and teacher's words, and portfolio photos. Band pre-primary; Classes I and II take it per class.
+ */
+export const HPC_TEMPLATES: typeof DPS_NOIDA_TEMPLATES = [
+  {
+    code: 'hpc_foundational',
+    name: 'Holistic progress card (Balvatika to II)',
+    band: 'pre_primary',
+    layout: {
+      subtitle: 'Holistic progress card',
+      sections: [
+        { type: 'cover', title: 'Holistic progress card' },
+        { type: 'header' },
+        { type: 'student', showPhoto: false },
+        { type: 'hpc_record', title: 'My progress' },
+        { type: 'page_break' },
+        { type: 'hpc_feedback', title: 'In our words' },
+        { type: 'portfolio', title: 'My portfolio' },
+        { type: 'attendance' },
+        { type: 'health' },
+        { type: 'signatures', roles: ['class_teacher', 'parent', 'principal'] },
       ],
     },
   },

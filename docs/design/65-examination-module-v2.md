@@ -279,3 +279,38 @@ batteries (AAHPERD), ICSE / state board cards, moving the old module's mark hist
   term results, register, DPS install, signatures, remarks, a card preview with the term result and a
   per-class template); all exam suites + permission coverage 74; db rls; workers 41; a11y schemes,
   report cards, templates, signatures, the teacher app (exam register added).
+- **Part 5** (migrations 0280, 0281): `indicator_sets.kind` (indicators / hpc) and `level_words` (a
+  level's word on the card); `indicators.parent_id` (one level deep: area → item → sub-item; an item
+  with items under it is a heading, not entered), `kind` (level / text: a written observation),
+  `description`, `descriptors` (level → what it means for the item); `indicator_entries.grade` may be
+  empty when a note is given. `hpc_feedback` (exam, student, self / parent / teacher, `by_family`) and
+  `portfolio_items` (a photo file, caption, the item it shows; soft-deleted). Right
+  `exams.family.feedback` (parents). The NCERT foundational set (`hpc-preset.ts`, code
+  HPC_FOUNDATION): six domains, thirteen curricular goals as headings, twenty-four competencies with a
+  meaning per level (Beginner "Tries it with a lot of help", Progressing "Does it with some help",
+  Proficient "Does it on their own"), the words Stream / Mountain / Sky; the school edits it. API:
+  `PUT exams/indicator-sets` takes `kind`, `levelWords` and per item `parentCode`, `kind`,
+  `description`, `descriptors` (up to 150 items; levels up to 20 letters; three levels at most);
+  `POST exams/indicator-sets/hpc` adds the set once; `GET exams/:id/indicators` gives the tree
+  (`heading`), `locked`, and for a progress card each child's feedback and photo count;
+  `PUT exams/:id/indicators` refuses a heading, a level for a written item and an unknown level, and
+  removes an entry given neither; `PUT exams/:id/hpc-feedback` (what a parent wrote in the app is
+  kept: `exams.feedback_by_family`); `GET/POST exams/:id/portfolio`, `DELETE …/:itemId`,
+  `GET …/:itemId/image` (PNG / JPEG up to 1 MB checked by its first bytes, twelve per child and exam,
+  file classification personal); `GET/PUT exams/mine/feedback` (a parent, while the class's
+  indicators and the exam are open); `POST exams/report-cards/templates/hpc`. The exam's classes carry
+  `indicatorSetId`. All of it follows the indicators' entry right (class teacher or coordinator of the
+  section) and lock. Card data: `hpc` (the term's exams with the HPC, levels and words, the tree with
+  the level per exam, the last note and the meaning of the last level, the three voices, six photos
+  filled by the worker and the preview); flat `indicators` leave out headings. Sections `hpc_record`,
+  `hpc_feedback`, `portfolio`; template `hpc_foundational` (pre-primary; Classes I and II take it per
+  class on the release). Admin: Exams → Indicators and HPC (the sets with their tree, add the NCERT
+  set and its card, the set editor: levels, words, items with area, under, takes, meanings), the set
+  per class on the exam page, an exam's Indicators and HPC (section and area grid with goals as
+  column groups; a child's words and portfolio with View / Download and Remove, photo upload).
+  Teacher app: Indicators and progress card (the same, Hindi labels). Parent app: Results shows "Your
+  feedback for the progress card" per exam while it is open.
+- Tests: exam-hpc e2e 5 (the set added once and its rules, levels and notes, headings refused, the
+  three voices, photos, the parent's feedback kept and the lock, the card printing all of it);
+  renderer 12 (two for the HPC card); all exam suites + permission coverage 79; db 73; workers 41;
+  a11y the new admin pages, the teacher and family walks.

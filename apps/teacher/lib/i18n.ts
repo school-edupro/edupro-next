@@ -622,6 +622,57 @@ const DICT: Record<string, string> = {
   'Took part in': 'भाग लिया',
   'Promoted to': 'पदोन्नत कक्षा',
   'Promoted to (final term)': 'पदोन्नत कक्षा (अंतिम सत्र)',
+  'Indicators and progress card': 'संकेतक और प्रगति कार्ड',
+  'Rate your section on the indicators and the progress card':
+    'अपने अनुभाग को संकेतकों और प्रगति कार्ड पर आँकें',
+  'Class teachers rate their section on the indicators of the exam.':
+    'कक्षा अध्यापक परीक्षा के संकेतकों पर अपने अनुभाग को आँकते हैं।',
+  'Indicator entry is locked; ask the coordinator to reopen it.':
+    'संकेतक प्रविष्टि लॉक है; समन्वयक से इसे फिर खोलने को कहें।',
+  'Only the class teacher of this section can enter these.':
+    'केवल इस अनुभाग के कक्षा अध्यापक इन्हें भर सकते हैं।',
+  'The parent wrote this in the parent app; it is kept as they wrote it.':
+    'अभिभावक ने इसे पेरेंट ऐप में लिखा है; यह वैसा ही रखा जाता है।',
+  'A child has up to twelve photos in an exam; remove one first.':
+    'एक परीक्षा में एक बच्चे की अधिकतम बारह फ़ोटो; पहले एक हटाएँ।',
+  'This section has no indicators in this exam.':
+    'इस परीक्षा में इस अनुभाग के कोई संकेतक नहीं हैं।',
+  Area: 'क्षेत्र',
+  Indicators: 'संकेतक',
+  Roll: 'रोल',
+  'In our words and the portfolio': 'हमारे शब्दों में और पोर्टफ़ोलियो',
+  photos: 'फ़ोटो',
+  'All about me (the child’s words)': 'मेरे बारे में (बच्चे के शब्द)',
+  'The parent’s feedback': 'अभिभावक की प्रतिक्रिया',
+  'My observations': 'मेरे अवलोकन',
+  'Written by the parent in the parent app.': 'अभिभावक ने पेरेंट ऐप में लिखा।',
+  'Save the words': 'शब्द सहेजें',
+  Portfolio: 'पोर्टफ़ोलियो',
+  Photo: 'फ़ोटो',
+  Remove: 'हटाएँ',
+  Download: 'डाउनलोड',
+  'No photo yet (up to twelve; the card prints six).':
+    'अभी कोई फ़ोटो नहीं (अधिकतम बारह; कार्ड पर छह छपती हैं)।',
+  'Photo (PNG or JPEG, up to 1 MB)': 'फ़ोटो (PNG या JPEG, 1 MB तक)',
+  Caption: 'कैप्शन',
+  'Shows (optional)': 'क्या दिखाती है (वैकल्पिक)',
+  'Add the photo': 'फ़ोटो जोड़ें',
+  'Added.': 'जोड़ दी गई।',
+  'Choose a PNG or JPEG photo': 'PNG या JPEG फ़ोटो चुनें',
+  'The photo is larger than 1 MB': 'फ़ोटो 1 MB से बड़ी है',
+  'Choose a photo': 'एक फ़ोटो चुनें',
+  Beginner: 'आरंभिक',
+  Progressing: 'प्रगतिशील',
+  Proficient: 'दक्ष',
+  Stream: 'धारा',
+  Mountain: 'पर्वत',
+  Sky: 'आकाश',
+  'Physical development': 'शारीरिक विकास',
+  'Socio-emotional and ethical development': 'सामाजिक-भावनात्मक और नैतिक विकास',
+  'Cognitive development': 'संज्ञानात्मक विकास',
+  'Language and literacy': 'भाषा और साक्षरता',
+  'Aesthetic and cultural development': 'सौंदर्य और सांस्कृतिक विकास',
+  'Positive learning habits': 'सीखने की सकारात्मक आदतें',
 };
 
 /** Translates a known English string; unknown strings fall back to English. */

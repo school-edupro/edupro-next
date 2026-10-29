@@ -15,7 +15,11 @@
 1. **Exams → Masters**: exam types (PT, half-yearly, annual) and the grade scale per class band.
 2. **Exams → Exams → New**: name, dates, the classes and subjects with maximum and pass marks; tick
    **show on portal** so the datesheet appears in the apps.
-3. Optional: indicator sets (primary), the remark bank.
+3. Optional: indicator sets, the remark bank. **Exams → Indicators and HPC** holds the sets in up to
+   three levels (area → item → sub-item); **Add the progress card set** brings the NCERT
+   foundational-stage Holistic Progress Card for Balvatika to Class II (domains, curricular goals,
+   competencies; Beginner / Progressing / Proficient printed with Stream / Mountain / Sky) and **Add
+   the progress card template** its card. Choose a class's set on the exam's page.
 
 ## Marks entry
 
@@ -23,6 +27,12 @@
   pupil, absent and exempt switches, saved as they go; the range is checked against the maximum.
 - The coordinator **locks** a subject when entry is complete; a reopen needs a reason and is audited.
 - The exam register (indicators, remarks, exam attendance, health) belongs to the class teacher.
+- The progress card: in the teacher app **Indicators and progress card** (or **Exams → open exam →
+  Indicators and HPC**) the class teacher picks an area and gives each child a level per competency
+  (or a written note), then per child writes "All about me", the parent's feedback (from paper) and
+  their own observations, and adds portfolio photos (up to twelve; the card prints six). Parents may
+  write their feedback in the parent app under **Results**; it is kept as they wrote it. The
+  indicators lock of the class closes all of it.
 
 ## Results and report cards
 

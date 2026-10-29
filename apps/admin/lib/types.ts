@@ -1964,6 +1964,8 @@ export interface ExamClass {
   locked: number;
   /** locks per entry type (docs/design/65) */
   locks?: { indicators: boolean; remarks: boolean; attendance: boolean; health: boolean };
+  /** the class's indicator / HPC set in the exam (docs/design/65 part 5) */
+  indicatorSetId?: string | null;
 }
 export interface ExamSubject {
   id: string;

@@ -51,6 +51,8 @@ export interface ExamClassRow {
   locked: number;
   /** locks per entry type (docs/design/65); marks lock per subject */
   locks: { indicators: boolean; remarks: boolean; attendance: boolean; health: boolean };
+  /** the class's indicator / HPC set in the exam (docs/design/65 part 5) */
+  indicatorSetId: string | null;
 }
 export interface ExamSubjectRow {
   id: string;
@@ -102,7 +104,8 @@ const EXAM_SELECT = `SELECT e.id::text, e.code, e.name, e.exam_type_id::text AS 
         COALESCE((SELECT jsonb_agg(jsonb_build_object('classId', ec.class_id::text, 'classCode', k.code, 'gradeScaleId', ec.grade_scale_id::text, 'gradeScaleCode', gs.code,
                     'subjects', (SELECT count(*) FROM exam_subjects es WHERE es.exam_id = e.id AND es.class_id = ec.class_id),
                     'locked', (SELECT count(*) FROM exam_subjects es WHERE es.exam_id = e.id AND es.class_id = ec.class_id AND es.entry_locked),
-                    'locks', jsonb_build_object('indicators', ec.indicators_locked, 'remarks', ec.remarks_locked, 'attendance', ec.attendance_locked, 'health', ec.health_locked)) ORDER BY k.display_order)
+                    'locks', jsonb_build_object('indicators', ec.indicators_locked, 'remarks', ec.remarks_locked, 'attendance', ec.attendance_locked, 'health', ec.health_locked),
+                    'indicatorSetId', (SELECT x.set_id::text FROM exam_indicator_sets x WHERE x.exam_id = e.id AND x.class_id = ec.class_id)) ORDER BY k.display_order)
                   FROM exam_classes ec JOIN classes k ON k.id = ec.class_id LEFT JOIN grade_scales gs ON gs.id = ec.grade_scale_id WHERE ec.exam_id = e.id), '[]'::jsonb) AS classes
    FROM exams e JOIN exam_types t ON t.id = e.exam_type_id`;
 

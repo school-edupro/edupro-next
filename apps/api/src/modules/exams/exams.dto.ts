@@ -17,6 +17,8 @@ export const EXAMS = {
   /** docs/design/65 part 2 */
   marksVerify: 'exams.marks.verify',
   resultPublish: 'exams.result.publish',
+  /** part 5: a parent's feedback on the HPC */
+  familyFeedback: 'exams.family.feedback',
 } as const;
 
 const DateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'must be YYYY-MM-DD');
@@ -207,14 +209,61 @@ export const PutIndicatorsSchema = z.object({
       z.object({
         studentId: IdSchema,
         indicatorId: IdSchema,
-        grade: z.string().trim().min(1).max(5),
-        note: z.string().trim().max(200).optional(),
+        /** a level of the set; a written item takes a note only; neither: the entry is removed */
+        grade: z.string().trim().min(1).max(20).nullable().optional(),
+        note: z.string().trim().max(600).nullable().optional(),
       }),
     )
     .min(1)
     .max(3000),
 });
 export class PutIndicatorsDto extends createZodDto(PutIndicatorsSchema) {}
+
+/** docs/design/65 part 5: the HPC's "All about me", the parent's and the teacher's words */
+export const FeedbackKindSchema = z.enum(['self', 'parent', 'teacher']);
+export const PutHpcFeedbackSchema = z.object({
+  classSectionId: IdSchema,
+  rows: z
+    .array(
+      z.object({
+        studentId: IdSchema,
+        kind: FeedbackKindSchema,
+        /** empty: removed */
+        text: z.string().trim().max(2000).nullable(),
+      }),
+    )
+    .min(1)
+    .max(300),
+});
+export class PutHpcFeedbackDto extends createZodDto(PutHpcFeedbackSchema) {}
+
+export const PortfolioQuerySchema = z.object({
+  classSectionId: IdSchema,
+  studentId: IdSchema.optional(),
+});
+export class PortfolioQueryDto extends createZodDto(PortfolioQuerySchema) {}
+
+export const AddPortfolioSchema = z.object({
+  classSectionId: IdSchema,
+  studentId: IdSchema,
+  caption: z.string().trim().max(200).optional(),
+  indicatorId: IdSchema.nullable().optional(),
+  image: z.object({
+    contentType: z.enum(['image/png', 'image/jpeg']),
+    /** up to 1 MB */
+    base64: z.string().min(16).max(1_400_000),
+  }),
+});
+export class AddPortfolioDto extends createZodDto(AddPortfolioSchema) {}
+
+export const MyFeedbackQuerySchema = z.object({ studentId: IdSchema });
+export class MyFeedbackQueryDto extends createZodDto(MyFeedbackQuerySchema) {}
+export const PutMyFeedbackSchema = z.object({
+  studentId: IdSchema,
+  examId: IdSchema,
+  text: z.string().trim().min(1).max(2000),
+});
+export class PutMyFeedbackDto extends createZodDto(PutMyFeedbackSchema) {}
 
 export const PutRemarksSchema = z.object({
   classSectionId: IdSchema,
@@ -276,7 +325,11 @@ export class PutHealthDto extends createZodDto(PutHealthSchema) {}
 export const UpsertIndicatorSetSchema = z.object({
   code: Code,
   name: z.string().trim().min(2).max(80),
-  grades: z.array(z.string().trim().min(1).max(5)).min(2).max(10),
+  /** the levels (grades) in order; docs/design/65 part 5: words up to 20 letters */
+  grades: z.array(z.string().trim().min(1).max(20)).min(2).max(10),
+  /** part 5: 'hpc' prints as the Holistic Progress Card; a level's words on it */
+  kind: z.enum(['indicators', 'hpc']).default('indicators'),
+  levelWords: z.record(z.string().max(20), z.string().trim().max(30)).default({}),
   indicators: z
     .array(
       z.object({
@@ -284,10 +337,17 @@ export const UpsertIndicatorSetSchema = z.object({
         name: z.string().trim().min(2).max(120),
         area: z.string().trim().max(60).optional(),
         sortOrder: z.number().int().min(0).max(1000).default(0),
+        /** part 5: under another indicator of the set (the third level); one level deep */
+        parentCode: Code.nullable().optional(),
+        /** level: takes a level; text: a written observation */
+        kind: z.enum(['level', 'text']).default('level'),
+        description: z.string().trim().max(300).nullable().optional(),
+        /** level → what it means for this item */
+        descriptors: z.record(z.string().max(20), z.string().trim().max(200)).default({}),
       }),
     )
     .min(1)
-    .max(60),
+    .max(150),
 });
 export class UpsertIndicatorSetDto extends createZodDto(UpsertIndicatorSetSchema) {}
 

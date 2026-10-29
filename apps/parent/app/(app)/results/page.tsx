@@ -6,7 +6,7 @@ import { ChildSwitch } from '@/components/ChildSwitch';
 import { chosenChild } from '@/lib/child';
 import { bff } from '@/lib/bff';
 import { currentLang, t } from '@/lib/i18n';
-import { queueMyReportCardPdf } from './actions';
+import { queueMyReportCardPdf, saveMyFeedback } from './actions';
 
 interface Term {
   releaseId: string;
@@ -26,12 +26,16 @@ interface Term {
 interface Res {
   children: Array<{ student: { id: string; name: string; section: string | null }; terms: Term[] }>;
 }
+/** the progress card's parent feedback per exam (docs/design/65 part 5) */
+interface MyFeedback {
+  exams: Array<{ examId: string; code: string; name: string; open: boolean; text: string | null }>;
+}
 
 /** Sprint 17: released results of the family's children and the report-card PDF. */
 export default async function ResultsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ export?: string; error?: string; detail?: string }>;
+  searchParams: Promise<{ export?: string; error?: string; detail?: string; saved?: string }>;
 }) {
   const sp = await searchParams;
   const lang = await currentLang();
@@ -63,6 +67,14 @@ export default async function ResultsPage({
         }>(`/exams/mine/exports/${sp.export}`)
         .catch(() => null)
     : null;
+  // a parent of a Balvatika-II child writes on the progress card; others (and students) see nothing
+  const feedback = new Map<string, MyFeedback['exams']>();
+  for (const c of res.children.filter((x) => !kid || x.student.id === kid.id)) {
+    const f = await bff.api
+      .fetch<MyFeedback>(`/exams/mine/feedback?studentId=${c.student.id}`)
+      .catch(() => null);
+    if (f?.exams.length) feedback.set(c.student.id, f.exams);
+  }
   return (
     <main style={{ padding: 'var(--sp-4)', maxWidth: 720, margin: '0 auto' }}>
       <PageHeader
@@ -88,6 +100,15 @@ export default async function ResultsPage({
           {sp.error === 'report_card.withheld'
             ? t(lang, 'The report card is available once the fee dues are cleared.')
             : sp.detail || sp.error}
+        </div>
+      ) : null}
+      {sp.saved ? (
+        <div
+          className="ep-alert ep-alert--success"
+          role="status"
+          style={{ marginBottom: 'var(--sp-3)' }}
+        >
+          {t(lang, 'Thank you: your feedback is saved for the progress card.')}
         </div>
       ) : null}
       {exportStatus ? (
@@ -126,6 +147,39 @@ export default async function ResultsPage({
             {c.terms.length === 0 ? (
               <p className="ep-field__help">{t(lang, 'No results released yet.')}</p>
             ) : null}
+            {(feedback.get(c.student.id) ?? []).map((f) => (
+              <form key={f.examId} action={saveMyFeedback} style={{ marginBottom: 'var(--sp-3)' }}>
+                <input type="hidden" name="studentId" value={c.student.id} />
+                <input type="hidden" name="examId" value={f.examId} />
+                <label className="ep-field">
+                  <span className="ep-field__label">
+                    {t(lang, 'Your feedback for the progress card')} · {f.name}
+                  </span>
+                  <textarea
+                    className="ep-input"
+                    name="text"
+                    rows={3}
+                    required
+                    maxLength={2000}
+                    defaultValue={f.text ?? ''}
+                    disabled={!f.open}
+                  />
+                  <span className="ep-field__help">
+                    {f.open
+                      ? t(
+                          lang,
+                          'What your child enjoys, does at home and has learnt: it is printed on the card as you write it.',
+                        )
+                      : t(lang, 'The progress card is closed for changes.')}
+                  </span>
+                </label>
+                {f.open ? (
+                  <button type="submit" className="ep-btn ep-btn--secondary ep-btn--sm">
+                    {t(lang, 'Save my feedback')}
+                  </button>
+                ) : null}
+              </form>
+            ))}
             {c.terms.map((term) => (
               <div
                 key={term.releaseId}

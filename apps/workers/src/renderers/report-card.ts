@@ -119,7 +119,7 @@ async function pupilCard(
     data.student.photoObjectKey,
     data.student.photoContentType,
   );
-  for (const g of data.signatures ?? [])
+  for (const g of [...(data.signatures ?? []), ...(data.hpc?.portfolio ?? [])])
     g.dataUri = await photoDataUri(storage, g.objectKey, g.contentType);
   const withheld =
     rel.hideDefaulters && data.fees.defaulter

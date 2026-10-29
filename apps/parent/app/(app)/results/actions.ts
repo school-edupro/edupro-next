@@ -27,3 +27,26 @@ export async function queueMyReportCardPdf(fd: FormData) {
   }
   redirect(`/results?export=${exportId}`);
 }
+
+/** docs/design/65 part 5: a parent's feedback on the child's progress card (kept as they write it). */
+export async function saveMyFeedback(fd: FormData) {
+  try {
+    await bff.api.fetch('/exams/mine/feedback', {
+      method: 'PUT',
+      body: JSON.stringify({
+        studentId: str(fd, 'studentId'),
+        examId: str(fd, 'examId'),
+        text: str(fd, 'text'),
+      }),
+    });
+  } catch (error) {
+    if (error instanceof ApiError) {
+      const detail = typeof error.problem.detail === 'string' ? error.problem.detail : '';
+      redirect(
+        `/results?error=${encodeURIComponent(error.problem.type)}&detail=${encodeURIComponent(detail.slice(0, 160))}`,
+      );
+    }
+    throw error;
+  }
+  redirect('/results?saved=1');
+}

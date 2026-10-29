@@ -7,6 +7,7 @@ import {
   sampleReportCardData,
   DEFAULT_LAYOUTS,
   DPS_NOIDA_TEMPLATES,
+  HPC_TEMPLATES,
   type ClassBand,
 } from '@edupro/db';
 import { AuditService } from '../../common/audit/audit.service';
@@ -168,10 +169,14 @@ export class ReportCardsService {
     });
   }
 
-  /** The DPS Noida cards (docs/design/65, part 4) as templates; one the school already has stays. */
-  async installDps(ctx: RequestContext): Promise<TemplateRow[]> {
+  /**
+   * The DPS Noida cards (docs/design/65, part 4) or the HPC (part 5) as templates; one the school
+   * already has stays.
+   */
+  async installDps(ctx: RequestContext, which: 'dps' | 'hpc' = 'dps'): Promise<TemplateRow[]> {
+    const list = which === 'hpc' ? HPC_TEMPLATES : DPS_NOIDA_TEMPLATES;
     return this.db.tenant(requireTenant(ctx), async (c) => {
-      for (const t of DPS_NOIDA_TEMPLATES)
+      for (const t of list)
         await c.query(
           `INSERT INTO report_card_templates (school_id, code, name, band, layout)
            VALUES (app.current_school_id(), $1, $2, $3::class_band, $4::jsonb)
@@ -179,10 +184,10 @@ export class ReportCardsService {
           [t.code, t.name, t.band, JSON.stringify(t.layout)],
         );
       await this.audit.stage(ctx, c, {
-        action: 'exams.report_card.templates_dps',
+        action: `exams.report_card.templates_${which}`,
         entityType: 'report_card_templates',
-        entityId: 'dps',
-        after: { codes: DPS_NOIDA_TEMPLATES.map((t) => t.code) },
+        entityId: which,
+        after: { codes: list.map((t) => t.code) },
       });
       const r = await c.query<Record<string, unknown>>(
         // eslint-disable-next-line no-restricted-syntax -- T_COLS is a constant
@@ -294,6 +299,7 @@ export class ReportCardsService {
           });
         });
         await this.signatures.fill(data.signatures ?? []);
+        await this.signatures.fill(data.hpc?.portfolio ?? []);
         return { html: reportCardDocument(like, [{ data }]) };
       }
       return {
