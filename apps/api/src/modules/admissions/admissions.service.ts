@@ -447,7 +447,7 @@ export class AdmissionsService {
       if (q.q) {
         params.push(`%${q.q}%`);
         where.push(
-          `(a.application_no ILIKE $${params.length} OR a.child_first_name ILIKE $${params.length} OR a.child_last_name ILIKE $${params.length} OR ap.mobile ILIKE $${params.length})`,
+          `(a.application_no ILIKE $${params.length} OR array_to_string(a.previous_numbers, ' ') ILIKE $${params.length} OR a.child_first_name ILIKE $${params.length} OR a.child_last_name ILIKE $${params.length} OR ap.mobile ILIKE $${params.length})`,
         );
       }
       const whereSql = where.join(' AND ');

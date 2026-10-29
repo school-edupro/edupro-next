@@ -66,9 +66,27 @@ export const NumberSeriesSchema = z.object({
   prefix: z
     .string()
     .trim()
-    .max(30)
+    .max(40)
     .regex(/^[^\s]*$/, 'no spaces in the prefix'),
   nextNo: z.number().int().min(0).max(9_999_999_999),
   digits: z.number().int().min(1).max(10),
 });
 export class NumberSeriesDto extends createZodDto(NumberSeriesSchema) {}
+
+/** Test a series (docs/design/63): which series a registration of a class with these answers takes. */
+export const NumberSeriesTestSchema = z.object({
+  kind: z.enum(['registration', 'admission']),
+  cycleId: IdSchema,
+  classId: IdSchema,
+  answers: z
+    .record(z.string().regex(/^[a-zA-Z][a-zA-Z0-9_]{0,40}$/), z.string().max(200))
+    .default({}),
+});
+export class NumberSeriesTestDto extends createZodDto(NumberSeriesTestSchema) {}
+
+/** Registrations already made given numbers from their series (docs/design/63): preview, then apply. */
+export const NumberSeriesRenumberSchema = z.object({
+  apply: z.boolean().default(false),
+  reason: z.string().trim().min(3).max(300).optional(),
+});
+export class NumberSeriesRenumberDto extends createZodDto(NumberSeriesRenumberSchema) {}

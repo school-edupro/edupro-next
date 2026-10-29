@@ -2,7 +2,14 @@
 /** Merit score tables, Recalculate and number series (docs/design/48). */
 import { revalidatePath } from 'next/cache';
 import { ApiError, apiFetch } from './api';
-import type { NumberSeries, ScoreOptions, ScoreRow, ScoreTableName } from './admission-scores';
+import type {
+  NumberSeries,
+  NumberSeriesRenumberResult,
+  NumberSeriesTestResult,
+  ScoreOptions,
+  ScoreRow,
+  ScoreTableName,
+} from './admission-scores';
 
 type Out<T> =
   | { ok: true; data: T }
@@ -122,6 +129,34 @@ export async function saveNumberSeries(
     id ? `/admissions/number-series/${id}` : '/admissions/number-series',
     id ? 'PUT' : 'POST',
     s,
+    '/admissions/setup/numbers',
+  );
+}
+
+/** Test a series (docs/design/63): which series and number, nothing used. */
+export async function testNumberSeries(body: {
+  kind: 'registration' | 'admission';
+  cycleId: string;
+  classId: string;
+  answers: Record<string, string>;
+}) {
+  if (!okId(body.cycleId) || !okId(body.classId))
+    return { ok: false as const, error: 'Choose the session and class' };
+  return call<NumberSeriesTestResult>(
+    '/admissions/number-series/test',
+    'POST',
+    body,
+    '/admissions/setup/numbers',
+  );
+}
+
+/** Registrations already made given numbers from the series: preview, or apply with a reason. */
+export async function renumberNumberSeries(id: string, apply: boolean, reason?: string) {
+  if (!okId(id)) return { ok: false as const, error: 'Unknown series' };
+  return call<NumberSeriesRenumberResult>(
+    `/admissions/number-series/${id}/renumber`,
+    'POST',
+    { apply, ...(reason ? { reason } : {}) },
     '/admissions/setup/numbers',
   );
 }

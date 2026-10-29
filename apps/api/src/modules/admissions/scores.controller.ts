@@ -21,6 +21,8 @@ import { AdmissionScoreTablesService } from './score-tables.service';
 import {
   LocalityNamesDto,
   NumberSeriesDto,
+  NumberSeriesRenumberDto,
+  NumberSeriesTestDto,
   RecalculateDto,
   ScoreImportDto,
   ScoreReportQueryDto,
@@ -192,6 +194,28 @@ export class AdmissionScoresController {
   @RequirePermission(ADMISSION_SETUP)
   addSeries(@ReqCtx() ctx: RequestContext, @Body() dto: NumberSeriesDto) {
     return this.series.save(ctx, null, dto);
+  }
+
+  @Post('number-series/test')
+  @ApiOperation({
+    summary: 'Which series a registration of a class with these answers takes, nothing used',
+  })
+  @RequirePermission(ADMISSIONS.cycleView)
+  testSeries(@ReqCtx() ctx: RequestContext, @Body() dto: NumberSeriesTestDto) {
+    return this.series.test(ctx, dto);
+  }
+
+  @Post('number-series/:id/renumber')
+  @ApiOperation({
+    summary: 'Registrations already made given numbers from the series (preview, then apply)',
+  })
+  @RequirePermission(ADMISSION_SETUP)
+  renumberSeries(
+    @ReqCtx() ctx: RequestContext,
+    @Param('id') id: string,
+    @Body() dto: NumberSeriesRenumberDto,
+  ) {
+    return this.series.renumber(ctx, id, dto);
   }
 
   @Put('number-series/:id')

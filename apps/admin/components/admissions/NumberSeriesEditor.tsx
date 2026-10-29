@@ -1,8 +1,16 @@
 'use client';
 import { Badge } from '@edupro/ui';
 import { useState, useTransition } from 'react';
+import { NumberSeriesRenumber } from '@/components/admissions/NumberSeriesRenumber';
+import { NumberSeriesTest } from '@/components/admissions/NumberSeriesTest';
 import { archiveNumberSeries, saveNumberSeries } from '@/lib/admission-scores-actions';
-import { seriesText, type NumberSeries, type NumberSeriesSetup } from '@/lib/admission-scores';
+import {
+  fillPrefix,
+  PREFIX_PLACEHOLDERS,
+  seriesText,
+  type NumberSeries,
+  type NumberSeriesSetup,
+} from '@/lib/admission-scores';
 
 type Draft = {
   id: string | null;
@@ -19,8 +27,10 @@ const KIND = { registration: 'Registration no.', admission: 'Admission no.' } as
 
 /**
  * Number series (docs/design/48, part 5): for Registration no. and Admission no., per session and class
- * (or every class), with answers a registration must have (round, student type, board); a prefix, the
- * next number and its digits, with the number it will give next. The most specific series wins.
+ * (or every class), with answers a registration must have (round, student type, board); a prefix (with
+ * {SESSION}, {YYYY}, {YY}, {CLASS} filled in), the next number and its digits, with the number it will
+ * give next. The most specific series wins. A series can be tested, and registrations already made
+ * renumbered from it (docs/design/63).
  */
 export function NumberSeriesEditor({
   initial,
@@ -33,7 +43,9 @@ export function NumberSeriesEditor({
   canEdit: boolean;
 }) {
   const [series, setSeries] = useState(initial.series);
-  const first = initial.cycles[0];
+  // the session with registrations first (docs/design/63)
+  const first = initial.cycles.find((y) => y.registrations > 0) ?? initial.cycles[0];
+  const [renumbering, setRenumbering] = useState<NumberSeries | null>(null);
   const fresh = (kind: Draft['kind'] = 'registration'): Draft => ({
     id: null,
     kind,
@@ -90,6 +102,39 @@ export function NumberSeriesEditor({
           {msg.text}
         </p>
       ) : null}
+      <details className="ep-card" open={!series.length}>
+        <summary>
+          <strong>How number series work</strong>
+        </summary>
+        <ol
+          style={{
+            margin: 'var(--sp-2) 0 0',
+            paddingLeft: '1.2rem',
+            display: 'grid',
+            gap: 'var(--sp-1)',
+          }}
+        >
+          <li>
+            Choose Registration no. or Admission no., the session, and a class (or every class). To
+            number only some registrations (a round, a board, a student type), add the answer they
+            must have.
+          </li>
+          <li>
+            Give it a name, a prefix, the next number and how many digits. The prefix may hold{' '}
+            {'{SESSION}'}, {'{YYYY}'}, {'{YY}'} and {'{CLASS}'}, e.g. REG/{'{SESSION}'}/{'{CLASS}'}/
+            gives REG/2027-28/I/0001. The form shows the next number it will give.
+          </li>
+          <li>
+            A new registration (or admission) takes the most specific series that fits it: its class
+            and answers first, then its class, then the session&apos;s. None fits: the default
+            numbers. A series only numbers registrations made after it; to give it to registrations
+            already made, use Renumber.
+          </li>
+          <li>
+            Test a series (below) shows which series a registration would get, without using it.
+          </li>
+        </ol>
+      </details>
       {canEdit && !draft ? (
         <div style={{ display: 'flex', gap: 'var(--sp-2)', flexWrap: 'wrap' }}>
           <button
@@ -175,8 +220,8 @@ export function NumberSeriesEditor({
               <span className="ep-field__label">Prefix (optional)</span>
               <input
                 className="ep-input"
-                maxLength={30}
-                placeholder="e.g. DPSNMI, N2026"
+                maxLength={40}
+                placeholder="e.g. REG/{SESSION}/{CLASS}/"
                 value={draft.prefix}
                 onChange={(e) => setDraft({ ...draft, prefix: e.target.value.replace(/\s/g, '') })}
               />
@@ -311,9 +356,47 @@ export function NumberSeriesEditor({
               </button>
             ) : null}
           </div>
+          <div style={{ display: 'grid', gap: 'var(--sp-1)', marginTop: 'var(--sp-3)' }}>
+            <span className="ep-field__label">Add to the prefix</span>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--sp-1)' }}>
+              {PREFIX_PLACEHOLDERS.map(([ph, what]) => (
+                <button
+                  key={ph}
+                  type="button"
+                  className="ep-btn ep-btn--secondary ep-btn--sm"
+                  title={what}
+                  onClick={() =>
+                    setDraft({ ...draft, prefix: `${draft.prefix}${ph}`.slice(0, 40) })
+                  }
+                >
+                  {ph}
+                  <span className="ep-sr-only"> ({what})</span>
+                </button>
+              ))}
+            </div>
+            <span className="ep-field__help">
+              {PREFIX_PLACEHOLDERS.map(([ph, what]) => `${ph}: ${what}`).join(' · ')}.
+            </span>
+          </div>
           <p className="ep-alert ep-alert--info" role="status" style={{ marginTop: 'var(--sp-3)' }}>
             Next {KIND[draft.kind]} will be:{' '}
-            <strong>{seriesText(draft.prefix, draft.nextNo, draft.digits)}</strong>
+            <strong>
+              {seriesText(
+                fillPrefix(
+                  draft.prefix,
+                  cycle?.session ?? '',
+                  (draft.classId
+                    ? cycle?.classes.find((k) => k.id === draft.classId)
+                    : cycle?.classes[0]
+                  )?.code ?? null,
+                ),
+                draft.nextNo,
+                draft.digits,
+              )}
+            </strong>
+            {!draft.classId && draft.prefix.includes('{CLASS}')
+              ? ` (for ${cycle?.classes[0]?.name ?? 'the first class'}; each class gets its own code, one running number for the whole session)`
+              : ''}
           </p>
           <div style={{ display: 'flex', gap: 'var(--sp-2)' }}>
             <button
@@ -328,7 +411,24 @@ export function NumberSeriesEditor({
               Cancel
             </button>
           </div>
+          {draft.name.trim().length < 2 ? (
+            <p className="ep-field__help" role="status" style={{ marginBottom: 0 }}>
+              Write a name for the series (2 letters or more) to save it.
+            </p>
+          ) : null}
         </section>
+      ) : null}
+      {renumbering ? (
+        <NumberSeriesRenumber
+          key={renumbering.id}
+          series={renumbering}
+          onClose={() => setRenumbering(null)}
+          onDone={(list, text) => {
+            setSeries(list);
+            setRenumbering(null);
+            setMsg({ tone: 'success', text });
+          }}
+        />
       ) : null}
       {initial.cycles.map((y) => {
         const list = series.filter((s) => s.cycleId === y.id);
@@ -381,6 +481,11 @@ export function NumberSeriesEditor({
                         </td>
                         <td>
                           <strong>{s.next}</strong>
+                          {s.perClass ? (
+                            <div className="ep-field__help" style={{ margin: 0 }}>
+                              e.g.; each class its code
+                            </div>
+                          ) : null}
                         </td>
                         <td>
                           {s.lastGiven ?? '-'}
@@ -413,6 +518,16 @@ export function NumberSeriesEditor({
                               >
                                 Change
                               </button>
+                              {s.kind === 'registration' ? (
+                                <button
+                                  type="button"
+                                  className="ep-btn ep-btn--ghost ep-btn--sm"
+                                  aria-label={`Renumber registrations already made from ${s.name}`}
+                                  onClick={() => setRenumbering(s)}
+                                >
+                                  Renumber
+                                </button>
+                              ) : null}
                               <button
                                 type="button"
                                 className="ep-btn ep-btn--ghost ep-btn--sm"
@@ -434,6 +549,14 @@ export function NumberSeriesEditor({
           </section>
         );
       })}
+      {first ? (
+        <NumberSeriesTest
+          setup={initial}
+          series={series}
+          questions={questions}
+          defaultCycleId={first.id}
+        />
+      ) : null}
     </div>
   );
 }

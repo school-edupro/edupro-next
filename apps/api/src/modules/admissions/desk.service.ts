@@ -94,7 +94,8 @@ export class AdmissionDeskService {
            FROM applications a JOIN classes cl ON cl.id = a.class_id JOIN applicants ap ON ap.id = a.applicant_id
            JOIN admission_cycles y ON y.id = a.cycle_id
           WHERE a.status::text NOT IN ('withdrawn')
-            AND (a.application_no ILIKE '%' || $1 || '%' OR a.candidate_name ILIKE '%' || $1 || '%'
+            AND (a.application_no ILIKE '%' || $1 || '%' OR array_to_string(a.previous_numbers, ' ') ILIKE '%' || $1 || '%'
+                 OR a.candidate_name ILIKE '%' || $1 || '%'
                  OR COALESCE(a.contact_email, ap.email::text) ILIKE '%' || $1 || '%'
                  OR ($2 <> '' AND length($2) >= 4 AND (COALESCE(a.contact_mobile, '') LIKE '%' || $2 || '%' OR COALESCE(ap.mobile, '') LIKE '%' || $2 || '%')))
           ORDER BY a.created_at DESC LIMIT 25`,

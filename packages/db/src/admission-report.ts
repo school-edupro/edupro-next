@@ -142,6 +142,7 @@ export const ADMISSION_REPORT_FIELDS: ReportFieldDef[] = [
 ];
 export const ADMISSION_SEARCH_KEYS = [
   'registration_no',
+  'previous_numbers',
   'candidate',
   'mobile',
   'email',
@@ -299,6 +300,7 @@ export async function loadAdmissionReportRows(
   const r = await c.query<{
     id: string;
     number: string | null;
+    previous_numbers: string;
     candidate: string | null;
     session: string;
     year: string;
@@ -339,7 +341,7 @@ export async function loadAdmissionReportRows(
     data: AdmissionAnswers;
     snapshot: AdmissionFormDef | null;
   }>(
-    `SELECT a.id::text, a.application_no AS number, a.candidate_name AS candidate, y.name AS session, ay.name AS year, cl.name AS class_name,
+    `SELECT a.id::text, a.application_no AS number, array_to_string(a.previous_numbers, ' ') AS previous_numbers, a.candidate_name AS candidate, y.name AS session, ay.name AS year, cl.name AS class_name,
             a.status::text, CASE WHEN a.status::text IN ('registered', 'under_review', 'sent_back') THEN st.name END AS stage,
             w.level_no, w.levels, w.level, w.level_since, w.due_at,
             k.name AS category, a.entered_by::text, COALESCE(a.contact_mobile, ap.mobile) AS mobile, COALESCE(a.contact_email, ap.email::text) AS email,
@@ -386,6 +388,8 @@ export async function loadAdmissionReportRows(
     const row: ReportRow = {
       __id: x.id,
       registration_no: x.number,
+      // earlier numbers (renumbered, docs/design/63): searchable, not a column
+      previous_numbers: x.previous_numbers || null,
       candidate: x.candidate,
       session: x.session,
       academic_year: x.year,

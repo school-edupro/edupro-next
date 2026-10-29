@@ -407,7 +407,7 @@ export class AdmissionProcessService {
         );
       if (q.q)
         add(
-          `(a.application_no ILIKE ? OR a.candidate_name ILIKE $${params.length + 1} OR a.contact_mobile ILIKE $${params.length + 1})`,
+          `(a.application_no ILIKE ? OR array_to_string(a.previous_numbers, ' ') ILIKE $${params.length + 1} OR a.candidate_name ILIKE $${params.length + 1} OR a.contact_mobile ILIKE $${params.length + 1})`,
           `%${q.q}%`,
         );
       const whereSql = where.join(' AND ');

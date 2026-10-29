@@ -100,7 +100,8 @@ export class AdmissionCounterService {
            FROM applications a JOIN classes cl ON cl.id = a.class_id JOIN applicants ap ON ap.id = a.applicant_id
            JOIN admission_cycles y ON y.id = a.cycle_id LEFT JOIN admission_fee_categories k ON k.id = a.category_id
           WHERE a.status::text <> 'draft'
-            AND ($1 = '' OR a.application_no ILIKE '%' || $1 || '%' OR a.admission_no ILIKE '%' || $1 || '%'
+            AND ($1 = '' OR a.application_no ILIKE '%' || $1 || '%' OR array_to_string(a.previous_numbers, ' ') ILIKE '%' || $1 || '%'
+                 OR a.admission_no ILIKE '%' || $1 || '%'
                  OR a.candidate_name ILIKE '%' || $1 || '%' OR COALESCE(a.contact_email, ap.email::text) ILIKE '%' || $1 || '%'
                  OR (length($2) >= 4 AND (COALESCE(a.contact_mobile, '') LIKE '%' || $2 || '%' OR ap.mobile LIKE '%' || $2 || '%')))
             AND (NOT $3 OR (a.status::text = 'submitted' AND a.application_no IS NULL AND COALESCE(a.registration_fee, 0) > 0)

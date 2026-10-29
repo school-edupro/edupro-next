@@ -98,6 +98,8 @@ export interface NumberSeries {
   next: string;
   lastGiven: string | null;
   given: number;
+  /** {CLASS} in a series for every class: `next` is one class's sample (docs/design/63) */
+  perClass: boolean;
 }
 export interface NumberSeriesSetup {
   series: NumberSeries[];
@@ -105,8 +107,42 @@ export interface NumberSeriesSetup {
     id: string;
     name: string;
     defaultRegistration: string;
-    classes: Array<{ id: string; name: string }>;
+    /** the academic year, for {SESSION} (2027-28) */
+    session: string;
+    registrations: number;
+    classes: Array<{ id: string; name: string; code: string }>;
   }>;
+}
+
+/** The placeholders a prefix may hold (docs/design/63), with what each gives. */
+export const PREFIX_PLACEHOLDERS: Array<[string, string]> = [
+  ['{SESSION}', 'the session, e.g. 2027-28'],
+  ['{YYYY}', 'its first year, e.g. 2027'],
+  ['{YY}', 'e.g. 27'],
+  ['{CLASS}', "the class's code, e.g. I, VI, NUR"],
+];
+/** The prefix with its placeholders filled, as the API fills them. */
+export const fillPrefix = (prefix: string, session: string, classCode: string | null) => {
+  const s = session.replace(/^Session\s+/i, '').replace(/\s+/g, '');
+  const yyyy = s.match(/\d{4}/)?.[0] ?? '';
+  return prefix
+    .replaceAll('{SESSION}', s)
+    .replaceAll('{YYYY}', yyyy)
+    .replaceAll('{YY}', yyyy.slice(2))
+    .replaceAll('{CLASS}', (classCode ?? '').replace(/\s+/g, ''));
+};
+/** Test a series: the series a registration would take and its number, or the default. */
+export interface NumberSeriesTestResult {
+  series: { id: string; name: string } | null;
+  number: string | null;
+  usual: string | null;
+}
+/** Renumbering registrations already made: old → new, applied or a preview. */
+export interface NumberSeriesRenumberResult {
+  applied: boolean;
+  rows: Array<{ id: string; candidate: string | null; from: string; to: string }>;
+  skipped: number;
+  series: NumberSeries[];
 }
 
 /** A series' number as it will be given ("DP1" + 1, 4 digits → DP10001). */
