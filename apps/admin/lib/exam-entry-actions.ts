@@ -271,3 +271,89 @@ export async function markEntryStatus(fd: FormData) {
     done[action],
   );
 }
+
+// ---- mark schemes (docs/design/65, part 3) --------------------------------------------------------
+export async function createMarkScheme(fd: FormData) {
+  const preset = str(fd, 'preset');
+  const examMap: Record<string, string> = {};
+  for (const [k, v] of fd.entries())
+    if (k.startsWith('map:') && String(v)) examMap[k.slice(4)] = String(v);
+  const classIds = fd.getAll('classId').map(String).filter(okId);
+  let made: { id: string } | undefined;
+  try {
+    made = await apiFetch<{ id: string }>('/exams/schemes', {
+      method: 'POST',
+      body: JSON.stringify({
+        name: str(fd, 'name'),
+        purpose: str(fd, 'purpose') || 'result',
+        termCode: str(fd, 'termCode') || undefined,
+        classIds,
+        ...(preset
+          ? { preset, examMap }
+          : {
+              // a blank scheme: one exam and its marks as the total, built up on the scheme's page
+              def: {
+                exams: [{ key: 'EXAM1', examId: str(fd, 'examId') }],
+                columns: [
+                  { key: 'EXAM1', label: 'Marks', kind: 'raw', exam: 'EXAM1', total: true },
+                ],
+                result: { passPct: 33, compartmentUpTo: 2, rankBy: 'total' },
+              },
+            }),
+      }),
+    });
+  } catch (error) {
+    if (error instanceof ApiError)
+      back(`/exams/schemes?preset=${preset}`, error.problem.type, detailOf(error));
+    throw error;
+  }
+  back(`/exams/schemes/${made!.id}`, 'ok', 'Scheme made: try it on a section, then lock it');
+}
+
+export async function saveMarkScheme(
+  id: string,
+  body: { name?: string; termCode?: string | null; classIds?: string[]; def?: unknown },
+): Promise<Out<{ problems: string[] }>> {
+  if (!okId(id)) return { ok: false, error: 'Unknown scheme' };
+  const out = await call<{ problems: string[] }>(`/exams/schemes/${id}`, 'PUT', body);
+  if (out.ok) revalidatePath(`/exams/schemes/${id}`);
+  return out;
+}
+
+/** lock | new-version | compute | remove */
+export async function markSchemeStep(fd: FormData) {
+  const id = str(fd, 'id');
+  const step = str(fd, 'step');
+  if (!okId(id) || !['lock', 'new-version', 'compute', 'remove'].includes(step))
+    back('/exams/schemes', 'validation-failed', 'Unknown step');
+  let next = `/exams/schemes/${id}`;
+  try {
+    if (step === 'remove') {
+      await apiFetch(`/exams/schemes/${id}`, { method: 'DELETE' });
+      next = '/exams/schemes';
+    } else {
+      const r = await apiFetch<{ id: string; counts?: Record<string, number> }>(
+        `/exams/schemes/${id}/${step}`,
+        { method: 'POST' },
+      );
+      next = `/exams/schemes/${r.id}`;
+      if (step === 'compute')
+        back(
+          next,
+          'ok',
+          `Term results worked out: ${Object.entries(r.counts ?? {})
+            .map(([k, n]) => `${k} ${String(n)}`)
+            .join(', ')}`,
+        );
+    }
+  } catch (error) {
+    if (error instanceof ApiError)
+      back(`/exams/schemes/${id}`, error.problem.type, detailOf(error));
+    throw error;
+  }
+  back(
+    next,
+    'ok',
+    { lock: 'Locked', 'new-version': 'A new version to change', remove: 'Removed' }[step],
+  );
+}

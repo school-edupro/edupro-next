@@ -8,6 +8,8 @@ import { ExamEntryController } from './exam-entry.controller';
 import { ExamEntryService } from './exam-entry.service';
 import { ExamResultsService } from './exam-results.service';
 import { ExamStatusController } from './exam-status.controller';
+import { MarkSchemesController } from './mark-schemes.controller';
+import { MarkSchemesService } from './mark-schemes.service';
 import { ExamStatusService } from './exam-status.service';
 import { ExamsController } from './exams.controller';
 import { ExamsService } from './exams.service';
@@ -25,6 +27,7 @@ import { SubjectChoicesService } from './subject-choices.service';
   controllers: [
     SubjectChoicesController,
     ExamStatusController,
+    MarkSchemesController,
     ExamsController,
     ExamEntryController,
     ReportCardsController,
@@ -39,6 +42,7 @@ import { SubjectChoicesService } from './subject-choices.service';
     BoardResultsService,
     SubjectChoicesService,
     ExamStatusService,
+    MarkSchemesService,
     AuditService,
   ],
   exports: [ExamsService, ExamEntryService, ExamResultsService, ReportCardsService],
