@@ -333,7 +333,7 @@ describe('workflow GA, report cards, GPS and library (e2e, Sprint 17)', () => {
         .json()
         .data.map((t: { band: string }) => t.band)
         .sort(),
-    ).toEqual(['middle', 'primary', 'secondary', 'senior']);
+    ).toEqual(['middle', 'pre_primary', 'primary', 'secondary', 'senior']);
     const middle = defaults.json().data.find((t: { band: string }) => t.band === 'middle');
     const rel = await inject({
       method: 'POST',

@@ -8,7 +8,7 @@ export const REPORT_CARDS = {
   familyView: 'exams.family.view',
 } as const;
 
-export const BandSchema = z.enum(['primary', 'middle', 'secondary', 'senior']);
+export const BandSchema = z.enum(['pre_primary', 'primary', 'middle', 'secondary', 'senior']);
 const SizeSchema = z.string().regex(/^\d+(\.\d+)?(mm|cm|in)$/);
 
 const SectionSchema = z.object({
@@ -23,6 +23,7 @@ const SectionSchema = z.object({
     'result',
     'grade_scale',
     'signatures',
+    'hpc_descriptors',
   ]),
   title: z.string().trim().max(80).optional(),
   showGrades: z.boolean().optional(),
@@ -30,6 +31,21 @@ const SectionSchema = z.object({
   showRank: z.boolean().optional(),
   showPhoto: z.boolean().optional(),
   labels: z.array(z.string().trim().min(1).max(40)).max(5).optional(),
+  /** scholastic: per-exam columns (cce) or the term's components (docs/design/65 fix: kept on save) */
+  mode: z.enum(['marks', 'cce', 'components']).optional(),
+  columns: z
+    .array(
+      z.object({
+        label: z.string().trim().min(1).max(60),
+        examCodes: z.array(z.string().trim().min(1).max(20)).min(1).max(10),
+        agg: z.enum(['sum', 'avg', 'best']).optional(),
+        scale: z.number().positive().max(1000),
+      }),
+    )
+    .max(20)
+    .optional(),
+  /** hpc_descriptors: grade → descriptor text */
+  descriptors: z.record(z.string().max(10), z.string().max(200)).optional(),
 });
 export const LayoutSchema = z.object({
   sections: z.array(SectionSchema).min(1).max(12),

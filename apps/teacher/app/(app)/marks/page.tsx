@@ -44,8 +44,12 @@ interface Sheet {
     passMarks: string | null;
     entryLocked: boolean;
     parts?: Part[];
+    /** maximum 0: a grade of the scale instead of marks (docs/design/65) */
+    gradeOnly?: boolean;
   };
   section: { id: string; code: string };
+  codes?: Array<{ code: string; name: string }>;
+  grades?: string[];
   rows: Array<{
     studentId: string;
     name: string;
@@ -55,6 +59,10 @@ interface Sheet {
     marks: string | null;
     absent: boolean;
     exempt: boolean;
+    code?: string | null;
+    grade?: string | null;
+    /** null: the pupil does not take the subject */
+    taken?: string | null;
   }>;
 }
 const ERRORS: Record<string, string> = {
@@ -63,6 +71,9 @@ const ERRORS: Record<string, string> = {
   'exams.marks_out_of_range': 'A mark is above the maximum for this subject.',
   'exams.not_assigned': 'You are not assigned to this section or subject.',
   'exams.student_not_in_section': 'A student in the sheet is no longer in this section; reload.',
+  'exams.subject_not_taken': 'A pupil does not take this subject; leave the row empty.',
+  'exams.unknown_code': 'That is not a marks code of the school.',
+  'exams.grade_not_allowed': "That grade is not on the subject's scale.",
   'scope-denied': 'You are not allowed to enter marks for this section.',
   'validation-failed': 'Some values were not accepted.',
 };
@@ -144,9 +155,12 @@ export default async function MarksPage({
     ? ((sheet?.examSubject.parts ?? []).find((p) => p.id === chosen.partId) ?? null)
     : null;
   const others = part ? (sheet?.examSubject.parts ?? []).filter((p) => p.id !== part.id) : [];
-  const entered = sheet
-    ? sheet.rows.filter((r) => r.marks !== null || r.absent || r.exempt).length
-    : 0;
+  const takers = sheet ? sheet.rows.filter((r) => r.taken !== null) : [];
+  const entered = takers.filter((r) => r.marks !== null || r.code || r.grade).length;
+  const gradeOnly = !!sheet?.examSubject.gradeOnly && !part;
+  const codes = (sheet?.codes ?? [{ code: 'AB', name: 'Absent' }]).filter(
+    (c) => !part || c.code === 'AB',
+  );
   return (
     <main style={{ padding: 'var(--sp-4)', maxWidth: 820, margin: '0 auto' }}>
       <PageHeader
@@ -154,7 +168,7 @@ export default async function MarksPage({
         title={exam ? `${exam.name} (${exam.code})` : t(lang, 'Marks')}
         description={
           sheet
-            ? `${sheet.section.code} · ${sheet.examSubject.name} ${t(lang, 'out of')} ${sheet.examSubject.maxMarks}${sheet.examSubject.passMarks ? ` (${t(lang, 'pass')} ${sheet.examSubject.passMarks})` : ''} · ${entered} ${t(lang, 'of')} ${sheet.rows.length} ${t(lang, 'entered')}`
+            ? `${sheet.section.code} · ${sheet.examSubject.name} ${gradeOnly ? t(lang, 'graded') : `${t(lang, 'out of')} ${sheet.examSubject.maxMarks}`}${sheet.examSubject.passMarks ? ` (${t(lang, 'pass')} ${sheet.examSubject.passMarks})` : ''} · ${entered} ${t(lang, 'of')} ${takers.length} ${t(lang, 'entered')}`
             : exams.length
               ? t(lang, 'Choose the section and subject.')
               : t(lang, 'No exam is set up for this year yet.')
@@ -217,7 +231,7 @@ export default async function MarksPage({
         <p className="ep-field__help" style={{ marginTop: 'var(--sp-2)' }}>
           {t(
             lang,
-            'Leave a mark empty to skip a pupil; tick AB for absent or EX for exempt. Marks are checked against the maximum and the lock before they are saved.',
+            'Leave a mark empty to skip a pupil; pick a code (AB absent, ML medical, EX exempt …) instead of marks. Marks are checked against the maximum and the lock before they are saved.',
           )}
         </p>
       </Card>
@@ -259,16 +273,16 @@ export default async function MarksPage({
                   <th>
                     {part
                       ? `${part.name} / ${String(Number(part.maxMarks))}`
-                      : `${t(lang, 'Marks')} / ${sheet.examSubject.maxMarks}`}
+                      : gradeOnly
+                        ? t(lang, 'Grade')
+                        : `${t(lang, 'Marks')} / ${sheet.examSubject.maxMarks}`}
                   </th>
-                  <th>AB</th>
+                  <th>{t(lang, 'Code')}</th>
                   {part ? (
                     <th>
                       {t(lang, 'Total')} / {String(Number(sheet.examSubject.maxMarks))}
                     </th>
-                  ) : (
-                    <th>EX</th>
-                  )}
+                  ) : null}
                 </tr>
               </thead>
               <tbody>
@@ -279,52 +293,85 @@ export default async function MarksPage({
                       {r.name}
                       <div className="ep-kicker">{r.admissionNo}</div>
                     </td>
-                    <td>
-                      <input
-                        className="ep-input"
-                        type="number"
-                        inputMode="decimal"
-                        name={`marks-${r.studentId}`}
-                        aria-label={`${t(lang, 'Marks')} · ${r.name}`}
-                        min={0}
-                        max={Number(part ? part.maxMarks : sheet!.examSubject.maxMarks)}
-                        step="0.5"
-                        defaultValue={part ? (r.parts?.[part.id]?.marks ?? '') : (r.marks ?? '')}
-                        disabled={locked}
-                        style={{ width: 110 }}
-                      />
-                    </td>
-                    <td>
-                      <input
-                        type="checkbox"
-                        name={`absent-${r.studentId}`}
-                        aria-label={`${t(lang, 'Absent')} · ${r.name}`}
-                        defaultChecked={part ? (r.parts?.[part.id]?.absent ?? false) : r.absent}
-                        disabled={locked}
-                      />
-                    </td>
-                    {part ? (
-                      <td>
-                        {r.absent ? 'AB' : (r.marks ?? '—')}
-                        <div className="ep-field__help">
-                          {others
-                            .map((o) => {
-                              const m = r.parts?.[o.id];
-                              return `${o.name} ${m ? (m.absent ? 'AB' : (m.marks ?? '—')) : '—'}`;
-                            })
-                            .join(' · ')}
-                        </div>
+                    {r.taken === null ? (
+                      <td colSpan={part ? 3 : 2}>
+                        <span className="ep-field__help">
+                          {t(lang, 'Does not take the subject')}
+                        </span>
                       </td>
                     ) : (
-                      <td>
-                        <input
-                          type="checkbox"
-                          name={`exempt-${r.studentId}`}
-                          aria-label={`${t(lang, 'Exempt')} · ${r.name}`}
-                          defaultChecked={r.exempt}
-                          disabled={locked}
-                        />
-                      </td>
+                      <>
+                        <td>
+                          <input type="hidden" name="studentId" value={r.studentId} />
+                          {gradeOnly ? (
+                            <select
+                              className="ep-input"
+                              name={`grade-${r.studentId}`}
+                              aria-label={`${t(lang, 'Grade')} · ${r.name}`}
+                              defaultValue={r.grade ?? ''}
+                              disabled={locked}
+                            >
+                              <option value="">-</option>
+                              {(sheet.grades ?? []).map((g) => (
+                                <option key={g} value={g}>
+                                  {g}
+                                </option>
+                              ))}
+                            </select>
+                          ) : (
+                            <input
+                              className="ep-input"
+                              type="number"
+                              inputMode="decimal"
+                              name={`marks-${r.studentId}`}
+                              aria-label={`${t(lang, 'Marks')} · ${r.name}`}
+                              min={0}
+                              max={Number(part ? part.maxMarks : sheet!.examSubject.maxMarks)}
+                              step="0.5"
+                              defaultValue={
+                                part ? (r.parts?.[part.id]?.marks ?? '') : (r.marks ?? '')
+                              }
+                              disabled={locked}
+                              style={{ width: 110 }}
+                            />
+                          )}
+                        </td>
+                        <td>
+                          <select
+                            className="ep-input"
+                            name={`code-${r.studentId}`}
+                            aria-label={`${t(lang, 'Code')} · ${r.name}`}
+                            defaultValue={
+                              part
+                                ? r.parts?.[part.id]?.absent
+                                  ? 'AB'
+                                  : ''
+                                : (r.code ?? (r.absent ? 'AB' : r.exempt ? 'EX' : ''))
+                            }
+                            disabled={locked}
+                          >
+                            <option value="">-</option>
+                            {codes.map((c) => (
+                              <option key={c.code} value={c.code}>
+                                {c.code} · {c.name}
+                              </option>
+                            ))}
+                          </select>
+                        </td>
+                        {part ? (
+                          <td>
+                            {r.absent ? 'AB' : (r.marks ?? '—')}
+                            <div className="ep-field__help">
+                              {others
+                                .map((o) => {
+                                  const m = r.parts?.[o.id];
+                                  return `${o.name} ${m ? (m.absent ? 'AB' : (m.marks ?? '—')) : '—'}`;
+                                })
+                                .join(' · ')}
+                            </div>
+                          </td>
+                        ) : null}
+                      </>
                     )}
                   </tr>
                 ))}

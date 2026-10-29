@@ -79,11 +79,14 @@ export const SetExamSubjectsSchema = z.object({
     .array(
       z.object({
         subjectId: IdSchema,
-        maxMarks: z.number().min(1).max(1000),
+        /** 0: a grade-only subject (art, PE): a grade of its scale instead of marks (docs/design/65) */
+        maxMarks: z.number().min(0).max(1000),
         passMarks: z.number().min(0).max(1000).nullable().optional(),
         weightage: z.number().min(0).max(100).nullable().optional(),
         isElective: z.boolean().default(false),
         examOn: DateSchema.nullable().optional(),
+        /** the subject's own grade scale (a grade-only subject needs one, or the class's) */
+        gradeScaleId: IdSchema.nullable().optional(),
       }),
     )
     .max(40),
@@ -115,12 +118,84 @@ export const PutMarksSchema = z.object({
         marks: Marks,
         absent: z.boolean().default(false),
         exempt: z.boolean().default(false),
+        /** a marks code (AB, ML, EX, NA, OD, L, NEW ADM or the school's own) in place of marks */
+        code: z.string().trim().toUpperCase().max(12).nullable().optional(),
+        /** a grade-only subject's grade */
+        grade: z.string().trim().max(10).nullable().optional(),
       }),
     )
     .min(1)
     .max(300),
 });
 export class PutMarksDto extends createZodDto(PutMarksSchema) {}
+
+/** A marks sheet from Excel: checked row by row; `apply` saves it (docs/design/65). */
+export const MarksUploadSchema = z.object({
+  classSectionId: IdSchema,
+  subjectId: IdSchema,
+  /** the .xlsx file, base64 */
+  file: z.string().min(10).max(2_000_000),
+  apply: z.boolean().default(false),
+});
+export class MarksUploadDto extends createZodDto(MarksUploadSchema) {}
+
+/** Locks of one class of an exam per entry type; marks lock every subject of the class. */
+export const ClassLocksSchema = z.object({
+  classId: IdSchema,
+  marks: z.boolean().optional(),
+  indicators: z.boolean().optional(),
+  remarks: z.boolean().optional(),
+  attendance: z.boolean().optional(),
+  health: z.boolean().optional(),
+});
+export class ClassLocksDto extends createZodDto(ClassLocksSchema) {}
+
+/** A marks code and what it does to a result. */
+export const UpsertMarkCodeSchema = z
+  .object({
+    code: z
+      .string()
+      .trim()
+      .toUpperCase()
+      .regex(/^[A-Z][A-Z0-9 ]{0,11}$/, 'capital letters, up to 12'),
+    name: z.string().trim().min(2).max(60),
+    treatment: z.enum(['zero', 'exclude', 'fixed', 'percent', 'pro_rata']),
+    value: z.number().min(0).max(1000).nullable().optional(),
+    blocksResult: z.boolean().default(false),
+    sortOrder: z.number().int().min(0).max(100).default(0),
+    status: z.enum(['active', 'inactive']).default('active'),
+  })
+  .refine((x) => ['fixed', 'percent'].includes(x.treatment) === (x.value != null), {
+    message: 'Fixed marks and a % of the maximum need a value; the others none',
+    path: ['value'],
+  });
+export class UpsertMarkCodeDto extends createZodDto(UpsertMarkCodeSchema) {}
+
+// ---- subject choices (docs/design/65) ------------------------------------------------------------
+export const SubjectChoicesQuerySchema = z.object({ classSectionId: IdSchema });
+export class SubjectChoicesQueryDto extends createZodDto(SubjectChoicesQuerySchema) {}
+const ChoiceKind = z.enum(['compulsory', 'optional', 'additional']);
+export const PutSubjectChoicesSchema = z.object({
+  classSectionId: IdSchema,
+  rows: z
+    .array(
+      z.object({
+        studentId: IdSchema,
+        stream: z.string().trim().max(40).nullable().optional(),
+        /** the whole list for the year; empty = no choices (every subject) */
+        subjects: z.array(z.object({ subjectId: IdSchema, kind: ChoiceKind })).max(30),
+      }),
+    )
+    .min(1)
+    .max(300),
+});
+export class PutSubjectChoicesDto extends createZodDto(PutSubjectChoicesSchema) {}
+export const SubjectChoicesUploadSchema = z.object({
+  classSectionId: IdSchema,
+  file: z.string().min(10).max(2_000_000),
+  apply: z.boolean().default(false),
+});
+export class SubjectChoicesUploadDto extends createZodDto(SubjectChoicesUploadSchema) {}
 
 export const PutIndicatorsSchema = z.object({
   classSectionId: IdSchema,

@@ -115,14 +115,20 @@ export class ReportCardsService {
 
   async installDefaults(ctx: RequestContext): Promise<TemplateRow[]> {
     return this.db.tenant(requireTenant(ctx), async (c) => {
-      for (const band of ['primary', 'middle', 'secondary', 'senior'] as ClassBand[]) {
+      for (const band of [
+        'pre_primary',
+        'primary',
+        'middle',
+        'secondary',
+        'senior',
+      ] as ClassBand[]) {
         await c.query(
           `INSERT INTO report_card_templates (school_id, code, name, band, layout)
            VALUES (app.current_school_id(), $1, $2, $3::class_band, $4::jsonb)
            ON CONFLICT (school_id, code) DO NOTHING`,
           [
             `${band}_default`,
-            `${band[0]!.toUpperCase()}${band.slice(1)} report card`,
+            `${band === 'pre_primary' ? 'Pre-primary' : `${band[0]!.toUpperCase()}${band.slice(1)}`} report card`,
             band,
             JSON.stringify(DEFAULT_LAYOUTS[band]),
           ],

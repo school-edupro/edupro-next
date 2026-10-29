@@ -5,8 +5,10 @@ import { DbService } from '../../common/db/db.service';
 import { DomainError } from '../../common/errors/domain-error';
 import { requireTenant, type RequestContext } from '../../common/http/request-context';
 import type {
+  ClassLocksDto,
   CreateExamDto,
   LockExamSubjectsDto,
+  UpsertMarkCodeDto,
   SetExamSubjectsDto,
   UpdateExamDto,
   UpdateExamTypeDto,
@@ -47,6 +49,8 @@ export interface ExamClassRow {
   gradeScaleCode: string | null;
   subjects: number;
   locked: number;
+  /** locks per entry type (docs/design/65); marks lock per subject */
+  locks: { indicators: boolean; remarks: boolean; attendance: boolean; health: boolean };
 }
 export interface ExamSubjectRow {
   id: string;
@@ -62,6 +66,8 @@ export interface ExamSubjectRow {
   entryLocked: boolean;
   lockedBy: string | null;
   lockedAt: string | null;
+  /** the subject's own grade scale; a grade-only subject (max 0) is graded on it (docs/design/65) */
+  gradeScaleId: string | null;
   /** The parts the subject is entered in (empty = one figure for the subject). */
   parts?: ExamPartRow[];
   /** Teaching subjects under this subject (Physics, Chemistry, Biology under Science): ready-made parts. */
@@ -95,13 +101,14 @@ const EXAM_SELECT = `SELECT e.id::text, e.code, e.name, e.exam_type_id::text AS 
         e.starts_on::text AS "startsOn", e.ends_on::text AS "endsOn", e.show_on_portal AS "showOnPortal", e.marks_locked AS "marksLocked", e.status::text,
         COALESCE((SELECT jsonb_agg(jsonb_build_object('classId', ec.class_id::text, 'classCode', k.code, 'gradeScaleId', ec.grade_scale_id::text, 'gradeScaleCode', gs.code,
                     'subjects', (SELECT count(*) FROM exam_subjects es WHERE es.exam_id = e.id AND es.class_id = ec.class_id),
-                    'locked', (SELECT count(*) FROM exam_subjects es WHERE es.exam_id = e.id AND es.class_id = ec.class_id AND es.entry_locked)) ORDER BY k.display_order)
+                    'locked', (SELECT count(*) FROM exam_subjects es WHERE es.exam_id = e.id AND es.class_id = ec.class_id AND es.entry_locked),
+                    'locks', jsonb_build_object('indicators', ec.indicators_locked, 'remarks', ec.remarks_locked, 'attendance', ec.attendance_locked, 'health', ec.health_locked)) ORDER BY k.display_order)
                   FROM exam_classes ec JOIN classes k ON k.id = ec.class_id LEFT JOIN grade_scales gs ON gs.id = ec.grade_scale_id WHERE ec.exam_id = e.id), '[]'::jsonb) AS classes
    FROM exams e JOIN exam_types t ON t.id = e.exam_type_id`;
 
 const SUBJECT_SELECT = `SELECT es.id::text, es.class_id::text AS "classId", es.subject_id::text AS "subjectId", sub.code AS "subjectCode", sub.name AS "subjectName",
         es.max_marks::text AS "maxMarks", es.pass_marks::text AS "passMarks", es.weightage::text, es.is_elective AS "isElective", es.exam_on::text AS "examOn",
-        es.entry_locked AS "entryLocked", u.display_name AS "lockedBy", es.locked_at::text AS "lockedAt"
+        es.entry_locked AS "entryLocked", u.display_name AS "lockedBy", es.locked_at::text AS "lockedAt", es.grade_scale_id::text AS "gradeScaleId"
    FROM exam_subjects es JOIN subjects sub ON sub.id = es.subject_id LEFT JOIN users u ON u.id = es.locked_by`;
 
 /**
@@ -431,24 +438,34 @@ export class ExamsService {
         throw new DomainError('exams.locked', 'The exam is locked; unlock it to change subjects', {
           status: 409,
         });
+      const classScale = exam.classes.find((k) => k.classId === dto.classId)?.gradeScaleId ?? null;
       for (const s of dto.subjects) {
         if (s.passMarks !== null && s.passMarks !== undefined && s.passMarks > s.maxMarks)
           throw new DomainError('exams.pass_above_max', 'Pass marks above max marks', {
             status: 400,
           });
+        // a grade-only subject (docs/design/65): graded on its scale, or the class's
+        if (s.maxMarks === 0 && !s.gradeScaleId && !classScale)
+          throw new DomainError(
+            'exams.grade_scale_needed',
+            'A grade-only subject (maximum 0) needs a grade scale: choose one for it or for the class',
+            { status: 400 },
+          );
         await c.query(
-          `INSERT INTO exam_subjects (school_id, exam_id, class_id, subject_id, max_marks, pass_marks, weightage, is_elective, exam_on)
-           VALUES (app.current_school_id(), $1, $2, $3, $4, $5, $6, $7, $8::date)
-           ON CONFLICT (exam_id, class_id, subject_id) DO UPDATE SET max_marks = EXCLUDED.max_marks, pass_marks = EXCLUDED.pass_marks, weightage = EXCLUDED.weightage, is_elective = EXCLUDED.is_elective, exam_on = EXCLUDED.exam_on`,
+          `INSERT INTO exam_subjects (school_id, exam_id, class_id, subject_id, max_marks, pass_marks, weightage, is_elective, exam_on, grade_scale_id)
+           VALUES (app.current_school_id(), $1, $2, $3, $4, $5, $6, $7, $8::date, $9)
+           ON CONFLICT (exam_id, class_id, subject_id) DO UPDATE SET max_marks = EXCLUDED.max_marks, pass_marks = EXCLUDED.pass_marks, weightage = EXCLUDED.weightage,
+             is_elective = EXCLUDED.is_elective, exam_on = EXCLUDED.exam_on, grade_scale_id = EXCLUDED.grade_scale_id`,
           [
             examId,
             dto.classId,
             s.subjectId,
             s.maxMarks,
-            s.passMarks ?? null,
+            s.maxMarks === 0 ? null : (s.passMarks ?? null),
             s.weightage ?? null,
             s.isElective,
             s.examOn ?? null,
+            s.gradeScaleId ?? null,
           ],
         );
       }
@@ -605,4 +622,185 @@ export class ExamsService {
       return this.findExam(c, examId, yearId);
     });
   }
+
+  /**
+   * Locks of one class of an exam per entry type (docs/design/65): marks (every subject of the class),
+   * indicators, remarks, attendance, health. Opening any of them again needs exams.marks.unlock.
+   */
+  async classLocks(ctx: RequestContext, examId: string, dto: ClassLocksDto): Promise<ExamRow> {
+    const tenant = requireTenant(ctx);
+    const yearId = this.year(tenant);
+    const opening = [dto.marks, dto.indicators, dto.remarks, dto.attendance, dto.health].some(
+      (v) => v === false,
+    );
+    if (opening && !ctx.permissions?.has('exams.marks.unlock'))
+      throw new DomainError('permission-denied', 'Opening entry again needs exams.marks.unlock', {
+        status: 403,
+      });
+    return this.db.tenant(tenant, async (c) => {
+      const exam = await this.findExam(c, examId, yearId);
+      if (!exam.classes.some((k) => k.classId === dto.classId))
+        throw new DomainError('exams.class_not_in_exam', 'The class is not in this exam', {
+          status: 404,
+        });
+      if (dto.marks !== undefined)
+        await c.query(
+          `UPDATE exam_subjects SET entry_locked = $3, locked_by = CASE WHEN $3 THEN app.current_user_id() END, locked_at = CASE WHEN $3 THEN now() END
+            WHERE exam_id = $1 AND class_id = $2 AND entry_locked <> $3`,
+          [examId, dto.classId, dto.marks],
+        );
+      await c.query(
+        `UPDATE exam_classes SET indicators_locked = COALESCE($3, indicators_locked), remarks_locked = COALESCE($4, remarks_locked),
+                attendance_locked = COALESCE($5, attendance_locked), health_locked = COALESCE($6, health_locked)
+          WHERE exam_id = $1 AND class_id = $2`,
+        [
+          examId,
+          dto.classId,
+          dto.indicators ?? null,
+          dto.remarks ?? null,
+          dto.attendance ?? null,
+          dto.health ?? null,
+        ],
+      );
+      await this.audit.stage(ctx, c, {
+        action: opening ? 'exams.class.unlock' : 'exams.class.lock',
+        entityType: 'exams',
+        entityId: examId,
+        after: dto,
+      });
+      return this.findExam(c, examId, yearId);
+    });
+  }
+
+  // ---- marks codes (docs/design/65) ---------------------------------------------------------------
+  private async codesWith(c: PoolClient) {
+    await c.query(`SELECT app.mark_codes_seed(app.current_school_id())`);
+    return (
+      await c.query<{
+        id: string;
+        code: string;
+        name: string;
+        treatment: string;
+        value: string | null;
+        blocksResult: boolean;
+        sortOrder: number;
+        status: string;
+      }>(
+        `SELECT id::text, code, name, treatment, value::text, blocks_result AS "blocksResult", sort_order AS "sortOrder", status::text
+           FROM mark_codes ORDER BY sort_order, code`,
+      )
+    ).rows;
+  }
+
+  async codes(ctx: RequestContext) {
+    return this.db.tenant(requireTenant(ctx), (c) => this.codesWith(c));
+  }
+
+  async upsertCode(ctx: RequestContext, dto: UpsertMarkCodeDto) {
+    return this.db.tenant(requireTenant(ctx), async (c) => {
+      await c.query(`SELECT app.mark_codes_seed(app.current_school_id())`);
+      const r = await c.query<{ id: string }>(
+        `INSERT INTO mark_codes (school_id, code, name, treatment, value, blocks_result, sort_order, status)
+         VALUES (app.current_school_id(), $1, $2, $3, $4, $5, $6, $7::row_status)
+         ON CONFLICT (school_id, code) DO UPDATE SET name = EXCLUDED.name, treatment = EXCLUDED.treatment, value = EXCLUDED.value,
+           blocks_result = EXCLUDED.blocks_result, sort_order = EXCLUDED.sort_order, status = EXCLUDED.status, updated_at = now()
+         RETURNING id::text`,
+        [
+          dto.code,
+          dto.name,
+          dto.treatment,
+          dto.value ?? null,
+          dto.blocksResult,
+          dto.sortOrder,
+          dto.status,
+        ],
+      );
+      await this.audit.stage(ctx, c, {
+        action: 'exams.mark_code.upsert',
+        entityType: 'mark_codes',
+        entityId: r.rows[0]!.id,
+        after: dto,
+      });
+      return this.codesWith(c);
+    });
+  }
+
+  /**
+   * Ready-made grade scales (docs/design/65): CBSE 8-point (VI-XII), the primary A*-D (I-V) and the
+   * 3-point co-scholastic A-C; a scale the school already has under the same code is left alone.
+   */
+  async installScalePresets(ctx: RequestContext): Promise<GradeScaleRow[]> {
+    return this.db.tenant(requireTenant(ctx), async (c) => {
+      for (const p of SCALE_PRESETS) {
+        const have = await c.query(
+          `SELECT 1 FROM grade_scales WHERE code = $1 AND deleted_at IS NULL`,
+          [p.code],
+        );
+        if (have.rowCount) continue;
+        const id = (
+          await c.query<{ id: string }>(
+            `INSERT INTO grade_scales (school_id, code, name, description, created_by, updated_by)
+             VALUES (app.current_school_id(), $1, $2, $3, app.current_user_id(), app.current_user_id()) RETURNING id::text`,
+            [p.code, p.name, p.description],
+          )
+        ).rows[0]!.id;
+        for (const [i, b] of p.bands.entries())
+          await c.query(
+            `INSERT INTO grade_bands (school_id, scale_id, min_pct, max_pct, grade, points, remark, sort_order)
+             VALUES (app.current_school_id(), $1, $2, $3, $4, $5, $6, $7)`,
+            [id, b[0], b[1], b[2], b[3], b[4], i],
+          );
+      }
+      await this.audit.stage(ctx, c, {
+        action: 'exams.scale.presets',
+        entityType: 'grade_scales',
+        entityId: 'presets',
+        after: { codes: SCALE_PRESETS.map((p) => p.code) },
+      });
+      return this.scalesWith(c);
+    });
+  }
 }
+
+/** [min %, max %, grade, points, remark], highest first */
+type Band = [number, number, string, number | null, string];
+const SCALE_PRESETS: Array<{ code: string; name: string; description: string; bands: Band[] }> = [
+  {
+    code: 'CBSE_8POINT',
+    name: 'CBSE 8-point (VI-XII)',
+    description: 'A1 91-100 down to E below 33, with grade points',
+    bands: [
+      [91, 100, 'A1', 10, 'Outstanding'],
+      [81, 90.99, 'A2', 9, 'Excellent'],
+      [71, 80.99, 'B1', 8, 'Very good'],
+      [61, 70.99, 'B2', 7, 'Good'],
+      [51, 60.99, 'C1', 6, 'Above average'],
+      [41, 50.99, 'C2', 5, 'Average'],
+      [33, 40.99, 'D', 4, 'Fair'],
+      [0, 32.99, 'E', null, 'Needs improvement'],
+    ],
+  },
+  {
+    code: 'PRIMARY_6POINT',
+    name: 'Primary A* to D (I-V)',
+    description: 'A* 91-100 down to D 50 and below',
+    bands: [
+      [91, 100, 'A*', null, 'Outstanding'],
+      [81, 90.99, 'A', null, 'Excellent'],
+      [71, 80.99, 'B*', null, 'Very good'],
+      [61, 70.99, 'B', null, 'Good'],
+      [51, 60.99, 'C', null, 'Fair'],
+      [0, 50.99, 'D', null, 'Needs improvement'],
+    ],
+  },
+  {
+    code: 'CO_SCHOLASTIC_3',
+    name: 'Co-scholastic 3-point (A-C)',
+    description: 'For grade-only subjects and co-scholastic areas',
+    bands: [
+      [67, 100, 'A', null, 'Outstanding'],
+      [34, 66.99, 'B', null, 'Very good'],
+      [0, 33.99, 'C', null, 'Fair'],
+    ],
+  },
+];

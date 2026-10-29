@@ -5,26 +5,30 @@ import { bff } from '@/lib/bff';
 
 const str = (fd: FormData, key: string): string => String(fd.get(key) ?? '').trim();
 
-/** Sprint 15: PUT the sheet through app.enter_marks; empty marks without AB/EX are skipped. */
+/**
+ * Sprint 15: PUT the sheet through app.enter_marks. A mark, a grade (grade-only subject) or a marks code
+ * (AB, ML, EX, ...; docs/design/65) per pupil; empty rows are skipped.
+ */
 export async function saveMarks(fd: FormData) {
   const examId = str(fd, 'examId');
   const back = `/marks?exam=${examId}&pick=${encodeURIComponent(str(fd, 'pick'))}`;
   const rows: Array<{
     studentId: string;
-    marks?: number | null;
-    absent: boolean;
-    exempt: boolean;
+    marks: number | null;
+    code: string | null;
+    grade: string | null;
   }> = [];
-  const ids = new Set<string>();
-  for (const key of fd.keys())
-    if (key.startsWith('marks-') || key.startsWith('absent-') || key.startsWith('exempt-'))
-      ids.add(key.slice(key.indexOf('-') + 1));
-  for (const studentId of ids) {
+  for (const studentId of fd.getAll('studentId').map(String)) {
     const marks = str(fd, `marks-${studentId}`);
-    const absent = fd.get(`absent-${studentId}`) !== null;
-    const exempt = fd.get(`exempt-${studentId}`) !== null;
-    if (!marks && !absent && !exempt) continue;
-    rows.push({ studentId, marks: absent || exempt ? null : Number(marks), absent, exempt });
+    const code = str(fd, `code-${studentId}`);
+    const grade = str(fd, `grade-${studentId}`);
+    if (!marks && !code && !grade) continue;
+    rows.push({
+      studentId,
+      marks: code || grade || !marks ? null : Number(marks),
+      code: code || null,
+      grade: code ? null : grade || null,
+    });
   }
   if (rows.length === 0) redirect(`${back}&error=validation-failed&detail=nothing%20to%20save`);
   let out: { inserted: number; updated: number } | undefined;
@@ -56,13 +60,9 @@ export async function savePartMarks(fd: FormData) {
   const examId = str(fd, 'examId');
   const back = `/marks?exam=${examId}&pick=${encodeURIComponent(str(fd, 'pick'))}`;
   const rows: Array<{ studentId: string; marks: number | null; absent: boolean }> = [];
-  const ids = new Set<string>();
-  for (const key of fd.keys())
-    if (key.startsWith('marks-') || key.startsWith('absent-'))
-      ids.add(key.slice(key.indexOf('-') + 1));
-  for (const studentId of ids) {
+  for (const studentId of fd.getAll('studentId').map(String)) {
     const marks = str(fd, `marks-${studentId}`);
-    const absent = fd.get(`absent-${studentId}`) !== null;
+    const absent = str(fd, `code-${studentId}`) === 'AB';
     // an empty box with no AB clears what was entered for the pupil in this part
     rows.push({ studentId, marks: absent || !marks ? null : Number(marks), absent });
   }

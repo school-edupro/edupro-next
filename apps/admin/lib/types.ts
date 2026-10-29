@@ -1962,6 +1962,8 @@ export interface ExamClass {
   gradeScaleCode: string | null;
   subjects: number;
   locked: number;
+  /** locks per entry type (docs/design/65) */
+  locks?: { indicators: boolean; remarks: boolean; attendance: boolean; health: boolean };
 }
 export interface ExamSubject {
   id: string;
@@ -1977,6 +1979,8 @@ export interface ExamSubject {
   entryLocked: boolean;
   lockedBy: string | null;
   lockedAt: string | null;
+  /** the subject's own grade scale; a grade-only subject (max 0) is graded on it */
+  gradeScaleId?: string | null;
   /** The parts the subject is entered in (empty = one figure). */
   parts?: Array<{
     id: string;

@@ -11,6 +11,8 @@ import { ExamsController } from './exams.controller';
 import { ExamsService } from './exams.service';
 import { FamilyResultsController, ReportCardsController } from './report-cards.controller';
 import { ReportCardsService } from './report-cards.service';
+import { SubjectChoicesController } from './subject-choices.controller';
+import { SubjectChoicesService } from './subject-choices.service';
 
 /**
  * Sprint 14: exam masters. Sprint 15: entry (marks, indicators, remarks, attendance, health).
@@ -19,6 +21,7 @@ import { ReportCardsService } from './report-cards.service';
 @Module({
   imports: [DailyAcademicsModule, ReportsModule],
   controllers: [
+    SubjectChoicesController,
     ExamsController,
     ExamEntryController,
     ReportCardsController,
@@ -31,6 +34,7 @@ import { ReportCardsService } from './report-cards.service';
     ExamResultsService,
     ReportCardsService,
     BoardResultsService,
+    SubjectChoicesService,
     AuditService,
   ],
   exports: [ExamsService, ExamEntryService, ExamResultsService, ReportCardsService],

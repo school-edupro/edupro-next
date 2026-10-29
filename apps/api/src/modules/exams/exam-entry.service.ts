@@ -4,10 +4,12 @@ import { ScopePolicy } from '../../common/access/scope.policy';
 import { AuditService } from '../../common/audit/audit.service';
 import { DbService } from '../../common/db/db.service';
 import { DomainError } from '../../common/errors/domain-error';
+import { readSheet, templateSheet } from '../../common/excel/sheet';
 import { requireTenant, type RequestContext } from '../../common/http/request-context';
 import {
   EXAMS,
   type EntryQueryDto,
+  type MarksUploadDto,
   type PutExamAttendanceDto,
   type PutHealthDto,
   type PutIndicatorsDto,
@@ -61,6 +63,11 @@ export interface MarkRow extends RosterStudent {
   marks: string | null;
   absent: boolean;
   exempt: boolean;
+  /** a marks code in place of marks (AB, ML, ...), and a grade-only subject's grade (docs/design/65) */
+  code: string | null;
+  grade: string | null;
+  /** how the student takes the subject (compulsory / optional / additional); null = not taken */
+  taken: string | null;
   updatedAt: string | null;
 }
 
@@ -75,22 +82,74 @@ export interface MarksSheet {
     passMarks: string | null;
     entryLocked: boolean;
     parts: PartRow[];
+    /** maximum 0: a grade of the scale instead of marks */
+    gradeOnly: boolean;
   };
   section: { id: string; code: string };
+  /** the school's active marks codes, and the grades a grade-only subject takes */
+  codes: Array<{ code: string; name: string }>;
+  grades: string[];
   rows: MarkRow[];
 }
+
+/** What the database's marks checks mean, for people (docs/design/65). */
+const MARKS_ERRORS: Record<string, string> = {
+  'exams.subject_not_taken':
+    'A student does not take this subject (see Subject choices); leave the row empty',
+  'exams.unknown_code':
+    'That is not a marks code of the school: use the number, or AB, ML, EX, NA, OD, L, NEW ADM',
+  'exams.grade_not_allowed': "That grade is not on the subject's grade scale",
+  'exams.marks_out_of_range': 'Marks must be between 0 and the maximum',
+  'exams.entry_locked': 'Marks entry is locked for this subject',
+  'exams.student_not_in_class': 'A student is not in this class this year',
+};
+const asMarksError = (error: unknown): unknown => {
+  const e = error as { code?: string; message?: string; detail?: string };
+  if (e.code !== 'P0001' || !e.message || !MARKS_ERRORS[e.message]) return error;
+  let extra: Record<string, unknown> | undefined;
+  try {
+    extra = e.detail ? (JSON.parse(e.detail) as Record<string, unknown>) : undefined;
+  } catch {
+    extra = undefined;
+  }
+  return new DomainError(e.message, MARKS_ERRORS[e.message]!, { status: 409, extra });
+};
+const num = (v: string | number) => String(Number(v));
 
 interface Kind {
   permission: string;
   /** Subject teachers qualify only with a matching subject; the register kinds need the class teacher. */
   subjectAware: boolean;
+  /** the exam class's lock of this entry type (docs/design/65) */
+  lock?: 'indicators_locked' | 'remarks_locked' | 'attendance_locked' | 'health_locked';
+  label?: string;
 }
 
 const MARKS: Kind = { permission: EXAMS.marksEnter, subjectAware: true };
-const INDICATORS: Kind = { permission: EXAMS.indicatorEnter, subjectAware: false };
-const REMARKS: Kind = { permission: EXAMS.remarkEnter, subjectAware: false };
-const ATTENDANCE: Kind = { permission: EXAMS.attendanceEnter, subjectAware: false };
-const HEALTH: Kind = { permission: EXAMS.healthEnter, subjectAware: false };
+const INDICATORS: Kind = {
+  permission: EXAMS.indicatorEnter,
+  subjectAware: false,
+  lock: 'indicators_locked',
+  label: 'Indicator',
+};
+const REMARKS: Kind = {
+  permission: EXAMS.remarkEnter,
+  subjectAware: false,
+  lock: 'remarks_locked',
+  label: 'Remarks',
+};
+const ATTENDANCE: Kind = {
+  permission: EXAMS.attendanceEnter,
+  subjectAware: false,
+  lock: 'attendance_locked',
+  label: 'Attendance',
+};
+const HEALTH: Kind = {
+  permission: EXAMS.healthEnter,
+  subjectAware: false,
+  lock: 'health_locked',
+  label: 'Health',
+};
 
 /**
  * Sprint 15: exam entry. Marks go through app.enter_marks (locks, range, enrolment); indicators, remarks,
@@ -196,6 +255,22 @@ export class ExamEntryService {
         status: 409,
         extra: { studentId: stranger.studentId },
       });
+  }
+
+  /** An entry type locked on the exam's class (docs/design/65). */
+  private async assertTypeOpen(c: PoolClient, examId: string, classId: string, kind: Kind) {
+    if (!kind.lock) return;
+    const r = await c.query<{ locked: boolean }>(
+      // eslint-disable-next-line no-restricted-syntax -- the column is one of the fixed lock names above
+      `SELECT ${kind.lock} AS locked FROM exam_classes WHERE exam_id = $1 AND class_id = $2`,
+      [examId, classId],
+    );
+    if (r.rows[0]?.locked)
+      throw new DomainError(
+        'exams.entry_locked',
+        `${kind.label ?? 'This'} entry is locked for the class in this exam`,
+        { status: 409 },
+      );
   }
 
   // ---- what the caller may enter -----------------------------------------------------------------
@@ -323,9 +398,12 @@ export class ExamEntryService {
       max_marks: string;
       pass_marks: string | null;
       entry_locked: boolean;
+      scale_id: string | null;
     }>(
-      `SELECT es.id::text, es.subject_id::text, sub.code, sub.name, es.max_marks::text, es.pass_marks::text, es.entry_locked
+      `SELECT es.id::text, es.subject_id::text, sub.code, sub.name, es.max_marks::text, es.pass_marks::text, es.entry_locked,
+              COALESCE(es.grade_scale_id, ec.grade_scale_id)::text AS scale_id
          FROM exam_subjects es JOIN subjects sub ON sub.id = es.subject_id
+         JOIN exam_classes ec ON ec.exam_id = es.exam_id AND ec.class_id = es.class_id
         WHERE es.exam_id = $1 AND es.class_id = $2 AND es.subject_id = $3`,
       [examId, classId, subjectId],
     );
@@ -354,15 +432,31 @@ export class ExamEntryService {
         marks: string | null;
         absent: boolean | null;
         exempt: boolean | null;
+        code: string | null;
+        grade: string | null;
+        kind: string | null;
         updated_at: Date | null;
       }>(
-        `SELECT s.id::text AS student_id, s.display_name AS name, s.admission_no, e.roll_no, m.marks::text, m.absent, m.exempt, m.updated_at
+        `SELECT s.id::text AS student_id, s.display_name AS name, s.admission_no, e.roll_no, m.marks::text, m.absent, m.exempt,
+                m.code, m.grade, app.student_subject_kind(s.id, $2, $4) AS kind, m.updated_at
            FROM enrolments e JOIN students s ON s.id = e.student_id AND s.deleted_at IS NULL
            LEFT JOIN mark_entries m ON m.student_id = s.id AND m.exam_subject_id = $3
           WHERE e.class_section_id = $1 AND e.academic_year_id = $2 AND e.status = 'active'
           ORDER BY e.roll_no NULLS LAST, s.display_name`,
-        [section.id, yearId, es.id],
+        [section.id, yearId, es.id, es.subject_id],
       );
+      await c.query(`SELECT app.mark_codes_seed(app.current_school_id())`);
+      const codes = await c.query<{ code: string; name: string }>(
+        `SELECT code, name FROM mark_codes WHERE status = 'active' ORDER BY sort_order, code`,
+      );
+      const grades = es.scale_id
+        ? (
+            await c.query<{ grade: string }>(
+              `SELECT grade FROM grade_bands WHERE scale_id = $1 ORDER BY sort_order, min_pct DESC`,
+              [es.scale_id],
+            )
+          ).rows.map((x) => x.grade)
+        : [];
       const mine = await c.query<{ ids: string[] | null; all: boolean }>(
         `SELECT array_agg(DISTINCT ta.subject_id::text) FILTER (WHERE ta.subject_id IS NOT NULL) AS ids,
                 COALESCE(bool_or(ta.kind IN ('class_teacher', 'coordinator')), false) AS all
@@ -409,8 +503,11 @@ export class ExamEntryService {
           maxMarks: es.max_marks,
           passMarks: es.pass_marks,
           entryLocked: es.entry_locked,
+          gradeOnly: Number(es.max_marks) === 0,
         },
         section: { id: section.id, code: section.code },
+        codes: codes.rows,
+        grades,
         rows: r.rows.map((x) => ({
           studentId: x.student_id,
           name: x.name,
@@ -420,6 +517,9 @@ export class ExamEntryService {
           marks: x.marks,
           absent: x.absent ?? false,
           exempt: x.exempt ?? false,
+          code: x.code,
+          grade: x.grade,
+          taken: x.kind,
           updatedAt: x.updated_at ? x.updated_at.toISOString() : null,
         })),
       };
@@ -445,10 +545,14 @@ export class ExamEntryService {
         );
       await this.assertMayEnter(c, tenant, yearId, section.id, MARKS, dto.subjectId);
       this.assertRoster(dto.rows, await this.roster(c, yearId, section.id));
-      const r = await c.query<{ o_inserted: number; o_updated: number }>(
-        `SELECT o_inserted, o_updated FROM app.enter_marks($1, $2::jsonb)`,
-        [es.id, JSON.stringify(dto.rows)],
-      );
+      const r = await c
+        .query<{ o_inserted: number; o_updated: number }>(
+          `SELECT o_inserted, o_updated FROM app.enter_marks($1, $2::jsonb)`,
+          [es.id, JSON.stringify(dto.rows)],
+        )
+        .catch((error: unknown) => {
+          throw asMarksError(error);
+        });
       await this.audit.stage(ctx, c, {
         action: 'exams.marks.enter',
         entityType: 'exam_subjects',
@@ -641,6 +745,7 @@ export class ExamEntryService {
       await this.assertMayEnter(c, tenant, yearId, section.id, INDICATORS);
       if (exam.marks_locked)
         throw new DomainError('exams.entry_locked', 'The exam is locked', { status: 409 });
+      await this.assertTypeOpen(c, examId, section.class_id, INDICATORS);
       await c.query(`SELECT app.assert_year_open($1, 'exams')`, [yearId]);
       const set = await c.query<{ id: string; grades: string[] }>(
         `SELECT s.id::text, s.grades FROM exam_indicator_sets x JOIN indicator_sets s ON s.id = x.set_id WHERE x.exam_id = $1 AND x.class_id = $2`,
@@ -775,6 +880,7 @@ export class ExamEntryService {
     await this.assertMayEnter(c, tenant, yearId, section.id, kind);
     if (exam.marks_locked)
       throw new DomainError('exams.entry_locked', 'The exam is locked', { status: 409 });
+    await this.assertTypeOpen(c, examId, section.class_id, kind);
     await c.query(`SELECT app.assert_year_open($1, 'exams')`, [yearId]);
     return section;
   }
@@ -1055,5 +1161,179 @@ export class ExamEntryService {
       });
       return { entries: dto.entries.length };
     });
+  }
+
+  // ---- marks by Excel (docs/design/65) -------------------------------------------------------------
+  /** The columns of a marks sheet: one value per subject, or one per part. */
+  private valueColumns(sheet: MarksSheet) {
+    const es = sheet.examSubject;
+    if (es.parts.length)
+      return es.parts.map((p) => ({
+        partId: p.id as string | null,
+        header: `${p.name} (out of ${num(p.maxMarks)})`,
+        max: Number(p.maxMarks),
+      }));
+    return [
+      {
+        partId: null as string | null,
+        header: es.gradeOnly ? 'Grade' : `Marks (out of ${num(es.maxMarks)})`,
+        max: Number(es.maxMarks),
+      },
+    ];
+  }
+
+  /** A section's marks of one subject as an Excel sheet to fill (the marks already entered in it). */
+  async marksExcel(ctx: RequestContext, examId: string, q: EntryQueryDto) {
+    const sheet = await this.marks(ctx, examId, q);
+    const es = sheet.examSubject;
+    const cols = this.valueColumns(sheet);
+    const valueOf = (r: MarkRow, partId: string | null) => {
+      if (partId) {
+        const p = r.parts[partId];
+        return p ? (p.absent ? 'AB' : p.marks === null ? null : Number(p.marks)) : null;
+      }
+      return r.code ?? r.grade ?? (r.marks === null ? null : Number(r.marks));
+    };
+    const bytes = await templateSheet({
+      sheet: 'Marks',
+      columns: [
+        { header: 'Admission no', width: 16, required: true, format: 'text' },
+        { header: 'Roll no', width: 8 },
+        { header: 'Name', width: 28 },
+        ...cols.map((c) => ({
+          header: c.header,
+          width: 20,
+          ...(es.gradeOnly ? { options: sheet.grades } : {}),
+          note: es.gradeOnly
+            ? 'A grade of the scale, or a code'
+            : `0 to ${String(c.max)}, or a code${es.parts.length ? ' (AB only in a part)' : ''}`,
+        })),
+      ],
+      guide: [
+        `${sheet.exam.name} · ${sheet.section.code} · ${es.name}`,
+        es.gradeOnly
+          ? 'Write a grade of the scale in the Grade column.'
+          : 'Write the marks, from 0 to the maximum shown in the heading.',
+        `Instead of marks, a code: ${sheet.codes.map((x) => `${x.code} (${x.name})`).join(', ')}.`,
+        'Leave a cell empty to keep what is entered; students who do not take the subject are not listed.',
+        'Do not change the Admission no column; upload the sheet on the marks screen, check the preview, then save.',
+      ],
+      rows: sheet.rows
+        .filter((r) => r.taken)
+        .map((r) => [r.admissionNo, r.rollNo, r.name, ...cols.map((c) => valueOf(r, c.partId))]),
+    });
+    return {
+      filename: `marks-${sheet.exam.code}-${sheet.section.code}-${es.code}.xlsx`
+        .toLowerCase()
+        .replace(/[^\w.-]+/g, '-'),
+      contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      base64: bytes.toString('base64'),
+    };
+  }
+
+  /**
+   * An uploaded marks sheet: every row checked (the student is in the section and takes the subject; the
+   * value is a mark in range, a code, or a grade of the scale); nothing is saved until `apply` and no
+   * row has an error.
+   */
+  async marksUpload(ctx: RequestContext, examId: string, dto: MarksUploadDto) {
+    const sheet = await this.marks(ctx, examId, {
+      classSectionId: dto.classSectionId,
+      subjectId: dto.subjectId,
+    });
+    const es = sheet.examSubject;
+    const cols = this.valueColumns(sheet);
+    const rows = await readSheet(dto.file, ['Admission no', ...cols.map((c) => c.header)]);
+    const byNo = new Map(sheet.rows.map((r) => [r.admissionNo.trim().toLowerCase(), r]));
+    const codes = new Set(sheet.codes.map((x) => x.code));
+    const grades = new Set(sheet.grades);
+    const seen = new Set<string>();
+    const checked = rows.map(({ row, cells }) => {
+      const no = cells['Admission no']!.trim();
+      const student = byNo.get(no.toLowerCase());
+      const values: Record<string, string> = {};
+      const parsed: Array<{
+        partId: string | null;
+        marks: number | null;
+        code: string | null;
+        grade: string | null;
+      }> = [];
+      let error: string | null = null;
+      if (!student) error = `No student with admission no ${no} in ${sheet.section.code}`;
+      else if (seen.has(student.studentId)) error = 'The student is in the sheet twice';
+      else if (!student.taken) error = 'Does not take this subject';
+      if (student) seen.add(student.studentId);
+      for (const c of cols) {
+        const raw = (cells[c.header] ?? '').trim();
+        values[c.header] = raw;
+        if (raw === '' || error) continue;
+        const up = raw.toUpperCase();
+        if (codes.has(up)) {
+          if (c.partId && up !== 'AB') error = `${c.header}: only AB in a part`;
+          else parsed.push({ partId: c.partId, marks: null, code: up, grade: null });
+        } else if (es.gradeOnly) {
+          if (!grades.has(raw)) error = `${raw} is not a grade of the scale`;
+          else parsed.push({ partId: null, marks: null, code: null, grade: raw });
+        } else {
+          const n = Number(raw);
+          if (!/^\d+(\.\d{1,2})?$/.test(raw) || !(n >= 0 && n <= c.max))
+            error = `${c.header}: ${raw} is not 0 to ${String(c.max)} or a code`;
+          else parsed.push({ partId: c.partId, marks: n, code: null, grade: null });
+        }
+      }
+      return { row, admissionNo: no, name: student?.name ?? null, student, values, parsed, error };
+    });
+    const errors = checked.filter((x) => x.error).length;
+    const preview = {
+      columns: cols.map((c) => c.header),
+      rows: checked.map((x) => ({
+        row: x.row,
+        admissionNo: x.admissionNo,
+        name: x.name,
+        values: x.values,
+        error: x.error,
+      })),
+      ready: checked.filter((x) => !x.error && x.parsed.length).length,
+      errors,
+      applied: false,
+    };
+    if (!dto.apply || errors || !preview.ready) return preview;
+    if (es.parts.length) {
+      for (const c of cols) {
+        const partRows = checked.flatMap((x) =>
+          x.parsed
+            .filter((v) => v.partId === c.partId)
+            .map((v) => ({
+              studentId: x.student!.studentId,
+              marks: v.marks,
+              absent: v.code === 'AB',
+            })),
+        );
+        if (partRows.length)
+          await this.putPartMarks(ctx, examId, {
+            classSectionId: dto.classSectionId,
+            partId: c.partId!,
+            rows: partRows,
+          });
+      }
+    } else
+      await this.putMarks(ctx, examId, {
+        classSectionId: dto.classSectionId,
+        subjectId: dto.subjectId,
+        rows: checked
+          .filter((x) => x.parsed.length)
+          .map((x) => {
+            const v = x.parsed[0]!;
+            return {
+              studentId: x.student!.studentId,
+              marks: v.marks,
+              code: v.code,
+              grade: v.grade,
+              absent: false,
+              exempt: false,
+            };
+          }),
+      });
+    return { ...preview, applied: true };
   }
 }

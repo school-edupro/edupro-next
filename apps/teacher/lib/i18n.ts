@@ -315,8 +315,8 @@ const DICT: Record<string, string> = {
   Exam: 'परीक्षा',
   'Section · subject': 'अनुभाग · विषय',
   'Open sheet': 'शीट खोलें',
-  'Leave a mark empty to skip a pupil; tick AB for absent or EX for exempt. Marks are checked against the maximum and the lock before they are saved.':
-    'किसी विद्यार्थी को छोड़ने के लिए अंक खाली रखें; अनुपस्थित के लिए AB या छूट के लिए EX पर टिक करें। सहेजने से पहले अंकों की अधिकतम और लॉक से जाँच होती है।',
+  'Leave a mark empty to skip a pupil; pick a code (AB absent, ML medical, EX exempt …) instead of marks. Marks are checked against the maximum and the lock before they are saved.':
+    'किसी विद्यार्थी को छोड़ने के लिए अंक खाली छोड़ें; अंकों के स्थान पर कोड चुनें (AB अनुपस्थित, ML चिकित्सा, EX छूट …)। सहेजने से पहले अंकों को अधिकतम अंक और लॉक से जाँचा जाता है।',
   Locked: 'लॉक',
   pupils: 'विद्यार्थी',
   Pupil: 'विद्यार्थी',
@@ -591,6 +591,14 @@ const DICT: Record<string, string> = {
   'due in the next 3 days': 'अगले 3 दिनों में देय',
   'A book can be reserved when every copy is out. The next copy back is kept for you for a few days; collect it at the library.':
     'जब सभी प्रतियाँ जारी हों तब पुस्तक आरक्षित की जा सकती है। लौटने वाली अगली प्रति कुछ दिन आपके लिए रखी जाती है; उसे पुस्तकालय से ले लें।',
+  Code: 'कोड',
+  Grade: 'ग्रेड',
+  graded: 'ग्रेड से',
+  'Does not take the subject': 'यह विषय नहीं लेता',
+  'A pupil does not take this subject; leave the row empty.':
+    'एक विद्यार्थी यह विषय नहीं लेता; पंक्ति खाली छोड़ें।',
+  'That is not a marks code of the school.': 'यह विद्यालय का अंक कोड नहीं है।',
+  "That grade is not on the subject's scale.": 'यह ग्रेड विषय के पैमाने में नहीं है।',
 };
 
 /** Translates a known English string; unknown strings fall back to English. */

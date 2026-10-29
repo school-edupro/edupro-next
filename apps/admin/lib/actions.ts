@@ -2902,15 +2902,20 @@ export async function setExamSubjects(fd: FormData) {
   const passes = fd.getAll('passMarks').map(String);
   const dates = fd.getAll('examOn').map(String);
   const electives = new Set(fd.getAll('elective').map(String));
+  const scales = fd.getAll('gradeScaleId').map(String);
+  // an empty maximum leaves the subject out; 0 makes it grade-only (docs/design/65)
   const subjects = subjectIds
     .map((subjectId, i) => ({
       subjectId,
+      given: Boolean(maxs[i]?.trim()),
       maxMarks: Number(maxs[i]),
-      passMarks: passes[i]?.trim() ? Number(passes[i]) : null,
+      passMarks: passes[i]?.trim() && Number(maxs[i]) > 0 ? Number(passes[i]) : null,
       examOn: dates[i]?.trim() || null,
       isElective: electives.has(subjectId),
+      gradeScaleId: scales[i]?.trim() || null,
     }))
-    .filter((s) => Number.isFinite(s.maxMarks) && s.maxMarks > 0);
+    .filter((s) => s.given && Number.isFinite(s.maxMarks) && s.maxMarks >= 0)
+    .map(({ given: _given, ...s }) => s);
   return run(`/exams/${id}?classId=${classId}`, () =>
     apiFetch(`/exams/${id}/subjects`, {
       method: 'PUT',

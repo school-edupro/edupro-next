@@ -22,7 +22,16 @@ export interface RegisterSheet {
     name: string;
     admissionNo: string;
     rollNo: number | null;
-    marks: Record<string, { marks: string | null; absent: boolean; exempt: boolean }>;
+    marks: Record<
+      string,
+      {
+        marks: string | null;
+        absent: boolean;
+        exempt: boolean;
+        code?: string | null;
+        grade?: string | null;
+      }
+    >;
     total: string | null;
     maxTotal: string | null;
     pct: string | null;
@@ -178,7 +187,7 @@ export class ExamResultsService {
         failed_subjects: number | null;
       }>(
         `SELECT s.id::text AS student_id, s.display_name AS name, s.admission_no, e.roll_no,
-                (SELECT jsonb_object_agg(m.exam_subject_id::text, jsonb_build_object('marks', m.marks::text, 'absent', m.absent, 'exempt', m.exempt))
+                (SELECT jsonb_object_agg(m.exam_subject_id::text, jsonb_build_object('marks', m.marks::text, 'absent', m.absent, 'exempt', m.exempt, 'code', m.code, 'grade', m.grade))
                    FROM mark_entries m JOIN exam_subjects es ON es.id = m.exam_subject_id WHERE es.exam_id = $3 AND m.student_id = s.id) AS marks,
                 r.total::text, r.max_total::text, r.pct::text, r.grade, r.result, r.rank_in_section, r.rank_in_class, r.failed_subjects
            FROM enrolments e JOIN students s ON s.id = e.student_id AND s.deleted_at IS NULL
@@ -259,12 +268,12 @@ export class ExamResultsService {
         pass_pct: string | null;
       }>(
         `SELECT k.code AS class_code, sub.code, sub.name, es.max_marks::text, es.pass_marks::text,
-                count(DISTINCT e.student_id)::int AS pupils, count(m.id) FILTER (WHERE NOT m.absent AND NOT m.exempt)::int AS entered,
+                count(DISTINCT e.student_id)::int AS pupils, count(m.id) FILTER (WHERE m.marks IS NOT NULL)::int AS entered,
                 count(m.id) FILTER (WHERE m.absent)::int AS absent, count(m.id) FILTER (WHERE m.exempt)::int AS exempt,
                 round(avg(m.marks) FILTER (WHERE NOT m.absent AND NOT m.exempt), 2)::text AS mean,
                 max(m.marks) FILTER (WHERE NOT m.absent AND NOT m.exempt)::text AS highest, min(m.marks) FILTER (WHERE NOT m.absent AND NOT m.exempt)::text AS lowest,
-                CASE WHEN es.pass_marks IS NOT NULL AND count(m.id) FILTER (WHERE NOT m.exempt) > 0
-                     THEN round(count(m.id) FILTER (WHERE NOT m.absent AND NOT m.exempt AND m.marks >= es.pass_marks)::numeric * 100 / count(m.id) FILTER (WHERE NOT m.exempt), 1)::text END AS pass_pct
+                CASE WHEN es.pass_marks IS NOT NULL AND count(m.id) FILTER (WHERE m.marks IS NOT NULL OR m.code = 'AB') > 0
+                     THEN round(count(m.id) FILTER (WHERE NOT m.absent AND NOT m.exempt AND m.marks >= es.pass_marks)::numeric * 100 / count(m.id) FILTER (WHERE m.marks IS NOT NULL OR m.code = 'AB'), 1)::text END AS pass_pct
            FROM exam_subjects es JOIN subjects sub ON sub.id = es.subject_id JOIN classes k ON k.id = es.class_id
            JOIN class_sections cs ON cs.class_id = es.class_id AND cs.academic_year_id = (SELECT academic_year_id FROM exams WHERE id = $1) AND cs.deleted_at IS NULL
            JOIN enrolments e ON e.class_section_id = cs.id AND e.academic_year_id = cs.academic_year_id AND e.status = 'active'

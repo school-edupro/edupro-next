@@ -6,7 +6,7 @@
  */
 import type { PoolClient } from 'pg';
 
-export type ClassBand = 'primary' | 'middle' | 'secondary' | 'senior';
+export type ClassBand = 'pre_primary' | 'primary' | 'middle' | 'secondary' | 'senior';
 
 export interface ReportCardSubjectRow {
   code: string;
@@ -18,6 +18,8 @@ export interface ReportCardSubjectRow {
     grade: string | null;
     absent: boolean;
     exempt: boolean;
+    /** a marks code in place of marks (ML, NA, OD, ...; docs/design/65) */
+    code?: string | null;
   }>;
   /** term aggregate across the exams (sum of marks / sum of max) */
   total: string | null;
@@ -100,9 +102,18 @@ const localDate = (d: Date | string | null): string | null => {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 };
 
-/** Band from the class row, else from its order (1-5 primary, 6-8 middle, 9-10 secondary, 11-12 senior). */
+/**
+ * Band from the class row, else from its order (1-5 primary, 6-8 middle, 9-10 secondary, 11-12 senior);
+ * pre-primary (Nursery, KG, Balvatika) only when the class says so (docs/design/65).
+ */
 export function bandFor(band: string | null, displayOrder: number): ClassBand {
-  if (band === 'primary' || band === 'middle' || band === 'secondary' || band === 'senior')
+  if (
+    band === 'pre_primary' ||
+    band === 'primary' ||
+    band === 'middle' ||
+    band === 'secondary' ||
+    band === 'senior'
+  )
     return band;
   if (displayOrder <= 5) return 'primary';
   if (displayOrder <= 8) return 'middle';
@@ -216,9 +227,11 @@ export async function loadReportCardData(
     marks: string | null;
     absent: boolean | null;
     exempt: boolean | null;
+    code: string | null;
+    entered_grade: string | null;
   }>(
     `SELECT es.exam_id::text, sub.code AS subject_code, sub.name AS subject_name, sub.display_order, es.max_marks::text,
-            m.marks::text, m.absent, m.exempt
+            m.marks::text, m.absent, m.exempt, m.code, m.grade AS entered_grade
        FROM exam_subjects es JOIN subjects sub ON sub.id = es.subject_id
        LEFT JOIN mark_entries m ON m.exam_subject_id = es.id AND m.student_id = $3
       WHERE es.exam_id = ANY($1::bigint[]) AND es.class_id = $2
@@ -249,13 +262,16 @@ export async function loadReportCardData(
       bySubject.set(r.subject_code, row);
     }
     const marks = r.absent ? '0.00' : r.marks;
-    const pct = marks !== null && !r.exempt ? (Number(marks) / Number(r.max_marks)) * 100 : null;
+    // a grade-only subject (maximum 0) and a code other than AB stay out of the totals
+    const out = r.exempt === true || Number(r.max_marks) === 0 || (!!r.code && r.code !== 'AB');
+    const pct = marks !== null && !out ? (Number(marks) / Number(r.max_marks)) * 100 : null;
     row.cellsByExam.set(r.exam_id, {
       marks,
       max: r.max_marks,
-      grade: gradeFor(pct, scale),
+      grade: r.entered_grade ?? gradeFor(pct, scale),
       absent: r.absent === true,
-      exempt: r.exempt === true,
+      exempt: out,
+      code: r.code && r.code !== 'AB' && r.code !== 'EX' ? r.code : null,
     });
   }
   const subjects: ReportCardSubjectRow[] = [...bySubject.values()]

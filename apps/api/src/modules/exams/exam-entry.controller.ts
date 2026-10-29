@@ -8,6 +8,7 @@ import {
   AnalysisQueryDto,
   EntryQueryDto,
   EXAMS,
+  MarksUploadDto,
   PromotionProposalsQueryDto,
   RegisterSheetQueryDto,
   PutExamAttendanceDto,
@@ -80,6 +81,20 @@ export class ExamEntryController {
   @RequirePermission(EXAMS.marksView)
   marks(@ReqCtx() ctx: RequestContext, @Param('id') id: string, @Query() q: EntryQueryDto) {
     return this.entry.marks(ctx, id, q);
+  }
+
+  @Get(':id/marks/excel')
+  @ApiOperation({ summary: "A section's marks of one subject as an Excel sheet to fill (base64)" })
+  @RequirePermission(EXAMS.marksView)
+  marksExcel(@ReqCtx() ctx: RequestContext, @Param('id') id: string, @Query() q: EntryQueryDto) {
+    return this.entry.marksExcel(ctx, id, q);
+  }
+
+  @Post(':id/marks/upload')
+  @ApiOperation({ summary: 'A filled marks sheet: preview, then save with apply' })
+  @RequirePermission(EXAMS.marksEnter)
+  marksUpload(@ReqCtx() ctx: RequestContext, @Param('id') id: string, @Body() dto: MarksUploadDto) {
+    return this.entry.marksUpload(ctx, id, dto);
   }
 
   @Put(':id/marks')

@@ -3,6 +3,7 @@ import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { RequirePermission } from '../../common/access/require-permission.decorator';
 import { ReqCtx, type RequestContext } from '../../common/http/request-context';
 import {
+  ClassLocksDto,
   CreateExamDto,
   EXAMS,
   LockExamSubjectsDto,
@@ -12,6 +13,7 @@ import {
   UpdateExamTypeDto,
   UpsertExamTypeDto,
   UpsertGradeScaleDto,
+  UpsertMarkCodeDto,
 } from './exams.dto';
 import { ExamsService } from './exams.service';
 
@@ -59,6 +61,28 @@ export class ExamsController {
   @RequirePermission(EXAMS.masterManage)
   upsertScale(@ReqCtx() ctx: RequestContext, @Body() dto: UpsertGradeScaleDto) {
     return this.exams.upsertScale(ctx, dto);
+  }
+
+  @Post('grade-scales/presets')
+  @ApiOperation({
+    summary: 'Add the ready-made scales: CBSE 8-point, primary A* to D, co-scholastic A to C',
+  })
+  @RequirePermission(EXAMS.masterManage)
+  async scalePresets(@ReqCtx() ctx: RequestContext) {
+    return { data: await this.exams.installScalePresets(ctx) };
+  }
+
+  @Get('mark-codes')
+  @ApiOperation({ summary: 'The marks codes (AB, ML, EX, ...) and what each does to a result' })
+  @RequirePermission(EXAMS.masterView)
+  async codes(@ReqCtx() ctx: RequestContext) {
+    return { data: await this.exams.codes(ctx) };
+  }
+
+  @Put('mark-codes')
+  @RequirePermission(EXAMS.masterManage)
+  async upsertCode(@ReqCtx() ctx: RequestContext, @Body() dto: UpsertMarkCodeDto) {
+    return { data: await this.exams.upsertCode(ctx, dto) };
   }
 
   @Get()
@@ -120,5 +144,15 @@ export class ExamsController {
   @RequirePermission(EXAMS.masterManage)
   lock(@ReqCtx() ctx: RequestContext, @Param('id') id: string, @Body() dto: LockExamSubjectsDto) {
     return this.exams.lockSubjects(ctx, id, dto);
+  }
+
+  @Put(':id/class-locks')
+  @ApiOperation({
+    summary:
+      'Lock or open entry of one class per type: marks, indicators, remarks, attendance, health',
+  })
+  @RequirePermission(EXAMS.masterManage)
+  classLocks(@ReqCtx() ctx: RequestContext, @Param('id') id: string, @Body() dto: ClassLocksDto) {
+    return this.exams.classLocks(ctx, id, dto);
   }
 }

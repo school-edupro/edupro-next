@@ -11,8 +11,9 @@ import {
 import { getTranslations } from 'next-intl/server';
 import { Notice } from '@/components/Notice';
 import { lockExamSubjects, setExamParts, setExamSubjects, updateExam } from '@/lib/actions';
+import { setClassLocks } from '@/lib/exam-entry-actions';
 import { apiFetch, getMe } from '@/lib/api';
-import type { Exam, ExamClass, ExamSubject, SubjectRow } from '@/lib/types';
+import type { Exam, ExamClass, ExamSubject, GradeScale, SubjectRow } from '@/lib/types';
 
 /** Sprint 14: one exam: classes, subjects per class with max and pass marks, entry locks. */
 export default async function ExamPage({
@@ -24,7 +25,7 @@ export default async function ExamPage({
 }) {
   const { id } = await params;
   const sp = await searchParams;
-  const [t, x, me, exam, subjects] = await Promise.all([
+  const [t, x, me, exam, subjects, scales] = await Promise.all([
     getTranslations('pages.exams_detail'),
     getTranslations('exams'),
     getMe(),
@@ -32,12 +33,17 @@ export default async function ExamPage({
     apiFetch<{ data: SubjectRow[] }>('/academics/subjects?size=200')
       .then((r) => r.data)
       .catch(() => [] as SubjectRow[]),
+    apiFetch<{ data: GradeScale[] }>('/exams/grade-scales')
+      .then((r) => r.data)
+      .catch(() => [] as GradeScale[]),
   ]);
+  const canUnlock = me.permissions.includes('exams.marks.unlock');
   const canManage = me.permissions.includes('exams.master.manage');
   const classId = sp.classId ?? exam.classes[0]?.classId ?? '';
   const rows = (exam.subjects ?? []).filter((s) => s.classId === classId);
   const byId = new Map(rows.map((s) => [s.subjectId, s]));
   const anyLocked = rows.some((s) => s.entryLocked);
+  const klass = exam.classes.find((k) => k.classId === classId);
   return (
     <>
       <Breadcrumbs items={[{ label: t('kicker'), href: '/exams' }, { label: exam.name }]} />
@@ -46,15 +52,23 @@ export default async function ExamPage({
         title={`${exam.name} · ${exam.code}`}
         description={`${exam.examTypeName}${exam.startsOn ? ` · ${exam.startsOn}` : ''}${exam.endsOn ? ` – ${exam.endsOn}` : ''}`}
         actions={
-          canManage ? (
-            <form action={updateExam} style={{ display: 'inline-flex', gap: 'var(--sp-2)' }}>
-              <input type="hidden" name="id" value={exam.id} />
-              <input type="hidden" name="marksLocked" value={exam.marksLocked ? 'no' : 'yes'} />
-              <Button type="submit" variant={exam.marksLocked ? 'secondary' : 'primary'}>
-                {exam.marksLocked ? x('unlockExam') : x('lockExam')}
-              </Button>
-            </form>
-          ) : null
+          <span style={{ display: 'inline-flex', gap: 'var(--sp-2)', flexWrap: 'wrap' }}>
+            <a className="ep-btn ep-btn--secondary ep-btn--sm" href={`/exams/${exam.id}/marks`}>
+              Marks entry
+            </a>
+            <a className="ep-btn ep-btn--ghost ep-btn--sm" href="/exams/subject-choices">
+              Subject choices
+            </a>
+            {canManage ? (
+              <form action={updateExam} style={{ display: 'inline-flex', gap: 'var(--sp-2)' }}>
+                <input type="hidden" name="id" value={exam.id} />
+                <input type="hidden" name="marksLocked" value={exam.marksLocked ? 'no' : 'yes'} />
+                <Button type="submit" variant={exam.marksLocked ? 'secondary' : 'primary'}>
+                  {exam.marksLocked ? x('unlockExam') : x('lockExam')}
+                </Button>
+              </form>
+            ) : null}
+          </span>
         }
       />
       <Notice params={sp} />
@@ -103,7 +117,12 @@ export default async function ExamPage({
                 header: x('subject'),
                 render: (s) => `${s.subjectCode} · ${s.subjectName}`,
               },
-              { key: 'max', header: x('maxMarks'), numeric: true, render: (s) => s.maxMarks },
+              {
+                key: 'max',
+                header: x('maxMarks'),
+                numeric: true,
+                render: (s) => (Number(s.maxMarks) === 0 ? 'Grade' : s.maxMarks),
+              },
               {
                 key: 'pass',
                 header: x('passMarks'),
@@ -135,7 +154,10 @@ export default async function ExamPage({
               <form action={setExamSubjects} style={{ marginTop: 'var(--sp-3)' }}>
                 <input type="hidden" name="id" value={exam.id} />
                 <input type="hidden" name="classId" value={classId} />
-                <p className="ep-field__help">{x('subjectsHelp')}</p>
+                <p className="ep-field__help">
+                  {x('subjectsHelp')} A maximum of 0 makes a grade-only subject (art, PE): it takes
+                  a grade of its scale (or the class&rsquo;s) and stays out of the total.
+                </p>
                 <table className="ep-table ep-table--dense" style={{ width: '100%' }}>
                   <thead>
                     <tr>
@@ -144,6 +166,7 @@ export default async function ExamPage({
                       <th>{x('passMarks')}</th>
                       <th>{x('examOn')}</th>
                       <th>{x('elective')}</th>
+                      <th>Grade scale</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -197,6 +220,21 @@ export default async function ExamPage({
                               defaultChecked={cur?.isElective ?? false}
                             />
                           </td>
+                          <td>
+                            <select
+                              className="ep-select"
+                              name="gradeScaleId"
+                              aria-label={`Grade scale · ${s.name}`}
+                              defaultValue={cur?.gradeScaleId ?? ''}
+                            >
+                              <option value="">The class&rsquo;s</option>
+                              {scales.map((g) => (
+                                <option key={g.id} value={g.id}>
+                                  {g.code}
+                                </option>
+                              ))}
+                            </select>
+                          </td>
                         </tr>
                       );
                     })}
@@ -226,6 +264,44 @@ export default async function ExamPage({
                 </FormActions>
               </form>
             </>
+          ) : null}
+          {canManage ? (
+            <form action={setClassLocks} style={{ marginTop: 'var(--sp-4)' }}>
+              <input type="hidden" name="examId" value={exam.id} />
+              <input type="hidden" name="classId" value={classId} />
+              <h3 className="ep-cdash__h3">Entry locks of the class</h3>
+              <p className="ep-field__help" style={{ marginTop: 0 }}>
+                Tick what is closed for {exam.classes.find((k) => k.classId === classId)?.classCode}
+                .{canUnlock ? '' : ' Opening entry again needs the unlock right.'}
+              </p>
+              <div style={{ display: 'flex', gap: 'var(--sp-4)', flexWrap: 'wrap' }}>
+                {(
+                  [
+                    ['marks', 'Marks', anyLocked && rows.every((s) => s.entryLocked)],
+                    ['indicators', 'Indicators', klass?.locks?.indicators],
+                    ['remarks', 'Remarks', klass?.locks?.remarks],
+                    ['attendance', 'Attendance', klass?.locks?.attendance],
+                    ['health', 'Health', klass?.locks?.health],
+                  ] as const
+                ).map(([k, label, on]) => (
+                  <label key={k} className="ep-check" htmlFor={`lk-${k}`}>
+                    <input
+                      id={`lk-${k}`}
+                      className="ep-check__input"
+                      type="checkbox"
+                      name={k}
+                      defaultChecked={Boolean(on)}
+                    />{' '}
+                    {label}
+                  </label>
+                ))}
+              </div>
+              <FormActions>
+                <Button type="submit" variant="secondary">
+                  Save the locks
+                </Button>
+              </FormActions>
+            </form>
           ) : null}
         </Card>
       ) : null}

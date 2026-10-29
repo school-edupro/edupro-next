@@ -56,6 +56,21 @@ export interface ReportCardLayout {
 }
 
 export const DEFAULT_LAYOUTS: Record<ReportCardData['student']['band'], ReportCardLayout> = {
+  pre_primary: {
+    subtitle: 'Holistic progress card (pre-primary)',
+    sections: [
+      { type: 'header' },
+      { type: 'student', showPhoto: true },
+      { type: 'scholastic', showGrades: true, showTotals: false, title: 'Scholastic areas' },
+      { type: 'hpc_descriptors', title: 'Co-scholastic areas and personal qualities' },
+      { type: 'attendance' },
+      { type: 'health' },
+      { type: 'remarks', title: "Class teacher's remarks" },
+      { type: 'result', showRank: false },
+      { type: 'grade_scale' },
+      { type: 'signatures', labels: ['Class teacher', 'Parent', 'Principal'] },
+    ],
+  },
   primary: {
     subtitle: 'Holistic progress card',
     sections: [
@@ -236,7 +251,7 @@ function scholastic(d: ReportCardData, s: ReportCardSection): string {
       const cells = r.cells
         .map(
           (c) =>
-            `<td class="num">${c.exempt ? 'EX' : c.absent ? 'AB' : esc(c.marks ?? '')}</td>${grades ? `<td class="ctr">${esc(c.grade ?? '')}</td>` : ''}`,
+            `<td class="num">${c.code ? esc(c.code) : Number(c.max) === 0 ? esc(c.grade ?? '') : c.exempt ? 'EX' : c.absent ? 'AB' : esc(c.marks ?? '')}</td>${grades ? `<td class="ctr">${esc(c.grade ?? '')}</td>` : ''}`,
         )
         .join('');
       return `<tr><td>${esc(r.name)}</td>${cells}${totals ? `<td class="num">${esc(r.total ?? '')} / ${esc(r.maxTotal)}</td><td class="num">${esc(r.pct ?? '')}</td><td class="ctr">${esc(r.grade ?? '')}</td>` : ''}</tr>`;

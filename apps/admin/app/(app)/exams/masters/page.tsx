@@ -12,6 +12,7 @@ import {
 import { getTranslations } from 'next-intl/server';
 import { Notice } from '@/components/Notice';
 import { createExamType, saveGradeScale } from '@/lib/actions';
+import { installGradeScalePresets, saveMarkCode } from '@/lib/exam-entry-actions';
 import { apiFetch, getMe } from '@/lib/api';
 import type { ExamType, GradeScale } from '@/lib/types';
 
@@ -30,6 +31,21 @@ export default async function ExamMastersPage({
     apiFetch<{ data: ExamType[] }>('/exams/types').then((r) => r.data),
     apiFetch<{ data: GradeScale[] }>('/exams/grade-scales').then((r) => r.data),
   ]);
+  // the marks codes and what each does to a result (docs/design/65)
+  const codes = await apiFetch<{
+    data: Array<{
+      id: string;
+      code: string;
+      name: string;
+      treatment: string;
+      value: string | null;
+      blocksResult: boolean;
+      sortOrder: number;
+      status: string;
+    }>;
+  }>('/exams/mark-codes')
+    .then((r) => r.data)
+    .catch(() => []);
   const canManage = me.permissions.includes('exams.master.manage');
   const editing = scales.find((s) => s.code === sp.scale) ?? null;
   const bandRows = editing ? editing.bands : [];
@@ -243,8 +259,120 @@ export default async function ExamMastersPage({
               </FormActions>
             </form>
           ) : null}
+          {canManage ? (
+            <form action={installGradeScalePresets} style={{ marginTop: 'var(--sp-3)' }}>
+              <p className="ep-field__help" style={{ marginTop: 0 }}>
+                Ready-made scales: CBSE 8-point A1 to E (VI-XII), primary A* to D (I-V) and the
+                co-scholastic A to C (for grade-only subjects). A scale you already have is left
+                alone.
+              </p>
+              <Button type="submit" variant="secondary">
+                Add the ready-made scales
+              </Button>
+            </form>
+          ) : null}
+        </Card>
+        <Card title="Marks codes">
+          <p className="ep-field__help" style={{ marginTop: 0 }}>
+            Written in place of marks. Each says what it does to a result: counted as 0, left out of
+            the maximum, fixed marks or a % of the maximum (pro-rata comes from the other exams of a
+            term); a code that fails the subject holds the result (AB).
+          </p>
+          <div className="ep-table-wrap">
+            <table className="ep-table ep-table--dense">
+              <caption className="ep-sr-only">Marks codes</caption>
+              <thead>
+                <tr>
+                  <th scope="col">Code</th>
+                  <th scope="col">Name</th>
+                  <th scope="col">In a result</th>
+                  <th scope="col">Fails the subject</th>
+                  <th scope="col">Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {codes.map((k) => (
+                  <tr key={k.id}>
+                    <td>
+                      <strong>{k.code}</strong>
+                    </td>
+                    <td>{k.name}</td>
+                    <td>
+                      {TREATMENT[k.treatment] ?? k.treatment}
+                      {k.value
+                        ? ` (${String(Number(k.value))}${k.treatment === 'percent' ? ' %' : ''})`
+                        : ''}
+                    </td>
+                    <td>{k.blocksResult ? 'Yes' : 'No'}</td>
+                    <td>
+                      <Badge tone={toneForStatus(k.status)}>{k.status}</Badge>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          {canManage ? (
+            <form action={saveMarkCode} style={{ marginTop: 'var(--sp-3)' }}>
+              <p className="ep-field__help" style={{ marginTop: 0 }}>
+                Add a code, or change one by writing its code again.
+              </p>
+              <FormRow>
+                <InputField id="mc-code" name="code" label="Code" required maxLength={12} />
+                <InputField id="mc-name" name="name" label="Name" required maxLength={60} />
+              </FormRow>
+              <FormRow>
+                <label className="ep-field" htmlFor="mc-treatment">
+                  <span className="ep-field__label">In a result</span>
+                  <select
+                    id="mc-treatment"
+                    name="treatment"
+                    className="ep-select"
+                    defaultValue="exclude"
+                  >
+                    {Object.entries(TREATMENT).map(([v, l]) => (
+                      <option key={v} value={v}>
+                        {l}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <InputField
+                  id="mc-value"
+                  name="value"
+                  label="Marks or % (fixed / % only)"
+                  type="number"
+                  min={0}
+                  step="0.5"
+                />
+              </FormRow>
+              <FormRow>
+                <label className="ep-field" htmlFor="mc-status">
+                  <span className="ep-field__label">Status</span>
+                  <select id="mc-status" name="status" className="ep-select" defaultValue="active">
+                    <option value="active">Active</option>
+                    <option value="inactive">Inactive</option>
+                  </select>
+                </label>
+                <label className="ep-check" htmlFor="mc-blocks" style={{ alignSelf: 'end' }}>
+                  <input id="mc-blocks" type="checkbox" name="blocksResult" /> Fails the subject
+                </label>
+              </FormRow>
+              <FormActions>
+                <Button type="submit">Save the code</Button>
+              </FormActions>
+            </form>
+          ) : null}
         </Card>
       </div>
     </>
   );
 }
+
+const TREATMENT: Record<string, string> = {
+  zero: 'Counted as 0',
+  exclude: 'Out of the maximum',
+  fixed: 'Fixed marks',
+  percent: '% of the maximum',
+  pro_rata: 'Pro-rata (term)',
+};
