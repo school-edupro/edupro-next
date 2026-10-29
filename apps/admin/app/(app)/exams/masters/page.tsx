@@ -11,16 +11,22 @@ import {
 } from '@edupro/ui';
 import { getTranslations } from 'next-intl/server';
 import { Notice } from '@/components/Notice';
-import { createExamType, saveGradeScale } from '@/lib/actions';
+import { createExamType, saveGradeScale, updateExamType } from '@/lib/actions';
 import { installGradeScalePresets, saveMarkCode } from '@/lib/exam-entry-actions';
 import { apiFetch, getMe } from '@/lib/api';
 import type { ExamType, GradeScale } from '@/lib/types';
 
-/** Sprint 14: exam types and grade scales. */
+/** Sprint 14: exam types and grade scales; `?type=CODE` opens a type to change, `?scale=CODE` a scale. */
 export default async function ExamMastersPage({
   searchParams,
 }: {
-  searchParams: Promise<{ ok?: string; error?: string; detail?: string; scale?: string }>;
+  searchParams: Promise<{
+    ok?: string;
+    error?: string;
+    detail?: string;
+    scale?: string;
+    type?: string;
+  }>;
 }) {
   const sp = await searchParams;
   const [t, x, c, me, types, scales] = await Promise.all([
@@ -47,6 +53,7 @@ export default async function ExamMastersPage({
     .then((r) => r.data)
     .catch(() => []);
   const canManage = me.permissions.includes('exams.master.manage');
+  const editingType = types.find((r) => r.code === sp.type) ?? null;
   const editing = scales.find((s) => s.code === sp.scale) ?? null;
   const bandRows = editing ? editing.bands : [];
   const blanks = Math.max(0, 8 - bandRows.length);
@@ -80,12 +87,87 @@ export default async function ExamMastersPage({
                 header: c('status'),
                 render: (r) => <Badge tone={toneForStatus(r.status)}>{c(r.status)}</Badge>,
               },
+              {
+                key: 'edit',
+                header: '',
+                render: (r) =>
+                  canManage ? (
+                    <a
+                      className="ep-btn ep-btn--ghost ep-btn--sm"
+                      href={`/exams/masters?type=${encodeURIComponent(r.code)}`}
+                      aria-label={x('editType', { code: r.code })}
+                      aria-current={editingType?.id === r.id ? 'true' : undefined}
+                    >
+                      {x('edit')}
+                    </a>
+                  ) : null,
+              },
             ]}
             rows={types}
             rowKey={(r) => r.id}
             emptyTitle={x('noTypes')}
           />
-          {canManage ? (
+          {canManage && editingType ? (
+            <form action={updateExamType} style={{ marginTop: 'var(--sp-3)' }}>
+              <input type="hidden" name="id" value={editingType.id} />
+              <input type="hidden" name="code" value={editingType.code} />
+              <h4 className="ep-card__title" style={{ marginTop: 0 }}>
+                {x('editType', { code: editingType.code })}
+              </h4>
+              <p className="ep-field__help" style={{ marginTop: 0 }}>
+                {x('typeCodeFixed')}
+              </p>
+              <FormRow columns={4}>
+                <InputField
+                  id="typeName"
+                  name="name"
+                  label={x('name')}
+                  required
+                  minLength={2}
+                  maxLength={80}
+                  defaultValue={editingType.name}
+                />
+                <InputField
+                  id="typeWeightage"
+                  name="weightage"
+                  label={x('weightage')}
+                  type="number"
+                  min={0}
+                  max={100}
+                  step="0.01"
+                  defaultValue={editingType.weightage ?? ''}
+                />
+                <InputField
+                  id="typeOrder"
+                  name="sortOrder"
+                  label={x('order')}
+                  type="number"
+                  min={0}
+                  max={1000}
+                  defaultValue={String(editingType.sortOrder)}
+                />
+                <label className="ep-field" htmlFor="typeStatus">
+                  <span className="ep-field__label">{c('status')}</span>
+                  <select
+                    id="typeStatus"
+                    name="status"
+                    className="ep-select"
+                    defaultValue={editingType.status}
+                  >
+                    <option value="active">{c('active')}</option>
+                    <option value="inactive">{c('inactive')}</option>
+                  </select>
+                </label>
+              </FormRow>
+              <FormActions>
+                <Button type="submit">{x('saveType')}</Button>
+                <a className="ep-btn ep-btn--ghost" href="/exams/masters">
+                  {c('cancel')}
+                </a>
+              </FormActions>
+            </form>
+          ) : null}
+          {canManage && !editingType ? (
             <form action={createExamType} style={{ marginTop: 'var(--sp-3)' }}>
               <FormRow columns={4}>
                 <InputField

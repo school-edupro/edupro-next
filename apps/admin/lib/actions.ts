@@ -2836,6 +2836,32 @@ export async function createExamType(fd: FormData) {
   );
 }
 
+/** Changes a type's name, weightage, order or status (the code stays: exams and reports refer to it). */
+export async function updateExamType(fd: FormData) {
+  const id = str(fd, 'id');
+  const editing = `/exams/masters?type=${encodeURIComponent(str(fd, 'code'))}`;
+  if (!/^\d{1,18}$/.test(id)) back(editing, 'validation', 'Choose the type again');
+  try {
+    await apiFetch(`/exams/types/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify({
+        name: str(fd, 'name'),
+        weightage: opt(fd, 'weightage') ? Number(str(fd, 'weightage')) : null,
+        sortOrder: opt(fd, 'sortOrder') ? Number(str(fd, 'sortOrder')) : 0,
+        status: str(fd, 'status') === 'inactive' ? 'inactive' : 'active',
+      }),
+    });
+  } catch (error) {
+    if (error instanceof ApiError && error.problem.type === 'mfa-required') {
+      redirect(`/step-up?returnTo=${encodeURIComponent(editing)}`);
+    }
+    // a refused change keeps the form open on the type
+    if (error instanceof ApiError) back(editing, error.problem.type, problemDetail(error));
+    throw error;
+  }
+  back('/exams/masters', 'ok');
+}
+
 export async function saveGradeScale(fd: FormData) {
   const grades = fd.getAll('grade').map(String);
   const mins = fd.getAll('minPct').map(String);

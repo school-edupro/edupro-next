@@ -12,7 +12,7 @@
 
 ## Before the exam
 
-1. **Exams → Masters**: exam types (PT, half-yearly, annual) and the grade scale per class band.
+1. **Exams → Types and grade scales**: exam types (PT, half-yearly, annual) and the grade scale per class band. **Edit** on a type changes its name, weightage, order or status; the code stays, and an inactive type is not offered for new exams.
 2. **Exams → Exams → New**: name, dates, the classes and subjects with maximum and pass marks; tick
    **show on portal** so the datesheet appears in the apps.
 3. Optional: indicator sets, the remark bank. **Exams → Indicators and HPC** holds the sets in up to

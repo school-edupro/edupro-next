@@ -247,6 +247,7 @@ const PAGES = [
   '/fees/bank',
   '/exams',
   '/exams/masters',
+  '/exams/masters?type=PT1',
   '/academics/subjects',
   '/exams/5',
   '/exams/5/marks',
