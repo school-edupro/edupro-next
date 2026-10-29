@@ -6,6 +6,8 @@ import { ReportsModule } from '../reports/reports.module';
 import { ReportCardSignaturesService } from './report-card-signatures.service';
 import { BoardResultsController } from './board-results.controller';
 import { BoardResultsService } from './board-results.service';
+import { ExamAnalysisController } from './exam-analysis.controller';
+import { ExamAnalysisService } from './exam-analysis.service';
 import { ExamEntryController } from './exam-entry.controller';
 import { ExamEntryService } from './exam-entry.service';
 import { ExamResultsService } from './exam-results.service';
@@ -34,6 +36,7 @@ import { SubjectChoicesService } from './subject-choices.service';
     MarkSchemesController,
     HpcController,
     FamilyHpcController,
+    ExamAnalysisController,
     ExamsController,
     ExamEntryController,
     ReportCardsController,
@@ -51,6 +54,7 @@ import { SubjectChoicesService } from './subject-choices.service';
     MarkSchemesService,
     ReportCardSignaturesService,
     HpcService,
+    ExamAnalysisService,
     AuditService,
   ],
   exports: [ExamsService, ExamEntryService, ExamResultsService, ReportCardsService],

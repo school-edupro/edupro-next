@@ -43,6 +43,11 @@
    **hide defaulters** with the minimum balance if the school withholds cards; release.
 4. Generate the batch PDF per section from the release; families download their own from the app.
 5. **Insights → Results analytics**: pass % and mean by class and section, weakest subjects.
+6. **Exams → open exam → Reports**: the section-wise subject analysis, mark ranges (the class's grade
+   scale, or your own ranges), toppers (top N in the class or section, at or above / below a %, or a
+   subject's), the subject teachers' analysis, the upload status and the missing marks; each with
+   Excel and PDF. A locked result scheme's page has **Merit by division**. The report builder has the
+   exam marks, exam results and term results datasets for your own reports.
 
 ## Five common questions
 

@@ -314,3 +314,28 @@ batteries (AAHPERD), ICSE / state board cards, moving the old module's mark hist
   three voices, photos, the parent's feedback kept and the lock, the card printing all of it);
   renderer 12 (two for the HPC card); all exam suites + permission coverage 79; db 73; workers 41;
   a11y the new admin pages, the teacher and family walks.
+- **Part 6** (no migration): `exam-analysis.service.ts`. `GET exams/:id/reports/:kind` with
+  `classId`, `classSectionId`, `format=json|xlsx|pdf`: `subjects` (each subject by section: students,
+  appeared, absent, mean, mean %, highest, lowest, passed, pass %; a class line under several
+  sections), `ranges` (students per band of the subject %: the class's grade scale when a class is
+  chosen, the school's own lower ends `ranges=90,75,33`, else ten-point bands; a % between two bands
+  goes to the lower), `toppers` (`top` N by the rank in the class or `by=section`, `minPct`,
+  `belowPct`, or `subjectId` for a subject's toppers with competition ranks; needs the results worked
+  out), `teachers` (each subject teacher's sections and subjects: appeared, mean %, pass %, highest %,
+  their overall line; "(no subject teacher)" for the rest), `status` (per section and subject:
+  students, entered, to enter, the status, submitted and verified by and when; a summary), `missing`
+  (the students without a mark or a code, under a heading per section and subject).
+  `GET exams/schemes/:id/divisions` (a locked result scheme: the merit list under a heading per
+  division in the scheme's order, then compartment / fail / absent / incomplete; the count per
+  section and in all). Staff read their scoped sections; subjects a student does not take and
+  grade-only subjects are left out. Excel: a sheet per table; PDF: the first table, the others under
+  it. Report builder datasets `exam_marks`, `exam_results`, `term_results` (locked schemes; the
+  working year, or `academicYearId`; `examId` / `termCode`; scoped by section). Admin: an exam's
+  Reports (the report, class, section and its filters; the tables; Excel, PDF View / Download through
+  `/api/exam-report/<id>/<kind>/<format>/<filters>`), Merit by division on a locked result scheme,
+  links from the exam and its result analysis.
+- Tests: exam-analysis e2e 8 (each report's figures, ranges by the scale and the school's own, the
+  toppers' filters, teachers, status and missing, Excel and PDF of each, divisions refused for a
+  draft, the datasets); all exam suites + report builder + permission coverage 98; db 73; a11y the
+  report pages.
+- Not done: promotion proposals from the term results (part 3) and remark categories (part 4).

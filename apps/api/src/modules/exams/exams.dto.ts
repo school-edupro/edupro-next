@@ -376,6 +376,35 @@ export class UpsertRemarkBankDto extends createZodDto(UpsertRemarkBankSchema) {}
 export const RegisterSheetQuerySchema = z.object({ classSectionId: IdSchema });
 export class RegisterSheetQueryDto extends createZodDto(RegisterSheetQuerySchema) {}
 export const AnalysisQuerySchema = z.object({ classId: IdSchema.optional() });
+
+/** docs/design/65 part 6: an exam's analyses, on the screen or as Excel / PDF */
+const FormatSchema = z.enum(['json', 'xlsx', 'pdf']).default('json');
+export const ExamReportQuerySchema = z.object({
+  classId: IdSchema.optional(),
+  classSectionId: IdSchema.optional(),
+  /** toppers: a subject's toppers */
+  subjectId: IdSchema.optional(),
+  top: z.coerce.number().int().min(1).max(100).optional(),
+  minPct: z.coerce.number().min(0).max(100).optional(),
+  belowPct: z.coerce.number().min(0).max(100).optional(),
+  /** toppers: the rank in the class (default) or in the section */
+  by: z.enum(['class', 'section']).optional(),
+  /** ranges: the lower ends of the school's own bands ("90,75,60,33") */
+  ranges: z
+    .string()
+    .regex(/^\d{1,3}(\.\d{1,2})?(,\d{1,3}(\.\d{1,2})?){0,11}$/, 'lower ends, comma between')
+    .transform((v) => v.split(',').map(Number))
+    .refine((v) => v.every((x) => x >= 0 && x <= 100), 'between 0 and 100')
+    .optional(),
+  format: FormatSchema,
+});
+export class ExamReportQueryDto extends createZodDto(ExamReportQuerySchema) {}
+export const DivisionsQuerySchema = z.object({
+  classId: IdSchema.optional(),
+  classSectionId: IdSchema.optional(),
+  format: FormatSchema,
+});
+export class DivisionsQueryDto extends createZodDto(DivisionsQuerySchema) {}
 export class AnalysisQueryDto extends createZodDto(AnalysisQuerySchema) {}
 export const PromotionProposalsQuerySchema = z.object({
   classId: IdSchema.optional(),

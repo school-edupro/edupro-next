@@ -995,6 +995,119 @@ export const DATASETS: Record<string, DatasetDefinition> = {
       values: [str(p.academicYearId), str(p.classLabel)],
     }),
   },
+  // ---- examinations v2 (docs/design/65 part 6): the marks register, exam and term results ------------
+  exam_marks: {
+    id: 'exam_marks',
+    title: 'Exam marks (register)',
+    permission: 'exams.marks.view',
+    scope: 'class_section',
+    maxRows: 200_000,
+    columns: [
+      { key: 'exam', header: 'Exam', width: 10 },
+      { key: 'class_code', header: 'Class', width: 8 },
+      { key: 'section', header: 'Section', width: 10 },
+      { key: 'roll_no', header: 'Roll', type: 'number', width: 6 },
+      { key: 'admission_no', header: 'Admission no', width: 14 },
+      { key: 'student', header: 'Student', width: 26 },
+      { key: 'subject', header: 'Subject', width: 22 },
+      { key: 'max_marks', header: 'Max', type: 'number', width: 7 },
+      { key: 'marks', header: 'Marks', type: 'number', width: 8 },
+      { key: 'code', header: 'Code', width: 8 },
+      { key: 'grade', header: 'Grade', width: 7 },
+      { key: 'pct', header: '%', type: 'number', width: 7 },
+    ],
+    // the working year's exams (or one), the subjects each student takes
+    query: (p) => ({
+      text: `SELECT x.code AS exam, k.code AS class_code, k.code || '-' || cs.name AS section, en.roll_no, s.admission_no, s.display_name AS student,
+                    sub.name AS subject, es.max_marks::float AS max_marks, m.marks::float AS marks, m.code, m.grade,
+                    CASE WHEN m.marks IS NOT NULL AND es.max_marks > 0 THEN round(m.marks * 100 / es.max_marks, 2)::float END AS pct
+               FROM exams x
+               JOIN exam_subjects es ON es.exam_id = x.id
+               JOIN subjects sub ON sub.id = es.subject_id
+               JOIN classes k ON k.id = es.class_id
+               JOIN class_sections cs ON cs.class_id = es.class_id AND cs.academic_year_id = x.academic_year_id AND cs.deleted_at IS NULL
+               JOIN enrolments en ON en.class_section_id = cs.id AND en.academic_year_id = x.academic_year_id AND en.status = 'active'
+               JOIN students s ON s.id = en.student_id AND s.deleted_at IS NULL
+               LEFT JOIN mark_entries m ON m.exam_subject_id = es.id AND m.student_id = s.id
+              WHERE x.deleted_at IS NULL AND x.academic_year_id = COALESCE($1::bigint, app.current_academic_year_id())
+                AND ($2::bigint IS NULL OR x.id = $2::bigint) AND ($3::bigint[] IS NULL OR cs.id = ANY($3::bigint[]))
+                AND app.student_subject_kind(s.id, x.academic_year_id, es.subject_id) IS NOT NULL
+              ORDER BY x.starts_on NULLS LAST, x.code, k.display_order, cs.name, en.roll_no NULLS LAST, s.display_name, sub.display_order`,
+      values: [str(p.academicYearId), str(p.examId), idList(p.sectionIds)],
+    }),
+  },
+  exam_results: {
+    id: 'exam_results',
+    title: 'Exam results',
+    permission: 'exams.marks.view',
+    scope: 'class_section',
+    maxRows: 50_000,
+    columns: [
+      { key: 'exam', header: 'Exam', width: 10 },
+      { key: 'class_code', header: 'Class', width: 8 },
+      { key: 'section', header: 'Section', width: 10 },
+      { key: 'roll_no', header: 'Roll', type: 'number', width: 6 },
+      { key: 'admission_no', header: 'Admission no', width: 14 },
+      { key: 'student', header: 'Student', width: 26 },
+      { key: 'total', header: 'Total', type: 'number', width: 8 },
+      { key: 'max_total', header: 'Max', type: 'number', width: 8 },
+      { key: 'pct', header: '%', type: 'number', width: 7 },
+      { key: 'grade', header: 'Grade', width: 7 },
+      { key: 'result', header: 'Result', width: 10 },
+      { key: 'failed_subjects', header: 'Subjects failed', type: 'number', width: 9 },
+      { key: 'rank_in_section', header: 'Rank (section)', type: 'number', width: 9 },
+      { key: 'rank_in_class', header: 'Rank (class)', type: 'number', width: 9 },
+    ],
+    query: (p) => ({
+      text: `SELECT x.code AS exam, k.code AS class_code, k.code || '-' || cs.name AS section, en.roll_no, s.admission_no, s.display_name AS student,
+                    r.total::float, r.max_total::float, r.pct::float, r.grade, r.result, r.failed_subjects, r.rank_in_section, r.rank_in_class
+               FROM exam_results r JOIN exams x ON x.id = r.exam_id AND x.deleted_at IS NULL
+               JOIN students s ON s.id = r.student_id
+               JOIN class_sections cs ON cs.id = r.class_section_id JOIN classes k ON k.id = cs.class_id
+               LEFT JOIN enrolments en ON en.student_id = r.student_id AND en.class_section_id = cs.id AND en.academic_year_id = x.academic_year_id AND en.status = 'active'
+              WHERE x.academic_year_id = COALESCE($1::bigint, app.current_academic_year_id())
+                AND ($2::bigint IS NULL OR x.id = $2::bigint) AND ($3::bigint[] IS NULL OR r.class_section_id = ANY($3::bigint[]))
+              ORDER BY x.starts_on NULLS LAST, x.code, k.display_order, cs.name, r.rank_in_section NULLS LAST, s.display_name`,
+      values: [str(p.academicYearId), str(p.examId), idList(p.sectionIds)],
+    }),
+  },
+  term_results: {
+    id: 'term_results',
+    title: 'Term results (mark schemes)',
+    permission: 'exams.marks.view',
+    scope: 'class_section',
+    maxRows: 50_000,
+    columns: [
+      { key: 'term', header: 'Term', width: 8 },
+      { key: 'scheme', header: 'Scheme', width: 22 },
+      { key: 'class_code', header: 'Class', width: 8 },
+      { key: 'section', header: 'Section', width: 10 },
+      { key: 'admission_no', header: 'Admission no', width: 14 },
+      { key: 'student', header: 'Student', width: 26 },
+      { key: 'total', header: 'Total', type: 'number', width: 8 },
+      { key: 'max_total', header: 'Max', type: 'number', width: 8 },
+      { key: 'pct', header: '%', type: 'number', width: 7 },
+      { key: 'grade', header: 'Grade', width: 7 },
+      { key: 'division', header: 'Division', width: 12 },
+      { key: 'result', header: 'Result', width: 12 },
+      { key: 'failed', header: 'Failed in', width: 18 },
+      { key: 'rank_in_section', header: 'Rank (section)', type: 'number', width: 9 },
+      { key: 'rank_in_class', header: 'Rank (class)', type: 'number', width: 9 },
+    ],
+    // locked schemes only (a draft's figures are a trial)
+    query: (p) => ({
+      text: `SELECT t.term_code AS term, m.name AS scheme, k.code AS class_code, k.code || '-' || cs.name AS section, s.admission_no, s.display_name AS student,
+                    t.total::float, t.max_total::float, t.pct::float, t.grade, t.division, t.result, array_to_string(t.failed, ', ') AS failed,
+                    t.rank_in_section, t.rank_in_class
+               FROM term_results t JOIN mark_schemes m ON m.id = t.scheme_id AND m.status = 'locked' AND m.deleted_at IS NULL
+               JOIN students s ON s.id = t.student_id
+               JOIN class_sections cs ON cs.id = t.class_section_id JOIN classes k ON k.id = cs.class_id
+              WHERE t.academic_year_id = COALESCE($1::bigint, app.current_academic_year_id())
+                AND ($2::text IS NULL OR t.term_code = $2) AND ($3::bigint[] IS NULL OR t.class_section_id = ANY($3::bigint[]))
+              ORDER BY t.term_code, k.display_order, cs.name, t.rank_in_section NULLS LAST, s.display_name`,
+      values: [str(p.academicYearId), str(p.termCode), idList(p.sectionIds)],
+    }),
+  },
   // ---- communication v2 (2026-10-02): usage statement, delivery log, failures ------------------------
   comms_monthly_usage: {
     id: 'comms_monthly_usage',

@@ -55,6 +55,9 @@ export default async function AnalysisPage({
             <a className="ep-btn ep-btn--ghost ep-btn--sm" href={`/exams/${id}/register`}>
               {r('register')}
             </a>
+            <a className="ep-btn ep-btn--ghost ep-btn--sm" href={`/exams/${id}/reports`}>
+              Reports and exports
+            </a>
             <a className="ep-btn ep-btn--ghost ep-btn--sm" href={`/exams/${id}/promotion`}>
               {r('promotion')}
             </a>
