@@ -52,8 +52,8 @@ export function MyProfileRowForm({
                 type="checkbox"
                 name={`r.${c.key}`}
                 defaultChecked={v[c.key] === true}
-              />{' '}
-              {c.label}
+              />
+              <span className="ep-check__box" aria-hidden="true" /> {c.label}
             </label>
           );
         if (c.type === 'doctype' || c.type === 'select')
