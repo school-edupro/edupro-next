@@ -1,4 +1,4 @@
-import { Badge, Card } from '@edupro/ui';
+import { Alert, Badge, Card } from '@edupro/ui';
 import { getTranslations } from 'next-intl/server';
 import { notFound } from 'next/navigation';
 import { AutoSubmit } from '@/components/AutoSubmit';
@@ -287,9 +287,19 @@ export default async function ExamMarksPage({
                 canReopen={me.permissions.includes('exams.marks.unlock')}
               />
             </div>
-            <p className="ep-field__help" style={{ marginTop: 0 }}>
-              {t('marksHelp', { codes: sheet.codes.map((c) => c.code).join(', ') })}
-            </p>
+            {canEnter && !locked ? (
+              <p className="ep-field__help" style={{ marginTop: 0 }}>
+                {t('marksHelp', { codes: sheet.codes.map((c) => c.code).join(', ') })}
+              </p>
+            ) : (
+              <Alert tone="info">
+                {sheet.status.status !== 'open'
+                  ? t('closed')
+                  : locked
+                    ? t('lockedNote')
+                    : t('viewOnly')}
+              </Alert>
+            )}
             <MarksSheet
               key={chosen.value}
               examId={exam.id}
@@ -329,15 +339,6 @@ export default async function ExamMarksPage({
               canEdit={canEnter && !locked}
               canSubmit={!part && canEnter && !locked}
             />
-            {canEnter && !locked ? null : (
-              <p className="ep-field__help">
-                {sheet.status.status !== 'open'
-                  ? t('closed')
-                  : locked
-                    ? t('lockedNote')
-                    : t('viewOnly')}
-              </p>
-            )}
           </Card>
           <Card elevated title={t('excel')}>
             <p style={{ marginTop: 0 }}>{t('excelHelp', { subject: es.name })}</p>

@@ -176,3 +176,27 @@ appearing once the exam is on the portal, a family refused the staff list); the 
 promotion, reports included) and the parent (parent and student logins) and teacher apps at 1280 and
 375 wide, with `/date-sheet` in both. The register PDF read back (school, exam · section, the subject
 columns, totals, grades, ranks, results).
+
+## After phase 3 (30 Oct 2026): master filters, Discipline, the exam office
+
+Asked: filters on Class and subject mapping; Discipline showed no drop-down on PT1's indicators;
+marks could not be entered on the admin marks page. Answers: filters on **every** master list;
+Discipline a level of its set; a ready-made **Exam office** role.
+
+- **Column filters on every master list** (`/masters/<group>`): a drop-down per lookup, fixed-list and
+  yes/no column (Class, Subject, Elective on Class and subject mapping; route, vehicle, category …
+  elsewhere), shown above the list and applied as picked (`by_<column>` in the address); the search
+  keeps Apply. API `GET masters/:id/rows` and `/export` take `filter=column:value` (repeated); only
+  those column kinds, a lookup by its id, yes / no as true / false; anything else is ignored. Excel /
+  PDF keep the filters ("filtered" in the PDF's subtitle); bulk update works on the ticked rows of
+  the filtered list. Test: `masters.e2e-spec.ts`.
+- **Discipline** (Alpha, set COSCH): the item had been switched to "a written note" after its 8 grades
+  were entered (the set editor now refuses that, 85fa532); it takes a level of the set again (A–D) and
+  the grades show.
+- **Exam office** (migration 0287): a built-in role with `exams.master.view`, `exams.marks.view` and
+  `exams.marks.enter`, no section limits: it enters marks and codes (and the Excel upload) for every
+  section and submits them; it never reopens (`exams.marks.unlock` stays with the school admin and
+  the coordinator, the sod rule keeps the two apart). On Alpha the demo office login dev-clerk holds
+  it. Test: `exam-hub.e2e-spec.ts` (enters without a teacher assignment, submits, reopening refused).
+- **Marks page, read only**: a login that may not enter (or a closed sheet) sees the marks as text,
+  with the reason at the top, instead of boxes it cannot type in.

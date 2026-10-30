@@ -171,6 +171,12 @@ export function MarksSheet({
                         {t('notTaken', { subject: subjectName })}
                       </span>
                     </td>
+                  ) : !canEdit ? (
+                    // read only: the values as text, not boxes that cannot be typed in
+                    <>
+                      <td>{c.code ? '' : gradeOnly ? c.grade : c.marks}</td>
+                      <td>{c.code}</td>
+                    </>
                   ) : (
                     <>
                       <td>

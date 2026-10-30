@@ -6,6 +6,7 @@
 | -------------------- | ------------------------------------------------------------------------------------------------------ |
 | Academic coordinator | Exam types and grade scales, exams and their subjects, entry locks, report-card templates and releases |
 | Subject teacher      | Enters marks for their subject and sections (teacher app or admin)                                     |
+| Exam office          | Enters marks and codes for every section (admin), e.g. from paper sheets; cannot reopen locked marks   |
 | Class teacher        | Indicators, remarks, exam attendance, height and weight (the exam register)                            |
 | Principal            | Reads results analytics; approves the release                                                          |
 | Families             | Read the released card in the parent app and download the PDF (unless withheld for fee default)        |
@@ -62,6 +63,9 @@
   maximum shows in red. **Save**, or **Save and submit** once every student who takes the subject has
   a mark or a code. The page asks before unsaved marks are left.
 - The coordinator **locks** a subject when entry is complete; a reopen needs a reason and is audited.
+- **Who can type marks**: subject and class teachers, and the **Exam office** role (Access → give it to
+  an office login). The school admin and the coordinator verify and reopen, so their marks pages
+  show the marks as text: entering and reopening are never the same person.
 - The exam register belongs to the class teacher: in the admin, **Remarks** (the general remark and
   the categories, saved together), **Attendance → Exam attendance** (the % shows as you type) and
   **Attendance → Health** (height, weight and blood group; the BMI shows as you type).

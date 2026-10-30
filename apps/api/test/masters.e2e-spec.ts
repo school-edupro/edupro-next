@@ -434,4 +434,59 @@ describe('master-data framework (e2e)', () => {
     expect(rowsExport.statusCode).toBe(200);
     expect(rowsExport.json().rows ?? rowsExport.json().data).toBeDefined();
   });
+
+  it('column filters: a drop-down or yes/no column narrows the list and its export; others are ignored', async () => {
+    const make = async (url: string, json: unknown) =>
+      (await inject({ method: 'POST', url, headers: h(), json })).json().id as string;
+    const c1 = await make('/academics/classes', {
+      code: 'F1',
+      name: 'Filter one',
+      displayOrder: 1,
+    });
+    const c2 = await make('/academics/classes', {
+      code: 'F2',
+      name: 'Filter two',
+      displayOrder: 2,
+    });
+    const sub: string[] = [];
+    for (const code of ['FENG', 'FMUS'])
+      sub.push(await make('/academics/subjects', { code, name: code, kind: 'scholastic' }));
+    const plan: Array<[string, string[]]> = [
+      [c1, [sub[1]!]],
+      [c2, []],
+    ];
+    for (const [k, electives] of plan)
+      expect(
+        (
+          await inject({
+            method: 'PUT',
+            url: `/academics/classes/${k}/subjects`,
+            headers: h(),
+            json: {
+              subjects: sub.map((x) => ({ subjectId: x, isElective: electives.includes(x) })),
+            },
+          })
+        ).statusCode,
+      ).toBe(200);
+    const rows = async (q: string) =>
+      (
+        await inject({ method: 'GET', url: `/masters/class_subjects/rows?${q}`, headers: h() })
+      ).json() as { data: Array<{ class_id: string; subject_id: string; is_elective: string }> };
+    expect((await rows('')).data).toHaveLength(4);
+    const one = await rows(`filter=class_id:${c1}`);
+    expect(one.data.map((r) => r.class_id)).toEqual(['F1', 'F1']);
+    const elective = await rows(`filter=class_id:${c1}&filter=is_elective:true`);
+    expect(elective.data).toHaveLength(1);
+    expect(elective.data[0]!.subject_id).toBe('FMUS (FMUS)');
+    expect((await rows(`filter=subject_id:${sub[0]!}`)).data).toHaveLength(2);
+    // not a drop-down or yes/no column, or not a value it takes: no filter
+    expect((await rows('filter=periods_per_week:3')).data).toHaveLength(4);
+    expect((await rows('filter=is_elective:maybe')).data).toHaveLength(4);
+    const file = await inject({
+      method: 'GET',
+      url: `/masters/class_subjects/export?format=xlsx&filter=is_elective:true`,
+      headers: h(),
+    });
+    expect(file.statusCode).toBe(200);
+  });
 });

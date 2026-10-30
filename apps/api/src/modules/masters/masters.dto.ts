@@ -1,13 +1,18 @@
 import { createZodDto } from 'nestjs-zod';
 import { z } from 'zod';
 
+const FilterParam = z
+  .union([z.string().max(200), z.array(z.string().max(200)).max(20)])
+  .optional()
+  .transform((v) => (v === undefined ? [] : Array.isArray(v) ? v : [v]));
+
 export const RowsQuerySchema = z.object({
   page: z.coerce.number().int().min(1).default(1),
   size: z.coerce.number().int().min(1).max(500).default(50),
   q: z.string().trim().max(80).optional(),
   status: z.enum(['active', 'inactive']).optional(),
-  /** filter[field]=value pairs arrive flattened by the query parser as `filters` */
-  filters: z.record(z.string().max(40), z.string().max(120)).optional(),
+  /** column filters (docs/design/66): `filter=column:value`, repeated; a drop-down or yes/no column */
+  filter: FilterParam,
   /** one row by its id (the edit form) */
   id: z.string().regex(/^\d+$/).optional(),
 });
@@ -58,5 +63,6 @@ export const ExportQuerySchema = z.object({
   format: z.enum(['xlsx', 'pdf']).default('xlsx'),
   q: z.string().trim().max(80).optional(),
   status: z.enum(['active', 'inactive']).optional(),
+  filter: FilterParam,
 });
 export class ExportQueryDto extends createZodDto(ExportQuerySchema) {}

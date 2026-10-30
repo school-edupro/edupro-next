@@ -3,7 +3,8 @@ import { apiFetchRaw } from '@/lib/api';
 
 /**
  * A master's list as Excel or PDF, made on the spot and handed to the browser as a download from this
- * same site (no queue, no second address): the search and the status filter on screen are kept.
+ * same site (no queue, no second address): the search, the status and the column filters on screen
+ * are kept.
  */
 export async function GET(req: NextRequest, { params }: { params: Promise<{ master: string }> }) {
   const { master } = await params;
@@ -15,6 +16,9 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ mast
   const search = (sp.get('q') ?? '').trim().slice(0, 80);
   if (search) q.set('q', search);
   if (['active', 'inactive'].includes(sp.get('status') ?? '')) q.set('status', sp.get('status')!);
+  // the column filters on screen (docs/design/66): column:value, checked by the API
+  for (const f of sp.getAll('filter').slice(0, 20))
+    if (/^[a-z_]{1,40}:.{1,120}$/.test(f)) q.append('filter', f);
   const res = await apiFetchRaw(`/masters/${master}/export?${q.toString()}`);
   if (!res.ok) return NextResponse.json({ type: 'request-error' }, { status: res.status });
   return new NextResponse(await res.arrayBuffer(), {

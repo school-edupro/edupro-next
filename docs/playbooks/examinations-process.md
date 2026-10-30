@@ -13,6 +13,7 @@ and the rules the system applies. Classes Balvatika to XII. Built from design do
 | Examination cell / coordinator | Academic coordinator | Exams and subjects, grade scales, marks codes, schemes, templates, releases; verifies marks; reopens with a reason; sends promotion decisions                                       |
 | Class teacher                  | Class teacher        | Marks of their subjects; the exam register (remarks by category, the general remark, attendance, height and weight); indicators and the progress card; verifies the section's marks |
 | Subject teacher                | Subject teacher      | Marks of their subject and sections; the remark category of their subject                                                                                                           |
+| Exam office                    | Exam office          | Enters marks and codes (and uploads them from Excel) for every section, e.g. from teachers' paper sheets; never reopens locked marks                                                |
 | Parent                         | Parent               | Reads published results and report cards in the parent app; writes their feedback on the Balvatika to Class II progress card                                                        |
 | Student                        | Student              | Reads published results and report cards                                                                                                                                            |
 

@@ -10,6 +10,7 @@ import {
 } from '@edupro/ui';
 import { notFound, redirect } from 'next/navigation';
 import { getTranslations } from 'next-intl/server';
+import { AutoSubmit } from '@/components/AutoSubmit';
 import { AcademicsNav } from '@/components/academics/AcademicsNav';
 import { FeeSetupNav } from '@/components/fees/FeeSetupNav';
 import { ExportWatcher } from '@/components/ExportWatcher';
@@ -59,6 +60,8 @@ type Search = {
   ok?: string;
   error?: string;
   detail?: string;
+  /** column filters: by_<column>=value (docs/design/66) */
+  [by: `by_${string}`]: string | undefined;
 };
 
 /**
@@ -102,14 +105,25 @@ export default async function MasterGroupPage({
   const size = SIZES.includes(sp.size ?? '') ? Number(sp.size) : 50;
   const q = (sp.q ?? '').trim();
   const status = sp.status === 'active' || sp.status === 'inactive' ? sp.status : '';
+  // column filters (docs/design/66): a drop-down (a lookup or a fixed list) or a yes/no column
+  const filterable = master.fields.filter(
+    (f) => ['ref', 'boolean', 'select'].includes(f.type) && !f.expr && !f.array,
+  );
+  const chosen = filterable
+    .map((f) => [f.key, (sp[`by_${f.key}`] ?? '').trim()] as const)
+    .filter(([, v]) => v);
   const query = new URLSearchParams({ page: String(page), size: String(size) });
   if (q) query.set('q', q);
   if (status) query.set('status', status);
-  const base = `/masters/${group}?tab=${master.id}&size=${size}${q ? `&q=${encodeURIComponent(q)}` : ''}${status ? `&status=${status}` : ''}`;
-  const exportQuery = new URLSearchParams({
+  for (const [k, v] of chosen) query.append('filter', `${k}:${v}`);
+  const byQuery = chosen.map(([k, v]) => `&by_${k}=${encodeURIComponent(v)}`).join('');
+  const base = `/masters/${group}?tab=${master.id}&size=${size}${q ? `&q=${encodeURIComponent(q)}` : ''}${status ? `&status=${status}` : ''}${byQuery}`;
+  const exportParams = new URLSearchParams({
     ...(q ? { q } : {}),
     ...(status ? { status } : {}),
-  }).toString();
+  });
+  for (const [k, v] of chosen) exportParams.append('filter', `${k}:${v}`);
+  const exportQuery = exportParams.toString();
   // what was typed in a form the server refused: shown again so nothing is retyped
   let typed: Record<string, string | null> | null = null;
   try {
@@ -136,9 +150,10 @@ export default async function MasterGroupPage({
           download: { url: string } | null;
         }>(`/reports/exports/${sp.export}`).catch(() => null)
       : Promise.resolve(null),
-    wantsForm &&
-    (master.fields.some((f) => f.type === 'ref') ||
-      Boolean(sp.edit && master.merge && master.canManage))
+    (wantsForm &&
+      (master.fields.some((f) => f.type === 'ref') ||
+        Boolean(sp.edit && master.merge && master.canManage))) ||
+    filterable.some((f) => f.type === 'ref')
       ? apiFetch<Record<string, MasterLookupOption[]>>(
           // editing a row that can take a duplicate: the rows it may be, too
           `/masters/${master.id}/lookups${sp.edit && master.merge && master.canManage ? '?merge=1' : ''}`,
@@ -268,9 +283,11 @@ export default async function MasterGroupPage({
                 {t('bulk')}
               </a>
             ) : null}
-            <a className="ep-btn ep-btn--ghost ep-btn--sm" href={`${back}&filter=1`}>
-              {t('filter')}
-            </a>
+            {filterable.length ? null : (
+              <a className="ep-btn ep-btn--ghost ep-btn--sm" href={`${back}&filter=1`}>
+                {t('filter')}
+              </a>
+            )}
             <a
               className="ep-btn ep-btn--secondary ep-btn--sm"
               href={`/api/masters/${master.id}/export?${exportQuery ? `${exportQuery}&` : ''}format=xlsx`}
@@ -297,8 +314,9 @@ export default async function MasterGroupPage({
         ) : null}
 
         {/* ---- filter row ---- */}
-        {sp.filter || q || status ? (
-          <form method="get" className="ep-master__filter">
+        {sp.filter || q || status || filterable.length ? (
+          <form method="get" className="ep-master__filter" aria-label={t('filter')}>
+            <AutoSubmit />
             <input type="hidden" name="tab" value={master.id} />
             <input type="hidden" name="size" value={String(size)} />
             <InputField
@@ -321,6 +339,29 @@ export default async function MasterGroupPage({
                 ]}
               />
             ) : null}
+            {filterable.map((f) => (
+              <SelectField
+                key={f.key}
+                id={`by_${f.key}`}
+                name={`by_${f.key}`}
+                label={f.header}
+                defaultValue={sp[`by_${f.key}`] ?? ''}
+                options={[
+                  { value: '', label: t('anyValue') },
+                  ...(f.type === 'boolean'
+                    ? [
+                        { value: 'true', label: t('yes') },
+                        { value: 'false', label: t('no') },
+                      ]
+                    : f.type === 'select'
+                      ? (f.options ?? []).map((o) => ({ value: o, label: o }))
+                      : (lookups[f.key] ?? []).map((o) => ({
+                          value: o.id,
+                          label: o.label ? `${o.label} (${o.value})` : o.value,
+                        }))),
+                ]}
+              />
+            ))}
             <Button type="submit" variant="secondary" size="sm">
               {t('apply')}
             </Button>
@@ -331,6 +372,11 @@ export default async function MasterGroupPage({
               {t('clear')}
             </a>
           </form>
+        ) : null}
+        {filterable.length ? (
+          <p className="ep-field__help" style={{ marginTop: 0 }}>
+            {t('filterHelp')}
+          </p>
         ) : null}
 
         {/* ---- add / edit ---- */}

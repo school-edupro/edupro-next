@@ -164,7 +164,7 @@ export class MastersService {
       q: query.q ?? null,
       status: query.status ?? null,
       academicYearId: def.yearScoped ? (tenant.academicYearId ?? null) : null,
-      filters: query.filters ?? {},
+      filters: this.filtersOf(def, query.filter),
     });
     const offset = (query.page - 1) * query.size;
     return this.db.tenant(tenant, async (c) => {
@@ -347,12 +347,33 @@ export class MastersService {
     return { fileName: `${def.id}-template.xlsx`, bytes };
   }
 
+  /**
+   * Column filters from `column:value` pairs (docs/design/66): only a drop-down (a lookup or a fixed
+   * list) or a yes/no column of the master; equality on the stored value (a lookup's id, true / false).
+   */
+  private filtersOf(def: MasterDefinition, pairs: string[] | undefined): Record<string, string> {
+    const out: Record<string, string> = {};
+    for (const p of pairs ?? []) {
+      const i = p.indexOf(':');
+      if (i < 1) continue;
+      const key = p.slice(0, i);
+      const value = p.slice(i + 1).trim();
+      const f = def.fields.find((x) => x.key === key);
+      if (!f || f.expr || f.array || !value || !['ref', 'boolean', 'select'].includes(f.type))
+        continue;
+      if (f.type === 'boolean' && !['true', 'false'].includes(value)) continue;
+      if (f.type === 'ref' && !/^\d{1,18}$/.test(value)) continue;
+      out[key] = value;
+    }
+    return out;
+  }
+
   // ---- export, at once --------------------------------------------------------------------------------
   /** The list as on screen (search and status filter kept) as Excel or PDF, made on the spot. */
   async export(
     ctx: RequestContext,
     id: string,
-    q: { q?: string; status?: string; format: 'xlsx' | 'pdf' },
+    q: { q?: string; status?: string; format: 'xlsx' | 'pdf'; filter?: string[] },
   ): Promise<{ fileName: string; bytes: Buffer; contentType: string }> {
     const def = this.def(id);
     this.assertPermission(ctx, def);
@@ -361,7 +382,7 @@ export class MastersService {
       q: q.q?.trim() || null,
       status: q.status ?? null,
       academicYearId: def.yearScoped ? (tenant.academicYearId ?? null) : null,
-      filters: {},
+      filters: this.filtersOf(def, q.filter),
     });
     const max = def.maxRows ?? 20_000;
     const { rows, school } = await this.db.tenant(tenant, async (c) => {
@@ -391,7 +412,7 @@ export class MastersService {
       const bytes = await tablePdf({
         school,
         title: def.title,
-        subtitle: `${String(rows.length)} row(s)${q.q ? ` · search "${q.q}"` : ''}${q.status ? ` · ${q.status}` : ''} · ${stamp}`,
+        subtitle: `${String(rows.length)} row(s)${q.q ? ` · search "${q.q}"` : ''}${q.status ? ` · ${q.status}` : ''}${Object.keys(this.filtersOf(def, q.filter)).length ? ' · filtered' : ''} · ${stamp}`,
         columns: cols.map((c) => ({
           label: c.header,
           width: c.width ?? 16,

@@ -4,7 +4,7 @@
  * (a subject or a class with marks stays), a new exam copied from an earlier one, and the entry locks:
  * locking one area needs no unlock right, only opening a locked one does; the general remark written
  * alone keeps "took part in" and "promoted to", and an emptied one goes; the register as a file, and
- * the date sheets of staff and of a family.
+ * the date sheets of staff and of a family; the exam office enters marks anywhere and never reopens.
  */
 import type { NestFastifyApplication } from '@nestjs/platform-fastify';
 import {
@@ -40,6 +40,8 @@ describe('exams made easy (e2e)', () => {
   /** the exam office: sets exams up and locks entry, never opens it again */
   let office: SeededUser;
   let parent: SeededUser;
+  /** the ready-made exam office: enters marks anywhere, never reopens */
+  let examOffice: SeededUser;
   let classId: string;
   let otherClassId: string;
   let section: string;
@@ -79,8 +81,9 @@ describe('exams made easy (e2e)', () => {
       clerk = await seedUser(c, school, `${s}-clerk`, 'class_teacher');
       office = await seedUser(c, school, `${s}-office`);
       parent = await seedUser(c, school, `${s}-parent`, 'parent', 'guardian');
+      examOffice = await seedUser(c, school, `${s}-exams`, 'exam_office');
       const role = await c.query<{ id: string }>(
-        `INSERT INTO roles (school_id, code, name, kind) VALUES ($1, 'exam_office', 'Exam office', 'module') RETURNING id::text`,
+        `INSERT INTO roles (school_id, code, name, kind) VALUES ($1, 'lock_desk', 'Lock desk', 'module') RETURNING id::text`,
         [school.id],
       );
       await c.query(
@@ -442,5 +445,44 @@ describe('exams made easy (e2e)', () => {
     expect(shown.map((e) => e.code)).toEqual(['HY-2026']);
     expect(shown[0]!.papers.map((p) => p.subject)).toEqual(['English', 'Mathematics']);
     expect((await call(parent, 'GET', '/exams/date-sheets')).statusCode).toBe(403);
+  });
+
+  it('the exam office enters marks for any section without being assigned, and cannot reopen them', async () => {
+    const eo = (
+      await call(admin, 'POST', '/exams', {
+        examTypeId: typeId,
+        code: 'EO-1',
+        name: 'Exam office check',
+        classes: [{ classId }],
+      })
+    ).json().id as string;
+    await subjects([{ subjectId: subject.SCI, maxMarks: 20 }], eo);
+    const roster = (
+      (
+        await call(
+          admin,
+          'GET',
+          `/exams/${eo}/marks?classSectionId=${section}&subjectId=${subject.SCI!}`,
+        )
+      ).json() as {
+        rows: Array<{ studentId: string }>;
+      }
+    ).rows;
+    const put = await call(examOffice, 'PUT', `/exams/${eo}/marks`, {
+      classSectionId: section,
+      subjectId: subject.SCI,
+      rows: roster.map((r, i) =>
+        i === 0 ? { studentId: r.studentId, code: 'AB' } : { studentId: r.studentId, marks: 15 },
+      ),
+    });
+    expect(put.statusCode).toBe(200);
+    const move = (action: string, extra: Record<string, unknown> = {}) =>
+      call(examOffice, 'POST', `/exams/${eo}/entry-status/${action}`, {
+        classSectionId: section,
+        subjectId: subject.SCI,
+        ...extra,
+      });
+    expect((await move('submit')).statusCode).toBe(201);
+    expect((await move('reopen', { note: 'A correction' })).statusCode).toBe(403);
   });
 });

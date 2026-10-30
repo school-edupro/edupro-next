@@ -3014,7 +3014,9 @@
     "yearHint": "Rows of the working year {year} (switch the year in the header).",
     "editVia": "Rows of this list are added and changed on",
     "descriptionOwnedUpload": "This list as Excel or PDF, and an Excel sheet to add or update many rows at once.",
-    "descriptionOwned": "This list as Excel or PDF."
+    "descriptionOwned": "This list as Excel or PDF.",
+    "anyValue": "Any",
+    "filterHelp": "Pick a value: the list follows at once. Excel and PDF keep these filters."
   },
   "workflowEditor": {
     "new": "New definition",
@@ -3874,7 +3876,7 @@
       "locked": "Locked",
       "students": "{n} students",
       "children": "{n} children",
-      "viewOnly": "You may view these marks only: the teachers or the exam office enter them (the marks entry right).",
+      "viewOnly": "You can read these marks; you cannot enter them. Marks are entered by the subject teacher, the class teacher or the exam office (Access → give the Exam office role to an office login); your role verifies and reopens them.",
       "closed": "The marks are submitted or verified: the verifier sends them back (or someone with the unlock right reopens them) before they change.",
       "lockedNote": "Entry is locked for this subject; open it on the exam's Overview.",
       "excel": "Excel",
