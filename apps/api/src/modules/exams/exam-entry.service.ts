@@ -1058,21 +1058,46 @@ export class ExamEntryService {
       this.assertRoster(dto.rows, await this.roster(c, yearId, section.id));
       let n = 0;
       for (const r of dto.rows) {
+        // "took part in" and "promoted to" left out are kept (the admin sheet writes the remark only)
+        const keepPart = r.participation === undefined;
+        const keepPromoted = r.promotedTo === undefined;
+        if (!r.remark && !r.participation?.trim() && !r.promotedTo?.trim()) {
+          // nothing written: a row with nothing else kept goes, else it keeps the rest
+          const d = await c.query(
+            `DELETE FROM exam_remarks WHERE exam_id = $1 AND student_id = $2
+               AND (NOT $3 OR participation IS NULL) AND (NOT $4 OR promoted_to IS NULL)`,
+            [examId, r.studentId, keepPart, keepPromoted],
+          );
+          const u = await c.query(
+            `UPDATE exam_remarks SET remark = NULL, bank_code = NULL,
+                    participation = CASE WHEN $3 THEN participation END,
+                    promoted_to = CASE WHEN $4 THEN promoted_to END, entered_by = app.current_user_id()
+              WHERE exam_id = $1 AND student_id = $2
+                AND (remark IS NOT NULL OR (NOT $3 AND participation IS NOT NULL) OR (NOT $4 AND promoted_to IS NOT NULL))`,
+            [examId, r.studentId, keepPart, keepPromoted],
+          );
+          n += (d.rowCount ?? 0) + (u.rowCount ?? 0);
+          continue;
+        }
         const u = await c.query(
           `INSERT INTO exam_remarks (school_id, exam_id, student_id, remark, bank_code, participation, promoted_to, entered_by)
            VALUES (app.current_school_id(), $1, $2, $3, $4, $5, $6, app.current_user_id())
            ON CONFLICT (exam_id, student_id) DO UPDATE SET remark = EXCLUDED.remark, bank_code = EXCLUDED.bank_code,
-             participation = EXCLUDED.participation, promoted_to = EXCLUDED.promoted_to, entered_by = app.current_user_id()
+             participation = CASE WHEN $7 THEN exam_remarks.participation ELSE EXCLUDED.participation END,
+             promoted_to = CASE WHEN $8 THEN exam_remarks.promoted_to ELSE EXCLUDED.promoted_to END,
+             entered_by = app.current_user_id()
            WHERE exam_remarks.remark IS DISTINCT FROM EXCLUDED.remark OR exam_remarks.bank_code IS DISTINCT FROM EXCLUDED.bank_code
-              OR exam_remarks.participation IS DISTINCT FROM EXCLUDED.participation
-              OR exam_remarks.promoted_to IS DISTINCT FROM EXCLUDED.promoted_to`,
+              OR (NOT $7 AND exam_remarks.participation IS DISTINCT FROM EXCLUDED.participation)
+              OR (NOT $8 AND exam_remarks.promoted_to IS DISTINCT FROM EXCLUDED.promoted_to)`,
           [
             examId,
             r.studentId,
-            r.remark,
-            r.bankCode ?? null,
+            r.remark || null,
+            r.remark ? (r.bankCode ?? null) : null,
             r.participation?.trim() || null,
             r.promotedTo?.trim() || null,
+            keepPart,
+            keepPromoted,
           ],
         );
         n += u.rowCount ?? 0;

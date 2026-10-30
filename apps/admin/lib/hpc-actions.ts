@@ -138,37 +138,6 @@ export async function saveIndicatorSet(input: SetInput) {
 }
 
 // ---- entry --------------------------------------------------------------------------------------
-/** One area of a section: a level (or an observation) per student and item; an empty cell is removed. */
-export async function saveIndicatorEntries(fd: FormData) {
-  const examId = str(fd, 'examId');
-  const backTo = str(fd, 'back') || `/exams/${examId}/indicators`;
-  const items = fd.getAll('item').map(String);
-  const rows: Array<{
-    studentId: string;
-    indicatorId: string;
-    grade: string | null;
-    note: string | null;
-  }> = [];
-  for (const studentId of fd.getAll('studentId').map(String))
-    for (const indicatorId of items) {
-      const k = `${studentId}-${indicatorId}`;
-      if (!fd.has(`l-${k}`) && !fd.has(`n-${k}`)) continue;
-      rows.push({
-        studentId,
-        indicatorId,
-        grade: str(fd, `l-${k}`) || null,
-        note: str(fd, `n-${k}`) || null,
-      });
-    }
-  if (!rows.length) back(backTo, 'validation-failed', 'Nothing to save');
-  return run(backTo, () =>
-    apiFetch(`/exams/${examId}/indicators`, {
-      method: 'PUT',
-      body: JSON.stringify({ classSectionId: str(fd, 'classSectionId'), rows }),
-    }),
-  );
-}
-
 /** A child's words, the parent's (unless they wrote it in the app) and the teacher's. */
 export async function saveHpcFeedback(fd: FormData) {
   const examId = str(fd, 'examId');

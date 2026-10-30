@@ -1,12 +1,16 @@
-import { Badge, Breadcrumbs, Button, Card, PageHeader } from '@edupro/ui';
+import { Badge, Button, Card } from '@edupro/ui';
+import { getTranslations } from 'next-intl/server';
 import { notFound } from 'next/navigation';
+import { AutoSubmit } from '@/components/AutoSubmit';
+import { ExamFrame } from '@/components/exams/ExamFrame';
+import { FormSaveBar } from '@/components/exams/FormSaveBar';
+import { IndicatorSheet, type SheetArea } from '@/components/exams/IndicatorSheet';
 import { ViewDownload } from '@/components/admissions/ViewDownload';
 import { PortfolioUpload } from '@/components/exams/PortfolioUpload';
 import { Notice } from '@/components/Notice';
-import { removePortfolioPhoto, saveHpcFeedback, saveIndicatorEntries } from '@/lib/hpc-actions';
+import { removePortfolioPhoto, saveHpcFeedback } from '@/lib/hpc-actions';
 import { ApiError, apiFetch, getMe } from '@/lib/api';
-import type { Exam } from '@/lib/types';
-import { ExamTabs } from '@/components/exams/ExamTabs';
+import type { Exam, ExamProgress } from '@/lib/types';
 
 interface Item {
   id: string;
@@ -53,9 +57,10 @@ interface Photo {
 }
 
 /**
- * Indicators and the Holistic Progress Card of a section (docs/design/65, part 5): one area at a
- * time, a level (or a written note) per child and item, the goals as headings; for a progress card,
- * a child's own words, the parent's and the teacher's, and portfolio photos.
+ * Indicators and the Holistic Progress Card of a section (docs/design/65, part 5; docs/design/66):
+ * every area as a tab of one sheet saved together, a level (or a written note) per child and item, the
+ * goals as headings; for a progress card, a child's own words, the parent's and the teacher's, and
+ * portfolio photos. Choosing the section or the child opens it at once.
  */
 export default async function ExamIndicatorsPage({
   params,
@@ -76,10 +81,14 @@ export default async function ExamIndicatorsPage({
   if (!/^\d{1,18}$/.test(id)) notFound();
   const me = await getMe();
   if (!me.permissions.includes('exams.marks.view')) notFound();
-  const exam = await apiFetch<Exam>(`/exams/${id}`).catch((e: unknown) => {
-    if (e instanceof ApiError && e.status === 404) notFound();
-    throw e;
-  });
+  const [t, exam, progress] = await Promise.all([
+    getTranslations('examHub.entry'),
+    apiFetch<Exam>(`/exams/${id}`).catch((e: unknown) => {
+      if (e instanceof ApiError && e.status === 404) notFound();
+      throw e;
+    }),
+    apiFetch<ExamProgress>(`/exams/${id}/progress`).catch(() => null),
+  ]);
   const sections = await apiFetch<{ data: Array<{ classSectionId: string; code: string }> }>(
     `/exams/${id}/entry/sections`,
   )
@@ -92,15 +101,29 @@ export default async function ExamIndicatorsPage({
   const canEnter = me.permissions.includes('exams.indicator.enter');
   const open = canEnter && !!sheet && !sheet.locked;
   const items = sheet?.indicators ?? [];
-  const areas = [...new Set(items.map((i) => i.area ?? 'Other'))];
-  const area = areas.includes(sp.area ?? '') ? sp.area! : areas[0];
-  const top = items.filter((i) => !i.parentId && (i.area ?? 'Other') === area);
-  const groups = top.map((i) => ({
-    item: i,
-    kids: items.filter((k) => k.parentId === i.id),
-  }));
-  const cells = groups.flatMap((g) => (g.kids.length ? g.kids : [g.item]));
-  const hasGoals = groups.some((g) => g.kids.length);
+  const areaNames = [...new Set(items.map((i) => i.area ?? 'Other'))];
+  const area = areaNames.includes(sp.area ?? '') ? sp.area! : areaNames[0];
+  const cell = (i: Item) => ({
+    id: i.id,
+    name: i.name,
+    kind: i.kind,
+    levels: i.levels ?? sheet?.set?.grades ?? [],
+  });
+  const areas: SheetArea[] = areaNames.map((name) => {
+    const groups = items
+      .filter((i) => !i.parentId && (i.area ?? 'Other') === name)
+      .map((i) => ({
+        id: i.id,
+        name: i.name,
+        kids: items.filter((k) => k.parentId === i.id).map(cell),
+        self: cell(i),
+      }));
+    return {
+      name,
+      groups: groups.map(({ self: _self, ...g }) => g),
+      cells: groups.flatMap((g) => (g.kids.length ? g.kids : [g.self])),
+    };
+  });
   const hpc = sheet?.set?.kind === 'hpc';
   const child = sheet?.rows.find((r) => r.studentId === sp.student) ?? sheet?.rows[0];
   const photos =
@@ -126,37 +149,25 @@ export default async function ExamIndicatorsPage({
     sheet?.set?.levelWords[g] ? `${g} (${sheet.set.levelWords[g]})` : g;
   return (
     <>
-      <Breadcrumbs
-        items={[
-          { label: 'Exams', href: '/exams' },
-          { label: exam.name, href: `/exams/${exam.id}` },
-          { label: 'Indicators and HPC' },
-        ]}
+      <ExamFrame
+        exam={exam}
+        stage={progress?.stage ?? null}
+        current="indicators"
+        canManage={me.permissions.includes('exams.master.manage')}
+        canUnlock={me.permissions.includes('exams.marks.unlock')}
       />
-      <PageHeader
-        kicker={`Exams · ${exam.code}`}
-        title={`Indicators and progress card · ${exam.name}`}
-        description={
-          sheet?.set
-            ? `${sheet.section.code} · ${sheet.set.name} · levels ${sheet.set.grades.map(level).join(', ')}`
-            : 'Choose the section.'
-        }
-        actions={
-          <a className="ep-btn ep-btn--ghost ep-btn--sm" href={`/exams/${exam.id}`}>
-            The exam
-          </a>
-        }
-      />
-      <ExamTabs examId={id} current="indicators" />
       <Notice params={sp} />
       <Card style={{ marginBottom: 'var(--sp-4)' }}>
-        <form
-          method="get"
-          style={{ display: 'flex', gap: 'var(--sp-3)', alignItems: 'flex-end', flexWrap: 'wrap' }}
-        >
-          <label className="ep-field" style={{ minWidth: 200 }}>
-            <span className="ep-field__label">Section</span>
-            <select className="ep-select" name="section" defaultValue={section?.classSectionId}>
+        <form method="get" className="ep-rp__row" aria-label={t('sheet')}>
+          <AutoSubmit />
+          <label className="ep-field" htmlFor="ind-section">
+            <span className="ep-field__label">{t('section')}</span>
+            <select
+              id="ind-section"
+              className="ep-select"
+              name="section"
+              defaultValue={section?.classSectionId}
+            >
               {sections.map((x) => (
                 <option key={x.classSectionId} value={x.classSectionId}>
                   {x.code}
@@ -164,35 +175,28 @@ export default async function ExamIndicatorsPage({
               ))}
             </select>
           </label>
-          {areas.length ? (
-            <label className="ep-field" style={{ minWidth: 260 }}>
-              <span className="ep-field__label">Area</span>
-              <select className="ep-select" name="area" defaultValue={area}>
-                {areas.map((a) => (
-                  <option key={a} value={a}>
-                    {a}
-                  </option>
-                ))}
-              </select>
-            </label>
-          ) : null}
-          <Button type="submit" variant="secondary">
-            Open
-          </Button>
+          {area ? <input type="hidden" name="area" value={area} /> : null}
+          <noscript>
+            <Button type="submit" variant="secondary">
+              {t('sheet')}
+            </Button>
+          </noscript>
         </form>
+        {sheet?.set ? (
+          <p className="ep-field__help" style={{ marginBottom: 0 }}>
+            {sheet.set.name} · {t('levels', { levels: sheet.set.grades.map(level).join(', ') })}
+          </p>
+        ) : null}
       </Card>
       {sheet && !sheet.set ? (
         <Card>
-          <p style={{ margin: 0 }}>
-            {sheet.section.code} has no indicator set in this exam: choose one on{' '}
-            <a
-              href={`/exams/${exam.id}/setup?step=subjects`}
-              style={{ textDecoration: 'underline' }}
-            >
-              the exam&rsquo;s Set-up
-            </a>
-            .
-          </p>
+          <p>{t('noSet', { section: sheet.section.code })}</p>
+          <a
+            className="ep-btn ep-btn--secondary ep-btn--sm"
+            href={`/exams/${exam.id}/setup?step=subjects`}
+          >
+            {t('openSetup')}
+          </a>
         </Card>
       ) : null}
       {sheet?.set && section ? (
@@ -200,119 +204,38 @@ export default async function ExamIndicatorsPage({
           <Card
             style={{ marginBottom: 'var(--sp-4)' }}
             elevated
-            title={`${sheet.section.code} · ${area ?? ''}`}
+            title={sheet.section.code}
             actions={
               sheet.locked ? (
-                <Badge tone="warning">Locked</Badge>
+                <Badge tone="warning">{t('locked')}</Badge>
               ) : (
-                <Badge tone="neutral">{sheet.rows.length} children</Badge>
+                <Badge tone="neutral">{t('children', { n: sheet.rows.length })}</Badge>
               )
             }
           >
-            <form action={saveIndicatorEntries}>
-              <input type="hidden" name="examId" value={exam.id} />
-              <input type="hidden" name="classSectionId" value={section.classSectionId} />
-              <input type="hidden" name="back" value={q({})} />
-              {cells.map((c) => (
-                <input key={c.id} type="hidden" name="item" value={c.id} />
-              ))}
-              <div className="ep-table-wrap" tabIndex={0} role="region" aria-label="Indicators">
-                <table className="ep-table ep-table--dense">
-                  <caption className="ep-sr-only">Indicators of {area}</caption>
-                  <thead>
-                    <tr>
-                      <th scope="col" rowSpan={hasGoals ? 2 : 1}>
-                        Roll
-                      </th>
-                      <th scope="col" rowSpan={hasGoals ? 2 : 1}>
-                        Child
-                      </th>
-                      {groups.map((g) =>
-                        g.kids.length ? (
-                          <th key={g.item.id} scope="colgroup" colSpan={g.kids.length}>
-                            {g.item.name}
-                          </th>
-                        ) : (
-                          <th key={g.item.id} scope="col" rowSpan={hasGoals ? 2 : 1}>
-                            {g.item.name}
-                          </th>
-                        ),
-                      )}
-                    </tr>
-                    {hasGoals ? (
-                      <tr>
-                        {groups.flatMap((g) =>
-                          g.kids.map((k) => (
-                            <th key={k.id} scope="col">
-                              {k.name}
-                            </th>
-                          )),
-                        )}
-                      </tr>
-                    ) : null}
-                  </thead>
-                  <tbody>
-                    {sheet.rows.map((r) => (
-                      <tr key={r.studentId}>
-                        <td>{r.rollNo ?? ''}</td>
-                        <td>
-                          <input type="hidden" name="studentId" value={r.studentId} />
-                          {r.name}
-                          <span className="ep-kicker" style={{ display: 'block' }}>
-                            {r.admissionNo}
-                          </span>
-                        </td>
-                        {cells.map((c) => {
-                          const v = r.grades[c.id];
-                          const k = `${r.studentId}-${c.id}`;
-                          return (
-                            <td key={c.id}>
-                              {c.kind === 'text' ? (
-                                <input
-                                  className="ep-input"
-                                  name={`n-${k}`}
-                                  aria-label={`${c.name} · ${r.name}`}
-                                  defaultValue={v?.note ?? ''}
-                                  maxLength={600}
-                                  disabled={!open}
-                                  style={{ minWidth: 180 }}
-                                />
-                              ) : (
-                                <select
-                                  className="ep-select"
-                                  name={`l-${k}`}
-                                  aria-label={`${c.name} · ${r.name}`}
-                                  defaultValue={v?.grade ?? ''}
-                                  disabled={!open}
-                                >
-                                  <option value="">-</option>
-                                  {(c.levels ?? sheet.set!.grades).map((g) => (
-                                    <option key={g} value={g}>
-                                      {level(g)}
-                                    </option>
-                                  ))}
-                                </select>
-                              )}
-                            </td>
-                          );
-                        })}
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-              {open ? (
-                <div className="ep-form-actions" style={{ marginTop: 'var(--sp-3)' }}>
-                  <Button type="submit">Save {area}</Button>
-                </div>
-              ) : (
-                <p className="ep-field__help">
-                  {sheet.locked
-                    ? 'Indicator entry is locked for the class in this exam; open it on the exam’s Overview.'
-                    : 'You may view these only: the class teachers enter them (the indicator entry right).'}
-                </p>
-              )}
-            </form>
+            <IndicatorSheet
+              key={section.classSectionId}
+              examId={exam.id}
+              classSectionId={section.classSectionId}
+              areas={areas}
+              rows={sheet.rows.map((r) => ({
+                studentId: r.studentId,
+                name: r.name,
+                admissionNo: r.admissionNo,
+                rollNo: r.rollNo,
+                values: Object.fromEntries(
+                  Object.entries(r.grades).map(([k, v]) => [k, v.grade ?? v.note ?? '']),
+                ),
+              }))}
+              levelWords={sheet.set.levelWords}
+              open={open}
+              initialArea={area ?? ''}
+            />
+            {open ? null : (
+              <p className="ep-field__help">
+                {sheet.locked ? t('indicatorsLocked') : t('indicatorsViewOnly')}
+              </p>
+            )}
           </Card>
           {hpc && child ? (
             <Card elevated title={`In our words and the portfolio · ${child.name}`}>
@@ -327,9 +250,15 @@ export default async function ExamIndicatorsPage({
               >
                 <input type="hidden" name="section" value={section.classSectionId} />
                 {area ? <input type="hidden" name="area" value={area} /> : null}
-                <label className="ep-field" style={{ minWidth: 240 }}>
-                  <span className="ep-field__label">Child</span>
-                  <select className="ep-select" name="student" defaultValue={child.studentId}>
+                <AutoSubmit />
+                <label className="ep-field" htmlFor="ind-child" style={{ minWidth: '15rem' }}>
+                  <span className="ep-field__label">{t('child')}</span>
+                  <select
+                    id="ind-child"
+                    className="ep-select"
+                    name="student"
+                    defaultValue={child.studentId}
+                  >
                     {sheet.rows.map((r) => (
                       <option key={r.studentId} value={r.studentId}>
                         {r.rollNo ? `${String(r.rollNo)} · ` : ''}
@@ -338,9 +267,11 @@ export default async function ExamIndicatorsPage({
                     ))}
                   </select>
                 </label>
-                <Button type="submit" variant="secondary">
-                  Open
-                </Button>
+                <noscript>
+                  <Button type="submit" variant="secondary">
+                    {t('child')}
+                  </Button>
+                </noscript>
               </form>
               <div className="ep-rp" style={{ marginTop: 'var(--sp-3)' }}>
                 <form action={saveHpcFeedback}>
@@ -377,11 +308,11 @@ export default async function ExamIndicatorsPage({
                     );
                   })}
                   {open ? (
-                    <div className="ep-form-actions">
+                    <FormSaveBar>
                       <Button type="submit" variant="secondary">
                         Save the words
                       </Button>
-                    </div>
+                    </FormSaveBar>
                   ) : null}
                 </form>
                 <section aria-label="Portfolio">

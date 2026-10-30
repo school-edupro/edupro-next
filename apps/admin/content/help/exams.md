@@ -56,12 +56,18 @@
 
 ## Marks entry
 
-- Teachers enter marks in the teacher app **Marks** (or **Exams → open exam → Entry**): a row per
-  pupil, absent and exempt switches, saved as they go; the range is checked against the maximum.
+- Teachers enter marks in the teacher app **Marks** (or **Exams → open exam → Marks → Enter
+  marks**): choose the section and the subject (it opens at once; **Previous / Next** go through every
+  section's subjects), type a mark or pick a code; Enter goes to the next student and a mark above the
+  maximum shows in red. **Save**, or **Save and submit** once every student who takes the subject has
+  a mark or a code. The page asks before unsaved marks are left.
 - The coordinator **locks** a subject when entry is complete; a reopen needs a reason and is audited.
-- The exam register (indicators, remarks, exam attendance, health) belongs to the class teacher.
+- The exam register belongs to the class teacher: in the admin, **Remarks** (the general remark and
+  the categories, saved together), **Attendance → Exam attendance** (the % shows as you type) and
+  **Attendance → Health** (height, weight and blood group; the BMI shows as you type).
 - The progress card: in the teacher app **Indicators and progress card** (or **Exams → open exam →
-  Indicators and HPC**) the class teacher picks an area and gives each child a level per competency
+  Indicators**) the class teacher moves between the areas (tabs; nothing is lost) and gives each
+  child a level per competency, saving every area at once
   (or a written note), then per child writes "All about me", the parent's feedback (from paper) and
   their own observations, and adds portfolio photos (up to twelve; the card prints six). Parents may
   write their feedback in the parent app under **Results**; it is kept as they wrote it. The

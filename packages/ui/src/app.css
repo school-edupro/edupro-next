@@ -13229,3 +13229,8 @@ a.ep-pub-foot__item {
   letter-spacing: normal;
   text-transform: none;
 }
+.ep-xlock[aria-selected='true'] {
+  border-color: var(--action-accent);
+  color: var(--text-heading);
+  font-weight: var(--fw-semibold);
+}

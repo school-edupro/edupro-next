@@ -2,7 +2,8 @@
  * Exams made easy (docs/design/66): an exam's stage worked out from its data (set-up, marks entry,
  * verification, results), the date sheet's times and note, set-up that never deletes entered marks
  * (a subject or a class with marks stays), a new exam copied from an earlier one, and the entry locks:
- * locking one area needs no unlock right, only opening a locked one does.
+ * locking one area needs no unlock right, only opening a locked one does; the general remark written
+ * alone keeps "took part in" and "promoted to", and an emptied one goes.
  */
 import type { NestFastifyApplication } from '@nestjs/platform-fastify';
 import {
@@ -238,6 +239,66 @@ describe('exams made easy (e2e)', () => {
     const p = await progress();
     expect(p.stage).toBe('results');
     expect(p.totals.marks.verified).toBe(2);
+  });
+
+  it('the general remark alone: "took part in" and "promoted to" are kept; an emptied remark goes', async () => {
+    const put = (rows: unknown[]) =>
+      call(admin, 'PUT', `/exams/${examId}/remarks`, { classSectionId: section, rows });
+    const reg = async () =>
+      (
+        (
+          await call(admin, 'GET', `/exams/${examId}/register?classSectionId=${section}`)
+        ).json() as {
+          rows: Array<{
+            studentId: string;
+            remark: string | null;
+            participation: string | null;
+            promotedTo: string | null;
+          }>;
+        }
+      ).rows;
+    expect(
+      (
+        await put([
+          {
+            studentId: student.Anu,
+            remark: 'Good',
+            participation: 'Choir',
+            promotedTo: 'Class VI',
+          },
+          { studentId: student.Bela, remark: 'Fine' },
+        ])
+      ).statusCode,
+    ).toBe(200);
+    expect((await put([{ studentId: student.Anu, remark: 'Very good' }])).statusCode).toBe(200);
+    let rows = await reg();
+    expect(rows.find((r) => r.studentId === student.Anu)).toMatchObject({
+      remark: 'Very good',
+      participation: 'Choir',
+      promotedTo: 'Class VI',
+    });
+    const cleared = await put([
+      { studentId: student.Anu, remark: '' },
+      { studentId: student.Bela, remark: '' },
+    ]);
+    expect(cleared.statusCode).toBe(200);
+    rows = await reg();
+    expect(rows.find((r) => r.studentId === student.Anu)).toMatchObject({
+      remark: null,
+      participation: 'Choir',
+      promotedTo: 'Class VI',
+    });
+    expect(rows.find((r) => r.studentId === student.Bela)).toMatchObject({
+      remark: null,
+      participation: null,
+    });
+    const left = await withMigrator((c) =>
+      c.query(
+        `SELECT count(*)::int AS n FROM exam_remarks WHERE exam_id = $1 AND student_id = $2`,
+        [examId, student.Bela],
+      ),
+    );
+    expect(left.rows[0]).toEqual({ n: 0 });
   });
 
   it('a copy takes the classes, subjects and parts, not the dates, times or marks', async () => {

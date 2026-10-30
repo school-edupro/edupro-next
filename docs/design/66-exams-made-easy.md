@@ -99,11 +99,50 @@ throwaway exam (Beta, removed after): new exam with a generated code, both class
 copy from a class), parts split and renamed in place, the date sheet and its print, a lock, details,
 a copy.
 
-## Phases still to come
+## Phase 2 — the entry pages (30 Oct 2026)
 
-- **Phase 2 — entry pages**: pickers that apply on change, previous / next subject, Save and "Save
-  and submit" together on marks, the Save bar and leave warning on every sheet, all indicator areas
-  saved at once, attendance % as typed, admin pages for the general remark and health.
+Every entry page now starts with `ExamFrame` (Marks and Attendance carry a `SubNav`: Enter marks ·
+Marks status; Exam attendance · Health), and its section, subject or child picker applies on change
+(`AutoSubmit`; a button only without JavaScript).
+
+- **Marks** (`/exams/:id/marks`, `?section=&subject=` or the old `?pick=`): a Section and a Subject
+  picker (a subject in parts: one entry per part), Previous / Next through every section's subjects,
+  and `MarksSheet`: the count entered as it is typed, a mark above the maximum shown at once (and not
+  sent), Enter to the next student, **Save** and **Save and submit** (the submit is refused while a
+  student who takes the subject has no mark or code) in the bar at the foot; only changed rows are
+  sent. A subject in parts keeps the Submit button beside its status (the submit is for the whole
+  subject). Verify, send back and reopen stay beside the status.
+- **Marks status**: the class and status filters apply on change.
+- **Indicators** (`IndicatorSheet`): every area of the section is a tab with "n of m" filled; what is
+  chosen in one area stays while another is open; one **Save every area** sends the changed cells (an
+  emptied cell is taken off; 3000 rows a request). The open area is kept in the address. The child's
+  words keep their own form with the Save bar.
+- **Remarks**: the class teacher's **general remark** is the first column (the general list as
+  suggestions; the remark entry right and the remarks lock), then the categories; one Save
+  (`saveRemarksSheet`: the changed general remarks to `PUT exams/:id/remarks`, the category cells to
+  `PUT exams/:id/remark-items`).
+- **Exam attendance**: % worked out as typed (`LiveCalc`), the Save bar; the class's lock read from
+  the section's class (no longer guessed from the section's name).
+- **Health** (`/exams/:id/health`, new): height, weight (BMI as typed), blood group, shown from the
+  last record ("Last measured …"), the measuring date; the changed rows go to `PUT exams/:id/health`.
+  Shown with `exams.health.view` (the register's `healthVisible`), written with `exams.health.enter`;
+  the health lock closes it.
+- `FormSaveBar`: the Save bar for a sheet saved as a form: "You have unsaved changes" once anything
+  is typed, and the browser asks before the page is left (another section chosen included).
+
+API: `PUT exams/:id/remarks` keeps "took part in" and "promoted to" when a row leaves them out (the
+teacher app sends both; the admin sheet the remark only), and an empty remark takes the general
+remark off (the row goes when nothing else is on it). Test: `exam-hub.e2e-spec.ts` (6).
+
+Tests: the exam suites, sprints 14–18, compat and permission coverage (99); accessibility on marks,
+status, indicators, remarks, attendance and health. Browser walk on a throwaway copy of the Class I
+exam (removed after, with its entries and the health record): two areas' levels saved together, a
+general remark and a category remark, attendance % and BMI as typed, both saved, and the leave
+warning (the handler blocks the unload; the in-app browser shows no dialog). Marks typing was not
+walked in the browser: the admin's demo user holds the unlock right, not marks entry.
+
+## Phase still to come
+
 - **Phase 3 — results and reports**: one Results tab (compute, analysis, register with Excel / PDF,
-  promotion that stays in the exam), Hindi / English on every exam page, the date sheet in the parent
-  and teacher apps.
+  promotion that stays in the exam) with pickers that apply on change, Hindi / English on every exam
+  page, the date sheet in the parent and teacher apps.

@@ -1,5 +1,9 @@
-import { Breadcrumbs, Button, Card, KpiTile, PageHeader } from '@edupro/ui';
+import { Card, KpiTile } from '@edupro/ui';
+import { getTranslations } from 'next-intl/server';
 import { notFound } from 'next/navigation';
+import { AutoSubmit } from '@/components/AutoSubmit';
+import { ExamFrame } from '@/components/exams/ExamFrame';
+import { SubNav } from '@/components/exams/SubNav';
 import {
   EntryStatusActions,
   EntryStatusBadge,
@@ -7,8 +11,7 @@ import {
 } from '@/components/exams/EntryStatusActions';
 import { Notice } from '@/components/Notice';
 import { ApiError, apiFetch, getMe } from '@/lib/api';
-import type { Exam } from '@/lib/types';
-import { ExamTabs } from '@/components/exams/ExamTabs';
+import type { Exam, ExamProgress } from '@/lib/types';
 
 interface Row extends EntryStatus {
   examSubjectId: string;
@@ -45,10 +48,14 @@ export default async function ExamStatusPage({
   if (!/^\d{1,18}$/.test(id)) notFound();
   const me = await getMe();
   if (!me.permissions.includes('exams.marks.view')) notFound();
-  const exam = await apiFetch<Exam>(`/exams/${id}`).catch((e: unknown) => {
-    if (e instanceof ApiError && e.status === 404) notFound();
-    throw e;
-  });
+  const [t, exam, progress] = await Promise.all([
+    getTranslations('examHub.entry'),
+    apiFetch<Exam>(`/exams/${id}`).catch((e: unknown) => {
+      if (e instanceof ApiError && e.status === 404) notFound();
+      throw e;
+    }),
+    apiFetch<ExamProgress>(`/exams/${id}/progress`).catch(() => null),
+  ]);
   const classId = exam.classes.some((k) => k.classId === sp.classId) ? sp.classId : undefined;
   const r = await apiFetch<{
     data: Row[];
@@ -64,24 +71,26 @@ export default async function ExamStatusPage({
   }).toString()}`;
   return (
     <>
-      <Breadcrumbs
+      <ExamFrame
+        exam={exam}
+        stage={progress?.stage ?? null}
+        current="marks"
+        canManage={me.permissions.includes('exams.master.manage')}
+        canUnlock={canReopen}
+      />
+      <SubNav
+        label={t('nav')}
+        current={`/exams/${id}/status`}
         items={[
-          { label: 'Exams', href: '/exams' },
-          { label: exam.name, href: `/exams/${exam.id}` },
-          { label: 'Marks status' },
+          { href: `/exams/${id}/marks`, label: t('navEnter') },
+          { href: `/exams/${id}/status`, label: t('navStatus') },
         ]}
       />
-      <PageHeader
-        kicker={`Exams · ${exam.code}`}
-        title={`Marks status · ${exam.name}`}
-        description="Each subject of each section: entered by the teacher, submitted for verification, verified by the class teacher or a coordinator (then locked). Results are worked out again on every verification."
-        actions={
-          <a className="ep-btn ep-btn--secondary ep-btn--sm" href={`/exams/${exam.id}/marks`}>
-            Marks entry
-          </a>
-        }
-      />
-      <ExamTabs examId={id} current="marks" />
+      <p className="ep-field__help" style={{ marginTop: 0 }}>
+        Each subject of each section: entered by the teacher, submitted for verification, verified
+        by the class teacher or a coordinator (then locked). Results are worked out again on every
+        verification.
+      </p>
       <Notice params={sp} />
       <div
         style={{
@@ -128,9 +137,12 @@ export default async function ExamStatusPage({
               <option value="verified">Verified</option>
             </select>
           </label>
-          <Button type="submit" variant="secondary">
-            Show
-          </Button>
+          <AutoSubmit />
+          <noscript>
+            <button type="submit" className="ep-btn ep-btn--secondary">
+              Show
+            </button>
+          </noscript>
         </form>
         <div className="ep-table-wrap" tabIndex={0} role="region" aria-label="Marks status">
           <table className="ep-table ep-table--dense">

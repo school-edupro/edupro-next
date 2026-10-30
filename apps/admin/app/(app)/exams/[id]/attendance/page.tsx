@@ -1,10 +1,15 @@
-import { Badge, Breadcrumbs, Button, Card, PageHeader } from '@edupro/ui';
+import { Badge, Button, Card } from '@edupro/ui';
+import { getTranslations } from 'next-intl/server';
 import { notFound } from 'next/navigation';
+import { AutoSubmit } from '@/components/AutoSubmit';
+import { ExamFrame } from '@/components/exams/ExamFrame';
+import { FormSaveBar } from '@/components/exams/FormSaveBar';
+import { LiveCalc } from '@/components/exams/LiveCalc';
+import { SubNav } from '@/components/exams/SubNav';
 import { Notice } from '@/components/Notice';
 import { ApiError, apiFetch, getMe } from '@/lib/api';
 import { countExamAttendance, saveExamAttendance } from '@/lib/remark-actions';
-import type { Exam } from '@/lib/types';
-import { ExamTabs } from '@/components/exams/ExamTabs';
+import type { Exam, ExamProgress } from '@/lib/types';
 
 interface Register {
   exam: { marksLocked: boolean };
@@ -35,60 +40,72 @@ export default async function ExamAttendancePage({
   if (!/^\d{1,18}$/.test(id)) notFound();
   const me = await getMe();
   if (!me.permissions.includes('exams.marks.view')) notFound();
-  const exam = await apiFetch<Exam>(`/exams/${id}`).catch((e: unknown) => {
-    if (e instanceof ApiError && e.status === 404) notFound();
-    throw e;
-  });
-  const sections = await apiFetch<{ data: Array<{ classSectionId: string; section: string }> }>(
-    `/exams/${id}/entry-status`,
-  )
-    .then((r) => [...new Map(r.data.map((x) => [x.classSectionId, x.section])).entries()])
-    .catch(() => [] as Array<[string, string]>);
-  const sectionId = sections.find(([sid]) => sid === sp.section)?.[0] ?? sections[0]?.[0];
+  const [t, exam, progress, sections] = await Promise.all([
+    getTranslations('examHub.entry'),
+    apiFetch<Exam>(`/exams/${id}`).catch((e: unknown) => {
+      if (e instanceof ApiError && e.status === 404) notFound();
+      throw e;
+    }),
+    apiFetch<ExamProgress>(`/exams/${id}/progress`).catch(() => null),
+    apiFetch<{ data: Array<{ classSectionId: string; classId: string; code: string }> }>(
+      `/exams/${id}/entry/sections`,
+    )
+      .then((r) => r.data)
+      .catch(() => [] as Array<{ classSectionId: string; classId: string; code: string }>),
+  ]);
+  const section = sections.find((x) => x.classSectionId === sp.section) ?? sections[0];
+  const sectionId = section?.classSectionId;
   const reg = sectionId
     ? await apiFetch<Register>(`/exams/${id}/register?classSectionId=${sectionId}`)
     : null;
-  const klass = exam.classes.find((k) =>
-    reg ? reg.section.code.startsWith(`${k.classCode}-`) : false,
-  );
+  const klass = exam.classes.find((k) => k.classId === section?.classId);
   const locked = !!reg && (reg.exam.marksLocked || Boolean(klass?.locks?.attendance));
   const canEnter = me.permissions.includes('exams.attendance.enter');
   const open = canEnter && !locked;
   const back = `/exams/${id}/attendance${sectionId ? `?section=${sectionId}` : ''}`;
   return (
     <>
-      <Breadcrumbs
+      <ExamFrame
+        exam={exam}
+        stage={progress?.stage ?? null}
+        current="attendance"
+        canManage={me.permissions.includes('exams.master.manage')}
+        canUnlock={me.permissions.includes('exams.marks.unlock')}
+      />
+      <SubNav
+        label={t('attNav')}
+        current={`/exams/${id}/attendance`}
         items={[
-          { label: 'Exams', href: '/exams' },
-          { label: exam.name, href: `/exams/${exam.id}` },
-          { label: 'Exam attendance' },
+          { href: `/exams/${id}/attendance`, label: t('attendance') },
+          {
+            href: `/exams/${id}/health${sectionId ? `?section=${sectionId}` : ''}`,
+            label: t('health'),
+          },
         ]}
       />
-      <PageHeader
-        kicker={`Exams · ${exam.code}`}
-        title={`Exam attendance · ${exam.name}`}
-        description="Count it from daily attendance (late, half day, on duty, stay back and short leave count as present), then correct any student. It prints on the report card."
-      />
-      <ExamTabs examId={id} current="attendance" />
+      <p className="ep-field__help" style={{ marginTop: 0 }}>
+        Count it from daily attendance (late, half day, on duty, stay back and short leave count as
+        present), then correct any student. It prints on the report card.
+      </p>
       <Notice params={sp} />
       <Card style={{ marginBottom: 'var(--sp-4)' }}>
-        <form
-          method="get"
-          style={{ display: 'flex', gap: 'var(--sp-3)', alignItems: 'flex-end', flexWrap: 'wrap' }}
-        >
-          <label className="ep-field" style={{ minWidth: 200 }}>
-            <span className="ep-field__label">Section</span>
-            <select className="ep-select" name="section" defaultValue={sectionId}>
-              {sections.map(([sid, code]) => (
-                <option key={sid} value={sid}>
-                  {code}
+        <form method="get" className="ep-rp__row" aria-label={t('sheet')}>
+          <AutoSubmit />
+          <label className="ep-field" htmlFor="at-section">
+            <span className="ep-field__label">{t('section')}</span>
+            <select id="at-section" className="ep-select" name="section" defaultValue={sectionId}>
+              {sections.map((x) => (
+                <option key={x.classSectionId} value={x.classSectionId}>
+                  {x.code}
                 </option>
               ))}
             </select>
           </label>
-          <Button type="submit" variant="secondary">
-            Open
-          </Button>
+          <noscript>
+            <Button type="submit" variant="secondary">
+              {t('sheet')}
+            </Button>
+          </noscript>
         </form>
       </Card>
       {reg ? (
@@ -172,13 +189,13 @@ export default async function ExamAttendancePage({
                     {reg.rows.map((r) => (
                       <tr key={r.studentId}>
                         <td>{r.rollNo ?? ''}</td>
-                        <td>
+                        <th scope="row">
                           <input type="hidden" name="studentId" value={r.studentId} />
                           {r.name}
                           <span className="ep-kicker" style={{ display: 'block' }}>
                             {r.admissionNo}
                           </span>
-                        </td>
+                        </th>
                         <td>
                           <input
                             className="ep-input"
@@ -206,9 +223,16 @@ export default async function ExamAttendancePage({
                           />
                         </td>
                         <td className="is-numeric">
-                          {r.daysPresent !== null && r.daysTotal
-                            ? `${String(Math.round((r.daysPresent * 1000) / r.daysTotal) / 10)}`
-                            : ''}
+                          <LiveCalc
+                            kind="pct"
+                            a={`p-${r.studentId}`}
+                            b={`t-${r.studentId}`}
+                            initial={
+                              r.daysPresent !== null && r.daysTotal
+                                ? String(Math.round((r.daysPresent * 1000) / r.daysTotal) / 10)
+                                : ''
+                            }
+                          />
                         </td>
                       </tr>
                     ))}
@@ -216,9 +240,9 @@ export default async function ExamAttendancePage({
                 </table>
               </div>
               {open ? (
-                <div className="ep-form-actions" style={{ marginTop: 'var(--sp-3)' }}>
+                <FormSaveBar>
                   <Button type="submit">Save exam attendance</Button>
-                </div>
+                </FormSaveBar>
               ) : (
                 <p className="ep-field__help">
                   {locked

@@ -47,68 +47,6 @@ async function call<T>(path: string, method: string, body: unknown): Promise<Out
 }
 
 // ---- marks --------------------------------------------------------------------------------------
-/** The sheet of one section and subject: a mark (or a grade) or a code per student; empty rows skipped. */
-export async function saveExamMarks(fd: FormData) {
-  const examId = str(fd, 'examId');
-  const backTo = str(fd, 'back') || `/exams/${examId}/marks`;
-  const rows: Array<{
-    studentId: string;
-    marks: number | null;
-    code: string | null;
-    grade: string | null;
-  }> = [];
-  for (const studentId of fd.getAll('studentId').map(String)) {
-    const v = str(fd, `v-${studentId}`);
-    const code = str(fd, `c-${studentId}`);
-    const grade = str(fd, `g-${studentId}`);
-    if (!v && !code && !grade) continue;
-    rows.push({
-      studentId,
-      marks: code || grade || !v ? null : Number(v),
-      code: code || null,
-      grade: code ? null : grade || null,
-    });
-  }
-  if (!rows.length) back(backTo, 'validation-failed', 'Nothing to save: write marks or a code');
-  return run(
-    backTo,
-    () =>
-      apiFetch(`/exams/${examId}/marks`, {
-        method: 'PUT',
-        body: JSON.stringify({
-          classSectionId: str(fd, 'classSectionId'),
-          subjectId: str(fd, 'subjectId'),
-          rows,
-        }),
-      }),
-    `${String(rows.length)} saved`,
-  );
-}
-
-/** One part of a subject: a mark or AB per student; an empty box clears the part's mark. */
-export async function saveExamPartMarks(fd: FormData) {
-  const examId = str(fd, 'examId');
-  const backTo = str(fd, 'back') || `/exams/${examId}/marks`;
-  const rows = fd
-    .getAll('studentId')
-    .map(String)
-    .map((studentId) => {
-      const v = str(fd, `v-${studentId}`);
-      const absent = str(fd, `c-${studentId}`) === 'AB';
-      return { studentId, marks: absent || !v ? null : Number(v), absent };
-    });
-  return run(backTo, () =>
-    apiFetch(`/exams/${examId}/part-marks`, {
-      method: 'PUT',
-      body: JSON.stringify({
-        classSectionId: str(fd, 'classSectionId'),
-        partId: str(fd, 'partId'),
-        rows,
-      }),
-    }),
-  );
-}
-
 export interface UploadPreview {
   columns?: string[];
   rows: Array<{

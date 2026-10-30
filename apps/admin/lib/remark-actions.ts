@@ -85,30 +85,6 @@ export async function saveBankRemark(fd: FormData) {
   back('/exams/remarks', 'ok');
 }
 
-/** A section's remarks by category: every cell shown is sent (an emptied one is removed). */
-export async function saveRemarkItems(fd: FormData) {
-  const examId = str(fd, 'examId');
-  const backTo = str(fd, 'back') || `/exams/${examId}/remarks`;
-  const cats = fd.getAll('category').map(String);
-  const rows: Array<{ studentId: string; categoryId: string; text: string | null }> = [];
-  for (const studentId of fd.getAll('studentId').map(String))
-    for (const categoryId of cats) {
-      const k = `r-${studentId}-${categoryId}`;
-      if (!fd.has(k)) continue;
-      rows.push({ studentId, categoryId, text: str(fd, k) || null });
-    }
-  if (!rows.length) back(backTo, 'validation-failed', 'Nothing to save');
-  return run(
-    backTo,
-    () =>
-      apiFetch(`/exams/${examId}/remark-items`, {
-        method: 'PUT',
-        body: JSON.stringify({ classSectionId: str(fd, 'classSectionId'), rows }),
-      }),
-    'Remarks saved',
-  );
-}
-
 // ---- promotion -----------------------------------------------------------------------------------
 export async function sendPromotions(fd: FormData) {
   const schemeId = str(fd, 'schemeId');
