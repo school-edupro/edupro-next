@@ -630,7 +630,14 @@ function hpcRecord(d: ReportCardData, s: ReportCardSection): string {
         `<span><strong>${esc(l)}</strong>${h.levelWords[l] ? ` ${esc(h.levelWords[l])}` : ''}</span>`,
     )
     .join('');
-  return `<h2>${esc(s.title ?? 'My progress')}</h2><table><thead><tr><th>Domain and competency</th>${head}<th>What it means</th></tr></thead><tbody>${body}</tbody></table><div class="scale">${legend}</div>`;
+  // sections with levels of their own (observations: Always ... Rarely) get a key line each
+  const others = (h.scales ?? [])
+    .map(
+      (sc) =>
+        `<div class="scale"><span><strong>${esc(sc.areas.join(', '))}:</strong></span>${sc.levels.map((l) => `<span>${esc(l)}</span>`).join('')}</div>`,
+    )
+    .join('');
+  return `<h2>${esc(s.title ?? 'My progress')}</h2><table><thead><tr><th>Domain and competency</th>${head}<th>What it means</th></tr></thead><tbody>${body}</tbody></table><div class="scale">${legend}</div>${others}`;
 }
 
 /** The child's own words, the parent's and the teacher's. */

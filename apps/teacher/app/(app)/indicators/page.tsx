@@ -23,6 +23,8 @@ interface Item {
   area: string | null;
   parentId: string | null;
   kind: 'level' | 'text';
+  /** its own levels (a section with its own scale); none: the set's */
+  levels?: string[] | null;
   heading: boolean;
 }
 interface Sheet {
@@ -317,7 +319,7 @@ export default async function IndicatorsPage({
                                 disabled={!open}
                               >
                                 <option value="">-</option>
-                                {sheet.set!.grades.map((g) => (
+                                {(c.levels ?? sheet.set!.grades).map((g) => (
                                   <option key={g} value={g}>
                                     {level(g)}
                                   </option>

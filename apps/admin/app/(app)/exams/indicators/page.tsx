@@ -108,6 +108,7 @@ export default async function IndicatorsPage({
                               <li key={i.code}>
                                 {i.code} · {i.name}
                                 {i.kind === 'text' ? ' (written)' : ''}
+                                {i.levels?.length ? ` (levels: ${i.levels.join(', ')})` : ''}
                                 {kids.length ? (
                                   <ul>
                                     {kids.map((k) => (

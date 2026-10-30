@@ -756,11 +756,13 @@ export class ExamEntryService {
       kind: 'level' | 'text';
       description: string | null;
       descriptors: Record<string, string>;
+      levels: string[] | null;
     }>(
-      `SELECT id::text, code, name, area, parent_id::text, kind, description, descriptors FROM indicators WHERE set_id = $1 ORDER BY sort_order, code`,
+      `SELECT id::text, code, name, area, parent_id::text, kind, description, descriptors, levels FROM indicators WHERE set_id = $1 ORDER BY sort_order, code`,
       [s.id],
     );
     const parents = new Set(ind.rows.map((i) => i.parent_id).filter(Boolean));
+    const own = new Map(ind.rows.map((i) => [i.id, i.levels]));
     return {
       id: s.id,
       code: s.code,
@@ -777,6 +779,8 @@ export class ExamEntryService {
         kind: i.kind,
         description: i.description,
         descriptors: i.descriptors,
+        /** the levels it takes: its own, else its heading's; null: the set's */
+        levels: i.levels ?? (i.parent_id ? (own.get(i.parent_id) ?? null) : null),
         /** has items under it: a heading, not entered */
         heading: parents.has(i.id),
       })),
@@ -886,7 +890,6 @@ export class ExamEntryService {
           { status: 409 },
         );
       const items = new Map(set.indicators.map((i) => [i.id, i]));
-      const grades = new Set(set.grades);
       this.assertRoster(dto.rows, await this.roster(c, yearId, section.id));
       for (const r of dto.rows) {
         const it = items.get(r.indicatorId);
@@ -907,10 +910,11 @@ export class ExamEntryService {
             `${it.name} takes a written observation, not a level`,
             { status: 409, extra: { indicatorId: r.indicatorId } },
           );
-        if (r.grade && !grades.has(r.grade))
+        const allowed = it.levels ?? set.grades;
+        if (r.grade && !allowed.includes(r.grade))
           throw new DomainError('exams.grade_not_allowed', `Grade ${r.grade} is not in the set`, {
             status: 409,
-            extra: { grade: r.grade, allowed: [...grades] },
+            extra: { grade: r.grade, allowed },
           });
       }
       let n = 0;
@@ -1270,8 +1274,9 @@ export class ExamEntryService {
       kind: string;
       description: string | null;
       descriptors: Record<string, string>;
+      levels: string[] | null;
     }>(
-      `SELECT i.id::text, i.set_id::text, i.code, i.name, i.area, i.sort_order, p.code AS parent_code, i.kind, i.description, i.descriptors
+      `SELECT i.id::text, i.set_id::text, i.code, i.name, i.area, i.sort_order, p.code AS parent_code, i.kind, i.description, i.descriptors, i.levels
          FROM indicators i LEFT JOIN indicators p ON p.id = i.parent_id ORDER BY i.set_id, i.sort_order, i.code`,
     );
     return sets.rows.map(({ level_words, ...s }) => ({
@@ -1289,6 +1294,7 @@ export class ExamEntryService {
           kind: i.kind,
           description: i.description,
           descriptors: i.descriptors,
+          levels: i.levels,
         })),
     }));
   }
@@ -1334,7 +1340,18 @@ export class ExamEntryService {
           `${i.code}: ${p.code} is itself under another item (three levels at most: area, item, sub-item)`,
           { status: 400 },
         );
+      if (i.levels?.length)
+        throw new DomainError(
+          'validation-failed',
+          `${i.code}: an item under a heading takes the heading's levels`,
+          { status: 400 },
+        );
     }
+    for (const i of dto.indicators)
+      if (i.levels && new Set(i.levels).size !== i.levels.length)
+        throw new DomainError('validation-failed', `${i.code}: a level is written twice`, {
+          status: 400,
+        });
     for (const [lvl] of Object.entries(dto.levelWords))
       if (!dto.grades.includes(lvl))
         throw new DomainError('validation-failed', `${lvl} is not one of the levels`, {
@@ -1357,10 +1374,10 @@ export class ExamEntryService {
     // the items first, then who goes under whom
     for (const i of dto.indicators) {
       await c.query(
-        `INSERT INTO indicators (school_id, set_id, code, name, area, sort_order, kind, description, descriptors)
-         VALUES (app.current_school_id(), $1, $2, $3, $4, $5, $6, $7, $8::jsonb)
+        `INSERT INTO indicators (school_id, set_id, code, name, area, sort_order, kind, description, descriptors, levels)
+         VALUES (app.current_school_id(), $1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9::text[])
          ON CONFLICT (set_id, code) DO UPDATE SET name = EXCLUDED.name, area = EXCLUDED.area, sort_order = EXCLUDED.sort_order,
-           kind = EXCLUDED.kind, description = EXCLUDED.description, descriptors = EXCLUDED.descriptors`,
+           kind = EXCLUDED.kind, description = EXCLUDED.description, descriptors = EXCLUDED.descriptors, levels = EXCLUDED.levels`,
         [
           setId,
           i.code,
@@ -1370,6 +1387,7 @@ export class ExamEntryService {
           i.kind,
           i.description ?? null,
           JSON.stringify(i.descriptors),
+          i.levels?.length ? i.levels : null,
         ],
       );
     }

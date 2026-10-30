@@ -20,7 +20,9 @@
    three levels (area → item → sub-item); **Add the progress card set** brings the NCERT
    foundational-stage Holistic Progress Card for Balvatika to Class II (domains, curricular goals,
    competencies; Beginner / Progressing / Proficient printed with Stream / Mountain / Sky) and **Add
-   the progress card template** its card. Choose a class's set on the exam's page.
+   the progress card template** its card. Choose a class's set on the exam's page. A top item may
+   have **own levels** (Always, Mostly, Sometimes, Rarely for observations, learning habits, peer and
+   parent sections): its items are rated on those, and the card prints a key line for them.
 
 ## Marks entry
 

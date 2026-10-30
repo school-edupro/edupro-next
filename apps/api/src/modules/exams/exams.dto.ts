@@ -356,7 +356,8 @@ export const UpsertIndicatorSetSchema = z.object({
     .array(
       z.object({
         code: Code,
-        name: z.string().trim().min(2).max(120),
+        // a progress card's competency is a sentence; 200 holds the CBSE/NCERT wording
+        name: z.string().trim().min(2).max(200),
         area: z.string().trim().max(60).optional(),
         sortOrder: z.number().int().min(0).max(1000).default(0),
         /** part 5: under another indicator of the set (the third level); one level deep */
@@ -366,6 +367,8 @@ export const UpsertIndicatorSetSchema = z.object({
         description: z.string().trim().max(300).nullable().optional(),
         /** level → what it means for this item */
         descriptors: z.record(z.string().max(20), z.string().trim().max(200)).default({}),
+        /** a heading's own levels, lowest first (its items use them); none: the set's */
+        levels: z.array(z.string().trim().min(1).max(20)).min(2).max(10).nullable().optional(),
       }),
     )
     .min(1)

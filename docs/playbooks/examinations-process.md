@@ -88,7 +88,9 @@ Do these once; review them each session.
 7. **Indicators and the progress card** — Exams → Exams setup → Indicators and HPC: **Add the progress card set**
    (NCERT foundational stage: six domains, curricular goals, competencies rated Beginner / Progressing /
    Proficient, printed with Stream / Mountain / Sky) and any co-scholastic indicator sets, in up to
-   three levels (area → item → sub-item). Edit the words to suit the school.
+   three levels (area → item → sub-item). Edit the words to suit the school. A school card that rates
+   observations, learning habits, peer and parent sections on another scale (Always / Mostly /
+   Sometimes / Rarely) gives that section's heading **own levels**; its items use them.
 
 ## 4. Each exam
 

@@ -77,6 +77,8 @@ export interface SetInput {
     kind: 'level' | 'text';
     description: string | null;
     descriptors: Record<string, string>;
+    /** a heading's own levels (its items use them); none: the set's */
+    levels?: string[] | null;
   }>;
 }
 

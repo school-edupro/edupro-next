@@ -405,3 +405,18 @@ As the leading ERPs (and EduPro's Fee set-up) do, each thing is now set in one p
   bank keeps the grid's Excel upload (`editVia.upload`), now with a category code column; the
   remarks page links to it. `/masters/exams` with no list named redirects to `/exams/masters`.
 - Test: masters e2e "exam set-up is kept on the exam pages".
+
+## A section's own levels (30 Oct 2026)
+
+A school's Class I card (a CBSE school's HPC) rates its subject competencies Beginner / Progressing /
+Proficient but its socio-emotional observation, positive learning habits, peer assessment and "My
+parent says" Always / Mostly / Sometimes / Rarely, in one card. Migration 0284 adds `indicators.levels`:
+a top item (a heading) may carry its own levels, which its items use (an item under a heading cannot
+have its own); none means the set's. The entry sheet gives each item its `levels`, entry checks the
+grade against them, the editor has an "Own levels" box on top items, and the card prints a key line
+per extra scale. Competency names may now be 200 letters (the CBSE wording ran past 120).
+On Alpha: set HPC_CLASS1 (70 items: English, Reading habits, Marathi, Hindi, Mathematics, EVS,
+Computer, Aesthetic, Physical with curricular goals as headings; the four frequency sections; self
+assessment and participation as written notes), grade scale CLASS_I (A+ 85-100, A 55-84.99, B below
+55) and exam TERM1-I-2026 for Class I with the set chosen (subjects not added yet).
+Test: exam-hpc e2e "a section rated on levels of its own".

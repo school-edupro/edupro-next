@@ -44,6 +44,8 @@ describe('the holistic progress card (e2e)', () => {
   let section: string;
   let examId: string;
   let setId: string;
+  let releaseId: string;
+  let tplId: string;
   const student: Record<string, string> = {};
   const item: Record<string, string> = {};
   const ids: Record<string, string> = {};
@@ -378,6 +380,8 @@ describe('the holistic progress card (e2e)', () => {
       templates: { [`class_${classId}`]: tpl.id },
     });
     expect(rel.statusCode).toBe(201);
+    releaseId = rel.json().id;
+    tplId = tpl.id;
     const pv = await call(admin, 'POST', `/exams/report-cards/templates/${tpl.id}/preview`, {
       releaseId: rel.json().id,
       studentId: student.Anu,
@@ -395,5 +399,83 @@ describe('the holistic progress card (e2e)', () => {
     expect(html).toContain('A curious learner.');
     expect(html).toContain(`data:image/png;base64,${PNG}`);
     expect(html).toContain('My painting');
+  });
+
+  it('a section rated on levels of its own: its items take them, the card keys them', async () => {
+    const OWN = ['Rarely', 'Sometimes', 'Mostly', 'Always'];
+    const body = (subLevels?: string[]) => ({
+      code: 'HPC_OWN',
+      name: 'Class I progress card',
+      kind: 'hpc',
+      grades: ['Beginner', 'Progressing', 'Proficient'],
+      levelWords: {},
+      indicators: [
+        { code: 'EN-G1', name: 'Curriculum Goal 1: Communicates', area: 'English', sortOrder: 1 },
+        {
+          code: 'EN-C11',
+          // the CBSE wording runs past the old 120 letters
+          name: 'C.1.1 Recognizes all the letters of the alphabet of the script, grammar concepts and uses this knowledge to read and write words.',
+          area: 'English',
+          parentCode: 'EN-G1',
+          sortOrder: 2,
+        },
+        {
+          code: 'SE',
+          name: 'Observation',
+          area: 'Socio-emotional and ethical learning',
+          sortOrder: 3,
+          levels: OWN,
+        },
+        {
+          code: 'SE1',
+          name: 'Displays empathy for all living beings and the environment.',
+          area: 'Socio-emotional and ethical learning',
+          parentCode: 'SE',
+          sortOrder: 4,
+          ...(subLevels ? { levels: subLevels } : {}),
+        },
+      ],
+    });
+    // an item under a heading takes the heading's levels
+    expect((await call(admin, 'PUT', '/exams/indicator-sets', body(OWN))).statusCode).toBe(400);
+    const made = await call(admin, 'PUT', '/exams/indicator-sets', body());
+    expect(made.statusCode).toBe(200);
+    const own = made.json().id as string;
+    expect(
+      (await call(admin, 'PUT', `/exams/${examId}/indicator-sets`, { classId, setId: own }))
+        .statusCode,
+    ).toBe(200);
+    await call(admin, 'PUT', `/exams/${examId}/class-locks`, { classId, indicators: false });
+    const sheet = (
+      await call(clerk, 'GET', `/exams/${examId}/indicators?classSectionId=${section}`)
+    ).json() as { indicators: Array<Item & { levels: string[] | null }> };
+    const by = (code: string) => sheet.indicators.find((i) => i.code === code)!;
+    expect(by('SE').levels).toEqual(OWN);
+    expect(by('SE1').levels).toEqual(OWN);
+    expect(by('EN-C11').levels).toBeNull();
+    const put = (rows: unknown[]) =>
+      call(clerk, 'PUT', `/exams/${examId}/indicators`, { classSectionId: section, rows });
+    const wrong = await put([
+      { studentId: student.Anu, indicatorId: by('SE1').id, grade: 'Progressing' },
+    ]);
+    expect(wrong.json()).toMatchObject({ type: 'exams.grade_not_allowed', allowed: OWN });
+    expect(
+      (await put([{ studentId: student.Anu, indicatorId: by('EN-C11').id, grade: 'Mostly' }]))
+        .statusCode,
+    ).toBe(409);
+    const ok = await put([
+      { studentId: student.Anu, indicatorId: by('SE1').id, grade: 'Mostly' },
+      { studentId: student.Anu, indicatorId: by('EN-C11').id, grade: 'Proficient' },
+    ]);
+    expect(ok.json().changed).toBe(2);
+    const html = (
+      await call(admin, 'POST', `/exams/report-cards/templates/${tplId}/preview`, {
+        releaseId,
+        studentId: student.Anu,
+      })
+    ).json().html as string;
+    expect(html).toContain('Recognizes all the letters of the alphabet');
+    expect(html).toContain('<strong>Socio-emotional and ethical learning:</strong>');
+    expect(html).toContain('<span class="lvl">Mostly</span>');
   });
 });

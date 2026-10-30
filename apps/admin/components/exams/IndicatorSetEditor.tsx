@@ -3,7 +3,12 @@ import { useRouter } from 'next/navigation';
 import { useState, useTransition } from 'react';
 import { saveIndicatorSet, type SetInput } from '@/lib/hpc-actions';
 
-type Row = SetInput['indicators'][number];
+type Row = SetInput['indicators'][number] & { levelsText?: string };
+const split = (v: string) =>
+  v
+    .split(',')
+    .map((x) => x.trim())
+    .filter(Boolean);
 const blank = (n: number): Row => ({
   code: '',
   name: '',
@@ -19,7 +24,8 @@ const blank = (n: number): Row => ({
  * An indicator set (docs/design/65, part 5): its levels in order (and, for a progress card, the word
  * each prints with), then the items: an area (the group), an item under another (one level deep; an
  * item with items under it is a heading), a level or a written observation, and what each level
- * means for the item.
+ * means for the item. A top item may have levels of its own (a card's observations: Always, Mostly,
+ * Sometimes, Rarely); the items under it use them.
  */
 export function IndicatorSetEditor({ initial }: { initial?: SetInput }) {
   const router = useRouter();
@@ -30,14 +36,21 @@ export function IndicatorSetEditor({ initial }: { initial?: SetInput }) {
   const [levels, setLevels] = useState((initial?.grades ?? ['A', 'B', 'C']).join(', '));
   const [words, setWords] = useState<Record<string, string>>(initial?.levelWords ?? {});
   const [rows, setRows] = useState<Row[]>(
-    initial?.indicators.length ? initial.indicators : [blank(1)],
+    initial?.indicators.length
+      ? initial.indicators.map((r) => ({ ...r, levelsText: (r.levels ?? []).join(', ') }))
+      : [blank(1)],
   );
   const [msg, setMsg] = useState<{ tone: 'success' | 'danger'; text: string } | null>(null);
   const key = initial?.code ?? 'new';
-  const grades = levels
-    .split(',')
-    .map((x) => x.trim())
-    .filter(Boolean);
+  const grades = split(levels);
+  // the levels a row takes: its own, else its heading's, else the set's
+  const levelsOf = (r: Row): string[] => {
+    const own = split(r.levelsText ?? '');
+    if (own.length) return own;
+    const p = r.parentCode ? rows.find((x) => x.code.trim().toUpperCase() === r.parentCode) : null;
+    const up = p ? split(p.levelsText ?? '') : [];
+    return up.length ? up : grades;
+  };
   const set = (i: number, patch: Partial<Row>) =>
     setRows((r) => r.map((x, k) => (k === i ? { ...x, ...patch } : x)));
   const areas = [...new Set(rows.map((r) => r.area).filter(Boolean))] as string[];
@@ -51,8 +64,10 @@ export function IndicatorSetEditor({ initial }: { initial?: SetInput }) {
           setMsg(null);
           const items = rows
             .filter((r) => r.code.trim() || r.name.trim())
-            .map((r, i) => ({
+            .map(({ levelsText, ...r }, i) => ({
               ...r,
+              levels:
+                !r.parentCode && split(levelsText ?? '').length ? split(levelsText ?? '') : null,
               code: r.code.trim().toUpperCase(),
               name: r.name.trim(),
               area: r.area?.trim() || undefined,
@@ -61,7 +76,7 @@ export function IndicatorSetEditor({ initial }: { initial?: SetInput }) {
               description: r.description?.trim() || null,
               descriptors: Object.fromEntries(
                 Object.entries(r.descriptors)
-                  .filter(([g, v]) => grades.includes(g) && v.trim())
+                  .filter(([g, v]) => levelsOf({ ...r, levelsText }).includes(g) && v.trim())
                   .map(([g, v]) => [g, v.trim()]),
               ),
             }));
@@ -183,7 +198,7 @@ export function IndicatorSetEditor({ initial }: { initial?: SetInput }) {
                     className="ep-input"
                     aria-label={`Item ${String(i + 1)}`}
                     value={r.name}
-                    maxLength={120}
+                    maxLength={200}
                     onChange={(e) => set(i, { name: e.target.value })}
                   />
                 </td>
@@ -224,6 +239,16 @@ export function IndicatorSetEditor({ initial }: { initial?: SetInput }) {
                     <option value="level">A level</option>
                     <option value="text">A written note</option>
                   </select>
+                  {!r.parentCode && r.kind === 'level' ? (
+                    <input
+                      className="ep-input"
+                      aria-label={`Own levels of item ${String(i + 1)}, comma between`}
+                      placeholder="Own levels (blank: the set's)"
+                      value={r.levelsText ?? ''}
+                      style={{ marginTop: 'var(--sp-1)', minWidth: 180 }}
+                      onChange={(e) => set(i, { levelsText: e.target.value })}
+                    />
+                  ) : null}
                 </td>
                 <td>
                   {r.kind === 'level' ? (
@@ -233,7 +258,7 @@ export function IndicatorSetEditor({ initial }: { initial?: SetInput }) {
                           ? `${String(Object.values(r.descriptors).filter(Boolean).length)} written`
                           : 'Write'}
                       </summary>
-                      {grades.map((g) => (
+                      {levelsOf(r).map((g) => (
                         <label key={g} className="ep-field">
                           <span className="ep-field__label">{g}</span>
                           <input
@@ -275,7 +300,8 @@ export function IndicatorSetEditor({ initial }: { initial?: SetInput }) {
       </p>
       <p className="ep-field__help">
         An item with items under it prints as a heading (an HPC curricular goal) and is not entered;
-        removing an item removes what was entered for it.
+        removing an item removes what was entered for it. Own levels on a top item (Always, Mostly,
+        Sometimes, Rarely) are used by it and the items under it.
       </p>
       <div className="ep-form-actions">
         <button type="submit" className="ep-btn ep-btn--primary ep-btn--sm" disabled={pending}>

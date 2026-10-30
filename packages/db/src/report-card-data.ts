@@ -138,6 +138,8 @@ export interface ReportCardHpc {
   exams: string[];
   levels: string[];
   levelWords: Record<string, string>;
+  /** sections rated on levels of their own (observations: Always ... Rarely), for the legend */
+  scales?: Array<{ levels: string[]; areas: string[] }>;
   areas: Array<{ area: string; items: ReportCardHpcItem[] }>;
   feedback: { self: string | null; parent: string | null; teacher: string | null };
   /** up to six photos, images filled by the renderer */
@@ -684,8 +686,9 @@ async function loadHpc(
     kind: 'level' | 'text';
     description: string | null;
     descriptors: Record<string, string>;
+    levels: string[] | null;
   }>(
-    `SELECT id::text, code, name, area, parent_id::text, kind, description, descriptors FROM indicators
+    `SELECT id::text, code, name, area, parent_id::text, kind, description, descriptors, levels FROM indicators
       WHERE set_id = $1 ORDER BY sort_order, code`,
     [last.set_id],
   );
@@ -720,10 +723,17 @@ async function loadHpc(
     };
   };
   const areas = new Map<string, ReportCardHpcItem[]>();
+  const scales = new Map<string, { levels: string[]; areas: string[] }>();
   for (const i of items.rows.filter((x) => !x.parent_id)) {
     const area = i.area ?? 'Progress';
     if (!areas.has(area)) areas.set(area, []);
     areas.get(area)!.push(node(i));
+    if (i.levels?.length) {
+      const k = i.levels.join('|');
+      const sc = scales.get(k) ?? { levels: i.levels, areas: [] };
+      if (!sc.areas.includes(area)) sc.areas.push(area);
+      scales.set(k, sc);
+    }
   }
   const fb = await c.query<{ kind: 'self' | 'parent' | 'teacher'; text: string }>(
     `SELECT DISTINCT ON (kind) kind, text FROM hpc_feedback WHERE exam_id = ANY($1::bigint[]) AND student_id = $2
@@ -747,6 +757,7 @@ async function loadHpc(
     exams: sets.rows.map((x) => x.code),
     levels: last.grades,
     levelWords: last.level_words ?? {},
+    scales: [...scales.values()],
     areas: [...areas.entries()].map(([area, list]) => ({ area, items: list })),
     feedback: {
       self: fb.rows.find((x) => x.kind === 'self')?.text ?? null,
