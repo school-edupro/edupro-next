@@ -20,9 +20,16 @@ export interface MaintenanceDeps {
   migratorUrl: string | undefined;
 }
 
+/**
+ * Scheduled walks over every school that come round often. A run still going when the next one is due
+ * (many schools, a busy machine, a stalled job retried by another worker) must not start a second walk
+ * on top of it: the runs piled up and held the database. The later run is skipped instead.
+ */
+const ONE_AT_A_TIME = new Set(['insights.refresh', 'insights.results_mart']);
+
 /** Cross-tenant housekeeping. Jobs here carry a system envelope (schoolId "0") and use SECURITY DEFINER routines. */
 export function maintenanceProcessor({ db, storage, log, migratorUrl }: MaintenanceDeps) {
-  return async (job: JobLike<unknown>): Promise<void> => {
+  const run = async (job: JobLike<unknown>): Promise<void> => {
     const kind = (job.data as JobEnvelope).kind;
     if (kind === 'exports.expire') {
       const expired = await db.withoutTenant((c) =>
@@ -685,7 +692,18 @@ export function maintenanceProcessor({ db, storage, log, migratorUrl }: Maintena
           },
         );
       }
-      log.info({ schools: schools.rows.length, affected: total }, 'retention purge run');
+      // the marts' refresh log: the dashboard reads only each mart's last refresh, a week is plenty
+      const pruned = await db.withoutTenant((c) =>
+        c.query<{ n: number }>('SELECT app.prune_mart_refresh_log(7) AS n'),
+      );
+      log.info(
+        {
+          schools: schools.rows.length,
+          affected: total,
+          martLog: Number(pruned.rows[0]?.n ?? 0),
+        },
+        'retention purge run',
+      );
       return;
     }
     if (kind === 'insights.results_mart') {
@@ -813,6 +831,32 @@ export function maintenanceProcessor({ db, storage, log, migratorUrl }: Maintena
       return;
     }
     log.warn({ kind }, 'unknown maintenance job kind');
+  };
+  return async (job: JobLike<unknown>): Promise<void> => {
+    const kind = (job.data as JobEnvelope).kind;
+    const only = (job.data as JobEnvelope<{ schoolIds?: string[] }>).payload?.schoolIds;
+    if (!ONE_AT_A_TIME.has(kind) || (Array.isArray(only) && only.length > 0)) return run(job);
+    // a session lock on a connection of its own: it outlives the per-school transactions and goes with
+    // the process if a worker dies mid-run
+    const key = `maintenance.run:${kind}`;
+    const guard = await db.pool.connect();
+    try {
+      const got = await guard.query<{ ok: boolean }>(
+        'SELECT pg_try_advisory_lock(hashtext($1)) AS ok',
+        [key],
+      );
+      if (!got.rows[0]?.ok) {
+        log.info({ kind, jobId: job.id }, 'skipped: the previous run is still going');
+        return;
+      }
+      try {
+        await run(job);
+      } finally {
+        await guard.query('SELECT pg_advisory_unlock(hashtext($1))', [key]).catch(() => undefined);
+      }
+    } finally {
+      guard.release();
+    }
   };
 }
 

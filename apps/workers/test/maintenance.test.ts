@@ -78,3 +78,51 @@ describe('maintenance: break-glass expiry (S5-03)', () => {
     expect(after.outbox.n).toBeGreaterThanOrEqual(1);
   });
 });
+
+describe('maintenance: one marts refresh at a time', () => {
+  const db = newDb();
+  let school: SeededSchool;
+  beforeAll(async () => {
+    school = await seedSchool(stamp('WMR'));
+  });
+  afterAll(async () => {
+    await db.close();
+  });
+
+  it('skips a scheduled refresh while another is going; a run for chosen schools still goes', async () => {
+    const storage = createStorageDriver({ driver: 'local', localDir: tmpdir(), urlTtlSeconds: 60 });
+    const lines: string[] = [];
+    const spy = {
+      ...log,
+      info: (_o: unknown, msg?: string) => {
+        if (msg) lines.push(msg);
+      },
+    } as unknown as typeof log;
+    const run = maintenanceProcessor({ db, storage, log: spy, migratorUrl: undefined });
+    const job = (only?: { schoolIds: string[] }) => ({
+      data: SYSTEM_ENVELOPE('insights.refresh', only),
+      attemptsMade: 0,
+      opts: { attempts: 1 },
+    });
+    // another run holds the lock: this one, or a worker running on the machine already holding it
+    const other = await db.pool.connect();
+    try {
+      const got = await other.query<{ ok: boolean }>(
+        "SELECT pg_try_advisory_lock(hashtext('maintenance.run:insights.refresh')) AS ok",
+      );
+      const t0 = Date.now();
+      await run(job());
+      expect(Date.now() - t0).toBeLessThan(5000);
+      expect(lines).toContain('skipped: the previous run is still going');
+      lines.length = 0;
+      await run(job({ schoolIds: [school.id] }));
+      expect(lines).toContain('insights refresh run');
+      if (got.rows[0]?.ok)
+        await other.query(
+          "SELECT pg_advisory_unlock(hashtext('maintenance.run:insights.refresh'))",
+        );
+    } finally {
+      other.release();
+    }
+  });
+});

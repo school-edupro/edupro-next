@@ -8,4 +8,6 @@ module.exports = {
   testTimeout: 60000,
   maxWorkers: 1,
   setupFiles: ['<rootDir>/test/setup-env.ts'],
+  globalSetup: '<rootDir>/test/global-setup.cjs',
+  globalTeardown: '<rootDir>/test/global-teardown.cjs',
 };
