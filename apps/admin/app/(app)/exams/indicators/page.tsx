@@ -21,7 +21,7 @@ interface SetRow {
 /**
  * Indicators and the Holistic Progress Card (docs/design/65, part 5): the indicator sets in three
  * levels (area → item → sub-item), the NCERT foundational-stage set for Balvatika to Class II and its
- * card. A class takes a set per exam on the exam's page.
+ * card. A class takes a set per exam on the exam's Set-up.
  */
 export default async function IndicatorsPage({
   searchParams,
@@ -54,7 +54,7 @@ export default async function IndicatorsPage({
       <PageHeader
         kicker="Exams"
         title="Indicators and the progress card"
-        description="Co-scholastic indicators and the Holistic Progress Card for Balvatika to Class II, in up to three levels. Choose a class's set on the exam's page; teachers enter it in the teacher app or here."
+        description="Co-scholastic indicators and the Holistic Progress Card for Balvatika to Class II, in up to three levels. Choose a class's set on the exam's Set-up; teachers enter it in the teacher app or here."
         actions={<MasterExport master="indicators" label="Indicators" />}
       />
       <ExamSetupNav current="/exams/indicators" />

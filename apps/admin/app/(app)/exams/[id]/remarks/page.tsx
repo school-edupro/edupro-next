@@ -4,6 +4,7 @@ import { Notice } from '@/components/Notice';
 import { ApiError, apiFetch, getMe } from '@/lib/api';
 import { saveRemarkItems } from '@/lib/remark-actions';
 import type { Exam } from '@/lib/types';
+import { ExamTabs } from '@/components/exams/ExamTabs';
 
 interface Sheet {
   section: { id: string; code: string };
@@ -79,6 +80,7 @@ export default async function ExamRemarksPage({
           </a>
         }
       />
+      <ExamTabs examId={id} current="remarks" />
       <Notice params={sp} />
       <Card style={{ marginBottom: 'var(--sp-4)' }}>
         <form
@@ -217,7 +219,7 @@ export default async function ExamRemarksPage({
             ) : (
               <p className="ep-field__help">
                 {sheet.locked
-                  ? 'Remarks are locked for the class in this exam; open them on the exam page.'
+                  ? 'Remarks are locked for the class in this exam; open them on the exam’s Overview.'
                   : 'You may view these only: the class teacher writes them, a subject teacher their subject’s.'}
               </p>
             )}

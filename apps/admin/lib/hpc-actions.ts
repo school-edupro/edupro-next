@@ -137,19 +137,6 @@ export async function saveIndicatorSet(input: SetInput) {
   return out;
 }
 
-/** The set a class uses in an exam (none: the class has no indicators in it). */
-export async function assignIndicatorSet(fd: FormData) {
-  const examId = str(fd, 'examId');
-  const classId = str(fd, 'classId');
-  const setId = str(fd, 'setId');
-  return run(`/exams/${examId}?classId=${classId}`, () =>
-    apiFetch(`/exams/${examId}/indicator-sets`, {
-      method: 'PUT',
-      body: JSON.stringify({ classId, setId: setId || null }),
-    }),
-  );
-}
-
 // ---- entry --------------------------------------------------------------------------------------
 /** One area of a section: a level (or an observation) per student and item; an empty cell is removed. */
 export async function saveIndicatorEntries(fd: FormData) {

@@ -98,20 +98,29 @@ Do these once; review them each session.
 
 ### 4.1 Create the exam — coordinator
 
-Exams → Exams of the session (the form under the list), then open the exam:
+Exams → Exams of the session → **New exam**, three steps (or **Copy** an earlier exam: its classes,
+subjects, marks, parts and sets come with it, and it opens at the date sheet):
 
-- its classes and the grade scale of each;
-- the subjects of each class with **maximum and pass marks** (a maximum of 0 makes a grade-only
-  subject such as art or PE, graded from its own scale); a subject may be entered **in parts**
-  (Theory / Practical, or Physics / Chemistry / Biology under Science, each by its own teacher);
-- **Indicators or progress card**: the set each class uses in this exam;
-- **Entry locks of the class**: marks, indicators, remarks, attendance, health (tick what is closed).
+1. **Details** — type, name, dates, the classes and a grade scale (each class can have its own on
+   Set-up → Details). A blank code is made from the type and the year.
+2. **Classes and subjects** — class by class: the subjects the class studies come ticked; **maximum
+   and pass marks** (Apply one pair to every subject, or Copy from another class; a maximum of 0
+   makes a grade-only subject such as art or PE, graded from its own scale); a subject may be entered
+   **in parts** (Theory / Practical, or Physics / Chemistry / Biology under Science, each by its own
+   teacher); the class's **indicator or progress card set**. Save and go to the next class.
+3. **Date sheet** — each paper's date, start and end time, and a note under it; print one class or
+   all classes side by side.
+
+The exam then opens on its **Overview** (stage, next step, class-by-class progress) with the same tabs
+on every page of the exam. **Entry locks** are switches there: one click locks or opens an area of a
+class (opening needs the unlock right); **Lock the whole exam** asks first. A subject or class with
+marks entered stays in the exam.
 
 ### 4.2 Enter — teachers
 
 | What                                                                              | Where (teacher app)                             | Where (admin)             | Rules                                                                                                                                                                                                                               |
 | --------------------------------------------------------------------------------- | ----------------------------------------------- | ------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Marks                                                                             | Marks                                           | Exam → Marks entry        | A mark, or a code instead; a grade for a grade-only subject; only the students who take the subject; Excel download and upload, every row checked before anything is saved                                                          |
+| Marks                                                                             | Marks                                           | Exam → Marks              | A mark, or a code instead; a grade for a grade-only subject; only the students who take the subject; Excel download and upload, every row checked before anything is saved                                                          |
 | Indicators, progress card                                                         | Indicators and progress card                    | Exam → Indicators and HPC | One area at a time; a level per competency, or a written note; goals are headings                                                                                                                                                   |
 | Child's words, parent's feedback, teacher's observations, portfolio photos        | Indicators and progress card                    | Exam → Indicators and HPC | Balvatika to II; up to 12 photos per child (the card prints 6), PNG or JPEG up to 1 MB                                                                                                                                              |
 | Remarks by category                                                               | Remarks                                         | Exam → Remarks            | One per student and category; the class teacher writes every category, a subject teacher their subject's                                                                                                                            |

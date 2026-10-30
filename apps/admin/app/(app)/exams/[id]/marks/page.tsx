@@ -10,6 +10,7 @@ import { Notice } from '@/components/Notice';
 import { saveExamMarks, saveExamPartMarks, uploadExamMarks } from '@/lib/exam-entry-actions';
 import { ApiError, apiFetch, getMe } from '@/lib/api';
 import type { Exam } from '@/lib/types';
+import { ExamTabs } from '@/components/exams/ExamTabs';
 
 interface Part {
   id: string;
@@ -168,6 +169,7 @@ export default async function ExamMarksPage({
           </span>
         }
       />
+      <ExamTabs examId={id} current="marks" />
       <Notice params={sp} />
       <Card style={{ marginBottom: 'var(--sp-4)' }}>
         <form
@@ -197,7 +199,7 @@ export default async function ExamMarksPage({
       {!options.length ? (
         <Card>
           <p style={{ margin: 0 }}>
-            The exam has no class with subjects yet: add the subjects on the exam page.
+            The exam has no class with subjects yet: add the subjects on the exam’s Set-up.
           </p>
         </Card>
       ) : null}
@@ -349,7 +351,7 @@ export default async function ExamMarksPage({
                   {sheet.status.status !== 'open'
                     ? 'The marks are submitted or verified: the verifier sends them back (or one with the unlock right reopens them) before they change.'
                     : locked
-                      ? 'Entry is locked for this subject; open it on the exam page.'
+                      ? 'Entry is locked for this subject; open it on the exam’s Overview.'
                       : 'You may view these marks only: they are entered by the teachers or the exam office (the marks entry right); admins open and lock entry.'}
                 </p>
               )}

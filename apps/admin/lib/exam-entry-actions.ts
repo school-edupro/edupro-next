@@ -196,25 +196,6 @@ export async function uploadSubjectChoices(
 }
 
 // ---- locks, codes, scales -----------------------------------------------------------------------
-export async function setClassLocks(fd: FormData) {
-  const examId = str(fd, 'examId');
-  const classId = str(fd, 'classId');
-  const on = (k: string) => fd.get(k) !== null;
-  return run(`/exams/${examId}?classId=${classId}`, () =>
-    apiFetch(`/exams/${examId}/class-locks`, {
-      method: 'PUT',
-      body: JSON.stringify({
-        classId,
-        marks: on('marks'),
-        indicators: on('indicators'),
-        remarks: on('remarks'),
-        attendance: on('attendance'),
-        health: on('health'),
-      }),
-    }),
-  );
-}
-
 export async function saveMarkCode(fd: FormData) {
   const treatment = str(fd, 'treatment');
   const value = str(fd, 'value');

@@ -6,6 +6,7 @@ import { DomainError } from '../../common/errors/domain-error';
 import { requireTenant, type RequestContext } from '../../common/http/request-context';
 import type {
   ClassLocksDto,
+  CopyExamDto,
   CreateExamDto,
   LockExamSubjectsDto,
   UpsertMarkCodeDto,
@@ -16,6 +17,7 @@ import type {
   UpsertGradeScaleDto,
   SetPartsDto,
 } from './exams.dto';
+import { examProgress, type ExamProgress } from './exam-progress';
 
 export interface ExamTypeRow {
   id: string;
@@ -65,6 +67,9 @@ export interface ExamSubjectRow {
   weightage: string | null;
   isElective: boolean;
   examOn: string | null;
+  /** the paper's time on the date sheet, HH:MM (docs/design/66) */
+  startsAt: string | null;
+  endsAt: string | null;
   entryLocked: boolean;
   lockedBy: string | null;
   lockedAt: string | null;
@@ -95,12 +100,17 @@ export interface ExamRow {
   showOnPortal: boolean;
   marksLocked: boolean;
   status: 'active' | 'inactive';
+  /** printed under the date sheet (docs/design/66) */
+  dateSheetNote: string | null;
   classes: ExamClassRow[];
   subjects?: ExamSubjectRow[];
+  /** the list's: how far the exam has got (docs/design/66) */
+  progress?: ExamProgress;
 }
 
 const EXAM_SELECT = `SELECT e.id::text, e.code, e.name, e.exam_type_id::text AS "examTypeId", t.code AS "examTypeCode", t.name AS "examTypeName",
         e.starts_on::text AS "startsOn", e.ends_on::text AS "endsOn", e.show_on_portal AS "showOnPortal", e.marks_locked AS "marksLocked", e.status::text,
+        e.date_sheet_note AS "dateSheetNote",
         COALESCE((SELECT jsonb_agg(jsonb_build_object('classId', ec.class_id::text, 'classCode', k.code, 'gradeScaleId', ec.grade_scale_id::text, 'gradeScaleCode', gs.code,
                     'subjects', (SELECT count(*) FROM exam_subjects es WHERE es.exam_id = e.id AND es.class_id = ec.class_id),
                     'locked', (SELECT count(*) FROM exam_subjects es WHERE es.exam_id = e.id AND es.class_id = ec.class_id AND es.entry_locked),
@@ -111,6 +121,7 @@ const EXAM_SELECT = `SELECT e.id::text, e.code, e.name, e.exam_type_id::text AS 
 
 const SUBJECT_SELECT = `SELECT es.id::text, es.class_id::text AS "classId", es.subject_id::text AS "subjectId", sub.code AS "subjectCode", sub.name AS "subjectName",
         es.max_marks::text AS "maxMarks", es.pass_marks::text AS "passMarks", es.weightage::text, es.is_elective AS "isElective", es.exam_on::text AS "examOn",
+        to_char(es.starts_at, 'HH24:MI') AS "startsAt", to_char(es.ends_at, 'HH24:MI') AS "endsAt",
         es.entry_locked AS "entryLocked", u.display_name AS "lockedBy", es.locked_at::text AS "lockedAt", es.grade_scale_id::text AS "gradeScaleId"
    FROM exam_subjects es JOIN subjects sub ON sub.id = es.subject_id LEFT JOIN users u ON u.id = es.locked_by`;
 
@@ -273,7 +284,95 @@ export class ExamsService {
         `${EXAM_SELECT} WHERE e.academic_year_id = $1 AND e.deleted_at IS NULL ORDER BY e.starts_on NULLS LAST, t.sort_order, e.code`,
         [yearId],
       );
-      return r.rows;
+      const progress = await examProgress(
+        c,
+        r.rows.map((e) => e.id),
+      );
+      return r.rows.map((e) => ({ ...e, progress: progress.get(e.id) }));
+    });
+  }
+
+  /** How far one exam has got, class by class (docs/design/66). */
+  async progress(ctx: RequestContext, id: string): Promise<ExamProgress> {
+    const tenant = requireTenant(ctx);
+    const yearId = this.year(tenant);
+    return this.db.tenant(tenant, async (c) => {
+      await this.findExam(c, id, yearId);
+      return (await examProgress(c, [id])).get(id)!;
+    });
+  }
+
+  /**
+   * A new exam made from an earlier one of the year (docs/design/66): its classes with their grade
+   * scales, subjects (marks, pass marks, electives, scales; not dates or times), parts and indicator
+   * sets. Entry, locks and the date sheet start afresh.
+   */
+  async copyExam(ctx: RequestContext, fromId: string, dto: CopyExamDto): Promise<ExamRow> {
+    const tenant = requireTenant(ctx);
+    const yearId = this.year(tenant);
+    return this.db.tenant(tenant, async (c) => {
+      await c.query(`SELECT app.assert_year_open($1, 'exams')`, [yearId]);
+      const from = await this.findExam(c, fromId, yearId);
+      const typeId = dto.examTypeId ?? from.examTypeId;
+      const t = await c.query(
+        `SELECT 1 FROM exam_types WHERE id = $1 AND deleted_at IS NULL AND status = 'active'`,
+        [typeId],
+      );
+      if (!t.rowCount) throw new DomainError('not-found', 'Exam type not found', { status: 404 });
+      let id: string;
+      try {
+        const r = await c.query<{ id: string }>(
+          `INSERT INTO exams (school_id, academic_year_id, exam_type_id, code, name, starts_on, ends_on, show_on_portal, date_sheet_note, created_by, updated_by)
+           VALUES (app.current_school_id(), $1, $2, $3, $4, $5::date, $6::date, $7, $8, app.current_user_id(), app.current_user_id()) RETURNING id::text`,
+          [
+            yearId,
+            typeId,
+            dto.code,
+            dto.name,
+            dto.startsOn ?? null,
+            dto.endsOn ?? null,
+            dto.showOnPortal,
+            from.dateSheetNote,
+          ],
+        );
+        id = r.rows[0]!.id;
+      } catch (error) {
+        if ((error as { code?: string }).code === '23505')
+          throw new DomainError('conflict', `Exam "${dto.code}" already exists in this year`, {
+            status: 409,
+          });
+        throw error;
+      }
+      await c.query(
+        `INSERT INTO exam_classes (school_id, exam_id, class_id, grade_scale_id)
+         SELECT school_id, $2, class_id, grade_scale_id FROM exam_classes WHERE exam_id = $1`,
+        [fromId, id],
+      );
+      await c.query(
+        `INSERT INTO exam_subjects (school_id, exam_id, class_id, subject_id, max_marks, pass_marks, weightage, is_elective, grade_scale_id)
+         SELECT school_id, $2, class_id, subject_id, max_marks, pass_marks, weightage, is_elective, grade_scale_id
+           FROM exam_subjects WHERE exam_id = $1`,
+        [fromId, id],
+      );
+      await c.query(
+        `INSERT INTO exam_subject_parts (school_id, exam_subject_id, name, subject_id, max_marks, sort_order)
+         SELECT p.school_id, n.id, p.name, p.subject_id, p.max_marks, p.sort_order
+           FROM exam_subject_parts p JOIN exam_subjects o ON o.id = p.exam_subject_id AND o.exam_id = $1
+           JOIN exam_subjects n ON n.exam_id = $2 AND n.class_id = o.class_id AND n.subject_id = o.subject_id`,
+        [fromId, id],
+      );
+      await c.query(
+        `INSERT INTO exam_indicator_sets (school_id, exam_id, class_id, set_id)
+         SELECT school_id, $2, class_id, set_id FROM exam_indicator_sets WHERE exam_id = $1`,
+        [fromId, id],
+      );
+      await this.audit.stage(ctx, c, {
+        action: 'exams.exam.copy',
+        entityType: 'exams',
+        entityId: id,
+        after: { from: fromId, ...dto },
+      });
+      return this.findExam(c, id, yearId);
     });
   }
 
@@ -375,9 +474,27 @@ export class ExamsService {
     const yearId = this.year(tenant);
     return this.db.tenant(tenant, async (c) => {
       const before = await this.findExam(c, id, yearId);
+      if (dto.classes) {
+        // a class whose marks are entered stays (taking it out would delete them)
+        const kept = dto.classes.map((k) => k.classId);
+        const marked = await c.query<{ code: string; n: number }>(
+          `SELECT k.code, count(*)::int AS n FROM mark_entries m JOIN exam_subjects es ON es.id = m.exam_subject_id
+             JOIN classes k ON k.id = es.class_id
+            WHERE es.exam_id = $1 AND NOT (es.class_id = ANY($2::bigint[])) GROUP BY k.code, k.display_order ORDER BY k.display_order LIMIT 1`,
+          [id, kept],
+        );
+        const m = marked.rows[0];
+        if (m)
+          throw new DomainError(
+            'exams.class_has_marks',
+            `Class ${m.code} has ${m.n} marks entered in this exam: it can't be taken out`,
+            { status: 409, extra: { classCode: m.code, entries: m.n } },
+          );
+      }
       await c.query(
         `UPDATE exams SET name = COALESCE($2, name), starts_on = CASE WHEN $3::boolean THEN $4::date ELSE starts_on END, ends_on = CASE WHEN $5::boolean THEN $6::date ELSE ends_on END,
-                show_on_portal = COALESCE($7, show_on_portal), marks_locked = COALESCE($8, marks_locked), status = COALESCE($9::row_status, status), updated_at = now(), updated_by = app.current_user_id()
+                show_on_portal = COALESCE($7, show_on_portal), marks_locked = COALESCE($8, marks_locked), status = COALESCE($9::row_status, status),
+                date_sheet_note = CASE WHEN $10::boolean THEN $11 ELSE date_sheet_note END, updated_at = now(), updated_by = app.current_user_id()
           WHERE id = $1`,
         [
           id,
@@ -389,6 +506,8 @@ export class ExamsService {
           dto.showOnPortal ?? null,
           dto.marksLocked ?? null,
           dto.status ?? null,
+          dto.dateSheetNote !== undefined,
+          dto.dateSheetNote || null,
         ],
       );
       if (dto.classes) {
@@ -442,7 +561,26 @@ export class ExamsService {
           status: 409,
         });
       const classScale = exam.classes.find((k) => k.classId === dto.classId)?.gradeScaleId ?? null;
+      // a subject whose marks are entered stays (taking it out would delete them)
+      const marked = await c.query<{ code: string; n: number }>(
+        `SELECT sub.code, count(*)::int AS n FROM mark_entries m JOIN exam_subjects es ON es.id = m.exam_subject_id
+           JOIN subjects sub ON sub.id = es.subject_id
+          WHERE es.exam_id = $1 AND es.class_id = $2 AND NOT es.entry_locked AND NOT (es.subject_id = ANY($3::bigint[]))
+          GROUP BY sub.code ORDER BY sub.code LIMIT 1`,
+        [examId, dto.classId, dto.subjects.map((s) => s.subjectId)],
+      );
+      const m = marked.rows[0];
+      if (m)
+        throw new DomainError(
+          'exams.subject_has_marks',
+          `${m.code} has ${m.n} marks entered: it can't be taken out of the exam`,
+          { status: 409, extra: { subjectCode: m.code, entries: m.n } },
+        );
       for (const s of dto.subjects) {
+        if (s.startsAt && s.endsAt && s.endsAt <= s.startsAt)
+          throw new DomainError('exams.paper_time', 'A paper ends after it starts', {
+            status: 400,
+          });
         if (s.passMarks !== null && s.passMarks !== undefined && s.passMarks > s.maxMarks)
           throw new DomainError('exams.pass_above_max', 'Pass marks above max marks', {
             status: 400,
@@ -455,10 +593,11 @@ export class ExamsService {
             { status: 400 },
           );
         await c.query(
-          `INSERT INTO exam_subjects (school_id, exam_id, class_id, subject_id, max_marks, pass_marks, weightage, is_elective, exam_on, grade_scale_id)
-           VALUES (app.current_school_id(), $1, $2, $3, $4, $5, $6, $7, $8::date, $9)
+          `INSERT INTO exam_subjects (school_id, exam_id, class_id, subject_id, max_marks, pass_marks, weightage, is_elective, exam_on, grade_scale_id, starts_at, ends_at)
+           VALUES (app.current_school_id(), $1, $2, $3, $4, $5, $6, $7, $8::date, $9, $10::time, $11::time)
            ON CONFLICT (exam_id, class_id, subject_id) DO UPDATE SET max_marks = EXCLUDED.max_marks, pass_marks = EXCLUDED.pass_marks, weightage = EXCLUDED.weightage,
-             is_elective = EXCLUDED.is_elective, exam_on = EXCLUDED.exam_on, grade_scale_id = EXCLUDED.grade_scale_id`,
+             is_elective = EXCLUDED.is_elective, exam_on = EXCLUDED.exam_on, grade_scale_id = EXCLUDED.grade_scale_id,
+             starts_at = EXCLUDED.starts_at, ends_at = EXCLUDED.ends_at`,
           [
             examId,
             dto.classId,
@@ -469,6 +608,8 @@ export class ExamsService {
             s.isElective,
             s.examOn ?? null,
             s.gradeScaleId ?? null,
+            s.startsAt ?? null,
+            s.endsAt ?? null,
           ],
         );
       }
@@ -633,18 +774,25 @@ export class ExamsService {
   async classLocks(ctx: RequestContext, examId: string, dto: ClassLocksDto): Promise<ExamRow> {
     const tenant = requireTenant(ctx);
     const yearId = this.year(tenant);
-    const opening = [dto.marks, dto.indicators, dto.remarks, dto.attendance, dto.health].some(
-      (v) => v === false,
-    );
-    if (opening && !ctx.permissions?.has('exams.marks.unlock'))
-      throw new DomainError('permission-denied', 'Opening entry again needs exams.marks.unlock', {
-        status: 403,
-      });
     return this.db.tenant(tenant, async (c) => {
       const exam = await this.findExam(c, examId, yearId);
-      if (!exam.classes.some((k) => k.classId === dto.classId))
+      const klass = exam.classes.find((k) => k.classId === dto.classId);
+      if (!klass)
         throw new DomainError('exams.class_not_in_exam', 'The class is not in this exam', {
           status: 404,
+        });
+      // opening is what is locked now and asked open (a box left as it was opens nothing)
+      const marksLocked = (exam.subjects ?? []).some(
+        (s) => s.classId === dto.classId && s.entryLocked,
+      );
+      const opening =
+        (dto.marks === false && marksLocked) ||
+        (['indicators', 'remarks', 'attendance', 'health'] as const).some(
+          (k) => dto[k] === false && klass.locks[k],
+        );
+      if (opening && !ctx.permissions?.has('exams.marks.unlock'))
+        throw new DomainError('permission-denied', 'Opening entry again needs exams.marks.unlock', {
+          status: 403,
         });
       if (dto.marks !== undefined)
         await c.query(

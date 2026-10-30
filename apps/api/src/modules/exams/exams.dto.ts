@@ -22,6 +22,7 @@ export const EXAMS = {
 } as const;
 
 const DateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'must be YYYY-MM-DD');
+const TimeSchema = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, 'must be HH:MM');
 const CategoryCode = z
   .string()
   .trim()
@@ -79,9 +80,22 @@ export const UpdateExamSchema = CreateExamSchema.omit({ code: true, examTypeId: 
     endsOn: DateSchema.nullable(),
     status: z.enum(['active', 'inactive']),
     marksLocked: z.boolean(),
+    /** printed under the date sheet (reporting time, what to bring); docs/design/66 */
+    dateSheetNote: z.string().trim().max(1000).nullable(),
   })
   .partial();
 export class UpdateExamDto extends createZodDto(UpdateExamSchema) {}
+
+/** docs/design/66: a new exam made from an earlier one (its classes, subjects, parts and sets). */
+export const CopyExamSchema = z.object({
+  examTypeId: IdSchema.optional(),
+  code: Code,
+  name: z.string().trim().min(2).max(120),
+  startsOn: DateSchema.optional(),
+  endsOn: DateSchema.optional(),
+  showOnPortal: z.boolean().default(false),
+});
+export class CopyExamDto extends createZodDto(CopyExamSchema) {}
 
 export const SetExamSubjectsSchema = z.object({
   classId: IdSchema,
@@ -95,6 +109,9 @@ export const SetExamSubjectsSchema = z.object({
         weightage: z.number().min(0).max(100).nullable().optional(),
         isElective: z.boolean().default(false),
         examOn: DateSchema.nullable().optional(),
+        /** the paper's time on the date sheet (docs/design/66) */
+        startsAt: TimeSchema.nullable().optional(),
+        endsAt: TimeSchema.nullable().optional(),
         /** the subject's own grade scale (a grade-only subject needs one, or the class's) */
         gradeScaleId: IdSchema.nullable().optional(),
       }),

@@ -13,6 +13,7 @@ import { Notice } from '@/components/Notice';
 import { savePromotions } from '@/lib/actions';
 import { apiFetch, getMe } from '@/lib/api';
 import type { Exam, PromotionProposals, Year } from '@/lib/types';
+import { ExamTabs } from '@/components/exams/ExamTabs';
 
 /** Sprint 16: promotion proposals from the results, handed to the promotion register of the next year. */
 export default async function PromotionProposalsPage({
@@ -85,6 +86,7 @@ export default async function PromotionProposalsPage({
           </span>
         }
       />
+      <ExamTabs examId={id} current="results" />
       <Notice params={sp} />
       <Card title={r('rule')} style={{ marginBottom: 'var(--sp-4)' }}>
         <form method="get">

@@ -4,6 +4,7 @@ import { Notice } from '@/components/Notice';
 import { computeExamResults } from '@/lib/actions';
 import { apiFetch, getMe } from '@/lib/api';
 import type { Exam, ExamAnalysis } from '@/lib/types';
+import { ExamTabs } from '@/components/exams/ExamTabs';
 
 const Kpi = ({ label, value }: { label: string; value: string }) => (
   <Card elevated>
@@ -73,6 +74,7 @@ export default async function AnalysisPage({
           </span>
         }
       />
+      <ExamTabs examId={id} current="results" />
       <Notice params={sp} />
       <form
         method="get"

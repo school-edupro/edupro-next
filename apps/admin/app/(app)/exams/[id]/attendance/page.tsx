@@ -4,6 +4,7 @@ import { Notice } from '@/components/Notice';
 import { ApiError, apiFetch, getMe } from '@/lib/api';
 import { countExamAttendance, saveExamAttendance } from '@/lib/remark-actions';
 import type { Exam } from '@/lib/types';
+import { ExamTabs } from '@/components/exams/ExamTabs';
 
 interface Register {
   exam: { marksLocked: boolean };
@@ -68,6 +69,7 @@ export default async function ExamAttendancePage({
         title={`Exam attendance · ${exam.name}`}
         description="Count it from daily attendance (late, half day, on duty, stay back and short leave count as present), then correct any student. It prints on the report card."
       />
+      <ExamTabs examId={id} current="attendance" />
       <Notice params={sp} />
       <Card style={{ marginBottom: 'var(--sp-4)' }}>
         <form
@@ -220,7 +222,7 @@ export default async function ExamAttendancePage({
               ) : (
                 <p className="ep-field__help">
                   {locked
-                    ? 'Attendance is locked for the class in this exam; open it on the exam page.'
+                    ? 'Attendance is locked for the class in this exam; open it on the exam’s Overview.'
                     : 'You may view this only (the exam attendance right).'}
                 </p>
               )}

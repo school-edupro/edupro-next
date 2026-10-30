@@ -4,6 +4,7 @@ import { RequirePermission } from '../../common/access/require-permission.decora
 import { ReqCtx, type RequestContext } from '../../common/http/request-context';
 import {
   ClassLocksDto,
+  CopyExamDto,
   CreateExamDto,
   EXAMS,
   LockExamSubjectsDto,
@@ -96,6 +97,20 @@ export class ExamsController {
   @RequirePermission(EXAMS.masterManage)
   create(@ReqCtx() ctx: RequestContext, @Body() dto: CreateExamDto) {
     return this.exams.createExam(ctx, dto);
+  }
+
+  @Get(':id/progress')
+  @ApiOperation({ summary: 'How far the exam has got, class by class, and its stage' })
+  @RequirePermission(EXAMS.masterView)
+  progress(@ReqCtx() ctx: RequestContext, @Param('id') id: string) {
+    return this.exams.progress(ctx, id);
+  }
+
+  @Post(':id/copy')
+  @ApiOperation({ summary: 'A new exam from this one: classes, subjects, parts and sets' })
+  @RequirePermission(EXAMS.masterManage)
+  copy(@ReqCtx() ctx: RequestContext, @Param('id') id: string, @Body() dto: CopyExamDto) {
+    return this.exams.copyExam(ctx, id, dto);
   }
 
   @Get(':id')

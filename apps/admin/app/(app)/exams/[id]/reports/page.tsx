@@ -3,6 +3,7 @@ import { notFound } from 'next/navigation';
 import { type ExamReport, ReportTables } from '@/components/exams/ReportTables';
 import { ApiError, apiFetch, getMe } from '@/lib/api';
 import type { Exam } from '@/lib/types';
+import { ExamTabs } from '@/components/exams/ExamTabs';
 
 const KINDS: Array<{ value: string; label: string; help: string }> = [
   {
@@ -126,6 +127,7 @@ export default async function ExamReportsPage({
           </span>
         }
       />
+      <ExamTabs examId={id} current="reports" />
       <Card style={{ marginBottom: 'var(--sp-4)' }}>
         <form
           method="get"

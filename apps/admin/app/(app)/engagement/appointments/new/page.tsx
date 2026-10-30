@@ -1,6 +1,6 @@
 import { Alert, Breadcrumbs, Button, Card, PageHeader, SelectField } from '@edupro/ui';
 import { AppointmentNav } from '@/components/appointments/AppointmentNav';
-import { AutoSubmit } from '@/components/appointments/AutoSubmit';
+import { AutoSubmit } from '@/components/AutoSubmit';
 import { Notice } from '@/components/Notice';
 import { apiFetch, getMe } from '@/lib/api';
 import { bookAppointment } from '@/lib/appointment-actions';

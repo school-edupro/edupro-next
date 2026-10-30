@@ -1,0 +1,319 @@
+/**
+ * Exams made easy (docs/design/66): an exam's stage worked out from its data (set-up, marks entry,
+ * verification, results), the date sheet's times and note, set-up that never deletes entered marks
+ * (a subject or a class with marks stays), a new exam copied from an earlier one, and the entry locks:
+ * locking one area needs no unlock right, only opening a locked one does.
+ */
+import type { NestFastifyApplication } from '@nestjs/platform-fastify';
+import {
+  createApp,
+  headersFor,
+  injector,
+  seedSchool,
+  seedUser,
+  stamp,
+  withMigrator,
+  type SeededSchool,
+  type SeededUser,
+} from './helpers';
+
+interface Progress {
+  stage: string;
+  classes: Array<{
+    classId: string;
+    subjects: number;
+    students: number;
+    marks: { slots: number; takers: number; entered: number; verified: number };
+    stage: string;
+  }>;
+  totals: { marks: { takers: number; entered: number; slots: number; verified: number } };
+}
+
+describe('exams made easy (e2e)', () => {
+  let app: NestFastifyApplication;
+  let inject: ReturnType<typeof injector>;
+  let school: SeededSchool;
+  let admin: SeededUser;
+  let clerk: SeededUser;
+  /** the exam office: sets exams up and locks entry, never opens it again */
+  let office: SeededUser;
+  let classId: string;
+  let otherClassId: string;
+  let section: string;
+  let typeId: string;
+  let examId: string;
+  const s = stamp('XH');
+  const subject: Record<string, string> = {};
+  const student: Record<string, string> = {};
+  const call = (
+    u: SeededUser,
+    method: 'GET' | 'POST' | 'PUT' | 'PATCH',
+    url: string,
+    json?: unknown,
+  ) =>
+    inject({
+      method,
+      url,
+      headers: headersFor(u.sub, school.id),
+      ...(json === undefined ? {} : { json }),
+    });
+  const progress = async (id = examId) =>
+    (await call(admin, 'GET', `/exams/${id}/progress`)).json() as Progress;
+  const subjects = (rows: unknown[], id = examId, k = classId) =>
+    call(admin, 'PUT', `/exams/${id}/subjects`, { classId: k, subjects: rows });
+  const marks = (subjectId: string, rows: unknown[]) =>
+    call(clerk, 'PUT', `/exams/${examId}/marks`, { classSectionId: section, subjectId, rows });
+  const status = (action: string, u: SeededUser, subjectId: string) =>
+    call(u, 'POST', `/exams/${examId}/entry-status/${action}`, {
+      classSectionId: section,
+      subjectId,
+    });
+
+  beforeAll(async () => {
+    await withMigrator(async (c) => {
+      school = await seedSchool(c, s);
+      admin = await seedUser(c, school, `${s}-admin`, 'school_admin');
+      clerk = await seedUser(c, school, `${s}-clerk`, 'class_teacher');
+      office = await seedUser(c, school, `${s}-office`);
+      const role = await c.query<{ id: string }>(
+        `INSERT INTO roles (school_id, code, name, kind) VALUES ($1, 'exam_office', 'Exam office', 'module') RETURNING id::text`,
+        [school.id],
+      );
+      await c.query(
+        `INSERT INTO role_permissions (role_id, permission_code) VALUES ($1, 'exams.master.view'), ($1, 'exams.master.manage')`,
+        [role.rows[0]!.id],
+      );
+      await c.query(
+        `INSERT INTO user_roles (school_id, user_id, role_id, reason) VALUES ($1, $2, $3, 'e2e')`,
+        [school.id, office.id, role.rows[0]!.id],
+      );
+    });
+    app = await createApp();
+    inject = injector(app);
+    classId = (
+      await call(admin, 'POST', '/academics/classes', {
+        code: 'V',
+        name: 'Class V',
+        displayOrder: 5,
+      })
+    ).json().id;
+    otherClassId = (
+      await call(admin, 'POST', '/academics/classes', {
+        code: 'IV',
+        name: 'Class IV',
+        displayOrder: 4,
+      })
+    ).json().id;
+    section = (
+      await call(admin, 'POST', `/academics/classes/${classId}/sections`, { name: 'A' })
+    ).json().id;
+    for (const [code, name] of [
+      ['ENG', 'English'],
+      ['MAT', 'Mathematics'],
+      ['SCI', 'Science'],
+    ]) {
+      const r = await call(admin, 'POST', '/academics/subjects', {
+        code,
+        name,
+        kind: 'scholastic',
+      });
+      expect(r.statusCode).toBe(201);
+      subject[code!] = r.json().id;
+    }
+    for (const [i, first] of ['Anu', 'Bela'].entries()) {
+      const r = await call(admin, 'POST', '/people/students', {
+        admissionNo: `${s}-${String(i + 1)}`,
+        firstName: first,
+        lastName: 'Hub',
+        guardians: [],
+        enrolment: { classSectionId: section, rollNo: i + 1 },
+      });
+      expect(r.statusCode).toBe(201);
+      student[first] = r.json().id;
+    }
+    typeId = (await call(admin, 'POST', '/exams/types', { code: 'HY', name: 'Half-yearly' })).json()
+      .id;
+    examId = (
+      await call(admin, 'POST', '/exams', {
+        examTypeId: typeId,
+        code: 'HY-2026',
+        name: 'Half-yearly 2026',
+        classes: [{ classId }, { classId: otherClassId }],
+      })
+    ).json().id;
+  }, 120_000);
+  afterAll(async () => {
+    await app?.close();
+  });
+
+  it('starts in set-up; a paper keeps its date and time; a paper ends after it starts; the note', async () => {
+    const list = (await call(admin, 'GET', '/exams')).json().data as Array<{
+      id: string;
+      progress: Progress;
+    }>;
+    expect(list.find((e) => e.id === examId)!.progress.stage).toBe('setup');
+    const wrong = await subjects([
+      {
+        subjectId: subject.ENG,
+        maxMarks: 50,
+        examOn: '2026-09-21',
+        startsAt: '12:00',
+        endsAt: '09:00',
+      },
+    ]);
+    expect(wrong.statusCode).toBe(400);
+    expect(wrong.json().type).toBe('exams.paper_time');
+    const ok = await subjects([
+      {
+        subjectId: subject.ENG,
+        maxMarks: 50,
+        passMarks: 17,
+        examOn: '2026-09-21',
+        startsAt: '09:00',
+        endsAt: '12:00',
+      },
+      { subjectId: subject.MAT, maxMarks: 50, passMarks: 17, examOn: '2026-09-22' },
+    ]);
+    expect(ok.statusCode).toBe(200);
+    const eng = (
+      ok.json().subjects as Array<{ subjectId: string; startsAt: string; endsAt: string }>
+    ).find((x) => x.subjectId === subject.ENG)!;
+    expect(eng).toMatchObject({ startsAt: '09:00', endsAt: '12:00' });
+    const note = await call(admin, 'PATCH', `/exams/${examId}`, {
+      dateSheetNote: 'Reporting time 7:45 am.',
+    });
+    expect(note.json().dateSheetNote).toBe('Reporting time 7:45 am.');
+    // Class IV has no subjects yet: the exam is still in set-up
+    const p = await progress();
+    expect(p.stage).toBe('setup');
+    expect(p.classes.find((k) => k.classId === classId)).toMatchObject({
+      subjects: 2,
+      students: 2,
+      stage: 'entry',
+      marks: { slots: 2, takers: 4, entered: 0 },
+    });
+  });
+
+  it('marks entry, then verification; a subject or a class with marks stays in the exam', async () => {
+    expect(
+      (
+        await call(admin, 'PATCH', `/exams/${examId}`, {
+          classes: [{ classId }],
+        })
+      ).statusCode,
+    ).toBe(200);
+    expect((await progress()).stage).toBe('entry');
+    for (const code of ['ENG', 'MAT'])
+      expect(
+        (
+          await marks(subject[code]!, [
+            { studentId: student.Anu, marks: 40 },
+            { studentId: student.Bela, marks: 30 },
+          ])
+        ).statusCode,
+      ).toBe(200);
+    const p = await progress();
+    expect(p.stage).toBe('verification');
+    expect(p.totals.marks).toMatchObject({ takers: 4, entered: 4, slots: 2, verified: 0 });
+    // taking MAT out would delete its marks
+    const out = await subjects([{ subjectId: subject.ENG, maxMarks: 50 }]);
+    expect(out.statusCode).toBe(409);
+    expect(out.json()).toMatchObject({
+      type: 'exams.subject_has_marks',
+      subjectCode: 'MAT',
+      entries: 2,
+    });
+    const gone = await call(admin, 'PATCH', `/exams/${examId}`, {
+      classes: [{ classId: otherClassId }],
+    });
+    expect(gone.statusCode).toBe(409);
+    expect(gone.json()).toMatchObject({ type: 'exams.class_has_marks', classCode: 'V' });
+  });
+
+  it('every subject verified: results', async () => {
+    for (const code of ['ENG', 'MAT']) {
+      expect((await status('submit', clerk, subject[code]!)).statusCode).toBe(201);
+      expect((await status('verify', admin, subject[code]!)).statusCode).toBe(201);
+    }
+    const p = await progress();
+    expect(p.stage).toBe('results');
+    expect(p.totals.marks.verified).toBe(2);
+  });
+
+  it('a copy takes the classes, subjects and parts, not the dates, times or marks', async () => {
+    const from = (
+      await call(admin, 'POST', '/exams', {
+        examTypeId: typeId,
+        code: 'PT-1',
+        name: 'Periodic test 1',
+        classes: [{ classId }],
+      })
+    ).json().id as string;
+    const set = await subjects(
+      [{ subjectId: subject.SCI, maxMarks: 50, examOn: '2026-08-01', startsAt: '09:00' }],
+      from,
+    );
+    const sci = (set.json().subjects as Array<{ id: string; subjectId: string }>).find(
+      (x) => x.subjectId === subject.SCI,
+    )!;
+    expect(
+      (
+        await call(admin, 'PUT', `/exams/${from}/subjects/${sci.id}/parts`, {
+          parts: [
+            { name: 'Theory', maxMarks: 30 },
+            { name: 'Practical', maxMarks: 20 },
+          ],
+        })
+      ).statusCode,
+    ).toBe(200);
+    const copy = await call(admin, 'POST', `/exams/${from}/copy`, {
+      code: 'PT-2',
+      name: 'Periodic test 2',
+      startsOn: '2026-11-02',
+    });
+    expect(copy.statusCode).toBe(201);
+    expect(copy.json()).toMatchObject({ code: 'PT-2', examTypeId: typeId, startsOn: '2026-11-02' });
+    expect(copy.json().classes.map((k: { classId: string }) => k.classId)).toEqual([classId]);
+    const [row] = copy.json().subjects as Array<{
+      subjectId: string;
+      maxMarks: string;
+      examOn: string | null;
+      startsAt: string | null;
+      parts: Array<{ name: string; maxMarks: string }>;
+    }>;
+    expect(row).toMatchObject({ subjectId: subject.SCI, examOn: null, startsAt: null });
+    expect(Number(row!.maxMarks)).toBe(50);
+    expect(row!.parts.map((x) => [x.name, Number(x.maxMarks)])).toEqual([
+      ['Theory', 30],
+      ['Practical', 20],
+    ]);
+    const twice = await call(admin, 'POST', `/exams/${from}/copy`, { code: 'PT-2', name: 'Again' });
+    expect(twice.statusCode).toBe(409);
+  });
+
+  it('locking one area needs no unlock right; opening a locked one does', async () => {
+    const pt = (await call(admin, 'GET', '/exams'))
+      .json()
+      .data.find((e: { code: string }) => e.code === 'PT-2').id as string;
+    const lock = (body: Record<string, boolean>, u = office) =>
+      call(u, 'PUT', `/exams/${pt}/class-locks`, { classId, ...body });
+    expect((await lock({ remarks: true })).statusCode).toBe(200);
+    // the old page sent every box: the ones left open opened nothing
+    expect(
+      (
+        await lock({
+          marks: false,
+          indicators: false,
+          remarks: true,
+          attendance: true,
+          health: false,
+        })
+      ).statusCode,
+    ).toBe(200);
+    const shut = await lock({ remarks: false });
+    expect(shut.statusCode).toBe(403);
+    const opened = await lock({ remarks: false }, admin);
+    expect(opened.statusCode).toBe(200);
+    expect(opened.json().classes[0].locks).toMatchObject({ remarks: false, attendance: true });
+  });
+});

@@ -8,6 +8,7 @@ import {
 import { Notice } from '@/components/Notice';
 import { ApiError, apiFetch, getMe } from '@/lib/api';
 import type { Exam } from '@/lib/types';
+import { ExamTabs } from '@/components/exams/ExamTabs';
 
 interface Row extends EntryStatus {
   examSubjectId: string;
@@ -80,6 +81,7 @@ export default async function ExamStatusPage({
           </a>
         }
       />
+      <ExamTabs examId={id} current="marks" />
       <Notice params={sp} />
       <div
         style={{

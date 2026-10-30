@@ -6,6 +6,7 @@ import { Notice } from '@/components/Notice';
 import { removePortfolioPhoto, saveHpcFeedback, saveIndicatorEntries } from '@/lib/hpc-actions';
 import { ApiError, apiFetch, getMe } from '@/lib/api';
 import type { Exam } from '@/lib/types';
+import { ExamTabs } from '@/components/exams/ExamTabs';
 
 interface Item {
   id: string;
@@ -146,6 +147,7 @@ export default async function ExamIndicatorsPage({
           </a>
         }
       />
+      <ExamTabs examId={id} current="indicators" />
       <Notice params={sp} />
       <Card style={{ marginBottom: 'var(--sp-4)' }}>
         <form
@@ -183,8 +185,11 @@ export default async function ExamIndicatorsPage({
         <Card>
           <p style={{ margin: 0 }}>
             {sheet.section.code} has no indicator set in this exam: choose one on{' '}
-            <a href={`/exams/${exam.id}`} style={{ textDecoration: 'underline' }}>
-              the exam&rsquo;s page
+            <a
+              href={`/exams/${exam.id}/setup?step=subjects`}
+              style={{ textDecoration: 'underline' }}
+            >
+              the exam&rsquo;s Set-up
             </a>
             .
           </p>
@@ -303,7 +308,7 @@ export default async function ExamIndicatorsPage({
               ) : (
                 <p className="ep-field__help">
                   {sheet.locked
-                    ? 'Indicator entry is locked for the class in this exam; open it on the exam page.'
+                    ? 'Indicator entry is locked for the class in this exam; open it on the exam’s Overview.'
                     : 'You may view these only: the class teachers enter them (the indicator entry right).'}
                 </p>
               )}

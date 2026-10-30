@@ -14,8 +14,20 @@
 
 1. **Exams → Exams setup**: one menu entry, four tabs. Each thing is set in one place only; Excel and PDF of each list sit beside it.
    - **Types, grade scales, marks codes**: exam types (PT, half-yearly, annual) and the grade scale per class band. **Edit** on a type changes its name, weightage, order or status; the code stays, and an inactive type is not offered for new exams.
-2. **Exams → Exams → New**: name, dates, the classes and subjects with maximum and pass marks; tick
-   **show on portal** so the datesheet appears in the apps.
+2. **Exams → Exams of the session → New exam**, in three steps:
+   - **Details**: the type, name, dates and classes (or start from **a copy of an earlier exam**:
+     its classes, subjects, marks, parts and progress card sets come with it). Leave the code blank
+     and it is made from the type and the year (HY-2026).
+   - **Classes and subjects**: one class at a time. The subjects the class studies are ticked for
+     you; type the maximum and pass marks once and **Apply** them to every ticked subject, or **Copy
+     from** another class. **One figure** on a row splits that subject into parts (Theory and
+     Practical, or Physics, Chemistry and Biology entered by their own teachers). Choose the class's
+     indicator or progress card set at the foot. **Save and go to** the next class.
+   - **Date sheet**: each paper's date and time (**Apply** one time to every paper) and a note
+     printed under it (reporting time, what to bring). **Print** gives one class or every class side
+     by side.
+     Tick **show on the parent portal** so the date sheet appears in the apps. A subject or a class
+     with marks entered can't be taken out of the exam (its marks would be lost).
 3. Optional: indicator sets, the remark bank. **Exams → Exams setup → Indicators and HPC** holds the sets in up to
    three levels (area → item → sub-item); **Add the progress card set** brings the NCERT
    foundational-stage Holistic Progress Card for Balvatika to Class II (domains, curricular goals,
@@ -28,6 +40,19 @@
    set) and the level scales (changing a scale's levels changes them in every set using it; to
    rename a level write its new words in its place, and a level with saved entries stays).
    An item placed under a heading is in the heading's area.
+
+## Following an exam
+
+- The exam list shows each exam's **stage** (Set-up → Marks entry → Verification → Results → Cards
+  released), worked out from what is done, how many marks are entered and the **next step** button.
+  Filter by type, class or stage.
+- An exam opens on its **Overview**: the next step, the figures, and class by class how many marks
+  are entered and verified, indicators, remarks, attendance, health and results. Every page of the
+  exam has the same tabs: Overview · Set-up · Marks · Indicators · Remarks · Attendance · Results ·
+  Reports.
+- **Entry locks** on the Overview: one click locks or opens marks, indicators, remarks, attendance or
+  health of a class. Locking needs no special right; opening a locked area needs the unlock right.
+  **Lock the whole exam** (at the top) asks first.
 
 ## Marks entry
 

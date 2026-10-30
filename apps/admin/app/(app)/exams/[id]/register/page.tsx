@@ -5,6 +5,7 @@ import { computeExamResults } from '@/lib/actions';
 import { apiFetch, getMe } from '@/lib/api';
 import { sectionOptions } from '@/lib/sections';
 import type { Exam, RegisterSheet } from '@/lib/types';
+import { ExamTabs } from '@/components/exams/ExamTabs';
 
 /** Sprint 16: the mark register of one section (pupils × subjects with totals, grade and rank). */
 export default async function RegisterPage({
@@ -76,6 +77,7 @@ export default async function RegisterPage({
           </span>
         }
       />
+      <ExamTabs examId={id} current="results" />
       <Notice params={sp} />
       <Card
         title={sheet ? `${r('register')} · ${sheet.section.code}` : r('register')}

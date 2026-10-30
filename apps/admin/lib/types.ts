@@ -1978,6 +1978,9 @@ export interface ExamSubject {
   weightage: string | null;
   isElective: boolean;
   examOn: string | null;
+  /** the paper's time on the date sheet, HH:MM (docs/design/66) */
+  startsAt?: string | null;
+  endsAt?: string | null;
   entryLocked: boolean;
   lockedBy: string | null;
   lockedAt: string | null;
@@ -2007,8 +2010,51 @@ export interface Exam {
   showOnPortal: boolean;
   marksLocked: boolean;
   status: 'active' | 'inactive';
+  /** printed under the date sheet (docs/design/66) */
+  dateSheetNote?: string | null;
   classes: ExamClass[];
   subjects?: ExamSubject[];
+  /** the list's: how far the exam has got */
+  progress?: ExamProgress;
+}
+
+/** docs/design/66: an exam's stage, worked out from its data. */
+export type ExamStage = 'setup' | 'entry' | 'verification' | 'results' | 'released';
+export interface ExamDone {
+  expected: number;
+  entered: number;
+}
+export interface ExamClassProgress {
+  classId: string;
+  classCode: string;
+  sections: number;
+  students: number;
+  subjects: number;
+  marks: { slots: number; takers: number; entered: number; submitted: number; verified: number };
+  indicators: ExamDone | null;
+  remarks: ExamDone | null;
+  generalRemarks: number;
+  attendance: number;
+  health: number;
+  results: number;
+  computedAt: string | null;
+  stage: ExamStage;
+}
+export interface ExamProgress {
+  stage: ExamStage;
+  released: boolean;
+  classes: ExamClassProgress[];
+  totals: {
+    students: number;
+    subjects: number;
+    marks: ExamClassProgress['marks'];
+    indicators: ExamDone;
+    remarks: ExamDone;
+    generalRemarks: number;
+    attendance: number;
+    health: number;
+    results: number;
+  };
 }
 export interface SubjectRow {
   id: string;
