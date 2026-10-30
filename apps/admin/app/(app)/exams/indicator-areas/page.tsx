@@ -228,10 +228,9 @@ export default async function IndicatorListsPage({
                 label="Levels, lowest first (comma between)"
                 required
                 defaultValue={scale?.levels.join(', ') ?? ''}
-                readOnly={Boolean(scale && scale.used)}
                 help={
                   scale && scale.used
-                    ? 'Sets use these levels and entries keep their words: add a new scale to change them.'
+                    ? `${scale.used} ${scale.used === 1 ? 'set or section rates' : 'sets and sections rate'} on it and change with it. To rename a level, write its new words in its place; a level with saved entries can't be taken out.`
                     : 'Two to ten: Beginner, Progressing, Proficient or Rarely, Sometimes, Mostly, Always.'
                 }
               />

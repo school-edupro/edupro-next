@@ -18,7 +18,7 @@ const unique = (error: unknown) => (error as { code?: string }).code === '23505'
 /**
  * Indicator areas and level scales (docs/design/65): the school's lists the set editor picks from. An
  * area's order is the order cards print and teachers see the areas; renaming one renames it in every
- * set. A scale's levels are fixed once a set uses them (entries keep the level's words); add a new one.
+ * set. Changing a scale's levels changes them in every set and item using it (see `levelChange`).
  */
 @Injectable()
 export class IndicatorMastersService {
@@ -111,11 +111,7 @@ export class IndicatorMastersService {
           if (!old.rowCount) throw new DomainError('not-found', 'Scale not found', { status: 404 });
           const was = old.rows[0]!;
           if (was.used > 0 && was.levels.join('|') !== dto.levels.join('|'))
-            throw new DomainError(
-              'exams.scale_in_use',
-              'Sets use these levels and entries keep their words: add a new scale instead',
-              { status: 409, extra: { used: was.used } },
-            );
+            await this.moveLevels(c, was.levels, dto.levels);
           await c.query(
             `UPDATE indicator_scales SET name = $2, levels = $3, sort_order = COALESCE($4, sort_order), status = $5::row_status, updated_at = now(), updated_by = app.current_user_id()
               WHERE id = $1`,
@@ -148,6 +144,93 @@ export class IndicatorMastersService {
       return { id };
     });
   }
+
+  /**
+   * A used scale's new levels, in every live set and item that rates on it: the set's levels and level
+   * words, the items' own levels and what each level means for them, and the saved entries of a renamed
+   * level. A level that has entries is not dropped.
+   */
+  private async moveLevels(c: PoolClient, was: string[], now: string[]) {
+    const { rename, dropped } = levelChange(was, now);
+    // the items rating on the scale: their own levels, else their heading's, else their set's
+    const items = (
+      await c.query<{ id: string }>(
+        `SELECT i.id::text FROM indicators i
+           JOIN indicator_sets s ON s.id = i.set_id AND s.deleted_at IS NULL
+           LEFT JOIN indicators p ON p.id = i.parent_id
+          WHERE COALESCE(i.levels, p.levels, s.grades) = $1::text[]`,
+        [was],
+      )
+    ).rows.map((r) => r.id);
+    if (dropped.length) {
+      const held = await c.query<{ grade: string; n: number }>(
+        `SELECT grade, count(*)::int AS n FROM indicator_entries
+          WHERE indicator_id = ANY($1::bigint[]) AND grade = ANY($2::text[])
+          GROUP BY grade ORDER BY array_position($2::text[], grade) LIMIT 1`,
+        [items, dropped],
+      );
+      const h = held.rows[0];
+      if (h)
+        throw new DomainError(
+          'exams.level_has_entries',
+          `${h.n} saved ${h.n === 1 ? 'entry is' : 'entries are'} rated ${h.grade}: keep ${h.grade} in the levels, or write its new words in its place to rename it`,
+          { status: 409, extra: { level: h.grade, entries: h.n } },
+        );
+    }
+    const map = JSON.stringify(Object.fromEntries(rename));
+    // a level's words, kept under its new name and dropped with the level
+    const keys = (col: 'descriptors' | 'level_words') =>
+      // eslint-disable-next-line no-restricted-syntax -- col is one of two fixed column names
+      `(SELECT COALESCE(jsonb_object_agg(COALESCE(m.new, k.key), k.value), '{}'::jsonb)
+          FROM jsonb_each(${col}) k LEFT JOIN jsonb_each_text($3::jsonb) m(old, new) ON m.old = k.key
+         WHERE COALESCE(m.new, k.key) = ANY($2::text[]))`;
+    await c.query(
+      // eslint-disable-next-line no-restricted-syntax -- keys() is a fixed fragment of this function
+      `UPDATE indicators SET descriptors = ${keys('descriptors')},
+              levels = CASE WHEN levels = $4::text[] THEN $2::text[] ELSE levels END
+        WHERE id = ANY($1::bigint[])`,
+      [items, now, map, was],
+    );
+    await c.query(
+      // eslint-disable-next-line no-restricted-syntax -- keys() is a fixed fragment of this function
+      `UPDATE indicator_sets SET grades = $2::text[], level_words = ${keys('level_words')},
+              updated_by = app.current_user_id()
+        WHERE deleted_at IS NULL AND grades = $1::text[]`,
+      [was, now, map],
+    );
+    if (rename.size)
+      await c.query(
+        `UPDATE indicator_entries e SET grade = m.new
+           FROM jsonb_each_text($2::jsonb) m(old, new)
+          WHERE e.indicator_id = ANY($1::bigint[]) AND e.grade = m.old`,
+        [items, map],
+      );
+  }
+}
+
+/**
+ * How a scale's levels change: a level written the same stays; one written in other capitals, or (with
+ * as many levels as before) the one now in its place, is renamed; the rest are dropped.
+ */
+export function levelChange(was: string[], now: string[]) {
+  const fresh = now.filter((l) => !was.includes(l));
+  const rename = new Map<string, string>();
+  const take = (old: string, to: string | undefined) => {
+    if (!to || rename.has(old) || [...rename.values()].includes(to)) return;
+    rename.set(old, to);
+  };
+  const gone = was.filter((l) => !now.includes(l));
+  for (const old of gone)
+    take(
+      old,
+      fresh.find((l) => l.toLowerCase() === old.toLowerCase()),
+    );
+  if (was.length === now.length)
+    for (const old of gone) {
+      const to = now[was.indexOf(old)];
+      take(old, to !== undefined && fresh.includes(to) ? to : undefined);
+    }
+  return { rename, dropped: gone.filter((l) => !rename.has(l)) };
 }
 
 /**

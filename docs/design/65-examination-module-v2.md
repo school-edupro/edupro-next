@@ -432,8 +432,15 @@ scales** (`/exams/indicator-areas`). The editor picks Area, the set's scale and 
 from drop-downs (a new area can be added from the editor); **Under** lists the headings by area with
 their names; an item under a heading is in its area (the API enforces it). Areas print, and appear in
 the entry sheets, in the list's order (entry sheet, editor and both card kinds join on the area's
-name); renaming an area renames it in every set; a scale a set uses keeps its levels (409
-`exams.scale_in_use`). Sets still store the area name and the level arrays, and a set saved through
+name); renaming an area renames it in every set. Sets still store the area name and the level arrays, and a set saved through
 the API adds a new area or scale to its list. **Takes** stays a fixed choice (a level / a written
 note). Test: `indicator-masters.e2e-spec.ts`.
+
+A used scale's levels can change (first built locked, 409 `exams.scale_in_use`; schools need to add
+a level, e.g. A / B / C to A / B / C / D, or fix a word). The change applies to every live set whose
+levels are the scale's, every item rating on it (its own levels, its heading's or its set's: own
+levels, what each level means, the set's level words) and the saved entries: a level written the same
+stays, one written in other capitals or, with as many levels as before, the one now in its place is
+renamed (entries follow), the rest are dropped; a dropped level with saved entries is refused (409
+`exams.level_has_entries` with `level` and `entries`).
 

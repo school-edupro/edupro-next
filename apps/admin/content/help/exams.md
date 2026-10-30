@@ -25,7 +25,8 @@
    parent sections): its items are rated on those, and the card prints a key line for them.
    **Exams setup → Areas and level scales** holds the lists the set editor picks from: the areas
    (in the order the card prints them and teachers see them; a new name renames the area in every
-   set) and the level scales (a scale a set uses keeps its levels: add a new one to change them).
+   set) and the level scales (changing a scale's levels changes them in every set using it; to
+   rename a level write its new words in its place, and a level with saved entries stays).
    An item placed under a heading is in the heading's area.
 
 ## Marks entry
