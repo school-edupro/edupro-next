@@ -28,7 +28,8 @@ export default async function setup(): Promise<() => Promise<void>> {
     await withClient((c) =>
       c.query(
         `UPDATE schools SET status = 'inactive', updated_at = now()
-          WHERE id > $1::bigint AND (name = code OR name LIKE code || ' School %') AND status = 'active'`,
+          WHERE id > $1::bigint AND status = 'active'
+            AND (name = code OR (name LIKE '% School _' AND code = regexp_replace(name, ' School (.)$', '\\1')))`,
         [before],
       ),
     );
