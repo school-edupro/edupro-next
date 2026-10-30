@@ -1,5 +1,7 @@
 import { Badge, Breadcrumbs, Button, Card, PageHeader } from '@edupro/ui';
 import { notFound } from 'next/navigation';
+import { MasterExport } from '@/components/MasterExport';
+import { ExamSetupNav } from '@/components/exams/ExamSetupNav';
 import { Notice } from '@/components/Notice';
 import { apiFetch, getMe } from '@/lib/api';
 import { saveBankRemark, saveRemarkCategory } from '@/lib/remark-actions';
@@ -66,6 +68,7 @@ export default async function RemarkCategoriesPage({
         title="Remark categories and the remark bank"
         description="Each student gets one remark per category in an exam (written in the teacher app or on an exam's Remarks page); the report card prints them under the remarks."
       />
+      <ExamSetupNav current="/exams/remarks" />
       <Notice params={sp} />
       <div style={{ display: 'grid', gap: 'var(--sp-4)' }}>
         <Card elevated title="Categories">
@@ -221,7 +224,23 @@ export default async function RemarkCategoriesPage({
             </form>
           </Card>
         ) : null}
-        <Card elevated title="The remark bank">
+        <Card
+          elevated
+          title="The remark bank"
+          actions={
+            <span style={{ display: 'inline-flex', gap: 'var(--sp-2)', flexWrap: 'wrap' }}>
+              <MasterExport master="remark_bank" label="The remark bank" />
+              {canManage ? (
+                <a
+                  className="ep-btn ep-btn--secondary ep-btn--sm"
+                  href="/masters/exams?tab=remark_bank&upload=1"
+                >
+                  Upload Excel
+                </a>
+              ) : null}
+            </span>
+          }
+        >
           {groups.map((g) => {
             const list = bank.filter((b) => b.categoryCode === g.code);
             return (

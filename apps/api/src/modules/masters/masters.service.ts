@@ -103,12 +103,23 @@ export class MastersService {
     return d;
   }
 
-  private assertPermission(ctx: RequestContext, def: MasterDefinition, manage = false) {
+  private assertPermission(
+    ctx: RequestContext,
+    def: MasterDefinition,
+    manage = false,
+    upload = false,
+  ) {
     const needed = manage ? def.permission.manage : def.permission.view;
     if (!ctx.permissions?.has(needed))
       throw new DomainError('permission-denied', `${def.title} requires ${needed}`, {
         status: 403,
         extra: { permission: needed },
+      });
+    // a screen of its own owns these rows and their checks: the grid only lists, exports (and uploads where allowed)
+    if (manage && def.editVia && !(upload && def.editVia.upload))
+      throw new DomainError('conflict', `${def.title} are changed on ${def.editVia.label}`, {
+        status: 409,
+        extra: { path: def.editVia.path },
       });
   }
 
@@ -121,8 +132,10 @@ export class MastersService {
       group: m.group,
       yearScoped: m.yearScoped === true,
       hidden: m.hidden === true,
-      canManage: held.has(m.permission.manage),
-      canClone: m.clone !== undefined && held.has(m.permission.manage),
+      canManage: held.has(m.permission.manage) && !m.editVia,
+      canUpload: held.has(m.permission.manage) && (!m.editVia || m.editVia.upload === true),
+      canClone: m.clone !== undefined && held.has(m.permission.manage) && !m.editVia,
+      editVia: m.editVia ? { path: m.editVia.path, label: m.editVia.label } : null,
       naturalKey: m.naturalKey,
       editableKeys: editableKeys(m),
       status: m.status ?? null,
@@ -179,7 +192,7 @@ export class MastersService {
    */
   async template(ctx: RequestContext, id: string): Promise<{ fileName: string; bytes: Buffer }> {
     const def = this.def(id);
-    this.assertPermission(ctx, def, true);
+    this.assertPermission(ctx, def, true, true);
     const refs = def.fields.some((f) => f.type === 'ref') ? await this.lookups(ctx, id) : {};
     const wb = new ExcelJS.Workbook();
     wb.creator = 'EduPro Next';
@@ -411,7 +424,7 @@ export class MastersService {
   // ---- upload: validate then commit ----------------------------------------------------------------
   async validate(ctx: RequestContext, id: string, dto: UploadDto): Promise<MasterImportRow> {
     const def = this.def(id);
-    this.assertPermission(ctx, def, true);
+    this.assertPermission(ctx, def, true, true);
     const tenant = requireTenant(ctx);
     if (def.yearScoped && !tenant.academicYearId)
       throw new DomainError('validation-failed', 'Select an academic year first', { status: 400 });
@@ -493,7 +506,7 @@ export class MastersService {
 
   async commit(ctx: RequestContext, id: string, importId: string): Promise<MasterImportRow> {
     const def = this.def(id);
-    this.assertPermission(ctx, def, true);
+    this.assertPermission(ctx, def, true, true);
     const tenant = requireTenant(ctx);
     return this.changed(
       ctx,

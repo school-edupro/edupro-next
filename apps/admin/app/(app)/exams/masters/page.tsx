@@ -10,6 +10,8 @@ import {
   toneForStatus,
 } from '@edupro/ui';
 import { getTranslations } from 'next-intl/server';
+import { MasterExport } from '@/components/MasterExport';
+import { ExamSetupNav } from '@/components/exams/ExamSetupNav';
 import { Notice } from '@/components/Notice';
 import { createExamType, saveGradeScale, updateExamType } from '@/lib/actions';
 import { installGradeScalePresets, saveMarkCode } from '@/lib/exam-entry-actions';
@@ -60,6 +62,7 @@ export default async function ExamMastersPage({
   return (
     <>
       <PageHeader kicker={t('kicker')} title={t('title')} description={t('description')} />
+      <ExamSetupNav current="/exams/masters" />
       <Notice params={sp} />
       <div
         style={{
@@ -68,7 +71,7 @@ export default async function ExamMastersPage({
           gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 560px), 1fr))',
         }}
       >
-        <Card title={x('types')}>
+        <Card title={x('types')} actions={<MasterExport master="exam_types" label={x('types')} />}>
           <DataTable<ExamType>
             caption={x('types')}
             density="dense"
@@ -201,7 +204,10 @@ export default async function ExamMastersPage({
             </form>
           ) : null}
         </Card>
-        <Card title={x('scales')}>
+        <Card
+          title={x('scales')}
+          actions={<MasterExport master="grade_bands" label={x('bands')} />}
+        >
           <DataTable<GradeScale>
             caption={x('scales')}
             density="dense"

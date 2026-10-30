@@ -313,6 +313,85 @@ describe('master-data framework (e2e)', () => {
     expect(noClone.statusCode).toBe(400);
   });
 
+  it('exam set-up is kept on the exam pages: the grid lists and exports it, refuses writes; the remark bank still takes an upload', async () => {
+    const reg = await inject({ method: 'GET', url: '/masters', headers: h() });
+    const meta = (id: string) =>
+      (reg.json().data as Array<Record<string, unknown>>).find((m) => m.id === id);
+    expect(meta('exam_types')).toMatchObject({
+      hidden: true,
+      canManage: false,
+      canUpload: false,
+      editVia: { path: '/exams/masters' },
+    });
+    expect(meta('remark_bank')).toMatchObject({
+      canManage: false,
+      canUpload: true,
+      editVia: { path: '/exams/remarks' },
+    });
+    for (const id of [
+      'exam_types',
+      'grade_scales',
+      'grade_bands',
+      'indicator_sets',
+      'indicators',
+      'remark_bank',
+    ]) {
+      const r = await inject({
+        method: 'POST',
+        url: `/masters/${id}/rows`,
+        headers: h(),
+        json: { values: { code: 'X1' } },
+      });
+      expect(r.statusCode).toBe(409);
+      expect(r.json().path).toMatch(/^\/exams\//);
+    }
+    // a band on its own could overlap its scale: only the exam page saves a scale with its bands
+    const bands = await inject({
+      method: 'POST',
+      url: '/masters/grade_bands/imports/validate',
+      headers: h(),
+      json: { fileName: 'bands.csv', csv: 'Scale code,Grade,Min %,Max %\nX,A,90,100\n' },
+    });
+    expect(bands.statusCode).toBe(409);
+    const ex = await inject({
+      method: 'GET',
+      url: '/masters/exam_types/export?format=xlsx',
+      headers: h(),
+    });
+    expect(ex.statusCode).toBe(200);
+
+    await withMigrator((c) =>
+      c.query(
+        `INSERT INTO remark_categories (school_id, code, name) VALUES ($1, 'CONDUCT', 'Conduct')`,
+        [school.id],
+      ),
+    );
+    const v = await inject({
+      method: 'POST',
+      url: '/masters/remark_bank/imports/validate',
+      headers: h(),
+      json: {
+        fileName: 'bank.csv',
+        csv: 'Code,Remark,Category code,Class code,Order\nGOOD1,Works hard and shares well,CONDUCT,,1\n',
+      },
+    });
+    expect(v.json().status).toBe('validated');
+    const done = await inject({
+      method: 'POST',
+      url: `/masters/remark_bank/imports/${v.json().id}/commit`,
+      headers: h(),
+    });
+    expect(done.json()).toMatchObject({ status: 'committed', insertedRows: 1 });
+    const row = await withMigrator((c) =>
+      c.query<{ code: string }>(
+        `SELECT k.code FROM remark_bank b JOIN remark_categories k ON k.id = b.category_id
+          WHERE b.school_id = $1 AND b.code = 'GOOD1'`,
+        [school.id],
+      ),
+    );
+    expect(row.rows[0]?.code).toBe('CONDUCT');
+  });
+
   it('masters never cross schools: rows, uploads and exports stay within the caller’s school', async () => {
     const rows = await inject({
       method: 'GET',

@@ -1,6 +1,8 @@
 import { Badge, Breadcrumbs, Button, Card, PageHeader } from '@edupro/ui';
 import { notFound } from 'next/navigation';
 import { IndicatorSetEditor } from '@/components/exams/IndicatorSetEditor';
+import { MasterExport } from '@/components/MasterExport';
+import { ExamSetupNav } from '@/components/exams/ExamSetupNav';
 import { Notice } from '@/components/Notice';
 import { installHpcCard, installHpcSet, type SetInput } from '@/lib/hpc-actions';
 import { apiFetch, getMe } from '@/lib/api';
@@ -40,7 +42,9 @@ export default async function IndicatorsPage({
         kicker="Exams"
         title="Indicators and the progress card"
         description="Co-scholastic indicators and the Holistic Progress Card for Balvatika to Class II, in up to three levels. Choose a class's set on the exam's page; teachers enter it in the teacher app or here."
+        actions={<MasterExport master="indicators" label="Indicators" />}
       />
+      <ExamSetupNav current="/exams/indicators" />
       <Notice params={sp} />
       {canManage || canCards ? (
         <Card elevated title="Ready-made" style={{ marginBottom: 'var(--sp-4)' }}>

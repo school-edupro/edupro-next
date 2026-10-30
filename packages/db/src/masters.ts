@@ -142,6 +142,12 @@ export interface MasterDefinition {
    * the Template master); the grid stays reachable from that screen for Excel import and export.
    */
   hidden?: boolean;
+  /**
+   * A dedicated screen owns these rows and their rules (a grade scale saved with its bands, the indicator
+   * levels, remarks by category): the grid lists and exports them but never writes them, so the screen's
+   * checks cannot be bypassed. `upload` keeps the grid's Excel upload (the screen links to it).
+   */
+  editVia?: { path: string; label: string; upload?: boolean };
 }
 
 export interface MasterListParams {
@@ -337,6 +343,9 @@ const order = (key = 'sort_order', header = 'Order'): MasterField => ({
   width: 8,
   bulk: true,
 });
+/** Exam set-up lives on the exam pages (docs/design/65): the grid keeps the list and its export. */
+const examOwned = (path: string, label: string, upload = false) =>
+  ({ hidden: true, editVia: { path, label, ...(upload ? { upload } : {}) } }) as const;
 const classRef = (key: string, header: string, identity = false): MasterField => ({
   key,
   header,
@@ -1856,6 +1865,7 @@ export const MASTERS: MasterDefinition[] = [
     id: 'exam_types',
     title: 'Exam types',
     group: 'exams',
+    ...examOwned('/exams/masters', 'Exams → Types and grade scales'),
     table: 'exam_types',
     permission: { view: 'exams.master.view', manage: 'exams.master.manage' },
     naturalKey: ['code'],
@@ -1883,6 +1893,7 @@ export const MASTERS: MasterDefinition[] = [
     id: 'grade_scales',
     title: 'Grade scales',
     group: 'exams',
+    ...examOwned('/exams/masters', 'Exams → Types and grade scales'),
     table: 'grade_scales',
     permission: { view: 'exams.master.view', manage: 'exams.master.manage' },
     naturalKey: ['code'],
@@ -1900,6 +1911,7 @@ export const MASTERS: MasterDefinition[] = [
     id: 'grade_bands',
     title: 'Grade bands',
     group: 'exams',
+    ...examOwned('/exams/masters', 'Exams → Types and grade scales'),
     table: 'grade_bands',
     permission: { view: 'exams.master.view', manage: 'exams.master.manage' },
     naturalKey: ['scale_id', 'grade'],
@@ -1954,6 +1966,7 @@ export const MASTERS: MasterDefinition[] = [
     id: 'indicator_sets',
     title: 'Indicator sets',
     group: 'exams',
+    ...examOwned('/exams/indicators', 'Exams → Indicator sets'),
     table: 'indicator_sets',
     permission: { view: 'exams.master.view', manage: 'exams.master.manage' },
     naturalKey: ['code'],
@@ -1980,6 +1993,7 @@ export const MASTERS: MasterDefinition[] = [
     id: 'indicators',
     title: 'Indicators',
     group: 'exams',
+    ...examOwned('/exams/indicators', 'Exams → Indicator sets'),
     table: 'indicators',
     permission: { view: 'exams.master.view', manage: 'exams.master.manage' },
     naturalKey: ['set_id', 'code'],
@@ -2006,6 +2020,7 @@ export const MASTERS: MasterDefinition[] = [
     id: 'remark_bank',
     title: 'Remark bank',
     group: 'exams',
+    ...examOwned('/exams/remarks', 'Exams → Remark categories', true),
     table: 'remark_bank',
     permission: { view: 'exams.master.view', manage: 'exams.master.manage' },
     naturalKey: ['code'],
@@ -2013,12 +2028,21 @@ export const MASTERS: MasterDefinition[] = [
     fields: [
       code(),
       { key: 'text', header: 'Remark', type: 'text', required: true, maxLength: 600, width: 50 },
+      {
+        key: 'category_id',
+        header: 'Category code',
+        type: 'ref',
+        lookup: { table: 'remark_categories', column: 'code' },
+        width: 12,
+      },
       classRef('class_id', 'Class code'),
       order(),
     ],
     status: STATUS,
     search: ['t.code', 't.text'],
     orderBy: 't.sort_order, t.code',
+    uploadHelp:
+      'One row per remark; the code identifies it. Category code: one of Exams → Remark categories (blank: the class teacher’s general list). Class code blank: every class.',
   }),
   // ---- communication ----
   master({

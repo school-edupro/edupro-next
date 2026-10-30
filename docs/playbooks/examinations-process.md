@@ -54,7 +54,9 @@ log with who, when and what changed.
 
 Do these once; review them each session.
 
-1. **Exam types and grade scales** — Exams → Types and grade scales.
+1. **Exam types and grade scales** — Exams → Exams setup (tab Types, grade scales, marks codes). Exam set-up
+   has one home: the tabs Types, Indicators and HPC, Remark categories and bank. Excel / PDF of each list is on its tab;
+   the remark bank also takes an Excel upload (with the category code).
    - Add the exam types (Periodic Test, Half-yearly, Annual …).
    - **Add the ready-made scales**: CBSE 8-point (A1 to E, VI-XII), primary 6-point, co-scholastic
      3-point. Change any band if the school uses its own.
@@ -79,11 +81,11 @@ Do these once; review them each session.
    Indicators and HPC.
    **Signatures and seal**: principal, vice principal, headmistress, coordinator, class teacher, exam
    in-charge, the seal, each with an image (PNG or JPEG up to 300 KB) and the classes it signs for.
-6. **Remark categories** — Exams → Remark categories: name the categories (as the old A / B / C / D
+6. **Remark categories** — Exams → Exams setup → Remark categories and bank: name the categories (as the old A / B / C / D
    lists and "any other"), tie one to a subject so its subject teacher writes it too, limit it to some
    classes, and choose free text or the listed remarks only. Put the remarks in the bank under each
    category; remarks without a category are the class teacher's general remark list.
-7. **Indicators and the progress card** — Exams → Indicators and HPC: **Add the progress card set**
+7. **Indicators and the progress card** — Exams → Exams setup → Indicators and HPC: **Add the progress card set**
    (NCERT foundational stage: six domains, curricular goals, competencies rated Beginner / Progressing /
    Proficient, printed with Stream / Mountain / Sky) and any co-scholastic indicator sets, in up to
    three levels (area → item → sub-item). Edit the words to suit the school.

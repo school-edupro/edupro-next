@@ -8,7 +8,7 @@ import {
   PageHeader,
   SelectField,
 } from '@edupro/ui';
-import { notFound } from 'next/navigation';
+import { notFound, redirect } from 'next/navigation';
 import { getTranslations } from 'next-intl/server';
 import { AcademicsNav } from '@/components/academics/AcademicsNav';
 import { FeeSetupNav } from '@/components/fees/FeeSetupNav';
@@ -90,8 +90,14 @@ export default async function MasterGroupPage({
     .map((x) => x.m);
   // a hidden master (owned by another screen) opens only by its link, never as a tab
   const listed = masters.filter((m) => !m.hidden);
-  if (listed.length === 0) notFound();
-  const master = masters.find((m) => m.id === sp.tab) ?? listed[0]!;
+  const opened = masters.find((m) => m.id === sp.tab);
+  if (listed.length === 0 && !opened) {
+    // every list of the group is kept on a screen of its own (exam set-up): old links go there
+    const home = masters.find((m) => m.editVia)?.editVia?.path;
+    if (home) redirect(home);
+    notFound();
+  }
+  const master = opened ?? listed[0]!;
   const page = Math.max(1, Number(sp.page) || 1);
   const size = SIZES.includes(sp.size ?? '') ? Number(sp.size) : 50;
   const q = (sp.q ?? '').trim();
@@ -144,6 +150,7 @@ export default async function MasterGroupPage({
   const from = total === 0 ? 0 : (page - 1) * size + 1;
   const to = Math.min(total, page * size);
   const canManage = master.canManage;
+  const canUpload = master.canUpload ?? canManage;
   const years = (me.academicYears ?? []).filter((y) => y.status !== 'closed');
   const currentYear = me.academicYear?.code ?? '';
   const importRow = imports.find((i) => i.id === sp.import) ?? null;
@@ -160,8 +167,12 @@ export default async function MasterGroupPage({
     <>
       <PageHeader
         kicker={t(`kicker.${groupKey}`)}
-        title={t(`title.${groupKey}`)}
-        description={t('description')}
+        title={master.editVia ? master.title : t(`title.${groupKey}`)}
+        description={
+          master.editVia
+            ? t(canUpload ? 'descriptionOwnedUpload' : 'descriptionOwned')
+            : t('description')
+        }
       />
       {groupKey === 'academics' ? (
         <AcademicsNav current="/masters/academics" permissions={me.permissions} />
@@ -182,31 +193,46 @@ export default async function MasterGroupPage({
         />
       ) : null}
 
-      <div className="ep-tabs">
+      {master.editVia ? (
         <div
-          role="tablist"
-          aria-label={t(`title.${groupKey}`)}
-          className="ep-tabs__list ep-tabs__list--wrap"
+          className="ep-alert ep-alert--info"
+          role="note"
+          style={{ marginBottom: 'var(--sp-4)' }}
         >
-          {listed.map((m) => (
-            <a
-              key={m.id}
-              role="tab"
-              aria-selected={m.id === master.id}
-              className="ep-tabs__tab"
-              href={`/masters/${group}?tab=${m.id}`}
-            >
-              {m.title}
-            </a>
-          ))}
-          {groupKey === 'library' ? (
-            // who works in which library: its own page (docs/design/36-library.md, round 3, part 3)
-            <a role="tab" aria-selected={false} className="ep-tabs__tab" href="/library/staff">
-              Library staff
-            </a>
-          ) : null}
+          {t('editVia')}{' '}
+          <a href={master.editVia.path} style={{ textDecoration: 'underline' }}>
+            {master.editVia.label}
+          </a>
+          .
         </div>
-      </div>
+      ) : null}
+      {listed.length ? (
+        <div className="ep-tabs">
+          <div
+            role="tablist"
+            aria-label={t(`title.${groupKey}`)}
+            className="ep-tabs__list ep-tabs__list--wrap"
+          >
+            {listed.map((m) => (
+              <a
+                key={m.id}
+                role="tab"
+                aria-selected={m.id === master.id}
+                className="ep-tabs__tab"
+                href={`/masters/${group}?tab=${m.id}`}
+              >
+                {m.title}
+              </a>
+            ))}
+            {groupKey === 'library' ? (
+              // who works in which library: its own page (docs/design/36-library.md, round 3, part 3)
+              <a role="tab" aria-selected={false} className="ep-tabs__tab" href="/library/staff">
+                Library staff
+              </a>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
 
       <Card>
         {/* ---- toolbar ---- */}
@@ -259,7 +285,7 @@ export default async function MasterGroupPage({
             >
               {t('pdf')}
             </a>
-            {canManage ? (
+            {canUpload ? (
               <a className="ep-btn ep-btn--secondary ep-btn--sm" href={`${back}&upload=1`}>
                 {t('upload')}
               </a>
@@ -354,7 +380,7 @@ export default async function MasterGroupPage({
         ) : null}
 
         {/* ---- upload ---- */}
-        {canManage && sp.upload ? (
+        {canUpload && sp.upload ? (
           <section
             className="ep-master__panel"
             aria-label={t('uploadTitle', { master: master.title })}

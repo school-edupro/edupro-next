@@ -272,7 +272,7 @@ const PAGES = [
   // master-data framework
   '/masters/fees?tab=fee_heads',
   '/masters/academics?tab=class_sections&add=1',
-  '/masters/exams?tab=grade_bands&upload=1',
+  '/masters/exams?tab=remark_bank&upload=1',
   // Sprint 17
   '/workflow/definitions?new=1',
   '/exams/report-cards',

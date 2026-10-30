@@ -12,10 +12,11 @@
 
 ## Before the exam
 
-1. **Exams → Types and grade scales**: exam types (PT, half-yearly, annual) and the grade scale per class band. **Edit** on a type changes its name, weightage, order or status; the code stays, and an inactive type is not offered for new exams.
+1. **Exams → Exams setup**: one menu entry, three tabs. Each thing is set in one place only; Excel and PDF of each list sit beside it.
+   - **Types, grade scales, marks codes**: exam types (PT, half-yearly, annual) and the grade scale per class band. **Edit** on a type changes its name, weightage, order or status; the code stays, and an inactive type is not offered for new exams.
 2. **Exams → Exams → New**: name, dates, the classes and subjects with maximum and pass marks; tick
    **show on portal** so the datesheet appears in the apps.
-3. Optional: indicator sets, the remark bank. **Exams → Indicators and HPC** holds the sets in up to
+3. Optional: indicator sets, the remark bank. **Exams → Exams setup → Indicators and HPC** holds the sets in up to
    three levels (area → item → sub-item); **Add the progress card set** brings the NCERT
    foundational-stage Holistic Progress Card for Balvatika to Class II (domains, curricular goals,
    competencies; Beginner / Progressing / Proficient printed with Stream / Mountain / Sky) and **Add
@@ -56,7 +57,7 @@
 
 ## Remarks by category
 
-**Exams → Remark categories**: name the categories (the old A / B / C / D lists and "any other"),
+**Exams → Exams setup → Remark categories and bank**: name the categories (the old A / B / C / D lists and "any other"),
 tie one to a subject (its subject teacher writes it too), to some classes, and choose free text or the
 listed remarks only; put remarks in the bank under each category. Teachers write them in the teacher
 app **Remarks** (or **Exams → open exam → Remarks**): one per student and category. The remarks lock

@@ -389,3 +389,19 @@ batteries (AAHPERD), ICSE / state board cards, moving the old module's mark hist
   dense (1, 2, 2, 3) while scheme ranks are competition ranks (1, 2, 2, 4); the attendance count
   defaults to the session's start, not the term's; tests do not check the old cards' numbers for the
   IX and XII presets, nor render the X, XI, XII and I-II cards.
+
+## One home for exam set-up (30 Oct 2026)
+
+The general grid (Exams setup, `/masters/exams`) listed exam types, grade scales, grade bands,
+indicator sets, indicators and the remark bank again, without the exam pages' rules: a band saved on
+its own could overlap its scale, an indicator had no level or descriptors, a bank remark no category.
+As the leading ERPs (and EduPro's Fee set-up) do, each thing is now set in one place:
+
+- **Exams → Exams setup** is one menu entry with three tabs (`components/exams/ExamSetupNav.tsx`):
+  Types, grade scales, marks codes (`/exams/masters`); Indicators and HPC (`/exams/indicators`);
+  Remark categories and bank (`/exams/remarks`). Each list has Excel and PDF beside it.
+- The six registry entries carry `editVia` (packages/db `masters.ts`): hidden from the grid's tabs; the
+  API refuses grid writes (409 with the page's path) but keeps the list and its export. The remark
+  bank keeps the grid's Excel upload (`editVia.upload`), now with a category code column; the
+  remarks page links to it. `/masters/exams` with no list named redirects to `/exams/masters`.
+- Test: masters e2e "exam set-up is kept on the exam pages".

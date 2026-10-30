@@ -45,9 +45,13 @@ export interface MasterMeta {
   group: string;
   yearScoped: boolean;
   canManage: boolean;
+  /** Excel upload: as canManage, or kept for a master another screen owns */
+  canUpload?: boolean;
   canClone: boolean;
   /** owned by another screen; opened from there, not listed */
   hidden?: boolean;
+  /** the screen that changes these rows (the grid lists and exports them) */
+  editVia?: { path: string; label: string } | null;
   naturalKey: string[];
   editableKeys?: string[];
   status: { column: string; values: string[] } | null;

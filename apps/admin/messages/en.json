@@ -3011,7 +3011,10 @@
     "exportFailed": "Export failed",
     "exportStuck": "Still queued after a minute: the workers service renders exports; check that it is running",
     "year": "Year",
-    "yearHint": "Rows of the working year {year} (switch the year in the header)."
+    "yearHint": "Rows of the working year {year} (switch the year in the header).",
+    "editVia": "Rows of this list are added and changed on",
+    "descriptionOwnedUpload": "This list as Excel or PDF, and an Excel sheet to add or update many rows at once.",
+    "descriptionOwned": "This list as Excel or PDF."
   },
   "workflowEditor": {
     "new": "New definition",

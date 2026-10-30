@@ -57,6 +57,7 @@ export async function Shell({
       '/fees/discounts',
       '/fees/approval',
     ],
+    '/exams/masters': ['/exams/indicators', '/exams/remarks', '/masters/exams'],
   };
   const matches = (link: string) => {
     const href = SECTION_OF[link] ?? link;
