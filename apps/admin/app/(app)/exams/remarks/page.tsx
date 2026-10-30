@@ -37,7 +37,13 @@ interface BankRemark {
 export default async function RemarkCategoriesPage({
   searchParams,
 }: {
-  searchParams: Promise<{ ok?: string; error?: string; detail?: string; edit?: string }>;
+  searchParams: Promise<{
+    ok?: string;
+    error?: string;
+    detail?: string;
+    edit?: string;
+    remark?: string;
+  }>;
 }) {
   const sp = await searchParams;
   const me = await getMe();
@@ -52,6 +58,7 @@ export default async function RemarkCategoriesPage({
       .catch(() => [] as SubjectRow[]),
   ]);
   const editing = cats.find((k) => k.code === sp.edit) ?? null;
+  const remark = bank.find((b) => b.code === sp.remark) ?? null;
   const classCode = (ids: string[]) =>
     ids.length
       ? ids.map((x) => classes.find((k) => k.id === x)?.code ?? x).join(', ')
@@ -220,6 +227,11 @@ export default async function RemarkCategoriesPage({
               </div>
               <div className="ep-form-actions">
                 <Button type="submit">{editing ? 'Save the category' : 'Add the category'}</Button>
+                {editing ? (
+                  <a className="ep-btn ep-btn--ghost" href="/exams/remarks">
+                    Cancel
+                  </a>
+                ) : null}
               </div>
             </form>
           </Card>
@@ -247,15 +259,47 @@ export default async function RemarkCategoriesPage({
               <section key={g.code ?? '-'} style={{ marginBottom: 'var(--sp-3)' }}>
                 <h3 className="ep-cdash__h3">{g.name}</h3>
                 {list.length ? (
-                  <ul style={{ marginTop: 0 }}>
-                    {list.map((b) => (
-                      <li key={b.code}>
-                        <strong>{b.code}</strong> · {b.text}
-                        {b.classCode ? ` · ${b.classCode} only` : ''}
-                        {b.status !== 'active' ? ' · not in use' : ''}
-                      </li>
-                    ))}
-                  </ul>
+                  <div className="ep-table-wrap" tabIndex={0} role="region" aria-label={g.name}>
+                    <table className="ep-table ep-table--dense">
+                      <caption className="ep-sr-only">{g.name}</caption>
+                      <thead>
+                        <tr>
+                          <th scope="col">Code</th>
+                          <th scope="col">Remark</th>
+                          <th scope="col">Class</th>
+                          <th scope="col">Status</th>
+                          <th scope="col">
+                            <span className="ep-sr-only">Change</span>
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {list.map((b) => (
+                          <tr key={b.code}>
+                            <td>{b.code}</td>
+                            <td>{b.text}</td>
+                            <td>{b.classCode ?? 'Every class'}</td>
+                            <td>
+                              <Badge tone={b.status === 'active' ? 'success' : 'neutral'}>
+                                {b.status === 'active' ? 'In use' : 'Not in use'}
+                              </Badge>
+                            </td>
+                            <td>
+                              {canManage ? (
+                                <a
+                                  className="ep-btn ep-btn--ghost ep-btn--sm"
+                                  href={`/exams/remarks?remark=${encodeURIComponent(b.code)}#remark-form`}
+                                  aria-label={`Change ${b.code}`}
+                                >
+                                  Change
+                                </a>
+                              ) : null}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
                 ) : (
                   <p className="ep-field__help">None yet.</p>
                 )}
@@ -263,16 +307,28 @@ export default async function RemarkCategoriesPage({
             );
           })}
           {canManage ? (
-            <form action={saveBankRemark}>
-              <h3 className="ep-cdash__h3">Add or change a remark (by its code)</h3>
+            <form action={saveBankRemark} id="remark-form" key={remark?.code ?? 'new'}>
+              <h3 className="ep-cdash__h3">{remark ? `Change ${remark.code}` : 'Add a remark'}</h3>
+              {remark ? <input type="hidden" name="editing" value="1" /> : null}
               <div className="ep-rp__row">
                 <label className="ep-field">
                   <span className="ep-field__label">Code</span>
-                  <input className="ep-input" name="code" required pattern="[A-Za-z0-9_\-]{2,20}" />
+                  <input
+                    className="ep-input"
+                    name="code"
+                    required
+                    pattern="[A-Za-z0-9_\-]{2,20}"
+                    defaultValue={remark?.code ?? ''}
+                    readOnly={Boolean(remark)}
+                  />
                 </label>
                 <label className="ep-field">
                   <span className="ep-field__label">Category</span>
-                  <select className="ep-select" name="categoryCode" defaultValue="">
+                  <select
+                    className="ep-select"
+                    name="categoryCode"
+                    defaultValue={remark?.categoryCode ?? ''}
+                  >
                     <option value="">General remark (no category)</option>
                     {cats.map((k) => (
                       <option key={k.code} value={k.code}>
@@ -283,7 +339,7 @@ export default async function RemarkCategoriesPage({
                 </label>
                 <label className="ep-field">
                   <span className="ep-field__label">Class (optional)</span>
-                  <select className="ep-select" name="classId" defaultValue="">
+                  <select className="ep-select" name="classId" defaultValue={remark?.classId ?? ''}>
                     <option value="">Every class</option>
                     {classes.map((k) => (
                       <option key={k.id} value={k.id}>
@@ -301,7 +357,8 @@ export default async function RemarkCategoriesPage({
                   required
                   minLength={3}
                   maxLength={600}
-                  rows={2}
+                  rows={remark ? 3 : 2}
+                  defaultValue={remark?.text ?? ''}
                 />
               </label>
               <div className="ep-rp__row">
@@ -313,21 +370,36 @@ export default async function RemarkCategoriesPage({
                     name="sortOrder"
                     min={0}
                     max={1000}
-                    defaultValue={0}
+                    defaultValue={
+                      remark?.sortOrder ??
+                      Math.min(1000, Math.max(0, ...bank.map((b) => b.sortOrder)) + 1)
+                    }
                   />
                 </label>
                 <label className="ep-field">
                   <span className="ep-field__label">Status</span>
-                  <select className="ep-select" name="status" defaultValue="active">
+                  <select
+                    className="ep-select"
+                    name="status"
+                    defaultValue={remark?.status ?? 'active'}
+                  >
                     <option value="active">In use</option>
                     <option value="inactive">Not in use</option>
                   </select>
                 </label>
               </div>
+              {remark ? null : (
+                <p className="ep-field__help">A code already in the bank changes that remark.</p>
+              )}
               <div className="ep-form-actions">
-                <Button type="submit" variant="secondary">
-                  Save the remark
+                <Button type="submit" variant={remark ? 'primary' : 'secondary'}>
+                  {remark ? 'Save the remark' : 'Add the remark'}
                 </Button>
+                {remark ? (
+                  <a className="ep-btn ep-btn--ghost" href="/exams/remarks">
+                    Cancel
+                  </a>
+                ) : null}
               </div>
             </form>
           ) : null}

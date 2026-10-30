@@ -54,14 +54,16 @@ export async function saveRemarkCategory(fd: FormData) {
   );
 }
 
+/** A remark added, or one changed from its Change link (a refusal keeps that remark open). */
 export async function saveBankRemark(fd: FormData) {
-  return run('/exams/remarks', () =>
-    apiFetch('/exams/remark-bank', {
+  const code = str(fd, 'code').toUpperCase();
+  try {
+    await apiFetch('/exams/remark-bank', {
       method: 'PUT',
       body: JSON.stringify({
         entries: [
           {
-            code: str(fd, 'code').toUpperCase(),
+            code,
             text: str(fd, 'text'),
             categoryCode: str(fd, 'categoryCode') || null,
             classId: str(fd, 'classId') || null,
@@ -70,8 +72,17 @@ export async function saveBankRemark(fd: FormData) {
           },
         ],
       }),
-    }),
-  );
+    });
+  } catch (error) {
+    if (error instanceof ApiError)
+      back(
+        fd.get('editing') ? `/exams/remarks?remark=${encodeURIComponent(code)}` : '/exams/remarks',
+        error.problem.type,
+        detailOf(error),
+      );
+    throw error;
+  }
+  back('/exams/remarks', 'ok');
 }
 
 /** A section's remarks by category: every cell shown is sent (an emptied one is removed). */
