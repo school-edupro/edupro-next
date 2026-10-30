@@ -128,6 +128,7 @@ const asMarksError = (error: unknown): unknown => {
   return new DomainError(e.message, MARKS_ERRORS[e.message]!, { status: 409, extra });
 };
 const num = (v: string | number) => String(Number(v));
+const savedEntries = (n: number) => `${n} saved ${n === 1 ? 'entry' : 'entries'}`;
 
 export interface Kind {
   permission: string;
@@ -1384,6 +1385,20 @@ export class ExamEntryService {
       [dto.code, dto.name, dto.grades, dto.kind, JSON.stringify(dto.levelWords)],
     );
     const setId = s.rows[0]!.id;
+    // saved entries stay on the entry sheet and the card: an item that has them is not removed
+    const gone = await c.query<{ code: string; n: number }>(
+      `SELECT i.code, count(*)::int AS n FROM indicators i JOIN indicator_entries e ON e.indicator_id = i.id
+        WHERE i.set_id = $1 AND NOT (i.code = ANY($2::text[]))
+        GROUP BY i.code, i.sort_order ORDER BY i.sort_order, i.code LIMIT 1`,
+      [setId, [...codes]],
+    );
+    const g = gone.rows[0];
+    if (g)
+      throw new DomainError(
+        'exams.item_has_entries',
+        `${g.code} has ${savedEntries(g.n)}: keep it in the set, or clear what was entered for it first`,
+        { status: 409, extra: { code: g.code, entries: g.n } },
+      );
     await c.query(`DELETE FROM indicators WHERE set_id = $1 AND NOT (code = ANY($2::text[]))`, [
       setId,
       [...codes],
@@ -1420,6 +1435,33 @@ export class ExamEntryService {
         ),
       ],
     );
+    // and each entry still fits its item: a written-note item holds no level, and a level is one of
+    // those the item takes now (its own, else its heading's, else the set's)
+    const off = await c.query<{ code: string; text: boolean; n: number; grades: string[] }>(
+      `SELECT i.code, i.kind = 'text' AS text, count(*)::int AS n,
+              array_agg(DISTINCT e.grade ORDER BY e.grade) AS grades
+         FROM indicators i JOIN indicator_sets s ON s.id = i.set_id
+         LEFT JOIN indicators p ON p.id = i.parent_id
+         JOIN indicator_entries e ON e.indicator_id = i.id AND e.grade IS NOT NULL
+        WHERE i.set_id = $1 AND (i.kind = 'text' OR e.grade <> ALL (COALESCE(i.levels, p.levels, s.grades)))
+        GROUP BY i.code, i.kind, i.sort_order ORDER BY i.sort_order, i.code LIMIT 1`,
+      [setId],
+    );
+    const o = off.rows[0];
+    if (o?.text)
+      throw new DomainError(
+        'exams.item_text_has_entries',
+        `${o.code} has ${savedEntries(o.n)} with a level: keep it taking a level, or clear those levels first`,
+        { status: 409, extra: { code: o.code, entries: o.n } },
+      );
+    if (o) {
+      const one = o.grades.length === 1;
+      throw new DomainError(
+        'exams.item_level_has_entries',
+        `${o.code} has ${savedEntries(o.n)} rated ${o.grades.join(' or ')}, ${one ? 'not one of the levels' : 'not among the levels'} it takes now: keep ${one ? o.grades[0]! : 'them'} in its levels, or rename a level in Exams setup → Areas and level scales`,
+        { status: 409, extra: { code: o.code, entries: o.n, levels: o.grades } },
+      );
+    }
     return setId;
   }
 

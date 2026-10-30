@@ -417,8 +417,7 @@ grade against them, the editor has an "Own levels" box on top items, and the car
 per extra scale. Competency names may now be 200 letters (the CBSE wording ran past 120).
 On Alpha: set HPC_CLASS1 (70 items: English, Reading habits, Marathi, Hindi, Mathematics, EVS,
 Computer, Aesthetic, Physical with curricular goals as headings; the four frequency sections; self
-assessment and participation as written notes), grade scale CLASS_I (A+ 85-100, A 55-84.99, B below
-55) and exam TERM1-I-2026 for Class I with the set chosen (subjects not added yet).
+assessment and participation as written notes), grade scale CLASS_I (A+ 85-100, A 55-84.99, B below 55) and exam TERM1-I-2026 for Class I with the set chosen (subjects not added yet).
 Test: exam-hpc e2e "a section rated on levels of its own".
 
 ## Areas and level scales as masters (30 Oct 2026)
@@ -444,3 +443,14 @@ stays, one written in other capitals or, with as many levels as before, the one 
 renamed (entries follow), the rest are dropped; a dropped level with saved entries is refused (409
 `exams.level_has_entries` with `level` and `entries`).
 
+Saving a set keeps its saved entries the same way (the save used to delete a removed item's entries
+with it and leave entries the sheet and card no longer showed). In the same transaction, so a refusal
+changes nothing, `PUT /exams/indicator-sets` refuses with 409, naming the first item (in set order)
+and its entry count: removing an item that has entries (`exams.item_has_entries`); an item made a
+written note while entries hold a level (`exams.item_text_has_entries`); and any change (the set's
+levels, an item's own, its heading's, or moving it to or from a heading) that leaves an entry's level
+outside the levels its item takes, `COALESCE(item, heading, set)` (`exams.item_level_has_entries`,
+also `levels`: the entries' levels left out). All carry `code` and `entries`. To rename a level the
+school changes it in Areas and level scales, which moves the entries; to drop an item or a level its
+entries are cleared on the entry sheet first. The set editor shows the message under Save. Test:
+`indicator-masters.e2e-spec.ts` "a set’s save keeps its saved entries".

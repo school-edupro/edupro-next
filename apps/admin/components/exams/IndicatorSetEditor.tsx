@@ -374,8 +374,9 @@ export function IndicatorSetEditor({
       </div>
       <p className="ep-field__help">
         An item with items under it prints as a heading (an HPC curricular goal) and is not entered;
-        the items under it are in its area and rate on its scale. Removing an item removes what was
-        entered for it.
+        the items under it are in its area and rate on its scale. An item with saved entries is not
+        removed or made a written note, and keeps the levels it was rated on (rename a level in
+        Areas and level scales).
       </p>
       <div className="ep-form-actions">
         <button type="submit" className="ep-btn ep-btn--primary ep-btn--sm" disabled={pending}>

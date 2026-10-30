@@ -3,7 +3,8 @@
  * spelt as the list has it (a new one joins the end), an item under a heading is in the heading's area,
  * the list's order is the order a set's items come back in, a rename renames the area in every set, and
  * a scale's new levels are the levels of every set and item rating on it (a renamed level's entries
- * follow it; a level with entries is not dropped).
+ * follow it; a level with entries is not dropped). A set's save keeps its saved entries: an item that
+ * has them is not removed or made a written note, and keeps the levels they are rated on.
  */
 import type { NestFastifyApplication } from '@nestjs/platform-fastify';
 import {
@@ -34,7 +35,11 @@ interface Scale {
 interface SetItem {
   id: string;
   code: string;
+  name: string;
   area: string | null;
+  sortOrder: number;
+  parentCode: string | null;
+  kind: 'level' | 'text';
   levels: string[] | null;
   descriptors: Record<string, string>;
 }
@@ -72,6 +77,13 @@ describe('indicator areas and level scales (e2e)', () => {
       }>
     ).find((x) => x.code === 'CARD1')!;
   const items = async () => (await card()).indicators;
+  /** the student's level per item, as the entry sheet has it */
+  const grades = async (): Promise<Record<string, string | null>> => {
+    const sheet = (
+      await call(admin, 'GET', `/exams/${examId}/indicators?classSectionId=${section}`)
+    ).json() as { rows: Array<{ grades: Record<string, { grade: string | null }> }> };
+    return Object.fromEntries(Object.entries(sheet.rows[0]!.grades).map(([k, v]) => [k, v.grade]));
+  };
 
   beforeAll(async () => {
     await withMigrator(async (c) => {
@@ -188,15 +200,6 @@ describe('indicator areas and level scales (e2e)', () => {
       ],
     });
     expect(entered.statusCode).toBe(200);
-    /** the student's level per item, as the entry sheet has it */
-    const grades = async (): Promise<Record<string, string | null>> => {
-      const sheet = (
-        await call(admin, 'GET', `/exams/${examId}/indicators?classSectionId=${section}`)
-      ).json() as { rows: Array<{ grades: Record<string, { grade: string | null }> }> };
-      return Object.fromEntries(
-        Object.entries(sheet.rows[0]!.grades).map(([k, v]) => [k, v.grade]),
-      );
-    };
     const scales = (await call(admin, 'GET', '/exams/indicator-scales')).json().data as Scale[];
     const freq = scales.find((x) => x.levels.join() === FREQ.join())!;
     const hpc = scales.find((x) => x.levels.join() === HPC.join())!;
@@ -278,6 +281,80 @@ describe('indicator areas and level scales (e2e)', () => {
       levels: ['Yes', 'yes'],
     });
     expect(twice.statusCode).toBe(400);
+  });
+
+  it('a set’s save keeps its saved entries: an item with them stays, takes a level and keeps its levels', async () => {
+    const set = await card();
+    const id = (code: string) => set.indicators.find((i) => i.code === code)!.id;
+    const before = await grades();
+    expect(before[id('L1')]).toBe('Skilled');
+    expect(before[id('O1A')]).toBe('Often');
+    /** the set as it is, with a change to its items or its levels */
+    const save = (change: (x: SetItem[]) => SetItem[], levels = set.grades) =>
+      call(admin, 'PUT', '/exams/indicator-sets', {
+        code: 'CARD1',
+        name: 'Card one',
+        kind: 'hpc',
+        grades: levels,
+        levelWords: Object.fromEntries(
+          Object.entries(set.levelWords).filter(([g]) => levels.includes(g)),
+        ),
+        indicators: change(set.indicators).map(({ id: _, area, ...i }) => ({
+          ...i,
+          area: area ?? undefined,
+        })),
+      });
+    const edit = (code: string, patch: Partial<SetItem>) => (x: SetItem[]) =>
+      x.map((i) => (i.code === code ? { ...i, ...patch } : i));
+
+    // an item with entries is not removed (the delete would take them with it)
+    const removed = await save((x) => x.filter((i) => i.code !== 'L1'));
+    expect(removed.statusCode).toBe(409);
+    expect(removed.json()).toMatchObject({
+      type: 'exams.item_has_entries',
+      code: 'L1',
+      entries: 1,
+    });
+    expect(removed.json().detail).toContain('L1 has 1 saved entry');
+
+    // nor made a written note while it holds a level
+    const text = await save(edit('L1', { kind: 'text' }));
+    expect(text.statusCode).toBe(409);
+    expect(text.json()).toMatchObject({
+      type: 'exams.item_text_has_entries',
+      code: 'L1',
+      entries: 1,
+    });
+
+    // the set's levels without an entry's level: refused for the item rating on them
+    const setLevels = await save((x) => x, ['Not yet', 'Yes']);
+    expect(setLevels.statusCode).toBe(409);
+    expect(setLevels.json()).toMatchObject({
+      type: 'exams.item_level_has_entries',
+      code: 'L1',
+      entries: 1,
+      levels: ['Skilled'],
+    });
+    expect(setLevels.json().detail).toContain('L1 has 1 saved entry rated Skilled');
+    // a heading's levels: its item's entries count; so does moving the item off the heading
+    const heading = await save(edit('O1', { levels: ['Not yet', 'Yes'] }));
+    expect(heading.json()).toMatchObject({ type: 'exams.item_level_has_entries', code: 'O1A' });
+    const moved = await save(edit('O1A', { parentCode: null }));
+    expect(moved.json()).toMatchObject({ type: 'exams.item_level_has_entries', code: 'O1A' });
+
+    // each refusal rolled back: the set, its items and the entries are as they were
+    const now = await card();
+    expect(now.grades).toEqual(set.grades);
+    expect(now.indicators.map((i) => [i.code, i.kind, i.levels, i.parentCode])).toEqual(
+      set.indicators.map((i) => [i.code, i.kind, i.levels, i.parentCode]),
+    );
+    expect(await grades()).toEqual(before);
+
+    // an item with no entries still goes, and a level that keeps the entries may be added
+    const ok = await save((x) => x.filter((i) => i.code !== 'P1A'), [...set.grades, 'Expert']);
+    expect(ok.statusCode).toBe(200);
+    expect((await items()).map((i) => i.code)).not.toContain('P1A');
+    expect(await grades()).toEqual(before);
   });
 
   it('a teacher sees the lists but does not change them', async () => {
