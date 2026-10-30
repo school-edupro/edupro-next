@@ -1,10 +1,12 @@
 import { Injectable } from '@nestjs/common';
 import type { PoolClient, TenantContext } from '@edupro/db';
+import ExcelJS from 'exceljs';
 import { ScopePolicy } from '../../common/access/scope.policy';
 import { AuditService } from '../../common/audit/audit.service';
 import { DbService } from '../../common/db/db.service';
 import { DomainError } from '../../common/errors/domain-error';
 import { requireTenant, type RequestContext } from '../../common/http/request-context';
+import { tablePdf } from '../engagement/table-pdf';
 import { EXAMS } from './exams.dto';
 
 export interface RegisterSheet {
@@ -229,6 +231,95 @@ export class ExamResultsService {
         })),
       };
     });
+  }
+  /**
+   * The mark register of a section as a file (docs/design/66): Excel (a row per pupil, a column per
+   * subject, then the total, %, grade, rank and result) or a PDF of the same.
+   */
+  async registerSheetFile(
+    ctx: RequestContext,
+    examId: string,
+    sectionId: string,
+    format: 'xlsx' | 'pdf',
+  ): Promise<{ filename: string; contentType: string; base64: string }> {
+    const sheet = await this.registerSheet(ctx, examId, sectionId);
+    const school = await this.db.tenant(requireTenant(ctx), async (c) => {
+      const r = await c.query<{ name: string }>(
+        `SELECT name FROM schools WHERE id = app.current_school_id()`,
+      );
+      return r.rows[0]?.name ?? '';
+    });
+    const RESULT: Record<string, string> = { pass: 'Pass', fail: 'Fail', incomplete: 'Incomplete' };
+    const head = [
+      'Roll',
+      'Adm no',
+      'Student',
+      ...sheet.subjects.map((x) => `${x.code} /${String(Number(x.maxMarks))}`),
+      'Total',
+      '%',
+      'Grade',
+      'Rank',
+      'Result',
+    ];
+    const body = sheet.rows.map((r) => [
+      r.rollNo ?? '',
+      r.admissionNo,
+      r.name,
+      ...sheet.subjects.map((x) => {
+        const m = r.marks[x.id];
+        if (!m) return '';
+        if (m.code) return m.code;
+        if (m.absent) return 'AB';
+        if (m.exempt) return 'EX';
+        return m.grade ?? (m.marks === null ? '' : String(Number(m.marks)));
+      }),
+      r.total ? `${String(Number(r.total))} / ${String(Number(r.maxTotal))}` : '',
+      r.pct ?? '',
+      r.grade ?? '',
+      r.rankInSection ?? '',
+      r.result ? (RESULT[r.result] ?? r.result) : '',
+    ]);
+    const title = `${sheet.exam.name} · ${sheet.section.code}`;
+    const stamp = `${sheet.exam.code}-${sheet.section.code}`
+      .toLowerCase()
+      .replace(/[^\w.-]+/g, '-');
+    if (format === 'xlsx') {
+      const wb = new ExcelJS.Workbook();
+      const ws = wb.addWorksheet('Register');
+      ws.addRow([title]).font = { bold: true, size: 13 };
+      ws.addRow([school]);
+      ws.addRow(head).font = { bold: true };
+      for (const line of body) ws.addRow(line);
+      ws.getColumn(3).width = 26;
+      ws.views = [{ state: 'frozen', xSplit: 3, ySplit: 3 }];
+      return {
+        filename: `register-${stamp}.xlsx`,
+        contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        base64: Buffer.from(await wb.xlsx.writeBuffer()).toString('base64'),
+      };
+    }
+    const bytes = await tablePdf({
+      school,
+      title,
+      subtitle: [
+        'Mark register',
+        sheet.exam.computedAt
+          ? `Worked out ${sheet.exam.computedAt.slice(0, 10)}`
+          : 'Not worked out',
+      ],
+      columns: head.map((label, i) => ({
+        label,
+        width: i === 2 ? 4 : i < 2 ? 1.6 : 1.2,
+        right: i > 2,
+      })),
+      rows: body,
+      fontSize: head.length > 24 ? 6.5 : 8,
+    });
+    return {
+      filename: `register-${stamp}.pdf`,
+      contentType: 'application/pdf',
+      base64: bytes.toString('base64'),
+    };
   }
 
   async analysis(ctx: RequestContext, examId: string, classId?: string): Promise<Analysis> {

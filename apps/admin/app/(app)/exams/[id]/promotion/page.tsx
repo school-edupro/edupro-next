@@ -1,21 +1,17 @@
-import {
-  Badge,
-  Breadcrumbs,
-  Button,
-  Card,
-  FormRow,
-  InputField,
-  PageHeader,
-  SelectField,
-} from '@edupro/ui';
+import { Alert, Badge, Button, Card, FormRow, InputField, SelectField } from '@edupro/ui';
 import { getTranslations } from 'next-intl/server';
+import { AutoSubmit } from '@/components/AutoSubmit';
 import { Notice } from '@/components/Notice';
-import { savePromotions } from '@/lib/actions';
+import { ExamFrame } from '@/components/exams/ExamFrame';
+import { ResultsHead } from '@/components/exams/ResultsHead';
 import { apiFetch, getMe } from '@/lib/api';
-import type { Exam, PromotionProposals, Year } from '@/lib/types';
-import { ExamTabs } from '@/components/exams/ExamTabs';
+import { recordExamPromotions } from '@/lib/exam-hub-actions';
+import type { Exam, ExamProgress, PromotionProposals, Year } from '@/lib/types';
 
-/** Sprint 16: promotion proposals from the results, handed to the promotion register of the next year. */
+/**
+ * Sprint 16: promotion proposals from the results, handed to the promotion register of the next year;
+ * docs/design/66: in the Results tab, recording them keeps the page here.
+ */
 export default async function PromotionProposalsPage({
   params,
   searchParams,
@@ -26,6 +22,7 @@ export default async function PromotionProposalsPage({
     minPct?: string;
     maxFailed?: string;
     toYearId?: string;
+    recorded?: string;
     ok?: string;
     error?: string;
     detail?: string;
@@ -33,11 +30,13 @@ export default async function PromotionProposalsPage({
 }) {
   const { id } = await params;
   const sp = await searchParams;
-  const [t, r, me, exam, years] = await Promise.all([
+  const [t, x, r, me, exam, progress, years] = await Promise.all([
     getTranslations('pages.exams_promotion'),
+    getTranslations('examHub.results'),
     getTranslations('results'),
     getMe(),
     apiFetch<Exam>(`/exams/${id}`),
+    apiFetch<ExamProgress>(`/exams/${id}/progress`).catch(() => null),
     apiFetch<{ data: Year[] }>('/platform/years')
       .then((x) => x.data.filter((y) => y.kind === 'academic'))
       .catch(() => [] as Year[]),
@@ -64,32 +63,42 @@ export default async function PromotionProposalsPage({
   const canManage = me.permissions.includes('people.promotion.manage');
   return (
     <>
-      <Breadcrumbs
-        items={[
-          { label: t('kicker'), href: '/exams' },
-          { label: exam.name, href: `/exams/${id}` },
-          { label: t('title') },
-        ]}
+      <ExamFrame
+        exam={exam}
+        stage={progress?.stage ?? null}
+        current="results"
+        canManage={me.permissions.includes('exams.master.manage')}
+        canUnlock={me.permissions.includes('exams.marks.unlock')}
       />
-      <PageHeader
-        kicker={t('kicker')}
-        title={`${t('title')} · ${exam.name}`}
-        description={t('description')}
-        actions={
-          <span style={{ display: 'inline-flex', gap: 'var(--sp-2)' }}>
-            <a className="ep-btn ep-btn--ghost ep-btn--sm" href={`/exams/${id}/register`}>
-              {r('register')}
-            </a>
-            <a className="ep-btn ep-btn--ghost ep-btn--sm" href={`/exams/${id}/analysis`}>
-              {r('analysis')}
-            </a>
-          </span>
-        }
+      <ResultsHead
+        examId={id}
+        current="promotion"
+        computedAt={proposals?.exam.computedAt ?? null}
+        canCompute={me.permissions.includes('exams.master.manage')}
+        back={`/exams/${id}/promotion?classId=${classId ?? ''}`}
       />
-      <ExamTabs examId={id} current="results" />
-      <Notice params={sp} />
+      <p className="ep-field__help" style={{ marginTop: 0 }}>
+        {t('description')}
+      </p>
+      {sp.ok && sp.recorded ? (
+        <Alert
+          tone="success"
+          action={
+            <a
+              className="ep-btn ep-btn--secondary ep-btn--sm"
+              href={`/people/promotions?classId=${classId ?? ''}&toYearId=${toYearId ?? ''}`}
+            >
+              {x('openPromotions')}
+            </a>
+          }
+        >
+          {x('recorded', { n: Number(sp.recorded) || 0 })}
+        </Alert>
+      ) : null}
+      {sp.recorded ? null : <Notice params={sp} />}
       <Card title={r('rule')} style={{ marginBottom: 'var(--sp-4)' }}>
         <form method="get">
+          <AutoSubmit />
           <FormRow columns={4}>
             <SelectField
               id="classId"
@@ -138,7 +147,8 @@ export default async function PromotionProposalsPage({
         >
           {!proposals.exam.computedAt ? <p className="ep-field__help">{r('notComputed')}</p> : null}
           {targets.length === 0 ? <p className="ep-field__help">{r('noTarget')}</p> : null}
-          <form action={savePromotions}>
+          <form action={recordExamPromotions}>
+            <input type="hidden" name="examId" value={id} />
             <input type="hidden" name="classId" value={classId ?? ''} />
             <input type="hidden" name="toYearId" value={toYearId ?? ''} />
             <table className="ep-table ep-table--dense" style={{ width: '100%' }}>

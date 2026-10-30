@@ -3,7 +3,8 @@
  * verification, results), the date sheet's times and note, set-up that never deletes entered marks
  * (a subject or a class with marks stays), a new exam copied from an earlier one, and the entry locks:
  * locking one area needs no unlock right, only opening a locked one does; the general remark written
- * alone keeps "took part in" and "promoted to", and an emptied one goes.
+ * alone keeps "took part in" and "promoted to", and an emptied one goes; the register as a file, and
+ * the date sheets of staff and of a family.
  */
 import type { NestFastifyApplication } from '@nestjs/platform-fastify';
 import {
@@ -38,6 +39,7 @@ describe('exams made easy (e2e)', () => {
   let clerk: SeededUser;
   /** the exam office: sets exams up and locks entry, never opens it again */
   let office: SeededUser;
+  let parent: SeededUser;
   let classId: string;
   let otherClassId: string;
   let section: string;
@@ -76,6 +78,7 @@ describe('exams made easy (e2e)', () => {
       admin = await seedUser(c, school, `${s}-admin`, 'school_admin');
       clerk = await seedUser(c, school, `${s}-clerk`, 'class_teacher');
       office = await seedUser(c, school, `${s}-office`);
+      parent = await seedUser(c, school, `${s}-parent`, 'parent', 'guardian');
       const role = await c.query<{ id: string }>(
         `INSERT INTO roles (school_id, code, name, kind) VALUES ($1, 'exam_office', 'Exam office', 'module') RETURNING id::text`,
         [school.id],
@@ -376,5 +379,68 @@ describe('exams made easy (e2e)', () => {
     const opened = await lock({ remarks: false }, admin);
     expect(opened.statusCode).toBe(200);
     expect(opened.json().classes[0].locks).toMatchObject({ remarks: false, attendance: true });
+  });
+
+  it('the register as Excel and PDF; date sheets for staff, and for a family once on the portal', async () => {
+    for (const format of ['xlsx', 'pdf']) {
+      const f = await call(
+        admin,
+        'GET',
+        `/exams/${examId}/register-sheet?classSectionId=${section}&format=${format}`,
+      );
+      expect(f.statusCode).toBe(200);
+      expect(f.json().filename).toMatch(new RegExp(`^register-hy-2026-v-a\\.${format}$`));
+      expect(f.json().base64.length).toBeGreaterThan(100);
+    }
+    const staff = (await call(admin, 'GET', '/exams/date-sheets')).json().data as Array<{
+      code: string;
+      note: string | null;
+      classes: Array<{ classCode: string; papers: Array<Record<string, string | null>> }>;
+    }>;
+    const hy = staff.find((e) => e.code === 'HY-2026')!;
+    expect(hy.note).toBe('Reporting time 7:45 am.');
+    expect(hy.classes[0]!.papers[0]).toEqual({
+      subject: 'English',
+      examOn: '2026-09-21',
+      startsAt: '09:00',
+      endsAt: '12:00',
+    });
+    // a family: the child's papers, once the exam is shown on the portal
+    const child = (
+      await call(admin, 'POST', '/people/students', {
+        admissionNo: `${s}-3`,
+        firstName: 'Chitra',
+        lastName: 'Hub',
+        guardians: [
+          {
+            guardian: { firstName: 'Meera', lastName: 'Hub', mobile: '9876512377' },
+            relation: 'mother',
+            isPrimary: true,
+          },
+        ],
+        enrolment: { classSectionId: section, rollNo: 3 },
+      })
+    ).json().id as string;
+    await withMigrator((c) =>
+      c.query(`UPDATE guardians SET user_id = $1 WHERE mobile = '9876512377' AND school_id = $2`, [
+        parent.id,
+        school.id,
+      ]),
+    );
+    const mine = async () =>
+      (
+        (await call(parent, 'GET', '/exams/mine/date-sheets')).json() as {
+          children: Array<{
+            student: { id: string };
+            exams: Array<{ code: string; papers: Array<{ subject: string }> }>;
+          }>;
+        }
+      ).children.find((x) => x.student.id === child)!.exams;
+    expect(await mine()).toEqual([]);
+    await call(admin, 'PATCH', `/exams/${examId}`, { showOnPortal: true });
+    const shown = await mine();
+    expect(shown.map((e) => e.code)).toEqual(['HY-2026']);
+    expect(shown[0]!.papers.map((p) => p.subject)).toEqual(['English', 'Mathematics']);
+    expect((await call(parent, 'GET', '/exams/date-sheets')).statusCode).toBe(403);
   });
 });

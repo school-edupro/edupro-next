@@ -64,7 +64,6 @@ interface Sheet {
   }>;
 }
 
-const KIND: Record<string, string> = { optional: 'Optional', additional: 'Additional' };
 const n = (v: string) => String(Number(v));
 
 /**
@@ -91,8 +90,9 @@ export default async function ExamMarksPage({
   if (!/^\d{1,18}$/.test(id)) notFound();
   const me = await getMe();
   if (!me.permissions.includes('exams.marks.view')) notFound();
-  const [t, exam, progress, sections] = await Promise.all([
+  const [t, m, exam, progress, sections] = await Promise.all([
     getTranslations('examHub.entry'),
+    getTranslations('examHub.misc'),
     apiFetch<Exam>(`/exams/${id}`).catch((e: unknown) => {
       if (e instanceof ApiError && e.status === 404) notFound();
       throw e;
@@ -305,7 +305,12 @@ export default async function ExamMarksPage({
                   admissionNo: r.admissionNo,
                   rollNo: r.rollNo,
                   taken: r.taken,
-                  takenLabel: r.taken ? (KIND[r.taken] ?? '') : '',
+                  takenLabel:
+                    r.taken === 'optional'
+                      ? m('optional')
+                      : r.taken === 'additional'
+                        ? m('additional')
+                        : '',
                   marks: part
                     ? pm?.marks != null
                       ? n(pm.marks)

@@ -691,6 +691,12 @@ const DICT: Record<string, string> = {
   From: 'से',
   'Replace what is entered': 'जो भरा है उसे बदलें',
   'Count from daily attendance': 'दैनिक उपस्थिति से गिनें',
+  'Exam date sheet': 'परीक्षा डेट शीट',
+  'The papers of each exam for your classes: date, day and time.':
+    'आपकी कक्षाओं के हर परीक्षा के पेपर: तिथि, दिन और समय।',
+  'No date sheet yet.': 'अभी कोई डेट शीट नहीं।',
+  'Papers of each exam for your classes': 'आपकी कक्षाओं की हर परीक्षा के पेपर',
+  Date: 'तिथि',
 };
 
 /** Translates a known English string; unknown strings fall back to English. */

@@ -1,13 +1,17 @@
-import { Badge, Breadcrumbs, Button, Card, PageHeader, SelectField } from '@edupro/ui';
+import { Badge, Button, Card, SelectField } from '@edupro/ui';
 import { getTranslations } from 'next-intl/server';
+import { AutoSubmit } from '@/components/AutoSubmit';
 import { Notice } from '@/components/Notice';
-import { computeExamResults } from '@/lib/actions';
+import { ViewDownload } from '@/components/admissions/ViewDownload';
+import { ExamFrame } from '@/components/exams/ExamFrame';
+import { ResultsHead } from '@/components/exams/ResultsHead';
 import { apiFetch, getMe } from '@/lib/api';
-import { sectionOptions } from '@/lib/sections';
-import type { Exam, RegisterSheet } from '@/lib/types';
-import { ExamTabs } from '@/components/exams/ExamTabs';
+import type { Exam, ExamProgress, RegisterSheet } from '@/lib/types';
 
-/** Sprint 16: the mark register of one section (pupils × subjects with totals, grade and rank). */
+/**
+ * Sprint 16: the mark register of one section (pupils × subjects with totals, grade and rank);
+ * docs/design/66: in the Results tab, the section applies on change, Excel and PDF beside it.
+ */
 export default async function RegisterPage({
   params,
   searchParams,
@@ -17,19 +21,21 @@ export default async function RegisterPage({
 }) {
   const { id } = await params;
   const sp = await searchParams;
-  const [t, r, me, exam, sections] = await Promise.all([
-    getTranslations('pages.exams_register'),
+  const [x, r, me, exam, progress, sections] = await Promise.all([
+    getTranslations('examHub.results'),
     getTranslations('results'),
     getMe(),
     apiFetch<Exam>(`/exams/${id}`),
-    sectionOptions(),
+    apiFetch<ExamProgress>(`/exams/${id}/progress`).catch(() => null),
+    apiFetch<{ data: Array<{ classSectionId: string; code: string }> }>(
+      `/exams/${id}/entry/sections`,
+    )
+      .then((v) => v.data)
+      .catch(() => [] as Array<{ classSectionId: string; code: string }>),
   ]);
-  // sections of the classes in the exam only (labels are `${classCode}-${section}`)
-  const classCodes = new Set(exam.classes.map((c) => c.classCode));
-  const options = sections.filter((s) =>
-    classCodes.has(s.label.slice(0, s.label.lastIndexOf('-'))),
-  );
-  const sectionId = sp.section ?? options[0]?.value;
+  // the exam's sections the caller reads
+  const options = sections.map((v) => ({ value: v.classSectionId, label: v.code }));
+  const sectionId = options.some((o) => o.value === sp.section) ? sp.section : options[0]?.value;
   const sheet = sectionId
     ? await apiFetch<RegisterSheet>(
         `/exams/${id}/register-sheet?classSectionId=${sectionId}`,
@@ -38,65 +44,55 @@ export default async function RegisterPage({
   const canManage = me.permissions.includes('exams.master.manage');
   return (
     <>
-      <Breadcrumbs
-        items={[
-          { label: t('kicker'), href: '/exams' },
-          { label: exam.name, href: `/exams/${id}` },
-          { label: t('title') },
-        ]}
+      <ExamFrame
+        exam={exam}
+        stage={progress?.stage ?? null}
+        current="results"
+        canManage={canManage}
+        canUnlock={me.permissions.includes('exams.marks.unlock')}
       />
-      <PageHeader
-        kicker={t('kicker')}
-        title={`${t('title')} · ${exam.name}`}
-        description={
-          sheet?.exam.computedAt
-            ? r('computedAt', { at: sheet.exam.computedAt.slice(0, 16).replace('T', ' ') })
-            : r('notComputed')
-        }
-        actions={
-          <span style={{ display: 'inline-flex', gap: 'var(--sp-2)' }}>
-            <a className="ep-btn ep-btn--ghost ep-btn--sm" href={`/exams/${id}/analysis`}>
-              {r('analysis')}
-            </a>
-            <a className="ep-btn ep-btn--ghost ep-btn--sm" href={`/exams/${id}/promotion`}>
-              {r('promotion')}
-            </a>
-            {canManage ? (
-              <form action={computeExamResults}>
-                <input type="hidden" name="examId" value={id} />
-                <input
-                  type="hidden"
-                  name="back"
-                  value={`/exams/${id}/register?section=${sectionId ?? ''}`}
-                />
-                <Button type="submit" size="sm">
-                  {r('compute')}
-                </Button>
-              </form>
-            ) : null}
-          </span>
-        }
+      <ResultsHead
+        examId={id}
+        current="register"
+        computedAt={sheet?.exam.computedAt ?? null}
+        canCompute={canManage}
+        back={`/exams/${id}/register?section=${sectionId ?? ''}`}
       />
-      <ExamTabs examId={id} current="results" />
       <Notice params={sp} />
       <Card
         title={sheet ? `${r('register')} · ${sheet.section.code}` : r('register')}
         actions={
-          <form
-            method="get"
-            style={{ display: 'flex', gap: 'var(--sp-2)', alignItems: 'flex-end' }}
-          >
-            <SelectField
-              id="section"
-              name="section"
-              label={r('section')}
-              defaultValue={sectionId ?? ''}
-              options={options}
-            />
-            <Button type="submit" variant="secondary" size="sm">
-              {r('open')}
-            </Button>
-          </form>
+          <span style={{ display: 'inline-flex', gap: 'var(--sp-2)', alignItems: 'flex-end' }}>
+            <form method="get">
+              <AutoSubmit />
+              <SelectField
+                id="section"
+                name="section"
+                label={r('section')}
+                defaultValue={sectionId ?? ''}
+                options={options}
+              />
+              <noscript>
+                <Button type="submit" variant="secondary" size="sm">
+                  {r('open')}
+                </Button>
+              </noscript>
+            </form>
+            {sheet && sectionId ? (
+              <>
+                <a
+                  className="ep-btn ep-btn--secondary ep-btn--sm"
+                  href={`/api/exam-register-sheet/${id}/${sectionId}/xlsx`}
+                >
+                  {x('excel')}
+                </a>
+                <ViewDownload
+                  href={`/api/exam-register-sheet/${id}/${sectionId}/pdf`}
+                  what={`${x('registerFile')} PDF`}
+                />
+              </>
+            ) : null}
+          </span>
         }
       >
         {sheet ? (

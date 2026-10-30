@@ -52,8 +52,9 @@ export default async function ExamRemarksPage({
   if (!/^\d{1,18}$/.test(id)) notFound();
   const me = await getMe();
   if (!me.permissions.includes('exams.marks.view')) notFound();
-  const [t, exam, progress, sections] = await Promise.all([
+  const [t, m, exam, progress, sections] = await Promise.all([
     getTranslations('examHub.entry'),
+    getTranslations('examHub.misc'),
     apiFetch<Exam>(`/exams/${id}`).catch((e: unknown) => {
       if (e instanceof ApiError && e.status === 404) notFound();
       throw e;
@@ -244,9 +245,7 @@ export default async function ExamRemarksPage({
               </FormSaveBar>
             ) : (
               <p className="ep-field__help">
-                {sheet.locked
-                  ? 'Remarks are locked for the class in this exam; open them on the exam’s Overview.'
-                  : 'You may view these only: the class teacher writes them, a subject teacher their subject’s.'}
+                {sheet.locked ? m('remarksLocked') : m('remarksViewOnly')}
               </p>
             )}
           </form>

@@ -1,10 +1,11 @@
-import { Breadcrumbs, Button, Card, DataTable, PageHeader, SelectField } from '@edupro/ui';
+import { Button, Card, DataTable, SelectField } from '@edupro/ui';
 import { getTranslations } from 'next-intl/server';
+import { AutoSubmit } from '@/components/AutoSubmit';
 import { Notice } from '@/components/Notice';
-import { computeExamResults } from '@/lib/actions';
+import { ExamFrame } from '@/components/exams/ExamFrame';
+import { ResultsHead } from '@/components/exams/ResultsHead';
 import { apiFetch, getMe } from '@/lib/api';
-import type { Exam, ExamAnalysis } from '@/lib/types';
-import { ExamTabs } from '@/components/exams/ExamTabs';
+import type { Exam, ExamAnalysis, ExamProgress } from '@/lib/types';
 
 const Kpi = ({ label, value }: { label: string; value: string }) => (
   <Card elevated>
@@ -15,7 +16,7 @@ const Kpi = ({ label, value }: { label: string; value: string }) => (
   </Card>
 );
 
-/** Sprint 16: result analysis of an exam. */
+/** Sprint 16: result analysis of an exam; docs/design/66: the Results tab's first page. */
 export default async function AnalysisPage({
   params,
   searchParams,
@@ -25,56 +26,31 @@ export default async function AnalysisPage({
 }) {
   const { id } = await params;
   const sp = await searchParams;
-  const [t, r, me, exam, a] = await Promise.all([
-    getTranslations('pages.exams_analysis'),
+  const [r, me, exam, a, progress] = await Promise.all([
     getTranslations('results'),
     getMe(),
     apiFetch<Exam>(`/exams/${id}`),
     apiFetch<ExamAnalysis>(`/exams/${id}/analysis${sp.classId ? `?classId=${sp.classId}` : ''}`),
+    apiFetch<ExamProgress>(`/exams/${id}/progress`).catch(() => null),
   ]);
   const canManage = me.permissions.includes('exams.master.manage');
   const pct = (v: number | null) => (v === null ? '—' : `${v}%`);
   return (
     <>
-      <Breadcrumbs
-        items={[
-          { label: t('kicker'), href: '/exams' },
-          { label: exam.name, href: `/exams/${id}` },
-          { label: t('title') },
-        ]}
+      <ExamFrame
+        exam={exam}
+        stage={progress?.stage ?? null}
+        current="results"
+        canManage={canManage}
+        canUnlock={me.permissions.includes('exams.marks.unlock')}
       />
-      <PageHeader
-        kicker={t('kicker')}
-        title={`${t('title')} · ${exam.name}`}
-        description={
-          a.exam.computedAt
-            ? r('computedAt', { at: a.exam.computedAt.slice(0, 16).replace('T', ' ') })
-            : r('notComputed')
-        }
-        actions={
-          <span style={{ display: 'inline-flex', gap: 'var(--sp-2)' }}>
-            <a className="ep-btn ep-btn--ghost ep-btn--sm" href={`/exams/${id}/register`}>
-              {r('register')}
-            </a>
-            <a className="ep-btn ep-btn--ghost ep-btn--sm" href={`/exams/${id}/reports`}>
-              Reports and exports
-            </a>
-            <a className="ep-btn ep-btn--ghost ep-btn--sm" href={`/exams/${id}/promotion`}>
-              {r('promotion')}
-            </a>
-            {canManage ? (
-              <form action={computeExamResults}>
-                <input type="hidden" name="examId" value={id} />
-                <input type="hidden" name="back" value={`/exams/${id}/analysis`} />
-                <Button type="submit" size="sm">
-                  {r('compute')}
-                </Button>
-              </form>
-            ) : null}
-          </span>
-        }
+      <ResultsHead
+        examId={id}
+        current="analysis"
+        computedAt={a.exam.computedAt}
+        canCompute={canManage}
+        back={`/exams/${id}/analysis${sp.classId ? `?classId=${sp.classId}` : ''}`}
       />
-      <ExamTabs examId={id} current="results" />
       <Notice params={sp} />
       <form
         method="get"
@@ -95,9 +71,12 @@ export default async function AnalysisPage({
             ...exam.classes.map((c) => ({ value: c.classId, label: c.classCode })),
           ]}
         />
-        <Button type="submit" variant="secondary" size="sm">
-          {r('open')}
-        </Button>
+        <AutoSubmit />
+        <noscript>
+          <Button type="submit" variant="secondary" size="sm">
+            {r('open')}
+          </Button>
+        </noscript>
       </form>
       <div
         style={{

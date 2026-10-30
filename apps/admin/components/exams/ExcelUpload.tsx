@@ -1,4 +1,5 @@
 'use client';
+import { useTranslations } from 'next-intl';
 import { useRouter } from 'next/navigation';
 import { useRef, useState, useTransition } from 'react';
 import type { UploadPreview } from '@/lib/exam-entry-actions';
@@ -17,6 +18,7 @@ export function ExcelUpload({
   /** bound on the page to the exam / section / subject */
   upload: (file: string, apply: boolean) => Promise<Out>;
 }) {
+  const t = useTranslations('examHub.upload');
   const router = useRouter();
   const input = useRef<HTMLInputElement>(null);
   const [pending, start] = useTransition();
@@ -28,7 +30,7 @@ export function ExcelUpload({
     new Promise<string>((resolve, reject) => {
       const r = new FileReader();
       r.onload = () => resolve(String(r.result).split(',')[1] ?? '');
-      r.onerror = () => reject(new Error('The file could not be read'));
+      r.onerror = () => reject(new Error(t('unreadableFile')));
       r.readAsDataURL(f);
     });
 
@@ -37,7 +39,7 @@ export function ExcelUpload({
       setMsg(null);
       setPreview(null);
       if (f.size > 1_400_000) {
-        setMsg({ tone: 'danger', text: 'The file is larger than 1.4 MB; split it' });
+        setMsg({ tone: 'danger', text: t('fileTooLarge') });
         return;
       }
       const b64 = await read(f);
@@ -66,28 +68,25 @@ export function ExcelUpload({
       </label>
       {pending && !preview ? (
         <p className="ep-field__help" style={{ margin: 0 }}>
-          Checking the sheet…
+          {t('checking')}
         </p>
       ) : null}
       {preview ? (
         <div className={`ep-alert ep-alert--${preview.errors ? 'danger' : 'info'}`} role="status">
-          {preview.rows.length} rows read: {preview.ready} ready to save
-          {preview.errors
-            ? `, ${String(preview.errors)} with an error (fix them and upload again)`
-            : ''}
-          .
+          {t('read', { rows: preview.rows.length, ready: preview.ready })}
+          {preview.errors ? t('withErrors', { n: preview.errors }) : ''}.
         </div>
       ) : null}
       {bad.length ? (
         <div className="ep-table-wrap">
           <table className="ep-table ep-table--dense">
-            <caption className="ep-sr-only">Rows with an error</caption>
+            <caption className="ep-sr-only">{t('errorRows')}</caption>
             <thead>
               <tr>
-                <th scope="col">Row</th>
-                <th scope="col">Admission no</th>
-                <th scope="col">Student</th>
-                <th scope="col">Problem</th>
+                <th scope="col">{t('row')}</th>
+                <th scope="col">{t('admissionNo')}</th>
+                <th scope="col">{t('student')}</th>
+                <th scope="col">{t('problem')}</th>
               </tr>
             </thead>
             <tbody>
@@ -113,16 +112,16 @@ export function ExcelUpload({
               start(async () => {
                 const r = await upload(file!, true);
                 if (r.ok && r.data.applied) {
-                  setMsg({ tone: 'success', text: `${String(r.data.ready)} rows saved.` });
+                  setMsg({ tone: 'success', text: t('saved', { n: r.data.ready }) });
                   setPreview(null);
                   setFile(null);
                   if (input.current) input.current.value = '';
                   router.refresh();
-                } else setMsg({ tone: 'danger', text: r.ok ? 'Nothing was saved' : r.error });
+                } else setMsg({ tone: 'danger', text: r.ok ? t('nothingSaved') : r.error });
               })
             }
           >
-            Save {preview.ready} rows
+            {t('saveRows', { n: preview.ready })}
           </button>
         </div>
       ) : null}

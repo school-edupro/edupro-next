@@ -141,8 +141,38 @@ general remark and a category remark, attendance % and BMI as typed, both saved,
 warning (the handler blocks the unload; the in-app browser shows no dialog). Marks typing was not
 walked in the browser: the admin's demo user holds the unlock right, not marks entry.
 
-## Phase still to come
+## Phase 3 — results, reports, languages, the apps' date sheet (30 Oct 2026)
 
-- **Phase 3 — results and reports**: one Results tab (compute, analysis, register with Excel / PDF,
-  promotion that stays in the exam) with pickers that apply on change, Hindi / English on every exam
-  page, the date sheet in the parent and teacher apps.
+- **Results tab**: Analysis · Mark register · Promotion under one tab (`ResultsHead`: the sub-pages,
+  when the results were worked out, **Work out results** for `exams.master.manage`). The class and
+  section pickers apply on change; the register's sections come from the exam's entry sections (no
+  longer parsed from labels) and the register comes as **Excel** and **PDF** (View / Download):
+  `GET exams/:id/register-sheet?classSectionId=&format=xlsx|pdf` (`registerSheetFile`: roll,
+  admission no, student, a column per subject with its maximum, total, %, grade, rank, result; the
+  PDF through `tablePdf`), admin route `/api/exam-register-sheet/<exam>/<section>/<xlsx|pdf>`.
+  Recording promotion decisions (`recordExamPromotions`) keeps the page on the exam's promotion,
+  says how many were recorded and links to People → Promotions, where they are applied.
+- **Reports**: the exam's header; the report, class and section apply on change (the sections are
+  the chosen class's); the figures of toppers and ranges with Show.
+- **English / Hindi** on every page of an exam (overview, set-up, marks and status, indicators,
+  remarks, attendance, health, results, reports, the date sheet) and the parts they share (status
+  badges and actions, Excel upload, portfolio photos, report tables): `messages/{en,hi}.json` under
+  `examHub` (status, esa, att, ind, upload, misc, results, reports). Report titles and table headings
+  made by the API stay English. The set-up screens of Exams setup (types and scales, indicator sets,
+  areas and level scales, remark categories), mark schemes, report cards, board results and subject
+  choices are not in this pass.
+- **Date sheet in the apps**: `GET exams/date-sheets` (`exams.marks.view`): the working year's exams
+  with dated papers of the classes the caller may read marks of; `GET exams/mine/date-sheets`
+  (`exams.family.view`): per child, the exams shown on the portal with the child's papers (a subject
+  the child does not take is left out) and the note. Parent app **Exam date sheet** (`/date-sheet`,
+  menu My child): the next paper, the coming exams (date, day, time, subject, the note), earlier ones
+  folded away; Hindi through the app's dictionary. Teacher app **Exam date sheet** (`/date-sheet`,
+  menu Marks): the exam (applies on change; the coming one first), a row per date and a column per
+  class.
+
+Tests: `exam-hub.e2e-spec.ts` (7: the register file in both formats, staff date sheets, a family's
+appearing once the exam is on the portal, a family refused the staff list); the exam suites, sprints
+14–18, compat and permission coverage (100); accessibility on the exam's pages (analysis, register,
+promotion, reports included) and the parent (parent and student logins) and teacher apps at 1280 and
+375 wide, with `/date-sheet` in both. The register PDF read back (school, exam · section, the subject
+columns, totals, grades, ranks, results).

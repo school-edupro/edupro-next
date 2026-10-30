@@ -18,6 +18,7 @@ const PAGES = [
   '/indicators',
   '/remarks',
   '/exam-register',
+  '/date-sheet',
   '/bus-attendance',
   '/documents',
   '/office-orders',

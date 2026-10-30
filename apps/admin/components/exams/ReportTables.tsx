@@ -1,3 +1,4 @@
+import { getTranslations } from 'next-intl/server';
 import { ViewDownload } from '@/components/admissions/ViewDownload';
 
 type Cell = string | number | null;
@@ -17,7 +18,7 @@ export interface ExamReport {
  * An exam analysis's tables (docs/design/65 part 6): a heading row across the table, a summary line
  * in bold; the Excel download and the PDF's View / Download over them.
  */
-export function ReportTables({
+export async function ReportTables({
   report,
   files,
 }: {
@@ -25,6 +26,7 @@ export function ReportTables({
   /** the file route without the format: /api/exam-report/<id>/<kind> and the filters segment */
   files: { base: string; q: string };
 }) {
+  const m = await getTranslations('examHub.misc');
   return (
     <>
       <div
@@ -109,7 +111,7 @@ export function ReportTables({
                     )
                   ) : (
                     <tr>
-                      <td colSpan={t.columns.length}>Nothing to show.</td>
+                      <td colSpan={t.columns.length}>{m('nothing')}</td>
                     </tr>
                   )}
                 </tbody>

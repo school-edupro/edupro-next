@@ -8,6 +8,8 @@ import { BoardResultsController } from './board-results.controller';
 import { BoardResultsService } from './board-results.service';
 import { ExamAnalysisController } from './exam-analysis.controller';
 import { ExamAnalysisService } from './exam-analysis.service';
+import { ExamDateSheetsController } from './exam-date-sheets.controller';
+import { ExamDateSheetsService } from './exam-date-sheets.service';
 import { ExamEntryController } from './exam-entry.controller';
 import { ExamRemarksController } from './exam-remarks.controller';
 import { RemarkCategoriesService } from './remark-categories.service';
@@ -36,6 +38,7 @@ import { SubjectChoicesService } from './subject-choices.service';
 @Module({
   imports: [DailyAcademicsModule, ReportsModule, FilesModule],
   controllers: [
+    ExamDateSheetsController,
     SubjectChoicesController,
     ExamStatusController,
     MarkSchemesController,
@@ -52,6 +55,7 @@ import { SubjectChoicesService } from './subject-choices.service';
   ],
   providers: [
     ExamsService,
+    ExamDateSheetsService,
     ExamEntryService,
     ExamResultsService,
     ReportCardsService,

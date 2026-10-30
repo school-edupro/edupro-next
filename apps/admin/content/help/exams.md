@@ -75,6 +75,16 @@
 
 ## Results and report cards
 
+- **Results** tab of an exam: **Analysis**, **Mark register** (by section; Excel, and PDF to view or
+  download) and **Promotion** (proposals from the results; **Record** sends the ticked decisions to
+  People → Promotions, where they are applied). **Work out results** sits on all three.
+- **Reports** tab: the analyses (section-wise subjects, ranges, toppers, subject teachers, upload
+  status, missing marks), each as Excel and PDF.
+- **Date sheet in the apps**: families see their child's papers under **Exam date sheet** in the
+  parent app once the exam is shown on the parent portal; teachers see their classes' date sheets in
+  the teacher app (**Exam date sheet**).
+- Every page of an exam is in English and Hindi (the language switch at the top).
+
 1. **Exams → open exam → Results → Compute**: totals, percentages, grades, ranks per section and class.
 2. **Exams → Report cards → Templates**: the layout per band (HPC for primary, CCE for middle,
    components for secondary, theory/practical for senior); preview with a real pupil.

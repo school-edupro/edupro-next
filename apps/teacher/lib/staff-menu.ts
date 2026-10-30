@@ -101,6 +101,12 @@ export const STAFF_MENU: StaffGroup[] = [
         allowed: (can) => can('exams.remark.enter') || can('exams.marks.enter'),
       },
       {
+        href: '/date-sheet',
+        label: 'Exam date sheet',
+        help: 'Papers of each exam for your classes',
+        allowed: (can) => can('exams.marks.view'),
+      },
+      {
         href: '/exam-register',
         label: 'Exam register',
         help: 'Remarks, exam attendance, height and weight',

@@ -81,8 +81,9 @@ export default async function ExamIndicatorsPage({
   if (!/^\d{1,18}$/.test(id)) notFound();
   const me = await getMe();
   if (!me.permissions.includes('exams.marks.view')) notFound();
-  const [t, exam, progress] = await Promise.all([
+  const [t, w, exam, progress] = await Promise.all([
     getTranslations('examHub.entry'),
+    getTranslations('examHub.ind'),
     apiFetch<Exam>(`/exams/${id}`).catch((e: unknown) => {
       if (e instanceof ApiError && e.status === 404) notFound();
       throw e;
@@ -238,7 +239,7 @@ export default async function ExamIndicatorsPage({
             )}
           </Card>
           {hpc && child ? (
-            <Card elevated title={`In our words and the portfolio · ${child.name}`}>
+            <Card elevated title={w('words', { name: child.name })}>
               <form
                 method="get"
                 style={{
@@ -262,7 +263,7 @@ export default async function ExamIndicatorsPage({
                     {sheet.rows.map((r) => (
                       <option key={r.studentId} value={r.studentId}>
                         {r.rollNo ? `${String(r.rollNo)} · ` : ''}
-                        {r.name} · {r.photos ?? 0} photos
+                        {r.name} · {w('photos', { n: r.photos ?? 0 })}
                       </option>
                     ))}
                   </select>
@@ -281,9 +282,9 @@ export default async function ExamIndicatorsPage({
                   <input type="hidden" name="back" value={q({})} />
                   {(
                     [
-                      ['self', 'All about me (the child’s words, as told to the teacher)'],
-                      ['parent', 'The parent’s feedback'],
-                      ['teacher', 'The teacher’s observations'],
+                      ['self', w('self')],
+                      ['parent', w('parent')],
+                      ['teacher', w('teacher')],
                     ] as const
                   ).map(([k, label]) => {
                     const f = child.feedback?.[k];
@@ -299,35 +300,31 @@ export default async function ExamIndicatorsPage({
                           defaultValue={f?.text ?? ''}
                           disabled={!open || Boolean(theirs)}
                         />
-                        {theirs ? (
-                          <span className="ep-field__help">
-                            Written by the parent in the parent app: kept as they wrote it.
-                          </span>
-                        ) : null}
+                        {theirs ? <span className="ep-field__help">{w('byFamily')}</span> : null}
                       </label>
                     );
                   })}
                   {open ? (
                     <FormSaveBar>
                       <Button type="submit" variant="secondary">
-                        Save the words
+                        {w('saveWords')}
                       </Button>
                     </FormSaveBar>
                   ) : null}
                 </form>
-                <section aria-label="Portfolio">
+                <section aria-label={w('portfolio')}>
                   <h3 className="ep-cdash__h3" style={{ marginTop: 0 }}>
-                    Portfolio
+                    {w('portfolio')}
                   </h3>
                   {photos.length ? (
                     <ul style={{ paddingLeft: 'var(--sp-4)' }}>
                       {photos.map((p) => (
                         <li key={p.id} style={{ marginBottom: 'var(--sp-2)' }}>
-                          {p.caption ?? 'Photo'}
+                          {p.caption ?? w('photo')}
                           {p.indicator ? ` · ${p.indicator}` : ''}{' '}
                           <ViewDownload
                             href={`/api/exam-portfolio/${exam.id}/${p.id}`}
-                            what={`the photo ${p.caption ?? ''}`.trim()}
+                            what={w('thePhoto', { caption: p.caption ?? '' }).trim()}
                           />
                           {open ? (
                             <form action={removePortfolioPhoto} style={{ display: 'inline' }}>
@@ -335,7 +332,7 @@ export default async function ExamIndicatorsPage({
                               <input type="hidden" name="itemId" value={p.id} />
                               <input type="hidden" name="back" value={q({})} />{' '}
                               <button type="submit" className="ep-btn ep-btn--ghost ep-btn--sm">
-                                Remove
+                                {w('remove')}
                               </button>
                             </form>
                           ) : null}
@@ -343,9 +340,7 @@ export default async function ExamIndicatorsPage({
                       ))}
                     </ul>
                   ) : (
-                    <p className="ep-field__help">
-                      No photo yet (up to twelve; the card prints six).
-                    </p>
+                    <p className="ep-field__help">{w('noPhoto')}</p>
                   )}
                   {open ? (
                     <PortfolioUpload

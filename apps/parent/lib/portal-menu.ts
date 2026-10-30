@@ -13,6 +13,7 @@ const NEEDS: Record<string, string> = {
   '/homework': 'academics.daily_work.view',
   '/documents': 'academics.daily_work.view',
   '/results': 'exams.family.view',
+  '/date-sheet': 'exams.family.view',
   '/health': 'engagement.family.view',
   '/certificates': 'engagement.family.view',
   '/notices': 'academics.notice.view',

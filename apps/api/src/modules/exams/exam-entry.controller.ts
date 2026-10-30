@@ -200,7 +200,9 @@ export class ExamEntryController {
     @Param('id') id: string,
     @Query() q: RegisterSheetQueryDto,
   ) {
-    return this.results.registerSheet(ctx, id, q.classSectionId);
+    return q.format
+      ? this.results.registerSheetFile(ctx, id, q.classSectionId, q.format)
+      : this.results.registerSheet(ctx, id, q.classSectionId);
   }
 
   @Get(':id/analysis')

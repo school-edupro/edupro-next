@@ -1,4 +1,5 @@
 import { Badge, Button } from '@edupro/ui';
+import { getTranslations } from 'next-intl/server';
 import { markEntryStatus } from '@/lib/exam-entry-actions';
 
 export interface EntryStatus {
@@ -11,7 +12,6 @@ export interface EntryStatus {
 }
 
 const TONE = { open: 'neutral', submitted: 'warning', verified: 'success' } as const;
-const LABEL = { open: 'Open', submitted: 'Submitted', verified: 'Verified' } as const;
 const when = (iso: string | null) =>
   iso
     ? new Intl.DateTimeFormat('en-IN', {
@@ -24,20 +24,21 @@ const when = (iso: string | null) =>
     : '';
 
 /** The status of one section's subject (docs/design/65, part 2). */
-export function EntryStatusBadge({ s }: { s: EntryStatus }) {
+export async function EntryStatusBadge({ s }: { s: EntryStatus }) {
+  const t = await getTranslations('examHub.esa');
   return (
     <span>
-      <Badge tone={TONE[s.status]}>{LABEL[s.status]}</Badge>
+      <Badge tone={TONE[s.status]}>{t(s.status)}</Badge>
       {s.status === 'submitted' && s.submittedBy ? (
         <span className="ep-kicker">
           {' '}
-          by {s.submittedBy} · {when(s.submittedAt)}
+          {t('by', { who: s.submittedBy, when: when(s.submittedAt) })}
         </span>
       ) : null}
       {s.status === 'verified' && s.verifiedBy ? (
         <span className="ep-kicker">
           {' '}
-          by {s.verifiedBy} · {when(s.verifiedAt)}
+          {t('by', { who: s.verifiedBy, when: when(s.verifiedAt) })}
         </span>
       ) : null}
       {s.remark ? (
@@ -53,7 +54,7 @@ export function EntryStatusBadge({ s }: { s: EntryStatus }) {
  * Submit (the teacher, every student entered), Verify or Send back (the verifier) and Reopen (the
  * unlock right, with a reason) for one section's subject.
  */
-export function EntryStatusActions({
+export async function EntryStatusActions({
   examId,
   classSectionId,
   subjectId,
@@ -75,6 +76,7 @@ export function EntryStatusActions({
   canVerify: boolean;
   canReopen: boolean;
 }) {
+  const t = await getTranslations('examHub.esa');
   const hidden = (action: string) => (
     <>
       <input type="hidden" name="examId" value={examId} />
@@ -89,13 +91,13 @@ export function EntryStatusActions({
       {status === 'open' && canSubmit ? (
         missing > 0 ? (
           <span className="ep-field__help" style={{ margin: 0 }}>
-            {missing} without marks: enter them (or a code) to submit
+            {t('withoutMarks', { n: missing })}
           </span>
         ) : (
           <form action={markEntryStatus}>
             {hidden('submit')}
             <Button type="submit" size="sm">
-              Submit for verification
+              {t('submit')}
             </Button>
           </form>
         )
@@ -105,7 +107,7 @@ export function EntryStatusActions({
           <form action={markEntryStatus}>
             {hidden('verify')}
             <Button type="submit" size="sm">
-              Verify
+              {t('verify')}
             </Button>
           </form>
           <form action={markEntryStatus} style={{ display: 'inline-flex', gap: 'var(--sp-1)' }}>
@@ -113,15 +115,15 @@ export function EntryStatusActions({
             <input
               className="ep-input"
               name="note"
-              aria-label="What to correct"
-              placeholder="What to correct"
+              aria-label={t('whatToCorrect')}
+              placeholder={t('whatToCorrect')}
               required
               minLength={3}
               maxLength={500}
-              style={{ width: 160 }}
+              style={{ width: '10rem' }}
             />
             <Button type="submit" size="sm" variant="ghost">
-              Send back
+              {t('sendBack')}
             </Button>
           </form>
         </>
@@ -132,15 +134,15 @@ export function EntryStatusActions({
           <input
             className="ep-input"
             name="note"
-            aria-label="Why reopen"
-            placeholder="Why reopen"
+            aria-label={t('whyReopen')}
+            placeholder={t('whyReopen')}
             required
             minLength={3}
             maxLength={500}
-            style={{ width: 140 }}
+            style={{ width: '9rem' }}
           />
           <Button type="submit" size="sm" variant="ghost">
-            Reopen
+            {t('reopen')}
           </Button>
         </form>
       ) : null}

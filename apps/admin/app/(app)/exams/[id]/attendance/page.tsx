@@ -40,8 +40,9 @@ export default async function ExamAttendancePage({
   if (!/^\d{1,18}$/.test(id)) notFound();
   const me = await getMe();
   if (!me.permissions.includes('exams.marks.view')) notFound();
-  const [t, exam, progress, sections] = await Promise.all([
+  const [t, a, exam, progress, sections] = await Promise.all([
     getTranslations('examHub.entry'),
+    getTranslations('examHub.att'),
     apiFetch<Exam>(`/exams/${id}`).catch((e: unknown) => {
       if (e instanceof ApiError && e.status === 404) notFound();
       throw e;
@@ -84,8 +85,7 @@ export default async function ExamAttendancePage({
         ]}
       />
       <p className="ep-field__help" style={{ marginTop: 0 }}>
-        Count it from daily attendance (late, half day, on duty, stay back and short leave count as
-        present), then correct any student. It prints on the report card.
+        {a('intro')}
       </p>
       <Notice params={sp} />
       <Card style={{ marginBottom: 'var(--sp-4)' }}>
@@ -111,11 +111,7 @@ export default async function ExamAttendancePage({
       {reg ? (
         <>
           {open ? (
-            <Card
-              elevated
-              title="Count from daily attendance"
-              style={{ marginBottom: 'var(--sp-4)' }}
-            >
+            <Card elevated title={a('count')} style={{ marginBottom: 'var(--sp-4)' }}>
               <form
                 action={countExamAttendance}
                 style={{
@@ -128,13 +124,13 @@ export default async function ExamAttendancePage({
                 <input type="hidden" name="examId" value={exam.id} />
                 <input type="hidden" name="classSectionId" value={reg.section.id} />
                 <input type="hidden" name="back" value={back} />
-                <label className="ep-field">
-                  <span className="ep-field__label">From (empty: the start of the session)</span>
-                  <input className="ep-input" type="date" name="from" />
+                <label className="ep-field" htmlFor="at-from">
+                  <span className="ep-field__label">{a('from')}</span>
+                  <input id="at-from" className="ep-input" type="date" name="from" />
                 </label>
-                <label className="ep-field">
-                  <span className="ep-field__label">To (empty: the exam&rsquo;s last day)</span>
-                  <input className="ep-input" type="date" name="to" />
+                <label className="ep-field" htmlFor="at-to">
+                  <span className="ep-field__label">{a('to')}</span>
+                  <input id="at-to" className="ep-input" type="date" name="to" />
                 </label>
                 <label className="ep-check" htmlFor="att-overwrite">
                   <input
@@ -143,10 +139,10 @@ export default async function ExamAttendancePage({
                     type="checkbox"
                     name="overwrite"
                   />
-                  <span className="ep-check__box" aria-hidden="true" /> Replace what is entered
+                  <span className="ep-check__box" aria-hidden="true" /> {a('replace')}
                 </label>
                 <Button type="submit" variant="secondary">
-                  Count
+                  {a('countButton')}
                 </Button>
               </form>
             </Card>
@@ -156,9 +152,9 @@ export default async function ExamAttendancePage({
             title={reg.section.code}
             actions={
               locked ? (
-                <Badge tone="warning">Locked</Badge>
+                <Badge tone="warning">{t('locked')}</Badge>
               ) : (
-                <Badge tone="neutral">{reg.rows.length} students</Badge>
+                <Badge tone="neutral">{t('students', { n: reg.rows.length })}</Badge>
               )
             }
           >
@@ -170,16 +166,16 @@ export default async function ExamAttendancePage({
                 className="ep-table-wrap"
                 tabIndex={0}
                 role="region"
-                aria-label="Exam attendance"
+                aria-label={t('attendance')}
               >
                 <table className="ep-table ep-table--dense">
-                  <caption className="ep-sr-only">Exam attendance</caption>
+                  <caption className="ep-sr-only">{t('attendance')}</caption>
                   <thead>
                     <tr>
-                      <th scope="col">Roll</th>
-                      <th scope="col">Student</th>
-                      <th scope="col">Days present</th>
-                      <th scope="col">Working days</th>
+                      <th scope="col">{t('roll')}</th>
+                      <th scope="col">{t('student')}</th>
+                      <th scope="col">{a('present')}</th>
+                      <th scope="col">{a('working')}</th>
                       <th scope="col" className="is-numeric">
                         %
                       </th>
@@ -203,10 +199,10 @@ export default async function ExamAttendancePage({
                             min={0}
                             max={400}
                             name={`p-${r.studentId}`}
-                            aria-label={`Days present · ${r.name}`}
+                            aria-label={`${a('present')} · ${r.name}`}
                             defaultValue={r.daysPresent ?? ''}
                             disabled={!open}
-                            style={{ width: 110 }}
+                            style={{ width: '7rem' }}
                           />
                         </td>
                         <td>
@@ -216,10 +212,10 @@ export default async function ExamAttendancePage({
                             min={1}
                             max={400}
                             name={`t-${r.studentId}`}
-                            aria-label={`Working days · ${r.name}`}
+                            aria-label={`${a('working')} · ${r.name}`}
                             defaultValue={r.daysTotal ?? ''}
                             disabled={!open}
-                            style={{ width: 110 }}
+                            style={{ width: '7rem' }}
                           />
                         </td>
                         <td className="is-numeric">
@@ -241,14 +237,10 @@ export default async function ExamAttendancePage({
               </div>
               {open ? (
                 <FormSaveBar>
-                  <Button type="submit">Save exam attendance</Button>
+                  <Button type="submit">{a('save')}</Button>
                 </FormSaveBar>
               ) : (
-                <p className="ep-field__help">
-                  {locked
-                    ? 'Attendance is locked for the class in this exam; open it on the exam’s Overview.'
-                    : 'You may view this only (the exam attendance right).'}
-                </p>
+                <p className="ep-field__help">{locked ? a('locked') : a('viewOnly')}</p>
               )}
             </form>
           </Card>

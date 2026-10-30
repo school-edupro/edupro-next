@@ -1113,6 +1113,13 @@ const DICT: Record<string, string> = {
     'आपके बच्चे को क्या अच्छा लगता है, घर पर क्या करता है और क्या सीखा: यह कार्ड पर वैसा ही छपता है जैसा आप लिखते हैं।',
   'The progress card is closed for changes.': 'प्रगति कार्ड अब बदलाव के लिए बंद है।',
   'Save my feedback': 'मेरी प्रतिक्रिया सहेजें',
+  Exams: 'परीक्षाएँ',
+  'Exam date sheet': 'परीक्षा डेट शीट',
+  'The papers of each exam: date, day and time.': 'हर परीक्षा के पेपर: तिथि, दिन और समय।',
+  'Next paper': 'अगला पेपर',
+  'No date sheet yet.': 'अभी कोई डेट शीट नहीं।',
+  'Earlier exams': 'पिछली परीक्षाएँ',
+  'No exam coming up.': 'आगे कोई परीक्षा नहीं।',
 };
 
 /** Translates a known English string; unknown strings fall back to English. */

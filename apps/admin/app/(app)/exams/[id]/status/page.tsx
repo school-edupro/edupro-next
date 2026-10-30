@@ -48,8 +48,9 @@ export default async function ExamStatusPage({
   if (!/^\d{1,18}$/.test(id)) notFound();
   const me = await getMe();
   if (!me.permissions.includes('exams.marks.view')) notFound();
-  const [t, exam, progress] = await Promise.all([
+  const [t, st, exam, progress] = await Promise.all([
     getTranslations('examHub.entry'),
+    getTranslations('examHub.status'),
     apiFetch<Exam>(`/exams/${id}`).catch((e: unknown) => {
       if (e instanceof ApiError && e.status === 404) notFound();
       throw e;
@@ -87,9 +88,7 @@ export default async function ExamStatusPage({
         ]}
       />
       <p className="ep-field__help" style={{ marginTop: 0 }}>
-        Each subject of each section: entered by the teacher, submitted for verification, verified
-        by the class teacher or a coordinator (then locked). Results are worked out again on every
-        verification.
+        {st('intro')}
       </p>
       <Notice params={sp} />
       <div
@@ -100,11 +99,11 @@ export default async function ExamStatusPage({
           marginBottom: 'var(--sp-4)',
         }}
       >
-        <KpiTile label="Subjects × sections" value={String(r.counts.total)} />
-        <KpiTile label="Open" value={String(r.counts.open)} />
-        <KpiTile label="Missing marks" value={String(r.counts.missing)} />
-        <KpiTile label="Waiting to verify" value={String(r.counts.submitted)} />
-        <KpiTile label="Verified" value={String(r.counts.verified)} />
+        <KpiTile label={st('total')} value={String(r.counts.total)} />
+        <KpiTile label={st('open')} value={String(r.counts.open)} />
+        <KpiTile label={st('missing')} value={String(r.counts.missing)} />
+        <KpiTile label={st('waiting')} value={String(r.counts.submitted)} />
+        <KpiTile label={st('verified')} value={String(r.counts.verified)} />
       </div>
       <Card elevated>
         <form
@@ -117,10 +116,10 @@ export default async function ExamStatusPage({
             marginBottom: 'var(--sp-3)',
           }}
         >
-          <label className="ep-field" style={{ minWidth: 180 }}>
-            <span className="ep-field__label">Class</span>
-            <select className="ep-select" name="classId" defaultValue={classId ?? ''}>
-              <option value="">Every class</option>
+          <label className="ep-field" htmlFor="st-class" style={{ minWidth: '11rem' }}>
+            <span className="ep-field__label">{st('class')}</span>
+            <select id="st-class" className="ep-select" name="classId" defaultValue={classId ?? ''}>
+              <option value="">{st('everyClass')}</option>
               {exam.classes.map((k) => (
                 <option key={k.classId} value={k.classId}>
                   {k.classCode}
@@ -128,35 +127,35 @@ export default async function ExamStatusPage({
               ))}
             </select>
           </label>
-          <label className="ep-field" style={{ minWidth: 180 }}>
-            <span className="ep-field__label">Status</span>
-            <select className="ep-select" name="show" defaultValue={show}>
-              <option value="">Any</option>
-              <option value="open">Open</option>
-              <option value="submitted">Waiting to verify</option>
-              <option value="verified">Verified</option>
+          <label className="ep-field" htmlFor="st-show" style={{ minWidth: '11rem' }}>
+            <span className="ep-field__label">{st('status')}</span>
+            <select id="st-show" className="ep-select" name="show" defaultValue={show}>
+              <option value="">{st('any')}</option>
+              <option value="open">{st('open')}</option>
+              <option value="submitted">{st('waiting')}</option>
+              <option value="verified">{st('verified')}</option>
             </select>
           </label>
           <AutoSubmit />
           <noscript>
             <button type="submit" className="ep-btn ep-btn--secondary">
-              Show
+              {st('show')}
             </button>
           </noscript>
         </form>
-        <div className="ep-table-wrap" tabIndex={0} role="region" aria-label="Marks status">
+        <div className="ep-table-wrap" tabIndex={0} role="region" aria-label={st('title')}>
           <table className="ep-table ep-table--dense">
-            <caption className="ep-sr-only">Marks status</caption>
+            <caption className="ep-sr-only">{st('title')}</caption>
             <thead>
               <tr>
-                <th scope="col">Section</th>
-                <th scope="col">Subject</th>
+                <th scope="col">{st('section')}</th>
+                <th scope="col">{st('subject')}</th>
                 <th scope="col" style={{ textAlign: 'right' }}>
-                  Entered
+                  {st('entered')}
                 </th>
-                <th scope="col">Status</th>
+                <th scope="col">{st('status')}</th>
                 <th scope="col">
-                  <span className="ep-sr-only">Actions</span>
+                  <span className="ep-sr-only">{st('actions')}</span>
                 </th>
               </tr>
             </thead>
@@ -196,7 +195,7 @@ export default async function ExamStatusPage({
             </tbody>
           </table>
         </div>
-        {!rows.length ? <p style={{ marginBottom: 0 }}>Nothing to show.</p> : null}
+        {!rows.length ? <p style={{ marginBottom: 0 }}>{st('nothing')}</p> : null}
       </Card>
     </>
   );

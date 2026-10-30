@@ -30,6 +30,7 @@ const PAGES = [
   '/appointments/new?student=12307&host=47',
   '/health',
   '/results',
+  '/date-sheet',
   '/health?kind=visit',
   '/health/visits/39',
   '/health/cards/2',

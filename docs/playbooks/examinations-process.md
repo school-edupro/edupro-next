@@ -166,6 +166,13 @@ teacher app's **Verify marks** lists what waits for a class teacher.
    is refused.
 3. **Withdraw** a published release with a reason; correct; publish again.
 
+## 6a. The date sheet
+
+Set each paper's date and time on the exam's Set-up → Date sheet, with a note (reporting time, what to
+bring). Print it per class or for all classes. Tick **Show on the parent portal** in the exam's
+details: families then see their child's papers in the parent app (**Exam date sheet**); teachers
+see their classes' date sheets in the teacher app.
+
 ## 7. Analysis and exports — any time
 
 Exam → **Reports**, each on screen, as Excel and as PDF:

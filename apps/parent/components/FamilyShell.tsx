@@ -45,6 +45,7 @@ const NAV: NavGroup[] = [
       { href: '/homework', label: 'Homework' },
       { href: '/documents', label: 'Session plan and date sheets' },
       { href: '/results', label: 'Results' },
+      { href: '/date-sheet', label: 'Exam date sheet' },
       { href: '/health', label: 'Health' },
       { href: '/certificates', label: 'Certificates' },
     ],

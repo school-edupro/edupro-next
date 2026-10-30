@@ -1,4 +1,5 @@
 'use client';
+import { useTranslations } from 'next-intl';
 import { useRouter } from 'next/navigation';
 import { useState, useTransition } from 'react';
 import { addPortfolioPhoto } from '@/lib/hpc-actions';
@@ -15,6 +16,7 @@ export function PortfolioUpload({
   studentId: string;
   items: Array<{ id: string; name: string }>;
 }) {
+  const t = useTranslations('examHub.upload');
   const router = useRouter();
   const [pending, start] = useTransition();
   const [file, setFile] = useState<File | null>(null);
@@ -25,7 +27,7 @@ export function PortfolioUpload({
     new Promise<string>((resolve, reject) => {
       const r = new FileReader();
       r.onload = () => resolve(String(r.result).split(',')[1] ?? '');
-      r.onerror = () => reject(new Error('The photo could not be read'));
+      r.onerror = () => reject(new Error(t('unreadablePhoto')));
       r.readAsDataURL(f);
     });
   return (
@@ -35,11 +37,10 @@ export function PortfolioUpload({
         e.preventDefault();
         start(async () => {
           setMsg(null);
-          if (!file) return setMsg({ tone: 'danger', text: 'Choose a photo' });
+          if (!file) return setMsg({ tone: 'danger', text: t('choosePhoto') });
           if (!['image/png', 'image/jpeg'].includes(file.type))
-            return setMsg({ tone: 'danger', text: 'Choose a PNG or JPEG photo' });
-          if (file.size > 1_000_000)
-            return setMsg({ tone: 'danger', text: 'The photo is larger than 1 MB' });
+            return setMsg({ tone: 'danger', text: t('pngJpeg') });
+          if (file.size > 1_000_000) return setMsg({ tone: 'danger', text: t('tooLarge') });
           const out = await addPortfolioPhoto({
             examId,
             classSectionId,
@@ -50,7 +51,7 @@ export function PortfolioUpload({
             base64: await read(file),
           });
           if (out.ok) {
-            setMsg({ tone: 'success', text: 'Added.' });
+            setMsg({ tone: 'success', text: t('added') });
             setCaption('');
             setFile(null);
             router.refresh();
@@ -60,7 +61,7 @@ export function PortfolioUpload({
     >
       <div className="ep-rp__row">
         <label className="ep-field">
-          <span className="ep-field__label">Photo (PNG or JPEG, up to 1 MB)</span>
+          <span className="ep-field__label">{t('photoLabel')}</span>
           <input
             className="ep-input"
             type="file"
@@ -69,7 +70,7 @@ export function PortfolioUpload({
           />
         </label>
         <label className="ep-field">
-          <span className="ep-field__label">Caption</span>
+          <span className="ep-field__label">{t('caption')}</span>
           <input
             className="ep-input"
             value={caption}
@@ -78,7 +79,7 @@ export function PortfolioUpload({
           />
         </label>
         <label className="ep-field">
-          <span className="ep-field__label">Shows (optional)</span>
+          <span className="ep-field__label">{t('shows')}</span>
           <select
             className="ep-select"
             value={indicatorId}
@@ -95,7 +96,7 @@ export function PortfolioUpload({
       </div>
       <div className="ep-form-actions">
         <button type="submit" className="ep-btn ep-btn--secondary ep-btn--sm" disabled={pending}>
-          Add the photo
+          {t('addPhoto')}
         </button>
       </div>
       {msg ? (

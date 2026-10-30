@@ -221,3 +221,35 @@ export async function toggleExamLock(fd: FormData) {
     }),
   );
 }
+
+// ---- promotion from the exam's results -------------------------------------------------------------
+/**
+ * The ticked students' decisions recorded in next year's promotion register (People → Promotions applies
+ * them); the page stays on the exam's promotion, saying how many were recorded.
+ */
+export async function recordExamPromotions(fd: FormData) {
+  const examId = str(fd, 'examId');
+  const classId = str(fd, 'classId');
+  const toYearId = str(fd, 'toYearId');
+  const here = `/exams/${examId}/promotion?classId=${classId}&toYearId=${toYearId}`;
+  const decisions = fd
+    .getAll('studentIds')
+    .map(String)
+    .map((studentId) => ({
+      studentId,
+      decision: str(fd, `decision:${studentId}`),
+      toClassSectionId: str(fd, `section:${studentId}`) || undefined,
+    }))
+    .filter((d) => d.decision);
+  if (!decisions.length) back(here, 'validation-failed', 'Tick the students to record');
+  try {
+    await apiFetch('/people/promotions', {
+      method: 'PUT',
+      body: JSON.stringify({ toYearId, decisions }),
+    });
+  } catch (error) {
+    if (error instanceof ApiError) back(here, error.problem.type, detailOf(error));
+    throw error;
+  }
+  back(`${here}&recorded=${String(decisions.length)}`, 'ok');
+}

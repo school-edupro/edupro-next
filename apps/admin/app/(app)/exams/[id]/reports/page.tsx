@@ -1,42 +1,13 @@
-import { Breadcrumbs, Button, Card, PageHeader } from '@edupro/ui';
+import { Button, Card } from '@edupro/ui';
+import { getTranslations } from 'next-intl/server';
 import { notFound } from 'next/navigation';
+import { AutoSubmit } from '@/components/AutoSubmit';
+import { ExamFrame } from '@/components/exams/ExamFrame';
 import { type ExamReport, ReportTables } from '@/components/exams/ReportTables';
 import { ApiError, apiFetch, getMe } from '@/lib/api';
-import type { Exam } from '@/lib/types';
-import { ExamTabs } from '@/components/exams/ExamTabs';
+import type { Exam, ExamProgress } from '@/lib/types';
 
-const KINDS: Array<{ value: string; label: string; help: string }> = [
-  {
-    value: 'subjects',
-    label: 'Section-wise subject analysis',
-    help: 'Each subject by section: appeared, absent, mean, highest, lowest, pass %; the class line under its sections.',
-  },
-  {
-    value: 'ranges',
-    label: 'Mark ranges',
-    help: "How many students' subject % fall in each band: the class's grade scale (choose the class), or your own ranges.",
-  },
-  {
-    value: 'toppers',
-    label: 'Toppers',
-    help: 'The top N of each class (or section), those at or above a %, below a %, or the toppers of a subject. Needs the results worked out.',
-  },
-  {
-    value: 'teachers',
-    label: 'Subject teachers',
-    help: "Each subject teacher's sections: appeared, mean %, pass %, the highest %.",
-  },
-  {
-    value: 'status',
-    label: 'Upload status',
-    help: 'Every section and subject: students who take it, marks entered, still to enter, submitted and verified by.',
-  },
-  {
-    value: 'missing',
-    label: 'Missing marks',
-    help: 'The students without a mark or a code, by section and subject.',
-  },
-];
+const KINDS = ['subjects', 'ranges', 'toppers', 'teachers', 'status', 'missing'] as const;
 const FILTERS = [
   'classId',
   'classSectionId',
@@ -49,8 +20,9 @@ const FILTERS = [
 ];
 
 /**
- * An exam's analyses and exports (docs/design/65, part 6): choose the report and its filters; each is
- * shown here and comes as Excel and PDF.
+ * An exam's analyses and exports (docs/design/65, part 6; docs/design/66): choose the report and its
+ * filters (the choices apply at once; the figures with Show); each is shown here and comes as Excel
+ * and PDF.
  */
 export default async function ExamReportsPage({
   params,
@@ -64,16 +36,25 @@ export default async function ExamReportsPage({
   if (!/^\d{1,18}$/.test(id)) notFound();
   const me = await getMe();
   if (!me.permissions.includes('exams.marks.view')) notFound();
-  const exam = await apiFetch<Exam>(`/exams/${id}`).catch((e: unknown) => {
-    if (e instanceof ApiError && e.status === 404) notFound();
-    throw e;
-  });
-  const kind = KINDS.find((k) => k.value === sp.kind) ?? KINDS[0]!;
-  const sections = await apiFetch<{ data: Array<{ classSectionId: string; section: string }> }>(
-    `/exams/${id}/entry-status`,
-  )
-    .then((r) => [...new Map(r.data.map((x) => [x.classSectionId, x.section])).entries()])
-    .catch(() => [] as Array<[string, string]>);
+  const [t, exam, progress, sections] = await Promise.all([
+    getTranslations('examHub.reports'),
+    apiFetch<Exam>(`/exams/${id}`).catch((e: unknown) => {
+      if (e instanceof ApiError && e.status === 404) notFound();
+      throw e;
+    }),
+    apiFetch<ExamProgress>(`/exams/${id}/progress`).catch(() => null),
+    apiFetch<{ data: Array<{ classSectionId: string; classId: string; code: string }> }>(
+      `/exams/${id}/entry/sections`,
+    )
+      .then((r) => r.data)
+      .catch(() => [] as Array<{ classSectionId: string; classId: string; code: string }>),
+  ]);
+  const kind = KINDS.find((k) => k === sp.kind) ?? KINDS[0];
+  // the sections of the class chosen (every section without one)
+  const shown = sp.classId ? sections.filter((x) => x.classId === sp.classId) : sections;
+  const sectionId = shown.some((x) => x.classSectionId === sp.classSectionId)
+    ? sp.classSectionId
+    : undefined;
   const subjects = [
     ...new Map((exam.subjects ?? []).map((x) => [x.subjectId, x.subjectName])).entries(),
   ];
@@ -82,14 +63,15 @@ export default async function ExamReportsPage({
     const v = k === 'ranges' ? sp[k]?.replace(/\s+/g, '') : sp[k]?.trim();
     if (v) q.set(k, v);
   }
+  if (!sectionId) q.delete('classSectionId');
   // only the filters that report reads
-  if (kind.value !== 'toppers')
+  if (kind !== 'toppers')
     for (const k of ['subjectId', 'top', 'minPct', 'belowPct', 'by']) q.delete(k);
-  if (kind.value !== 'ranges') q.delete('ranges');
+  if (kind !== 'ranges') q.delete('ranges');
   let report: ExamReport | null = null;
   let error: string | null = null;
   try {
-    report = await apiFetch<ExamReport>(`/exams/${id}/reports/${kind.value}?${q.toString()}`);
+    report = await apiFetch<ExamReport>(`/exams/${id}/reports/${kind}?${q.toString()}`);
   } catch (e) {
     if (!(e instanceof ApiError)) throw e;
     error =
@@ -98,55 +80,48 @@ export default async function ExamReportsPage({
         e.problem.type);
   }
   const field = (name: string, label: string, props: Record<string, unknown> = {}) => (
-    <label className="ep-field" style={{ minWidth: 120 }}>
+    <label className="ep-field" htmlFor={`rp-${name}`} style={{ minWidth: '7.5rem' }}>
       <span className="ep-field__label">{label}</span>
-      <input className="ep-input" name={name} defaultValue={sp[name] ?? ''} {...props} />
+      <input
+        id={`rp-${name}`}
+        className="ep-input"
+        name={name}
+        defaultValue={sp[name] ?? ''}
+        {...props}
+      />
     </label>
   );
   return (
     <>
-      <Breadcrumbs
-        items={[
-          { label: 'Exams', href: '/exams' },
-          { label: exam.name, href: `/exams/${exam.id}` },
-          { label: 'Reports' },
-        ]}
+      <ExamFrame
+        exam={exam}
+        stage={progress?.stage ?? null}
+        current="reports"
+        canManage={me.permissions.includes('exams.master.manage')}
+        canUnlock={me.permissions.includes('exams.marks.unlock')}
       />
-      <PageHeader
-        kicker={`Exams · ${exam.code}`}
-        title={`Reports · ${exam.name}`}
-        description={kind.help}
-        actions={
-          <span style={{ display: 'inline-flex', gap: 'var(--sp-2)' }}>
-            <a className="ep-btn ep-btn--ghost ep-btn--sm" href={`/exams/${exam.id}/analysis`}>
-              Result analysis
-            </a>
-            <a className="ep-btn ep-btn--ghost ep-btn--sm" href={`/exams/${exam.id}`}>
-              The exam
-            </a>
-          </span>
-        }
-      />
-      <ExamTabs examId={id} current="reports" />
       <Card style={{ marginBottom: 'var(--sp-4)' }}>
-        <form
-          method="get"
-          style={{ display: 'flex', gap: 'var(--sp-3)', alignItems: 'flex-end', flexWrap: 'wrap' }}
-        >
-          <label className="ep-field" style={{ minWidth: 240 }}>
-            <span className="ep-field__label">Report</span>
-            <select className="ep-select" name="kind" defaultValue={kind.value}>
+        <form method="get" className="ep-rp__row" aria-label={t('report')}>
+          <AutoSubmit />
+          <label className="ep-field" htmlFor="rp-kind" style={{ minWidth: '15rem' }}>
+            <span className="ep-field__label">{t('report')}</span>
+            <select id="rp-kind" className="ep-select" name="kind" defaultValue={kind}>
               {KINDS.map((k) => (
-                <option key={k.value} value={k.value}>
-                  {k.label}
+                <option key={k} value={k}>
+                  {t(`kinds.${k}`)}
                 </option>
               ))}
             </select>
           </label>
-          <label className="ep-field" style={{ minWidth: 140 }}>
-            <span className="ep-field__label">Class</span>
-            <select className="ep-select" name="classId" defaultValue={sp.classId ?? ''}>
-              <option value="">Every class</option>
+          <label className="ep-field" htmlFor="rp-class">
+            <span className="ep-field__label">{t('class')}</span>
+            <select
+              id="rp-class"
+              className="ep-select"
+              name="classId"
+              defaultValue={sp.classId ?? ''}
+            >
+              <option value="">{t('everyClass')}</option>
               {exam.classes.map((k) => (
                 <option key={k.classId} value={k.classId}>
                   {k.classCode}
@@ -154,37 +129,43 @@ export default async function ExamReportsPage({
               ))}
             </select>
           </label>
-          <label className="ep-field" style={{ minWidth: 140 }}>
-            <span className="ep-field__label">Section</span>
+          <label className="ep-field" htmlFor="rp-section">
+            <span className="ep-field__label">{t('section')}</span>
             <select
+              id="rp-section"
               className="ep-select"
               name="classSectionId"
-              defaultValue={sp.classSectionId ?? ''}
+              defaultValue={sectionId ?? ''}
             >
-              <option value="">Every section</option>
-              {sections.map(([sid, code]) => (
-                <option key={sid} value={sid}>
-                  {code}
+              <option value="">{t('everySection')}</option>
+              {shown.map((x) => (
+                <option key={x.classSectionId} value={x.classSectionId}>
+                  {x.code}
                 </option>
               ))}
             </select>
           </label>
-          {kind.value === 'toppers' ? (
+          {kind === 'toppers' ? (
             <>
-              {field('top', 'Top', { type: 'number', min: 1, max: 100, placeholder: '10' })}
-              <label className="ep-field" style={{ minWidth: 140 }}>
-                <span className="ep-field__label">Rank in</span>
-                <select className="ep-select" name="by" defaultValue={sp.by ?? 'class'}>
-                  <option value="class">The class</option>
-                  <option value="section">The section</option>
+              {field('top', t('top'), { type: 'number', min: 1, max: 100, placeholder: '10' })}
+              <label className="ep-field" htmlFor="rp-by">
+                <span className="ep-field__label">{t('rankIn')}</span>
+                <select id="rp-by" className="ep-select" name="by" defaultValue={sp.by ?? 'class'}>
+                  <option value="class">{t('theClass')}</option>
+                  <option value="section">{t('theSection')}</option>
                 </select>
               </label>
-              {field('minPct', 'At or above %', { type: 'number', min: 0, max: 100, step: '0.01' })}
-              {field('belowPct', 'Below %', { type: 'number', min: 0, max: 100, step: '0.01' })}
-              <label className="ep-field" style={{ minWidth: 180 }}>
-                <span className="ep-field__label">Subject (optional)</span>
-                <select className="ep-select" name="subjectId" defaultValue={sp.subjectId ?? ''}>
-                  <option value="">The overall result</option>
+              {field('minPct', t('atOrAbove'), { type: 'number', min: 0, max: 100, step: '0.01' })}
+              {field('belowPct', t('below'), { type: 'number', min: 0, max: 100, step: '0.01' })}
+              <label className="ep-field" htmlFor="rp-subject" style={{ minWidth: '11rem' }}>
+                <span className="ep-field__label">{t('subject')}</span>
+                <select
+                  id="rp-subject"
+                  className="ep-select"
+                  name="subjectId"
+                  defaultValue={sp.subjectId ?? ''}
+                >
+                  <option value="">{t('overall')}</option>
                   {subjects.map(([sid, name]) => (
                     <option key={sid} value={sid}>
                       {name}
@@ -194,18 +175,31 @@ export default async function ExamReportsPage({
               </label>
             </>
           ) : null}
-          {kind.value === 'ranges'
-            ? field('ranges', 'Your ranges: lower ends (optional)', {
+          {kind === 'ranges'
+            ? field('ranges', t('ranges'), {
                 placeholder: '90, 75, 60, 45, 33, 0',
                 pattern: '[0-9., ]{1,80}',
               })
             : null}
-          <Button type="submit" variant="secondary">
-            Show
-          </Button>
+          {kind === 'toppers' || kind === 'ranges' ? (
+            <div className="ep-field" style={{ alignSelf: 'flex-end' }}>
+              <Button type="submit" variant="secondary">
+                {t('show')}
+              </Button>
+            </div>
+          ) : (
+            <noscript>
+              <Button type="submit" variant="secondary">
+                {t('show')}
+              </Button>
+            </noscript>
+          )}
         </form>
+        <p className="ep-field__help" style={{ marginBottom: 0 }}>
+          {t(`kinds.${kind}Help`)}
+        </p>
       </Card>
-      <Card elevated title={report?.title ?? kind.label}>
+      <Card elevated title={report?.title ?? t(`kinds.${kind}`)}>
         {report ? (
           <>
             <p className="ep-field__help" style={{ marginTop: 0 }}>
@@ -214,7 +208,7 @@ export default async function ExamReportsPage({
             <ReportTables
               report={report}
               files={{
-                base: `/api/exam-report/${exam.id}/${kind.value}`,
+                base: `/api/exam-report/${exam.id}/${kind}`,
                 q: q.toString() ? encodeURIComponent(q.toString()) : '-',
               }}
             />

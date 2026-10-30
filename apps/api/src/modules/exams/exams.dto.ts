@@ -497,7 +497,11 @@ export const SendPromotionsSchema = z.object({
 export class SendPromotionsDto extends createZodDto(SendPromotionsSchema) {}
 
 // ---- Sprint 16: results, analysis, promotion proposals ------------------------------------------
-export const RegisterSheetQuerySchema = z.object({ classSectionId: IdSchema });
+export const RegisterSheetQuerySchema = z.object({
+  classSectionId: IdSchema,
+  /** docs/design/66: the register as a file */
+  format: z.enum(['xlsx', 'pdf']).optional(),
+});
 export class RegisterSheetQueryDto extends createZodDto(RegisterSheetQuerySchema) {}
 export const AnalysisQuerySchema = z.object({ classId: IdSchema.optional() });
 
