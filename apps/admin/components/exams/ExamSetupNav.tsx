@@ -2,6 +2,7 @@
 const TABS: Array<{ href: string; label: string }> = [
   { href: '/exams/masters', label: 'Types, grade scales, marks codes' },
   { href: '/exams/indicators', label: 'Indicators and HPC' },
+  { href: '/exams/indicator-areas', label: 'Areas and level scales' },
   { href: '/exams/remarks', label: 'Remark categories and bank' },
 ];
 

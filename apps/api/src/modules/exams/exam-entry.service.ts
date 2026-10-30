@@ -6,6 +6,7 @@ import { DbService } from '../../common/db/db.service';
 import { DomainError } from '../../common/errors/domain-error';
 import { readSheet, templateSheet } from '../../common/excel/sheet';
 import { requireTenant, type RequestContext } from '../../common/http/request-context';
+import { listAreas, listScales } from './indicator-masters.service';
 import {
   EXAMS,
   type EntryQueryDto,
@@ -758,7 +759,9 @@ export class ExamEntryService {
       descriptors: Record<string, string>;
       levels: string[] | null;
     }>(
-      `SELECT id::text, code, name, area, parent_id::text, kind, description, descriptors, levels FROM indicators WHERE set_id = $1 ORDER BY sort_order, code`,
+      `SELECT i.id::text, i.code, i.name, i.area, i.parent_id::text, i.kind, i.description, i.descriptors, i.levels FROM indicators i
+         LEFT JOIN indicator_areas ar ON lower(ar.name) = lower(btrim(i.area))
+        WHERE i.set_id = $1 ORDER BY ar.sort_order NULLS LAST, i.area NULLS LAST, i.sort_order, i.code`,
       [s.id],
     );
     const parents = new Set(ind.rows.map((i) => i.parent_id).filter(Boolean));
@@ -1277,7 +1280,9 @@ export class ExamEntryService {
       levels: string[] | null;
     }>(
       `SELECT i.id::text, i.set_id::text, i.code, i.name, i.area, i.sort_order, p.code AS parent_code, i.kind, i.description, i.descriptors, i.levels
-         FROM indicators i LEFT JOIN indicators p ON p.id = i.parent_id ORDER BY i.set_id, i.sort_order, i.code`,
+         FROM indicators i LEFT JOIN indicators p ON p.id = i.parent_id
+         LEFT JOIN indicator_areas ar ON lower(ar.name) = lower(btrim(i.area))
+        ORDER BY i.set_id, ar.sort_order NULLS LAST, i.area NULLS LAST, i.sort_order, i.code`,
     );
     return sets.rows.map(({ level_words, ...s }) => ({
       ...s,
@@ -1357,6 +1362,18 @@ export class ExamEntryService {
         throw new DomainError('validation-failed', `${lvl} is not one of the levels`, {
           status: 400,
         });
+    // areas and scales are the school's lists: an item under a heading is in the heading's area, an
+    // area is spelt as the list has it, and a new area or scale joins its list
+    const areaOf = (i: (typeof dto.indicators)[number]) =>
+      (i.parentCode ? byCode.get(i.parentCode)?.area : i.area)?.trim() || null;
+    const areas = await listAreas(
+      c,
+      dto.indicators.map(areaOf).filter((a): a is string => Boolean(a)),
+    );
+    await listScales(c, [
+      dto.grades,
+      ...dto.indicators.flatMap((i) => (i.levels?.length ? [i.levels] : [])),
+    ]);
     const s = await c.query<{ id: string }>(
       `INSERT INTO indicator_sets (school_id, code, name, grades, kind, level_words, created_by, updated_by)
        VALUES (app.current_school_id(), $1, $2, $3, $4, $5::jsonb, app.current_user_id(), app.current_user_id())
@@ -1382,7 +1399,7 @@ export class ExamEntryService {
           setId,
           i.code,
           i.name,
-          i.area ?? null,
+          ((a) => (a ? (areas.get(a.toLowerCase()) ?? a) : null))(areaOf(i)),
           i.sortOrder,
           i.kind,
           i.description ?? null,

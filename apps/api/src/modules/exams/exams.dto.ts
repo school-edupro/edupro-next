@@ -400,6 +400,28 @@ export const UpsertRemarkBankSchema = z.object({
 });
 export class UpsertRemarkBankDto extends createZodDto(UpsertRemarkBankSchema) {}
 
+/** An indicator area (an HPC domain, a co-scholastic area): the list sets pick from, in print order */
+export const UpsertIndicatorAreaSchema = z.object({
+  id: IdSchema.optional(),
+  name: z.string().trim().min(2).max(60),
+  /** none: a new one goes to the end of the list, a change keeps its place */
+  sortOrder: z.number().int().min(0).max(100000).optional(),
+  status: z.enum(['active', 'inactive']).default('active'),
+});
+export class UpsertIndicatorAreaDto extends createZodDto(UpsertIndicatorAreaSchema) {}
+
+/** A level scale (Beginner, Progressing, Proficient; Rarely ... Always): a set's or a heading's levels */
+export const UpsertIndicatorScaleSchema = z.object({
+  id: IdSchema.optional(),
+  name: z.string().trim().min(2).max(60),
+  /** lowest first */
+  levels: z.array(z.string().trim().min(1).max(20)).min(2).max(10),
+  /** none: a new one goes to the end of the list, a change keeps its place */
+  sortOrder: z.number().int().min(0).max(100000).optional(),
+  status: z.enum(['active', 'inactive']).default('active'),
+});
+export class UpsertIndicatorScaleDto extends createZodDto(UpsertIndicatorScaleSchema) {}
+
 /** docs/design/65 part 7: a remark category (the old A / B / C / D lists and "any other") */
 export const UpsertRemarkCategorySchema = z.object({
   code: CategoryCode,

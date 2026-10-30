@@ -51,6 +51,55 @@ async function call<T>(path: string, method: string, body?: unknown): Promise<Ou
   }
 }
 
+// ---- areas and level scales (the lists the set editor picks from) ------------------------------
+const LISTS = '/exams/indicator-areas';
+const num = (fd: FormData, key: string) => (str(fd, key) ? Number(str(fd, key)) : undefined);
+const split = (v: string) =>
+  v
+    .split(',')
+    .map((x) => x.trim())
+    .filter(Boolean);
+
+export async function saveIndicatorArea(fd: FormData) {
+  const id = str(fd, 'id');
+  return run(id ? `${LISTS}?area=${id}` : LISTS, async () => {
+    await apiFetch('/exams/indicator-areas', {
+      method: 'PUT',
+      body: JSON.stringify({
+        ...(id ? { id } : {}),
+        name: str(fd, 'name'),
+        sortOrder: num(fd, 'sortOrder'),
+        status: str(fd, 'status') === 'inactive' ? 'inactive' : 'active',
+      }),
+    });
+    revalidatePath('/exams/indicators');
+  });
+}
+
+export async function saveIndicatorScale(fd: FormData) {
+  const id = str(fd, 'id');
+  return run(id ? `${LISTS}?scale=${id}` : LISTS, async () => {
+    await apiFetch('/exams/indicator-scales', {
+      method: 'PUT',
+      body: JSON.stringify({
+        ...(id ? { id } : {}),
+        name: str(fd, 'name'),
+        levels: split(str(fd, 'levels')),
+        sortOrder: num(fd, 'sortOrder'),
+        status: str(fd, 'status') === 'inactive' ? 'inactive' : 'active',
+      }),
+    });
+    revalidatePath('/exams/indicators');
+  });
+}
+
+/** From the set editor: a new area at the end of the list. */
+export async function addIndicatorArea(name: string) {
+  const out = await call<{ id: string }>('/exams/indicator-areas', 'PUT', { name: name.trim() });
+  if (out.ok) revalidatePath(LISTS);
+  return out;
+}
+
 // ---- sets ---------------------------------------------------------------------------------------
 export async function installHpcSet() {
   return run('/exams/indicators', () => apiFetch('/exams/indicator-sets/hpc', { method: 'POST' }));

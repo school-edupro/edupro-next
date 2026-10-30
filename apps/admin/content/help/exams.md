@@ -12,7 +12,7 @@
 
 ## Before the exam
 
-1. **Exams → Exams setup**: one menu entry, three tabs. Each thing is set in one place only; Excel and PDF of each list sit beside it.
+1. **Exams → Exams setup**: one menu entry, four tabs. Each thing is set in one place only; Excel and PDF of each list sit beside it.
    - **Types, grade scales, marks codes**: exam types (PT, half-yearly, annual) and the grade scale per class band. **Edit** on a type changes its name, weightage, order or status; the code stays, and an inactive type is not offered for new exams.
 2. **Exams → Exams → New**: name, dates, the classes and subjects with maximum and pass marks; tick
    **show on portal** so the datesheet appears in the apps.
@@ -23,6 +23,10 @@
    the progress card template** its card. Choose a class's set on the exam's page. A top item may
    have **own levels** (Always, Mostly, Sometimes, Rarely for observations, learning habits, peer and
    parent sections): its items are rated on those, and the card prints a key line for them.
+   **Exams setup → Areas and level scales** holds the lists the set editor picks from: the areas
+   (in the order the card prints them and teachers see them; a new name renames the area in every
+   set) and the level scales (a scale a set uses keeps its levels: add a new one to change them).
+   An item placed under a heading is in the heading's area.
 
 ## Marks entry
 

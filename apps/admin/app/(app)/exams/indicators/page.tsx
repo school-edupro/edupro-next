@@ -33,7 +33,20 @@ export default async function IndicatorsPage({
   if (!me.permissions.includes('exams.master.view')) notFound();
   const canManage = me.permissions.includes('exams.master.manage');
   const canCards = me.permissions.includes('exams.report_card.manage');
-  const sets = await apiFetch<{ data: SetRow[] }>('/exams/indicator-sets').then((r) => r.data);
+  const [sets, areaRows, scaleRows] = await Promise.all([
+    apiFetch<{ data: SetRow[] }>('/exams/indicator-sets').then((r) => r.data),
+    apiFetch<{ data: Array<{ name: string; status: string }> }>('/exams/indicator-areas').then(
+      (r) => r.data,
+    ),
+    apiFetch<{ data: Array<{ name: string; levels: string[]; status: string }> }>(
+      '/exams/indicator-scales',
+    ).then((r) => r.data),
+  ]);
+  // the editor picks from the lists in use (Exams setup → Areas and level scales)
+  const areaList = areaRows.filter((a) => a.status === 'active').map((a) => a.name);
+  const scales = scaleRows
+    .filter((x) => x.status === 'active')
+    .map((x) => ({ name: x.name, levels: x.levels }));
   const hasHpc = sets.some((s) => s.code === 'HPC_FOUNDATION');
   return (
     <>
@@ -141,6 +154,9 @@ export default async function IndicatorsPage({
                           area: area ?? undefined,
                         })),
                       }}
+                      areas={areaList}
+                      scales={scales}
+                      canAddArea={canManage}
                     />
                   </details>
                 ) : null}
@@ -154,7 +170,7 @@ export default async function IndicatorsPage({
         )}
         {canManage ? (
           <Card elevated title="A new set">
-            <IndicatorSetEditor />
+            <IndicatorSetEditor areas={areaList} scales={scales} canAddArea={canManage} />
           </Card>
         ) : null}
       </div>

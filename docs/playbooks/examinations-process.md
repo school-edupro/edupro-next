@@ -90,7 +90,9 @@ Do these once; review them each session.
    Proficient, printed with Stream / Mountain / Sky) and any co-scholastic indicator sets, in up to
    three levels (area → item → sub-item). Edit the words to suit the school. A school card that rates
    observations, learning habits, peer and parent sections on another scale (Always / Mostly /
-   Sometimes / Rarely) gives that section's heading **own levels**; its items use them.
+   Sometimes / Rarely) gives that section's heading **own levels**; its items use them. Areas and
+   level scales are lists (Exams setup → Areas and level scales): set the areas' print order once;
+   every set and class follows it.
 
 ## 4. Each exam
 

@@ -420,3 +420,20 @@ Computer, Aesthetic, Physical with curricular goals as headings; the four freque
 assessment and participation as written notes), grade scale CLASS_I (A+ 85-100, A 55-84.99, B below
 55) and exam TERM1-I-2026 for Class I with the set chosen (subjects not added yet).
 Test: exam-hpc e2e "a section rated on levels of its own".
+
+## Areas and level scales as masters (30 Oct 2026)
+
+The set editor's Area was typed per item (suggestions from the same set only) and its Levels typed as
+a comma list, so a slip made a new area or scale and two classes' sets could not share them. As the
+leading ERPs keep co-scholastic areas / HPC domains and grading scales as masters, migration 0285
+adds `indicator_areas` (name, print order, status) and `indicator_scales` (name, levels, order,
+status), loaded once from what the sets used. Exams setup has a fourth tab, **Areas and level
+scales** (`/exams/indicator-areas`). The editor picks Area, the set's scale and a heading's own scale
+from drop-downs (a new area can be added from the editor); **Under** lists the headings by area with
+their names; an item under a heading is in its area (the API enforces it). Areas print, and appear in
+the entry sheets, in the list's order (entry sheet, editor and both card kinds join on the area's
+name); renaming an area renames it in every set; a scale a set uses keeps its levels (409
+`exams.scale_in_use`). Sets still store the area name and the level arrays, and a set saved through
+the API adds a new area or scale to its list. **Takes** stays a fixed choice (a level / a written
+note). Test: `indicator-masters.e2e-spec.ts`.
+

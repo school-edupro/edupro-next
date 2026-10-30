@@ -22,6 +22,8 @@ import { ExamsController } from './exams.controller';
 import { ExamsService } from './exams.service';
 import { FamilyHpcController, HpcController } from './hpc.controller';
 import { HpcService } from './hpc.service';
+import { IndicatorMastersController } from './indicator-masters.controller';
+import { IndicatorMastersService } from './indicator-masters.service';
 import { FamilyResultsController, ReportCardsController } from './report-cards.controller';
 import { ReportCardsService } from './report-cards.service';
 import { SubjectChoicesController } from './subject-choices.controller';
@@ -38,6 +40,7 @@ import { SubjectChoicesService } from './subject-choices.service';
     ExamStatusController,
     MarkSchemesController,
     HpcController,
+    IndicatorMastersController,
     FamilyHpcController,
     ExamAnalysisController,
     ExamRemarksController,
@@ -58,6 +61,7 @@ import { SubjectChoicesService } from './subject-choices.service';
     MarkSchemesService,
     ReportCardSignaturesService,
     HpcService,
+    IndicatorMastersService,
     ExamAnalysisService,
     RemarkCategoriesService,
     SchemePromotionService,

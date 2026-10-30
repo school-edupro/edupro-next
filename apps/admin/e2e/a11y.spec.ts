@@ -259,6 +259,7 @@ const PAGES = [
   '/exams/subject-choices',
   '/exams/schemes',
   '/exams/indicators',
+  '/exams/indicator-areas',
   '/exams/remarks',
   '/exams/5/remarks',
   '/exams/5/attendance',

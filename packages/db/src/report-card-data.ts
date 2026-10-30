@@ -445,9 +445,10 @@ export async function loadReportCardData(
     `SELECT es.exam_id::text, i.area, i.code, i.name, i.sort_order, ie.grade
        FROM exam_indicator_sets es JOIN indicators i ON i.set_id = es.set_id
        LEFT JOIN indicator_entries ie ON ie.exam_id = es.exam_id AND ie.indicator_id = i.id AND ie.student_id = $3
+       LEFT JOIN indicator_areas ar ON lower(ar.name) = lower(btrim(i.area))
       WHERE es.exam_id = ANY($1::bigint[]) AND es.class_id = $2
         AND NOT EXISTS (SELECT 1 FROM indicators ch WHERE ch.parent_id = i.id)
-      ORDER BY i.area NULLS LAST, i.sort_order, i.code`,
+      ORDER BY ar.sort_order NULLS LAST, i.area NULLS LAST, i.sort_order, i.code`,
     [input.examIds, s.class_id, input.studentId],
   );
   const areas = new Map<
@@ -688,8 +689,9 @@ async function loadHpc(
     descriptors: Record<string, string>;
     levels: string[] | null;
   }>(
-    `SELECT id::text, code, name, area, parent_id::text, kind, description, descriptors, levels FROM indicators
-      WHERE set_id = $1 ORDER BY sort_order, code`,
+    `SELECT i.id::text, i.code, i.name, i.area, i.parent_id::text, i.kind, i.description, i.descriptors, i.levels FROM indicators i
+       LEFT JOIN indicator_areas ar ON lower(ar.name) = lower(btrim(i.area))
+      WHERE i.set_id = $1 ORDER BY ar.sort_order NULLS LAST, i.area NULLS LAST, i.sort_order, i.code`,
     [last.set_id],
   );
   // entries by the item's code (an exam may use another copy of the set)
