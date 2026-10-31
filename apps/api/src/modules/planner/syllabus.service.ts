@@ -93,7 +93,7 @@ export class SyllabusService {
         `SELECT k.id::text AS class_id, k.name AS class_name, s.id::text AS subject_id, s.name AS subject,
                 count(DISTINCT ch.id)::int AS chapters, count(t.id)::int AS topics
            FROM classes k
-           JOIN class_subjects x ON x.class_id = k.id AND x.academic_year_id = $1
+           JOIN class_subjects x ON x.class_id = k.id AND x.academic_year_id = $1 AND x.status = 'active'
            JOIN subjects s ON s.id = x.subject_id AND s.deleted_at IS NULL
            LEFT JOIN syllabus_chapters ch ON ch.class_id = k.id AND ch.subject_id = s.id AND ch.academic_year_id = $1
            LEFT JOIN syllabus_topics t ON t.chapter_id = ch.id

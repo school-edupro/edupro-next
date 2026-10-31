@@ -112,7 +112,7 @@ export class SubjectChoicesService {
     }>(
       `SELECT sub.id::text, sub.code, sub.name, cs.is_elective AS elective, cs.group_id::text, cs.sort_order
          FROM class_subjects cs JOIN subjects sub ON sub.id = cs.subject_id AND sub.deleted_at IS NULL
-        WHERE cs.class_id = $1 AND cs.academic_year_id = $2
+        WHERE cs.class_id = $1 AND cs.academic_year_id = $2 AND cs.status = 'active'
         ORDER BY app.subject_seq(cs.class_id, cs.academic_year_id, cs.subject_id), sub.code`,
       [classId, yearId],
     );
@@ -180,7 +180,7 @@ export class SubjectChoicesService {
                 FILTER (WHERE cs.id IS NOT NULL) AS subject_ids
          FROM class_streams st
          LEFT JOIN class_stream_subjects x ON x.stream_id = st.id
-         LEFT JOIN class_subjects cs ON cs.id = x.class_subject_id
+         LEFT JOIN class_subjects cs ON cs.id = x.class_subject_id AND cs.status = 'active'
         WHERE st.class_id = $1 AND st.academic_year_id = $2
         GROUP BY st.id, st.name, st.sort_order ORDER BY st.sort_order, st.name`,
       [classId, yearId],
@@ -719,7 +719,7 @@ export class SubjectChoicesService {
         await c.query(
           `INSERT INTO class_stream_subjects (school_id, stream_id, class_subject_id)
            SELECT app.current_school_id(), $1, cs.id FROM class_subjects cs
-            WHERE cs.class_id = $2 AND cs.academic_year_id = $3 AND cs.subject_id = ANY($4::bigint[])
+            WHERE cs.class_id = $2 AND cs.academic_year_id = $3 AND cs.status = 'active' AND cs.subject_id = ANY($4::bigint[])
            ON CONFLICT DO NOTHING`,
           [sid, dto.classId, yearId, keep],
         );
@@ -738,7 +738,7 @@ export class SubjectChoicesService {
            FROM (SELECT DISTINCT student_id FROM student_subjects
                   WHERE academic_year_id = $2 AND student_id IN (SELECT en.student_id FROM enrolments en JOIN class_sections s ON s.id = en.class_section_id
                     WHERE s.class_id = $1 AND en.academic_year_id = $2 AND en.status = 'active')) x
-           JOIN class_subjects cs ON cs.class_id = $1 AND cs.academic_year_id = $2 AND NOT cs.is_elective
+           JOIN class_subjects cs ON cs.class_id = $1 AND cs.academic_year_id = $2 AND NOT cs.is_elective AND cs.status = 'active'
          ON CONFLICT DO NOTHING`,
         [dto.classId, yearId],
       );
@@ -746,7 +746,7 @@ export class SubjectChoicesService {
         `UPDATE student_subjects x
             SET kind = CASE WHEN NOT cs.is_elective THEN 'compulsory' WHEN g.kind = 'additional' THEN 'additional' ELSE 'optional' END
            FROM class_subjects cs LEFT JOIN subject_groups g ON g.id = cs.group_id
-          WHERE cs.class_id = $1 AND cs.academic_year_id = $2 AND x.academic_year_id = $2 AND x.subject_id = cs.subject_id
+          WHERE cs.class_id = $1 AND cs.academic_year_id = $2 AND cs.status = 'active' AND x.academic_year_id = $2 AND x.subject_id = cs.subject_id
             AND x.student_id IN (SELECT en.student_id FROM enrolments en JOIN class_sections s ON s.id = en.class_section_id
                     WHERE s.class_id = $1 AND en.academic_year_id = $2 AND en.status = 'active')
             AND x.kind <> CASE WHEN NOT cs.is_elective THEN 'compulsory' WHEN g.kind = 'additional' THEN 'additional' ELSE 'optional' END`,

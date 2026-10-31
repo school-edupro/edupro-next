@@ -97,7 +97,7 @@ export class WorkSheetService {
       `SELECT id::text, code, name FROM subjects WHERE deleted_at IS NULL AND status = 'active' ORDER BY display_order, name`,
     );
     const mapped = await c.query<{ class_id: string; subject_id: string }>(
-      `SELECT class_id::text, subject_id::text FROM class_subjects WHERE academic_year_id = $1`,
+      `SELECT class_id::text, subject_id::text FROM class_subjects WHERE academic_year_id = $1 AND status = 'active'`,
       [yearId],
     );
     // the caller's own assignments say which subjects: a class teacher too posts only for the subjects

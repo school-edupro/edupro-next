@@ -1564,6 +1564,10 @@ export const MASTERS: MasterDefinition[] = [
     yearScoped: true,
     naturalKey: ['class_id', 'subject_id'],
     conflict: '(academic_year_id, class_id, subject_id)',
+    // a wrong class or subject is corrected on the row (both are drop-downs); a subject the class no
+    // longer studies is made inactive (docs/design/67)
+    rekey: true,
+    status: STATUS,
     uploadHelp:
       'Which subjects a class studies in this session. Teachers are then assigned to these under Teacher assignments; homework and marks follow them.',
     fields: [
@@ -1592,7 +1596,7 @@ export const MASTERS: MasterDefinition[] = [
     orderBy: 'r1.display_order, r1.code, r2.display_order, r2.code',
     clone: cloneSql(
       'class_subjects',
-      ['class_id', 'subject_id', 'is_elective', 'periods_per_week'],
+      ['class_id', 'subject_id', 'is_elective', 'periods_per_week', 'status'],
       ['class_id', 'subject_id'],
     ),
   }),

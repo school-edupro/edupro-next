@@ -101,6 +101,7 @@ const PAGES = [
   '/academics/calendar?new=event',
   '/masters/academics?tab=class_subjects',
   '/masters/academics?tab=class_subjects&by_class_id=169&by_is_elective=false',
+  '/masters/academics?tab=class_subjects&by_class_id=169&edit=3589',
   '/academics/notices/report',
   '/academics/documents',
   '/academics/acknowledgements?type=notice&id=1',

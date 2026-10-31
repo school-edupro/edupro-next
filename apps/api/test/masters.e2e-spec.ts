@@ -489,4 +489,73 @@ describe('master-data framework (e2e)', () => {
     });
     expect(file.statusCode).toBe(200);
   });
+
+  it('class and subject mapping: the edit form corrects the subject; an inactive mapping leaves the class’s lists', async () => {
+    const make = async (url: string, json: unknown) =>
+      (await inject({ method: 'POST', url, headers: h(), json })).json().id as string;
+    const k = await make('/academics/classes', {
+      code: 'M1',
+      name: 'Mapping one',
+      displayOrder: 1,
+    });
+    const sub: Record<string, string> = {};
+    for (const code of ['MENG', 'MART', 'MMUS'])
+      sub[code] = await make('/academics/subjects', { code, name: code, kind: 'scholastic' });
+    await inject({
+      method: 'PUT',
+      url: `/academics/classes/${k}/subjects`,
+      headers: h(),
+      json: { subjects: [{ subjectId: sub.MENG }, { subjectId: sub.MART, isElective: true }] },
+    });
+    const rows = async () =>
+      (
+        await inject({
+          method: 'GET',
+          url: `/masters/class_subjects/rows?filter=class_id:${k}`,
+          headers: h(),
+        })
+      ).json().data as Array<{ id: string; subject_id: string; status: string }>;
+    const art = (await rows()).find((r) => r.subject_id === 'MART (MART)')!;
+    // a wrong subject corrected on the row: Music in place of Art, still elective
+    const fix = await inject({
+      method: 'POST',
+      url: '/masters/class_subjects/rows',
+      headers: h(),
+      json: {
+        id: art.id,
+        values: {
+          class_id: 'M1 · Mapping one',
+          subject_id: 'MMUS (MMUS)',
+          is_elective: 'yes',
+          periods_per_week: '2',
+        },
+      },
+    });
+    expect(fix.statusCode).toBe(201);
+    expect((await rows()).map((r) => r.subject_id).sort()).toEqual(['MENG (MENG)', 'MMUS (MMUS)']);
+    // English on the same row as well: refused, the class has it already
+    const twice = await inject({
+      method: 'POST',
+      url: '/masters/class_subjects/rows',
+      headers: h(),
+      json: { id: art.id, values: { class_id: 'M1', subject_id: 'MENG', is_elective: 'no' } },
+    });
+    expect(twice.statusCode).toBe(400);
+    // Music made inactive: no longer a subject of the class
+    expect(
+      (
+        await inject({
+          method: 'PUT',
+          url: `/masters/class_subjects/rows/${art.id}/status`,
+          headers: h(),
+          json: { status: 'inactive' },
+        })
+      ).statusCode,
+    ).toBe(200);
+    expect((await rows()).find((r) => r.id === art.id)!.status).toBe('inactive');
+    const list = (
+      await inject({ method: 'GET', url: `/academics/classes/${k}/subjects`, headers: h() })
+    ).json().data as Array<{ code: string }>;
+    expect(list.map((x) => x.code)).toEqual(['MENG']);
+  });
 });

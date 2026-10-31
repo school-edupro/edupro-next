@@ -433,7 +433,7 @@ export class DocumentsService {
                 (SELECT count(*) FROM subjects WHERE deleted_at IS NULL AND status = 'active')::int AS subjects,
                 (SELECT count(*) FROM class_sections cs WHERE cs.academic_year_id = $1 AND cs.deleted_at IS NULL AND ($2::bigint[] IS NULL OR cs.id = ANY($2))
                     AND NOT EXISTS (SELECT 1 FROM teacher_assignments ta WHERE ta.class_section_id = cs.id AND ta.kind = 'class_teacher' AND ta.is_actual AND ta.valid_to IS NULL))::int AS no_class_teacher,
-                (SELECT count(*) FROM class_sections cs JOIN class_subjects x ON x.class_id = cs.class_id AND x.academic_year_id = cs.academic_year_id
+                (SELECT count(*) FROM class_sections cs JOIN class_subjects x ON x.class_id = cs.class_id AND x.academic_year_id = cs.academic_year_id AND x.status = 'active'
                   WHERE cs.academic_year_id = $1 AND cs.deleted_at IS NULL AND ($2::bigint[] IS NULL OR cs.id = ANY($2))
                     AND NOT EXISTS (SELECT 1 FROM teacher_assignments ta WHERE ta.class_section_id = cs.id AND ta.subject_id = x.subject_id AND ta.valid_to IS NULL))::int AS no_subject_teacher,
                 (SELECT count(*) FROM daily_work w WHERE w.academic_year_id = $1 AND w.deleted_at IS NULL AND w.created_at >= now() - interval '7 days' AND ($2::bigint[] IS NULL OR w.class_section_id = ANY($2)))::int AS posts_week,

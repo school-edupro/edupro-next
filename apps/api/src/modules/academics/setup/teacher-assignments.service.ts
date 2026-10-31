@@ -320,8 +320,8 @@ export class TeacherAssignmentsService {
   ): Promise<string | null> {
     if (x.subjectId) {
       const taught = await c.query<{ any: boolean; has: boolean }>(
-        `SELECT EXISTS (SELECT 1 FROM class_subjects cs2 JOIN class_sections s ON s.class_id = cs2.class_id WHERE s.id = $1 AND cs2.academic_year_id = $3) AS any,
-                EXISTS (SELECT 1 FROM class_subjects cs2 JOIN class_sections s ON s.class_id = cs2.class_id WHERE s.id = $1 AND cs2.academic_year_id = $3 AND cs2.subject_id = $2) AS has`,
+        `SELECT EXISTS (SELECT 1 FROM class_subjects cs2 JOIN class_sections s ON s.class_id = cs2.class_id WHERE s.id = $1 AND cs2.academic_year_id = $3 AND cs2.status = 'active') AS any,
+                EXISTS (SELECT 1 FROM class_subjects cs2 JOIN class_sections s ON s.class_id = cs2.class_id WHERE s.id = $1 AND cs2.academic_year_id = $3 AND cs2.status = 'active' AND cs2.subject_id = $2) AS has`,
         [x.sectionId, x.subjectId, yearId],
       );
       if (taught.rows[0]!.any && !taught.rows[0]!.has)

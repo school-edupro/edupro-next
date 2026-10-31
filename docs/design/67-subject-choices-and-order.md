@@ -90,3 +90,15 @@ that student; a student left out keeps theirs. Errors per row before saving.
 (or the student's current one) is kept.
 
 Tests: `apps/api/test/subject-choices.e2e-spec.ts`, `exams-v2.e2e-spec.ts` (fallback without a set-up).
+
+## Class and subject mapping (Masters), 31 Oct (migration 0290)
+
+- The edit form's **Class** and **Subject** are drop-downs (type to search): a wrong class or subject
+  is corrected on the row itself (`rekey`); a mapping that would repeat one the class has is refused.
+  A mapping moved to another class leaves its place in the order, its group and its streams behind.
+- `class_subjects.status` (active / inactive) with the grid's Deactivate / Activate and a Status
+  filter: a subject the class no longer studies is made inactive, not removed. Inactive mappings drop
+  out of the class's subjects everywhere (Academics class subjects, subject choices and set-up,
+  teacher assignment checks, daily work, syllabus, the academics board); exams that already hold the
+  subject keep it. "Clone from year" copies the status; saving the class's subjects under Academics
+  makes the listed ones active again.

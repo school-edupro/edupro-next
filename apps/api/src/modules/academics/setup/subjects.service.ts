@@ -281,7 +281,7 @@ export class SubjectsService {
     }>(
       `SELECT cs.id::text, cs.class_id::text, cs.subject_id::text, s.code, s.name, s.kind, cs.is_elective, cs.periods_per_week
          FROM class_subjects cs JOIN subjects s ON s.id = cs.subject_id
-        WHERE cs.class_id = $1 AND cs.academic_year_id = $2
+        WHERE cs.class_id = $1 AND cs.academic_year_id = $2 AND cs.status = 'active'
         ORDER BY s.display_order, s.code`,
       [classId, yearId],
     );
@@ -324,7 +324,7 @@ export class SubjectsService {
           `INSERT INTO class_subjects (school_id, academic_year_id, class_id, subject_id, is_elective, periods_per_week, created_by)
            VALUES (app.current_school_id(), $1, $2, $3, $4, $5, app.current_user_id())
            ON CONFLICT (academic_year_id, class_id, subject_id) DO UPDATE
-             SET is_elective = EXCLUDED.is_elective, periods_per_week = EXCLUDED.periods_per_week`,
+             SET is_elective = EXCLUDED.is_elective, periods_per_week = EXCLUDED.periods_per_week, status = 'active'`,
           [yearId, classId, s.subjectId, s.isElective, s.periodsPerWeek ?? null],
         );
       }
