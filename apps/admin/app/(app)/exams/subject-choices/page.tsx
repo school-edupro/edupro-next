@@ -651,9 +651,10 @@ export default async function SubjectChoicesPage({
                   <span
                     style={{ display: 'inline-flex', gap: 'var(--sp-3)', alignItems: 'center' }}
                   >
+                    <span className="ep-subchoice__pdf">Mapping report</span>
                     <FileLinks
                       href={`/api/subject-counts/${counts.class.id}/pdf`}
-                      label={`Subject counts of ${counts.class.name} (PDF)`}
+                      label={`Student subject mapping report of ${counts.class.name} (PDF)`}
                     />
                     <a
                       className="ep-btn ep-btn--secondary ep-btn--sm"

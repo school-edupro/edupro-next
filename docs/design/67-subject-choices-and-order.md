@@ -224,3 +224,15 @@ them). A subject entered in parts shows its sub-subjects ("GEOGRAPHY, POLITICAL 
 student's own additional subject (or an additional group's). Excel: merged centred letterhead with the
 logo, a black heading row, every cell ruled. PDF: A4 landscape, ruled cells, subjects wrap to two lines,
 the heading repeated on each page, page numbers (`subject-mapping-file.ts`). The "upright" print is gone.
+
+## Whole class report like the legacy "Student Subject Mapping Report" (31 Oct)
+
+`GET exams/subject-choices/counts/file` (the Whole class tab's Mapping report PDF / Excel): the letterhead in a
+ruled box (logo in its own cell; the school, "Student Subject Mapping Report | Class-VI", "Session: 2026-27 |
+Generated on: …"), then each section under "Section: VI-A" (accent bar) with S.No, Subject, Student Count.
+The count is of students whose subjects are **saved** (the old report's "mapped"); a section's students not set
+yet are a line under its table ("Not set yet: 8 students (not counted above…)"), and a section with none saved
+has no table. Subjects in the class's order, only those someone takes. The PDF is A4 landscape with the
+letterhead on every page and the table heading repeated when a section runs on; Excel has the same blocks
+(`countsReportPdf` / `countsReportXlsx` in subject-mapping-file.ts). The on-screen Whole class table keeps
+"taking / students", where a student not set counts as taking every subject.

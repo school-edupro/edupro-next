@@ -1,5 +1,4 @@
 import { Inject, Injectable } from '@nestjs/common';
-import ExcelJS from 'exceljs';
 import type { PoolClient, TenantContext } from '@edupro/db';
 import type { StorageDriver } from '@edupro/storage';
 import { ScopePolicy } from '../../common/access/scope.policy';
@@ -8,7 +7,6 @@ import { DbService } from '../../common/db/db.service';
 import { DomainError } from '../../common/errors/domain-error';
 import { readSheet, templateSheet } from '../../common/excel/sheet';
 import { requireTenant, type RequestContext } from '../../common/http/request-context';
-import { tablePdf } from '../engagement/table-pdf';
 import { STORAGE_DRIVER } from '../files/storage';
 import {
   EXAMS,
@@ -16,7 +14,7 @@ import {
   type PutSubjectSetupDto,
   type SubjectChoicesUploadDto,
 } from './exams.dto';
-import { mappingPdf, mappingXlsx } from './subject-mapping-file';
+import { countsReportPdf, countsReportXlsx, mappingPdf, mappingXlsx } from './subject-mapping-file';
 
 type Kind = 'compulsory' | 'optional' | 'additional';
 type Take = 'all' | 'group' | 'free';
@@ -1007,6 +1005,14 @@ export class SubjectChoicesService {
           GROUP BY en.class_section_id, en.student_id`,
         [yearId, sec.rows.map((x) => x.id)],
       );
+      // the choices recorded (the old report's "mapped" count): a student not set yet is not in it
+      const mapped = await c.query<{ section_id: string; subject_id: string; n: number }>(
+        `SELECT en.class_section_id::text AS section_id, x.subject_id::text, count(*)::int AS n
+           FROM enrolments en JOIN student_subjects x ON x.student_id = en.student_id AND x.academic_year_id = $1
+          WHERE en.class_section_id = ANY($2::bigint[]) AND en.academic_year_id = $1 AND en.status = 'active'
+          GROUP BY en.class_section_id, x.subject_id`,
+        [yearId, sec.rows.map((x) => x.id)],
+      );
       const short = (ids: string[]) =>
         setup.groups.some((g) => g.subjectIds.filter((id) => ids.includes(id)).length < g.min);
       const sections = sec.rows.map((s) => ({
@@ -1015,6 +1021,9 @@ export class SubjectChoicesService {
         students: s.students,
         notSet: s.not_set,
         missing: chosen.rows.filter((x) => x.section_id === s.id && short(x.ids)).length,
+        mapped: Object.fromEntries(
+          mapped.rows.filter((x) => x.section_id === s.id).map((x) => [x.subject_id, x.n]),
+        ) as Record<string, number>,
         counts: Object.fromEntries(
           n.rows.filter((x) => x.section_id === s.id).map((x) => [x.subject_id, x.n]),
         ) as Record<string, number>,
@@ -1039,58 +1048,92 @@ export class SubjectChoicesService {
     });
   }
 
-  async countsFile(ctx: RequestContext, classId: string, format: 'xlsx' | 'pdf') {
-    const out = await this.counts(ctx, classId);
-    const school = await this.db.tenant(requireTenant(ctx), async (c) => {
-      const r = await c.query<{ name: string }>(
-        `SELECT name FROM schools WHERE id = app.current_school_id()`,
+  /** The school's name, the session and the logo, for a printed paper's letterhead. */
+  private async letterheadOf(tenant: TenantContext, yearId: string) {
+    const head = await this.db.tenant(tenant, async (c) => {
+      const sc = await c.query<{ name: string; logo: string | null; year: string }>(
+        `SELECT s.name, NULLIF(s.branding->>'logoFileId', '') AS logo,
+                (SELECT code FROM academic_years WHERE id = $1) AS year
+           FROM schools s WHERE s.id = app.current_school_id()`,
+        [yearId],
       );
-      return r.rows[0]?.name ?? '';
+      const logo = sc.rows[0]?.logo;
+      const f =
+        logo && /^\d{1,18}$/.test(logo)
+          ? (
+              await c.query<{ object_key: string; content_type: string }>(
+                `SELECT object_key, content_type FROM files WHERE id = $1 AND deleted_at IS NULL`,
+                [logo],
+              )
+            ).rows[0]
+          : undefined;
+      return { school: sc.rows[0]?.name ?? '', year: sc.rows[0]?.year ?? '', file: f };
     });
-    const TAKE: Record<Take, string> = { all: 'Compulsory', group: '', free: 'Elective' };
-    const head = ['Subject', 'Taken by', ...out.sections.map((s) => s.code), 'Total'];
-    const body = out.subjects.map((x) => [
-      `${x.name} (${x.code})`,
-      x.take === 'group' ? (out.groups.find((g) => g.id === x.groupId)?.name ?? '') : TAKE[x.take],
-      ...out.sections.map((s) => s.counts[x.id] ?? 0),
-      out.total.counts[x.id] ?? 0,
-    ]);
-    body.push(['Students', '', ...out.sections.map((s) => s.students), out.total.students]);
-    body.push(['No choices yet', '', ...out.sections.map((s) => s.notSet), out.total.notSet]);
-    body.push(['Missing a choice', '', ...out.sections.map((s) => s.missing), out.total.missing]);
-    const title = `Subject counts · ${out.class.name}`;
-    const stamp = `subject-counts-${out.class.code}`.toLowerCase().replace(/[^\w.-]+/g, '-');
-    if (format === 'xlsx') {
-      const wb = new ExcelJS.Workbook();
-      const ws = wb.addWorksheet('Counts');
-      ws.addRow([title]).font = { bold: true, size: 13 };
-      ws.addRow([school]);
-      ws.addRow(head).font = { bold: true };
-      for (const line of body) ws.addRow(line);
-      ws.getColumn(1).width = 30;
-      ws.getColumn(2).width = 18;
-      ws.views = [{ state: 'frozen', xSplit: 1, ySplit: 3 }];
+    let logo: { contentType: string; bytes: Buffer } | null = null;
+    if (head.file)
+      try {
+        logo = {
+          contentType: head.file.content_type,
+          bytes: await this.storage.read(head.file.object_key),
+        };
+      } catch {
+        logo = null;
+      }
+    return { school: head.school, year: head.year, logo };
+  }
+
+  /** When a paper was made, as the old reports print it: 31-10-2026 08:08 PM (India). */
+  private generatedOn() {
+    return new Date()
+      .toLocaleString('en-GB', {
+        timeZone: 'Asia/Kolkata',
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: true,
+      })
+      .replace(/\//g, '-')
+      .replace(',', '')
+      .toUpperCase();
+  }
+
+  /**
+   * The class's "Student Subject Mapping Report" (the legacy layout): the letterhead, then each section
+   * with S.No, Subject and Student Count (the subjects someone in the section takes, in the class's order).
+   */
+  async countsFile(ctx: RequestContext, classId: string, format: 'xlsx' | 'pdf') {
+    const tenant = requireTenant(ctx);
+    const out = await this.counts(ctx, classId);
+    const head = await this.letterheadOf(tenant, this.year(tenant));
+    const report = {
+      school: head.school,
+      title: `Student Subject Mapping Report | Class-${out.class.code}`,
+      line: `Session: ${head.year} | Generated on: ${this.generatedOn()}`,
+      logo: head.logo,
+      // the students whose subjects are saved, as the old report counted them
+      sections: out.sections.map((s) => ({
+        code: s.code,
+        notSet: s.notSet,
+        rows: out.subjects
+          .filter((x) => (s.mapped[x.id] ?? 0) > 0)
+          .map((x) => ({ subject: x.name.toUpperCase(), count: s.mapped[x.id] ?? 0 })),
+      })),
+    };
+    const stamp = `subject-mapping-report-${out.class.code}`
+      .toLowerCase()
+      .replace(/[^\w.-]+/g, '-');
+    if (format === 'xlsx')
       return {
         filename: `${stamp}.xlsx`,
         contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-        base64: Buffer.from(await wb.xlsx.writeBuffer()).toString('base64'),
+        base64: (await countsReportXlsx(report)).toString('base64'),
       };
-    }
-    const bytes = await tablePdf({
-      school,
-      title,
-      subtitle: ['Students taking each subject, section by section'],
-      columns: head.map((label, i) => ({
-        label,
-        width: i === 0 ? 4 : i === 1 ? 2.4 : 1.2,
-        right: i > 1,
-      })),
-      rows: body.map((r) => r.map(String)),
-    });
     return {
       filename: `${stamp}.pdf`,
       contentType: 'application/pdf',
-      base64: bytes.toString('base64'),
+      base64: (await countsReportPdf(report)).toString('base64'),
     };
   }
 
@@ -1382,7 +1425,7 @@ export class SubjectChoicesService {
     const tenant = requireTenant(ctx);
     const yearId = this.year(tenant);
     const allowed = await this.scopes.filter(tenant, EXAMS.marksView, 'class_section');
-    const { school, sections, year, logoFile } = await this.db.tenant(tenant, async (c) => {
+    const sections = await this.db.tenant(tenant, async (c) => {
       const ids = q.classSectionId
         ? [q.classSectionId]
         : (
@@ -1396,39 +1439,9 @@ export class SubjectChoicesService {
       if (!seen.length) throw new DomainError('not-found', 'No section to show', { status: 404 });
       const out = [];
       for (const id of seen) out.push(await this.load(c, yearId, id));
-      const sc = await c.query<{ name: string; logo: string | null; year: string }>(
-        `SELECT s.name, NULLIF(s.branding->>'logoFileId', '') AS logo,
-                (SELECT code FROM academic_years WHERE id = $1) AS year
-           FROM schools s WHERE s.id = app.current_school_id()`,
-        [yearId],
-      );
-      const logo = sc.rows[0]?.logo;
-      const f =
-        logo && /^\d{1,18}$/.test(logo)
-          ? (
-              await c.query<{ object_key: string; content_type: string }>(
-                `SELECT object_key, content_type FROM files WHERE id = $1 AND deleted_at IS NULL`,
-                [logo],
-              )
-            ).rows[0]
-          : undefined;
-      return {
-        school: sc.rows[0]?.name ?? '',
-        year: sc.rows[0]?.year ?? '',
-        sections: out,
-        logoFile: f,
-      };
+      return out;
     });
-    let logo: { contentType: string; bytes: Buffer } | null = null;
-    if (logoFile)
-      try {
-        logo = {
-          contentType: logoFile.content_type,
-          bytes: await this.storage.read(logoFile.object_key),
-        };
-      } catch {
-        logo = null;
-      }
+    const { school, year, logo } = await this.letterheadOf(tenant, yearId);
     const first = sections[0]!;
     // the class's slots, as the students' grid shows them
     type Slot = { kind: 'one'; id: string } | { kind: 'group'; group: SubjectGroup; pick: number };
@@ -1486,22 +1499,13 @@ export class SubjectChoicesService {
     const whole = !q.classSectionId;
     const place = whole ? first.section.className : first.section.code;
     const stamp = `subject-mapping-${place}`.toLowerCase().replace(/[^\w.-]+/g, '-');
-    const now = new Date().toLocaleString('en-GB', {
-      timeZone: 'Asia/Kolkata',
-      day: '2-digit',
-      month: '2-digit',
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-      hour12: true,
-    });
     const sheet = {
       school,
       title: 'Define Student Subject Mapping',
       lines: [
         `Classes: ${sections.map((x) => x.section.code).join(', ')}`,
         `Session: ${year}`,
-        `Generated on: ${now.replace(/\//g, '-').replace(',', '').toUpperCase()}`,
+        `Generated on: ${this.generatedOn()}`,
       ],
       logo,
       slots: slots.length,

@@ -381,6 +381,21 @@ describe('subject choices and order (e2e)', () => {
       `/exams/subject-choices/counts/file?classId=${classId}&format=xlsx`,
     );
     expect(file.statusCode).toBe(200);
+    // the legacy "Student Subject Mapping Report": letterhead, then each section's S.No / Subject / count
+    const rep = new ExcelJS.Workbook();
+    await rep.xlsx.load(
+      Buffer.from(file.json().base64 as string, 'base64') as unknown as ArrayBuffer,
+    );
+    const rs = rep.worksheets[0]!;
+    expect(String(rs.getRow(2).getCell(2).value)).toBe('Student Subject Mapping Report | Class-XI');
+    expect(String(rs.getRow(5).getCell(1).value)).toBe('Section: XI-A');
+    expect(Array.from(rs.getRow(6).values as unknown[]).slice(1)).toEqual([
+      'S.No',
+      'Subject',
+      'Student Count',
+    ]);
+    // Anu and Bela have saved subjects: English 2; Chirag and Devi are not set yet
+    expect(Array.from(rs.getRow(7).values as unknown[]).slice(1)).toEqual([1, 'ENGLISH', 2]);
 
     const dl = (
       await call(admin, 'GET', `/exams/subject-choices/excel?classSectionId=${section}`)
