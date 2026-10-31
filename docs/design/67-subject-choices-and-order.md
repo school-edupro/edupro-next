@@ -161,3 +161,20 @@ assign all** (every student of the section; nothing is saved until Save); Stream
 The card's toolbar: Export to Excel, Export PDF (view / download), Subject count report (the Whole class
 tab); "Find a student in any section" stays above. Bring last year's choices, the Excel to fill and the
 upright print sit in cards under the grid. Styles: `.ep-subchoice*` in packages/ui app.css (tokens only).
+
+## Class set-up as a slot template (31 Oct)
+
+Decisions: a **slot template per class** (Number of subjects N, then for Subject-1 … N the subjects allowed);
+the optional subject stays the **Optional tick** on any slot; every student must fill **exactly N**.
+
+- Class set-up shows "Number of subjects" and a row per slot: the subjects allowed (chips, "+ Add a choice"),
+  a name for a choice ("Second language"), sub-subject parts under a subject that has them, ↑ ↓ and remove.
+  A row with one subject = everyone takes it; several = a choice; rows offering the same subjects = one
+  choice taking that many ("Same as Subject-k (a second pick)"). A subject is in one slot (or in rows with
+  exactly the same subjects). Streams stay below (subjects of the choice slots).
+- Saved through the same set-up API: a single-subject slot is `take: all`; a choice is a group with
+  `min = max = its slots` (so fewer shows "Missing", more is refused); the class's other subjects are
+  `free` ("Not in a slot": no student is offered them; the grid shows such a column only while a student
+  of the section still has one). The order printed is the slot order.
+- Existing set-ups load as slots: a compulsory subject is one, a group as many as it takes; electives go
+  to "Not in a slot".

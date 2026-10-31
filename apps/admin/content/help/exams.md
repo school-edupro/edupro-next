@@ -38,7 +38,11 @@
    - **Class set-up**: **Entered in parts** splits a subject into its sub-subjects (Social Science:
      Geography, History, Pol. Sc.) with a share each; every exam of the class gets these parts, each
      entered by its own teacher. The mark registers show the parts; the report card the total.
-   - **Class set-up**: the order the class's subjects print in on report cards and the mark register
+   - **Class set-up** is the class's subject template: **Number of subjects** (e.g. 5 for VI and VII, 6
+     for VIII), then for Subject-1 … Subject-5 the subject(s) allowed there: one (English: everyone) or
+     several (Hindi, Sanskrit, German: the student chooses one; name the choice "Second language").
+     Every student fills every slot; the students' grid shows these slots in this order.
+   - **Class set-up** also sets the order the class's subjects print in on report cards and the mark register
      (↑ ↓; a choice group moves with its subjects), who takes each subject (everyone, one of a group,
      or those who pick it), the choice groups ("Second language: pick 1", or "Additional: pick 0 or
      1", kept out of the total) and, for XI–XII, the streams with their subjects.

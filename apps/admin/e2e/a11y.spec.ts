@@ -269,6 +269,7 @@ const PAGES = [
   '/exams/subject-choices?sectionId=149',
   '/exams/subject-choices?tab=students&sectionId=143',
   '/exams/subject-choices?tab=setup&classId=172',
+  '/exams/subject-choices?tab=setup&classId=164',
   '/exams/subject-choices?tab=class&classId=172',
   '/exams/subject-choices?tab=students&sectionId=149&q=A2529&history=12355',
   '/exams/schemes',

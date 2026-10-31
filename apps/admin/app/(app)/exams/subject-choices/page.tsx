@@ -406,6 +406,7 @@ export default async function SubjectChoicesPage({
                     key={`${choices.section.id}-${initialQuery}`}
                     classSectionId={choices.section.id}
                     sectionCode={choices.section.code}
+                    fromExams={choices.fromExams}
                     subjects={choices.subjects}
                     groups={choices.groups}
                     streams={choices.streams}

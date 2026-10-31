@@ -78,6 +78,7 @@ export function ChoicesSheet({
   canEdit,
   initialQuery = '',
   historyBase,
+  fromExams = false,
 }: {
   classSectionId: string;
   sectionCode: string;
@@ -90,6 +91,8 @@ export function ChoicesSheet({
   initialQuery?: string;
   /** the address that opens a student's history, the student id appended */
   historyBase: string;
+  /** no subjects mapped to the class: its exams' subjects, each one a student may take */
+  fromExams?: boolean;
 }) {
   const leaving = useRef(false);
   const compulsory = useMemo(() => subjects.filter((x) => x.take === 'all'), [subjects]);
@@ -100,15 +103,18 @@ export function ChoicesSheet({
     const out: Slot[] = [];
     for (const x of subjects) {
       if (x.take === 'all') out.push({ kind: 'all', id: x.id });
-      else if (x.take === 'free') out.push({ kind: 'free', id: x.id });
-      else {
+      // a subject not in a slot of the class: only while a student still has it
+      else if (x.take === 'free') {
+        if (fromExams || rows.some((r) => r.subjectIds.includes(x.id)))
+          out.push({ kind: 'free', id: x.id });
+      } else {
         const g = groups.find((y) => y.id === x.groupId);
         if (g && !out.some((s) => s.kind === 'group' && s.group.id === g.id))
           for (let i = 0; i < g.max; i += 1) out.push({ kind: 'group', group: g, pick: i });
       }
     }
     return out;
-  }, [subjects, groups]);
+  }, [subjects, groups, rows, fromExams]);
   const initial = useMemo(
     () =>
       Object.fromEntries(
@@ -272,7 +278,9 @@ export function ChoicesSheet({
       ? `${s.group.name}${s.group.max > 1 ? ` (${String(s.pick + 1)})` : ''}`
       : s.kind === 'all'
         ? 'Everyone'
-        : 'Elective';
+        : fromExams
+          ? 'Elective'
+          : 'Not in a slot';
 
   return (
     <div className="ep-subchoice">

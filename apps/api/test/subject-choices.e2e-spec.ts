@@ -730,4 +730,60 @@ describe('subject choices and order (e2e)', () => {
         .statusCode,
     ).toBe(200);
   });
+
+  it('a slot template: two slots with the same languages take exactly two; fewer is missing, more refused', async () => {
+    const k = (
+      await call(admin, 'POST', '/academics/classes', {
+        code: 'VIII',
+        name: 'Class VIII',
+        displayOrder: 8,
+      })
+    ).json().id as string;
+    const sec = (
+      await call(admin, 'POST', `/academics/classes/${k}/sections`, { name: 'A' })
+    ).json().id as string;
+    const kid = await call(admin, 'POST', '/people/students', {
+      admissionNo: `${s}-81`,
+      firstName: 'Ira',
+      lastName: 'Slot',
+      guardians: [],
+      enrolment: { classSectionId: sec, rollNo: 1 },
+    });
+    const ira = kid.json().id as string;
+    await call(admin, 'PUT', `/academics/classes/${k}/subjects`, {
+      subjects: ['ENG', 'HIN', 'SKT', 'FRE', 'MAT'].map((c) => ({ subjectId: subject[c] })),
+    });
+    // Subject-1 English, Subject-2 and -3 two of Hindi / Sanskrit / French, Subject-4 Maths
+    const langs = [subject.HIN, subject.SKT, subject.FRE].sort().join(',');
+    const ok = await call(admin, 'PUT', '/exams/subject-choices/setup', {
+      classId: k,
+      groups: [{ key: langs, name: 'Languages', kind: 'optional', min: 2, max: 2 }],
+      subjects: [
+        { subjectId: subject.ENG, take: 'all', group: null, parts: [] },
+        ...['HIN', 'SKT', 'FRE'].map((c) => ({
+          subjectId: subject[c],
+          take: 'group',
+          group: langs,
+          parts: [],
+        })),
+        { subjectId: subject.MAT, take: 'all', group: null, parts: [] },
+      ],
+      streams: [],
+    });
+    expect(ok.statusCode).toBe(200);
+    const set = (ids: string[]) =>
+      call(admin, 'PUT', '/exams/subject-choices', {
+        classSectionId: sec,
+        rows: [{ studentId: ira, subjects: ids.map((c) => ({ subjectId: subject[c]! })) }],
+      });
+    const missing = async () =>
+      (await call(admin, 'GET', `/exams/subject-choices/counts?classId=${k}`)).json().total.missing;
+    expect((await set(['HIN'])).statusCode).toBe(200);
+    expect(await missing()).toBe(1);
+    expect((await set(['HIN', 'FRE'])).statusCode).toBe(200);
+    expect(await missing()).toBe(0);
+    const three = await set(['HIN', 'FRE', 'SKT']);
+    expect(three.statusCode).toBe(409);
+    expect(three.json().detail).toContain('Languages: pick at most 2');
+  });
 });

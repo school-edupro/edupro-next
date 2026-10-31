@@ -13351,3 +13351,51 @@ button.ep-subchoice__icon:hover {
   gap: var(--sp-4);
   margin-bottom: var(--sp-4);
 }
+.ep-subchoice__template th,
+.ep-subchoice__template td {
+  vertical-align: top;
+}
+.ep-subchoice__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+  align-items: center;
+}
+.ep-subchoice__chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-1);
+  padding: var(--sp-1) var(--sp-2);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  background: var(--mob-cyan-50);
+  color: var(--text-heading);
+  font-size: var(--fs-small);
+}
+.ep-subchoice__chip button {
+  border: 0;
+  background: none;
+  color: var(--text-muted);
+  font: inherit;
+  cursor: pointer;
+}
+.ep-subchoice__chip button:hover {
+  color: var(--status-danger);
+}
+.ep-subchoice__setparts {
+  margin: var(--sp-2) 0 0;
+  padding: var(--sp-2);
+  border: 1px dashed var(--border-default);
+  border-radius: var(--radius-sm);
+}
+.ep-subchoice__setparts legend {
+  font-size: var(--fs-small);
+  color: var(--text-muted);
+}
+.ep-subchoice__setpart {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-1);
+  margin-right: var(--sp-3);
+  font-size: var(--fs-small);
+}

@@ -1,15 +1,15 @@
 'use client';
 import { Button } from '@edupro/ui';
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { Icon } from '@/components/nav-icons';
 import { saveSubjectSetup, type SubjectSetupInput } from '@/lib/exam-entry-actions';
 import type { ChoiceGroup, ChoiceStream, ChoiceSubject } from './ChoicesSheet';
 
-interface Group {
+/** One subject slot of the class: Subject-k, the subjects a student may have there, a name for a choice. */
+interface Row {
   key: string;
   name: string;
-  kind: 'optional' | 'additional';
-  min: number;
-  max: number;
+  ids: string[];
 }
 interface Stream {
   key: string;
@@ -17,42 +17,22 @@ interface Stream {
   ids: string[];
 }
 interface State {
-  /** every subject in the order printed; a group's subjects print together, at its first one */
-  order: string[];
-  /** all, free, or a group's key */
-  take: Record<string, string>;
-  groups: Group[];
+  rows: Row[];
   streams: Stream[];
   /** a subject entered in parts: its sub-subjects with their share of the maximum */
   parts: Record<string, Array<{ subjectId: string; share: number }>>;
 }
-type Place = { kind: 's'; id: string } | { kind: 'g'; key: string; ids: string[] };
 
-/** The places of the order: a subject on its own, or a group with its subjects. */
-function placesOf(s: State): Place[] {
-  const out: Place[] = [];
-  for (const id of s.order) {
-    const t = s.take[id]!;
-    if (t === 'all' || t === 'free') out.push({ kind: 's', id });
-    else {
-      const g = out.find((p): p is Extract<Place, { kind: 'g' }> => p.kind === 'g' && p.key === t);
-      if (g) g.ids.push(id);
-      else out.push({ kind: 'g', key: t, ids: [id] });
-    }
-  }
-  // a group with no subject yet keeps a place at the end
-  for (const g of s.groups)
-    if (!out.some((p) => p.kind === 'g' && p.key === g.key))
-      out.push({ kind: 'g', key: g.key, ids: [] });
-  return out;
-}
-const flatten = (places: Place[]) => places.flatMap((p) => (p.kind === 's' ? [p.id] : p.ids));
+const setKey = (ids: string[]) => [...ids].sort().join(',');
+const MAX_SLOTS = 15;
 
 /**
- * A class's subjects for report cards and the register (docs/design/67): their order (a group prints
- * at its place, the subject the student took), who takes each (everyone, one of a choice group, anyone
- * who picks it), the choice groups (counted in the total or additional, how many to pick) and the
- * streams (a set of subjects). One Save; students' choices follow the change.
+ * A class's subject template (docs/design/67): "Number of subjects" and, for Subject-1 … Subject-N, the
+ * subjects allowed there. A slot with one subject is taken by everyone; a slot with several is a choice
+ * (slots offering the same subjects are one choice taking that many, e.g. two of the languages). Every
+ * student fills every slot; the "Optional" tick on the students' grid keeps a subject out of the total.
+ * Cards and registers print in slot order. A subject may be entered in parts (Social Science: its
+ * sub-subjects with a share of the maximum); a class may have streams (XI-XII). One Save.
  */
 export function ClassSubjectSetup({
   classId,
@@ -68,19 +48,22 @@ export function ClassSubjectSetup({
   canEdit: boolean;
 }) {
   const leaving = useRef(false);
-  const initial = useMemo<State>(
-    () => ({
-      order: subjects.map((x) => x.id),
-      take: Object.fromEntries(
-        subjects.map((x) => [x.id, x.take === 'group' ? x.groupId! : x.take]),
-      ),
-      groups: groups.map((g) => ({
-        key: g.id,
-        name: g.name,
-        kind: g.kind,
-        min: g.min,
-        max: g.max,
-      })),
+  const initial = useMemo<State>(() => {
+    // the set-up as slots: a subject everyone takes is one, a group as many as it takes
+    const rows: Row[] = [];
+    const seen = new Set<string>();
+    for (const x of subjects) {
+      if (x.take === 'all') rows.push({ key: `s${x.id}`, name: '', ids: [x.id] });
+      else if (x.take === 'group' && x.groupId && !seen.has(x.groupId)) {
+        seen.add(x.groupId);
+        const g = groups.find((y) => y.id === x.groupId);
+        if (g)
+          for (let i = 0; i < Math.max(1, g.max); i += 1)
+            rows.push({ key: `g${g.id}-${String(i)}`, name: g.name, ids: g.subjectIds });
+      }
+    }
+    return {
+      rows,
       streams: streams.map((s) => ({ key: s.id, name: s.name, ids: s.subjectIds })),
       parts: Object.fromEntries(
         subjects.map((x) => [
@@ -88,13 +71,13 @@ export function ClassSubjectSetup({
           (x.parts ?? []).map((p) => ({ subjectId: p.subjectId, share: p.share })),
         ]),
       ),
-    }),
-    [subjects, groups, streams],
-  );
+    };
+  }, [subjects, groups, streams]);
   const [s, set] = useState<State>(initial);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [seq, setSeq] = useState(1);
+  const [count, setCount] = useState(String(initial.rows.length));
   const dirty = JSON.stringify(s) !== JSON.stringify(initial);
 
   useEffect(() => {
@@ -108,117 +91,52 @@ export function ClassSubjectSetup({
 
   const sub = (id: string) => subjects.find((x) => x.id === id)!;
   const label = (id: string) => `${sub(id).name} (${sub(id).code})`;
-  const places = placesOf(s);
-  const group = (key: string) => s.groups.find((g) => g.key === key);
+  const used = new Set(s.rows.flatMap((r) => r.ids));
+  const unused = subjects.filter((x) => !used.has(x.id));
 
-  /** a place up or down the order */
-  const movePlace = (i: number, by: -1 | 1) => {
-    const j = i + by;
-    if (j < 0 || j >= places.length) return;
-    const next = [...places];
-    [next[i], next[j]] = [next[j]!, next[i]!];
-    set({ ...s, order: flatten(next) });
+  // ---- slots -------------------------------------------------------------------------------------
+  const newRow = (): Row => {
+    setSeq((n) => n + 1);
+    return { key: `new-${String(seq)}-${String(Math.random()).slice(2, 7)}`, name: '', ids: [] };
   };
-  /** a subject up or down inside its group */
-  const moveInGroup = (ids: string[], k: number, by: -1 | 1) => {
-    const a = ids[k]!;
-    const b = ids[k + by];
-    if (!b) return;
-    const order = s.order.map((x) => (x === a ? b : x === b ? a : x));
-    set({ ...s, order });
+  const setNumber = (raw: string) => {
+    setCount(raw);
+    const n = Math.round(Number(raw));
+    if (!Number.isFinite(n) || n < 1 || n > MAX_SLOTS) return;
+    const rows = [...s.rows];
+    while (rows.length < n) rows.push(newRow());
+    // only empty slots go when the number comes down
+    while (rows.length > n && rows[rows.length - 1]!.ids.length === 0) rows.pop();
+    set({ ...s, rows });
   };
-  const setTake = (id: string, take: string) =>
-    set({
-      ...s,
-      take: { ...s.take, [id]: take },
-      // a subject everyone takes is in no stream
-      streams:
-        take === 'all'
-          ? s.streams.map((x) => ({ ...x, ids: x.ids.filter((y) => y !== id) }))
-          : s.streams,
-    });
-  const setGroup = (key: string, patch: Partial<Group>) =>
-    set({ ...s, groups: s.groups.map((g) => (g.key === key ? { ...g, ...patch } : g)) });
-  const addGroup = () => {
-    setSeq(seq + 1);
-    set({
-      ...s,
-      groups: [
-        ...s.groups,
-        {
-          key: `new-${String(seq)}`,
-          name: `Group ${String(s.groups.length + 1)}`,
-          kind: 'optional',
-          min: 1,
-          max: 1,
-        },
-      ],
-    });
+  const patchRow = (k: number, patch: Partial<Row>) =>
+    set({ ...s, rows: s.rows.map((r, i) => (i === k ? { ...r, ...patch } : r)) });
+  const move = (k: number, by: -1 | 1) => {
+    const j = k + by;
+    if (j < 0 || j >= s.rows.length) return;
+    const rows = [...s.rows];
+    [rows[k], rows[j]] = [rows[j]!, rows[k]!];
+    set({ ...s, rows });
   };
-  const removeGroup = (key: string) =>
-    set({
-      ...s,
-      groups: s.groups.filter((g) => g.key !== key),
-      take: Object.fromEntries(
-        Object.entries(s.take).map(([id, t]) => [id, t === key ? 'free' : t]),
-      ),
-    });
-  const addStream = () => {
-    setSeq(seq + 1);
-    set({
-      ...s,
-      streams: [
-        ...s.streams,
-        { key: `new-${String(seq)}`, name: `Stream ${String(s.streams.length + 1)}`, ids: [] },
-      ],
-    });
+  const removeRow = (k: number) => {
+    const rows = s.rows.filter((_, i) => i !== k);
+    set({ ...s, rows });
+    setCount(String(rows.length));
   };
-  const setStream = (key: string, patch: Partial<Stream>) =>
-    set({ ...s, streams: s.streams.map((x) => (x.key === key ? { ...x, ...patch } : x)) });
+  const addRow = () => {
+    if (s.rows.length >= MAX_SLOTS) return;
+    const rows = [...s.rows, newRow()];
+    set({ ...s, rows });
+    setCount(String(rows.length));
+  };
+  /** what a slot may still add: a subject not in another slot, or one of the slot above's set */
+  const addable = (k: number) =>
+    subjects.filter(
+      (x) =>
+        !s.rows[k]!.ids.includes(x.id) && !s.rows.some((r, i) => i !== k && r.ids.includes(x.id)),
+    );
 
-  const problems = [
-    ...s.groups
-      .filter((g) => !Object.values(s.take).includes(g.key))
-      .map((g) => `${g.name}: put at least one subject in it (Who takes it)`),
-    ...s.groups
-      .filter((g) => g.min > g.max)
-      .map((g) => `${g.name}: “at least” is more than “at most”`),
-    ...s.groups
-      .filter((g) => g.max > Object.values(s.take).filter((t) => t === g.key).length)
-      .filter((g) => Object.values(s.take).includes(g.key))
-      .map((g) => `${g.name}: “at most” is more than its subjects`),
-    ...s.streams.filter((x) => !x.ids.length).map((x) => `${x.name}: tick its subjects`),
-  ];
-
-  const save = async () => {
-    setError(null);
-    setBusy(true);
-    const input: SubjectSetupInput = {
-      classId,
-      groups: s.groups.map((g) => ({ ...g, name: g.name.trim() })),
-      subjects: s.order.map((id) => {
-        const t = s.take[id]!;
-        const parts = s.parts[id] ?? [];
-        return t === 'all' || t === 'free'
-          ? { subjectId: id, take: t, group: null, parts }
-          : { subjectId: id, take: 'group' as const, group: t, parts };
-      }),
-      streams: s.streams.map((x) => ({ name: x.name.trim(), subjectIds: x.ids })),
-    };
-    const r = await saveSubjectSetup(input);
-    setBusy(false);
-    if (!r.ok) {
-      setError(r.error);
-      return;
-    }
-    leaving.current = true;
-    const url = new URL(window.location.href);
-    for (const k of ['error', 'detail']) url.searchParams.delete(k);
-    url.searchParams.set('ok', '1');
-    window.location.assign(url.toString());
-  };
-
-  /** the sub-subjects a subject is entered in (Social Science: Geography, History, Pol. Sc.) */
+  // ---- parts -------------------------------------------------------------------------------------
   const setPart = (id: string, kid: string, share: number | null) => {
     const cur = s.parts[id] ?? [];
     const next =
@@ -229,25 +147,17 @@ export function ClassSubjectSetup({
           : [...cur, { subjectId: kid, share }];
     set({ ...s, parts: { ...s.parts, [id]: next } });
   };
-  const partsCell = (id: string) => {
+  const partsOf = (id: string) => {
     const kids = sub(id).children ?? [];
-    if (!kids.length) return <span className="ep-kicker">-</span>;
+    if (!kids.length) return null;
     const mine = s.parts[id] ?? [];
     return (
-      <fieldset style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }}>
-        <legend className="ep-sr-only">{`${label(id)}: entered in parts`}</legend>
+      <fieldset key={id} className="ep-subchoice__setparts">
+        <legend>{sub(id).name}: entered in parts</legend>
         {kids.map((k) => {
           const p = mine.find((x) => x.subjectId === k.id);
           return (
-            <span
-              key={k.id}
-              style={{
-                display: 'inline-flex',
-                gap: 'var(--sp-1)',
-                alignItems: 'center',
-                marginRight: 'var(--sp-3)',
-              }}
-            >
+            <span key={k.id} className="ep-subchoice__setpart">
               <label>
                 <input
                   type="checkbox"
@@ -255,7 +165,7 @@ export function ClassSubjectSetup({
                   disabled={!canEdit}
                   onChange={(e) => setPart(id, k.id, e.target.checked ? 1 : null)}
                 />{' '}
-                <abbr title={k.name}>{k.code}</abbr>
+                {k.name}
               </label>
               {p ? (
                 <input
@@ -277,264 +187,271 @@ export function ClassSubjectSetup({
       </fieldset>
     );
   };
-  const takeSelect = (id: string) => (
-    <select
-      className="ep-select"
-      aria-label={`Who takes ${label(id)}`}
-      value={s.take[id]}
-      disabled={!canEdit}
-      onChange={(e) => setTake(id, e.target.value)}
-    >
-      <option value="all">Everyone (compulsory)</option>
-      <option value="free">Those who pick it (elective)</option>
-      {s.groups.map((g) => (
-        <option key={g.key} value={g.key}>
-          One of: {g.name}
-        </option>
-      ))}
-    </select>
-  );
-  const arrows = (name: string, up: () => void, down: () => void, first: boolean, last: boolean) =>
-    canEdit ? (
-      <span style={{ whiteSpace: 'nowrap' }}>
-        <Button
-          type="button"
-          size="sm"
-          variant="ghost"
-          onClick={up}
-          disabled={first}
-          aria-label={`Move ${name} up`}
-        >
-          ↑
-        </Button>
-        <Button
-          type="button"
-          size="sm"
-          variant="ghost"
-          onClick={down}
-          disabled={last}
-          aria-label={`Move ${name} down`}
-        >
-          ↓
-        </Button>
-      </span>
-    ) : null;
 
-  let n = 0;
+  // ---- streams -----------------------------------------------------------------------------------
+  const addStream = () => {
+    setSeq(seq + 1);
+    set({
+      ...s,
+      streams: [
+        ...s.streams,
+        { key: `new-${String(seq)}`, name: `Stream ${String(s.streams.length + 1)}`, ids: [] },
+      ],
+    });
+  };
+  const setStream = (key: string, patch: Partial<Stream>) =>
+    set({ ...s, streams: s.streams.map((x) => (x.key === key ? { ...x, ...patch } : x)) });
+
+  // ---- checks and save ---------------------------------------------------------------------------
+  const problems: string[] = [];
+  s.rows.forEach((r, k) => {
+    if (!r.ids.length) problems.push(`Subject-${String(k + 1)}: choose its subject(s)`);
+  });
+  s.rows.forEach((r, k) => {
+    const clash = s.rows.findIndex(
+      (o, i) =>
+        i !== k && o.ids.some((id) => r.ids.includes(id)) && setKey(o.ids) !== setKey(r.ids),
+    );
+    if (clash > k)
+      problems.push(
+        `Subject-${String(k + 1)} and Subject-${String(clash + 1)} share a subject but not all: give them the same subjects or none in common`,
+      );
+  });
+  for (const x of s.streams) if (!x.ids.length) problems.push(`${x.name}: tick its subjects`);
+
+  const save = async () => {
+    setError(null);
+    setBusy(true);
+    // slots offering the same subjects are one choice that takes that many
+    const choices = new Map<string, { name: string; ids: string[]; slots: number[] }>();
+    s.rows.forEach((r, k) => {
+      if (r.ids.length < 2) return;
+      const c = choices.get(setKey(r.ids));
+      if (c) c.slots.push(k);
+      else choices.set(setKey(r.ids), { name: r.name.trim(), ids: r.ids, slots: [k] });
+    });
+    const names = new Set<string>();
+    const groupsOut: SubjectSetupInput['groups'] = [];
+    for (const c of choices.values()) {
+      let name = c.name || `Subject-${c.slots.map((k) => String(k + 1)).join(' & ')}`;
+      while (names.has(name.toLowerCase())) name = `${name} (${String(c.slots[0]! + 1)})`;
+      names.add(name.toLowerCase());
+      groupsOut.push({
+        key: setKey(c.ids),
+        name,
+        kind: 'optional',
+        min: c.slots.length,
+        max: c.slots.length,
+      });
+    }
+    const order: SubjectSetupInput['subjects'] = [];
+    const placed = new Set<string>();
+    for (const r of s.rows)
+      for (const id of r.ids) {
+        if (placed.has(id)) continue;
+        placed.add(id);
+        order.push(
+          r.ids.length === 1
+            ? { subjectId: id, take: 'all', group: null, parts: s.parts[id] ?? [] }
+            : { subjectId: id, take: 'group', group: setKey(r.ids), parts: s.parts[id] ?? [] },
+        );
+      }
+    // the class's other subjects: not in a slot (no student is offered them in the grid)
+    for (const x of subjects)
+      if (!placed.has(x.id))
+        order.push({ subjectId: x.id, take: 'free', group: null, parts: s.parts[x.id] ?? [] });
+    const r = await saveSubjectSetup({
+      classId,
+      groups: groupsOut,
+      subjects: order,
+      streams: s.streams.map((x) => ({ name: x.name.trim(), subjectIds: x.ids })),
+    });
+    setBusy(false);
+    if (!r.ok) {
+      setError(r.error);
+      return;
+    }
+    leaving.current = true;
+    const url = new URL(window.location.href);
+    for (const k of ['error', 'detail']) url.searchParams.delete(k);
+    url.searchParams.set('ok', '1');
+    window.location.assign(url.toString());
+  };
+
   return (
-    <div>
-      <h3 style={{ marginTop: 0 }}>Order on the report card and the register</h3>
+    <div className="ep-subchoice">
+      <h3 style={{ marginTop: 0 }}>Subjects of the class</h3>
       <p className="ep-field__help" style={{ marginTop: 0 }}>
-        The subjects print in this order, as Subject-1, Subject-2, … in the mark registers. A group
-        prints at its place: each student&rsquo;s own subject from it. Additional subjects print
-        last, marked. &ldquo;Entered in parts&rdquo;: a subject&rsquo;s sub-subjects (Social
-        Science: Geography, History, Pol. Sc.), each entered by its own teacher; every exam of the
-        class splits the subject&rsquo;s maximum by the shares (1, 1, 1 for equal parts, or the
-        marks themselves, e.g. 27, 27, 26 out of 80). The registers show the parts; the report card
-        the total.
+        Set how many subjects every student of the class takes, then the subject(s) allowed in each
+        slot. One subject: everyone takes it. Several (Hindi, Sanskrit, German): the student chooses
+        one; two slots with the same subjects let the student choose two. Report cards and mark
+        registers print Subject-1, Subject-2, … in this order. The &ldquo;Optional&rdquo; tick on
+        the students&rsquo; grid keeps one student&rsquo;s subject out of the total.
       </p>
-      <div className="ep-table-wrap" tabIndex={0} role="region" aria-label="Order of the subjects">
-        <table className="ep-table ep-table--dense">
-          <caption className="ep-sr-only">Order of the subjects</caption>
+      <label className="ep-field" style={{ maxWidth: '14rem' }}>
+        <span className="ep-field__label">Number of subjects</span>
+        <input
+          className="ep-input"
+          type="number"
+          min={1}
+          max={MAX_SLOTS}
+          value={count}
+          disabled={!canEdit}
+          onChange={(e) => setNumber(e.target.value)}
+        />
+        <span className="ep-field__help">
+          {s.rows.length > Number(count) && Number(count) > 0
+            ? 'Clear the subjects of the last slots to have fewer.'
+            : `Subject-1 to Subject-${String(Math.max(1, s.rows.length))}`}
+        </span>
+      </label>
+
+      <div className="ep-table-wrap" tabIndex={0} role="region" aria-label="Subject slots">
+        <table className="ep-table ep-subchoice__template">
+          <caption className="ep-sr-only">The subject slots of the class</caption>
           <thead>
             <tr>
-              <th scope="col">#</th>
-              <th scope="col">Subject</th>
-              <th scope="col">Who takes it</th>
-              <th scope="col">
-                Entered in parts
-                <span className="ep-kicker" style={{ display: 'block' }}>
-                  sub-subject: share of the maximum
-                </span>
-              </th>
+              <th scope="col">Slot</th>
+              <th scope="col">Subjects allowed</th>
+              <th scope="col">Name of the choice</th>
               {canEdit ? <th scope="col">Move</th> : null}
             </tr>
           </thead>
           <tbody>
-            {places.flatMap((p, i) => {
-              const first = i === 0;
-              const last = i === places.length - 1;
-              if (p.kind === 's') {
-                n += 1;
-                return [
-                  <tr key={p.id}>
-                    <td>{n}</td>
-                    <th scope="row">{label(p.id)}</th>
-                    <td>{takeSelect(p.id)}</td>
-                    <td>{partsCell(p.id)}</td>
-                    {canEdit ? (
-                      <td>
-                        {arrows(
-                          label(p.id),
-                          () => movePlace(i, -1),
-                          () => movePlace(i, 1),
-                          first,
-                          last,
-                        )}
-                      </td>
-                    ) : null}
-                  </tr>,
-                ];
-              }
-              const g = group(p.key);
-              n += 1;
-              const at = n;
-              return [
-                <tr key={`g-${p.key}`}>
-                  <td>{at}</td>
-                  <th scope="row" colSpan={3}>
-                    {g?.name ?? ''}{' '}
-                    <span className="ep-kicker">
-                      {g?.kind === 'additional' ? 'additional, ' : ''}pick{' '}
-                      {g && g.min === g.max ? g.max : `${String(g?.min)}–${String(g?.max)}`}
-                      {p.ids.length ? '' : ' · no subject yet'}
+            {s.rows.map((r, k) => {
+              const many = r.ids.length > 1;
+              const above = s.rows[k - 1];
+              return (
+                <tr key={r.key}>
+                  <th scope="row">
+                    Subject-{k + 1}
+                    <span className="ep-kicker" style={{ display: 'block' }}>
+                      {!r.ids.length ? 'not set' : many ? 'choose 1' : 'everyone'}
                     </span>
                   </th>
+                  <td>
+                    <span className="ep-subchoice__chips">
+                      {r.ids.map((id) => (
+                        <span key={id} className="ep-subchoice__chip">
+                          {label(id)}
+                          {canEdit ? (
+                            <button
+                              type="button"
+                              aria-label={`Take ${sub(id).name} out of Subject-${String(k + 1)}`}
+                              onClick={() => patchRow(k, { ids: r.ids.filter((x) => x !== id) })}
+                            >
+                              ×
+                            </button>
+                          ) : null}
+                        </span>
+                      ))}
+                      {canEdit ? (
+                        <select
+                          className="ep-select"
+                          aria-label={`Add a subject to Subject-${String(k + 1)}`}
+                          value=""
+                          onChange={(e) => {
+                            if (e.target.value) patchRow(k, { ids: [...r.ids, e.target.value] });
+                          }}
+                          style={{ minWidth: '12rem' }}
+                        >
+                          <option value="">
+                            {r.ids.length ? '+ Add a choice' : 'Select subject'}
+                          </option>
+                          {addable(k).map((x) => (
+                            <option key={x.id} value={x.id}>
+                              {x.name} ({x.code})
+                            </option>
+                          ))}
+                        </select>
+                      ) : null}
+                      {canEdit && !r.ids.length && above && above.ids.length > 1 ? (
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => patchRow(k, { ids: above.ids, name: above.name })}
+                        >
+                          Same as Subject-{k} (a second pick)
+                        </Button>
+                      ) : null}
+                    </span>
+                    {r.ids.map((id) => partsOf(id))}
+                  </td>
+                  <td>
+                    {many ? (
+                      <input
+                        className="ep-input"
+                        aria-label={`Name of the choice in Subject-${String(k + 1)}`}
+                        placeholder="e.g. Second language"
+                        maxLength={60}
+                        value={r.name}
+                        disabled={!canEdit}
+                        onChange={(e) => patchRow(k, { name: e.target.value })}
+                      />
+                    ) : (
+                      <span className="ep-kicker">-</span>
+                    )}
+                  </td>
                   {canEdit ? (
                     <td>
-                      {arrows(
-                        g?.name ?? '',
-                        () => movePlace(i, -1),
-                        () => movePlace(i, 1),
-                        first,
-                        last,
-                      )}
+                      <span style={{ whiteSpace: 'nowrap' }}>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => move(k, -1)}
+                          disabled={k === 0}
+                          aria-label={`Move Subject-${String(k + 1)} up`}
+                        >
+                          ↑
+                        </Button>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => move(k, 1)}
+                          disabled={k === s.rows.length - 1}
+                          aria-label={`Move Subject-${String(k + 1)} down`}
+                        >
+                          ↓
+                        </Button>
+                        <button
+                          type="button"
+                          className="ep-subchoice__icon"
+                          aria-label={`Remove Subject-${String(k + 1)}`}
+                          title="Remove the slot"
+                          onClick={() => removeRow(k)}
+                        >
+                          <Icon name="trash" size={16} />
+                        </button>
+                      </span>
                     </td>
                   ) : null}
-                </tr>,
-                ...p.ids.map((id, k) => (
-                  <tr key={id}>
-                    <td />
-                    <td style={{ paddingLeft: 'var(--sp-5)' }}>{label(id)}</td>
-                    <td>{takeSelect(id)}</td>
-                    <td>{partsCell(id)}</td>
-                    {canEdit ? (
-                      <td>
-                        {arrows(
-                          label(id),
-                          () => moveInGroup(p.ids, k, -1),
-                          () => moveInGroup(p.ids, k, 1),
-                          k === 0,
-                          k === p.ids.length - 1,
-                        )}
-                      </td>
-                    ) : null}
-                  </tr>
-                )),
-              ];
+                </tr>
+              );
             })}
           </tbody>
         </table>
       </div>
-
-      <h3>Choice groups</h3>
-      <p className="ep-field__help" style={{ marginTop: 0 }}>
-        A group is a choice the student makes, such as &ldquo;Second language: Hindi, Sanskrit or
-        French&rdquo;. Put subjects in it with &ldquo;Who takes it&rdquo; above.
-      </p>
-      {s.groups.length ? (
-        <div className="ep-table-wrap" tabIndex={0} role="region" aria-label="Choice groups">
-          <table className="ep-table ep-table--dense">
-            <caption className="ep-sr-only">Choice groups</caption>
-            <thead>
-              <tr>
-                <th scope="col">Name</th>
-                <th scope="col">In the total</th>
-                <th scope="col">Pick at least</th>
-                <th scope="col">Pick at most</th>
-                <th scope="col">Subjects</th>
-                {canEdit ? <th scope="col">Remove</th> : null}
-              </tr>
-            </thead>
-            <tbody>
-              {s.groups.map((g) => (
-                <tr key={g.key}>
-                  <td>
-                    <input
-                      className="ep-input"
-                      aria-label="Group name"
-                      value={g.name}
-                      maxLength={60}
-                      disabled={!canEdit}
-                      onChange={(e) => setGroup(g.key, { name: e.target.value })}
-                    />
-                  </td>
-                  <td>
-                    <select
-                      className="ep-select"
-                      aria-label={`${g.name}: in the total`}
-                      value={g.kind}
-                      disabled={!canEdit}
-                      onChange={(e) => setGroup(g.key, { kind: e.target.value as Group['kind'] })}
-                    >
-                      <option value="optional">Counts in the total</option>
-                      <option value="additional">Additional (kept out)</option>
-                    </select>
-                  </td>
-                  <td>
-                    <input
-                      className="ep-input"
-                      type="number"
-                      min={0}
-                      max={10}
-                      aria-label={`${g.name}: pick at least`}
-                      value={g.min}
-                      disabled={!canEdit}
-                      onChange={(e) => setGroup(g.key, { min: Number(e.target.value) })}
-                      style={{ width: '5rem' }}
-                    />
-                  </td>
-                  <td>
-                    <input
-                      className="ep-input"
-                      type="number"
-                      min={1}
-                      max={10}
-                      aria-label={`${g.name}: pick at most`}
-                      value={g.max}
-                      disabled={!canEdit}
-                      onChange={(e) => setGroup(g.key, { max: Number(e.target.value) })}
-                      style={{ width: '5rem' }}
-                    />
-                  </td>
-                  <td>
-                    {s.order
-                      .filter((id) => s.take[id] === g.key)
-                      .map((id) => sub(id).code)
-                      .join(', ') || '-'}
-                  </td>
-                  {canEdit ? (
-                    <td>
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="ghost"
-                        onClick={() => removeGroup(g.key)}
-                      >
-                        Remove
-                      </Button>
-                    </td>
-                  ) : null}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      ) : (
-        <p>No choice groups: every elective is picked on its own.</p>
-      )}
-      {canEdit ? (
+      {canEdit && s.rows.length < MAX_SLOTS ? (
         <p>
-          <Button type="button" variant="secondary" size="sm" onClick={addGroup}>
-            Add a group
+          <Button type="button" variant="secondary" size="sm" onClick={addRow}>
+            Add a subject slot
           </Button>
+        </p>
+      ) : null}
+      {unused.length ? (
+        <p className="ep-field__help">
+          <strong>Not in a slot:</strong> {unused.map((x) => x.name).join(', ')}. No student is
+          offered them; a student who already has one keeps it (shown after the slots).
         </p>
       ) : null}
 
       <h3>Streams</h3>
       <p className="ep-field__help" style={{ marginTop: 0 }}>
         For classes XI and XII: a stream is a set of subjects (Science-PCM: Physics, Chemistry,
-        Mathematics). Choosing a student&rsquo;s stream ticks its subjects.
+        Mathematics), each in its slot. Choosing a student&rsquo;s stream fills those slots.
       </p>
       {s.streams.map((x) => (
         <fieldset
@@ -573,8 +490,10 @@ export function ClassSubjectSetup({
             ) : null}
           </div>
           <div role="group" aria-label={`${x.name}: subjects`} style={{ marginTop: 'var(--sp-2)' }}>
-            {s.order
-              .filter((id) => s.take[id] !== 'all')
+            {s.rows
+              .filter((r) => r.ids.length > 1)
+              .flatMap((r) => r.ids)
+              .filter((id, i, a) => a.indexOf(id) === i)
               .map((id) => (
                 <label key={id} style={{ marginRight: 'var(--sp-3)', whiteSpace: 'nowrap' }}>
                   <input
