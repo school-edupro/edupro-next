@@ -42,6 +42,12 @@ export default async function RegisterPage({
       ).catch(() => null)
     : null;
   const canManage = me.permissions.includes('exams.master.manage');
+  // Subject-1, Subject-2, …: as many as the most subjects a student takes
+  const slots = Array.from(
+    { length: Math.max(0, ...(sheet?.rows ?? []).map((row) => row.slots?.length ?? 0)) },
+    (_, k) => k,
+  );
+  const byId = new Map((sheet?.subjects ?? []).map((x) => [x.id, x]));
   return (
     <>
       <ExamFrame
@@ -96,7 +102,7 @@ export default async function RegisterPage({
         }
       >
         {sheet ? (
-          <div style={{ overflowX: 'auto' }}>
+          <div className="ep-table-wrap" tabIndex={0} role="region" aria-label={x('registerFile')}>
             <table className="ep-table ep-table--dense" style={{ minWidth: 720 }}>
               <caption className="ep-kicker">
                 {sheet.section.code} · {sheet.rows.length} {r('pupils').toLowerCase()}
@@ -105,12 +111,21 @@ export default async function RegisterPage({
                 <tr>
                   <th>#</th>
                   <th>{r('pupil')}</th>
-                  {sheet.subjects.map((s) => (
-                    <th key={s.id} style={{ textAlign: 'right' }} title={s.name}>
-                      {s.code}
-                      <div className="ep-kicker">/ {s.maxMarks}</div>
-                    </th>
-                  ))}
+                  {/* each student's own subjects in the class's order (docs/design/67) */}
+                  {slots.map((k) => {
+                    const ids = new Set(sheet.rows.map((row) => row.slots?.[k]).filter(Boolean));
+                    const one = ids.size === 1 ? byId.get([...ids][0]!) : undefined;
+                    return (
+                      <th key={k} style={{ textAlign: 'right' }}>
+                        {r('slot', { n: k + 1 })}
+                        {one ? (
+                          <div className="ep-kicker">
+                            {one.code} / {one.maxMarks}
+                          </div>
+                        ) : null}
+                      </th>
+                    );
+                  })}
                   <th style={{ textAlign: 'right' }}>{r('total')}</th>
                   <th style={{ textAlign: 'right' }}>{r('pct')}</th>
                   <th>{r('grade')}</th>
@@ -126,23 +141,40 @@ export default async function RegisterPage({
                       {row.name}
                       <div className="ep-kicker">{row.admissionNo}</div>
                     </td>
-                    {sheet.subjects.map((s) => {
-                      const m = row.marks[s.id];
-                      // a subject the student does not take (docs/design/67)
-                      if (row.notTaken?.includes(s.id))
-                        return (
-                          <td key={s.id} style={{ textAlign: 'right' }} title={r('notTaken')}>
-                            —
-                          </td>
-                        );
+                    {slots.map((k) => {
+                      const id = row.slots?.[k];
+                      const sub = id ? byId.get(id) : undefined;
+                      if (!id || !sub) return <td key={k} />;
+                      const m = row.marks[id];
                       return (
-                        <td key={s.id} style={{ textAlign: 'right' }}>
-                          {!m ? '' : m.absent ? r('ab') : m.exempt ? r('ex') : m.marks}
-                          {row.additional?.includes(s.id) ? (
+                        <td key={k} style={{ textAlign: 'right' }}>
+                          <span className="ep-kicker" title={sub.name}>
+                            {sub.code}{' '}
+                          </span>
+                          {!m
+                            ? ''
+                            : m.code
+                              ? m.code
+                              : m.absent
+                                ? r('ab')
+                                : m.exempt
+                                  ? r('ex')
+                                  : (m.grade ?? m.marks)}
+                          {row.additional?.includes(id) ? (
                             <span className="ep-kicker" title={r('additional')}>
                               {' '}
                               A
                             </span>
+                          ) : null}
+                          {sub.parts?.length ? (
+                            <div className="ep-kicker">
+                              {sub.parts
+                                .map((p) => {
+                                  const v = row.parts?.[p.id];
+                                  return `${p.code ?? p.name} ${v ? (v.absent ? r('ab') : String(Number(v.marks))) : '-'}`;
+                                })
+                                .join(' · ')}
+                            </div>
                           ) : null}
                         </td>
                       );

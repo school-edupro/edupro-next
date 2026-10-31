@@ -28,6 +28,10 @@ export interface ClassSubject {
   groupId: string | null;
   /** the class's place for it; null: not placed yet (after the placed ones) */
   order: number | null;
+  /** entered in parts by its sub-subjects' teachers, each with a share of the maximum (docs/design/67) */
+  parts?: Array<{ subjectId: string; code: string; name: string; share: number }>;
+  /** its sub-subjects in the subject master (what the parts may be) */
+  children?: Array<{ id: string; code: string; name: string }>;
 }
 export interface SubjectGroup {
   id: string;
@@ -150,6 +154,25 @@ export class SubjectChoicesService {
         streams: [],
       };
     }
+    const parts = await c.query<{
+      parent: string;
+      subject_id: string;
+      code: string;
+      name: string;
+      share: string;
+    }>(
+      `SELECT cs.subject_id::text AS parent, p.subject_id::text, s.code, s.name, p.share::text
+         FROM class_subject_parts p JOIN class_subjects cs ON cs.id = p.class_subject_id
+         JOIN subjects s ON s.id = p.subject_id
+        WHERE cs.class_id = $1 AND cs.academic_year_id = $2 ORDER BY p.sort_order, p.id`,
+      [classId, yearId],
+    );
+    const kids = await c.query<{ parent: string; id: string; code: string; name: string }>(
+      `SELECT parent_id::text AS parent, id::text, code, name FROM subjects
+        WHERE parent_id = ANY($1::bigint[]) AND deleted_at IS NULL AND status = 'active'
+        ORDER BY display_order, code`,
+      [set.rows.map((x) => x.id)],
+    );
     const subjects: ClassSubject[] = set.rows.map((x) => ({
       id: x.id,
       code: x.code,
@@ -158,6 +181,17 @@ export class SubjectChoicesService {
       take: x.group_id ? 'group' : x.elective ? 'free' : 'all',
       groupId: x.group_id,
       order: x.sort_order,
+      parts: parts.rows
+        .filter((p) => p.parent === x.id)
+        .map((p) => ({
+          subjectId: p.subject_id,
+          code: p.code,
+          name: p.name,
+          share: Number(p.share),
+        })),
+      children: kids.rows
+        .filter((k) => k.parent === x.id)
+        .map((k) => ({ id: k.id, code: k.code, name: k.name })),
     }));
     const g = await c.query<{
       id: string;
@@ -693,6 +727,20 @@ export class SubjectChoicesService {
           `${known.get(lone.subjectId)!.code}: choose its group`,
           { status: 400 },
         );
+      for (const x of dto.subjects) {
+        const kids = known.get(x.subjectId)!.children ?? [];
+        const bad = (x.parts ?? []).find((p) => !kids.some((k) => k.id === p.subjectId));
+        if (bad)
+          throw new DomainError(
+            'validation-failed',
+            `${known.get(x.subjectId)!.code}: a part must be one of its sub-subjects in the subject master`,
+            { status: 400 },
+          );
+        if (new Set((x.parts ?? []).map((p) => p.subjectId)).size !== (x.parts ?? []).length)
+          throw new DomainError('validation-failed', 'A sub-subject is a part twice', {
+            status: 400,
+          });
+      }
       const streamNames = new Set<string>();
       for (const s of dto.streams) {
         if (streamNames.has(s.name.toLowerCase()))
@@ -786,6 +834,34 @@ export class SubjectChoicesService {
         [dto.classId, yearId, streamIds],
       );
 
+      // each subject's parts (sub-subjects with their share), then the class's exams of the year that
+      // have no parts and no marks on the subject get them
+      for (const x of dto.subjects) {
+        const cs = await c.query<{ id: string }>(
+          `SELECT id::text FROM class_subjects WHERE class_id = $1 AND academic_year_id = $2 AND subject_id = $3`,
+          [dto.classId, yearId, x.subjectId],
+        );
+        const csId = cs.rows[0]!.id;
+        const want = x.parts ?? [];
+        await c.query(
+          `DELETE FROM class_subject_parts WHERE class_subject_id = $1 AND NOT (subject_id = ANY($2::bigint[]))`,
+          [csId, want.map((p) => p.subjectId)],
+        );
+        for (const [i, p] of want.entries())
+          await c.query(
+            `INSERT INTO class_subject_parts (school_id, class_subject_id, subject_id, share, sort_order)
+             VALUES (app.current_school_id(), $1, $2, $3, $4)
+             ON CONFLICT (class_subject_id, subject_id) DO UPDATE SET share = EXCLUDED.share, sort_order = EXCLUDED.sort_order`,
+            [csId, p.subjectId, p.share, i],
+          );
+      }
+      const parted = await c.query<{ n: number }>(
+        `SELECT COALESCE(sum(app.apply_class_parts(es.id)), 0)::int AS n
+           FROM exam_subjects es JOIN exams e ON e.id = es.exam_id AND e.academic_year_id = $2 AND e.deleted_at IS NULL
+          WHERE es.class_id = $1`,
+        [dto.classId, yearId],
+      );
+
       // the students who have choices: the compulsory subjects added, every kind from the set-up
       const added = await c.query(
         `INSERT INTO student_subjects (school_id, academic_year_id, student_id, subject_id, kind, stream, created_by)
@@ -831,6 +907,8 @@ export class SubjectChoicesService {
         ...(await this.setupOf(c, dto.classId, yearId)),
         added: added.rowCount ?? 0,
         rekinded: rekinded.rowCount ?? 0,
+        /** parts made on the class's exams */
+        parts: parted.rows[0]?.n ?? 0,
       };
     });
   }

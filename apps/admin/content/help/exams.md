@@ -35,6 +35,9 @@
      Tick **show on the parent portal** so the date sheet appears in the apps. A subject or a class
      with marks entered can't be taken out of the exam (its marks would be lost).
 4. **Exams → Subject choices** (once a session):
+   - **Class set-up**: **Entered in parts** splits a subject into its sub-subjects (Social Science:
+     Geography, History, Pol. Sc.) with a share each; every exam of the class gets these parts, each
+     entered by its own teacher. The mark registers show the parts; the report card the total.
    - **Class set-up**: the order the class's subjects print in on report cards and the mark register
      (↑ ↓; a choice group moves with its subjects), who takes each subject (everyone, one of a group,
      or those who pick it), the choice groups ("Second language: pick 1", or "Additional: pick 0 or

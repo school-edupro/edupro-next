@@ -18,6 +18,8 @@ export interface RegisterSheet {
     name: string;
     maxMarks: string;
     passMarks: string | null;
+    /** entered in parts (Geography, History, …: docs/design/67) */
+    parts: Array<{ id: string; name: string; code: string | null; maxMarks: string }>;
   }>;
   rows: Array<{
     studentId: string;
@@ -45,6 +47,10 @@ export interface RegisterSheet {
     /** exam subject ids the student does not take, and those taken as additional (docs/design/67) */
     notTaken: string[];
     additional: string[];
+    /** part id → its marks (absent: AB) */
+    parts: Record<string, { marks: string | null; absent: boolean }>;
+    /** the student's own subjects in the class's order, additional last: Subject-1, Subject-2, … */
+    slots: string[];
   }>;
 }
 
@@ -192,8 +198,13 @@ export class ExamResultsService {
         failed_subjects: number | null;
         not_taken: string[] | null;
         additional: string[] | null;
+        parts: Record<string, { marks: string | null; absent: boolean }> | null;
       }>(
         `SELECT s.id::text AS student_id, s.display_name AS name, s.admission_no, e.roll_no,
+                (SELECT jsonb_object_agg(pe.part_id::text, jsonb_build_object('marks', pe.marks::text, 'absent', pe.absent))
+                   FROM mark_part_entries pe JOIN exam_subject_parts p ON p.id = pe.part_id
+                   JOIN exam_subjects es ON es.id = p.exam_subject_id
+                  WHERE es.exam_id = $3 AND es.class_id = $4 AND pe.student_id = s.id) AS parts,
                 (SELECT array_agg(es.id::text) FROM exam_subjects es WHERE es.exam_id = $3 AND es.class_id = $4
                     AND app.student_subject_kind(s.id, $2, es.subject_id) IS NULL) AS not_taken,
                 (SELECT array_agg(es.id::text) FROM exam_subjects es WHERE es.exam_id = $3 AND es.class_id = $4
@@ -207,6 +218,20 @@ export class ExamResultsService {
           ORDER BY e.roll_no NULLS LAST, s.display_name`,
         [sectionId, yearId, examId, sec.rows[0].class_id],
       );
+      const parts = await c.query<{
+        id: string;
+        es: string;
+        name: string;
+        code: string | null;
+        max: string;
+      }>(
+        `SELECT p.id::text, p.exam_subject_id::text AS es, p.name, sub.code, p.max_marks::text AS max
+           FROM exam_subject_parts p JOIN exam_subjects es ON es.id = p.exam_subject_id
+           LEFT JOIN subjects sub ON sub.id = p.subject_id
+          WHERE es.exam_id = $1 AND es.class_id = $2 ORDER BY p.sort_order, p.id`,
+        [examId, sec.rows[0].class_id],
+      );
+      const order = subjects.rows.map((x) => x.id);
       return {
         exam: {
           id: exam.id,
@@ -222,6 +247,9 @@ export class ExamResultsService {
           name: x.name,
           maxMarks: x.max_marks,
           passMarks: x.pass_marks,
+          parts: parts.rows
+            .filter((p) => p.es === x.id)
+            .map((p) => ({ id: p.id, name: p.name, code: p.code, maxMarks: p.max })),
         })),
         rows: rows.rows.map((x) => ({
           studentId: x.student_id,
@@ -240,13 +268,19 @@ export class ExamResultsService {
           /** exam subject ids the student does not take ("—"), and those taken as additional */
           notTaken: x.not_taken ?? [],
           additional: x.additional ?? [],
+          parts: x.parts ?? {},
+          slots: [
+            ...order.filter((id) => !x.not_taken?.includes(id) && !x.additional?.includes(id)),
+            ...order.filter((id) => x.additional?.includes(id)),
+          ],
         })),
       };
     });
   }
   /**
-   * The mark register of a section as a file (docs/design/66): Excel (a row per pupil, a column per
-   * subject, then the total, %, grade, rank and result) or a PDF of the same.
+   * The mark register of a section as a file (docs/design/66, 67): Excel or PDF, a row per pupil with
+   * their own subjects as Subject-1, Subject-2, … in the class's order (the subject, its marks, its
+   * parts), then the total, %, grade, rank and result.
    */
   async registerSheetFile(
     ctx: RequestContext,
@@ -262,36 +296,59 @@ export class ExamResultsService {
       return r.rows[0]?.name ?? '';
     });
     const RESULT: Record<string, string> = { pass: 'Pass', fail: 'Fail', incomplete: 'Incomplete' };
-    const head = [
-      'Roll',
-      'Adm no',
-      'Student',
-      ...sheet.subjects.map((x) => `${x.code} /${String(Number(x.maxMarks))}`),
-      'Total',
-      '%',
-      'Grade',
-      'Rank',
-      'Result',
+    // each student's own subjects as Subject-1, Subject-2, … (docs/design/67): the subject, its marks,
+    // and its parts when it is entered in parts
+    const slots = Math.max(0, ...sheet.rows.map((r) => r.slots.length));
+    const byId = new Map(sheet.subjects.map((x) => [x.id, x]));
+    const withParts = Array.from({ length: slots }, (_, k) =>
+      sheet.rows.some((r) => (byId.get(r.slots[k] ?? '')?.parts.length ?? 0) > 0),
+    );
+    const marksOf = (r: (typeof sheet.rows)[number], id: string) => {
+      const m = r.marks[id];
+      if (!m) return '';
+      if (m.code) return m.code;
+      if (m.absent) return 'AB';
+      if (m.exempt) return 'EX';
+      return m.grade ?? (m.marks === null ? '' : String(Number(m.marks)));
+    };
+    const partsOf = (r: (typeof sheet.rows)[number], id: string) =>
+      (byId.get(id)?.parts ?? [])
+        .map((p) => {
+          const v = r.parts[p.id];
+          return `${p.code ?? p.name} ${v ? (v.absent ? 'AB' : String(Number(v.marks))) : '-'}`;
+        })
+        .join(', ');
+    const head: Array<{ label: string; group?: string }> = [
+      { label: 'Roll' },
+      { label: 'Adm no' },
+      { label: 'Student' },
     ];
-    const body = sheet.rows.map((r) => [
-      r.rollNo ?? '',
-      r.admissionNo,
-      r.name,
-      ...sheet.subjects.map((x) => {
-        if (r.notTaken.includes(x.id)) return '—';
-        const m = r.marks[x.id];
-        if (!m) return '';
-        if (m.code) return m.code;
-        if (m.absent) return 'AB';
-        if (m.exempt) return 'EX';
-        return m.grade ?? (m.marks === null ? '' : String(Number(m.marks)));
-      }),
-      r.total ? `${String(Number(r.total))} / ${String(Number(r.maxTotal))}` : '',
-      r.pct ?? '',
-      r.grade ?? '',
-      r.rankInSection ?? '',
-      r.result ? (RESULT[r.result] ?? r.result) : '',
-    ]);
+    for (let k = 0; k < slots; k += 1) {
+      const group = `Subject-${String(k + 1)}`;
+      head.push({ label: 'Subject', group }, { label: 'Marks', group });
+      if (withParts[k]) head.push({ label: 'Parts', group });
+    }
+    for (const label of ['Total', '%', 'Grade', 'Rank', 'Result']) head.push({ label });
+    const body = sheet.rows.map((r) => {
+      const line: Array<string | number> = [r.rollNo ?? '', r.admissionNo, r.name];
+      for (let k = 0; k < slots; k += 1) {
+        const id = r.slots[k];
+        const sub = id ? byId.get(id) : undefined;
+        line.push(
+          sub ? `${sub.code}${r.additional.includes(sub.id) ? ' (A)' : ''}` : '',
+          id ? marksOf(r, id) : '',
+        );
+        if (withParts[k]) line.push(id ? partsOf(r, id) : '');
+      }
+      line.push(
+        r.total ? `${String(Number(r.total))} / ${String(Number(r.maxTotal))}` : '',
+        r.pct ?? '',
+        r.grade ?? '',
+        r.rankInSection ?? '',
+        r.result ? (RESULT[r.result] ?? r.result) : '',
+      );
+      return line;
+    });
     const title = `${sheet.exam.name} · ${sheet.section.code}`;
     const stamp = `${sheet.exam.code}-${sheet.section.code}`
       .toLowerCase()
@@ -301,10 +358,24 @@ export class ExamResultsService {
       const ws = wb.addWorksheet('Register');
       ws.addRow([title]).font = { bold: true, size: 13 };
       ws.addRow([school]);
-      ws.addRow(head).font = { bold: true };
+      // Subject-1, Subject-2, … over their columns
+      const groups = ws.addRow(head.map((h) => h.group ?? ''));
+      groups.font = { bold: true };
+      ws.addRow(head.map((h) => h.label)).font = { bold: true };
+      let col = 1;
+      while (col <= head.length) {
+        const g = head[col - 1]!.group;
+        let end = col;
+        while (g && end < head.length && head[end]!.group === g) end += 1;
+        if (g && end > col) ws.mergeCells(groups.number, col, groups.number, end);
+        col = end + 1;
+      }
       for (const line of body) ws.addRow(line);
       ws.getColumn(3).width = 26;
-      ws.views = [{ state: 'frozen', xSplit: 3, ySplit: 3 }];
+      head.forEach((h, i) => {
+        if (h.label === 'Parts') ws.getColumn(i + 1).width = 28;
+      });
+      ws.views = [{ state: 'frozen', xSplit: 3, ySplit: 4 }];
       return {
         filename: `register-${stamp}.xlsx`,
         contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
@@ -320,12 +391,15 @@ export class ExamResultsService {
           ? `Worked out ${sheet.exam.computedAt.slice(0, 10)}`
           : 'Not worked out',
       ],
-      columns: head.map((label, i) => ({
-        label,
-        width: i === 2 ? 4 : i < 2 ? 1.6 : 1.2,
-        right: i > 2,
+      columns: head.map((h, i) => ({
+        label: h.label,
+        width:
+          i === 2 ? 4 : i < 2 ? 1.6 : h.label === 'Parts' ? 3.2 : h.label === 'Subject' ? 1.3 : 1.2,
+        right: i > 2 && h.label !== 'Subject' && h.label !== 'Parts',
+        ...(h.group ? { group: h.group } : {}),
       })),
       rows: body,
+      wrap: true,
       fontSize: head.length > 24 ? 6.5 : 8,
     });
     return {

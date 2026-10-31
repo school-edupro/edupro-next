@@ -124,3 +124,26 @@ tick); the class teacher edits, **subject teachers see** their sections read-onl
 | Delete (trash, soft)                               | **Clear** on a row (back to "Not set"); nothing is lost: every change is in the audit trail                                                                                                                                                                        |
 | student_subject_mapping_log                        | **History** on a row: who added, took off or changed each subject, from the audit log                                                                                                                                                                              |
 | Teachers see their classes                         | class teacher edits; subject teachers read only (`sections[].mine`)                                                                                                                                                                                                |
+
+## Registers by numbered slots; sub-subjects set once per class (31 Oct, migrations 0292–0293)
+
+Decisions: the mark registers use **numbered slots** (legacy Subject-1 … Subject-n), for the single-exam
+register (screen, Excel, PDF) and the term registers of the mark schemes; sub-subjects are set **once per
+class**; parts show in the **registers**, the report card prints the **total** only.
+
+- **Slots**: each student's own subjects in the class's order (`app.subject_seq`), additional last, fill
+  Subject-1, Subject-2, …; a subject the student does not take has no column at all (a Hindi student
+  has no Sanskrit or German cell). Each cell is the subject's code and its marks (AB, EX, a code or a
+  grade), "A" for an additional one; when every student has the same subject in a slot its heading says
+  so. Excel / PDF: per slot "Subject", "Marks" and, when its subject is entered in parts, "Parts"
+  ("GEO 20, HIS 21, POL 22"), under a merged Subject-n heading. Term registers: per slot "Subject" then
+  the scheme's printed columns and the grade. `register-sheet` rows carry `slots` (exam subject ids) and
+  `parts`; subjects carry their `parts`; the scheme register JSON carries `slots`.
+- **Parts per class**: Class set-up → "Entered in parts" lists a subject's sub-subjects from the subject
+  master (Social Science → Geography, History, Pol. Sc.) with a share each (`class_subject_parts`).
+  `app.apply_class_parts(exam_subject)` gives an exam subject the class's parts when it has none and no
+  marks: the exam's maximum split by the shares, whole marks rounded down for all but the last part,
+  which takes the rest (80 with 1:1:1 → 26 + 26 + 28; shares 27:27:26 give exactly that). It runs when
+  an exam's subjects are saved and when the class set-up is saved (for the year's exams). Each part's
+  teacher enters it (existing part entry); the parts add up to the subject's marks, so results and the
+  card read the total as before. An exam may still change its parts on its own set-up.

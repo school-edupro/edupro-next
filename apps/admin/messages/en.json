@@ -2871,7 +2871,8 @@
     "recordHelp": "Ticked pupils are written with their proposal (promote or retain) to People → Promotions for the chosen year; apply them there when the year opens.",
     "noTarget": "No planned or active year to promote into; create it under System → Years.",
     "notTaken": "Does not take this subject",
-    "additional": "Additional subject (kept out of the total)"
+    "additional": "Additional subject (kept out of the total)",
+    "slot": "Subject-{n}"
   },
   "aiReports": {
     "run": "Generate now",

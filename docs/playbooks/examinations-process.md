@@ -76,6 +76,10 @@ Do these once; review them each session.
    - **Whole class** (the old Master Subject Mapping) gives "taking / students" per subject by
      section and sets one column for every section at once; PDF and Excel for timetable and paper
      orders. **Opt** marks a student's own additional subject; **History** shows each change.
+     Sub-subjects (Social Science: Geography, History, Pol. Sc.) are set once in Class set-up
+     ("Entered in parts"); every exam splits the subject's maximum by their shares. Mark registers show
+     each student's own subjects as Subject-1, Subject-2, … in the class's order, with the parts; no blank
+     column for a subject a student does not take.
      Until choices are recorded a student takes every subject. A subject with marks can't be taken off
      (mark it NA first). A subject not taken shows "—" in the register and is left off the card.
 3. **Teacher assignments** — Academics → Teacher assignments: the class teacher and the subject teacher

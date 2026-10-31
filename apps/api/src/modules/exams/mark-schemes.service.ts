@@ -676,12 +676,21 @@ export class MarkSchemesService {
     for (const r of out.rows)
       for (const x of r.subjects)
         if (!subjects.some((y) => y.code === x.code)) subjects.push({ code: x.code, name: x.name });
+    // each student's own subjects in the class's order, additional last: Subject-1, Subject-2, …
+    const own = out.rows.map((r) => ({
+      ...r,
+      subjects: [
+        ...r.subjects.filter((x) => x.kind !== 'additional'),
+        ...r.subjects.filter((x) => x.kind === 'additional'),
+      ],
+    }));
+    const slots = Math.max(0, ...own.map((r) => r.subjects.length));
     const rows =
       q.view === 'merit'
-        ? out.rows
+        ? own
             .filter((r) => r.rankInClass !== null)
             .sort((a, b) => a.rankInClass! - b.rankInClass! || a.name.localeCompare(b.name))
-        : out.rows;
+        : own;
     const counts: Record<string, number> = {};
     for (const r of out.rows) counts[r.result] = (counts[r.result] ?? 0) + 1;
     const title = `${out.s.name}${out.s.term_code ? ` · ${out.s.term_code}` : ''} · ${out.place}`;
@@ -698,6 +707,8 @@ export class MarkSchemesService {
         view: q.view,
         columns: printed.map((x) => ({ key: x.key, label: x.label, total: Boolean(x.total) })),
         subjects,
+        /** the most subjects a student takes: Subject-1 … Subject-n (docs/design/67) */
+        slots,
         rows: rows.map((r) => ({
           ...r,
           subjects: r.subjects.map((x) => ({
@@ -707,15 +718,18 @@ export class MarkSchemesService {
         })),
         counts,
       };
-    // a file: per subject its printed columns and grade, then the overall figures
+    // a file: Subject-1, Subject-2, … each with the subject, its printed columns and grade, then the
+    // overall figures (docs/design/67: no column for a subject a student does not take)
     const head: Array<{ label: string; group?: string }> = [
       { label: q.view === 'merit' ? 'Rank' : 'Roll' },
       { label: 'Adm no' },
       { label: 'Student' },
     ];
-    for (const sub of subjects) {
-      for (const p of printed) head.push({ label: p.label, group: sub.name });
-      head.push({ label: 'Grade', group: sub.name });
+    for (let k = 0; k < slots; k += 1) {
+      const group = `Subject-${String(k + 1)}`;
+      head.push({ label: 'Subject', group });
+      for (const p of printed) head.push({ label: p.label, group });
+      head.push({ label: 'Grade', group });
     }
     for (const l of ['Total', 'Max', '%', 'Grade', 'Division', 'Result', 'Rank'])
       head.push({ label: l });
@@ -727,10 +741,11 @@ export class MarkSchemesService {
         r.admissionNo,
         r.name,
       ];
-      for (const sub of subjects) {
-        const x = r.subjects.find((y) => y.code === sub.code);
+      for (let k = 0; k < slots; k += 1) {
+        const x = r.subjects[k];
+        line.push(x ? `${x.code}${x.kind === 'additional' ? ' (A)' : ''}` : '');
         for (const p of printed) line.push(x ? cell(x.values[p.key]) : '');
-        line.push(x ? (x.grade ?? (x.kind === 'additional' ? 'Addl.' : '')) : '');
+        line.push(x ? (x.grade ?? '') : '');
       }
       line.push(
         show(r.total),
@@ -752,11 +767,11 @@ export class MarkSchemesService {
       const groups = ws.addRow(head.map((h) => h.group ?? ''));
       groups.font = { bold: true };
       ws.addRow(head.map((h) => h.label)).font = { bold: true };
-      // each subject's name over its columns
+      // Subject-1, Subject-2, … over their columns
       let col = 4;
-      for (let i = 0; i < subjects.length; i += 1) {
-        const span = printed.length + 1;
-        if (span > 1) ws.mergeCells(groups.number, col, groups.number, col + span - 1);
+      for (let i = 0; i < slots; i += 1) {
+        const span = printed.length + 2;
+        ws.mergeCells(groups.number, col, groups.number, col + span - 1);
         col += span;
       }
       for (const line of body) ws.addRow(line);
@@ -780,7 +795,7 @@ export class MarkSchemesService {
       columns: head.map((h, i) => ({
         label: h.label,
         width: i === 2 ? 4 : i < 2 ? 1.6 : 1.2,
-        right: i > 2,
+        right: i > 2 && h.label !== 'Subject',
         ...(h.group ? { group: h.group } : {}),
       })),
       rows: body,

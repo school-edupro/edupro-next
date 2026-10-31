@@ -590,4 +590,144 @@ describe('subject choices and order (e2e)', () => {
     const none = (await call(other, 'GET', '/exams/subject-choices/sections')).json().data;
     expect(none.some((x: { mine: boolean }) => x.mine)).toBe(false);
   });
+
+  it('Social Science entered in parts once for the class: an exam splits it; the register shows each student’s own subjects as Subject-1, Subject-2, … with the parts', async () => {
+    const sst = (
+      await call(admin, 'POST', '/academics/subjects', {
+        code: 'SST',
+        name: 'Social Science',
+        kind: 'scholastic',
+        displayOrder: 20,
+      })
+    ).json().id as string;
+    subject.SST = sst;
+    for (const [code, name] of [
+      ['GEO', 'Geography'],
+      ['HIS', 'History'],
+      ['POL', 'Political Science'],
+    ]) {
+      const r = await call(admin, 'POST', '/academics/subjects', {
+        code,
+        name,
+        kind: 'scholastic',
+        parentId: sst,
+      });
+      expect(r.statusCode).toBe(201);
+      subject[code!] = r.json().id;
+    }
+    await withMigrator((c) =>
+      c.query(
+        `INSERT INTO class_subjects (school_id, academic_year_id, class_id, subject_id) VALUES ($1, $2, $3, $4)`,
+        [school.id, school.yearId, classId, sst],
+      ),
+    );
+    // Social Science fourth, for everyone, in three parts (a part must be a sub-subject)
+    const plan = setup({ pe: 'all' }) as ReturnType<typeof setup> & {
+      subjects: Array<Record<string, unknown>>;
+    };
+    plan.subjects.splice(5, 0, {
+      subjectId: sst,
+      take: 'all',
+      parts: [
+        { subjectId: subject.GEO, share: 1 },
+        { subjectId: subject.HIS, share: 1 },
+        { subjectId: subject.POL, share: 1 },
+      ],
+    });
+    const wrong = structuredClone(plan);
+    (wrong.subjects[5] as unknown as { parts: unknown[] }).parts = [
+      { subjectId: subject.ENG, share: 1 },
+    ];
+    expect((await call(admin, 'PUT', '/exams/subject-choices/setup', wrong)).statusCode).toBe(400);
+    const saved = await call(admin, 'PUT', '/exams/subject-choices/setup', plan);
+    expect(saved.statusCode).toBe(200);
+    expect(
+      (saved.json().subjects as Array<{ code: string; parts: Array<{ code: string }> }>)
+        .find((x) => x.code === 'SST')!
+        .parts.map((p) => p.code),
+    ).toEqual(['GEO', 'HIS', 'POL']);
+    // a new exam: Social Science out of 80 comes in parts 26 + 26 + 28
+    const type = (await call(admin, 'GET', '/exams/types')).json().data[0].id as string;
+    const exam = await call(admin, 'POST', '/exams', {
+      examTypeId: type,
+      code: 'HY-SC',
+      name: 'Half yearly',
+      classes: [{ classId }],
+    });
+    const hy = exam.json().id as string;
+    const subs = await call(admin, 'PUT', `/exams/${hy}/subjects`, {
+      classId,
+      subjects: Object.entries(subject)
+        .filter(([k]) => !['GEO', 'HIS', 'POL'].includes(k))
+        .map(([k, id]) => ({ subjectId: id, maxMarks: k === 'SST' ? 80 : 50, passMarks: 17 })),
+    });
+    expect(subs.statusCode).toBe(200);
+    const es = (
+      subs.json().subjects as Array<{
+        id: string;
+        subjectCode: string;
+        maxMarks: string;
+        parts?: Array<{ id: string; name: string; maxMarks: string }>;
+      }>
+    ).find((x) => x.subjectCode === 'SST')!;
+    expect(es.maxMarks).toBe('80.00');
+    expect(es.parts!.map((p) => [p.name, Number(p.maxMarks)])).toEqual([
+      ['Geography', 26],
+      ['History', 26],
+      ['Political Science', 28],
+    ]);
+    for (const [i, p] of es.parts!.entries())
+      expect(
+        (
+          await call(office, 'PUT', `/exams/${hy}/part-marks`, {
+            classSectionId: section,
+            partId: p.id,
+            rows: [{ studentId: student.Anu, marks: 20 + i }],
+          })
+        ).statusCode,
+      ).toBe(200);
+    expect(
+      (
+        await call(office, 'PUT', `/exams/${hy}/marks`, {
+          classSectionId: section,
+          subjectId: subject.ENG,
+          rows: [{ studentId: student.Anu, marks: 44 }],
+        })
+      ).statusCode,
+    ).toBe(200);
+    const sheet = (
+      await call(admin, 'GET', `/exams/${hy}/register-sheet?classSectionId=${section}`)
+    ).json();
+    const code = (id: string) =>
+      sheet.subjects.find((x: { id: string; code: string }) => x.id === id).code as string;
+    const anu = sheet.rows.find((r: { studentId: string }) => r.studentId === student.Anu);
+    // her own subjects only, in the class's order, Music (additional) last; no Sanskrit, French or Biology
+    expect(anu.slots.map(code)).toEqual(['ENG', 'HIN', 'MAT', 'SST', 'PHY', 'CHE', 'PE', 'MUS']);
+    const sstRow = sheet.subjects.find((x: { code: string }) => x.code === 'SST');
+    expect(sstRow.parts.map((p: { code: string }) => p.code)).toEqual(['GEO', 'HIS', 'POL']);
+    expect(Object.values(anu.parts).map((v) => Number((v as { marks: string }).marks))).toEqual(
+      expect.arrayContaining([20, 21, 22]),
+    );
+    // the files: Subject-1 … with the subject, its marks and its parts
+    const file = await call(
+      admin,
+      'GET',
+      `/exams/${hy}/register-sheet?classSectionId=${section}&format=xlsx`,
+    );
+    const wb = new ExcelJS.Workbook();
+    await wb.xlsx.load(
+      Buffer.from(file.json().base64 as string, 'base64') as unknown as ArrayBuffer,
+    );
+    const ws = wb.worksheets[0]!;
+    const groups = Array.from(ws.getRow(3).values as unknown[], (v) => String(v ?? ''));
+    const heads = Array.from(ws.getRow(4).values as unknown[], (v) => String(v ?? ''));
+    expect(groups).toContain('Subject-1');
+    expect(heads.slice(4, 6)).toEqual(['Subject', 'Marks']);
+    const line = Array.from(ws.getRow(5).values as unknown[], (v) => String(v ?? ''));
+    expect(line).toContain('GEO 20, HIS 21, POL 22');
+    expect(
+      (await call(admin, 'GET', `/exams/${hy}/register-sheet?classSectionId=${section}&format=pdf`))
+        .statusCode,
+    ).toBe(200);
+  });
 });

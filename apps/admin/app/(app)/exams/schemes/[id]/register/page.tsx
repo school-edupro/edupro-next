@@ -17,6 +17,8 @@ interface Register {
   view: 'marks' | 'merit';
   columns: Array<{ key: string; label: string; total: boolean }>;
   subjects: Array<{ code: string; name: string }>;
+  /** the most subjects a student takes: Subject-1 … Subject-n (docs/design/67) */
+  slots?: number;
   rows: Array<{
     studentId: string;
     name: string;
@@ -25,6 +27,7 @@ interface Register {
     section: string;
     subjects: Array<{
       code: string;
+      name?: string;
       kind: string;
       values: Record<string, Cell | null>;
       grade: string | null;
@@ -86,6 +89,10 @@ export default async function SchemeRegisterPage({
     ? `classSectionId=${sectionId}`
     : `classId=${classId ?? s.classIds[0] ?? ''}`;
   const reg = await apiFetch<Register>(`/exams/schemes/${id}/register?${where}&view=${view}`);
+  const slots = Array.from(
+    { length: reg.slots ?? Math.max(0, ...reg.rows.map((r) => r.subjects.length)) },
+    (_, k) => k,
+  );
   // the place and order in the path: View / Download add their own ?save=1
   const place = sectionId ? `s${sectionId}` : `c${classId ?? s.classIds[0] ?? ''}`;
   const file = (format: string) => `/api/exam-register/${s.id}/${format}/${place}/${view}`;
@@ -166,9 +173,10 @@ export default async function SchemeRegisterPage({
                 <th scope="col" rowSpan={2}>
                   Student
                 </th>
-                {reg.subjects.map((x) => (
-                  <th key={x.code} scope="colgroup" colSpan={reg.columns.length + 1}>
-                    {x.name}
+                {/* each student's own subjects in the class's order, additional last */}
+                {slots.map((k) => (
+                  <th key={k} scope="colgroup" colSpan={reg.columns.length + 2}>
+                    Subject-{k + 1}
                   </th>
                 ))}
                 <th scope="col" rowSpan={2} style={{ textAlign: 'right' }}>
@@ -188,10 +196,11 @@ export default async function SchemeRegisterPage({
                 </th>
               </tr>
               <tr>
-                {reg.subjects.map((x) => (
-                  <Fragment key={x.code}>
+                {slots.map((k) => (
+                  <Fragment key={k}>
+                    <th scope="col">Subject</th>
                     {reg.columns.map((c) => (
-                      <th key={`${x.code}-${c.key}`} scope="col" style={{ textAlign: 'right' }}>
+                      <th key={`${String(k)}-${c.key}`} scope="col" style={{ textAlign: 'right' }}>
                         {c.label}
                       </th>
                     ))}
@@ -210,13 +219,14 @@ export default async function SchemeRegisterPage({
                       {r.admissionNo} · {r.section}
                     </span>
                   </td>
-                  {reg.subjects.map((x) => {
-                    const sub = r.subjects.find((y) => y.code === x.code);
+                  {slots.map((k) => {
+                    const sub = r.subjects[k];
                     return (
-                      <Fragment key={x.code}>
+                      <Fragment key={k}>
+                        <td title={sub?.name}>{sub ? sub.code : ''}</td>
                         {reg.columns.map((c) => (
                           <td
-                            key={`${x.code}-${c.key}`}
+                            key={`${String(k)}-${c.key}`}
                             style={{ textAlign: 'right', fontWeight: c.total ? 600 : undefined }}
                           >
                             {sub ? fmt(sub.values[c.key]) : ''}

@@ -647,6 +647,11 @@ export class ExamsService {
         `DELETE FROM exam_subjects WHERE exam_id = $1 AND class_id = $2 AND NOT entry_locked AND NOT (subject_id = ANY($3::bigint[]))`,
         [examId, dto.classId, dto.subjects.map((s) => s.subjectId)],
       );
+      // a subject the class enters in parts (Class set-up, docs/design/67) gets them, while it has none
+      await c.query(
+        `SELECT app.apply_class_parts(id) FROM exam_subjects WHERE exam_id = $1 AND class_id = $2`,
+        [examId, dto.classId],
+      );
       await this.audit.stage(ctx, c, {
         action: 'exams.subjects.set',
         entityType: 'exams',

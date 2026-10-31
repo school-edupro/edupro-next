@@ -286,6 +286,11 @@ export const PutSubjectSetupSchema = z
           /** all: compulsory; group: one of a choice group; free: an elective anyone may take */
           take: z.enum(['all', 'group', 'free']),
           group: z.string().trim().max(60).nullable().optional(),
+          /** entered in parts by its sub-subjects (Geography, History, …), each with a share of the maximum */
+          parts: z
+            .array(z.object({ subjectId: IdSchema, share: z.number().positive().max(1000) }))
+            .max(8)
+            .optional(),
         }),
       )
       .min(1)

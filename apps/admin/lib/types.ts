@@ -2244,13 +2244,24 @@ export interface RegisterSheet {
     name: string;
     maxMarks: string;
     passMarks: string | null;
+    /** entered in parts (Geography, History, …) */
+    parts?: Array<{ id: string; name: string; code: string | null; maxMarks: string }>;
   }>;
   rows: Array<{
     studentId: string;
     name: string;
     admissionNo: string;
     rollNo: number | null;
-    marks: Record<string, { marks: string | null; absent: boolean; exempt: boolean }>;
+    marks: Record<
+      string,
+      {
+        marks: string | null;
+        absent: boolean;
+        exempt: boolean;
+        code?: string | null;
+        grade?: string | null;
+      }
+    >;
     total: string | null;
     maxTotal: string | null;
     pct: string | null;
@@ -2262,6 +2273,10 @@ export interface RegisterSheet {
     /** exam subject ids the student does not take ("—"), and those taken as additional */
     notTaken?: string[];
     additional?: string[];
+    /** part id → its marks */
+    parts?: Record<string, { marks: string | null; absent: boolean }>;
+    /** the student's own subjects in the class's order: Subject-1, Subject-2, … */
+    slots?: string[];
   }>;
 }
 export interface ExamAnalysis {

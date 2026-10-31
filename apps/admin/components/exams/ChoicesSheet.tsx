@@ -9,6 +9,9 @@ export interface ChoiceSubject {
   name: string;
   take: 'all' | 'group' | 'free';
   groupId: string | null;
+  /** its sub-subjects in the subject master, and those it is entered in (Class set-up) */
+  children?: Array<{ id: string; code: string; name: string }>;
+  parts?: Array<{ subjectId: string; code: string; name: string; share: number }>;
 }
 export interface ChoiceGroup {
   id: string;

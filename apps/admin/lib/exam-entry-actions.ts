@@ -187,16 +187,22 @@ export interface SubjectSetupInput {
     min: number;
     max: number;
   }>;
-  subjects: Array<{ subjectId: string; take: 'all' | 'group' | 'free'; group: string | null }>;
+  subjects: Array<{
+    subjectId: string;
+    take: 'all' | 'group' | 'free';
+    group: string | null;
+    /** entered in parts by its sub-subjects, each with a share of the maximum */
+    parts: Array<{ subjectId: string; share: number }>;
+  }>;
   streams: Array<{ name: string; subjectIds: string[] }>;
 }
 
-/** A class's subject order, choice groups and streams. */
+/** A class's subject order, choice groups, streams and sub-subject parts. */
 export async function saveSubjectSetup(
   input: SubjectSetupInput,
-): Promise<Out<{ added: number; rekinded: number }>> {
+): Promise<Out<{ added: number; rekinded: number; parts: number }>> {
   if (!okId(input.classId)) return { ok: false, error: 'Choose the class' };
-  const out = await call<{ added: number; rekinded: number }>(
+  const out = await call<{ added: number; rekinded: number; parts: number }>(
     '/exams/subject-choices/setup',
     'PUT',
     input,

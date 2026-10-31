@@ -23,6 +23,8 @@ interface State {
   take: Record<string, string>;
   groups: Group[];
   streams: Stream[];
+  /** a subject entered in parts: its sub-subjects with their share of the maximum */
+  parts: Record<string, Array<{ subjectId: string; share: number }>>;
 }
 type Place = { kind: 's'; id: string } | { kind: 'g'; key: string; ids: string[] };
 
@@ -80,6 +82,12 @@ export function ClassSubjectSetup({
         max: g.max,
       })),
       streams: streams.map((s) => ({ key: s.id, name: s.name, ids: s.subjectIds })),
+      parts: Object.fromEntries(
+        subjects.map((x) => [
+          x.id,
+          (x.parts ?? []).map((p) => ({ subjectId: p.subjectId, share: p.share })),
+        ]),
+      ),
     }),
     [subjects, groups, streams],
   );
@@ -190,9 +198,10 @@ export function ClassSubjectSetup({
       groups: s.groups.map((g) => ({ ...g, name: g.name.trim() })),
       subjects: s.order.map((id) => {
         const t = s.take[id]!;
+        const parts = s.parts[id] ?? [];
         return t === 'all' || t === 'free'
-          ? { subjectId: id, take: t, group: null }
-          : { subjectId: id, take: 'group', group: t };
+          ? { subjectId: id, take: t, group: null, parts }
+          : { subjectId: id, take: 'group' as const, group: t, parts };
       }),
       streams: s.streams.map((x) => ({ name: x.name.trim(), subjectIds: x.ids })),
     };
@@ -209,6 +218,65 @@ export function ClassSubjectSetup({
     window.location.assign(url.toString());
   };
 
+  /** the sub-subjects a subject is entered in (Social Science: Geography, History, Pol. Sc.) */
+  const setPart = (id: string, kid: string, share: number | null) => {
+    const cur = s.parts[id] ?? [];
+    const next =
+      share === null
+        ? cur.filter((p) => p.subjectId !== kid)
+        : cur.some((p) => p.subjectId === kid)
+          ? cur.map((p) => (p.subjectId === kid ? { ...p, share } : p))
+          : [...cur, { subjectId: kid, share }];
+    set({ ...s, parts: { ...s.parts, [id]: next } });
+  };
+  const partsCell = (id: string) => {
+    const kids = sub(id).children ?? [];
+    if (!kids.length) return <span className="ep-kicker">-</span>;
+    const mine = s.parts[id] ?? [];
+    return (
+      <fieldset style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }}>
+        <legend className="ep-sr-only">{`${label(id)}: entered in parts`}</legend>
+        {kids.map((k) => {
+          const p = mine.find((x) => x.subjectId === k.id);
+          return (
+            <span
+              key={k.id}
+              style={{
+                display: 'inline-flex',
+                gap: 'var(--sp-1)',
+                alignItems: 'center',
+                marginRight: 'var(--sp-3)',
+              }}
+            >
+              <label>
+                <input
+                  type="checkbox"
+                  checked={Boolean(p)}
+                  disabled={!canEdit}
+                  onChange={(e) => setPart(id, k.id, e.target.checked ? 1 : null)}
+                />{' '}
+                <abbr title={k.name}>{k.code}</abbr>
+              </label>
+              {p ? (
+                <input
+                  className="ep-input"
+                  type="number"
+                  min={0.5}
+                  max={1000}
+                  step={0.5}
+                  aria-label={`${k.name}: share of ${sub(id).name}'s maximum`}
+                  value={p.share}
+                  disabled={!canEdit}
+                  onChange={(e) => setPart(id, k.id, Math.max(0.5, Number(e.target.value) || 1))}
+                  style={{ width: '4.5rem' }}
+                />
+              ) : null}
+            </span>
+          );
+        })}
+      </fieldset>
+    );
+  };
   const takeSelect = (id: string) => (
     <select
       className="ep-select"
@@ -257,8 +325,13 @@ export function ClassSubjectSetup({
     <div>
       <h3 style={{ marginTop: 0 }}>Order on the report card and the register</h3>
       <p className="ep-field__help" style={{ marginTop: 0 }}>
-        The subjects print in this order. A group prints at its place: each student&rsquo;s own
-        subject from it. Additional subjects print last on the card, marked.
+        The subjects print in this order, as Subject-1, Subject-2, … in the mark registers. A group
+        prints at its place: each student&rsquo;s own subject from it. Additional subjects print
+        last, marked. &ldquo;Entered in parts&rdquo;: a subject&rsquo;s sub-subjects (Social
+        Science: Geography, History, Pol. Sc.), each entered by its own teacher; every exam of the
+        class splits the subject&rsquo;s maximum by the shares (1, 1, 1 for equal parts, or the
+        marks themselves, e.g. 27, 27, 26 out of 80). The registers show the parts; the report card
+        the total.
       </p>
       <div className="ep-table-wrap" tabIndex={0} role="region" aria-label="Order of the subjects">
         <table className="ep-table ep-table--dense">
@@ -268,6 +341,12 @@ export function ClassSubjectSetup({
               <th scope="col">#</th>
               <th scope="col">Subject</th>
               <th scope="col">Who takes it</th>
+              <th scope="col">
+                Entered in parts
+                <span className="ep-kicker" style={{ display: 'block' }}>
+                  sub-subject: share of the maximum
+                </span>
+              </th>
               {canEdit ? <th scope="col">Move</th> : null}
             </tr>
           </thead>
@@ -282,6 +361,7 @@ export function ClassSubjectSetup({
                     <td>{n}</td>
                     <th scope="row">{label(p.id)}</th>
                     <td>{takeSelect(p.id)}</td>
+                    <td>{partsCell(p.id)}</td>
                     {canEdit ? (
                       <td>
                         {arrows(
@@ -302,7 +382,7 @@ export function ClassSubjectSetup({
               return [
                 <tr key={`g-${p.key}`}>
                   <td>{at}</td>
-                  <th scope="row" colSpan={2}>
+                  <th scope="row" colSpan={3}>
                     {g?.name ?? ''}{' '}
                     <span className="ep-kicker">
                       {g?.kind === 'additional' ? 'additional, ' : ''}pick{' '}
@@ -327,6 +407,7 @@ export function ClassSubjectSetup({
                     <td />
                     <td style={{ paddingLeft: 'var(--sp-5)' }}>{label(id)}</td>
                     <td>{takeSelect(id)}</td>
+                    <td>{partsCell(id)}</td>
                     {canEdit ? (
                       <td>
                         {arrows(
