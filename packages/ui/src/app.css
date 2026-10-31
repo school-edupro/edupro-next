@@ -13424,3 +13424,120 @@ button.ep-subchoice__icon:hover {
   gap: var(--sp-3);
   align-items: flex-end;
 }
+
+/* Exam marks status as a grid (docs/design/66): a block per class, a tile per section × subject */
+.ep-statusgrid__tools {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-4);
+  align-items: flex-end;
+  justify-content: space-between;
+}
+.ep-statusgrid__legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: var(--fs-caption);
+  color: var(--text-body);
+}
+.ep-statusgrid__legend li {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-1);
+}
+.ep-statusgrid__swatch {
+  display: inline-block;
+  width: 0.9rem;
+  height: 0.9rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-default);
+}
+.ep-statusgrid__block {
+  margin-top: var(--sp-4);
+}
+.ep-statusgrid__title {
+  margin: 0 0 var(--sp-2);
+  font-size: var(--fs-h4);
+}
+.ep-statusgrid th,
+.ep-statusgrid td {
+  text-align: center;
+  vertical-align: middle;
+  padding: var(--sp-1);
+}
+.ep-statusgrid tbody th,
+.ep-statusgrid tfoot th {
+  text-align: left;
+  white-space: nowrap;
+}
+.ep-statusgrid__tile {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-width: 5.5rem;
+  min-height: 3rem;
+  padding: var(--sp-1);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  background: var(--surface-card);
+  color: var(--text-heading);
+  text-decoration: none;
+  line-height: 1.2;
+}
+.ep-statusgrid__tile:hover {
+  border-color: var(--border-accent);
+}
+.ep-statusgrid__tile:focus-visible,
+.ep-statusgrid__tile[aria-current='true'] {
+  outline: 2px solid var(--border-accent);
+  outline-offset: 2px;
+}
+.ep-statusgrid__num {
+  font-weight: var(--fw-semibold);
+  font-size: var(--fs-small);
+}
+.ep-statusgrid__state {
+  font-size: var(--fs-caption);
+  color: var(--text-body);
+}
+.ep-statusgrid__tile[data-state='notStarted'],
+.ep-statusgrid__swatch[data-state='notStarted'] {
+  background: var(--surface-subtle);
+}
+.ep-statusgrid__tile[data-state='inProgress'],
+.ep-statusgrid__swatch[data-state='inProgress'] {
+  background: var(--status-warning-bg);
+}
+.ep-statusgrid__tile[data-state='ready'],
+.ep-statusgrid__swatch[data-state='ready'] {
+  background: var(--status-info-bg);
+}
+.ep-statusgrid__tile[data-state='submitted'],
+.ep-statusgrid__swatch[data-state='submitted'] {
+  background: var(--mob-cyan-50);
+  border-color: var(--border-accent);
+}
+.ep-statusgrid__tile[data-state='verified'],
+.ep-statusgrid__swatch[data-state='verified'] {
+  background: var(--status-success-bg);
+}
+.ep-statusgrid__tile[data-state='nobody'] {
+  background: none;
+  border-style: dashed;
+  color: var(--text-muted);
+}
+.ep-statusgrid__swatch[data-state='nobody'] {
+  border-style: dashed;
+}
+.ep-statusgrid__sum {
+  font-size: var(--fs-small);
+  color: var(--text-heading);
+  white-space: nowrap;
+}
+.ep-statusgrid__cell {
+  scroll-margin-top: 5rem;
+}

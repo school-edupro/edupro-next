@@ -13,6 +13,8 @@ type Status = 'open' | 'submitted' | 'verified';
 
 export interface EntryStatusRow {
   examId: string;
+  /** the section's class (the status grid: a block per class) */
+  classId: string;
   examCode: string;
   examSubjectId: string;
   subjectId: string;
@@ -35,7 +37,7 @@ export interface EntryStatusRow {
 /** One section × subject of the exams asked for, with how many take it and how many are entered. */
 const ROWS = `
   SELECT e.id::text AS exam_id, e.code AS exam_code, es.id::text AS exam_subject_id, es.subject_id::text, sub.code AS subject_code,
-         sub.name AS subject_name, cs.id::text AS class_section_id, k.code || '-' || cs.name AS section,
+         sub.name AS subject_name, cs.id::text AS class_section_id, cs.class_id::text AS class_id, k.code || '-' || cs.name AS section,
          (SELECT count(*)::int FROM enrolments en WHERE en.class_section_id = cs.id AND en.academic_year_id = e.academic_year_id
              AND en.status = 'active' AND app.student_exam_subject_kind(en.student_id, e.id, es.subject_id) IS NOT NULL) AS takers,
          (SELECT count(*)::int FROM enrolments en JOIN mark_entries m ON m.student_id = en.student_id AND m.exam_subject_id = es.id
@@ -61,6 +63,7 @@ interface Raw {
   subject_code: string;
   subject_name: string;
   class_section_id: string;
+  class_id: string;
   section: string;
   takers: number;
   entered: number;
@@ -123,6 +126,7 @@ export class ExamStatusService {
       subjectCode: r.subject_code,
       subjectName: r.subject_name,
       classSectionId: r.class_section_id,
+      classId: r.class_id,
       section: r.section,
       takers: r.takers,
       entered: r.entered,

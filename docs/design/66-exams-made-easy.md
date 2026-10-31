@@ -232,3 +232,13 @@ exams/indicator-sets/:id/classes` (`exams.master.manage`) sets them (a class tic
   marks-only exam refusing indicators and remarks and starting in set-up, indicators turned on
   bringing the set). Browser: a throwaway copy of PT1 set to marks only (tabs, overview, the old
   indicators link), the mapping saved, the types form; removed after.
+
+## Marks status as a grid (31 Oct)
+
+Exam → Marks → Marks status is a grid, a block per class (or one class picked): a row per section, a column per
+subject in the class's order (`entry-status` rows carry `classId`). Each tile shows the marks entered out of the
+students who take the subject and its stage, by colour: not started, in progress, entered (not submitted),
+submitted, verified (✓); "—" when nobody in the section takes it. A row ends with the subjects verified, the
+foot of a column with the marks entered. Picking a tile opens a card above the grid: entered of takers, who
+submitted / verified and when, the remark, the actions (submit, verify or send back, reopen with a reason) and
+"Open the marks sheet". The figures stay on top (total, open, missing, waiting, verified).

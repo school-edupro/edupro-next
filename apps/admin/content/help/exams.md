@@ -112,6 +112,11 @@
   write their feedback in the parent app under **Results**; it is kept as they wrote it. The
   indicators lock of the class closes all of it.
 
+**Marks status** (Exam → Marks → Marks status) is a grid per class: a row per section, a column per subject.
+Each tile shows the marks entered out of the students who take the subject and its colour says where it
+stands (not started, in progress, entered, submitted, verified; "—" when nobody takes it). Pick a tile to
+see who submitted or verified it and to submit, verify, send back or reopen it.
+
 ## Results and report cards
 
 - **Results** tab of an exam: **Analysis**, **Mark register** (by section; Excel, and PDF to view or

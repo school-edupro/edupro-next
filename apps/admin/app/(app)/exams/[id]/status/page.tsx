@@ -18,17 +18,31 @@ interface Row extends EntryStatus {
   subjectId: string;
   subjectCode: string;
   subjectName: string;
+  classId: string;
   classSectionId: string;
   section: string;
   takers: number;
   entered: number;
   canVerify: boolean;
 }
+/** where a tile stands, for its colour */
+type State = 'nobody' | 'notStarted' | 'inProgress' | 'ready' | 'submitted' | 'verified';
+
+const stateOf = (x: Row): State => {
+  if (x.status === 'verified') return 'verified';
+  if (x.status === 'submitted') return 'submitted';
+  if (x.takers === 0) return 'nobody';
+  if (x.entered === 0) return 'notStarted';
+  return x.entered >= x.takers ? 'ready' : 'inProgress';
+};
 
 /**
- * Marks status of an exam (docs/design/65, part 2): every section × subject with the students who take
- * it, how many are entered, and where it stands: open → submitted → verified. The verifier verifies or
- * sends back here; reopening needs the unlock right and a reason.
+ * Marks status of an exam (docs/design/65, part 2) as a grid (docs/design/66): a block per class with a
+ * row per section and a column per subject in the class's order. Each tile shows the marks entered out
+ * of the students who take the subject and its stage (not started, in progress, entered, submitted,
+ * verified); a row ends with the subjects verified, a column with the marks entered. A picked tile opens
+ * above the grid with who submitted or verified it and its actions: submit, verify or send back,
+ * reopen (the unlock right, with a reason).
  */
 export default async function ExamStatusPage({
   params,
@@ -37,7 +51,7 @@ export default async function ExamStatusPage({
   params: Promise<{ id: string }>;
   searchParams: Promise<{
     classId?: string;
-    show?: string;
+    cell?: string;
     ok?: string;
     error?: string;
     detail?: string;
@@ -48,9 +62,10 @@ export default async function ExamStatusPage({
   if (!/^\d{1,18}$/.test(id)) notFound();
   const me = await getMe();
   if (!me.permissions.includes('exams.marks.view')) notFound();
-  const [t, st, exam, progress] = await Promise.all([
+  const [t, st, esa, exam, progress] = await Promise.all([
     getTranslations('examHub.entry'),
     getTranslations('examHub.status'),
+    getTranslations('examHub.esa'),
     apiFetch<Exam>(`/exams/${id}`).catch((e: unknown) => {
       if (e instanceof ApiError && e.status === 404) notFound();
       throw e;
@@ -62,14 +77,40 @@ export default async function ExamStatusPage({
     data: Row[];
     counts: { total: number; open: number; submitted: number; verified: number; missing: number };
   }>(`/exams/${id}/entry-status${classId ? `?classId=${classId}` : ''}`);
-  const show = ['open', 'submitted', 'verified'].includes(sp.show ?? '') ? sp.show : '';
-  const rows = show ? r.data.filter((x) => x.status === show) : r.data;
   const canEnter = me.permissions.includes('exams.marks.enter');
   const canReopen = me.permissions.includes('exams.marks.unlock');
-  const back = `/exams/${id}/status?${new URLSearchParams({
-    ...(classId ? { classId } : {}),
-    ...(show ? { show } : {}),
-  }).toString()}`;
+  const base = `/exams/${id}/status${classId ? `?classId=${classId}` : ''}`;
+  const link = (x: Row) =>
+    `/exams/${id}/status?${new URLSearchParams({
+      ...(classId ? { classId } : {}),
+      cell: `${x.classSectionId}|${x.subjectId}`,
+    }).toString()}#status-cell`;
+  const picked = sp.cell
+    ? r.data.find((x) => `${x.classSectionId}|${x.subjectId}` === sp.cell)
+    : undefined;
+  const label: Record<State, string> = {
+    nobody: st('nobody'),
+    notStarted: st('notStarted'),
+    inProgress: st('inProgress'),
+    ready: st('ready'),
+    submitted: esa('submitted'),
+    verified: esa('verified'),
+  };
+  // a block per class: its sections and its subjects in the order the rows come (the class's order)
+  const blocks = exam.classes
+    .filter((k) => !classId || k.classId === classId)
+    .map((k) => {
+      const rows = r.data.filter((x) => x.classId === k.classId);
+      const sections = [...new Map(rows.map((x) => [x.classSectionId, x.section])).entries()];
+      const subjects = [
+        ...new Map(
+          rows.map((x) => [x.subjectId, { code: x.subjectCode, name: x.subjectName }]),
+        ).entries(),
+      ];
+      return { k, rows, sections, subjects };
+    })
+    .filter((b) => b.rows.length);
+
   return (
     <>
       <ExamFrame
@@ -88,7 +129,7 @@ export default async function ExamStatusPage({
         ]}
       />
       <p className="ep-field__help" style={{ marginTop: 0 }}>
-        {st('intro')}
+        {st('gridIntro')}
       </p>
       <Notice params={sp} />
       <div
@@ -105,97 +146,184 @@ export default async function ExamStatusPage({
         <KpiTile label={st('waiting')} value={String(r.counts.submitted)} />
         <KpiTile label={st('verified')} value={String(r.counts.verified)} />
       </div>
-      <Card elevated>
-        <form
-          method="get"
-          style={{
-            display: 'flex',
-            gap: 'var(--sp-3)',
-            alignItems: 'flex-end',
-            flexWrap: 'wrap',
-            marginBottom: 'var(--sp-3)',
-          }}
+
+      {picked ? (
+        <Card
+          elevated
+          id="status-cell"
+          className="ep-statusgrid__cell"
+          title={st('cellTitle', {
+            section: picked.section,
+            subject: `${picked.subjectName} (${picked.subjectCode})`,
+          })}
+          style={{ marginBottom: 'var(--sp-4)' }}
+          actions={
+            <span style={{ display: 'inline-flex', gap: 'var(--sp-2)' }}>
+              <a
+                className="ep-btn ep-btn--secondary ep-btn--sm"
+                href={`/exams/${exam.id}/marks?pick=${encodeURIComponent(`${picked.classSectionId}|${picked.subjectId}`)}`}
+              >
+                {st('openSheet')}
+              </a>
+              <a className="ep-btn ep-btn--ghost ep-btn--sm" href={base}>
+                {st('close')}
+              </a>
+            </span>
+          }
         >
-          <label className="ep-field" htmlFor="st-class" style={{ minWidth: '11rem' }}>
-            <span className="ep-field__label">{st('class')}</span>
-            <select id="st-class" className="ep-select" name="classId" defaultValue={classId ?? ''}>
-              <option value="">{st('everyClass')}</option>
-              {exam.classes.map((k) => (
-                <option key={k.classId} value={k.classId}>
-                  {k.classCode}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="ep-field" htmlFor="st-show" style={{ minWidth: '11rem' }}>
-            <span className="ep-field__label">{st('status')}</span>
-            <select id="st-show" className="ep-select" name="show" defaultValue={show}>
-              <option value="">{st('any')}</option>
-              <option value="open">{st('open')}</option>
-              <option value="submitted">{st('waiting')}</option>
-              <option value="verified">{st('verified')}</option>
-            </select>
-          </label>
-          <AutoSubmit />
-          <noscript>
-            <button type="submit" className="ep-btn ep-btn--secondary">
-              {st('show')}
-            </button>
-          </noscript>
-        </form>
-        <div className="ep-table-wrap" tabIndex={0} role="region" aria-label={st('title')}>
-          <table className="ep-table ep-table--dense">
-            <caption className="ep-sr-only">{st('title')}</caption>
-            <thead>
-              <tr>
-                <th scope="col">{st('section')}</th>
-                <th scope="col">{st('subject')}</th>
-                <th scope="col" style={{ textAlign: 'right' }}>
-                  {st('entered')}
-                </th>
-                <th scope="col">{st('status')}</th>
-                <th scope="col">
-                  <span className="ep-sr-only">{st('actions')}</span>
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((x) => (
-                <tr key={`${x.examSubjectId}-${x.classSectionId}`}>
-                  <td>{x.section}</td>
-                  <td>
-                    <a
-                      href={`/exams/${exam.id}/marks?pick=${encodeURIComponent(`${x.classSectionId}|${x.subjectId}`)}`}
-                      style={{ textDecoration: 'underline' }}
-                    >
-                      {x.subjectCode} · {x.subjectName}
-                    </a>
-                  </td>
-                  <td style={{ textAlign: 'right' }}>
-                    {x.entered} / {x.takers}
-                  </td>
-                  <td>
-                    <EntryStatusBadge s={x} />
-                  </td>
-                  <td>
-                    <EntryStatusActions
-                      examId={exam.id}
-                      classSectionId={x.classSectionId}
-                      subjectId={x.subjectId}
-                      status={x.status}
-                      back={back}
-                      missing={Math.max(0, x.takers - x.entered)}
-                      canSubmit={canEnter}
-                      canVerify={x.canVerify}
-                      canReopen={canReopen}
-                    />
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <p style={{ marginTop: 0 }}>
+            <strong>{st('enteredOf', { n: picked.entered, m: picked.takers })}</strong>{' '}
+            <EntryStatusBadge s={picked} />
+          </p>
+          <EntryStatusActions
+            examId={exam.id}
+            classSectionId={picked.classSectionId}
+            subjectId={picked.subjectId}
+            status={picked.status}
+            back={`${base}${base.includes('?') ? '&' : '?'}cell=${encodeURIComponent(`${picked.classSectionId}|${picked.subjectId}`)}`}
+            missing={Math.max(0, picked.takers - picked.entered)}
+            canSubmit={canEnter}
+            canVerify={picked.canVerify}
+            canReopen={canReopen}
+          />
+        </Card>
+      ) : null}
+
+      <Card elevated>
+        <div className="ep-statusgrid__tools">
+          <form
+            method="get"
+            style={{ display: 'flex', gap: 'var(--sp-3)', alignItems: 'flex-end' }}
+          >
+            <label className="ep-field" htmlFor="st-class" style={{ minWidth: '11rem' }}>
+              <span className="ep-field__label">{st('class')}</span>
+              <select
+                id="st-class"
+                className="ep-select"
+                name="classId"
+                defaultValue={classId ?? ''}
+              >
+                <option value="">{st('everyClass')}</option>
+                {exam.classes.map((k) => (
+                  <option key={k.classId} value={k.classId}>
+                    {k.classCode}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <AutoSubmit />
+            <noscript>
+              <button type="submit" className="ep-btn ep-btn--secondary">
+                {st('show')}
+              </button>
+            </noscript>
+          </form>
+          <ul className="ep-statusgrid__legend" aria-label={st('legend')}>
+            {(
+              ['notStarted', 'inProgress', 'ready', 'submitted', 'verified', 'nobody'] as State[]
+            ).map((s) => (
+              <li key={s}>
+                <span className="ep-statusgrid__swatch" data-state={s} aria-hidden="true" />
+                {label[s]}
+              </li>
+            ))}
+          </ul>
         </div>
-        {!rows.length ? <p style={{ marginBottom: 0 }}>{st('nothing')}</p> : null}
+        {!picked ? <p className="ep-field__help">{st('pick')}</p> : null}
+
+        {blocks.map((b) => (
+          <section key={b.k.classId} className="ep-statusgrid__block" aria-label={b.k.classCode}>
+            <h3 className="ep-statusgrid__title">
+              {st('classBlock', {
+                cls: b.k.classCode,
+                sections: b.sections.length,
+                subjects: b.subjects.length,
+              })}
+            </h3>
+            <div className="ep-table-wrap" tabIndex={0} role="region" aria-label={b.k.classCode}>
+              <table className="ep-table ep-statusgrid">
+                <caption className="ep-sr-only">
+                  {st('title')} · {b.k.classCode}
+                </caption>
+                <thead>
+                  <tr>
+                    <th scope="col">{st('section')}</th>
+                    {b.subjects.map(([sid, s]) => (
+                      <th key={sid} scope="col" title={s.name}>
+                        {s.code}
+                      </th>
+                    ))}
+                    <th scope="col">{st('sectionDone')}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {b.sections.map(([secId, code]) => {
+                    const own = b.rows.filter((x) => x.classSectionId === secId);
+                    const counted = own.filter((x) => x.takers > 0);
+                    return (
+                      <tr key={secId}>
+                        <th scope="row">{code}</th>
+                        {b.subjects.map(([sid, s]) => {
+                          const x = own.find((y) => y.subjectId === sid);
+                          if (!x) return <td key={sid} />;
+                          const state = stateOf(x);
+                          return (
+                            <td key={sid}>
+                              <a
+                                className="ep-statusgrid__tile"
+                                data-state={state}
+                                aria-current={picked === x ? 'true' : undefined}
+                                href={link(x)}
+                                aria-label={st('tile', {
+                                  subject: s.name,
+                                  section: code,
+                                  n: x.entered,
+                                  m: x.takers,
+                                  state: label[state],
+                                })}
+                              >
+                                {state === 'nobody' ? (
+                                  '—'
+                                ) : (
+                                  <>
+                                    <span className="ep-statusgrid__num">
+                                      {state === 'verified' ? '✓ ' : ''}
+                                      {x.entered}/{x.takers}
+                                    </span>
+                                    <span className="ep-statusgrid__state">{label[state]}</span>
+                                  </>
+                                )}
+                              </a>
+                            </td>
+                          );
+                        })}
+                        <td className="ep-statusgrid__sum">
+                          {counted.filter((x) => x.status === 'verified').length}/{counted.length}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+                <tfoot>
+                  <tr>
+                    <th scope="row">{st('columnTotal')}</th>
+                    {b.subjects.map(([sid]) => {
+                      const col = b.rows.filter((x) => x.subjectId === sid);
+                      return (
+                        <td key={sid} className="ep-statusgrid__sum">
+                          {col.reduce((a, x) => a + x.entered, 0)}/
+                          {col.reduce((a, x) => a + x.takers, 0)}
+                        </td>
+                      );
+                    })}
+                    <td />
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+          </section>
+        ))}
+        {!blocks.length ? <p style={{ marginBottom: 0 }}>{st('nothing')}</p> : null}
       </Card>
     </>
   );
