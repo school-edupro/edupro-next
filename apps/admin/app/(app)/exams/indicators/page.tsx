@@ -4,8 +4,9 @@ import { IndicatorSetEditor } from '@/components/exams/IndicatorSetEditor';
 import { MasterExport } from '@/components/MasterExport';
 import { ExamSetupNav } from '@/components/exams/ExamSetupNav';
 import { Notice } from '@/components/Notice';
-import { installHpcCard, installHpcSet, type SetInput } from '@/lib/hpc-actions';
+import { installHpcCard, installHpcSet, saveSetMapping, type SetInput } from '@/lib/hpc-actions';
 import { apiFetch, getMe } from '@/lib/api';
+import type { ClassRow, Page } from '@/lib/types';
 
 interface SetRow {
   id: string;
@@ -15,13 +16,16 @@ interface SetRow {
   status: string;
   kind: 'indicators' | 'hpc';
   levelWords: Record<string, string>;
+  /** the classes the set is for (docs/design/66) */
+  classIds: string[];
   indicators: Array<SetInput['indicators'][number] & { id: string; area: string | null }>;
 }
 
 /**
  * Indicators and the Holistic Progress Card (docs/design/65, part 5): the indicator sets in three
  * levels (area → item → sub-item), the NCERT foundational-stage set for Balvatika to Class II and its
- * card. A class takes a set per exam on the exam's Set-up.
+ * card. Each class is mapped to its set here (docs/design/66): a new exam that takes indicators gives
+ * every class its set, and the exam's Set-up may pick another for that exam.
  */
 export default async function IndicatorsPage({
   searchParams,
@@ -33,7 +37,7 @@ export default async function IndicatorsPage({
   if (!me.permissions.includes('exams.master.view')) notFound();
   const canManage = me.permissions.includes('exams.master.manage');
   const canCards = me.permissions.includes('exams.report_card.manage');
-  const [sets, areaRows, scaleRows] = await Promise.all([
+  const [sets, areaRows, scaleRows, classes] = await Promise.all([
     apiFetch<{ data: SetRow[] }>('/exams/indicator-sets').then((r) => r.data),
     apiFetch<{ data: Array<{ name: string; status: string }> }>('/exams/indicator-areas').then(
       (r) => r.data,
@@ -41,7 +45,10 @@ export default async function IndicatorsPage({
     apiFetch<{ data: Array<{ name: string; levels: string[]; status: string }> }>(
       '/exams/indicator-scales',
     ).then((r) => r.data),
+    apiFetch<Page<ClassRow>>('/academics/classes?size=200').then((r) => r.data),
   ]);
+  const setOf = (classId: string) => sets.find((x) => x.classIds.includes(classId)) ?? null;
+  const className = (id: string) => classes.find((k) => k.id === id)?.name ?? id;
   // the editor picks from the lists in use (Exams setup → Areas and level scales)
   const areaList = areaRows.filter((a) => a.status === 'active').map((a) => a.name);
   const scales = scaleRows
@@ -54,7 +61,7 @@ export default async function IndicatorsPage({
       <PageHeader
         kicker="Exams"
         title="Indicators and the progress card"
-        description="Co-scholastic indicators and the Holistic Progress Card for Balvatika to Class II, in up to three levels. Choose a class's set on the exam's Set-up; teachers enter it in the teacher app or here."
+        description="Co-scholastic indicators and the Holistic Progress Card for Balvatika to Class II, in up to three levels. Map each class to its set below: new exams use it (an exam's Set-up may pick another); teachers enter it in the teacher app or here."
         actions={<MasterExport master="indicators" label="Indicators" />}
       />
       <ExamSetupNav current="/exams/indicators" />
@@ -84,6 +91,62 @@ export default async function IndicatorsPage({
           </div>
         </Card>
       ) : null}
+      {sets.length ? (
+        <Card elevated title="Class mapping" style={{ marginBottom: 'var(--sp-4)' }}>
+          <p className="ep-field__help" style={{ marginTop: 0 }}>
+            The set each class is rated on. A new exam that takes indicators gives every class its
+            set; exams made before keep theirs, and an exam&rsquo;s Set-up may pick another set for
+            that exam.
+          </p>
+          <form action={saveSetMapping}>
+            {sets.map((x) => (
+              <input key={x.id} type="hidden" name="setId" value={x.id} />
+            ))}
+            <div className="ep-table-wrap" tabIndex={0} role="region" aria-label="Class mapping">
+              <table className="ep-table ep-table--dense">
+                <caption className="ep-sr-only">Class mapping</caption>
+                <thead>
+                  <tr>
+                    <th scope="col">Class</th>
+                    <th scope="col">Set</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {classes.map((k) => (
+                    <tr key={k.id}>
+                      <th scope="row">
+                        <input type="hidden" name="classId" value={k.id} />
+                        {k.name}
+                      </th>
+                      <td>
+                        <select
+                          className="ep-select"
+                          name={`set-${k.id}`}
+                          aria-label={`Set · ${k.name}`}
+                          defaultValue={setOf(k.id)?.id ?? ''}
+                          disabled={!canManage}
+                        >
+                          <option value="">None</option>
+                          {sets.map((x) => (
+                            <option key={x.id} value={x.id}>
+                              {x.name} ({x.code})
+                            </option>
+                          ))}
+                        </select>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            {canManage ? (
+              <div className="ep-form-actions" style={{ marginTop: 'var(--sp-3)' }}>
+                <Button type="submit">Save the mapping</Button>
+              </div>
+            ) : null}
+          </form>
+        </Card>
+      ) : null}
       <div style={{ display: 'grid', gap: 'var(--sp-4)' }}>
         {sets.length ? (
           sets.map((s) => {
@@ -106,6 +169,9 @@ export default async function IndicatorsPage({
                     .map((g) => (s.levelWords[g] ? `${g} (${s.levelWords[g]})` : g))
                     .join(', ')}{' '}
                   · {s.indicators.length} items in {areas.length} areas
+                </p>
+                <p className="ep-field__help" style={{ marginTop: 0 }}>
+                  Classes: {s.classIds.length ? s.classIds.map(className).join(', ') : 'none yet'}
                 </p>
                 <details>
                   <summary>The items</summary>

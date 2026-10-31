@@ -4,7 +4,8 @@
  * (a subject or a class with marks stays), a new exam copied from an earlier one, and the entry locks:
  * locking one area needs no unlock right, only opening a locked one does; the general remark written
  * alone keeps "took part in" and "promoted to", and an emptied one goes; the register as a file, and
- * the date sheets of staff and of a family; the exam office enters marks anywhere and never reopens.
+ * the date sheets of staff and of a family; the exam office enters marks anywhere and never reopens;
+ * an exam takes its type's areas (others refused) and a class's mapped indicator set.
  */
 import type { NestFastifyApplication } from '@nestjs/platform-fastify';
 import {
@@ -484,5 +485,79 @@ describe('exams made easy (e2e)', () => {
       });
     expect((await move('submit')).statusCode).toBe(201);
     expect((await move('reopen', { note: 'A correction' })).statusCode).toBe(403);
+  });
+
+  it('an exam takes its type’s areas (others refused); a class’s mapped set comes with a new exam', async () => {
+    const pt = await call(admin, 'POST', '/exams/types', {
+      code: 'PTX',
+      name: 'Periodic test',
+      areas: ['marks'],
+    });
+    expect(pt.json().areas).toEqual(['marks']);
+    // a set of indicators mapped to Class V
+    const set = await call(admin, 'PUT', '/exams/indicator-sets', {
+      code: 'COX',
+      name: 'Co-scholastic',
+      kind: 'indicators',
+      grades: ['A', 'B', 'C'],
+      levelWords: {},
+      indicators: [{ code: 'ART', name: 'Art', area: 'Co-scholastic', sortOrder: 1 }],
+    });
+    const setId = set.json().id as string;
+    expect(
+      (await call(admin, 'PUT', `/exams/indicator-sets/${setId}/classes`, { classIds: [classId] }))
+        .statusCode,
+    ).toBe(200);
+    const listed = (await call(admin, 'GET', '/exams/indicator-sets')).json().data as Array<{
+      id: string;
+      classIds: string[];
+    }>;
+    expect(listed.find((x) => x.id === setId)!.classIds).toEqual([classId]);
+    // a term exam (every area) gives Class V its set; the periodic test (marks only) none
+    const term = (
+      await call(admin, 'POST', '/exams', {
+        examTypeId: typeId,
+        code: 'T-AREAS',
+        name: 'Term',
+        classes: [{ classId }],
+      })
+    ).json();
+    expect(term.areas).toEqual(['marks', 'indicators', 'remarks', 'attendance', 'health']);
+    expect(term.classes[0].indicatorSetId).toBe(setId);
+    const test = (
+      await call(admin, 'POST', '/exams', {
+        examTypeId: pt.json().id,
+        code: 'PT-AREAS',
+        name: 'Periodic',
+        classes: [{ classId }],
+      })
+    ).json();
+    expect(test.areas).toEqual(['marks']);
+    expect(test.classes[0].indicatorSetId).toBeNull();
+    const art = (
+      (await call(admin, 'GET', '/exams/indicator-sets')).json().data as Array<{
+        id: string;
+        indicators: Array<{ id: string }>;
+      }>
+    ).find((x) => x.id === setId)!.indicators[0]!.id;
+    const off = await call(admin, 'PUT', `/exams/${test.id as string}/indicators`, {
+      classSectionId: section,
+      rows: [{ studentId: student.Anu, indicatorId: art, grade: 'A' }],
+    });
+    expect(off.statusCode).toBe(409);
+    expect(off.json()).toMatchObject({ type: 'exams.area_off', area: 'indicators' });
+    const remarks = await call(admin, 'PUT', `/exams/${test.id as string}/remarks`, {
+      classSectionId: section,
+      rows: [{ studentId: student.Anu, remark: 'Good' }],
+    });
+    expect(remarks.json()).toMatchObject({ type: 'exams.area_off', area: 'remarks' });
+    expect((await call(admin, 'GET', `/exams/${test.id as string}/progress`)).json()).toMatchObject(
+      { areas: ['marks'], stage: 'setup' },
+    );
+    // indicators taken later: the class's set comes then
+    const on = await call(admin, 'PATCH', `/exams/${test.id as string}`, {
+      areas: ['marks', 'indicators'],
+    });
+    expect(on.json().classes[0].indicatorSetId).toBe(setId);
   });
 });

@@ -26,6 +26,8 @@ export interface ExamTypeRow {
   weightage: string | null;
   sortOrder: number;
   status: 'active' | 'inactive';
+  /** the areas its exams take (docs/design/66) */
+  areas: string[];
   exams: number;
 }
 export interface GradeBand {
@@ -102,6 +104,8 @@ export interface ExamRow {
   status: 'active' | 'inactive';
   /** printed under the date sheet (docs/design/66) */
   dateSheetNote: string | null;
+  /** what the exam takes: marks, indicators, remarks, attendance, health (docs/design/66) */
+  areas: string[];
   classes: ExamClassRow[];
   subjects?: ExamSubjectRow[];
   /** the list's: how far the exam has got (docs/design/66) */
@@ -110,7 +114,7 @@ export interface ExamRow {
 
 const EXAM_SELECT = `SELECT e.id::text, e.code, e.name, e.exam_type_id::text AS "examTypeId", t.code AS "examTypeCode", t.name AS "examTypeName",
         e.starts_on::text AS "startsOn", e.ends_on::text AS "endsOn", e.show_on_portal AS "showOnPortal", e.marks_locked AS "marksLocked", e.status::text,
-        e.date_sheet_note AS "dateSheetNote",
+        e.date_sheet_note AS "dateSheetNote", e.areas,
         COALESCE((SELECT jsonb_agg(jsonb_build_object('classId', ec.class_id::text, 'classCode', k.code, 'gradeScaleId', ec.grade_scale_id::text, 'gradeScaleCode', gs.code,
                     'subjects', (SELECT count(*) FROM exam_subjects es WHERE es.exam_id = e.id AND es.class_id = ec.class_id),
                     'locked', (SELECT count(*) FROM exam_subjects es WHERE es.exam_id = e.id AND es.class_id = ec.class_id AND es.entry_locked),
@@ -153,7 +157,7 @@ export class ExamsService {
   private async typesWith(c: PoolClient): Promise<ExamTypeRow[]> {
     {
       const r = await c.query<ExamTypeRow>(
-        `SELECT t.id::text, t.code, t.name, t.weightage::text, t.sort_order AS "sortOrder", t.status::text,
+        `SELECT t.id::text, t.code, t.name, t.weightage::text, t.sort_order AS "sortOrder", t.status::text, t.areas,
                 (SELECT count(*)::int FROM exams e WHERE e.exam_type_id = t.id AND e.deleted_at IS NULL) AS exams
            FROM exam_types t WHERE t.deleted_at IS NULL ORDER BY t.sort_order, t.code`,
       );
@@ -166,9 +170,9 @@ export class ExamsService {
       let id: string;
       try {
         const r = await c.query<{ id: string }>(
-          `INSERT INTO exam_types (school_id, code, name, weightage, sort_order, created_by, updated_by)
-           VALUES (app.current_school_id(), $1, $2, $3, $4, app.current_user_id(), app.current_user_id()) RETURNING id::text`,
-          [dto.code, dto.name, dto.weightage ?? null, dto.sortOrder],
+          `INSERT INTO exam_types (school_id, code, name, weightage, sort_order, areas, created_by, updated_by)
+           VALUES (app.current_school_id(), $1, $2, $3, $4, COALESCE($5::text[], '{marks,indicators,remarks,attendance,health}'), app.current_user_id(), app.current_user_id()) RETURNING id::text`,
+          [dto.code, dto.name, dto.weightage ?? null, dto.sortOrder, dto.areas ?? null],
         );
         id = r.rows[0]!.id;
       } catch (error) {
@@ -192,7 +196,7 @@ export class ExamsService {
     return this.db.tenant(requireTenant(ctx), async (c) => {
       const r = await c.query(
         `UPDATE exam_types SET name = COALESCE($2, name), weightage = CASE WHEN $3::boolean THEN $4 ELSE weightage END, sort_order = COALESCE($5, sort_order),
-                status = COALESCE($6::row_status, status), updated_at = now(), updated_by = app.current_user_id()
+                status = COALESCE($6::row_status, status), areas = COALESCE($7::text[], areas), updated_at = now(), updated_by = app.current_user_id()
           WHERE id = $1 AND deleted_at IS NULL`,
         [
           id,
@@ -201,6 +205,7 @@ export class ExamsService {
           dto.weightage ?? null,
           dto.sortOrder ?? null,
           dto.status ?? null,
+          dto.areas ?? null,
         ],
       );
       if (!r.rowCount) throw new DomainError('not-found', 'Exam type not found', { status: 404 });
@@ -322,8 +327,8 @@ export class ExamsService {
       let id: string;
       try {
         const r = await c.query<{ id: string }>(
-          `INSERT INTO exams (school_id, academic_year_id, exam_type_id, code, name, starts_on, ends_on, show_on_portal, date_sheet_note, created_by, updated_by)
-           VALUES (app.current_school_id(), $1, $2, $3, $4, $5::date, $6::date, $7, $8, app.current_user_id(), app.current_user_id()) RETURNING id::text`,
+          `INSERT INTO exams (school_id, academic_year_id, exam_type_id, code, name, starts_on, ends_on, show_on_portal, date_sheet_note, areas, created_by, updated_by)
+           VALUES (app.current_school_id(), $1, $2, $3, $4, $5::date, $6::date, $7, $8, $9, app.current_user_id(), app.current_user_id()) RETURNING id::text`,
           [
             yearId,
             typeId,
@@ -333,6 +338,7 @@ export class ExamsService {
             dto.endsOn ?? null,
             dto.showOnPortal,
             from.dateSheetNote,
+            dto.areas ?? from.areas,
           ],
         );
         id = r.rows[0]!.id;
@@ -366,6 +372,7 @@ export class ExamsService {
          SELECT school_id, $2, class_id, set_id FROM exam_indicator_sets WHERE exam_id = $1`,
         [fromId, id],
       );
+      await this.fillSets(c, id);
       await this.audit.stage(ctx, c, {
         action: 'exams.exam.copy',
         entityType: 'exams',
@@ -426,16 +433,16 @@ export class ExamsService {
     const yearId = this.year(tenant);
     return this.db.tenant(tenant, async (c) => {
       await c.query(`SELECT app.assert_year_open($1, 'exams')`, [yearId]);
-      const t = await c.query(
-        `SELECT 1 FROM exam_types WHERE id = $1 AND deleted_at IS NULL AND status = 'active'`,
+      const t = await c.query<{ areas: string[] }>(
+        `SELECT areas FROM exam_types WHERE id = $1 AND deleted_at IS NULL AND status = 'active'`,
         [dto.examTypeId],
       );
       if (!t.rowCount) throw new DomainError('not-found', 'Exam type not found', { status: 404 });
       let id: string;
       try {
         const r = await c.query<{ id: string }>(
-          `INSERT INTO exams (school_id, academic_year_id, exam_type_id, code, name, starts_on, ends_on, show_on_portal, created_by, updated_by)
-           VALUES (app.current_school_id(), $1, $2, $3, $4, $5::date, $6::date, $7, app.current_user_id(), app.current_user_id()) RETURNING id::text`,
+          `INSERT INTO exams (school_id, academic_year_id, exam_type_id, code, name, starts_on, ends_on, show_on_portal, areas, created_by, updated_by)
+           VALUES (app.current_school_id(), $1, $2, $3, $4, $5::date, $6::date, $7, $8, app.current_user_id(), app.current_user_id()) RETURNING id::text`,
           [
             yearId,
             dto.examTypeId,
@@ -444,6 +451,7 @@ export class ExamsService {
             dto.startsOn ?? null,
             dto.endsOn ?? null,
             dto.showOnPortal,
+            dto.areas ?? t.rows[0]!.areas,
           ],
         );
         id = r.rows[0]!.id;
@@ -459,6 +467,7 @@ export class ExamsService {
           `INSERT INTO exam_classes (school_id, exam_id, class_id, grade_scale_id) VALUES (app.current_school_id(), $1, $2, $3) ON CONFLICT (exam_id, class_id) DO UPDATE SET grade_scale_id = EXCLUDED.grade_scale_id`,
           [id, k.classId, k.gradeScaleId ?? null],
         );
+      await this.fillSets(c, id);
       await this.audit.stage(ctx, c, {
         action: 'exams.exam.create',
         entityType: 'exams',
@@ -467,6 +476,23 @@ export class ExamsService {
       });
       return this.findExam(c, id, yearId);
     });
+  }
+
+  /**
+   * The classes of an exam that takes indicators get their mapped set (docs/design/66) where the exam
+   * has none for them yet; a set chosen on the exam's set-up stays.
+   */
+  private async fillSets(c: PoolClient, examId: string): Promise<void> {
+    await c.query(
+      `INSERT INTO exam_indicator_sets (school_id, exam_id, class_id, set_id)
+       SELECT ec.school_id, ec.exam_id, ec.class_id, m.set_id
+         FROM exam_classes ec JOIN exams e ON e.id = ec.exam_id AND 'indicators' = ANY(e.areas)
+         JOIN indicator_set_classes m ON m.class_id = ec.class_id
+         JOIN indicator_sets s ON s.id = m.set_id AND s.deleted_at IS NULL AND s.status = 'active'
+        WHERE ec.exam_id = $1
+       ON CONFLICT (exam_id, class_id) DO NOTHING`,
+      [examId],
+    );
   }
 
   async updateExam(ctx: RequestContext, id: string, dto: UpdateExamDto): Promise<ExamRow> {
@@ -494,7 +520,8 @@ export class ExamsService {
       await c.query(
         `UPDATE exams SET name = COALESCE($2, name), starts_on = CASE WHEN $3::boolean THEN $4::date ELSE starts_on END, ends_on = CASE WHEN $5::boolean THEN $6::date ELSE ends_on END,
                 show_on_portal = COALESCE($7, show_on_portal), marks_locked = COALESCE($8, marks_locked), status = COALESCE($9::row_status, status),
-                date_sheet_note = CASE WHEN $10::boolean THEN $11 ELSE date_sheet_note END, updated_at = now(), updated_by = app.current_user_id()
+                date_sheet_note = CASE WHEN $10::boolean THEN $11 ELSE date_sheet_note END, areas = COALESCE($12::text[], areas),
+                updated_at = now(), updated_by = app.current_user_id()
           WHERE id = $1`,
         [
           id,
@@ -508,6 +535,7 @@ export class ExamsService {
           dto.status ?? null,
           dto.dateSheetNote !== undefined,
           dto.dateSheetNote || null,
+          dto.areas ?? null,
         ],
       );
       if (dto.classes) {
@@ -530,6 +558,8 @@ export class ExamsService {
           `UPDATE exam_subjects SET entry_locked = $2, locked_by = CASE WHEN $2 THEN app.current_user_id() END, locked_at = CASE WHEN $2 THEN now() END WHERE exam_id = $1`,
           [id, dto.marksLocked],
         );
+      // a class added (or indicators taken now) gets its mapped set
+      if (dto.classes || dto.areas) await this.fillSets(c, id);
       const after = await this.findExam(c, id, yearId);
       await this.audit.stage(ctx, c, {
         action: 'exams.exam.update',

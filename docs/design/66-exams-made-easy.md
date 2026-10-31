@@ -200,3 +200,35 @@ Discipline a level of its set; a ready-made **Exam office** role.
   it. Test: `exam-hub.e2e-spec.ts` (enters without a teacher assignment, submits, reopening refused).
 - **Marks page, read only**: a login that may not enter (or a closed sheet) sees the marks as text,
   with the reason at the top, instead of boxes it cannot type in.
+
+## What an exam takes; indicator sets mapped to classes (31 Oct 2026)
+
+Asked: set per exam type what applies (marks, indicators, attendance, remarks) and show only that; map
+indicator sets to classes so an exam shows the class's indicators. Answers: the exam type ticks its
+areas, an exam may change them; an area that is off is hidden and refused everywhere; each set lists
+its classes and an exam uses the class's set (Set-up may pick another); existing exams keep everything
+and their chosen sets.
+
+- Migration 0288: `exam_types.areas` and `exams.areas` (TEXT[] of marks, indicators, remarks,
+  attendance, health; at least one; default all, so existing types and exams take everything);
+  `indicator_set_classes` (set, class; a class has one set), filled once from the sets classes used
+  in exams (a class with one set across its exams).
+- API: types and exams carry `areas` (`POST/PATCH exams/types`, `POST exams`, `PATCH exams/:id`,
+  `POST exams/:id/copy`; a new exam takes its type's, a copy its source's). Entry of an area the exam
+  does not take is refused (409 `exams.area_off`, `area`): marks and part marks through
+  `assertEntryOpen`, the rest through `assertTypeOpen` (each entry kind names its area), so the
+  Excel upload, attendance from daily, the progress card's words and photos and remarks by category
+  follow. `GET exams/indicator-sets` lists each set's `classIds`; `PUT
+exams/indicator-sets/:id/classes` (`exams.master.manage`) sets them (a class ticked moves from its
+  old set). A new exam, a copy, a class added or indicators turned on gives each class its mapped
+  set where the exam has none (`fillSets`). Progress and the stage count only the areas taken.
+- Admin: Exams setup → Types has "What the exam takes" ticks and a Takes column; an exam's Set-up →
+  Details has the same ticks. Tabs of areas not taken go (Results and Reports go with marks); an old
+  link to one says so. Overview shows only those columns, figures and locks; Attendance / Health
+  sub-pages follow. The exam list shows "Takes: …" when not everything. Indicators and HPC has a
+  **Class mapping** card (a set per class, saved together) and each set lists its classes. Teacher
+  app: Marks, Indicators, Remarks and Exam register list only the exams that take them.
+- Test: `exam-hub.e2e-spec.ts` (a type's areas, the mapping, a new exam with the class's set, the
+  marks-only exam refusing indicators and remarks and starting in set-up, indicators turned on
+  bringing the set). Browser: a throwaway copy of PT1 set to marks only (tabs, overview, the old
+  indicators link), the mapping saved, the types form; removed after.

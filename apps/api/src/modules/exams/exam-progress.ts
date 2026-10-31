@@ -36,6 +36,8 @@ export interface ClassProgress {
   stage: ExamStage;
 }
 export interface ExamProgress {
+  /** the areas the exam takes (docs/design/66) */
+  areas: string[];
   stage: ExamStage;
   released: boolean;
   classes: ClassProgress[];
@@ -52,12 +54,15 @@ export interface ExamProgress {
   };
 }
 
-const classStage = (k: Omit<ClassProgress, 'stage'>): ExamStage => {
-  if (k.subjects === 0 && !k.indicators) return 'setup';
-  if (k.marks.entered < k.marks.takers) return 'entry';
-  if (k.subjects === 0 && k.indicators && k.indicators.entered < k.indicators.expected)
-    return 'entry';
-  if (k.marks.verified < k.marks.slots) return 'verification';
+/** A class's stage; only the areas the exam takes count (an exam of remarks alone is never in set-up). */
+const classStage = (k: Omit<ClassProgress, 'stage'>, areas: string[]): ExamStage => {
+  const marks = areas.includes('marks');
+  const ind = areas.includes('indicators');
+  const subjects = marks && k.subjects > 0;
+  if (!subjects && !(ind && k.indicators) && (marks || ind)) return 'setup';
+  if (subjects && k.marks.entered < k.marks.takers) return 'entry';
+  if (!subjects && k.indicators && k.indicators.entered < k.indicators.expected) return 'entry';
+  if (subjects && k.marks.verified < k.marks.slots) return 'verification';
   return 'results';
 };
 
@@ -69,6 +74,11 @@ export async function examProgress(
   const out = new Map<string, ExamProgress>();
   if (!examIds.length) return out;
   const key = (e: string, k: string) => `${e}:${k}`;
+  const taken = await c.query<{ id: string; areas: string[] }>(
+    `SELECT id::text, areas FROM exams WHERE id = ANY($1::bigint[])`,
+    [examIds],
+  );
+  const areasOf = new Map(taken.rows.map((r) => [r.id, r.areas]));
   // the classes and their active students
   const classes = await c.query<{
     exam_id: string;
@@ -189,7 +199,9 @@ export async function examProgress(
     const m = mk.get(key(k.exam_id, k.class_id));
     const i = ind.get(key(k.exam_id, k.class_id));
     const students = p?.students ?? 0;
-    const n = cats.get(k.class_id) ?? 0;
+    const areas = areasOf.get(k.exam_id) ?? [];
+    const n = areas.includes('remarks') ? (cats.get(k.class_id) ?? 0) : 0;
+    const takesMarks = areas.includes('marks');
     const row: Omit<ClassProgress, 'stage'> = {
       classId: k.class_id,
       classCode: k.code,
@@ -197,15 +209,16 @@ export async function examProgress(
       students,
       subjects: k.subjects,
       marks: {
-        slots: m?.slots ?? 0,
-        takers: m?.takers ?? 0,
-        entered: m?.entered ?? 0,
-        submitted: m?.submitted ?? 0,
-        verified: m?.verified ?? 0,
+        slots: takesMarks ? (m?.slots ?? 0) : 0,
+        takers: takesMarks ? (m?.takers ?? 0) : 0,
+        entered: takesMarks ? (m?.entered ?? 0) : 0,
+        submitted: takesMarks ? (m?.submitted ?? 0) : 0,
+        verified: takesMarks ? (m?.verified ?? 0) : 0,
       },
-      indicators: k.set_id
-        ? { expected: (i?.items ?? 0) * students, entered: i?.entered ?? 0 }
-        : null,
+      indicators:
+        k.set_id && areas.includes('indicators')
+          ? { expected: (i?.items ?? 0) * students, entered: i?.entered ?? 0 }
+          : null,
       remarks: n ? { expected: n * students, entered: p?.remark_items ?? 0 } : null,
       generalRemarks: p?.general ?? 0,
       attendance: p?.attendance ?? 0,
@@ -214,7 +227,7 @@ export async function examProgress(
       computedAt: p?.computed_at?.toISOString() ?? null,
     };
     const list = byExam.get(k.exam_id) ?? [];
-    list.push({ ...row, stage: classStage(row) });
+    list.push({ ...row, stage: classStage(row, areas) });
     byExam.set(k.exam_id, list);
   }
   for (const id of examIds) {
@@ -225,6 +238,7 @@ export async function examProgress(
       ? STAGES[Math.min(...list.map((k) => STAGES.indexOf(k.stage)))]!
       : ('setup' as const);
     out.set(id, {
+      areas: areasOf.get(id) ?? [],
       stage: isReleased && least === 'results' ? 'released' : least,
       released: isReleased,
       classes: list,

@@ -1,4 +1,4 @@
-import { Badge, Breadcrumbs, PageHeader } from '@edupro/ui';
+import { Alert, Badge, Breadcrumbs, PageHeader } from '@edupro/ui';
 import { getTranslations } from 'next-intl/server';
 import { ConfirmAction } from '@/components/ConfirmAction';
 import { toggleExamLock } from '@/lib/exam-hub-actions';
@@ -23,11 +23,23 @@ export async function ExamFrame({
   canManage: boolean;
   canUnlock: boolean;
 }) {
-  const [t, s, l] = await Promise.all([
+  const [t, s, l, a] = await Promise.all([
     getTranslations('examHub.overview'),
     getTranslations('examHub.stage'),
     getTranslations('examHub.list'),
+    getTranslations('examHub.areas'),
   ]);
+  // a page of an area the exam does not take (an old link): said at the top
+  const areaOf: Partial<Record<ExamTab, string[]>> = {
+    marks: ['marks'],
+    indicators: ['indicators'],
+    remarks: ['remarks'],
+    attendance: ['attendance', 'health'],
+    results: ['marks'],
+    reports: ['marks'],
+  };
+  const need = areaOf[current];
+  const off = need && exam.areas ? !need.some((x) => exam.areas!.includes(x)) : false;
   const dates =
     exam.startsOn && exam.endsOn
       ? l('dates', { from: exam.startsOn, to: exam.endsOn })
@@ -77,7 +89,12 @@ export async function ExamFrame({
           </span>
         }
       />
-      <ExamTabs examId={exam.id} current={current} />
+      <ExamTabs examId={exam.id} current={current} areas={exam.areas} />
+      {off ? (
+        <Alert tone="warning">
+          {a('notTaken', { area: need!.map((x) => a(x as 'marks')).join(' / ') })}
+        </Alert>
+      ) : null}
     </>
   );
 }

@@ -82,7 +82,11 @@ export default async function ExamAttendancePage({
             href: `/exams/${id}/health${sectionId ? `?section=${sectionId}` : ''}`,
             label: t('health'),
           },
-        ]}
+        ].filter((x) =>
+          (exam.areas ?? ['attendance', 'health']).includes(
+            x.href.includes('/health') ? 'health' : 'attendance',
+          ),
+        )}
       />
       <p className="ep-field__help" style={{ marginTop: 0 }}>
         {a('intro')}

@@ -1937,6 +1937,8 @@ export interface ExamType {
   weightage: string | null;
   sortOrder: number;
   status: 'active' | 'inactive';
+  /** the areas its exams take (docs/design/66) */
+  areas?: string[];
   exams: number;
 }
 export interface GradeBand {
@@ -2012,6 +2014,8 @@ export interface Exam {
   status: 'active' | 'inactive';
   /** printed under the date sheet (docs/design/66) */
   dateSheetNote?: string | null;
+  /** what the exam takes: marks, indicators, remarks, attendance, health (docs/design/66) */
+  areas?: string[];
   classes: ExamClass[];
   subjects?: ExamSubject[];
   /** the list's: how far the exam has got */
@@ -2041,6 +2045,7 @@ export interface ExamClassProgress {
   stage: ExamStage;
 }
 export interface ExamProgress {
+  areas?: string[];
   stage: ExamStage;
   released: boolean;
   classes: ExamClassProgress[];

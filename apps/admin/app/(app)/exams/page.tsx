@@ -28,10 +28,11 @@ export default async function ExamsPage({
   }>;
 }) {
   const sp = await searchParams;
-  const [t, s, n, me, exams, types, classes] = await Promise.all([
+  const [t, s, n, a, me, exams, types, classes] = await Promise.all([
     getTranslations('examHub.list'),
     getTranslations('examHub.stage'),
     getTranslations('examHub.next'),
+    getTranslations('examHub.areas'),
     getMe(),
     apiFetch<{ data: Exam[] }>('/exams').then((r) => r.data),
     apiFetch<{ data: ExamType[] }>('/exams/types').then((r) => r.data),
@@ -166,6 +167,11 @@ export default async function ExamsPage({
                   <p className="ep-xcard__meta">
                     {e.code} · {e.examTypeName} · {dates(e)}
                   </p>
+                  {e.areas && e.areas.length < 5 ? (
+                    <p className="ep-xcard__meta">
+                      {a('takes')}: {e.areas.map((x) => a(x as 'marks')).join(' · ')}
+                    </p>
+                  ) : null}
                   {e.classes.length ? (
                     <ul className="ep-xchips" aria-label={t('class')}>
                       {e.classes.map((k) => (

@@ -2831,6 +2831,7 @@ export async function createExamType(fd: FormData) {
         name: str(fd, 'name'),
         weightage: opt(fd, 'weightage') ? Number(str(fd, 'weightage')) : null,
         sortOrder: opt(fd, 'sortOrder') ? Number(str(fd, 'sortOrder')) : 0,
+        areas: fd.getAll('areas').map(String),
       }),
     }),
   );
@@ -2849,6 +2850,7 @@ export async function updateExamType(fd: FormData) {
         weightage: opt(fd, 'weightage') ? Number(str(fd, 'weightage')) : null,
         sortOrder: opt(fd, 'sortOrder') ? Number(str(fd, 'sortOrder')) : 0,
         status: str(fd, 'status') === 'inactive' ? 'inactive' : 'active',
+        areas: fd.getAll('areas').map(String),
       }),
     });
   } catch (error) {

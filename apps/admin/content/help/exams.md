@@ -15,7 +15,12 @@
 
 1. **Exams → Exams setup**: one menu entry, four tabs. Each thing is set in one place only; Excel and PDF of each list sit beside it.
    - **Types, grade scales, marks codes**: exam types (PT, half-yearly, annual) and the grade scale per class band. **Edit** on a type changes its name, weightage, order or status; the code stays, and an inactive type is not offered for new exams.
-2. **Exams → Exams of the session → New exam**, in three steps:
+2. **What each exam takes**: on Exams setup → Types, tick for each type what its exams take
+   (marks, indicators / progress card, remarks, attendance, health), e.g. a periodic test marks only.
+   A new exam takes its type's; Set-up → Details changes them for one exam. What an exam does not
+   take has no tab, no column and no entry (teachers do not see the exam for it).
+   **Indicators and HPC → Class mapping**: the set each class is rated on; new exams use it.
+3. **Exams → Exams of the session → New exam**, in three steps:
    - **Details**: the type, name, dates and classes (or start from **a copy of an earlier exam**:
      its classes, subjects, marks, parts and progress card sets come with it). Leave the code blank
      and it is made from the type and the year (HY-2026).
@@ -29,7 +34,7 @@
      by side.
      Tick **show on the parent portal** so the date sheet appears in the apps. A subject or a class
      with marks entered can't be taken out of the exam (its marks would be lost).
-3. Optional: indicator sets, the remark bank. **Exams → Exams setup → Indicators and HPC** holds the sets in up to
+4. Optional: indicator sets, the remark bank. **Exams → Exams setup → Indicators and HPC** holds the sets in up to
    three levels (area → item → sub-item); **Add the progress card set** brings the NCERT
    foundational-stage Holistic Progress Card for Balvatika to Class II (domains, curricular goals,
    competencies; Beginner / Progressing / Proficient printed with Stream / Mountain / Sky) and **Add

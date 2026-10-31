@@ -100,6 +100,23 @@ export async function addIndicatorArea(name: string) {
   return out;
 }
 
+// ---- which set each class takes (docs/design/66) -----------------------------------------------------
+/** Class → set from the mapping card: each set is sent its classes (a set none chose: none). */
+export async function saveSetMapping(fd: FormData) {
+  const classIds = fd.getAll('classId').map(String);
+  const setIds = fd.getAll('setId').map(String);
+  return run('/exams/indicators', async () => {
+    for (const setId of setIds)
+      await apiFetch(`/exams/indicator-sets/${setId}/classes`, {
+        method: 'PUT',
+        body: JSON.stringify({
+          classIds: classIds.filter((k) => str(fd, `set-${k}`) === setId),
+        }),
+      });
+    revalidatePath('/exams');
+  });
+}
+
 // ---- sets ---------------------------------------------------------------------------------------
 export async function installHpcSet() {
   return run('/exams/indicators', () => apiFetch('/exams/indicator-sets/hpc', { method: 'POST' }));

@@ -4051,6 +4051,18 @@
       "remarksLocked": "Remarks are locked for the class in this exam; open them on the exam's Overview.",
       "remarksViewOnly": "You may view these only: the class teacher writes them, a subject teacher their subject's.",
       "nothing": "Nothing to show."
+    },
+    "areas": {
+      "legend": "What the exam takes",
+      "help": "An area left out is hidden on the exam's pages and in the teacher app, and its entry is refused.",
+      "marks": "Marks",
+      "indicators": "Indicators / progress card",
+      "remarks": "Remarks",
+      "attendance": "Attendance",
+      "health": "Health",
+      "takes": "Takes",
+      "all": "Everything",
+      "notTaken": "This exam does not take {area}: tick it under Set-up → Details to use it."
     }
   }
 }

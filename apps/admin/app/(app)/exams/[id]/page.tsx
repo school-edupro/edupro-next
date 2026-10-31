@@ -40,6 +40,8 @@ export default async function ExamOverviewPage({
   const m = p.totals.marks;
   const of = (a: number, b: number) => t('of', { a, b });
   const done = (d: ExamDone | null) => (d ? of(d.entered, d.expected) : t('none'));
+  // only the areas the exam takes (docs/design/66)
+  const on = (a: Area) => (exam.areas ?? AREAS).includes(a);
   const lockState = (classId: string, area: Area): 'locked' | 'open' | 'partly' => {
     if (area !== 'marks') {
       const k = exam.classes.find((x) => x.classId === classId);
@@ -72,13 +74,34 @@ export default async function ExamOverviewPage({
         </div>
         <div className="ep-kpis">
           <KpiTile label={t('students')} value={String(p.totals.students)} />
-          <KpiTile
-            label={t('marksEntered')}
-            value={m.takers ? `${String(Math.round((m.entered / m.takers) * 100))}%` : t('none')}
-            hint={m.takers ? of(m.entered, m.takers) : undefined}
-          />
-          <KpiTile label={t('verified')} value={m.slots ? of(m.verified, m.slots) : t('none')} />
-          <KpiTile label={t('results')} value={of(p.totals.results, p.totals.students)} />
+          {on('marks') ? (
+            <>
+              <KpiTile
+                label={t('marksEntered')}
+                value={
+                  m.takers ? `${String(Math.round((m.entered / m.takers) * 100))}%` : t('none')
+                }
+                hint={m.takers ? of(m.entered, m.takers) : undefined}
+              />
+              <KpiTile
+                label={t('verified')}
+                value={m.slots ? of(m.verified, m.slots) : t('none')}
+              />
+              <KpiTile label={t('results')} value={of(p.totals.results, p.totals.students)} />
+            </>
+          ) : null}
+          {on('indicators') && !on('marks') ? (
+            <KpiTile
+              label={t('indicators')}
+              value={of(p.totals.indicators.entered, p.totals.indicators.expected)}
+            />
+          ) : null}
+          {on('remarks') && !on('marks') ? (
+            <KpiTile
+              label={t('generalRemark')}
+              value={of(p.totals.generalRemarks, p.totals.students)}
+            />
+          ) : null}
         </div>
         <Card title={t('byClass')}>
           {p.classes.length === 0 ? (
@@ -90,15 +113,21 @@ export default async function ExamOverviewPage({
                 <thead>
                   <tr>
                     <th scope="col">{t('class')}</th>
-                    <th scope="col" className="is-numeric">
-                      {t('subjects')}
-                    </th>
-                    <th scope="col">{t('marks')}</th>
-                    <th scope="col">{t('verified')}</th>
-                    <th scope="col">{t('indicators')}</th>
-                    <th scope="col">{t('remarks')}</th>
-                    <th scope="col">{t('attendance')}</th>
-                    <th scope="col">{t('results')}</th>
+                    {on('marks') ? (
+                      <>
+                        <th scope="col" className="is-numeric">
+                          {t('subjects')}
+                        </th>
+                        <th scope="col">{t('marks')}</th>
+                        <th scope="col">{t('verified')}</th>
+                      </>
+                    ) : null}
+                    {on('indicators') ? <th scope="col">{t('indicators')}</th> : null}
+                    {on('remarks') ? <th scope="col">{t('remarks')}</th> : null}
+                    {on('attendance') || on('health') ? (
+                      <th scope="col">{on('attendance') ? t('attendance') : t('health')}</th>
+                    ) : null}
+                    {on('marks') ? <th scope="col">{t('results')}</th> : null}
                     <th scope="col">{t('stage')}</th>
                     <th scope="col">
                       <span className="ep-sr-only">{t('setUp')}</span>
@@ -114,40 +143,52 @@ export default async function ExamOverviewPage({
                           {t('students')}: {k.students}
                         </div>
                       </th>
-                      <td className="is-numeric">{k.subjects}</td>
-                      <td>
-                        {k.marks.takers ? (
-                          <Meter
-                            done={k.marks.entered}
-                            of={k.marks.takers}
-                            label={of(k.marks.entered, k.marks.takers)}
-                          />
-                        ) : (
-                          t('none')
-                        )}
-                      </td>
-                      <td>{k.marks.slots ? of(k.marks.verified, k.marks.slots) : t('none')}</td>
-                      <td>{done(k.indicators)}</td>
-                      <td>
-                        {done(k.remarks)}
-                        <div className="ep-meter__text">
-                          {t('generalRemark')}: {of(k.generalRemarks, k.students)}
-                        </div>
-                      </td>
-                      <td>
-                        {of(k.attendance, k.students)}
-                        <div className="ep-meter__text">
-                          {t('health')}: {of(k.health, k.students)}
-                        </div>
-                      </td>
-                      <td>
-                        {of(k.results, k.students)}
-                        <div className="ep-meter__text">
-                          {k.computedAt
-                            ? t('computed', { when: k.computedAt.slice(0, 10) })
-                            : t('notComputed')}
-                        </div>
-                      </td>
+                      {on('marks') ? (
+                        <>
+                          <td className="is-numeric">{k.subjects}</td>
+                          <td>
+                            {k.marks.takers ? (
+                              <Meter
+                                done={k.marks.entered}
+                                of={k.marks.takers}
+                                label={of(k.marks.entered, k.marks.takers)}
+                              />
+                            ) : (
+                              t('none')
+                            )}
+                          </td>
+                          <td>{k.marks.slots ? of(k.marks.verified, k.marks.slots) : t('none')}</td>
+                        </>
+                      ) : null}
+                      {on('indicators') ? <td>{done(k.indicators)}</td> : null}
+                      {on('remarks') ? (
+                        <td>
+                          {done(k.remarks)}
+                          <div className="ep-meter__text">
+                            {t('generalRemark')}: {of(k.generalRemarks, k.students)}
+                          </div>
+                        </td>
+                      ) : null}
+                      {on('attendance') || on('health') ? (
+                        <td>
+                          {on('attendance') ? of(k.attendance, k.students) : null}
+                          {on('health') ? (
+                            <div className="ep-meter__text">
+                              {t('health')}: {of(k.health, k.students)}
+                            </div>
+                          ) : null}
+                        </td>
+                      ) : null}
+                      {on('marks') ? (
+                        <td>
+                          {of(k.results, k.students)}
+                          <div className="ep-meter__text">
+                            {k.computedAt
+                              ? t('computed', { when: k.computedAt.slice(0, 10) })
+                              : t('notComputed')}
+                          </div>
+                        </td>
+                      ) : null}
                       <td>
                         <Badge tone={STAGE_TONE[k.stage]}>{s(k.stage)}</Badge>
                       </td>
@@ -179,7 +220,7 @@ export default async function ExamOverviewPage({
                 <thead>
                   <tr>
                     <th scope="col">{t('class')}</th>
-                    {AREAS.map((a) => (
+                    {AREAS.filter(on).map((a) => (
                       <th key={a} scope="col">
                         {t(a)}
                       </th>
@@ -190,7 +231,7 @@ export default async function ExamOverviewPage({
                   {exam.classes.map((k) => (
                     <tr key={k.classId}>
                       <th scope="row">{k.classCode}</th>
-                      {AREAS.map((a) => {
+                      {AREAS.filter(on).map((a) => {
                         const st = lockState(k.classId, a);
                         const label = t('lockLabel', {
                           area: t(a),

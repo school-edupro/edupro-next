@@ -13,6 +13,7 @@ import { getTranslations } from 'next-intl/server';
 import { MasterExport } from '@/components/MasterExport';
 import { ExamSetupNav } from '@/components/exams/ExamSetupNav';
 import { Notice } from '@/components/Notice';
+import { AreaTicks } from '@/components/exams/AreaTicks';
 import { createExamType, saveGradeScale, updateExamType } from '@/lib/actions';
 import { installGradeScalePresets, saveMarkCode } from '@/lib/exam-entry-actions';
 import { apiFetch, getMe } from '@/lib/api';
@@ -31,10 +32,11 @@ export default async function ExamMastersPage({
   }>;
 }) {
   const sp = await searchParams;
-  const [t, x, c, me, types, scales] = await Promise.all([
+  const [t, x, c, takes, me, types, scales] = await Promise.all([
     getTranslations('pages.exams_masters'),
     getTranslations('exams'),
     getTranslations('common'),
+    getTranslations('examHub.areas'),
     getMe(),
     apiFetch<{ data: ExamType[] }>('/exams/types').then((r) => r.data),
     apiFetch<{ data: GradeScale[] }>('/exams/grade-scales').then((r) => r.data),
@@ -83,6 +85,14 @@ export default async function ExamMastersPage({
                 header: x('weightage'),
                 numeric: true,
                 render: (r) => r.weightage ?? '—',
+              },
+              {
+                key: 'areas',
+                header: takes('takes'),
+                render: (r) =>
+                  (r.areas ?? []).length === 5
+                    ? takes('all')
+                    : (r.areas ?? []).map((a) => takes(a as 'marks')).join(' · '),
               },
               { key: 'n', header: x('examsCount'), numeric: true, render: (r) => r.exams },
               {
@@ -162,6 +172,7 @@ export default async function ExamMastersPage({
                   </select>
                 </label>
               </FormRow>
+              <AreaTicks idPrefix="ta" value={editingType.areas ?? []} />
               <FormActions>
                 <Button type="submit">{x('saveType')}</Button>
                 <a className="ep-btn ep-btn--ghost" href="/exams/masters">
@@ -198,6 +209,10 @@ export default async function ExamMastersPage({
                   min={0}
                 />
               </FormRow>
+              <AreaTicks
+                idPrefix="tn"
+                value={['marks', 'indicators', 'remarks', 'attendance', 'health']}
+              />
               <FormActions>
                 <Button type="submit">{x('addType')}</Button>
               </FormActions>

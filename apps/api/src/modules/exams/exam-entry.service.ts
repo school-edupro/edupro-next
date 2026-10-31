@@ -128,6 +128,19 @@ const asMarksError = (error: unknown): unknown => {
   return new DomainError(e.message, MARKS_ERRORS[e.message]!, { status: 409, extra });
 };
 const num = (v: string | number) => String(Number(v));
+const AREA_WORDS: Record<string, string> = {
+  marks: 'marks',
+  indicators: 'indicators or a progress card',
+  remarks: 'remarks',
+  attendance: 'exam attendance',
+  health: 'health records',
+};
+/** An exam that does not take an area refuses its entry (docs/design/66). */
+const areaOff = (area: string) =>
+  new DomainError('exams.area_off', `This exam does not take ${AREA_WORDS[area] ?? area}`, {
+    status: 409,
+    extra: { area },
+  });
 const savedEntries = (n: number) => `${n} saved ${n === 1 ? 'entry' : 'entries'}`;
 
 export interface Kind {
@@ -137,28 +150,34 @@ export interface Kind {
   /** the exam class's lock of this entry type (docs/design/65) */
   lock?: 'indicators_locked' | 'remarks_locked' | 'attendance_locked' | 'health_locked';
   label?: string;
+  /** the exam area it belongs to: an exam that does not take it refuses the entry (docs/design/66) */
+  area: 'marks' | 'indicators' | 'remarks' | 'attendance' | 'health';
 }
 
-export const MARKS: Kind = { permission: EXAMS.marksEnter, subjectAware: true };
+export const MARKS: Kind = { permission: EXAMS.marksEnter, subjectAware: true, area: 'marks' };
 export const INDICATORS: Kind = {
+  area: 'indicators',
   permission: EXAMS.indicatorEnter,
   subjectAware: false,
   lock: 'indicators_locked',
   label: 'Indicator',
 };
 export const REMARKS: Kind = {
+  area: 'remarks',
   permission: EXAMS.remarkEnter,
   subjectAware: false,
   lock: 'remarks_locked',
   label: 'Remarks',
 };
 const ATTENDANCE: Kind = {
+  area: 'attendance',
   permission: EXAMS.attendanceEnter,
   subjectAware: false,
   lock: 'attendance_locked',
   label: 'Attendance',
 };
 const HEALTH: Kind = {
+  area: 'health',
   permission: EXAMS.healthEnter,
   subjectAware: false,
   lock: 'health_locked',
@@ -273,6 +292,11 @@ export class ExamEntryService {
 
   /** Marks of a section's subject change only while its entry is open (docs/design/65, part 2). */
   async assertEntryOpen(c: PoolClient, examSubjectId: string, sectionId: string) {
+    const takes = await c.query<{ marks: boolean }>(
+      `SELECT 'marks' = ANY(e.areas) AS marks FROM exam_subjects es JOIN exams e ON e.id = es.exam_id WHERE es.id = $1`,
+      [examSubjectId],
+    );
+    if (takes.rows[0] && !takes.rows[0].marks) throw areaOff('marks');
     const r = await c.query<{ status: string }>(
       `SELECT status FROM exam_entry_status WHERE exam_subject_id = $1 AND class_section_id = $2`,
       [examSubjectId, sectionId],
@@ -290,6 +314,11 @@ export class ExamEntryService {
 
   /** An entry type locked on the exam's class (docs/design/65). */
   async assertTypeOpen(c: PoolClient, examId: string, classId: string, kind: Kind) {
+    const takes = await c.query<{ on: boolean }>(
+      `SELECT $2 = ANY(areas) AS on FROM exams WHERE id = $1`,
+      [examId, kind.area],
+    );
+    if (takes.rows[0] && !takes.rows[0].on) throw areaOff(kind.area);
     if (!kind.lock) return;
     const r = await c.query<{ locked: boolean }>(
       // eslint-disable-next-line no-restricted-syntax -- the column is one of the fixed lock names above
@@ -1289,8 +1318,12 @@ export class ExamEntryService {
       status: string;
       kind: string;
       level_words: Record<string, string>;
+      class_ids: string[];
     }>(
-      `SELECT id::text, code, name, grades, status::text, kind, level_words FROM indicator_sets WHERE deleted_at IS NULL ORDER BY code`,
+      // the classes a set is for (docs/design/66)
+      `SELECT s.id::text, s.code, s.name, s.grades, s.status::text, s.kind, s.level_words,
+              COALESCE((SELECT array_agg(m.class_id::text ORDER BY m.class_id) FROM indicator_set_classes m WHERE m.set_id = s.id), '{}') AS class_ids
+         FROM indicator_sets s WHERE s.deleted_at IS NULL ORDER BY s.code`,
     );
     const ind = await c.query<{
       id: string;
@@ -1310,9 +1343,10 @@ export class ExamEntryService {
          LEFT JOIN indicator_areas ar ON lower(ar.name) = lower(btrim(i.area))
         ORDER BY i.set_id, ar.sort_order NULLS LAST, i.area NULLS LAST, i.sort_order, i.code`,
     );
-    return sets.rows.map(({ level_words, ...s }) => ({
+    return sets.rows.map(({ level_words, class_ids, ...s }) => ({
       ...s,
       levelWords: level_words,
+      classIds: class_ids,
       indicators: ind.rows
         .filter((i) => i.set_id === s.id)
         .map((i) => ({

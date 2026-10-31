@@ -27,6 +27,7 @@ interface Category {
 
 /** A subject's remarks: its subject teacher writes them for their sections (as marks). */
 const SUBJECT_REMARKS: Kind = {
+  area: 'remarks',
   permission: EXAMS.marksEnter,
   subjectAware: true,
   lock: 'remarks_locked',

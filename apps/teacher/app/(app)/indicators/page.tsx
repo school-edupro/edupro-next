@@ -11,6 +11,7 @@ interface Exam {
   id: string;
   code: string;
   name: string;
+  areas?: string[];
 }
 interface EntrySection {
   classSectionId: string;
@@ -83,7 +84,12 @@ export default async function IndicatorsPage({
   const lang = await currentLang();
   let exams: Exam[];
   try {
-    exams = await bff.api.fetch<{ data: Exam[] }>('/exams').then((r) => r.data);
+    // only the exams that take this (docs/design/66)
+    exams = await bff.api
+      .fetch<{ data: Exam[] }>('/exams')
+      .then((r) =>
+        r.data.filter((e) => !e.areas || ['indicators'].some((a) => e.areas!.includes(a))),
+      );
   } catch (error) {
     if (error instanceof ApiError && error.status === 401) redirect('/login?error=session-expired');
     if (error instanceof ApiError && error.status === 403)

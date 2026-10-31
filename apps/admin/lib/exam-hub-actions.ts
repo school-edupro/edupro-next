@@ -128,6 +128,7 @@ export async function saveExamDetails(fd: FormData) {
         endsOn: str(fd, 'endsOn') || null,
         showOnPortal: fd.get('showOnPortal') !== null,
         status: str(fd, 'status') === 'inactive' ? 'inactive' : 'active',
+        areas: fd.getAll('areas').map(String),
         ...(classes.length ? { classes } : {}),
       }),
     }),

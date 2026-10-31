@@ -1,8 +1,8 @@
-import { Body, Controller, Get, Put } from '@nestjs/common';
+import { Body, Controller, Get, Param, Put } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { RequirePermission } from '../../common/access/require-permission.decorator';
 import { ReqCtx, type RequestContext } from '../../common/http/request-context';
-import { EXAMS, UpsertIndicatorAreaDto, UpsertIndicatorScaleDto } from './exams.dto';
+import { EXAMS, SetClassesDto, UpsertIndicatorAreaDto, UpsertIndicatorScaleDto } from './exams.dto';
 import { IndicatorMastersService } from './indicator-masters.service';
 
 /** docs/design/65: the indicator areas and level scales the set editor picks from. */
@@ -23,6 +23,13 @@ export class IndicatorMastersController {
   @RequirePermission(EXAMS.masterManage)
   upsertArea(@ReqCtx() ctx: RequestContext, @Body() dto: UpsertIndicatorAreaDto) {
     return this.masters.upsertArea(ctx, dto);
+  }
+
+  @Put('indicator-sets/:id/classes')
+  @ApiOperation({ summary: 'The classes a set of indicators or a progress card is for' })
+  @RequirePermission(EXAMS.masterManage)
+  setClasses(@ReqCtx() ctx: RequestContext, @Param('id') id: string, @Body() dto: SetClassesDto) {
+    return this.masters.setClasses(ctx, id, dto);
   }
 
   @Get('indicator-scales')

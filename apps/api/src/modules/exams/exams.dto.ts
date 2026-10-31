@@ -33,11 +33,22 @@ const Code = z
   .trim()
   .regex(/^[A-Z0-9_-]{2,20}$/, 'upper case code');
 
+/** What an exam takes (docs/design/66): an area left out is hidden and its entry refused. */
+export const EXAM_AREAS = ['marks', 'indicators', 'remarks', 'attendance', 'health'] as const;
+export type ExamArea = (typeof EXAM_AREAS)[number];
+const AreasSchema = z
+  .array(z.enum(EXAM_AREAS))
+  .min(1)
+  .max(5)
+  .transform((a) => EXAM_AREAS.filter((x) => a.includes(x)));
+
 export const UpsertExamTypeSchema = z.object({
   code: Code,
   name: z.string().trim().min(2).max(80),
   weightage: z.number().min(0).max(100).nullable().optional(),
   sortOrder: z.number().int().min(0).max(1000).default(0),
+  /** none: every area */
+  areas: AreasSchema.optional(),
 });
 export class UpsertExamTypeDto extends createZodDto(UpsertExamTypeSchema) {}
 export const UpdateExamTypeSchema = UpsertExamTypeSchema.omit({ code: true })
@@ -62,6 +73,8 @@ export class UpsertGradeScaleDto extends createZodDto(UpsertGradeScaleSchema) {}
 
 export const CreateExamSchema = z.object({
   examTypeId: IdSchema,
+  /** none: the type's areas */
+  areas: AreasSchema.optional(),
   code: Code,
   name: z.string().trim().min(2).max(120),
   startsOn: DateSchema.optional(),
@@ -89,6 +102,8 @@ export class UpdateExamDto extends createZodDto(UpdateExamSchema) {}
 /** docs/design/66: a new exam made from an earlier one (its classes, subjects, parts and sets). */
 export const CopyExamSchema = z.object({
   examTypeId: IdSchema.optional(),
+  /** none: the copied exam's areas */
+  areas: AreasSchema.optional(),
   code: Code,
   name: z.string().trim().min(2).max(120),
   startsOn: DateSchema.optional(),
@@ -427,6 +442,10 @@ export const UpsertIndicatorAreaSchema = z.object({
   status: z.enum(['active', 'inactive']).default('active'),
 });
 export class UpsertIndicatorAreaDto extends createZodDto(UpsertIndicatorAreaSchema) {}
+
+/** The classes a set of indicators or a progress card is for (docs/design/66); a class has one set. */
+export const SetClassesSchema = z.object({ classIds: z.array(IdSchema).max(60) });
+export class SetClassesDto extends createZodDto(SetClassesSchema) {}
 
 /** A level scale (Beginner, Progressing, Proficient; Rarely ... Always): a set's or a heading's levels */
 export const UpsertIndicatorScaleSchema = z.object({

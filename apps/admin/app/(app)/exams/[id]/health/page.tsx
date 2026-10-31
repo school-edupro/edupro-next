@@ -92,7 +92,11 @@ export default async function ExamHealthPage({
             label: t('attendance'),
           },
           { href: `/exams/${id}/health`, label: t('health') },
-        ]}
+        ].filter((x) =>
+          (exam.areas ?? ['attendance', 'health']).includes(
+            x.href.includes('/health') ? 'health' : 'attendance',
+          ),
+        )}
       />
       <p className="ep-field__help" style={{ marginTop: 0 }}>
         {h('description')}

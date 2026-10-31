@@ -4,6 +4,7 @@ import { notFound } from 'next/navigation';
 import type { ReactNode } from 'react';
 import { Notice } from '@/components/Notice';
 import { DateSheetEditor, type PaperRow } from '@/components/exams/DateSheetEditor';
+import { AreaTicks } from '@/components/exams/AreaTicks';
 import { ExamFrame } from '@/components/exams/ExamFrame';
 import { ExamSubjectsEditor, type EditorRow } from '@/components/exams/ExamSubjectsEditor';
 import { apiFetch, getMe } from '@/lib/api';
@@ -167,6 +168,7 @@ export default async function ExamSetupPage({
             />
             <span className="ep-check__box" aria-hidden="true" /> {t('portal')}
           </label>
+          <AreaTicks idPrefix="xd-area" value={exam.areas ?? []} disabled={!canManage} />
           <h3 className="ep-cdash__h3">{t('classes')}</h3>
           <p className="ep-field__help" style={{ marginTop: 0 }}>
             {t('classesHelp')}

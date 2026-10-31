@@ -4,7 +4,7 @@ import { AuditService } from '../../common/audit/audit.service';
 import { DbService } from '../../common/db/db.service';
 import { DomainError } from '../../common/errors/domain-error';
 import { requireTenant, type RequestContext } from '../../common/http/request-context';
-import type { UpsertIndicatorAreaDto, UpsertIndicatorScaleDto } from './exams.dto';
+import type { SetClassesDto, UpsertIndicatorAreaDto, UpsertIndicatorScaleDto } from './exams.dto';
 
 /** How many items of live sets an area or a scale is used by (a scale: as a set's levels or a heading's). */
 const AREA_USE = `(SELECT count(*)::int FROM indicators i JOIN indicator_sets s ON s.id = i.set_id AND s.deleted_at IS NULL
@@ -82,6 +82,45 @@ export class IndicatorMastersService {
         after: dto,
       });
       return { id };
+    });
+  }
+
+  /**
+   * The classes a set is for (docs/design/66): a class ticked here leaves any other set; a class left
+   * out is no longer this set's. New exams give each class its set; existing exams keep theirs.
+   */
+  async setClasses(ctx: RequestContext, setId: string, dto: SetClassesDto) {
+    return this.db.tenant(requireTenant(ctx), async (c) => {
+      const s = await c.query(`SELECT 1 FROM indicator_sets WHERE id = $1 AND deleted_at IS NULL`, [
+        setId,
+      ]);
+      if (!s.rowCount) throw new DomainError('not-found', 'Set not found', { status: 404 });
+      const ids = [...new Set(dto.classIds)];
+      const known = await c.query<{ n: number }>(
+        `SELECT count(*)::int AS n FROM classes WHERE id = ANY($1::bigint[]) AND deleted_at IS NULL`,
+        [ids],
+      );
+      if (known.rows[0]!.n !== ids.length)
+        throw new DomainError('validation-failed', 'A class is not of this school', {
+          status: 400,
+        });
+      await c.query(
+        `DELETE FROM indicator_set_classes WHERE set_id = $1 AND NOT (class_id = ANY($2::bigint[]))`,
+        [setId, ids],
+      );
+      await c.query(
+        `INSERT INTO indicator_set_classes (school_id, set_id, class_id, updated_by)
+         SELECT app.current_school_id(), $1, x, app.current_user_id() FROM unnest($2::bigint[]) AS x
+         ON CONFLICT (school_id, class_id) DO UPDATE SET set_id = EXCLUDED.set_id, updated_by = EXCLUDED.updated_by, updated_at = now()`,
+        [setId, ids],
+      );
+      await this.audit.stage(ctx, c, {
+        action: 'exams.indicator_set.classes',
+        entityType: 'indicator_sets',
+        entityId: setId,
+        after: { classIds: ids },
+      });
+      return { classIds: ids };
     });
   }
 
