@@ -31,7 +31,11 @@ interface Option {
   id: string;
   code: string;
   name: string;
+  /** its sub-subjects in the subject master */
+  children?: Array<{ id: string; code: string; name: string }>;
 }
+/** the part names offered besides a subject's sub-subjects */
+const PRESETS = ['Theory', 'Practical'] as const;
 
 const partsKey = (p: EditorPart[]) =>
   JSON.stringify(
@@ -150,9 +154,36 @@ export function ExamSubjectsEditor({
         endsAt: null,
         entryLocked: false,
         parts: [],
-        children: [],
+        children: s.children ?? [],
       },
     ]);
+  };
+  // a part typed by hand ("Other"): its name box stays open
+  const [typed, setTyped] = useState<Set<string>>(new Set());
+  const partChoice = (r: EditorRow, p: EditorPart, i: number) => {
+    const kid = r.children.find((k) => k.name.trim().toLowerCase() === p.name.trim().toLowerCase());
+    if (kid && !typed.has(`${r.subjectId}|${String(i)}`)) return `k:${kid.id}`;
+    if (
+      (PRESETS as readonly string[]).includes(p.name) &&
+      !typed.has(`${r.subjectId}|${String(i)}`)
+    )
+      return `p:${p.name}`;
+    return p.name || typed.has(`${r.subjectId}|${String(i)}`) ? 'other' : '';
+  };
+  /** a part picked from the list: a sub-subject is entered by its own teacher */
+  const pickPart = (r: EditorRow, i: number, value: string) => {
+    const key = `${r.subjectId}|${String(i)}`;
+    const next = new Set(typed);
+    next.delete(key);
+    if (value.startsWith('k:')) {
+      const kid = r.children.find((k) => k.id === value.slice(2));
+      if (kid) changePart(r.subjectId, i, { name: kid.name, subjectId: kid.id });
+    } else if (value.startsWith('p:')) changePart(r.subjectId, i, { name: value.slice(2) });
+    else if (value === 'other') {
+      next.add(key);
+      changePart(r.subjectId, i, { name: '' });
+    } else changePart(r.subjectId, i, { name: '' });
+    setTyped(next);
   };
 
   const save = async (then?: string) => {
@@ -426,16 +457,37 @@ export function ExamSubjectsEditor({
                               <span className="ep-field__label">
                                 {t('partName')} {i + 1}
                               </span>
-                              <input
+                              <select
                                 id={`xp-n-${r.subjectId}-${String(i)}`}
-                                className="ep-input"
-                                maxLength={60}
-                                value={p.name}
-                                placeholder={i === 0 ? 'Theory' : i === 1 ? 'Practical' : ''}
-                                onChange={(e) =>
-                                  changePart(r.subjectId, i, { name: e.target.value })
-                                }
-                              />
+                                className="ep-select"
+                                value={partChoice(r, p, i)}
+                                onChange={(e) => pickPart(r, i, e.target.value)}
+                              >
+                                <option value="">{t('partChoose')}</option>
+                                {r.children.map((k) => (
+                                  <option key={k.id} value={`k:${k.id}`}>
+                                    {k.name} ({k.code})
+                                  </option>
+                                ))}
+                                {PRESETS.map((x) => (
+                                  <option key={x} value={`p:${x}`}>
+                                    {t(x === 'Theory' ? 'partTheory' : 'partPractical')}
+                                  </option>
+                                ))}
+                                <option value="other">{t('partOther')}</option>
+                              </select>
+                              {partChoice(r, p, i) === 'other' ? (
+                                <input
+                                  className="ep-input"
+                                  aria-label={t('partOtherName', { n: i + 1 })}
+                                  maxLength={60}
+                                  value={p.name}
+                                  onChange={(e) =>
+                                    changePart(r.subjectId, i, { name: e.target.value })
+                                  }
+                                  style={{ marginTop: 'var(--sp-1)' }}
+                                />
+                              ) : null}
                             </label>
                             <label
                               className="ep-field"

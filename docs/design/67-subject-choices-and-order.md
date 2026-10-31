@@ -236,3 +236,11 @@ has no table. Subjects in the class's order, only those someone takes. The PDF i
 letterhead on every page and the table heading repeated when a section runs on; Excel has the same blocks
 (`countsReportPdf` / `countsReportXlsx` in subject-mapping-file.ts). The on-screen Whole class table keeps
 "taking / students", where a student not set counts as taking every subject.
+
+## An exam's parts picked from the subject master (31 Oct)
+
+Exam → Set-up → Classes and subjects → a subject's parts: the part's name is a drop-down of the subject's
+sub-subjects in the subject master (Social Science: Economics, Geography, History, Political Science), then
+Theory, Practical and "Other (type the name)". Picking a sub-subject also sets "Entered by the teacher of" to
+it (its teacher enters the part); that list now offers the sub-subjects for every row, also for a class whose
+subjects are not saved in the exam yet (they come from the subject master, not only from the saved exam).

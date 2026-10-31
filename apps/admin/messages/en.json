@@ -3841,7 +3841,12 @@
       "print": "Print",
       "printAll": "Print every class",
       "noSubjects": "{class} has no subjects in this exam yet.",
-      "addSubjectsFirst": "Add the subjects first"
+      "addSubjectsFirst": "Add the subjects first",
+      "partChoose": "Choose the part",
+      "partTheory": "Theory",
+      "partPractical": "Practical",
+      "partOther": "Other (type the name)",
+      "partOtherName": "Name of part {n}"
     },
     "sheet": {
       "title": "Date sheet",

@@ -52,9 +52,11 @@ export default async function ExamSetupPage({
     apiFetch<Exam>(`/exams/${id}`),
     apiFetch<ExamProgress>(`/exams/${id}/progress`),
     apiFetch<Page<ClassRow>>('/academics/classes?size=200').then((r) => r.data),
-    apiFetch<{ data: Array<SubjectRow & { status?: string }> }>('/academics/subjects?size=200')
+    apiFetch<{ data: Array<SubjectRow & { status?: string; parentId?: string | null }> }>(
+      '/academics/subjects?size=200',
+    )
       .then((r) => r.data.filter((x) => x.status !== 'inactive'))
-      .catch(() => [] as SubjectRow[]),
+      .catch(() => [] as Array<SubjectRow & { parentId?: string | null }>),
     apiFetch<{ data: GradeScale[] }>('/exams/grade-scales')
       .then((r) => r.data)
       .catch(() => [] as GradeScale[]),
@@ -247,6 +249,12 @@ export default async function ExamSetupPage({
     }>(`/academics/classes/${klass.classId}/subjects`)
       .then((r) => r.data)
       .catch(() => []);
+    // a subject's sub-subjects in the subject master (Social Science: Geography, History, …): the parts
+    // it may be entered in, each by its own teacher
+    const kidsOf = (subjectId: string) =>
+      subjects
+        .filter((x) => x.parentId === subjectId)
+        .map((x) => ({ id: x.id, code: x.code, name: x.name }));
     const row = (s: ExamSubject): EditorRow => ({
       subjectId: s.subjectId,
       code: s.subjectCode,
@@ -267,7 +275,7 @@ export default async function ExamSetupPage({
         max: num(x.maxMarks),
         entered: x.entered,
       })),
-      children: s.children ?? [],
+      children: s.children?.length ? s.children : kidsOf(s.subjectId),
     });
     const blank = (
       x: { subjectId: string; code: string; name: string },
@@ -287,7 +295,7 @@ export default async function ExamSetupPage({
       endsAt: null,
       entryLocked: false,
       parts: [],
-      children: [],
+      children: kidsOf(x.subjectId),
     });
     const fromClassList = current.length === 0 && studied.length > 0;
     const initial: EditorRow[] = [
@@ -312,7 +320,7 @@ export default async function ExamSetupPage({
             fromClassList={fromClassList}
             addable={subjects
               .filter((x) => !initial.some((r) => r.subjectId === x.id))
-              .map((x) => ({ id: x.id, code: x.code, name: x.name }))}
+              .map((x) => ({ id: x.id, code: x.code, name: x.name, children: kidsOf(x.id) }))}
             scales={scales.map((g) => ({ id: g.id, code: g.code, name: g.name }))}
             sets={sets}
             setId={klass.indicatorSetId ?? null}

@@ -3841,7 +3841,12 @@
       "print": "प्रिंट",
       "printAll": "सभी कक्षाओं की प्रिंट",
       "noSubjects": "{class} के इस परीक्षा में अभी कोई विषय नहीं।",
-      "addSubjectsFirst": "पहले विषय जोड़ें"
+      "addSubjectsFirst": "पहले विषय जोड़ें",
+      "partChoose": "भाग चुनें",
+      "partTheory": "सैद्धांतिक",
+      "partPractical": "प्रायोगिक",
+      "partOther": "अन्य (नाम लिखें)",
+      "partOtherName": "भाग {n} का नाम"
     },
     "sheet": {
       "title": "डेट शीट",
