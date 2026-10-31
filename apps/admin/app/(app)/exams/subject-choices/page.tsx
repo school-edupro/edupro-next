@@ -637,13 +637,6 @@ export default async function SubjectChoicesPage({
                     />
                   ) : null}
                 </Card>
-                <Card title="Print">
-                  <p style={{ marginTop: 0 }}>The section&rsquo;s list, A4 upright.</p>
-                  <FileLinks
-                    href={`/api/subject-choices/list?classSectionId=${choices.section.id}&format=pdf&portrait=true`}
-                    label={`Subject choices of ${choices.section.code} (PDF, upright)`}
-                  />
-                </Card>
               </div>
             </>
           ) : null}
@@ -826,21 +819,12 @@ export default async function SubjectChoicesPage({
                 </Card>
                 <Card elevated title="Every student of the class">
                   <p style={{ marginTop: 0 }}>Each student&rsquo;s subjects, section by section.</p>
-                  <p style={{ display: 'flex', gap: 'var(--sp-3)', flexWrap: 'wrap' }}>
-                    <span>
-                      PDF, landscape{' '}
-                      <FileLinks
-                        href={`/api/subject-choices/list?classId=${classId}&format=pdf`}
-                        label={`Subject choices of ${counts.class.name} (PDF, landscape)`}
-                      />
-                    </span>
-                    <span>
-                      PDF, upright{' '}
-                      <FileLinks
-                        href={`/api/subject-choices/list?classId=${classId}&format=pdf&portrait=true`}
-                        label={`Subject choices of ${counts.class.name} (PDF, upright)`}
-                      />
-                    </span>
+                  <p style={{ display: 'flex', gap: 'var(--sp-2)', alignItems: 'center' }}>
+                    PDF{' '}
+                    <FileLinks
+                      href={`/api/subject-choices/list?classId=${classId}&format=pdf`}
+                      label={`Subject mapping of ${counts.class.name} (PDF)`}
+                    />
                   </p>
                   <p>
                     <a

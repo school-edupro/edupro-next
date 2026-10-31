@@ -1,6 +1,7 @@
-import { Injectable } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
 import ExcelJS from 'exceljs';
 import type { PoolClient, TenantContext } from '@edupro/db';
+import type { StorageDriver } from '@edupro/storage';
 import { ScopePolicy } from '../../common/access/scope.policy';
 import { AuditService } from '../../common/audit/audit.service';
 import { DbService } from '../../common/db/db.service';
@@ -8,12 +9,14 @@ import { DomainError } from '../../common/errors/domain-error';
 import { readSheet, templateSheet } from '../../common/excel/sheet';
 import { requireTenant, type RequestContext } from '../../common/http/request-context';
 import { tablePdf } from '../engagement/table-pdf';
+import { STORAGE_DRIVER } from '../files/storage';
 import {
   EXAMS,
   type PutSubjectChoicesDto,
   type PutSubjectSetupDto,
   type SubjectChoicesUploadDto,
 } from './exams.dto';
+import { mappingPdf, mappingXlsx } from './subject-mapping-file';
 
 type Kind = 'compulsory' | 'optional' | 'additional';
 type Take = 'all' | 'group' | 'free';
@@ -99,6 +102,7 @@ export class SubjectChoicesService {
     private readonly db: DbService,
     private readonly audit: AuditService,
     private readonly scopes: ScopePolicy,
+    @Inject(STORAGE_DRIVER) private readonly storage: StorageDriver,
   ) {}
 
   private year(tenant: TenantContext): string {
@@ -1365,7 +1369,12 @@ export class SubjectChoicesService {
     });
   }
 
-  /** Every student of a section or of the class with their subjects, as Excel or PDF. */
+  /**
+   * Every student of a section or of the class with their subjects, as Excel or PDF, laid out like the
+   * legacy "Define Student Subject Mapping" export: the school's letterhead, then admission no, class,
+   * name, stream and Subject-1 / Option(Y/N), Subject-2 / … in the class's slots (a subject entered in
+   * parts shows its sub-subjects; Option Y = the student's own additional subject).
+   */
   async listFile(
     ctx: RequestContext,
     q: { classId?: string; classSectionId?: string; format: 'xlsx' | 'pdf'; portrait: boolean },
@@ -1373,7 +1382,7 @@ export class SubjectChoicesService {
     const tenant = requireTenant(ctx);
     const yearId = this.year(tenant);
     const allowed = await this.scopes.filter(tenant, EXAMS.marksView, 'class_section');
-    const { school, sections } = await this.db.tenant(tenant, async (c) => {
+    const { school, sections, year, logoFile } = await this.db.tenant(tenant, async (c) => {
       const ids = q.classSectionId
         ? [q.classSectionId]
         : (
@@ -1387,107 +1396,127 @@ export class SubjectChoicesService {
       if (!seen.length) throw new DomainError('not-found', 'No section to show', { status: 404 });
       const out = [];
       for (const id of seen) out.push(await this.load(c, yearId, id));
-      const sc = await c.query<{ name: string }>(
-        `SELECT name FROM schools WHERE id = app.current_school_id()`,
+      const sc = await c.query<{ name: string; logo: string | null; year: string }>(
+        `SELECT s.name, NULLIF(s.branding->>'logoFileId', '') AS logo,
+                (SELECT code FROM academic_years WHERE id = $1) AS year
+           FROM schools s WHERE s.id = app.current_school_id()`,
+        [yearId],
       );
-      return { school: sc.rows[0]?.name ?? '', sections: out };
+      const logo = sc.rows[0]?.logo;
+      const f =
+        logo && /^\d{1,18}$/.test(logo)
+          ? (
+              await c.query<{ object_key: string; content_type: string }>(
+                `SELECT object_key, content_type FROM files WHERE id = $1 AND deleted_at IS NULL`,
+                [logo],
+              )
+            ).rows[0]
+          : undefined;
+      return {
+        school: sc.rows[0]?.name ?? '',
+        year: sc.rows[0]?.year ?? '',
+        sections: out,
+        logoFile: f,
+      };
     });
+    let logo: { contentType: string; bytes: Buffer } | null = null;
+    if (logoFile)
+      try {
+        logo = {
+          contentType: logoFile.content_type,
+          bytes: await this.storage.read(logoFile.object_key),
+        };
+      } catch {
+        logo = null;
+      }
     const first = sections[0]!;
-    const cols = this.sheetColumns(first);
-    const code = (id: string) => first.subjects.find((x) => x.id === id)?.code ?? '';
-    const compulsory = first.subjects.filter((x) => x.take === 'all').map((x) => x.code);
-    const whole = !q.classSectionId;
-    const head = [
-      ...(whole ? ['Section'] : []),
-      'Roll',
-      'Adm no',
-      'Student',
-      ...(cols.stream ? ['Stream'] : []),
-      ...cols.groups.map((x) => x.header),
-      ...(cols.free.length ? [cols.freeHeader] : []),
-      ...(cols.additional ? ['Additional'] : []),
-      'Status',
-    ];
-    const body = sections.flatMap((sec) =>
+    // the class's slots, as the students' grid shows them
+    type Slot = { kind: 'one'; id: string } | { kind: 'group'; group: SubjectGroup; pick: number };
+    const slots: Slot[] = [];
+    const anyHas = (id: string) =>
+      sections.some((sec) => sec.rows.some((r) => r.subjects.some((x) => x.subjectId === id)));
+    for (const x of first.subjects) {
+      if (x.take === 'all') slots.push({ kind: 'one', id: x.id });
+      else if (x.take === 'free') {
+        if (first.fromExams || anyHas(x.id)) slots.push({ kind: 'one', id: x.id });
+      } else {
+        const g = first.groups.find((y) => y.id === x.groupId);
+        if (g && !slots.some((s) => s.kind === 'group' && s.group.id === g.id))
+          for (let i = 0; i < g.max; i += 1) slots.push({ kind: 'group', group: g, pick: i });
+      }
+    }
+    const byId = new Map(first.subjects.map((x) => [x.id, x]));
+    // a subject entered in parts shows its sub-subjects (HISTORY, GEOGRAPHY), as the old export did
+    const label = (id: string) => {
+      const x = byId.get(id);
+      if (!x) return '';
+      return (x.parts?.length ? x.parts.map((p) => p.name).join(', ') : x.name).toUpperCase();
+    };
+    const additionalGroup = (id: string) => {
+      const x = byId.get(id);
+      return (
+        x?.take === 'group' && first.groups.find((g) => g.id === x.groupId)?.kind === 'additional'
+      );
+    };
+    const rows = sections.flatMap((sec) =>
       sec.rows.map((r) => {
         const has = new Set(r.subjects.map((x) => x.subjectId));
-        const short = sec.groups.filter(
-          (g) => g.subjectIds.filter((id) => has.has(id)).length < g.min,
-        );
-        return [
-          ...(whole ? [sec.section.code] : []),
-          r.rollNo ?? '',
-          r.admissionNo,
-          r.name,
-          ...(cols.stream ? [r.stream ?? ''] : []),
-          ...cols.groups.map((x) =>
-            x.g.subjectIds
-              .filter((id) => has.has(id))
-              .map(code)
-              .join(', '),
-          ),
-          ...(cols.free.length
-            ? [
-                cols.free
-                  .filter((x) => has.has(x.id))
-                  .map((x) => x.code)
-                  .join(', '),
-              ]
-            : []),
-          ...(cols.additional
-            ? [
-                r.subjects
-                  .filter((x) => x.additional)
-                  .map((x) => code(x.subjectId))
-                  .join(', '),
-              ]
-            : []),
-          !r.subjects.length
-            ? 'Not set: takes every subject'
-            : short.length
-              ? `Missing: ${short.map((g) => g.name).join(', ')}`
-              : 'Complete',
-        ];
+        const opted = new Set(r.subjects.filter((x) => x.additional).map((x) => x.subjectId));
+        const notSet = !r.subjects.length;
+        return {
+          admissionNo: r.admissionNo,
+          className: sec.section.code,
+          name: r.name,
+          stream: r.stream ?? '',
+          cells: slots.map((s) => {
+            const id =
+              s.kind === 'one'
+                ? has.has(s.id) || (notSet && byId.get(s.id)?.take === 'all')
+                  ? s.id
+                  : ''
+                : (s.group.subjectIds.filter((x) => has.has(x))[s.pick] ?? '');
+            return {
+              subject: id ? label(id) : '',
+              option: id ? (opted.has(id) || additionalGroup(id) ? 'Y' : 'N') : '',
+            };
+          }),
+        };
       }),
     );
+    const whole = !q.classSectionId;
     const place = whole ? first.section.className : first.section.code;
-    const title = `Subject choices · ${place}`;
-    const stamp = `subject-choices-${place}`.toLowerCase().replace(/[^\w.-]+/g, '-');
-    if (q.format === 'xlsx') {
-      const wb = new ExcelJS.Workbook();
-      const ws = wb.addWorksheet('Subject choices');
-      ws.addRow([title]).font = { bold: true, size: 13 };
-      ws.addRow([school]);
-      if (compulsory.length) ws.addRow([`Everyone takes ${compulsory.join(', ')}`]);
-      ws.addRow(head).font = { bold: true };
-      for (const line of body) ws.addRow(line);
-      ws.getColumn(head.indexOf('Student') + 1).width = 28;
+    const stamp = `subject-mapping-${place}`.toLowerCase().replace(/[^\w.-]+/g, '-');
+    const now = new Date().toLocaleString('en-GB', {
+      timeZone: 'Asia/Kolkata',
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: true,
+    });
+    const sheet = {
+      school,
+      title: 'Define Student Subject Mapping',
+      lines: [
+        `Classes: ${sections.map((x) => x.section.code).join(', ')}`,
+        `Session: ${year}`,
+        `Generated on: ${now.replace(/\//g, '-').replace(',', '').toUpperCase()}`,
+      ],
+      logo,
+      slots: slots.length,
+      rows,
+    };
+    if (q.format === 'xlsx')
       return {
         filename: `${stamp}.xlsx`,
         contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-        base64: Buffer.from(await wb.xlsx.writeBuffer()).toString('base64'),
+        base64: (await mappingXlsx(sheet)).toString('base64'),
       };
-    }
-    const bytes = await tablePdf({
-      school,
-      title,
-      subtitle: [
-        compulsory.length ? `Everyone takes ${compulsory.join(', ')}` : 'Subjects of each student',
-        `${String(body.length)} students`,
-      ],
-      columns: head.map((label) => ({
-        label,
-        width: label === 'Student' ? 4 : label === 'Status' ? 3 : label === 'Roll' ? 1 : 2,
-      })),
-      rows: body,
-      wrap: true,
-      portrait: q.portrait,
-      fontSize: head.length > 9 ? 7.5 : 8.5,
-    });
     return {
       filename: `${stamp}.pdf`,
       contentType: 'application/pdf',
-      base64: bytes.toString('base64'),
+      base64: (await mappingPdf(sheet)).toString('base64'),
     };
   }
 

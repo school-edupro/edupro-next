@@ -567,6 +567,31 @@ describe('subject choices and order (e2e)', () => {
       const f = await call(admin, 'GET', `/exams/subject-choices/list-file?${q}`);
       expect(f.statusCode).toBe(200);
     }
+    // the legacy "Define Student Subject Mapping" layout: letterhead, then Subject-1 / Option(Y/N)
+    const listed = (
+      await call(
+        admin,
+        'GET',
+        `/exams/subject-choices/list-file?classSectionId=${section}&format=xlsx`,
+      )
+    ).json();
+    const book = new ExcelJS.Workbook();
+    await book.xlsx.load(Buffer.from(listed.base64 as string, 'base64') as unknown as ArrayBuffer);
+    const sheet = book.worksheets[0]!;
+    expect(String(sheet.getRow(2).getCell(1).value)).toBe('Define Student Subject Mapping');
+    expect(String(sheet.getRow(3).getCell(1).value)).toBe('Classes: XI-A');
+    const heading = Array.from(sheet.getRow(7).values as unknown[], (v) => String(v ?? '')).filter(
+      Boolean,
+    );
+    expect(heading.slice(0, 6)).toEqual([
+      'ADMISSION_NUMBER',
+      'CLASS_NAME',
+      'STUDENT_NAME',
+      'STREAM',
+      'SUBJECT-1',
+      'OPTION(Y/N)',
+    ]);
+    expect(String(sheet.getRow(8).getCell(5).value)).toBe('ENGLISH');
     // a student by admission no; the history of Chirag's subjects
     const found = (
       await call(admin, 'GET', `/exams/subject-choices/find?q=${encodeURIComponent(`${s}-3`)}`)

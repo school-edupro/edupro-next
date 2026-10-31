@@ -213,3 +213,14 @@ line** in term results; **the office** records it, **with a reason**.
   French carries German's into French, not Hindi's).
 - Screen: "Change subject" on a row (office) opens a card: subject now, changes to, from the exam, reason;
   the student's changes with Undo. The row shows "FREN → SAN from HY".
+
+## Export like the legacy "Define Student Subject Mapping" (31 Oct)
+
+`GET exams/subject-choices/list-file` (section or whole class; the Students toolbar's Export to Excel /
+Export PDF, the Whole class "Every student"): the school's letterhead (logo from branding.logoFileId, the
+name, "Define Student Subject Mapping", Classes, Session, Generated on in IST), then ADMISSION_NUMBER,
+CLASS_NAME, STUDENT_NAME, STREAM and SUBJECT-1 / OPTION(Y/N) … for the class's slots (as the grid shows
+them). A subject entered in parts shows its sub-subjects ("GEOGRAPHY, POLITICAL SCIENCE"); Option Y = the
+student's own additional subject (or an additional group's). Excel: merged centred letterhead with the
+logo, a black heading row, every cell ruled. PDF: A4 landscape, ruled cells, subjects wrap to two lines,
+the heading repeated on each page, page numbers (`subject-mapping-file.ts`). The "upright" print is gone.
