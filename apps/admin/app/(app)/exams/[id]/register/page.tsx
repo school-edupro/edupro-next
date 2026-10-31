@@ -128,9 +128,22 @@ export default async function RegisterPage({
                     </td>
                     {sheet.subjects.map((s) => {
                       const m = row.marks[s.id];
+                      // a subject the student does not take (docs/design/67)
+                      if (row.notTaken?.includes(s.id))
+                        return (
+                          <td key={s.id} style={{ textAlign: 'right' }} title={r('notTaken')}>
+                            —
+                          </td>
+                        );
                       return (
                         <td key={s.id} style={{ textAlign: 'right' }}>
                           {!m ? '' : m.absent ? r('ab') : m.exempt ? r('ex') : m.marks}
+                          {row.additional?.includes(s.id) ? (
+                            <span className="ep-kicker" title={r('additional')}>
+                              {' '}
+                              A
+                            </span>
+                          ) : null}
                         </td>
                       );
                     })}

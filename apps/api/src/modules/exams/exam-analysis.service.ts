@@ -149,7 +149,7 @@ export class ExamAnalysisService {
     return (
       await c.query<MarkRow>(
         `SELECT k.id::text AS class_id, k.code AS class_code, cs.id::text AS class_section_id, k.code || '-' || cs.name AS section,
-                sub.id::text AS subject_id, sub.code AS subject_code, sub.name AS subject_name, sub.display_order AS sub_order,
+                sub.id::text AS subject_id, sub.code AS subject_code, sub.name AS subject_name, app.subject_seq(es.class_id, $2, es.subject_id) AS sub_order,
                 es.max_marks::text, es.pass_marks::text, s.id::text AS student_id, s.display_name AS name, s.admission_no, en.roll_no,
                 m.marks::text, COALESCE(m.absent, false) AS absent, m.code, m.grade, (m.id IS NOT NULL) AS entered
            FROM exam_subjects es
@@ -163,7 +163,7 @@ export class ExamAnalysisService {
             AND ($3::bigint IS NULL OR es.class_id = $3::bigint)
             AND ($4::bigint[] IS NULL OR cs.id = ANY($4::bigint[]))
             AND app.student_subject_kind(s.id, $2, es.subject_id) IS NOT NULL
-          ORDER BY k.display_order, k.code, cs.name, sub.display_order, sub.code, en.roll_no NULLS LAST, s.display_name`,
+          ORDER BY k.display_order, k.code, cs.name, app.subject_seq(es.class_id, $2, es.subject_id), sub.code, en.roll_no NULLS LAST, s.display_name`,
         [p.examId, p.yearId, p.classId, p.sections],
       )
     ).rows;
@@ -551,7 +551,7 @@ export class ExamAnalysisService {
          LEFT JOIN exam_entry_status st ON st.exam_subject_id = es.id AND st.class_section_id = cs.id
          LEFT JOIN users su ON su.id = st.submitted_by LEFT JOIN users vu ON vu.id = st.verified_by
         WHERE es.exam_id = $1 AND ($3::bigint IS NULL OR es.class_id = $3::bigint) AND ($4::bigint[] IS NULL OR cs.id = ANY($4::bigint[]))
-        ORDER BY k.display_order, k.code, cs.name, sub.display_order, sub.code`,
+        ORDER BY k.display_order, k.code, cs.name, app.subject_seq(es.class_id, $2, es.subject_id), sub.code`,
       [p.examId, p.yearId, p.classId, p.sections],
     );
     const day = (d: Date | null) =>

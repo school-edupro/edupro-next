@@ -2,14 +2,14 @@
 
 ## Who does what
 
-| Person               | Does                                                                                                   |
-| -------------------- | ------------------------------------------------------------------------------------------------------ |
-| Academic coordinator | Exam types and grade scales, exams and their subjects, entry locks, report-card templates and releases |
-| Subject teacher      | Enters marks for their subject and sections (teacher app or admin)                                     |
-| Exam office          | Enters marks and codes for every section (admin), e.g. from paper sheets; cannot reopen locked marks   |
-| Class teacher        | Indicators, remarks, exam attendance, height and weight (the exam register)                            |
-| Principal            | Reads results analytics; approves the release                                                          |
-| Families             | Read the released card in the parent app and download the PDF (unless withheld for fee default)        |
+| Person               | Does                                                                                                                                                 |
+| -------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Academic coordinator | Exam types and grade scales, exams and their subjects, each class's subject order and choice groups, entry locks, report-card templates and releases |
+| Subject teacher      | Enters marks for their subject and sections (teacher app or admin)                                                                                   |
+| Exam office          | Students' subject choices; enters marks and codes for every section (admin), e.g. from paper sheets; cannot reopen locked marks                      |
+| Class teacher        | Their section's subject choices; indicators, remarks, exam attendance, height and weight (the exam register)                                         |
+| Principal            | Reads results analytics; approves the release                                                                                                        |
+| Families             | Read the released card in the parent app and download the PDF (unless withheld for fee default)                                                      |
 
 ## Before the exam
 
@@ -34,7 +34,17 @@
      by side.
      Tick **show on the parent portal** so the date sheet appears in the apps. A subject or a class
      with marks entered can't be taken out of the exam (its marks would be lost).
-4. Optional: indicator sets, the remark bank. **Exams → Exams setup → Indicators and HPC** holds the sets in up to
+4. **Exams → Subject choices** (once a session):
+   - **Class set-up**: the order the class's subjects print in on report cards and the mark register
+     (↑ ↓; a choice group moves with its subjects), who takes each subject (everyone, one of a group,
+     or those who pick it), the choice groups ("Second language: pick 1", or "Additional: pick 0 or
+     1", kept out of the total) and, for XI–XII, the streams with their subjects.
+   - **Students**: one row per student: the stream, each group's subject, the other subjects ticked.
+     **Set many at once** fills a column for those without one; **Missing a choice** lists who is
+     left; **Bring last year's choices** fills class XII from XI. The class teacher can do the same
+     for their section in the teacher app. A subject with marks stays (mark it NA first).
+   - **Counts**: students taking each subject, section by section (PDF and Excel).
+5. Optional: indicator sets, the remark bank. **Exams → Exams setup → Indicators and HPC** holds the sets in up to
    three levels (area → item → sub-item); **Add the progress card set** brings the NCERT
    foundational-stage Holistic Progress Card for Balvatika to Class II (domains, curricular goals,
    competencies; Beginner / Progressing / Proficient printed with Stream / Mountain / Sky) and **Add

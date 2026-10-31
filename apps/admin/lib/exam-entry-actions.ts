@@ -82,34 +82,33 @@ export async function uploadExamMarks(
   return out;
 }
 
-// ---- subject choices ----------------------------------------------------------------------------
-export async function saveSubjectChoices(fd: FormData) {
-  const sectionId = str(fd, 'classSectionId');
-  const backTo = `/exams/subject-choices?sectionId=${sectionId}`;
-  const subjects = fd.getAll('subjectId').map(String);
-  const rows = fd
-    .getAll('studentId')
-    .map(String)
-    .map((studentId) => ({
-      studentId,
-      stream: str(fd, `stream-${studentId}`) || null,
-      subjects: subjects
-        .map((subjectId) => ({ subjectId, kind: str(fd, `k-${studentId}-${subjectId}`) }))
-        .filter((x): x is { subjectId: string; kind: 'compulsory' | 'optional' | 'additional' } =>
-          ['compulsory', 'optional', 'additional'].includes(x.kind),
-        ),
-    }));
-  return run(backTo, () =>
-    apiFetch('/exams/subject-choices', {
-      method: 'PUT',
-      body: JSON.stringify({ classSectionId: sectionId, rows }),
-    }),
-  );
+// ---- subject choices (docs/design/67) ------------------------------------------------------------
+const choicesPath = (sectionId: string) => `/exams/subject-choices?sectionId=${sectionId}`;
+
+/** The rows of the sheet that changed: each student's stream and the subjects ticked. */
+export async function saveChoicesSheet(
+  classSectionId: string,
+  rows: Array<{ studentId: string; stream: string | null; subjectIds: string[] }>,
+): Promise<Out<{ changed: number }>> {
+  if (!okId(classSectionId)) return { ok: false, error: 'Choose the section' };
+  for (let i = 0; i < rows.length; i += 300) {
+    const out = await call<{ changed: number }>('/exams/subject-choices', 'PUT', {
+      classSectionId,
+      rows: rows.slice(i, i + 300).map((r) => ({
+        studentId: r.studentId,
+        stream: r.stream,
+        subjects: r.subjectIds.map((subjectId) => ({ subjectId })),
+      })),
+    });
+    if (!out.ok) return out;
+  }
+  revalidatePath('/exams/subject-choices');
+  return { ok: true, data: { changed: rows.length } };
 }
 
 export async function fillSubjectChoices(fd: FormData) {
   const sectionId = str(fd, 'classSectionId');
-  return run(`/exams/subject-choices?sectionId=${sectionId}`, () =>
+  return run(choicesPath(sectionId), () =>
     apiFetch('/exams/subject-choices/defaults', {
       method: 'POST',
       body: JSON.stringify({ classSectionId: sectionId }),
@@ -117,7 +116,54 @@ export async function fillSubjectChoices(fd: FormData) {
   );
 }
 
-/** Bound to the section on the page; the client sends the file (base64). */
+/** Students without choices take their last year's subjects and stream (XI → XII). */
+export async function lastYearChoices(fd: FormData) {
+  const sectionId = str(fd, 'classSectionId');
+  let r: { copied: number; skipped: number };
+  try {
+    r = await apiFetch<{ copied: number; skipped: number }>('/exams/subject-choices/last-year', {
+      method: 'POST',
+      body: JSON.stringify({ classSectionId: sectionId }),
+    });
+  } catch (error) {
+    if (error instanceof ApiError)
+      back(choicesPath(sectionId), error.problem.type, detailOf(error));
+    throw error;
+  }
+  back(
+    choicesPath(sectionId),
+    'ok',
+    `${String(r.copied)} student${r.copied === 1 ? '' : 's'} given last year’s subjects${r.skipped ? `; ${String(r.skipped)} left as they were (last year’s no longer fit the class)` : ''}.`,
+  );
+}
+
+export interface SubjectSetupInput {
+  classId: string;
+  groups: Array<{
+    key: string;
+    name: string;
+    kind: 'optional' | 'additional';
+    min: number;
+    max: number;
+  }>;
+  subjects: Array<{ subjectId: string; take: 'all' | 'group' | 'free'; group: string | null }>;
+  streams: Array<{ name: string; subjectIds: string[] }>;
+}
+
+/** A class's subject order, choice groups and streams. */
+export async function saveSubjectSetup(
+  input: SubjectSetupInput,
+): Promise<Out<{ added: number; rekinded: number }>> {
+  if (!okId(input.classId)) return { ok: false, error: 'Choose the class' };
+  const out = await call<{ added: number; rekinded: number }>(
+    '/exams/subject-choices/setup',
+    'PUT',
+    input,
+  );
+  if (out.ok) revalidatePath('/exams/subject-choices');
+  return out;
+}
+
 export async function uploadSubjectChoices(
   classSectionId: string,
   file: string,

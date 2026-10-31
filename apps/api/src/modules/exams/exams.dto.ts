@@ -19,6 +19,8 @@ export const EXAMS = {
   resultPublish: 'exams.result.publish',
   /** part 5: a parent's feedback on the HPC */
   familyFeedback: 'exams.family.feedback',
+  /** docs/design/67: students' subject choices for any section (a class teacher: their own) */
+  choicesManage: 'exams.choices.manage',
 } as const;
 
 const DateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'must be YYYY-MM-DD');
@@ -224,8 +226,14 @@ export const PutSubjectChoicesSchema = z.object({
       z.object({
         studentId: IdSchema,
         stream: z.string().trim().max(40).nullable().optional(),
-        /** the whole list for the year; empty = no choices (every subject) */
-        subjects: z.array(z.object({ subjectId: IdSchema, kind: ChoiceKind })).max(30),
+        /**
+         * The whole list for the year; empty (and no stream) = no choices (every subject). With the
+         * class's set-up (docs/design/67) the compulsory subjects and the stream's come with it and each
+         * kind follows the set-up; without one the kind given is kept.
+         */
+        subjects: z
+          .array(z.object({ subjectId: IdSchema, kind: ChoiceKind.optional() }))
+          .max(30),
       }),
     )
     .min(1)
@@ -238,6 +246,57 @@ export const SubjectChoicesUploadSchema = z.object({
   apply: z.boolean().default(false),
 });
 export class SubjectChoicesUploadDto extends createZodDto(SubjectChoicesUploadSchema) {}
+
+// ---- a class's subject order, choice groups and streams (docs/design/67) --------------------------
+export const SubjectClassQuerySchema = z.object({ classId: IdSchema });
+export class SubjectClassQueryDto extends createZodDto(SubjectClassQuerySchema) {}
+export const SubjectCountsFileSchema = z.object({
+  classId: IdSchema,
+  format: z.enum(['xlsx', 'pdf']).default('xlsx'),
+});
+export class SubjectCountsFileDto extends createZodDto(SubjectCountsFileSchema) {}
+export const PutSubjectSetupSchema = z
+  .object({
+    classId: IdSchema,
+    groups: z
+      .array(
+        z.object({
+          /** the group's name, or a number for a new one; subjects point at it */
+          key: z.string().trim().min(1).max(60),
+          name: z.string().trim().min(1).max(60),
+          /** optional: counts in the total; additional: printed, kept out of it */
+          kind: z.enum(['optional', 'additional']),
+          min: z.number().int().min(0).max(10),
+          max: z.number().int().min(1).max(10),
+        }),
+      )
+      .max(20),
+    /** every subject of the class, in the order printed */
+    subjects: z
+      .array(
+        z.object({
+          subjectId: IdSchema,
+          /** all: compulsory; group: one of a choice group; free: an elective anyone may take */
+          take: z.enum(['all', 'group', 'free']),
+          group: z.string().trim().max(60).nullable().optional(),
+        }),
+      )
+      .min(1)
+      .max(60),
+    streams: z
+      .array(
+        z.object({
+          name: z.string().trim().min(1).max(40),
+          subjectIds: z.array(IdSchema).min(1).max(30),
+        }),
+      )
+      .max(12),
+  })
+  .refine((x) => x.groups.every((g) => g.min <= g.max), {
+    message: 'The fewest to pick cannot be more than the most',
+    path: ['groups'],
+  });
+export class PutSubjectSetupDto extends createZodDto(PutSubjectSetupSchema) {}
 
 export const PutIndicatorsSchema = z.object({
   classSectionId: IdSchema,

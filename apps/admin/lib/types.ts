@@ -2259,6 +2259,9 @@ export interface RegisterSheet {
     rankInSection: number | null;
     rankInClass: number | null;
     failedSubjects: number | null;
+    /** exam subject ids the student does not take ("—"), and those taken as additional */
+    notTaken?: string[];
+    additional?: string[];
   }>;
 }
 export interface ExamAnalysis {

@@ -26,6 +26,8 @@ export interface ReportCardSubjectRow {
   maxTotal: string;
   pct: string | null;
   grade: string | null;
+  /** how the student takes it (docs/design/67): an additional one is printed last, marked */
+  kind?: 'compulsory' | 'optional' | 'additional';
 }
 
 export interface ReportCardData {
@@ -304,6 +306,7 @@ export async function loadReportCardData(
     subject_code: string;
     subject_name: string;
     display_order: number;
+    kind: 'compulsory' | 'optional' | 'additional';
     max_marks: string;
     marks: string | null;
     absent: boolean | null;
@@ -311,12 +314,16 @@ export async function loadReportCardData(
     code: string | null;
     entered_grade: string | null;
   }>(
-    `SELECT es.exam_id::text, sub.code AS subject_code, sub.name AS subject_name, sub.display_order, es.max_marks::text,
+    // the subjects the student takes (docs/design/67), in the class's order
+    `SELECT es.exam_id::text, sub.code AS subject_code, sub.name AS subject_name,
+            app.subject_seq(es.class_id, app.current_academic_year_id(), es.subject_id) AS display_order,
+            app.student_subject_kind($3, app.current_academic_year_id(), es.subject_id) AS kind, es.max_marks::text,
             m.marks::text, m.absent, m.exempt, m.code, m.grade AS entered_grade
        FROM exam_subjects es JOIN subjects sub ON sub.id = es.subject_id
        LEFT JOIN mark_entries m ON m.exam_subject_id = es.id AND m.student_id = $3
       WHERE es.exam_id = ANY($1::bigint[]) AND es.class_id = $2
-      ORDER BY sub.display_order, sub.code`,
+        AND app.student_subject_kind($3, app.current_academic_year_id(), es.subject_id) IS NOT NULL
+      ORDER BY 4, sub.code`,
     [input.examIds, s.class_id, input.studentId],
   );
   const bySubject = new Map<
@@ -333,6 +340,7 @@ export async function loadReportCardData(
         code: r.subject_code,
         name: r.subject_name,
         order: r.display_order,
+        kind: r.kind,
         cells: [],
         cellsByExam: new Map(),
         total: null,
@@ -355,8 +363,14 @@ export async function loadReportCardData(
       code: r.code && r.code !== 'AB' && r.code !== 'EX' ? r.code : null,
     });
   }
+  // additional subjects printed last
   const subjects: ReportCardSubjectRow[] = [...bySubject.values()]
-    .sort((a, b) => a.order - b.order || a.code.localeCompare(b.code))
+    .sort(
+      (a, b) =>
+        Number(a.kind === 'additional') - Number(b.kind === 'additional') ||
+        a.order - b.order ||
+        a.code.localeCompare(b.code),
+    )
     .map((row) => {
       const cells = exams.map(
         (e) =>
@@ -388,6 +402,7 @@ export async function loadReportCardData(
         maxTotal: fmt(max),
         pct: pct === null ? null : fmt(pct),
         grade: gradeFor(pct, scale),
+        kind: row.kind,
       };
     });
 
@@ -508,6 +523,14 @@ export async function loadReportCardData(
       ORDER BY t.term_code`,
     [input.studentId],
   );
+  const seq = new Map(
+    (
+      await c.query<{ code: string; seq: number }>(
+        `SELECT sub.code, app.subject_seq($1, app.current_academic_year_id(), sub.id) AS seq FROM subjects sub`,
+        [s.class_id],
+      )
+    ).rows.map((x) => [x.code, x.seq]),
+  );
   const sig = await c.query<{
     role: string;
     label: string;
@@ -611,9 +634,11 @@ export async function loadReportCardData(
       columns: t.def.columns
         .filter((x) => !x.hidden)
         .map((x) => ({ key: x.key, label: x.label, total: Boolean(x.total) })),
-      // additional subjects printed last
+      // the class's order, additional subjects printed last
       subjects: [...t.subjects].sort(
-        (a, b) => Number(a.kind === 'additional') - Number(b.kind === 'additional'),
+        (a, b) =>
+          Number(a.kind === 'additional') - Number(b.kind === 'additional') ||
+          (seq.get(a.code) ?? 0) - (seq.get(b.code) ?? 0),
       ),
       total: num(t.total),
       max: Number(t.max_total),

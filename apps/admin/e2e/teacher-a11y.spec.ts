@@ -19,6 +19,7 @@ const PAGES = [
   '/remarks',
   '/exam-register',
   '/date-sheet',
+  '/subject-choices',
   '/bus-attendance',
   '/documents',
   '/office-orders',

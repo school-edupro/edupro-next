@@ -65,11 +65,17 @@ Do these once; review them each session.
      applicable), OD (on duty), L (late admission), NEW ADM — these stay out of the maximum. A school
      may add its own code with a treatment: zero, out of the maximum, fixed marks, a % of the maximum,
      or pro-rata from the student's other exams.
-2. **Subject choices** — Exams → Subject choices: until choices are recorded, a student takes every
-   subject of the class's exams; **Fill the class's subjects** records the defaults, then set optional,
-   additional and stream subjects per student, in bulk or by Excel.
-   A student without a subject is "not taken", never "incomplete". Additional subjects print but stay
-   out of the total unless the scheme counts them.
+2. **Subject choices** (docs/design/67) — Exams → Subject choices:
+   - **Class set-up** (coordinator): put the class's subjects in the order the report card and the
+     mark register print them; say who takes each (everyone, one of a choice group such as "Second
+     language: Hindi / Sanskrit / French", or an elective); for XI–XII add the streams (Science-PCM:
+     Physics, Chemistry, Mathematics). Additional groups print last and stay out of the total.
+   - **Students** (office or the class teacher, also in the teacher app): choose the stream and each
+     group's subject; compulsory subjects come with it. **Set many at once** fills a column; the filter
+     **Missing a choice** shows who is left. Class XII: **Bring last year's choices**. Excel works too.
+   - **Counts** gives students per subject by section (PDF, Excel) for timetable and paper orders.
+     Until choices are recorded a student takes every subject. A subject with marks can't be taken off
+     (mark it NA first). A subject not taken shows "—" in the register and is left off the card.
 3. **Teacher assignments** — Academics → Teacher assignments: the class teacher and the subject teacher
    of each section. Teachers see and enter only their own sections and subjects.
 4. **Mark schemes** — Exams → Mark schemes and registers: start from a ready-made DPS Noida scheme

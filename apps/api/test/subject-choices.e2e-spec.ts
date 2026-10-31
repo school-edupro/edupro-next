@@ -1,0 +1,452 @@
+/**
+ * Subject choices and the class's subject order (docs/design/67): a class's subjects put in order, each
+ * compulsory, one of a choice group or a free elective, and its streams; a student's list is the
+ * compulsory subjects, the stream's and those picked (a group takes at most its number); the office or
+ * the section's class teacher sets them, another teacher not; a subject with marks is not taken off;
+ * the set-up changes the students' kinds; the register and the card print the class's order, leave out
+ * what a student does not take and print additional subjects last; counts, Excel and last year's choices.
+ */
+import type { NestFastifyApplication } from '@nestjs/platform-fastify';
+import { loadReportCardData } from '@edupro/db';
+import ExcelJS from 'exceljs';
+import {
+  createApp,
+  headersFor,
+  injector,
+  seedSchool,
+  seedUser,
+  stamp,
+  withMigrator,
+  type SeededSchool,
+  type SeededUser,
+} from './helpers';
+
+interface Setup {
+  placed: boolean;
+  fromExams: boolean;
+  subjects: Array<{ id: string; code: string; take: string; groupId: string | null }>;
+  groups: Array<{ id: string; name: string; kind: string; min: number; max: number }>;
+  streams: Array<{ name: string; subjectIds: string[] }>;
+}
+interface Choices extends Setup {
+  canEdit: boolean;
+  rows: Array<{
+    studentId: string;
+    name: string;
+    stream: string | null;
+    subjects: Array<{ subjectId: string; kind: string }>;
+    marked: string[];
+  }>;
+}
+
+describe('subject choices and order (e2e)', () => {
+  let app: NestFastifyApplication;
+  let inject: ReturnType<typeof injector>;
+  let school: SeededSchool;
+  let admin: SeededUser;
+  /** the ready-made exam office: sets choices anywhere, enters marks */
+  let office: SeededUser;
+  /** the class teacher of XI-A */
+  let teacher: SeededUser;
+  /** a class teacher of no section here */
+  let other: SeededUser;
+  let classId: string;
+  let section: string;
+  let examId: string;
+  const s = stamp('SC');
+  const subject: Record<string, string> = {};
+  const student: Record<string, string> = {};
+  const call = (u: SeededUser, method: 'GET' | 'POST' | 'PUT', url: string, json?: unknown) =>
+    inject({
+      method,
+      url,
+      headers: headersFor(u.sub, school.id),
+      ...(json === undefined ? {} : { json }),
+    });
+  const choices = async () =>
+    (
+      await call(admin, 'GET', `/exams/subject-choices?classSectionId=${section}`)
+    ).json() as Choices;
+  const codes = (ids: string[]) =>
+    ids.map((id) => Object.keys(subject).find((k) => subject[k] === id)).sort();
+  const of = (c: Choices, name: string) => {
+    const r = c.rows.find((x) => x.name.startsWith(name))!;
+    return {
+      ...r,
+      codes: codes(r.subjects.map((x) => x.subjectId)),
+      kind: (code: string) => r.subjects.find((x) => x.subjectId === subject[code])?.kind,
+    };
+  };
+  const put = (u: SeededUser, rows: unknown[]) =>
+    call(u, 'PUT', '/exams/subject-choices', { classSectionId: section, rows });
+  const pick = (...list: string[]) => list.map((k) => ({ subjectId: subject[k]! }));
+  /** ENG; Second language (HIN, SKT, FRE); MAT; PHY; CHE; BIO; PE; Additional (MUS) */
+  const setup = (over: { pe?: string; musKind?: string } = {}) => ({
+    classId,
+    groups: [
+      { key: 'L2', name: 'Second language', kind: 'optional', min: 1, max: 1 },
+      { key: 'ADD', name: 'Additional', kind: over.musKind ?? 'additional', min: 0, max: 1 },
+    ],
+    subjects: [
+      { subjectId: subject.ENG, take: 'all' },
+      ...['HIN', 'SKT', 'FRE'].map((k) => ({ subjectId: subject[k], take: 'group', group: 'L2' })),
+      ...['MAT', 'PHY', 'CHE', 'BIO'].map((k) => ({ subjectId: subject[k], take: 'free' })),
+      { subjectId: subject.PE, take: over.pe ?? 'free' },
+      { subjectId: subject.MUS, take: 'group', group: 'ADD' },
+    ],
+    streams: [
+      { name: 'Science-PCM', subjectIds: [subject.PHY, subject.CHE, subject.MAT] },
+      { name: 'Science-PCB', subjectIds: [subject.PHY, subject.CHE, subject.BIO] },
+    ],
+  });
+
+  beforeAll(async () => {
+    await withMigrator(async (c) => {
+      school = await seedSchool(c, s);
+      admin = await seedUser(c, school, `${s}-admin`, 'school_admin');
+      office = await seedUser(c, school, `${s}-exams`, 'exam_office');
+      teacher = await seedUser(c, school, `${s}-ct`, 'class_teacher');
+      other = await seedUser(c, school, `${s}-ot`, 'class_teacher');
+    });
+    app = await createApp();
+    inject = injector(app);
+    classId = (
+      await call(admin, 'POST', '/academics/classes', {
+        code: 'XI',
+        name: 'Class XI',
+        displayOrder: 11,
+      })
+    ).json().id;
+    section = (
+      await call(admin, 'POST', `/academics/classes/${classId}/sections`, { name: 'A' })
+    ).json().id;
+    // the subject master's order: MAT first, so the class's order shows
+    for (const [i, [code, name]] of [
+      ['MAT', 'Mathematics'],
+      ['ENG', 'English'],
+      ['HIN', 'Hindi'],
+      ['SKT', 'Sanskrit'],
+      ['FRE', 'French'],
+      ['PHY', 'Physics'],
+      ['CHE', 'Chemistry'],
+      ['BIO', 'Biology'],
+      ['PE', 'Physical Education'],
+      ['MUS', 'Music'],
+    ].entries()) {
+      const r = await call(admin, 'POST', '/academics/subjects', {
+        code,
+        name,
+        kind: 'scholastic',
+        displayOrder: i + 1,
+      });
+      expect(r.statusCode).toBe(201);
+      subject[code!] = r.json().id;
+    }
+    const cs = await call(admin, 'PUT', `/academics/classes/${classId}/subjects`, {
+      subjects: Object.values(subject).map((id) => ({ subjectId: id, isElective: false })),
+    });
+    expect(cs.statusCode).toBe(200);
+    for (const [i, first] of ['Anu', 'Bela', 'Chirag', 'Devi'].entries()) {
+      const r = await call(admin, 'POST', '/people/students', {
+        admissionNo: `${s}-${String(i + 1)}`,
+        firstName: first,
+        lastName: 'Choice',
+        guardians: [],
+        enrolment: { classSectionId: section, rollNo: i + 1 },
+      });
+      expect(r.statusCode).toBe(201);
+      student[first] = r.json().id;
+    }
+    await withMigrator(async (c) => {
+      for (const [u, code, mine] of [
+        [teacher, 'T1', true],
+        [other, 'T2', false],
+      ] as const) {
+        const e = await c.query<{ id: string }>(
+          `INSERT INTO employees (school_id, employee_code, first_name, last_name, user_id) VALUES ($1, $2, 'Tara', $2, $3) RETURNING id::text`,
+          [school.id, code, u.id],
+        );
+        if (mine)
+          await c.query(
+            `INSERT INTO teacher_assignments (school_id, academic_year_id, employee_id, class_section_id, kind)
+             VALUES ($1, $2, $3, $4, 'class_teacher')`,
+            [school.id, school.yearId, e.rows[0]!.id, section],
+          );
+      }
+    });
+  });
+  afterAll(async () => {
+    await app?.close();
+  });
+
+  it("starts in the subject master's order; the set-up puts the class's subjects in order with groups and streams", async () => {
+    const before = (
+      await call(admin, 'GET', `/exams/subject-choices/setup?classId=${classId}`)
+    ).json() as Setup;
+    expect(before).toMatchObject({ placed: false, fromExams: false, groups: [], streams: [] });
+    expect(before.subjects.map((x) => x.code).slice(0, 3)).toEqual(['MAT', 'ENG', 'HIN']);
+    const url = '/exams/subject-choices/setup';
+    // every subject placed; a group no bigger than its subjects; a group subject needs its group
+    const short = setup();
+    short.subjects = short.subjects.slice(1);
+    expect((await call(admin, 'PUT', url, short)).statusCode).toBe(400);
+    const big = setup();
+    big.groups[0]!.max = 4;
+    expect((await call(admin, 'PUT', url, big)).json()).toMatchObject({ type: 'exams.group_pick' });
+    const lone = setup();
+    lone.subjects[1] = { subjectId: subject.HIN, take: 'group', group: 'NONE' };
+    expect((await call(admin, 'PUT', url, lone)).statusCode).toBe(400);
+    // the office sets choices but not the set-up
+    expect((await call(office, 'PUT', url, setup())).statusCode).toBe(403);
+    const ok = await call(admin, 'PUT', url, setup());
+    expect(ok.statusCode).toBe(200);
+    const after = ok.json() as Setup;
+    expect(after.placed).toBe(true);
+    expect(after.subjects.map((x) => x.code)).toEqual([
+      'ENG',
+      'HIN',
+      'SKT',
+      'FRE',
+      'MAT',
+      'PHY',
+      'CHE',
+      'BIO',
+      'PE',
+      'MUS',
+    ]);
+    expect(after.groups.map((g) => [g.name, g.kind, g.min, g.max])).toEqual([
+      ['Second language', 'optional', 1, 1],
+      ['Additional', 'additional', 0, 1],
+    ]);
+    expect(after.streams.map((x) => [x.name, codes(x.subjectIds)])).toEqual([
+      ['Science-PCM', ['CHE', 'MAT', 'PHY']],
+      ['Science-PCB', ['BIO', 'CHE', 'PHY']],
+    ]);
+  });
+
+  it('a pick brings the compulsory subjects and the stream’s; a group takes at most its number; the class teacher sets their section, another teacher not', async () => {
+    const anu = await put(office, [
+      { studentId: student.Anu, stream: 'science-pcm', subjects: pick('HIN', 'MUS') },
+    ]);
+    expect(anu.statusCode).toBe(200);
+    let c = await choices();
+    expect(of(c, 'Anu').codes).toEqual(['CHE', 'ENG', 'HIN', 'MAT', 'MUS', 'PHY']);
+    expect(of(c, 'Anu').stream).toBe('Science-PCM');
+    expect(of(c, 'Anu').kind('ENG')).toBe('compulsory');
+    expect(of(c, 'Anu').kind('HIN')).toBe('optional');
+    expect(of(c, 'Anu').kind('MUS')).toBe('additional');
+    // two second languages; a stream the class does not have
+    const two = await put(office, [{ studentId: student.Bela, subjects: pick('HIN', 'SKT') }]);
+    expect(two.json()).toMatchObject({ type: 'exams.choice_refused' });
+    expect(two.json().detail).toContain('Second language: pick at most 1');
+    const arts = await put(office, [{ studentId: student.Bela, stream: 'Arts', subjects: [] }]);
+    expect(arts.json().detail).toContain('Arts is not a stream of the class');
+    // the class teacher of XI-A sets Bela's; another class teacher may not
+    const bela = await put(teacher, [
+      { studentId: student.Bela, stream: 'Science-PCB', subjects: pick('FRE') },
+    ]);
+    expect(bela.statusCode).toBe(200);
+    expect((await put(other, [{ studentId: student.Bela, subjects: [] }])).statusCode).toBe(403);
+    const mine = (await call(teacher, 'GET', '/exams/subject-choices/sections')).json().data;
+    expect(mine.find((x: { id: string }) => x.id === section)).toMatchObject({ canEdit: true });
+    expect(
+      (await call(other, 'GET', `/exams/subject-choices?classSectionId=${section}`)).json(),
+    ).toMatchObject({ canEdit: false });
+    c = await choices();
+    expect(of(c, 'Bela').codes).toEqual(['BIO', 'CHE', 'ENG', 'FRE', 'PHY']);
+    expect(c.rows.filter((r) => r.subjects.length)).toHaveLength(2);
+  });
+
+  it("the register and the card print the class's order, leave out what a student does not take, additional last; marks keep a subject", async () => {
+    const type = await call(admin, 'POST', '/exams/types', { code: 'UT1', name: 'Unit Test 1' });
+    const exam = await call(admin, 'POST', '/exams', {
+      examTypeId: type.json().id,
+      code: 'UT1-SC',
+      name: 'Unit Test 1',
+      classes: [{ classId }],
+    });
+    expect(exam.statusCode).toBe(201);
+    examId = exam.json().id;
+    const subs = await call(admin, 'PUT', `/exams/${examId}/subjects`, {
+      classId,
+      subjects: Object.values(subject).map((id) => ({
+        subjectId: id,
+        maxMarks: 50,
+        passMarks: 17,
+      })),
+    });
+    expect(subs.statusCode).toBe(200);
+    for (const k of ['ENG', 'HIN', 'MAT', 'MUS'])
+      expect(
+        (
+          await call(office, 'PUT', `/exams/${examId}/marks`, {
+            classSectionId: section,
+            subjectId: subject[k],
+            rows: [{ studentId: student.Anu, marks: 40 }],
+          })
+        ).statusCode,
+      ).toBe(200);
+    const sheet = (
+      await call(admin, 'GET', `/exams/${examId}/register-sheet?classSectionId=${section}`)
+    ).json();
+    expect(sheet.subjects.map((x: { code: string }) => x.code)).toEqual([
+      'ENG',
+      'HIN',
+      'SKT',
+      'FRE',
+      'MAT',
+      'PHY',
+      'CHE',
+      'BIO',
+      'PE',
+      'MUS',
+    ]);
+    const byCode = (code: string) =>
+      sheet.subjects.find((x: { code: string; id: string }) => x.code === code).id as string;
+    const anuRow = sheet.rows.find((r: { studentId: string }) => r.studentId === student.Anu);
+    expect(anuRow.notTaken.sort()).toEqual(['BIO', 'FRE', 'PE', 'SKT'].map(byCode).sort());
+    expect(anuRow.additional).toEqual([byCode('MUS')]);
+    const pdf = await call(
+      admin,
+      'GET',
+      `/exams/${examId}/register-sheet?classSectionId=${section}&format=pdf`,
+    );
+    expect(pdf.json().contentType).toBe('application/pdf');
+    // Anu's card: her subjects only, Music (additional) last
+    const card = await withMigrator(async (c) => {
+      await c.query(
+        `SELECT set_config('app.school_id', $1, false), set_config('app.academic_year_id', $2, false)`,
+        [school.id, school.yearId],
+      );
+      return loadReportCardData(c as never, {
+        studentId: student.Anu!,
+        examIds: [examId],
+        termCode: 'T1',
+        termName: 'Term 1',
+        defaulterMin: 75,
+      });
+    });
+    expect(card.subjects.map((x) => x.code)).toEqual(['ENG', 'HIN', 'MAT', 'PHY', 'CHE', 'MUS']);
+    expect(card.subjects.at(-1)).toMatchObject({ code: 'MUS', kind: 'additional' });
+    // Hindi has marks: it is not taken off Anu (Sanskrit in its place is refused)
+    const swap = await put(office, [
+      { studentId: student.Anu, stream: 'Science-PCM', subjects: pick('SKT', 'MUS') },
+    ]);
+    expect(swap.statusCode).toBe(409);
+    expect(swap.json().detail).toContain('Has marks in HIN');
+    expect(of(await choices(), 'Anu').marked.length).toBe(4);
+    // marked NA (not applicable), Music may go; then it comes back
+    const na = await call(office, 'PUT', `/exams/${examId}/marks`, {
+      classSectionId: section,
+      subjectId: subject.MUS,
+      rows: [{ studentId: student.Anu, marks: null, code: 'NA' }],
+    });
+    expect(na.statusCode).toBe(200);
+    for (const list of [pick('HIN'), pick('HIN', 'MUS')])
+      expect(
+        (await put(office, [{ studentId: student.Anu, stream: 'Science-PCM', subjects: list }]))
+          .statusCode,
+      ).toBe(200);
+  });
+
+  it('changing the set-up gives students the new compulsory subject and sets the kinds again', async () => {
+    const r = await call(
+      admin,
+      'PUT',
+      '/exams/subject-choices/setup',
+      setup({ pe: 'all', musKind: 'optional' }),
+    );
+    expect(r.statusCode).toBe(200);
+    // Anu and Bela have choices: Physical Education added; Music now counts in the total
+    expect(r.json()).toMatchObject({ added: 2, rekinded: 1 });
+    const c = await choices();
+    expect(of(c, 'Anu').kind('PE')).toBe('compulsory');
+    expect(of(c, 'Bela').kind('PE')).toBe('compulsory');
+    expect(of(c, 'Anu').kind('MUS')).toBe('optional');
+    expect(of(c, 'Chirag').subjects).toHaveLength(0);
+    await call(admin, 'PUT', '/exams/subject-choices/setup', setup({ pe: 'all' }));
+  });
+
+  it("counts each subject by section; the Excel sheet by group round-trips; last year's choices come over", async () => {
+    // Chirag and Devi have no choices: they take every subject
+    const n = (await call(admin, 'GET', `/exams/subject-choices/counts?classId=${classId}`)).json();
+    expect(n.sections[0]).toMatchObject({ students: 4, notSet: 2 });
+    expect(n.total.counts[subject.ENG!]).toBe(4);
+    expect(n.total.counts[subject.HIN!]).toBe(3);
+    expect(n.total.counts[subject.BIO!]).toBe(3);
+    const file = await call(
+      admin,
+      'GET',
+      `/exams/subject-choices/counts/file?classId=${classId}&format=xlsx`,
+    );
+    expect(file.statusCode).toBe(200);
+
+    const dl = (
+      await call(admin, 'GET', `/exams/subject-choices/excel?classSectionId=${section}`)
+    ).json();
+    const wb = new ExcelJS.Workbook();
+    await wb.xlsx.load(Buffer.from(dl.base64 as string, 'base64') as unknown as ArrayBuffer);
+    const ws = wb.worksheets[0]!;
+    const heads = Array.from(ws.getRow(1).values as unknown[], (v) =>
+      String(v ?? '').replace(/\s*\*$/, ''),
+    );
+    expect(heads.filter(Boolean)).toEqual([
+      'Admission no',
+      'Name',
+      'Stream',
+      'Second language',
+      'Additional',
+      'Other subjects',
+    ]);
+    const col = (h: string) => heads.indexOf(h);
+    // Anu's row as saved
+    expect(String(ws.getRow(2).getCell(col('Second language')).value)).toBe('HIN');
+    expect(String(ws.getRow(2).getCell(col('Stream')).value)).toBe('Science-PCM');
+    // Chirag: PCB with Sanskrit; Devi left out of the sheet (keeps no choices)
+    const ch = ws.getRow(4);
+    ch.getCell(col('Stream')).value = 'Science-PCB';
+    ch.getCell(col('Second language')).value = 'skt';
+    ws.spliceRows(5, 1);
+    const bad = new ExcelJS.Workbook();
+    await bad.xlsx.load((await wb.xlsx.writeBuffer()) as ArrayBuffer);
+    bad.worksheets[0]!.getRow(4).getCell(col('Second language')).value = 'XYZ';
+    const upload = async (book: ExcelJS.Workbook, apply: boolean) =>
+      (
+        await call(admin, 'POST', '/exams/subject-choices/upload', {
+          classSectionId: section,
+          file: Buffer.from(await book.xlsx.writeBuffer()).toString('base64'),
+          apply,
+        })
+      ).json();
+    const wrong = await upload(bad, true);
+    expect(wrong).toMatchObject({ errors: 1, applied: false });
+    expect(wrong.rows[2].error).toContain('XYZ is not one of HIN, SKT, FRE');
+    expect(await upload(wb, true)).toMatchObject({ errors: 0, applied: true });
+    let c = await choices();
+    expect(of(c, 'Chirag').codes).toEqual(['BIO', 'CHE', 'ENG', 'PE', 'PHY', 'SKT']);
+    expect(of(c, 'Anu').codes).toEqual(['CHE', 'ENG', 'HIN', 'MAT', 'MUS', 'PE', 'PHY']);
+    expect(of(c, 'Devi').subjects).toHaveLength(0);
+
+    // last year Devi took Hindi with Science-PCM
+    await withMigrator(async (m) => {
+      const y = await m.query<{ id: string }>(
+        `INSERT INTO academic_years (school_id, code, name, start_date, end_date, status)
+         VALUES ($1, '2025-26', 'Session 2025-26', '2025-04-01', '2026-03-31', 'closed') RETURNING id::text`,
+        [school.id],
+      );
+      for (const k of ['HIN', 'PHY', 'CHE', 'MAT'])
+        await m.query(
+          `INSERT INTO student_subjects (school_id, academic_year_id, student_id, subject_id, kind, stream)
+           VALUES ($1, $2, $3, $4, 'optional', 'Science-PCM')`,
+          [school.id, y.rows[0]!.id, student.Devi, subject[k]],
+        );
+    });
+    const last = await call(teacher, 'POST', '/exams/subject-choices/last-year', {
+      classSectionId: section,
+    });
+    expect(last.json()).toMatchObject({ copied: 1, skipped: 0 });
+    c = await choices();
+    expect(of(c, 'Devi').codes).toEqual(['CHE', 'ENG', 'HIN', 'MAT', 'PE', 'PHY']);
+    expect(of(c, 'Devi').stream).toBe('Science-PCM');
+  });
+});

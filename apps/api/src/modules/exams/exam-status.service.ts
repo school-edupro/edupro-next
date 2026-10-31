@@ -149,7 +149,7 @@ export class ExamStatusService {
         // eslint-disable-next-line no-restricted-syntax -- ROWS is a constant; values are bound parameters
         `${ROWS} WHERE e.id = $1 AND ($2::bigint IS NULL OR ec.class_id = $2::bigint)
             AND ($3::bigint[] IS NULL OR cs.id = ANY($3::bigint[]))
-          ORDER BY k.display_order, k.code, cs.name, sub.display_order, sub.code`,
+          ORDER BY k.display_order, k.code, cs.name, app.subject_seq(es.class_id, e.academic_year_id, es.subject_id), sub.code`,
         [examId, classId ?? null, allowed],
       );
       const may = await this.verifiable(c, tenant, ctx, yearId);

@@ -75,7 +75,7 @@ const PAPERS = `
     JOIN subjects sub ON sub.id = es.subject_id
     JOIN classes k ON k.id = es.class_id
    WHERE e.academic_year_id = $1 AND e.deleted_at IS NULL AND e.status = 'active'`;
-const ORDER = `ORDER BY min(es.exam_on) OVER (PARTITION BY e.id), e.id, k.display_order, es.exam_on, es.starts_at NULLS LAST, sub.display_order`;
+const ORDER = `ORDER BY min(es.exam_on) OVER (PARTITION BY e.id), e.id, k.display_order, es.exam_on, es.starts_at NULLS LAST, app.subject_seq(es.class_id, e.academic_year_id, es.subject_id), sub.code`;
 
 /**
  * Date sheets in the apps (docs/design/66): staff read the papers of the classes they may read marks

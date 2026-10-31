@@ -389,7 +389,7 @@ export class ExamEntryService {
             WHERE es.exam_id = $1 AND es.class_id = $2
               AND ($5::bigint[] IS NULL OR es.subject_id = ANY($5::bigint[])
                    OR EXISTS (SELECT 1 FROM exam_subject_parts p WHERE p.exam_subject_id = es.id AND p.subject_id = ANY($5::bigint[])))
-            ORDER BY sub.display_order, sub.code`,
+            ORDER BY app.subject_seq(es.class_id, $4, es.subject_id), sub.code`,
           [examId, s.class_id, s.id, yearId, s.subject_ids],
         );
         if (!s.register && subs.rowCount === 0) continue;

@@ -42,6 +42,9 @@ export interface RegisterSheet {
     rankInSection: number | null;
     rankInClass: number | null;
     failedSubjects: number | null;
+    /** exam subject ids the student does not take, and those taken as additional (docs/design/67) */
+    notTaken: string[];
+    additional: string[];
   }>;
 }
 
@@ -170,8 +173,8 @@ export class ExamResultsService {
         pass_marks: string | null;
       }>(
         `SELECT es.id::text, sub.code, sub.name, es.max_marks::text, es.pass_marks::text FROM exam_subjects es JOIN subjects sub ON sub.id = es.subject_id
-          WHERE es.exam_id = $1 AND es.class_id = $2 ORDER BY sub.display_order, sub.code`,
-        [examId, sec.rows[0].class_id],
+          WHERE es.exam_id = $1 AND es.class_id = $2 ORDER BY app.subject_seq(es.class_id, $3, es.subject_id), sub.code`,
+        [examId, sec.rows[0].class_id, yearId],
       );
       const rows = await c.query<{
         student_id: string;
@@ -187,8 +190,14 @@ export class ExamResultsService {
         rank_in_section: number | null;
         rank_in_class: number | null;
         failed_subjects: number | null;
+        not_taken: string[] | null;
+        additional: string[] | null;
       }>(
         `SELECT s.id::text AS student_id, s.display_name AS name, s.admission_no, e.roll_no,
+                (SELECT array_agg(es.id::text) FROM exam_subjects es WHERE es.exam_id = $3 AND es.class_id = $4
+                    AND app.student_subject_kind(s.id, $2, es.subject_id) IS NULL) AS not_taken,
+                (SELECT array_agg(es.id::text) FROM exam_subjects es WHERE es.exam_id = $3 AND es.class_id = $4
+                    AND app.student_subject_kind(s.id, $2, es.subject_id) = 'additional') AS additional,
                 (SELECT jsonb_object_agg(m.exam_subject_id::text, jsonb_build_object('marks', m.marks::text, 'absent', m.absent, 'exempt', m.exempt, 'code', m.code, 'grade', m.grade))
                    FROM mark_entries m JOIN exam_subjects es ON es.id = m.exam_subject_id WHERE es.exam_id = $3 AND m.student_id = s.id) AS marks,
                 r.total::text, r.max_total::text, r.pct::text, r.grade, r.result, r.rank_in_section, r.rank_in_class, r.failed_subjects
@@ -196,7 +205,7 @@ export class ExamResultsService {
            LEFT JOIN exam_results r ON r.exam_id = $3 AND r.student_id = s.id
           WHERE e.class_section_id = $1 AND e.academic_year_id = $2 AND e.status = 'active'
           ORDER BY e.roll_no NULLS LAST, s.display_name`,
-        [sectionId, yearId, examId],
+        [sectionId, yearId, examId, sec.rows[0].class_id],
       );
       return {
         exam: {
@@ -228,6 +237,9 @@ export class ExamResultsService {
           rankInSection: x.rank_in_section,
           rankInClass: x.rank_in_class,
           failedSubjects: x.failed_subjects,
+          /** exam subject ids the student does not take ("—"), and those taken as additional */
+          notTaken: x.not_taken ?? [],
+          additional: x.additional ?? [],
         })),
       };
     });
@@ -266,6 +278,7 @@ export class ExamResultsService {
       r.admissionNo,
       r.name,
       ...sheet.subjects.map((x) => {
+        if (r.notTaken.includes(x.id)) return '—';
         const m = r.marks[x.id];
         if (!m) return '';
         if (m.code) return m.code;
@@ -371,7 +384,7 @@ export class ExamResultsService {
            LEFT JOIN mark_entries m ON m.exam_subject_id = es.id AND m.student_id = e.student_id
           WHERE es.exam_id = $1 AND ($2::bigint IS NULL OR es.class_id = $2) AND ($3::bigint[] IS NULL OR cs.id = ANY($3::bigint[]))
           GROUP BY k.display_order, k.code, sub.display_order, sub.code, sub.name, es.max_marks, es.pass_marks
-          ORDER BY k.display_order, sub.display_order`,
+          ORDER BY k.display_order, min(app.subject_seq(es.class_id, cs.academic_year_id, es.subject_id)), sub.code`,
         params,
       );
       const grades = await c.query<{ grade: string; pupils: number }>(

@@ -697,6 +697,24 @@ const DICT: Record<string, string> = {
   'No date sheet yet.': 'अभी कोई डेट शीट नहीं।',
   'Papers of each exam for your classes': 'आपकी कक्षाओं की हर परीक्षा के पेपर',
   Date: 'तिथि',
+  'Subject choices': 'विषय चयन',
+  "Your section's students' subjects for the year": 'आपके सेक्शन के विद्यार्थियों के इस वर्ष के विषय',
+  'The subjects each student of your section takes this year. The report card and the mark register follow them.':
+    'आपके सेक्शन का हर विद्यार्थी इस वर्ष कौन-से विषय लेता है। रिपोर्ट कार्ड और अंक रजिस्टर इन्हीं के अनुसार बनते हैं।',
+  "students given last year's subjects": 'विद्यार्थियों को पिछले वर्ष के विषय दिए गए',
+  "A section's class teacher sets its students' subject choices; you are not the class teacher of a section this year.":
+    'सेक्शन के विद्यार्थियों के विषय उसके कक्षा अध्यापक चुनते हैं; इस वर्ष आप किसी सेक्शन के कक्षा अध्यापक नहीं हैं।',
+  Student: 'विद्यार्थी',
+  'Other subjects': 'अन्य विषय',
+  'Everyone takes': 'सभी लेते हैं',
+  'A subject with marks this year stays.': 'जिस विषय में इस वर्ष अंक भरे हैं, वह बना रहता है।',
+  'Every subject of the class is compulsory: nothing to choose.':
+    'कक्षा के सभी विषय अनिवार्य हैं: चुनने को कुछ नहीं।',
+  'not set: takes every subject': 'चयन नहीं: सभी विषय लेता है',
+  'Save the choices': 'चयन सहेजें',
+  "Students without choices take their last year's subjects and stream.":
+    'जिन विद्यार्थियों का चयन नहीं हुआ, उन्हें पिछले वर्ष के विषय और स्ट्रीम मिलेंगे।',
+  "Bring last year's choices": 'पिछले वर्ष का चयन लाएँ',
 };
 
 /** Translates a known English string; unknown strings fall back to English. */

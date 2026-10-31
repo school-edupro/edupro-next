@@ -456,22 +456,31 @@ describe('examinations v2 (e2e)', () => {
   });
 
   it('subject choices by Excel; filling the class subjects gives the rest the compulsory ones', async () => {
+    // Dev has marks in AI and ART: marked NA they no longer keep the subjects (docs/design/67)
+    for (const k of ['AI', 'ART'] as const)
+      expect(
+        (await marks(subject[k]!, [{ studentId: student.Dev, marks: null, code: 'NA' }]))
+          .statusCode,
+      ).toBe(200);
     const dl = await call(admin, 'GET', `/exams/subject-choices/excel?classSectionId=${section}`);
     expect(dl.statusCode).toBe(200);
+    // no subjects under Academics: one column of the subjects each student takes (docs/design/67);
     // Dev: English and Maths only
     const file = await xlsx(dl.json().base64 as string, (ws) => {
       const heads = Array.from(ws.getRow(1).values as string[], (v) => String(v ?? ''));
-      const col = (code: string) => heads.findIndex((v) => v.startsWith(`${code} ·`));
       const dev = ws.getRow(5);
       expect(String(dev.getCell(2).value)).toBe('Dev Exam');
-      dev.getCell(col('ENG')).value = 'C';
-      dev.getCell(col('MAT')).value = 'c';
+      expect(String(ws.getRow(2).getCell(heads.indexOf('Subjects')).value)).toBe(
+        'AI, ART, ENG, MAT',
+      );
+      dev.getCell(heads.indexOf('Subjects')).value = 'eng, MAT';
     });
     const up = await call(admin, 'POST', '/exams/subject-choices/upload', {
       classSectionId: section,
       file,
       apply: true,
     });
+    expect(up.json().rows.filter((x: { error: string | null }) => x.error)).toEqual([]);
     expect(up.json()).toMatchObject({ errors: 0, applied: true });
     const after = (
       await call(admin, 'GET', `/exams/subject-choices?classSectionId=${section}`)

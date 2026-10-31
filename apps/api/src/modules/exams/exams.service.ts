@@ -393,7 +393,7 @@ export class ExamsService {
       throw new DomainError('not-found', 'Exam not found in the working year', { status: 404 });
     const subjects = await c.query<ExamSubjectRow>(
       // eslint-disable-next-line no-restricted-syntax -- SUBJECT_SELECT is a constant; the id is a bound parameter
-      `${SUBJECT_SELECT} WHERE es.exam_id = $1 ORDER BY es.class_id, sub.display_order, sub.code`,
+      `${SUBJECT_SELECT} WHERE es.exam_id = $1 ORDER BY es.class_id, app.subject_seq(es.class_id, (SELECT academic_year_id FROM exams WHERE id = es.exam_id), es.subject_id), sub.code`,
       [id],
     );
     const parts = await c.query<ExamPartRow & { examSubjectId: string }>(

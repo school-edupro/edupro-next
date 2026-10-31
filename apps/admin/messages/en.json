@@ -2869,7 +2869,9 @@
     "targetSection": "Section next year",
     "record": "Record decisions in the promotion register",
     "recordHelp": "Ticked pupils are written with their proposal (promote or retain) to People → Promotions for the chosen year; apply them there when the year opens.",
-    "noTarget": "No planned or active year to promote into; create it under System → Years."
+    "noTarget": "No planned or active year to promote into; create it under System → Years.",
+    "notTaken": "Does not take this subject",
+    "additional": "Additional subject (kept out of the total)"
   },
   "aiReports": {
     "run": "Generate now",

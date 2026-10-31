@@ -382,7 +382,7 @@ export class MarkSchemesService {
       `SELECT es.id::text, es.exam_id::text, es.subject_id::text, sub.code, sub.name, es.max_marks::text AS max
          FROM exam_subjects es JOIN subjects sub ON sub.id = es.subject_id
         WHERE es.exam_id = ANY($1::bigint[]) AND es.class_id = $2 AND es.max_marks > 0
-        ORDER BY sub.display_order, sub.code`,
+        ORDER BY app.subject_seq(es.class_id, (SELECT academic_year_id FROM exams WHERE id = es.exam_id), es.subject_id), sub.code`,
       [examIds, classId],
     );
     const esIds = es.rows.map((x) => x.id);

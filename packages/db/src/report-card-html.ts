@@ -256,6 +256,10 @@ const esc = (v: unknown): string =>
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;');
 
+/** an additional subject (docs/design/67): printed last, marked */
+const extra = (r: { kind?: string }): string =>
+  r.kind === 'additional' ? ' <span class="meta">(additional)</span>' : '';
+
 function header(d: ReportCardData, layout: ReportCardLayout): string {
   const logo = d.school.logoDataUri
     ? `<img src="${d.school.logoDataUri}" alt="" />`
@@ -300,7 +304,7 @@ function scholastic(d: ReportCardData, s: ReportCardSection): string {
             `<td class="num">${c.code ? esc(c.code) : Number(c.max) === 0 ? esc(c.grade ?? '') : c.exempt ? 'EX' : c.absent ? 'AB' : esc(c.marks ?? '')}</td>${grades ? `<td class="ctr">${esc(c.grade ?? '')}</td>` : ''}`,
         )
         .join('');
-      return `<tr><td>${esc(r.name)}</td>${cells}${totals ? `<td class="num">${esc(r.total ?? '')} / ${esc(r.maxTotal)}</td><td class="num">${esc(r.pct ?? '')}</td><td class="ctr">${esc(r.grade ?? '')}</td>` : ''}</tr>`;
+      return `<tr><td>${esc(r.name)}${extra(r)}</td>${cells}${totals ? `<td class="num">${esc(r.total ?? '')} / ${esc(r.maxTotal)}</td><td class="num">${esc(r.pct ?? '')}</td><td class="ctr">${esc(r.grade ?? '')}</td>` : ''}</tr>`;
     })
     .join('');
   const totRow = totals
@@ -352,7 +356,7 @@ function scholasticComponents(d: ReportCardData, s: ReportCardSection): string {
           ? null
           : (d.gradeScale.find((b) => pct >= Number(b.minPct) && pct <= Number(b.maxPct))?.grade ??
             null);
-      return `<tr><td>${esc(r.name)}</td>${values.map((v) => `<td class="num">${v === null ? '' : esc(v.toFixed(v % 1 ? 1 : 0))}</td>`).join('')}<td class="num">${present.length ? `${esc(total.toFixed(1))} / ${max}` : ''}</td><td class="ctr">${esc(grade ?? '')}</td></tr>`;
+      return `<tr><td>${esc(r.name)}${extra(r)}</td>${values.map((v) => `<td class="num">${v === null ? '' : esc(v.toFixed(v % 1 ? 1 : 0))}</td>`).join('')}<td class="num">${present.length ? `${esc(total.toFixed(1))} / ${max}` : ''}</td><td class="ctr">${esc(grade ?? '')}</td></tr>`;
     })
     .join('');
   return `<h2>${esc(s.title ?? 'Scholastic areas')}</h2><table><thead><tr><th>Subject</th>${head}<th class="num">Total</th><th class="ctr">Grade</th></tr></thead><tbody>${rows}</tbody></table>`;
