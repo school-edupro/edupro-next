@@ -73,7 +73,9 @@ Do these once; review them each session.
    - **Students** (office or the class teacher, also in the teacher app): choose the stream and each
      group's subject; compulsory subjects come with it. **Set many at once** fills a column; the filter
      **Missing a choice** shows who is left. Class XII: **Bring last year's choices**. Excel works too.
-   - **Counts** gives students per subject by section (PDF, Excel) for timetable and paper orders.
+   - **Whole class** (the old Master Subject Mapping) gives "taking / students" per subject by
+     section and sets one column for every section at once; PDF and Excel for timetable and paper
+     orders. **Opt** marks a student's own additional subject; **History** shows each change.
      Until choices are recorded a student takes every subject. A subject with marks can't be taken off
      (mark it NA first). A subject not taken shows "—" in the register and is left off the card.
 3. **Teacher assignments** — Academics → Teacher assignments: the class teacher and the subject teacher

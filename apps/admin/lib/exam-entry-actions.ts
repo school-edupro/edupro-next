@@ -88,7 +88,13 @@ const choicesPath = (sectionId: string) => `/exams/subject-choices?sectionId=${s
 /** The rows of the sheet that changed: each student's stream and the subjects ticked. */
 export async function saveChoicesSheet(
   classSectionId: string,
-  rows: Array<{ studentId: string; stream: string | null; subjectIds: string[] }>,
+  rows: Array<{
+    studentId: string;
+    stream: string | null;
+    subjectIds: string[];
+    /** the student's own additional subject(s) (the old "Opt") */
+    additionalIds: string[];
+  }>,
 ): Promise<Out<{ changed: number }>> {
   if (!okId(classSectionId)) return { ok: false, error: 'Choose the section' };
   for (let i = 0; i < rows.length; i += 300) {
@@ -97,7 +103,10 @@ export async function saveChoicesSheet(
       rows: rows.slice(i, i + 300).map((r) => ({
         studentId: r.studentId,
         stream: r.stream,
-        subjects: r.subjectIds.map((subjectId) => ({ subjectId })),
+        subjects: r.subjectIds.map((subjectId) => ({
+          subjectId,
+          additional: r.additionalIds.includes(subjectId),
+        })),
       })),
     });
     if (!out.ok) return out;
@@ -134,6 +143,38 @@ export async function lastYearChoices(fd: FormData) {
     choicesPath(sectionId),
     'ok',
     `${String(r.copied)} student${r.copied === 1 ? '' : 's'} given last year’s subjects${r.skipped ? `; ${String(r.skipped)} left as they were (last year’s no longer fit the class)` : ''}.`,
+  );
+}
+
+/**
+ * One column for every section of the class at once (the legacy Master Subject Mapping's "Bulk Assign
+ * All"): saved at once, after the confirming tick; says how many changed and who was left as they were.
+ */
+export async function classBulkChoices(fd: FormData) {
+  const classId = str(fd, 'classId');
+  const path = `/exams/subject-choices?tab=class&classId=${classId}`;
+  if (fd.get('sure') !== 'on')
+    back(path, 'validation-failed', 'Tick the box to confirm the change for the whole class');
+  let r: { changed: number; skipped: Array<{ section: string; name: string; error: string }> };
+  try {
+    r = await apiFetch('/exams/subject-choices/bulk', {
+      method: 'POST',
+      body: JSON.stringify({ classId, set: str(fd, 'set'), scope: str(fd, 'scope') || 'empty' }),
+    });
+  } catch (error) {
+    if (error instanceof ApiError) back(path, error.problem.type, detailOf(error));
+    throw error;
+  }
+  const left = r.skipped.length
+    ? ` ${String(r.skipped.length)} left as they were: ${r.skipped
+        .slice(0, 5)
+        .map((x) => `${x.name} (${x.section})`)
+        .join(', ')}${r.skipped.length > 5 ? '…' : ''} (marks in a subject it would take off).`
+    : '';
+  back(
+    path,
+    'ok',
+    `${String(r.changed)} student${r.changed === 1 ? '' : 's'} set across the sections.${left}`,
   );
 }
 

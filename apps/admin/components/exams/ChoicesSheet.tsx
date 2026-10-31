@@ -30,23 +30,31 @@ export interface ChoiceRow {
   rollNo: number | null;
   stream: string | null;
   subjectIds: string[];
+  /** the student's own additional subject(s) (the old "Opt"): kept out of the total */
+  additionalIds: string[];
   /** subjects with marks this year: not taken off */
   marked: string[];
 }
 interface Value {
   stream: string;
   ids: string[];
+  /** taken as additional by the student's own choice */
+  add: string[];
 }
 type Filter = 'all' | 'missing' | 'unset';
 
+const sameSet = (a: string[], b: string[]) =>
+  a.length === b.length && a.every((x) => b.includes(x));
 const same = (a: Value, b: Value) =>
-  a.stream === b.stream && a.ids.length === b.ids.length && a.ids.every((x) => b.ids.includes(x));
+  a.stream === b.stream && sameSet(a.ids, b.ids) && sameSet(a.add, b.add);
 
 /**
  * A section's subject choices (docs/design/67): the compulsory subjects come with every choice, a column
  * per choice group (one drop-down, or ticks when a group takes more than one), the stream (it ticks its
- * subjects), the other electives as ticks. Each row says what is missing; "Set for" fills a column at
- * once; counts follow as you go; one Save sends the rows that changed and asks before leaving unsaved.
+ * subjects), the other electives as ticks, and the student's own additional subject (the old "Opt").
+ * Each row says what is missing, clears back to "not set" and opens its history; "Set many at once"
+ * fills a column; counts follow as you go; one Save sends the rows that changed and asks before
+ * leaving unsaved.
  */
 export function ChoicesSheet({
   classSectionId,
@@ -55,6 +63,8 @@ export function ChoicesSheet({
   streams,
   rows,
   canEdit,
+  initialQuery = '',
+  historyBase,
 }: {
   classSectionId: string;
   subjects: ChoiceSubject[];
@@ -62,6 +72,10 @@ export function ChoicesSheet({
   streams: ChoiceStream[];
   rows: ChoiceRow[];
   canEdit: boolean;
+  /** a student looked up by admission no: the grid opens filtered to them */
+  initialQuery?: string;
+  /** the address that opens a student's history, the student id appended */
+  historyBase: string;
 }) {
   const leaving = useRef(false);
   const compulsory = useMemo(() => subjects.filter((x) => x.take === 'all'), [subjects]);
@@ -74,14 +88,17 @@ export function ChoicesSheet({
   const initial = useMemo(
     () =>
       Object.fromEntries(
-        rows.map((r) => [r.studentId, { stream: r.stream ?? '', ids: r.subjectIds }]),
+        rows.map((r) => [
+          r.studentId,
+          { stream: r.stream ?? '', ids: r.subjectIds, add: r.additionalIds },
+        ]),
       ) as Record<string, Value>,
     [rows],
   );
   const [values, setValues] = useState(initial);
   const [ticked, setTicked] = useState<string[]>([]);
   const [filter, setFilter] = useState<Filter>('all');
-  const [query, setQuery] = useState('');
+  const [query, setQuery] = useState(initialQuery);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const showStream = streams.length > 0 || rows.some((r) => r.stream);
@@ -112,8 +129,26 @@ export function ChoicesSheet({
       if (ids.size || next.stream) for (const x of compulsory) ids.add(x.id);
       // a subject with marks stays
       if (ids.size) for (const id of r.marked) ids.add(id);
-      return { ...all, [r.studentId]: { stream: next.stream, ids: [...ids] } };
+      return {
+        ...all,
+        [r.studentId]: {
+          stream: next.stream,
+          ids: [...ids],
+          add: next.add.filter((id) => ids.has(id) && !compulsory.some((x) => x.id === id)),
+        },
+      };
     });
+  /** back to "not set": the student takes every subject (a subject with marks keeps them anyway) */
+  const clear = (r: ChoiceRow) =>
+    setValues((all) => ({ ...all, [r.studentId]: { stream: '', ids: [], add: [] } }));
+  /** what may be the student's own additional subject: one taken that is not compulsory or additional already */
+  const optable = (v: Value) =>
+    v.ids.filter((id) => {
+      const x = subjects.find((s) => s.id === id);
+      if (!x || x.take === 'all') return false;
+      return !(x.take === 'group' && groups.find((g) => g.id === x.groupId)?.kind === 'additional');
+    });
+  const showOpt = subjects.some((x) => x.take !== 'all');
   const setStream = (r: ChoiceRow, name: string) =>
     edit(r, (v) => {
       const old = streams.find((s) => s.name === v.stream)?.subjectIds ?? [];
@@ -121,18 +156,23 @@ export function ChoicesSheet({
       return {
         stream: name,
         ids: [...v.ids.filter((id) => !old.includes(id)), ...add],
+        add: v.add,
       };
     });
   const setGroup = (r: ChoiceRow, g: ChoiceGroup, id: string) =>
     edit(r, (v) => ({
       stream: v.stream,
       ids: [...v.ids.filter((x) => !g.subjectIds.includes(x) || marked(r, x)), ...(id ? [id] : [])],
+      add: v.add,
     }));
   const toggle = (r: ChoiceRow, id: string, on: boolean) =>
     edit(r, (v) => ({
       stream: v.stream,
       ids: on ? [...v.ids, id] : v.ids.filter((x) => x !== id || marked(r, x)),
+      add: v.add,
     }));
+  const setOpt = (r: ChoiceRow, id: string) =>
+    edit(r, (v) => ({ stream: v.stream, ids: v.ids, add: id ? [id] : [] }));
 
   // ---- bulk: one column for many students -------------------------------------------------------
   const targets = [
@@ -214,6 +254,7 @@ export function ChoicesSheet({
         studentId: x.studentId,
         stream: values[x.studentId]!.stream || null,
         subjectIds: values[x.studentId]!.ids,
+        additionalIds: values[x.studentId]!.add,
       })),
     );
     setBusy(false);
@@ -400,6 +441,14 @@ export function ChoicesSheet({
                 </th>
               ))}
               {free.length ? <th scope="col">Other subjects</th> : null}
+              {showOpt ? (
+                <th scope="col">
+                  Opt
+                  <span className="ep-kicker" style={{ display: 'block' }}>
+                    additional, out of total
+                  </span>
+                </th>
+              ) : null}
               <th scope="col">Status</th>
             </tr>
           </thead>
@@ -514,7 +563,50 @@ export function ChoicesSheet({
                       </fieldset>
                     </td>
                   ) : null}
-                  <td>{status(v)}</td>
+                  {showOpt ? (
+                    <td>
+                      <select
+                        className="ep-select"
+                        aria-label={`Opt (additional subject) · ${r.name}`}
+                        value={v.add[0] ?? ''}
+                        disabled={!canEdit || !optable(v).length}
+                        onChange={(e) => setOpt(r, e.target.value)}
+                      >
+                        <option value="">-</option>
+                        {optable(v).map((id) => (
+                          <option key={id} value={id}>
+                            {nameOf(id)}
+                          </option>
+                        ))}
+                      </select>
+                    </td>
+                  ) : null}
+                  <td>
+                    {status(v)}
+                    <span
+                      style={{
+                        display: 'flex',
+                        gap: 'var(--sp-2)',
+                        alignItems: 'center',
+                        marginTop: 'var(--sp-1)',
+                      }}
+                    >
+                      {canEdit && isSet(v) ? (
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="ghost"
+                          aria-label={`Clear ${r.name}'s choices`}
+                          onClick={() => clear(r)}
+                        >
+                          Clear
+                        </Button>
+                      ) : null}
+                      <a href={`${historyBase}${r.studentId}`} aria-label={`History of ${r.name}`}>
+                        History
+                      </a>
+                    </span>
+                  </td>
                 </tr>
               );
             })}

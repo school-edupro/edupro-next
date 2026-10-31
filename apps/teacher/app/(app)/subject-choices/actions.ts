@@ -27,6 +27,8 @@ export async function saveChoices(fd: FormData) {
       const stream = str(fd, `stream-${studentId}`);
       const before = str(fd, `stream0-${studentId}`);
       const marked = str(fd, `marked-${studentId}`).split(',').filter(Boolean);
+      // the student's own additional subject (the old "Opt")
+      const opt = str(fd, `opt-${studentId}`);
       let ids = [
         ...groups.flatMap((g) => fd.getAll(`g-${studentId}-${g}`).map(String)),
         ...fd.getAll(`f-${studentId}`).map(String),
@@ -41,7 +43,10 @@ export async function saveChoices(fd: FormData) {
       return {
         studentId,
         stream: stream || null,
-        subjects: [...new Set(ids)].map((subjectId) => ({ subjectId })),
+        subjects: [...new Set(ids)].map((subjectId) => ({
+          subjectId,
+          additional: subjectId === opt,
+        })),
       };
     });
   if (!rows.length) redirect(`${back}&error=validation-failed`);

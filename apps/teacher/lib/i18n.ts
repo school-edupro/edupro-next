@@ -698,7 +698,8 @@ const DICT: Record<string, string> = {
   'Papers of each exam for your classes': 'आपकी कक्षाओं की हर परीक्षा के पेपर',
   Date: 'तिथि',
   'Subject choices': 'विषय चयन',
-  "Your section's students' subjects for the year": 'आपके सेक्शन के विद्यार्थियों के इस वर्ष के विषय',
+  "Your section's students' subjects for the year":
+    'आपके सेक्शन के विद्यार्थियों के इस वर्ष के विषय',
   'The subjects each student of your section takes this year. The report card and the mark register follow them.':
     'आपके सेक्शन का हर विद्यार्थी इस वर्ष कौन-से विषय लेता है। रिपोर्ट कार्ड और अंक रजिस्टर इन्हीं के अनुसार बनते हैं।',
   "students given last year's subjects": 'विद्यार्थियों को पिछले वर्ष के विषय दिए गए',
@@ -715,6 +716,9 @@ const DICT: Record<string, string> = {
   "Students without choices take their last year's subjects and stream.":
     'जिन विद्यार्थियों का चयन नहीं हुआ, उन्हें पिछले वर्ष के विषय और स्ट्रीम मिलेंगे।',
   "Bring last year's choices": 'पिछले वर्ष का चयन लाएँ',
+  "You see this section's choices; its class teacher sets them.":
+    'आप इस सेक्शन का चयन देख सकते हैं; इसे कक्षा अध्यापक भरते हैं।',
+  'Opt (additional, out of total)': 'अतिरिक्त विषय (कुल में नहीं)',
 };
 
 /** Translates a known English string; unknown strings fall back to English. */

@@ -11,6 +11,8 @@ interface Section {
   code: string;
   students: number;
   canEdit: boolean;
+  /** the teacher teaches the section (class or subject teacher) */
+  mine: boolean;
 }
 interface Subject {
   id: string;
@@ -38,7 +40,7 @@ interface Choices {
     admissionNo: string;
     rollNo: number | null;
     stream: string | null;
-    subjects: Array<{ subjectId: string; kind: string }>;
+    subjects: Array<{ subjectId: string; kind: string; additional: boolean }>;
     marked: string[];
   }>;
   canEdit: boolean;
@@ -66,7 +68,7 @@ export default async function SubjectChoicesPage({
   try {
     sections = await bff.api
       .fetch<{ data: Section[] }>('/exams/subject-choices/sections')
-      .then((r) => r.data.filter((s) => s.canEdit));
+      .then((r) => r.data.filter((s) => s.canEdit || s.mine));
   } catch (error) {
     if (error instanceof ApiError && error.status === 401) redirect('/login?error=session-expired');
     if (error instanceof ApiError && error.status === 403) sections = [];
@@ -85,6 +87,17 @@ export default async function SubjectChoicesPage({
   const free = data?.subjects.filter((x) => x.take === 'free') ?? [];
   const showStream = !!data && (data.streams.length > 0 || data.rows.some((r) => r.stream));
   const open = !!data?.canEdit;
+  // the student's own additional subject (the old "Opt"): one taken, not compulsory or additional already
+  const optable = (ids: Set<string>) =>
+    (data?.subjects ?? []).filter(
+      (x) =>
+        ids.has(x.id) &&
+        x.take !== 'all' &&
+        !(
+          x.take === 'group' && data?.groups.find((g) => g.id === x.groupId)?.kind === 'additional'
+        ),
+    );
+  const showOpt = !!data?.subjects.some((x) => x.take !== 'all');
   return (
     <main style={{ padding: 'var(--sp-4)', maxWidth: 1100, margin: '0 auto' }}>
       <PageHeader
@@ -149,6 +162,11 @@ export default async function SubjectChoicesPage({
           </Card>
           {data ? (
             <Card title={`${data.section.code}`}>
+              {!open ? (
+                <p className="ep-field__help" style={{ marginTop: 0 }} role="status">
+                  {t(lang, "You see this section's choices; its class teacher sets them.")}
+                </p>
+              ) : null}
               {compulsory.length ? (
                 <p className="ep-field__help" style={{ marginTop: 0 }}>
                   <strong>{t(lang, 'Everyone takes')}</strong>{' '}
@@ -189,6 +207,9 @@ export default async function SubjectChoicesPage({
                             </th>
                           ))}
                           {free.length ? <th scope="col">{t(lang, 'Other subjects')}</th> : null}
+                          {showOpt ? (
+                            <th scope="col">{t(lang, 'Opt (additional, out of total)')}</th>
+                          ) : null}
                         </tr>
                       </thead>
                       <tbody>
@@ -309,6 +330,26 @@ export default async function SubjectChoicesPage({
                                       </label>
                                     ))}
                                   </fieldset>
+                                </td>
+                              ) : null}
+                              {showOpt ? (
+                                <td>
+                                  <select
+                                    className="ep-select"
+                                    name={`opt-${r.studentId}`}
+                                    aria-label={`${t(lang, 'Opt (additional, out of total)')} · ${r.name}`}
+                                    defaultValue={
+                                      r.subjects.find((x) => x.additional)?.subjectId ?? ''
+                                    }
+                                    disabled={!open || !optable(has).length}
+                                  >
+                                    <option value="">-</option>
+                                    {optable(has).map((x) => (
+                                      <option key={x.id} value={x.id}>
+                                        {x.name} ({x.code})
+                                      </option>
+                                    ))}
+                                  </select>
                                 </td>
                               ) : null}
                             </tr>

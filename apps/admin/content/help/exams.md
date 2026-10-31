@@ -43,7 +43,12 @@
      **Set many at once** fills a column for those without one; **Missing a choice** lists who is
      left; **Bring last year's choices** fills class XII from XI. The class teacher can do the same
      for their section in the teacher app. A subject with marks stays (mark it NA first).
-   - **Counts**: students taking each subject, section by section (PDF and Excel).
+   - **Opt** on a row: the student's own additional subject (kept out of the total, printed last).
+     **Clear** puts a student back to "not set"; **History** shows who changed what. **Find a
+     student in any section** takes an admission no.
+   - **Whole class**: every section's "taking / students" for each subject, who is not set or
+     missing a choice, and **Set for the whole class** (one column for every section at once).
+     PDF and Excel of the summary and of every student.
 5. Optional: indicator sets, the remark bank. **Exams → Exams setup → Indicators and HPC** holds the sets in up to
    three levels (area → item → sub-item); **Add the progress card set** brings the NCERT
    foundational-stage Holistic Progress Card for Balvatika to Class II (domains, curricular goals,

@@ -397,6 +397,7 @@ describe('subject choices and order (e2e)', () => {
       'Second language',
       'Additional',
       'Other subjects',
+      'Additional (out of total)',
     ]);
     const col = (h: string) => heads.indexOf(h);
     // Anu's row as saved
@@ -448,5 +449,145 @@ describe('subject choices and order (e2e)', () => {
     c = await choices();
     expect(of(c, 'Devi').codes).toEqual(['CHE', 'ENG', 'HIN', 'MAT', 'PE', 'PHY']);
     expect(of(c, 'Devi').stream).toBe('Science-PCM');
+  });
+
+  it('a student’s own additional subject (the old “Opt”) stays through the set-up and the sheet', async () => {
+    // Biology (from the stream) kept out of Chirag’s total
+    const r = await put(office, [
+      {
+        studentId: student.Chirag,
+        stream: 'Science-PCB',
+        subjects: [...pick('SKT'), { subjectId: subject.BIO!, additional: true }],
+      },
+    ]);
+    expect(r.statusCode).toBe(200);
+    expect(of(await choices(), 'Chirag').kind('BIO')).toBe('additional');
+    // the set-up sets kinds again: the student's tick stays
+    expect(
+      (await call(admin, 'PUT', '/exams/subject-choices/setup', setup({ pe: 'all' }))).statusCode,
+    ).toBe(200);
+    const after = of(await choices(), 'Chirag');
+    expect(after.kind('BIO')).toBe('additional');
+    expect(after.subjects.find((x) => x.subjectId === subject.BIO)).toMatchObject({
+      additional: true,
+    });
+    // the sheet: its column, and a compulsory subject refused there
+    const dl = (
+      await call(admin, 'GET', `/exams/subject-choices/excel?classSectionId=${section}`)
+    ).json();
+    const wb = new ExcelJS.Workbook();
+    await wb.xlsx.load(Buffer.from(dl.base64 as string, 'base64') as unknown as ArrayBuffer);
+    const ws = wb.worksheets[0]!;
+    const heads = Array.from(ws.getRow(1).values as unknown[], (v) =>
+      String(v ?? '').replace(/\s*\*$/, ''),
+    );
+    const col = heads.indexOf('Additional (out of total)');
+    expect(col).toBeGreaterThan(0);
+    expect(String(ws.getRow(4).getCell(col).value)).toBe('BIO');
+    ws.getRow(3).getCell(col).value = 'ENG';
+    const bad = (
+      await call(admin, 'POST', '/exams/subject-choices/upload', {
+        classSectionId: section,
+        file: Buffer.from(await wb.xlsx.writeBuffer()).toString('base64'),
+        apply: false,
+      })
+    ).json();
+    expect(bad.rows[1].error).toContain('ENG is not one of the student’s own');
+    ws.getRow(3).getCell(col).value = 'PHY';
+    const ok = (
+      await call(admin, 'POST', '/exams/subject-choices/upload', {
+        classSectionId: section,
+        file: Buffer.from(await wb.xlsx.writeBuffer()).toString('base64'),
+        apply: true,
+      })
+    ).json();
+    expect(ok).toMatchObject({ errors: 0, applied: true });
+    const c = await choices();
+    expect(of(c, 'Bela').kind('PHY')).toBe('additional');
+    expect(of(c, 'Chirag').kind('BIO')).toBe('additional');
+  });
+
+  it('the whole class at once: every section set, a student with marks left out; lists, find and history; subject teachers see', async () => {
+    const b = (
+      await call(admin, 'POST', `/academics/classes/${classId}/sections`, { name: 'B' })
+    ).json().id as string;
+    const esha = await call(admin, 'POST', '/people/students', {
+      admissionNo: `${s}-9`,
+      firstName: 'Esha',
+      lastName: 'Choice',
+      guardians: [],
+      enrolment: { classSectionId: b, rollNo: 1 },
+    });
+    expect(esha.statusCode).toBe(201);
+    const groups = (await choices()).groups;
+    const l2 = groups.find((g) => g.name === 'Second language')!.id;
+    // a class teacher sets only their section: the whole class is the office's
+    expect(
+      (
+        await call(other, 'POST', '/exams/subject-choices/bulk', {
+          classId,
+          set: `group:${l2}:${subject.FRE}`,
+          scope: 'all',
+        })
+      ).statusCode,
+    ).toBe(403);
+    const bulk = await call(office, 'POST', '/exams/subject-choices/bulk', {
+      classId,
+      set: `group:${l2}:${subject.FRE}`,
+      scope: 'all',
+    });
+    expect(bulk.statusCode).toBe(201);
+    // Anu has marks in Hindi: left as she is; Bela has French already; Chirag, Devi and Esha changed
+    expect(bulk.json().changed).toBe(3);
+    expect(bulk.json().skipped).toEqual([
+      expect.objectContaining({ name: 'Anu Choice', section: 'XI-A' }),
+    ]);
+    const c = await choices();
+    expect(of(c, 'Chirag').codes).toContain('FRE');
+    expect(of(c, 'Chirag').codes).not.toContain('SKT');
+    expect(of(c, 'Anu').codes).toContain('HIN');
+    const eshaRow = (await call(admin, 'GET', `/exams/subject-choices?classSectionId=${b}`)).json()
+      .rows[0];
+    expect(codes(eshaRow.subjects.map((x: { subjectId: string }) => x.subjectId))).toEqual([
+      'ENG',
+      'FRE',
+      'PE',
+    ]);
+    // the summary: two sections, nobody short of the second language
+    const n = (await call(admin, 'GET', `/exams/subject-choices/counts?classId=${classId}`)).json();
+    expect(n.sections.map((x: { code: string }) => x.code)).toEqual(['XI-A', 'XI-B']);
+    expect(n.total).toMatchObject({ students: 5, missing: 0 });
+    expect(n.total.counts[subject.FRE!]).toBe(4);
+    // every student of the class, and one section upright
+    for (const q of [
+      `classId=${classId}&format=xlsx`,
+      `classSectionId=${section}&format=pdf&portrait=true`,
+    ]) {
+      const f = await call(admin, 'GET', `/exams/subject-choices/list-file?${q}`);
+      expect(f.statusCode).toBe(200);
+    }
+    // a student by admission no; the history of Chirag's subjects
+    const found = (
+      await call(admin, 'GET', `/exams/subject-choices/find?q=${encodeURIComponent(`${s}-3`)}`)
+    ).json().data;
+    expect(found[0]).toMatchObject({ name: 'Chirag Choice', sectionId: section });
+    const h = (
+      await call(admin, 'GET', `/exams/subject-choices/history?studentId=${student.Chirag}`)
+    ).json();
+    const lines = h.data as Array<{ subject: string; what: string; by: string | null }>;
+    expect(
+      lines.find((x) => x.subject === 'Sanskrit (SKT)' && x.what === 'Taken off'),
+    ).toBeTruthy();
+    expect(
+      lines.find((x) => x.subject === 'French (FRE)' && x.what.startsWith('Added')),
+    ).toBeTruthy();
+    // the teacher app: the class teacher's section is theirs; a teacher of none has none
+    const mine = (await call(teacher, 'GET', '/exams/subject-choices/sections')).json().data;
+    expect(mine.find((x: { id: string }) => x.id === section)).toMatchObject({
+      mine: true,
+      canEdit: true,
+    });
+    const none = (await call(other, 'GET', '/exams/subject-choices/sections')).json().data;
+    expect(none.some((x: { mine: boolean }) => x.mine)).toBe(false);
   });
 });

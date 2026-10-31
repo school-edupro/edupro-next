@@ -4,6 +4,10 @@ import { RequirePermission } from '../../common/access/require-permission.decora
 import { AuthenticatedOnly } from '../../common/auth/decorators';
 import { ReqCtx, type RequestContext } from '../../common/http/request-context';
 import {
+  ChoicesFindDto,
+  ChoicesHistoryDto,
+  ChoicesListFileDto,
+  ClassBulkChoiceDto,
   EXAMS,
   PutSubjectChoicesDto,
   PutSubjectSetupDto,
@@ -59,6 +63,41 @@ export class SubjectChoicesController {
   @AuthenticatedOnly()
   lastYear(@ReqCtx() ctx: RequestContext, @Body() dto: SubjectChoicesQueryDto) {
     return this.svc.lastYear(ctx, dto.classSectionId);
+  }
+
+  @Post('bulk')
+  @ApiOperation({
+    summary: 'Set one column for every section of a class (stream, a group subject, an elective)',
+  })
+  @AuthenticatedOnly()
+  bulk(@ReqCtx() ctx: RequestContext, @Body() dto: ClassBulkChoiceDto) {
+    return this.svc.bulk(ctx, dto);
+  }
+
+  @Get('list-file')
+  @ApiOperation({ summary: "A section's or a class's students with their subjects (Excel or PDF)" })
+  @RequirePermission(EXAMS.marksView)
+  listFile(@ReqCtx() ctx: RequestContext, @Query() q: ChoicesListFileDto) {
+    return this.svc.listFile(ctx, {
+      ...(q.classId ? { classId: q.classId } : {}),
+      ...(q.classSectionId ? { classSectionId: q.classSectionId } : {}),
+      format: q.format,
+      portrait: q.portrait === 'true',
+    });
+  }
+
+  @Get('find')
+  @ApiOperation({ summary: 'Students of the year by admission no or name, with their section' })
+  @RequirePermission(EXAMS.marksView)
+  find(@ReqCtx() ctx: RequestContext, @Query() q: ChoicesFindDto) {
+    return this.svc.find(ctx, q.q);
+  }
+
+  @Get('history')
+  @ApiOperation({ summary: "Who changed a student's subjects this year, and what" })
+  @RequirePermission(EXAMS.marksView)
+  history(@ReqCtx() ctx: RequestContext, @Query() q: ChoicesHistoryDto) {
+    return this.svc.history(ctx, q.studentId);
   }
 
   @Get('excel')

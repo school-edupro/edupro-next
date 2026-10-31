@@ -232,7 +232,14 @@ export const PutSubjectChoicesSchema = z.object({
          * kind follows the set-up; without one the kind given is kept.
          */
         subjects: z
-          .array(z.object({ subjectId: IdSchema, kind: ChoiceKind.optional() }))
+          .array(
+            z.object({
+              subjectId: IdSchema,
+              kind: ChoiceKind.optional(),
+              /** the student's own "Opt": taken as additional (kept out of the total) */
+              additional: z.boolean().optional(),
+            }),
+          )
           .max(30),
       }),
     )
@@ -297,6 +304,32 @@ export const PutSubjectSetupSchema = z
     path: ['groups'],
   });
 export class PutSubjectSetupDto extends createZodDto(PutSubjectSetupSchema) {}
+export const ClassBulkChoiceSchema = z.object({
+  classId: IdSchema,
+  /** stream:<name> | group:<groupId>:<subjectId> | take:<subjectId> | drop:<subjectId> */
+  set: z
+    .string()
+    .trim()
+    .regex(/^(stream:.{1,40}|group:\d{1,18}:\d{1,18}|take:\d{1,18}|drop:\d{1,18})$/),
+  /** empty: only the students without one; all: every student */
+  scope: z.enum(['empty', 'all']),
+});
+export class ClassBulkChoiceDto extends createZodDto(ClassBulkChoiceSchema) {}
+export const ChoicesListFileSchema = z
+  .object({
+    classId: IdSchema.optional(),
+    classSectionId: IdSchema.optional(),
+    format: z.enum(['xlsx', 'pdf']).default('pdf'),
+    portrait: z.enum(['true', 'false']).default('false'),
+  })
+  .refine((x) => Boolean(x.classId) !== Boolean(x.classSectionId), {
+    message: 'Give a class or a section',
+  });
+export class ChoicesListFileDto extends createZodDto(ChoicesListFileSchema) {}
+export const ChoicesFindSchema = z.object({ q: z.string().trim().min(1).max(60) });
+export class ChoicesFindDto extends createZodDto(ChoicesFindSchema) {}
+export const ChoicesHistorySchema = z.object({ studentId: IdSchema });
+export class ChoicesHistoryDto extends createZodDto(ChoicesHistorySchema) {}
 
 export const PutIndicatorsSchema = z.object({
   classSectionId: IdSchema,

@@ -41,10 +41,12 @@ export interface TablePdf {
   }>;
   /** A closing line under everything (the rule the figures follow). */
   footnote?: string;
+  /** A4 upright instead of the default landscape. */
+  portrait?: boolean;
 }
 
-const W = 841.89; // A4 landscape
-const H = 595.28;
+const LONG = 841.89; // A4
+const SHORT = 595.28;
 const M = 36;
 const NAVY = rgb(0, 0.149, 0.365);
 const INK = rgb(0.043, 0.122, 0.227);
@@ -109,6 +111,7 @@ function wrapLines(
  * (no worker needed).
  */
 export async function tablePdf(t: TablePdf): Promise<Buffer> {
+  const [W, H] = t.portrait ? [SHORT, LONG] : [LONG, SHORT];
   const pdf = await PDFDocument.create();
   pdf.setTitle(t.title);
   const regular = await pdf.embedFont(StandardFonts.Helvetica);
