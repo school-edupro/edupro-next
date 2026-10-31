@@ -358,14 +358,17 @@ export class SubjectChoicesService {
             opted.delete(s.id);
           }
       for (const g of setup.groups) {
-        const n = g.subjectIds.filter((id) => list.has(id)).length;
-        if (n > g.max)
+        const ids = g.subjectIds.filter((id) => list.has(id));
+        if (ids.length <= g.max) continue;
+        // more than the group takes because the student has marks in them: they cannot go
+        const kept = ids.filter((id) => row.marked.includes(id));
+        if (kept.length > g.max)
           return {
-            error: `${g.name}: pick at most ${String(g.max)} (${g.subjectIds
-              .filter((id) => list.has(id))
-              .map(code)
-              .join(', ')})`,
+            error: `has marks this year in ${kept.map(code).join(' and ')}, but ${g.name} takes ${String(g.max)}: let it take ${String(kept.length)} in Class set-up (or give one its own slot), or mark the extra one NA on the marks sheet`,
           };
+        return {
+          error: `${g.name}: pick at most ${String(g.max)} (${ids.map(code).join(', ')})`,
+        };
       }
     }
     // a subject with marks stays (no list at all: the student takes every subject, it stays too)
@@ -518,7 +521,10 @@ export class SubjectChoicesService {
     await this.assertEdit(ctx, tenant, dto.classSectionId);
     return this.db.tenant(tenant, async (c) => {
       const cur = await this.load(c, yearId, dto.classSectionId);
-      const lists = dto.rows.map((r) => {
+      // with `partial` a student whose list does not fit is left out and listed; the rest are saved
+      const refused: Array<{ studentId: string; name: string; error: string }> = [];
+      const lists: Array<Planned & { studentId: string }> = [];
+      for (const r of dto.rows) {
         const row = cur.rows.find((x) => x.studentId === r.studentId);
         if (!row)
           throw new DomainError(
@@ -530,21 +536,28 @@ export class SubjectChoicesService {
             },
           );
         const p = this.plan(cur, row, r.stream ?? null, r.subjects);
-        if ('error' in p)
+        if (!('error' in p)) lists.push({ studentId: r.studentId, ...p });
+        else if (dto.partial)
+          refused.push({ studentId: r.studentId, name: row.name, error: p.error });
+        else
           throw new DomainError('exams.choice_refused', `${row.name}: ${p.error}`, {
             status: 409,
             extra: { studentId: r.studentId },
           });
-        return { studentId: r.studentId, ...p };
-      });
+      }
       const changed = await this.write(c, yearId, lists);
       await this.audit.stage(ctx, c, {
         action: 'exams.subject_choices.set',
         entityType: 'class_sections',
         entityId: dto.classSectionId,
-        after: { students: dto.rows.length, changed },
+        after: { students: lists.length, changed, refused: refused.length },
       });
-      return { ...(await this.load(c, yearId, dto.classSectionId)), changed };
+      return {
+        ...(await this.load(c, yearId, dto.classSectionId)),
+        changed,
+        saved: lists.length,
+        refused,
+      };
     });
   }
 

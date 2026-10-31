@@ -178,3 +178,14 @@ the optional subject stays the **Optional tick** on any slot; every student must
   of the section still has one). The order printed is the slot order.
 - Existing set-ups load as slots: a compulsory subject is one, a group as many as it takes; electives go
   to "Not in a slot".
+
+## A template that does not fit marks already entered (31 Oct)
+
+A student keeps every subject with marks this year (unless marked NA). When a choice slot takes fewer than
+the student's marked subjects in it (VI-A on Alpha: marks in Hindi and a foreign language, Subject-2 "one
+of Hindi, French, German, …"), the grid says so on the row before saving ("Has marks in HIN and FREN:
+Subject-2 takes 1", counted under "Missing or too many"), and Save keeps the other students: the API's
+`PUT exams/subject-choices` with `partial: true` saves the rows that fit and returns `refused` with the
+reason ("has marks this year in HIN and FREN, but Subject-2 takes 1: let it take 2 in Class set-up (or
+give one its own slot), or mark the extra one NA"). Without `partial` (uploads, other callers) one row that
+does not fit still refuses the lot.

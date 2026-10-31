@@ -221,6 +221,8 @@ export class SubjectChoicesQueryDto extends createZodDto(SubjectChoicesQuerySche
 const ChoiceKind = z.enum(['compulsory', 'optional', 'additional']);
 export const PutSubjectChoicesSchema = z.object({
   classSectionId: IdSchema,
+  /** save the students whose list fits and list the others (the grid), instead of refusing all */
+  partial: z.boolean().optional(),
   rows: z
     .array(
       z.object({

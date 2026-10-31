@@ -785,5 +785,83 @@ describe('subject choices and order (e2e)', () => {
     const three = await set(['HIN', 'FRE', 'SKT']);
     expect(three.statusCode).toBe(409);
     expect(three.json().detail).toContain('Languages: pick at most 2');
+
+    // marks in Hindi and French while not set; then the slot takes one: the grid's save keeps the
+    // others and says why this one is left
+    const jai = (
+      await call(admin, 'POST', '/people/students', {
+        admissionNo: `${s}-82`,
+        firstName: 'Jai',
+        lastName: 'Slot',
+        guardians: [],
+        enrolment: { classSectionId: sec, rollNo: 2 },
+      })
+    ).json().id as string;
+    expect((await set([])).statusCode).toBe(200);
+    const type = (await call(admin, 'GET', '/exams/types')).json().data[0].id as string;
+    const ex = (
+      await call(admin, 'POST', '/exams', {
+        examTypeId: type,
+        code: 'PT-VIII',
+        name: 'Periodic test',
+        classes: [{ classId: k }],
+      })
+    ).json().id as string;
+    await call(admin, 'PUT', `/exams/${ex}/subjects`, {
+      classId: k,
+      subjects: ['ENG', 'HIN', 'SKT', 'FRE', 'MAT'].map((c) => ({
+        subjectId: subject[c],
+        maxMarks: 20,
+      })),
+    });
+    for (const c of ['HIN', 'FRE'])
+      expect(
+        (
+          await call(office, 'PUT', `/exams/${ex}/marks`, {
+            classSectionId: sec,
+            subjectId: subject[c],
+            rows: [{ studentId: ira, marks: 15 }],
+          })
+        ).statusCode,
+      ).toBe(200);
+    const one = await call(admin, 'PUT', '/exams/subject-choices/setup', {
+      classId: k,
+      groups: [{ key: langs, name: 'Languages', kind: 'optional', min: 1, max: 1 }],
+      subjects: [
+        { subjectId: subject.ENG, take: 'all', group: null, parts: [] },
+        ...['HIN', 'SKT', 'FRE'].map((c) => ({
+          subjectId: subject[c],
+          take: 'group',
+          group: langs,
+          parts: [],
+        })),
+        { subjectId: subject.MAT, take: 'all', group: null, parts: [] },
+      ],
+      streams: [],
+    });
+    expect(one.statusCode).toBe(200);
+    const grid = await call(admin, 'PUT', '/exams/subject-choices', {
+      classSectionId: sec,
+      partial: true,
+      // as the grid sends it: a subject with marks stays in the list
+      rows: [
+        { studentId: ira, subjects: [{ subjectId: subject.HIN! }, { subjectId: subject.FRE! }] },
+        { studentId: jai, subjects: [{ subjectId: subject.SKT! }] },
+      ],
+    });
+    expect(grid.statusCode).toBe(200);
+    expect(grid.json()).toMatchObject({ saved: 1 });
+    expect(grid.json().refused).toEqual([
+      expect.objectContaining({
+        studentId: ira,
+        error: expect.stringContaining('has marks this year in HIN and FRE, but Languages takes 1'),
+      }),
+    ]);
+    // without `partial` (an upload, another caller) the whole lot is refused as before
+    const strict = await call(admin, 'PUT', '/exams/subject-choices', {
+      classSectionId: sec,
+      rows: [{ studentId: ira, subjects: [{ subjectId: subject.HIN! }] }],
+    });
+    expect(strict.statusCode).toBe(409);
   });
 });

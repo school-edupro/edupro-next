@@ -149,6 +149,17 @@ export function ChoicesSheet({
     isSet(v)
       ? groups.filter((g) => g.subjectIds.filter((id) => v.ids.includes(id)).length < g.min)
       : [];
+  /**
+   * a choice holding more than it takes: subjects with marks this year that cannot go (they come with
+   * the student's list as soon as it is set, so a student not set yet shows it too)
+   */
+  const over = (v: Value, r: ChoiceRow) =>
+    groups
+      .map((g) => ({
+        g,
+        ids: g.subjectIds.filter((id) => v.ids.includes(id) || r.marked.includes(id)),
+      }))
+      .filter((x) => x.ids.length > x.g.max);
   /** an additional group's subjects are additional anyway: no tick of their own */
   const additionalGroup = (id: string) => {
     const x = byId.get(id);
@@ -220,7 +231,7 @@ export function ChoicesSheet({
   const q = query.trim().toLowerCase();
   const shown = rows.filter((r) => {
     const v = values[r.studentId]!;
-    if (filter === 'missing' && !missing(v).length) return false;
+    if (filter === 'missing' && !missing(v).length && !over(v, r).length) return false;
     if (filter === 'unset' && isSet(v)) return false;
     return (
       !q ||
@@ -232,7 +243,9 @@ export function ChoicesSheet({
   const counts = subjects
     .filter((x) => x.take !== 'all')
     .map((x) => ({ x, n: rows.filter((r) => values[r.studentId]!.ids.includes(x.id)).length }));
-  const nMissing = rows.filter((r) => missing(values[r.studentId]!).length).length;
+  const nMissing = rows.filter(
+    (r) => missing(values[r.studentId]!).length || over(values[r.studentId]!, r).length,
+  ).length;
   const nUnset = rows.filter((r) => !isSet(values[r.studentId]!)).length;
 
   const save = async () => {
@@ -256,22 +269,47 @@ export function ChoicesSheet({
     const url = new URL(window.location.href);
     for (const k of ['error', 'detail']) url.searchParams.delete(k);
     url.searchParams.set('ok', '1');
+    // saved, and who was not (with the reason)
+    url.searchParams.set(
+      'detail',
+      r.data.refused.length
+        ? `${String(r.data.saved)} saved. Not saved: ${r.data.refused
+            .slice(0, 4)
+            .map((x) => `${x.name}, ${x.error}`)
+            .join(
+              ' · ',
+            )}${r.data.refused.length > 4 ? ` · and ${String(r.data.refused.length - 4)} more` : ''}`.slice(
+            0,
+            900,
+          )
+        : `${String(r.data.saved)} saved.`,
+    );
     window.location.assign(url.toString());
   };
 
-  const status = (v: Value) => {
-    if (!isSet(v))
-      return (
-        <span className="ep-kicker" style={{ display: 'block' }}>
-          Not set: takes every subject
-        </span>
-      );
+  const status = (v: Value, r: ChoiceRow) => {
     const m = missing(v);
-    return m.length ? (
-      <span className="ep-field__error" style={{ display: 'block' }}>
-        Missing: {m.map((g) => g.name).join(', ')}
-      </span>
-    ) : null;
+    const o = over(v, r);
+    return (
+      <>
+        {!isSet(v) ? (
+          <span className="ep-kicker" style={{ display: 'block' }}>
+            Not set: takes every subject
+          </span>
+        ) : null}
+        {o.map((x) => (
+          <span key={x.g.id} className="ep-field__error" style={{ display: 'block' }}>
+            Has marks in {x.ids.map((id) => byId.get(id)?.code ?? '').join(' and ')}: {x.g.name}{' '}
+            takes {x.g.max}
+          </span>
+        ))}
+        {m.length ? (
+          <span className="ep-field__error" style={{ display: 'block' }}>
+            Missing: {m.map((g) => g.name).join(', ')}
+          </span>
+        ) : null}
+      </>
+    );
   };
   const slotTitle = (s: Slot) =>
     s.kind === 'group'
@@ -289,7 +327,7 @@ export function ChoicesSheet({
           {(
             [
               ['all', `All students (${String(rows.length)})`],
-              ['missing', `Missing a choice (${String(nMissing)})`],
+              ['missing', `Missing or too many (${String(nMissing)})`],
               ['unset', `Not set (${String(nUnset)})`],
             ] as Array<[Filter, string]>
           ).map(([k, label]) => (
@@ -416,7 +454,7 @@ export function ChoicesSheet({
                     <span className="ep-kicker" style={{ display: 'block' }}>
                       {r.admissionNo}
                     </span>
-                    {status(v)}
+                    {status(v, r)}
                   </th>
                   {showStream ? (
                     <td>

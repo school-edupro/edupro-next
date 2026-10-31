@@ -95,24 +95,36 @@ export async function saveChoicesSheet(
     /** the student's own additional subject(s) (the old "Opt") */
     additionalIds: string[];
   }>,
-): Promise<Out<{ changed: number }>> {
+): Promise<
+  Out<{ saved: number; refused: Array<{ studentId: string; name: string; error: string }> }>
+> {
   if (!okId(classSectionId)) return { ok: false, error: 'Choose the section' };
+  let saved = 0;
+  const refused: Array<{ studentId: string; name: string; error: string }> = [];
   for (let i = 0; i < rows.length; i += 300) {
-    const out = await call<{ changed: number }>('/exams/subject-choices', 'PUT', {
-      classSectionId,
-      rows: rows.slice(i, i + 300).map((r) => ({
-        studentId: r.studentId,
-        stream: r.stream,
-        subjects: r.subjectIds.map((subjectId) => ({
-          subjectId,
-          additional: r.additionalIds.includes(subjectId),
+    // the students whose list fits are saved; the others come back with the reason
+    const out = await call<{ saved: number; refused: typeof refused }>(
+      '/exams/subject-choices',
+      'PUT',
+      {
+        classSectionId,
+        partial: true,
+        rows: rows.slice(i, i + 300).map((r) => ({
+          studentId: r.studentId,
+          stream: r.stream,
+          subjects: r.subjectIds.map((subjectId) => ({
+            subjectId,
+            additional: r.additionalIds.includes(subjectId),
+          })),
         })),
-      })),
-    });
+      },
+    );
     if (!out.ok) return out;
+    saved += out.data.saved;
+    refused.push(...out.data.refused);
   }
   revalidatePath('/exams/subject-choices');
-  return { ok: true, data: { changed: rows.length } };
+  return { ok: true, data: { saved, refused } };
 }
 
 export async function fillSubjectChoices(fd: FormData) {
