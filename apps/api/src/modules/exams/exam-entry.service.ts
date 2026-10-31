@@ -498,7 +498,7 @@ export class ExamEntryService {
         updated_at: Date | null;
       }>(
         `SELECT s.id::text AS student_id, s.display_name AS name, s.admission_no, e.roll_no, m.marks::text, m.absent, m.exempt,
-                m.code, m.grade, app.student_subject_kind(s.id, $2, $4) AS kind, m.updated_at
+                m.code, m.grade, app.student_exam_subject_kind(s.id, (SELECT exam_id FROM exam_subjects WHERE id = $3), $4) AS kind, m.updated_at
            FROM enrolments e JOIN students s ON s.id = e.student_id AND s.deleted_at IS NULL
            LEFT JOIN mark_entries m ON m.student_id = s.id AND m.exam_subject_id = $3
           WHERE e.class_section_id = $1 AND e.academic_year_id = $2 AND e.status = 'active'

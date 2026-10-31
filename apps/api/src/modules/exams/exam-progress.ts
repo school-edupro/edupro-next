@@ -150,7 +150,7 @@ export async function examProgress(
          SELECT count(*)::int AS takers, count(m.student_id)::int AS entered
            FROM enrolments en LEFT JOIN mark_entries m ON m.student_id = en.student_id AND m.exam_subject_id = es.id
           WHERE en.class_section_id = cs.id AND en.academic_year_id = e.academic_year_id AND en.status = 'active'
-            AND app.student_subject_kind(en.student_id, e.academic_year_id, es.subject_id) IS NOT NULL) t
+            AND app.student_exam_subject_kind(en.student_id, es.exam_id, es.subject_id) IS NOT NULL) t
       WHERE es.exam_id = ANY($1::bigint[])
       GROUP BY es.exam_id, es.class_id`,
     [examIds],

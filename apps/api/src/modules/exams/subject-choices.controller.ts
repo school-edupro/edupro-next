@@ -11,6 +11,8 @@ import {
   EXAMS,
   PutSubjectChoicesDto,
   PutSubjectSetupDto,
+  SubjectChangeDto,
+  SubjectChangeUndoDto,
   SubjectChoicesQueryDto,
   SubjectChoicesUploadDto,
   SubjectClassQueryDto,
@@ -63,6 +65,22 @@ export class SubjectChoicesController {
   @AuthenticatedOnly()
   lastYear(@ReqCtx() ctx: RequestContext, @Body() dto: SubjectChoicesQueryDto) {
     return this.svc.lastYear(ctx, dto.classSectionId);
+  }
+
+  @Post('change')
+  @ApiOperation({
+    summary: "Change a student's subject from an exam on (the office, with a reason)",
+  })
+  @AuthenticatedOnly()
+  change(@ReqCtx() ctx: RequestContext, @Body() dto: SubjectChangeDto) {
+    return this.svc.change(ctx, dto);
+  }
+
+  @Post('change/undo')
+  @ApiOperation({ summary: 'Undo a change of subject while the new subject has no marks' })
+  @AuthenticatedOnly()
+  undoChange(@ReqCtx() ctx: RequestContext, @Body() dto: SubjectChangeUndoDto) {
+    return this.svc.undoChange(ctx, dto);
   }
 
   @Post('bulk')

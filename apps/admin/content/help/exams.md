@@ -56,6 +56,11 @@
    - **Opt** on a row: the student's own additional subject (kept out of the total, printed last).
      **Clear** puts a student back to "not set"; **History** shows who changed what. **Find a
      student in any section** takes an admission no.
+   - **A subject changed during the year** (Hindi in PT1, German from PT2): **Change subject** on the
+     student's row (the office), choose the new subject, the first exam with it and the reason. PT1
+     keeps Hindi with its marks; from PT2 the German teacher enters the marks; the term result
+     carries PT1's Hindi marks into German's line, noted "PT1 in Hindi". **Undo** while German has no
+     marks.
    - **Whole class**: every section's "taking / students" for each subject, who is not set or
      missing a choice, and **Set for the whole class** (one column for every section at once).
      PDF and Excel of the summary and of every student.

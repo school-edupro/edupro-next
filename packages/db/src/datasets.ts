@@ -1031,7 +1031,7 @@ export const DATASETS: Record<string, DatasetDefinition> = {
                LEFT JOIN mark_entries m ON m.exam_subject_id = es.id AND m.student_id = s.id
               WHERE x.deleted_at IS NULL AND x.academic_year_id = COALESCE($1::bigint, app.current_academic_year_id())
                 AND ($2::bigint IS NULL OR x.id = $2::bigint) AND ($3::bigint[] IS NULL OR cs.id = ANY($3::bigint[]))
-                AND app.student_subject_kind(s.id, x.academic_year_id, es.subject_id) IS NOT NULL
+                AND app.student_exam_subject_kind(s.id, x.id, es.subject_id) IS NOT NULL
               ORDER BY x.starts_on NULLS LAST, x.code, k.display_order, cs.name, en.roll_no NULLS LAST, s.display_name, sub.display_order`,
       values: [str(p.academicYearId), str(p.examId), idList(p.sectionIds)],
     }),

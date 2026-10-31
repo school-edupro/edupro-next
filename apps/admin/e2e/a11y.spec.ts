@@ -268,6 +268,7 @@ const PAGES = [
   '/exams/subject-choices',
   '/exams/subject-choices?sectionId=149',
   '/exams/subject-choices?tab=students&sectionId=143',
+  '/exams/subject-choices?tab=students&sectionId=143&change=12307',
   '/exams/subject-choices?tab=setup&classId=172',
   '/exams/subject-choices?tab=setup&classId=164',
   '/exams/subject-choices?tab=class&classId=172',

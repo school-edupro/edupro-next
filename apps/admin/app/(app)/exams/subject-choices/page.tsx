@@ -13,9 +13,11 @@ import {
 import { ClassSubjectSetup } from '@/components/exams/ClassSubjectSetup';
 import { ExcelUpload } from '@/components/exams/ExcelUpload';
 import {
+  changeStudentSubject,
   classBulkChoices,
   fillSubjectChoices,
   lastYearChoices,
+  undoStudentSubjectChange,
   uploadSubjectChoices,
 } from '@/lib/exam-entry-actions';
 import { apiFetch, getMe } from '@/lib/api';
@@ -46,10 +48,22 @@ interface Choices extends Setup {
     stream: string | null;
     subjects: Array<{ subjectId: string; kind: string; additional: boolean }>;
     marked: string[];
+    changes: Array<{
+      id: string;
+      fromSubjectId: string;
+      toSubjectId: string;
+      fromExamId: string;
+      fromExam: string;
+      reason: string;
+    }>;
   }>;
   withChoices: number;
   canEdit: boolean;
   canSetUp: boolean;
+  /** the office: a subject changed mid-year */
+  canChange: boolean;
+  /** the class's exams in the session's order */
+  exams: Array<{ id: string; code: string; name: string }>;
 }
 interface Counts {
   class: { id: string; code: string; name: string };
@@ -104,6 +118,7 @@ export default async function SubjectChoicesPage({
     find?: string;
     q?: string;
     history?: string;
+    change?: string;
     ok?: string;
     error?: string;
     detail?: string;
@@ -158,6 +173,12 @@ export default async function SubjectChoicesPage({
       ? await apiFetch<Setup>(`/exams/subject-choices/setup?classId=${classId}`)
       : null;
   const canSetUp = me.permissions.includes('exams.master.manage');
+  // a subject changed mid-year: the student whose form is open
+  const changing = choices?.rows.find((r) => r.studentId === sp.change) ?? null;
+  const subjectName = (id: string) => {
+    const x = choices?.subjects.find((y) => y.id === id);
+    return x ? `${x.name} (${x.code})` : id;
+  };
   const canClass = sections.some((s) => s.classId === classId && s.canEdit);
   const initialQuery = one?.admissionNo ?? sp.q ?? '';
   const nameOf = (list: ChoiceSubject[], id: string) => {
@@ -345,6 +366,144 @@ export default async function SubjectChoicesPage({
             </Card>
           ) : null}
 
+          {choices && changing ? (
+            <Card
+              elevated
+              title={`Change a subject during the year · ${changing.name}`}
+              style={{ marginBottom: 'var(--sp-4)' }}
+              actions={
+                <a className="ep-btn ep-btn--ghost ep-btn--sm" href={base('students')}>
+                  Close
+                </a>
+              }
+            >
+              <p className="ep-field__help" style={{ marginTop: 0 }}>
+                Hindi until PT1 and German from PT2: the exams before the one chosen keep the old
+                subject with its marks (their register and card show it); from that exam the new
+                subject is used and its teacher enters the marks. In a term result the new
+                subject&rsquo;s line carries the earlier marks, noted &ldquo;PT1 in Hindi&rdquo;.
+              </p>
+              {!changing.subjects.length ? (
+                <p>
+                  {changing.name}&rsquo;s subjects are not set yet (the student takes every
+                  subject): set them in the grid below and save, then change one here.
+                </p>
+              ) : !changing.subjects.some(
+                  (x) => choices.subjects.find((y) => y.id === x.subjectId)?.take !== 'all',
+                ) ? (
+                <p>Every subject of {changing.name} is one everyone takes: nothing to change.</p>
+              ) : choices.canChange ? (
+                <form action={changeStudentSubject} className="ep-subchoice__changeform">
+                  <input type="hidden" name="classSectionId" value={choices.section.id} />
+                  <input type="hidden" name="studentId" value={changing.studentId} />
+                  <label className="ep-field">
+                    <span className="ep-field__label">Subject now</span>
+                    <select className="ep-select" name="fromSubjectId" required>
+                      {changing.subjects
+                        .map((x) => choices.subjects.find((y) => y.id === x.subjectId))
+                        .filter((x) => x && x.take !== 'all')
+                        .map((x) => (
+                          <option key={x!.id} value={x!.id}>
+                            {x!.name} ({x!.code})
+                          </option>
+                        ))}
+                    </select>
+                  </label>
+                  <label className="ep-field">
+                    <span className="ep-field__label">Changes to</span>
+                    <select className="ep-select" name="toSubjectId" required>
+                      {choices.subjects
+                        .filter(
+                          (x) =>
+                            x.take !== 'all' &&
+                            !changing.subjects.some((y) => y.subjectId === x.id),
+                        )
+                        .map((x) => (
+                          <option key={x.id} value={x.id}>
+                            {x.name} ({x.code})
+                          </option>
+                        ))}
+                    </select>
+                  </label>
+                  <label className="ep-field">
+                    <span className="ep-field__label">From the exam</span>
+                    <select className="ep-select" name="fromExamId" required>
+                      {choices.exams.map((x) => (
+                        <option key={x.id} value={x.id}>
+                          {x.name} ({x.code})
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="ep-field" style={{ minWidth: '16rem' }}>
+                    <span className="ep-field__label">Reason</span>
+                    <input
+                      className="ep-input"
+                      name="reason"
+                      required
+                      minLength={3}
+                      maxLength={300}
+                      placeholder="e.g. parents asked for German"
+                    />
+                  </label>
+                  <Button type="submit">Change the subject</Button>
+                </form>
+              ) : (
+                <p>The office changes a subject during the year.</p>
+              )}
+              {changing.changes.length ? (
+                <div
+                  className="ep-table-wrap"
+                  tabIndex={0}
+                  role="region"
+                  aria-label="Changes this year"
+                  style={{ marginTop: 'var(--sp-4)' }}
+                >
+                  <table className="ep-table">
+                    <caption className="ep-sr-only">
+                      {changing.name}&rsquo;s changes of subject this year
+                    </caption>
+                    <thead>
+                      <tr>
+                        <th scope="col">Subject</th>
+                        <th scope="col">Changed to</th>
+                        <th scope="col">From the exam</th>
+                        <th scope="col">Reason</th>
+                        {choices.canChange ? <th scope="col">Undo</th> : null}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {changing.changes.map((ch) => (
+                        <tr key={ch.id}>
+                          <td>{subjectName(ch.fromSubjectId)}</td>
+                          <td>{subjectName(ch.toSubjectId)}</td>
+                          <td>{ch.fromExam}</td>
+                          <td>{ch.reason}</td>
+                          {choices.canChange ? (
+                            <td>
+                              <form action={undoStudentSubjectChange}>
+                                <input
+                                  type="hidden"
+                                  name="classSectionId"
+                                  value={choices.section.id}
+                                />
+                                <input type="hidden" name="studentId" value={changing.studentId} />
+                                <input type="hidden" name="changeId" value={ch.id} />
+                                <Button type="submit" size="sm" variant="ghost">
+                                  Undo
+                                </Button>
+                              </form>
+                            </td>
+                          ) : null}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : null}
+            </Card>
+          ) : null}
+
           {choices ? (
             <>
               <Card
@@ -413,6 +572,11 @@ export default async function SubjectChoicesPage({
                     canEdit={choices.canEdit}
                     initialQuery={initialQuery}
                     historyBase={`/exams/subject-choices?tab=students&sectionId=${choices.section.id}${initialQuery ? `&q=${encodeURIComponent(initialQuery)}` : ''}&history=`}
+                    {...(choices.canChange
+                      ? {
+                          changeBase: `/exams/subject-choices?tab=students&sectionId=${choices.section.id}&change=`,
+                        }
+                      : {})}
                     rows={choices.rows.map((r) => ({
                       studentId: r.studentId,
                       name: r.name,
@@ -422,6 +586,7 @@ export default async function SubjectChoicesPage({
                       subjectIds: r.subjects.map((x) => x.subjectId),
                       additionalIds: r.subjects.filter((x) => x.additional).map((x) => x.subjectId),
                       marked: r.marked,
+                      changes: r.changes,
                     }))}
                   />
                 )}

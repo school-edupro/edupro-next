@@ -68,6 +68,15 @@ export interface ChoiceRow {
   subjects: Array<{ subjectId: string; kind: Kind; additional: boolean }>;
   /** subjects with marks this year (a mark changed to NA does not count): not taken off */
   marked: string[];
+  /** subjects changed mid-year: the old one until the exam before `fromExam`, the new one from it */
+  changes: Array<{
+    id: string;
+    fromSubjectId: string;
+    toSubjectId: string;
+    fromExamId: string;
+    fromExam: string;
+    reason: string;
+  }>;
 }
 /** A student's whole list: each subject's kind, and those the student takes as additional. */
 interface Planned {
@@ -253,6 +262,7 @@ export class SubjectChoicesService {
         additional: boolean;
       }> | null;
       marked: string[] | null;
+      changes: ChoiceRow['changes'] | null;
     }>(
       `SELECT s.id::text AS student_id, s.display_name AS name, s.admission_no, e.roll_no,
               (SELECT jsonb_agg(jsonb_build_object('subjectId', x.subject_id::text, 'kind', x.kind, 'stream', x.stream, 'additional', x.opted_additional) ORDER BY x.id)
@@ -261,11 +271,22 @@ export class SubjectChoicesService {
                  SELECT es.subject_id FROM mark_entries m JOIN exam_subjects es ON es.id = m.exam_subject_id
                    JOIN exams x ON x.id = es.exam_id AND x.academic_year_id = $2 AND x.deleted_at IS NULL
                   WHERE m.student_id = s.id AND m.code IS DISTINCT FROM 'NA'
+                    AND NOT EXISTS (SELECT 1 FROM student_subject_changes ch
+                         WHERE ch.student_id = s.id AND ch.academic_year_id = $2 AND ch.from_subject_id = es.subject_id
+                           AND app.exam_before(x.id, ch.from_exam_id))
                  UNION
                  SELECT es.subject_id FROM mark_part_entries pe JOIN exam_subject_parts p ON p.id = pe.part_id
                    JOIN exam_subjects es ON es.id = p.exam_subject_id
                    JOIN exams x ON x.id = es.exam_id AND x.academic_year_id = $2 AND x.deleted_at IS NULL
-                  WHERE pe.student_id = s.id) t) AS marked
+                  WHERE pe.student_id = s.id
+                    AND NOT EXISTS (SELECT 1 FROM student_subject_changes ch
+                         WHERE ch.student_id = s.id AND ch.academic_year_id = $2 AND ch.from_subject_id = es.subject_id
+                           AND app.exam_before(x.id, ch.from_exam_id))) t) AS marked,
+              (SELECT jsonb_agg(jsonb_build_object('id', ch.id::text, 'fromSubjectId', ch.from_subject_id::text,
+                        'toSubjectId', ch.to_subject_id::text, 'fromExamId', ch.from_exam_id::text, 'fromExam', ex.code,
+                        'reason', ch.reason) ORDER BY ch.changed_at)
+                 FROM student_subject_changes ch JOIN exams ex ON ex.id = ch.from_exam_id
+                WHERE ch.student_id = s.id AND ch.academic_year_id = $2) AS changes
          FROM enrolments e JOIN students s ON s.id = e.student_id AND s.deleted_at IS NULL
         WHERE e.class_section_id = $1 AND e.academic_year_id = $2 AND e.status = 'active'
         ORDER BY e.roll_no NULLS LAST, s.display_name`,
@@ -284,6 +305,7 @@ export class SubjectChoicesService {
         additional: k.additional || (setup.fromExams && k.kind === 'additional'),
       })),
       marked: x.marked ?? [],
+      changes: x.changes ?? [],
     }));
     return {
       section: {
@@ -371,6 +393,14 @@ export class SubjectChoicesService {
         };
       }
     }
+    // a subject that came in a mid-year change stays: undo the change to take it off
+    const brought = list.size
+      ? row.changes.filter((ch) => !list.has(ch.toSubjectId)).map((ch) => ch.toSubjectId)
+      : [];
+    if (brought.length)
+      return {
+        error: `${brought.map(code).join(', ')} came in a change of subject this year: undo the change to take it off`,
+      };
     // a subject with marks stays (no list at all: the student takes every subject, it stays too)
     const dropped = list.size ? row.marked.filter((id) => !list.has(id)) : [];
     if (dropped.length)
@@ -504,10 +534,19 @@ export class SubjectChoicesService {
     const yearId = this.year(tenant);
     await this.scopes.assert(tenant, EXAMS.marksView, 'class_section', sectionId);
     const canEdit = (await this.mayEdit(ctx, tenant, [sectionId])).has(sectionId);
+    const canChange = await this.mayChange(ctx, tenant, sectionId);
     return this.db.tenant(tenant, async (c) => {
       const out = await this.load(c, yearId, sectionId);
+      const exams = await c.query<{ id: string; code: string; name: string }>(
+        `SELECT e.id::text, e.code, e.name FROM exams e JOIN exam_classes ec ON ec.exam_id = e.id AND ec.class_id = $1
+          WHERE e.academic_year_id = $2 AND e.deleted_at IS NULL ORDER BY app.exam_day(e.id), e.id`,
+        [out.section.classId, yearId],
+      );
       return {
         ...out,
+        /** the class's exams in the session's order: where a change of subject starts */
+        exams: exams.rows,
+        canChange,
         withChoices: out.rows.filter((r) => r.subjects.length).length,
         canEdit,
         canSetUp: ctx.permissions?.has(EXAMS.masterManage) ?? false,
@@ -1049,6 +1088,181 @@ export class SubjectChoicesService {
       contentType: 'application/pdf',
       base64: bytes.toString('base64'),
     };
+  }
+
+  // ---- a subject changed mid-year (docs/design/67) ---------------------------------------------------
+  /** Only the office changes a subject mid-year (exams.choices.manage, in its scope). */
+  private async mayChange(ctx: RequestContext, tenant: TenantContext, sectionId: string) {
+    if (!ctx.permissions?.has(EXAMS.choicesManage)) return false;
+    const allowed = await this.scopes.filter(tenant, EXAMS.choicesManage, 'class_section');
+    return allowed === null || allowed.includes(sectionId);
+  }
+
+  private async assertChange(ctx: RequestContext, tenant: TenantContext, sectionId: string) {
+    if (!(await this.mayChange(ctx, tenant, sectionId)))
+      throw new DomainError('forbidden', 'The office changes a subject during the year', {
+        status: 403,
+      });
+  }
+
+  /**
+   * Hindi until PT1, German from PT2: the student's list holds the new subject; every exam before the
+   * change point keeps the old one with its marks; the term results carry them into the new subject's
+   * line. The old subject may have no marks from that exam on; the two are in the same choice slot.
+   */
+  async change(
+    ctx: RequestContext,
+    dto: {
+      classSectionId: string;
+      studentId: string;
+      fromSubjectId: string;
+      toSubjectId: string;
+      fromExamId: string;
+      reason: string;
+    },
+  ) {
+    const tenant = requireTenant(ctx);
+    const yearId = this.year(tenant);
+    await this.assertChange(ctx, tenant, dto.classSectionId);
+    return this.db.tenant(tenant, async (c) => {
+      const cur = await this.load(c, yearId, dto.classSectionId);
+      const row = cur.rows.find((x) => x.studentId === dto.studentId);
+      if (!row)
+        throw new DomainError(
+          'exams.student_not_in_section',
+          'The student is not in this section',
+          {
+            status: 409,
+          },
+        );
+      const code = (id: string) => cur.subjects.find((x) => x.id === id)?.code ?? id;
+      const refuse = (detail: string) =>
+        new DomainError('exams.change_refused', `${row.name}: ${detail}`, { status: 409 });
+      if (!row.subjects.length) throw refuse('set the student’s subjects first');
+      const from = cur.subjects.find((x) => x.id === dto.fromSubjectId);
+      const to = cur.subjects.find((x) => x.id === dto.toSubjectId);
+      if (!from || !row.subjects.some((x) => x.subjectId === from.id))
+        throw refuse('the subject to change is not one the student takes');
+      if (!to) throw refuse('the new subject is not of the class');
+      if (row.subjects.some((x) => x.subjectId === to.id))
+        throw refuse(`the student takes ${to.code} already`);
+      if (from.take === 'all')
+        throw refuse(`everyone takes ${from.code}: it is not changed for one student`);
+      if (from.take === 'group' && to.groupId !== from.groupId)
+        throw refuse(`${from.code} and ${to.code} are not choices of the same slot`);
+      if (from.take === 'free' && to.take !== 'free')
+        throw refuse(`${to.code} is not an elective of the class`);
+      const ex = await c.query<{ code: string }>(
+        `SELECT e.code FROM exams e JOIN exam_classes ec ON ec.exam_id = e.id AND ec.class_id = $2
+          WHERE e.id = $1 AND e.academic_year_id = $3 AND e.deleted_at IS NULL`,
+        [dto.fromExamId, cur.section.classId, yearId],
+      );
+      if (!ex.rows[0]) throw refuse('the exam is not one of the class this year');
+      if (row.changes.some((x) => x.fromSubjectId === from.id))
+        throw refuse(`${from.code} was changed already this year`);
+      // the old subject's marks must all be in the exams before the change
+      const later = await c.query<{ code: string }>(
+        `SELECT DISTINCT e.code FROM exam_subjects es JOIN exams e ON e.id = es.exam_id AND e.academic_year_id = $3 AND e.deleted_at IS NULL
+          WHERE es.subject_id = $2 AND NOT app.exam_before(e.id, $4)
+            AND (EXISTS (SELECT 1 FROM mark_entries m WHERE m.exam_subject_id = es.id AND m.student_id = $1 AND m.code IS DISTINCT FROM 'NA')
+              OR EXISTS (SELECT 1 FROM mark_part_entries pe JOIN exam_subject_parts p ON p.id = pe.part_id
+                          WHERE p.exam_subject_id = es.id AND pe.student_id = $1))`,
+        [row.studentId, from.id, yearId, dto.fromExamId],
+      );
+      if (later.rows.length)
+        throw refuse(
+          `${from.code} has marks in ${later.rows.map((x) => x.code).join(', ')}: change from a later exam, or mark them NA`,
+        );
+      const opted = row.subjects.find((x) => x.subjectId === from.id)?.additional ?? false;
+      await c.query(
+        `DELETE FROM student_subjects WHERE student_id = $1 AND academic_year_id = $2 AND subject_id = $3`,
+        [row.studentId, yearId, from.id],
+      );
+      await c.query(
+        `INSERT INTO student_subjects (school_id, academic_year_id, student_id, subject_id, kind, stream, opted_additional, created_by)
+         VALUES (app.current_school_id(), $1, $2, $3, $4, $5, $6, app.current_user_id())`,
+        [
+          yearId,
+          row.studentId,
+          to.id,
+          opted ? 'additional' : this.kindOf(cur, to.id),
+          row.stream,
+          opted,
+        ],
+      );
+      await c.query(
+        `INSERT INTO student_subject_changes (school_id, academic_year_id, student_id, from_subject_id, to_subject_id, from_exam_id, reason, changed_by)
+         VALUES (app.current_school_id(), $1, $2, $3, $4, $5, $6, app.current_user_id())`,
+        [yearId, row.studentId, from.id, to.id, dto.fromExamId, dto.reason.trim()],
+      );
+      await this.audit.stage(ctx, c, {
+        action: 'exams.subject_choices.change',
+        entityType: 'students',
+        entityId: row.studentId,
+        after: {
+          from: code(from.id),
+          to: code(to.id),
+          fromExam: ex.rows[0].code,
+          reason: dto.reason.trim(),
+        },
+      });
+      return this.load(c, yearId, dto.classSectionId);
+    });
+  }
+
+  /** A change undone while the new subject has no marks: the old subject is back for the whole year. */
+  async undoChange(ctx: RequestContext, dto: { classSectionId: string; changeId: string }) {
+    const tenant = requireTenant(ctx);
+    const yearId = this.year(tenant);
+    await this.assertChange(ctx, tenant, dto.classSectionId);
+    return this.db.tenant(tenant, async (c) => {
+      const cur = await this.load(c, yearId, dto.classSectionId);
+      const row = cur.rows.find((x) => x.changes.some((ch) => ch.id === dto.changeId));
+      const ch = row?.changes.find((x) => x.id === dto.changeId);
+      if (!row || !ch)
+        throw new DomainError('not-found', 'No such change of subject in this section', {
+          status: 404,
+        });
+      const code = (id: string) => cur.subjects.find((x) => x.id === id)?.code ?? id;
+      if (row.marked.includes(ch.toSubjectId))
+        throw new DomainError(
+          'exams.change_refused',
+          `${row.name}: ${code(ch.toSubjectId)} has marks: mark them NA before undoing the change`,
+          { status: 409 },
+        );
+      if (row.changes.some((x) => x.fromSubjectId === ch.toSubjectId))
+        throw new DomainError(
+          'exams.change_refused',
+          `${row.name}: ${code(ch.toSubjectId)} was changed again: undo the later change first`,
+          { status: 409 },
+        );
+      const opted = row.subjects.find((x) => x.subjectId === ch.toSubjectId)?.additional ?? false;
+      await c.query(`DELETE FROM student_subject_changes WHERE id = $1`, [ch.id]);
+      await c.query(
+        `DELETE FROM student_subjects WHERE student_id = $1 AND academic_year_id = $2 AND subject_id = $3`,
+        [row.studentId, yearId, ch.toSubjectId],
+      );
+      await c.query(
+        `INSERT INTO student_subjects (school_id, academic_year_id, student_id, subject_id, kind, stream, opted_additional, created_by)
+         VALUES (app.current_school_id(), $1, $2, $3, $4, $5, $6, app.current_user_id())
+         ON CONFLICT (academic_year_id, student_id, subject_id) DO NOTHING`,
+        [
+          yearId,
+          row.studentId,
+          ch.fromSubjectId,
+          opted ? 'additional' : this.kindOf(cur, ch.fromSubjectId),
+          row.stream,
+          opted,
+        ],
+      );
+      await this.audit.stage(ctx, c, {
+        action: 'exams.subject_choices.change_undone',
+        entityType: 'students',
+        entityId: row.studentId,
+        after: { from: code(ch.fromSubjectId), to: code(ch.toSubjectId), fromExam: ch.fromExam },
+      });
+      return this.load(c, yearId, dto.classSectionId);
+    });
   }
 
   // ---- the whole class at once, the full list, a student, the history ---------------------------

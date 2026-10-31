@@ -38,6 +38,8 @@ export interface ChoiceRow {
   additionalIds: string[];
   /** subjects with marks this year: not taken off */
   marked: string[];
+  /** subjects changed mid-year: the old one until the exam before `fromExam` */
+  changes?: Array<{ id: string; fromSubjectId: string; toSubjectId: string; fromExam: string }>;
 }
 interface Value {
   stream: string;
@@ -79,6 +81,7 @@ export function ChoicesSheet({
   initialQuery = '',
   historyBase,
   fromExams = false,
+  changeBase,
 }: {
   classSectionId: string;
   sectionCode: string;
@@ -93,6 +96,8 @@ export function ChoicesSheet({
   historyBase: string;
   /** no subjects mapped to the class: its exams' subjects, each one a student may take */
   fromExams?: boolean;
+  /** the office: the address that opens "Change subject" for a student, the student id appended */
+  changeBase?: string;
 }) {
   const leaving = useRef(false);
   const compulsory = useMemo(() => subjects.filter((x) => x.take === 'all'), [subjects]);
@@ -454,7 +459,22 @@ export function ChoicesSheet({
                     <span className="ep-kicker" style={{ display: 'block' }}>
                       {r.admissionNo}
                     </span>
+                    {(r.changes ?? []).map((ch) => (
+                      <span key={ch.id} className="ep-subchoice__change">
+                        {byId.get(ch.fromSubjectId)?.code} → {byId.get(ch.toSubjectId)?.code} from{' '}
+                        {ch.fromExam}
+                      </span>
+                    ))}
                     {status(v, r)}
+                    {changeBase && isSet(v) ? (
+                      <a
+                        className="ep-subchoice__changelink"
+                        href={`${changeBase}${r.studentId}`}
+                        aria-label={`Change a subject of ${r.name} during the year`}
+                      >
+                        Change subject
+                      </a>
+                    ) : null}
                   </th>
                   {showStream ? (
                     <td>

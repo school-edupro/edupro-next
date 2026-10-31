@@ -223,6 +223,44 @@ export async function saveSubjectSetup(
   return out;
 }
 
+/** A subject changed mid-year from an exam on, with a reason (the office). */
+export async function changeStudentSubject(fd: FormData) {
+  const sectionId = str(fd, 'classSectionId');
+  const studentId = str(fd, 'studentId');
+  const path = `/exams/subject-choices?tab=students&sectionId=${sectionId}&change=${studentId}`;
+  return run(
+    path,
+    () =>
+      apiFetch('/exams/subject-choices/change', {
+        method: 'POST',
+        body: JSON.stringify({
+          classSectionId: sectionId,
+          studentId,
+          fromSubjectId: str(fd, 'fromSubjectId'),
+          toSubjectId: str(fd, 'toSubjectId'),
+          fromExamId: str(fd, 'fromExamId'),
+          reason: str(fd, 'reason'),
+        }),
+      }),
+    'The subject is changed: earlier exams keep the old one with its marks.',
+  );
+}
+
+/** A change undone while the new subject has no marks. */
+export async function undoStudentSubjectChange(fd: FormData) {
+  const sectionId = str(fd, 'classSectionId');
+  const path = `/exams/subject-choices?tab=students&sectionId=${sectionId}&change=${str(fd, 'studentId')}`;
+  return run(
+    path,
+    () =>
+      apiFetch('/exams/subject-choices/change/undo', {
+        method: 'POST',
+        body: JSON.stringify({ classSectionId: sectionId, changeId: str(fd, 'changeId') }),
+      }),
+    'The change is undone: the old subject is back for the whole year.',
+  );
+}
+
 export async function uploadSubjectChoices(
   classSectionId: string,
   file: string,

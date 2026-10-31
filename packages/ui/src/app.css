@@ -13399,3 +13399,28 @@ button.ep-subchoice__icon:hover {
   margin-right: var(--sp-3);
   font-size: var(--fs-small);
 }
+.ep-subchoice__change {
+  display: inline-block;
+  margin-top: var(--sp-1);
+  padding: 0 var(--sp-1);
+  border-radius: var(--radius-sm);
+  background: var(--status-info-bg);
+  color: var(--text-heading);
+  font-size: var(--fs-caption);
+  text-transform: none;
+  letter-spacing: normal;
+}
+.ep-subchoice__changelink {
+  display: block;
+  margin-top: var(--sp-1);
+  font-size: var(--fs-caption);
+  font-weight: var(--fw-regular);
+  text-transform: none;
+  letter-spacing: normal;
+}
+.ep-subchoice__changeform {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-3);
+  align-items: flex-end;
+}

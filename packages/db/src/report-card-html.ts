@@ -497,11 +497,16 @@ function termMarks(d: ReportCardData, s: ReportCardSection): string {
   const title = `<h2>${esc(s.title ?? 'Scholastic areas')}</h2>`;
   if (!terms.length)
     return `${title}<div class="remark">The term results are not worked out yet.</div>`;
-  const subjects: Array<{ code: string; name: string; kind: string }> = [];
+  const subjects: Array<{ code: string; name: string; kind: string; note?: string }> = [];
   for (const t of terms)
     for (const x of t.subjects)
       if (!subjects.some((y) => y.code === x.code))
-        subjects.push({ code: x.code, name: x.name, kind: x.kind });
+        subjects.push({
+          code: x.code,
+          name: x.name,
+          kind: x.kind,
+          ...(x.note ? { note: x.note } : {}),
+        });
   const cols = (t: (typeof terms)[number]) => (s.gradesOnly ? [] : t.columns);
   const head1 = terms
     .map((t) => `<th class="ctr" colspan="${cols(t).length + 1}">${esc(t.name)}</th>`)
@@ -524,7 +529,7 @@ function termMarks(d: ReportCardData, s: ReportCardSection): string {
             .join('')}<td class="ctr">${esc(x?.grade ?? '')}</td>`;
         })
         .join('');
-      return `<tr><td>${esc(sub.name)}${sub.kind === 'additional' ? ' <span class="meta">(additional)</span>' : ''}</td>${cells}</tr>`;
+      return `<tr><td>${esc(sub.name)}${sub.kind === 'additional' ? ' <span class="meta">(additional)</span>' : ''}${sub.note ? ` <span class="meta">(${esc(sub.note)})</span>` : ''}</td>${cells}</tr>`;
     })
     .join('');
   const line = (label: string, v: (t: (typeof terms)[number]) => string) =>

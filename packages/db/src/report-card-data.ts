@@ -163,6 +163,8 @@ export interface ReportCardTermResult {
     name: string;
     kind: string;
     values: Record<string, { v: number | null; max: number; code?: string } | null>;
+    /** a subject changed mid-year: the exams that carry the old subject's marks ("PT1 in Hindi") */
+    note?: string;
     total: number | null;
     max: number;
     grade: string | null;
@@ -317,12 +319,12 @@ export async function loadReportCardData(
     // the subjects the student takes (docs/design/67), in the class's order
     `SELECT es.exam_id::text, sub.code AS subject_code, sub.name AS subject_name,
             app.subject_seq(es.class_id, app.current_academic_year_id(), es.subject_id) AS display_order,
-            app.student_subject_kind($3, app.current_academic_year_id(), es.subject_id) AS kind, es.max_marks::text,
+            app.student_exam_subject_kind($3, es.exam_id, es.subject_id) AS kind, es.max_marks::text,
             m.marks::text, m.absent, m.exempt, m.code, m.grade AS entered_grade
        FROM exam_subjects es JOIN subjects sub ON sub.id = es.subject_id
        LEFT JOIN mark_entries m ON m.exam_subject_id = es.id AND m.student_id = $3
       WHERE es.exam_id = ANY($1::bigint[]) AND es.class_id = $2
-        AND app.student_subject_kind($3, app.current_academic_year_id(), es.subject_id) IS NOT NULL
+        AND app.student_exam_subject_kind($3, es.exam_id, es.subject_id) IS NOT NULL
       ORDER BY 4, sub.code`,
     [input.examIds, s.class_id, input.studentId],
   );

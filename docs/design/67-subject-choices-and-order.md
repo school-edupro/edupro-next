@@ -189,3 +189,27 @@ Subject-2 takes 1", counted under "Missing or too many"), and Save keeps the oth
 reason ("has marks this year in HIN and FREN, but Subject-2 takes 1: let it take 2 in Class set-up (or
 give one its own slot), or mark the extra one NA"). Without `partial` (uploads, other callers) one row that
 does not fit still refuses the lot.
+
+## A subject changed during the year (31 Oct, migration 0294)
+
+Decisions: the change is recorded **from an exam**; the old subject's marks **carry into the new subject's
+line** in term results; **the office** records it, **with a reason**.
+
+- `student_subject_changes` (student, year, from subject, to subject, from exam, reason, who, when; one
+  change per old subject a year). `app.exam_day` / `app.exam_before` order the session's exams (first day,
+  else first paper, else created; then id).
+- `app.student_exam_subject_kind(student, exam, subject)`: the year's choice, but the old subject is the
+  student's in exams before the change (with the new subject's kind) and the new one is not theirs yet.
+  Marks entry (`app.enter_marks`), exam results (`app.compute_exam_results`), the register, status,
+  progress, analysis, date sheets, report cards and the report datasets ask it per exam.
+- Recording (`POST exams/subject-choices/change`, exams.choices.manage): the student's list gets the new
+  subject (same choice slot as the old one; kind, stream and Optional tick kept); the old subject may have
+  no marks from that exam on (else "change from a later exam, or mark them NA"). Marks before the change
+  do not lock the old subject in the grid. A subject brought by a change is not taken off in the grid
+  ("undo the change"); `POST …/change/undo` while the new subject has no marks.
+- Term results (mark schemes): the new subject's line takes the old one's marks for the exams before the
+  change, and carries `note: "PT1 in Hindi"`, printed after the subject on the term card. Each exam's own
+  card and register show the subject taken in that exam. Only one level is carried (Hindi → German →
+  French carries German's into French, not Hindi's).
+- Screen: "Change subject" on a row (office) opens a card: subject now, changes to, from the exam, reason;
+  the student's changes with Undo. The row shows "FREN → SAN from HY".

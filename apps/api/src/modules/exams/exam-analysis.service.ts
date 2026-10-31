@@ -162,7 +162,7 @@ export class ExamAnalysisService {
           WHERE es.exam_id = $1 AND es.max_marks > 0
             AND ($3::bigint IS NULL OR es.class_id = $3::bigint)
             AND ($4::bigint[] IS NULL OR cs.id = ANY($4::bigint[]))
-            AND app.student_subject_kind(s.id, $2, es.subject_id) IS NOT NULL
+            AND app.student_exam_subject_kind(s.id, es.exam_id, es.subject_id) IS NOT NULL
           ORDER BY k.display_order, k.code, cs.name, app.subject_seq(es.class_id, $2, es.subject_id), sub.code, en.roll_no NULLS LAST, s.display_name`,
         [p.examId, p.yearId, p.classId, p.sections],
       )
@@ -540,10 +540,10 @@ export class ExamAnalysisService {
     }>(
       `SELECT k.code || '-' || cs.name AS section, sub.name AS subject,
               (SELECT count(*)::int FROM enrolments en WHERE en.class_section_id = cs.id AND en.academic_year_id = $2 AND en.status = 'active'
-                  AND app.student_subject_kind(en.student_id, $2, es.subject_id) IS NOT NULL) AS takers,
+                  AND app.student_exam_subject_kind(en.student_id, es.exam_id, es.subject_id) IS NOT NULL) AS takers,
               (SELECT count(*)::int FROM enrolments en JOIN mark_entries m ON m.student_id = en.student_id AND m.exam_subject_id = es.id
                 WHERE en.class_section_id = cs.id AND en.academic_year_id = $2 AND en.status = 'active'
-                  AND app.student_subject_kind(en.student_id, $2, es.subject_id) IS NOT NULL) AS entered,
+                  AND app.student_exam_subject_kind(en.student_id, es.exam_id, es.subject_id) IS NOT NULL) AS entered,
               COALESCE(st.status, 'open') AS status, su.display_name AS submitted_by, st.submitted_at, vu.display_name AS verified_by, st.verified_at
          FROM exam_subjects es
          JOIN subjects sub ON sub.id = es.subject_id JOIN classes k ON k.id = es.class_id

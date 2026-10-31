@@ -90,6 +90,8 @@ export interface SchemeStudent {
     kind: 'compulsory' | 'optional' | 'additional';
     /** by exam key; absent when the exam does not have the subject */
     marks: Record<string, SchemeMark | undefined>;
+    /** a subject changed mid-year: which exams carry the old subject's marks ("PT1 in Hindi") */
+    note?: string;
   }>;
 }
 
@@ -106,6 +108,8 @@ export interface SchemeSubjectResult {
   name: string;
   kind: 'compulsory' | 'optional' | 'additional';
   values: Record<string, SchemeCell>;
+  /** a subject changed mid-year: the exams that carry the old subject's marks */
+  note?: string;
   total: number | null;
   max: number;
   pct: number | null;
@@ -387,6 +391,7 @@ function subjectResult(
     name: sub.name,
     kind: sub.kind,
     values,
+    ...(sub.note ? { note: sub.note } : {}),
     total,
     max: tot.max,
     pct: pct === null ? null : roundBy(pct),

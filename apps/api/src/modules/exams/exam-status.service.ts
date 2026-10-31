@@ -37,10 +37,10 @@ const ROWS = `
   SELECT e.id::text AS exam_id, e.code AS exam_code, es.id::text AS exam_subject_id, es.subject_id::text, sub.code AS subject_code,
          sub.name AS subject_name, cs.id::text AS class_section_id, k.code || '-' || cs.name AS section,
          (SELECT count(*)::int FROM enrolments en WHERE en.class_section_id = cs.id AND en.academic_year_id = e.academic_year_id
-             AND en.status = 'active' AND app.student_subject_kind(en.student_id, e.academic_year_id, es.subject_id) IS NOT NULL) AS takers,
+             AND en.status = 'active' AND app.student_exam_subject_kind(en.student_id, e.id, es.subject_id) IS NOT NULL) AS takers,
          (SELECT count(*)::int FROM enrolments en JOIN mark_entries m ON m.student_id = en.student_id AND m.exam_subject_id = es.id
            WHERE en.class_section_id = cs.id AND en.academic_year_id = e.academic_year_id AND en.status = 'active'
-             AND app.student_subject_kind(en.student_id, e.academic_year_id, es.subject_id) IS NOT NULL) AS entered,
+             AND app.student_exam_subject_kind(en.student_id, e.id, es.subject_id) IS NOT NULL) AS entered,
          COALESCE(st.status, 'open') AS status, su.display_name AS submitted_by, st.submitted_at, st.submitted_by::text AS submitted_by_id,
          vu.display_name AS verified_by, st.verified_at, st.remark
     FROM exams e

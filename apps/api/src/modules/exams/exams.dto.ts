@@ -333,6 +333,19 @@ export const ChoicesListFileSchema = z
     message: 'Give a class or a section',
   });
 export class ChoicesListFileDto extends createZodDto(ChoicesListFileSchema) {}
+/** A subject changed mid-year from an exam (Hindi until PT1, German from PT2), with a reason. */
+export const SubjectChangeSchema = z.object({
+  classSectionId: IdSchema,
+  studentId: IdSchema,
+  fromSubjectId: IdSchema,
+  toSubjectId: IdSchema,
+  /** the first exam with the new subject */
+  fromExamId: IdSchema,
+  reason: z.string().trim().min(3).max(300),
+});
+export class SubjectChangeDto extends createZodDto(SubjectChangeSchema) {}
+export const SubjectChangeUndoSchema = z.object({ classSectionId: IdSchema, changeId: IdSchema });
+export class SubjectChangeUndoDto extends createZodDto(SubjectChangeUndoSchema) {}
 export const ChoicesFindSchema = z.object({ q: z.string().trim().min(1).max(60) });
 export class ChoicesFindDto extends createZodDto(ChoicesFindSchema) {}
 export const ChoicesHistorySchema = z.object({ studentId: IdSchema });

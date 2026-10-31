@@ -206,9 +206,9 @@ export class ExamResultsService {
                    JOIN exam_subjects es ON es.id = p.exam_subject_id
                   WHERE es.exam_id = $3 AND es.class_id = $4 AND pe.student_id = s.id) AS parts,
                 (SELECT array_agg(es.id::text) FROM exam_subjects es WHERE es.exam_id = $3 AND es.class_id = $4
-                    AND app.student_subject_kind(s.id, $2, es.subject_id) IS NULL) AS not_taken,
+                    AND app.student_exam_subject_kind(s.id, es.exam_id, es.subject_id) IS NULL) AS not_taken,
                 (SELECT array_agg(es.id::text) FROM exam_subjects es WHERE es.exam_id = $3 AND es.class_id = $4
-                    AND app.student_subject_kind(s.id, $2, es.subject_id) = 'additional') AS additional,
+                    AND app.student_exam_subject_kind(s.id, es.exam_id, es.subject_id) = 'additional') AS additional,
                 (SELECT jsonb_object_agg(m.exam_subject_id::text, jsonb_build_object('marks', m.marks::text, 'absent', m.absent, 'exempt', m.exempt, 'code', m.code, 'grade', m.grade))
                    FROM mark_entries m JOIN exam_subjects es ON es.id = m.exam_subject_id WHERE es.exam_id = $3 AND m.student_id = s.id) AS marks,
                 r.total::text, r.max_total::text, r.pct::text, r.grade, r.result, r.rank_in_section, r.rank_in_class, r.failed_subjects

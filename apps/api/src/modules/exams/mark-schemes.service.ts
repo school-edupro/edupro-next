@@ -433,6 +433,24 @@ export class MarkSchemesService {
         WHERE academic_year_id = $1 AND student_id = ANY($2::bigint[])`,
       [yearId, ids],
     );
+    // a subject changed mid-year (Hindi until PT1, German from PT2: docs/design/67): the new subject's
+    // line carries the old one's marks in the exams before the change
+    const switched = await c.query<{
+      student: string;
+      from_sub: string;
+      to_sub: string;
+      from_name: string;
+      before: string[] | null;
+    }>(
+      `SELECT ch.student_id::text AS student, ch.from_subject_id::text AS from_sub, ch.to_subject_id::text AS to_sub,
+              sub.name AS from_name,
+              array_agg(x.id::text) FILTER (WHERE app.exam_before(x.id, ch.from_exam_id)) AS before
+         FROM student_subject_changes ch JOIN subjects sub ON sub.id = ch.from_subject_id
+         CROSS JOIN unnest($3::bigint[]) AS x(id)
+        WHERE ch.academic_year_id = $1 AND ch.student_id = ANY($2::bigint[])
+        GROUP BY ch.id, ch.student_id, ch.from_subject_id, ch.to_subject_id, sub.name`,
+      [yearId, ids, examIds],
+    );
     const att = await c.query<{ student: string; present: number; total: number }>(
       `SELECT student_id::text AS student, sum(days_present)::int AS present, sum(days_total)::int AS total
          FROM exam_attendance WHERE exam_id = ANY($1::bigint[]) AND student_id = ANY($2::bigint[]) GROUP BY student_id`,
@@ -495,7 +513,17 @@ export class MarkSchemesService {
           .filter(([sid]) => !mine.length || mine.some((x) => x.subject === sid))
           .map(([sid, sub]) => {
             const marks: Record<string, SchemeMark | undefined> = {};
-            for (const x of es.rows.filter((e) => e.subject_id === sid)) {
+            const carry = switched.rows.find((w) => w.student === s.id && w.to_sub === sid);
+            const before = carry?.before ?? [];
+            const own = [
+              ...es.rows.filter((e) => e.subject_id === sid && !before.includes(e.exam_id)),
+              ...(carry
+                ? es.rows.filter(
+                    (e) => e.subject_id === carry.from_sub && before.includes(e.exam_id),
+                  )
+                : []),
+            ];
+            for (const x of own) {
               const m = markBy.get(`${x.id}|${s.id}`);
               marks[keyOf.get(x.exam_id)!] = {
                 max: Number(x.max),
@@ -523,7 +551,15 @@ export class MarkSchemesService {
             }
             const kind = (mine.find((x) => x.subject === sid)?.kind ??
               'compulsory') as SchemeStudent['subjects'][number]['kind'];
-            return { subjectId: sid, code: sub.code, name: sub.name, kind, marks };
+            const keys = before.map((id) => keyOf.get(id)).filter(Boolean);
+            return {
+              subjectId: sid,
+              code: sub.code,
+              name: sub.name,
+              kind,
+              marks,
+              ...(carry && keys.length ? { note: `${keys.join(', ')} in ${carry.from_name}` } : {}),
+            };
           }),
       };
     });

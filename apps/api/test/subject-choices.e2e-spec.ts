@@ -36,6 +36,7 @@ interface Choices extends Setup {
     stream: string | null;
     subjects: Array<{ subjectId: string; kind: string }>;
     marked: string[];
+    changes: Array<{ id: string; fromExam: string; reason: string }>;
   }>;
 }
 
@@ -863,5 +864,130 @@ describe('subject choices and order (e2e)', () => {
       rows: [{ studentId: ira, subjects: [{ subjectId: subject.HIN! }] }],
     });
     expect(strict.statusCode).toBe(409);
+  });
+
+  it('a subject changed mid-year: French until UT1, Sanskrit from the half-yearly; registers, entry and the term line follow', async () => {
+    const exams = (await call(admin, 'GET', '/exams')).json().data as Array<{
+      id: string;
+      code: string;
+    }>;
+    const ut = exams.find((x) => x.code === 'UT1-SC')!.id;
+    const hy = exams.find((x) => x.code === 'HY-SC')!.id;
+    const mark = (exam: string, code: string, row: Record<string, unknown>) =>
+      call(office, 'PUT', `/exams/${exam}/marks`, {
+        classSectionId: section,
+        subjectId: subject[code],
+        rows: [{ studentId: student.Bela, ...row }],
+      });
+    expect((await mark(ut, 'FRE', { marks: 30 })).statusCode).toBe(200);
+    expect((await mark(hy, 'FRE', { marks: 45 })).statusCode).toBe(200);
+    const change = (u: SeededUser, body: Record<string, unknown>) =>
+      call(u, 'POST', '/exams/subject-choices/change', {
+        classSectionId: section,
+        studentId: student.Bela,
+        fromSubjectId: subject.FRE,
+        toSubjectId: subject.SKT,
+        fromExamId: hy,
+        reason: 'Moved to Sanskrit',
+        ...body,
+      });
+    // the office only; a subject everyone takes, or one of another slot, is not changed
+    expect((await change(teacher, {})).statusCode).toBe(403);
+    expect((await change(admin, { fromSubjectId: subject.ENG })).json().detail).toContain(
+      'everyone takes ENG',
+    );
+    expect((await change(admin, { toSubjectId: subject.MAT })).json().detail).toContain(
+      'not choices of the same slot',
+    );
+    // French has marks in the half-yearly: not from there, until they are NA
+    const busy = await change(admin, {});
+    expect(busy.statusCode).toBe(409);
+    expect(busy.json().detail).toContain('FRE has marks in HY-SC');
+    expect((await mark(hy, 'FRE', { marks: null, code: 'NA' })).statusCode).toBe(200);
+    const done = await change(admin, {});
+    expect(done.statusCode).toBe(201);
+    const bela = of(await choices(), 'Bela');
+    expect(bela.codes).toContain('SKT');
+    expect(bela.codes).not.toContain('FRE');
+    expect(bela.changes).toEqual([
+      expect.objectContaining({ fromExam: 'HY-SC', reason: 'Moved to Sanskrit' }),
+    ]);
+    // the unit test keeps French; the half-yearly has Sanskrit
+    const slots = async (exam: string) => {
+      const sheet = (
+        await call(admin, 'GET', `/exams/${exam}/register-sheet?classSectionId=${section}`)
+      ).json();
+      const row = sheet.rows.find((r: { studentId: string }) => r.studentId === student.Bela);
+      return row.slots.map(
+        (id: string) => sheet.subjects.find((x: { id: string }) => x.id === id).code as string,
+      ) as string[];
+    };
+    expect(await slots(ut)).toContain('FRE');
+    expect(await slots(ut)).not.toContain('SKT');
+    expect(await slots(hy)).toContain('SKT');
+    expect(await slots(hy)).not.toContain('FRE');
+    // the half-yearly's French sheet no longer takes her; Sanskrit does
+    expect((await mark(hy, 'FRE', { marks: 40 })).statusCode).not.toBe(200);
+    expect((await mark(hy, 'SKT', { marks: 44 })).statusCode).toBe(200);
+    // a term line: Sanskrit carries the unit test's French marks
+    const scheme = await call(admin, 'POST', '/exams/schemes', {
+      name: 'Language carry',
+      purpose: 'register',
+      classIds: [classId],
+      def: {
+        exams: [
+          { key: 'UT', examId: ut },
+          { key: 'HY', examId: hy },
+        ],
+        columns: [
+          { key: 'ut', label: 'UT', kind: 'raw', exam: 'UT' },
+          { key: 'hy', label: 'HY', kind: 'raw', exam: 'HY' },
+          { key: 'tot', label: 'Total', kind: 'sum', of: ['ut', 'hy'], total: true },
+        ],
+        result: { passPct: 33, compartmentUpTo: 2, rankBy: 'total' },
+      },
+    });
+    expect(scheme.statusCode).toBe(201);
+    const reg = (
+      await call(
+        admin,
+        'GET',
+        `/exams/schemes/${scheme.json().id as string}/register?classSectionId=${section}`,
+      )
+    ).json();
+    const line = reg.rows
+      .find((r: { studentId: string }) => r.studentId === student.Bela)
+      .subjects.find((x: { code: string }) => x.code === 'SKT');
+    expect(line.note).toBe('UT in French');
+    expect(line.values.UT.v).toBe(30);
+    expect(line.values.HY.v).toBe(44);
+    expect(line.values.TOT.v).toBe(74);
+    expect(
+      reg.rows
+        .find((r: { studentId: string }) => r.studentId === student.Bela)
+        .subjects.some((x: { code: string }) => x.code === 'FRE'),
+    ).toBe(false);
+    // the grid saves her as she is; Sanskrit has marks, so the change is not undone
+    expect(
+      (
+        await call(admin, 'PUT', '/exams/subject-choices', {
+          classSectionId: section,
+          partial: true,
+          rows: [
+            {
+              studentId: student.Bela,
+              stream: bela.stream,
+              subjects: bela.subjects.map((x) => ({ subjectId: x.subjectId })),
+            },
+          ],
+        })
+      ).json(),
+    ).toMatchObject({ saved: 1, refused: [] });
+    const undo = await call(admin, 'POST', '/exams/subject-choices/change/undo', {
+      classSectionId: section,
+      changeId: bela.changes[0]!.id,
+    });
+    expect(undo.statusCode).toBe(409);
+    expect(undo.json().detail).toContain('SKT has marks');
   });
 });

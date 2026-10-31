@@ -121,7 +121,7 @@ export class ExamDateSheetsService {
           // eslint-disable-next-line no-restricted-syntax -- PAPERS / ORDER are fixed fragments of this file
           `${PAPERS} AND e.show_on_portal
              AND es.class_id = (SELECT class_id FROM class_sections WHERE id = $2)
-             AND app.student_subject_kind($3, $1, es.subject_id) IS NOT NULL
+             AND app.student_exam_subject_kind($3, es.exam_id, es.subject_id) IS NOT NULL
            ${ORDER}`,
           [yearId, s.classSectionId, s.id],
         );
