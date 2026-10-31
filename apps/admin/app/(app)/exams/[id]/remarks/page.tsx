@@ -1,4 +1,4 @@
-import { Badge, Button, Card } from '@edupro/ui';
+import { Alert, Badge, Button, Card } from '@edupro/ui';
 import { getTranslations } from 'next-intl/server';
 import { notFound } from 'next/navigation';
 import { AutoSubmit } from '@/components/AutoSubmit';
@@ -128,6 +128,9 @@ export default async function ExamRemarksPage({
             )
           }
         >
+          {reg && reg.remarkBank.length === 0 ? (
+            <Alert tone="warning">{t('noGeneral', { section: sheet.section.code })}</Alert>
+          ) : null}
           <datalist id="rb-general">
             {(reg?.remarkBank ?? []).map((b) => (
               <option key={b.code} value={b.text} />

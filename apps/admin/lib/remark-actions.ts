@@ -45,7 +45,9 @@ export async function saveRemarkCategory(fd: FormData) {
         code: str(fd, 'code').toUpperCase(),
         name: str(fd, 'name'),
         subjectId: str(fd, 'subjectId') || null,
-        classIds: fd.getAll('classIds').map(String).filter(Boolean),
+        // "Every class" chosen: the ticks below it do not count
+        classIds:
+          str(fd, 'classScope') === 'all' ? [] : fd.getAll('classIds').map(String).filter(Boolean),
         freeText: fd.get('freeText') !== null,
         sortOrder: Number(str(fd, 'sortOrder') || '0'),
         status: str(fd, 'status') || 'active',

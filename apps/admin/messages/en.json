@@ -3901,7 +3901,8 @@
       "health": "Health",
       "enteredCount": "{n} entered",
       "openSetup": "Open Set-up",
-      "remarkSetup": "Remark categories and bank"
+      "remarkSetup": "Remark categories and bank",
+      "noGeneral": "No general remark in the bank is for {section}'s class: in Remark categories and bank, give the general remarks Class: Every class (or this class)."
     },
     "health": {
       "title": "Health",

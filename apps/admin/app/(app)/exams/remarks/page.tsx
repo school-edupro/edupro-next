@@ -59,10 +59,10 @@ export default async function RemarkCategoriesPage({
   ]);
   const editing = cats.find((k) => k.code === sp.edit) ?? null;
   const remark = bank.find((b) => b.code === sp.remark) ?? null;
-  const classCode = (ids: string[]) =>
-    ids.length
-      ? ids.map((x) => classes.find((k) => k.id === x)?.code ?? x).join(', ')
-      : 'Every class';
+  // classes by name (a code like DEMO reads like a setting; "Fee Demo" does not)
+  const className = (id: string) => classes.find((k) => k.id === id)?.name ?? id;
+  const classNames = (ids: string[]) =>
+    ids.length ? ids.map(className).join(', ') : 'Every class';
   const groups: Array<{ code: string | null; name: string }> = [
     { code: null, name: 'General remark (no category)' },
     ...cats.map((k) => ({ code: k.code, name: `${k.name} · ${k.code}` })),
@@ -102,7 +102,7 @@ export default async function RemarkCategoriesPage({
                       <td>{k.code}</td>
                       <td>{k.name}</td>
                       <td>{k.subjectName ?? '—'}</td>
-                      <td>{classCode(k.classIds)}</td>
+                      <td>{classNames(k.classIds)}</td>
                       <td>{k.freeText ? 'Free text or the list' : 'The list only'}</td>
                       <td>
                         <Badge tone={k.status === 'active' ? 'success' : 'neutral'}>
@@ -173,7 +173,29 @@ export default async function RemarkCategoriesPage({
                 </label>
               </div>
               <fieldset className="ep-field" style={{ border: 0, padding: 0, margin: 0 }}>
-                <legend className="ep-field__label">Classes (none ticked: every class)</legend>
+                <legend className="ep-field__label">Classes</legend>
+                <div style={{ display: 'flex', gap: 'var(--sp-4)', flexWrap: 'wrap' }}>
+                  <label className="ep-check" htmlFor="rc-scope-all">
+                    <input
+                      id="rc-scope-all"
+                      type="radio"
+                      name="classScope"
+                      value="all"
+                      defaultChecked={!editing?.classIds.length}
+                    />{' '}
+                    Every class
+                  </label>
+                  <label className="ep-check" htmlFor="rc-scope-some">
+                    <input
+                      id="rc-scope-some"
+                      type="radio"
+                      name="classScope"
+                      value="some"
+                      defaultChecked={Boolean(editing?.classIds.length)}
+                    />{' '}
+                    Only the classes ticked below
+                  </label>
+                </div>
                 <div style={{ display: 'flex', gap: 'var(--sp-3)', flexWrap: 'wrap' }}>
                   {classes.map((k) => (
                     <label key={k.id} className="ep-check" htmlFor={`rc-k-${k.id}`}>
@@ -185,7 +207,7 @@ export default async function RemarkCategoriesPage({
                         value={k.id}
                         defaultChecked={editing?.classIds.includes(k.id) ?? false}
                       />
-                      <span className="ep-check__box" aria-hidden="true" /> {k.code}
+                      <span className="ep-check__box" aria-hidden="true" /> {k.name}
                     </label>
                   ))}
                 </div>
@@ -278,7 +300,7 @@ export default async function RemarkCategoriesPage({
                           <tr key={b.code}>
                             <td>{b.code}</td>
                             <td>{b.text}</td>
-                            <td>{b.classCode ?? 'Every class'}</td>
+                            <td>{b.classId ? className(b.classId) : 'Every class'}</td>
                             <td>
                               <Badge tone={b.status === 'active' ? 'success' : 'neutral'}>
                                 {b.status === 'active' ? 'In use' : 'Not in use'}
@@ -343,7 +365,7 @@ export default async function RemarkCategoriesPage({
                     <option value="">Every class</option>
                     {classes.map((k) => (
                       <option key={k.id} value={k.id}>
-                        {k.code}
+                        {k.name}
                       </option>
                     ))}
                   </select>
