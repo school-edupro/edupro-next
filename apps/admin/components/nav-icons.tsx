@@ -32,6 +32,7 @@ const P = {
   arrowUp: 'M12 19V5M5 12l7-7 7 7',
   arrowDown: 'M12 5v14M19 12l-7 7-7-7',
   copy: 'M9 9h11v11H9V9ZM5 15H4V4h11v1',
+  clock: 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18ZM12 7v5l3 2',
   trash: 'M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14M10 11v6M14 11v6',
   pencil: 'M4 20h4L19 9l-4-4L4 16v4ZM13.5 6.5l4 4',
   send: 'M22 2 11 13M22 2l-7 20-4-9-9-4 20-7Z',

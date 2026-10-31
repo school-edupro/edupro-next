@@ -42,7 +42,10 @@
      (↑ ↓; a choice group moves with its subjects), who takes each subject (everyone, one of a group,
      or those who pick it), the choice groups ("Second language: pick 1", or "Additional: pick 0 or
      1", kept out of the total) and, for XI–XII, the streams with their subjects.
-   - **Students**: one row per student: the stream, each group's subject, the other subjects ticked.
+   - **Students**: one row per student, laid out like the old Student Subject Mapping: the stream, then
+     Subject-1, Subject-2, … in the class's order, each with its **Optional** tick (the student's own
+     additional subject, out of the total); **Bulk assign all** on a column sets it for everyone; the
+     bin clears a student back to "not set". Press **Save the choices** to keep the changes.
      **Set many at once** fills a column for those without one; **Missing a choice** lists who is
      left; **Bring last year's choices** fills class XII from XI. The class teacher can do the same
      for their section in the teacher app. A subject with marks stays (mark it NA first).

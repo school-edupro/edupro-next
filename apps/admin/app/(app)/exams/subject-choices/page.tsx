@@ -3,6 +3,7 @@ import { notFound } from 'next/navigation';
 import { AutoSubmit } from '@/components/AutoSubmit';
 import { FileLinks } from '@/components/FileLinks';
 import { Notice } from '@/components/Notice';
+import { Icon } from '@/components/nav-icons';
 import {
   ChoicesSheet,
   type ChoiceGroup,
@@ -345,16 +346,39 @@ export default async function SubjectChoicesPage({
           ) : null}
 
           {choices ? (
-            <div className="ep-rp">
+            <>
               <Card
                 elevated
-                title={`${choices.section.code} · ${String(choices.withChoices)} of ${String(choices.rows.length)} with choices`}
+                title={`All students (${choices.section.code}) · ${String(choices.withChoices)} of ${String(choices.rows.length)} with choices`}
+                style={{ marginBottom: 'var(--sp-4)' }}
+                actions={
+                  <span className="ep-subchoice__toolbar">
+                    <a
+                      className="ep-btn ep-btn--secondary ep-btn--sm"
+                      href={`/api/subject-choices/list?classSectionId=${choices.section.id}&format=xlsx`}
+                    >
+                      <Icon name="download" size={16} /> Export to Excel
+                    </a>
+                    <span className="ep-subchoice__pdf">
+                      Export PDF
+                      <FileLinks
+                        href={`/api/subject-choices/list?classSectionId=${choices.section.id}&format=pdf`}
+                        label={`Subject choices of ${choices.section.code} (PDF)`}
+                      />
+                    </span>
+                    <a
+                      className="ep-btn ep-btn--secondary ep-btn--sm"
+                      href={`/exams/subject-choices?tab=class&classId=${choices.section.classId}`}
+                    >
+                      <Icon name="chart" size={16} /> Subject count report
+                    </a>
+                  </span>
+                }
               >
                 {choices.fromExams ? (
                   <Alert tone="info">
                     {choices.section.className} has no subjects mapped this year: its exams&rsquo;
-                    subjects are shown; tick each student&rsquo;s. Map the class&rsquo;s subjects
-                    under{' '}
+                    subjects are shown, each as an elective. Map the class&rsquo;s subjects under{' '}
                     <a href="/masters/academics?tab=class_subjects">
                       Masters → Class and subject mapping
                     </a>{' '}
@@ -362,9 +386,15 @@ export default async function SubjectChoicesPage({
                   </Alert>
                 ) : !choices.placed && canSetUp ? (
                   <Alert tone="info">
-                    The class&rsquo;s subjects print in the subject master&rsquo;s order until you
-                    set its own under <a href={base('setup')}>Class set-up</a>.
+                    Subject-1, Subject-2, … follow the subject master&rsquo;s order until you set
+                    the class&rsquo;s own under <a href={base('setup')}>Class set-up</a> (groups
+                    such as &ldquo;Second language&rdquo;, sub-subjects, streams).
                   </Alert>
+                ) : null}
+                {!choices.canEdit ? (
+                  <p className="ep-field__help" style={{ marginTop: 0 }}>
+                    The office or the section&rsquo;s class teacher sets the choices.
+                  </p>
                 ) : null}
                 {!choices.subjects.length ? (
                   <p>
@@ -375,6 +405,7 @@ export default async function SubjectChoicesPage({
                   <ChoicesSheet
                     key={`${choices.section.id}-${initialQuery}`}
                     classSectionId={choices.section.id}
+                    sectionCode={choices.section.code}
                     subjects={choices.subjects}
                     groups={choices.groups}
                     streams={choices.streams}
@@ -394,10 +425,10 @@ export default async function SubjectChoicesPage({
                   />
                 )}
               </Card>
-              <Card elevated title="Quick ways">
+              <div className="ep-subchoice__more">
                 {choices.canEdit ? (
-                  <>
-                    <form action={lastYearChoices} style={{ marginBottom: 'var(--sp-4)' }}>
+                  <Card title="Bring last year’s choices">
+                    <form action={lastYearChoices}>
                       <input type="hidden" name="classSectionId" value={choices.section.id} />
                       <p style={{ marginTop: 0 }}>
                         Students without choices take their last year&rsquo;s subjects and stream
@@ -408,56 +439,47 @@ export default async function SubjectChoicesPage({
                       </Button>
                     </form>
                     {choices.subjects.some((x) => x.take === 'all') ? (
-                      <form action={fillSubjectChoices} style={{ marginBottom: 'var(--sp-4)' }}>
+                      <form action={fillSubjectChoices} style={{ marginTop: 'var(--sp-4)' }}>
                         <input type="hidden" name="classSectionId" value={choices.section.id} />
                         <p style={{ marginTop: 0 }}>
-                          Students without choices take only the compulsory subjects.
+                          Or students without choices take only the compulsory subjects.
                         </p>
                         <Button type="submit" variant="secondary" size="sm">
                           Give them the compulsory subjects
                         </Button>
                       </form>
                     ) : null}
-                  </>
-                ) : (
-                  <p style={{ marginTop: 0 }}>
-                    The office or the section&rsquo;s class teacher sets the choices.
-                  </p>
-                )}
-                <h3 className="ep-field__label">The section&rsquo;s list</h3>
-                <p style={{ display: 'flex', gap: 'var(--sp-3)', flexWrap: 'wrap' }}>
-                  <span>
-                    PDF, landscape{' '}
-                    <FileLinks
-                      href={`/api/subject-choices/list?classSectionId=${choices.section.id}&format=pdf`}
-                      label={`Subject choices of ${choices.section.code} (PDF, landscape)`}
-                    />
-                  </span>
-                  <span>
-                    PDF, upright{' '}
-                    <FileLinks
-                      href={`/api/subject-choices/list?classSectionId=${choices.section.id}&format=pdf&portrait=true`}
-                      label={`Subject choices of ${choices.section.code} (PDF, upright)`}
-                    />
-                  </span>
-                </p>
-                <h3 className="ep-field__label">Excel to fill and upload</h3>
-                <p>
-                  <a
-                    className="ep-btn ep-btn--secondary ep-btn--sm"
-                    href={`/api/subject-choices/excel?classSectionId=${choices.section.id}`}
-                  >
-                    Download as Excel
-                  </a>
-                </p>
-                {choices.canEdit ? (
-                  <ExcelUpload
-                    label="Upload the filled sheet"
-                    upload={uploadSubjectChoices.bind(null, choices.section.id)}
-                  />
+                  </Card>
                 ) : null}
-              </Card>
-            </div>
+                <Card title="Fill in Excel">
+                  <p style={{ marginTop: 0 }}>
+                    The sheet has a column per group, the stream and &ldquo;Additional (out of
+                    total)&rdquo;; fill it and upload it back.
+                  </p>
+                  <p>
+                    <a
+                      className="ep-btn ep-btn--secondary ep-btn--sm"
+                      href={`/api/subject-choices/excel?classSectionId=${choices.section.id}`}
+                    >
+                      Download the sheet to fill
+                    </a>
+                  </p>
+                  {choices.canEdit ? (
+                    <ExcelUpload
+                      label="Upload the filled sheet"
+                      upload={uploadSubjectChoices.bind(null, choices.section.id)}
+                    />
+                  ) : null}
+                </Card>
+                <Card title="Print">
+                  <p style={{ marginTop: 0 }}>The section&rsquo;s list, A4 upright.</p>
+                  <FileLinks
+                    href={`/api/subject-choices/list?classSectionId=${choices.section.id}&format=pdf&portrait=true`}
+                    label={`Subject choices of ${choices.section.code} (PDF, upright)`}
+                  />
+                </Card>
+              </div>
+            </>
           ) : null}
 
           {counts && classSetup ? (

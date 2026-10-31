@@ -147,3 +147,17 @@ class**; parts show in the **registers**, the report card prints the **total** o
   an exam's subjects are saved and when the class set-up is saved (for the year's exams). Each part's
   teacher enters it (existing part entry); the parts add up to the subject's marks, so results and the
   card read the total as before. An exam may still change its parts on its own set-up.
+
+## The Students grid in the legacy layout (31 Oct)
+
+The section grid looks like the legacy Student Subject Mapping, on the same rules: a row per student
+(Sr no. with the bin = Clear and the history clock, Name with admission no and what is missing), Stream,
+then **Subject-1 … Subject-n** in the class's order. A slot is a subject everyone takes (shown fixed), one
+pick of a choice group (a group that takes two has two slots), or an elective ("Select subject" / the
+subject). Under each drop-down the **Optional** tick = the student's own additional subject (kept out of
+the total; an additional group's subjects are ticked and fixed); a subject entered in parts lists its
+sub-subjects ticked (they come from Class set-up, not per student). Each column heading has **Bulk
+assign all** (every student of the section; nothing is saved until Save); Stream has **Bulk stream all**.
+The card's toolbar: Export to Excel, Export PDF (view / download), Subject count report (the Whole class
+tab); "Find a student in any section" stays above. Bring last year's choices, the Excel to fill and the
+upright print sit in cards under the grid. Styles: `.ep-subchoice*` in packages/ui app.css (tokens only).

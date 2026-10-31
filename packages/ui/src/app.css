@@ -13234,3 +13234,120 @@ a.ep-pub-foot__item {
   color: var(--text-heading);
   font-weight: var(--fw-semibold);
 }
+
+/* Subject choices: the legacy Student Subject Mapping grid (docs/design/67) */
+.ep-subchoice__tools {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-3);
+  align-items: flex-end;
+  justify-content: space-between;
+  margin-bottom: var(--sp-3);
+}
+.ep-subchoice__table th,
+.ep-subchoice__table td {
+  vertical-align: top;
+}
+.ep-subchoice__table thead th {
+  min-width: 11rem;
+}
+.ep-subchoice__table thead th:first-child {
+  min-width: 5.5rem;
+}
+.ep-subchoice__table thead th:nth-child(2) {
+  min-width: 12rem;
+}
+.ep-subchoice__table td .ep-select {
+  min-width: 10rem;
+  font-size: var(--fs-small);
+}
+.ep-subchoice__bulk {
+  display: block;
+  width: 100%;
+  margin-top: var(--sp-1);
+  font-family: var(--font-body);
+  font-weight: var(--fw-regular);
+  letter-spacing: normal;
+  text-transform: none;
+}
+.ep-subchoice__srno {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-1);
+}
+.ep-subchoice__icon {
+  display: inline-grid;
+  place-items: center;
+  width: 1.75rem;
+  height: 1.75rem;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  background: var(--surface-card);
+  color: var(--mob-navy-800);
+  cursor: pointer;
+}
+.ep-subchoice__icon:hover {
+  border-color: var(--border-accent);
+  background: var(--mob-cyan-50);
+}
+button.ep-subchoice__icon:hover {
+  color: var(--status-danger);
+}
+.ep-subchoice__icon:focus-visible {
+  outline: 2px solid var(--border-accent);
+  outline-offset: 2px;
+}
+.ep-subchoice__name {
+  font-weight: var(--fw-semibold);
+}
+.ep-subchoice__fixed {
+  display: inline-block;
+  min-width: 10rem;
+  padding: var(--sp-1) var(--sp-2);
+  border: 1px dashed var(--border-default);
+  border-radius: var(--radius-sm);
+  background: var(--surface-subtle);
+  color: var(--text-heading);
+  font-size: var(--fs-small);
+}
+.ep-subchoice__parts {
+  display: block;
+  margin-top: var(--sp-1);
+}
+.ep-subchoice__opt,
+.ep-subchoice__parts label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-2);
+  margin-top: var(--sp-1);
+  font-size: var(--fs-small);
+  color: var(--text-body);
+}
+.ep-subchoice__parts label {
+  color: var(--text-heading);
+}
+.ep-subchoice__toolbar {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+  align-items: center;
+}
+.ep-subchoice__toolbar .ep-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-1);
+}
+.ep-subchoice__pdf {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-1);
+  font-size: var(--fs-small);
+  color: var(--text-heading);
+}
+.ep-subchoice__more {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
+  gap: var(--sp-4);
+  margin-bottom: var(--sp-4);
+}
