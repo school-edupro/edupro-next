@@ -925,5 +925,37 @@ describe('examinations v2 (e2e)', () => {
       }>
     ).find((x) => x.student.name === 'Asha Exam')!.terms;
     expect(terms.map((x) => [x.kind, x.name])).toEqual([['exam', 'Periodic Test 1']]);
+    expect(terms[0]).toMatchObject({ feeDue: false, withheld: false });
+    // the family opens the card at once, printed with the class's design (the test slip)
+    const page = await call(
+      parent,
+      'GET',
+      `/exams/mine/report-cards/${pt.json().id}/${student.Asha}/view`,
+    );
+    expect(page.statusCode).toBe(200);
+    expect(page.json().html).toContain('Marks obtained');
+    // not the revoked term card, and not another family's child
+    const t1 = (
+      (await call(admin, 'GET', '/exams/report-cards/releases')).json().data as Array<{
+        id: string;
+        termCode: string;
+      }>
+    ).find((r) => r.termCode === 'T1')!;
+    expect(
+      (await call(parent, 'GET', `/exams/mine/report-cards/${t1.id}/${student.Asha}/view`))
+        .statusCode,
+    ).toBe(404);
+    expect(
+      (await call(parent, 'GET', `/exams/mine/report-cards/${pt.json().id}/${student.Chitra}/view`))
+        .statusCode,
+    ).toBe(404);
+    // the school's preview of one student: the design of the student's class
+    const pre = await call(
+      admin,
+      'GET',
+      `/exams/report-cards/releases/${pt.json().id}/students/${student.Chitra}/preview`,
+    );
+    expect(pre.statusCode).toBe(200);
+    expect(pre.json().html).toContain('Marks obtained');
   });
 });

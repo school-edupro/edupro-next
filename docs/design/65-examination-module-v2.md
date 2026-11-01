@@ -535,3 +535,11 @@ exam cards print a **new ready-made test slip** by default; families see **every
   API `GET /exams/report-cards/classes/:classId/cards`.
 - Parent app: each card shows Exam card / Term card / Annual card (`mine` returns `kind`).
 - Tests: db `report-card.test.ts` (the slip); `exams-v2.e2e-spec.ts` "a class has several cards live".
+- Fix (1 Nov, "the report card does not show" in the parent app): the PDF waits for the workers, and the
+  page needed a manual Refresh. Now **View report card** opens the card at once
+  (`GET /exams/mine/report-cards/:releaseId/:studentId/view`, the PDF's checks: published for the
+  child's class, not held, the fee rule), the PDF notice refreshes by itself (ExportWatcher), the empty
+  marks table is gone, and a held or fee-withheld card says so up front (`mine` returns `held`, `feeDue`
+  worked out today from `mart.fee_dues`). The admin Preview took the release's first design for every
+  student; it now uses `GET /exams/report-cards/releases/:id/students/:studentId/preview`, the design of
+  the student's class (class → band → band's first active, as the worker).

@@ -169,7 +169,10 @@ see who submitted or verified it and to submit, verify, send back or reopen it.
      in the parent app (withheld and held cards stay hidden). **Revoke VI** (with a reason) hides that
      class's cards again and lets its marks be reopened; revoking the last class withdraws the release.
      The table shows, per class, whether it is ready, when it was published and how many messages went.
-4. Families download their own card from the parent app once the release is published.
+4. Families see their child's published cards in the parent app (**Results**): **View report card**
+   opens the card at once (to read, print or save), and **Report card PDF** also makes the PDF in the
+   background (the page shows it by itself when it is ready; the workers make it). A card held by the
+   school, or withheld while a fee is due, says so instead of the buttons.
 5. **Insights → Results analytics**: pass % and mean by class and section, weakest subjects.
 6. **Exams → open exam → Reports**: the section-wise subject analysis, mark ranges (the class's grade
    scale, or your own ranges), toppers (top N in the class or section, at or above / below a %, or a

@@ -216,6 +216,19 @@ export class ReportCardsController {
     return this.cards.renderBatch(ctx, id, body);
   }
 
+  @Get('releases/:id/students/:studentId/preview')
+  @ApiOperation({ summary: "One student's card as HTML, with the design of the student's class" })
+  @RequirePermission(REPORT_CARDS.view)
+  studentPreview(
+    @ReqCtx() ctx: RequestContext,
+    @Param('id') id: string,
+    @Param('studentId') studentId: string,
+  ) {
+    if (!/^\d{1,18}$/.test(id) || !/^\d{1,18}$/.test(studentId))
+      throw new DomainError('validation-failed', 'Unknown student', { status: 400 });
+    return this.cards.studentPreview(ctx, id, studentId);
+  }
+
   @Post('releases/:id/students/:studentId/render')
   @RequirePermission(REPORT_CARDS.manage)
   renderOne(
@@ -254,6 +267,21 @@ export class FamilyResultsController {
     @Param('studentId') studentId: string,
   ) {
     return this.cards.myReportCardPdf(ctx, releaseId, studentId);
+  }
+
+  @Get('report-cards/:releaseId/:studentId/view')
+  @ApiOperation({
+    summary: 'My child’s report card as a page, at once (the same checks as the PDF)',
+  })
+  @RequirePermission(REPORT_CARDS.familyView)
+  view(
+    @ReqCtx() ctx: RequestContext,
+    @Param('releaseId') releaseId: string,
+    @Param('studentId') studentId: string,
+  ) {
+    if (!/^\d{1,18}$/.test(releaseId) || !/^\d{1,18}$/.test(studentId))
+      throw new DomainError('not-found', 'Report card not found', { status: 404 });
+    return this.cards.myReportCardHtml(ctx, releaseId, studentId);
   }
 
   @Get('exports/:id')

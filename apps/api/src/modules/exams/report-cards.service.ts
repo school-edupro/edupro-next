@@ -1138,7 +1138,10 @@ export class ReportCardsService {
                   (SELECT jsonb_agg(jsonb_build_object('code', e.code, 'name', e.name, 'pct', x.pct::text, 'grade', x.grade, 'result', x.result, 'rank', x.rank_in_section) ORDER BY array_position(r.exam_ids, e.id))
                      FROM exams e LEFT JOIN exam_results x ON x.exam_id = e.id AND x.student_id = $1 WHERE e.id = ANY(r.exam_ids) AND e.show_on_portal) AS exams,
                   rc.withheld, rc.export_id::text,
-                  EXISTS (SELECT 1 FROM report_card_holds h WHERE h.release_id = r.id AND h.student_id = $1) AS held
+                  EXISTS (SELECT 1 FROM report_card_holds h WHERE h.release_id = r.id AND h.student_id = $1) AS held,
+                  -- the fee rule as it stands today (the card's own record only knows the last PDF)
+                  r.hide_defaulters AND (SELECT COALESCE(sum(d.balance), 0) FROM mart.fee_dues d
+                     WHERE d.student_id = $1 AND d.academic_year_id = r.academic_year_id AND d.due_on <= CURRENT_DATE) > r.defaulter_min AS fee_due
              FROM report_card_releases r
              LEFT JOIN report_cards rc ON rc.release_id = r.id AND rc.student_id = $1
             WHERE r.academic_year_id = app.current_academic_year_id() AND r.status = 'released'
@@ -1160,7 +1163,9 @@ export class ReportCardsService {
             name: String(r.name),
             releasedAt: r.released_at ? new Date(r.released_at as string).toISOString() : null,
             exams: r.held ? [] : ((r.exams as unknown[]) ?? []),
-            withheld: Boolean(r.withheld) || Boolean(r.held),
+            withheld: Boolean(r.withheld) || Boolean(r.held) || Boolean(r.fee_due),
+            /** withheld today by the fee rule: the card opens once the dues are cleared */
+            feeDue: Boolean(r.fee_due),
             /** held back by the school: the office tells the family why (docs/design/65) */
             held: Boolean(r.held),
           })),
@@ -1175,49 +1180,9 @@ export class ReportCardsService {
     const v = await this.viewer.resolve(ctx, 'exams.family.view');
     if (v.kind !== 'family' || !v.students.some((s) => s.id === studentId))
       throw new DomainError('not-found', 'Report card not found', { status: 404 });
-    const info = await this.db.tenant(requireTenant(ctx), async (c) => {
-      const rel = await this.findRelease(c, releaseId);
-      if (!rel || rel.status !== 'released')
-        throw new DomainError('not-found', 'Report card not found', { status: 404 });
-      const open = await c.query(
-        `SELECT 1 FROM report_card_releases r WHERE r.id = $2 AND EXISTS (SELECT 1 FROM report_card_release_classes rcl
-           JOIN class_sections ocs ON ocs.class_id = rcl.class_id AND ocs.academic_year_id = r.academic_year_id
-           JOIN enrolments oen ON oen.class_section_id = ocs.id AND oen.student_id = $1 AND oen.status = 'active'
-          WHERE rcl.release_id = r.id AND rcl.status = 'released')`,
-        [studentId, releaseId],
-      );
-      if (!open.rowCount)
-        throw new DomainError('not-found', 'Report card not found', { status: 404 });
-      const held = await c.query(
-        `SELECT 1 FROM report_card_holds WHERE release_id = $1 AND student_id = $2`,
-        [releaseId, studentId],
-      );
-      if (held.rowCount)
-        throw new DomainError(
-          'report_card.held',
-          'The school has held this report card: please contact the class teacher or the office',
-          { status: 409 },
-        );
-      if (rel.hideDefaulters) {
-        const data = await loadReportCardData(c, {
-          studentId,
-          examIds: rel.examIds,
-          termCode: rel.termCode,
-          termName: rel.name,
-          defaulterMin: Number(rel.defaulterMin),
-        });
-        if (data.fees.defaulter)
-          throw new DomainError(
-            'report_card.withheld',
-            'The report card is available once the fee dues are cleared',
-            {
-              status: 409,
-              extra: { balance: data.fees.balance },
-            },
-          );
-      }
-      return rel;
-    });
+    const info = await this.db.tenant(requireTenant(ctx), (c) =>
+      this.familyCard(c, releaseId, studentId),
+    );
     const exp = await this.reports.createRenderedForOwner(
       ctx,
       {
@@ -1229,6 +1194,129 @@ export class ReportCardsService {
       'exams.report_card.render_family',
     );
     return { exportId: exp.id, status: exp.status };
+  }
+
+  /**
+   * A family's own card as a page, at once (1 Nov 2026): the same checks as the PDF (published for the
+   * child's class, not held, the fee rule), printed with the design the PDF uses; the browser prints or
+   * saves it while the PDF is made in the background.
+   */
+  async myReportCardHtml(ctx: RequestContext, releaseId: string, studentId: string) {
+    const v = await this.viewer.resolve(ctx, 'exams.family.view');
+    if (v.kind !== 'family' || !v.students.some((s) => s.id === studentId))
+      throw new DomainError('not-found', 'Report card not found', { status: 404 });
+    return this.db.tenant(requireTenant(ctx), async (c) => {
+      const rel = await this.familyCard(c, releaseId, studentId);
+      return { html: await this.studentCardHtml(c, rel, studentId) };
+    });
+  }
+
+  /** The school's preview of one student's card in a release, with the design of the student's class. */
+  async studentPreview(ctx: RequestContext, releaseId: string, studentId: string) {
+    return this.db.tenant(requireTenant(ctx), async (c) => {
+      const rel = await this.findRelease(c, releaseId);
+      if (!rel) throw new DomainError('not-found', 'Release not found', { status: 404 });
+      return { html: await this.studentCardHtml(c, rel, studentId) };
+    });
+  }
+
+  /** A family may open the card: published for the child's class, not held, not withheld for fees. */
+  private async familyCard(c: PoolClient, releaseId: string, studentId: string) {
+    const rel = await this.findRelease(c, releaseId);
+    if (!rel || rel.status !== 'released')
+      throw new DomainError('not-found', 'Report card not found', { status: 404 });
+    const open = await c.query(
+      `SELECT 1 FROM report_card_releases r WHERE r.id = $2 AND EXISTS (SELECT 1 FROM report_card_release_classes rcl
+         JOIN class_sections ocs ON ocs.class_id = rcl.class_id AND ocs.academic_year_id = r.academic_year_id
+         JOIN enrolments oen ON oen.class_section_id = ocs.id AND oen.student_id = $1 AND oen.status = 'active'
+        WHERE rcl.release_id = r.id AND rcl.status = 'released')`,
+      [studentId, releaseId],
+    );
+    if (!open.rowCount)
+      throw new DomainError('not-found', 'Report card not found', { status: 404 });
+    const held = await c.query(
+      `SELECT 1 FROM report_card_holds WHERE release_id = $1 AND student_id = $2`,
+      [releaseId, studentId],
+    );
+    if (held.rowCount)
+      throw new DomainError(
+        'report_card.held',
+        'The school has held this report card: please contact the class teacher or the office',
+        { status: 409 },
+      );
+    if (rel.hideDefaulters) {
+      const data = await loadReportCardData(c, {
+        studentId,
+        examIds: rel.examIds,
+        termCode: rel.termCode,
+        termName: rel.name,
+        defaulterMin: Number(rel.defaulterMin),
+      });
+      if (data.fees.defaulter)
+        throw new DomainError(
+          'report_card.withheld',
+          'The report card is available once the fee dues are cleared',
+          {
+            status: 409,
+            extra: { balance: data.fees.balance },
+          },
+        );
+    }
+    return rel;
+  }
+
+  /**
+   * One student's card as HTML with the design the PDF uses: the one chosen for the student's class,
+   * else the band's on the release, else the band's first active design (as the worker picks it).
+   */
+  private async studentCardHtml(c: PoolClient, rel: ReleaseRow, studentId: string) {
+    const k = await c.query<{ band: string | null; display_order: number; class_id: string }>(
+      `SELECT k.band::text, k.display_order, k.id::text AS class_id
+         FROM enrolments en JOIN class_sections cs ON cs.id = en.class_section_id JOIN classes k ON k.id = cs.class_id
+        WHERE en.student_id = $1 AND en.academic_year_id = app.current_academic_year_id()
+        ORDER BY (en.status = 'active') DESC, en.id DESC LIMIT 1`,
+      [studentId],
+    );
+    if (!k.rows[0])
+      throw new DomainError('not-found', 'The pupil is not enrolled in the working year', {
+        status: 404,
+      });
+    const band = bandFor(k.rows[0].band, k.rows[0].display_order);
+    const chosen = rel.templates[`class_${k.rows[0].class_id}`] ?? rel.templates[band];
+    const t = chosen
+      ? await this.findTemplate(c, chosen)
+      : await c
+          .query<Record<string, unknown>>(
+            // eslint-disable-next-line no-restricted-syntax -- T_COLS is a constant
+            `SELECT ${T_COLS} FROM report_card_templates WHERE band = $1::class_band AND status = 'active' AND deleted_at IS NULL ORDER BY code LIMIT 1`,
+            [band],
+          )
+          .then((r) => (r.rows[0] ? toTemplate(r.rows[0]) : null));
+    if (!t)
+      throw new DomainError(
+        'report_card.no_template',
+        `No active report-card template for the ${band} band; install the defaults or design one`,
+        { status: 409 },
+      );
+    const data = await loadReportCardData(c, {
+      studentId,
+      examIds: rel.examIds,
+      termCode: rel.termCode,
+      termName: rel.name,
+      defaulterMin: Number(rel.defaulterMin),
+    });
+    await this.signatures.fill(data.signatures ?? []);
+    await this.signatures.fill(data.hpc?.portfolio ?? []);
+    return reportCardDocument(
+      {
+        layout: t.layout,
+        bodyHtml: t.bodyHtml,
+        stylesCss: t.stylesCss,
+        pageWidth: t.pageWidth,
+        pageHeight: t.pageHeight,
+      },
+      [{ data }],
+    );
   }
 
   async myExportStatus(ctx: RequestContext, exportId: string) {

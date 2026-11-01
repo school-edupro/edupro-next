@@ -3,6 +3,7 @@ import { Badge, Card, PageHeader } from '@edupro/ui';
 import { ApiError } from '@edupro/bff';
 import { redirect } from 'next/navigation';
 import { ChildSwitch } from '@/components/ChildSwitch';
+import { ExportWatcher } from '@/components/ExportWatcher';
 import { chosenChild } from '@/lib/child';
 import { bff } from '@/lib/bff';
 import { currentLang, t } from '@/lib/i18n';
@@ -24,6 +25,9 @@ interface Term {
     rank: number | null;
   }>;
   withheld: boolean;
+  /** held back by the school, or withheld today by the fee rule */
+  held?: boolean;
+  feeDue?: boolean;
 }
 interface Res {
   children: Array<{ student: { id: string; name: string; section: string | null }; terms: Term[] }>;
@@ -101,7 +105,12 @@ export default async function ResultsPage({
         >
           {sp.error === 'report_card.withheld'
             ? t(lang, 'The report card is available once the fee dues are cleared.')
-            : sp.detail || sp.error}
+            : sp.error === 'report_card.held'
+              ? t(
+                  lang,
+                  'The school has held this report card: please contact the class teacher or the office.',
+                )
+              : sp.detail || sp.error}
         </div>
       ) : null}
       {sp.saved ? (
@@ -132,8 +141,11 @@ export default async function ResultsPage({
             </span>
           ) : (
             <>
-              {t(lang, 'The report card PDF is being prepared.')}{' '}
-              <a href={`/results?export=${exportStatus.export.id}`}>{t(lang, 'Refresh')}</a>
+              {t(
+                lang,
+                'The report card PDF is being prepared; it appears here by itself. Meanwhile, View report card shows it at once.',
+              )}
+              <ExportWatcher id={exportStatus.export.id} url={null} />
             </>
           )}
         </div>
@@ -222,62 +234,86 @@ export default async function ResultsPage({
                       )}
                     </Badge>
                   </span>
-                  <form action={queueMyReportCardPdf}>
-                    <input type="hidden" name="releaseId" value={term.releaseId} />
-                    <input type="hidden" name="studentId" value={c.student.id} />
-                    <button type="submit" className="ep-btn ep-btn--secondary ep-btn--sm">
-                      {t(lang, 'Report card PDF')}
-                    </button>
-                  </form>
+                  {term.held || term.feeDue ? null : (
+                    <span style={{ display: 'inline-flex', gap: 'var(--sp-2)', flexWrap: 'wrap' }}>
+                      <a
+                        className="ep-btn ep-btn--primary ep-btn--sm"
+                        href={`/api/report-card/${term.releaseId}/${c.student.id}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                      >
+                        {t(lang, 'View report card')}
+                      </a>
+                      <form action={queueMyReportCardPdf}>
+                        <input type="hidden" name="releaseId" value={term.releaseId} />
+                        <input type="hidden" name="studentId" value={c.student.id} />
+                        <button type="submit" className="ep-btn ep-btn--secondary ep-btn--sm">
+                          {t(lang, 'Report card PDF')}
+                        </button>
+                      </form>
+                    </span>
+                  )}
                 </div>
-                <table
-                  className="ep-table ep-table--dense"
-                  style={{ width: '100%', marginTop: 'var(--sp-2)' }}
-                >
-                  <thead>
-                    <tr>
-                      <th>{t(lang, 'Exam')}</th>
-                      <th style={{ textAlign: 'right' }}>%</th>
-                      <th>{t(lang, 'Grade')}</th>
-                      <th>{t(lang, 'Result')}</th>
-                      <th style={{ textAlign: 'right' }}>{t(lang, 'Rank')}</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {term.exams.map((ex) => (
-                      <tr key={ex.code}>
-                        <td>{ex.name}</td>
-                        <td style={{ textAlign: 'right' }}>{ex.pct ?? '—'}</td>
-                        <td>{ex.grade ?? ''}</td>
-                        <td>
-                          {ex.result ? (
-                            <Badge
-                              tone={
-                                ex.result === 'pass'
-                                  ? 'success'
-                                  : ex.result === 'fail'
-                                    ? 'danger'
-                                    : 'warning'
-                              }
-                            >
-                              {t(
-                                lang,
-                                ex.result === 'pass'
-                                  ? 'Pass'
-                                  : ex.result === 'fail'
-                                    ? 'Needs improvement'
-                                    : 'Incomplete',
-                              )}
-                            </Badge>
-                          ) : (
-                            ''
-                          )}
-                        </td>
-                        <td style={{ textAlign: 'right' }}>{ex.rank ?? ''}</td>
+                {term.held || term.feeDue ? (
+                  <p className="ep-alert ep-alert--warning" style={{ margin: 'var(--sp-2) 0 0' }}>
+                    {term.held
+                      ? t(
+                          lang,
+                          'The school has held this report card: please contact the class teacher or the office.',
+                        )
+                      : t(lang, 'The report card is available once the fee dues are cleared.')}
+                  </p>
+                ) : null}
+                {term.exams.length ? (
+                  <table
+                    className="ep-table ep-table--dense"
+                    style={{ width: '100%', marginTop: 'var(--sp-2)' }}
+                  >
+                    <thead>
+                      <tr>
+                        <th>{t(lang, 'Exam')}</th>
+                        <th style={{ textAlign: 'right' }}>%</th>
+                        <th>{t(lang, 'Grade')}</th>
+                        <th>{t(lang, 'Result')}</th>
+                        <th style={{ textAlign: 'right' }}>{t(lang, 'Rank')}</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
+                    </thead>
+                    <tbody>
+                      {term.exams.map((ex) => (
+                        <tr key={ex.code}>
+                          <td>{ex.name}</td>
+                          <td style={{ textAlign: 'right' }}>{ex.pct ?? '—'}</td>
+                          <td>{ex.grade ?? ''}</td>
+                          <td>
+                            {ex.result ? (
+                              <Badge
+                                tone={
+                                  ex.result === 'pass'
+                                    ? 'success'
+                                    : ex.result === 'fail'
+                                      ? 'danger'
+                                      : 'warning'
+                                }
+                              >
+                                {t(
+                                  lang,
+                                  ex.result === 'pass'
+                                    ? 'Pass'
+                                    : ex.result === 'fail'
+                                      ? 'Needs improvement'
+                                      : 'Incomplete',
+                                )}
+                              </Badge>
+                            ) : (
+                              ''
+                            )}
+                          </td>
+                          <td style={{ textAlign: 'right' }}>{ex.rank ?? ''}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                ) : null}
               </div>
             ))}
           </Card>
