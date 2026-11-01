@@ -992,7 +992,9 @@ export interface SheetCell {
   /** the link that opens the drill (default: the cell's text) */
   drillLabel?: string;
   /** a status after the text (Complete, Partial …) */
-  badge?: { label: string; tone: 'success' | 'warning' | 'danger' | 'neutral' };
+  badge?: { label: string; tone: 'success' | 'warning' | 'danger' | 'neutral' | 'info' };
+  /** "obtained / maximum": the obtained in bold, the maximum muted */
+  ratio?: boolean;
   /** centred (a report's counts, #, admission no) */
   center?: boolean;
   /** in bold */

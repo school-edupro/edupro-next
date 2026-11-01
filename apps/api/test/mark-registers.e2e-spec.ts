@@ -475,8 +475,10 @@ describe('mark registers like the legacy Term Mark Register (e2e)', () => {
       'Dev',
       'Bhanu',
     ]);
-    const teacher = (await run(`${A}&report=teacher`)).blocks[0]!;
-    expect(teacher.sheet.body[0]!.cells[0]!.t).toBe('Not assigned');
+    // no subject teacher is assigned in this school: every line is under "No teacher mapped"
+    const teacher = await run(`${A}&report=teacher`);
+    expect(teacher.blocks.map((b) => b.title)).toEqual(['NO TEACHER MAPPED']);
+    expect(teacher.blocks[0]!.sheet.foot![0]!.t).toMatch(/^Total — \d+ classes$/);
     const risk = (await run(`${A}&report=risk&margin=10`)).blocks[0]!;
     expect(risk.sheet.body.map((r) => r.cells[0]!.t)).toContain('Watch');
     const failing = (await run(`${VI}&report=failing`)).blocks[0]!;

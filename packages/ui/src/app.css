@@ -13906,6 +13906,9 @@ button.ep-subchoice__icon:hover {
   margin-left: var(--sp-2);
   vertical-align: middle;
 }
+.ep-mr-badge:first-child {
+  margin-left: 0;
+}
 .ep-mr-muted {
   color: var(--text-muted);
 }

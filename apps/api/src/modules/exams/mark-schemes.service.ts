@@ -1571,17 +1571,17 @@ export class MarkSchemesService {
    * (`${sectionId}|class`).
    */
   private async teachersOf(c: PoolClient, yearId: string, sectionIds: string[]) {
-    const r = await c.query<{ section: string; subject: string; name: string }>(
+    const r = await c.query<{ section: string; subject: string; names: string[] }>(
       `SELECT ta.class_section_id::text AS section,
               CASE WHEN ta.kind = 'class_teacher' THEN 'class' ELSE ta.subject_id::text END AS subject,
-              string_agg(DISTINCT COALESCE(e.display_name, concat_ws(' ', e.first_name, e.last_name)), ', ') AS name
+              array_agg(DISTINCT COALESCE(e.display_name, concat_ws(' ', e.first_name, e.last_name))) AS names
          FROM teacher_assignments ta JOIN employees e ON e.id = ta.employee_id
         WHERE ta.academic_year_id = $1 AND ta.class_section_id = ANY($2::bigint[]) AND ta.valid_to IS NULL
           AND ((ta.kind = 'subject_teacher' AND ta.subject_id IS NOT NULL) OR ta.kind = 'class_teacher')
         GROUP BY 1, 2`,
       [yearId, sectionIds],
     );
-    return Object.fromEntries(r.rows.map((x) => [`${x.section}|${x.subject}`, x.name]));
+    return Object.fromEntries(r.rows.map((x) => [`${x.section}|${x.subject}`, x.names]));
   }
 
   private async letterhead(c: PoolClient) {

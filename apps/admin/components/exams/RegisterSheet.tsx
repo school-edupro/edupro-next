@@ -79,11 +79,20 @@ function CellBody({ c }: { c: SheetCell }) {
     warning: 'warning',
     danger: 'danger',
     neutral: 'neutral',
+    info: 'info',
   } as const;
   if (c.drill && !c.badge) return <CountDrill label={c.drillLabel ?? c.t} drill={c.drill} />;
+  // "681 / 700": the obtained in bold, the maximum muted
+  const ratio = c.ratio ? /^(.+) \/ (.+)$/.exec(c.t) : null;
   return (
     <>
-      {c.t}
+      {ratio ? (
+        <>
+          <strong>{ratio[1]}</strong> <span className="ep-mr-muted">/ {ratio[2]}</span>
+        </>
+      ) : (
+        c.t
+      )}
       {c.badge ? (
         <span className={`ep-badge ep-badge--${tone[c.badge.tone]} ep-mr-badge`}>
           {c.badge.label}

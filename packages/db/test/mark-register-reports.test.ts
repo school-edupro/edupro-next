@@ -69,7 +69,12 @@ const input = (merit: boolean, extra: Partial<ReportInput> = {}): ReportInput =>
   merit,
   order: ['ENG', 'MAT'],
   titles: { ENG: 'English', MAT: 'Maths' },
-  teachers: { 'A|ENG': 'Mrs Rao', 'B|ENG': 'Mrs Rao', 'A|MAT': 'Mr Das' },
+  teachers: {
+    'A|ENG': ['Mrs Rao'],
+    'B|ENG': ['Mrs Rao'],
+    'A|MAT': ['Mr Das'],
+    'A|class': ['Ms Iyer'],
+  },
   ...extra,
 });
 /** a table's cells by its first column */
@@ -155,41 +160,44 @@ describe('mark register reports (docs/design/68, phase 2)', () => {
     expect(lines(g!.sheet)['VI-B']).toEqual(['VI-B', '100%', '100%']);
   });
 
-  it('toppers: the top N of the class with ties, each section’s top 3, every subject’s topper (full marks)', () => {
+  it('toppers as the legacy prints them: overall top N with ties and positions, each section’s top 3, subject toppers', () => {
     const [top, secA, , subjects] = buildReport('toppers', input(true, { top: 2 }));
-    expect(top!.sheet.body.map((r) => r.cells[1]!.t)).toEqual(['a1', 'b1']);
-    expect(secA!.title).toBe('Top 3 of VI-A');
-    expect(lines(subjects!.sheet).English).toEqual([
-      'English',
-      'b1 (VI-B)',
-      '100 / 100',
-      'Full marks',
+    expect(top!.title).toBe('Overall Toppers — Top 2 of the class · by Final Total');
+    expect(top!.sheet.body.map((r) => [r.cells[0]!.badge!.label, r.cells[1]!.t])).toEqual([
+      ['1', 'a1'],
+      ['2', 'b1'],
     ]);
+    expect(top!.sheet.body[0]!.cells.slice(4).map((c) => c.t)).toEqual([
+      '175 / 200',
+      '87.5%',
+      'A2',
+    ]);
+    expect(top!.sheet.body[0]!.cells[4]!.ratio).toBe(true);
+    expect(secA!.title).toBe('Top 3 of VI-A · by Final Total');
+    const eng = subjects!.sheet.body.find((r) => r.cells[0]!.t === 'ENGLISH')!.cells;
+    expect(eng.map((c) => c.t)).toEqual(['ENGLISH', 'b1', 'VI-B', 'b1', '100 / 100', '100%']);
+    expect(eng[1]!.badge).toEqual({ label: 'Full marks', tone: 'success' });
   });
 
-  it('teacher-wise: each subject teacher’s sections; a section without one is “Not assigned”', () => {
-    const [t] = buildReport('teacher', input(true));
-    const rows2 = t!.sheet.body.map((r) =>
-      r.cells
-        .slice(0, 3)
-        .map((c) => c.t)
-        .join(' | '),
-    );
-    expect(rows2).toEqual([
-      'Mr Das | Maths | VI-A',
-      'Mrs Rao | English | VI-A',
-      'Mrs Rao | English | VI-B',
-      'Not assigned | Maths | VI-B',
+  it('teacher-wise as the legacy prints it: a block per teacher with their classes and a total; no teacher last', () => {
+    const blocks = buildReport('teacher', input(true));
+    expect(blocks.map((b) => b.title)).toEqual(['MR DAS', 'MRS RAO', 'NO TEACHER MAPPED']);
+    expect(blocks[0]!.sheet.note).toContain('Teacher = the teacher assignments');
+    const rao = blocks[1]!.sheet;
+    expect(rao.body.map((r) => r.cells.map((c) => c.t))).toEqual([
+      ['VI-A', 'ENGLISH', '5', '4', '56.25%', '75%', '90', '1'],
+      ['VI-B', 'ENGLISH', '3', '2', '60%', '50%', '100', '1'],
     ]);
-    // Mrs Rao in VI-A: appeared 4 (90, 30, 35, 70), one failed (30)
-    expect(t!.sheet.body[1]!.cells.map((c) => c.t).slice(3)).toEqual([
-      '5',
-      '4',
-      '56.25',
-      '75.00',
-      '90',
-      '1',
+    expect(rao.foot!.map((c) => c.t)).toEqual([
+      'Total — 2 classes',
+      '8',
+      '6',
+      '57.5%',
+      '66.67%',
+      '',
+      '2',
     ]);
+    expect(blocks[2]!.sheet.body.map((r) => r.cells[1]!.t)).toEqual(['MATHS']);
   });
 
   it('at-risk: failing high, compartment medium, borderline and absent to watch; counts by subject', () => {

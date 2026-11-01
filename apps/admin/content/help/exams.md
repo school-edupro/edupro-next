@@ -184,9 +184,12 @@ out, then runs it for any section; the marks always come from the exam entry.
      students, a column per exam — entered of how many with Complete / Partial, "▶ 1 pending" opens the
      names, "–" where the subject has no such paper — and the % of all subjects at the foot; the class
      teacher in the line above. A class's all sections: a grid of the % entered.
-   - **Toppers**: the top 3 / 5 / 10 (passed), each section's top 3 in a class, every subject's topper
-     (full marks marked).
-   - **Teacher-wise**: each subject teacher's sections: average %, pass %, highest, failed.
+   - **Toppers** (as the old register prints them): "Overall Toppers — Top 3 / 5 / 10 · by Final
+     Total" with position, final total, % and grade (ties shown), each section's top 3 in a class,
+     then "Subject Toppers" — every subject's highest with all ties, "Full marks" marked.
+   - **Teacher-wise** (as the old register prints it): a block per subject teacher (Academics →
+     Teacher assignments) with each section and subject — students, appeared, average %, pass %,
+     highest, failed, "shared" when two teachers share it — and their total; "No teacher mapped" last.
    - **At-risk**: failing (high), compartment (medium), borderline subjects or absent (watch), with a
      margin of 5 or 10 over the pass %; counts by subject.
    - **Failing students**: each failing subject with its %, NIL where nobody fails.

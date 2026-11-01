@@ -47,8 +47,8 @@ export interface ReportInput {
   /** register subject keys in the order printed */
   order: string[];
   titles: Record<string, string>;
-  /** a section's subject teacher: `${sectionId}|${subjectId}` → name */
-  teachers?: Record<string, string>;
+  /** a section's subject teachers (`${sectionId}|${subjectId}`) and class teacher (`${sectionId}|class`) */
+  teachers?: Record<string, string[]>;
   /** Toppers: the top N */
   top?: number;
   /** At-risk: how far above the pass % is borderline */
@@ -109,8 +109,6 @@ function block(
 
 const nameOf = (i: ReportInput, r: RegStudentResult) =>
   i.def.display.properCase ? properCase(r.name) : r.name;
-const who = (i: ReportInput, r: RegStudentResult) =>
-  i.merit ? `${nameOf(i, r)} (${r.section})` : nameOf(i, r);
 type Who = { r: RegStudentResult; x?: RegSubjectResult };
 /**
  * A count that opens its students: name, admission no (and section in a class), and the marks — the
@@ -165,12 +163,11 @@ function subjectsOf(i: ReportInput) {
       .filter((y): y is { r: RegStudentResult; x: RegSubjectResult } => !!y.x);
     if (!takers.length) continue;
     if (s.slot) {
-      for (const code of [...new Set(takers.map((y) => y.x.code))])
-        out.push({
-          label: `${i.titles[k] ?? k} · ${code}`,
-          key: `${k}|${code}`,
-          list: takers.filter((y) => y.x.code === code),
-        });
+      // each language of a slot as its own subject (HINDI, SANSKRIT …), as the legacy lists them
+      for (const code of [...new Set(takers.map((y) => y.x.code))]) {
+        const list = takers.filter((y) => y.x.code === code);
+        out.push({ label: list[0]!.x.name, key: `${k}|${code}`, list });
+      }
     } else out.push({ label: i.titles[k] ?? k, key: k, list: takers });
   }
   return out;
@@ -459,11 +456,11 @@ function entry(i: ReportInput): ReportBlock[] {
   if (!i.merit) {
     const exams = i.def.exams.filter((e) => lines.some((l) => l.exams[e.key]));
     const sectionId = sections[0]?.[0] ?? '';
-    const classTeacher = i.teachers?.[`${sectionId}|class`];
+    const classTeacher = i.teachers?.[`${sectionId}|class`]?.join(', ');
     const rows = lines.map((l, n): SheetCell[] => [
       { t: String(n + 1), center: true },
       { t: l.subject, text: true, strong: true },
-      { t: i.teachers?.[`${l.sectionId}|${l.subjectId}`] ?? '', text: true },
+      { t: (i.teachers?.[`${l.sectionId}|${l.subjectId}`] ?? []).join(', '), text: true },
       { t: String(l.takers.length), center: true },
       ...exams.map((e): SheetCell => {
         const x = l.exams[e.key];
@@ -568,6 +565,17 @@ function entry(i: ReportInput): ReportBlock[] {
 }
 
 // ---- Toppers ---------------------------------------------------------------------------------------
+/** a % as the legacy prints it: up to two decimals, trailing zeros dropped (100%, 97.44%, 81.9%) */
+const pctOf = (v: number | null) => {
+  if (v === null) return '';
+  return `${String(Math.round(v * 100) / 100)}%`;
+};
+
+/**
+ * The legacy's Toppers: "Overall Toppers — Top N · by Final Total" (position, student, admission no,
+ * final total, %, grade; every tie at a position shown; each section's top 3 in a class), then
+ * "Subject Toppers": every subject's highest marks with all ties, "Full marks" marked.
+ */
 function toppers(i: ReportInput): ReportBlock[] {
   const n = i.top ?? 3;
   const rankOf = (r: RegStudentResult) => (i.merit ? r.rankInClass : r.rankInSection);
@@ -580,140 +588,245 @@ function toppers(i: ReportInput): ReportBlock[] {
     rows
       .filter((r) => (rank(r) ?? Infinity) <= top)
       .sort((a, b) => rank(a)! - rank(b)! || a.name.localeCompare(b.name));
+  const by = i.def.final.rankBy === 'pct' ? 'Final %' : 'Final Total';
   const cols: Col[] = [
-    ['Rank', 0.8],
-    ['Student', 4, true],
+    ['Position', 1, true],
+    ['Student Name', 4, true],
     ...(i.merit ? [['Section', 1.2, true] as Col] : []),
-    ['Total', 1.6],
-    ['%', 1],
-    ['Grade', 0.9],
+    ['Adm No', 1.8],
+    ['Final Total', 2],
+    ['%', 1.4],
+    ['Grade', 1.1],
   ];
   const line = (r: RegStudentResult, rank: number | null): SheetCell[] => [
-    { t: String(rank ?? '') },
-    { t: nameOf(i, r), text: true },
+    { t: '', center: true, badge: { label: String(rank ?? ''), tone: 'info' } },
+    { t: nameOf(i, r), text: true, strong: true },
     ...(i.merit ? [{ t: r.section, text: true } as SheetCell] : []),
+    { t: r.admissionNo, center: true },
     {
       t: r.total === null ? '' : `${cutFixed(r.total, 'auto')} / ${cutFixed(r.max, 'auto')}`,
       tone: 'final',
+      center: true,
+      ratio: true,
     },
-    { t: r.pct === null ? '' : cutFixed(r.pct, 2) },
-    { t: r.grade ?? '' },
+    { t: r.pct === null ? '' : pctOf(r.pct), tone: 'final', center: true, strong: true },
+    { t: r.grade ?? '', tone: 'final', center: true, strong: true },
   ];
+  const amber = (b: ReportBlock) => {
+    for (const h of b.sheet.head[0]!.slice(-3)) h.tone = 'final';
+    for (const h of b.sheet.head[0]!)
+      if (h.t !== 'Student Name' && h.t !== 'Section') h.center = true;
+    return b;
+  };
   const out = [
-    block(
-      i,
-      `Top ${String(n)}${i.merit ? ' of the class' : ''} (passed)`,
-      cols,
-      list(passed, rankOf, n).map((r) => line(r, rankOf(r))),
+    amber(
+      block(
+        i,
+        `Overall Toppers — Top ${String(n)}${i.merit ? ' of the class' : ''} · by ${by}`,
+        cols,
+        list(passed, rankOf, n).map((r) => line(r, rankOf(r))),
+      ),
     ),
   ];
   if (i.merit)
     for (const sec of [...new Set(i.rows.map((r) => r.section))].sort())
       out.push(
-        block(
-          i,
-          `Top 3 of ${sec}`,
-          cols,
-          list(
-            passed.filter((r) => r.section === sec),
-            (r) => r.rankInSection,
-            3,
-          ).map((r) => line(r, r.rankInSection)),
+        amber(
+          block(
+            i,
+            `Top 3 of ${sec} · by ${by}`,
+            cols,
+            list(
+              passed.filter((r) => r.section === sec),
+              (r) => r.rankInSection,
+              3,
+            ).map((r) => line(r, r.rankInSection)),
+          ),
         ),
       );
-  // each subject's topper (every one tied at the top)
+  // every subject's topper, every one tied at the top
   const rows: SheetCell[][] = [];
   for (const s of subjectsOf(i)) {
-    const ok = s.list.filter((y) => !y.x.withheld && y.x.total !== null && !y.x.missing);
+    const ok = s.list.filter(
+      (y) => !y.x.withheld && y.x.total !== null && !y.x.missing && y.x.max > 0,
+    );
     if (!ok.length) continue;
     const best = Math.max(...ok.map((y) => y.x.total!));
-    const top = ok.filter((y) => Math.abs(y.x.total! - best) < 1e-9);
-    const max = top[0]!.x.max;
-    rows.push([
-      { t: s.label, text: true },
-      { t: top.map((y) => who(i, y.r)).join(', '), text: true },
-      { t: `${cutFixed(best, 'auto')} / ${cutFixed(max, 'auto')}`, tone: 'final' },
-      { t: Math.abs(best - max) < 1e-9 ? 'Full marks' : '', text: true },
-    ]);
+    const top = ok
+      .filter((y) => Math.abs(y.x.total! - best) < 1e-9)
+      .sort((a, b) => a.r.name.localeCompare(b.r.name));
+    for (const [k, y] of top.entries()) {
+      const full = Math.abs(y.x.total! - y.x.max) < 1e-9;
+      rows.push([
+        { t: k === 0 ? s.label.toUpperCase() : '', text: true, strong: true },
+        {
+          t: nameOf(i, y.r),
+          text: true,
+          ...(full ? { badge: { label: 'Full marks', tone: 'success' as const } } : {}),
+        },
+        ...(i.merit ? [{ t: y.r.section, text: true } as SheetCell] : []),
+        { t: y.r.admissionNo, center: true },
+        {
+          t: `${cutFixed(y.x.total!, 'auto')} / ${cutFixed(y.x.max, 'auto')}`,
+          tone: 'calc',
+          center: true,
+          ratio: true,
+        },
+        { t: pctOf(y.x.pct), tone: 'calc', center: true },
+      ]);
+    }
   }
-  out.push(
-    block(
-      i,
-      'The topper of every subject',
-      [
-        ['Subject', 3, true],
-        ['Topper', 6, true],
-        ['Marks', 1.6],
-        ['', 1.4, true],
-      ],
-      rows,
-    ),
+  const subjects = block(
+    i,
+    'Subject Toppers — highest in each subject (all ties shown)',
+    [
+      ['Subject', 3, true],
+      ['Topper', 5, true],
+      ...(i.merit ? [['Section', 1.2, true] as Col] : []),
+      ['Adm No', 1.8],
+      ['Marks', 1.8],
+      ['%', 1.4],
+    ],
+    rows,
   );
+  for (const h of subjects.sheet.head[0]!.slice(-2)) h.tone = 'calc';
+  for (const h of subjects.sheet.head[0]!.slice(-3)) h.center = true;
+  out.push(subjects);
   return out;
 }
 
 // ---- Teacher-wise ----------------------------------------------------------------------------------
+/**
+ * The legacy's Teacher-wise result: a block per subject teacher (from the teacher assignments) with
+ * their sections and subjects — students, appeared, average %, pass %, highest, failed; a subject two
+ * teachers share is marked — and their total; the lines with no teacher last, to fix the mapping.
+ */
 function teacherWise(i: ReportInput): ReportBlock[] {
-  const groups = new Map<
-    string,
-    {
-      teacher: string;
-      subject: string;
-      section: string;
-      list: Array<{ r: RegStudentResult; x: RegSubjectResult }>;
-    }
-  >();
+  const NONE = 'No teacher mapped';
+  type Line = {
+    subject: string;
+    section: string;
+    shared: boolean;
+    list: Array<{ r: RegStudentResult; x: RegSubjectResult }>;
+  };
+  const byTeacher = new Map<string, Map<string, Line>>();
   for (const s of subjectsOf(i))
     for (const y of s.list) {
-      const t = i.teachers?.[`${y.r.sectionId}|${y.x.subjectId}`] ?? 'Not assigned';
-      const key = `${t}|${s.label}|${y.r.section}`;
-      const g = groups.get(key) ?? { teacher: t, subject: s.label, section: y.r.section, list: [] };
-      g.list.push(y);
-      groups.set(key, g);
+      const ts = i.teachers?.[`${y.r.sectionId}|${y.x.subjectId}`] ?? [];
+      const names = ts.length ? ts : [NONE];
+      for (const t of names) {
+        const lines = byTeacher.get(t) ?? new Map<string, Line>();
+        const key = `${y.r.section}|${s.label}`;
+        const line = lines.get(key) ?? {
+          subject: s.label.toUpperCase(),
+          section: y.r.section,
+          shared: ts.length > 1,
+          list: [],
+        };
+        line.list.push(y);
+        lines.set(key, line);
+        byTeacher.set(t, lines);
+      }
     }
-  const rows = [...groups.values()]
-    .sort(
-      (a, b) =>
-        a.teacher.localeCompare(b.teacher) ||
-        a.subject.localeCompare(b.subject) ||
-        a.section.localeCompare(b.section),
-    )
-    .map((g) => {
-      const appeared = g.list.filter((y) => !y.x.withheld && y.x.pct !== null && !y.x.missing);
-      const pcts = appeared.map((y) => y.x.pct!);
-      const failed = appeared.filter((y) => y.x.status === 'fail');
+  const stats = (list: Line['list']) => {
+    const appeared = list.filter((y) => !y.x.withheld && y.x.pct !== null && !y.x.missing);
+    const failed = appeared.filter((y) => y.x.status === 'fail');
+    return { appeared, failed, pcts: appeared.map((y) => y.x.pct!) };
+  };
+  const teachers = [...byTeacher.keys()].sort((a, b) =>
+    a === NONE ? 1 : b === NONE ? -1 : a.localeCompare(b),
+  );
+  const out: ReportBlock[] = [];
+  for (const t of teachers) {
+    const lines = [...byTeacher.get(t)!.values()].sort(
+      (a, b) => a.section.localeCompare(b.section) || a.subject.localeCompare(b.subject),
+    );
+    const rows = lines.map((l): SheetCell[] => {
+      const st = stats(l.list);
+      const title = `${l.subject} · ${l.section}`;
       return [
-        { t: g.teacher, text: true },
-        { t: g.subject, text: true },
-        { t: g.section, text: true },
-        count(i, `${g.subject} · ${g.section} · Students`, g.list),
-        count(i, `${g.subject} · ${g.section} · Appeared`, appeared),
-        { t: pcts.length ? cutFixed(avg(pcts)!, 2) : '' },
-        { t: pct(appeared.length - failed.length, appeared.length), tone: 'final' as const },
+        { t: l.section, text: true, strong: true },
         {
-          t: appeared.length ? cutFixed(Math.max(...appeared.map((y) => y.x.total!)), 'auto') : '',
+          t: l.subject,
+          text: true,
+          strong: true,
+          ...(l.shared ? { badge: { label: 'shared', tone: 'neutral' as const } } : {}),
         },
-        count(i, `${g.subject} · ${g.section} · Failed`, failed),
+        { ...count(i, `${title} · Students`, l.list), center: true },
+        { ...count(i, `${title} · Appeared`, st.appeared), center: true },
+        { t: st.pcts.length ? pctOf(avg(st.pcts)) : '', tone: 'calc', center: true },
+        {
+          t: st.appeared.length
+            ? pctOf(((st.appeared.length - st.failed.length) / st.appeared.length) * 100)
+            : '',
+          center: true,
+          strong: true,
+        },
+        {
+          t: st.appeared.length
+            ? cutFixed(Math.max(...st.appeared.map((y) => y.x.total!)), 'auto')
+            : '',
+          center: true,
+        },
+        { ...count(i, `${title} · Failed`, st.failed), center: true },
       ];
     });
-  return [
-    block(
+    const all = lines.flatMap((l) => l.list);
+    const st = stats(all);
+    const b = block(
       i,
-      'Teacher-wise result (the subject teacher of each section)',
+      t.toUpperCase(),
       [
-        ['Teacher', 3, true],
-        ['Subject', 3, true],
-        ['Section', 1.2, true],
-        ['Students', 1],
-        ['Appeared', 1],
-        ['Average %', 1.2],
-        ['Pass %', 1.1],
+        ['Section', 1.4, true],
+        ['Subject', 3.2, true],
+        ['Students', 1.2],
+        ['Appeared', 1.2],
+        ['Avg %', 1.2],
+        ['Pass %', 1.2],
         ['Highest', 1.1],
         ['Failed', 1],
       ],
       rows,
-    ),
-  ];
+    );
+    for (const h of b.sheet.head[0]!.slice(2)) h.center = true;
+    b.sheet.head[0]![4]!.tone = 'calc';
+    b.sheet.foot = [
+      {
+        t: `Total — ${String(lines.length)} class${lines.length === 1 ? '' : 'es'}`,
+        span: 2,
+        text: true,
+        strong: true,
+        tone: 'final',
+      },
+      { t: String(all.length), center: true, strong: true, tone: 'final' },
+      { t: String(st.appeared.length), center: true, strong: true, tone: 'final' },
+      // the average over every student who appeared (each class weighted by its size)
+      {
+        t: st.pcts.length ? pctOf(Math.round(avg(st.pcts)! * 10) / 10) : '',
+        center: true,
+        strong: true,
+        tone: 'final',
+      },
+      {
+        t: st.appeared.length
+          ? pctOf(((st.appeared.length - st.failed.length) / st.appeared.length) * 100)
+          : '',
+        center: true,
+        strong: true,
+        tone: 'final',
+      },
+      { t: '', tone: 'final' },
+      { t: String(st.failed.length), center: true, strong: true, tone: 'final' },
+    ];
+    out.push(b);
+  }
+  if (out[0])
+    out[0].sheet.note = [
+      'Teacher = the teacher assignments (Academics → Teacher assignments: the section’s subject teacher)',
+      'figures = each line’s own subject summary (AB and withheld left out, Pass % = passed ÷ appeared)',
+      `“${NONE}” = assign the teacher to credit them`,
+    ].join(' · ');
+  return out;
 }
 
 // ---- At-risk ---------------------------------------------------------------------------------------
