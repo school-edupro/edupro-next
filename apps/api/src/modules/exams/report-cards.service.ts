@@ -56,6 +56,8 @@ export interface TemplateRow {
 
 export interface ReleaseRow {
   id: string;
+  /** the release's working year (sent with its PDF jobs: a job has no year of its own) */
+  academicYearId: string;
   /** exam card (PT1, PT2 …), term card or annual card (1 Nov 2026) */
   kind: 'exam' | 'term' | 'annual';
   termCode: string;
@@ -97,7 +99,7 @@ const toTemplate = (r: Record<string, unknown>): TemplateRow => ({
   updatedAt: new Date(r.updated_at as string).toISOString(),
 });
 
-const R_COLS = `r.id::text, r.kind, r.term_code, r.name, r.exam_ids::text[] AS exam_ids, r.templates, r.hide_defaulters, r.defaulter_min::text, r.status, r.released_at, r.created_at,
+const R_COLS = `r.id::text, r.academic_year_id::text AS academic_year_id, r.kind, r.term_code, r.name, r.exam_ids::text[] AS exam_ids, r.templates, r.hide_defaulters, r.defaulter_min::text, r.status, r.released_at, r.created_at,
   (SELECT jsonb_agg(jsonb_build_object('id', e.id::text, 'code', e.code, 'name', e.name) ORDER BY array_position(r.exam_ids, e.id)) FROM exams e WHERE e.id = ANY(r.exam_ids)) AS exams,
   (SELECT count(*) FROM report_cards c WHERE c.release_id = r.id AND c.rendered_at IS NOT NULL)::int AS rendered,
   (SELECT count(*) FROM report_cards c WHERE c.release_id = r.id AND c.withheld)::int AS withheld,
@@ -113,6 +115,7 @@ const R_COLS = `r.id::text, r.kind, r.term_code, r.name, r.exam_ids::text[] AS e
   (SELECT count(*) FROM report_card_release_classes x WHERE x.release_id = r.id AND x.status = 'released')::int AS published_classes`;
 const toRelease = (r: Record<string, unknown>): ReleaseRow => ({
   id: String(r.id),
+  academicYearId: String(r.academic_year_id),
   kind: (r.kind as ReleaseRow['kind']) ?? 'term',
   termCode: String(r.term_code),
   name: String(r.name),
@@ -646,7 +649,11 @@ export class ReportCardsService {
             {
               dataset: 'report_card',
               format: 'pdf',
-              params: { releaseId, studentId: picked[0]!.studentId },
+              params: {
+                releaseId,
+                studentId: picked[0]!.studentId,
+                academicYearId: rel.academicYearId,
+              },
               title: `Report card · ${rel.name} · ${place} · ${picked[0]!.admissionNo} ${picked[0]!.name}`,
             },
             'exams.report_card.render',
@@ -656,7 +663,12 @@ export class ReportCardsService {
             {
               dataset: 'report_card_batch',
               format: 'pdf',
-              params: { releaseId, classId, studentIds: picked.map((x) => x.studentId) },
+              params: {
+                releaseId,
+                classId,
+                studentIds: picked.map((x) => x.studentId),
+                academicYearId: rel.academicYearId,
+              },
               title: `Report cards · ${rel.name} · ${place} · ${RANGE_LABEL[dto.range ?? 'all']} (${String(picked.length)})`,
             },
             'exams.report_card.render_batch',
@@ -774,7 +786,11 @@ export class ReportCardsService {
       {
         dataset: 'report_card_batch',
         format: 'pdf',
-        params: { releaseId, classSectionId: dto.classSectionId },
+        params: {
+          releaseId,
+          classSectionId: dto.classSectionId,
+          academicYearId: rel.academicYearId,
+        },
         title: `Report cards · ${rel.name}`,
       },
       'exams.report_card.render_batch',
@@ -789,7 +805,7 @@ export class ReportCardsService {
       {
         dataset: 'report_card',
         format: 'pdf',
-        params: { releaseId, studentId },
+        params: { releaseId, studentId, academicYearId: rel.academicYearId },
         title: `Report card · ${rel.name}`,
       },
       'exams.report_card.render',
@@ -1198,7 +1214,7 @@ export class ReportCardsService {
       {
         dataset: 'report_card',
         format: 'pdf',
-        params: { releaseId, studentId },
+        params: { releaseId, studentId, academicYearId: info.academicYearId },
         title: `Report card · ${info.name}`,
       },
       'exams.report_card.render_family',

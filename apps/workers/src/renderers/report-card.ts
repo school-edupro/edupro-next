@@ -144,6 +144,28 @@ async function recordCard(
 }
 
 /** Sprint 17: one pupil's card. */
+/**
+ * The working year of a card job: the job's own (the API sends the release's year) or, for a job queued
+ * before it did, the release's. The card reads the year's enrolments, marks and dues, and a job has no
+ * year of its own: without it no student is found ("not enrolled in the working year").
+ */
+async function yearOf(
+  db: Db,
+  envelope: JobEnvelope,
+  params: Record<string, unknown>,
+  releaseId: string,
+): Promise<string | null> {
+  if (typeof params.academicYearId === 'string' && /^[0-9]{1,18}$/.test(params.academicYearId))
+    return params.academicYearId;
+  return db.withTenant(tenantForJob(envelope), async (c) => {
+    const r = await c.query<{ year: string }>(
+      `SELECT academic_year_id::text AS year FROM report_card_releases WHERE id = $1`,
+      [releaseId],
+    );
+    return r.rows[0]?.year ?? null;
+  });
+}
+
 export async function renderReportCard(
   db: Db,
   storage: StorageDriver,
@@ -153,7 +175,8 @@ export async function renderReportCard(
 ): Promise<{ html: string; width: string; height: string }> {
   const releaseId = String(params.releaseId ?? '');
   const studentId = String(params.studentId ?? '');
-  return db.withTenant(tenantForJob(envelope), async (c) => {
+  const year = await yearOf(db, envelope, params, releaseId);
+  return db.withTenant(tenantForJob(envelope, year), async (c) => {
     const rel = await loadRelease(c as Q, releaseId);
     const card = await pupilCard(c as Q, storage, rel, studentId);
     const t = await templateFor(c as Q, rel, card.data.student.band, card.data.student.classId);
@@ -177,7 +200,8 @@ export async function renderReportCardBatch(
     ? params.studentIds.map(String).filter((x) => /^[0-9]{1,18}$/.test(x))
     : null;
   const classId = String(params.classId ?? '');
-  return db.withTenant(tenantForJob(envelope), async (c) => {
+  const year = await yearOf(db, envelope, params, releaseId);
+  return db.withTenant(tenantForJob(envelope, year), async (c) => {
     const rel = await loadRelease(c as Q, releaseId);
     const k = chosen
       ? await c.query<{ band: string | null; display_order: number; class_id: string }>(

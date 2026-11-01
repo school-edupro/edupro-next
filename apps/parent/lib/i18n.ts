@@ -660,6 +660,8 @@ const DICT: Record<string, string> = {
   'Report card PDF': 'रिपोर्ट कार्ड PDF',
   'View report card': 'रिपोर्ट कार्ड देखें',
   'Print / Save as PDF': 'प्रिंट / PDF में सहेजें',
+  'The PDF could not be made. Ask for it again, or open the card and use Print, then Save as PDF.':
+    'PDF नहीं बन सकी। फिर से माँगें, या कार्ड खोलें और प्रिंट में "PDF में सहेजें" चुनें।',
   'The PDF is taking longer than usual. Open the card now and use Print, then Save as PDF; the PDF still appears here when it is ready.':
     'PDF बनने में सामान्य से अधिक समय लग रहा है। अभी कार्ड खोलें और प्रिंट में "PDF में सहेजें" चुनें; PDF तैयार होने पर यहाँ भी दिखेगी।',
   'The report card PDF is being prepared; it appears here by itself. Meanwhile, View report card shows it at once.':

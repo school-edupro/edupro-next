@@ -548,3 +548,9 @@ exam cards print a **new ready-made test slip** by default; families see **every
   being made returns that export; after 45 s waiting the notice offers **Print / Save as PDF** (the card
   page with `?print=1`: `public/rc-print.js` adds a Print / Save as PDF bar, hidden in print, and opens
   the print dialog; a file so the CSP allows it). The worker-made PDF still appears by itself when ready.
+- Fix (1 Nov, with the workers running): every report-card PDF failed "student … is not enrolled in the
+  working year". A job has no working year (`tenantForJob(envelope)` sets none) and the card reads the
+  year's enrolments. The API now sends the release's `academicYearId` with every report-card job, and the
+  worker falls back to the release's year for jobs queued before (`yearOf`). Test: workers
+  `report-card.test.ts` (fails with the old code). The parent page also says when a PDF failed (ask
+  again, or Print / Save as PDF) instead of "being prepared".

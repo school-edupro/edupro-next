@@ -146,7 +146,25 @@ export default async function ResultsPage({
             </span>
           ) : (
             <>
-              {Date.now() - Date.parse(exportStatus.export.requestedAt) > 45_000 ? (
+              {exportStatus.export.status === 'failed' ||
+              exportStatus.export.status === 'expired' ? (
+                <>
+                  {t(
+                    lang,
+                    'The PDF could not be made. Ask for it again, or open the card and use Print, then Save as PDF.',
+                  )}{' '}
+                  {exportStatus.export.params.releaseId && exportStatus.export.params.studentId ? (
+                    <a
+                      className="ep-btn ep-btn--primary ep-btn--sm"
+                      href={`/api/report-card/${exportStatus.export.params.releaseId}/${exportStatus.export.params.studentId}?print=1`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
+                      {t(lang, 'Print / Save as PDF')}
+                    </a>
+                  ) : null}
+                </>
+              ) : Date.now() - Date.parse(exportStatus.export.requestedAt) > 45_000 ? (
                 <>
                   {t(
                     lang,
@@ -169,7 +187,10 @@ export default async function ResultsPage({
                   'The report card PDF is being prepared; it appears here by itself. Meanwhile, View report card shows it at once.',
                 )
               )}
-              <ExportWatcher id={exportStatus.export.id} url={null} />
+              {exportStatus.export.status === 'failed' ||
+              exportStatus.export.status === 'expired' ? null : (
+                <ExportWatcher id={exportStatus.export.id} url={null} />
+              )}
             </>
           )}
         </div>
