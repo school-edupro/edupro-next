@@ -115,6 +115,17 @@ export class ReportCardsController {
     return this.cards.preview(ctx, id, body);
   }
 
+  @Get('scope')
+  @ApiOperation({
+    summary: 'The classes and sections I see on Report cards',
+    description:
+      'Every class for whoever may publish results; else the classes I coordinate and the sections I am class teacher of',
+  })
+  @RequirePermission(REPORT_CARDS.view)
+  scope(@ReqCtx() ctx: RequestContext) {
+    return this.cards.myScope(ctx);
+  }
+
   @Get('releases')
   @RequirePermission(REPORT_CARDS.view)
   async releases(@ReqCtx() ctx: RequestContext) {
@@ -183,8 +194,9 @@ export class ReportCardsController {
   @Post('releases/:id/generate')
   @ApiOperation({
     summary: 'A Cards line: a section or a class, a roll-order range or one admission number',
+    description: 'A class teacher prints their own section; a coordinator their classes',
   })
-  @RequirePermission(REPORT_CARDS.manage)
+  @RequirePermission(REPORT_CARDS.view)
   generate(@ReqCtx() ctx: RequestContext, @Param('id') id: string, @Body() body: GenerateCardsDto) {
     return this.cards.generate(ctx, id, body);
   }

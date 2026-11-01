@@ -971,4 +971,166 @@ describe('examinations v2 (e2e)', () => {
     expect(pre.statusCode).toBe(200);
     expect(pre.json().html).toContain('Marks obtained');
   });
+
+  it('report cards keep to each person’s classes: the principal every class, a coordinator theirs, a class teacher their section', async () => {
+    // a second section of XI (one pupil) and a class the release does not carry
+    const secB = (
+      await call(admin, 'POST', `/academics/classes/${classId}/sections`, { name: 'B' })
+    ).json().id as string;
+    const esha = await call(admin, 'POST', '/people/students', {
+      admissionNo: `${s}-9`,
+      firstName: 'Esha',
+      lastName: 'Exam',
+      guardians: [],
+      enrolment: { classSectionId: secB, rollNo: 1 },
+    });
+    expect(esha.statusCode).toBe(201);
+    const eshaId = esha.json().id as string;
+    const xii = (
+      await call(admin, 'POST', '/academics/classes', {
+        code: 'XII',
+        name: 'Class XII',
+        displayOrder: 12,
+      })
+    ).json().id as string;
+    const xiiA = (
+      await call(admin, 'POST', `/academics/classes/${xii}/sections`, { name: 'A' })
+    ).json().id as string;
+    // the class teacher of XI-A, the coordinator of XI (through XI-B), one of XII, a subject teacher
+    const staff: Record<string, SeededUser> = {};
+    await withMigrator(async (c) => {
+      for (const [key, role, kind, sec] of [
+        ['ct', 'class_teacher', 'class_teacher', section],
+        ['co', 'academic_coordinator', 'coordinator', secB],
+        ['far', 'academic_coordinator', 'coordinator', xiiA],
+        ['sub', 'subject_teacher', null, null],
+      ] as const) {
+        staff[key] = await seedUser(c, school, `${s}-${key}`, role);
+        if (!kind) continue;
+        const e = await c.query<{ id: string }>(
+          `INSERT INTO employees (school_id, employee_code, first_name, last_name, user_id) VALUES ($1, $2, $3, 'Staff', $4) RETURNING id::text`,
+          [school.id, `RC-${key}`, key, staff[key].id],
+        );
+        await c.query(
+          `INSERT INTO teacher_assignments (school_id, academic_year_id, employee_id, class_section_id, kind)
+           VALUES ($1, $2, $3, $4, $5::teacher_assignment_kind)`,
+          [school.id, school.yearId, e.rows[0]!.id, sec, kind],
+        );
+      }
+    });
+    const { ct, co, far, sub } = staff as Record<'ct' | 'co' | 'far' | 'sub', SeededUser>;
+    const pt = (
+      (await call(admin, 'GET', '/exams/report-cards/releases')).json().data as Array<{
+        id: string;
+        termCode: string;
+      }>
+    ).find((r) => r.termCode === 'PT1')!;
+    const url = `/exams/report-cards/releases/${pt.id}`;
+    // whom each one sees
+    expect((await call(admin, 'GET', '/exams/report-cards/scope')).json()).toMatchObject({
+      all: true,
+    });
+    expect((await call(ct, 'GET', '/exams/report-cards/scope')).json()).toMatchObject({
+      all: false,
+      classes: [classId],
+      sections: [{ id: section, code: 'XI-A' }],
+    });
+    expect(
+      (
+        (await call(co, 'GET', '/exams/report-cards/scope')).json().sections as Array<{
+          code: string;
+        }>
+      ).map((x) => x.code),
+    ).toEqual(['XI-A', 'XI-B']);
+    // a subject teacher no longer opens the page; a coordinator of XII sees no card of XI
+    expect((await call(sub, 'GET', '/exams/report-cards/releases')).statusCode).toBe(403);
+    expect((await call(far, 'GET', '/exams/report-cards/releases')).json().data).toEqual([]);
+    expect((await call(far, 'GET', `${url}/readiness`)).statusCode).toBe(404);
+    const sectionsOf = async (u: SeededUser) =>
+      (
+        (await call(u, 'GET', `${url}/readiness`)).json().classes as Array<{
+          sections: Array<{ code: string }>;
+        }>
+      ).flatMap((k) => k.sections.map((x) => x.code));
+    expect(await sectionsOf(ct)).toEqual(['XI-A']);
+    expect(await sectionsOf(co)).toEqual(['XI-A', 'XI-B']);
+    expect(await sectionsOf(admin)).toEqual(['XI-A', 'XI-B']);
+    expect((await call(ct, 'GET', `${url}/readiness`)).json().allClasses).toBe(false);
+    // the class teacher's cards: their section; the whole class keeps to it
+    expect((await call(ct, 'GET', `${url}/cards?classSectionId=${secB}`)).statusCode).toBe(403);
+    const whole = (await call(ct, 'GET', `${url}/cards?classId=${classId}`)).json().data as Array<{
+      section: string;
+    }>;
+    expect([...new Set(whole.map((x) => x.section))]).toEqual(['XI-A']);
+    expect((await call(ct, 'GET', `${url}/students/${student.Asha}/preview`)).statusCode).toBe(200);
+    expect((await call(ct, 'GET', `${url}/students/${eshaId}/preview`)).statusCode).toBe(403);
+    expect((await call(co, 'GET', `${url}/students/${eshaId}/preview`)).statusCode).toBe(200);
+    // a class teacher prints their own section (they may only view), not another
+    const mine = await call(ct, 'POST', `${url}/generate`, {
+      classSectionId: section,
+      range: 'all',
+    });
+    expect(mine.statusCode).toBe(201);
+    expect(
+      (await call(ct, 'POST', `${url}/generate`, { classSectionId: secB, range: 'all' }))
+        .statusCode,
+    ).toBe(403);
+    // and not through the general export request either
+    expect(
+      (
+        await call(ct, 'POST', '/reports/exports', {
+          dataset: 'report_card',
+          format: 'pdf',
+          params: { releaseId: pt.id, studentId: eshaId },
+        })
+      ).statusCode,
+    ).toBe(400);
+    // holds are the coordinator's and the principal's; publishing the principal's
+    expect(
+      (
+        await call(ct, 'PUT', `${url}/holds`, {
+          studentId: student.Asha,
+          held: true,
+          reason: 'A dispute',
+        })
+      ).statusCode,
+    ).toBe(403);
+    expect(
+      (
+        await call(co, 'PUT', `${url}/classes/${classId}`, {
+          status: 'withdrawn',
+          reason: 'Not mine',
+        })
+      ).statusCode,
+    ).toBe(403);
+    // the Download Log: the class teacher's own PDFs and their section's, not XI-B's
+    const theirs = await call(co, 'POST', `${url}/generate`, {
+      classSectionId: secB,
+      range: 'all',
+    });
+    expect(theirs.statusCode).toBe(201);
+    const logOf = async (u: SeededUser) =>
+      ((await call(u, 'GET', `${url}/exports`)).json().data as Array<{ id: string }>).map(
+        (x) => x.id,
+      );
+    expect(await logOf(ct)).toContain(mine.json().exportId);
+    expect(await logOf(ct)).not.toContain(theirs.json().exportId);
+    expect(await logOf(co)).toEqual(
+      expect.arrayContaining([mine.json().exportId, theirs.json().exportId]),
+    );
+    // the class view: their class only, counted for their section
+    expect((await call(ct, 'GET', `/exams/report-cards/classes/${xii}/cards`)).statusCode).toBe(
+      403,
+    );
+    const countOf = async (u: SeededUser) =>
+      (
+        (await call(u, 'GET', `/exams/report-cards/classes/${classId}/cards`)).json()
+          .data as Array<{
+          name: string;
+          students: number;
+        }>
+      ).find((x) => x.name === 'Periodic Test 1')!.students;
+    expect(await countOf(ct)).toBe(4);
+    expect(await countOf(admin)).toBe(5);
+  });
 });

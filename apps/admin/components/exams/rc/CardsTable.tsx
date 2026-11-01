@@ -29,7 +29,9 @@ const admOf = (v: string) => v.split(' — ')[0]!.trim();
  * The Cards tab as the legacy Exam Report Card (docs/design/65, 1 Nov 2026): one line per card design;
  * on a line pick the class (a section, or every section), the students (a roll-order range or one
  * admission number, by status) and Generate Report Card (made in the background, then downloaded) or the
- * eye (the cards at once in the side panel, with holds). One PDF is made at a time.
+ * eye (the cards at once in the side panel, with holds). One PDF is made at a time. Whoever opens the
+ * page generates (a class teacher their own section: the API keeps to the person's classes); holds
+ * need exams.report_card.manage.
  */
 export function CardsTable({
   releaseId,
@@ -81,7 +83,6 @@ export function CardsTable({
                 line={line}
                 releaseId={releaseId}
                 term={term}
-                canManage={canManage}
                 busy={busy}
                 setBusy={setBusy}
                 onPreview={setPreview}
@@ -106,7 +107,6 @@ function Line({
   line,
   releaseId,
   term,
-  canManage,
   busy,
   setBusy,
   onPreview,
@@ -115,7 +115,6 @@ function Line({
   line: CardsLine;
   releaseId: string;
   term: { code: string; name: string };
-  canManage: boolean;
   busy: string | null;
   setBusy: (k: string | null) => void;
   onPreview: (s: PreviewStudent[]) => void;
@@ -340,27 +339,25 @@ function Line({
       </td>
       <td>
         <div className="ep-rcw-gen-wrap">
-          {canManage ? (
-            <button
-              type="button"
-              className="ep-rcw-gen"
-              disabled={busy !== null}
-              aria-busy={busy === line.key}
-              onClick={onGenerate}
-            >
-              <svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-                <path
-                  d="M6 2h9l5 5v15H6V2Zm8 1.5V8h4.5M8.5 13h1.8a1.6 1.6 0 0 1 0 3.2H8.5V13Zm0 3.2V18m5-5v5h1.2a2.5 2.5 0 0 0 0-5h-1.2Zm5 0h-2v5m0-2.6h1.7"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="1.4"
-                />
-              </svg>
-              <span>
-                {busy === line.key && job ? t('making', { s: job.seconds }) : t('generate')}
-              </span>
-            </button>
-          ) : null}
+          <button
+            type="button"
+            className="ep-rcw-gen"
+            disabled={busy !== null}
+            aria-busy={busy === line.key}
+            onClick={onGenerate}
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+              <path
+                d="M6 2h9l5 5v15H6V2Zm8 1.5V8h4.5M8.5 13h1.8a1.6 1.6 0 0 1 0 3.2H8.5V13Zm0 3.2V18m5-5v5h1.2a2.5 2.5 0 0 0 0-5h-1.2Zm5 0h-2v5m0-2.6h1.7"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.4"
+              />
+            </svg>
+            <span>
+              {busy === line.key && job ? t('making', { s: job.seconds }) : t('generate')}
+            </span>
+          </button>
           <button
             type="button"
             className="ep-rcw-eye"

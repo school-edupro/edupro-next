@@ -1,11 +1,20 @@
 import { Badge, Breadcrumbs, Card, PageHeader } from '@edupro/ui';
 import { getLocale, getTranslations } from 'next-intl/server';
+import { notFound } from 'next/navigation';
 import { ConfirmAction } from '@/components/ConfirmAction';
 import { Notice } from '@/components/Notice';
 import { NewReleaseDialog } from '@/components/exams/rc/NewReleaseDialog';
-import { apiFetch, getMe } from '@/lib/api';
+import { ApiError, apiFetch, getMe } from '@/lib/api';
 import { setClassPublish } from '@/lib/report-card-actions';
-import { KIND_TONE, RELEASE_TONE, STEP_OF, STEPS, type ClassCard } from '@/lib/report-card-release';
+import { ScopeNote } from '@/components/exams/rc/ScopeNote';
+import {
+  KIND_TONE,
+  RELEASE_TONE,
+  STEP_OF,
+  STEPS,
+  type CardScope,
+  type ClassCard,
+} from '@/lib/report-card-release';
 import type { ClassRow, Exam, Page, ReportCardRelease } from '@/lib/types';
 
 /**
@@ -13,7 +22,8 @@ import type { ClassRow, Exam, Page, ReportCardRelease } from '@/lib/types';
  * annual card — with its exams, where it stands (draft, with the principal, published class by class)
  * and its PDFs; a new card in a dialog. "By class" shows one class's cards side by side (several can be
  * live at once) with Publish and Revoke for that class. A card opens its workspace: Set-up, Readiness,
- * Cards, Publish.
+ * Cards, Publish. A coordinator sees the classes they coordinate and a class teacher their own section;
+ * the principal every class (the API keeps to them).
  */
 export default async function ReportCardsPage({
   searchParams,
@@ -29,8 +39,15 @@ export default async function ReportCardsPage({
 }) {
   const sp = await searchParams;
   const byClass = sp.view === 'class';
-  const classId = byClass && /^\d{1,18}$/.test(sp.class ?? '') ? sp.class! : null;
-  const [me, releases, exams, classes, cards, tp, t, locale] = await Promise.all([
+  // a coordinator sees the classes they coordinate, a class teacher their section (the principal all)
+  const scope = await apiFetch<CardScope>('/exams/report-cards/scope').catch((e: unknown) => {
+    // the page is the principal's, the coordinators' and the class teachers'
+    if (e instanceof ApiError && e.status === 403) notFound();
+    throw e;
+  });
+  const asked = byClass && /^\d{1,18}$/.test(sp.class ?? '') ? sp.class! : null;
+  const classId = asked && (scope.all || scope.classes.includes(asked)) ? asked : null;
+  const [me, releases, exams, allClasses, cards, tp, t, locale] = await Promise.all([
     getMe(),
     apiFetch<{ data: ReportCardRelease[] }>('/exams/report-cards/releases').then((x) => x.data),
     apiFetch<{ data: Exam[] }>('/exams').then((x) => x.data),
@@ -57,6 +74,7 @@ export default async function ReportCardsPage({
       : '';
   const canManage = me.permissions.includes('exams.report_card.manage');
   const canPublish = me.permissions.includes('exams.result.publish');
+  const classes = scope.all ? allClasses : allClasses.filter((k) => scope.classes.includes(k.id));
   const klass = classes.find((k) => k.id === classId);
   const back = `/exams/report-cards?view=class&class=${classId ?? ''}`;
   return (
@@ -84,6 +102,7 @@ export default async function ReportCardsPage({
         }
       />
       <Notice params={sp} />
+      <ScopeNote scope={scope} />
       <nav aria-label={t('views')} style={{ marginBottom: 'var(--sp-4)' }}>
         <ul className="ep-xchips">
           <li style={{ padding: 0, border: 0, background: 'none' }}>

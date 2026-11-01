@@ -11,6 +11,11 @@ export interface RendererDefinition {
   page: { width: string; height: string };
   /** Parameter names that must be present (numeric ids). */
   requiredParams: string[];
+  /**
+   * Made only through this API route, which checks whose records the requester may print (report
+   * cards: the class teacher's own section); the general export request and schedules refuse it.
+   */
+  ownRoute?: string;
 }
 
 export const RENDERERS: Record<string, RendererDefinition> = {
@@ -77,6 +82,7 @@ RENDERERS.report_card = {
   permission: 'exams.report_card.view',
   page: { width: '210mm', height: '297mm' },
   requiredParams: ['releaseId', 'studentId'],
+  ownRoute: '/exams/report-cards',
 };
 RENDERERS.report_card_batch = {
   id: 'report_card_batch',
@@ -86,6 +92,7 @@ RENDERERS.report_card_batch = {
   // with classSectionId (every active pupil of the section) or classId + studentIds (the pupils chosen
   // on the Cards line, in order); the worker checks which it got
   requiredParams: ['releaseId'],
+  ownRoute: '/exams/report-cards',
 };
 
 // Sprint 19: certificates — one issued certificate, or an issue batch (the export groups them)

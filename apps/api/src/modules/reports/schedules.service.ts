@@ -90,6 +90,10 @@ export class SchedulesService {
   private validate(ctx: RequestContext, dto: ScheduleDto) {
     const def = datasetOrNull(dto.dataset) ?? rendererOrNull(dto.dataset);
     if (!def) throw new DomainError('validation-failed', 'Unknown dataset', { status: 400 });
+    if ('ownRoute' in def && def.ownRoute)
+      throw new DomainError('validation-failed', `This document is made from ${def.ownRoute}`, {
+        status: 400,
+      });
     if (!mayUseDataset(ctx.permissions ?? new Set<string>(), def))
       throw new DomainError('permission-denied', `${def.title} requires ${def.permission}`, {
         status: 403,

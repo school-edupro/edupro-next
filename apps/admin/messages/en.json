@@ -3325,7 +3325,10 @@
     "revokeCardTitle": "Revoke {card} for {cls}?",
     "noCardsForClass": "No report card carries {cls} yet: make one with “+ New release” and tick exams of this class.",
     "pickClassHelp": "Pick a class to see all its report cards side by side (an exam card, term card and annual card can be live together), with Publish and Revoke for the class.",
-    "readyAllExam": "Every class is ready: the marks are verified and the remarks and attendance are in."
+    "readyAllExam": "Every class is ready: the marks are verified and the remarks and attendance are in.",
+    "yourClasses": "You see only your own classes: {list}. The principal sees every class.",
+    "noClassesTitle": "No class is assigned to you",
+    "noClasses": "Report cards show the classes you coordinate and the sections you are class teacher of. None is assigned to you this year: the office assigns them in <a>Teacher assignments</a>."
   },
   "gps": {
     "vehicle": "Vehicle",

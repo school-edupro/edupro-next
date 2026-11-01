@@ -1,8 +1,20 @@
 import type { ReportCardRelease } from './types';
 
+/**
+ * The classes a person sees on Report cards (GET /exams/report-cards/scope): every class for whoever may
+ * publish results; else the classes they coordinate and the sections they are class teacher of.
+ */
+export interface CardScope {
+  all: boolean;
+  classes: string[];
+  sections: Array<{ id: string; classId: string; code: string }>;
+}
+
 /** A term release's readiness, class by class (docs/design/65; the workspace's Readiness and Cards). */
 export interface ReleaseReadiness {
   release: ReportCardRelease;
+  /** false: only the person's own classes and sections are here */
+  allClasses: boolean;
   templates: Array<{ id: string; name: string; band: string }>;
   classes: Array<{
     classId: string;

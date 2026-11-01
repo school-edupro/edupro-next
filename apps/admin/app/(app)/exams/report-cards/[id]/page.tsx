@@ -6,6 +6,7 @@ import { ConfirmAction } from '@/components/ConfirmAction';
 import { Notice } from '@/components/Notice';
 import { CardsTable } from '@/components/exams/rc/CardsTable';
 import { DownloadLog } from '@/components/exams/rc/DownloadLog';
+import { ScopeNote } from '@/components/exams/rc/ScopeNote';
 import { ApiError, apiFetch, getMe } from '@/lib/api';
 import { saveReleaseSetup, setClassPublish, setReleaseStatus } from '@/lib/report-card-actions';
 import {
@@ -125,6 +126,13 @@ export default async function ReleasePage({
         ))}
       </ol>
       <Notice params={sp} />
+      <ScopeNote
+        scope={{
+          all: ready.allClasses,
+          classes: ready.classes.map((k) => k.classId),
+          sections: allSections.map((x) => ({ id: x.id, classId: '', code: x.code })),
+        }}
+      />
       <div className="ep-rcw-kpis">
         <KpiTile
           label={t('kPublished')}

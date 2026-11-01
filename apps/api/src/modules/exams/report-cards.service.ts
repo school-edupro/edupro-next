@@ -83,6 +83,20 @@ export interface ReleaseRow {
   publishedClasses: number;
 }
 
+/**
+ * Whose classes a person sees on Report cards (docs/design/65, 1 Nov 2026): whoever may publish results
+ * (the principal; school and group admins) every class; anyone else the classes they coordinate (each
+ * section) and the sections they are class teacher of, from this year's Teacher assignments. A person
+ * with neither sees no class.
+ */
+export interface CardScope {
+  all: boolean;
+  /** the classes with a section in sight */
+  classes: string[];
+  /** the sections in sight */
+  sections: string[];
+}
+
 const T_COLS = `id::text, code, name, band::text, layout, body_html, styles_css, page_width, page_height, version, status::text, updated_at`;
 const toTemplate = (r: Record<string, unknown>): TemplateRow => ({
   id: String(r.id),
@@ -99,20 +113,30 @@ const toTemplate = (r: Record<string, unknown>): TemplateRow => ({
   updatedAt: new Date(r.updated_at as string).toISOString(),
 });
 
+/**
+ * The release columns. $2 (sections) and $3 (classes) narrow the counts to the classes a person sees
+ * on Report cards (CardScope: cards and holds of the students in those sections); null counts all.
+ */
 const R_COLS = `r.id::text, r.academic_year_id::text AS academic_year_id, r.kind, r.term_code, r.name, r.exam_ids::text[] AS exam_ids, r.templates, r.hide_defaulters, r.defaulter_min::text, r.status, r.released_at, r.created_at,
   (SELECT jsonb_agg(jsonb_build_object('id', e.id::text, 'code', e.code, 'name', e.name) ORDER BY array_position(r.exam_ids, e.id)) FROM exams e WHERE e.id = ANY(r.exam_ids)) AS exams,
-  (SELECT count(*) FROM report_cards c WHERE c.release_id = r.id AND c.rendered_at IS NOT NULL)::int AS rendered,
-  (SELECT count(*) FROM report_cards c WHERE c.release_id = r.id AND c.withheld)::int AS withheld,
+  (SELECT count(*) FROM report_cards c WHERE c.release_id = r.id AND c.rendered_at IS NOT NULL AND ($2::bigint[] IS NULL OR EXISTS (SELECT 1 FROM enrolments en WHERE en.student_id = c.student_id
+       AND en.academic_year_id = r.academic_year_id AND en.status = 'active' AND en.class_section_id = ANY($2::bigint[]))))::int AS rendered,
+  (SELECT count(*) FROM report_cards c WHERE c.release_id = r.id AND c.withheld AND ($2::bigint[] IS NULL OR EXISTS (SELECT 1 FROM enrolments en WHERE en.student_id = c.student_id
+       AND en.academic_year_id = r.academic_year_id AND en.status = 'active' AND en.class_section_id = ANY($2::bigint[]))))::int AS withheld,
   r.submitted_at, r.withdrawn_reason, r.notified_count,
-  (SELECT count(*) FROM report_card_holds h WHERE h.release_id = r.id)::int AS held,
+  (SELECT count(*) FROM report_card_holds h WHERE h.release_id = r.id AND ($2::bigint[] IS NULL OR EXISTS (SELECT 1 FROM enrolments en WHERE en.student_id = h.student_id
+       AND en.academic_year_id = r.academic_year_id AND en.status = 'active' AND en.class_section_id = ANY($2::bigint[]))))::int AS held,
   (SELECT count(*) FROM exam_subjects es
      JOIN class_sections cs ON cs.class_id = es.class_id AND cs.academic_year_id = r.academic_year_id AND cs.deleted_at IS NULL AND cs.status = 'active'
      LEFT JOIN exam_entry_status st ON st.exam_subject_id = es.id AND st.class_section_id = cs.id
     WHERE es.exam_id = ANY(r.exam_ids) AND COALESCE(st.status, 'open') <> 'verified'
+      AND ($2::bigint[] IS NULL OR cs.id = ANY($2::bigint[]))
       AND EXISTS (SELECT 1 FROM enrolments en WHERE en.class_section_id = cs.id AND en.status = 'active'
                     AND app.student_exam_subject_kind(en.student_id, es.exam_id, es.subject_id) IS NOT NULL))::int AS unverified,
-  (SELECT count(DISTINCT ec.class_id) FROM exam_classes ec WHERE ec.exam_id = ANY(r.exam_ids))::int AS class_count,
-  (SELECT count(*) FROM report_card_release_classes x WHERE x.release_id = r.id AND x.status = 'released')::int AS published_classes`;
+  (SELECT count(DISTINCT ec.class_id) FROM exam_classes ec WHERE ec.exam_id = ANY(r.exam_ids)
+      AND ($3::bigint[] IS NULL OR ec.class_id = ANY($3::bigint[])))::int AS class_count,
+  (SELECT count(*) FROM report_card_release_classes x WHERE x.release_id = r.id AND x.status = 'released'
+      AND ($3::bigint[] IS NULL OR x.class_id = ANY($3::bigint[])))::int AS published_classes`;
 const toRelease = (r: Record<string, unknown>): ReleaseRow => ({
   id: String(r.id),
   academicYearId: String(r.academic_year_id),
@@ -353,21 +377,37 @@ export class ReportCardsService {
   }
 
   // ---- releases ----------------------------------------------------------------------------------
+  /** The year's cards that carry a class the person sees, counted for those classes only. */
   async releases(ctx: RequestContext): Promise<ReleaseRow[]> {
-    return this.db.tenant(requireTenant(ctx), async (c) => {
-      const r = await c.query<Record<string, unknown>>(
-        // eslint-disable-next-line no-restricted-syntax -- fixed fragments (constant SELECT or registry names); values are bound
-        `SELECT ${R_COLS} FROM report_card_releases r WHERE r.academic_year_id = app.current_academic_year_id() ORDER BY r.created_at DESC`,
-      );
-      return r.rows.map(toRelease);
-    });
+    return this.db.tenant(requireTenant(ctx), async (c) =>
+      this.releaseRows(c, null, await this.scopeOf(c, ctx)),
+    );
   }
 
   async release(ctx: RequestContext, id: string): Promise<ReleaseRow> {
     return this.db.tenant(requireTenant(ctx), async (c) => {
-      const row = await this.findRelease(c, id);
+      const row = await this.findRelease(c, id, await this.scopeOf(c, ctx));
       if (!row) throw new DomainError('not-found', 'Release not found', { status: 404 });
       return row;
+    });
+  }
+
+  /** The classes and sections the person sees on Report cards, with their codes (the page's hint). */
+  async myScope(ctx: RequestContext) {
+    return this.db.tenant(requireTenant(ctx), async (c) => {
+      const scope = await this.scopeOf(c, ctx);
+      if (scope.all) return { all: true, classes: [], sections: [] };
+      const r = await c.query<{ id: string; class_id: string; code: string }>(
+        `SELECT cs.id::text, cs.class_id::text, k.code || '-' || cs.name AS code
+           FROM class_sections cs JOIN classes k ON k.id = cs.class_id
+          WHERE cs.id = ANY($1::bigint[]) ORDER BY k.display_order, cs.name`,
+        [scope.sections],
+      );
+      return {
+        all: false,
+        classes: scope.classes,
+        sections: r.rows.map((x) => ({ id: x.id, classId: x.class_id, code: x.code })),
+      };
     });
   }
 
@@ -431,7 +471,8 @@ export class ReportCardsService {
         status: 400,
       });
     return this.db.tenant(requireTenant(ctx), async (c) => {
-      const before = await this.findRelease(c, id);
+      const scope = await this.scopeOf(c, ctx);
+      const before = await this.findRelease(c, id, scope);
       if (!before) throw new DomainError('not-found', 'Release not found', { status: 404 });
       const from: Record<string, ReleaseRow['status'][]> = {
         submitted: ['draft', 'withdrawn'],
@@ -491,7 +532,7 @@ export class ReportCardsService {
         entityId: id,
         after: dto,
       });
-      return (await this.findRelease(c, id))!;
+      return (await this.findRelease(c, id, scope))!;
     });
   }
 
@@ -610,6 +651,7 @@ export class ReportCardsService {
    * number. One student makes his own card; more make one PDF, a page each.
    */
   async generate(ctx: RequestContext, releaseId: string, dto: GenerateCardsDto) {
+    // release() and cards() keep to the person's classes; a class teacher prints their own section
     const rel = await this.release(ctx, releaseId);
     const list = await this.cards(ctx, releaseId, dto);
     const one = dto.admissionNo?.toLowerCase();
@@ -642,9 +684,10 @@ export class ReportCardsService {
     const place = dto.classId
       ? `${picked[0]!.section.split('-')[0]} (all sections)`
       : picked[0]!.section;
+    // the classes were checked above: a class teacher (who may only view) prints their own section
     const exp =
       one && picked.length === 1
-        ? await this.reports.create(
+        ? await this.reports.createRenderedForOwner(
             ctx,
             {
               dataset: 'report_card',
@@ -658,7 +701,7 @@ export class ReportCardsService {
             },
             'exams.report_card.render',
           )
-        : await this.reports.create(
+        : await this.reports.createRenderedForOwner(
             ctx,
             {
               dataset: 'report_card_batch',
@@ -683,6 +726,8 @@ export class ReportCardsService {
    */
   async classCards(ctx: RequestContext, classId: string) {
     return this.db.tenant(requireTenant(ctx), async (c) => {
+      const scope = await this.scopeOf(c, ctx);
+      if (!scope.all && !scope.classes.includes(classId)) throw this.outOfSight();
       const r = await c.query<{
         id: string;
         kind: ReleaseRow['kind'];
@@ -702,17 +747,19 @@ export class ReportCardsService {
         `SELECT r.id::text, r.kind, r.term_code, r.name, r.status, x.status AS publish, x.released_at, x.withdrawn_at,
                 x.withdrawn_reason, x.notified_count AS notified,
                 (SELECT count(*) FROM enrolments en JOIN class_sections cs ON cs.id = en.class_section_id
-                  WHERE cs.class_id = $1 AND en.status = 'active' AND en.academic_year_id = r.academic_year_id)::int AS students,
+                  WHERE cs.class_id = $1 AND en.status = 'active' AND en.academic_year_id = r.academic_year_id
+                    AND ($2::bigint[] IS NULL OR cs.id = ANY($2::bigint[])))::int AS students,
                 (SELECT count(*) FROM report_cards rc JOIN enrolments en ON en.student_id = rc.student_id AND en.status = 'active' AND en.academic_year_id = r.academic_year_id
                    JOIN class_sections cs ON cs.id = en.class_section_id AND cs.class_id = $1
-                  WHERE rc.release_id = r.id AND rc.rendered_at IS NOT NULL)::int AS made,
+                  WHERE rc.release_id = r.id AND rc.rendered_at IS NOT NULL AND ($2::bigint[] IS NULL OR cs.id = ANY($2::bigint[])))::int AS made,
                 (SELECT count(*) FROM report_card_holds h JOIN enrolments en ON en.student_id = h.student_id AND en.status = 'active' AND en.academic_year_id = r.academic_year_id
                    JOIN class_sections cs ON cs.id = en.class_section_id AND cs.class_id = $1
-                  WHERE h.release_id = r.id)::int AS held,
+                  WHERE h.release_id = r.id AND ($2::bigint[] IS NULL OR cs.id = ANY($2::bigint[])))::int AS held,
                 (SELECT count(*) FROM exam_subjects es
                    JOIN class_sections cs ON cs.class_id = es.class_id AND cs.academic_year_id = r.academic_year_id AND cs.deleted_at IS NULL
                    LEFT JOIN exam_entry_status st ON st.exam_subject_id = es.id AND st.class_section_id = cs.id
                   WHERE es.exam_id = ANY(r.exam_ids) AND es.class_id = $1 AND COALESCE(st.status, 'open') <> 'verified'
+                    AND ($2::bigint[] IS NULL OR cs.id = ANY($2::bigint[]))
                     AND EXISTS (SELECT 1 FROM enrolments en WHERE en.class_section_id = cs.id AND en.status = 'active'
                                   AND app.student_exam_subject_kind(en.student_id, es.exam_id, es.subject_id) IS NOT NULL))::int AS unverified
            FROM report_card_releases r
@@ -720,7 +767,7 @@ export class ReportCardsService {
           WHERE r.academic_year_id = app.current_academic_year_id()
             AND EXISTS (SELECT 1 FROM exam_classes ec WHERE ec.class_id = $1 AND ec.exam_id = ANY(r.exam_ids))
           ORDER BY r.created_at DESC, r.id DESC`,
-        [classId],
+        [classId, scope.all ? null : scope.sections],
       );
       return r.rows.map((x) => ({
         releaseId: x.id,
@@ -745,9 +792,15 @@ export class ReportCardsService {
     });
   }
 
-  /** The Download Log: the PDFs the school made for this release, newest first (not the families' own). */
+  /**
+   * The Download Log: the PDFs the school made for this release, newest first (not the families' own).
+   * A person who sees some classes gets the PDFs they made and those whose every pupil is theirs.
+   */
   async exportsOf(ctx: RequestContext, releaseId: string) {
     return this.db.tenant(requireTenant(ctx), async (c) => {
+      const scope = await this.scopeOf(c, ctx);
+      if (!(await this.findRelease(c, releaseId, scope)))
+        throw new DomainError('not-found', 'Release not found', { status: 404 });
       const r = await c.query<{
         id: string;
         title: string;
@@ -761,9 +814,19 @@ export class ReportCardsService {
            FROM exports e LEFT JOIN users u ON u.id = e.requested_by
           WHERE e.dataset IN ('report_card', 'report_card_batch') AND e.params->>'releaseId' = $1
             AND NOT EXISTS (SELECT 1 FROM guardians g WHERE g.user_id = e.requested_by)
+            AND ($2::text[] IS NULL OR e.requested_by = app.current_user_id()
+                 OR e.params->>'classSectionId' = ANY($2::text[])
+                 OR (e.params ? 'studentId' AND EXISTS (SELECT 1 FROM enrolments en
+                       WHERE en.student_id::text = e.params->>'studentId' AND en.academic_year_id = app.current_academic_year_id()
+                         AND en.class_section_id::text = ANY($2::text[])))
+                 OR (jsonb_typeof(e.params->'studentIds') = 'array' AND jsonb_array_length(e.params->'studentIds') > 0
+                     AND NOT EXISTS (SELECT 1 FROM jsonb_array_elements_text(e.params->'studentIds') sid
+                       WHERE NOT EXISTS (SELECT 1 FROM enrolments en
+                         WHERE en.student_id::text = sid AND en.academic_year_id = app.current_academic_year_id()
+                           AND en.class_section_id::text = ANY($2::text[])))))
           ORDER BY e.requested_at DESC, e.id DESC
           LIMIT 100`,
-        [releaseId],
+        [releaseId, scope.all ? null : scope.sections],
       );
       return r.rows.map((x) => ({
         id: x.id,
@@ -780,6 +843,10 @@ export class ReportCardsService {
   /** Queues one PDF for a whole section (page break per pupil); the worker records each card. */
   async renderBatch(ctx: RequestContext, releaseId: string, dto: RenderBatchDto) {
     const rel = await this.release(ctx, releaseId);
+    await this.db.tenant(requireTenant(ctx), async (c) => {
+      const scope = await this.scopeOf(c, ctx);
+      if (!scope.all && !scope.sections.includes(dto.classSectionId)) throw this.outOfSight();
+    });
     await this.assertTemplateFor(ctx, rel, { classSectionId: dto.classSectionId });
     const exp = await this.reports.create(
       ctx,
@@ -800,6 +867,9 @@ export class ReportCardsService {
 
   async renderOne(ctx: RequestContext, releaseId: string, studentId: string) {
     const rel = await this.release(ctx, releaseId);
+    await this.db.tenant(requireTenant(ctx), async (c) =>
+      this.assertStudentInSight(c, await this.scopeOf(c, ctx), studentId),
+    );
     const exp = await this.reports.create(
       ctx,
       {
@@ -876,8 +946,10 @@ export class ReportCardsService {
         status: 400,
       });
     return this.db.tenant(requireTenant(ctx), async (c) => {
-      const rel = await this.findRelease(c, releaseId);
+      const scope = await this.scopeOf(c, ctx);
+      const rel = await this.findRelease(c, releaseId, scope);
       if (!rel) throw new DomainError('not-found', 'Release not found', { status: 404 });
+      await this.assertStudentInSight(c, scope, dto.studentId);
       if (dto.held)
         await c.query(
           `INSERT INTO report_card_holds (school_id, release_id, student_id, reason, held_by)
@@ -896,7 +968,7 @@ export class ReportCardsService {
         entityId: releaseId,
         after: dto,
       });
-      return (await this.findRelease(c, releaseId))!;
+      return (await this.findRelease(c, releaseId, scope))!;
     });
   }
 
@@ -908,7 +980,9 @@ export class ReportCardsService {
    */
   async readiness(ctx: RequestContext, releaseId: string) {
     return this.db.tenant(requireTenant(ctx), async (c) => {
-      const rel = await this.findRelease(c, releaseId);
+      // a coordinator's classes, a class teacher's own section (CardScope)
+      const scope = await this.scopeOf(c, ctx);
+      const rel = await this.findRelease(c, releaseId, scope);
       if (!rel) throw new DomainError('not-found', 'Release not found', { status: 404 });
       const classes = await c.query<{
         id: string;
@@ -920,8 +994,9 @@ export class ReportCardsService {
         `SELECT DISTINCT k.id::text, k.code, k.name, k.band::text, k.display_order
            FROM exam_classes ec JOIN classes k ON k.id = ec.class_id
           WHERE ec.exam_id = ANY($1::bigint[]) AND k.deleted_at IS NULL
+            AND ($2::bigint[] IS NULL OR k.id = ANY($2::bigint[]))
           ORDER BY k.display_order, k.code`,
-        [rel.examIds],
+        [rel.examIds, scope.all ? null : scope.classes],
       );
       const classIds = classes.rows.map((k) => k.id);
       const sections = await c.query<{
@@ -943,9 +1018,10 @@ export class ReportCardsService {
                   WHERE h.release_id = $1)::int AS held
            FROM class_sections cs JOIN classes k ON k.id = cs.class_id
           WHERE cs.class_id = ANY($2::bigint[]) AND cs.academic_year_id = app.current_academic_year_id() AND cs.deleted_at IS NULL
+            AND ($3::bigint[] IS NULL OR cs.id = ANY($3::bigint[]))
             AND EXISTS (SELECT 1 FROM enrolments en WHERE en.class_section_id = cs.id AND en.status = 'active')
           ORDER BY k.display_order, cs.name`,
-        [releaseId, classIds],
+        [releaseId, classIds, scope.all ? null : scope.sections],
       );
       // papers (section × subject) someone takes that are not verified yet
       const open = await c.query<{ section: string; exam: string; open: number; papers: number }>(
@@ -1012,6 +1088,8 @@ export class ReportCardsService {
       const exams = rel.exams;
       return {
         release: rel,
+        /** false: only the person's classes and sections are here (a coordinator, a class teacher) */
+        allClasses: scope.all,
         templates: templates.rows,
         classes: classes.rows.map((k) => {
           const band = bandFor(k.band, k.display_order);
@@ -1101,6 +1179,15 @@ export class ReportCardsService {
     q: { classSectionId?: string; classId?: string; status?: 'active' | 'inactive' | 'all' },
   ) {
     return this.db.tenant(requireTenant(ctx), async (c) => {
+      const scope = await this.scopeOf(c, ctx);
+      if (!(await this.findRelease(c, releaseId, scope)))
+        throw new DomainError('not-found', 'Release not found', { status: 404 });
+      if (
+        !scope.all &&
+        ((q.classSectionId && !scope.sections.includes(q.classSectionId)) ||
+          (q.classId && !scope.classes.includes(q.classId)))
+      )
+        throw this.outOfSight();
       const r = await c.query<Record<string, unknown>>(
         `SELECT s.id::text AS student_id, s.display_name AS name, s.admission_no, e.roll_no,
                 cs.id::text AS section_id, cs.class_id::text AS class_id, k.code || '-' || cs.name AS section,
@@ -1118,8 +1205,15 @@ export class ReportCardsService {
             AND ($3::bigint IS NULL OR cs.class_id = $3::bigint)
             AND e.academic_year_id = app.current_academic_year_id()
             AND ($4 = 'all' OR ($4 = 'active') = (e.status = 'active'))
+            AND ($5::bigint[] IS NULL OR cs.id = ANY($5::bigint[]))
           ORDER BY cs.name, e.roll_no NULLS LAST, s.display_name`,
-        [releaseId, q.classSectionId ?? null, q.classId ?? null, q.status ?? 'active'],
+        [
+          releaseId,
+          q.classSectionId ?? null,
+          q.classId ?? null,
+          q.status ?? 'active',
+          scope.all ? null : scope.sections,
+        ],
       );
       return r.rows.map((x) => ({
         studentId: String(x.student_id),
@@ -1240,8 +1334,10 @@ export class ReportCardsService {
   /** The school's preview of one student's card in a release, with the design of the student's class. */
   async studentPreview(ctx: RequestContext, releaseId: string, studentId: string) {
     return this.db.tenant(requireTenant(ctx), async (c) => {
-      const rel = await this.findRelease(c, releaseId);
+      const scope = await this.scopeOf(c, ctx);
+      const rel = await this.findRelease(c, releaseId, scope);
       if (!rel) throw new DomainError('not-found', 'Release not found', { status: 404 });
+      await this.assertStudentInSight(c, scope, studentId);
       return { html: await this.studentCardHtml(c, rel, studentId) };
     });
   }
@@ -1365,13 +1461,73 @@ export class ReportCardsService {
     return r.rows[0] ? toTemplate(r.rows[0]) : null;
   }
 
-  private async findRelease(c: PoolClient, id: string): Promise<ReleaseRow | null> {
+  /** A release; with a scope, only one that carries a class in sight, counted for those classes. */
+  private async findRelease(
+    c: PoolClient,
+    id: string,
+    scope?: CardScope,
+  ): Promise<ReleaseRow | null> {
+    return (await this.releaseRows(c, id, scope))[0] ?? null;
+  }
+
+  /** One release (id) or the working year's (null), newest first, as findRelease narrows them. */
+  private async releaseRows(
+    c: PoolClient,
+    id: string | null,
+    scope?: CardScope,
+  ): Promise<ReleaseRow[]> {
+    const narrow = scope && !scope.all;
     const r = await c.query<Record<string, unknown>>(
       // eslint-disable-next-line no-restricted-syntax -- fixed fragments (constant SELECT or registry names); values are bound
-      `SELECT ${R_COLS} FROM report_card_releases r WHERE r.id = $1`,
-      [id],
+      `SELECT ${R_COLS} FROM report_card_releases r
+        WHERE ($1::bigint IS NULL OR r.id = $1::bigint)
+          AND ($1::bigint IS NOT NULL OR r.academic_year_id = app.current_academic_year_id())
+          AND ($3::bigint[] IS NULL OR EXISTS (SELECT 1 FROM exam_classes ec
+                WHERE ec.exam_id = ANY(r.exam_ids) AND ec.class_id = ANY($3::bigint[])))
+        ORDER BY r.created_at DESC, r.id DESC`,
+      [id, narrow ? scope.sections : null, narrow ? scope.classes : null],
     );
-    return r.rows[0] ? toRelease(r.rows[0]) : null;
+    return r.rows.map(toRelease);
+  }
+
+  /** See CardScope: every class for whoever may publish results, else this year's assignments. */
+  private async scopeOf(c: PoolClient, ctx: RequestContext): Promise<CardScope> {
+    if (ctx.permissions?.has('exams.result.publish'))
+      return { all: true, classes: [], sections: [] };
+    const r = await c.query<{ class_id: string; section_id: string }>(
+      `SELECT DISTINCT cs.class_id::text, cs.id::text AS section_id
+         FROM teacher_assignments ta
+         JOIN employees e ON e.id = ta.employee_id AND e.user_id = app.current_user_id()
+         JOIN class_sections mine ON mine.id = ta.class_section_id
+         JOIN class_sections cs ON cs.academic_year_id = ta.academic_year_id AND cs.deleted_at IS NULL
+          AND (cs.id = mine.id OR (ta.kind = 'coordinator' AND cs.class_id = mine.class_id))
+        WHERE ta.academic_year_id = app.current_academic_year_id() AND ta.valid_to IS NULL
+          AND ta.kind IN ('class_teacher', 'coordinator')`,
+    );
+    return {
+      all: false,
+      classes: [...new Set(r.rows.map((x) => x.class_id))],
+      sections: r.rows.map((x) => x.section_id),
+    };
+  }
+
+  private outOfSight(): DomainError {
+    return new DomainError(
+      'report_card.not_your_class',
+      'This class is not yours: you see the classes you coordinate and the sections you are class teacher of',
+      { status: 403 },
+    );
+  }
+
+  /** A student's section this year must be in sight (a preview, a hold, a single card). */
+  private async assertStudentInSight(c: PoolClient, scope: CardScope, studentId: string) {
+    if (scope.all) return;
+    const r = await c.query(
+      `SELECT 1 FROM enrolments en WHERE en.student_id = $1 AND en.academic_year_id = app.current_academic_year_id()
+          AND en.class_section_id = ANY($2::bigint[]) LIMIT 1`,
+      [studentId, scope.sections],
+    );
+    if (!r.rowCount) throw this.outOfSight();
   }
 
   /** The section's band must have a template (the release's, or the band's active default). */

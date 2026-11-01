@@ -554,3 +554,39 @@ exam cards print a **new ready-made test slip** by default; families see **every
   worker falls back to the release's year for jobs queued before (`yearOf`). Test: workers
   `report-card.test.ts` (fails with the old code). The parent page also says when a PDF failed (ask
   again, or Print / Save as PDF) instead of "being prepared".
+
+### Report cards for their own classes; teacher pages in the admin's Quick actions (1 Nov 2026, later)
+
+Asked 1 Nov 2026: Report cards only for the class teacher, the coordinator and the principal, a class
+teacher seeing only their own class; and the teacher app's Marks, Indicators, Remarks and Date sheet in
+the admin app's Quick actions. Answers (all the recommended ones): **principal every class, others their
+own**; a class teacher **checks, previews and prints** (no holds, set-up or publishing); a coordinator
+**prepares and the principal publishes**; the teacher pages on a **Teacher app tab** that opens them.
+
+- Who sees which classes (`CardScope`, `ReportCardsService.scopeOf`): whoever may publish results
+  (`exams.result.publish`: school admin = the principal, group admin) every class; anyone else the
+  classes they coordinate (Teacher assignments, kind coordinator: every section of the class) and the
+  sections they are class teacher of (kind class_teacher), this year. Nothing assigned: no class, and the
+  page says the office assigns them in Teacher assignments. `GET /exams/report-cards/scope` returns it.
+- Every report-card route keeps to it: the list (only cards that carry a class in sight; counts, PDFs,
+  holds, papers not verified and classes published counted for those classes), a card, Readiness (its
+  classes and sections), the Cards lines (a section in sight; "all sections" = the sections in sight),
+  Generate, the preview, holds, the Download Log (their own PDFs and those whose every pupil is theirs),
+  the class view and the older render routes. Out of sight: 403 `report_card.not_your_class`; a card of
+  no class in sight: 404.
+- Generate needs `exams.report_card.view` now (a class teacher prints their own section); its PDFs are
+  queued through the owner path because the classes were checked. Holds, set-up and new cards keep
+  `exams.report_card.manage` (coordinators, principal); publish / revoke keep `exams.result.publish`.
+- The general export request (`POST /reports/exports`) and report schedules refuse `report_card` and
+  `report_card_batch` (`RendererDefinition.ownRoute`): they bypassed whose classes.
+- Migration 0299: the built-in Subject teacher and Auditor roles lose `exams.report_card.view` (a
+  school's own roles are left as they are).
+- Admin: the list and the workspace show "You see only your own classes: VI-A" (`ScopeNote`); By class
+  lists only those classes; Generate shows for everyone who opens the page; Hold and Publish stay hidden
+  without their rights.
+- Quick actions (admin landing, docs/design/26): a **Teacher app** tab beside **Admin pages** when the
+  person may use one of: Marks entry (`exams.marks.enter`), Indicators and progress card
+  (`exams.indicator.enter`), Remarks (`exams.remark.enter` or marks entry), Exam date sheet
+  (`exams.marks.view`) — the teacher app menu's rules. A tile opens the teacher app (`TEACHER_APP_URL`,
+  default http://localhost:3002) in a new tab; the search covers both tabs.
+- Tests: `exams-v2.e2e-spec.ts` "report cards keep to each person's classes".

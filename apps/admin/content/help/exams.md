@@ -9,6 +9,7 @@
 | Exam office          | Students' subject choices; enters marks and codes for every section (admin), e.g. from paper sheets; cannot reopen locked marks                      |
 | Class teacher        | Their section's subject choices; indicators, remarks, exam attendance, height and weight (the exam register)                                         |
 | Principal            | Reads results analytics; approves the release                                                                                                        |
+| Report cards         | The principal sees every class; a coordinator the classes they coordinate; a class teacher their own section (checks, previews and prints only)      |
 | Families             | Read the released card in the parent app and download the PDF (unless withheld for fee default)                                                      |
 
 ## Before the exam
@@ -128,6 +129,9 @@ see who submitted or verified it and to submit, verify, send back or reopen it.
   parent app once the exam is shown on the parent portal; teachers see their classes' date sheets in
   the teacher app (**Exam date sheet**).
 - Every page of an exam is in English and Hindi (the language switch at the top).
+- **Teacher app pages from the admin app**: the home page's **Quick actions** has a **Teacher app**
+  tab with **Marks entry**, **Indicators and progress card**, **Remarks** and **Exam date sheet** (each
+  only for people who may use it). A tile opens that page of the teacher app in a new tab.
 
 1. **Exams → open exam → Results → Compute**: totals, percentages, grades, ranks per section and class.
 2. **Exams → Report cards → Templates**: the layout per band (HPC for primary, CCE for middle,
@@ -141,12 +145,18 @@ see who submitted or verified it and to submit, verify, send back or reopen it.
    - **Term card** (T1, T2): every exam of the term; prints the term result of the locked mark register
      with that term code (for example the DPS Noida VI-VIII card).
    - **Annual card**: every exam of the year.
-   A class can have **several cards live at once**: for Class VI make an exam card PT1, an exam card PT2
-   and a term card T1, and publish each for Class VI. Families see every published card in the parent
-   app, newest first, each marked Exam card, Term card or Annual card. **Report cards → By class** shows
-   one class's cards side by side, with whether each is published, the PDFs made and the papers not
-   verified, and **Publish** / **Revoke** for that class.
-   The release opens in its workspace, with four steps:
+     A class can have **several cards live at once**: for Class VI make an exam card PT1, an exam card PT2
+     and a term card T1, and publish each for Class VI. Families see every published card in the parent
+     app, newest first, each marked Exam card, Term card or Annual card. **Report cards → By class** shows
+     one class's cards side by side, with whether each is published, the PDFs made and the papers not
+     verified, and **Publish** / **Revoke** for that class.
+     **Whose classes**: the principal (and the school and group admins) sees every class. A coordinator
+     sees the classes they coordinate and a class teacher their own section, as set in **Academics →
+     Teacher assignments**; the page says "You see only your own classes: …". A class teacher checks the
+     readiness, previews and prints their section's cards; holds, set-up and new cards are the
+     coordinator's and the principal's, and only the principal publishes. Subject teachers do not open
+     Report cards.
+     The release opens in its workspace, with four steps:
    - **Set-up**: the name, the exams and the card design of each class (a class's own design comes
      before its band's: Class IX and X can print different cards).
    - **Readiness**: class by class, a checklist of what is done (✓) and what is still needed (!): the

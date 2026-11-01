@@ -7812,6 +7812,14 @@ a.db-list__main:hover strong {
 .db-qa__search:focus-within {
   box-shadow: 0 0 0 2px var(--focus-ring);
 }
+/* the Admin pages / Teacher app tabs: the tab row above the tiles (.ep-tabs is a chip row elsewhere) */
+.db-qa .ep-tabs {
+  display: block;
+  margin-bottom: 0;
+}
+.db-qa .ep-tabs__list {
+  margin-bottom: var(--sp-3);
+}
 .db-qa__grid {
   list-style: none;
   margin: 0;
@@ -14056,6 +14064,15 @@ button.ep-subchoice__icon:hover {
 }
 .ep-rcw-check a {
   text-decoration: underline;
+}
+/* whose classes Report cards shows (a coordinator's, a class teacher's own) */
+.ep-rcw-scope {
+  margin: 0 0 var(--sp-3);
+  padding: var(--sp-2) var(--sp-3);
+  border-left: 3px solid var(--mob-cyan-500);
+  background: var(--mob-navy-50);
+  color: var(--text-body);
+  font-size: var(--fs-small);
 }
 /* the Cards tab as the legacy Exam Report Card: a line per card design */
 .ep-rcw-toolbar {
