@@ -188,12 +188,18 @@ describe('mark schemes and registers (e2e)', () => {
     );
     expect(r.statusCode).toBe(200);
     const reg = r.json();
-    expect(reg.columns.map((x: { label: string }) => x.label)).toEqual([
+    // the sheet as it prints (docs/design/68): each subject over its columns, then the final
+    const heads = (reg.sheet.head[1] as Array<{ t: string }>).map((x) => x.t);
+    expect(heads.slice(0, 7)).toEqual([
       'Periodic test (15)',
       'Subject enrichment (5)',
       'Term exam (80)',
       'Marks obtained (100)',
+      '%',
+      'Grade',
+      'Periodic test (15)',
     ]);
+    expect((reg.sheet.head[0] as Array<{ t: string }>).map((x) => x.t)).toContain('FINAL RESULT');
     const by = Object.fromEntries(
       (reg.rows as Array<{ name: string }>).map((x) => [x.name, x as unknown]),
     ) as Record<
@@ -220,9 +226,15 @@ describe('mark schemes and registers (e2e)', () => {
   it('locks as the class term 1 result and keeps every student’s term result', async () => {
     const lock = await call(admin, 'POST', `/exams/schemes/${ids.v1!}/lock`);
     expect(lock.json()).toMatchObject({ status: 'locked' });
-    expect(
-      (await call(admin, 'PUT', `/exams/schemes/${ids.v1!}`, { name: 'Changed' })).statusCode,
-    ).toBe(409);
+    // saving a locked register never overwrites it: the change is its next version, a draft
+    const saved = await call(admin, 'PUT', `/exams/schemes/${ids.v1!}`, { name: 'Term 1 result' });
+    expect(saved.statusCode).toBe(200);
+    expect(saved.json()).toMatchObject({ status: 'draft', version: 2, previousId: ids.v1 });
+    ids.v2 = saved.json().id;
+    expect((await call(admin, 'GET', `/exams/schemes/${ids.v1!}`)).json()).toMatchObject({
+      status: 'locked',
+      version: 1,
+    });
     const done = await call(admin, 'POST', `/exams/schemes/${ids.v1!}/compute`);
     expect(done.statusCode).toBe(201);
     expect(done.json()).toMatchObject({ results: 4, counts: { pass: 3, compartment: 1 } });
@@ -259,13 +271,16 @@ describe('mark schemes and registers (e2e)', () => {
     const clash = await call(admin, 'POST', `/exams/schemes/${other.json().id as string}/lock`);
     expect(clash.statusCode).toBe(409);
     expect(clash.json().detail).toContain('already has "Term 1 result"');
-    const v2 = await call(admin, 'POST', `/exams/schemes/${ids.v1!}/new-version`);
+    // the draft saved from it is the new version; another is not started beside it
+    const again = await call(admin, 'POST', `/exams/schemes/${ids.v1!}/new-version`);
+    expect(again.statusCode).toBe(409);
+    const v2 = await call(admin, 'GET', `/exams/schemes/${ids.v2!}`);
     expect(v2.json()).toMatchObject({ status: 'draft', version: 2, previousId: ids.v1 });
-    ids.v2 = v2.json().id;
     // the pass mark raised to 40: Bhanu's English (53) still passes, his Maths (21) fails
     const def = v2.json().def;
+    expect(def.v).toBe(2);
     const up = await call(admin, 'PUT', `/exams/schemes/${ids.v2!}`, {
-      def: { ...def, result: { ...def.result, passPct: 40, compartmentUpTo: 0 } },
+      def: { ...def, final: { ...def.final, passPct: 40, compartmentUpTo: 0 } },
     });
     expect(up.statusCode).toBe(200);
     expect((await call(admin, 'POST', `/exams/schemes/${ids.v2!}/lock`)).json().status).toBe(
@@ -333,6 +348,16 @@ describe('mark schemes and registers (e2e)', () => {
       },
     });
     expect(free.statusCode).toBe(201);
+    // a class teacher sees a register only when it is given to them (docs/design/68)
+    const url = `/exams/schemes/${free.json().id as string}/register?classSectionId=${section.A}`;
+    expect((await call(clerk, 'GET', url)).statusCode).toBe(403);
+    expect(
+      (
+        await call(admin, 'PUT', `/exams/schemes/${free.json().id as string}/access`, {
+          rows: [{ userId: clerk.id, run: true, edit: false, delete: false, assign: false }],
+        })
+      ).statusCode,
+    ).toBe(200);
     const reg = (
       await call(
         clerk,
@@ -342,11 +367,11 @@ describe('mark schemes and registers (e2e)', () => {
     ).json();
     const asha = reg.rows.find((x: { name: string }) => x.name === 'Asha Scheme');
     expect(asha.subjects.find((x: { code: string }) => x.code === 'ENG').total).toBe(18);
-    // the clerk reads registers but does not build schemes
+    // the clerk runs the register given to them but does not build registers
     expect(
       (
         await call(clerk, 'POST', '/exams/schemes', {
-          name: 'x',
+          name: 'A register of my own',
           purpose: 'register',
           classIds: [classId],
           preset: 'DPS_VI_VIII',

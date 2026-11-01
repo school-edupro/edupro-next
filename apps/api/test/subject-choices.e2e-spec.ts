@@ -1015,7 +1015,7 @@ describe('subject choices and order (e2e)', () => {
     expect(line.note).toBe('UT in French');
     expect(line.values.UT.v).toBe(30);
     expect(line.values.HY.v).toBe(44);
-    expect(line.values.TOT.v).toBe(74);
+    expect(line.total).toBe(74);
     expect(
       reg.rows
         .find((r: { studentId: string }) => r.studentId === student.Bela)

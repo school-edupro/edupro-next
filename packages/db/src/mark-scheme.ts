@@ -572,3 +572,27 @@ export const SCHEME_PRESETS: Array<{
     },
   },
 ];
+
+/** a stored definition is a register (docs/design/68) or a v1 scheme */
+export const isRegisterDef = (def: SchemeDef | RegisterDef): def is RegisterDef =>
+  (def as RegisterDef).v === 2;
+
+/**
+ * The columns a term result prints (the report card): a v1 scheme's printed columns; a register's
+ * printed columns in the order they first come, then its total ("_total" in the stored values).
+ */
+export function printedColumns(
+  def: SchemeDef | RegisterDef,
+): Array<{ key: string; label: string; total: boolean }> {
+  if (!isRegisterDef(def))
+    return def.columns
+      .filter((x) => !x.hidden)
+      .map((x) => ({ key: x.key, label: x.label, total: Boolean(x.total) }));
+  const out: Array<{ key: string; label: string; total: boolean }> = [];
+  for (const s of def.subjects)
+    for (const c of s.columns)
+      if (!c.hidden && !out.some((x) => x.key === c.key))
+        out.push({ key: c.key, label: c.name, total: false });
+  out.push({ key: '_total', label: def.subjects[0]?.totalLabel ?? 'Total', total: true });
+  return out;
+}

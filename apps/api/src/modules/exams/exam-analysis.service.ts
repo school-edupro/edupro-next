@@ -646,7 +646,11 @@ export class ExamAnalysisService {
         name: string;
         term_code: string;
         status: string;
-        def: { result?: { divisions?: Array<{ name: string; minPct: number }> } };
+        def: {
+          /** a register (docs/design/68) keeps them here, a v1 scheme under result */
+          divisions?: Array<{ name: string; minPct: number }>;
+          result?: { divisions?: Array<{ name: string; minPct: number }> };
+        };
       }>(
         `SELECT name, term_code, status, def FROM mark_schemes WHERE id = $1 AND purpose = 'result' AND deleted_at IS NULL`,
         [schemeId],
@@ -684,7 +688,7 @@ export class ExamAnalysisService {
           ORDER BY t.rank_in_class NULLS LAST, t.pct DESC NULLS LAST, st.display_name`,
         [schemeId, q.classId ?? null, q.classSectionId ?? null, allowed],
       );
-      const order = (s.def.result?.divisions ?? []).map((d) => d.name);
+      const order = (s.def.divisions ?? s.def.result?.divisions ?? []).map((d) => d.name);
       const divisionOf = (x: (typeof r.rows)[number]) =>
         x.result === 'pass' ? (x.division ?? 'Pass') : (RESULT[x.result] ?? x.result);
       const heads = [

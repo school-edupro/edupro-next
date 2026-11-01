@@ -5,6 +5,8 @@
  * caller's tenant context (RLS); bound parameters only.
  */
 import type { PoolClient } from 'pg';
+import type { RegisterDef } from './mark-register';
+import { printedColumns, type SchemeDef } from './mark-scheme';
 
 export type ClassBand = 'pre_primary' | 'primary' | 'middle' | 'secondary' | 'senior';
 
@@ -507,7 +509,7 @@ export async function loadReportCardData(
   const tr = await c.query<{
     term_code: string;
     name: string;
-    def: { columns: Array<{ key: string; label: string; hidden?: boolean; total?: boolean }> };
+    def: SchemeDef | RegisterDef;
     subjects: ReportCardTermResult['subjects'];
     total: string | null;
     max_total: string;
@@ -633,9 +635,7 @@ export async function loadReportCardData(
     termResults: tr.rows.map((t) => ({
       term: t.term_code,
       name: t.name,
-      columns: t.def.columns
-        .filter((x) => !x.hidden)
-        .map((x) => ({ key: x.key, label: x.label, total: Boolean(x.total) })),
+      columns: printedColumns(t.def),
       // the class's order, additional subjects printed last
       subjects: [...t.subjects].sort(
         (a, b) =>
