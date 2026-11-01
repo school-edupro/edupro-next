@@ -274,6 +274,8 @@ const PAGES = [
   '/exams/subject-choices?tab=class&classId=172',
   '/exams/subject-choices?tab=students&sectionId=149&q=A2529&history=12355',
   '/exams/schemes',
+  // the register builder (docs/design/68), from blank
+  '/exams/schemes/new',
   '/exams/indicators',
   '/exams/indicator-areas',
   '/exams/remarks',
@@ -747,6 +749,47 @@ test.describe('accessibility (axe)', () => {
             .join(' | ')}`,
       ),
     ).toEqual([]);
+  });
+
+  test('no serious or critical violations on a mark register: overview, Run and every builder step', async ({
+    page,
+  }) => {
+    test.setTimeout(240_000);
+    await page.goto('/exams/schemes');
+    await page.waitForLoadState('networkidle');
+    const href = await page
+      .locator('a[href^="/exams/schemes/"]')
+      .evaluateAll((as) =>
+        as.map((a) => a.getAttribute('href') ?? '').find((h) => /^\/exams\/schemes\/\d+$/.test(h)),
+      );
+    test.skip(!href, 'no mark register in this school');
+    const check = async () => {
+      const results = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa']).analyze();
+      return results.violations
+        .filter((v) => v.impact === 'serious' || v.impact === 'critical')
+        .map(
+          (v) =>
+            `${v.id}: ${v.nodes
+              .map((n) => n.target.join(' '))
+              .slice(0, 3)
+              .join(' | ')}`,
+        );
+    };
+    const bad: string[] = [];
+    for (const path of [href!, `${href!}/register`]) {
+      await page.goto(path);
+      await page.waitForLoadState('networkidle');
+      bad.push(...(await check()).map((x) => `${path} ${x}`));
+    }
+    await page.goto(`${href!}/edit`);
+    await page.waitForLoadState('networkidle');
+    const skip = page.getByRole('button', { name: 'Skip' });
+    if (await skip.isVisible().catch(() => false)) await skip.click();
+    for (let i = 0; i < 6; i += 1) {
+      await page.locator('.ep-mr-steps button').nth(i).click();
+      bad.push(...(await check()).map((x) => `step ${String(i + 1)} ${x}`));
+    }
+    expect(bad).toEqual([]);
   });
 
   test('no serious or critical violations on a book copy’s status panel', async ({ page }) => {

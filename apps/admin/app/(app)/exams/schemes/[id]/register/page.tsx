@@ -1,48 +1,10 @@
-import { Fragment } from 'react';
-import { Badge, Breadcrumbs, Button, Card, PageHeader } from '@edupro/ui';
+import { Badge, Breadcrumbs, Card, PageHeader } from '@edupro/ui';
 import { notFound } from 'next/navigation';
-import { ViewDownload } from '@/components/admissions/ViewDownload';
-import { ApiError, apiFetch, getMe } from '@/lib/api';
-import type { MarkScheme } from '@/lib/mark-schemes';
-import { sectionOptions } from '@/lib/sections';
-
-interface Cell {
-  v: number | null;
-  max: number;
-  code?: string;
-}
-interface Register {
-  scheme: { id: string; name: string; termCode: string | null; status: string; version: number };
-  place: string;
-  view: 'marks' | 'merit';
-  columns: Array<{ key: string; label: string; total: boolean }>;
-  subjects: Array<{ code: string; name: string }>;
-  /** the most subjects a student takes: Subject-1 … Subject-n (docs/design/67) */
-  slots?: number;
-  rows: Array<{
-    studentId: string;
-    name: string;
-    admissionNo: string;
-    rollNo: number | null;
-    section: string;
-    subjects: Array<{
-      code: string;
-      name?: string;
-      kind: string;
-      values: Record<string, Cell | null>;
-      grade: string | null;
-      status: string;
-    }>;
-    total: number | null;
-    max: number;
-    pct: number | null;
-    grade: string | null;
-    division: string | null;
-    result: string;
-    rankInClass: number | null;
-  }>;
-  counts: Record<string, number>;
-}
+import { AutoSubmit } from '@/components/AutoSubmit';
+import { RegisterDownloads } from '@/components/exams/RegisterDownloads';
+import { RegisterSheet } from '@/components/exams/RegisterSheet';
+import { ApiError, apiFetch } from '@/lib/api';
+import type { RunResponse } from '@/lib/mark-schemes';
 
 const RESULT: Record<
   string,
@@ -51,220 +13,167 @@ const RESULT: Record<
   pass: { label: 'Pass', tone: 'success' },
   compartment: { label: 'Compartment', tone: 'warning' },
   fail: { label: 'Fail', tone: 'danger' },
-  absent: { label: 'Absent', tone: 'danger' },
+  absent: { label: 'Absent', tone: 'neutral' },
   incomplete: { label: 'Incomplete', tone: 'neutral' },
 };
-const fmt = (c: Cell | null | undefined) =>
-  !c ? '' : c.code && (c.v === null || c.v === 0) ? c.code : c.v === null ? '' : String(c.v);
 
 /**
- * A scheme's register (docs/design/65, part 3): a section or a whole class, by roll or as a merit
- * list; each subject's columns, its grade, then the total, %, grade, division, result and rank. Excel
- * and PDF of the same.
+ * Run a mark register (docs/design/68): pick the class — a section, or a whole class ranked together
+ * (the merit list, by rank or division-wise) — the exam of an exam-wise register and a subject (its own
+ * sheet). The marks come from the exam entry; the sheet shows the register's columns, totals, grades and
+ * the final, with what to check above it. Download it as PDF (the paper asked) or Excel, one section or
+ * all.
  */
-export default async function SchemeRegisterPage({
+export default async function RunRegisterPage({
   params,
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ sectionId?: string; classId?: string; view?: string }>;
+  searchParams: Promise<{ place?: string; exam?: string; subject?: string; view?: string }>;
 }) {
   const { id } = await params;
   const sp = await searchParams;
   if (!/^\d{1,18}$/.test(id)) notFound();
-  const me = await getMe();
-  if (!me.permissions.includes('exams.marks.view')) notFound();
-  const s = await apiFetch<MarkScheme>(`/exams/schemes/${id}`).catch((e: unknown) => {
-    if (e instanceof ApiError && (e.status === 404 || e.status === 403)) notFound();
-    throw e;
-  });
-  const prefixes = s.classes.map((k) => `${k.code}-`);
-  const sections = (await sectionOptions()).filter((o) =>
-    prefixes.some((p) => o.label.startsWith(p)),
+  const place = /^[sc]:\d{1,18}$/.test(sp.place ?? '') ? sp.place! : '';
+  const view =
+    place.startsWith('c:') && sp.view === 'division'
+      ? 'division'
+      : place.startsWith('c:')
+        ? 'merit'
+        : 'marks';
+  const q = new URLSearchParams({ view });
+  if (place) q.set(place.startsWith('s:') ? 'classSectionId' : 'classId', place.slice(2));
+  if (sp.exam && /^[A-Z][A-Z0-9_]{0,11}$/.test(sp.exam)) q.set('exam', sp.exam);
+  if (sp.subject && /^[A-Za-z0-9_~-]{1,32}$/.test(sp.subject)) q.set('subject', sp.subject);
+  const reg = await apiFetch<RunResponse>(`/exams/schemes/${id}/register?${q.toString()}`).catch(
+    (e: unknown) => {
+      if (e instanceof ApiError && (e.status === 404 || e.status === 403)) notFound();
+      throw e;
+    },
   );
-  const view = sp.view === 'merit' ? 'merit' : 'marks';
-  const sectionId = sections.find((o) => o.value === sp.sectionId)?.value;
-  const classId = s.classIds.includes(sp.classId ?? '') ? sp.classId : undefined;
-  const where = sectionId
-    ? `classSectionId=${sectionId}`
-    : `classId=${classId ?? s.classIds[0] ?? ''}`;
-  const reg = await apiFetch<Register>(`/exams/schemes/${id}/register?${where}&view=${view}`);
-  const slots = Array.from(
-    { length: reg.slots ?? Math.max(0, ...reg.rows.map((r) => r.subjects.length)) },
-    (_, k) => k,
-  );
-  // the place and order in the path: View / Download add their own ?save=1
-  const place = sectionId ? `s${sectionId}` : `c${classId ?? s.classIds[0] ?? ''}`;
-  const file = (format: string) => `/api/exam-register/${s.id}/${format}/${place}/${view}`;
+  const s = reg.scheme;
+  const shownPlace = place || reg.places[0]?.value || '';
+  const label = reg.places.find((p) => p.value === shownPlace)?.label ?? '';
   return (
     <>
       <Breadcrumbs
         items={[
           { label: 'Exams', href: '/exams' },
-          { label: 'Mark schemes', href: '/exams/schemes' },
+          { label: 'Mark registers', href: '/exams/schemes' },
           { label: s.name, href: `/exams/schemes/${s.id}` },
-          { label: 'Register' },
+          { label: 'Run' },
         ]}
       />
       <PageHeader
-        kicker={`Register · version ${String(s.version)}${s.status === 'draft' ? ' (draft)' : ''}`}
-        title={`${s.name} · ${reg.place}`}
-        description={Object.entries(reg.counts)
-          .map(([k, n]) => `${RESULT[k]?.label ?? k} ${String(n)}`)
-          .join(' · ')}
-        actions={
-          <span style={{ display: 'inline-flex', gap: 'var(--sp-2)', alignItems: 'center' }}>
-            <a className="ep-btn ep-btn--ghost ep-btn--sm" href={file('xlsx')}>
-              Excel
-            </a>
-            <ViewDownload href={file('pdf')} what="the register" />
-          </span>
-        }
+        kicker={`Run · version ${String(s.version)}${s.status === 'draft' ? ' (draft)' : ''}`}
+        title={`▶ ${s.name}`}
+        description={`${label}${reg.examName ? ` · ${reg.examName}` : ''}`}
       />
       <Card style={{ marginBottom: 'var(--sp-4)' }}>
-        <form
-          method="get"
-          style={{ display: 'flex', gap: 'var(--sp-3)', alignItems: 'flex-end', flexWrap: 'wrap' }}
-        >
-          <label className="ep-field" style={{ minWidth: 200 }}>
-            <span className="ep-field__label">Section</span>
-            <select className="ep-select" name="sectionId" defaultValue={sectionId ?? ''}>
-              <option value="">The whole class</option>
-              {sections.map((o) => (
-                <option key={o.value} value={o.value}>
-                  {o.label}
-                </option>
-              ))}
-            </select>
-          </label>
-          {s.classIds.length > 1 ? (
-            <label className="ep-field" style={{ minWidth: 160 }}>
-              <span className="ep-field__label">Class (whole class)</span>
-              <select className="ep-select" name="classId" defaultValue={classId ?? ''}>
-                {s.classes.map((k) => (
-                  <option key={k.id} value={k.id}>
-                    {k.code}
+        <div className="ep-mr-toolbar">
+          <form method="get" className="ep-mr-toolbar" style={{ flex: 1 }}>
+            <label className="ep-field" style={{ margin: 0, minWidth: '14rem' }}>
+              <span className="ep-field__label">Class</span>
+              <select className="ep-select" name="place" defaultValue={shownPlace}>
+                {reg.places.map((p) => (
+                  <option key={p.value} value={p.value}>
+                    {p.label}
                   </option>
                 ))}
               </select>
             </label>
-          ) : null}
-          <label className="ep-field" style={{ minWidth: 160 }}>
-            <span className="ep-field__label">Order</span>
-            <select className="ep-select" name="view" defaultValue={view}>
-              <option value="marks">By roll</option>
-              <option value="merit">Merit list</option>
-            </select>
-          </label>
-          <Button type="submit" variant="secondary">
-            Show
-          </Button>
-        </form>
-      </Card>
-      <Card elevated>
-        <div className="ep-table-wrap" tabIndex={0} role="region" aria-label="Register">
-          <table className="ep-table ep-table--dense">
-            <caption className="ep-sr-only">Register</caption>
-            <thead>
-              <tr>
-                <th scope="col" rowSpan={2}>
-                  {view === 'merit' ? 'Rank' : 'Roll'}
-                </th>
-                <th scope="col" rowSpan={2}>
-                  Student
-                </th>
-                {/* each student's own subjects in the class's order, additional last */}
-                {slots.map((k) => (
-                  <th key={k} scope="colgroup" colSpan={reg.columns.length + 2}>
-                    Subject-{k + 1}
-                  </th>
+            {s.type === 'examwise' ? (
+              <label className="ep-field" style={{ margin: 0, minWidth: '8rem' }}>
+                <span className="ep-field__label">Exam</span>
+                <select className="ep-select" name="exam" defaultValue={reg.exam ?? ''}>
+                  {reg.exams.map((e) => (
+                    <option key={e} value={e}>
+                      {e}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            ) : null}
+            <label className="ep-field" style={{ margin: 0, minWidth: '12rem' }}>
+              <span className="ep-field__label">Subject</span>
+              <select className="ep-select" name="subject" defaultValue={sp.subject ?? ''}>
+                <option value="">All subjects</option>
+                {reg.subjects.map((x) => (
+                  <option key={x.key} value={x.key}>
+                    {x.title}
+                  </option>
                 ))}
-                <th scope="col" rowSpan={2} style={{ textAlign: 'right' }}>
-                  Total
-                </th>
-                <th scope="col" rowSpan={2} style={{ textAlign: 'right' }}>
-                  %
-                </th>
-                <th scope="col" rowSpan={2}>
-                  Grade
-                </th>
-                <th scope="col" rowSpan={2}>
-                  Result
-                </th>
-                <th scope="col" rowSpan={2} style={{ textAlign: 'right' }}>
-                  Rank
-                </th>
-              </tr>
-              <tr>
-                {slots.map((k) => (
-                  <Fragment key={k}>
-                    <th scope="col">Subject</th>
-                    {reg.columns.map((c) => (
-                      <th key={`${String(k)}-${c.key}`} scope="col" style={{ textAlign: 'right' }}>
-                        {c.label}
-                      </th>
-                    ))}
-                    <th scope="col">Grade</th>
-                  </Fragment>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {reg.rows.map((r) => (
-                <tr key={r.studentId}>
-                  <td>{view === 'merit' ? (r.rankInClass ?? '') : (r.rollNo ?? '')}</td>
-                  <td>
-                    {r.name}
-                    <span className="ep-kicker" style={{ display: 'block' }}>
-                      {r.admissionNo} · {r.section}
-                    </span>
-                  </td>
-                  {slots.map((k) => {
-                    const sub = r.subjects[k];
-                    return (
-                      <Fragment key={k}>
-                        <td title={sub?.name}>{sub ? sub.code : ''}</td>
-                        {reg.columns.map((c) => (
-                          <td
-                            key={`${String(k)}-${c.key}`}
-                            style={{ textAlign: 'right', fontWeight: c.total ? 600 : undefined }}
-                          >
-                            {sub ? fmt(sub.values[c.key]) : ''}
-                          </td>
-                        ))}
-                        <td>
-                          {sub
-                            ? sub.kind === 'additional'
-                              ? `${sub.grade ?? ''} (addl.)`
-                              : (sub.grade ?? '')
-                            : ''}
-                        </td>
-                      </Fragment>
-                    );
-                  })}
-                  <td style={{ textAlign: 'right' }}>
-                    {r.total ?? ''} / {r.max}
-                  </td>
-                  <td style={{ textAlign: 'right' }}>{r.pct ?? ''}</td>
-                  <td>{r.grade ?? ''}</td>
-                  <td>
-                    <Badge tone={RESULT[r.result]?.tone ?? 'neutral'}>
-                      {RESULT[r.result]?.label ?? r.result}
-                    </Badge>
-                    {r.division ? (
-                      <span className="ep-kicker" style={{ display: 'block' }}>
-                        {r.division}
-                      </span>
-                    ) : null}
-                  </td>
-                  <td style={{ textAlign: 'right' }}>{r.rankInClass ?? ''}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+              </select>
+            </label>
+            {shownPlace.startsWith('c:') ? (
+              <label className="ep-field" style={{ margin: 0, minWidth: '10rem' }}>
+                <span className="ep-field__label">Merit order</span>
+                <select className="ep-select" name="view" defaultValue={view}>
+                  <option value="merit">Rank (1, 2, 3 …)</option>
+                  <option value="division">Division-wise</option>
+                </select>
+              </label>
+            ) : null}
+            <AutoSubmit />
+            <noscript>
+              <button type="submit" className="ep-btn ep-btn--secondary">
+                Show
+              </button>
+            </noscript>
+          </form>
+          <details className="ep-mr-menu">
+            <summary className="ep-btn ep-btn--ghost ep-btn--sm">Reports ▾</summary>
+            <div className="ep-mr-menu__list">
+              <a
+                href={`/exams/schemes/${s.id}/register${shownPlace ? `?place=${shownPlace}` : ''}`}
+                aria-current="true"
+              >
+                Register
+              </a>
+            </div>
+          </details>
+          <RegisterDownloads
+            id={s.id}
+            place={shownPlace}
+            view={view}
+            exam={reg.exam}
+            subject={sp.subject ?? null}
+          />
         </div>
-        {!reg.rows.length ? <p style={{ marginBottom: 0 }}>No students.</p> : null}
       </Card>
+      {reg.notes.length ? (
+        <div className="ep-alert ep-alert--warning" style={{ marginBottom: 'var(--sp-3)' }}>
+          <ul style={{ margin: 0, paddingLeft: 'var(--sp-5)' }}>
+            {reg.notes.map((n) => (
+              <li key={n}>{n}</li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+      <p className="ep-mr-pills" style={{ marginTop: 0 }}>
+        {Object.entries(reg.counts).map(([k, n]) => (
+          <Badge key={k} tone={RESULT[k]?.tone ?? 'neutral'}>
+            {`${RESULT[k]?.label ?? k} ${String(n)}`}
+          </Badge>
+        ))}
+        <span className="ep-mr-legend">
+          <span>
+            <i data-tone="calc" />
+            worked out
+          </span>
+          <span>
+            <i data-tone="final" />
+            final
+          </span>
+        </span>
+      </p>
+      {reg.sheet && reg.sheet.body.length ? (
+        <RegisterSheet sheet={reg.sheet} label={`${s.name} · ${label}`} />
+      ) : (
+        <Card>
+          <p style={{ margin: 0 }}>No students here, or nobody takes these subjects.</p>
+        </Card>
+      )}
     </>
   );
 }

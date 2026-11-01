@@ -85,6 +85,7 @@ export {
   type InstalmentBill,
 } from './components/FeeBillSheet';
 export * from './admission-engine';
+export * from './mark-register';
 export {
   AdmissionFormFill,
   type AdmissionFormFillProps,

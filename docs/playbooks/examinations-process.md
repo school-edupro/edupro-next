@@ -84,11 +84,16 @@ Do these once; review them each session.
      (mark it NA first). A subject not taken shows "—" in the register and is left off the card.
 3. **Teacher assignments** — Academics → Teacher assignments: the class teacher and the subject teacher
    of each section. Teachers see and enter only their own sections and subjects.
-4. **Mark schemes** — Exams → Mark schemes and registers: start from a ready-made DPS Noida scheme
-   (VI-VIII, IX, X, XI, XII) and map its exams, or build columns yourself (an exam's marks, a part such
-   as Theory, average or best of N, sum, convert to a maximum, attendance slab, the marks-obtained
-   column), the rounding, pass %, compartment up to N subjects, divisions and ranking. One locked scheme
-   per class and term is **the result scheme**; others are free registers.
+4. **Mark registers** — Exams → Mark registers (docs/design/68, the school's Term Mark Register):
+   **+ New mark register** builds one in six steps — Details (name, classes, order, layout, type),
+   Subjects (and elective slots such as the third language), Columns (each subject's chain: an exam's
+   marks or parts, average / best of N / sum, conversion by scale or weightage, attendance; Copy to
+   subjects, Weightage builder), Mark codes (per exam), Totals, Final (grading, divisions, display) —
+   with a live preview; or start from a ready-made DPS Noida scheme (VI-VIII, IX, X, XI, XII). **Run**
+   shows a section, a whole class ranked together (by rank or division), an exam (exam-wise) or one
+   subject, and downloads PDF / Excel (one section or all). A register marked **the term result**
+   (one locked per class and term) makes the term results; **Assign** gives a teacher Run / Edit /
+   Delete / Assign on one register.
 5. **Report cards** — Exams → Report cards → Templates: **Install the DPS Noida cards** (I-II, III-V,
    VI-VIII, IX, X, XI, XII); for Balvatika to Class II, **Add the progress card template** on Exams →
    Indicators and HPC.

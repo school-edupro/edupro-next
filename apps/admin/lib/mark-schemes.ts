@@ -1,45 +1,22 @@
-/** Mark schemes as the API gives them (docs/design/65, part 3). */
-export type Rounding = 'none' | 'two' | 'whole' | 'half_kept' | 'up';
-export interface SchemeColumn {
-  key: string;
-  label: string;
-  kind: 'raw' | 'average' | 'sum' | 'convert' | 'attendance';
-  exam?: string;
-  part?: string;
-  wholeIfNoParts?: boolean;
-  of?: string[];
-  best?: number;
-  scale?: number | 'rest';
-  round?: Rounding;
-  hidden?: boolean;
-  total?: boolean;
-  target?: number;
-  passGroup?: 'theory' | 'practical';
-}
-export interface SchemeDef {
-  exams: Array<{ key: string; examId: string }>;
-  columns: SchemeColumn[];
-  codes?: Record<string, string>;
-  attendance?: Array<{ minPct: number; marks: number }>;
-  result: {
-    passPct: number;
-    partsEach?: boolean;
-    compartmentUpTo: number;
-    divisions?: Array<{ name: string; minPct: number }>;
-    rankBy: 'total' | 'pct';
-    countAdditional?: boolean;
-    totalRound?: Rounding;
-  };
-  gradeScaleId?: string | null;
+import type { RegisterDef, RegStudentResult, Sheet } from '@edupro/ui';
+
+/** Mark registers as the API gives them (docs/design/68; the schemes of docs/design/65 part 3). */
+export interface RegisterRights {
+  manage: boolean;
+  run: boolean;
+  edit: boolean;
+  delete: boolean;
+  assign: boolean;
 }
 export interface MarkScheme {
   id: string;
+  chainId: string;
   name: string;
   purpose: 'result' | 'register';
   termCode: string | null;
   classIds: string[];
   classes: Array<{ id: string; code: string; name: string }>;
-  def: SchemeDef;
+  def: RegisterDef;
   exams: Array<{ key: string; examId: string; code: string | null; name: string | null }>;
   preset: string | null;
   status: 'draft' | 'locked' | 'superseded';
@@ -48,15 +25,72 @@ export interface MarkScheme {
   lockedAt: string | null;
   lockedBy: string | null;
   computedAt: string | null;
+  createdAt: string;
+  createdBy: string | null;
+  updatedAt: string;
+  updatedBy: string | null;
   results: number;
   problems: string[];
+  rights: RegisterRights;
 }
+/** a row of the registers list */
+export type RegisterRow = Omit<MarkScheme, 'def'> & {
+  subjects: number;
+  layout: RegisterDef['layout'];
+  type: RegisterDef['type'];
+  /** a draft being made from a locked version: that version's number */
+  inUse: number | null;
+  sameName: boolean;
+  assignees: Array<{ name: string; rights: string }>;
+};
 export interface SchemePreset {
   code: string;
   name: string;
   description: string;
   examKeys: Array<{ key: string; label: string }>;
   columns: string[];
+}
+/** what the builder reads for its classes */
+export interface BuilderData {
+  exams: Array<{ id: string; code: string; name: string }>;
+  subjects: Array<{
+    id: string;
+    code: string;
+    name: string;
+    classes: string[];
+    papers: Array<{
+      examId: string;
+      classCode: string;
+      max: number;
+      weightage: number | null;
+      parts: Array<{ name: string; code: string | null; max: number }>;
+    }>;
+  }>;
+  slots: Array<{ name: string; members: string[] }>;
+  codes: RegisterDef['codes'][string];
+  scales: Array<{ id: string; code: string; name: string }>;
+  grades: RegisterDef['grades'];
+}
+export interface RunResponse {
+  scheme: {
+    id: string;
+    name: string;
+    purpose: 'result' | 'register';
+    termCode: string | null;
+    status: MarkScheme['status'];
+    version: number;
+    layout: RegisterDef['layout'];
+    type: RegisterDef['type'];
+  };
+  places: Array<{ value: string; label: string; classId: string }>;
+  exams: string[];
+  exam: string | null;
+  examName: string | null;
+  subjects: Array<{ key: string; title: string }>;
+  sheet: Sheet | null;
+  rows: Array<Omit<RegStudentResult, 'subjects'> & { subjects: unknown[] }>;
+  notes: string[];
+  counts: Record<string, number>;
 }
 export const SCHEME_STATUS: Record<
   MarkScheme['status'],
@@ -66,17 +100,13 @@ export const SCHEME_STATUS: Record<
   locked: { label: 'Locked', tone: 'success' },
   superseded: { label: 'Replaced', tone: 'neutral' },
 };
-export const ROUNDING: Record<Rounding, string> = {
-  two: '2 decimals',
-  whole: 'Whole, half up',
-  half_kept: 'Whole, .5 kept',
-  up: 'Round up',
-  none: 'As worked out',
-};
-export const KINDS: Record<SchemeColumn['kind'], string> = {
-  raw: "An exam's marks",
-  average: 'Average (or best N)',
-  sum: 'Sum',
-  convert: 'Convert to a maximum',
-  attendance: 'Attendance slabs',
+export const COLUMN_KIND: Record<
+  RegisterDef['subjects'][number]['columns'][number]['kind'],
+  string
+> = {
+  raw: 'EXAM',
+  part: 'SUB-PART',
+  avg: 'AVERAGE',
+  conv: 'CONVERSION',
+  attendance: 'ATTENDANCE',
 };

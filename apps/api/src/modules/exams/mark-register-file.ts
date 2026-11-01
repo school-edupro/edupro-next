@@ -110,7 +110,11 @@ export async function registerPdf(
     for (const w of sheet.widths) xs.push(xs[xs.length - 1]! + w * unit);
     const heads = grid(sheet.head);
     const headRows = sheet.head.length;
-    const headH = lineH * 2 + 4;
+    // the subject row takes one line; the columns' row two (the name, then its maximum)
+    const rowH = (r: number) => (r === headRows - 1 && headRows > 1 ? lineH * 2 + 4 : lineH + 4);
+    const rowTop = (r: number) =>
+      Array.from({ length: r }, (_, i) => rowH(i)).reduce((a, b) => a + b, 0);
+    const headH = rowTop(headRows);
 
     let page: PDFPage = doc.addPage([W, H]);
     let y = 0;
@@ -180,17 +184,16 @@ export async function registerPdf(
     };
     const header = () => {
       const top = y;
-      const rowH = headH / headRows;
       for (const g of heads) {
         const x0 = xs[g.col]!;
         const x1 = xs[g.col + (g.cell.span ?? 1)]!;
-        const h = rowH * (g.cell.rows ?? 1);
+        const h = rowTop(g.row + (g.cell.rows ?? 1)) - rowTop(g.row);
         const words = g.cell.t.split(' (');
         const lines =
           words.length > 1 && (g.cell.span ?? 1) === 1
             ? [words[0]!, `(${words.slice(1).join(' (')}`]
             : [g.cell.t];
-        drawCell(g.cell.t, x0, x1, top - rowH * g.row, h, {
+        drawCell(g.cell.t, x0, x1, top - rowTop(g.row), h, {
           font: bold,
           bg: HEAD_BG,
           centre: true,

@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
   computeRegister,
@@ -478,5 +480,11 @@ describe('mark registers (docs/design/68)', () => {
         'LANG: add its columns',
       ]),
     );
+  });
+
+  it('the builder preview runs the same engine (scripts/sync-mark-register.mjs)', () => {
+    const db = readFileSync(join(__dirname, '../src/mark-register.ts'), 'utf8');
+    const ui = readFileSync(join(__dirname, '../../ui/src/mark-register.ts'), 'utf8');
+    expect(ui.split('\n').slice(1).join('\n')).toBe(db);
   });
 });

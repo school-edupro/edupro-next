@@ -1,6 +1,6 @@
 # 68 · Mark registers like the legacy Term Mark Register
 
-Status: planned 1 Nov 2026 · replaces the scheme editor of docs/design/65 part 3 · phase 1 then phase 2
+Status: phase 1 built 1 Nov 2026 (migration 0296) · replaces the scheme editor of docs/design/65 part 3 · phase 2 next
 
 ## Why
 
@@ -19,28 +19,28 @@ keeps grade-calculation formulas per course with versions. None of them offers t
 
 ## Decisions (user, 1 Nov)
 
-| Question | Answer |
-| --- | --- |
-| Columns | **Per subject, with Copy to subjects** and the Weightage builder (the legacy model); ready-made schemes fill every subject |
-| Rights | **Like the legacy**: managers see and manage every register; others see only registers assigned to them with Run / Edit / Delete / Assign per register; delegated assign; Rights report |
-| Grades and codes | **Copied into the register** from the masters (grade scale, divisions, mark codes per exam), editable, "Import from another register" |
-| Scope | **Phased**: phase 1 = list, builder, engine, Run register + merit + downloads, rights; phase 2 = the eight reports |
+| Question         | Answer                                                                                                                                                                                  |
+| ---------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Columns          | **Per subject, with Copy to subjects** and the Weightage builder (the legacy model); ready-made schemes fill every subject                                                              |
+| Rights           | **Like the legacy**: managers see and manage every register; others see only registers assigned to them with Run / Edit / Delete / Assign per register; delegated assign; Rights report |
+| Grades and codes | **Copied into the register** from the masters (grade scale, divisions, mark codes per exam), editable, "Import from another register"                                                   |
+| Scope            | **Phased**: phase 1 = list, builder, engine, Run register + merit + downloads, rights; phase 2 = the eight reports                                                                      |
 
 ## Legacy → EduPro
 
-| Legacy | EduPro |
-| --- | --- |
-| Exam type (PT-1, Term 1) assigned to a subject, max in `exam_subject_master` | An exam of the year (`exams`) and its `exam_subjects` row for the class (max, parts) |
-| Composite subject (PHY/CHE/BIO, TH/PR), children from the master | The exam subject's parts (`exam_subject_parts`: a sub-subject or Theory / Practical), set once per class (0292) |
-| Elective slot (THIRD LANGUAGE: SAN / FRE / GER) | A slot of the register; offered from the class's choice groups (doc 67), editable |
-| Subject Mapping priority | The class's subject order (`app.subject_seq`, doc 67) unless the register's own order is on |
-| Optional = Y in the mapping | A student's additional subject (`student_subjects.opted_additional` / kind additional) |
-| `exam_attendance` | `exam_attendance` (days present / total per exam) |
-| Mark codes per register and exam | Copied from `mark_codes` per exam into the register |
-| Grade bands, divisions | Copied from the class's grade scale (`grade_scales`) and 60 / 45 / 33 |
-| Report Card: Yes (one register per class) | A **result** register with its term (one locked per class and term), as today |
-| Roles screen (Create / Edit / Delete / Run / Assign) | Access → Roles: `exams.registers.manage`, `exams.registers.assign` |
-| Schema check | Not needed (migrations) |
+| Legacy                                                                       | EduPro                                                                                                          |
+| ---------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
+| Exam type (PT-1, Term 1) assigned to a subject, max in `exam_subject_master` | An exam of the year (`exams`) and its `exam_subjects` row for the class (max, parts)                            |
+| Composite subject (PHY/CHE/BIO, TH/PR), children from the master             | The exam subject's parts (`exam_subject_parts`: a sub-subject or Theory / Practical), set once per class (0292) |
+| Elective slot (THIRD LANGUAGE: SAN / FRE / GER)                              | A slot of the register; offered from the class's choice groups (doc 67), editable                               |
+| Subject Mapping priority                                                     | The class's subject order (`app.subject_seq`, doc 67) unless the register's own order is on                     |
+| Optional = Y in the mapping                                                  | A student's additional subject (`student_subjects.opted_additional` / kind additional)                          |
+| `exam_attendance`                                                            | `exam_attendance` (days present / total per exam)                                                               |
+| Mark codes per register and exam                                             | Copied from `mark_codes` per exam into the register                                                             |
+| Grade bands, divisions                                                       | Copied from the class's grade scale (`grade_scales`) and 60 / 45 / 33                                           |
+| Report Card: Yes (one register per class)                                    | A **result** register with its term (one locked per class and term), as today                                   |
+| Roles screen (Create / Edit / Delete / Run / Assign)                         | Access → Roles: `exams.registers.manage`, `exams.registers.assign`                                              |
+| Schema check                                                                 | Not needed (migrations)                                                                                         |
 
 ## The register (definition v2)
 
@@ -56,13 +56,13 @@ read: their columns become every subject's columns).
   subject: show its Total column, Total out of (scale the total to a maximum), round off, grade, %,
   count in the final (when "this register" decides optional subjects), child subjects in columns.
 - **Columns** per subject, each a key + name:
-  - *exam marks* (an exam; a subject with parts reads their sum, or each part as a column / one
+  - _exam marks_ (an exam; a subject with parts reads their sum, or each part as a column / one
     stacked "breakup" cell with Sum / Average / Both at the foot);
-  - *average* of existing columns or of the parts: all, best N (blanks not attempted are skipped, a
+  - _average_ of existing columns or of the parts: all, best N (blanks not attempted are skipped, a
     real 0 counts), or sum;
-  - *conversion* of an exam or of an existing column: scale (marks ÷ max × target) or weightage %
+  - _conversion_ of an exam or of an existing column: scale (marks ÷ max × target) or weightage %
     (marks × %); "each part" makes one per part and their sum;
-  - *attendance* slabs (≥96 % → 5 … ≥76 % → 1) from the exam's attendance days.
+  - _attendance_ slabs (≥96 % → 5 … ≥76 % → 1) from the exam's attendance days.
   - Options: in the final total · grade after it · round off (whole, an exact .5 kept) · hide (kept in
     the maths) · show code (a conversion prints AB instead of 0) · **Sub from** (where a pro-rata code
     takes its marks: skip, one column, or all other exams) · per slot member: its own exam (or not
@@ -152,3 +152,29 @@ Assign on one register may pass on only the rights they hold, never Assign. Ever
 
 **Phase 2** — the eight Run reports (Result summary, Analysis, Entry status, Toppers, Teacher-wise,
 At-risk, Failing students, Compare sections) on the same computed rows.
+
+## As built (phase 1, 1 Nov 2026)
+
+- **Part A** — `packages/db/src/mark-register.ts` (pure; copied to `packages/ui` by
+  `scripts/sync-mark-register.mjs`, a unit test keeps the copy equal): `computeRegister`, `examView`,
+  `countedColumns`, `registerProblems`, `newRegisterDef`, `defaultCodes`, `buildSheet` / `byDivision`
+  (the one layout of the screen, the PDF, the Excel and the builder's preview), `cutFixed`,
+  `properCase`, `orderStudents`. `computeScheme` (v1) converts with `fromV1` and runs it: the ten v1
+  tests pass; pro-rata now follows the legacy (other exams' marks over their maximum).
+- **Part B** — migration 0296: `mark_schemes.chain_id` (trigger), `updated_by`, `deleted_by`;
+  `mark_scheme_access`; `exams.registers.manage` / `.assign` for school admin, group admin, exam office
+  (the academic coordinator is no longer a manager by role: give them registers with Assign, or the
+  right in Access → Roles). API: list (one row per register, by rights), get, create (built, v1, or a
+  ready-made scheme: the one-language choice groups become a slot), save (a locked one → its next
+  version), lock / unlock, bin and restore, versions and restore as new, copy, builder data, staff,
+  access (delegation), rights report and remove, Run (section, merit by rank or division, exam-wise,
+  one subject; JSON sheet + rows + notes; PDF A4 / A3 / Legal / Letter either way round with fit; Excel
+  a sheet per section). Term results keep each subject's printed values and `_total`; report cards
+  (`printedColumns`) and the division list read v2. e2e `mark-registers` (8 tests).
+- **Part C** — admin: `/exams/schemes` (list, search by class, row actions, Deleted, Rights report,
+  ready-made start), `/exams/schemes/new` and `/:id/edit` (`RegisterBuilder`, `RegisterColumns`,
+  `lib/register-builder.ts`), `/:id` (overview), `/:id/register` (Run: `RegisterSheet`,
+  `RegisterDownloads`); the menu entry is "Mark registers". a11y: the list, the new builder and a
+  register's overview, Run and every builder step.
+- The sample "Term I result (sample)" (VI-VII) is a v2 register now, its languages in the SUBJECT-2
+  slot (scripts/seed-exam-sample.mjs).

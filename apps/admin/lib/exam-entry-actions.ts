@@ -369,7 +369,11 @@ export async function createMarkScheme(fd: FormData) {
       back(`/exams/schemes?preset=${preset}`, error.problem.type, detailOf(error));
     throw error;
   }
-  back(`/exams/schemes/${made!.id}`, 'ok', 'Scheme made: try it on a section, then lock it');
+  back(
+    `/exams/schemes/${made!.id}/edit`,
+    'ok',
+    'Register made from the ready-made scheme: check each step, save, then Run it',
+  );
 }
 
 export async function saveMarkScheme(
@@ -382,11 +386,11 @@ export async function saveMarkScheme(
   return out;
 }
 
-/** lock | new-version | compute | remove */
+/** lock | unlock | new-version | compute | remove */
 export async function markSchemeStep(fd: FormData) {
   const id = str(fd, 'id');
   const step = str(fd, 'step');
-  if (!okId(id) || !['lock', 'new-version', 'compute', 'remove'].includes(step))
+  if (!okId(id) || !['lock', 'unlock', 'new-version', 'compute', 'remove'].includes(step))
     back('/exams/schemes', 'validation-failed', 'Unknown step');
   let next = `/exams/schemes/${id}`;
   try {
@@ -416,7 +420,12 @@ export async function markSchemeStep(fd: FormData) {
   back(
     next,
     'ok',
-    { lock: 'Locked', 'new-version': 'A new version to change', remove: 'Removed' }[step],
+    {
+      lock: 'Locked',
+      unlock: 'Unlocked: it changes in place again',
+      'new-version': 'A new version to change',
+      remove: 'Moved to the bin',
+    }[step],
   );
 }
 

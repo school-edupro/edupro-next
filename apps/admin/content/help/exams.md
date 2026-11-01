@@ -139,13 +139,45 @@ see who submitted or verified it and to submit, verify, send back or reopen it.
 6. **Exams → open exam → Reports**: the section-wise subject analysis, mark ranges (the class's grade
    scale, or your own ranges), toppers (top N in the class or section, at or above / below a %, or a
    subject's), the subject teachers' analysis, the upload status and the missing marks; each with
-   Excel and PDF. A locked result scheme's page has **Merit by division**. The report builder has the
+   Excel and PDF. A locked result register's page has **Merit by division**. The report builder has the
    exam marks, exam results and term results datasets for your own reports.
-7. **Promotion proposals** (a locked result scheme of the final term): passed → promote to the next
+7. **Promotion proposals** (a locked result register of the final term): passed → promote to the next
    class, compartment → held for review (the card says "subject to compartment"), failed → retain,
    absent or incomplete → review, the last class → passed out. Choose next year's section, tick and
    send: the decisions go to **People → Promotions** (applied there) and the cards' "Promoted to" is
    filled.
+
+## Mark registers
+
+**Exams → Mark registers** (the school's Term Mark Register) sets up once how a class's marks are worked
+out, then runs it for any section; the marks always come from the exam entry.
+
+1. **+ New mark register**: six steps with a preview on two sample students (type over a mark or a code
+   such as AB to try the formulas).
+   - **Details**: the name (unique in the year), the classes, student order (roll, A–Z, rank), layout
+     (subjects across the top, or Subject-1, Subject-2 … for different electives) and type (general,
+     or exam-wise: pick the exam at Run). **The term result** makes the term results for report cards
+     and promotion.
+   - **Subjects**: tick them; **+ Elective slot** (or **Use the classes' choice groups**) makes one
+     block of several subjects, each student with their own.
+   - **Columns**, per subject: pick the exam, then **Same marks as entry** (or its parts), **Average /
+     best of / sum**, **Conversion** (scale to a maximum, or a weightage %; "the rest" of a total out
+     of) or **Attendance** slabs. Per column: in the total, a grade, round off (.5 kept), hide (kept in
+     the maths), show code, and **sub from** (where an ML pro-rata takes its marks). **Copy to
+     subjects** and the **Weightage builder** save a long set-up.
+   - **Mark codes**, per exam: count 0, leave out of the maximum, fixed or % marks, pro-rata; holds the
+     total ("–"); show the value with "*".
+   - **Totals** (round off, grade, % per subject) and **Final** (total, %, grade, rank, result, pass %,
+     compartment, theory and practical each, optional subjects, student columns, decimals, class
+     average; grading scale and divisions).
+2. **Run**: Class (a section, or a class's **all sections (merit)**, by rank or division-wise), Exam,
+   Subject; the note above the sheet says what to check (withheld finals, marks not entered).
+   **Download**: PDF (paper, way round, fit to width) or Excel, this section or every section.
+3. **Lock** pins a register: saving it then makes its next version (a draft); **Versions** restores an
+   old one as a new register; **Delete** sends a draft to the bin (**Deleted** brings it back);
+   **Copy** makes one for other classes.
+4. **Assign** (managers, or someone given Assign) gives a teacher Run / Edit / Delete on one register;
+   the **Rights report** shows who holds what.
 
 ## Remarks by category
 

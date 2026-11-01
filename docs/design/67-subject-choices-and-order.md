@@ -271,7 +271,7 @@ scheme in the database (the API never deletes marks); run again, it gives the sa
   verification, except VII-B Science and Social Science (5 of 8 entered) and VI-A Computer Science
   (entered, not submitted).
 - **Term I result (sample).** The DPS VI-VIII scheme (periodic test 15 + subject enrichment 5 + term 80),
-  locked and worked out: 24 pass, 4 compartment, 1 fail, 2 absent, 3 incomplete (VII-B). Not released;
+  locked and worked out: 24 pass, 3 compartment, 1 fail, 2 absent, 3 incomplete (VII-B). Not released;
   no message is queued (the script checks).
 
 **Found while seeding: parts follow a new maximum (0295).** Term I's Social Science for VI was out of
