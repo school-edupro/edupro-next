@@ -3,34 +3,30 @@ import { notFound } from 'next/navigation';
 import { getLocale, getTranslations } from 'next-intl/server';
 import type { ReactNode } from 'react';
 import { ConfirmAction } from '@/components/ConfirmAction';
-import { FileLinks } from '@/components/FileLinks';
 import { Notice } from '@/components/Notice';
-import { CardPreview } from '@/components/exams/rc/CardPreview';
+import { CardsTable } from '@/components/exams/rc/CardsTable';
+import { DownloadLog } from '@/components/exams/rc/DownloadLog';
 import { ApiError, apiFetch, getMe } from '@/lib/api';
-import {
-  holdCard,
-  renderCard,
-  renderSections,
-  saveReleaseSetup,
-  setReleaseStatus,
-} from '@/lib/report-card-actions';
+import { saveReleaseSetup, setClassPublish, setReleaseStatus } from '@/lib/report-card-actions';
 import {
   RELEASE_TONE,
   STEP_OF,
   STEPS,
+  cardLines,
   issuesOf,
   type ReleaseReadiness,
 } from '@/lib/report-card-release';
-import type { Exam, ReportCardStatus } from '@/lib/types';
+import type { Exam } from '@/lib/types';
 
 const TABS = ['setup', 'ready', 'cards', 'publish'] as const;
 type Tab = (typeof TABS)[number];
 
 /**
  * A report-card release's workspace (docs/design/65): Set-up (its name, exams, the design of each class,
- * the fee-due rule) · Readiness (what each class still needs, with where to fix it) · Cards (each class's
- * sections as tiles; a section's students with the preview, holds and their PDFs) · Publish (to the
- * principal, then to the families; withdraw with a reason).
+ * the fee-due rule) · Readiness (what each class still needs, with where to fix it) · Cards (the legacy
+ * Exam Report Card: a line per card design, a section or class, a roll-order range or one admission
+ * number, Generate and the eye; the Download Log) · Publish (to the principal, then class by class to the
+ * families; revoke a class with a reason).
  */
 export default async function ReleasePage({
   params,
@@ -39,7 +35,6 @@ export default async function ReleasePage({
   params: Promise<{ id: string }>;
   searchParams: Promise<{
     tab?: string;
-    section?: string;
     ok?: string;
     error?: string;
     detail?: string;
@@ -78,13 +73,6 @@ export default async function ReleasePage({
   const tab: Tab = TABS.find((k) => k === sp.tab) ?? (rel.status === 'draft' ? 'ready' : 'cards');
   const here = (to: Tab, extra = '') => `/exams/report-cards/${rel.id}?tab=${to}${extra}`;
   const allSections = ready.classes.flatMap((k) => k.sections);
-  const section = allSections.find((s) => s.id === sp.section) ?? null;
-  const cards =
-    tab === 'cards' && section
-      ? await apiFetch<{ data: ReportCardStatus[] }>(
-          `/exams/report-cards/releases/${rel.id}/cards?classSectionId=${section.id}`,
-        ).then((x) => x.data)
-      : [];
   const sum = (k: 'students' | 'made' | 'withheld' | 'held') =>
     allSections.reduce((a, s) => a + s[k], 0);
   const students = sum('students');
@@ -93,6 +81,7 @@ export default async function ReleasePage({
     return x.unverified || x.remarks || x.attendance || x.noTemplate || x.noTermResult;
   });
   const notReadyList = notReady.map((k) => k.code).join(', ');
+  const published = ready.classes.filter((k) => k.publish?.status === 'released');
   const at = STEP_OF[rel.status];
   const link = (href: string) => (chunks: ReactNode) => <a href={href}>{chunks}</a>;
 
@@ -131,7 +120,10 @@ export default async function ReleasePage({
       </ol>
       <Notice params={sp} />
       <div className="ep-rcw-kpis">
-        <KpiTile label={t('kClasses')} value={String(ready.classes.length)} />
+        <KpiTile
+          label={t('kPublished')}
+          value={`${String(published.length)} / ${String(ready.classes.length)}`}
+        />
         <KpiTile label={t('kStudents')} value={String(students)} />
         <KpiTile label={t('kPdfs')} value={`${String(sum('made'))} / ${String(students)}`} />
         <KpiTile label={t('kWithheld')} value={String(sum('withheld'))} />
@@ -376,207 +368,40 @@ export default async function ReleasePage({
       ) : null}
 
       {tab === 'cards' ? (
-        <>
-          {ready.classes.map((k) => (
-            <section key={k.classId} className="ep-rcw-class" aria-label={k.code}>
-              <div className="ep-rcw-class__head">
-                <h3>{k.code}</h3>
-                <span className="ep-field__help" style={{ margin: 0 }}>
-                  {k.template ? k.template.name : t('noDesignShort')} ·{' '}
-                  {t('pdfsOf', {
-                    made: k.sections.reduce((a, s) => a + s.made, 0),
-                    total: k.sections.reduce((a, s) => a + s.students, 0),
-                  })}
-                </span>
-                <span style={{ flex: 1 }} />
-                {canManage && k.sections.length ? (
-                  <form action={renderSections}>
-                    <input type="hidden" name="id" value={rel.id} />
-                    <input
-                      type="hidden"
-                      name="back"
-                      value={here('cards', section ? `&section=${section.id}` : '')}
-                    />
-                    {k.sections.map((s) => (
-                      <input key={s.id} type="hidden" name="sectionId" value={s.id} />
-                    ))}
-                    <Button type="submit" size="sm" variant="secondary">
-                      {t('makeClass', { cls: k.code, n: k.sections.length })}
-                    </Button>
-                  </form>
-                ) : null}
-              </div>
-              <div className="ep-rcw-tiles">
-                {k.sections.map((s) => (
-                  <a
-                    key={s.id}
-                    className="ep-rcw-tile"
-                    href={`${here('cards', `&section=${s.id}`)}#students`}
-                    aria-current={section?.id === s.id ? 'true' : undefined}
-                  >
-                    <strong>{s.code}</strong>
-                    <span>{t('pdfsOf', { made: s.made, total: s.students })}</span>
-                    <span className="ep-rcw-tile__bar" aria-hidden="true">
-                      <span
-                        style={{
-                          width: `${String(s.students ? Math.round((s.made / s.students) * 100) : 0)}%`,
-                        }}
-                      />
-                    </span>
-                    <small>
-                      {t('tileSub', { withheld: s.withheld, held: s.held })}
-                      {s.unverified ? t('tileUnverified', { n: s.unverified }) : ''}
-                    </small>
-                  </a>
-                ))}
-              </div>
-            </section>
-          ))}
-          {section ? (
-            <Card
-              elevated
-              id="students"
-              title={t('studentsOf', { sec: section.code })}
-              actions={
-                canManage ? (
-                  <form action={renderSections}>
-                    <input type="hidden" name="id" value={rel.id} />
-                    <input
-                      type="hidden"
-                      name="back"
-                      value={here('cards', `&section=${section.id}`)}
-                    />
-                    <input type="hidden" name="sectionId" value={section.id} />
-                    <Button type="submit" size="sm">
-                      {t('makeSection', { sec: section.code })}
-                    </Button>
-                  </form>
-                ) : null
-              }
+        <section aria-label={t('cardsTitle')}>
+          <div className="ep-rcw-toolbar">
+            <h2>{t('cardsTitle')}</h2>
+            <span style={{ flex: 1 }} />
+            <a
+              className="ep-btn ep-btn--secondary ep-btn--sm"
+              href="/help/exams#results-and-report-cards"
             >
-              <p className="ep-field__help" style={{ marginTop: 0 }}>
-                {t('sectionHelp')}
-              </p>
-              <div
-                className="ep-table-wrap"
-                tabIndex={0}
-                role="region"
-                aria-label={t('cardsOf', { sec: section.code })}
-              >
-                <table className="ep-table ep-table--dense">
-                  <caption className="ep-sr-only">{t('cardsOf', { sec: section.code })}</caption>
-                  <thead>
-                    <tr>
-                      <th scope="col">{t('roll')}</th>
-                      <th scope="col">{t('student')}</th>
-                      <th scope="col">{t('card')}</th>
-                      <th scope="col">{t('pdf')}</th>
-                      <th scope="col">
-                        <span className="ep-sr-only">{t('actions')}</span>
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {cards.map((c, i) => {
-                      const back = here('cards', `&section=${section.id}`);
-                      return (
-                        <tr key={c.studentId}>
-                          <td>{c.rollNo ?? ''}</td>
-                          <td>
-                            <strong>{c.name}</strong>
-                            <span className="ep-mr-col__desc">{c.admissionNo}</span>
-                          </td>
-                          <td>
-                            <span className="ep-mr-pills">
-                              {c.withheld ? (
-                                <Badge tone="danger">
-                                  {c.withheldReason ?? t('withheldBadge')}
-                                </Badge>
-                              ) : null}
-                              {c.heldReason ? (
-                                <Badge tone="warning">
-                                  {t('heldBadge', { reason: c.heldReason })}
-                                </Badge>
-                              ) : null}
-                              {!c.withheld && !c.heldReason ? (
-                                <Badge tone="success">{t('shown')}</Badge>
-                              ) : null}
-                            </span>
-                          </td>
-                          <td>
-                            {c.exportId && c.exportStatus === 'ready' ? (
-                              <FileLinks
-                                href={`/reports/exports/${c.exportId}/download`}
-                                label={t('pdfLabel')}
-                              />
-                            ) : (
-                              <span className="ep-field__help" style={{ margin: 0 }}>
-                                {c.exportStatus === 'failed'
-                                  ? t('pdfFailed')
-                                  : c.exportStatus
-                                    ? t('pdfMaking')
-                                    : t('pdfNone')}
-                              </span>
-                            )}
-                          </td>
-                          <td>
-                            <span className="ep-mr-row-actions">
-                              <CardPreview
-                                releaseId={rel.id}
-                                students={cards.map((x) => ({ id: x.studentId, name: x.name }))}
-                                at={i}
-                              />
-                              {canManage && c.heldReason ? (
-                                <ConfirmAction
-                                  action={holdCard}
-                                  fields={{ id: rel.id, back, studentId: c.studentId, held: 'no' }}
-                                  label={t('showAgain')}
-                                  title={t('showAgainTitle', { name: c.name })}
-                                  confirmLabel={t('showAgain')}
-                                  variant="ghost"
-                                >
-                                  {t('showAgainBody')}
-                                </ConfirmAction>
-                              ) : null}
-                              {canManage && !c.heldReason ? (
-                                <ConfirmAction
-                                  action={holdCard}
-                                  fields={{ id: rel.id, back, studentId: c.studentId, held: 'yes' }}
-                                  label={t('hold')}
-                                  title={t('holdTitle', { name: c.name })}
-                                  confirmLabel={t('holdConfirm')}
-                                  variant="ghost"
-                                  reason={{
-                                    label: t('holdReason'),
-                                    placeholder: t('holdPlaceholder'),
-                                  }}
-                                >
-                                  {t('holdBody')}
-                                </ConfirmAction>
-                              ) : null}
-                              {canManage ? (
-                                <form action={renderCard}>
-                                  <input type="hidden" name="id" value={rel.id} />
-                                  <input type="hidden" name="back" value={back} />
-                                  <input type="hidden" name="studentId" value={c.studentId} />
-                                  <Button type="submit" size="sm" variant="ghost">
-                                    {t('makePdf')}
-                                  </Button>
-                                </form>
-                              ) : null}
-                            </span>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            </Card>
-          ) : (
-            <p className="ep-field__help">{t('pickSection')}</p>
-          )}
-        </>
+              {t('userGuide')}
+            </a>
+            <DownloadLog releaseId={rel.id} />
+            {canManage ? (
+              <a className="ep-btn ep-btn--secondary ep-btn--sm" href={here('setup')}>
+                {t('settings')}
+              </a>
+            ) : null}
+          </div>
+          <CardsTable
+            releaseId={rel.id}
+            term={{ code: rel.termCode, name: rel.name }}
+            canManage={canManage}
+            lines={cardLines(ready.classes).map((x) => ({
+              key: x.key,
+              label: x.label,
+              design: x.design,
+              classes: x.classes.map((k) => ({
+                id: k.classId,
+                code: k.code,
+                sections: k.sections.map((c) => ({ id: c.id, code: c.code })),
+              })),
+            }))}
+          />
+          <p className="ep-field__help">{t('cardsHelp')}</p>
+        </section>
       ) : null}
 
       {tab === 'publish' ? (
@@ -588,18 +413,16 @@ export default async function ReleasePage({
               : rel.status === 'submitted'
                 ? t('st_submitted', { date: when(rel.submittedAt) })
                 : rel.status === 'released'
-                  ? t('st_released', { date: when(rel.releasedAt), n: rel.notifiedCount ?? 0 })
+                  ? t('st_released_classes', {
+                      n: published.length,
+                      total: ready.classes.length,
+                      told: rel.notifiedCount ?? 0,
+                    })
                   : t('st_withdrawn', {
                       hasReason: rel.withdrawnReason ? 'yes' : 'no',
                       reason: rel.withdrawnReason ?? '',
                     })}
           </p>
-          {notReady.length && rel.status !== 'released' ? (
-            <div className="ep-alert ep-alert--warning" style={{ marginBottom: 'var(--sp-3)' }}>
-              {t('notReadyWarn', { n: notReady.length, list: notReadyList })}{' '}
-              <a href={here('ready')}>{t('seeReadiness')}</a>
-            </div>
-          ) : null}
           <div style={{ display: 'flex', gap: 'var(--sp-2)', flexWrap: 'wrap' }}>
             {canManage && (rel.status === 'draft' || rel.status === 'withdrawn') ? (
               <ConfirmAction
@@ -613,36 +436,163 @@ export default async function ReleasePage({
                 {t('sendBody')}
               </ConfirmAction>
             ) : null}
-            {canPublish && rel.status !== 'released' ? (
+            {canPublish && published.length < ready.classes.length ? (
               <ConfirmAction
                 action={setReleaseStatus}
                 fields={{ id: rel.id, back: here('publish'), status: 'released' }}
-                label={t('publish')}
-                title={t('publishTitle')}
+                label={t('publishAll')}
+                title={t('publishAllTitle')}
                 confirmLabel={t('publishConfirm')}
-                variant="primary"
+                variant="secondary"
               >
-                {t('publishBody', { n: students })}
+                {t('publishAllBody', {
+                  list: ready.classes
+                    .filter((k) => k.publish?.status !== 'released')
+                    .map((k) => k.code)
+                    .join(', '),
+                })}
                 {notReady.length
                   ? ` ${t('publishNotReady', { n: notReady.length, list: notReadyList })}`
                   : ''}
               </ConfirmAction>
             ) : null}
-            {canPublish && rel.status === 'released' ? (
+            {canPublish && published.length ? (
               <ConfirmAction
                 action={setReleaseStatus}
                 fields={{ id: rel.id, back: here('publish'), status: 'withdrawn' }}
-                label={t('withdraw')}
-                title={t('withdrawTitle')}
-                confirmLabel={t('withdraw')}
+                label={t('revokeAll')}
+                title={t('revokeAllTitle')}
+                confirmLabel={t('revokeAll')}
                 variant="ghost"
                 confirmVariant="danger"
                 reason={{ label: t('withdrawReason'), placeholder: t('withdrawPlaceholder') }}
               >
-                {t('withdrawBody')}
+                {t('revokeAllBody', { list: published.map((k) => k.code).join(', ') })}
               </ConfirmAction>
             ) : null}
           </div>
+          <div className="ep-table-wrap" style={{ marginTop: 'var(--sp-4)' }}>
+            <table className="ep-table">
+              <caption className="ep-sr-only">{t('classPublishCaption')}</caption>
+              <thead>
+                <tr>
+                  <th scope="col">{t('class')}</th>
+                  <th scope="col">{t('kStudents')}</th>
+                  <th scope="col">{t('readyCol')}</th>
+                  <th scope="col">{t('publishCol')}</th>
+                  <th scope="col">
+                    <span className="ep-sr-only">{t('actions')}</span>
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {ready.classes.map((k) => {
+                  const x = issuesOf(k);
+                  const gaps = [
+                    x.noTemplate ? t('gapDesign') : null,
+                    x.noTermResult ? t('gapTerm') : null,
+                    x.unverified ? t('gapPapers', { n: x.unverified }) : null,
+                    x.remarks ? t('gapRemarks', { n: x.remarks }) : null,
+                    x.attendance ? t('gapAttendance', { n: x.attendance }) : null,
+                  ].filter(Boolean) as string[];
+                  const p = k.publish;
+                  const n = k.sections.reduce((a, c) => a + c.students, 0);
+                  return (
+                    <tr key={k.classId}>
+                      <td>
+                        <strong>{k.code}</strong>
+                        <span className="ep-mr-col__desc">
+                          {t('sectionsOf', { list: k.sections.map((c) => c.code).join(', ') })}
+                        </span>
+                      </td>
+                      <td>{n}</td>
+                      <td>
+                        {gaps.length ? (
+                          <>
+                            <Badge tone="warning">{t('notReadyBadge')}</Badge>
+                            <span className="ep-mr-col__desc">
+                              {gaps.join(' · ')} — <a href={here('ready')}>{t('seeReadiness')}</a>
+                            </span>
+                          </>
+                        ) : (
+                          <Badge tone="success">{t('readyBadge')}</Badge>
+                        )}
+                      </td>
+                      <td>
+                        {p?.status === 'released' ? (
+                          <>
+                            <Badge tone="success">{t('status_released')}</Badge>
+                            <span className="ep-mr-col__desc">
+                              {t('classPublishedOn', { date: when(p.releasedAt), n: p.notified })}
+                            </span>
+                          </>
+                        ) : p?.status === 'withdrawn' ? (
+                          <>
+                            <Badge tone="danger">{t('status_withdrawn')}</Badge>
+                            <span className="ep-mr-col__desc">
+                              {t('classRevokedOn', {
+                                date: when(p.withdrawnAt),
+                                reason: p.reason ?? '',
+                              })}
+                            </span>
+                          </>
+                        ) : (
+                          <Badge tone="neutral">{t('notPublished')}</Badge>
+                        )}
+                      </td>
+                      <td>
+                        {canPublish && p?.status !== 'released' ? (
+                          <ConfirmAction
+                            action={setClassPublish}
+                            fields={{
+                              id: rel.id,
+                              back: here('publish'),
+                              classId: k.classId,
+                              status: 'released',
+                              label: k.code,
+                            }}
+                            label={t('publishClass', { cls: k.code })}
+                            title={t('publishClassTitle', { cls: k.code })}
+                            confirmLabel={t('publishConfirm')}
+                            variant="primary"
+                          >
+                            {t('publishClassBody', { n, cls: k.code })}
+                            {gaps.length
+                              ? ` ${t('publishClassGaps', { list: gaps.join(', ') })}`
+                              : ''}
+                          </ConfirmAction>
+                        ) : null}
+                        {canPublish && p?.status === 'released' ? (
+                          <ConfirmAction
+                            action={setClassPublish}
+                            fields={{
+                              id: rel.id,
+                              back: here('publish'),
+                              classId: k.classId,
+                              status: 'withdrawn',
+                              label: k.code,
+                            }}
+                            label={t('revokeClass', { cls: k.code })}
+                            title={t('revokeClassTitle', { cls: k.code })}
+                            confirmLabel={t('revoke')}
+                            variant="ghost"
+                            confirmVariant="danger"
+                            reason={{
+                              label: t('withdrawReason'),
+                              placeholder: t('withdrawPlaceholder'),
+                            }}
+                          >
+                            {t('revokeClassBody', { cls: k.code })}
+                          </ConfirmAction>
+                        ) : null}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+          {!canPublish ? <p className="ep-field__help">{t('publishWho')}</p> : null}
         </Card>
       ) : null}
     </>

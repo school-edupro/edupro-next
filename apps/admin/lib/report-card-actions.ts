@@ -116,50 +116,157 @@ export async function setReleaseStatus(fd: FormData) {
   );
 }
 
-export async function holdCard(fd: FormData) {
+/** a release's class published to its families, or revoked with a reason (docs/design/65, 1 Nov) */
+export async function setClassPublish(fd: FormData) {
   const id = str(fd, 'id');
-  const held = str(fd, 'held') === 'yes';
+  const classId = str(fd, 'classId');
+  const status = str(fd, 'status');
+  if (!okId(id) || !okId(classId) || !['released', 'withdrawn'].includes(status))
+    back('/exams/report-cards', 'validation-failed', 'Unknown class');
   const reason = str(fd, 'reason');
   return run(
     backTo(fd, id),
     () =>
-      apiFetch(`/exams/report-cards/releases/${id}/holds`, {
+      apiFetch(`/exams/report-cards/releases/${id}/classes/${classId}`, {
         method: 'PUT',
-        body: JSON.stringify({
-          studentId: str(fd, 'studentId'),
-          held,
-          ...(reason ? { reason } : {}),
-        }),
+        body: JSON.stringify({ status, ...(reason ? { reason } : {}) }),
       }),
-    held ? 'Card held back' : 'Card shown again',
+    status === 'released'
+      ? `${str(fd, 'label')} published: its families are told`
+      : `${str(fd, 'label')} revoked`,
   );
 }
 
-/** the PDFs of one or more sections (a whole class: each of its sections) */
-export async function renderSections(fd: FormData) {
-  const id = str(fd, 'id');
-  const sections = fd.getAll('sectionId').map(String).filter(okId);
-  return run(
-    backTo(fd, id),
-    async () => {
-      for (const s of sections)
-        await apiFetch(`/exams/report-cards/releases/${id}/render`, {
-          method: 'POST',
-          body: JSON.stringify({ classSectionId: s }),
-        });
-    },
-    `${String(sections.length)} section PDF${sections.length === 1 ? '' : 's'} being made: they appear when ready`,
-  );
+// ---- the Cards line (client components call these and show the answer in place) -----------------
+type Out<T> = { ok: true; data: T } | { ok: false; error: string };
+const fail = (e: unknown): { ok: false; error: string } => {
+  if (e instanceof ApiError)
+    return { ok: false, error: detailOf(e) ?? e.problem.title ?? e.problem.type };
+  throw e;
+};
+/** "s:<section id>" or "c:<class id>" (every section of the class) */
+const placeOf = (place: string) => {
+  const m = /^([sc]):(\d{1,18})$/.exec(place);
+  return m ? (m[1] === 's' ? { classSectionId: m[2]! } : { classId: m[2]! }) : null;
+};
+const STATUSES = ['active', 'inactive', 'all'];
+const RANGES = ['first10', '11-20', '21-30', '31-40', 'above40', '1-2', 'all'];
+
+export interface LineStudent {
+  studentId: string;
+  name: string;
+  admissionNo: string;
+  rollNo: number | null;
+  section: string;
+  heldReason: string | null;
+  withheld: boolean;
 }
 
-export async function renderCard(fd: FormData) {
-  const id = str(fd, 'id');
-  return run(
-    backTo(fd, id),
-    () =>
-      apiFetch(`/exams/report-cards/releases/${id}/students/${str(fd, 'studentId')}/render`, {
+/** the students of a line's section or class with the status chosen, section by section in roll order */
+export async function lineStudents(
+  releaseId: string,
+  place: string,
+  status: string,
+): Promise<Out<LineStudent[]>> {
+  const p = placeOf(place);
+  if (!okId(releaseId) || !p || !STATUSES.includes(status))
+    return { ok: false, error: 'Pick a class' };
+  try {
+    const q = new URLSearchParams({ status });
+    for (const [k, v] of Object.entries(p)) if (v) q.set(k, v);
+    const r = await apiFetch<{ data: Array<LineStudent & { heldReason?: string | null }> }>(
+      `/exams/report-cards/releases/${releaseId}/cards?${q.toString()}`,
+    );
+    return {
+      ok: true,
+      data: r.data.map((x) => ({
+        studentId: x.studentId,
+        name: x.name,
+        admissionNo: x.admissionNo,
+        rollNo: x.rollNo,
+        section: x.section,
+        heldReason: x.heldReason ?? null,
+        withheld: x.withheld,
+      })),
+    };
+  } catch (e) {
+    return fail(e);
+  }
+}
+
+/** Generate Report Card on a line: the PDF is made in the background; the page then downloads it */
+export async function generateLine(
+  releaseId: string,
+  input: { place: string; range: string; status: string; admissionNo: string },
+): Promise<Out<{ exportId: string; students: number; title: string }>> {
+  const p = placeOf(input.place);
+  const admissionNo = input.admissionNo.trim();
+  if (!okId(releaseId) || !p) return { ok: false, error: 'Pick a class' };
+  if (!STATUSES.includes(input.status) || (input.range && !RANGES.includes(input.range)))
+    return { ok: false, error: 'Pick the roll numbers' };
+  if (!input.range && !admissionNo)
+    return { ok: false, error: 'Pick the roll numbers, or type one admission number' };
+  try {
+    const r = await apiFetch<{ exportId: string; students: number; title: string }>(
+      `/exams/report-cards/releases/${releaseId}/generate`,
+      {
         method: 'POST',
+        body: JSON.stringify({
+          ...p,
+          status: input.status,
+          ...(admissionNo ? { admissionNo } : { range: input.range }),
+        }),
+      },
+    );
+    return { ok: true, data: r };
+  } catch (e) {
+    return fail(e);
+  }
+}
+
+/** a card held back with a reason, or shown again, from the preview panel */
+export async function holdInline(
+  releaseId: string,
+  studentId: string,
+  held: boolean,
+  reason: string,
+): Promise<Out<null>> {
+  if (!okId(releaseId) || !okId(studentId)) return { ok: false, error: 'Unknown student' };
+  try {
+    await apiFetch(`/exams/report-cards/releases/${releaseId}/holds`, {
+      method: 'PUT',
+      body: JSON.stringify({
+        studentId,
+        held,
+        ...(reason.trim() ? { reason: reason.trim() } : {}),
       }),
-    'The card is being made',
-  );
+    });
+    revalidatePath(`/exams/report-cards/${releaseId}`);
+    return { ok: true, data: null };
+  } catch (e) {
+    return fail(e);
+  }
+}
+
+export interface ExportLogRow {
+  id: string;
+  title: string;
+  status: string;
+  error: string | null;
+  requestedAt: string;
+  finishedAt: string | null;
+  by: string | null;
+}
+
+/** the Download Log: the PDFs made for the release, newest first */
+export async function releaseExports(releaseId: string): Promise<Out<ExportLogRow[]>> {
+  if (!okId(releaseId)) return { ok: false, error: 'Unknown release' };
+  try {
+    const r = await apiFetch<{ data: ExportLogRow[] }>(
+      `/exams/report-cards/releases/${releaseId}/exports`,
+    );
+    return { ok: true, data: r.data };
+  } catch (e) {
+    return fail(e);
+  }
 }

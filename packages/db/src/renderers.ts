@@ -83,7 +83,9 @@ RENDERERS.report_card_batch = {
   title: 'Report cards of a section',
   permission: 'exams.report_card.manage',
   page: { width: '210mm', height: '297mm' },
-  requiredParams: ['releaseId', 'classSectionId'],
+  // with classSectionId (every active pupil of the section) or classId + studentIds (the pupils chosen
+  // on the Cards line, in order); the worker checks which it got
+  requiredParams: ['releaseId'],
 };
 
 // Sprint 19: certificates — one issued certificate, or an issue batch (the export groups them)

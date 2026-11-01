@@ -25,6 +25,8 @@ describe('examinations v2 (e2e)', () => {
   let admin: SeededUser;
   /** the exam office: may enter marks (never unlock) */
   let clerk: SeededUser;
+  /** Asha's and Bhanu's father (made when the results are first published) */
+  let parent: SeededUser;
   let classId: string;
   let section: string;
   let examId: string;
@@ -620,7 +622,7 @@ describe('examinations v2 (e2e)', () => {
   });
 
   it('the principal publishes: families told, a held card stays closed, reopening waits for a withdrawal', async () => {
-    const parent = await withMigrator(async (c) => {
+    parent = await withMigrator(async (c) => {
       const u = await seedUser(c, school, `${s}-parent`, 'parent', 'guardian');
       const g = await c.query<{ id: string }>(
         `INSERT INTO guardians (school_id, first_name, last_name, mobile, email, user_id)
@@ -745,5 +747,119 @@ describe('examinations v2 (e2e)', () => {
       (await inject({ method: 'PATCH', url, headers: h(clerk), json: { status: 'released' } }))
         .statusCode,
     ).toBe(403);
+  });
+
+  it('publishes and revokes class by class; a Cards line makes a range or one pupil’s card', async () => {
+    const rel = (
+      (await call(admin, 'GET', '/exams/report-cards/releases')).json().data as Array<{
+        id: string;
+        termCode: string;
+      }>
+    ).find((r) => r.termCode === 'T1')!;
+    const url = `/exams/report-cards/releases/${rel.id}`;
+    const publishOf = async () =>
+      (await call(admin, 'GET', `${url}/readiness`)).json().classes[0].publish as Record<
+        string,
+        unknown
+      >;
+    // the whole release was withdrawn: its class is revoked with the same reason
+    expect(await publishOf()).toMatchObject({
+      status: 'withdrawn',
+      reason: 'A mark of AI to correct',
+    });
+    const cls = `${url}/classes/${classId}`;
+    expect((await call(clerk, 'PUT', cls, { status: 'released' })).statusCode).toBe(403);
+    expect(
+      (await call(admin, 'PUT', `${url}/classes/999999999`, { status: 'released' })).statusCode,
+    ).toBe(404);
+    const pub = await call(admin, 'PUT', cls, { status: 'released' });
+    expect(pub.statusCode).toBe(200);
+    expect(pub.json()).toMatchObject({ status: 'released', classCount: 1, publishedClasses: 1 });
+    expect((await call(admin, 'PUT', cls, { status: 'released' })).statusCode).toBe(409);
+    // Asha's father is told again (Bhanu's card is still held): 1 then, 1 now
+    expect(await publishOf()).toMatchObject({ status: 'released', notified: 2 });
+    const terms = async () =>
+      (
+        (await call(parent, 'GET', '/exams/mine/results')).json().children as Array<{
+          student: { name: string };
+          terms: unknown[];
+        }>
+      ).find((x) => x.student.name === 'Asha Exam')!.terms;
+    expect(await terms()).toHaveLength(1);
+    // the class's marks reopen only once the class is revoked
+    expect(
+      (await status('reopen', admin, subject.ENG!, { note: 'A late correction' })).json().type,
+    ).toBe('exams.result_published');
+    expect((await call(admin, 'PUT', cls, { status: 'withdrawn' })).statusCode).toBe(400);
+    const revoked = await call(admin, 'PUT', cls, {
+      status: 'withdrawn',
+      reason: 'A grade of ART to correct',
+    });
+    // the last class revoked: the release is withdrawn
+    expect(revoked.json()).toMatchObject({
+      status: 'withdrawn',
+      withdrawnReason: 'A grade of ART to correct',
+      publishedClasses: 0,
+    });
+    expect(await terms()).toHaveLength(0);
+    expect(
+      (await call(parent, 'POST', `/exams/mine/report-cards/${rel.id}/${student.Asha}/pdf`))
+        .statusCode,
+    ).toBe(404);
+
+    // a Cards line (the legacy Exam Report Card): a section or the class, a range or one pupil
+    expect(
+      (await call(admin, 'POST', '/exams/report-cards/templates/defaults')).statusCode,
+    ).toBeLessThan(300);
+    const gen = (json: Record<string, unknown>) => call(admin, 'POST', `${url}/generate`, json);
+    expect((await gen({ classSectionId: section })).statusCode).toBe(400);
+    expect((await gen({ classSectionId: section, classId, range: 'all' })).statusCode).toBe(400);
+    const two = await gen({ classSectionId: section, range: '1-2' });
+    expect(two.statusCode).toBe(201);
+    expect(two.json()).toMatchObject({ students: 2 });
+    const whole = await gen({ classId, range: 'all', status: 'active' });
+    expect(whole.json()).toMatchObject({ students: 4 });
+    const one = await gen({ classSectionId: section, admissionNo: `${s}-3` });
+    expect(one.json()).toMatchObject({ students: 1 });
+    expect((await gen({ classSectionId: section, range: 'above40' })).json().type).toBe(
+      'report_card.no_students',
+    );
+    expect((await gen({ classSectionId: section, admissionNo: 'NOPE' })).statusCode).toBe(409);
+    const made = await withMigrator(
+      async (c) =>
+        (
+          await c.query<{ id: string; dataset: string; params: Record<string, unknown> }>(
+            `SELECT id::text, dataset, params FROM exports WHERE id = ANY($1::bigint[]) ORDER BY id`,
+            [[two.json().exportId, one.json().exportId]],
+          )
+        ).rows,
+    );
+    expect(made[0]).toMatchObject({
+      dataset: 'report_card_batch',
+      params: { releaseId: rel.id, classId, studentIds: [student.Asha, student.Bhanu] },
+    });
+    expect(made[1]).toMatchObject({
+      dataset: 'report_card',
+      params: { releaseId: rel.id, studentId: student.Chitra },
+    });
+    // the Download Log lists them, newest first
+    const log = (await call(admin, 'GET', `${url}/exports`)).json().data as Array<{
+      id: string;
+      title: string;
+    }>;
+    expect(log.slice(0, 3).map((x) => x.id)).toEqual([
+      one.json().exportId,
+      whole.json().exportId,
+      two.json().exportId,
+    ]);
+    expect(log[0]!.title).toContain(`${s}-3 Chitra Exam`);
+    expect(log[1]!.title).toContain('XI (all sections) · whole class (4)');
+    // the class's students by status: no one has left yet
+    expect(
+      (await call(admin, 'GET', `${url}/cards?classId=${classId}&status=inactive`)).json().data,
+    ).toEqual([]);
+    expect(
+      (await call(admin, 'GET', `${url}/cards?classId=${classId}&status=all`)).json().data,
+    ).toHaveLength(4);
   });
 });

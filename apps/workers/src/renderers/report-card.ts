@@ -172,25 +172,40 @@ export async function renderReportCardBatch(
 ): Promise<{ html: string; width: string; height: string; pupils: number; withheld: number }> {
   const releaseId = String(params.releaseId ?? '');
   const classSectionId = String(params.classSectionId ?? '');
+  // the Cards line (docs/design/65): one class and the pupils chosen on it, in their order
+  const chosen = Array.isArray(params.studentIds)
+    ? params.studentIds.map(String).filter((x) => /^[0-9]{1,18}$/.test(x))
+    : null;
+  const classId = String(params.classId ?? '');
   return db.withTenant(tenantForJob(envelope), async (c) => {
     const rel = await loadRelease(c as Q, releaseId);
-    const k = await c.query<{ band: string | null; display_order: number; class_id: string }>(
-      `SELECT k.band::text, k.display_order, k.id::text AS class_id FROM class_sections cs JOIN classes k ON k.id = cs.class_id WHERE cs.id = $1`,
-      [classSectionId],
-    );
-    if (!k.rows[0]) throw new Error(`section ${classSectionId} not found`);
+    const k = chosen
+      ? await c.query<{ band: string | null; display_order: number; class_id: string }>(
+          `SELECT k.band::text, k.display_order, k.id::text AS class_id FROM classes k WHERE k.id = $1`,
+          [classId],
+        )
+      : await c.query<{ band: string | null; display_order: number; class_id: string }>(
+          `SELECT k.band::text, k.display_order, k.id::text AS class_id FROM class_sections cs JOIN classes k ON k.id = cs.class_id WHERE cs.id = $1`,
+          [classSectionId],
+        );
+    if (!k.rows[0])
+      throw new Error(
+        chosen ? `class ${classId} not found` : `section ${classSectionId} not found`,
+      );
     const t = await templateFor(
       c as Q,
       rel,
       bandFor(k.rows[0].band, k.rows[0].display_order),
       k.rows[0].class_id,
     );
-    const pupils = await c.query<{ id: string }>(
-      `SELECT s.id::text FROM enrolments e JOIN students s ON s.id = e.student_id AND s.deleted_at IS NULL
-        WHERE e.class_section_id = $1 AND e.academic_year_id = app.current_academic_year_id() AND e.status = 'active'
-        ORDER BY e.roll_no NULLS LAST, s.display_name`,
-      [classSectionId],
-    );
+    const pupils = chosen
+      ? { rows: chosen.map((id) => ({ id })) }
+      : await c.query<{ id: string }>(
+          `SELECT s.id::text FROM enrolments e JOIN students s ON s.id = e.student_id AND s.deleted_at IS NULL
+            WHERE e.class_section_id = $1 AND e.academic_year_id = app.current_academic_year_id() AND e.status = 'active'
+            ORDER BY e.roll_no NULLS LAST, s.display_name`,
+          [classSectionId],
+        );
     const cards: Array<{ data: ReportCardData; withheld: string | null }> = [];
     let withheld = 0;
     for (const p of pupils.rows) {

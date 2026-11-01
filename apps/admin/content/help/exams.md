@@ -141,14 +141,22 @@ see who submitted or verified it and to submit, verify, send back or reopen it.
      card design, the term result worked out from a locked mark register, each exam's papers verified,
      remarks and attendance. Each line links to the page that fixes it. The principal can publish
      anyway.
-   - **Cards**: each class's sections as tiles (PDFs made, withheld for fees, held). Open a tile for its
-     students: **Preview** opens the card in a side panel with **Previous** / **Next**, **Open in a new
-     tab** and **Print**; **Hold** keeps one card back with a reason (**Show again** undoes it); **Make
-     PDF** makes one student's card. **Make the PDF of** a section, or of the whole class, makes every
-     card, a page each (made by the workers; they appear when ready).
-   - **Publish**: the office **Sends to the principal**; the principal **Publishes to the families**
-     (families get a message and see the cards in the parent app; withheld and held cards stay hidden)
-     and can **Withdraw** with a reason.
+   - **Cards** (like the old Exam Report Card): one line per card design (for example "Class VI–VIII").
+     On a line pick the **Class** (a section, or "VI (all sections)"), the **Exam Type** (this release's
+     term, already picked) and the students: **Select Roll No.** takes a range in roll-number order in
+     each section ("11–20" = the 11th to 20th student of each section, not roll numbers 11 to 20;
+     **Whole class** = everyone), **Status** picks active, inactive (left, transferred) or all, and
+     **Search Admission** makes one student's card instead. **Generate Report Card** makes the PDF in
+     the background (the button counts the seconds) and downloads it when ready; the **eye** shows the
+     cards at once in a side panel with **Previous** / **Next**, **Print**, **Open in a new tab** and
+     **Hold** (with a reason; **Show again** undoes it). **Download Log** lists every PDF made for the
+     release, with who made it and when; **Settings** opens the Set-up step and **User Guide** this page.
+     The PDFs are made by the workers: if a PDF waits, it appears in the Download Log once ready.
+   - **Publish**: the office **Sends to the principal**. The principal publishes **class by class**
+     (**Publish VI**) or **Publish every class**; each class's families get a message and see the cards
+     in the parent app (withheld and held cards stay hidden). **Revoke VI** (with a reason) hides that
+     class's cards again and lets its marks be reopened; revoking the last class withdraws the release.
+     The table shows, per class, whether it is ready, when it was published and how many messages went.
 4. Families download their own card from the parent app once the release is published.
 5. **Insights → Results analytics**: pass % and mean by class and section, weakest subjects.
 6. **Exams → open exam → Reports**: the section-wise subject analysis, mark ranges (the class's grade

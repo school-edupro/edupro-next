@@ -14057,6 +14057,111 @@ button.ep-subchoice__icon:hover {
 .ep-rcw-check a {
   text-decoration: underline;
 }
+/* the Cards tab as the legacy Exam Report Card: a line per card design */
+.ep-rcw-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+  align-items: center;
+  margin-bottom: var(--sp-3);
+}
+.ep-rcw-toolbar h2 {
+  margin: 0;
+  font-size: var(--fs-h4);
+  color: var(--mob-navy-900);
+}
+.ep-rcw-lines {
+  table-layout: fixed;
+  min-width: 62rem;
+}
+.ep-rcw-lines th,
+.ep-rcw-lines td {
+  padding-inline: var(--sp-2);
+  vertical-align: top;
+}
+.ep-rcw-lines .ep-select,
+.ep-rcw-lines .ep-input {
+  width: 100%;
+  min-width: 0;
+  padding-inline-start: var(--sp-2);
+}
+.ep-mr-col__desc a {
+  text-decoration: underline;
+}
+.ep-rcw-gen-wrap {
+  display: flex;
+  gap: var(--sp-2);
+  align-items: stretch;
+}
+.ep-rcw-gen,
+.ep-rcw-eye {
+  display: inline-flex;
+  gap: var(--sp-2);
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: var(--radius-sm);
+  font: inherit;
+  font-weight: var(--fw-semibold);
+  cursor: pointer;
+}
+.ep-rcw-gen {
+  flex: 1;
+  padding: var(--sp-2) var(--sp-3);
+  background: var(--status-danger-bg);
+  color: var(--status-danger-text);
+  white-space: nowrap;
+}
+.ep-rcw-gen:hover:not(:disabled) {
+  background: var(--mob-red-50);
+  box-shadow: inset 0 0 0 1px var(--status-danger);
+}
+.ep-rcw-gen:disabled {
+  cursor: progress;
+  opacity: 0.75;
+}
+.ep-rcw-eye {
+  padding: var(--sp-2) var(--sp-3);
+  background: var(--mob-cyan-50);
+  color: var(--mob-cyan-700);
+}
+.ep-rcw-eye:hover {
+  box-shadow: inset 0 0 0 1px var(--mob-cyan-600);
+}
+.ep-rcw-gen:focus-visible,
+.ep-rcw-eye:focus-visible {
+  outline: 2px solid var(--mob-cyan-600);
+  outline-offset: 2px;
+}
+.ep-rcw-line-msg {
+  margin: var(--sp-1) 0 0;
+  font-size: var(--fs-small);
+}
+.ep-rcw-line-msg--error {
+  color: var(--status-danger-text);
+}
+.ep-rcw-line-msg--success {
+  color: var(--status-success-text);
+}
+.ep-rcw-line-msg--info {
+  color: var(--status-info-text);
+}
+.ep-rcw-panel-foot {
+  display: grid;
+  gap: var(--sp-2);
+  width: 100%;
+}
+.ep-rcw-panel-hold,
+.ep-rcw-panel-nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+  align-items: center;
+}
+.ep-rcw-panel-hold .ep-input {
+  flex: 1;
+  min-width: 12rem;
+}
 .ep-rcw-kpis {
   display: grid;
   gap: var(--sp-3);
@@ -14084,8 +14189,11 @@ button.ep-subchoice__icon:hover {
   color: var(--status-warning);
 }
 .ep-rcw-preview {
+  display: block;
   width: 100%;
-  height: calc(100vh - 11rem);
+  /* fills the panel between its title and footer, so the panel itself never scrolls */
+  height: 100%;
+  min-height: 16rem;
   border: 1px solid var(--border-default);
   border-radius: var(--radius-sm);
   background: var(--mob-white);

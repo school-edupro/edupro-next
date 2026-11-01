@@ -111,6 +111,14 @@ export default async function ReportCardsPage({
                         ? `: ${r.withdrawnReason}`
                         : ''}
                     </li>
+                    {r.classCount ? (
+                      <li>
+                        {t('classesPublished', {
+                          n: r.publishedClasses ?? 0,
+                          total: r.classCount,
+                        })}
+                      </li>
+                    ) : null}
                     <li>
                       <strong>{r.cards.rendered}</strong> {t('pdfsMade')}
                     </li>

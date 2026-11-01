@@ -4136,13 +4136,23 @@ async function main(): Promise<void> {
           `SELECT id::text FROM exams WHERE school_id = $1 AND academic_year_id = $2 AND code = 'PT1-2026' AND deleted_at IS NULL`,
           [alpha.id, yearId],
         );
-        if (pt1.rows[0])
+        if (pt1.rows[0]) {
           await c.query(
             `INSERT INTO report_card_releases (school_id, academic_year_id, term_code, name, exam_ids, hide_defaulters, status, released_at, released_by, created_by)
              VALUES ($1, $2, 'T1', 'Term 1 (2026-27)', ARRAY[$3::bigint], true, 'released', now(), $4, $4)
              ON CONFLICT (academic_year_id, term_code) DO NOTHING`,
             [alpha.id, yearId, pt1.rows[0].id, userIds['dev-admin']],
           );
+          // published class by class (0297): every class of the term's exam is open to its families
+          await c.query(
+            `INSERT INTO report_card_release_classes (school_id, release_id, class_id, status, released_at, released_by)
+             SELECT DISTINCT r.school_id, r.id, ec.class_id, 'released', r.released_at, r.released_by
+               FROM report_card_releases r JOIN exam_classes ec ON ec.exam_id = ANY (r.exam_ids)
+              WHERE r.school_id = $1 AND r.academic_year_id = $2 AND r.term_code = 'T1' AND r.status = 'released'
+             ON CONFLICT (release_id, class_id) DO NOTHING`,
+            [alpha.id, yearId],
+          );
+        }
         const titles: Array<[string, string, string, string, string]> = [
           ['978-0140328721', 'Matilda', 'Roald Dahl', 'Fiction', '299'],
           ['978-0141325293', 'Wonder', 'R. J. Palacio', 'Fiction', '350'],

@@ -3,8 +3,11 @@ import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { RequirePermission } from '../../common/access/require-permission.decorator';
 import { ReqCtx, type RequestContext } from '../../common/http/request-context';
 import {
+  CardsQueryDto,
+  ClassPublishDto,
   CreateReleaseDto,
   CreateTemplateDto,
+  GenerateCardsDto,
   HoldDto,
   SignatureDto,
   PreviewDto,
@@ -156,13 +159,40 @@ export class ReportCardsController {
   }
 
   @Get('releases/:id/cards')
+  @ApiOperation({ summary: 'The cards of a section or a whole class, by student status' })
   @RequirePermission(REPORT_CARDS.view)
-  async cardsOf(
+  async cardsOf(@ReqCtx() ctx: RequestContext, @Param('id') id: string, @Query() q: CardsQueryDto) {
+    return { data: await this.cards.cards(ctx, id, q) };
+  }
+
+  @Put('releases/:id/classes/:classId')
+  @ApiOperation({
+    summary: "Publish one class's cards to its families, or revoke them with a reason",
+  })
+  @RequirePermission(REPORT_CARDS.view)
+  classStatus(
     @ReqCtx() ctx: RequestContext,
     @Param('id') id: string,
-    @Query('classSectionId') classSectionId: string,
+    @Param('classId') classId: string,
+    @Body() body: ClassPublishDto,
   ) {
-    return { data: await this.cards.cards(ctx, id, classSectionId) };
+    return this.cards.setClassStatus(ctx, id, classId, body);
+  }
+
+  @Post('releases/:id/generate')
+  @ApiOperation({
+    summary: 'A Cards line: a section or a class, a roll-order range or one admission number',
+  })
+  @RequirePermission(REPORT_CARDS.manage)
+  generate(@ReqCtx() ctx: RequestContext, @Param('id') id: string, @Body() body: GenerateCardsDto) {
+    return this.cards.generate(ctx, id, body);
+  }
+
+  @Get('releases/:id/exports')
+  @ApiOperation({ summary: 'The Download Log: the PDFs made for this release' })
+  @RequirePermission(REPORT_CARDS.view)
+  async exportsOf(@ReqCtx() ctx: RequestContext, @Param('id') id: string) {
+    return { data: await this.cards.exportsOf(ctx, id) };
   }
 
   @Post('releases/:id/render')

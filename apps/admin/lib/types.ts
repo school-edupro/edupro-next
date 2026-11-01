@@ -2432,6 +2432,9 @@ export interface ReportCardRelease {
   notifiedCount?: number;
   held?: number;
   unverified?: number;
+  /** the classes the release carries and how many are published (class-wise, 1 Nov 2026) */
+  classCount?: number;
+  publishedClasses?: number;
 }
 export interface ReportCardStatus {
   studentId: string;
@@ -2445,6 +2448,12 @@ export interface ReportCardStatus {
   renderedAt: string | null;
   /** held back by the school (docs/design/65) */
   heldReason?: string | null;
+  sectionId?: string;
+  classId?: string;
+  /** "VI-A" */
+  section?: string;
+  /** an active enrolment (not left or transferred) */
+  active?: boolean;
 }
 export interface VehiclePosition {
   vehicleId: string;

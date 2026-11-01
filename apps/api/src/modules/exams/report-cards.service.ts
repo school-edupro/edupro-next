@@ -20,11 +20,23 @@ import { ReportCardSignaturesService } from './report-card-signatures.service';
 import type {
   CreateReleaseDto,
   CreateTemplateDto,
+  GenerateCardsDto,
   PreviewDto,
   RenderBatchDto,
   UpdateReleaseDto,
   UpdateTemplateDto,
 } from './report-cards.dto';
+
+/** the legacy ranges, in the titles of the PDFs (the Download Log) */
+const RANGE_LABEL: Record<string, string> = {
+  first10: '1–10',
+  '11-20': '11–20',
+  '21-30': '21–30',
+  '31-40': '31–40',
+  above40: '41 onwards',
+  '1-2': '1–2',
+  all: 'whole class',
+};
 
 export interface TemplateRow {
   id: string;
@@ -61,6 +73,9 @@ export interface ReleaseRow {
   held: number;
   /** sections × subjects of the release's exams whose marks are not verified yet */
   unverified: number;
+  /** the classes the release carries, and how many are published (class-wise, 1 Nov 2026) */
+  classCount: number;
+  publishedClasses: number;
 }
 
 const T_COLS = `id::text, code, name, band::text, layout, body_html, styles_css, page_width, page_height, version, status::text, updated_at`;
@@ -90,7 +105,9 @@ const R_COLS = `r.id::text, r.term_code, r.name, r.exam_ids::text[] AS exam_ids,
      LEFT JOIN exam_entry_status st ON st.exam_subject_id = es.id AND st.class_section_id = cs.id
     WHERE es.exam_id = ANY(r.exam_ids) AND COALESCE(st.status, 'open') <> 'verified'
       AND EXISTS (SELECT 1 FROM enrolments en WHERE en.class_section_id = cs.id AND en.status = 'active'
-                    AND app.student_exam_subject_kind(en.student_id, es.exam_id, es.subject_id) IS NOT NULL))::int AS unverified`;
+                    AND app.student_exam_subject_kind(en.student_id, es.exam_id, es.subject_id) IS NOT NULL))::int AS unverified,
+  (SELECT count(DISTINCT ec.class_id) FROM exam_classes ec WHERE ec.exam_id = ANY(r.exam_ids))::int AS class_count,
+  (SELECT count(*) FROM report_card_release_classes x WHERE x.release_id = r.id AND x.status = 'released')::int AS published_classes`;
 const toRelease = (r: Record<string, unknown>): ReleaseRow => ({
   id: String(r.id),
   termCode: String(r.term_code),
@@ -109,6 +126,8 @@ const toRelease = (r: Record<string, unknown>): ReleaseRow => ({
   notifiedCount: Number(r.notified_count ?? 0),
   held: Number(r.held ?? 0),
   unverified: Number(r.unverified ?? 0),
+  classCount: Number(r.class_count ?? 0),
+  publishedClasses: Number(r.published_classes ?? 0),
 });
 
 /**
@@ -409,7 +428,7 @@ export class ReportCardsService {
       if (dto.defaulterMin !== undefined) add('defaulter_min', dto.defaulterMin);
       if (dto.status !== undefined) {
         add('status', dto.status);
-        if (dto.status === 'released')
+        if (dto.status === 'released' && before.status !== 'released')
           sets.push('released_at = now()', 'released_by = app.current_user_id()');
         if (dto.status === 'submitted')
           sets.push('submitted_at = now()', 'submitted_by = app.current_user_id()');
@@ -426,14 +445,16 @@ export class ReportCardsService {
       );
       if (r.rowCount === 0)
         throw new DomainError('not-found', 'Release not found', { status: 404 });
-      // published: the families are told (once per publishing)
-      if (dto.status === 'released' && before.status !== 'released') {
-        const n = await this.tellFamilies(c, id);
+      // published: every class not open yet opens now and only its families are told; withdrawn:
+      // every published class is revoked with the same reason (class by class: setClassStatus)
+      if (dto.status === 'released') await this.openClasses(c, id, null);
+      if (dto.status === 'withdrawn')
         await c.query(
-          `UPDATE report_card_releases SET notified_at = now(), notified_count = $2 WHERE id = $1`,
-          [id, n],
+          `UPDATE report_card_release_classes SET status = 'withdrawn', withdrawn_at = now(),
+                  withdrawn_by = app.current_user_id(), withdrawn_reason = $2
+            WHERE release_id = $1 AND status = 'released'`,
+          [id, dto.reason!.trim()],
         );
-      }
       await this.audit.stage(ctx, c, {
         action: `exams.report_card.release_${dto.status ?? 'update'}`,
         entityType: 'report_card_releases',
@@ -444,10 +465,214 @@ export class ReportCardsService {
     });
   }
 
+  /**
+   * One class of a release published to its families, or revoked with a reason (docs/design/65, 1 Nov
+   * 2026). The first class published makes the release published; revoking the last one withdraws it.
+   */
+  async setClassStatus(
+    ctx: RequestContext,
+    releaseId: string,
+    classId: string,
+    dto: { status: 'released' | 'withdrawn'; reason?: string },
+  ): Promise<ReleaseRow> {
+    if (!ctx.permissions?.has('exams.result.publish'))
+      throw new DomainError(
+        'permission-denied',
+        'Publishing and revoking results needs exams.result.publish (the principal)',
+        { status: 403 },
+      );
+    const reason = dto.reason?.trim() ?? '';
+    if (dto.status === 'withdrawn' && reason.length < 3)
+      throw new DomainError('validation-failed', 'Give the reason for revoking the results', {
+        status: 400,
+      });
+    return this.db.tenant(requireTenant(ctx), async (c) => {
+      const rel = await this.findRelease(c, releaseId);
+      if (!rel) throw new DomainError('not-found', 'Release not found', { status: 404 });
+      const k = await c.query<{ code: string; status: string | null }>(
+        `SELECT k.code, x.status
+           FROM classes k LEFT JOIN report_card_release_classes x ON x.release_id = $1 AND x.class_id = k.id
+          WHERE k.id = $2 AND EXISTS (SELECT 1 FROM exam_classes ec WHERE ec.class_id = k.id AND ec.exam_id = ANY($3::bigint[]))`,
+        [releaseId, classId, rel.examIds],
+      );
+      if (!k.rows[0])
+        throw new DomainError('not-found', 'The release does not carry this class', {
+          status: 404,
+        });
+      const now = k.rows[0].status;
+      if (dto.status === 'released' && now === 'released')
+        throw new DomainError('report_card.status', `${k.rows[0].code} is published already`, {
+          status: 409,
+        });
+      if (dto.status === 'withdrawn' && now !== 'released')
+        throw new DomainError('report_card.status', `${k.rows[0].code} is not published`, {
+          status: 409,
+        });
+      if (dto.status === 'released') {
+        await this.openClasses(c, releaseId, [classId]);
+        if (rel.status !== 'released')
+          await c.query(
+            `UPDATE report_card_releases SET status = 'released', released_at = now(), released_by = app.current_user_id(), updated_at = now()
+              WHERE id = $1`,
+            [releaseId],
+          );
+      } else {
+        await c.query(
+          `UPDATE report_card_release_classes SET status = 'withdrawn', withdrawn_at = now(),
+                  withdrawn_by = app.current_user_id(), withdrawn_reason = $3
+            WHERE release_id = $1 AND class_id = $2`,
+          [releaseId, classId, reason],
+        );
+        // the last class revoked: the release is withdrawn with that reason
+        await c.query(
+          `UPDATE report_card_releases SET status = 'withdrawn', withdrawn_at = now(), withdrawn_by = app.current_user_id(),
+                  withdrawn_reason = $2, updated_at = now()
+            WHERE id = $1 AND status = 'released'
+              AND NOT EXISTS (SELECT 1 FROM report_card_release_classes x WHERE x.release_id = $1 AND x.status = 'released')`,
+          [releaseId, reason],
+        );
+      }
+      await this.audit.stage(ctx, c, {
+        action: `exams.report_card.class_${dto.status}`,
+        entityType: 'report_card_releases',
+        entityId: releaseId,
+        after: { classId, ...dto },
+      });
+      return (await this.findRelease(c, releaseId))!;
+    });
+  }
+
+  /**
+   * Opens the given classes of a release (every class it carries when null) that are not open yet, and
+   * tells only those classes' families; the release and each class keep the count of messages queued.
+   */
+  private async openClasses(c: PoolClient, releaseId: string, classIds: string[] | null) {
+    const opened = await c.query<{ class_id: string }>(
+      `INSERT INTO report_card_release_classes (school_id, release_id, class_id, status, released_at, released_by)
+       SELECT DISTINCT app.current_school_id(), r.id, ec.class_id, 'released', now(), app.current_user_id()
+         FROM report_card_releases r JOIN exam_classes ec ON ec.exam_id = ANY(r.exam_ids)
+        WHERE r.id = $1 AND ($2::bigint[] IS NULL OR ec.class_id = ANY($2::bigint[]))
+       ON CONFLICT (release_id, class_id) DO UPDATE
+          SET status = 'released', released_at = now(), released_by = app.current_user_id(),
+              withdrawn_at = NULL, withdrawn_by = NULL, withdrawn_reason = NULL
+        WHERE report_card_release_classes.status <> 'released'
+       RETURNING class_id::text`,
+      [releaseId, classIds],
+    );
+    const ids = opened.rows.map((x) => x.class_id);
+    if (!ids.length) return;
+    const told = await this.tellFamilies(c, releaseId, ids);
+    for (const [classId, n] of told)
+      await c.query(
+        `UPDATE report_card_release_classes SET notified_count = notified_count + $3 WHERE release_id = $1 AND class_id = $2`,
+        [releaseId, classId, n],
+      );
+    const total = [...told.values()].reduce((a, n) => a + n, 0);
+    await c.query(
+      `UPDATE report_card_releases SET notified_at = now(), notified_count = notified_count + $2 WHERE id = $1`,
+      [releaseId, total],
+    );
+  }
+
+  /**
+   * A line of the Cards tab (the legacy Exam Report Card): a section or a whole class, the students with
+   * the status chosen, then a range by position in roll order (taken in each section) or one admission
+   * number. One student makes his own card; more make one PDF, a page each.
+   */
+  async generate(ctx: RequestContext, releaseId: string, dto: GenerateCardsDto) {
+    const rel = await this.release(ctx, releaseId);
+    const list = await this.cards(ctx, releaseId, dto);
+    const one = dto.admissionNo?.toLowerCase();
+    let picked: typeof list;
+    if (one) picked = list.filter((x) => x.admissionNo.toLowerCase() === one);
+    else {
+      const [from, to] = {
+        first10: [0, 10],
+        '11-20': [10, 20],
+        '21-30': [20, 30],
+        '31-40': [30, 40],
+        above40: [40, Infinity],
+        '1-2': [0, 2],
+        all: [0, Infinity],
+      }[dto.range!];
+      const bySection = new Map<string, typeof list>();
+      for (const x of list) bySection.set(x.sectionId, [...(bySection.get(x.sectionId) ?? []), x]);
+      picked = [...bySection.values()].flatMap((xs) => xs.slice(from, to));
+    }
+    if (!picked.length)
+      throw new DomainError(
+        'report_card.no_students',
+        one
+          ? `No student with admission number ${dto.admissionNo} in the class chosen`
+          : 'No students in that range',
+        { status: 409 },
+      );
+    const classId = picked[0]!.classId;
+    await this.assertTemplateFor(ctx, rel, { classId });
+    const place = dto.classId
+      ? `${picked[0]!.section.split('-')[0]} (all sections)`
+      : picked[0]!.section;
+    const exp =
+      one && picked.length === 1
+        ? await this.reports.create(
+            ctx,
+            {
+              dataset: 'report_card',
+              format: 'pdf',
+              params: { releaseId, studentId: picked[0]!.studentId },
+              title: `Report card · ${rel.name} · ${place} · ${picked[0]!.admissionNo} ${picked[0]!.name}`,
+            },
+            'exams.report_card.render',
+          )
+        : await this.reports.create(
+            ctx,
+            {
+              dataset: 'report_card_batch',
+              format: 'pdf',
+              params: { releaseId, classId, studentIds: picked.map((x) => x.studentId) },
+              title: `Report cards · ${rel.name} · ${place} · ${RANGE_LABEL[dto.range ?? 'all']} (${String(picked.length)})`,
+            },
+            'exams.report_card.render_batch',
+          );
+    return { exportId: exp.id, status: exp.status, students: picked.length, title: exp.title };
+  }
+
+  /** The Download Log: the PDFs the school made for this release, newest first (not the families' own). */
+  async exportsOf(ctx: RequestContext, releaseId: string) {
+    return this.db.tenant(requireTenant(ctx), async (c) => {
+      const r = await c.query<{
+        id: string;
+        title: string;
+        status: string;
+        error: string | null;
+        requested_at: Date;
+        finished_at: Date | null;
+        by: string | null;
+      }>(
+        `SELECT e.id::text, e.title, e.status::text, e.error, e.requested_at, e.finished_at, u.display_name AS by
+           FROM exports e LEFT JOIN users u ON u.id = e.requested_by
+          WHERE e.dataset IN ('report_card', 'report_card_batch') AND e.params->>'releaseId' = $1
+            AND NOT EXISTS (SELECT 1 FROM guardians g WHERE g.user_id = e.requested_by)
+          ORDER BY e.requested_at DESC, e.id DESC
+          LIMIT 100`,
+        [releaseId],
+      );
+      return r.rows.map((x) => ({
+        id: x.id,
+        title: x.title,
+        status: x.status,
+        error: x.error,
+        requestedAt: x.requested_at.toISOString(),
+        finishedAt: x.finished_at?.toISOString() ?? null,
+        by: x.by,
+      }));
+    });
+  }
+
   /** Queues one PDF for a whole section (page break per pupil); the worker records each card. */
   async renderBatch(ctx: RequestContext, releaseId: string, dto: RenderBatchDto) {
     const rel = await this.release(ctx, releaseId);
-    await this.assertTemplateFor(ctx, rel, dto.classSectionId);
+    await this.assertTemplateFor(ctx, rel, { classSectionId: dto.classSectionId });
     const exp = await this.reports.create(
       ctx,
       {
@@ -480,7 +705,11 @@ export class ReportCardsService {
    * The families of the release's classes (guardians who take notifications), but not those whose card
    * is held, get the result message by SMS and e-mail. Returns the messages queued.
    */
-  private async tellFamilies(c: PoolClient, releaseId: string): Promise<number> {
+  private async tellFamilies(
+    c: PoolClient,
+    releaseId: string,
+    classIds: string[],
+  ): Promise<Map<string, number>> {
     await c.query(`SELECT app.exam_seed_templates(app.current_school_id())`);
     const r = await c.query<{
       name: string;
@@ -489,8 +718,9 @@ export class ReportCardsService {
       mobile: string | null;
       email: string | null;
       user_id: string | null;
+      class_id: string;
     }>(
-      `SELECT DISTINCT ON (s.id, g.id) s.display_name AS name, r.name AS term,
+      `SELECT DISTINCT ON (s.id, g.id) s.display_name AS name, r.name AS term, cs.class_id::text,
               (SELECT name FROM schools WHERE id = app.current_school_id()) AS school,
               g.mobile, g.email::text AS email, g.user_id::text
          FROM report_card_releases r
@@ -500,12 +730,12 @@ export class ReportCardsService {
          JOIN students s ON s.id = en.student_id AND s.deleted_at IS NULL
          JOIN student_guardians sg ON sg.student_id = s.id AND sg.receives_notifications
          JOIN guardians g ON g.id = sg.guardian_id AND g.deleted_at IS NULL
-        WHERE r.id = $1
+        WHERE r.id = $1 AND cs.class_id = ANY($2::bigint[])
           AND NOT EXISTS (SELECT 1 FROM report_card_holds h WHERE h.release_id = r.id AND h.student_id = s.id)
         ORDER BY s.id, g.id`,
-      [releaseId],
+      [releaseId, classIds],
     );
-    let n = 0;
+    const n = new Map<string, number>();
     for (const x of r.rows) {
       const vars = JSON.stringify({ name: x.name, term: x.term, school: x.school });
       for (const [channel, to] of [
@@ -517,7 +747,7 @@ export class ReportCardsService {
           `SELECT app.send_template('result_published', $1, $2, $3::jsonb, $4)::text AS id`,
           [channel, to, vars, x.user_id],
         );
-        if (m.rows[0]?.id) n += 1;
+        if (m.rows[0]?.id) n.set(x.class_id, (n.get(x.class_id) ?? 0) + 1);
       }
     }
     return n;
@@ -655,6 +885,18 @@ export class ReportCardsService {
       const templates = await c.query<{ id: string; name: string; band: string }>(
         `SELECT id::text, name, band::text FROM report_card_templates WHERE status = 'active' AND deleted_at IS NULL ORDER BY name`,
       );
+      const published = await c.query<{
+        class_id: string;
+        status: 'released' | 'withdrawn';
+        released_at: Date | null;
+        withdrawn_at: Date | null;
+        withdrawn_reason: string | null;
+        notified_count: number;
+      }>(
+        `SELECT class_id::text, status, released_at, withdrawn_at, withdrawn_reason, notified_count
+           FROM report_card_release_classes WHERE release_id = $1`,
+        [releaseId],
+      );
       const exams = rel.exams;
       return {
         release: rel,
@@ -668,11 +910,22 @@ export class ReportCardsService {
             : templates.rows.find((x) => x.band === band);
           const scheme = schemes.rows.find((m) => m.class_ids.includes(k.id));
           const secs = sections.rows.filter((x) => x.class_id === k.id);
+          const pub = published.rows.find((x) => x.class_id === k.id);
           return {
             classId: k.id,
             code: k.code,
             name: k.name,
             band,
+            /** published to the class's families, or revoked (null: never published) */
+            publish: pub
+              ? {
+                  status: pub.status,
+                  releasedAt: pub.released_at?.toISOString() ?? null,
+                  withdrawnAt: pub.withdrawn_at?.toISOString() ?? null,
+                  reason: pub.withdrawn_reason,
+                  notified: pub.notified_count,
+                }
+              : null,
             template: t
               ? { id: t.id, name: t.name, from: own ? 'class' : chosen ? 'band' : 'default' }
               : null,
@@ -725,26 +978,46 @@ export class ReportCardsService {
     });
   }
 
-  /** Per-pupil status of a release for one section (rendered, withheld, export id). */
-  async cards(ctx: RequestContext, releaseId: string, classSectionId: string) {
+  /**
+   * Per-pupil status of a release for a section or a whole class (rendered, withheld, held, export id),
+   * section by section in roll order; status picks the active pupils, the inactive (left, transferred)
+   * or all of the year's.
+   */
+  async cards(
+    ctx: RequestContext,
+    releaseId: string,
+    q: { classSectionId?: string; classId?: string; status?: 'active' | 'inactive' | 'all' },
+  ) {
     return this.db.tenant(requireTenant(ctx), async (c) => {
       const r = await c.query<Record<string, unknown>>(
         `SELECT s.id::text AS student_id, s.display_name AS name, s.admission_no, e.roll_no,
+                cs.id::text AS section_id, cs.class_id::text AS class_id, k.code || '-' || cs.name AS section,
+                e.status::text AS enrolment_status,
                 rc.export_id::text, rc.withheld, rc.withheld_reason, rc.rendered_at, x.status AS export_status,
                 h.reason AS held_reason
-           FROM enrolments e JOIN students s ON s.id = e.student_id AND s.deleted_at IS NULL
+           FROM enrolments e
+           JOIN class_sections cs ON cs.id = e.class_section_id AND cs.deleted_at IS NULL
+           JOIN classes k ON k.id = cs.class_id
+           JOIN students s ON s.id = e.student_id AND s.deleted_at IS NULL
            LEFT JOIN report_cards rc ON rc.release_id = $1 AND rc.student_id = s.id
            LEFT JOIN report_card_holds h ON h.release_id = $1 AND h.student_id = s.id
            LEFT JOIN exports x ON x.id = rc.export_id
-          WHERE e.class_section_id = $2 AND e.academic_year_id = app.current_academic_year_id() AND e.status = 'active'
-          ORDER BY e.roll_no NULLS LAST, s.display_name`,
-        [releaseId, classSectionId],
+          WHERE ($2::bigint IS NULL OR e.class_section_id = $2::bigint)
+            AND ($3::bigint IS NULL OR cs.class_id = $3::bigint)
+            AND e.academic_year_id = app.current_academic_year_id()
+            AND ($4 = 'all' OR ($4 = 'active') = (e.status = 'active'))
+          ORDER BY cs.name, e.roll_no NULLS LAST, s.display_name`,
+        [releaseId, q.classSectionId ?? null, q.classId ?? null, q.status ?? 'active'],
       );
       return r.rows.map((x) => ({
         studentId: String(x.student_id),
         name: String(x.name),
         admissionNo: String(x.admission_no),
         rollNo: (x.roll_no as number | null) ?? null,
+        sectionId: String(x.section_id),
+        classId: String(x.class_id),
+        section: String(x.section),
+        active: x.enrolment_status === 'active',
         exportId: (x.export_id as string | null) ?? null,
         exportStatus: (x.export_status as string | null) ?? null,
         withheld: Boolean(x.withheld),
@@ -773,6 +1046,11 @@ export class ReportCardsService {
              FROM report_card_releases r
              LEFT JOIN report_cards rc ON rc.release_id = r.id AND rc.student_id = $1
             WHERE r.academic_year_id = app.current_academic_year_id() AND r.status = 'released'
+              -- published class by class: the child's class must be open (docs/design/65, 1 Nov)
+              AND EXISTS (SELECT 1 FROM report_card_release_classes rcl
+                      JOIN class_sections ocs ON ocs.class_id = rcl.class_id AND ocs.academic_year_id = r.academic_year_id
+                      JOIN enrolments oen ON oen.class_section_id = ocs.id AND oen.student_id = $1 AND oen.status = 'active'
+                     WHERE rcl.release_id = r.id AND rcl.status = 'released')
             ORDER BY r.released_at DESC`,
           [s.id],
         );
@@ -802,6 +1080,15 @@ export class ReportCardsService {
     const info = await this.db.tenant(requireTenant(ctx), async (c) => {
       const rel = await this.findRelease(c, releaseId);
       if (!rel || rel.status !== 'released')
+        throw new DomainError('not-found', 'Report card not found', { status: 404 });
+      const open = await c.query(
+        `SELECT 1 FROM report_card_releases r WHERE r.id = $2 AND EXISTS (SELECT 1 FROM report_card_release_classes rcl
+           JOIN class_sections ocs ON ocs.class_id = rcl.class_id AND ocs.academic_year_id = r.academic_year_id
+           JOIN enrolments oen ON oen.class_section_id = ocs.id AND oen.student_id = $1 AND oen.status = 'active'
+          WHERE rcl.release_id = r.id AND rcl.status = 'released')`,
+        [studentId, releaseId],
+      );
+      if (!open.rowCount)
         throw new DomainError('not-found', 'Report card not found', { status: 404 });
       const held = await c.query(
         `SELECT 1 FROM report_card_holds WHERE release_id = $1 AND student_id = $2`,
@@ -879,12 +1166,13 @@ export class ReportCardsService {
   private async assertTemplateFor(
     ctx: RequestContext,
     rel: ReleaseRow,
-    classSectionId: string,
+    place: { classSectionId?: string; classId?: string },
   ): Promise<void> {
     await this.db.tenant(requireTenant(ctx), async (c) => {
       const k = await c.query<{ band: string | null; display_order: number; class_id: string }>(
-        `SELECT k.band::text, k.display_order, k.id::text AS class_id FROM class_sections cs JOIN classes k ON k.id = cs.class_id WHERE cs.id = $1`,
-        [classSectionId],
+        `SELECT k.band::text, k.display_order, k.id::text AS class_id FROM classes k
+          WHERE k.id = COALESCE($2::bigint, (SELECT cs.class_id FROM class_sections cs WHERE cs.id = $1::bigint))`,
+        [place.classSectionId ?? null, place.classId ?? null],
       );
       if (!k.rows[0]) throw new DomainError('not-found', 'Section not found', { status: 404 });
       const band = bandFor(k.rows[0].band, k.rows[0].display_order);

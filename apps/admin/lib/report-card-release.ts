@@ -10,6 +10,14 @@ export interface ReleaseReadiness {
     name: string;
     band: string;
     template: { id: string; name: string; from: 'class' | 'band' | 'default' } | null;
+    /** published to the class's families, or revoked; null: never published */
+    publish: {
+      status: 'released' | 'withdrawn';
+      releasedAt: string | null;
+      withdrawnAt: string | null;
+      reason: string | null;
+      notified: number;
+    } | null;
     termResult: {
       schemeId: string;
       name: string;
@@ -70,4 +78,31 @@ export function issuesOf(k: ReleaseReadiness['classes'][number]) {
     noTemplate: !k.template,
     noTermResult: !k.termResult || !k.termResult.computedAt,
   };
+}
+
+/** the legacy ranges of the Cards line: positions in roll order, taken in each section */
+export const CARD_RANGES = ['first10', '11-20', '21-30', '31-40', 'above40', '1-2', 'all'] as const;
+export const CARD_STATUSES = ['active', 'inactive', 'all'] as const;
+
+/**
+ * The lines of the Cards tab: one per card design (legacy "Class 6-8"), with the classes that print it in
+ * their order; the classes without a design share a line of their own.
+ */
+export function cardLines(classes: ReleaseReadiness['classes']) {
+  const lines: Array<{
+    key: string;
+    design: string | null;
+    classes: ReleaseReadiness['classes'];
+  }> = [];
+  for (const k of classes) {
+    const key = k.template?.id ?? 'none';
+    const line = lines.find((x) => x.key === key);
+    if (line) line.classes.push(k);
+    else lines.push({ key, design: k.template?.name ?? null, classes: [k] });
+  }
+  return lines.map((x) => {
+    const first = x.classes[0]!.code;
+    const last = x.classes[x.classes.length - 1]!.code;
+    return { ...x, label: first === last ? first : `${first}–${last}` };
+  });
 }

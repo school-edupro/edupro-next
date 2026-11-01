@@ -478,3 +478,38 @@ readiness is a **checklist, and the principal may publish anyway**.
   - **Publish**: Send to the principal (report_card.manage), Publish to the families and Withdraw with a
     reason (exams.result.publish); the classes not ready are listed in the warning and the dialog.
 - English and Hindi (`rcRelease` messages). Tests: `exams-v2.e2e-spec.ts` (readiness), a11y on every tab.
+
+### Cards like the legacy Exam Report Card; publishing class by class (1 Nov 2026, later)
+
+Asked 1 Nov 2026 (screenshot of the legacy Exam Report Card, `EANDE/exam_report_card_dash_board_new.php`):
+Exam Type = **this release's term, already picked**; Generate **downloads when ready, the eye previews**;
+holds **in the preview panel**; **one line per card design**. Then: "class wise publish report card and
+revoke option".
+
+- **Cards tab** = the legacy table: Sr No · Description (the classes of a design, "Class VI–VIII", and its
+  name) · Class (each section, plus "VI (all sections)" for a class with more than one) · Exam Type (the
+  term code) · Select Roll No. (1–10, 11–20, 21–30, 31–40, 41 onwards, 1–2 test, Whole class: positions
+  in roll order taken in each section, as legacy) · Status (active / inactive / all enrolments of the
+  year) · Search Admission (a datalist of the line's students; one admission number replaces the range) ·
+  Generate Report Card + eye. Toolbar: User Guide (help), Download Log (a drawer of this release's PDFs,
+  not the families' own), Settings (Set-up). Whole class of all sections asks first. One PDF at a time.
+  - API `POST releases/:id/generate` {classSectionId | classId, range | admissionNo, status}: one pupil
+    → a `report_card` export, more → `report_card_batch` with `classId` + `studentIds` (the worker keeps
+    their order; `classSectionId` still works for a whole section). The export title says the place,
+    range and count; `GET releases/:id/exports` is the Download Log; `GET releases/:id/cards` takes
+    `classId` or `classSectionId` and `status`.
+  - Generate polls the export (2 s), downloads it when ready, and after 90 s says it will be in the
+    Download Log (the workers make the PDFs).
+- **Class-wise publish** (migration 0297 `report_card_release_classes`: a row per published class,
+  `released` / `withdrawn` with reason, times, families told). `PUT releases/:id/classes/:classId`
+  {status, reason} (exams.result.publish): the first class published makes the release published,
+  revoking the last withdraws it with that reason. Publishing the whole release opens every class not
+  open yet (only their families are told); withdrawing it revokes every open class. Releases published
+  before 0297 were opened for all their classes.
+  - Families see a release only while their child's class is open (results list and PDF); reopening
+    marks is refused only for a published class; an exam counts as released when any class is.
+  - Publish tab: per class — students, ready or what is missing, published on / families told or revoked
+    with the reason, Publish VI / Revoke VI (with a reason); plus Publish every class / Revoke every
+    class. The list shows "n / m classes published"; the figures show classes published.
+- Tests: `exams-v2.e2e-spec.ts` "publishes and revokes class by class; a Cards line makes a range or one
+  pupil's card"; a11y on every tab.

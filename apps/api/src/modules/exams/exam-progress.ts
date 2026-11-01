@@ -184,7 +184,8 @@ export async function examProgress(
   );
   const released = await c.query<{ exam_id: string }>(
     `SELECT DISTINCT x::text AS exam_id FROM report_card_releases r, unnest(r.exam_ids) AS x
-      WHERE r.status = 'released' AND r.exam_ids && $1::bigint[]`,
+      WHERE r.status = 'released' AND r.exam_ids && $1::bigint[]
+        AND EXISTS (SELECT 1 FROM report_card_release_classes rc WHERE rc.release_id = r.id AND rc.status = 'released')`,
     [examIds],
   );
 

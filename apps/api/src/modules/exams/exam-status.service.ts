@@ -348,14 +348,17 @@ export class ExamStatusService {
       );
       if (row.status === 'open')
         throw new DomainError('exams.not_submitted', 'The marks are open already', { status: 409 });
+      // published class by class (docs/design/65, 1 Nov): only this section's class blocks reopening
       const published = await c.query<{ name: string }>(
-        `SELECT name FROM report_card_releases WHERE status = 'released' AND $1::bigint = ANY(exam_ids) LIMIT 1`,
-        [examId],
+        `SELECT r.name FROM report_card_releases r
+           JOIN report_card_release_classes x ON x.release_id = r.id AND x.status = 'released' AND x.class_id = $2
+          WHERE $1::bigint = ANY(r.exam_ids) LIMIT 1`,
+        [examId, section.class_id],
       );
       if (published.rows[0])
         throw new DomainError(
           'exams.result_published',
-          `The results are published in "${published.rows[0].name}": withdraw it (with a reason) before reopening marks`,
+          `The results of this class are published in "${published.rows[0].name}": revoke the class (with a reason) before reopening marks`,
           { status: 409 },
         );
       await this.move(c, es.id, section.id, row.status, 'open', `Reopened: ${dto.note}`);

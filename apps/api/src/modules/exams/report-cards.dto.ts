@@ -150,6 +150,45 @@ export class UpdateReleaseDto extends createZodDto(UpdateReleaseSchema) {}
 export const RenderBatchSchema = z.object({ classSectionId: IdSchema });
 export class RenderBatchDto extends createZodDto(RenderBatchSchema) {}
 
+/** A class of a release published to its families, or revoked with a reason (docs/design/65, 1 Nov). */
+export const ClassPublishSchema = z.object({
+  status: z.enum(['released', 'withdrawn']),
+  reason: z.string().trim().max(300).optional(),
+});
+export class ClassPublishDto extends createZodDto(ClassPublishSchema) {}
+
+/** Students in roll order: the legacy ranges count positions in each section, not roll numbers. */
+export const CARD_RANGES = ['first10', '11-20', '21-30', '31-40', 'above40', '1-2', 'all'] as const;
+export const CARD_STATUSES = ['active', 'inactive', 'all'] as const;
+
+/** A line of the Cards tab (legacy Exam Report Card): a section or a whole class, then a range or one pupil. */
+export const GenerateCardsSchema = z
+  .object({
+    classSectionId: IdSchema.optional(),
+    classId: IdSchema.optional(),
+    range: z.enum(CARD_RANGES).optional(),
+    status: z.enum(CARD_STATUSES).default('active'),
+    admissionNo: z.string().trim().min(1).max(40).optional(),
+  })
+  .refine((v) => Boolean(v.classSectionId) !== Boolean(v.classId), {
+    message: 'pick a section or a whole class',
+  })
+  .refine((v) => Boolean(v.range) || Boolean(v.admissionNo), {
+    message: 'pick the roll numbers, or type one admission number',
+  });
+export class GenerateCardsDto extends createZodDto(GenerateCardsSchema) {}
+
+export const CardsQuerySchema = z
+  .object({
+    classSectionId: IdSchema.optional(),
+    classId: IdSchema.optional(),
+    status: z.enum(CARD_STATUSES).default('active'),
+  })
+  .refine((v) => Boolean(v.classSectionId) !== Boolean(v.classId), {
+    message: 'pick a section or a whole class',
+  });
+export class CardsQueryDto extends createZodDto(CardsQuerySchema) {}
+
 /** One student's card held back by the school, or shown again (docs/design/65). */
 export const HoldSchema = z.object({
   studentId: IdSchema,
