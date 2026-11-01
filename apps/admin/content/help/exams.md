@@ -132,9 +132,21 @@ see who submitted or verified it and to submit, verify, send back or reopen it.
 1. **Exams → open exam → Results → Compute**: totals, percentages, grades, ranks per section and class.
 2. **Exams → Report cards → Templates**: the layout per band (HPC for primary, CCE for middle,
    components for secondary, theory/practical for senior); preview with a real pupil.
-3. **Exams → Report cards → + New release**: the term, a name and the exams the cards carry; tick
-   **Withhold the card while a fee is due** with the amount if the school withholds cards. The release
-   opens in its workspace, with four steps:
+3. **Exams → Report cards → + New release**: first the **kind of card**, then a code, a name and the
+   exams the cards carry; tick **Withhold the card while a fee is due** with the amount if the school
+   withholds cards.
+   - **Exam card** (a periodic test such as PT1 or PT2): tick the test; the code and name come from it.
+     It prints the **Periodic test slip** of each band (maximum marks, marks obtained and grade per
+     subject, then the total, percentage and grade; no rank, no pass or fail). No term result is needed.
+   - **Term card** (T1, T2): every exam of the term; prints the term result of the locked mark register
+     with that term code (for example the DPS Noida VI-VIII card).
+   - **Annual card**: every exam of the year.
+   A class can have **several cards live at once**: for Class VI make an exam card PT1, an exam card PT2
+   and a term card T1, and publish each for Class VI. Families see every published card in the parent
+   app, newest first, each marked Exam card, Term card or Annual card. **Report cards → By class** shows
+   one class's cards side by side, with whether each is published, the PDFs made and the papers not
+   verified, and **Publish** / **Revoke** for that class.
+   The release opens in its workspace, with four steps:
    - **Set-up**: the name, the exams and the card design of each class (a class's own design comes
      before its band's: Class IX and X can print different cards).
    - **Readiness**: class by class, a checklist of what is done (✓) and what is still needed (!): the

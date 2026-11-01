@@ -10,6 +10,8 @@ import { queueMyReportCardPdf, saveMyFeedback } from './actions';
 
 interface Term {
   releaseId: string;
+  /** exam card (PT1, PT2 …), term card or annual card: a child can have several live (1 Nov 2026) */
+  kind?: 'exam' | 'term' | 'annual';
   termCode: string;
   name: string;
   releasedAt: string | null;
@@ -197,7 +199,29 @@ export default async function ResultsPage({
                     gap: 'var(--sp-2)',
                   }}
                 >
-                  <strong>{term.name}</strong>
+                  <span
+                    style={{ display: 'inline-flex', gap: 'var(--sp-2)', alignItems: 'center' }}
+                  >
+                    <strong>{term.name}</strong>
+                    <Badge
+                      tone={
+                        term.kind === 'exam'
+                          ? 'info'
+                          : term.kind === 'annual'
+                            ? 'success'
+                            : 'neutral'
+                      }
+                    >
+                      {t(
+                        lang,
+                        term.kind === 'exam'
+                          ? 'Exam card'
+                          : term.kind === 'annual'
+                            ? 'Annual card'
+                            : 'Term card',
+                      )}
+                    </Badge>
+                  </span>
                   <form action={queueMyReportCardPdf}>
                     <input type="hidden" name="releaseId" value={term.releaseId} />
                     <input type="hidden" name="studentId" value={c.student.id} />

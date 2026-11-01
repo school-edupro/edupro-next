@@ -513,3 +513,25 @@ revoke option".
     class. The list shows "n / m classes published"; the figures show classes published.
 - Tests: `exams-v2.e2e-spec.ts` "publishes and revokes class by class; a Cards line makes a range or one
   pupil's card"; a11y on every tab.
+
+### Several cards live for a class: exam, term and annual cards (1 Nov 2026, later)
+
+Asked 1 Nov 2026: "the same class with different report cards, e.g. Class VI: PT1, PT2 and Term 1 live".
+It already worked as one release per card; the answers: a **card type on the release** (Recommended);
+exam cards print a **new ready-made test slip** by default; families see **every published card**; a
+**class view** on the list.
+
+- Migration 0298: `report_card_releases.kind` exam / term / annual (default term; fixed once made).
+  The New release dialog asks the kind first; an exam card takes its code and name from the first test
+  ticked; the hints and placeholders follow the kind.
+- `TEST_SLIP_TEMPLATES` (packages/db report-card-html): "Periodic test slip (I-V / VI-VIII / IX-X /
+  XI-XII)", scholastic mode `slip` (one test: maximum / marks obtained / grade, then total, percentage,
+  grade tiles; several tests: a column each and the total; no rank, no pass or fail). Installed when the
+  first exam card is made (a school's own changes stay); an exam card's band templates default to them.
+- Readiness: an exam card needs no term result (the line is not shown and not counted).
+- Report cards list: the kind badge on each card; **By class** (`?view=class&class=`) lists every card of
+  the year that carries the class — kind, name, published / revoked for the class, PDFs made, held,
+  papers not verified — with Open, Publish and Revoke (the server actions return to the class view).
+  API `GET /exams/report-cards/classes/:classId/cards`.
+- Parent app: each card shows Exam card / Term card / Annual card (`mine` returns `kind`).
+- Tests: db `report-card.test.ts` (the slip); `exams-v2.e2e-spec.ts` "a class has several cards live".

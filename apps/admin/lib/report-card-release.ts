@@ -67,8 +67,40 @@ export const STEP_OF: Record<ReportCardRelease['status'], number> = {
 };
 export const STEPS = ['step_draft', 'step_principal', 'step_published'] as const;
 
-/** what a class still needs before its cards go out */
-export function issuesOf(k: ReleaseReadiness['classes'][number]) {
+export const CARD_KINDS = ['exam', 'term', 'annual'] as const;
+export const KIND_TONE: Record<(typeof CARD_KINDS)[number], 'info' | 'neutral' | 'success'> = {
+  exam: 'info',
+  term: 'neutral',
+  annual: 'success',
+};
+
+/** A class's cards (the list's class view): each release that carries it and where it stands. */
+export interface ClassCard {
+  releaseId: string;
+  kind: (typeof CARD_KINDS)[number];
+  termCode: string;
+  name: string;
+  status: ReportCardRelease['status'];
+  publish: {
+    status: 'released' | 'withdrawn';
+    releasedAt: string | null;
+    withdrawnAt: string | null;
+    reason: string | null;
+    notified: number;
+  } | null;
+  students: number;
+  made: number;
+  held: number;
+  unverified: number;
+}
+
+/**
+ * what a class still needs before its cards go out; an exam card (a test slip) needs no term result
+ */
+export function issuesOf(
+  k: ReleaseReadiness['classes'][number],
+  kind: ReportCardRelease['kind'] = 'term',
+) {
   const sum = (key: 'unverified' | 'remarksMissing' | 'attendanceMissing') =>
     k.sections.reduce((a, s) => a + s[key], 0);
   return {
@@ -76,7 +108,7 @@ export function issuesOf(k: ReleaseReadiness['classes'][number]) {
     remarks: sum('remarksMissing'),
     attendance: sum('attendanceMissing'),
     noTemplate: !k.template,
-    noTermResult: !k.termResult || !k.termResult.computedAt,
+    noTermResult: kind !== 'exam' && (!k.termResult || !k.termResult.computedAt),
   };
 }
 

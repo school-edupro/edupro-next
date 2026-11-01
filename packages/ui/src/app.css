@@ -14162,6 +14162,23 @@ button.ep-subchoice__icon:hover {
   flex: 1;
   min-width: 12rem;
 }
+/* two fields side by side, tops aligned (a help line under one does not push the other) */
+.ep-rcw-pair {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 14rem), 1fr));
+  gap: var(--sp-3);
+  align-items: start;
+}
+/* the Report cards list's class view: pick a class, then its cards side by side */
+.ep-rcw-classpick {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-3);
+  align-items: end;
+}
+.ep-rcw-classpick .ep-field {
+  min-width: min(100%, 16rem);
+}
 .ep-rcw-kpis {
   display: grid;
   gap: var(--sp-3);

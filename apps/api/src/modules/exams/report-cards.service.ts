@@ -8,6 +8,7 @@ import {
   DEFAULT_LAYOUTS,
   DPS_NOIDA_TEMPLATES,
   HPC_TEMPLATES,
+  TEST_SLIP_TEMPLATES,
   type ClassBand,
 } from '@edupro/db';
 import { AuditService } from '../../common/audit/audit.service';
@@ -55,6 +56,8 @@ export interface TemplateRow {
 
 export interface ReleaseRow {
   id: string;
+  /** exam card (PT1, PT2 …), term card or annual card (1 Nov 2026) */
+  kind: 'exam' | 'term' | 'annual';
   termCode: string;
   name: string;
   examIds: string[];
@@ -94,7 +97,7 @@ const toTemplate = (r: Record<string, unknown>): TemplateRow => ({
   updatedAt: new Date(r.updated_at as string).toISOString(),
 });
 
-const R_COLS = `r.id::text, r.term_code, r.name, r.exam_ids::text[] AS exam_ids, r.templates, r.hide_defaulters, r.defaulter_min::text, r.status, r.released_at, r.created_at,
+const R_COLS = `r.id::text, r.kind, r.term_code, r.name, r.exam_ids::text[] AS exam_ids, r.templates, r.hide_defaulters, r.defaulter_min::text, r.status, r.released_at, r.created_at,
   (SELECT jsonb_agg(jsonb_build_object('id', e.id::text, 'code', e.code, 'name', e.name) ORDER BY array_position(r.exam_ids, e.id)) FROM exams e WHERE e.id = ANY(r.exam_ids)) AS exams,
   (SELECT count(*) FROM report_cards c WHERE c.release_id = r.id AND c.rendered_at IS NOT NULL)::int AS rendered,
   (SELECT count(*) FROM report_cards c WHERE c.release_id = r.id AND c.withheld)::int AS withheld,
@@ -110,6 +113,7 @@ const R_COLS = `r.id::text, r.term_code, r.name, r.exam_ids::text[] AS exam_ids,
   (SELECT count(*) FROM report_card_release_classes x WHERE x.release_id = r.id AND x.status = 'released')::int AS published_classes`;
 const toRelease = (r: Record<string, unknown>): ReleaseRow => ({
   id: String(r.id),
+  kind: (r.kind as ReleaseRow['kind']) ?? 'term',
   termCode: String(r.term_code),
   name: String(r.name),
   examIds: (r.exam_ids as string[]) ?? [],
@@ -215,6 +219,23 @@ export class ReportCardsService {
       );
       return r.rows.map(toTemplate);
     });
+  }
+
+  /** The periodic-test slips installed when missing (one the school changed stays); band → template id. */
+  private async testSlips(c: PoolClient): Promise<Map<string, string>> {
+    for (const t of TEST_SLIP_TEMPLATES)
+      await c.query(
+        `INSERT INTO report_card_templates (school_id, code, name, band, layout)
+         VALUES (app.current_school_id(), $1, $2, $3::class_band, $4::jsonb)
+         ON CONFLICT (school_id, code) DO NOTHING`,
+        [t.code, t.name, t.band, JSON.stringify(t.layout)],
+      );
+    const r = await c.query<{ id: string; band: string }>(
+      `SELECT id::text, band::text FROM report_card_templates
+        WHERE code = ANY($1::text[]) AND status = 'active' AND deleted_at IS NULL`,
+      [TEST_SLIP_TEMPLATES.map((t) => t.code)],
+    );
+    return new Map(r.rows.map((x) => [x.band, x.id]));
   }
 
   async createTemplate(ctx: RequestContext, dto: CreateTemplateDto): Promise<TemplateRow> {
@@ -357,17 +378,23 @@ export class ReportCardsService {
         throw new DomainError('validation-failed', 'Every exam must belong to the working year', {
           status: 400,
         });
+      // an exam card prints the periodic-test slip of each band unless a design is chosen
+      const templates = { ...dto.templates };
+      if (dto.kind === 'exam')
+        for (const [band, id] of await this.testSlips(c))
+          if (!templates[band]) templates[band] = id;
       const r = await c
         .query<{ id: string }>(
-          `INSERT INTO report_card_releases (school_id, academic_year_id, term_code, name, exam_ids, templates, hide_defaulters, defaulter_min, created_by)
-         VALUES (app.current_school_id(), app.current_academic_year_id(), $1, $2, $3::bigint[], $4::jsonb, $5, $6, app.current_user_id()) RETURNING id::text`,
+          `INSERT INTO report_card_releases (school_id, academic_year_id, kind, term_code, name, exam_ids, templates, hide_defaulters, defaulter_min, created_by)
+         VALUES (app.current_school_id(), app.current_academic_year_id(), $7, $1, $2, $3::bigint[], $4::jsonb, $5, $6, app.current_user_id()) RETURNING id::text`,
           [
             dto.termCode,
             dto.name,
             dto.examIds,
-            JSON.stringify(dto.templates),
+            JSON.stringify(templates),
             dto.hideDefaulters,
             dto.defaulterMin,
+            dto.kind,
           ],
         )
         .catch((e: { code?: string }) => {
@@ -635,6 +662,75 @@ export class ReportCardsService {
             'exams.report_card.render_batch',
           );
     return { exportId: exp.id, status: exp.status, students: picked.length, title: exp.title };
+  }
+
+  /**
+   * The cards of one class (the Report cards list's class view, 1 Nov 2026): every release of the year
+   * that carries the class, with the class's publishing, students, PDFs made, holds and the papers not
+   * verified yet; newest first.
+   */
+  async classCards(ctx: RequestContext, classId: string) {
+    return this.db.tenant(requireTenant(ctx), async (c) => {
+      const r = await c.query<{
+        id: string;
+        kind: ReleaseRow['kind'];
+        term_code: string;
+        name: string;
+        status: ReleaseRow['status'];
+        publish: 'released' | 'withdrawn' | null;
+        released_at: Date | null;
+        withdrawn_at: Date | null;
+        withdrawn_reason: string | null;
+        notified: number | null;
+        students: number;
+        made: number;
+        held: number;
+        unverified: number;
+      }>(
+        `SELECT r.id::text, r.kind, r.term_code, r.name, r.status, x.status AS publish, x.released_at, x.withdrawn_at,
+                x.withdrawn_reason, x.notified_count AS notified,
+                (SELECT count(*) FROM enrolments en JOIN class_sections cs ON cs.id = en.class_section_id
+                  WHERE cs.class_id = $1 AND en.status = 'active' AND en.academic_year_id = r.academic_year_id)::int AS students,
+                (SELECT count(*) FROM report_cards rc JOIN enrolments en ON en.student_id = rc.student_id AND en.status = 'active' AND en.academic_year_id = r.academic_year_id
+                   JOIN class_sections cs ON cs.id = en.class_section_id AND cs.class_id = $1
+                  WHERE rc.release_id = r.id AND rc.rendered_at IS NOT NULL)::int AS made,
+                (SELECT count(*) FROM report_card_holds h JOIN enrolments en ON en.student_id = h.student_id AND en.status = 'active' AND en.academic_year_id = r.academic_year_id
+                   JOIN class_sections cs ON cs.id = en.class_section_id AND cs.class_id = $1
+                  WHERE h.release_id = r.id)::int AS held,
+                (SELECT count(*) FROM exam_subjects es
+                   JOIN class_sections cs ON cs.class_id = es.class_id AND cs.academic_year_id = r.academic_year_id AND cs.deleted_at IS NULL
+                   LEFT JOIN exam_entry_status st ON st.exam_subject_id = es.id AND st.class_section_id = cs.id
+                  WHERE es.exam_id = ANY(r.exam_ids) AND es.class_id = $1 AND COALESCE(st.status, 'open') <> 'verified'
+                    AND EXISTS (SELECT 1 FROM enrolments en WHERE en.class_section_id = cs.id AND en.status = 'active'
+                                  AND app.student_exam_subject_kind(en.student_id, es.exam_id, es.subject_id) IS NOT NULL))::int AS unverified
+           FROM report_card_releases r
+           LEFT JOIN report_card_release_classes x ON x.release_id = r.id AND x.class_id = $1
+          WHERE r.academic_year_id = app.current_academic_year_id()
+            AND EXISTS (SELECT 1 FROM exam_classes ec WHERE ec.class_id = $1 AND ec.exam_id = ANY(r.exam_ids))
+          ORDER BY r.created_at DESC, r.id DESC`,
+        [classId],
+      );
+      return r.rows.map((x) => ({
+        releaseId: x.id,
+        kind: x.kind,
+        termCode: x.term_code,
+        name: x.name,
+        status: x.status,
+        publish: x.publish
+          ? {
+              status: x.publish,
+              releasedAt: x.released_at?.toISOString() ?? null,
+              withdrawnAt: x.withdrawn_at?.toISOString() ?? null,
+              reason: x.withdrawn_reason,
+              notified: x.notified ?? 0,
+            }
+          : null,
+        students: x.students,
+        made: x.made,
+        held: x.held,
+        unverified: x.unverified,
+      }));
+    });
   }
 
   /** The Download Log: the PDFs the school made for this release, newest first (not the families' own). */
@@ -1038,7 +1134,7 @@ export class ReportCardsService {
       const children = [];
       for (const s of v.students) {
         const rel = await c.query<Record<string, unknown>>(
-          `SELECT r.id::text, r.term_code, r.name, r.hide_defaulters, r.defaulter_min::text, r.released_at,
+          `SELECT r.id::text, r.kind, r.term_code, r.name, r.hide_defaulters, r.defaulter_min::text, r.released_at,
                   (SELECT jsonb_agg(jsonb_build_object('code', e.code, 'name', e.name, 'pct', x.pct::text, 'grade', x.grade, 'result', x.result, 'rank', x.rank_in_section) ORDER BY array_position(r.exam_ids, e.id))
                      FROM exams e LEFT JOIN exam_results x ON x.exam_id = e.id AND x.student_id = $1 WHERE e.id = ANY(r.exam_ids) AND e.show_on_portal) AS exams,
                   rc.withheld, rc.export_id::text,
@@ -1058,6 +1154,8 @@ export class ReportCardsService {
           student: { id: s.id, name: s.name, section: s.section },
           terms: rel.rows.map((r) => ({
             releaseId: String(r.id),
+            /** exam card, term card or annual card (1 Nov 2026) */
+            kind: String(r.kind),
             termCode: String(r.term_code),
             name: String(r.name),
             releasedAt: r.released_at ? new Date(r.released_at as string).toISOString() : null,

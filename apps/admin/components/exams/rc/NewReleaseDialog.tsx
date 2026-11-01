@@ -3,10 +3,21 @@ import { Button, Dialog } from '@edupro/ui';
 import { useTranslations } from 'next-intl';
 import { useRef, useState } from 'react';
 import { createRelease } from '@/lib/report-card-actions';
+import { CARD_KINDS } from '@/lib/report-card-release';
+
+/** an exam's code as a card code: capitals, digits and _ only, at most 12 */
+const codeOf = (examCode: string) =>
+  examCode
+    .toUpperCase()
+    .replace(/[^A-Z0-9_]+/g, '_')
+    .replace(/^_+|_+$/g, '')
+    .slice(0, 12);
 
 /**
- * A new term release in one dialog (docs/design/65): the term and its name, the exams whose marks the
- * cards carry, and the fee-due rule; the template of each class is set on the next screen.
+ * A new report card in one dialog (docs/design/65): its kind (an exam card such as PT1, a term card or
+ * an annual card), its code and name, the exams whose marks it carries, and the fee-due rule; the design
+ * of each class is set on the next screen. An exam card takes its code and name from the first exam
+ * ticked until they are typed.
  */
 export function NewReleaseDialog({
   exams,
@@ -18,7 +29,18 @@ export function NewReleaseDialog({
   const t = useTranslations('rcRelease');
   const [open, setOpen] = useState(openAtStart);
   const [busy, setBusy] = useState(false);
+  const [kind, setKind] = useState<(typeof CARD_KINDS)[number]>('term');
+  const [code, setCode] = useState('');
+  const [name, setName] = useState('');
+  const [typed, setTyped] = useState({ code: false, name: false });
   const form = useRef<HTMLFormElement>(null);
+  const tick = (id: string, on: boolean) => {
+    if (kind !== 'exam' || !on) return;
+    const e = exams.find((x) => x.id === id);
+    if (!e) return;
+    if (!typed.code && !code) setCode(codeOf(e.code));
+    if (!typed.name && !name) setName(e.name);
+  };
   return (
     <>
       <Button size="sm" onClick={() => setOpen(true)}>
@@ -40,18 +62,43 @@ export function NewReleaseDialog({
         }}
       >
         <form ref={form} action={createRelease} className="ep-rcw-setup">
-          <div className="ep-rp__row">
+          <fieldset className="ep-field" style={{ border: 0, padding: 0, margin: 0 }}>
+            <legend className="ep-field__label">{t('kindReq')}</legend>
+            <div className="ep-mr-tiles">
+              {CARD_KINDS.map((k) => (
+                <label key={k} className="ep-mr-tile">
+                  <input
+                    type="radio"
+                    name="kind"
+                    value={k}
+                    checked={kind === k}
+                    onChange={() => setKind(k)}
+                  />
+                  <span>
+                    {t(`kind_${k}`)}
+                    <small>{t(`kindHelp_${k}`)}</small>
+                  </span>
+                </label>
+              ))}
+            </div>
+          </fieldset>
+          <div className="ep-rcw-pair">
             <label className="ep-field">
-              <span className="ep-field__label">{t('term')}</span>
+              <span className="ep-field__label">{t('codeReq')}</span>
               <input
                 className="ep-input"
                 name="termCode"
                 required
                 pattern="[A-Za-z0-9_]{1,12}"
-                placeholder="T1"
+                placeholder={t(`codePlaceholder_${kind}`)}
                 maxLength={12}
+                value={code}
+                onChange={(e) => {
+                  setCode(e.target.value);
+                  setTyped((x) => ({ ...x, code: true }));
+                }}
               />
-              <span className="ep-field__help">{t('termHelp')}</span>
+              <span className="ep-field__help">{t(`codeHelp_${kind}`)}</span>
             </label>
             <label className="ep-field">
               <span className="ep-field__label">{t('nameReq')}</span>
@@ -61,7 +108,12 @@ export function NewReleaseDialog({
                 required
                 minLength={2}
                 maxLength={120}
-                placeholder="Term I (2026-27)"
+                placeholder={t(`namePlaceholder_${kind}`)}
+                value={name}
+                onChange={(e) => {
+                  setName(e.target.value);
+                  setTyped((x) => ({ ...x, name: true }));
+                }}
               />
             </label>
           </div>
@@ -70,7 +122,12 @@ export function NewReleaseDialog({
             <div className="ep-mr-tiles">
               {exams.map((e) => (
                 <label key={e.id} className="ep-mr-tile">
-                  <input type="checkbox" name="examIds" value={e.id} />
+                  <input
+                    type="checkbox"
+                    name="examIds"
+                    value={e.id}
+                    onChange={(ev) => tick(e.id, ev.target.checked)}
+                  />
                   <span>
                     {e.code}
                     <small>{e.name}</small>
@@ -78,6 +135,7 @@ export function NewReleaseDialog({
                 </label>
               ))}
             </div>
+            <span className="ep-field__help">{t(`examsHelp_${kind}`)}</span>
           </fieldset>
           <div className="ep-rcw-setup__fee">
             <label className="ep-check">

@@ -9,6 +9,7 @@ import { DownloadLog } from '@/components/exams/rc/DownloadLog';
 import { ApiError, apiFetch, getMe } from '@/lib/api';
 import { saveReleaseSetup, setClassPublish, setReleaseStatus } from '@/lib/report-card-actions';
 import {
+  KIND_TONE,
   RELEASE_TONE,
   STEP_OF,
   STEPS,
@@ -77,7 +78,7 @@ export default async function ReleasePage({
     allSections.reduce((a, s) => a + s[k], 0);
   const students = sum('students');
   const notReady = ready.classes.filter((k) => {
-    const x = issuesOf(k);
+    const x = issuesOf(k, rel.kind);
     return x.unverified || x.remarks || x.attendance || x.noTemplate || x.noTermResult;
   });
   const notReadyList = notReady.map((k) => k.code).join(', ');
@@ -101,7 +102,12 @@ export default async function ReleasePage({
           exams: rel.exams.map((e) => e.code).join(', '),
           classes: ready.classes.map((k) => k.code).join(', '),
         })}
-        actions={<Badge tone={RELEASE_TONE[rel.status]}>{t(`status_${rel.status}`)}</Badge>}
+        actions={
+          <span className="ep-mr-pills">
+            <Badge tone={KIND_TONE[rel.kind]}>{t(`kind_${rel.kind}`)}</Badge>
+            <Badge tone={RELEASE_TONE[rel.status]}>{t(`status_${rel.status}`)}</Badge>
+          </span>
+        }
       />
       <ol
         className="ep-xstages"
@@ -281,10 +287,10 @@ export default async function ReleasePage({
                   ready: ready.classes.length - notReady.length,
                   total: ready.classes.length,
                 })
-              : t('readyAll')}
+              : t(rel.kind === 'exam' ? 'readyAllExam' : 'readyAll')}
           </p>
           {ready.classes.map((k) => {
-            const x = issuesOf(k);
+            const x = issuesOf(k, rel.kind);
             const term = k.termResult;
             return (
               <Card
@@ -306,23 +312,25 @@ export default async function ReleasePage({
                     <span>{t.rich('noDesign', { a: link('/exams/report-cards/templates') })}</span>
                   )}
                 </p>
-                <p className="ep-rcw-check" data-ok={String(!x.noTermResult)}>
-                  <span>
-                    {term?.computedAt
-                      ? t.rich('termWorked', {
-                          name: term.name,
-                          date: when(term.computedAt),
-                          n: term.results,
-                          a: link(`/exams/schemes/${term.schemeId}`),
-                        })
-                      : term
-                        ? t.rich('termNotWorked', {
+                {rel.kind === 'exam' ? null : (
+                  <p className="ep-rcw-check" data-ok={String(!x.noTermResult)}>
+                    <span>
+                      {term?.computedAt
+                        ? t.rich('termWorked', {
                             name: term.name,
+                            date: when(term.computedAt),
+                            n: term.results,
                             a: link(`/exams/schemes/${term.schemeId}`),
                           })
-                        : t.rich('noTerm', { term: rel.termCode, a: link('/exams/schemes') })}
-                  </span>
-                </p>
+                        : term
+                          ? t.rich('termNotWorked', {
+                              name: term.name,
+                              a: link(`/exams/schemes/${term.schemeId}`),
+                            })
+                          : t.rich('noTerm', { term: rel.termCode, a: link('/exams/schemes') })}
+                    </span>
+                  </p>
+                )}
                 {k.exams.map((e) => (
                   <div key={e.examId}>
                     <p className="ep-rcw-check" data-ok={String(!e.unverified)}>
@@ -487,7 +495,7 @@ export default async function ReleasePage({
               </thead>
               <tbody>
                 {ready.classes.map((k) => {
-                  const x = issuesOf(k);
+                  const x = issuesOf(k, rel.kind);
                   const gaps = [
                     x.noTemplate ? t('gapDesign') : null,
                     x.noTermResult ? t('gapTerm') : null,

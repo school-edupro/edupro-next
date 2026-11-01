@@ -2415,6 +2415,8 @@ export interface ReportCardTemplate {
 }
 export interface ReportCardRelease {
   id: string;
+  /** exam card (PT1, PT2 …), term card or annual card (1 Nov 2026) */
+  kind: 'exam' | 'term' | 'annual';
   termCode: string;
   name: string;
   examIds: string[];

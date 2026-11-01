@@ -48,9 +48,11 @@ export interface ReportCardSection {
   /**
    * scholastic (Sprint 18): 'marks' = one column per exam (default); 'cce' = marks and grade per exam
    * with the term total; 'components' = columns built from exams and scaled (internal assessment +
-   * annual, or theory / practical), totalled and graded.
+   * annual, or theory / practical), totalled and graded; 'slip' (1 Nov 2026) = the periodic-test slip:
+   * one exam as maximum / marks obtained / grade with the total, percentage and grade under it
+   * (several exams: a column each, then the total).
    */
-  mode?: 'marks' | 'cce' | 'components';
+  mode?: 'marks' | 'cce' | 'components' | 'slip';
   columns?: Array<{
     label: string;
     examCodes: string[];
@@ -311,6 +313,54 @@ function scholastic(d: ReportCardData, s: ReportCardSection): string {
     ? `<tr class="tot"><td>Total</td>${d.exams.map((e) => `<td class="num">${esc(e.total ?? '')}</td>${grades ? `<td class="ctr">${esc(e.grade ?? '')}</td>` : ''}`).join('')}<td class="num">${esc(d.term.total ?? '')} / ${esc(d.term.maxTotal)}</td><td class="num">${esc(d.term.pct ?? '')}</td><td class="ctr">${esc(d.term.grade ?? '')}</td></tr>`
     : '';
   return `<h2>${esc(s.title ?? 'Scholastic areas')}</h2><table><thead><tr><th>Subject</th>${head}${totals ? '<th class="num">Term total</th><th class="num">%</th><th class="ctr">Grade</th>' : ''}</tr></thead><tbody>${rows}${totRow}</tbody></table>`;
+}
+
+/** a cell as printed: the marks code, a grade-only subject's grade, EX, AB or the marks */
+const cellText = (c: ReportCardData['subjects'][number]['cells'][number]) =>
+  c.code
+    ? esc(c.code)
+    : Number(c.max) === 0
+      ? esc(c.grade ?? '')
+      : c.exempt
+        ? 'EX'
+        : c.absent
+          ? 'AB'
+          : esc(c.marks ?? '');
+const noZeros = (v: string) => v.replace(/\.00$/, '');
+
+/**
+ * The periodic-test slip (1 Nov 2026): an exam card. One exam prints maximum / marks obtained / grade per
+ * subject; more exams a marks and grade column each, then the total; the total, percentage and grade
+ * close it (no rank, no pass or fail: a test is not a result).
+ */
+function scholasticSlip(d: ReportCardData, s: ReportCardSection): string {
+  const title = `<h2>${esc(s.title ?? 'Marks')}</h2>`;
+  const tile = (k: string, v: string) =>
+    `<div class="tile"><div class="k">${esc(k)}</div><div class="v">${v}</div></div>`;
+  const tiles = `<div class="result">${tile('Total', `${esc(d.term.total ?? '—')} / ${esc(noZeros(d.term.maxTotal))}`)}${tile('Percentage', d.term.pct ? `${esc(d.term.pct)}%` : '—')}${tile('Grade', esc(d.term.grade ?? '—'))}</div>`;
+  if (d.exams.length === 1) {
+    const rows = d.subjects
+      .map((r) => {
+        const c = r.cells[0];
+        if (!c) return '';
+        return `<tr><td>${esc(r.name)}${extra(r)}</td><td class="num">${Number(c.max) === 0 ? '—' : esc(noZeros(c.max))}</td><td class="num">${cellText(c)}</td><td class="ctr">${esc(c.grade ?? '')}</td></tr>`;
+      })
+      .join('');
+    return `${title}<table><thead><tr><th>Subject</th><th class="num">Maximum marks</th><th class="num">Marks obtained</th><th class="ctr">Grade</th></tr></thead><tbody>${rows}</tbody></table>${tiles}`;
+  }
+  const head = d.exams
+    .map(
+      (e) =>
+        `<th class="num">${esc(e.code)} (${esc(noZeros(e.maxTotal))})</th><th class="ctr">Gr</th>`,
+    )
+    .join('');
+  const rows = d.subjects
+    .map(
+      (r) =>
+        `<tr><td>${esc(r.name)}${extra(r)}</td>${r.cells.map((c) => `<td class="num">${cellText(c)}</td><td class="ctr">${esc(c.grade ?? '')}</td>`).join('')}<td class="num">${esc(r.total ?? '')} / ${esc(noZeros(r.maxTotal))}</td><td class="ctr">${esc(r.grade ?? '')}</td></tr>`,
+    )
+    .join('');
+  return `${title}<table><thead><tr><th>Subject</th>${head}<th class="num">Total</th><th class="ctr">Grade</th></tr></thead><tbody>${rows}</tbody></table>${tiles}`;
 }
 
 /** Sprint 18: scaled component columns (PT best-of, portfolio, annual; or theory / practical). */
@@ -685,7 +735,11 @@ export function reportCardBody(
       case 'student':
         return student(d, s);
       case 'scholastic':
-        return s.mode === 'components' ? scholasticComponents(d, s) : scholastic(d, s);
+        return s.mode === 'components'
+          ? scholasticComponents(d, s)
+          : s.mode === 'slip'
+            ? scholasticSlip(d, s)
+            : scholastic(d, s);
       case 'hpc_descriptors':
         return hpcDescriptors(d, s);
       case 'co_scholastic':
@@ -921,6 +975,34 @@ export const DPS_NOIDA_TEMPLATES: Array<{
     },
   },
 ];
+
+/**
+ * The periodic-test slips (1 Nov 2026): the default design of an exam card (PT1, PT2 …), one per band
+ * from Class I. A school may change them in Card designs or pick another per class on the release.
+ */
+export const TEST_SLIP_TEMPLATES: typeof DPS_NOIDA_TEMPLATES = (
+  [
+    ['primary', 'I-V'],
+    ['middle', 'VI-VIII'],
+    ['secondary', 'IX-X'],
+    ['senior', 'XI-XII'],
+  ] as const
+).map(([band, classes]) => ({
+  code: `test_slip_${band}`,
+  name: `Periodic test slip (${classes})`,
+  band,
+  layout: {
+    subtitle: 'Test report',
+    sections: [
+      { type: 'header' },
+      { type: 'student', showPhoto: false },
+      { type: 'scholastic', mode: 'slip', title: 'Marks' },
+      { type: 'attendance' },
+      { type: 'remarks', title: "Class teacher's remark" },
+      { type: 'signatures', roles: ['class_teacher', 'parent', 'principal'] },
+    ],
+  },
+}));
 
 /**
  * The Holistic Progress Card for Balvatika to Class II (docs/design/65 part 5, after NCERT's HPC for

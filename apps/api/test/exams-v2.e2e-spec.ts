@@ -862,4 +862,68 @@ describe('examinations v2 (e2e)', () => {
       (await call(admin, 'GET', `${url}/cards?classId=${classId}&status=all`)).json().data,
     ).toHaveLength(4);
   });
+
+  it('a class has several cards live: an exam card prints the test slip; the class view lists them', async () => {
+    const pt = await call(admin, 'POST', '/exams/report-cards/releases', {
+      kind: 'exam',
+      termCode: 'PT1',
+      name: 'Periodic Test 1',
+      examIds: [examId],
+    });
+    expect(pt.statusCode).toBe(201);
+    const slips = await withMigrator(
+      async (c) =>
+        (
+          await c.query<{ id: string; band: string }>(
+            `SELECT id::text, band::text FROM report_card_templates WHERE school_id = $1 AND code LIKE 'test_slip_%'`,
+            [school.id],
+          )
+        ).rows,
+    );
+    expect(slips.map((x) => x.band).sort()).toEqual(['middle', 'primary', 'secondary', 'senior']);
+    // the exam card prints each band's slip unless a design is chosen
+    expect(pt.json()).toMatchObject({ kind: 'exam', termCode: 'PT1', status: 'draft' });
+    for (const x of slips) expect(pt.json().templates[x.band]).toBe(x.id);
+    // the kind stays what it was made as: Set-up cannot change it
+    await inject({
+      method: 'PATCH',
+      url: `/exams/report-cards/releases/${pt.json().id}`,
+      headers: h(admin),
+      json: { kind: 'term', name: 'Periodic Test 1' },
+    });
+    expect(
+      (await call(admin, 'GET', `/exams/report-cards/releases/${pt.json().id}`)).json().kind,
+    ).toBe('exam');
+    const pub = await call(
+      admin,
+      'PUT',
+      `/exams/report-cards/releases/${pt.json().id}/classes/${classId}`,
+      {
+        status: 'released',
+      },
+    );
+    expect(pub.json()).toMatchObject({ kind: 'exam', status: 'released' });
+    // the class view: both cards of class XI, newest first, with where each stands for the class
+    const view = (await call(admin, 'GET', `/exams/report-cards/classes/${classId}/cards`)).json()
+      .data as Array<{
+      name: string;
+      kind: string;
+      publish: { status: string } | null;
+      students: number;
+    }>;
+    expect(view.map((x) => [x.name, x.kind, x.publish?.status])).toEqual([
+      ['Periodic Test 1', 'exam', 'released'],
+      ['Term 1', 'term', 'withdrawn'],
+    ]);
+    expect(view[0]!.students).toBe(4);
+    expect((await call(admin, 'GET', '/exams/report-cards/classes/x/cards')).statusCode).toBe(400);
+    // the family sees the published exam card, with its kind
+    const terms = (
+      (await call(parent, 'GET', '/exams/mine/results')).json().children as Array<{
+        student: { name: string };
+        terms: Array<{ kind: string; name: string }>;
+      }>
+    ).find((x) => x.student.name === 'Asha Exam')!.terms;
+    expect(terms.map((x) => [x.kind, x.name])).toEqual([['exam', 'Periodic Test 1']]);
+  });
 });

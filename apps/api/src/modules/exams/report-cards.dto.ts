@@ -113,6 +113,8 @@ export const PreviewSchema = z.object({
 export class PreviewDto extends createZodDto(PreviewSchema) {}
 
 export const CreateReleaseSchema = z.object({
+  /** exam card (PT1, PT2 …), term card (the term result) or annual card (1 Nov 2026) */
+  kind: z.enum(['exam', 'term', 'annual']).default('term'),
   termCode: z
     .string()
     .trim()
@@ -137,7 +139,7 @@ export const CreateReleaseSchema = z.object({
 });
 export class CreateReleaseDto extends createZodDto(CreateReleaseSchema) {}
 
-export const UpdateReleaseSchema = CreateReleaseSchema.omit({ termCode: true })
+export const UpdateReleaseSchema = CreateReleaseSchema.omit({ termCode: true, kind: true })
   .extend({
     status: z.enum(['draft', 'submitted', 'released', 'withdrawn']),
     /** withdrawing published results needs a reason (docs/design/65) */

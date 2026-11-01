@@ -1,6 +1,7 @@
 import { Body, Controller, Get, Param, Patch, Post, Put, Query } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { RequirePermission } from '../../common/access/require-permission.decorator';
+import { DomainError } from '../../common/errors/domain-error';
 import { ReqCtx, type RequestContext } from '../../common/http/request-context';
 import {
   CardsQueryDto,
@@ -186,6 +187,15 @@ export class ReportCardsController {
   @RequirePermission(REPORT_CARDS.manage)
   generate(@ReqCtx() ctx: RequestContext, @Param('id') id: string, @Body() body: GenerateCardsDto) {
     return this.cards.generate(ctx, id, body);
+  }
+
+  @Get('classes/:classId/cards')
+  @ApiOperation({ summary: "A class's cards: each release that carries it and where it stands" })
+  @RequirePermission(REPORT_CARDS.view)
+  async classCards(@ReqCtx() ctx: RequestContext, @Param('classId') classId: string) {
+    if (!/^\d{1,18}$/.test(classId))
+      throw new DomainError('validation-failed', 'Unknown class', { status: 400 });
+    return { data: await this.cards.classCards(ctx, classId) };
   }
 
   @Get('releases/:id/exports')

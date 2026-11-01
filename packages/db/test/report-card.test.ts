@@ -3,6 +3,7 @@ import {
   DEFAULT_LAYOUTS,
   DPS_NOIDA_TEMPLATES,
   HPC_TEMPLATES,
+  TEST_SLIP_TEMPLATES,
   reportCardBody,
   reportCardDocument,
 } from '../src/report-card-html';
@@ -203,5 +204,48 @@ describe('remarks by category and promotion (docs/design/65, part 7)', () => {
     expect(reportCardBody(d, { sections: [{ type: 'promotion' }] })).toContain(
       '<div class="k">Promoted to</div>',
     );
+  });
+});
+
+describe('the periodic-test slip (an exam card, 1 Nov 2026)', () => {
+  const slip = TEST_SLIP_TEMPLATES.find((t) => t.band === 'middle')!;
+  const one = () => {
+    const d = sampleReportCardData('middle');
+    // an exam card carries one test: PT1 only
+    return {
+      ...d,
+      exams: d.exams.slice(0, 1),
+      subjects: d.subjects.map((r) => ({ ...r, cells: r.cells.slice(0, 1) })),
+    };
+  };
+
+  it('has a slip for each band from Class I, none for pre-primary', () => {
+    expect(TEST_SLIP_TEMPLATES.map((t) => t.band)).toEqual([
+      'primary',
+      'middle',
+      'secondary',
+      'senior',
+    ]);
+    expect(slip.name).toBe('Periodic test slip (VI-VIII)');
+  });
+
+  it('one test: maximum, marks obtained and grade per subject, then total, percentage, grade', () => {
+    const html = reportCardBody(one(), slip.layout);
+    expect(html).toContain('Maximum marks');
+    expect(html).toContain('Marks obtained');
+    expect(html).toContain('Mathematics');
+    expect(html).toContain('Percentage');
+    // a test is not a result: no rank, no pass or fail, no term columns
+    expect(html).not.toContain('Rank');
+    expect(html).not.toContain('PASS');
+    expect(html).not.toContain('Term total');
+  });
+
+  it('several tests: a marks and grade column each, then the total', () => {
+    const d = sampleReportCardData('middle');
+    const html = reportCardBody(d, slip.layout);
+    for (const e of d.exams) expect(html).toContain(`${e.code} (`);
+    expect(html).not.toContain('Marks obtained');
+    expect(html).toContain('<th class="num">Total</th>');
   });
 });

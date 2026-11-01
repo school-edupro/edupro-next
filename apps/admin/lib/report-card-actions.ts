@@ -38,7 +38,11 @@ async function run(path: string, fn: () => Promise<unknown>, done?: string): Pro
 /** the workspace tab to come back to (only this app's own release pages) */
 const backTo = (fd: FormData, id: string) => {
   const b = str(fd, 'back');
-  return b.startsWith(`/exams/report-cards/${id}`) ? b : `/exams/report-cards/${id}`;
+  // the release's own tabs, or the list's class view (publish / revoke a class from there)
+  return b.startsWith(`/exams/report-cards/${id}?`) ||
+    /^\/exams\/report-cards\?view=class(&|$)/.test(b)
+    ? b
+    : `/exams/report-cards/${id}`;
 };
 
 export async function createRelease(fd: FormData) {
@@ -47,6 +51,7 @@ export async function createRelease(fd: FormData) {
     made = await apiFetch<{ id: string }>('/exams/report-cards/releases', {
       method: 'POST',
       body: JSON.stringify({
+        kind: ['exam', 'term', 'annual'].includes(str(fd, 'kind')) ? str(fd, 'kind') : 'term',
         termCode: str(fd, 'termCode').toUpperCase(),
         name: str(fd, 'name'),
         examIds: fd.getAll('examIds').map(String).filter(okId),
