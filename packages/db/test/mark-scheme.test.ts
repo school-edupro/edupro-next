@@ -200,8 +200,9 @@ describe('mark schemes (docs/design/65, part 3)', () => {
     // SR: half of MT1's 20 = 10; the PT is the average of 50 % and 100 %
     expect(by.sr!.subjects[0]!.values.MT1).toEqual({ v: 10, max: 20, code: 'SR' });
     expect(by.sr!.subjects[0]!.values.PT).toEqual({ v: 11.25, max: 15 });
-    // pro-rata: MT1 takes the student's share of the other exams (50 %, 100 %, 100 %, 50 % → 75 %)
-    expect(by.pr!.subjects[0]!.values.MT1).toMatchObject({ v: 15, code: 'PR' });
+    // pro-rata, as the school's register works it (docs/design/68): the other exams' marks over their
+    // maximum, (10 + 5 + 5 + 40) ÷ (20 + 5 + 5 + 80), of MT1's 20 = 10.91
+    expect(by.pr!.subjects[0]!.values.MT1).toMatchObject({ v: 10.91, code: 'PR' });
   });
 
   it('one or two subjects failed is a compartment, three a fail; a missing mark is incomplete, no rank', () => {

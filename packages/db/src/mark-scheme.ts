@@ -8,7 +8,23 @@
  * free register).
  */
 
-export type Rounding = 'none' | 'two' | 'whole' | 'half_kept' | 'up';
+import {
+  computeRegister,
+  newRegisterDef,
+  roundBy,
+  type CodeTreat,
+  type RegCode,
+  type RegColumn,
+  type RegisterDef,
+  type RegRound,
+  type RegStudent,
+  type RegSubjectResult,
+} from './mark-register';
+
+export { roundBy };
+export type { Rounding } from './mark-register';
+import type { Rounding } from './mark-register';
+
 export type Treatment = 'zero' | 'exclude' | 'fixed' | 'percent' | 'pro_rata';
 
 export interface SchemeColumn {
@@ -142,24 +158,6 @@ export interface GradeBand {
   maxPct: number;
 }
 
-export function roundBy(v: number, how: Rounding = 'two'): number {
-  switch (how) {
-    case 'none':
-      return v;
-    case 'whole':
-      return Math.floor(v + 0.5 + 1e-9);
-    case 'up':
-      return Math.ceil(v - 1e-9);
-    case 'half_kept': {
-      // the nearest whole number, an exact .5 kept as it is
-      const r = Math.round(v * 100) / 100;
-      return Math.abs(r - Math.trunc(r)) === 0.5 ? r : Math.floor(r + 0.5);
-    }
-    default:
-      return Math.round(v * 100) / 100;
-  }
-}
-
 export function gradeOf(pct: number | null, scale: GradeBand[]): string | null {
   if (pct === null) return null;
   const p = Math.round(pct * 100) / 100;
@@ -202,281 +200,172 @@ export function schemeProblems(def: SchemeDef): string[] {
   return out;
 }
 
-const pctOf = (c: SchemeCell) => (c.v === null || !(c.max > 0) ? null : (c.v / c.max) * 100);
+/** a v1 scheme's rounding as a register's (whole numbers .5 up, .5 kept, or as it is) */
+const regRound = (r: Rounding | undefined): RegRound =>
+  r === 'whole' ? 'up' : r === 'half_kept' ? 'keep' : 'none';
 
-/** One subject of one student. */
-function subjectResult(
+const V1_TREAT: Record<Treatment, CodeTreat> = {
+  zero: 'zero',
+  exclude: 'excl',
+  fixed: 'fixed',
+  percent: 'pctmax',
+  pro_rata: 'prorata',
+};
+
+/**
+ * A v1 scheme (one set of columns for every subject) as a register (docs/design/68): every subject
+ * gets the same chain; an average or sum with a maximum becomes the average / sum and a conversion; the
+ * marks-obtained column becomes the subject's total (its sources counted, its maximum and rounding).
+ */
+export function fromV1(
   def: SchemeDef,
-  s: SchemeStudent,
-  sub: SchemeStudent['subjects'][number],
+  subjectIds: string[],
   codes: Record<string, SchemeCode>,
   scale: GradeBand[],
-): SchemeSubjectResult & { blocked: boolean; missing: boolean } {
-  const values: Record<string, SchemeCell> = {};
-  const excluded = new Set<string>();
-  let blocked = false;
-  let missing = false;
-  const treat = (code: string): SchemeCode =>
-    def.codes?.[code]
-      ? { ...(codes[code] ?? { value: null, blocks: false }), treatment: def.codes[code]! }
-      : (codes[code] ?? {
-          treatment: code === 'AB' ? 'zero' : 'exclude',
-          value: null,
-          blocks: code === 'AB',
-        });
-  const proRata: string[] = [];
-  // the structural maximum of a column (before marks), for "the rest" of a total
-  const maxOf = (c: SchemeColumn): number => {
-    if (c.kind === 'raw') {
-      const m = sub.marks[c.exam!];
-      if (!m) return 0;
-      if (c.part) {
-        const p = m.parts[c.part];
-        if (p) return p.max;
-        return c.wholeIfNoParts && Object.keys(m.parts).length === 0 ? m.max : 0;
-      }
-      return m.max;
-    }
-    if (c.kind === 'attendance') return Math.max(0, ...(def.attendance ?? []).map((x) => x.marks));
-    if (typeof c.scale === 'number') return c.scale;
-    if (c.scale === 'rest') {
-      const tot = def.columns.find((x) => x.total)!;
-      const others = (tot.of ?? []).filter((k) => k !== c.key);
-      return Math.max(
-        0,
-        (tot.target ?? 0) -
-          others.reduce((a, k) => a + maxOf(def.columns.find((x) => x.key === k)!), 0),
+): RegisterDef {
+  const tot = def.columns.find((c) => c.total);
+  // a sum as the marks obtained gives its sources to the total; any other kind is counted itself
+  const totalIsSum = tot?.kind === 'sum';
+  const counted = new Set(totalIsSum ? (tot.of ?? []) : tot ? [tot.key] : []);
+  const columns: RegColumn[] = [];
+  for (const c of def.columns) {
+    if (c === tot && totalIsSum) continue;
+    const base = {
+      key: c.key,
+      name: c.label,
+      hidden: c.hidden,
+      inTotal: counted.has(c.key),
+      round: c !== tot && (c.round === 'whole' || c.round === 'half_kept') ? true : undefined,
+    };
+    if (c.kind === 'raw')
+      columns.push(
+        c.part
+          ? { ...base, kind: 'part', exam: c.exam, part: c.part, wholeIfNoParts: c.wholeIfNoParts }
+          : { ...base, kind: 'raw', exam: c.exam },
       );
-    }
-    const src = (c.of ?? []).map((k) => maxOf(def.columns.find((x) => x.key === k)!));
-    if (c.kind === 'sum') return src.reduce((a, b) => a + b, 0);
-    if (c.kind === 'average') {
-      const live = src.filter((x) => x > 0);
-      return live.length ? live.reduce((a, b) => a + b, 0) / live.length : 0;
-    }
-    return src[0] ?? 0;
-  };
-
-  // the exams' marks first, then pro-rata codes from them, then the columns made from them
-  const raws = def.columns.filter((c) => c.kind === 'raw');
-  const made = def.columns.filter((c) => c.kind !== 'raw');
-  for (const c of raws) {
-    const max = maxOf(c);
-    const m = sub.marks[c.exam!];
-    if (!m || max === 0) {
-      values[c.key] = { v: null, max: 0 };
-      excluded.add(c.key);
-      continue;
-    }
-    const part = c.part ? m.parts[c.part] : undefined;
-    if (c.part && part) {
-      if (!part.entered) missing = true;
-      if (part.absent) {
-        const t = treat('AB');
-        if (t.blocks) blocked = true;
-        values[c.key] = { v: t.treatment === 'zero' ? 0 : null, max, code: 'AB' };
-        if (t.treatment !== 'zero') excluded.add(c.key);
-      } else values[c.key] = { v: part.marks, max };
-      continue;
-    }
-    if (!m.entered) {
-      missing = true;
-      values[c.key] = { v: null, max };
-      continue;
-    }
-    if (m.code) {
-      const t = treat(m.code);
-      if (t.blocks) blocked = true;
-      const v =
-        t.treatment === 'zero'
-          ? 0
-          : t.treatment === 'fixed'
-            ? Math.min(t.value ?? 0, max)
-            : t.treatment === 'percent'
-              ? (max * (t.value ?? 0)) / 100
-              : null;
-      values[c.key] = { v, max, code: m.code };
-      if (v === null) {
-        if (t.treatment === 'pro_rata') proRata.push(c.key);
-        else excluded.add(c.key);
-      }
-      continue;
-    }
-    values[c.key] = { v: m.marks, max };
-  }
-  // pro-rata codes: the share the subject's other exams give
-  for (const k of proRata) {
-    const others = raws
-      .filter((x) => x.key !== k && !proRata.includes(x.key) && !excluded.has(x.key))
-      .map((x) => pctOf(values[x.key]!))
-      .filter((p): p is number => p !== null);
-    if (others.length) {
-      const p = others.reduce((a, b) => a + b, 0) / others.length;
-      values[k] = { ...values[k]!, v: roundBy((values[k]!.max * p) / 100) };
-    } else excluded.add(k);
-  }
-  for (const c of made) {
-    const max = maxOf(c);
-    const srcs = (c.of ?? [])
-      .filter((k) => !excluded.has(k))
-      .map((k) => values[k])
-      .filter((x): x is SchemeCell => !!x && x.v !== null && x.max > 0);
-    let v: number | null = null;
-    let cmax = max;
-    if (c.kind === 'attendance') {
-      const pct = s.attendancePct;
-      v =
-        pct === null
-          ? null
-          : ([...(def.attendance ?? [])]
-              .sort((a, b) => b.minPct - a.minPct)
-              .find((x) => pct >= x.minPct)?.marks ?? 0);
-    } else if (!srcs.length) {
-      v = null;
-      // nothing to average or add (codes left them out): out of the maximum too
-      if ((c.of ?? []).every((k) => excluded.has(k))) excluded.add(c.key);
-    } else if (c.kind === 'average') {
-      const taken =
-        c.best && c.best < srcs.length
-          ? [...srcs].sort((a, b) => (pctOf(b) ?? 0) - (pctOf(a) ?? 0)).slice(0, c.best)
-          : srcs;
-      if (c.scale !== undefined) {
-        const p = taken.reduce((a, x) => a + (pctOf(x) ?? 0), 0) / taken.length;
-        v = (p * max) / 100;
-      } else {
-        v = taken.reduce((a, x) => a + x.v!, 0) / taken.length;
-        cmax = taken.reduce((a, x) => a + x.max, 0) / taken.length;
-      }
-    } else if (c.kind === 'sum') {
-      const got = srcs.reduce((a, x) => a + x.v!, 0);
-      const of = srcs.reduce((a, x) => a + x.max, 0);
-      if (c.scale !== undefined) v = of > 0 ? (got / of) * max : null;
+    else if (c.kind === 'attendance')
+      columns.push({ ...base, kind: 'attendance', slabs: def.attendance ?? [] });
+    else if (c.kind === 'convert')
+      columns.push({ ...base, kind: 'conv', source: c.of?.[0], method: 'scale', target: c.scale });
+    else {
+      const mode = c.kind === 'sum' ? 'sum' : c.best ? 'best' : 'all';
+      const avg: RegColumn = { ...base, kind: 'avg', mode, best: c.best, agg: 'avg', of: c.of };
+      if (c.scale === undefined) columns.push(avg);
       else {
-        v = got;
-        // a source left out by a code leaves the maximum too
-        cmax = (c.of ?? [])
-          .filter((k) => !excluded.has(k))
-          .reduce((a, k) => a + (values[k]?.max ?? 0), 0);
+        const inner = `${c.key}~`;
+        columns.push({
+          ...avg,
+          key: inner,
+          name: `${c.label} (made of)`,
+          hidden: true,
+          inTotal: false,
+          round: undefined,
+        });
+        columns.push({ ...base, kind: 'conv', source: inner, method: 'scale', target: c.scale });
       }
-    } else {
-      const x = srcs[0]!;
-      v = (x.v! / x.max) * max;
     }
-    values[c.key] = { v: v === null ? null : roundBy(v, c.round), max: roundBy(cmax) };
   }
-
-  const totalCol = def.columns.find((c) => c.total)!;
-  const tot = values[totalCol.key]!;
-  const total = tot.v;
-  const pct = total === null || !(tot.max > 0) ? null : (total / tot.max) * 100;
-  let status: SchemeSubjectResult['status'];
-  if (missing) status = 'incomplete';
-  else if (blocked) status = 'absent';
-  else {
-    const ok = pct !== null && roundBy(pct) >= def.result.passPct;
-    let groupsOk = true;
-    if (def.result.partsEach)
-      for (const g of ['theory', 'practical'] as const) {
-        const cols = def.columns.filter((c) => c.passGroup === g && values[c.key]?.max);
-        if (!cols.length) continue;
-        const got = cols.reduce((a, c) => a + (values[c.key]!.v ?? 0), 0);
-        const of = cols.reduce((a, c) => a + values[c.key]!.max, 0);
-        if (of > 0 && roundBy((got / of) * 100) < def.result.passPct) groupsOk = false;
-      }
-    status = ok && groupsOk ? 'pass' : 'fail';
-  }
+  const reg = newRegisterDef();
+  const own = (code: string): RegCode => {
+    const school = codes[code];
+    const t = def.codes?.[code] ?? school?.treatment ?? (code === 'AB' ? 'zero' : 'exclude');
+    const value = school?.value ?? null;
+    return {
+      code,
+      meaning: code,
+      treat: V1_TREAT[t],
+      amt: value,
+      blocks: school ? school.blocks : code === 'AB',
+      showValue: false,
+      prPct: 100,
+    };
+  };
+  const list = [...new Set(['AB', ...Object.keys(codes), ...Object.keys(def.codes ?? {})])];
   return {
-    subjectId: sub.subjectId,
-    code: sub.code,
-    name: sub.name,
-    kind: sub.kind,
-    values,
-    ...(sub.note ? { note: sub.note } : {}),
-    total,
-    max: tot.max,
-    pct: pct === null ? null : roundBy(pct),
-    grade: gradeOf(pct, scale),
-    status,
-    blocked,
-    missing,
+    ...reg,
+    exams: def.exams,
+    subjects: subjectIds.map((id) => ({
+      key: id,
+      subjectId: id,
+      columns: columns.map((c) => ({ ...c })),
+      showTotal: true,
+      totalOutOf: totalIsSum ? (tot.target ?? null) : null,
+      round: regRound(tot?.round),
+      grade: true,
+      pct: true,
+      totalLabel: tot?.label,
+    })),
+    codes: Object.fromEntries(def.exams.map((e) => [e.key, list.map(own)])),
+    final: {
+      ...reg.final,
+      rankBy: def.result.rankBy,
+      round: regRound(def.result.totalRound ?? 'two'),
+      optionalMode: 'choices',
+      optionalInFinal: Boolean(def.result.countAdditional),
+      passPct: def.result.passPct,
+      compartmentUpTo: def.result.compartmentUpTo,
+      partsEach: Boolean(def.result.partsEach),
+    },
+    grades: scale.map((b) => ({ grade: b.grade, minPct: b.minPct })),
+    divisions: def.result.divisions ?? [],
+    gradeScaleId: def.gradeScaleId ?? null,
   };
 }
 
-/** Competition ranks (1, 2, 2, 4) among the ranked, by a number, highest first. */
-function competitionRank<T>(rows: T[], value: (r: T) => number, set: (r: T, n: number) => void) {
-  const sorted = [...rows].sort((a, b) => value(b) - value(a));
-  let rank = 0;
-  let prev: number | null = null;
-  sorted.forEach((r, i) => {
-    const v = value(r);
-    if (prev === null || Math.abs(v - prev) > 1e-9) rank = i + 1;
-    prev = v;
-    set(r, rank);
-  });
-}
+/** a v1 student (one attendance %) as a register's */
+const toRegStudent = (s: SchemeStudent): RegStudent => ({
+  ...s,
+  attendance: s.attendancePct === null ? {} : { '*': { present: s.attendancePct, total: 100 } },
+  subjects: s.subjects.map((x) => ({
+    ...x,
+    marks: Object.fromEntries(
+      Object.entries(x.marks).map(([k, m]) => [
+        k,
+        m && {
+          ...m,
+          parts: Object.entries(m.parts).map(([name, p]) => ({ name, ...p })),
+        },
+      ]),
+    ),
+  })),
+});
 
-/** A scheme over a class: every student's subjects, totals, result, division and ranks. */
+/** A scheme over a class: every student's subjects, totals, result, division and ranks (the register engine). */
 export function computeScheme(
   def: SchemeDef,
   students: SchemeStudent[],
   codes: Record<string, SchemeCode>,
   scale: GradeBand[],
 ): SchemeStudentResult[] {
-  const out = students.map((s) => {
-    const subjects = s.subjects.map((sub) => subjectResult(def, s, sub, codes, scale));
-    const counted = subjects.filter((x) => x.kind !== 'additional' || def.result.countAdditional);
-    const missing = counted.some((x) => x.missing);
-    const absent = counted.some((x) => x.blocked);
-    const sumTotal = counted.reduce((a, x) => a + (x.total ?? 0), 0);
-    const max = counted.reduce((a, x) => a + x.max, 0);
-    const total = missing ? null : roundBy(sumTotal, def.result.totalRound ?? 'two');
-    const pct = total === null || !(max > 0) ? null : roundBy((total / max) * 100);
-    const failed = counted.filter((x) => x.status === 'fail').map((x) => x.code);
-    const result: SchemeStudentResult['result'] = missing
-      ? 'incomplete'
-      : absent
-        ? 'absent'
-        : failed.length === 0
-          ? 'pass'
-          : failed.length <= def.result.compartmentUpTo
-            ? 'compartment'
-            : 'fail';
-    const division =
-      pct === null || result !== 'pass'
-        ? null
-        : ([...(def.result.divisions ?? [])]
-            .sort((a, b) => b.minPct - a.minPct)
-            .find((d) => pct >= d.minPct)?.name ?? null);
-    return {
-      studentId: s.studentId,
-      name: s.name,
-      admissionNo: s.admissionNo,
-      rollNo: s.rollNo,
-      sectionId: s.sectionId,
-      section: s.section,
-      subjects: subjects.map(({ blocked: _b, missing: _m, ...x }) => x),
-      total,
-      max: roundBy(max),
-      pct,
-      grade: gradeOf(pct, scale),
-      division,
-      result,
-      failed,
-      rankInSection: null as number | null,
-      rankInClass: null as number | null,
-    };
-  });
-  const ranked = out.filter((r) => r.result !== 'incomplete' && r.result !== 'absent');
-  const by = (r: SchemeStudentResult) =>
-    def.result.rankBy === 'pct' ? (r.pct ?? 0) : (r.total ?? 0);
-  competitionRank(ranked, by, (r, n) => (r.rankInClass = n));
-  for (const sec of new Set(ranked.map((r) => r.sectionId)))
-    competitionRank(
-      ranked.filter((r) => r.sectionId === sec),
-      by,
-      (r, n) => (r.rankInSection = n),
-    );
-  return out;
+  const ids = [...new Set(students.flatMap((s) => s.subjects.map((x) => x.subjectId)))];
+  const reg = fromV1(def, ids, codes, scale);
+  const tot = def.columns.find((c) => c.total);
+  return computeRegister(reg, students.map(toRegStudent)).map((r) => ({
+    ...r,
+    subjects: reg.subjects
+      .map((rs) => r.subjects[rs.key])
+      .filter((x): x is RegSubjectResult => !!x)
+      .map((x) => ({
+        subjectId: x.subjectId,
+        code: x.code,
+        name: x.name,
+        kind: x.kind,
+        values: {
+          ...Object.fromEntries(
+            Object.entries(x.values)
+              .filter(([k]) => !k.endsWith('~'))
+              .map(([k, c]) => [k, { v: c.v, max: c.max, ...(c.code ? { code: c.code } : {}) }]),
+          ),
+          ...(tot ? { [tot.key]: { v: x.total, max: x.max } } : {}),
+        },
+        ...(x.note ? { note: x.note } : {}),
+        total: x.total,
+        max: x.max,
+        pct: x.pct,
+        grade: x.grade,
+        status: x.status,
+      })),
+  }));
 }
 
 /** Ready-made schemes from the old DPS Noida cards: the exams are named by key, mapped when used. */

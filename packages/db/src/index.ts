@@ -211,6 +211,7 @@ export * from './masters';
 export * from './report-card-data';
 export * from './report-card-html';
 export * from './mark-scheme';
+export * from './mark-register';
 export * from './cron';
 export * from './renderers';
 export * from './schema-version';
