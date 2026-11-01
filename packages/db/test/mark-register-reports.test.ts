@@ -227,13 +227,39 @@ describe('mark register reports (docs/design/68, phase 2)', () => {
     expect(one!.sheet.body[0]!.cells[1]!.t).toBe('NIL');
   });
 
-  it('compare sections: each subject by section and the class, the best section marked; overall figures', () => {
-    const [c, overall] = buildReport('compare', input(true));
-    const eng = lines(c!.sheet).English!;
+  it('compare sections as the legacy prints it: the overall result by section and class (best ▲), then by subject', () => {
+    const [overall, c] = buildReport('compare', input(true));
+    expect(overall!.band).toBe(false);
+    expect(overall!.sheet.head[0]!.map((h) => h.t)).toEqual([
+      'Overall result',
+      'VI-A',
+      'VI-B',
+      'Class',
+    ]);
+    expect(overall!.sheet.body.map((r) => r.cells.map((x) => x.t))).toEqual([
+      ['Students', '5', '3', '8'],
+      ['Appeared', '3', '3', '6'],
+      ['Average Final %', '54%', '60% ▲', '57%'],
+      ['Pass % (Result PASS ÷ appeared)', '66.67% ▲', '66.67% ▲', '66.67%'],
+      ['Compartment (1 failed)', '1', '0', '1'],
+      ['Fail (more than 1 failed)', '0', '1', '1'],
+      ['Absent (final withheld)', '1', '0', '1'],
+    ]);
+    // the class column in amber
+    expect(overall!.sheet.body[0]!.cells[3]!.tone).toBe('final');
+    const eng = lines(c!.sheet).ENGLISH!;
     // VI-A English average (90 + 30 + 35 + 70) / 4 = 56.25; VI-B (100 + 20) / 2 = 60 (b3 left out)
-    expect(eng[1]).toBe('56.25');
-    expect(eng[4]).toBe('▲ 60.00');
-    expect(lines(overall!.sheet)['Pass %']).toEqual(['Pass %', '66.67', '66.67', '66.67']);
+    expect(eng.slice(1)).toEqual([
+      '56.25%',
+      '75%',
+      '90',
+      '60% ▲',
+      '50%',
+      '100',
+      '57.5%',
+      '66.67%',
+      '100',
+    ]);
     expect(buildReport('compare', input(false))[0]!.sheet.body[0]!.cells[0]!.t).toContain(
       'all sections',
     );

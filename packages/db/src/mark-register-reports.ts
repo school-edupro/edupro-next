@@ -34,6 +34,8 @@ export const REPORTS: Array<{ kind: ReportKind; label: string; merit?: boolean }
 export interface ReportBlock {
   title: string;
   sheet: Sheet;
+  /** false: the table names itself in its first heading (no band over it) */
+  band?: boolean;
 }
 export interface ReportInput {
   def: RegisterDef;
@@ -143,7 +145,6 @@ function count(i: ReportInput, title: string, list: Who[]): SheetCell {
     },
   };
 }
-const whom = (list: RegStudentResult[]): Who[] => list.map((r) => ({ r }));
 const pct = (n: number, of: number) => (of > 0 ? cutFixed((n / of) * 100, 2) : '');
 const avg = (vals: number[]) =>
   vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : null;
@@ -982,70 +983,119 @@ function compare(i: ReportInput): ReportBlock[] {
     const per = places.map((p) =>
       stats(p === 'Class' ? s.list : s.list.filter((y) => y.r.section === p)),
     );
-    const bestAvg = Math.max(...per.slice(0, sections.length).map((x) => x.avg ?? -1));
+    const bestAvg = Math.max(
+      ...per
+        .slice(0, sections.length)
+        .map((x) => (x.avg === null ? -1 : Math.round(x.avg * 100) / 100)),
+    );
     return [
-      { t: s.label, text: true },
-      ...per.flatMap((x, n): SheetCell[] => [
-        {
-          t:
-            x.avg === null
-              ? ''
-              : `${n < sections.length && x.avg === bestAvg && sections.length > 1 ? '▲ ' : ''}${cutFixed(x.avg, 2)}`,
-          tone: n === places.length - 1 ? 'final' : undefined,
-        },
-        {
-          t: x.pass === null ? '' : cutFixed(x.pass, 2),
-          tone: n === places.length - 1 ? 'final' : undefined,
-        },
-        {
-          t: x.high === null ? '' : cutFixed(x.high, 'auto'),
-          tone: n === places.length - 1 ? 'final' : undefined,
-        },
-      ]),
+      { t: s.label.toUpperCase(), text: true, strong: true },
+      ...per.flatMap((x, n): SheetCell[] => {
+        const cls = n === places.length - 1;
+        const top =
+          !cls &&
+          sections.length > 1 &&
+          x.avg !== null &&
+          Math.abs(Math.round(x.avg * 100) / 100 - bestAvg) < 1e-9;
+        const base = { center: true, ...(cls ? { tone: 'final' as const, strong: true } : {}) };
+        return [
+          {
+            ...base,
+            t: x.avg === null ? '' : `${pctOf(x.avg)}${top ? ' ▲' : ''}`,
+            ...(top ? { strong: true } : {}),
+          },
+          { ...base, t: x.pass === null ? '' : pctOf(x.pass) },
+          { ...base, t: x.high === null ? '' : cutFixed(x.high, 'auto') },
+        ];
+      }),
     ];
   });
+  // the legacy's "Overall result": a column per section and the class, the best section marked ▲
   const overall = places.map((p) => {
     const list = p === 'Class' ? i.rows : i.rows.filter((r) => r.section === p);
     const appeared = list.filter((r) => ['pass', 'compartment', 'fail'].includes(r.result));
+    const passed = appeared.filter((r) => r.result === 'pass');
     return {
       list,
       appeared,
-      passed: appeared.filter((r) => r.result === 'pass'),
-      pcts: appeared.map((r) => r.pct ?? 0),
+      avg: appeared.length ? avg(appeared.map((r) => r.pct ?? 0)) : null,
+      pass: appeared.length ? (passed.length / appeared.length) * 100 : null,
+      compartment: list.filter((r) => r.result === 'compartment').length,
+      fail: list.filter((r) => r.result === 'fail').length,
+      absent: list.filter((r) => r.result === 'absent').length,
     };
   });
+  const isClass = (n: number) => n === places.length - 1;
+  const best = (pick: (o: (typeof overall)[number]) => number | null) => {
+    const vals = overall.slice(0, sections.length).map(pick);
+    const top = Math.max(...vals.map((v) => v ?? -1));
+    return (n: number) =>
+      sections.length > 1 && !isClass(n) && vals[n] !== null && Math.abs(vals[n]! - top) < 1e-9;
+  };
+  const bestAvg = best((o) => (o.avg === null ? null : Math.round(o.avg * 100) / 100));
+  const bestPass = best((o) => (o.pass === null ? null : Math.round(o.pass * 100) / 100));
+  const cell = (t: string, n: number, top = false): SheetCell => ({
+    t: top ? `${t} ▲` : t,
+    center: true,
+    ...(top || isClass(n) ? { strong: true } : {}),
+    ...(isClass(n) ? { tone: 'final' as const } : {}),
+  });
+  const upTo = i.def.final.compartmentUpTo;
   const overallRows: SheetCell[][] = [
     [
-      { t: 'Students', text: true },
-      ...overall.map((o, n) => count(i, `${places[n]!} · Students`, whom(o.list))),
+      { t: 'Students', text: true, strong: true },
+      ...overall.map((o, n) => cell(String(o.list.length), n)),
     ],
     [
-      { t: 'Appeared', text: true },
-      ...overall.map((o, n) => count(i, `${places[n]!} · Appeared`, whom(o.appeared))),
+      { t: 'Appeared', text: true, strong: true },
+      ...overall.map((o, n) => cell(String(o.appeared.length), n)),
     ],
     [
-      { t: 'Passed', text: true },
-      ...overall.map((o, n) => count(i, `${places[n]!} · Passed`, whom(o.passed))),
+      { t: 'Average Final %', text: true, strong: true },
+      ...overall.map((o, n) => cell(pctOf(o.avg), n, bestAvg(n))),
     ],
     [
-      { t: 'Pass %', text: true },
-      ...overall.map((o): SheetCell => ({
-        t: pct(o.passed.length, o.appeared.length),
-        tone: 'final',
-      })),
+      { t: 'Pass % (Result PASS ÷ appeared)', text: true, strong: true },
+      ...overall.map((o, n) => cell(pctOf(o.pass), n, bestPass(n))),
     ],
     [
-      { t: 'Average %', text: true },
-      ...overall.map((o): SheetCell => ({ t: o.pcts.length ? cutFixed(avg(o.pcts)!, 2) : '' })),
+      {
+        t: `Compartment (${upTo === 1 ? '1' : `1–${String(upTo)}`} failed)`,
+        text: true,
+        strong: true,
+      },
+      ...overall.map((o, n) => cell(String(o.compartment), n)),
+    ],
+    [
+      { t: `Fail (more than ${String(upTo)} failed)`, text: true, strong: true },
+      ...overall.map((o, n) => cell(String(o.fail), n)),
+    ],
+    [
+      { t: 'Absent (final withheld)', text: true, strong: true },
+      ...overall.map((o, n) => cell(String(o.absent), n)),
     ],
   ];
-  return [
-    block(i, 'Section comparison by subject (▲ the best section)', cols, rows, [
-      { t: '', span: 1 },
-      ...places.map((p) => ({ t: p, span: 3 })),
-    ]),
-    block(i, 'Overall', [['Figure', 3, true], ...places.map((p): Col => [p, 1.2])], overallRows),
-  ];
+  const head = block(
+    i,
+    'Overall result',
+    [['Overall result', 3, true], ...places.map((p): Col => [p, 1.3])],
+    overallRows,
+  );
+  for (const [n, h] of head.sheet.head[0]!.entries()) {
+    if (n > 0) h.center = true;
+    if (n === places.length) h.tone = 'final';
+  }
+  head.band = false;
+  const bySubject = block(i, 'Section comparison by subject (▲ the best section)', cols, rows, [
+    { t: '', span: 1 },
+    ...places.map((p) => ({ t: p, span: 3 })),
+  ]);
+  for (const row of bySubject.sheet.head)
+    for (const h of row) if (h.t !== 'Subject') h.center = true;
+  const top = bySubject.sheet.head[0]!;
+  top[top.length - 1]!.tone = 'final';
+  for (const h of bySubject.sheet.head[1]!.slice(-3)) h.tone = 'final';
+  return [head, bySubject];
 }
 
 /** a report of a register for one place */

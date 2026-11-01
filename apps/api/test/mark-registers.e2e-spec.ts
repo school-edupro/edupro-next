@@ -484,7 +484,14 @@ describe('mark registers like the legacy Term Mark Register (e2e)', () => {
     const failing = (await run(`${VI}&report=failing`)).blocks[0]!;
     expect(failing.sheet.body.map((r) => r.cells[1]!.t)).toEqual(['NIL', 'NIL']);
     const cmp = await run(`${VI}&report=compare`);
+    // the overall result first (the legacy's), then by subject
     expect(cmp.blocks[0]!.sheet.head[0]!.map((c) => c.t)).toEqual([
+      'Overall result',
+      'VI-A',
+      'VI-B',
+      'Class',
+    ]);
+    expect(cmp.blocks[1]!.sheet.head[0]!.map((c) => c.t)).toEqual([
       'Subject',
       'VI-A',
       'VI-B',

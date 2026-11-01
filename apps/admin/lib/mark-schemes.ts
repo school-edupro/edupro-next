@@ -92,7 +92,7 @@ export interface RunResponse {
   reports: Array<{ kind: string; label: string; merit: boolean }>;
   sheet: Sheet | null;
   /** a report's tables */
-  blocks: Array<{ title: string; sheet: Sheet }>;
+  blocks: Array<{ title: string; sheet: Sheet; band?: boolean }>;
   rows: Array<Omit<RegStudentResult, 'subjects'> & { subjects: unknown[] }>;
   notes: string[];
   counts: Record<string, number>;

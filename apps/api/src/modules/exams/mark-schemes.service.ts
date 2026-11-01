@@ -1636,6 +1636,8 @@ export class MarkSchemesService {
   async register(ctx: RequestContext, id: string, q: RegisterQueryDto) {
     const tenant = requireTenant(ctx);
     const yearId = this.year(tenant);
+    // a report's tables that name themselves in their first heading (no band over them)
+    const bare = new WeakSet<Sheet>();
     const out = await this.db.tenant(tenant, async (c) => {
       const s = await this.find(c, id);
       await this.must(c, ctx, s.chain_id, 'run');
@@ -1782,8 +1784,10 @@ export class MarkSchemesService {
             teachers,
             top: q.top,
             margin: q.margin,
-          }))
+          })) {
             sheets.push(b.sheet);
+            if (b.band === false) bare.add(b.sheet);
+          }
           if (!firstSheets) firstSheets = sheets.length;
         }
         if (q.format === 'json') {
@@ -1887,7 +1891,11 @@ export class MarkSchemesService {
             ? []
             : out.sheets
                 .slice(0, out.firstSheets || out.sheets.length)
-                .map((x) => ({ title: x.title ?? '', sheet: x })),
+                .map((x) => ({
+                  title: x.title ?? '',
+                  sheet: x,
+                  ...(bare.has(x) ? { band: false } : {}),
+                })),
         /** the worked-out students, in the sheet's order: each subject's values, total, % and status */
         rows: out.rows.map((r) => ({
           ...r,

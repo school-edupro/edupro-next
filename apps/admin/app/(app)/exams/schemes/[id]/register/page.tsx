@@ -249,7 +249,7 @@ export default async function RunRegisterPage({
               </p>
             ) : null}
             <section className="ep-mr-report" aria-label={b.title}>
-              <h2 className="ep-mr-report__title">{b.title}</h2>
+              {b.band !== false ? <h2 className="ep-mr-report__title">{b.title}</h2> : null}
               {b.sheet.body.length ? (
                 <RegisterSheet sheet={b.sheet} label={`${b.title} · ${label}`} />
               ) : (

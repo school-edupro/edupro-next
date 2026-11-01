@@ -193,8 +193,9 @@ out, then runs it for any section; the marks always come from the exam entry.
    - **At-risk**: failing (high), compartment (medium), borderline subjects or absent (watch), with a
      margin of 5 or 10 over the pass %; counts by subject.
    - **Failing students**: each failing subject with its %, NIL where nobody fails.
-   - **Compare sections** (a class's all sections): each subject's average %, pass % and highest by
-     section and for the class, the best section marked ▲; overall figures.
+   - **Compare sections** (a class's all sections, as the old register prints it): "Overall result" —
+     students, appeared, average final %, pass %, compartment, fail and absent for each section and
+     the class (the best section ▲) — then each subject's average %, pass % and highest by section.
 3. **Lock** pins a register: saving it then makes its next version (a draft); **Versions** restores an
    old one as a new register; **Delete** sends a draft to the bin (**Deleted** brings it back);
    **Copy** makes one for other classes.
