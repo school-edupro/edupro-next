@@ -27,6 +27,13 @@ export async function GET(
   const subject = sp.get('subject');
   if (subject && /^[A-Za-z0-9_~-]{1,32}$/.test(subject)) q.set('subject', subject);
   if (sp.get('all') === '1') q.set('all', '1');
+  const report = sp.get('report');
+  if (report && /^(summary|analysis|entry|toppers|teacher|risk|failing|compare)$/.test(report))
+    q.set('report', report);
+  const top = sp.get('top');
+  if (top && ['3', '5', '10'].includes(top)) q.set('top', top);
+  const margin = sp.get('margin');
+  if (margin && ['5', '10'].includes(margin)) q.set('margin', margin);
   const paper = sp.get('paper');
   if (paper && ['A4', 'A3', 'Legal', 'Letter'].includes(paper)) q.set('paper', paper);
   const orientation = sp.get('orientation');

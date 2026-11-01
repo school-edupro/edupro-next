@@ -87,7 +87,12 @@ export interface RunResponse {
   exam: string | null;
   examName: string | null;
   subjects: Array<{ key: string; title: string }>;
+  /** register, or one of the reports (docs/design/68, phase 2) */
+  report: string;
+  reports: Array<{ kind: string; label: string; merit: boolean }>;
   sheet: Sheet | null;
+  /** a report's tables */
+  blocks: Array<{ title: string; sheet: Sheet }>;
   rows: Array<Omit<RegStudentResult, 'subjects'> & { subjects: unknown[] }>;
   notes: string[];
   counts: Record<string, number>;

@@ -1,6 +1,6 @@
 # 68 · Mark registers like the legacy Term Mark Register
 
-Status: phase 1 built 1 Nov 2026 (migration 0296) · replaces the scheme editor of docs/design/65 part 3 · phase 2 next
+Status: built 1 Nov 2026 (phase 1, migration 0296; phase 2) · replaces the scheme editor of docs/design/65 part 3
 
 ## Why
 
@@ -178,3 +178,20 @@ At-risk, Failing students, Compare sections) on the same computed rows.
   register's overview, Run and every builder step.
 - The sample "Term I result (sample)" (VI-VII) is a v2 register now, its languages in the SUBJECT-2
   slot (scripts/seed-exam-sample.mjs).
+
+## As built (phase 2, 1 Nov 2026)
+
+- `packages/db/src/mark-register-reports.ts` (`buildReport`, `REPORTS`): the eight reports as titled
+  tables in the sheet form, from the register's worked-out rows (entry status also from the loaded
+  marks; entry status and teacher-wise from the sections' subject teachers): Result summary (and failed /
+  absent / on leave in N subjects), Analysis (the register's bands and cut-offs; a slot by member),
+  Entry status (a section by subject and exam with who is pending; a class as a grid of % entered),
+  Toppers (top 3 / 5 / 10 passed, each section's top 3, each subject's topper with full marks), Teacher-
+  wise, At-risk (margin 5 / 10), Failing students (NIL per section), Compare sections (a class: ▲ the
+  best section, overall figures). A count carries its students (`SheetCell.names`), opened on a click.
+- A subject whose every mark is left out (exempted, a leave with nothing to fill from) passes (no
+  penalty), as in the legacy.
+- API: Run takes `report`, `top`, `margin`; JSON `blocks`; the PDF keeps a place's tables on one page
+  (a new page when full), the Excel stacks them in the place's sheet under their titles. Admin: the
+  Reports menu, the Top / margin choices, the downloads of what is shown.
+- Tests: unit `mark-register-reports` (8), e2e reports (1 more in `mark-registers`), a11y every report.

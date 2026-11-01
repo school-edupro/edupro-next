@@ -6,6 +6,17 @@ import { RegisterSheet } from '@/components/exams/RegisterSheet';
 import { ApiError, apiFetch } from '@/lib/api';
 import type { RunResponse } from '@/lib/mark-schemes';
 
+const REPORT_KINDS = [
+  'summary',
+  'analysis',
+  'entry',
+  'toppers',
+  'teacher',
+  'risk',
+  'failing',
+  'compare',
+];
+
 const RESULT: Record<
   string,
   { label: string; tone: 'success' | 'warning' | 'danger' | 'neutral' }
@@ -21,15 +32,24 @@ const RESULT: Record<
  * Run a mark register (docs/design/68): pick the class — a section, or a whole class ranked together
  * (the merit list, by rank or division-wise) — the exam of an exam-wise register and a subject (its own
  * sheet). The marks come from the exam entry; the sheet shows the register's columns, totals, grades and
- * the final, with what to check above it. Download it as PDF (the paper asked) or Excel, one section or
- * all.
+ * the final, with what to check above it. The Reports menu has the legacy's eight reports (Result
+ * summary, Analysis, Entry status, Toppers, Teacher-wise, At-risk, Failing students, Compare sections:
+ * phase 2). Download what is shown as PDF (the paper asked) or Excel, one section or all.
  */
 export default async function RunRegisterPage({
   params,
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ place?: string; exam?: string; subject?: string; view?: string }>;
+  searchParams: Promise<{
+    place?: string;
+    exam?: string;
+    subject?: string;
+    view?: string;
+    report?: string;
+    top?: string;
+    margin?: string;
+  }>;
 }) {
   const { id } = await params;
   const sp = await searchParams;
@@ -45,6 +65,12 @@ export default async function RunRegisterPage({
   if (place) q.set(place.startsWith('s:') ? 'classSectionId' : 'classId', place.slice(2));
   if (sp.exam && /^[A-Z][A-Z0-9_]{0,11}$/.test(sp.exam)) q.set('exam', sp.exam);
   if (sp.subject && /^[A-Za-z0-9_~-]{1,32}$/.test(sp.subject)) q.set('subject', sp.subject);
+  const report = REPORT_KINDS.includes(sp.report ?? '') ? sp.report! : 'register';
+  const top = ['3', '5', '10'].includes(sp.top ?? '') ? sp.top! : '3';
+  const margin = ['5', '10'].includes(sp.margin ?? '') ? sp.margin! : '5';
+  q.set('report', report);
+  if (report === 'toppers') q.set('top', top);
+  if (report === 'risk') q.set('margin', margin);
   const reg = await apiFetch<RunResponse>(`/exams/schemes/${id}/register?${q.toString()}`).catch(
     (e: unknown) => {
       if (e instanceof ApiError && (e.status === 404 || e.status === 403)) notFound();
@@ -54,6 +80,17 @@ export default async function RunRegisterPage({
   const s = reg.scheme;
   const shownPlace = place || reg.places[0]?.value || '';
   const label = reg.places.find((p) => p.value === shownPlace)?.label ?? '';
+  const merit = shownPlace.startsWith('c:');
+  // a link to the same place with another report
+  const linkTo = (kind: string) => {
+    const l = new URLSearchParams();
+    if (shownPlace) l.set('place', shownPlace);
+    if (reg.exam && s.type === 'examwise') l.set('exam', reg.exam);
+    if (sp.subject) l.set('subject', sp.subject);
+    if (kind !== 'register') l.set('report', kind);
+    return `/exams/schemes/${s.id}/register?${l.toString()}`;
+  };
+  const reportLabel = reg.reports.find((x) => x.kind === report)?.label ?? 'Register';
   return (
     <>
       <Breadcrumbs
@@ -67,7 +104,7 @@ export default async function RunRegisterPage({
       <PageHeader
         kicker={`Run · version ${String(s.version)}${s.status === 'draft' ? ' (draft)' : ''}`}
         title={`▶ ${s.name}`}
-        description={`${label}${reg.examName ? ` · ${reg.examName}` : ''}`}
+        description={`${reportLabel} · ${label}${reg.examName ? ` · ${reg.examName}` : ''}`}
       />
       <Card style={{ marginBottom: 'var(--sp-4)' }}>
         <div className="ep-mr-toolbar">
@@ -105,7 +142,29 @@ export default async function RunRegisterPage({
                 ))}
               </select>
             </label>
-            {shownPlace.startsWith('c:') ? (
+            {report !== 'register' ? <input type="hidden" name="report" value={report} /> : null}
+            {report === 'toppers' ? (
+              <label className="ep-field" style={{ margin: 0, minWidth: '7rem' }}>
+                <span className="ep-field__label">Top</span>
+                <select className="ep-select" name="top" defaultValue={top}>
+                  {['3', '5', '10'].map((n) => (
+                    <option key={n} value={n}>
+                      {n}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            ) : null}
+            {report === 'risk' ? (
+              <label className="ep-field" style={{ margin: 0, minWidth: '9rem' }}>
+                <span className="ep-field__label">Borderline margin</span>
+                <select className="ep-select" name="margin" defaultValue={margin}>
+                  <option value="5">Pass % + 5</option>
+                  <option value="10">Pass % + 10</option>
+                </select>
+              </label>
+            ) : null}
+            {merit && report === 'register' ? (
               <label className="ep-field" style={{ margin: 0, minWidth: '10rem' }}>
                 <span className="ep-field__label">Merit order</span>
                 <select className="ep-select" name="view" defaultValue={view}>
@@ -122,14 +181,25 @@ export default async function RunRegisterPage({
             </noscript>
           </form>
           <details className="ep-mr-menu">
-            <summary className="ep-btn ep-btn--ghost ep-btn--sm">Reports ▾</summary>
+            <summary className="ep-btn ep-btn--ghost ep-btn--sm">{`Reports: ${reportLabel} ▾`}</summary>
             <div className="ep-mr-menu__list">
               <a
-                href={`/exams/schemes/${s.id}/register${shownPlace ? `?place=${shownPlace}` : ''}`}
-                aria-current="true"
+                href={linkTo('register')}
+                aria-current={report === 'register' ? 'true' : undefined}
               >
                 Register
               </a>
+              {reg.reports
+                .filter((x) => !x.merit || merit)
+                .map((x) => (
+                  <a
+                    key={x.kind}
+                    href={linkTo(x.kind)}
+                    aria-current={report === x.kind ? 'true' : undefined}
+                  >
+                    {x.label}
+                  </a>
+                ))}
             </div>
           </details>
           <RegisterDownloads
@@ -138,6 +208,8 @@ export default async function RunRegisterPage({
             view={view}
             exam={reg.exam}
             subject={sp.subject ?? null}
+            report={report}
+            extra={report === 'toppers' ? { top } : report === 'risk' ? { margin } : {}}
           />
         </div>
       </Card>
@@ -167,7 +239,18 @@ export default async function RunRegisterPage({
           </span>
         </span>
       </p>
-      {reg.sheet && reg.sheet.body.length ? (
+      {report !== 'register' ? (
+        reg.blocks.map((b) => (
+          <section key={b.title} className="ep-mr-report" aria-label={b.title}>
+            <h2>{b.title}</h2>
+            {b.sheet.body.length ? (
+              <RegisterSheet sheet={b.sheet} label={`${b.title} · ${label}`} />
+            ) : (
+              <p className="ep-field__help">Nothing to show.</p>
+            )}
+          </section>
+        ))
+      ) : reg.sheet && reg.sheet.body.length ? (
         <RegisterSheet sheet={reg.sheet} label={`${s.name} · ${label}`} />
       ) : (
         <Card>

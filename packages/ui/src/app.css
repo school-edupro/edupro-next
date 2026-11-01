@@ -13872,3 +13872,25 @@ button.ep-subchoice__icon:hover {
   flex-wrap: wrap;
   gap: var(--sp-1);
 }
+.ep-mr-names summary {
+  color: var(--text-link);
+  text-decoration: underline;
+  cursor: pointer;
+}
+.ep-mr-names ul {
+  max-height: 12rem;
+  margin: var(--sp-1) 0 0;
+  padding: var(--sp-1) var(--sp-2) var(--sp-1) var(--sp-5);
+  overflow: auto;
+  border-radius: var(--radius-sm);
+  background: var(--surface-subtle);
+  text-align: left;
+  white-space: normal;
+}
+.ep-mr-report {
+  margin-bottom: var(--sp-5);
+}
+.ep-mr-report h2 {
+  margin: 0 0 var(--sp-2);
+  font-size: var(--fs-h4);
+}

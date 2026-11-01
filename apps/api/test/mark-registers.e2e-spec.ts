@@ -423,6 +423,78 @@ describe('mark registers like the legacy Term Mark Register (e2e)', () => {
     expect(texts).toContain('THIRD LANGUAGE');
   });
 
+  it('the Run reports: summary, analysis, entry status, toppers, teacher-wise, at-risk, failing, compare; their files', async () => {
+    const run = (q: string) =>
+      call(office, 'GET', `/exams/schemes/${ids.reg!}/register?${q}`).then((r) => {
+        expect(r.statusCode).toBe(200);
+        return r.json() as {
+          report: string;
+          reports: Array<{ kind: string }>;
+          blocks: Array<{ title: string; sheet: Sheet }>;
+        };
+      });
+    const A = `classSectionId=${section['VI-A']!}`;
+    const VI = `classId=${cls.VI!}`;
+    const firstCol = (b: { sheet: Sheet }) =>
+      Object.fromEntries(b.sheet.body.map((r) => [r.cells[0]!.t, r.cells.map((c) => c.t)]));
+    const sum = await run(`${A}&report=summary`);
+    expect(sum.reports.map((x) => x.kind)).toContain('compare');
+    const fig = firstCol(sum.blocks[0]!);
+    // Asha and Bhanu pass; Chitra's AB withholds her final
+    expect(fig.Students![1]).toBe('3');
+    expect(fig.Passed![1]).toBe('2');
+    expect(fig['Absent (final withheld)']![1]).toBe('1');
+    expect(sum.blocks.map((b) => b.title)).toContain(
+      'Absent in N subjects (a code that holds the total)',
+    );
+    const ana = firstCol((await run(`${A}&report=analysis`)).blocks[0]!);
+    // English: Asha 88, Bhanu 64, Chitra 75
+    expect(ana.English!.slice(1, 4)).toEqual(['3', '0', '3']);
+    expect(ana.English!.slice(-4)).toEqual(['88 / 100', '64', '75.67', '100.00']);
+    const entry = (await run(`${A}&report=entry`)).blocks[0]!;
+    expect(entry.sheet.body.every((r) => r.cells[3]!.t === 'Complete')).toBe(true);
+    const top = (await run(`${VI}&report=toppers&top=3`)).blocks[0]!;
+    expect(top.sheet.body.map((r) => r.cells[1]!.t.split(' ')[0])).toEqual([
+      'Asha',
+      'Dev',
+      'Bhanu',
+    ]);
+    const teacher = (await run(`${A}&report=teacher`)).blocks[0]!;
+    expect(teacher.sheet.body[0]!.cells[0]!.t).toBe('Not assigned');
+    const risk = (await run(`${A}&report=risk&margin=10`)).blocks[0]!;
+    expect(risk.sheet.body.map((r) => r.cells[0]!.t)).toContain('Watch');
+    const failing = (await run(`${VI}&report=failing`)).blocks[0]!;
+    expect(failing.sheet.body.map((r) => r.cells[1]!.t)).toEqual(['NIL', 'NIL']);
+    const cmp = await run(`${VI}&report=compare`);
+    expect(cmp.blocks[0]!.sheet.head[0]!.map((c) => c.t)).toEqual([
+      'Subject',
+      'VI-A',
+      'VI-B',
+      'Class',
+    ]);
+    const pdf = await call(
+      office,
+      'GET',
+      `/exams/schemes/${ids.reg!}/register?${A}&report=summary&format=pdf`,
+    );
+    expect(
+      Buffer.from(pdf.json().base64 as string, 'base64')
+        .subarray(0, 4)
+        .toString(),
+    ).toBe('%PDF');
+    const xl = await call(
+      office,
+      'GET',
+      `/exams/schemes/${ids.reg!}/register?${VI}&report=analysis&format=xlsx&all=true`,
+    );
+    const wb = new ExcelJS.Workbook();
+    await wb.xlsx.load(Buffer.from(xl.json().base64 as string, 'base64') as unknown as ArrayBuffer);
+    expect(wb.worksheets.map((w) => w.name)).toEqual(['VI-A', 'VI-B']);
+    const texts: string[] = [];
+    wb.worksheets[0]!.eachRow((row) => row.eachCell((c) => texts.push(String(c.value))));
+    expect(texts).toContain('Analysis');
+  });
+
   it('a copy for another class leaves out what it does not have; the bin and restoring with a new name', async () => {
     const copy = await call(office, 'POST', `/exams/schemes/${ids.reg!}/copy`, {
       name: 'VII Register',

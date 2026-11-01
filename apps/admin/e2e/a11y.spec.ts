@@ -751,7 +751,7 @@ test.describe('accessibility (axe)', () => {
     ).toEqual([]);
   });
 
-  test('no serious or critical violations on a mark register: overview, Run and every builder step', async ({
+  test('no serious or critical violations on a mark register: overview, Run, its reports and every builder step', async ({
     page,
   }) => {
     test.setTimeout(240_000);
@@ -776,7 +776,21 @@ test.describe('accessibility (axe)', () => {
         );
     };
     const bad: string[] = [];
-    for (const path of [href!, `${href!}/register`]) {
+    const reports = [
+      'summary',
+      'analysis',
+      'entry',
+      'toppers',
+      'teacher',
+      'risk',
+      'failing',
+      'compare',
+    ];
+    for (const path of [
+      href!,
+      `${href!}/register`,
+      ...reports.map((r) => `${href!}/register?report=${r}`),
+    ]) {
       await page.goto(path);
       await page.waitForLoadState('networkidle');
       bad.push(...(await check()).map((x) => `${path} ${x}`));

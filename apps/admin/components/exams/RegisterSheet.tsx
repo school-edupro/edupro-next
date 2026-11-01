@@ -3,7 +3,8 @@ import type { Sheet, SheetCell } from '@edupro/ui';
 /**
  * A register's sheet as a table (docs/design/68): the two heading rows (each subject over its columns),
  * a row per student, the class average at the foot. Worked-out cells are tinted green, the final
- * amber, codes in red; the student's name stays in view while the sheet scrolls.
+ * amber, codes in red; the student's name stays in view while the sheet scrolls. A report's count
+ * opens the list of the students it stands for.
  */
 export function RegisterSheet({ sheet, label }: { sheet: Sheet; label: string }) {
   const nameAt = sheet.head[0]?.findIndex((h) => h.t === 'Student') ?? -1;
@@ -45,7 +46,18 @@ export function RegisterSheet({ sheet, label }: { sheet: Sheet; label: string })
                   </th>
                 ) : (
                   <td key={i} {...attrs(c, i)}>
-                    {c.t}
+                    {c.names?.length ? (
+                      <details className="ep-mr-names">
+                        <summary>{c.t}</summary>
+                        <ul>
+                          {c.names.map((n) => (
+                            <li key={n}>{n}</li>
+                          ))}
+                        </ul>
+                      </details>
+                    ) : (
+                      c.t
+                    )}
                   </td>
                 ),
               )}

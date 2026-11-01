@@ -776,6 +776,8 @@ function subjectFor(ctx: Ctx): RegSubjectResult {
   let status: RegSubjectResult['status'];
   if (blocked) status = 'absent';
   else if (missing) status = 'incomplete';
+  // every mark left out (exempted, a leave with nothing to fill from): no penalty
+  else if (!(max > 0)) status = 'pass';
   else {
     let ok = pct !== null && pct >= def.final.passPct;
     if (ok && def.final.partsEach)
@@ -984,10 +986,14 @@ export interface SheetCell {
   rows?: number;
   /** text, not a number (left aligned) */
   text?: boolean;
+  /** the students a count stands for (a report: shown on a click) */
+  names?: string[];
 }
 export interface Sheet {
   /** the section or class it is for */
   place: string;
+  /** a report's table: its heading (tables of one place follow on one page) */
+  title?: string;
   head: SheetCell[][];
   body: Array<{ studentId: string; cells: SheetCell[] }>;
   foot: SheetCell[] | null;

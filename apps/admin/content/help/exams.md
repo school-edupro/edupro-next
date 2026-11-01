@@ -173,6 +173,21 @@ out, then runs it for any section; the marks always come from the exam entry.
 2. **Run**: Class (a section, or a class's **all sections (merit)**, by rank or division-wise), Exam,
    Subject; the note above the sheet says what to check (withheld finals, marks not entered).
    **Download**: PDF (paper, way round, fit to width) or Excel, this section or every section.
+   **Reports ▾** (each downloads the same way; a count opens the students it stands for):
+   - **Result summary**: passed, compartment, failed, absent, not entered, pass %; failed / absent /
+     on leave in 1, 2 … subjects with who.
+   - **Analysis**: per subject (each language of a slot apart) the students in each % band, the
+     cumulative counts, highest, lowest, average and passing % (bands set in step 6).
+   - **Entry status**: per subject and exam, entered of how many, the teacher and who is pending; a
+     class's all sections as a grid of the % entered.
+   - **Toppers**: the top 3 / 5 / 10 (passed), each section's top 3 in a class, every subject's topper
+     (full marks marked).
+   - **Teacher-wise**: each subject teacher's sections: average %, pass %, highest, failed.
+   - **At-risk**: failing (high), compartment (medium), borderline subjects or absent (watch), with a
+     margin of 5 or 10 over the pass %; counts by subject.
+   - **Failing students**: each failing subject with its %, NIL where nobody fails.
+   - **Compare sections** (a class's all sections): each subject's average %, pass % and highest by
+     section and for the class, the best section marked ▲; overall figures.
 3. **Lock** pins a register: saving it then makes its next version (a draft); **Versions** restores an
    old one as a new register; **Delete** sends a draft to the bin (**Deleted** brings it back);
    **Copy** makes one for other classes.

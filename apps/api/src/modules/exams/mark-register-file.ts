@@ -100,6 +100,9 @@ export async function registerPdf(
   const [W, H] = p.orientation === 'landscape' ? [b, a] : [a, b];
   const usable = W - 2 * M;
 
+  let page: PDFPage | null = null;
+  let y = 0;
+  let lastPlace: string | null = null;
   for (const sheet of sheets) {
     const shares = sheet.widths.reduce((x, y) => x + y, 0) || 1;
     const unit = usable / shares;
@@ -116,13 +119,13 @@ export async function registerPdf(
       Array.from({ length: r }, (_, i) => rowH(i)).reduce((a, b) => a + b, 0);
     const headH = rowTop(headRows);
 
-    let page: PDFPage = doc.addPage([W, H]);
-    let y = 0;
     const letterhead = () => {
+      const pg = page;
+      if (!pg) return 0;
       let top = H - M;
       if (logo) {
         const s = Math.min(40 / logo.height, 70 / logo.width);
-        page.drawImage(logo, {
+        pg.drawImage(logo, {
           x: M,
           y: top - logo.height * s,
           width: logo.width * s,
@@ -131,7 +134,7 @@ export async function registerPdf(
       }
       const centre = (text: string, font: PDFFont, sz: number) => {
         const t = clip(font, text, sz, usable - 160);
-        page.drawText(t, {
+        pg.drawText(t, {
           x: W / 2 - font.widthOfTextAtSize(t, sz) / 2,
           y: top - sz,
           size: sz,
@@ -161,6 +164,7 @@ export async function registerPdf(
         lines?: string[];
       },
     ) => {
+      if (!page) return;
       if (opts.bg)
         page.drawRectangle({ x: x0, y: yTop - h, width: x1 - x0, height: h, color: opts.bg });
       page.drawRectangle({
@@ -189,8 +193,9 @@ export async function registerPdf(
         const x1 = xs[g.col + (g.cell.span ?? 1)]!;
         const h = rowTop(g.row + (g.cell.rows ?? 1)) - rowTop(g.row);
         const words = g.cell.t.split(' (');
+        // the name over its maximum, in the columns' two-line row only
         const lines =
-          words.length > 1 && (g.cell.span ?? 1) === 1
+          words.length > 1 && (g.cell.span ?? 1) === 1 && headRows > 1 && g.row === headRows - 1
             ? [words[0]!, `(${words.slice(1).join(' (')}`]
             : [g.cell.t];
         drawCell(g.cell.t, x0, x1, top - rowTop(g.row), h, {
@@ -202,15 +207,33 @@ export async function registerPdf(
       }
       y = top - headH;
     };
-    y = letterhead();
+    const fresh = () => {
+      page = doc.addPage([W, H]);
+      y = letterhead();
+    };
+    // a report's next table of the same place follows on the page (a new page when it is full)
+    const titleH = sheet.title ? 16 : 0;
+    if (!page || !sheet.title || sheet.place !== lastPlace || y - titleH - headH - lineH * 2 < M)
+      fresh();
+    else y -= 10;
+    lastPlace = sheet.place;
+    if (sheet.title && page) {
+      (page as PDFPage).drawText(clip(bold, sheet.title, 10, usable), {
+        x: M,
+        y: y - 11,
+        size: 10,
+        font: bold,
+        color: INK,
+      });
+      y -= titleH;
+    }
     header();
     const rows = [...sheet.body.map((r) => r.cells), ...(sheet.foot ? [sheet.foot] : [])];
     rows.forEach((cells, ri) => {
       const n = Math.max(1, ...cells.map((c) => (c.lines ?? c.t.split('\n')).length));
       const h = n * lineH + 3;
       if (y - h < M) {
-        page = doc.addPage([W, H]);
-        y = letterhead();
+        fresh();
         header();
       }
       const isFoot = sheet.foot !== null && ri === rows.length - 1;
@@ -239,16 +262,24 @@ function excelValue(t: string): { v: string | number; fmt?: string } {
 export async function registerXlsx(sheets: Sheet[], meta: RegisterFileMeta): Promise<Buffer> {
   const wb = new ExcelJS.Workbook();
   const used = new Set<string>();
+  // a worksheet per place; a report's tables one under another, each under its title
+  const places: Sheet[][] = [];
   for (const sheet of sheets) {
-    let name = sheet.place.replace(/[\\/?*[\]:]/g, '-').slice(0, 28) || 'Register';
+    const last = places[places.length - 1];
+    if (last && sheet.title && last[0]!.place === sheet.place) last.push(sheet);
+    else places.push([sheet]);
+  }
+  const thin = { style: 'thin' as const, color: { argb: 'FF8C9199' } };
+  const box = { top: thin, left: thin, bottom: thin, right: thin };
+  for (const group of places) {
+    const place = group[0]!.place;
+    let name = place.replace(/[\\/?*[\]:]/g, '-').slice(0, 28) || 'Register';
     while (used.has(name)) name = `${name.slice(0, 26)}-${String(used.size)}`;
     used.add(name);
     const ws = wb.addWorksheet(name, {
       pageSetup: { orientation: 'landscape', fitToPage: true, fitToWidth: 1, fitToHeight: 0 },
     });
-    const cols = sheet.widths.length;
-    const thin = { style: 'thin' as const, color: { argb: 'FF8C9199' } };
-    const box = { top: thin, left: thin, bottom: thin, right: thin };
+    const cols = Math.max(...group.map((x) => x.widths.length), 1);
     // the letterhead: logo on the left, the lines centred over the table
     if (meta.logo && /^image\/(png|jpeg)$/.test(meta.logo.contentType)) {
       const id = wb.addImage({
@@ -261,59 +292,78 @@ export async function registerXlsx(sheets: Sheet[], meta: RegisterFileMeta): Pro
       [meta.school, true, 14],
       [meta.address, false, 10],
       [meta.label, true, 11],
-      [`Class: ${sheet.place} · Generated on: ${meta.generatedOn}`, false, 10],
+      [`Class: ${place} · Generated on: ${meta.generatedOn}`, false, 10],
     ];
     for (const [text, isBold, size] of lines) {
       const r = ws.addRow([text]);
-      ws.mergeCells(r.number, 1, r.number, Math.max(cols, 1));
+      ws.mergeCells(r.number, 1, r.number, cols);
       r.getCell(1).alignment = { horizontal: 'center' };
       r.getCell(1).font = { bold: isBold, size };
     }
-    const first = ws.rowCount + 1;
-    for (let i = 0; i < sheet.head.length; i += 1) ws.addRow([]);
-    for (const g of grid(sheet.head)) {
-      const r = first + g.row;
-      const c = g.col + 1;
-      const cell = ws.getCell(r, c);
-      cell.value = g.cell.t;
-      cell.font = { bold: true };
-      cell.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
-      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE6E8EC' } };
-      const r2 = r + (g.cell.rows ?? 1) - 1;
-      const c2 = c + (g.cell.span ?? 1) - 1;
-      if (r2 > r || c2 > c) ws.mergeCells(r, c, r2, c2);
-    }
-    for (let r = first; r < first + sheet.head.length; r += 1)
-      for (let c = 1; c <= cols; c += 1) ws.getCell(r, c).border = box;
-    const rows = [...sheet.body.map((x) => x.cells), ...(sheet.foot ? [sheet.foot] : [])];
-    for (const cells of rows) {
-      const row = ws.addRow([]);
-      cells.forEach((c, i) => {
-        const cell = row.getCell(i + 1);
-        const x = c.text || c.lines ? { v: c.t } : excelValue(c.t);
-        cell.value = x.v;
-        if (x.fmt) cell.numFmt = x.fmt;
-        cell.border = box;
-        cell.alignment = {
-          horizontal: c.text ? 'left' : 'right',
-          vertical: 'middle',
-          wrapText: Boolean(c.lines),
-        };
-        if (c.tone === 'calc' || c.tone === 'final')
-          cell.fill = {
-            type: 'pattern',
-            pattern: 'solid',
-            fgColor: { argb: c.tone === 'calc' ? 'FFEBF7ED' : 'FFFFF5E0' },
+    let firstHead = 0;
+    for (const [n, sheet] of group.entries()) {
+      if (sheet.title) {
+        if (n > 0) ws.addRow([]);
+        const t = ws.addRow([sheet.title]);
+        t.getCell(1).font = { bold: true, size: 11 };
+      }
+      const first = ws.rowCount + 1;
+      if (n === 0) firstHead = first;
+      for (let i = 0; i < sheet.head.length; i += 1) ws.addRow([]);
+      for (const g of grid(sheet.head)) {
+        const r = first + g.row;
+        const c = g.col + 1;
+        const cell = ws.getCell(r, c);
+        cell.value = g.cell.t;
+        cell.font = { bold: true };
+        cell.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
+        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE6E8EC' } };
+        const r2 = r + (g.cell.rows ?? 1) - 1;
+        const c2 = c + (g.cell.span ?? 1) - 1;
+        if (r2 > r || c2 > c) ws.mergeCells(r, c, r2, c2);
+      }
+      for (let r = first; r < first + sheet.head.length; r += 1)
+        for (let c = 1; c <= sheet.widths.length; c += 1) ws.getCell(r, c).border = box;
+      const rows = [...sheet.body.map((x) => x.cells), ...(sheet.foot ? [sheet.foot] : [])];
+      for (const cells of rows) {
+        const row = ws.addRow([]);
+        cells.forEach((c, i) => {
+          const cell = row.getCell(i + 1);
+          const x = c.text || c.lines ? { v: c.t } : excelValue(c.t);
+          cell.value = x.v;
+          if (x.fmt) cell.numFmt = x.fmt;
+          cell.border = box;
+          cell.alignment = {
+            horizontal: c.text ? 'left' : 'right',
+            vertical: 'middle',
+            wrapText: Boolean(c.lines) || (c.text && c.t.length > 40),
           };
-        if (c.tone === 'star' || c.tone === 'code' || c.tone === 'warn')
-          cell.font = { color: { argb: 'FFBF1A1A' } };
-        if (c.tone === 'final') cell.font = { ...(cell.font ?? {}), bold: true };
-      });
+          if (c.tone === 'calc' || c.tone === 'final')
+            cell.fill = {
+              type: 'pattern',
+              pattern: 'solid',
+              fgColor: { argb: c.tone === 'calc' ? 'FFEBF7ED' : 'FFFFF5E0' },
+            };
+          if (c.tone === 'star' || c.tone === 'code' || c.tone === 'warn')
+            cell.font = { color: { argb: 'FFBF1A1A' } };
+          if (c.tone === 'final') cell.font = { ...(cell.font ?? {}), bold: true };
+        });
+      }
     }
-    sheet.widths.forEach((w, i) => {
-      ws.getColumn(i + 1).width = Math.max(6, Math.round(w * 7));
-    });
-    ws.views = [{ state: 'frozen', xSplit: sheet.frozen, ySplit: first + sheet.head.length - 1 }];
+    for (let i = 0; i < cols; i += 1)
+      ws.getColumn(i + 1).width = Math.max(
+        6,
+        Math.round(Math.max(...group.map((x) => x.widths[i] ?? 0)) * 7),
+      );
+    // the register (one table): its heading rows and the student stay in view
+    if (group.length === 1 && !group[0]!.title)
+      ws.views = [
+        {
+          state: 'frozen',
+          xSplit: group[0]!.frozen,
+          ySplit: firstHead + group[0]!.head.length - 1,
+        },
+      ];
   }
   return Buffer.from(await wb.xlsx.writeBuffer());
 }

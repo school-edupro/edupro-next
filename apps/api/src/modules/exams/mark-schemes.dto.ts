@@ -237,6 +237,32 @@ export const RegisterQuerySchema = z.object({
   subject: Token.optional(),
   /** a file of every section, a section a page (or a sheet) */
   all: Flag.optional(),
+  /** the register, or one of its reports (docs/design/68, phase 2) */
+  report: z
+    .enum([
+      'register',
+      'summary',
+      'analysis',
+      'entry',
+      'toppers',
+      'teacher',
+      'risk',
+      'failing',
+      'compare',
+    ])
+    .default('register'),
+  /** Toppers: the top N */
+  top: z.coerce
+    .number()
+    .int()
+    .refine((n) => [3, 5, 10].includes(n), '3, 5 or 10')
+    .default(3),
+  /** At-risk: how far above the pass % is borderline */
+  margin: z.coerce
+    .number()
+    .int()
+    .refine((n) => [5, 10].includes(n), '5 or 10')
+    .default(5),
   paper: z.enum(['A4', 'A3', 'Legal', 'Letter']).default('Legal'),
   orientation: z.enum(['portrait', 'landscape']).default('landscape'),
   fit: Flag.default(true),

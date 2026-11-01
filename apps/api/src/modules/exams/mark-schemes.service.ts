@@ -1,7 +1,9 @@
 import { Inject, Injectable } from '@nestjs/common';
 import {
+  buildReport,
   CBSE_8,
   computeRegister,
+  REPORTS,
   fromV1,
   isRegisterDef,
   orderStudents,
@@ -1564,6 +1566,20 @@ export class MarkSchemesService {
   }
 
   // ---- Run --------------------------------------------------------------------------------------
+  /** each section's subject teachers: `${sectionId}|${subjectId}` → their names */
+  private async teachersOf(c: PoolClient, yearId: string, sectionIds: string[]) {
+    const r = await c.query<{ section: string; subject: string; name: string }>(
+      `SELECT ta.class_section_id::text AS section, ta.subject_id::text AS subject,
+              string_agg(DISTINCT COALESCE(e.display_name, concat_ws(' ', e.first_name, e.last_name)), ', ') AS name
+         FROM teacher_assignments ta JOIN employees e ON e.id = ta.employee_id
+        WHERE ta.academic_year_id = $1 AND ta.class_section_id = ANY($2::bigint[]) AND ta.kind = 'subject_teacher'
+          AND ta.valid_to IS NULL AND ta.subject_id IS NOT NULL
+        GROUP BY 1, 2`,
+      [yearId, sectionIds],
+    );
+    return Object.fromEntries(r.rows.map((x) => [`${x.section}|${x.subject}`, x.name]));
+  }
+
   private async letterhead(c: PoolClient) {
     const sc = await c.query<{
       name: string;
@@ -1697,6 +1713,7 @@ export class MarkSchemesService {
       const sheets: Sheet[] = [];
       let firstRows: RegStudentResult[] = [];
       let firstOrder: string[] = [];
+      let firstSheets = 0;
       const notes: string[] = [];
       const counts: Record<string, number> = {};
       for (const p of places) {
@@ -1721,7 +1738,8 @@ export class MarkSchemesService {
               }))
               .sort((a, b) => a.at - b.at || a.i - b.i)
               .map((x) => x.key);
-        let rows = await this.work(c, yearId, def, p.classId, p.sections, exam);
+        const students = await this.load(c, yearId, def, p.classId, p.sections);
+        let rows = computeRegister(def, students, { exam });
         for (const r of rows) counts[r.result] = (counts[r.result] ?? 0) + 1;
         rows =
           p.merit && q.view === 'division'
@@ -1731,16 +1749,39 @@ export class MarkSchemesService {
           firstRows = rows;
           firstOrder = order;
         }
-        sheets.push(
-          buildSheet(def, rows, {
+        if (q.report === 'register')
+          sheets.push(
+            buildSheet(def, rows, {
+              place: p.place,
+              merit: p.merit,
+              division: q.view === 'division',
+              subject: q.subject,
+              order,
+              titles,
+            }),
+          );
+        else {
+          // a report (docs/design/68, phase 2): its tables, one after another
+          const teachers =
+            q.report === 'entry' || q.report === 'teacher'
+              ? await this.teachersOf(c, yearId, [...new Set(students.map((x) => x.sectionId))])
+              : undefined;
+          const only = q.subject ? order.filter((k) => k === q.subject) : order;
+          for (const b of buildReport(q.report, {
+            def,
+            rows,
+            students,
             place: p.place,
             merit: p.merit,
-            division: q.view === 'division',
-            subject: q.subject,
-            order,
+            order: only,
             titles,
-          }),
-        );
+            teachers,
+            top: q.top,
+            margin: q.margin,
+          }))
+            sheets.push(b.sheet);
+          if (!firstSheets) firstSheets = sheets.length;
+        }
         if (q.format === 'json') {
           const none = order.filter((k) => !rows.some((r) => r.subjects[k]));
           if (none.length)
@@ -1771,7 +1812,6 @@ export class MarkSchemesService {
                 .map((r) => r.name)
                 .join(', ')}${gaps.length > 8 ? ' …' : ''}): no final for them yet.`,
             );
-          const students = await this.load(c, yearId, def, p.classId, p.sections);
           const empty = def.exams.filter(
             (e) => !students.some((st) => st.subjects.some((x) => x.marks[e.key]?.entered)),
           );
@@ -1785,6 +1825,7 @@ export class MarkSchemesService {
         def,
         sections: sections.rows,
         sheets,
+        firstSheets,
         rows: firstRows,
         order: firstOrder,
         notes,
@@ -1832,7 +1873,17 @@ export class MarkSchemesService {
         exam: out.exam ?? null,
         examName,
         subjects: out.def.subjects.map((x) => ({ key: x.key, title: out.titles[x.key] })),
-        sheet: out.sheets[0] ?? null,
+        report: q.report,
+        /** the reports of the Run menu (Compare sections: a class's all sections) */
+        reports: REPORTS.map((x) => ({ kind: x.kind, label: x.label, merit: Boolean(x.merit) })),
+        sheet: q.report === 'register' ? (out.sheets[0] ?? null) : null,
+        /** a report's tables (of the place shown) */
+        blocks:
+          q.report === 'register'
+            ? []
+            : out.sheets
+                .slice(0, out.firstSheets || out.sheets.length)
+                .map((x) => ({ title: x.title ?? '', sheet: x })),
         /** the worked-out students, in the sheet's order: each subject's values, total, % and status */
         rows: out.rows.map((r) => ({
           ...r,
@@ -1853,14 +1904,17 @@ export class MarkSchemesService {
       } catch {
         logo = null;
       }
+    const report = REPORTS.find((x) => x.kind === q.report);
     const label = [
-      q.subject
-        ? `Subject sheet · ${out.titles[q.subject] ?? q.subject}`
-        : q.view === 'division'
-          ? 'Merit List (division-wise)'
-          : (q.view === 'merit' || q.classId) && !q.all
-            ? 'Merit List'
-            : 'Mark Register',
+      report
+        ? `${report.label}${q.subject ? ` · ${out.titles[q.subject] ?? q.subject}` : ''}`
+        : q.subject
+          ? `Subject sheet · ${out.titles[q.subject] ?? q.subject}`
+          : q.view === 'division'
+            ? 'Merit List (division-wise)'
+            : (q.view === 'merit' || q.classId) && !q.all
+              ? 'Merit List'
+              : 'Mark Register',
       examName,
     ]
       .filter(Boolean)
@@ -1873,7 +1927,7 @@ export class MarkSchemesService {
       generatedOn: this.generatedOn(),
     };
     const stamp =
-      `${out.s.name}-${q.all ? 'all' : (out.sheets[0]?.place ?? '')}${out.exam ? `-${out.exam}` : ''}${q.subject ? `-${q.subject}` : ''}`
+      `${out.s.name}-${q.report === 'register' ? '' : `${q.report}-`}${q.all ? 'all' : (out.sheets[0]?.place ?? '')}${out.exam ? `-${out.exam}` : ''}${q.subject ? `-${q.subject}` : ''}`
         .toLowerCase()
         .replace(/[^\w.-]+/g, '-');
     if (q.format === 'xlsx')

@@ -15,12 +15,17 @@ export function RegisterDownloads({
   view,
   exam,
   subject,
+  report = 'register',
+  extra = {},
 }: {
   id: string;
   place: string;
   view: string;
   exam: string | null;
   subject: string | null;
+  /** a report instead of the register (docs/design/68, phase 2) */
+  report?: string;
+  extra?: Record<string, string>;
 }) {
   const [open, setOpen] = useState<null | 'one' | 'all'>(null);
   const [paper, setPaper] = useState<Paper>('Legal');
@@ -41,12 +46,14 @@ export function RegisterDownloads({
     }
   }, []);
   const where = place ? place.replace(':', '') : 'first';
-  const file = (format: 'pdf' | 'xlsx', all: boolean, extra: Record<string, string> = {}) => {
+  const file = (format: 'pdf' | 'xlsx', all: boolean, more: Record<string, string> = {}) => {
     const q = new URLSearchParams({
       ...(exam ? { exam } : {}),
       ...(subject ? { subject } : {}),
       ...(all ? { all: '1' } : {}),
+      ...(report !== 'register' ? { report } : {}),
       ...extra,
+      ...more,
     });
     return `/api/exam-register/${id}/${format}/${where}/${view}?${q.toString()}`;
   };
