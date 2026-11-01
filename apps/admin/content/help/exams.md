@@ -171,8 +171,11 @@ see who submitted or verified it and to submit, verify, send back or reopen it.
      The table shows, per class, whether it is ready, when it was published and how many messages went.
 4. Families see their child's published cards in the parent app (**Results**): **View report card**
    opens the card at once (to read, print or save), and **Report card PDF** also makes the PDF in the
-   background (the page shows it by itself when it is ready; the workers make it). A card held by the
-   school, or withheld while a fee is due, says so instead of the buttons.
+   background (the page shows it by itself when it is ready; the workers make it; asking again while it
+   is being made does not queue another). If the PDF takes longer than about 45 seconds the page offers
+   **Print / Save as PDF**, which opens the card with the browser's print dialog (Save as PDF makes the
+   file at once); the card page has the same button. A card held by the school, or withheld while a fee
+   is due, says so instead of the buttons.
 5. **Insights → Results analytics**: pass % and mean by class and section, weakest subjects.
 6. **Exams → open exam → Reports**: the section-wise subject analysis, mark ranges (the class's grade
    scale, or your own ranges), toppers (top N in the class or section, at or above / below a %, or a

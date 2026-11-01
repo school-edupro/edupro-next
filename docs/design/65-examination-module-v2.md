@@ -543,3 +543,8 @@ exam cards print a **new ready-made test slip** by default; families see **every
   worked out today from `mart.fee_dues`). The admin Preview took the release's first design for every
   student; it now uses `GET /exams/report-cards/releases/:id/students/:studentId/preview`, the design of
   the student's class (class → band → band's first active, as the worker).
+- Fix (1 Nov, "Report card PDF not working" in the parent app): no workers were running locally, so every
+  request stayed queued and each click queued another. Now a request while the same PDF is queued or
+  being made returns that export; after 45 s waiting the notice offers **Print / Save as PDF** (the card
+  page with `?print=1`: `public/rc-print.js` adds a Print / Save as PDF bar, hidden in print, and opens
+  the print dialog; a file so the CSP allows it). The worker-made PDF still appears by itself when ready.

@@ -949,6 +949,19 @@ describe('examinations v2 (e2e)', () => {
       (await call(parent, 'GET', `/exams/mine/report-cards/${pt.json().id}/${student.Chitra}/view`))
         .statusCode,
     ).toBe(404);
+    // the PDF asked twice while it is still being made: the same one, not a second in the queue
+    const pdf1 = await call(
+      parent,
+      'POST',
+      `/exams/mine/report-cards/${pt.json().id}/${student.Asha}/pdf`,
+    );
+    const pdf2 = await call(
+      parent,
+      'POST',
+      `/exams/mine/report-cards/${pt.json().id}/${student.Asha}/pdf`,
+    );
+    expect(pdf1.statusCode).toBe(201);
+    expect(pdf2.json().exportId).toBe(pdf1.json().exportId);
     // the school's preview of one student: the design of the student's class
     const pre = await call(
       admin,

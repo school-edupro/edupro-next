@@ -68,7 +68,12 @@ export default async function ResultsPage({
   const exportStatus = sp.export
     ? await bff.api
         .fetch<{
-          export: { id: string; status: string };
+          export: {
+            id: string;
+            status: string;
+            requestedAt: string;
+            params: { releaseId?: string; studentId?: string };
+          };
           download: { url: string; saveUrl?: string } | null;
         }>(`/exams/mine/exports/${sp.export}`)
         .catch(() => null)
@@ -141,9 +146,28 @@ export default async function ResultsPage({
             </span>
           ) : (
             <>
-              {t(
-                lang,
-                'The report card PDF is being prepared; it appears here by itself. Meanwhile, View report card shows it at once.',
+              {Date.now() - Date.parse(exportStatus.export.requestedAt) > 45_000 ? (
+                <>
+                  {t(
+                    lang,
+                    'The PDF is taking longer than usual. Open the card now and use Print, then Save as PDF; the PDF still appears here when it is ready.',
+                  )}{' '}
+                  {exportStatus.export.params.releaseId && exportStatus.export.params.studentId ? (
+                    <a
+                      className="ep-btn ep-btn--primary ep-btn--sm"
+                      href={`/api/report-card/${exportStatus.export.params.releaseId}/${exportStatus.export.params.studentId}?print=1`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
+                      {t(lang, 'Print / Save as PDF')}
+                    </a>
+                  ) : null}
+                </>
+              ) : (
+                t(
+                  lang,
+                  'The report card PDF is being prepared; it appears here by itself. Meanwhile, View report card shows it at once.',
+                )
               )}
               <ExportWatcher id={exportStatus.export.id} url={null} />
             </>

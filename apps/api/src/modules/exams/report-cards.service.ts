@@ -1180,9 +1180,19 @@ export class ReportCardsService {
     const v = await this.viewer.resolve(ctx, 'exams.family.view');
     if (v.kind !== 'family' || !v.students.some((s) => s.id === studentId))
       throw new DomainError('not-found', 'Report card not found', { status: 404 });
-    const info = await this.db.tenant(requireTenant(ctx), (c) =>
-      this.familyCard(c, releaseId, studentId),
-    );
+    const { rel: info, pending } = await this.db.tenant(requireTenant(ctx), async (c) => {
+      const rel = await this.familyCard(c, releaseId, studentId);
+      // asked again while the PDF is still being made: the same one, not another in the queue
+      const p = await c.query<{ id: string; status: string }>(
+        `SELECT id::text, status::text FROM exports
+          WHERE dataset = 'report_card' AND requested_by = app.current_user_id() AND status IN ('queued', 'running')
+            AND params->>'releaseId' = $1 AND params->>'studentId' = $2
+          ORDER BY id DESC LIMIT 1`,
+        [releaseId, studentId],
+      );
+      return { rel, pending: p.rows[0] ?? null };
+    });
+    if (pending) return { exportId: pending.id, status: pending.status };
     const exp = await this.reports.createRenderedForOwner(
       ctx,
       {

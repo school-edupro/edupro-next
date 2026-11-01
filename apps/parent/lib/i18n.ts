@@ -659,6 +659,9 @@ const DICT: Record<string, string> = {
   'No results released yet.': 'अभी कोई परिणाम जारी नहीं।',
   'Report card PDF': 'रिपोर्ट कार्ड PDF',
   'View report card': 'रिपोर्ट कार्ड देखें',
+  'Print / Save as PDF': 'प्रिंट / PDF में सहेजें',
+  'The PDF is taking longer than usual. Open the card now and use Print, then Save as PDF; the PDF still appears here when it is ready.':
+    'PDF बनने में सामान्य से अधिक समय लग रहा है। अभी कार्ड खोलें और प्रिंट में "PDF में सहेजें" चुनें; PDF तैयार होने पर यहाँ भी दिखेगी।',
   'The report card PDF is being prepared; it appears here by itself. Meanwhile, View report card shows it at once.':
     'रिपोर्ट कार्ड PDF बन रही है; तैयार होते ही यहाँ दिखेगी। तब तक "रिपोर्ट कार्ड देखें" से तुरंत देखें।',
   'The school has held this report card: please contact the class teacher or the office.':
