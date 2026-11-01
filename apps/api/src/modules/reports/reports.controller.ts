@@ -3,7 +3,7 @@ import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { DATASETS, mayUseDataset, rendererOrNull } from '@edupro/db';
 import { RequirePermission } from '../../common/access/require-permission.decorator';
 import { DomainError } from '../../common/errors/domain-error';
-import { ReqCtx, requireTenant, type RequestContext } from '../../common/http/request-context';
+import { ReqCtx, type RequestContext } from '../../common/http/request-context';
 import { CreateExportDto, ListExportsQueryDto, RowsQueryDto } from './reports.dto';
 import { REPORTS } from './reports.permissions';
 import { ReportsService } from './reports.service';
@@ -42,9 +42,9 @@ export class ReportsController {
   @Get('exports')
   @RequirePermission(REPORTS.exportView)
   async list(@ReqCtx() ctx: RequestContext, @Query() q: ListExportsQueryDto) {
-    // Sprint 14: families (no export.create) see their own exports only
+    // the exports the caller may open (see status); families (no export.create) their own only
     const { rows, total } = await this.reports.list(
-      requireTenant(ctx),
+      ctx,
       q,
       !ctx.permissions?.has(REPORTS.exportCreate),
     );
@@ -73,7 +73,10 @@ export class ReportsController {
   }
 
   @Get('exports/:id')
-  @ApiOperation({ summary: 'Export status and, when ready, a signed download URL' })
+  @ApiOperation({
+    summary:
+      'Export status and, when ready, a signed download URL: the requester, a holder of the dataset permission, or for a report card whoever sees all its pupils',
+  })
   @RequirePermission(REPORTS.exportView)
   status(@ReqCtx() ctx: RequestContext, @Param('id') id: string) {
     return this.reports.status(ctx, id);

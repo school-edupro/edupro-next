@@ -209,7 +209,7 @@ export class DsrService {
       throw new DomainError('not-found', 'No report is available for this request', {
         status: 404,
       });
-    return this.reports.status(ctx, row.export_id);
+    return this.reports.statusForOwner(ctx, row.export_id);
   }
 
   // ---- office ---------------------------------------------------------------------------------------

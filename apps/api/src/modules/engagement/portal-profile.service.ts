@@ -766,7 +766,7 @@ export class PortalProfileService {
       ]),
     );
     if (!own.rowCount) throw new DomainError('not-found', 'Export not found', { status: 404 });
-    return this.reports.status(ctx, exportId);
+    return this.reports.statusForOwner(ctx, exportId);
   }
 
   // ---- approvals -----------------------------------------------------------------------------------

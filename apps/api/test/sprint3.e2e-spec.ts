@@ -232,6 +232,7 @@ describe('comms, reports, audit and jobs (e2e)', () => {
           .sort(),
       ).toEqual([
         // Sprint 13 added the department report-centre datasets; the admin holds every permission
+        'admission_enquiries',
         'admission_fee_collection',
         'admissions_funnel',
         'assignments',
@@ -245,6 +246,8 @@ describe('comms, reports, audit and jobs (e2e)', () => {
         'comms_failures',
         'comms_monthly_usage',
         'employees',
+        'exam_marks',
+        'exam_results',
         'fee_cheque_bounce',
         'fee_day_book',
         'fee_defaulters',
@@ -261,6 +264,7 @@ describe('comms, reports, audit and jobs (e2e)', () => {
         'parent_queries',
         'settlement_lines',
         'substitutions',
+        'term_results',
         'transport_requests',
         'transport_riders',
         'transport_vehicle_logs',
@@ -282,9 +286,12 @@ describe('comms, reports, audit and jobs (e2e)', () => {
         'board_results',
         'class_sections',
         'classes',
+        'exam_marks',
+        'exam_results',
         'lesson_plans',
         'parent_queries',
         'substitutions',
+        'term_results',
       ]);
       const refused = await inject({
         method: 'POST',

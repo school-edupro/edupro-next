@@ -34,6 +34,16 @@ describe('examinations v2 (e2e)', () => {
   const subject: Record<string, string> = {};
   const student: Record<string, string> = {};
   const scale: Record<string, string> = {};
+  /** what the report-card classes test leaves for the export test after it */
+  const rc = {} as {
+    ct: SeededUser;
+    co: SeededUser;
+    far: SeededUser;
+    secB: string;
+    releaseId: string;
+    mine: string;
+    theirs: string;
+  };
   const h = (u: SeededUser) => headersFor(u.sub, school.id);
   const call = (u: SeededUser, method: 'GET' | 'POST' | 'PUT', url: string, json?: unknown) =>
     inject({ method, url, headers: h(u), ...(json === undefined ? {} : { json }) });
@@ -1132,5 +1142,76 @@ describe('examinations v2 (e2e)', () => {
       ).find((x) => x.name === 'Periodic Test 1')!.students;
     expect(await countOf(ct)).toBe(4);
     expect(await countOf(admin)).toBe(5);
+    Object.assign(rc, {
+      ct,
+      co,
+      far,
+      secB,
+      releaseId: pt.id,
+      mine: mine.json().exportId as string,
+      theirs: theirs.json().exportId as string,
+    });
+  });
+
+  it('an export opens for its requester, a holder of its dataset permission, or (a report card) whoever sees all its pupils', async () => {
+    const { ct, co, far, secB, releaseId, mine, theirs } = rc;
+    const url = `/exams/report-cards/releases/${releaseId}`;
+    const made = async (u: SeededUser, body: Record<string, unknown>) => {
+      const r = await call(u, 'POST', `${url}/generate`, body);
+      expect(r.statusCode).toBe(201);
+      return r.json().exportId as string;
+    };
+    // a fee report the class teacher may not run; Esha's own card (XI-B); the whole of XI; XI-A
+    const fee = await call(admin, 'POST', '/reports/exports', {
+      dataset: 'fee_day_book',
+      format: 'xlsx',
+      params: {},
+    });
+    expect(fee.statusCode).toBe(201);
+    const feeId = fee.json().id as string;
+    const esha = await made(co, { classSectionId: secB, admissionNo: `${s}-9` });
+    const whole = await made(admin, { classId, range: 'all' });
+    const xiA = await made(admin, { classSectionId: section, range: 'all' });
+    const opens = async (u: SeededUser, id: string) =>
+      (await call(u, 'GET', `/reports/exports/${id}`)).statusCode;
+    for (const [who, u, id, code] of [
+      ['admin', admin, feeId, 200],
+      // the class teacher holds the report-card permission, yet opens only cards of their section
+      ['ct', ct, feeId, 404],
+      ['ct', ct, mine, 200],
+      ['ct', ct, xiA, 200],
+      ['ct', ct, theirs, 404],
+      ['ct', ct, esha, 404],
+      ['ct', ct, whole, 404],
+      ['co', co, esha, 200],
+      ['co', co, whole, 200],
+      ['co', co, feeId, 404],
+      ['far', far, mine, 404],
+      ['far', far, whole, 404],
+      ['admin', admin, theirs, 200],
+      ['admin', admin, esha, 200],
+    ] as const)
+      expect({ who, id, code: await opens(u, id) }).toEqual({ who, id, code });
+    // the export list keeps to the same
+    const listed = async (u: SeededUser) =>
+      (
+        (await call(u, 'GET', '/reports/exports?mine=false&size=200')).json().data as Array<{
+          id: string;
+        }>
+      ).map((x) => x.id);
+    const ctSees = await listed(ct);
+    expect(ctSees).toEqual(expect.arrayContaining([mine, xiA]));
+    for (const id of [feeId, theirs, esha, whole]) expect(ctSees).not.toContain(id);
+    expect(await listed(co)).toEqual(expect.arrayContaining([mine, xiA, theirs, esha, whole]));
+    expect(await listed(co)).not.toContain(feeId);
+    expect(await listed(admin)).toEqual(
+      expect.arrayContaining([feeId, mine, xiA, theirs, esha, whole]),
+    );
+    // the Download Log agrees with the export
+    const log = (
+      (await call(ct, 'GET', `${url}/exports`)).json().data as Array<{ id: string }>
+    ).map((x) => x.id);
+    expect(log).toEqual(expect.arrayContaining([mine, xiA]));
+    for (const id of [theirs, esha, whole]) expect(log).not.toContain(id);
   });
 });

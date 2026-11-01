@@ -1,6 +1,8 @@
 import { Injectable } from '@nestjs/common';
 import {
+  DATASETS,
   QUEUES,
+  RENDERERS,
   datasetOrNull,
   rendererOrNull,
   type PoolClient,
@@ -14,6 +16,7 @@ import { DomainError } from '../../common/errors/domain-error';
 import { requireTenant, type RequestContext } from '../../common/http/request-context';
 import { OutboxService } from '../../common/jobs/outbox.service';
 import { generatedOn, registerFile, schoolHead } from '../attendance/register-file';
+import { CARD_DATASETS, cardExportInSight, cardScopeOf } from '../exams/card-scope';
 import { FilesService } from '../files/files.service';
 import type { CreateExportDto, ExportFormat, ListExportsQueryDto } from './reports.dto';
 
@@ -60,6 +63,21 @@ interface ExportDbRow {
 const SELECT = `SELECT e.id::text, e.dataset, e.format, e.title, e.params, e.status, e.file_id::text, e.row_count, e.error,
          e.requested_by::text, u.display_name AS requested_by_name, e.requested_at, e.started_at, e.finished_at, e.expires_at, e.download_count
     FROM exports e LEFT JOIN users u ON u.id = e.requested_by`;
+
+/**
+ * SQL: the caller may open export `e` (1 Nov 2026). Whoever asked for it; whoever holds its dataset's
+ * permission ($2: those datasets), but a builder report or student profile with full ID numbers only
+ * if they view sensitive data ($4); a report card whoever sees every pupil of it on Report cards
+ * ($3: CardScope sections, NULL for every class): class teachers hold the report-card permission for
+ * their own section only, so it does not open the others'.
+ */
+const OPENABLE =
+  `(e.requested_by = app.current_user_id()
+    OR (e.dataset = ANY($2::text[])
+        AND NOT (e.dataset IN ('report_builder', 'student_profile') AND e.params @> '{"showSensitive": true}' AND NOT $4::boolean))
+    OR (e.dataset IN ('report_card', 'report_card_batch') AND ` +
+  cardExportInSight('$3') +
+  '))';
 
 const iso = (d: Date | null): string | null => (d ? d.toISOString() : null);
 const toRow = (x: ExportDbRow): ExportRow => ({
@@ -375,22 +393,28 @@ export class ReportsService {
     });
   }
 
+  /** The exports the caller may open (OPENABLE), newest first; `mineOnly` keeps to their own. */
   list(
-    tenant: TenantContext,
+    ctx: RequestContext,
     q: ListExportsQueryDto,
     mineOnly = false,
   ): Promise<{ rows: ExportRow[]; total: number }> {
-    return this.db.tenant(tenant, async (c) => {
+    return this.db.tenant(requireTenant(ctx), async (c) => {
       const where =
-        ' WHERE ($1::export_status IS NULL OR e.status = $1::export_status)' +
-        ' AND ($2::boolean = false OR e.requested_by = app.current_user_id())';
-      const params: unknown[] = [q.status ?? null, q.mine === 'true' || mineOnly];
+        ' WHERE ($1::export_status IS NULL OR e.status = $1::export_status) AND ' +
+        OPENABLE +
+        ' AND ($5::boolean = false OR e.requested_by = app.current_user_id())';
+      const params: unknown[] = [
+        q.status ?? null,
+        ...(await this.openableBinds(c, ctx)),
+        q.mine === 'true' || mineOnly,
+      ];
       const total = await c.query<{ n: string }>(
         'SELECT count(*)::text AS n FROM exports e' + where,
         params,
       );
       const r = await c.query<ExportDbRow>(
-        SELECT + where + ' ORDER BY e.requested_at DESC LIMIT $3 OFFSET $4',
+        SELECT + where + ' ORDER BY e.requested_at DESC LIMIT $6 OFFSET $7',
         [...params, q.size, (q.page - 1) * q.size],
       );
       return { rows: r.rows.map(toRow), total: Number(total.rows[0]?.n ?? 0) };
@@ -406,18 +430,43 @@ export class ReportsService {
     return client ? run(client) : this.db.tenant(tenant, run);
   }
 
-  /** Status plus a signed download URL once the file is ready. Each URL issue counts as a download. */
+  /** The values OPENABLE binds as $2-$4 for this caller. */
+  private async openableBinds(
+    c: PoolClient,
+    ctx: RequestContext,
+  ): Promise<[string[], string[] | null, boolean]> {
+    const held = ctx.permissions ?? new Set<string>();
+    const datasets = [...Object.values(DATASETS), ...Object.values(RENDERERS)]
+      .filter((d) => !CARD_DATASETS.includes(d.id) && mayUseDataset(held, d))
+      .map((d) => d.id);
+    const scope = await cardScopeOf(c, ctx);
+    return [datasets, scope.all ? null : scope.sections, held.has('people.sensitive.view')];
+  }
+
+  /**
+   * GET /reports/exports/:id: status and download link of an export the caller may open (OPENABLE);
+   * any other is "not found", so ids cannot be walked through.
+   */
   async status(ctx: RequestContext, id: string) {
+    const open = await this.db.tenant(requireTenant(ctx), async (c) => {
+      const r = await c.query('SELECT 1 FROM exports e WHERE e.id = $1 AND ' + OPENABLE, [
+        id,
+        ...(await this.openableBinds(c, ctx)),
+      ]);
+      return Boolean(r.rowCount);
+    });
+    if (!open) throw new DomainError('not-found', 'Export not found');
+    return this.statusForOwner(ctx, id);
+  }
+
+  /**
+   * Status plus a signed download URL once the file is ready. Each URL issue counts as a download. The
+   * check that the export is the caller's is the caller's (a family's own receipt or report card, the
+   * access report of its own data request), as for createRenderedForOwner.
+   */
+  async statusForOwner(ctx: RequestContext, id: string) {
     const tenant = requireTenant(ctx);
     const row = await this.get(tenant, id);
-    // a builder report run with full ID numbers opens only for its requester or a sensitive-data viewer
-    if (
-      (row.dataset === 'report_builder' || row.dataset === 'student_profile') &&
-      (row.params as { showSensitive?: boolean }).showSensitive &&
-      row.requestedBy !== (tenant.userId ?? null) &&
-      !ctx.permissions?.has('people.sensitive.view')
-    )
-      throw new DomainError('not-found', 'Export not found');
     if (row.status !== 'ready' || !row.fileId) return { export: row, download: null };
     const { download } = await this.files.downloadUrl(ctx, row.fileId);
     await this.db.tenant(tenant, (c) =>
