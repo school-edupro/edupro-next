@@ -986,8 +986,12 @@ export interface SheetCell {
   rows?: number;
   /** text, not a number (left aligned) */
   text?: boolean;
-  /** the students a count stands for (a report: shown on a click) */
-  names?: string[];
+  /** the students a count stands for, as a small table (a report: opened from the count) */
+  drill?: { title: string; cols: string[]; rows: string[][] };
+  /** the link that opens the drill (default: the cell's text) */
+  drillLabel?: string;
+  /** a status after the text (Complete, Partial …) */
+  badge?: { label: string; tone: 'success' | 'warning' | 'danger' | 'neutral' };
   /** centred (a report's counts, #, admission no) */
   center?: boolean;
   /** in bold */

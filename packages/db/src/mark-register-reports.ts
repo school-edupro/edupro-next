@@ -111,10 +111,41 @@ const nameOf = (i: ReportInput, r: RegStudentResult) =>
   i.def.display.properCase ? properCase(r.name) : r.name;
 const who = (i: ReportInput, r: RegStudentResult) =>
   i.merit ? `${nameOf(i, r)} (${r.section})` : nameOf(i, r);
-const count = (i: ReportInput, list: RegStudentResult[]): SheetCell => ({
-  t: String(list.length),
-  ...(list.length ? { names: list.map((r) => who(i, r)) } : {}),
-});
+type Who = { r: RegStudentResult; x?: RegSubjectResult };
+/**
+ * A count that opens its students: name, admission no (and section in a class), and the marks — the
+ * subject's when the count is about one subject, else the final — with the %.
+ */
+function count(i: ReportInput, title: string, list: Who[]): SheetCell {
+  if (!list.length) return { t: '0' };
+  const marks = (y: Who): [string, string] => {
+    const total = y.x ? y.x.total : y.r.total;
+    const max = y.x ? y.x.max : y.r.max;
+    const pc = y.x ? y.x.pct : y.r.pct;
+    const held = y.x ? y.x.withheld : y.r.withheldBy.length > 0;
+    if (held) return ['–', ''];
+    if (total === null) return ['', ''];
+    return [
+      `${cutFixed(total, 'auto')} / ${cutFixed(max, 'auto')}`,
+      pc === null ? '' : `${cutFixed(pc, 'auto')}%`,
+    ];
+  };
+  return {
+    t: String(list.length),
+    drill: {
+      title,
+      cols: ['#', 'Name', 'Adm No', ...(i.merit ? ['Section'] : []), 'Marks', '%'],
+      rows: list.map((y, n) => [
+        String(n + 1),
+        nameOf(i, y.r),
+        y.r.admissionNo,
+        ...(i.merit ? [y.r.section] : []),
+        ...marks(y),
+      ]),
+    },
+  };
+}
+const whom = (list: RegStudentResult[]): Who[] => list.map((r) => ({ r }));
 const pct = (n: number, of: number) => (of > 0 ? cutFixed((n / of) * 100, 2) : '');
 const avg = (vals: number[]) =>
   vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : null;
@@ -330,18 +361,24 @@ function analysis(i: ReportInput): ReportBlock[] {
     const totals = appeared.map((y) => y.x.total!);
     const max = Math.max(0, ...appeared.map((y) => y.x.max));
     const passed = appeared.filter((y) => y.x.status === 'pass');
-    const names = (l: typeof s.list) =>
-      count(
-        i,
-        l.map((y) => y.r),
-      );
+    const at = (label: string, l: typeof s.list) => count(i, `${s.label} · ${label}`, l);
     return [
       { t: s.label, text: true },
-      names(s.list),
-      names(absent),
-      names(appeared),
-      ...ordered.map((b) => names(appeared.filter((y) => bandOf(y.x.pct!) === b.label))),
-      ...cuml.map((c) => names(appeared.filter((y) => reach(y.x.pct!, c.op, c.pct)))),
+      at('Students', s.list),
+      at('Absent', absent),
+      at('Appeared', appeared),
+      ...ordered.map((b) =>
+        at(
+          b.label,
+          appeared.filter((y) => bandOf(y.x.pct!) === b.label),
+        ),
+      ),
+      ...cuml.map((c) =>
+        at(
+          `${c.op}${String(c.pct)}%`,
+          appeared.filter((y) => reach(y.x.pct!, c.op, c.pct)),
+        ),
+      ),
       {
         t: totals.length
           ? `${cutFixed(Math.max(...totals), 'auto')} / ${cutFixed(max, 'auto')}`
@@ -363,95 +400,167 @@ function analysis(i: ReportInput): ReportBlock[] {
 }
 
 // ---- Entry status ----------------------------------------------------------------------------------
+/**
+ * The legacy's Marks Entry Status. A section: a row per subject (each member of a slot apart) with its
+ * teachers and students, a column per exam — entered of how many with Complete / Partial / Not
+ * started, the pending students on a click, "–" where the subject has no such exam — and the share of
+ * every subject at the foot. A class: its sections against the subjects, the % entered of every exam.
+ */
 function entry(i: ReportInput): ReportBlock[] {
   const sections = [...new Map(i.students.map((s) => [s.sectionId, s.section])).entries()];
-  const lines: Array<{
+  const name = (st: RegStudent) => (i.def.display.properCase ? properCase(st.name) : st.name);
+  type Line = {
     subject: string;
     subjectId: string;
-    exam: string;
-    section: string;
     sectionId: string;
     takers: RegStudent[];
-    done: RegStudent[];
-  }> = [];
+    /** by exam key: who takes it in that exam, and who is done */
+    exams: Record<string, { takers: RegStudent[]; done: RegStudent[] } | undefined>;
+  };
+  const lines: Line[] = [];
   for (const k of i.order) {
     const s = i.def.subjects.find((x) => x.key === k);
     if (!s) continue;
     const members = s.slot ? s.slot.members : [s.subjectId ?? ''];
     for (const m of members)
-      for (const e of i.def.exams)
-        for (const [sectionId, section] of sections) {
-          const takers = i.students.filter(
-            (st) =>
-              st.sectionId === sectionId &&
-              st.subjects.some((x) => x.subjectId === m && x.marks[e.key]),
-          );
+      for (const [sectionId] of sections) {
+        const mine = i.students.filter(
+          (st) => st.sectionId === sectionId && st.subjects.some((x) => x.subjectId === m),
+        );
+        const sub = (st: RegStudent) => st.subjects.find((x) => x.subjectId === m)!;
+        const exams: Line['exams'] = {};
+        for (const e of i.def.exams) {
+          const takers = mine.filter((st) => sub(st).marks[e.key]);
           if (!takers.length) continue;
-          const sub = (st: RegStudent) => st.subjects.find((x) => x.subjectId === m)!;
-          const done = takers.filter((st) => {
-            const mk = sub(st).marks[e.key]!;
-            return mk.entered || (mk.parts.length > 0 && mk.parts.every((p) => p.entered));
-          });
-          lines.push({
-            subject: s.slot ? `${i.titles[k] ?? k} · ${sub(takers[0]!).code}` : (i.titles[k] ?? k),
-            subjectId: m,
-            exam: e.key,
-            section,
-            sectionId,
+          exams[e.key] = {
             takers,
-            done,
-          });
+            // done: a mark or a code; a subject in parts when every part is entered
+            done: takers.filter((st) => {
+              const mk = sub(st).marks[e.key]!;
+              return mk.entered || (mk.parts.length > 0 && mk.parts.every((p) => p.entered));
+            }),
+          };
         }
+        const takers = mine.filter((st) => Object.keys(exams).some((key) => sub(st).marks[key]));
+        if (!takers.length) continue;
+        lines.push({
+          subject: (s.slot ? sub(takers[0]!).name : (i.titles[k] ?? k)).toUpperCase(),
+          subjectId: m,
+          sectionId,
+          takers,
+          exams,
+        });
+      }
   }
-  const status = (l: (typeof lines)[number]) =>
-    l.done.length === l.takers.length ? 'Complete' : l.done.length ? 'Partial' : 'Not started';
-  if (!i.merit)
-    return [
-      block(
-        i,
-        'Marks entry status',
-        [
-          ['Subject', 3, true],
-          ['Exam', 1.2, true],
-          ['Entered', 1.2],
-          ['Status', 1.4, true],
-          ['Teacher', 2.5, true],
-          ['Not entered yet', 6, true],
-        ],
-        lines.map((l) => {
-          const pending = l.takers
-            .filter((st) => !l.done.includes(st))
-            .map((st) => (i.def.display.properCase ? properCase(st.name) : st.name));
-          return [
-            { t: l.subject, text: true },
-            { t: l.exam, text: true },
-            { t: `${String(l.done.length)}/${String(l.takers.length)}` },
-            {
-              t: status(l),
-              text: true,
-              tone: status(l) === 'Complete' ? 'calc' : status(l) === 'Partial' ? 'warn' : 'code',
-            },
-            { t: i.teachers?.[`${l.sectionId}|${l.subjectId}`] ?? '', text: true },
-            { t: pending.join(', '), text: true, ...(pending.length ? { names: pending } : {}) },
-          ];
-        }),
-      ),
+  const pctText = (got: number, of: number) => {
+    const v = of > 0 ? Math.round((got / of) * 1000) / 10 : 0;
+    return `${Number.isInteger(v) ? String(v) : v.toFixed(1)}%`;
+  };
+  if (!i.merit) {
+    const exams = i.def.exams.filter((e) => lines.some((l) => l.exams[e.key]));
+    const sectionId = sections[0]?.[0] ?? '';
+    const classTeacher = i.teachers?.[`${sectionId}|class`];
+    const rows = lines.map((l, n): SheetCell[] => [
+      { t: String(n + 1), center: true },
+      { t: l.subject, text: true, strong: true },
+      { t: i.teachers?.[`${l.sectionId}|${l.subjectId}`] ?? '', text: true },
+      { t: String(l.takers.length), center: true },
+      ...exams.map((e): SheetCell => {
+        const x = l.exams[e.key];
+        if (!x) return { t: '–', center: true, tone: 'none' };
+        const pending = x.takers.filter((st) => !x.done.includes(st));
+        const state = !pending.length ? 'Complete' : x.done.length ? 'Partial' : 'Not started';
+        return {
+          t: `${String(x.done.length)} / ${String(x.takers.length)}`,
+          center: true,
+          strong: true,
+          badge: {
+            label: state,
+            tone: state === 'Complete' ? 'success' : state === 'Partial' ? 'warning' : 'danger',
+          },
+          ...(pending.length
+            ? {
+                drillLabel: `${String(pending.length)} pending`,
+                drill: {
+                  title: `${l.subject} · ${e.key} · pending`,
+                  cols: ['#', 'Name', 'Adm No', 'Roll'],
+                  rows: pending.map((st, k) => [
+                    String(k + 1),
+                    name(st),
+                    st.admissionNo,
+                    st.rollNo === null ? '' : String(st.rollNo),
+                  ]),
+                },
+              }
+            : {}),
+        };
+      }),
+    ]);
+    const out = block(
+      i,
+      `Marks Entry Status — ${i.place}`,
+      [
+        ['#', 0.5],
+        ['Subject', 2.6, true],
+        ['Teacher', 4, true],
+        ['Students', 1],
+        ...exams.map((e): Col => [e.key, 1.9]),
+      ],
+      rows,
+    );
+    // all subjects of each exam: the share entered
+    out.sheet.foot = [
+      { t: 'All subjects', span: 4, center: true, strong: true, tone: 'final' },
+      ...exams.map((e): SheetCell => {
+        const of = lines.reduce((a, l) => a + (l.exams[e.key]?.takers.length ?? 0), 0);
+        const got = lines.reduce((a, l) => a + (l.exams[e.key]?.done.length ?? 0), 0);
+        return {
+          t: `${pctText(got, of)} (${String(got)} / ${String(of)})`,
+          center: true,
+          tone: 'final',
+        };
+      }),
     ];
+    out.sheet.note = [
+      'Entered = any mark (0 included) or code (AB, ML …)',
+      'blank = pending',
+      'only students who take the subject (subject choices)',
+      'a student is done for an exam when every part of it is entered',
+      'click “pending” for the names',
+      ...(classTeacher ? [`Class teacher: ${classTeacher}`] : []),
+    ].join(' · ');
+    return [out];
+  }
   // a class: the sections against the subjects, the share entered of every exam
   const subjects = [...new Set(lines.map((l) => l.subject))];
   return [
     block(
       i,
-      'Marks entry status (% entered, every exam)',
-      [['Section', 1.4, true], ...subjects.map((s): Col => [s, 1.3])],
+      `Marks Entry Status — ${i.place} (% entered, every exam)`,
+      [['Section', 1.4, true], ...subjects.map((x): Col => [x, 1.6])],
       sections.map(([sectionId, section]) => [
-        { t: section, text: true },
-        ...subjects.map((s): SheetCell => {
-          const of = lines.filter((l) => l.subject === s && l.sectionId === sectionId);
-          const want = of.reduce((a, l) => a + l.takers.length, 0);
-          const got = of.reduce((a, l) => a + l.done.length, 0);
-          if (!want) return { t: '—', tone: 'none' };
-          return { t: `${pct(got, want)}%`, tone: got === want ? 'calc' : got ? 'warn' : 'code' };
+        { t: section, text: true, strong: true },
+        ...subjects.map((x): SheetCell => {
+          const of = lines.filter((l) => l.subject === x && l.sectionId === sectionId);
+          const want = of.reduce(
+            (a, l) => a + Object.values(l.exams).reduce((b, e) => b + (e?.takers.length ?? 0), 0),
+            0,
+          );
+          const got = of.reduce(
+            (a, l) => a + Object.values(l.exams).reduce((b, e) => b + (e?.done.length ?? 0), 0),
+            0,
+          );
+          if (!want) return { t: '–', tone: 'none', center: true };
+          return {
+            t: pctText(got, want),
+            center: true,
+            badge:
+              got === want
+                ? { label: 'Complete', tone: 'success' }
+                : got
+                  ? { label: 'Partial', tone: 'warning' }
+                  : { label: 'Not started', tone: 'danger' },
+          };
         }),
       ]),
     ),
@@ -577,23 +686,14 @@ function teacherWise(i: ReportInput): ReportBlock[] {
         { t: g.teacher, text: true },
         { t: g.subject, text: true },
         { t: g.section, text: true },
-        count(
-          i,
-          g.list.map((y) => y.r),
-        ),
-        count(
-          i,
-          appeared.map((y) => y.r),
-        ),
+        count(i, `${g.subject} · ${g.section} · Students`, g.list),
+        count(i, `${g.subject} · ${g.section} · Appeared`, appeared),
         { t: pcts.length ? cutFixed(avg(pcts)!, 2) : '' },
         { t: pct(appeared.length - failed.length, appeared.length), tone: 'final' as const },
         {
           t: appeared.length ? cutFixed(Math.max(...appeared.map((y) => y.x.total!)), 'auto') : '',
         },
-        count(
-          i,
-          failed.map((y) => y.r),
-        ),
+        count(i, `${g.subject} · ${g.section} · Failed`, failed),
       ];
     });
   return [
@@ -622,21 +722,18 @@ function atRisk(i: ReportInput): ReportBlock[] {
   const pass = i.def.final.passPct;
   type Risk = { r: RegStudentResult; level: 'High' | 'Medium' | 'Watch'; notes: string[] };
   const risks: Risk[] = [];
-  const perSubject = new Map<
-    string,
-    { fail: RegStudentResult[]; border: RegStudentResult[]; absent: RegStudentResult[] }
-  >();
-  const bump = (label: string, kind: 'fail' | 'border' | 'absent', r: RegStudentResult) => {
+  const perSubject = new Map<string, { fail: Who[]; border: Who[]; absent: Who[] }>();
+  const bump = (label: string, kind: 'fail' | 'border' | 'absent', y: Who) => {
     const g = perSubject.get(label) ?? { fail: [], border: [], absent: [] };
-    g[kind].push(r);
+    g[kind].push(y);
     perSubject.set(label, g);
   };
   for (const s of subjectsOf(i))
     for (const y of s.list) {
-      if (y.x.withheld) bump(s.label, 'absent', y.r);
-      else if (y.x.status === 'fail') bump(s.label, 'fail', y.r);
+      if (y.x.withheld) bump(s.label, 'absent', y);
+      else if (y.x.status === 'fail') bump(s.label, 'fail', y);
       else if (y.x.pct !== null && y.x.pct >= pass && y.x.pct < pass + margin)
-        bump(s.label, 'border', y.r);
+        bump(s.label, 'border', y);
     }
   for (const r of i.rows) {
     const notes: string[] = [];
@@ -695,9 +792,9 @@ function atRisk(i: ReportInput): ReportBlock[] {
       ],
       [...perSubject.entries()].map(([label, g]) => [
         { t: label, text: true },
-        count(i, g.fail),
-        count(i, g.border),
-        count(i, g.absent),
+        count(i, `${label} · Failing`, g.fail),
+        count(i, `${label} · Borderline`, g.border),
+        count(i, `${label} · Absent`, g.absent),
       ]),
     ),
   ];
@@ -805,9 +902,18 @@ function compare(i: ReportInput): ReportBlock[] {
     };
   });
   const overallRows: SheetCell[][] = [
-    [{ t: 'Students', text: true }, ...overall.map((o) => count(i, o.list))],
-    [{ t: 'Appeared', text: true }, ...overall.map((o) => count(i, o.appeared))],
-    [{ t: 'Passed', text: true }, ...overall.map((o) => count(i, o.passed))],
+    [
+      { t: 'Students', text: true },
+      ...overall.map((o, n) => count(i, `${places[n]!} · Students`, whom(o.list))),
+    ],
+    [
+      { t: 'Appeared', text: true },
+      ...overall.map((o, n) => count(i, `${places[n]!} · Appeared`, whom(o.appeared))),
+    ],
+    [
+      { t: 'Passed', text: true },
+      ...overall.map((o, n) => count(i, `${places[n]!} · Passed`, whom(o.passed))),
+    ],
     [
       { t: 'Pass %', text: true },
       ...overall.map((o): SheetCell => ({

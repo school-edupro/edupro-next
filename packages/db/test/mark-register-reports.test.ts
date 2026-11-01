@@ -128,15 +128,31 @@ describe('mark register reports (docs/design/68, phase 2)', () => {
     // bands 0-32: 30 · 33-40: 35 · 70-80: 70 · 90-100: 90
     expect(eng.slice(4, 12)).toEqual(['1', '1', '0', '0', '0', '1', '0', '1']);
     expect(eng.slice(-4)).toEqual(['90 / 100', '30', '56.25', '75.00']);
+    // a count opens its students with the subject's marks
+    const band = a!.sheet.body[0]!.cells[11]!;
+    expect(band.drill).toEqual({
+      title: 'English · 90-100',
+      cols: ['#', 'Name', 'Adm No', 'Marks', '%'],
+      rows: [['1', 'a1', 'a1', '90 / 100', '90%']],
+    });
   });
 
-  it('entry status: a section’s subjects by exam with who is pending; a class as a grid of sections', () => {
+  it('entry status as the legacy prints it: subjects by exam with a badge, who is pending, the share at the foot', () => {
     const [s] = buildReport('entry', input(false));
-    const mat = s!.sheet.body.find((r) => r.cells[0]!.t === 'Maths')!.cells.map((c) => c.t);
-    expect(mat).toEqual(['Maths', 'T', '4/5', 'Partial', 'Mr Das', 'a5']);
+    expect(s!.title).toBe('Marks Entry Status — VI-A');
+    expect(s!.sheet.head[0]!.map((c) => c.t)).toEqual(['#', 'Subject', 'Teacher', 'Students', 'T']);
+    const mat = s!.sheet.body.find((r) => r.cells[1]!.t === 'MATHS')!.cells;
+    expect(mat.map((c) => c.t)).toEqual(['2', 'MATHS', 'Mr Das', '5', '4 / 5']);
+    expect(mat[4]!.badge).toEqual({ label: 'Partial', tone: 'warning' });
+    expect(mat[4]!.drillLabel).toBe('1 pending');
+    expect(mat[4]!.drill!.rows).toEqual([['1', 'a5', 'a5', '']]);
+    expect(s!.sheet.body[0]!.cells[4]!.badge!.label).toBe('Complete');
+    // every subject of the exam: 9 of 10 entered
+    expect(s!.sheet.foot!.map((c) => c.t)).toEqual(['All subjects', '90% (9 / 10)']);
+    expect(s!.sheet.note).toContain('Entered = any mark (0 included) or code (AB, ML …)');
     const [g] = buildReport('entry', input(true));
-    expect(lines(g!.sheet)['VI-A']).toEqual(['VI-A', '100.00%', '80.00%']);
-    expect(lines(g!.sheet)['VI-B']).toEqual(['VI-B', '100.00%', '100.00%']);
+    expect(lines(g!.sheet)['VI-A']).toEqual(['VI-A', '100%', '80%']);
+    expect(lines(g!.sheet)['VI-B']).toEqual(['VI-B', '100%', '100%']);
   });
 
   it('toppers: the top N of the class with ties, each section’s top 3, every subject’s topper (full marks)', () => {

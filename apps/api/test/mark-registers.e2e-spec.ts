@@ -24,6 +24,8 @@ import {
 
 interface Cell {
   t: string;
+  badge?: { label: string };
+  drill?: { rows: string[][] };
   tone?: string;
   span?: number;
   rows?: number;
@@ -459,7 +461,14 @@ describe('mark registers like the legacy Term Mark Register (e2e)', () => {
     expect(ana.English!.slice(1, 4)).toEqual(['3', '0', '3']);
     expect(ana.English!.slice(-4)).toEqual(['88 / 100', '64', '75.67', '100.00']);
     const entry = (await run(`${A}&report=entry`)).blocks[0]!;
-    expect(entry.sheet.body.every((r) => r.cells[3]!.t === 'Complete')).toBe(true);
+    // the legacy's entry status: each exam entered of how many, Complete (or "–": no such paper)
+    expect(entry.title).toBe('Marks Entry Status — VI-A');
+    expect(
+      entry.sheet.body.every((r) =>
+        r.cells.slice(4).every((c) => c.t === '–' || c.badge?.label === 'Complete'),
+      ),
+    ).toBe(true);
+    expect(entry.sheet.foot!.slice(1).every((c) => c.t.startsWith('100%'))).toBe(true);
     const top = (await run(`${VI}&report=toppers&top=3`)).blocks[0]!;
     expect(top.sheet.body.map((r) => r.cells[1]!.t.split(' ')[0])).toEqual([
       'Asha',

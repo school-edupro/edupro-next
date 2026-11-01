@@ -180,8 +180,10 @@ out, then runs it for any section; the marks always come from the exam entry.
      with their %, the final.
    - **Analysis**: per subject (each language of a slot apart) the students in each % band, the
      cumulative counts, highest, lowest, average and passing % (bands set in step 6).
-   - **Entry status**: per subject and exam, entered of how many, the teacher and who is pending; a
-     class's all sections as a grid of the % entered.
+   - **Entry status** (as the old register prints it): a row per subject with its teachers and
+     students, a column per exam — entered of how many with Complete / Partial, "▶ 1 pending" opens the
+     names, "–" where the subject has no such paper — and the % of all subjects at the foot; the class
+     teacher in the line above. A class's all sections: a grid of the % entered.
    - **Toppers**: the top 3 / 5 / 10 (passed), each section's top 3 in a class, every subject's topper
      (full marks marked).
    - **Teacher-wise**: each subject teacher's sections: average %, pass %, highest, failed.

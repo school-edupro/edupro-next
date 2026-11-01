@@ -13878,20 +13878,42 @@ button.ep-subchoice__icon:hover {
   flex-wrap: wrap;
   gap: var(--sp-1);
 }
-.ep-mr-names summary {
+.ep-mr-drill {
+  display: inline-flex;
+  gap: var(--sp-1);
+  align-items: center;
+  padding: 0;
+  border: 0;
+  background: none;
   color: var(--text-link);
+  font: inherit;
+  font-weight: var(--fw-semibold);
   text-decoration: underline;
   cursor: pointer;
 }
-.ep-mr-names ul {
-  max-height: 12rem;
-  margin: var(--sp-1) 0 0;
-  padding: var(--sp-1) var(--sp-2) var(--sp-1) var(--sp-5);
-  overflow: auto;
-  border-radius: var(--radius-sm);
-  background: var(--surface-subtle);
-  text-align: left;
-  white-space: normal;
+.ep-mr-drill span {
+  font-size: var(--fs-caption);
+  text-decoration: none;
+}
+.ep-mr-drill:hover {
+  color: var(--text-link-hover);
+}
+.ep-mr-drill-line {
+  display: block;
+  margin-top: var(--sp-1);
+}
+.ep-mr-badge {
+  margin-left: var(--sp-2);
+  vertical-align: middle;
+}
+.ep-mr-muted {
+  color: var(--text-muted);
+}
+.ep-mr-drill__table td[data-col='#'],
+.ep-mr-drill__table td[data-col='Adm No'],
+.ep-mr-drill__table td[data-col='Marks'],
+.ep-mr-drill__table td[data-col='%'] {
+  text-align: center;
 }
 .ep-mr-report {
   margin-bottom: var(--sp-5);

@@ -254,7 +254,7 @@ export async function registerPdf(
       cells.forEach((c) => {
         const from = col;
         col += c.span ?? 1;
-        drawCell(c.t, xs[from]!, xs[Math.min(col, xs.length - 1)]!, y, h, {
+        drawCell(fileText(c), xs[from]!, xs[Math.min(col, xs.length - 1)]!, y, h, {
           font: isFoot || c.tone === 'final' || c.strong ? bold : regular,
           bg: fill(c.tone),
           left: c.text && !c.center,
@@ -268,6 +268,12 @@ export async function registerPdf(
   }
   return Buffer.from(await doc.save());
 }
+
+/** a cell as a file prints it: its text, its status and what is pending (38 / 39 Partial (1 pending)) */
+const fileText = (c: SheetCell) =>
+  [c.t, c.badge?.label, c.badge && c.drillLabel ? `(${c.drillLabel})` : '']
+    .filter(Boolean)
+    .join(' ');
 
 /** a shown number as Excel keeps it (35.50 stays 35.50); anything else stays text */
 function excelValue(t: string): { v: string | number; fmt?: string } {
@@ -355,7 +361,7 @@ export async function registerXlsx(sheets: Sheet[], meta: RegisterFileMeta): Pro
           col += c.span ?? 1;
           if ((c.span ?? 1) > 1) ws.mergeCells(row.number, at, row.number, col);
           const cell = row.getCell(at);
-          const x = c.text || c.lines ? { v: c.t } : excelValue(c.t);
+          const x = c.text || c.lines || c.badge ? { v: fileText(c) } : excelValue(c.t);
           cell.value = x.v;
           if (x.fmt) cell.numFmt = x.fmt;
           cell.border = box;

@@ -1,4 +1,5 @@
 import type { Sheet, SheetCell } from '@edupro/ui';
+import { CountDrill } from '@/components/exams/CountDrill';
 
 /**
  * A register's sheet as a table (docs/design/68): the two heading rows (each subject over its columns),
@@ -48,18 +49,7 @@ export function RegisterSheet({ sheet, label }: { sheet: Sheet; label: string })
                   </th>
                 ) : (
                   <td key={i} colSpan={c.span} {...attrs(c, i)}>
-                    {c.names?.length ? (
-                      <details className="ep-mr-names">
-                        <summary>{c.t}</summary>
-                        <ul>
-                          {c.names.map((n) => (
-                            <li key={n}>{n}</li>
-                          ))}
-                        </ul>
-                      </details>
-                    ) : (
-                      c.t
-                    )}
+                    <CellBody c={c} />
                   </td>
                 ),
               )}
@@ -70,7 +60,7 @@ export function RegisterSheet({ sheet, label }: { sheet: Sheet; label: string })
           <tfoot>
             <tr>
               {sheet.foot.map((c, i) => (
-                <td key={i} {...attrs(c, i)}>
+                <td key={i} colSpan={c.span} {...attrs(c, i)}>
                   {c.t}
                 </td>
               ))}
@@ -79,5 +69,31 @@ export function RegisterSheet({ sheet, label }: { sheet: Sheet; label: string })
         ) : null}
       </table>
     </div>
+  );
+}
+
+/** a cell: its text, a status badge, and a count that opens its students */
+function CellBody({ c }: { c: SheetCell }) {
+  const tone = {
+    success: 'success',
+    warning: 'warning',
+    danger: 'danger',
+    neutral: 'neutral',
+  } as const;
+  if (c.drill && !c.badge) return <CountDrill label={c.drillLabel ?? c.t} drill={c.drill} />;
+  return (
+    <>
+      {c.t}
+      {c.badge ? (
+        <span className={`ep-badge ep-badge--${tone[c.badge.tone]} ep-mr-badge`}>
+          {c.badge.label}
+        </span>
+      ) : null}
+      {c.drill ? (
+        <span className="ep-mr-drill-line">
+          <CountDrill label={c.drillLabel ?? c.t} drill={c.drill} />
+        </span>
+      ) : null}
+    </>
   );
 }
