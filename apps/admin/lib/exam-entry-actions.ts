@@ -458,21 +458,3 @@ export async function saveSignature(
   if (out.ok) revalidatePath('/exams/report-cards/signatures');
   return out;
 }
-
-/** The template of each class on a release (class_<id>), the band ones kept. */
-export async function setReleaseClassTemplates(fd: FormData) {
-  const id = str(fd, 'releaseId');
-  const templates: Record<string, string> = {};
-  for (const [k, v] of fd.entries())
-    if (/^(tpl:)(pre_primary|primary|middle|secondary|senior|class_\d{1,18})$/.test(k) && String(v))
-      templates[k.slice(4)] = String(v);
-  return run(
-    `/exams/report-cards?release=${id}`,
-    () =>
-      apiFetch(`/exams/report-cards/releases/${id}`, {
-        method: 'PATCH',
-        body: JSON.stringify({ templates }),
-      }),
-    'Templates saved',
-  );
-}

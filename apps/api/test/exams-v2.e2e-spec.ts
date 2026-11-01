@@ -662,6 +662,28 @@ describe('examinations v2 (e2e)', () => {
       reason: 'Meet the class teacher first',
     });
     expect(held.json().held).toBe(1);
+    // the workspace's readiness: class by class, its sections and what each exam still needs
+    const ready = (await call(admin, 'GET', `${url}/readiness`)).json() as {
+      release: { id: string; status: string };
+      classes: Array<{
+        code: string;
+        termResult: unknown;
+        sections: Array<{ id: string; students: number; held: number; unverified: number }>;
+        exams: Array<{ examId: string; unverified: number; papers: number }>;
+      }>;
+    };
+    expect(ready.release).toMatchObject({ id, status: 'submitted' });
+    expect(ready.classes).toHaveLength(1);
+    expect(ready.classes[0]).toMatchObject({ code: 'XI', termResult: null });
+    expect(ready.classes[0]!.sections).toEqual([
+      expect.objectContaining({ id: section, students: 4, held: 1, unverified: 0 }),
+    ]);
+    expect(ready.classes[0]!.exams).toEqual([
+      expect.objectContaining({ examId, unverified: 0, papers: 4 }),
+    ]);
+    expect(
+      (await call(admin, 'GET', '/exams/report-cards/releases/999999999/readiness')).statusCode,
+    ).toBe(404);
     const pub = await inject({
       method: 'PATCH',
       url,

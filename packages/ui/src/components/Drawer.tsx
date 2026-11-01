@@ -8,7 +8,8 @@ export interface DrawerProps {
   children: ReactNode;
   footer?: ReactNode;
   side?: 'right' | 'left';
-  width?: 'sm' | 'md' | 'lg';
+  /** xl: a page preview (an A4 report card) */
+  width?: 'sm' | 'md' | 'lg' | 'xl';
 }
 
 /** Side panel for detail views and forms that keep the list visible. Native <dialog> for focus and Escape. */

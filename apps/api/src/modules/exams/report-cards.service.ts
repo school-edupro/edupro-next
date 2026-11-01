@@ -89,7 +89,8 @@ const R_COLS = `r.id::text, r.term_code, r.name, r.exam_ids::text[] AS exam_ids,
      JOIN class_sections cs ON cs.class_id = es.class_id AND cs.academic_year_id = r.academic_year_id AND cs.deleted_at IS NULL AND cs.status = 'active'
      LEFT JOIN exam_entry_status st ON st.exam_subject_id = es.id AND st.class_section_id = cs.id
     WHERE es.exam_id = ANY(r.exam_ids) AND COALESCE(st.status, 'open') <> 'verified'
-      AND EXISTS (SELECT 1 FROM enrolments en WHERE en.class_section_id = cs.id AND en.status = 'active'))::int AS unverified`;
+      AND EXISTS (SELECT 1 FROM enrolments en WHERE en.class_section_id = cs.id AND en.status = 'active'
+                    AND app.student_exam_subject_kind(en.student_id, es.exam_id, es.subject_id) IS NOT NULL))::int AS unverified`;
 const toRelease = (r: Record<string, unknown>): ReleaseRow => ({
   id: String(r.id),
   termCode: String(r.term_code),
@@ -554,6 +555,173 @@ export class ReportCardsService {
         after: dto,
       });
       return (await this.findRelease(c, releaseId))!;
+    });
+  }
+
+  /**
+   * What a release still needs, class by class (docs/design/65; the workspace's Readiness and Cards):
+   * the template each class prints with, its locked term result, and per section the students, the
+   * PDFs made, the cards withheld for fees or held, the papers not verified (only subjects someone
+   * takes) and the students without the remark or the attendance an exam takes.
+   */
+  async readiness(ctx: RequestContext, releaseId: string) {
+    return this.db.tenant(requireTenant(ctx), async (c) => {
+      const rel = await this.findRelease(c, releaseId);
+      if (!rel) throw new DomainError('not-found', 'Release not found', { status: 404 });
+      const classes = await c.query<{
+        id: string;
+        code: string;
+        name: string;
+        band: string | null;
+        display_order: number;
+      }>(
+        `SELECT DISTINCT k.id::text, k.code, k.name, k.band::text, k.display_order
+           FROM exam_classes ec JOIN classes k ON k.id = ec.class_id
+          WHERE ec.exam_id = ANY($1::bigint[]) AND k.deleted_at IS NULL
+          ORDER BY k.display_order, k.code`,
+        [rel.examIds],
+      );
+      const classIds = classes.rows.map((k) => k.id);
+      const sections = await c.query<{
+        id: string;
+        class_id: string;
+        code: string;
+        students: number;
+        made: number;
+        withheld: number;
+        held: number;
+      }>(
+        `SELECT cs.id::text, cs.class_id::text, k.code || '-' || cs.name AS code,
+                (SELECT count(*) FROM enrolments en WHERE en.class_section_id = cs.id AND en.status = 'active')::int AS students,
+                (SELECT count(*) FROM report_cards rc JOIN enrolments en ON en.student_id = rc.student_id AND en.class_section_id = cs.id AND en.status = 'active'
+                  WHERE rc.release_id = $1 AND rc.rendered_at IS NOT NULL)::int AS made,
+                (SELECT count(*) FROM report_cards rc JOIN enrolments en ON en.student_id = rc.student_id AND en.class_section_id = cs.id AND en.status = 'active'
+                  WHERE rc.release_id = $1 AND rc.withheld)::int AS withheld,
+                (SELECT count(*) FROM report_card_holds h JOIN enrolments en ON en.student_id = h.student_id AND en.class_section_id = cs.id AND en.status = 'active'
+                  WHERE h.release_id = $1)::int AS held
+           FROM class_sections cs JOIN classes k ON k.id = cs.class_id
+          WHERE cs.class_id = ANY($2::bigint[]) AND cs.academic_year_id = app.current_academic_year_id() AND cs.deleted_at IS NULL
+            AND EXISTS (SELECT 1 FROM enrolments en WHERE en.class_section_id = cs.id AND en.status = 'active')
+          ORDER BY k.display_order, cs.name`,
+        [releaseId, classIds],
+      );
+      // papers (section × subject) someone takes that are not verified yet
+      const open = await c.query<{ section: string; exam: string; open: number; papers: number }>(
+        `SELECT cs.id::text AS section, es.exam_id::text AS exam,
+                count(*) FILTER (WHERE COALESCE(st.status, 'open') <> 'verified')::int AS open, count(*)::int AS papers
+           FROM exam_subjects es
+           JOIN class_sections cs ON cs.class_id = es.class_id AND cs.academic_year_id = app.current_academic_year_id() AND cs.deleted_at IS NULL
+           LEFT JOIN exam_entry_status st ON st.exam_subject_id = es.id AND st.class_section_id = cs.id
+          WHERE es.exam_id = ANY($1::bigint[])
+            AND EXISTS (SELECT 1 FROM enrolments en WHERE en.class_section_id = cs.id AND en.status = 'active'
+                          AND app.student_exam_subject_kind(en.student_id, es.exam_id, es.subject_id) IS NOT NULL)
+          GROUP BY 1, 2`,
+        [rel.examIds],
+      );
+      // students without the remark or the attendance an exam takes
+      const gaps = await c.query<{
+        section: string;
+        exam: string;
+        remarks: number | null;
+        attendance: number | null;
+      }>(
+        `SELECT cs.id::text AS section, e.id::text AS exam,
+                CASE WHEN 'remarks' = ANY(e.areas) THEN count(*) FILTER (WHERE NOT EXISTS (
+                  SELECT 1 FROM exam_remarks r WHERE r.exam_id = e.id AND r.student_id = en.student_id AND btrim(coalesce(r.remark, '')) <> '')
+                  AND NOT EXISTS (SELECT 1 FROM exam_remark_items ri WHERE ri.exam_id = e.id AND ri.student_id = en.student_id))::int END AS remarks,
+                CASE WHEN 'attendance' = ANY(e.areas) THEN count(*) FILTER (WHERE NOT EXISTS (
+                  SELECT 1 FROM exam_attendance a WHERE a.exam_id = e.id AND a.student_id = en.student_id))::int END AS attendance
+           FROM exams e JOIN exam_classes ec ON ec.exam_id = e.id
+           JOIN class_sections cs ON cs.class_id = ec.class_id AND cs.academic_year_id = app.current_academic_year_id() AND cs.deleted_at IS NULL
+           JOIN enrolments en ON en.class_section_id = cs.id AND en.status = 'active'
+          WHERE e.id = ANY($1::bigint[])
+          GROUP BY cs.id, e.id, e.areas`,
+        [rel.examIds],
+      );
+      const schemes = await c.query<{
+        id: string;
+        name: string;
+        class_ids: string[];
+        computed_at: Date | null;
+        results: number;
+      }>(
+        `SELECT m.id::text, m.name, m.class_ids::text[] AS class_ids, m.computed_at,
+                (SELECT count(*) FROM term_results t WHERE t.scheme_id = m.id)::int AS results
+           FROM mark_schemes m
+          WHERE m.academic_year_id = app.current_academic_year_id() AND m.purpose = 'result' AND m.status = 'locked'
+            AND m.deleted_at IS NULL AND m.term_code = $1`,
+        [rel.termCode],
+      );
+      const templates = await c.query<{ id: string; name: string; band: string }>(
+        `SELECT id::text, name, band::text FROM report_card_templates WHERE status = 'active' AND deleted_at IS NULL ORDER BY name`,
+      );
+      const exams = rel.exams;
+      return {
+        release: rel,
+        templates: templates.rows,
+        classes: classes.rows.map((k) => {
+          const band = bandFor(k.band, k.display_order);
+          const own = rel.templates[`class_${k.id}`];
+          const chosen = own ?? rel.templates[band];
+          const t = chosen
+            ? templates.rows.find((x) => x.id === chosen)
+            : templates.rows.find((x) => x.band === band);
+          const scheme = schemes.rows.find((m) => m.class_ids.includes(k.id));
+          const secs = sections.rows.filter((x) => x.class_id === k.id);
+          return {
+            classId: k.id,
+            code: k.code,
+            name: k.name,
+            band,
+            template: t
+              ? { id: t.id, name: t.name, from: own ? 'class' : chosen ? 'band' : 'default' }
+              : null,
+            termResult: scheme
+              ? {
+                  schemeId: scheme.id,
+                  name: scheme.name,
+                  computedAt: scheme.computed_at?.toISOString() ?? null,
+                  results: scheme.results,
+                }
+              : null,
+            sections: secs.map((x) => ({
+              id: x.id,
+              code: x.code,
+              students: x.students,
+              made: x.made,
+              withheld: x.withheld,
+              held: x.held,
+              unverified: open.rows
+                .filter((o) => o.section === x.id)
+                .reduce((a, o) => a + o.open, 0),
+              remarksMissing: gaps.rows
+                .filter((g) => g.section === x.id)
+                .reduce((a, g) => a + (g.remarks ?? 0), 0),
+              attendanceMissing: gaps.rows
+                .filter((g) => g.section === x.id)
+                .reduce((a, g) => a + (g.attendance ?? 0), 0),
+            })),
+            exams: exams.map((e) => {
+              const mine = (rows: Array<{ section: string; exam: string }>) =>
+                rows.filter((r) => r.exam === e.id && secs.some((x) => x.id === r.section));
+              const g = mine(gaps.rows) as typeof gaps.rows;
+              return {
+                examId: e.id,
+                code: e.code,
+                name: e.name,
+                unverified: (mine(open.rows) as typeof open.rows).reduce((a, o) => a + o.open, 0),
+                papers: (mine(open.rows) as typeof open.rows).reduce((a, o) => a + o.papers, 0),
+                remarksMissing: g.some((x) => x.remarks !== null)
+                  ? g.reduce((a, x) => a + (x.remarks ?? 0), 0)
+                  : null,
+                attendanceMissing: g.some((x) => x.attendance !== null)
+                  ? g.reduce((a, x) => a + (x.attendance ?? 0), 0)
+                  : null,
+              };
+            }),
+          };
+        }),
+      };
     });
   }
 

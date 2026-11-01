@@ -48,9 +48,10 @@ const nextConfig: NextConfig = {
   async headers() {
     return [
       { source: '/(.*)', headers: securityHeaders },
-      // proof documents preview inside the approvals panel: framed by this site's own pages only
-      {
-        source: '/api/profile-proofs/:path*',
+      // framed by this site's own pages only: proof documents in the approvals panel, and the
+      // report-card preview (the card designer and a release's preview panel)
+      ...['/api/profile-proofs/:path*', '/api/report-cards/preview'].map((source) => ({
+        source,
         headers: [
           { key: 'X-Frame-Options', value: 'SAMEORIGIN' },
           ...(process.env.NODE_ENV === 'production'
@@ -62,7 +63,7 @@ const nextConfig: NextConfig = {
               ]
             : []),
         ],
-      },
+      })),
     ];
   },
 };

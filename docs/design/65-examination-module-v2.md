@@ -454,3 +454,27 @@ also `levels`: the entries' levels left out). All carry `code` and `entries`. To
 school changes it in Areas and level scales, which moves the entries; to drop an item or a level its
 entries are cleared on the entry sheet first. The set editor shows the message under Save. Test:
 `indicator-masters.e2e-spec.ts` "a set’s save keeps its saved entries".
+
+## Report-card release workspace (1 Nov 2026)
+
+Asked 1 Nov 2026: the report-cards page was hard to use (one long page: releases, a create form,
+templates per band and a section table together). Decisions: a **release workspace in steps**;
+cards by **class → section tiles → students**; the preview in a **side panel with previous / next**;
+readiness is a **checklist, and the principal may publish anyway**.
+
+- **List** (`/exams/report-cards`): one card per release: its exams, the Draft → With the principal →
+  Published stepper, PDFs made, withheld, held and papers not verified; **+ New release** is a dialog
+  (term, name, exams, fee-due rule) that opens the new release's Set-up.
+- **Workspace** (`/exams/report-cards/[id]?tab=`): figures on top, then four tabs.
+  - **Set-up**: name, exams, the design of each class (`templates.class_<id>`, the band keys kept),
+    the fee-due rule.
+  - **Readiness**: per class, ✓ / ! lines for the card design, the term result (a locked mark register
+    of the term, worked out), each exam's papers verified, remarks and attendance, each linking to the
+    page that fixes it. API `GET /exams/report-cards/releases/:id/readiness` (report_card view).
+    "Unverified" counts only papers someone in the section takes (`student_exam_subject_kind`).
+  - **Cards**: section tiles with a made / students bar; a section's students with Preview (Drawer
+    `xl`, an iframe of `/api/report-cards/preview`; the admin allows same-origin framing of that route
+    only), Hold / Show again with a reason, Make PDF; Make the PDF of a section or a whole class.
+  - **Publish**: Send to the principal (report_card.manage), Publish to the families and Withdraw with a
+    reason (exams.result.publish); the classes not ready are listed in the warning and the dialog.
+- English and Hindi (`rcRelease` messages). Tests: `exams-v2.e2e-spec.ts` (readiness), a11y on every tab.

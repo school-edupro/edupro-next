@@ -132,9 +132,24 @@ see who submitted or verified it and to submit, verify, send back or reopen it.
 1. **Exams → open exam → Results → Compute**: totals, percentages, grades, ranks per section and class.
 2. **Exams → Report cards → Templates**: the layout per band (HPC for primary, CCE for middle,
    components for secondary, theory/practical for senior); preview with a real pupil.
-3. **Exams → Report cards → New release**: choose the term, the exams and the template per band; tick
-   **hide defaulters** with the minimum balance if the school withholds cards; release.
-4. Generate the batch PDF per section from the release; families download their own from the app.
+3. **Exams → Report cards → + New release**: the term, a name and the exams the cards carry; tick
+   **Withhold the card while a fee is due** with the amount if the school withholds cards. The release
+   opens in its workspace, with four steps:
+   - **Set-up**: the name, the exams and the card design of each class (a class's own design comes
+     before its band's: Class IX and X can print different cards).
+   - **Readiness**: class by class, a checklist of what is done (✓) and what is still needed (!): the
+     card design, the term result worked out from a locked mark register, each exam's papers verified,
+     remarks and attendance. Each line links to the page that fixes it. The principal can publish
+     anyway.
+   - **Cards**: each class's sections as tiles (PDFs made, withheld for fees, held). Open a tile for its
+     students: **Preview** opens the card in a side panel with **Previous** / **Next**, **Open in a new
+     tab** and **Print**; **Hold** keeps one card back with a reason (**Show again** undoes it); **Make
+     PDF** makes one student's card. **Make the PDF of** a section, or of the whole class, makes every
+     card, a page each (made by the workers; they appear when ready).
+   - **Publish**: the office **Sends to the principal**; the principal **Publishes to the families**
+     (families get a message and see the cards in the parent app; withheld and held cards stay hidden)
+     and can **Withdraw** with a reason.
+4. Families download their own card from the parent app once the release is published.
 5. **Insights → Results analytics**: pass % and mean by class and section, weakest subjects.
 6. **Exams → open exam → Reports**: the section-wise subject analysis, mark ranges (the class's grade
    scale, or your own ranges), toppers (top N in the class or section, at or above / below a %, or a

@@ -149,6 +149,12 @@ export class ReportCardsController {
     return this.cards.setHold(ctx, id, body);
   }
 
+  @Get('releases/:id/readiness')
+  @RequirePermission(REPORT_CARDS.view)
+  readiness(@ReqCtx() ctx: RequestContext, @Param('id') id: string) {
+    return this.cards.readiness(ctx, id);
+  }
+
   @Get('releases/:id/cards')
   @RequirePermission(REPORT_CARDS.view)
   async cardsOf(

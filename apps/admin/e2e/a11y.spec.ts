@@ -299,6 +299,10 @@ const PAGES = [
   // Sprint 17
   '/workflow/definitions?new=1',
   '/exams/report-cards',
+  '/exams/report-cards/1?tab=setup',
+  '/exams/report-cards/1?tab=ready',
+  '/exams/report-cards/1?tab=cards&section=143',
+  '/exams/report-cards/1?tab=publish',
   '/exams/report-cards/templates',
   '/exams/report-cards/signatures',
   '/transport/gps',
