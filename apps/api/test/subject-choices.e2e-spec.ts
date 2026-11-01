@@ -696,27 +696,36 @@ describe('subject choices and order (e2e)', () => {
       classes: [{ classId }],
     });
     const hy = exam.json().id as string;
-    const subs = await call(admin, 'PUT', `/exams/${hy}/subjects`, {
-      classId,
-      subjects: Object.entries(subject)
-        .filter(([k]) => !['GEO', 'HIS', 'POL'].includes(k))
-        .map(([k, id]) => ({ subjectId: id, maxMarks: k === 'SST' ? 80 : 50, passMarks: 17 })),
-    });
+    const putSubjects = (sst: number) =>
+      call(admin, 'PUT', `/exams/${hy}/subjects`, {
+        classId,
+        subjects: Object.entries(subject)
+          .filter(([k]) => !['GEO', 'HIS', 'POL'].includes(k))
+          .map(([k, id]) => ({ subjectId: id, maxMarks: k === 'SST' ? sst : 50, passMarks: 17 })),
+      });
+    const sstOf = (r: Awaited<ReturnType<typeof putSubjects>>) =>
+      (
+        r.json().subjects as Array<{
+          id: string;
+          subjectCode: string;
+          maxMarks: string;
+          parts?: Array<{ id: string; name: string; maxMarks: string }>;
+        }>
+      ).find((x) => x.subjectCode === 'SST')!;
+    const partMax = (r: Awaited<ReturnType<typeof putSubjects>>) =>
+      sstOf(r).parts!.map((p) => Number(p.maxMarks));
+    const subs = await putSubjects(80);
     expect(subs.statusCode).toBe(200);
-    const es = (
-      subs.json().subjects as Array<{
-        id: string;
-        subjectCode: string;
-        maxMarks: string;
-        parts?: Array<{ id: string; name: string; maxMarks: string }>;
-      }>
-    ).find((x) => x.subjectCode === 'SST')!;
+    const es = sstOf(subs);
     expect(es.maxMarks).toBe('80.00');
     expect(es.parts!.map((p) => [p.name, Number(p.maxMarks)])).toEqual([
       ['Geography', 26],
       ['History', 26],
       ['Political Science', 28],
     ]);
+    // a new maximum before any marks: the parts follow it in their ratio (0295)
+    expect(partMax(await putSubjects(40))).toEqual([13, 13, 14]);
+    expect(partMax(await putSubjects(80))).toEqual([26, 26, 28]);
     for (const [i, p] of es.parts!.entries())
       expect(
         (
@@ -736,6 +745,11 @@ describe('subject choices and order (e2e)', () => {
         })
       ).statusCode,
     ).toBe(200);
+    // once marked, the subject's maximum stays with its parts
+    const refused = await putSubjects(60);
+    expect(refused.statusCode).toBe(409);
+    expect(refused.json().type).toBe('exams.parts_marked');
+    expect(partMax(await putSubjects(80))).toEqual([26, 26, 28]);
     const sheet = (
       await call(admin, 'GET', `/exams/${hy}/register-sheet?classSectionId=${section}`)
     ).json();

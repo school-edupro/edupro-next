@@ -244,3 +244,39 @@ sub-subjects in the subject master (Social Science: Economics, Geography, Histor
 Theory, Practical and "Other (type the name)". Picking a sub-subject also sets "Entered by the teacher of" to
 it (its teacher enters the part); that list now offers the sub-subjects for every row, also for a class whose
 subjects are not saved in the exam yet (they come from the subject master, not only from the saved exam).
+
+## Sample exams for Classes VI and VII (1 Nov, migration 0295)
+
+Decided (1 Nov): everything each exam takes; the stage of mid-October; replace what VI and VII had;
+a Term I result worked out but not released.
+
+`scripts/seed-exam-sample.mjs --yes` (local database only; about 800 API calls, so raise the API's rate
+limit for the run) fills Periodic Test 1 and 2, Activity Test 1 and 2 and Term I for VI-A, VI-B, VII-A
+and VII-B through the API as the demo users (dev-clerk enters and submits, dev-admin sets up and
+verifies), so every rule applies as on screen. It first clears those exams' VI-VII marks, statuses,
+results, remarks, attendance, indicators, health, subject changes and the "Term I result (sample)"
+scheme in the database (the API never deletes marks); run again, it gives the same data.
+
+- **Subjects.** VII gets a slot template (its 8 subjects for everyone, Social Science in the same two
+  parts as VI: Geography and Political Science); VI-A students without a Subject-2 language get one
+  (mostly Hindi, some Sanskrit, French, German, Spanish); VI-B keeps its choices. Term I: every subject
+  out of 80 (pass 27), a paper a day from 1 October (VI's languages on one day), VII's Art and PE graded
+  A-C (CO_SCHOLASTIC_3); Geography / History, offered to nobody, are out of Term I.
+- **Marks.** A steady level per student with some spread (a few weak, a few toppers); Social Science by
+  its parts. AB twice (it counts 0 and holds the term result as Absent, as the school's codes say), ML
+  three times (left out).
+- **Other entries.** Attendance and a general remark for PT1, PT2 and Term I; Term I co-scholastic
+  indicators (A-D) and height / weight / blood group.
+- **Stage.** PT1, PT2, ACT1, ACT2 submitted, verified and worked out. Term I submitted and waiting for
+  verification, except VII-B Science and Social Science (5 of 8 entered) and VI-A Computer Science
+  (entered, not submitted).
+- **Term I result (sample).** The DPS VI-VIII scheme (periodic test 15 + subject enrichment 5 + term 80),
+  locked and worked out: 24 pass, 4 compartment, 1 fail, 2 absent, 3 incomplete (VII-B). Not released;
+  no message is queued (the script checks).
+
+**Found while seeding: parts follow a new maximum (0295).** Term I's Social Science for VI was out of
+40 in parts of 20 + 20; set to 80, the parts stayed 20 + 20, so no one could score above 40.
+`app.fit_parts_to_max` now resizes the parts in their ratio when the exam's subjects change the
+maximum and nothing is marked yet (rounded as the class parts are: whole marks, the last part takes
+what is left). Once the subject or a part has marks, a new maximum is refused (`exams.parts_marked`):
+the parts' maxima are changed instead.

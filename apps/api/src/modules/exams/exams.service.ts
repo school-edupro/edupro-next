@@ -606,6 +606,27 @@ export class ExamsService {
           `${m.code} has ${m.n} marks entered: it can't be taken out of the exam`,
           { status: 409, extra: { subjectCode: m.code, entries: m.n } },
         );
+      // a subject entered in parts has their sum as its maximum: once marked, its parts change instead
+      const parted = await c.query<{ subjectId: string; code: string; max: string }>(
+        `SELECT es.subject_id::text AS "subjectId", sub.code, es.max_marks::text AS max
+           FROM exam_subjects es JOIN subjects sub ON sub.id = es.subject_id
+          WHERE es.exam_id = $1 AND es.class_id = $2
+            AND EXISTS (SELECT 1 FROM exam_subject_parts p WHERE p.exam_subject_id = es.id)
+            AND (EXISTS (SELECT 1 FROM mark_entries me WHERE me.exam_subject_id = es.id)
+              OR EXISTS (SELECT 1 FROM mark_part_entries mp JOIN exam_subject_parts p ON p.id = mp.part_id
+                          WHERE p.exam_subject_id = es.id))`,
+        [examId, dto.classId],
+      );
+      const refit = parted.rows.find((x) => {
+        const s = dto.subjects.find((y) => y.subjectId === x.subjectId);
+        return s !== undefined && s.maxMarks !== Number(x.max);
+      });
+      if (refit)
+        throw new DomainError(
+          'exams.parts_marked',
+          `${refit.code} is entered in parts and has marks: change the maximum of its parts instead`,
+          { status: 409, extra: { subjectCode: refit.code } },
+        );
       for (const s of dto.subjects) {
         if (s.startsAt && s.endsAt && s.endsAt <= s.startsAt)
           throw new DomainError('exams.paper_time', 'A paper ends after it starts', {
@@ -647,9 +668,10 @@ export class ExamsService {
         `DELETE FROM exam_subjects WHERE exam_id = $1 AND class_id = $2 AND NOT entry_locked AND NOT (subject_id = ANY($3::bigint[]))`,
         [examId, dto.classId, dto.subjects.map((s) => s.subjectId)],
       );
-      // a subject the class enters in parts (Class set-up, docs/design/67) gets them, while it has none
+      // parts follow a new maximum while unmarked (0295); a subject the class enters in parts (Class
+      // set-up, docs/design/67) gets them, while it has none
       await c.query(
-        `SELECT app.apply_class_parts(id) FROM exam_subjects WHERE exam_id = $1 AND class_id = $2`,
+        `SELECT app.fit_parts_to_max(id), app.apply_class_parts(id) FROM exam_subjects WHERE exam_id = $1 AND class_id = $2`,
         [examId, dto.classId],
       );
       await this.audit.stage(ctx, c, {
