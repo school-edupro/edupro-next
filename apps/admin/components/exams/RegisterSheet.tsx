@@ -13,6 +13,8 @@ export function RegisterSheet({ sheet, label }: { sheet: Sheet; label: string })
     'data-text': c.text ? 'true' : undefined,
     'data-lines': c.lines ? 'true' : undefined,
     'data-frozen': i === nameAt ? 'true' : undefined,
+    'data-align': c.center ? 'center' : undefined,
+    'data-strong': c.strong ? 'true' : undefined,
     title: c.title,
   });
   return (
@@ -45,7 +47,7 @@ export function RegisterSheet({ sheet, label }: { sheet: Sheet; label: string })
                     {c.t}
                   </th>
                 ) : (
-                  <td key={i} {...attrs(c, i)}>
+                  <td key={i} colSpan={c.span} {...attrs(c, i)}>
                     {c.names?.length ? (
                       <details className="ep-mr-names">
                         <summary>{c.t}</summary>

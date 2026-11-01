@@ -1,4 +1,5 @@
 import { Badge, Breadcrumbs, Card, PageHeader } from '@edupro/ui';
+import { Fragment } from 'react';
 import { notFound } from 'next/navigation';
 import { AutoSubmit } from '@/components/AutoSubmit';
 import { RegisterDownloads } from '@/components/exams/RegisterDownloads';
@@ -241,14 +242,23 @@ export default async function RunRegisterPage({
       </p>
       {report !== 'register' ? (
         reg.blocks.map((b) => (
-          <section key={b.title} className="ep-mr-report" aria-label={b.title}>
-            <h2>{b.title}</h2>
-            {b.sheet.body.length ? (
-              <RegisterSheet sheet={b.sheet} label={`${b.title} · ${label}`} />
-            ) : (
-              <p className="ep-field__help">Nothing to show.</p>
-            )}
-          </section>
+          <Fragment key={b.title}>
+            {b.sheet.note ? (
+              <p className="ep-alert ep-alert--info" style={{ marginBottom: 'var(--sp-4)' }}>
+                {b.sheet.note}
+              </p>
+            ) : null}
+            <section className="ep-mr-report" aria-label={b.title}>
+              <h2 className="ep-mr-report__title">{b.title}</h2>
+              {b.sheet.body.length ? (
+                <RegisterSheet sheet={b.sheet} label={`${b.title} · ${label}`} />
+              ) : (
+                <p className="ep-field__help" style={{ padding: 'var(--sp-3)' }}>
+                  Nothing to show.
+                </p>
+              )}
+            </section>
+          </Fragment>
         ))
       ) : reg.sheet && reg.sheet.body.length ? (
         <RegisterSheet sheet={reg.sheet} label={`${s.name} · ${label}`} />

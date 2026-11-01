@@ -29,6 +29,7 @@ interface Cell {
   rows?: number;
 }
 interface Sheet {
+  note?: string;
   head: Cell[][];
   body: Array<{ studentId: string; cells: Cell[] }>;
   foot: Cell[] | null;
@@ -440,13 +441,19 @@ describe('mark registers like the legacy Term Mark Register (e2e)', () => {
     const sum = await run(`${A}&report=summary`);
     expect(sum.reports.map((x) => x.kind)).toContain('compare');
     const fig = firstCol(sum.blocks[0]!);
-    // Asha and Bhanu pass; Chitra's AB withholds her final
-    expect(fig.Students![1]).toBe('3');
-    expect(fig.Passed![1]).toBe('2');
-    expect(fig['Absent (final withheld)']![1]).toBe('1');
-    expect(sum.blocks.map((b) => b.title)).toContain(
-      'Absent in N subjects (a code that holds the total)',
-    );
+    // the legacy's Result Summary: Asha and Bhanu pass; Chitra's AB withholds her final
+    expect(sum.blocks[0]!.title).toBe('Result Summary — 3 student(s), 2 appeared');
+    expect(sum.blocks[0]!.sheet.note).toContain('Fail = subject % below 33%');
+    expect(fig['Total students']![1]).toBe('3');
+    expect(fig['Passed (no failure, no absence)']!.slice(1)).toEqual(['2', '100.00%']);
+    expect(fig['Absent in 1 subject']![1]).toBe('1');
+    const absent = sum.blocks.find((b) => b.title === 'Absent in 1 subject — 1')!;
+    expect(absent.sheet.body[0]!.cells.map((c) => c.t).slice(1)).toEqual([
+      'Chitra Register',
+      `${s}-3`,
+      'MATHEMATICS (AB)',
+      '–',
+    ]);
     const ana = firstCol((await run(`${A}&report=analysis`)).blocks[0]!);
     // English: Asha 88, Bhanu 64, Chitra 75
     expect(ana.English!.slice(1, 4)).toEqual(['3', '0', '3']);

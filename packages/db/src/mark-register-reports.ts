@@ -146,122 +146,162 @@ function subjectsOf(i: ReportInput) {
 }
 
 // ---- Result summary --------------------------------------------------------------------------------
+/** the rules the summary follows, in words, from the register's own settings */
+function rules(def: RegisterDef): string {
+  const f = def.final;
+  const codes = Object.values(def.codes).flat();
+  const holds = [...new Set(codes.filter((c) => c.blocks).map((c) => c.code))];
+  const others = [...new Set(codes.filter((c) => !c.blocks).map((c) => c.code))];
+  return [
+    `Fail = subject % below ${String(f.passPct)}%`,
+    f.compartmentUpTo > 0
+      ? `${f.compartmentUpTo === 1 ? '1' : `1–${String(f.compartmentUpTo)}`} failed = Compartment, more = Fail`
+      : 'any failed = Fail',
+    ...(holds.length ? [`${holds.join(', ')} = absent (not counted as fail)`] : []),
+    ...(others.length ? [`${others.slice(0, 3).join(', ')} shown separately`] : []),
+    ...(f.optionalMode === 'choices' && !f.optionalInFinal ? ['optional subjects left out'] : []),
+  ].join(' · ');
+}
+
+/**
+ * The legacy's Result Summary: the counts (passed; failed in 1, 2 … subjects as compartment or fail;
+ * absent in N; medical leave or another code in N; marks not entered) with each one's % of those who
+ * appeared and the pass %, then a table per group: the student, the subjects with their %, the final.
+ */
 function summary(i: ReportInput): ReportBlock[] {
   const rows = i.rows;
-  const by = (res: RegStudentResult['result']) => rows.filter((r) => r.result === res);
+  const f = i.def.final;
   const appeared = rows.filter((r) => ['pass', 'compartment', 'fail'].includes(r.result));
-  const passed = by('pass');
-  const head: SheetCell[][] = [
-    [{ t: 'Students', text: true }, count(i, rows)],
-    [{ t: 'Appeared (a final)', text: true }, count(i, appeared)],
-    [{ t: 'Passed', text: true }, count(i, passed)],
-    [
-      { t: `Compartment (failed in 1–${String(i.def.final.compartmentUpTo)})`, text: true },
-      count(i, by('compartment')),
-    ],
-    [{ t: 'Failed', text: true }, count(i, by('fail'))],
-    [{ t: 'Absent (final withheld)', text: true }, count(i, by('absent'))],
-    [{ t: 'Marks not entered yet', text: true }, count(i, by('incomplete'))],
-    [
-      { t: 'Pass % (passed of appeared)', text: true },
-      { t: pct(passed.length, appeared.length), tone: 'final' },
-    ],
-  ];
-  const out = [
-    block(
-      i,
-      'Result summary',
-      [
-        ['Figure', 6, true],
-        ['Students', 1.4],
-      ],
-      head,
-    ),
-  ];
-  const failedIn = new Map<number, RegStudentResult[]>();
-  for (const r of rows)
-    if (r.failed.length)
-      failedIn.set(r.failed.length, [...(failedIn.get(r.failed.length) ?? []), r]);
-  if (failedIn.size)
-    out.push(
-      block(
-        i,
-        'Failed in N subjects',
-        [
-          ['Failed in', 2, true],
-          ['Students', 1.2],
-          ['Who (subjects)', 8, true],
-        ],
-        [...failedIn.entries()]
-          .sort((a, b) => a[0] - b[0])
-          .map(([n, list]) => [
-            { t: `${String(n)} subject${n === 1 ? '' : 's'}`, text: true },
-            count(i, list),
-            { t: list.map((r) => `${who(i, r)}: ${r.failed.join(', ')}`).join('; '), text: true },
-          ]),
-      ),
-    );
-  const absentIn = new Map<number, RegStudentResult[]>();
-  for (const r of rows)
+  const passed = rows.filter((r) => r.result === 'pass');
+  const of = appeared.length;
+  const share = (n: number) => (of > 0 ? `${cutFixed((n / of) * 100, 2)}%` : '');
+  const plural = (n: number) => `${String(n)} subject${n === 1 ? '' : 's'}`;
+  const upper = (x: RegSubjectResult) => x.name.toUpperCase();
+  const final = (r: RegStudentResult): SheetCell => ({
+    t: r.withheldBy.length
+      ? '–'
+      : r.total === null
+        ? ''
+        : `${cutFixed(r.total, 'auto')} / ${cutFixed(r.max, 'auto')}`,
+    tone: 'final',
+  });
+  type Group = { label: string; list: Array<{ r: RegStudentResult; subjects: string }> };
+  const groups: Group[] = [];
+  const add = (label: string, r: RegStudentResult, subjects: string) => {
+    let g = groups.find((x) => x.label === label);
+    if (!g) groups.push((g = { label, list: [] }));
+    g.list.push({ r, subjects });
+  };
+  const taken = (r: RegStudentResult) =>
+    Object.values(r.subjects).filter((x): x is RegSubjectResult => !!x && x.inFinal);
+  // failed in N subjects: a compartment up to the register's number, a fail above it
+  for (const r of [...rows].sort((a, b) => a.failed.length - b.failed.length))
+    if (r.failed.length && (r.result === 'compartment' || r.result === 'fail'))
+      add(
+        `Failed in ${plural(r.failed.length)} — ${r.failed.length <= f.compartmentUpTo ? 'Compartment' : 'Fail'}`,
+        r,
+        taken(r)
+          .filter((x) => x.status === 'fail')
+          .map((x) => `${upper(x)} (${String(Math.round(x.pct ?? 0))}%)`)
+          .join(', '),
+      );
+  for (const r of [...rows].sort((a, b) => a.withheldBy.length - b.withheldBy.length))
     if (r.withheldBy.length)
-      absentIn.set(r.withheldBy.length, [...(absentIn.get(r.withheldBy.length) ?? []), r]);
-  if (absentIn.size)
+      add(
+        `Absent in ${plural(r.withheldBy.length)}`,
+        r,
+        taken(r)
+          .filter((x) => x.withheld)
+          .map((x) => {
+            const code = x.counted.map((k) => x.values[k]?.code).find((c) => c);
+            return `${upper(x)} (${code ?? 'AB'})`;
+          })
+          .join(', '),
+      );
+  // a code that does not hold the total (medical leave, exempted …): shown apart
+  const leave = rows
+    .map((r) => ({
+      r,
+      list: taken(r).flatMap((x) => {
+        const code = x.counted.map((k) => x.values[k]).find((c) => c?.code && !c.blocked)?.code;
+        return code ? [`${upper(x)} (${code})`] : [];
+      }),
+    }))
+    .filter((y) => y.list.length)
+    .sort((a, b) => a.list.length - b.list.length);
+  for (const y of leave)
+    add(`Medical leave / code in ${plural(y.list.length)}`, y.r, y.list.join(', '));
+  for (const r of rows)
+    if (r.result === 'incomplete')
+      add(
+        'Marks not entered yet',
+        r,
+        taken(r)
+          .filter((x) => x.missing)
+          .map(upper)
+          .join(', '),
+      );
+
+  const main: SheetCell[][] = [
+    [
+      { t: 'Total students', text: true, strong: true },
+      { t: String(rows.length), center: true, strong: true },
+      { t: '' },
+    ],
+    [
+      { t: 'Passed (no failure, no absence)', text: true, strong: true },
+      { t: String(passed.length), center: true, strong: true },
+      { t: share(passed.length), center: true },
+    ],
+    ...groups.map((g): SheetCell[] => [
+      { t: g.label, text: true, strong: true },
+      { t: String(g.list.length), center: true, strong: true },
+      { t: share(g.list.length), center: true },
+    ]),
+    [
+      { t: 'Pass % (passed ÷ appeared)', text: true, tone: 'final' },
+      { t: share(passed.length), tone: 'final', span: 2, center: true },
+    ],
+  ];
+  const head = block(
+    i,
+    `Result Summary — ${String(rows.length)} student(s), ${String(of)} appeared`,
+    [
+      ['Result', 6, true],
+      ['Students', 1.5],
+      [`% of ${String(of)} appeared`, 2],
+    ],
+    main,
+  );
+  head.sheet.note = rules(i.def);
+  const out = [head];
+  for (const g of groups)
     out.push(
       block(
         i,
-        'Absent in N subjects (a code that holds the total)',
+        `${g.label} — ${String(g.list.length)}`,
         [
-          ['Absent in', 2, true],
-          ['Students', 1.2],
-          ['Who (subjects)', 8, true],
+          ['#', 0.6],
+          ['Student Name', 4, true],
+          ...(i.merit ? [['Section', 1.2, true] as Col] : []),
+          ['Adm No', 1.8],
+          ['Subjects', 8, true],
+          ['Final', 2],
         ],
-        [...absentIn.entries()]
-          .sort((a, b) => a[0] - b[0])
-          .map(([n, list]) => [
-            { t: `${String(n)} subject${n === 1 ? '' : 's'}`, text: true },
-            count(i, list),
-            {
-              t: list.map((r) => `${who(i, r)}: ${r.withheldBy.join(', ')}`).join('; '),
-              text: true,
-            },
-          ]),
+        g.list.map(({ r, subjects }, n): SheetCell[] => [
+          { t: String(n + 1), center: true },
+          { t: nameOf(i, r), text: true, strong: true },
+          ...(i.merit ? [{ t: r.section, text: true } as SheetCell] : []),
+          { t: r.admissionNo, center: true },
+          { t: subjects, text: true },
+          { ...final(r), center: true },
+        ]),
       ),
     );
-  // a code that does not hold the total (medical leave, exempted …) in a counted column
-  const leave = new Map<number, Array<{ r: RegStudentResult; subjects: string[] }>>();
-  for (const r of rows) {
-    const subjects = Object.values(r.subjects)
-      .filter((x): x is RegSubjectResult => !!x && x.inFinal)
-      .filter((x) => x.counted.some((k) => x.values[k]?.code && !x.values[k]?.blocked))
-      .map((x) => x.code);
-    if (subjects.length)
-      leave.set(subjects.length, [...(leave.get(subjects.length) ?? []), { r, subjects }]);
+  for (const b of out.slice(1)) {
+    const last = b.sheet.head[0]![b.sheet.head[0]!.length - 1]!;
+    last.tone = 'final';
   }
-  if (leave.size)
-    out.push(
-      block(
-        i,
-        'Medical leave or another code in N subjects',
-        [
-          ['In', 2, true],
-          ['Students', 1.2],
-          ['Who (subjects)', 8, true],
-        ],
-        [...leave.entries()]
-          .sort((a, b) => a[0] - b[0])
-          .map(([n, list]) => [
-            { t: `${String(n)} subject${n === 1 ? '' : 's'}`, text: true },
-            count(
-              i,
-              list.map((y) => y.r),
-            ),
-            {
-              t: list.map((y) => `${who(i, y.r)}: ${y.subjects.join(', ')}`).join('; '),
-              text: true,
-            },
-          ]),
-      ),
-    );
   return out;
 }
 

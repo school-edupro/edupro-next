@@ -174,8 +174,10 @@ out, then runs it for any section; the marks always come from the exam entry.
    Subject; the note above the sheet says what to check (withheld finals, marks not entered).
    **Download**: PDF (paper, way round, fit to width) or Excel, this section or every section.
    **Reports ▾** (each downloads the same way; a count opens the students it stands for):
-   - **Result summary**: passed, compartment, failed, absent, not entered, pass %; failed / absent /
-     on leave in 1, 2 … subjects with who.
+   - **Result summary** (as the old register prints it): the rules line, then total, passed, failed
+     in 1, 2 … subjects (compartment or fail), absent, medical leave, not entered, each with its % of
+     those who appeared, and the pass %; then a table per group: student, admission no, the subjects
+     with their %, the final.
    - **Analysis**: per subject (each language of a slot apart) the students in each % band, the
      cumulative counts, highest, lowest, average and passing % (bands set in step 6).
    - **Entry status**: per subject and exam, entered of how many, the teacher and who is pending; a

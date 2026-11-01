@@ -13777,6 +13777,12 @@ button.ep-subchoice__icon:hover {
 .ep-mr-sheet [data-text='true'] {
   text-align: left;
 }
+.ep-mr-sheet [data-align='center'] {
+  text-align: center;
+}
+.ep-mr-sheet [data-strong='true'] {
+  font-weight: var(--fw-semibold);
+}
 .ep-mr-sheet [data-tone='calc'] {
   background: var(--status-success-bg);
 }
@@ -13889,8 +13895,26 @@ button.ep-subchoice__icon:hover {
 }
 .ep-mr-report {
   margin-bottom: var(--sp-5);
+  overflow: hidden;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  background: var(--surface-card);
+  box-shadow: var(--shadow-card);
 }
-.ep-mr-report h2 {
-  margin: 0 0 var(--sp-2);
-  font-size: var(--fs-h4);
+.ep-mr-report__title {
+  margin: 0;
+  padding: var(--sp-3) var(--sp-3);
+  background: var(--mob-navy-50);
+  color: var(--text-heading);
+  font-family: var(--font-body);
+  font-size: var(--fs-body);
+  font-weight: var(--fw-semibold);
+}
+.ep-mr-report .ep-mr-sheet-wrap {
+  max-height: none;
+  border: 0;
+  border-radius: 0;
+}
+.ep-mr-report .ep-mr-sheet {
+  width: 100%;
 }

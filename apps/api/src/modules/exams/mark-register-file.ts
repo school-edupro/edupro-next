@@ -212,11 +212,23 @@ export async function registerPdf(
       y = letterhead();
     };
     // a report's next table of the same place follows on the page (a new page when it is full)
-    const titleH = sheet.title ? 16 : 0;
+    const noteH = sheet.note ? 14 : 0;
+    const titleH = (sheet.title ? 16 : 0) + noteH;
     if (!page || !sheet.title || sheet.place !== lastPlace || y - titleH - headH - lineH * 2 < M)
       fresh();
     else y -= 10;
     lastPlace = sheet.place;
+    if (sheet.note && page) {
+      // the rules the figures follow
+      (page as PDFPage).drawText(clip(regular, sheet.note, 8, usable), {
+        x: M,
+        y: y - 9,
+        size: 8,
+        font: regular,
+        color: INK,
+      });
+      y -= noteH;
+    }
     if (sheet.title && page) {
       (page as PDFPage).drawText(clip(bold, sheet.title, 10, usable), {
         x: M,
@@ -225,7 +237,7 @@ export async function registerPdf(
         font: bold,
         color: INK,
       });
-      y -= titleH;
+      y -= titleH - noteH;
     }
     header();
     const rows = [...sheet.body.map((r) => r.cells), ...(sheet.foot ? [sheet.foot] : [])];
@@ -237,11 +249,16 @@ export async function registerPdf(
         header();
       }
       const isFoot = sheet.foot !== null && ri === rows.length - 1;
-      cells.forEach((c, i) => {
-        drawCell(c.t, xs[i]!, xs[i + 1]!, y, h, {
-          font: isFoot || c.tone === 'final' ? bold : regular,
+      // a cell may span columns (the pass % of a summary)
+      let col = 0;
+      cells.forEach((c) => {
+        const from = col;
+        col += c.span ?? 1;
+        drawCell(c.t, xs[from]!, xs[Math.min(col, xs.length - 1)]!, y, h, {
+          font: isFoot || c.tone === 'final' || c.strong ? bold : regular,
           bg: fill(c.tone),
-          left: c.text,
+          left: c.text && !c.center,
+          centre: c.center,
           red: c.tone === 'star' || c.tone === 'code' || c.tone === 'warn',
           lines: c.lines,
         });
@@ -302,6 +319,11 @@ export async function registerXlsx(sheets: Sheet[], meta: RegisterFileMeta): Pro
     }
     let firstHead = 0;
     for (const [n, sheet] of group.entries()) {
+      if (sheet.note) {
+        const r = ws.addRow([sheet.note]);
+        ws.mergeCells(r.number, 1, r.number, cols);
+        r.getCell(1).alignment = { wrapText: true };
+      }
       if (sheet.title) {
         if (n > 0) ws.addRow([]);
         const t = ws.addRow([sheet.title]);
@@ -327,14 +349,18 @@ export async function registerXlsx(sheets: Sheet[], meta: RegisterFileMeta): Pro
       const rows = [...sheet.body.map((x) => x.cells), ...(sheet.foot ? [sheet.foot] : [])];
       for (const cells of rows) {
         const row = ws.addRow([]);
-        cells.forEach((c, i) => {
-          const cell = row.getCell(i + 1);
+        let col = 0;
+        cells.forEach((c) => {
+          const at = col + 1;
+          col += c.span ?? 1;
+          if ((c.span ?? 1) > 1) ws.mergeCells(row.number, at, row.number, col);
+          const cell = row.getCell(at);
           const x = c.text || c.lines ? { v: c.t } : excelValue(c.t);
           cell.value = x.v;
           if (x.fmt) cell.numFmt = x.fmt;
           cell.border = box;
           cell.alignment = {
-            horizontal: c.text ? 'left' : 'right',
+            horizontal: c.center ? 'center' : c.text ? 'left' : 'right',
             vertical: 'middle',
             wrapText: Boolean(c.lines) || (c.text && c.t.length > 40),
           };
@@ -346,7 +372,7 @@ export async function registerXlsx(sheets: Sheet[], meta: RegisterFileMeta): Pro
             };
           if (c.tone === 'star' || c.tone === 'code' || c.tone === 'warn')
             cell.font = { color: { argb: 'FFBF1A1A' } };
-          if (c.tone === 'final') cell.font = { ...(cell.font ?? {}), bold: true };
+          if (c.tone === 'final' || c.strong) cell.font = { ...(cell.font ?? {}), bold: true };
         });
       }
     }

@@ -77,27 +77,45 @@ const lines = (s: Sheet) =>
   Object.fromEntries(s.body.map((r) => [r.cells[0]!.t, r.cells.map((c) => c.t)]));
 
 describe('mark register reports (docs/design/68, phase 2)', () => {
-  it('result summary: who passed, the compartment, failed, absent, not entered; failed and absent in N; leave', () => {
-    const [main, failedIn, absentIn, leave] = buildReport('summary', input(true));
-    const m = lines(main!.sheet);
-    expect(m.Students![1]).toBe('8');
-    expect(m['Appeared (a final)']![1]).toBe('6');
-    expect(m.Passed![1]).toBe('4');
-    expect(m['Compartment (failed in 1–1)']![1]).toBe('1');
-    expect(m.Failed![1]).toBe('1');
-    expect(m['Absent (final withheld)']![1]).toBe('1');
-    expect(m['Marks not entered yet']![1]).toBe('1');
-    expect(m['Pass % (passed of appeared)']![1]).toBe('66.67');
-    // the students a count stands for
-    expect(main!.sheet.body[2]!.cells[1]!.names).toEqual([
-      'a1 (VI-A)',
-      'a4 (VI-A)',
-      'b1 (VI-B)',
-      'b3 (VI-B)',
+  it('result summary as the legacy prints it: the rules, the counts with % of those who appeared, a table per group', () => {
+    const blocks = buildReport('summary', input(true));
+    const [main] = blocks;
+    expect(main!.title).toBe('Result Summary — 8 student(s), 6 appeared');
+    expect(main!.sheet.note).toBe(
+      'Fail = subject % below 33% · 1 failed = Compartment, more = Fail · AB = absent (not counted as fail) · ML, L, EX shown separately · optional subjects left out',
+    );
+    expect(main!.sheet.body.map((r) => r.cells.map((c) => c.t))).toEqual([
+      ['Total students', '8', ''],
+      ['Passed (no failure, no absence)', '4', '66.67%'],
+      ['Failed in 1 subject — Compartment', '1', '16.67%'],
+      ['Failed in 2 subjects — Fail', '1', '16.67%'],
+      ['Absent in 1 subject', '1', '16.67%'],
+      ['Medical leave / code in 1 subject', '1', '16.67%'],
+      ['Marks not entered yet', '1', '16.67%'],
+      ['Pass % (passed ÷ appeared)', '66.67%'],
     ]);
-    expect(lines(failedIn!.sheet)['2 subjects']![2]).toBe('b2 (VI-B): ENG, MAT');
-    expect(lines(absentIn!.sheet)['1 subject']![2]).toBe('a3 (VI-A): ENG');
-    expect(lines(leave!.sheet)['1 subject']![2]).toBe('b3 (VI-B): ENG');
+    // the pass % spans the last two columns
+    expect(main!.sheet.body[7]!.cells[1]!.span).toBe(2);
+    const by = Object.fromEntries(
+      blocks.slice(1).map((b) => [b.title, b.sheet.body.map((r) => r.cells.map((c) => c.t))]),
+    );
+    expect(by['Failed in 2 subjects — Fail — 1']).toEqual([
+      ['1', 'b2', 'VI-B', 'b2', 'ENGLISH (20%), MATHS (10%)', '30 / 200'],
+    ]);
+    expect(by['Absent in 1 subject — 1']).toEqual([['1', 'a3', 'VI-A', 'a3', 'ENGLISH (AB)', '–']]);
+    expect(by['Medical leave / code in 1 subject — 1']).toEqual([
+      ['1', 'b3', 'VI-B', 'b3', 'ENGLISH (ML)', '80 / 100'],
+    ]);
+    expect(by['Marks not entered yet — 1']).toEqual([['1', 'a5', 'VI-A', 'a5', 'MATHS', '']]);
+    // a section's table has no Section column
+    const sec = buildReport('summary', input(false))[1]!;
+    expect(sec.sheet.head[0]!.map((c) => c.t)).toEqual([
+      '#',
+      'Student Name',
+      'Adm No',
+      'Subjects',
+      'Final',
+    ]);
   });
 
   it('analysis: bands, cumulative, highest, lowest, average and passing % by subject', () => {

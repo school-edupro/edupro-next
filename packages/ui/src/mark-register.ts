@@ -989,12 +989,18 @@ export interface SheetCell {
   text?: boolean;
   /** the students a count stands for (a report: shown on a click) */
   names?: string[];
+  /** centred (a report's counts, #, admission no) */
+  center?: boolean;
+  /** in bold */
+  strong?: boolean;
 }
 export interface Sheet {
   /** the section or class it is for */
   place: string;
   /** a report's table: its heading (tables of one place follow on one page) */
   title?: string;
+  /** a line above it: the rules the figures follow */
+  note?: string;
   head: SheetCell[][];
   body: Array<{ studentId: string; cells: SheetCell[] }>;
   foot: SheetCell[] | null;
