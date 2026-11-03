@@ -17,6 +17,8 @@ import { SchemePromotionService } from './scheme-promotion.service';
 import { ExamEntryService } from './exam-entry.service';
 import { ExamResultsService } from './exam-results.service';
 import { ExamStatusController } from './exam-status.controller';
+import { GradeRegistersController } from './grade-registers.controller';
+import { GradeRegistersService } from './grade-registers.service';
 import { StudentRegistersController } from './student-registers.controller';
 import { StudentRegistersService } from './student-registers.service';
 import { MarkSchemesController } from './mark-schemes.controller';
@@ -45,6 +47,7 @@ import { SubjectChoicesService } from './subject-choices.service';
     ExamStatusController,
     MarkSchemesController,
     StudentRegistersController,
+    GradeRegistersController,
     HpcController,
     IndicatorMastersController,
     FamilyHpcController,
@@ -74,6 +77,7 @@ import { SubjectChoicesService } from './subject-choices.service';
     SchemePromotionService,
     AuditService,
     StudentRegistersService,
+    GradeRegistersService,
   ],
   exports: [ExamsService, ExamEntryService, ExamResultsService, ReportCardsService],
 })

@@ -1,6 +1,6 @@
 # 69 · Grade, Remark, Attendance and Height & Weight registers like the legacy
 
-Status: part 1 built 3 Nov 2026 · parts 2–3 to build · companion of docs/design/68 (mark registers)
+Status: parts 1–2 built 3 Nov 2026 · part 3 to build · companion of docs/design/68 (mark registers)
 
 ## Why
 
@@ -106,6 +106,41 @@ others the sections they teach.
   Show; Download as the mark registers'), `RegistersSwitch` on it and on `/exams/schemes`; the menu entry
   is now **Registers**; file route `/api/student-register/[type]/[format]`.
 - Tests: `apps/api/test/student-registers.e2e-spec.ts` (5); a11y entries for the three pages.
+
+## As built (part 2, 3 Nov 2026)
+
+- Migration 0300: `grade_registers` (name 2–150, `class_ids`, `def` JSONB, `access_type` all | mapping,
+  status draft | locked | superseded, `version`, `previous_id`, `chain_id` set by a trigger as mark
+  registers, created / updated / locked / deleted by and at) and `grade_register_access` (per chain and
+  person: run, edit, delete, assign). The same permissions as mark registers (`exams.registers.manage`,
+  `exams.registers.assign`; their descriptions now name both).
+- Engine `packages/db/src/grade-register.ts` (copied to `packages/ui` by `scripts/sync-mark-register.mjs`
+  for the builder's preview; a unit test keeps the copies equal): `GradeRegisterDef` (exams with
+  headers, areas and indicators left out, short labels, own order of areas / items / indicators, roll or
+  alphabetical, full or numbered headers, legend, proper case, blank text, Overall off | mode | points,
+  grade scale best first, student columns), `arrange` (areas → items → indicators; an item without
+  sub-items is its own column), `overallOf` (the legacy rules), `scaleFromLevels` (letters best first,
+  words lowest first), `buildGradeSheet` (the class sheet; numbered headers add a Legend table),
+  `sampleGradeData`, `gradeProblems`.
+- The legacy's four levels map to EduPro's three: group = area (the areas master's order), indicator =
+  item (a heading, or the item itself when rated), description = the rated item; written observations
+  (`kind = 'text'`) are not grades and are left out. The tree is the union of the sets the classes use in
+  the assessments (`exam_indicator_sets`).
+- API `/exams/grade-registers` (`GradeRegistersController`, `GradeRegistersService`, rights as the mark
+  registers', the staff list from them): list (newest first; assessments, assignees, in use, same
+  name), builder (`?classIds=&examIds=`: classes with "no grades yet", the year's exams that take
+  indicators for those classes, the tree, the sets' levels), get, create, save (a draft in place; a
+  locked one makes or reuses the next draft), lock (the earlier locked version is superseded), unlock,
+  access-type (managers; the whole chain), delete (drafts) and the bin, restore (renamed on a clash),
+  versions, restore-version (a new register with the chain's people), copy (classes; not the people),
+  access (delegated assign as mark registers), rights report and remove. Saving refuses what
+  `gradeProblems` finds with the classes' tree (no assessment, nothing ticked, points without a scale).
+- Admin: `/exams/grade-registers` (the switch's Grade Register), `/new` and `/[id]/edit` with
+  `GradeRegisterBuilder` (4 steps, a step's gaps stop Next, preview from step 3); `RegistersList` and the
+  register server actions take a `kind` (mark | grade): an Assessments column, the Access button and
+  dialog for grade registers; Run arrives with part 3.
+- Tests: `packages/db/test/grade-register.test.ts` (8), `apps/api/test/grade-registers.e2e-spec.ts` (7),
+  a11y entries for the list and the new builder.
 
 ## Found while planning (for parts 2–3)
 

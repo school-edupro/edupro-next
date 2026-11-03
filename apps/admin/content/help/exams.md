@@ -253,6 +253,29 @@ out, then runs it for any section; the marks always come from the exam entry.
 4. **Assign** (managers, or someone given Assign) gives a teacher Run / Edit / Delete on one register;
    the **Rights report** shows who holds what.
 
+### Grade registers (indicators)
+
+**Exams → Registers → Grade Register** keeps the school's grade registers, as the old Grade Register
+did: a register says which assessments and indicators a class's grade sheet shows, in which order and
+with which headers.
+
+1. **+ New grade register** (register managers: exam office, school admin) opens four steps:
+   **Details** (a name unique in the year, the classes — "no grades yet" marks a class with no grades —
+   and the student order), **Assessments** (the exams of the year that rate indicators for those
+   classes; tick them in print order and give each a short header such as T1), **Indicators** (the
+   areas and indicators of the classes' sets: untick what the register leaves out, move with ▲▼, give
+   a long indicator a short header) and **Display & Save** (the header as full text or numbered D1, D2
+   … with a legend, proper-case names, the text for a blank grade, the **Overall** per area — most
+   frequent grade, or by the points of the grade scale, with the scale best first — and the student
+   columns). A preview on three sample students shows the sheet as you go.
+2. The list has **Edit** (a locked register saves as its next version), **Versions** (restoring a
+   version makes a new register), **Copy** (for other classes; the people given rights are not copied),
+   **Assign** (Run / Edit / Delete / Assign per person, as for mark registers), **Access** (**All**: who
+   may run it sees every indicator; **As per mapping**: a teacher sees only the indicator areas of their
+   Indicator assignment), **Lock** / **Unlock**, **Delete** (to the bin; **Deleted** brings it back) and
+   the **Rights report**.
+3. **Run** (the class sheet or student-wise, PDF and Excel) comes in the next part.
+
 ### Remark, Attendance and Height & Weight registers
 
 **Exams → Registers** opens with a switch at the top, as in the old Registers menu: **Mark Register**

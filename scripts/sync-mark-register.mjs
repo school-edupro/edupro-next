@@ -11,3 +11,11 @@ const banner =
   '// GENERATED from packages/db/src/mark-register.ts by scripts/sync-mark-register.mjs — do not edit.\n';
 writeFileSync(join(root, 'packages/ui/src/mark-register.ts'), banner + src);
 console.log('mark register engine copied to packages/ui/src/mark-register.ts');
+// the grade registers' engine too (docs/design/69): the builder's preview
+const grade = readFileSync(join(root, 'packages/db/src/grade-register.ts'), 'utf8');
+writeFileSync(
+  join(root, 'packages/ui/src/grade-register.ts'),
+  '// GENERATED from packages/db/src/grade-register.ts by scripts/sync-mark-register.mjs — do not edit.\n' +
+    grade,
+);
+console.log('grade register engine copied to packages/ui/src/grade-register.ts');

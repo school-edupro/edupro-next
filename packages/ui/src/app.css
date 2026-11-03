@@ -13788,6 +13788,73 @@ button.ep-subchoice__icon:hover {
 .ep-mr-sheet [data-text='true'] {
   text-align: left;
 }
+/* the grade register builder (docs/design/69) */
+.ep-gr-step {
+  display: grid;
+  gap: var(--sp-3);
+}
+.ep-gr-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: var(--sp-1) 0;
+  border-bottom: 1px solid var(--border-default);
+}
+.ep-gr-row[data-off='true'] {
+  opacity: 0.6;
+}
+.ep-gr-row--area {
+  border-bottom: 0;
+  padding: var(--sp-2) var(--sp-3);
+  background: var(--mob-navy-50);
+  border-radius: var(--radius-md);
+}
+.ep-gr-row--item {
+  padding-left: var(--sp-4);
+}
+.ep-gr-row--leaf {
+  padding-left: var(--sp-6);
+}
+.ep-gr-area {
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  padding: var(--sp-2);
+}
+.ep-gr-area[data-off='true'] .ep-gr-row:not(.ep-gr-row--area) {
+  opacity: 0.5;
+}
+.ep-gr-move {
+  display: inline-flex;
+  gap: 2px;
+  min-width: 3.2rem;
+}
+.ep-gr-move button {
+  width: 1.5rem;
+  height: 1.5rem;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  background: var(--surface-card);
+  color: var(--text-body);
+  font-size: var(--fs-caption);
+  cursor: pointer;
+}
+.ep-gr-move button:hover {
+  border-color: var(--border-accent);
+}
+.ep-gr-text {
+  flex: 1;
+  min-width: 14rem;
+}
+.ep-gr-label {
+  margin: 0;
+  width: 14rem;
+}
+.ep-gr-scale {
+  display: grid;
+  gap: var(--sp-1);
+  max-width: 40rem;
+}
 /* the Remark, Attendance and Height & Weight registers (docs/design/69) */
 .ep-streg-form {
   display: grid;

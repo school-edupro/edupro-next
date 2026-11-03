@@ -2,6 +2,7 @@
 import { Badge, Button, Dialog, Drawer } from '@edupro/ui';
 import { useRouter } from 'next/navigation';
 import { useMemo, useState, useTransition } from 'react';
+import type { GradeRegisterRow } from '@/lib/grade-registers';
 import { SCHEME_STATUS, type RegisterRow } from '@/lib/mark-schemes';
 import {
   copyRegister,
@@ -15,8 +16,13 @@ import {
   restoreVersion,
   rightsReport,
   saveRegisterAccess,
+  setGradeAccessType,
   type AccessRow,
+  type RegisterKind,
 } from '@/lib/register-actions';
+
+type Row = RegisterRow | GradeRegisterRow;
+const isMark = (r: Row): r is RegisterRow => 'purpose' in r;
 
 const when = (iso: string | null) =>
   iso
@@ -29,7 +35,7 @@ const when = (iso: string | null) =>
     : '';
 
 /** class tokens: "X" never matches "IX"; a word that is not a class matches classes starting with it */
-function matches(row: RegisterRow, q: string) {
+function matches(row: Row, q: string) {
   const words = q.trim().toUpperCase().split(/\s+/).filter(Boolean);
   if (!words.length) return true;
   const codes = row.classes.map((k) => k.code.toUpperCase());
@@ -45,31 +51,38 @@ type Rights = Pick<
 >;
 
 /**
- * The mark registers (docs/design/68) as the school's Term Mark Register lists them: search by class, a
- * row per register with its classes, who made and last changed it, and its actions — Run (a new tab),
- * Edit, Versions, Copy, Assign, Lock / Unlock, Delete (click twice); the bin and the Rights report.
+ * The mark registers (docs/design/68) as the school's Term Mark Register lists them, and the grade
+ * registers (docs/design/69) as its Grade Register does: search by class, a row per register with its
+ * classes, who made and last changed it, and its actions — Run (a new tab), Edit, Versions, Copy, Assign,
+ * Access (grade registers: All or As per mapping), Lock / Unlock, Delete (click twice); the bin and the
+ * Rights report.
  */
 export function RegistersList({
   rows,
   classes,
   canCreate,
   canAssign,
+  kind = 'mark',
 }: {
-  rows: RegisterRow[];
+  rows: Row[];
   classes: Array<{ id: string; code: string }>;
   canCreate: boolean;
   canAssign: boolean;
+  kind?: RegisterKind;
 }) {
+  const base = kind === 'grade' ? '/exams/grade-registers' : '/exams/schemes';
+  const noun = kind === 'grade' ? 'grade register' : 'mark register';
+  const Noun = kind === 'grade' ? 'Grade register' : 'Mark register';
   const router = useRouter();
   const [q, setQ] = useState('');
   const [pending, start] = useTransition();
   const [msg, setMsg] = useState<{ tone: 'danger' | 'success'; text: string } | null>(null);
   const [armed, setArmed] = useState<string | null>(null);
   // dialogs and drawers
-  const [copyOf, setCopyOf] = useState<RegisterRow | null>(null);
+  const [copyOf, setCopyOf] = useState<Row | null>(null);
   const [copyName, setCopyName] = useState('');
   const [copyClasses, setCopyClasses] = useState<string[]>([]);
-  const [versionsOf, setVersionsOf] = useState<RegisterRow | null>(null);
+  const [versionsOf, setVersionsOf] = useState<Row | null>(null);
   const [versions, setVersions] = useState<
     Array<{
       id: string;
@@ -92,7 +105,9 @@ export function RegistersList({
     }>
   >([]);
   const [binName, setBinName] = useState<Record<string, string>>({});
-  const [assignOf, setAssignOf] = useState<RegisterRow | null>(null);
+  const [assignOf, setAssignOf] = useState<Row | null>(null);
+  const [accessOf, setAccessOf] = useState<GradeRegisterRow | null>(null);
+  const [accessType, setAccessType] = useState<'all' | 'mapping'>('all');
   const [people, setPeople] = useState<Rights[]>([]);
   const [mine, setMine] = useState<Record<string, boolean>>({});
   const [staff, setStaff] = useState<
@@ -111,9 +126,9 @@ export function RegistersList({
     router.refresh();
   };
 
-  const step = (r: RegisterRow, s: 'lock' | 'unlock' | 'delete') =>
+  const step = (r: Row, s: 'lock' | 'unlock' | 'delete') =>
     start(async () => {
-      const out = await registerStep(r.id, s);
+      const out = await registerStep(r.id, s, kind);
       if (!out.ok) return fail(out.error);
       setArmed(null);
       ok(
@@ -124,9 +139,9 @@ export function RegistersList({
             : `${r.name} moved to the bin`,
       );
     });
-  const openVersions = (r: RegisterRow) =>
+  const openVersions = (r: Row) =>
     start(async () => {
-      const out = await registerVersions(r.id);
+      const out = await registerVersions(r.id, kind);
       if (!out.ok) return fail(out.error);
       setVersions(out.data.data);
       setRestoreName('');
@@ -134,14 +149,14 @@ export function RegistersList({
     });
   const openBin = () =>
     start(async () => {
-      const out = await deletedRegisters();
+      const out = await deletedRegisters(kind);
       if (!out.ok) return fail(out.error);
       setBin(out.data.data);
       setBinOpen(true);
     });
-  const openAssign = (r: RegisterRow) =>
+  const openAssign = (r: Row) =>
     start(async () => {
-      const [a, st] = await Promise.all([registerAccess(r.id), registerStaff()]);
+      const [a, st] = await Promise.all([registerAccess(r.id, kind), registerStaff()]);
       if (!a.ok) return fail(a.error);
       setPeople(a.data.data);
       setMine(a.data.mine);
@@ -151,7 +166,7 @@ export function RegistersList({
     });
   const openRights = () =>
     start(async () => {
-      const out = await rightsReport();
+      const out = await rightsReport(kind);
       if (!out.ok) return fail(out.error);
       setReport(out.data.data);
       setOff([]);
@@ -184,8 +199,8 @@ export function RegistersList({
           </Button>
         ) : null}
         {canCreate ? (
-          <a className="ep-btn ep-btn--primary ep-btn--sm" href="/exams/schemes/new">
-            + New mark register
+          <a className="ep-btn ep-btn--primary ep-btn--sm" href={`${base}/new`}>
+            + New {noun}
           </a>
         ) : null}
       </div>
@@ -199,14 +214,15 @@ export function RegistersList({
         </div>
       ) : null}
       {shown.length ? (
-        <div className="ep-table-wrap" tabIndex={0} role="region" aria-label="Mark registers">
+        <div className="ep-table-wrap" tabIndex={0} role="region" aria-label={`${Noun}s`}>
           <table className="ep-table ep-table--dense">
-            <caption className="ep-sr-only">Mark registers</caption>
+            <caption className="ep-sr-only">{`${Noun}s`}</caption>
             <thead>
               <tr>
                 <th scope="col">Sr</th>
-                <th scope="col">Mark register</th>
+                <th scope="col">{Noun}</th>
                 <th scope="col">Classes</th>
+                {kind === 'grade' ? <th scope="col">Assessments</th> : null}
                 <th scope="col">Created by</th>
                 <th scope="col">Updated by</th>
                 <th scope="col">Actions</th>
@@ -217,12 +233,16 @@ export function RegistersList({
                 <tr key={r.id}>
                   <td>{i + 1}</td>
                   <td>
-                    <a
-                      href={`/exams/schemes/${r.id}`}
-                      style={{ textDecoration: 'underline', fontWeight: 600 }}
-                    >
-                      {r.name}
-                    </a>{' '}
+                    {isMark(r) ? (
+                      <a
+                        href={`/exams/schemes/${r.id}`}
+                        style={{ textDecoration: 'underline', fontWeight: 600 }}
+                      >
+                        {r.name}
+                      </a>
+                    ) : (
+                      <strong>{r.name}</strong>
+                    )}{' '}
                     <span className="ep-mr-pills">
                       <Badge tone={SCHEME_STATUS[r.status].tone}>
                         {r.status === 'locked'
@@ -232,21 +252,29 @@ export function RegistersList({
                       {r.inUse ? (
                         <Badge tone="success">{`v${String(r.inUse)} locked in use`}</Badge>
                       ) : null}
-                      {r.purpose === 'result' ? (
+                      {isMark(r) && r.purpose === 'result' ? (
                         <Badge tone="info">{`Result · ${r.termCode ?? ''}`}</Badge>
                       ) : null}
                       {r.sameName ? <Badge tone="warning">Same name</Badge> : null}
                     </span>
-                    <span className="ep-mr-col__desc">
-                      {r.subjects} subjects ·{' '}
-                      {r.layout === 'vertical'
-                        ? 'Subject-1, Subject-2 …'
-                        : 'subjects in the header'}
-                      {r.type === 'examwise' ? ' · exam-wise' : ''}
-                      {r.assignees.length
-                        ? ` · ${r.assignees.map((a) => `${a.name} (${a.rights})`).join(', ')}`
-                        : ''}
-                    </span>
+                    {isMark(r) ? (
+                      <span className="ep-mr-col__desc">
+                        {r.subjects} subjects ·{' '}
+                        {r.layout === 'vertical'
+                          ? 'Subject-1, Subject-2 …'
+                          : 'subjects in the header'}
+                        {r.type === 'examwise' ? ' · exam-wise' : ''}
+                        {r.assignees.length
+                          ? ` · ${r.assignees.map((a) => `${a.name} (${a.rights})`).join(', ')}`
+                          : ''}
+                      </span>
+                    ) : (
+                      <span className="ep-mr-col__desc">
+                        {r.assignees.length
+                          ? r.assignees.map((a) => `${a.name} (${a.rights})`).join(' · ')
+                          : 'not assigned'}
+                      </span>
+                    )}
                   </td>
                   <td>
                     <span className="ep-mr-pills">
@@ -257,6 +285,7 @@ export function RegistersList({
                       ))}
                     </span>
                   </td>
+                  {isMark(r) ? null : <td>{r.assessments.join(', ')}</td>}
                   <td>
                     {r.createdBy ?? ''}
                     <span className="ep-mr-col__desc">{when(r.createdAt)}</span>
@@ -267,7 +296,7 @@ export function RegistersList({
                   </td>
                   <td>
                     <span className="ep-mr-row-actions">
-                      {r.rights.run ? (
+                      {r.rights.run && isMark(r) ? (
                         <a
                           className="ep-btn ep-btn--secondary ep-btn--sm"
                           href={`/exams/schemes/${r.id}/register`}
@@ -280,7 +309,7 @@ export function RegistersList({
                       {r.rights.edit ? (
                         <a
                           className="ep-btn ep-btn--ghost ep-btn--sm"
-                          href={`/exams/schemes/${r.id}/edit`}
+                          href={`${base}/${r.id}/edit`}
                         >
                           Edit
                         </a>
@@ -306,6 +335,18 @@ export function RegistersList({
                       {r.rights.assign ? (
                         <Button size="sm" variant="ghost" onClick={() => openAssign(r)}>
                           Assign
+                        </Button>
+                      ) : null}
+                      {!isMark(r) && r.rights.manage ? (
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => {
+                            setAccessType(r.accessType);
+                            setAccessOf(r);
+                          }}
+                        >
+                          {r.accessType === 'mapping' ? 'Access: As per mapping' : 'Access: All'}
                         </Button>
                       ) : null}
                       {r.rights.manage && r.status === 'draft' && !r.inUse ? (
@@ -351,9 +392,11 @@ export function RegistersList({
         </div>
       ) : (
         <p style={{ margin: 0 }}>
-          {rows.length ? 'No register for these classes.' : 'No mark register yet.'}{' '}
+          {rows.length ? 'No register for these classes.' : `No ${noun} yet.`}{' '}
           {canCreate && !rows.length
-            ? 'Make one with “+ New mark register”, or start from a ready-made scheme below.'
+            ? kind === 'grade'
+              ? 'Make one with “+ New grade register”.'
+              : 'Make one with “+ New mark register”, or start from a ready-made scheme below.'
             : ''}
         </p>
       )}
@@ -367,7 +410,7 @@ export function RegistersList({
           loading: pending,
           onClick: () =>
             start(async () => {
-              const out = await copyRegister(copyOf!.id, copyName.trim(), copyClasses);
+              const out = await copyRegister(copyOf!.id, copyName.trim(), copyClasses, kind);
               if (!out.ok) return fail(out.error);
               setCopyOf(null);
               ok(
@@ -377,16 +420,16 @@ export function RegistersList({
         }}
       >
         <p style={{ marginTop: 0 }}>
-          Every subject, column, code, grade and display setting is copied and saved at once. A
-          subject the new classes do not have is left out; maximum marks are read from each class’s
-          exams when it runs.
+          {kind === 'grade'
+            ? 'Every setting (assessments, indicators left out, labels, order, display, Overall and the grade scale) is copied and saved at once; the people given rights are not. Each class prints its own indicator set when it runs.'
+            : 'Every subject, column, code, grade and display setting is copied and saved at once. A subject the new classes do not have is left out; maximum marks are read from each class’s exams when it runs.'}
         </p>
         <label className="ep-field">
           <span className="ep-field__label">New register name</span>
           <input
             className="ep-input"
             value={copyName}
-            maxLength={120}
+            maxLength={kind === 'grade' ? 150 : 120}
             onChange={(e) => setCopyName(e.target.value)}
           />
         </label>
@@ -468,6 +511,7 @@ export function RegistersList({
                           const out = await restoreVersion(
                             v.id,
                             restoreName.trim() || `${versionsOf!.name} (v${String(v.version)})`,
+                            kind,
                           );
                           if (!out.ok) return fail(out.error);
                           setVersionsOf(null);
@@ -507,7 +551,7 @@ export function RegistersList({
               variant="secondary"
               onClick={() =>
                 start(async () => {
-                  const out = await restoreRegister(b.id, binName[b.id]?.trim() || undefined);
+                  const out = await restoreRegister(b.id, binName[b.id]?.trim() || undefined, kind);
                   if (!out.ok) return fail(out.error);
                   setBin((x) => x.filter((y) => y.id !== b.id));
                   ok(`${out.data.name} restored`);
@@ -539,6 +583,7 @@ export function RegistersList({
                   delete: p.delete,
                   assign: p.assign,
                 })),
+                kind,
               );
               if (!out.ok) return fail(out.error);
               setAssignOf(null);
@@ -633,6 +678,60 @@ export function RegistersList({
         {!people.length ? <p className="ep-field__help">Nobody yet: add staff above.</p> : null}
       </Dialog>
 
+      <Dialog
+        open={accessOf !== null}
+        title={`Access type · ${accessOf?.name ?? ''}`}
+        onClose={() => setAccessOf(null)}
+        primary={{
+          label: 'Save',
+          loading: pending,
+          onClick: () =>
+            start(async () => {
+              const out = await setGradeAccessType(accessOf!.id, accessType);
+              if (!out.ok) return fail(out.error);
+              setAccessOf(null);
+              ok(
+                accessType === 'mapping'
+                  ? 'Access: As per mapping — teachers see only the indicator areas given to them'
+                  : 'Access: All',
+              );
+            }),
+        }}
+      >
+        <fieldset className="ep-field" style={{ border: 0, padding: 0, margin: 0 }}>
+          <legend className="ep-field__label">Who sees which indicators when it runs</legend>
+          <div className="ep-mr-tiles">
+            <label className="ep-mr-tile">
+              <input
+                type="radio"
+                name="access-type"
+                checked={accessType === 'all'}
+                onChange={() => setAccessType('all')}
+              />
+              <span>
+                All
+                <small>Everyone who may run it sees every indicator</small>
+              </span>
+            </label>
+            <label className="ep-mr-tile">
+              <input
+                type="radio"
+                name="access-type"
+                checked={accessType === 'mapping'}
+                onChange={() => setAccessType('mapping')}
+              />
+              <span>
+                As per mapping
+                <small>
+                  A teacher sees only the indicator areas of their Indicator assignment (managers
+                  see all)
+                </small>
+              </span>
+            </label>
+          </div>
+        </fieldset>
+      </Dialog>
+
       <Drawer
         open={rightsOpen}
         title="Rights report"
@@ -659,7 +758,7 @@ export function RegistersList({
                   const [chainId, userId] = k.split('|');
                   return { chainId: chainId!, userId: userId! };
                 });
-                const out = await removeRights(pairs);
+                const out = await removeRights(pairs, kind);
                 if (!out.ok) return fail(out.error);
                 setReport((r) => r.filter((x) => !off.includes(`${x.chainId}|${x.userId}`)));
                 setOff([]);

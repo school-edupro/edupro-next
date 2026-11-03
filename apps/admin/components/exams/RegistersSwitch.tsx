@@ -1,17 +1,18 @@
 /**
- * The legacy Registers menu as a switch (docs/design/69): Mark · Remark · Attendance · Height & Weight
- * (the last only with the health view right). The Mark registers are the saved ones of docs/design/68;
- * the others are reports over what was entered.
+ * The legacy Registers menu as a switch (docs/design/69): Mark · Grade · Remark · Attendance · Height &
+ * Weight (the last only with the health view right). Mark and Grade registers are saved (docs/design/68,
+ * 69); the others are reports over what was entered.
  */
 export function RegistersSwitch({
   current,
   permissions,
 }: {
-  current: 'mark' | 'remark' | 'attendance' | 'health';
+  current: 'mark' | 'grade' | 'remark' | 'attendance' | 'health';
   permissions: string[];
 }) {
   const items = [
     { key: 'mark', label: 'Mark Register', href: '/exams/schemes', show: true },
+    { key: 'grade', label: 'Grade Register', href: '/exams/grade-registers', show: true },
     {
       key: 'remark',
       label: 'Remark Register',

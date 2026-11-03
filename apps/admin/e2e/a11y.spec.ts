@@ -277,6 +277,8 @@ const PAGES = [
   '/exams/registers/remark?classId=169',
   '/exams/registers/attendance?classId=169&section=all',
   '/exams/registers/health?classId=169',
+  '/exams/grade-registers',
+  '/exams/grade-registers/new',
   // the register builder (docs/design/68), from blank
   '/exams/schemes/new',
   '/exams/indicators',
