@@ -1,6 +1,6 @@
 # 70 · Subject marks master: an exam's papers and maximum marks come from a master
 
-Status: planned 3 Nov 2026 · parts 1–2 to build
+Status: part 1 built 3 Nov 2026 (migration 0302) · part 2 to build
 
 ## Why
 
@@ -61,3 +61,20 @@ takes its papers from the master.
 - **Part 2** — the exam's Subjects step from the master (select only), the API's subjects save takes
   only the papers; a master change follows into unmarked exams; "differs from master" with Apply
   (reason); new and copied exams from the master; e2e, a11y, help.
+
+## As built (part 1, 3 Nov 2026)
+
+- Migration 0302 `exam_type_subjects` as designed (a grade-only row: maximum 0, its scale, no pass marks).
+- API `/exams/subject-marks` (`SubjectMarksController`, `SubjectMarksService`; view `exams.master.view`,
+  change `exams.master.manage`): `GET overview` (types × classes, subjects set), `GET ?typeId=&classId=`
+  (the list in the class order `app.subject_seq`, the subjects the class studies, last changed),
+  `PUT` (the whole list; checks marks, scale, duplicates; audited), `POST copy` (to classes of the type:
+  only what each studies, "not studied there" reported; to exam types of the class; a subject there takes
+  the copied marks, the others stay), `POST fill` (an exam's subjects, every class, into its type's
+  lists; a class's scale for a grade-only paper), `POST last-year` (the previous year by start date; what
+  is set stays), `GET file` (a type's lists as Excel / PDF with the school's head).
+- Admin: Exams set-up tab **Subject marks** (`/exams/subject-marks`): the type × class grid (a count or
+  —), the list editor (`SubjectMarksEditor`: max, pass, scale, optional, remove, add a class subject, max
+  / pass for all, a leave warning), Copy / Fill / Copy from last year forms, Excel and PDF
+  (`/api/subject-marks/[typeId]/[format]`).
+- Tests: `apps/api/test/subject-marks.e2e-spec.ts` (6); a11y for the grid and a list.

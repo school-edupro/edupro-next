@@ -1,6 +1,7 @@
 /** Exam set-up is one menu entry; these tabs are its screens. Each thing is set in one place only. */
 const TABS: Array<{ href: string; label: string }> = [
   { href: '/exams/masters', label: 'Types, grade scales, marks codes' },
+  { href: '/exams/subject-marks', label: 'Subject marks' },
   { href: '/exams/indicators', label: 'Indicators and HPC' },
   { href: '/exams/indicator-areas', label: 'Areas and level scales' },
   { href: '/exams/remarks', label: 'Remark categories and bank' },

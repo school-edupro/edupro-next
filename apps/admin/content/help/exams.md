@@ -14,8 +14,9 @@
 
 ## Before the exam
 
-1. **Exams → Exams setup**: one menu entry, four tabs. Each thing is set in one place only; Excel and PDF of each list sit beside it.
+1. **Exams → Exams setup**: one menu entry, five tabs. Each thing is set in one place only; Excel and PDF of each list sit beside it.
    - **Types, grade scales, marks codes**: exam types (PT, half-yearly, annual) and the grade scale per class band. **Edit** on a type changes its name, weightage, order or status; the code stays, and an inactive type is not offered for new exams.
+   - **Subject marks** (the old Subject Master): for each exam type and class, the subjects its exams hold with their **maximum** and **pass marks**, a graded subject's **scale** (maximum 0 = grade only) and **Optional**. The grid at the top shows, per type and class, how many subjects are set (— = not set); open a cell to set its list (a list not set starts from the subjects the class studies, in its order). **Max / Pass for all** fills every subject with marks; **Copy** sends the list to other classes of the type (only the subjects each class studies) and to other exam types of the class; **Fill from an exam** takes an exam already set up (every class of it); **Copy from last year** brings last year's lists (what is set stays). Excel and PDF of a type. The parts of a subject (Geography, History …) stay in Class set-up. The exams of the type will take their papers and marks from here (next step: the exam's Subjects step).
 2. **What each exam takes**: on Exams setup → Types, tick for each type what its exams take
    (marks, indicators / progress card, remarks, attendance, health), e.g. a periodic test marks only.
    A new exam takes its type's; Set-up → Details changes them for one exam. What an exam does not

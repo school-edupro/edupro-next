@@ -13788,6 +13788,30 @@ button.ep-subchoice__icon:hover {
 .ep-mr-sheet [data-text='true'] {
   text-align: left;
 }
+/* the subject marks master (docs/design/70): the exam type × class overview and the tools */
+.ep-sm-grid td {
+  text-align: center;
+}
+.ep-sm-grid td a {
+  display: inline-block;
+  min-width: 2rem;
+  padding: 2px var(--sp-1);
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+}
+.ep-sm-grid td[data-set='true'] a {
+  color: var(--text-heading);
+  font-weight: var(--fw-semibold);
+  text-decoration: underline;
+}
+.ep-sm-grid td a[aria-current='true'] {
+  outline: 2px solid var(--border-accent);
+  background: var(--mob-navy-50);
+}
+.ep-sm-tools {
+  display: grid;
+  gap: var(--sp-5);
+}
 /* the grade register builder (docs/design/69) */
 .ep-gr-step {
   display: grid;
