@@ -7,6 +7,7 @@ import {
   CopyGradeRegisterDto,
   CreateGradeRegisterDto,
   GradeBuilderQueryDto,
+  GradeRunQueryDto,
   RestoreGradeRegisterDto,
   UpdateGradeRegisterDto,
 } from './grade-registers.dto';
@@ -130,6 +131,14 @@ export class GradeRegistersController {
   @Post(':id/copy')
   copy(@ReqCtx() ctx: RequestContext, @Param('id') id: string, @Body() body: CopyGradeRegisterDto) {
     return this.svc.copy(ctx, id, body);
+  }
+
+  @Get(':id/run')
+  @ApiOperation({
+    summary: 'Run a grade register: class sheet or student-wise, summary, analysis; PDF / Excel',
+  })
+  run(@ReqCtx() ctx: RequestContext, @Param('id') id: string, @Query() q: GradeRunQueryDto) {
+    return this.svc.run(ctx, id, q);
   }
 
   @Get(':id/access')

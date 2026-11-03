@@ -2,7 +2,7 @@ import { Badge, Button, Card, DataTable, PageHeader, SelectField } from '@edupro
 import { getTranslations } from 'next-intl/server';
 import { Notice } from '@/components/Notice';
 import { AssignmentForm } from '@/components/academics/AssignmentForm';
-import { endTeacherAssignment } from '@/lib/actions';
+import { endTeacherAssignment, setAssignmentAreas } from '@/lib/actions';
 import { AcademicsNav } from '@/components/academics/AcademicsNav';
 import { apiFetch, getMe } from '@/lib/api';
 import { sectionOptions } from '@/lib/sections';
@@ -35,13 +35,19 @@ export default async function TeacherAssignmentsPage({
   if (sp.classSectionId) query.set('classSectionId', sp.classSectionId);
   if (/^\d{1,18}$/.test(sp.employeeId ?? '')) query.set('employeeId', sp.employeeId!);
   if (sp.includeEnded) query.set('includeEnded', 'true');
-  const [assignments, sections, employees, subjects] = await Promise.all([
+  const [assignments, sections, employees, subjects, areas] = await Promise.all([
     apiFetch<{ data: TeacherAssignment[] }>(`/academics/teacher-assignments?${query.toString()}`),
     sectionOptions(),
     apiFetch<Page<Employee>>('/people/employees?size=200&employeeType=teaching')
       .then((r) => r.data)
       .catch(() => [] as Employee[]),
     apiFetch<Page<Subject>>('/academics/subjects?size=200&status=active').then((r) => r.data),
+    // the indicator areas an Indicator assignment may name (docs/design/69)
+    apiFetch<{ data: Array<{ id: string; name: string; status: string }> }>(
+      '/exams/indicator-areas',
+    )
+      .then((r) => r.data.filter((x) => x.status === 'active'))
+      .catch(() => [] as Array<{ id: string; name: string; status: string }>),
   ]);
 
   return (
@@ -171,7 +177,14 @@ export default async function TeacherAssignmentsPage({
               {
                 key: 'subject',
                 header: a('subject'),
-                render: (r) => (r.subjectName ? `${r.subjectName} (${r.subjectCode})` : ''),
+                render: (r) =>
+                  r.kind === 'indicator' ? (
+                    <IndicatorAreas row={r} areas={areas} canManage={canManage && !r.validTo} />
+                  ) : r.subjectName ? (
+                    `${r.subjectName} (${r.subjectCode})`
+                  ) : (
+                    ''
+                  ),
               },
               { key: 'since', header: a('since'), render: (r) => r.validFrom },
               {
@@ -204,5 +217,55 @@ export default async function TeacherAssignmentsPage({
         </Card>
       </div>
     </>
+  );
+}
+
+/**
+ * An Indicator assignment's indicator areas (docs/design/69): the grade registers run "as per mapping"
+ * show the teacher only these areas of the section; none ticked covers every area.
+ */
+function IndicatorAreas({
+  row,
+  areas,
+  canManage,
+}: {
+  row: TeacherAssignment;
+  areas: Array<{ id: string; name: string }>;
+  canManage: boolean;
+}) {
+  const mine = row.indicatorAreas ?? [];
+  const text = mine.length ? mine.map((x) => x.name).join(', ') : 'All indicator areas';
+  if (!canManage || !areas.length) return <span>{text}</span>;
+  return (
+    <details className="ep-gr-filter">
+      <summary>{text}</summary>
+      <form action={setAssignmentAreas} className="ep-streg-form">
+        <input type="hidden" name="id" value={row.id} />
+        <fieldset className="ep-field" style={{ border: 0, padding: 0, margin: 0 }}>
+          <legend className="ep-field__label">
+            The areas {row.employeeName} rates in {row.classCode}-{row.section} (none ticked: every
+            area)
+          </legend>
+          <div className="ep-mr-tiles">
+            {areas.map((x) => (
+              <label key={x.id} className="ep-mr-tile">
+                <input
+                  type="checkbox"
+                  name="areaId"
+                  value={x.id}
+                  defaultChecked={mine.some((y) => y.id === x.id)}
+                />
+                <span>{x.name}</span>
+              </label>
+            ))}
+          </div>
+        </fieldset>
+        <div>
+          <Button type="submit" variant="secondary" size="sm">
+            Save areas
+          </Button>
+        </div>
+      </form>
+    </details>
   );
 }

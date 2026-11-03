@@ -274,7 +274,17 @@ with which headers.
    may run it sees every indicator; **As per mapping**: a teacher sees only the indicator areas of their
    Indicator assignment), **Lock** / **Unlock**, **Delete** (to the bin; **Deleted** brings it back) and
    the **Rights report**.
-3. **Run** (the class sheet or student-wise, PDF and Excel) comes in the next part.
+3. **Run** (a new tab) shows a **Section** of the register's classes: the **Class sheet** (a row per
+   student; area, indicator and term headers; the Overall per area tinted green) or **Student-wise** (a
+   table per student). **Filter** by area and indicator. **Grade summary** counts each grade, the blanks
+   and the students per indicator and Overall (click a count to see its students); **Analysis** gives
+   the % of each grade per area, indicator and Overall for the section, or **Analysis (all sections)**
+   side by side. **Download** gives the PDF (paper, way round, fit to width; student-wise a page per
+   student) or Excel of what is shown, or of every section.
+4. **As per mapping**: in **Academics → Teacher assignments**, an **Indicator** assignment's row shows
+   its indicator areas ("All indicator areas" until some are ticked): open it to tick the areas that
+   teacher rates in the section. A register set to As per mapping shows such a teacher only those areas
+   (no Indicator assignment of the section: nothing, with a note). Register managers see every area.
 
 ### Remark, Attendance and Height & Weight registers
 

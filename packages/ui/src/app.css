@@ -13850,6 +13850,19 @@ button.ep-subchoice__icon:hover {
   margin: 0;
   width: 14rem;
 }
+.ep-gr-filter {
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  padding: var(--sp-2) var(--sp-3);
+}
+.ep-gr-filter > summary {
+  cursor: pointer;
+  font-weight: var(--fw-semibold);
+  color: var(--text-heading);
+}
+.ep-gr-filter[open] > summary {
+  margin-bottom: var(--sp-2);
+}
 .ep-gr-scale {
   display: grid;
   gap: var(--sp-1);

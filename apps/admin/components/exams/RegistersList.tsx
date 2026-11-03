@@ -296,10 +296,12 @@ export function RegistersList({
                   </td>
                   <td>
                     <span className="ep-mr-row-actions">
-                      {r.rights.run && isMark(r) ? (
+                      {r.rights.run ? (
                         <a
                           className="ep-btn ep-btn--secondary ep-btn--sm"
-                          href={`/exams/schemes/${r.id}/register`}
+                          href={
+                            isMark(r) ? `/exams/schemes/${r.id}/register` : `${base}/${r.id}/run`
+                          }
                           target="_blank"
                           rel="noopener"
                         >

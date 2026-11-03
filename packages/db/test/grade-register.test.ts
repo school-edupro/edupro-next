@@ -4,6 +4,11 @@ import { describe, expect, it } from 'vitest';
 import {
   arrange,
   buildGradeSheet,
+  buildStudentWise,
+  gradeAnalysis,
+  gradeAnalysisAll,
+  gradeStats,
+  gradeSummary,
   gradeProblems,
   newGradeDef,
   overallOf,
@@ -203,6 +208,101 @@ describe('grade register engine', () => {
     expect(out[0]!.head[1]!.map((c) => c.t)).toEqual(['D1', 'D2', 'Conduct']);
     expect(out[1]!.title).toBe('Legend');
     expect(out[1]!.body.map((r) => r.cells[0]!.t)).toEqual(['D1', 'D2', 'D3', 'D4']);
+  });
+
+  const runInput = () => {
+    const d = def({
+      overall: 'mode',
+      blankText: '-',
+      scale: [
+        { g: 'A', p: 2 },
+        { g: 'B', p: 1 },
+      ],
+    });
+    const grades: Record<string, string> = {
+      '1|s1': 'A',
+      '2|s1': 'B',
+      '11|s1': 'B',
+      '1|s2': 'B',
+      '11|s2': 'B',
+    };
+    return {
+      place: 'VI-A',
+      areas: arrange(tree, d),
+      def: d,
+      exams: [{ examId: 'e1', label: 'T1', name: 'Term 1' }],
+      students: [
+        { id: 's1', name: 'Asha', adm: 'A1', roll: 1 },
+        { id: 's2', name: 'Bhanu', adm: 'A2', roll: 2 },
+      ],
+      grade: (leaf: string, _exam: string, st: string) => grades[`${leaf}|${st}`],
+    };
+  };
+
+  it('student-wise: a table per student, the area and indicator once, the Overall row', () => {
+    const out = buildStudentWise(runInput(), (st) => `VI-A · ${st.name}`);
+    expect(out.map((x) => [x.place, x.title])).toEqual([
+      ['VI-A · Asha', '1. Asha · Adm A1 · Roll 1'],
+      ['VI-A · Bhanu', '2. Bhanu · Adm A2 · Roll 2'],
+    ]);
+    expect(out[0]!.body.map((r) => r.cells.map((c) => c.t))).toEqual([
+      ['Co-scholastic', 'Work education', '', 'A'],
+      ['', 'Art', 'Drawing', 'B'],
+      ['', 'Overall — Co-scholastic', 'A'],
+      ['Discipline', 'Conduct', 'Listens', 'B'],
+      ['', '', 'Neat work', '-'],
+      ['', 'Overall — Discipline', 'B'],
+    ]);
+  });
+
+  it('the Grade summary counts each grade, the blanks and opens the students', () => {
+    const sum = gradeSummary(runInput());
+    expect(sum.head[0]!.map((c) => c.t)).toEqual([
+      'Area',
+      'Indicator',
+      'Description',
+      'A',
+      'B',
+      'Blank',
+      'Students',
+    ]);
+    const work = sum.body[0]!.cells;
+    expect(work.map((c) => c.t)).toEqual([
+      'Co-scholastic',
+      'Work education',
+      '',
+      '1',
+      '1',
+      '0',
+      '2',
+    ]);
+    expect(work[3]!.drill!.rows).toEqual([['1', 'Asha', 'A1', '1']]);
+  });
+
+  it('the Analysis: % of the grades given per area, indicator and Overall; every section side by side', () => {
+    const an = gradeAnalysis(runInput());
+    // Co-scholastic: A 1, B 2 of 3 given (Bhanu's Art blank)
+    expect(an.body[0]!.cells.map((c) => c.t)).toEqual([
+      'Co-scholastic',
+      '33.3% (1)',
+      '66.7% (2)',
+      '3',
+      '1',
+    ]);
+    const all = gradeAnalysisAll(
+      'VI',
+      [
+        { place: 'VI-A', stats: gradeStats(runInput()) },
+        { place: 'VI-B', stats: null },
+      ],
+      [{ label: 'T1' }],
+    );
+    expect(all.head[0]!.map((c) => c.t)).toEqual(['Area', 'VI-A', 'VI-B']);
+    expect(all.body[0]!.cells.map((c) => c.t)).toEqual([
+      'Co-scholastic',
+      'B 66.7% · A 33.3% (3)',
+      'could not be read',
+    ]);
   });
 
   it('proper case only for names typed all in capitals or all small', () => {

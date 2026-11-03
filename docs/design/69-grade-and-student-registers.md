@@ -1,6 +1,6 @@
 # 69 · Grade, Remark, Attendance and Height & Weight registers like the legacy
 
-Status: parts 1–2 built 3 Nov 2026 · part 3 to build · companion of docs/design/68 (mark registers)
+Status: built 3 Nov 2026 (parts 1–3; migrations 0300, 0301) · companion of docs/design/68 (mark registers)
 
 ## Why
 
@@ -142,9 +142,37 @@ others the sections they teach.
 - Tests: `packages/db/test/grade-register.test.ts` (8), `apps/api/test/grade-registers.e2e-spec.ts` (7),
   a11y entries for the list and the new builder.
 
+## As built (part 3, 3 Nov 2026)
+
+- Run `GET /exams/grade-registers/:id/run` (Run right): `classSectionId` (any section of the register's
+  classes with students; the first by default), `layout` class | student, `report` sheet | summary |
+  analysis | analysis-all, `areas` (keys joined by |) and `items` (ids) to filter, `format` json | pdf |
+  xlsx, `all` (every section), paper / orientation / fit. JSON: the sections, the exams with their
+  headers, the filter's choices (the section's areas and items, as per mapping), the sheets and the notes
+  (an exam with no indicator set for the class, the mapping). Each section reads its class's tree for the
+  register's exams and the students' `indicator_entries`.
+- Engine: `buildStudentWise` (a table per student: area and indicator printed once, the indicator's
+  short label or description, a column per term, an Overall row per area; in a PDF each student is a
+  page), `gradeSummary` (per indicator and Overall and term: a count per grade — the scale's in order,
+  others A→Z — blanks and students; each count drills to its students), `gradeStats` / `gradeAnalysis`
+  (% of the grades given per area, indicator and Overall; graded, blank) and `gradeAnalysisAll` (per
+  area and Overall, a column per section: "B 66.7% · A 33.3% (n)").
+- Files: the mark registers' `registerPdf` / `registerXlsx` (the letterhead, "Grade Register · name ·
+  report"); every section a page (student-wise every student).
+- As per mapping (migration 0301): `teacher_assignments.indicator_area_ids` (only for kind indicator;
+  none = every area), set by `PUT /academics/teacher-assignments/:id/areas` (assignment managers;
+  audited) and shown with the row (`indicatorAreas`). A run of a mapping register by someone who neither
+  manages nor assigns registers keeps to the areas of their Indicator assignments of that section; with
+  none it shows nothing and says why.
+- Admin: `/exams/grade-registers/[id]/run` (section and layout apply on change; Filter; the four views as
+  chips; Download as the mark registers'), Run in the list, file route `/api/grade-register/[id]/[format]`;
+  Teacher assignments: an Indicator row's areas with a fold-out to tick them.
+- Tests: engine 11, API e2e `grade-registers` 11 (the runs, the files, as per mapping); the suites that
+  read teacher assignments pass (28).
+
 ## Found while planning (for parts 2–3)
 
-- Teacher assignments of kind **Indicator** map a teacher to a **section only**: there is no record of
-  which indicators a teacher rates. **Decided 3 Nov 2026: areas on the assignment** — an Indicator
+- Teacher assignments of kind **Indicator** mapped a teacher to a **section only**: there was no record
+  of which indicators a teacher rates. **Decided 3 Nov 2026: areas on the assignment** — an Indicator
   assignment also picks one or more indicator areas (the areas master) for its section; "As per
   mapping" shows such a teacher only those areas' indicators (built with part 3).

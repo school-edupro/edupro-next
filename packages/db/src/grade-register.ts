@@ -420,3 +420,385 @@ export function sampleGradeData(areas: ArrangedArea[], def: GradeRegisterDef) {
   };
   return { students, grade };
 }
+
+// ---- Run: student-wise, Grade summary, Analysis (docs/design/69, part 3) ----------------------------
+
+const stuCell = (def: GradeRegisterDef, g: string | undefined): SheetCell =>
+  g?.trim() ? { t: g.trim(), center: true } : { t: def.blankText, tone: 'none', center: true };
+
+/**
+ * Student-wise: a table per student — area, indicator, its rated item, a column per term — with an
+ * Overall row after each area when asked. `place` names each student's table in a PDF (a page each).
+ */
+export function buildStudentWise(
+  input: GradeSheetInput,
+  placeOf: (s: GradeStudent) => string = () => input.place,
+): Sheet[] {
+  const { def, areas, exams } = input;
+  const withOverall = def.overall !== 'off';
+  return orderGradeStudents(input.students, def).map((s, n) => {
+    const body: Sheet['body'] = [];
+    for (const a of areas) {
+      let firstArea = true;
+      for (const it of a.items) {
+        let firstItem = true;
+        for (const l of it.leaves) {
+          body.push({
+            studentId: `${s.id}-${l.id}`,
+            cells: [
+              { t: firstArea ? a.name || 'Indicators' : '', text: true, strong: firstArea },
+              { t: firstItem ? (it.single ? l.name : it.name) : '', text: true, wrap: true },
+              {
+                t: it.single
+                  ? (def.labels[l.id] ?? l.description ?? '')
+                  : def.labels[l.id] || l.name,
+                text: true,
+                wrap: true,
+              },
+              ...exams.map((e) => stuCell(def, input.grade(l.id, e.examId, s.id))),
+            ],
+          });
+          firstArea = false;
+          firstItem = false;
+        }
+      }
+      if (withOverall)
+        body.push({
+          studentId: `${s.id}-overall-${a.key}`,
+          cells: [
+            { t: '', text: true },
+            { t: `Overall — ${a.name || 'Indicators'}`, text: true, strong: true, span: 2 },
+            ...exams.map((e): SheetCell => {
+              const o = overallOf(
+                a.items.flatMap((it) =>
+                  it.leaves.map((l) => input.grade(l.id, e.examId, s.id) ?? ''),
+                ),
+                def,
+              );
+              return o
+                ? { t: o, tone: 'calc', center: true, strong: true }
+                : { t: def.blankText, tone: 'none', center: true };
+            }),
+          ],
+        });
+    }
+    return {
+      place: placeOf(s),
+      title: `${String(n + 1)}. ${s.name} · Adm ${s.adm} · Roll ${s.roll === null ? '—' : String(s.roll)}`,
+      head: [
+        [
+          { t: 'Area' },
+          { t: 'Indicator' },
+          { t: 'Description' },
+          ...exams.map((e) => ({ t: e.label, title: e.name, center: true })),
+        ],
+      ],
+      body,
+      foot: null,
+      frozen: 0,
+      widths: [10, 16, 24, ...exams.map(() => 4)],
+    };
+  });
+}
+
+/** the grades a summary counts: the scale's (in its order), then any other given, A→Z */
+function gradeColumns(def: GradeRegisterDef, given: string[]) {
+  const scale = def.scale.map((x) => x.g.trim()).filter(Boolean);
+  const inScale = new Set(scale.map(norm));
+  const others = [...new Set(given.map((g) => g.trim()).filter((g) => g && !inScale.has(norm(g))))]
+    .map(norm)
+    .filter((g, i, all) => all.indexOf(g) === i)
+    .sort((a, b) => a.localeCompare(b));
+  return [
+    ...scale.map((g) => ({ key: norm(g), label: g })),
+    ...others.map((g) => ({ key: g, label: scale.length ? `${g} (other)` : g })),
+  ];
+}
+
+const studentRows = (list: GradeStudent[]) =>
+  list.map((s, i) => [String(i + 1), s.name, s.adm, s.roll === null ? '—' : String(s.roll)]);
+
+/**
+ * Grade summary: for each indicator (and the Overall of each area) and term, how many students got
+ * each grade, how many are blank, and of how many; a count opens its students.
+ */
+export function gradeSummary(input: GradeSheetInput): Sheet {
+  const { def, areas, exams } = input;
+  const students = orderGradeStudents(input.students, def);
+  const T = exams.length;
+  type Line = {
+    area: string;
+    item: string;
+    leaf: string;
+    exam: (typeof exams)[number];
+    got: Map<string, string>;
+  };
+  const lines: Line[] = [];
+  for (const a of areas) {
+    for (const it of a.items)
+      for (const l of it.leaves)
+        for (const e of exams)
+          lines.push({
+            area: a.name,
+            item: it.single ? l.name : it.name,
+            leaf: it.single ? (def.labels[l.id] ?? '') : def.labels[l.id] || l.name,
+            exam: e,
+            got: new Map(
+              students.map((s) => [s.id, input.grade(l.id, e.examId, s.id)?.trim() ?? '']),
+            ),
+          });
+    if (def.overall !== 'off')
+      for (const e of exams)
+        lines.push({
+          area: a.name,
+          item: 'Overall',
+          leaf: '',
+          exam: e,
+          got: new Map(
+            students.map((s) => [
+              s.id,
+              overallOf(
+                a.items.flatMap((it) =>
+                  it.leaves.map((l) => input.grade(l.id, e.examId, s.id) ?? ''),
+                ),
+                def,
+              ) ?? '',
+            ]),
+          ),
+        });
+  }
+  const cols = gradeColumns(
+    def,
+    lines.flatMap((x) => [...x.got.values()]),
+  );
+  const drill = (title: string, ids: string[]): SheetCell['drill'] => ({
+    title,
+    cols: ['#', 'Student', 'Adm No', 'Roll No'],
+    rows: studentRows(students.filter((s) => ids.includes(s.id))),
+  });
+  const body = lines.map((x, i) => {
+    const of = (key: string | null) =>
+      students.filter((s) => {
+        const g = x.got.get(s.id) ?? '';
+        return key === null ? !g : g && norm(g) === key;
+      });
+    const what = `${x.item}${x.leaf ? ` · ${x.leaf}` : ''}${T > 1 ? ` · ${x.exam.label}` : ''}`;
+    const count = (list: GradeStudent[], label: string): SheetCell =>
+      list.length
+        ? {
+            t: String(list.length),
+            center: true,
+            drill: drill(
+              `${what}: ${label}`,
+              list.map((s) => s.id),
+            ),
+          }
+        : { t: '0', center: true, tone: 'none' };
+    return {
+      studentId: `line-${String(i)}`,
+      cells: [
+        { t: x.area, text: true },
+        { t: x.item, text: true, strong: x.item === 'Overall', wrap: true },
+        { t: x.leaf, text: true, wrap: true },
+        ...(T > 1 ? [{ t: x.exam.label, center: true, title: x.exam.name }] : []),
+        ...cols.map((c) => count(of(c.key), c.label)),
+        count(of(null), 'blank'),
+        { t: String(students.length), center: true },
+      ],
+    };
+  });
+  return {
+    place: input.place,
+    title: 'Grade summary',
+    head: [
+      [
+        { t: 'Area' },
+        { t: 'Indicator' },
+        { t: 'Description' },
+        ...(T > 1 ? [{ t: 'Term' }] : []),
+        ...cols.map((c) => ({ t: c.label, center: true })),
+        { t: 'Blank', center: true },
+        { t: 'Students', center: true },
+      ],
+    ],
+    body,
+    foot: null,
+    frozen: 0,
+    widths: [10, 14, 18, ...(T > 1 ? [4] : []), ...cols.map(() => 4), 4, 5],
+  };
+}
+
+/** one row of an analysis: what it counts, and the grades given (blanks apart) */
+export interface GradeStat {
+  area: string;
+  /** the area's line, an indicator under it, or the area's Overall */
+  line: string;
+  kind: 'area' | 'item' | 'overall';
+  exam: string;
+  counts: Map<string, { label: string; n: number }>;
+  graded: number;
+  blank: number;
+}
+
+/** The analysis's rows: per area (all its indicators × students), per indicator, and the Overall. */
+export function gradeStats(input: GradeSheetInput): GradeStat[] {
+  const { def, areas, exams } = input;
+  const out: GradeStat[] = [];
+  const tally = (grades: string[]) => {
+    const counts = new Map<string, { label: string; n: number }>();
+    let blank = 0;
+    for (const g0 of grades) {
+      const g = g0.trim();
+      if (!g) {
+        blank += 1;
+        continue;
+      }
+      const c = counts.get(norm(g));
+      if (c) c.n += 1;
+      else counts.set(norm(g), { label: g, n: 1 });
+    }
+    return { counts, graded: grades.length - blank, blank };
+  };
+  for (const e of exams)
+    for (const a of areas) {
+      const of = (leaves: GradeLeaf[]) =>
+        leaves.flatMap((l) => input.students.map((s) => input.grade(l.id, e.examId, s.id) ?? ''));
+      out.push({
+        area: a.name,
+        line: a.name || 'Indicators',
+        kind: 'area',
+        exam: e.label,
+        ...tally(of(a.items.flatMap((it) => it.leaves))),
+      });
+      for (const it of a.items)
+        out.push({
+          area: a.name,
+          line: it.name,
+          kind: 'item',
+          exam: e.label,
+          ...tally(of(it.leaves)),
+        });
+      if (def.overall !== 'off')
+        out.push({
+          area: a.name,
+          line: `Overall — ${a.name || 'Indicators'}`,
+          kind: 'overall',
+          exam: e.label,
+          ...tally(
+            input.students.map(
+              (s) =>
+                overallOf(
+                  a.items.flatMap((it) =>
+                    it.leaves.map((l) => input.grade(l.id, e.examId, s.id) ?? ''),
+                  ),
+                  def,
+                ) ?? '',
+            ),
+          ),
+        });
+    }
+  return out;
+}
+
+const pct = (n: number, of: number) => (of ? `${((n / of) * 100).toFixed(1)}%` : '—');
+
+/** Analysis of a section: % of each grade (of the grades given) per area, indicator and Overall. */
+export function gradeAnalysis(input: GradeSheetInput): Sheet {
+  const { def, exams } = input;
+  const stats = gradeStats(input);
+  const T = exams.length;
+  const cols = gradeColumns(
+    def,
+    stats.flatMap((x) => [...x.counts.values()].map((c) => c.label)),
+  );
+  return {
+    place: input.place,
+    title: 'Analysis',
+    note: 'A grade’s % is of the grades given (blanks left out); an area counts all its indicators for every student.',
+    head: [
+      [
+        { t: 'Area / indicator' },
+        ...(T > 1 ? [{ t: 'Term' }] : []),
+        ...cols.map((c) => ({ t: c.label, center: true })),
+        { t: 'Graded', center: true },
+        { t: 'Blank', center: true },
+      ],
+    ],
+    body: stats.map((x, i) => ({
+      studentId: `stat-${String(i)}`,
+      cells: [
+        {
+          t: x.kind === 'item' ? `   ${x.line}` : x.line,
+          text: true,
+          strong: x.kind !== 'item',
+          ...(x.kind === 'overall' ? { tone: 'calc' as const } : {}),
+        },
+        ...(T > 1 ? [{ t: x.exam, center: true }] : []),
+        ...cols.map((c) => {
+          const n = x.counts.get(c.key)?.n ?? 0;
+          return { t: n ? `${pct(n, x.graded)} (${String(n)})` : '—', center: true };
+        }),
+        { t: String(x.graded), center: true },
+        { t: String(x.blank), center: true },
+      ],
+    })),
+    foot: null,
+    frozen: 0,
+    widths: [22, ...(T > 1 ? [4] : []), ...cols.map(() => 7), 5, 5],
+  };
+}
+
+/** Analysis of every section side by side: per area and Overall (and term), a column per section. */
+export function gradeAnalysisAll(
+  place: string,
+  sections: Array<{ place: string; stats: GradeStat[] | null }>,
+  exams: Array<{ label: string }>,
+): Sheet {
+  const T = exams.length;
+  const keys: Array<{ line: string; exam: string; kind: GradeStat['kind'] }> = [];
+  for (const s of sections)
+    for (const x of s.stats ?? [])
+      if (x.kind !== 'item' && !keys.some((k) => k.line === x.line && k.exam === x.exam))
+        keys.push({ line: x.line, exam: x.exam, kind: x.kind });
+  const text = (x: GradeStat | undefined) => {
+    if (!x || !x.graded) return 'no grades';
+    const parts = [...x.counts.values()]
+      .sort((a, b) => b.n - a.n || a.label.localeCompare(b.label))
+      .map((c) => `${c.label} ${pct(c.n, x.graded)}`);
+    return `${parts.join(' · ')} (${String(x.graded)})`;
+  };
+  return {
+    place,
+    title: 'Analysis — all sections',
+    note: 'Each grade’s % of the grades given in the section, most given first; (n) = grades given.',
+    head: [
+      [
+        { t: 'Area' },
+        ...(T > 1 ? [{ t: 'Term' }] : []),
+        ...sections.map((s) => ({ t: s.place, center: true })),
+      ],
+    ],
+    body: keys.map((k, i) => ({
+      studentId: `all-${String(i)}`,
+      cells: [
+        {
+          t: k.line,
+          text: true,
+          strong: true,
+          ...(k.kind === 'overall' ? { tone: 'calc' as const } : {}),
+        },
+        ...(T > 1 ? [{ t: k.exam, center: true }] : []),
+        ...sections.map((s) => ({
+          t: s.stats
+            ? text(s.stats.find((x) => x.line === k.line && x.exam === k.exam))
+            : 'could not be read',
+          text: true,
+          wrap: true,
+        })),
+      ],
+    })),
+    foot: null,
+    frozen: 0,
+    widths: [16, ...(T > 1 ? [4] : []), ...sections.map(() => 14)],
+  };
+}

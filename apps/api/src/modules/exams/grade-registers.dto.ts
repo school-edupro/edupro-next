@@ -68,3 +68,27 @@ export const GradeBuilderQuerySchema = z.object({
   examIds: Ids.optional(),
 });
 export class GradeBuilderQueryDto extends createZodDto(GradeBuilderQuerySchema) {}
+
+const Flag = z
+  .union([z.boolean(), z.enum(['true', 'false', '1', '0'])])
+  .transform((v) => v === true || v === 'true' || v === '1');
+/** Run (docs/design/69, part 3): a section, the layout, a report, filters, a file */
+export const GradeRunQuerySchema = z.object({
+  classSectionId: IdSchema.optional(),
+  layout: z.enum(['class', 'student']).default('class'),
+  report: z.enum(['sheet', 'summary', 'analysis', 'analysis-all']).default('sheet'),
+  /** the areas shown (their keys, joined by |); none given: every area */
+  areas: z.string().max(4000).optional(),
+  /** the items shown (ids, comma-separated); none given: every item */
+  items: z
+    .string()
+    .regex(/^\d{1,18}(,\d{1,18}){0,999}$/)
+    .optional(),
+  format: z.enum(['json', 'xlsx', 'pdf']).default('json'),
+  /** a file of every section */
+  all: Flag.optional(),
+  paper: z.enum(['A4', 'A3', 'Legal', 'Letter']).default('Legal'),
+  orientation: z.enum(['portrait', 'landscape']).default('landscape'),
+  fit: Flag.default(true),
+});
+export class GradeRunQueryDto extends createZodDto(GradeRunQuerySchema) {}

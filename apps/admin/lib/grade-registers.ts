@@ -1,4 +1,4 @@
-import type { GradeRegisterDef, GradeTree } from '@edupro/ui';
+import type { GradeRegisterDef, GradeTree, Sheet } from '@edupro/ui';
 import type { RegisterRights } from './mark-schemes';
 
 /** Grade registers as the API gives them (docs/design/69). */
@@ -39,4 +39,27 @@ export interface GradeBuilderData {
   tree: GradeTree | null;
   /** the levels of the sets the classes use (a starting grade scale) */
   levels: string[];
+}
+/** GET /exams/grade-registers/:id/run (docs/design/69, part 3) */
+export interface GradeRunResponse {
+  register: {
+    id: string;
+    name: string;
+    version: number;
+    status: GradeRegister['status'];
+    accessType: GradeRegister['accessType'];
+  };
+  places: Array<{ value: string; label: string }>;
+  place: string | null;
+  layout: 'class' | 'student';
+  report: 'sheet' | 'summary' | 'analysis' | 'analysis-all';
+  exams: Array<{ examId: string; label: string; name: string }>;
+  /** the filter's choices (the section's areas and items, as per mapping) */
+  areas: Array<{ key: string; name: string }>;
+  items: Array<{ key: string; name: string; area: string }>;
+  chosen: { areas: string[] | null; items: string[] | null };
+  sheets: Sheet[];
+  notes: string[];
+  /** as per mapping, for this person */
+  mapped: boolean;
 }

@@ -1,9 +1,10 @@
-import { Body, Controller, Get, HttpCode, Param, Post, Query, Res } from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, Param, Post, Put, Query, Res } from '@nestjs/common';
 import type { FastifyReply } from 'fastify';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { RequirePermission } from '../../../common/access/require-permission.decorator';
 import { ReqCtx, type RequestContext } from '../../../common/http/request-context';
 import {
+  AssignmentAreasDto,
   BulkTeacherAssignmentDto,
   CreateTeacherAssignmentDto,
   ImportTeacherAssignmentsDto,
@@ -83,6 +84,16 @@ export class TeacherAssignmentsController {
   @RequirePermission(ACADEMICS.assignmentManage)
   import(@ReqCtx() ctx: RequestContext, @Body() body: ImportTeacherAssignmentsDto) {
     return this.assignments.import(ctx, body.fileBase64);
+  }
+
+  @Put(':id/areas')
+  @ApiOperation({
+    summary: "An Indicator assignment's indicator areas (none: every area)",
+    description: 'A grade register run as per mapping shows the teacher only these areas',
+  })
+  @RequirePermission(ACADEMICS.assignmentManage)
+  areas(@ReqCtx() ctx: RequestContext, @Param('id') id: string, @Body() body: AssignmentAreasDto) {
+    return this.assignments.setAreas(ctx, id, body.areaIds);
   }
 
   @Post(':id/end')

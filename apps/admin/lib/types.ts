@@ -405,6 +405,8 @@ export interface TeacherAssignment {
   canAnswerQueries: boolean;
   validFrom: string;
   validTo: string | null;
+  /** an Indicator assignment: the indicator areas it covers (none: every area; docs/design/69) */
+  indicatorAreas?: Array<{ id: string; name: string }>;
 }
 
 export interface Period {

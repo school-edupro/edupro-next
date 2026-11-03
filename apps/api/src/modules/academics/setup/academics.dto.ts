@@ -71,6 +71,10 @@ export const CreateTeacherAssignmentSchema = z
   });
 export class CreateTeacherAssignmentDto extends createZodDto(CreateTeacherAssignmentSchema) {}
 
+/** An Indicator assignment's indicator areas (docs/design/69); none: every area. */
+export const AssignmentAreasSchema = z.object({ areaIds: z.array(IdSchema).max(60) });
+export class AssignmentAreasDto extends createZodDto(AssignmentAreasSchema) {}
+
 /** One teacher, one type, many classes and many subjects: every class with every subject. */
 export const BulkTeacherAssignmentSchema = z
   .object({

@@ -36,6 +36,8 @@ export interface TeacherAssignmentRow {
   isActual: boolean;
   validFrom: string;
   validTo: string | null;
+  /** an Indicator assignment: the indicator areas the teacher rates (none named: every area) */
+  indicatorAreas: Array<{ id: string; name: string }>;
 }
 
 interface AssignmentDb {
@@ -58,12 +60,15 @@ interface AssignmentDb {
   is_actual: boolean;
   valid_from: string;
   valid_to: string | null;
+  areas: Array<{ id: string; name: string }> | null;
 }
 
 const SELECT = `SELECT ta.id::text, ta.academic_year_id::text, ta.employee_id::text, e.employee_code, e.display_name AS employee_name,
         e.user_id::text, ta.class_section_id::text, c.code AS class_code, cs.name AS section,
         ta.subject_id::text, s.code AS subject_code, s.name AS subject_name, ta.kind,
-        ta.can_mark_attendance, ta.can_post_homework, ta.can_answer_queries, ta.is_actual, ta.valid_from::text, ta.valid_to::text
+        ta.can_mark_attendance, ta.can_post_homework, ta.can_answer_queries, ta.is_actual, ta.valid_from::text, ta.valid_to::text,
+        (SELECT jsonb_agg(jsonb_build_object('id', ia.id::text, 'name', ia.name) ORDER BY ia.sort_order, ia.name)
+           FROM indicator_areas ia WHERE ia.id = ANY(ta.indicator_area_ids)) AS areas
    FROM teacher_assignments ta
    JOIN employees e ON e.id = ta.employee_id
    JOIN class_sections cs ON cs.id = ta.class_section_id
@@ -90,6 +95,7 @@ const toRow = (r: AssignmentDb): TeacherAssignmentRow => ({
   isActual: r.is_actual,
   validFrom: r.valid_from,
   validTo: r.valid_to,
+  indicatorAreas: r.areas ?? [],
 });
 
 /**
@@ -580,6 +586,50 @@ export class TeacherAssignmentsService {
   }
 
   /** Ends an assignment today and re-synchronises the teacher's roles and scopes. */
+  /**
+   * The indicator areas an Indicator assignment covers (docs/design/69): a grade register run "as per
+   * mapping" shows the teacher only these areas of the section; none named covers every area.
+   */
+  async setAreas(
+    ctx: RequestContext,
+    id: string,
+    areaIds: string[],
+  ): Promise<TeacherAssignmentRow> {
+    const tenant = requireTenant(ctx);
+    return this.db.tenant(tenant, async (c) => {
+      const before = await this.find(c, id);
+      if (!before) throw new DomainError('not-found', 'Assignment not found');
+      if (before.kind !== 'indicator')
+        throw new DomainError(
+          'assignment.not_indicator',
+          'Only an Indicator assignment names indicator areas',
+          { status: 409 },
+        );
+      const ids = [...new Set(areaIds)];
+      const known = await c.query<{ id: string }>(
+        `SELECT id::text FROM indicator_areas WHERE id = ANY($1::bigint[])`,
+        [ids],
+      );
+      if (known.rows.length !== ids.length)
+        throw new DomainError('validation-failed', 'An indicator area is not of this school', {
+          status: 400,
+        });
+      await c.query(
+        `UPDATE teacher_assignments SET indicator_area_ids = $2::bigint[], updated_at = now(), updated_by = app.current_user_id() WHERE id = $1`,
+        [id, ids],
+      );
+      const after = (await this.find(c, id))!;
+      await this.audit.stage(ctx, c, {
+        action: 'academics.teacher_assignment.areas',
+        entityType: 'teacher_assignments',
+        entityId: id,
+        before: { areas: before.indicatorAreas },
+        after: { areas: after.indicatorAreas },
+      });
+      return after;
+    });
+  }
+
   async end(ctx: RequestContext, id: string): Promise<TeacherAssignmentRow> {
     const tenant = requireTenant(ctx);
     return this.db.tenant(tenant, async (c) => {

@@ -336,4 +336,239 @@ describe('grade registers like the legacy Grade Register (e2e)', () => {
     });
     expect(removed.json()).toEqual({ removed: 1 });
   });
+
+  // ---- Run (part 3) ----------------------------------------------------------------------------------
+  interface Cell {
+    t: string;
+    tone?: string;
+    span?: number;
+    drill?: { rows: string[][] };
+  }
+  interface RunSheet {
+    place: string;
+    title?: string;
+    head: Cell[][];
+    body: Array<{ cells: Cell[] }>;
+  }
+  const run = async (u: SeededUser, id: string, q: string) =>
+    (await call(u, 'GET', `/${id}/run?${q}`)).json() as {
+      places: Array<{ value: string; label: string }>;
+      areas: Array<{ key: string; name: string }>;
+      items: Array<{ key: string; name: string }>;
+      sheets: RunSheet[];
+      notes: string[];
+      mapped: boolean;
+    };
+  const texts = (cells: Cell[]) => cells.map((c) => c.t);
+  const sec = { a: '', b: '' };
+  const pupil: Record<string, string> = {};
+  let runId = '';
+
+  it('runs a section as the class sheet: the grades, blanks, and the Overall per area', async () => {
+    await withMigrator(async (c) => {
+      for (const [key, name] of [
+        ['a', 'A'],
+        ['b', 'B'],
+      ] as const)
+        sec[key] = (
+          await c.query<{ id: string }>(
+            `INSERT INTO class_sections (school_id, academic_year_id, class_id, name, capacity) VALUES ($1, $2, $3, $4, 40) RETURNING id::text`,
+            [school.id, school.yearId, ids.vi, name],
+          )
+        ).rows[0]!.id;
+      for (const [i, [first, last, section]] of (
+        [
+          ['Asha', 'Reg', sec.a],
+          ['BHANU', 'PRATAP', sec.a],
+          ['Chitra', 'Reg', sec.b],
+        ] as const
+      ).entries()) {
+        const st = await c.query<{ id: string }>(
+          `INSERT INTO students (school_id, admission_no, first_name, last_name) VALUES ($1, $2, $3, $4) RETURNING id::text`,
+          [school.id, `${s}-${String(i + 1)}`, first, last],
+        );
+        pupil[first] = st.rows[0]!.id;
+        await c.query(
+          `INSERT INTO enrolments (school_id, student_id, academic_year_id, class_section_id, roll_no, joined_on) VALUES ($1, $2, $3, $4, $5, CURRENT_DATE - 30)`,
+          [school.id, st.rows[0]!.id, school.yearId, section, i + 1],
+        );
+      }
+      for (const [st, ind, g] of [
+        [pupil.Asha, ids.work, 'A'],
+        [pupil.Asha, ids.art, 'B'],
+        [pupil.Asha, ids.listens, 'B'],
+        [pupil.Asha, ids.neat, 'B'],
+        [pupil.BHANU, ids.work, 'C'],
+        [pupil.BHANU, ids.art, 'C'],
+        [pupil.BHANU, ids.listens, 'A'],
+        [pupil.Chitra, ids.work, 'A'],
+      ] as const)
+        await c.query(
+          `INSERT INTO indicator_entries (school_id, exam_id, indicator_id, student_id, grade) VALUES ($1, $2, $3, $4, $5)`,
+          [school.id, ids.t1, ind, st, g],
+        );
+    });
+    const made = await call(admin, 'POST', '', {
+      name: 'Run register VI',
+      classIds: [ids.vi],
+      def: def({
+        overall: 'mode',
+        blankText: '-',
+        scale: [
+          { g: 'A', p: 3 },
+          { g: 'B', p: 2 },
+          { g: 'C', p: 1 },
+        ],
+        labels: { [ids.listens]: 'Listens well' },
+      }),
+    });
+    runId = made.json().id;
+    const r = await run(admin, runId, `classSectionId=${sec.a}`);
+    expect(r.places.map((p) => p.label)).toEqual(['VI-A', 'VI-B']);
+    expect(r.areas.map((a) => a.name)).toEqual(['Discipline', 'Co-scholastic']);
+    const [sheet] = r.sheets;
+    expect(texts(sheet!.head[1]!)).toEqual([
+      'Conduct',
+      'Overall',
+      'Work education',
+      'Art education',
+      'Overall',
+    ]);
+    expect(texts(sheet!.head[2]!)).toEqual(['Listens well', 'Neat work']);
+    // Asha: B B | B | A B | A (a tie: the better grade); Bhanu (proper case): A - | A | C C | C
+    expect(texts(sheet!.body[0]!.cells).slice(3)).toEqual([
+      'Asha Reg',
+      'B',
+      'B',
+      'B',
+      'A',
+      'B',
+      'A',
+    ]);
+    expect(texts(sheet!.body[1]!.cells).slice(3)).toEqual([
+      'Bhanu Pratap',
+      'A',
+      '-',
+      'A',
+      'C',
+      'C',
+      'C',
+    ]);
+    expect(sheet!.body[1]!.cells[9]).toMatchObject({ t: 'C', tone: 'calc' });
+  });
+
+  it('student-wise, the filters, the Grade summary and the Analysis (a section, every section)', async () => {
+    const sw = await run(admin, runId, `classSectionId=${sec.a}&layout=student`);
+    expect(sw.sheets.map((x) => x.title)).toEqual([
+      `1. Asha Reg · Adm ${s}-1 · Roll 1`,
+      `2. Bhanu Pratap · Adm ${s}-2 · Roll 2`,
+    ]);
+    expect(texts(sw.sheets[0]!.body[0]!.cells)).toEqual([
+      'Discipline',
+      'Conduct',
+      'Listens well',
+      'B',
+    ]);
+    expect(sw.sheets[0]!.body[2]!.cells[1]).toMatchObject({ t: 'Overall — Discipline', span: 2 });
+    // filters: one area, one item
+    const area = await run(admin, runId, `classSectionId=${sec.a}&areas=co-scholastic`);
+    expect(texts(area.sheets[0]!.head[0]!).slice(4)).toEqual(['Co-scholastic']);
+    const item = await run(admin, runId, `classSectionId=${sec.a}&items=${ids.work}`);
+    expect(texts(item.sheets[0]!.head[1]!)).toEqual(['Work education', 'Overall']);
+    // the summary: Work education A 1 (Asha), C 1 (Bhanu); a count opens its students
+    const sum = (await run(admin, runId, `classSectionId=${sec.a}&report=summary`)).sheets[0]!;
+    expect(texts(sum.head[0]!)).toEqual([
+      'Area',
+      'Indicator',
+      'Description',
+      'A',
+      'B',
+      'C',
+      'Blank',
+      'Students',
+    ]);
+    const work = sum.body.find((x) => x.cells[1]!.t === 'Work education')!;
+    expect(texts(work.cells).slice(3)).toEqual(['1', '0', '1', '0', '2']);
+    expect(work.cells[3]!.drill!.rows).toEqual([['1', 'Asha Reg', `${s}-1`, '1']]);
+    const an = (await run(admin, runId, `classSectionId=${sec.a}&report=analysis`)).sheets[0]!;
+    // Discipline: B 2, A 1 of 3 given, 1 blank
+    expect(texts(an.body[0]!.cells)).toEqual([
+      'Discipline',
+      '33.3% (1)',
+      '66.7% (2)',
+      '—',
+      '3',
+      '1',
+    ]);
+    const all = (await run(admin, runId, 'report=analysis-all')).sheets[0]!;
+    expect(texts(all.head[0]!)).toEqual(['Area', 'VI-A', 'VI-B']);
+    expect(all.body.find((x) => x.cells[0]!.t === 'Co-scholastic')!.cells[2]!.t).toBe(
+      'A 100.0% (1)',
+    );
+  });
+
+  it('downloads the sheet (a section or all), student-wise a page each, as PDF or Excel', async () => {
+    for (const [q, name] of [
+      [`classSectionId=${sec.a}&format=pdf`, 'grade-register-run-register-vi-vi-a.pdf'],
+      [`classSectionId=${sec.a}&format=xlsx&all=1`, 'grade-register-run-register-vi-all.xlsx'],
+      [
+        `classSectionId=${sec.a}&format=pdf&layout=student`,
+        'grade-register-run-register-vi-vi-a-student-wise.pdf',
+      ],
+      ['report=analysis-all&format=pdf', 'grade-register-run-register-vi-all-analysis-all.pdf'],
+    ] as const) {
+      const f = await call(admin, 'GET', `/${runId}/run?${q}`);
+      expect(f.statusCode).toBe(200);
+      expect(f.json().filename).toBe(name);
+      expect(Buffer.from(f.json().base64 as string, 'base64').length).toBeGreaterThan(500);
+    }
+  });
+
+  it('as per mapping: a teacher sees the areas of their Indicator assignment of the section', async () => {
+    await call(admin, 'PUT', `/${runId}/access`, {
+      rows: [{ userId: other.id, run: true, edit: false, delete: false, assign: false }],
+    });
+    await call(admin, 'PUT', `/${runId}/access-type`, { type: 'mapping' });
+    // no Indicator assignment: nothing, and why
+    const none = await run(other, runId, `classSectionId=${sec.a}`);
+    expect(none.mapped).toBe(true);
+    expect(none.areas).toEqual([]);
+    expect(none.notes.join(' ')).toContain('no Indicator assignment of this section is yours');
+    // an Indicator assignment of VI-A for Discipline
+    const discipline = await withMigrator(async (c) => {
+      const e = await c.query<{ id: string }>(
+        `INSERT INTO employees (school_id, employee_code, first_name, last_name, user_id) VALUES ($1, 'GR-IND', 'Ira', 'Indicator', $2) RETURNING id::text`,
+        [school.id, other.id],
+      );
+      const ta = await c.query<{ id: string }>(
+        `INSERT INTO teacher_assignments (school_id, academic_year_id, employee_id, class_section_id, kind) VALUES ($1, $2, $3, $4, 'indicator') RETURNING id::text`,
+        [school.id, school.yearId, e.rows[0]!.id, sec.a],
+      );
+      const ar = await c.query<{ id: string }>(
+        `SELECT id::text FROM indicator_areas WHERE school_id = $1 AND name = 'Discipline'`,
+        [school.id],
+      );
+      return { assignment: ta.rows[0]!.id, area: ar.rows[0]!.id };
+    });
+    // no area named: every area
+    expect((await run(other, runId, `classSectionId=${sec.a}`)).areas.map((a) => a.name)).toEqual([
+      'Discipline',
+      'Co-scholastic',
+    ]);
+    const set = await inject({
+      method: 'PUT',
+      url: `/academics/teacher-assignments/${discipline.assignment}/areas`,
+      headers: headersFor(admin.sub, school.id),
+      json: { areaIds: [discipline.area] },
+    });
+    expect(set.statusCode).toBe(200);
+    expect(set.json().indicatorAreas).toEqual([{ id: discipline.area, name: 'Discipline' }]);
+    const only = await run(other, runId, `classSectionId=${sec.a}`);
+    expect(only.areas.map((a) => a.name)).toEqual(['Discipline']);
+    expect(texts(only.sheets[0]!.head[0]!).slice(4)).toEqual(['Discipline']);
+    // another section: no assignment there
+    expect((await run(other, runId, `classSectionId=${sec.b}`)).areas).toEqual([]);
+    // the manager sees every area
+    expect((await run(admin, runId, `classSectionId=${sec.a}`)).areas).toHaveLength(2);
+  });
 });

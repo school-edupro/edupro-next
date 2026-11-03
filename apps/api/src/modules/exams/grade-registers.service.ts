@@ -1,23 +1,45 @@
-import { Injectable } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
 import {
   areaKey,
+  arrange,
+  buildGradeSheet,
+  buildStudentWise,
+  gradeAnalysis,
+  gradeAnalysisAll,
   gradeProblems,
+  gradeStats,
+  gradeSummary,
+  type GradeLeaf,
   type GradeRegisterDef,
+  type GradeSheetInput,
   type GradeTree,
   type PoolClient,
+  type Sheet,
 } from '@edupro/db';
+import type { StorageDriver } from '@edupro/storage';
 import { AuditService } from '../../common/audit/audit.service';
 import { DbService } from '../../common/db/db.service';
 import { DomainError } from '../../common/errors/domain-error';
 import { requireTenant, type RequestContext } from '../../common/http/request-context';
+import { STORAGE_DRIVER } from '../files/storage';
 import type {
   CopyGradeRegisterDto,
   CreateGradeRegisterDto,
+  GradeRunQueryDto,
   RestoreGradeRegisterDto,
   UpdateGradeRegisterDto,
 } from './grade-registers.dto';
 import type { RemoveAccessDto, SchemeAccessDto } from './mark-schemes.dto';
+import { registerPdf, registerXlsx } from './mark-register-file';
 import { MarkSchemesService, REGISTERS, type Rights } from './mark-schemes.service';
+import { registerGeneratedOn, registerLetterhead, registerLogo } from './register-head';
+
+const REPORT_LABEL: Record<GradeRunQueryDto['report'], string> = {
+  sheet: '',
+  summary: 'Grade Summary',
+  analysis: 'Analysis',
+  'analysis-all': 'Analysis (all sections)',
+};
 
 interface Row {
   id: string;
@@ -63,6 +85,7 @@ export class GradeRegistersService {
     private readonly db: DbService,
     private readonly audit: AuditService,
     private readonly marks: MarkSchemesService,
+    @Inject(STORAGE_DRIVER) private readonly storage: StorageDriver,
   ) {}
 
   private year(ctx: RequestContext): string {
@@ -922,5 +945,228 @@ export class GradeRegistersService {
       });
       return { removed: n };
     });
+  }
+
+  // ---- Run (part 3) ---------------------------------------------------------------------------------
+  /**
+   * Runs a register for a section (any section of its classes with students): the class sheet or
+   * student-wise, or the Grade summary, the Analysis, the Analysis of every section side by side; on
+   * screen or as a PDF / Excel (of the section, or of every section). Filters by area and item. "As per
+   * mapping": a teacher who does not manage registers sees only the areas of their Indicator assignment
+   * of the section (an assignment naming no area covers every area).
+   */
+  async run(ctx: RequestContext, id: string, q: GradeRunQueryDto) {
+    const yearId = this.year(ctx);
+    const role = this.roleRights(ctx);
+    const out = await this.db.tenant(requireTenant(ctx), async (c) => {
+      const reg = await this.find(c, id);
+      await this.must(c, ctx, reg.chain_id, 'run');
+      const secs = (
+        await c.query<{ id: string; class_id: string; code: string; class_name: string }>(
+          `SELECT cs.id::text, cs.class_id::text, k.code || '-' || cs.name AS code, k.name AS class_name
+             FROM class_sections cs JOIN classes k ON k.id = cs.class_id
+            WHERE cs.class_id = ANY($1::bigint[]) AND cs.academic_year_id = $2 AND cs.deleted_at IS NULL
+              AND EXISTS (SELECT 1 FROM enrolments en WHERE en.class_section_id = cs.id AND en.status = 'active')
+            ORDER BY k.display_order, cs.name`,
+          [reg.class_ids, yearId],
+        )
+      ).rows;
+      const exRows = (
+        await c.query<{ id: string; code: string; name: string }>(
+          `SELECT id::text, code, name FROM exams WHERE id = ANY($1::bigint[])`,
+          [reg.def.exams.map((e) => e.examId)],
+        )
+      ).rows;
+      const exams = reg.def.exams.map((e) => {
+        const x = exRows.find((y) => y.id === e.examId);
+        return {
+          examId: e.examId,
+          label: e.label || x?.code || 'T',
+          name: x ? `${x.code} · ${x.name}` : 'an exam no longer there',
+        };
+      });
+      const place = secs.find((x) => x.id === q.classSectionId) ?? secs[0] ?? null;
+      const mapping = reg.access_type === 'mapping' && !(role.manage || role.assign);
+      const areaPick = q.areas ? new Set(q.areas.split('|').filter(Boolean)) : null;
+      const itemPick = q.items ? new Set(q.items.split(',')) : null;
+      const load = (sec: (typeof secs)[number]) =>
+        this.sectionRun(c, reg.def, exams, sec, yearId, mapping, areaPick, itemPick);
+      const all = q.report === 'analysis-all' || (q.all && q.format !== 'json');
+      const runs = place ? (all ? await Promise.all(secs.map(load)) : [await load(place)]) : [];
+      const head = q.format === 'json' ? null : await registerLetterhead(c);
+      return { reg, secs, place, exams, runs, head };
+    });
+    const { reg, secs, place, exams, runs } = out;
+    const sheets: Sheet[] =
+      q.report === 'analysis-all'
+        ? runs.length
+          ? [
+              gradeAnalysisAll(
+                reg.name,
+                runs.map((r) => ({ place: r.input.place, stats: gradeStats(r.input) })),
+                exams,
+              ),
+            ]
+          : []
+        : runs.flatMap((r) =>
+            q.report === 'summary'
+              ? [gradeSummary(r.input)]
+              : q.report === 'analysis'
+                ? [gradeAnalysis(r.input)]
+                : q.layout === 'student'
+                  ? buildStudentWise(r.input, (st) =>
+                      q.format === 'pdf' ? `${r.input.place} · ${st.name}` : r.input.place,
+                    )
+                  : buildGradeSheet(r.input),
+          );
+    const first = runs.find((r) => r.input.place === place?.code) ?? runs[0];
+    if (q.format === 'json')
+      return {
+        register: {
+          id: reg.id,
+          name: reg.name,
+          version: reg.version,
+          status: reg.status,
+          accessType: reg.access_type,
+        },
+        places: secs.map((x) => ({ value: x.id, label: x.code })),
+        place: place?.id ?? null,
+        layout: q.layout,
+        report: q.report,
+        exams,
+        /** the filter's choices: the section's areas and items (as per mapping, before the filter) */
+        areas: first?.areas ?? [],
+        items: first?.items ?? [],
+        chosen: { areas: q.areas ? q.areas.split('|') : null, items: q.items?.split(',') ?? null },
+        sheets,
+        notes: first?.notes ?? [],
+        mapped: reg.access_type === 'mapping' && !(role.manage || role.assign),
+      };
+    if (!sheets.length)
+      throw new DomainError('exams.register_empty', 'Nothing to print for the section chosen', {
+        status: 409,
+      });
+    const label = [`Grade Register · ${reg.name}`, REPORT_LABEL[q.report]]
+      .filter(Boolean)
+      .join(' · ');
+    const meta = {
+      school: out.head?.school ?? '',
+      address: out.head?.address ?? '',
+      logo: await registerLogo(this.storage, out.head?.file),
+      label,
+      generatedOn: registerGeneratedOn(),
+    };
+    const stamp =
+      `grade-register-${reg.name}-${q.all || q.report === 'analysis-all' ? 'all' : (place?.code ?? '')}${q.report === 'sheet' ? (q.layout === 'student' ? '-student-wise' : '') : `-${q.report}`}`
+        .toLowerCase()
+        .replace(/[^\w.-]+/g, '-');
+    if (q.format === 'xlsx')
+      return {
+        filename: `${stamp}.xlsx`,
+        contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        base64: (await registerXlsx(sheets, meta)).toString('base64'),
+      };
+    return {
+      filename: `${stamp}.pdf`,
+      contentType: 'application/pdf',
+      base64: (
+        await registerPdf(sheets, meta, {
+          paper: q.paper,
+          orientation: q.orientation,
+          fit: q.fit,
+        })
+      ).toString('base64'),
+    };
+  }
+
+  /** One section's run: its students, its class's tree (as per mapping and the filter), the grades. */
+  private async sectionRun(
+    c: PoolClient,
+    def: GradeRegisterDef,
+    exams: GradeSheetInput['exams'],
+    sec: { id: string; class_id: string; code: string; class_name: string },
+    yearId: string,
+    mapping: boolean,
+    areaPick: Set<string> | null,
+    itemPick: Set<string> | null,
+  ) {
+    const notes: string[] = [];
+    const examIds = exams.map((e) => e.examId);
+    const tree = await this.tree(c, [sec.class_id], examIds);
+    const sets = await c.query<{ exam_id: string }>(
+      `SELECT exam_id::text FROM exam_indicator_sets WHERE class_id = $1 AND exam_id = ANY($2::bigint[])`,
+      [sec.class_id, examIds],
+    );
+    for (const e of exams)
+      if (!sets.rows.some((x) => x.exam_id === e.examId))
+        notes.push(
+          `${e.label} (${e.name}) has no indicator set for ${sec.class_name}: its columns stay empty.`,
+        );
+    // as per mapping: the areas of the person's Indicator assignments of the section
+    let mapped: Set<string> | null = null;
+    if (mapping) {
+      const r = await c.query<{ ids: string[] }>(
+        `SELECT ta.indicator_area_ids::text[] AS ids FROM teacher_assignments ta
+           JOIN employees e ON e.id = ta.employee_id AND e.user_id = app.current_user_id()
+          WHERE ta.class_section_id = $1 AND ta.academic_year_id = $2 AND ta.valid_to IS NULL AND ta.kind = 'indicator'`,
+        [sec.id, yearId],
+      );
+      if (!r.rows.length) {
+        mapped = new Set();
+        notes.push(
+          'This register shows each teacher the indicator areas given to them, and no Indicator assignment of this section is yours (Academics → Teacher assignments).',
+        );
+      } else if (!r.rows.some((x) => !x.ids.length)) {
+        const names = await c.query<{ name: string }>(
+          `SELECT name FROM indicator_areas WHERE id = ANY($1::bigint[])`,
+          [r.rows.flatMap((x) => x.ids)],
+        );
+        mapped = new Set(names.rows.map((x) => areaKey(x.name)));
+        notes.push('Only the indicator areas given to you in this section are shown.');
+      }
+    }
+    const inMap = (l: GradeLeaf) => !mapped || mapped.has(areaKey(l.area));
+    const choices = arrange(tree, def, inMap);
+    const areas = arrange(
+      tree,
+      def,
+      (l) =>
+        inMap(l) &&
+        (!areaPick || areaPick.has(areaKey(l.area))) &&
+        (!itemPick || itemPick.has(l.itemId ?? l.id)),
+    );
+    if (choices.length && !areas.length) notes.push('No indicator matches the filter.');
+    const st = await c.query<{ id: string; name: string; adm: string; roll: number | null }>(
+      `SELECT s.id::text, s.display_name AS name, s.admission_no AS adm, en.roll_no AS roll
+         FROM enrolments en JOIN students s ON s.id = en.student_id AND s.deleted_at IS NULL
+        WHERE en.class_section_id = $1 AND en.academic_year_id = $2 AND en.status = 'active'
+        ORDER BY en.roll_no NULLS LAST, s.display_name`,
+      [sec.id, yearId],
+    );
+    const leafIds = areas.flatMap((a) => a.items.flatMap((it) => it.leaves.map((l) => l.id)));
+    const g = await c.query<{ exam: string; leaf: string; student: string; grade: string }>(
+      `SELECT exam_id::text AS exam, indicator_id::text AS leaf, student_id::text AS student, grade
+         FROM indicator_entries
+        WHERE exam_id = ANY($1::bigint[]) AND student_id = ANY($2::bigint[]) AND indicator_id = ANY($3::bigint[])
+          AND grade IS NOT NULL`,
+      [examIds, st.rows.map((x) => x.id), leafIds],
+    );
+    const grades = new Map(g.rows.map((x) => [`${x.leaf}|${x.exam}|${x.student}`, x.grade]));
+    const input: GradeSheetInput = {
+      place: sec.code,
+      areas,
+      def,
+      exams,
+      students: st.rows,
+      grade: (leafId, examId, studentId) => grades.get(`${leafId}|${examId}|${studentId}`),
+    };
+    return {
+      input,
+      notes,
+      areas: choices.map((a) => ({ key: a.key, name: a.name })),
+      items: choices.flatMap((a) =>
+        a.items.map((it) => ({ key: it.key, name: it.name, area: a.key })),
+      ),
+    };
   }
 }
