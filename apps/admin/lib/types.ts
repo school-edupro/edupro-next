@@ -1971,6 +1971,17 @@ export interface ExamClass {
   /** the class's indicator / HPC set in the exam (docs/design/65 part 5) */
   indicatorSetId?: string | null;
 }
+/** a line of the subject marks master (docs/design/70) */
+export interface SubjectMarksLine {
+  subjectId: string;
+  code: string;
+  name: string;
+  maxMarks: number;
+  passMarks: number | null;
+  gradeScaleId: string | null;
+  optional: boolean;
+}
+
 export interface ExamSubject {
   id: string;
   classId: string;
@@ -1990,6 +2001,11 @@ export interface ExamSubject {
   lockedAt: string | null;
   /** the subject's own grade scale; a grade-only subject (max 0) is graded on it */
   gradeScaleId?: string | null;
+  /** marks entered: the paper no longer follows the subject marks master (docs/design/70) */
+  marked?: boolean;
+  /** the master's line for it; null: not in the class's list */
+  master?: SubjectMarksLine | null;
+  differs?: boolean;
   /** The parts the subject is entered in (empty = one figure). */
   parts?: Array<{
     id: string;
@@ -2019,6 +2035,8 @@ export interface Exam {
   /** what the exam takes: marks, indicators, remarks, attendance, health (docs/design/66) */
   areas?: string[];
   classes: ExamClass[];
+  /** the subject marks master of the exam's type, per class that has one (docs/design/70) */
+  subjectMarks?: Array<{ classId: string; rows: SubjectMarksLine[] }>;
   subjects?: ExamSubject[];
   /** the list's: how far the exam has got */
   progress?: ExamProgress;

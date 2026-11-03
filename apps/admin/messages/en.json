@@ -4075,7 +4075,21 @@
       "partTheory": "Theory",
       "partPractical": "Practical",
       "partOther": "Other (type the name)",
-      "partOtherName": "Name of part {n}"
+      "partOtherName": "Name of part {n}",
+      "masterNote": "The papers and their marks come from <a>Exam set-up → Subject marks</a> ({type} · {class}): change the marks there. Tick the papers the class sits.",
+      "masterMissingTitle": "The subject marks are not set yet",
+      "masterMissing": "The papers and marks of {type} for {class} come from <a>Exam set-up → Subject marks</a>, and none are set there yet.",
+      "masterFill": "Fill the subject marks from this exam",
+      "masterFillHelp": "Takes this exam’s subjects and marks, every class, as the subject marks of {type}.",
+      "notInMaster": "Not in the subject marks: untick it, or add it there",
+      "differs": "Differs from the subject marks ({master}): marks are entered",
+      "applyMaster": "Apply the subject marks",
+      "applyReason": "Reason (shown in the history)",
+      "applyConfirm": "Apply",
+      "applyCancel": "Cancel",
+      "partsMustAdd": "The parts of {subject} must add up to its maximum of {max}",
+      "gradeOnly": "Grade only",
+      "optional": "Optional"
     },
     "sheet": {
       "title": "Date sheet",

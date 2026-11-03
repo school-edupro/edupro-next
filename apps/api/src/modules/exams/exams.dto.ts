@@ -687,6 +687,10 @@ export const SetPartsSchema = z.object({
 });
 export class SetPartsDto extends createZodDto(SetPartsSchema) {}
 
+/** A paper with marks moved to the subject marks master's values (docs/design/70), with a reason. */
+export const ApplyMasterSchema = z.object({ reason: z.string().trim().min(3).max(300) });
+export class ApplyMasterDto extends createZodDto(ApplyMasterSchema) {}
+
 export const PutPartMarksSchema = z.object({
   classSectionId: IdSchema,
   partId: IdSchema,

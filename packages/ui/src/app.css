@@ -13789,6 +13789,22 @@ button.ep-subchoice__icon:hover {
   text-align: left;
 }
 /* the subject marks master (docs/design/70): the exam type × class overview and the tools */
+.ep-xsubj__note {
+  margin-top: var(--sp-1);
+  font-size: var(--fs-caption);
+  font-weight: var(--fw-regular, 400);
+  color: var(--status-warning-text);
+}
+.ep-xsubj__apply {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: var(--sp-1);
+  align-items: center;
+  margin-top: var(--sp-1);
+}
+.ep-xsubj__apply .ep-input {
+  width: 14rem;
+}
 .ep-sm-grid td {
   text-align: center;
 }

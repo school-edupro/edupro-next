@@ -213,15 +213,18 @@ describe('subject marks master (e2e)', () => {
 
   it("fills an exam type's master from an exam already set up", async () => {
     const filled = await call(admin, 'POST', '/fill', { examId: ids.pt1 });
+    // the exam's own marks: nothing to follow
     expect(filled.json()).toEqual({
       typeId: ids.pt,
       data: [{ classId: ids.vi, code: 'VI', subjects: 3 }],
+      followed: 0,
     });
     expect(
       (await list(ids.pt!, ids.vi!)).rows.map((x) => [x.code, x.max, x.pass, x.scaleId]),
     ).toEqual([
-      ['MAT', 20, 7, null],
-      ['ENG', 20, 7, null],
+      // the exam (no marks yet) followed the lists saved above (part 2): MAT from the first, the rest from the second
+      ['MAT', 40, 14, null],
+      ['ENG', 40, 13, null],
       ['ART', 0, null, ids.scale],
     ]);
   });
@@ -244,7 +247,7 @@ describe('subject marks master (e2e)', () => {
         );
     });
     const r = await call(admin, 'POST', '/last-year', { typeId: ids.hy });
-    expect(r.json()).toEqual({ from: '2025-26', added: 2 });
+    expect(r.json()).toEqual({ from: '2025-26', added: 2, followed: 0 });
     expect((await list(ids.hy!, ids.vii!)).rows.map((x) => [x.code, x.max])).toEqual([
       ['ENG', 50],
       ['MAT', 50],
@@ -267,5 +270,185 @@ describe('subject marks master (e2e)', () => {
           .toString(),
       ).toBe(sig);
     }
+  });
+
+  // ---- part 2: the exams take their papers and marks from the master -------------------------------
+  interface ExamSubject {
+    id: string;
+    classId: string;
+    subjectCode: string;
+    maxMarks: string;
+    passMarks: string | null;
+    marked: boolean;
+    differs: boolean;
+  }
+  const examCall = (
+    u: SeededUser,
+    method: 'GET' | 'POST' | 'PUT' | 'PATCH',
+    url: string,
+    json?: unknown,
+  ) =>
+    inject({
+      method,
+      url: `/exams${url}`,
+      headers: headersFor(u.sub, school.id),
+      ...(json === undefined ? {} : { json }),
+    });
+  const papers = async (examId: string, classId = ids.vi!) =>
+    ((await examCall(admin, 'GET', `/${examId}`)).json().subjects as ExamSubject[])
+      .filter((x) => x.classId === classId)
+      .map((x) => ({
+        ...x,
+        max: Number(x.maxMarks),
+        pass: x.passMarks === null ? null : Number(x.passMarks),
+      }));
+  const master = (rows: Array<[string, number, number | null]>) =>
+    call(admin, 'PUT', '', {
+      typeId: ids.pt,
+      classId: ids.vi,
+      rows: rows.map(([code, max, pass]) => ({
+        subjectId: ids[code],
+        max,
+        pass,
+        scaleId: max === 0 ? ids.scale : null,
+        optional: false,
+      })),
+    });
+
+  it('an exam shows its type master; a paper with no mark follows a change of the master', async () => {
+    const exam = (await examCall(admin, 'GET', `/${ids.pt1}`)).json() as {
+      subjectMarks: Array<{ classId: string; rows: Array<{ code: string }> }>;
+    };
+    expect(exam.subjectMarks[0]!.rows.map((x) => x.code)).toEqual(['MAT', 'ENG', 'ART']);
+    expect((await papers(ids.pt1!)).every((x) => !x.differs && !x.marked)).toBe(true);
+    const saved = await master([
+      ['MAT', 30, 10],
+      ['ENG', 40, 13],
+      ['ART', 0, null],
+    ]);
+    expect(saved.json().followed).toBe(1);
+    expect((await papers(ids.pt1!)).find((x) => x.subjectCode === 'MAT')).toMatchObject({
+      max: 30,
+      pass: 10,
+    });
+  });
+
+  it('a paper with marks keeps its own and differs; Apply (a reason) moves it unless a mark is above', async () => {
+    const eng = (await papers(ids.pt1!)).find((x) => x.subjectCode === 'ENG')!;
+    await withMigrator(async (c) => {
+      const sec = await c.query<{ id: string }>(
+        `INSERT INTO class_sections (school_id, academic_year_id, class_id, name, capacity) VALUES ($1, $2, $3, 'A', 40) RETURNING id::text`,
+        [school.id, school.yearId, ids.vi],
+      );
+      const st = await c.query<{ id: string }>(
+        `INSERT INTO students (school_id, admission_no, first_name, last_name) VALUES ($1, $2, 'Asha', 'Mark') RETURNING id::text`,
+        [school.id, `${s}-1`],
+      );
+      ids.asha = st.rows[0]!.id;
+      await c.query(
+        `INSERT INTO enrolments (school_id, student_id, academic_year_id, class_section_id, roll_no, joined_on) VALUES ($1, $2, $3, $4, 1, CURRENT_DATE - 10)`,
+        [school.id, ids.asha, school.yearId, sec.rows[0]!.id],
+      );
+      await c.query(
+        `INSERT INTO mark_entries (school_id, exam_subject_id, student_id, marks) VALUES ($1, $2, $3, 35)`,
+        [school.id, eng.id, ids.asha],
+      );
+    });
+    const saved = await master([
+      ['MAT', 30, 10],
+      ['ENG', 30, 10],
+      ['ART', 0, null],
+    ]);
+    expect(saved.json().followed).toBe(0);
+    expect((await papers(ids.pt1!)).find((x) => x.subjectCode === 'ENG')).toMatchObject({
+      max: 40,
+      marked: true,
+      differs: true,
+    });
+    const url = `/${ids.pt1}/subjects/${eng.id}/apply-master`;
+    expect((await examCall(admin, 'POST', url, {})).statusCode).toBe(400);
+    expect((await examCall(teacher, 'POST', url, { reason: 'Out of 30' })).statusCode).toBe(403);
+    const above = await examCall(admin, 'POST', url, { reason: 'Out of 30' });
+    expect(above.statusCode).toBe(409);
+    expect(above.json().detail).toContain(`${s}-1 Asha Mark (35)`);
+    await withMigrator((c) =>
+      c.query(`UPDATE mark_entries SET marks = 28 WHERE exam_subject_id = $1`, [eng.id]),
+    );
+    expect((await examCall(admin, 'POST', url, { reason: 'Out of 30' })).statusCode).toBe(201);
+    expect((await papers(ids.pt1!)).find((x) => x.subjectCode === 'ENG')).toMatchObject({
+      max: 30,
+      pass: 10,
+      differs: false,
+    });
+  });
+
+  it("saving an exam's subjects takes the master's marks; a subject not in it is refused", async () => {
+    const sci = await withMigrator(
+      async (c) =>
+        (
+          await c.query<{ id: string }>(
+            `INSERT INTO subjects (school_id, code, name, kind, display_order, status) VALUES ($1, 'SCI', 'Science', 'scholastic', 4, 'active') RETURNING id::text`,
+            [school.id],
+          )
+        ).rows[0]!.id,
+    );
+    const put = (subjects: Array<{ subjectId: string; maxMarks: number }>) =>
+      examCall(admin, 'PUT', `/${ids.pt1}/subjects`, {
+        classId: ids.vi,
+        subjects: subjects.map((x) => ({
+          ...x,
+          passMarks: null,
+          isElective: false,
+          gradeScaleId: null,
+        })),
+      });
+    const ok = await put([
+      { subjectId: ids.MAT!, maxMarks: 99 },
+      { subjectId: ids.ENG!, maxMarks: 99 },
+      { subjectId: ids.ART!, maxMarks: 0 },
+    ]);
+    expect(ok.statusCode).toBe(200);
+    expect((await papers(ids.pt1!)).map((x) => [x.subjectCode, x.max, x.pass])).toEqual([
+      ['MAT', 30, 10],
+      ['ENG', 30, 10],
+      ['ART', 0, null],
+    ]);
+    const refused = await put([
+      { subjectId: ids.MAT!, maxMarks: 30 },
+      { subjectId: ids.ENG!, maxMarks: 30 },
+      { subjectId: sci, maxMarks: 40 },
+    ]);
+    expect(refused.statusCode).toBe(409);
+    expect(refused.json().type).toBe('exams.not_in_master');
+  });
+
+  it('a new exam takes its papers from the master, a class added later too; a copy follows its type', async () => {
+    const made = await examCall(admin, 'POST', '', {
+      examTypeId: ids.pt,
+      code: 'PT2',
+      name: 'Periodic Test 2',
+      classes: [{ classId: ids.vi }],
+    });
+    expect(made.statusCode).toBe(201);
+    const pt2 = made.json().id as string;
+    expect((await papers(pt2)).map((x) => [x.subjectCode, x.max])).toEqual([
+      ['MAT', 30],
+      ['ENG', 30],
+      ['ART', 0],
+    ]);
+    await examCall(admin, 'PATCH', `/${pt2}`, {
+      classes: [{ classId: ids.vi }, { classId: ids.vii }],
+    });
+    expect((await papers(pt2, ids.vii)).map((x) => [x.subjectCode, x.max])).toEqual([['ENG', 40]]);
+    // a copy as a half-yearly: English and Art follow HY's list; Maths (not in it) stays and differs
+    const copy = await examCall(admin, 'POST', `/${ids.pt1}/copy`, {
+      examTypeId: ids.hy,
+      code: 'HY1',
+      name: 'Half yearly',
+    });
+    expect(copy.statusCode).toBe(201);
+    const hy = await papers(copy.json().id as string);
+    expect(hy.find((x) => x.subjectCode === 'ENG')).toMatchObject({ max: 40, differs: false });
+    expect(hy.find((x) => x.subjectCode === 'MAT')).toMatchObject({ max: 30, differs: true });
   });
 });

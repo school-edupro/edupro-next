@@ -2,7 +2,12 @@
 import { Button } from '@edupro/ui';
 import { useTranslations } from 'next-intl';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { saveClassSetup, type PartsInput, type SubjectInput } from '@/lib/exam-hub-actions';
+import {
+  applyMasterToPaper,
+  saveClassSetup,
+  type PartsInput,
+  type SubjectInput,
+} from '@/lib/exam-hub-actions';
 
 export interface EditorPart {
   id?: string;
@@ -26,6 +31,15 @@ export interface EditorRow {
   entryLocked: boolean;
   parts: EditorPart[];
   children: Array<{ id: string; code: string; name: string }>;
+  /** the saved paper (docs/design/70: Apply the subject marks) */
+  examSubjectId?: string;
+  /** marks entered: keeps its own marks */
+  marked?: boolean;
+  /** with the master: differs from it (its line, as "30 / 10") */
+  differs?: boolean;
+  masterText?: string;
+  /** with the master: not in the class's list */
+  notInMaster?: boolean;
 }
 interface Option {
   id: string;
@@ -48,7 +62,9 @@ const partsKey = (p: EditorPart[]) =>
  * A class's subjects in an exam (docs/design/66), saved together with their parts and the class's
  * progress card set: tick what the class sits, set the marks (or apply one maximum and pass mark to
  * every ticked subject), copy another class's, split a subject into parts in its row. Unsaved changes
- * are kept on screen and the page asks before it is left.
+ * are kept on screen and the page asks before it is left. With the subject marks master of the exam's
+ * type for the class (docs/design/70) the papers and marks come from it: only the ticks and the parts
+ * (adding up to the maximum) change here; a paper with marks that differs offers Apply (a reason).
  */
 export function ExamSubjectsEditor({
   examId,
@@ -63,6 +79,7 @@ export function ExamSubjectsEditor({
   copySources,
   next,
   locked,
+  fromMaster = null,
 }: {
   examId: string;
   classId: string;
@@ -76,7 +93,10 @@ export function ExamSubjectsEditor({
   copySources: Array<{ classId: string; classCode: string; rows: EditorRow[] }>;
   next: { href: string; label: string } | null;
   locked: boolean;
+  /** the subject marks master this class's papers come from (docs/design/70) */
+  fromMaster?: { href: string; type: string; class: string } | null;
 }) {
+  const master = fromMaster !== null;
   const t = useTranslations('examHub.setup');
   const leaving = useRef(false);
   const [rows, setRows] = useState<EditorRow[]>(initial);
@@ -86,6 +106,8 @@ export function ExamSubjectsEditor({
   const [open, setOpen] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [applying, setApplying] = useState<string | null>(null);
+  const [reason, setReason] = useState('');
   const baseline = useMemo(() => JSON.stringify([initial, setId ?? '']), [initial, setId]);
   const dirty = JSON.stringify([rows, set]) !== baseline || fromClassList;
 
@@ -191,6 +213,11 @@ export function ExamSubjectsEditor({
     const on = rows.filter((r) => r.on);
     for (const r of on) {
       const withParts = r.parts.filter((p) => p.name.trim() && Number(p.max) > 0);
+      const sum = withParts.reduce((a, p) => a + Number(p.max), 0);
+      if (master && withParts.length && sum !== Number(r.max)) {
+        setError(t('partsMustAdd', { subject: r.name, max: r.max }));
+        return;
+      }
       if (!withParts.length && r.max.trim() === '') {
         setError(t('maxNeeded', { subject: r.name }));
         return;
@@ -263,8 +290,18 @@ export function ExamSubjectsEditor({
           {t('locked')}
         </p>
       ) : null}
-      <p className="ep-field__help">{t('subjectsHelp')}</p>
-      <div className="ep-xapply">
+      {fromMaster ? (
+        <p className="ep-alert ep-alert--info" role="note">
+          {t.rich('masterNote', {
+            a: (chunks) => <a href={fromMaster.href}>{chunks}</a>,
+            type: fromMaster.type,
+            class: fromMaster.class,
+          })}
+        </p>
+      ) : (
+        <p className="ep-field__help">{t('subjectsHelp')}</p>
+      )}
+      <div className="ep-xapply" hidden={master}>
         <label className="ep-field" htmlFor="xs-allmax">
           <span className="ep-field__label">{t('max')}</span>
           <input
@@ -365,67 +402,145 @@ export function ExamSubjectsEditor({
                     {r.entryLocked ? (
                       <div className="ep-meter__text">🔒 {t('rowLocked')}</div>
                     ) : null}
+                    {master && r.notInMaster ? (
+                      <div className="ep-xsubj__note">{t('notInMaster')}</div>
+                    ) : null}
+                    {master && r.differs && !r.notInMaster && r.examSubjectId ? (
+                      <div className="ep-xsubj__note">
+                        {t('differs', { master: r.masterText ?? '' })}{' '}
+                        {applying === r.subjectId ? (
+                          <span className="ep-xsubj__apply">
+                            <input
+                              className="ep-input"
+                              aria-label={t('applyReason')}
+                              placeholder={t('applyReason')}
+                              maxLength={300}
+                              value={reason}
+                              onChange={(e) => setReason(e.target.value)}
+                            />
+                            <Button
+                              type="button"
+                              size="sm"
+                              disabled={reason.trim().length < 3 || busy}
+                              onClick={() => {
+                                setBusy(true);
+                                setError(null);
+                                void applyMasterToPaper(
+                                  examId,
+                                  r.examSubjectId!,
+                                  reason.trim(),
+                                ).then((out) => {
+                                  setBusy(false);
+                                  if (!out.ok) return setError(out.error);
+                                  leaving.current = true;
+                                  window.location.reload();
+                                });
+                              }}
+                            >
+                              {t('applyConfirm')}
+                            </Button>
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => setApplying(null)}
+                            >
+                              {t('applyCancel')}
+                            </Button>
+                          </span>
+                        ) : (
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="secondary"
+                            disabled={dirty || locked}
+                            onClick={() => {
+                              setReason('');
+                              setApplying(r.subjectId);
+                            }}
+                          >
+                            {t('applyMaster')}
+                          </Button>
+                        )}
+                      </div>
+                    ) : null}
                   </th>
                   <td>
-                    <input
-                      className="ep-input"
-                      type="number"
-                      min={0}
-                      max={1000}
-                      step="0.5"
-                      aria-label={`${t('max')} · ${r.name}`}
-                      value={named.length ? String(partsMax) : r.max}
-                      readOnly={named.length > 0}
-                      disabled={off || fixed}
-                      onChange={(e) => change(r.subjectId, { max: e.target.value })}
-                    />
-                  </td>
-                  <td>
-                    <input
-                      className="ep-input"
-                      type="number"
-                      min={0}
-                      max={1000}
-                      step="0.5"
-                      aria-label={`${t('pass')} · ${r.name}`}
-                      value={r.pass}
-                      disabled={
-                        off || fixed || (!named.length && Number(r.max) === 0 && r.max !== '')
-                      }
-                      onChange={(e) => change(r.subjectId, { pass: e.target.value })}
-                    />
-                  </td>
-                  <td>
-                    <label className="ep-check" htmlFor={`xs-el-${r.subjectId}`}>
+                    {master ? (
+                      <span>{r.max === '0' ? t('gradeOnly') : r.max}</span>
+                    ) : (
                       <input
-                        id={`xs-el-${r.subjectId}`}
-                        className="ep-check__input"
-                        type="checkbox"
-                        checked={r.elective}
+                        className="ep-input"
+                        type="number"
+                        min={0}
+                        max={1000}
+                        step="0.5"
+                        aria-label={`${t('max')} · ${r.name}`}
+                        value={named.length ? String(partsMax) : r.max}
+                        readOnly={named.length > 0}
                         disabled={off || fixed}
-                        onChange={(e) => change(r.subjectId, { elective: e.target.checked })}
+                        onChange={(e) => change(r.subjectId, { max: e.target.value })}
                       />
-                      <span className="ep-check__box" aria-hidden="true" />
-                      <span className="ep-sr-only">
-                        {t('elective')} · {r.name}
-                      </span>
-                    </label>
+                    )}
                   </td>
                   <td>
-                    <select
-                      className="ep-select"
-                      aria-label={`${t('scale')} · ${r.name}`}
-                      value={r.scaleId}
-                      disabled={off || fixed}
-                      onChange={(e) => change(r.subjectId, { scaleId: e.target.value })}
-                    >
-                      <option value="">{t('classScaleOption')}</option>
-                      {scales.map((g) => (
-                        <option key={g.id} value={g.id}>
-                          {g.code}
-                        </option>
-                      ))}
-                    </select>
+                    {master ? (
+                      <span>{r.pass}</span>
+                    ) : (
+                      <input
+                        className="ep-input"
+                        type="number"
+                        min={0}
+                        max={1000}
+                        step="0.5"
+                        aria-label={`${t('pass')} · ${r.name}`}
+                        value={r.pass}
+                        disabled={
+                          off || fixed || (!named.length && Number(r.max) === 0 && r.max !== '')
+                        }
+                        onChange={(e) => change(r.subjectId, { pass: e.target.value })}
+                      />
+                    )}
+                  </td>
+                  <td>
+                    {master ? (
+                      <span>{r.elective ? t('optional') : ''}</span>
+                    ) : (
+                      <label className="ep-check" htmlFor={`xs-el-${r.subjectId}`}>
+                        <input
+                          id={`xs-el-${r.subjectId}`}
+                          className="ep-check__input"
+                          type="checkbox"
+                          checked={r.elective}
+                          disabled={off || fixed}
+                          onChange={(e) => change(r.subjectId, { elective: e.target.checked })}
+                        />
+                        <span className="ep-check__box" aria-hidden="true" />
+                        <span className="ep-sr-only">
+                          {t('elective')} · {r.name}
+                        </span>
+                      </label>
+                    )}
+                  </td>
+                  <td>
+                    {master ? (
+                      <span>{scales.find((g) => g.id === r.scaleId)?.code ?? ''}</span>
+                    ) : (
+                      <select
+                        className="ep-select"
+                        aria-label={`${t('scale')} · ${r.name}`}
+                        value={r.scaleId}
+                        disabled={off || fixed}
+                        onChange={(e) => change(r.subjectId, { scaleId: e.target.value })}
+                      >
+                        <option value="">{t('classScaleOption')}</option>
+                        {scales.map((g) => (
+                          <option key={g.id} value={g.id}>
+                            {g.code}
+                          </option>
+                        ))}
+                      </select>
+                    )}
                   </td>
                   <td>
                     <button

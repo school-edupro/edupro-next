@@ -8,7 +8,7 @@ import { AreaTicks } from '@/components/exams/AreaTicks';
 import { ExamFrame } from '@/components/exams/ExamFrame';
 import { ExamSubjectsEditor, type EditorRow } from '@/components/exams/ExamSubjectsEditor';
 import { apiFetch, getMe } from '@/lib/api';
-import { saveExamDetails } from '@/lib/exam-hub-actions';
+import { fillMasterFromExam, saveExamDetails } from '@/lib/exam-hub-actions';
 import type {
   ClassRow,
   Exam,
@@ -297,7 +297,41 @@ export default async function ExamSetupPage({
       parts: [],
       children: kidsOf(x.subjectId),
     });
-    const fromClassList = current.length === 0 && studied.length > 0;
+    // the subject marks master of the exam's type for the class (docs/design/70)
+    const masterRows = exam.subjectMarks?.find((x) => x.classId === klass.classId)?.rows ?? null;
+    const masterHref = `/exams/subject-marks?type=${exam.examTypeId}&class=${klass.classId}`;
+    const fmt = (n: number | null) => (n === null ? '' : String(n));
+    const masterInitial: EditorRow[] | null = masterRows
+      ? [
+          ...masterRows.map((m): EditorRow => {
+            const cur = current.find((s) => s.subjectId === m.subjectId);
+            const own = cur ? row(cur) : null;
+            const marked = !!cur?.marked;
+            return {
+              ...(own ?? blank({ subjectId: m.subjectId, code: m.code, name: m.name }, false)),
+              // ticked when the exam holds it; all ticked when the class has none yet
+              on: cur ? true : current.length === 0,
+              ...(marked
+                ? {}
+                : {
+                    max: fmt(m.maxMarks),
+                    pass: fmt(m.passMarks),
+                    elective: m.optional,
+                    scaleId: m.gradeScaleId ?? '',
+                  }),
+              examSubjectId: cur?.id,
+              marked,
+              differs: !!cur?.differs,
+              masterText: `${m.maxMarks === 0 ? 'grade only' : fmt(m.maxMarks)}${m.passMarks !== null ? ` / ${fmt(m.passMarks)}` : ''}`,
+            };
+          }),
+          // a paper the exam holds that is not in the list
+          ...current
+            .filter((s) => !masterRows.some((m) => m.subjectId === s.subjectId))
+            .map((s): EditorRow => ({ ...row(s), examSubjectId: s.id, notInMaster: true })),
+        ]
+      : null;
+    const fromClassList = !masterInitial && current.length === 0 && studied.length > 0;
     const initial: EditorRow[] = [
       ...current.map(row),
       ...studied
@@ -310,17 +344,58 @@ export default async function ExamSetupPage({
     body = (
       <Card title={t('subjectsOf', { class: klass.classCode })}>
         {chips('subjects')}
-        {canManage ? (
+        {!masterInitial ? (
+          <Alert tone="warning" title={t('masterMissingTitle')}>
+            <p style={{ margin: 0 }}>
+              {t.rich('masterMissing', {
+                a: (chunks: ReactNode) => <a href={masterHref}>{chunks}</a>,
+                type: exam.examTypeCode,
+                class: klass.classCode,
+              })}
+            </p>
+            {canManage && exam.subjects?.length ? (
+              <form action={fillMasterFromExam} style={{ marginTop: 'var(--sp-2)' }}>
+                <input type="hidden" name="examId" value={exam.id} />
+                <input
+                  type="hidden"
+                  name="back"
+                  value={`${base}?step=subjects&classId=${klass.classId}`}
+                />
+                <Button type="submit" variant="secondary" size="sm">
+                  {t('masterFill')}
+                </Button>
+                <span className="ep-field__help" style={{ marginLeft: 'var(--sp-2)' }}>
+                  {t('masterFillHelp', { type: exam.examTypeCode })}
+                </span>
+              </form>
+            ) : null}
+          </Alert>
+        ) : null}
+        {canManage && masterInitial ? (
           <ExamSubjectsEditor
             key={klass.classId}
             examId={exam.id}
             classId={klass.classId}
             classCode={klass.classCode}
-            initial={initial}
+            initial={masterInitial ?? initial}
             fromClassList={fromClassList}
-            addable={subjects
-              .filter((x) => !initial.some((r) => r.subjectId === x.id))
-              .map((x) => ({ id: x.id, code: x.code, name: x.name, children: kidsOf(x.id) }))}
+            fromMaster={
+              masterInitial
+                ? { href: masterHref, type: exam.examTypeCode, class: klass.classCode }
+                : null
+            }
+            addable={
+              masterInitial
+                ? []
+                : subjects
+                    .filter((x) => !initial.some((r) => r.subjectId === x.id))
+                    .map((x) => ({
+                      id: x.id,
+                      code: x.code,
+                      name: x.name,
+                      children: kidsOf(x.id),
+                    }))
+            }
             scales={scales.map((g) => ({ id: g.id, code: g.code, name: g.name }))}
             sets={sets}
             setId={klass.indicatorSetId ?? null}

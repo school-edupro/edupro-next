@@ -1,6 +1,6 @@
 # 70 · Subject marks master: an exam's papers and maximum marks come from a master
 
-Status: part 1 built 3 Nov 2026 (migration 0302) · part 2 to build
+Status: built 3 Nov 2026 (parts 1–2; migration 0302)
 
 ## Why
 
@@ -78,3 +78,27 @@ takes its papers from the master.
   / pass for all, a leave warning), Copy / Fill / Copy from last year forms, Excel and PDF
   (`/api/subject-marks/[typeId]/[format]`).
 - Tests: `apps/api/test/subject-marks.e2e-spec.ts` (6); a11y for the grid and a list.
+
+## As built (part 2, 3 Nov 2026)
+
+- `subject-marks-follow.ts`: `followSubjectMarks` (a paper with no mark, whole or in a part, of an
+  unlocked exam of the year takes the master's maximum, pass, scale and Optional; parts fitted, a class's
+  parts given) — run after a list is saved, copied (each target), filled or brought from last year (the
+  responses say how many papers followed) and after an exam is copied; `fillExamFromSubjectMarks` — a
+  new exam's classes, and a class added to an exam, get the class's list (exams that take marks).
+- A subject taken out of a list is **not** removed from exams (its date sheet and parts would go): the
+  exam shows it as not in the list and the office unticks it.
+- `ExamsService.findExam` returns `subjectMarks` (the list per class of the exam's type) and per paper
+  `marked`, `master` and `differs`; `setSubjects` with a list for the class takes the marks from it (a
+  marked paper keeps its own, a held paper not in the list keeps its own, a new subject not in the list
+  is refused `exams.not_in_master`); without a list it keeps the marks given (exams set up before the
+  master, the date sheet). `POST /exams/:id/subjects/:examSubjectId/apply-master` {reason}
+  (`exams.master.manage`, audited): refused for a locked exam, a paper marked in parts, a mark above the
+  new maximum (the students named) or numeric marks on a grade-only line.
+- Admin Set-up → Classes and subjects: with a list, `ExamSubjectsEditor` in master mode (the list's
+  subjects, ticked when held — all when the class has none; marks, pass, optional and scale shown, not
+  edited; "apply to all", "copy from class" and adding subjects hidden; parts must add up to the
+  maximum; Differs with Apply and a reason; Not in the list); without one, a notice with the link and
+  **Fill the subject marks from this exam**, and the papers listed. English and Hindi.
+- Tests: `subject-marks.e2e-spec.ts` (10: part 1's 6 and following, differs and Apply, the save, new /
+  added class / copied exams); the exam suites without a master pass unchanged; a11y for the step.

@@ -8,6 +8,7 @@ import { requireTenant, type RequestContext } from '../../common/http/request-co
 import { STORAGE_DRIVER } from '../files/storage';
 import { registerPdf, registerXlsx } from './mark-register-file';
 import { registerGeneratedOn, registerLetterhead, registerLogo } from './register-head';
+import { followSubjectMarks } from './subject-marks-follow';
 import type {
   CopySubjectMarksDto,
   SaveSubjectMarksDto,
@@ -187,7 +188,7 @@ export class SubjectMarksService {
   async save(ctx: RequestContext, dto: SaveSubjectMarksDto) {
     const yearId = this.year(ctx);
     this.check(dto.rows);
-    await this.db.tenant(requireTenant(ctx), async (c) => {
+    const followed = await this.db.tenant(requireTenant(ctx), async (c) => {
       const ok = await c.query(
         `SELECT 1 FROM exam_types WHERE id = $1 AND deleted_at IS NULL
           UNION ALL SELECT 1 FROM classes WHERE id = $2 AND deleted_at IS NULL`,
@@ -223,8 +224,10 @@ export class SubjectMarksService {
         before: { rows: before.map((x) => [x.code, x.max, x.pass]) },
         after: { rows: dto.rows.length },
       });
+      // the exams of the type follow where no mark is entered yet (docs/design/70, part 2)
+      return followSubjectMarks(c, { yearId, typeId: dto.typeId, classIds: [dto.classId] });
     });
-    return this.get(ctx, dto.typeId, dto.classId);
+    return { ...(await this.get(ctx, dto.typeId, dto.classId)), followed };
   }
 
   /**
@@ -278,7 +281,16 @@ export class SubjectMarksService {
         entityId: `${dto.typeId}:${dto.classId}`,
         after: { to: out },
       });
-      return { data: out };
+      let followed = 0;
+      if (classes.rows.length)
+        followed += await followSubjectMarks(c, {
+          yearId,
+          typeId: dto.typeId,
+          classIds: classes.rows.map((k) => k.id),
+        });
+      for (const t of types.rows)
+        followed += await followSubjectMarks(c, { yearId, typeId: t.id, classIds: [dto.classId] });
+      return { data: out, followed };
     });
   }
 
@@ -318,6 +330,7 @@ export class SubjectMarksService {
       return {
         typeId: ex.rows[0].type_id,
         data: r.rows.map((x) => ({ classId: x.class_id, code: x.code, subjects: x.n })),
+        followed: await followSubjectMarks(c, { yearId, typeId: ex.rows[0].type_id }),
       };
     });
   }
@@ -348,7 +361,11 @@ export class SubjectMarksService {
         entityId: typeId ?? 'all',
         after: { from: prev.rows[0].code, added: r.rowCount ?? 0 },
       });
-      return { from: prev.rows[0].code, added: r.rowCount ?? 0 };
+      return {
+        from: prev.rows[0].code,
+        added: r.rowCount ?? 0,
+        followed: r.rowCount ? await followSubjectMarks(c, { yearId, typeId: typeId ?? null }) : 0,
+      };
     });
   }
 

@@ -3,6 +3,7 @@ import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { RequirePermission } from '../../common/access/require-permission.decorator';
 import { ReqCtx, type RequestContext } from '../../common/http/request-context';
 import {
+  ApplyMasterDto,
   ClassLocksDto,
   CopyExamDto,
   CreateExamDto,
@@ -124,6 +125,22 @@ export class ExamsController {
   @RequirePermission(EXAMS.masterManage)
   update(@ReqCtx() ctx: RequestContext, @Param('id') id: string, @Body() dto: UpdateExamDto) {
     return this.exams.updateExam(ctx, id, dto);
+  }
+
+  @Post(':id/subjects/:examSubjectId/apply-master')
+  @ApiOperation({
+    summary: "Move a paper with marks to the subject marks master's values (a reason)",
+    description:
+      'Refused when an entered mark is above the new maximum, or the paper is marked in parts',
+  })
+  @RequirePermission(EXAMS.masterManage)
+  applyMaster(
+    @ReqCtx() ctx: RequestContext,
+    @Param('id') id: string,
+    @Param('examSubjectId') examSubjectId: string,
+    @Body() dto: ApplyMasterDto,
+  ) {
+    return this.exams.applyMaster(ctx, id, examSubjectId, dto.reason);
   }
 
   @Put(':id/subjects/:examSubjectId/parts')

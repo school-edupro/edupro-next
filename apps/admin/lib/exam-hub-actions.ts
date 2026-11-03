@@ -180,6 +180,31 @@ export async function saveClassSetup(
   return { ok: true, data: null };
 }
 
+/** A paper with marks moved to the subject marks master's values, with a reason (docs/design/70). */
+export async function applyMasterToPaper(
+  examId: string,
+  examSubjectId: string,
+  reason: string,
+): Promise<Out<null>> {
+  if (!/^\d{1,18}$/.test(examId) || !/^\d{1,18}$/.test(examSubjectId))
+    return { ok: false, error: 'Unknown subject' };
+  const r = await call(`/exams/${examId}/subjects/${examSubjectId}/apply-master`, 'POST', {
+    reason,
+  });
+  if (!r.ok) return r;
+  revalidatePath(`/exams/${examId}`, 'layout');
+  return { ok: true, data: null };
+}
+
+/** The subject marks master of the exam's type filled from this exam (docs/design/70). */
+export async function fillMasterFromExam(fd: FormData) {
+  const examId = str(fd, 'examId');
+  const back = str(fd, 'back');
+  return run(back.startsWith(`/exams/${examId}/setup`) ? back : `/exams/${examId}/setup`, () =>
+    apiFetch('/exams/subject-marks/fill', { method: 'POST', body: JSON.stringify({ examId }) }),
+  );
+}
+
 /** The date sheet of a class (its subjects with dates and times) and the exam's note under it. */
 export async function saveDateSheet(
   examId: string,

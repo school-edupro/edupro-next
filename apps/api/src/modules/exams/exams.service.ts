@@ -18,6 +18,7 @@ import type {
   SetPartsDto,
 } from './exams.dto';
 import { examProgress, type ExamProgress } from './exam-progress';
+import { fillExamFromSubjectMarks, followSubjectMarks } from './subject-marks-follow';
 
 export interface ExamTypeRow {
   id: string;
@@ -81,6 +82,12 @@ export interface ExamSubjectRow {
   parts?: ExamPartRow[];
   /** Teaching subjects under this subject (Physics, Chemistry, Biology under Science): ready-made parts. */
   children?: Array<{ id: string; code: string; name: string }>;
+  /** marks entered (as a whole or in a part): the paper no longer follows the master */
+  marked?: boolean;
+  /** the subject marks master's line for it (docs/design/70); null: not in the class's list */
+  master?: SubjectMarksLine | null;
+  /** differs from the master (marked before the master changed, or not in the class's list) */
+  differs?: boolean;
 }
 export interface ExamPartRow {
   id: string;
@@ -90,6 +97,17 @@ export interface ExamPartRow {
   maxMarks: string;
   entered: number;
 }
+/** a line of the subject marks master (docs/design/70) */
+export interface SubjectMarksLine {
+  subjectId: string;
+  code: string;
+  name: string;
+  maxMarks: number;
+  passMarks: number | null;
+  gradeScaleId: string | null;
+  optional: boolean;
+}
+
 export interface ExamRow {
   id: string;
   code: string;
@@ -110,6 +128,8 @@ export interface ExamRow {
   subjects?: ExamSubjectRow[];
   /** the list's: how far the exam has got (docs/design/66) */
   progress?: ExamProgress;
+  /** the subject marks master of the exam's type for each class that has one (docs/design/70) */
+  subjectMarks?: Array<{ classId: string; rows: SubjectMarksLine[] }>;
 }
 
 const EXAM_SELECT = `SELECT e.id::text, e.code, e.name, e.exam_type_id::text AS "examTypeId", t.code AS "examTypeCode", t.name AS "examTypeName",
@@ -373,6 +393,8 @@ export class ExamsService {
         [fromId, id],
       );
       await this.fillSets(c, id);
+      // the copy's papers follow the master of its type (docs/design/70)
+      await followSubjectMarks(c, { yearId, examId: id });
       await this.audit.stage(ctx, c, {
         action: 'exams.exam.copy',
         entityType: 'exams',
@@ -409,17 +431,75 @@ export class ExamsService {
         ORDER BY k.display_order, k.code`,
       [id],
     );
+    // the subject marks master of the exam's type (docs/design/70), and the papers with marks
+    const master = await c.query<{
+      class_id: string;
+      subject_id: string;
+      code: string;
+      name: string;
+      max: string;
+      pass: string | null;
+      scale: string | null;
+      optional: boolean;
+    }>(
+      `SELECT m.class_id::text, m.subject_id::text, s.code, s.name, m.max_marks::text AS max, m.pass_marks::text AS pass,
+              m.grade_scale_id::text AS scale, m.is_optional AS optional
+         FROM exams e JOIN exam_classes ec ON ec.exam_id = e.id
+         JOIN exam_type_subjects m ON m.academic_year_id = e.academic_year_id AND m.exam_type_id = e.exam_type_id AND m.class_id = ec.class_id
+         JOIN subjects s ON s.id = m.subject_id
+        WHERE e.id = $1
+        ORDER BY m.class_id, app.subject_seq(m.class_id, e.academic_year_id, m.subject_id), s.code`,
+      [id],
+    );
+    const marked = new Set(
+      (
+        await c.query<{ id: string }>(
+          `SELECT es.id::text FROM exam_subjects es WHERE es.exam_id = $1
+              AND (EXISTS (SELECT 1 FROM mark_entries me WHERE me.exam_subject_id = es.id)
+                OR EXISTS (SELECT 1 FROM mark_part_entries mp JOIN exam_subject_parts p ON p.id = mp.part_id
+                            WHERE p.exam_subject_id = es.id))`,
+          [id],
+        )
+      ).rows.map((x) => x.id),
+    );
+    const line = (x: (typeof master.rows)[number]): SubjectMarksLine => ({
+      subjectId: x.subject_id,
+      code: x.code,
+      name: x.name,
+      maxMarks: Number(x.max),
+      passMarks: x.pass === null ? null : Number(x.pass),
+      gradeScaleId: x.scale,
+      optional: x.optional,
+    });
+    const classesWithMaster = new Set(master.rows.map((x) => x.class_id));
     return {
       ...r.rows[0],
-      subjects: subjects.rows.map((x) => ({
-        ...x,
-        parts: parts.rows
-          .filter((p) => p.examSubjectId === x.id)
-          .map(({ examSubjectId: _es, ...p }) => p),
-        children: children.rows
-          .filter((k) => k.parent === x.subjectId)
-          .map((k) => ({ id: k.id, code: k.code, name: k.name })),
+      subjectMarks: [...classesWithMaster].map((classId) => ({
+        classId,
+        rows: master.rows.filter((x) => x.class_id === classId).map(line),
       })),
+      subjects: subjects.rows.map((x) => {
+        const m = master.rows.find((y) => y.class_id === x.classId && y.subject_id === x.subjectId);
+        const own = m ? line(m) : null;
+        return {
+          ...x,
+          marked: marked.has(x.id),
+          master: own,
+          differs: classesWithMaster.has(x.classId)
+            ? !own ||
+              own.maxMarks !== Number(x.maxMarks) ||
+              own.passMarks !== (x.passMarks === null ? null : Number(x.passMarks)) ||
+              own.gradeScaleId !== x.gradeScaleId ||
+              own.optional !== x.isElective
+            : false,
+          parts: parts.rows
+            .filter((p) => p.examSubjectId === x.id)
+            .map(({ examSubjectId: _es, ...p }) => p),
+          children: children.rows
+            .filter((k) => k.parent === x.subjectId)
+            .map((k) => ({ id: k.id, code: k.code, name: k.name })),
+        };
+      }),
     };
   }
 
@@ -468,6 +548,8 @@ export class ExamsService {
           [id, k.classId, k.gradeScaleId ?? null],
         );
       await this.fillSets(c, id);
+      // each class's papers from the master of the exam's type (docs/design/70)
+      await fillExamFromSubjectMarks(c, id);
       await this.audit.stage(ctx, c, {
         action: 'exams.exam.create',
         entityType: 'exams',
@@ -560,6 +642,8 @@ export class ExamsService {
         );
       // a class added (or indicators taken now) gets its mapped set
       if (dto.classes || dto.areas) await this.fillSets(c, id);
+      // a class added takes its papers from the master (docs/design/70)
+      if (dto.classes) await fillExamFromSubjectMarks(c, id);
       const after = await this.findExam(c, id, yearId);
       await this.audit.stage(ctx, c, {
         action: 'exams.exam.update',
@@ -591,13 +675,68 @@ export class ExamsService {
           status: 409,
         });
       const classScale = exam.classes.find((k) => k.classId === dto.classId)?.gradeScaleId ?? null;
+      // the subject marks master of the exam's type (docs/design/70): with a list for the class, a
+      // paper's marks come from it (a paper already marked keeps its own); a subject not in it is
+      // refused unless the exam holds it already. Without a list the marks given are kept (as before).
+      const master = new Map(
+        (
+          await c.query<{
+            subject_id: string;
+            max: string;
+            pass: string | null;
+            scale: string | null;
+            optional: boolean;
+          }>(
+            `SELECT subject_id::text, max_marks::text AS max, pass_marks::text AS pass, grade_scale_id::text AS scale, is_optional AS optional
+               FROM exam_type_subjects WHERE academic_year_id = $1 AND exam_type_id = $2 AND class_id = $3`,
+            [yearId, exam.examTypeId, dto.classId],
+          )
+        ).rows.map((x) => [x.subject_id, x]),
+      );
+      const held = new Map(
+        (exam.subjects ?? []).filter((x) => x.classId === dto.classId).map((x) => [x.subjectId, x]),
+      );
+      const subjects = dto.subjects.map((s) => {
+        if (!master.size) return s;
+        const cur = held.get(s.subjectId);
+        if (cur?.marked)
+          return {
+            ...s,
+            maxMarks: Number(cur.maxMarks),
+            passMarks: cur.passMarks === null ? null : Number(cur.passMarks),
+            isElective: cur.isElective,
+            gradeScaleId: cur.gradeScaleId,
+          };
+        const m = master.get(s.subjectId);
+        if (m)
+          return {
+            ...s,
+            maxMarks: Number(m.max),
+            passMarks: m.pass === null ? null : Number(m.pass),
+            isElective: m.optional,
+            gradeScaleId: m.scale,
+          };
+        if (cur)
+          return {
+            ...s,
+            maxMarks: Number(cur.maxMarks),
+            passMarks: cur.passMarks === null ? null : Number(cur.passMarks),
+            isElective: cur.isElective,
+            gradeScaleId: cur.gradeScaleId,
+          };
+        throw new DomainError(
+          'exams.not_in_master',
+          `A subject is not in the subject marks of ${exam.examTypeCode} for this class: add it there first`,
+          { status: 409, extra: { subjectId: s.subjectId } },
+        );
+      });
       // a subject whose marks are entered stays (taking it out would delete them)
       const marked = await c.query<{ code: string; n: number }>(
         `SELECT sub.code, count(*)::int AS n FROM mark_entries m JOIN exam_subjects es ON es.id = m.exam_subject_id
            JOIN subjects sub ON sub.id = es.subject_id
           WHERE es.exam_id = $1 AND es.class_id = $2 AND NOT es.entry_locked AND NOT (es.subject_id = ANY($3::bigint[]))
           GROUP BY sub.code ORDER BY sub.code LIMIT 1`,
-        [examId, dto.classId, dto.subjects.map((s) => s.subjectId)],
+        [examId, dto.classId, subjects.map((s) => s.subjectId)],
       );
       const m = marked.rows[0];
       if (m)
@@ -618,7 +757,7 @@ export class ExamsService {
         [examId, dto.classId],
       );
       const refit = parted.rows.find((x) => {
-        const s = dto.subjects.find((y) => y.subjectId === x.subjectId);
+        const s = subjects.find((y) => y.subjectId === x.subjectId);
         return s !== undefined && s.maxMarks !== Number(x.max);
       });
       if (refit)
@@ -627,7 +766,7 @@ export class ExamsService {
           `${refit.code} is entered in parts and has marks: change the maximum of its parts instead`,
           { status: 409, extra: { subjectCode: refit.code } },
         );
-      for (const s of dto.subjects) {
+      for (const s of subjects) {
         if (s.startsAt && s.endsAt && s.endsAt <= s.startsAt)
           throw new DomainError('exams.paper_time', 'A paper ends after it starts', {
             status: 400,
@@ -666,7 +805,7 @@ export class ExamsService {
       }
       await c.query(
         `DELETE FROM exam_subjects WHERE exam_id = $1 AND class_id = $2 AND NOT entry_locked AND NOT (subject_id = ANY($3::bigint[]))`,
-        [examId, dto.classId, dto.subjects.map((s) => s.subjectId)],
+        [examId, dto.classId, subjects.map((s) => s.subjectId)],
       );
       // parts follow a new maximum while unmarked (0295); a subject the class enters in parts (Class
       // set-up, docs/design/67) gets them, while it has none
@@ -678,7 +817,93 @@ export class ExamsService {
         action: 'exams.subjects.set',
         entityType: 'exams',
         entityId: examId,
-        after: { classId: dto.classId, subjects: dto.subjects.length },
+        after: { classId: dto.classId, subjects: subjects.length },
+      });
+      return this.findExam(c, examId, yearId);
+    });
+  }
+
+  /**
+   * A paper whose marks are entered moved to the subject marks master's values (docs/design/70): its
+   * maximum, pass marks, grade scale and Optional, with a reason. Refused when an entered mark is above
+   * the new maximum (the students are named) or the paper is entered in parts (change its parts).
+   */
+  async applyMaster(
+    ctx: RequestContext,
+    examId: string,
+    examSubjectId: string,
+    reason: string,
+  ): Promise<ExamRow> {
+    const tenant = requireTenant(ctx);
+    const yearId = this.year(tenant);
+    return this.db.tenant(tenant, async (c) => {
+      const exam = await this.findExam(c, examId, yearId);
+      if (exam.marksLocked)
+        throw new DomainError('exams.locked', 'The exam is locked; unlock it to change subjects', {
+          status: 409,
+        });
+      const es = exam.subjects?.find((x) => x.id === examSubjectId);
+      if (!es) throw new DomainError('not-found', 'Subject not found in the exam', { status: 404 });
+      if (!es.master)
+        throw new DomainError(
+          'exams.not_in_master',
+          `${es.subjectCode} is not in the subject marks of ${exam.examTypeCode} for this class`,
+          { status: 409 },
+        );
+      const m = es.master;
+      const partsMarked = await c.query(
+        `SELECT 1 FROM mark_part_entries mp JOIN exam_subject_parts p ON p.id = mp.part_id WHERE p.exam_subject_id = $1 LIMIT 1`,
+        [examSubjectId],
+      );
+      if (partsMarked.rowCount)
+        throw new DomainError(
+          'exams.parts_marked',
+          `${es.subjectCode} is entered in parts and has marks: change the maximum of its parts instead`,
+          { status: 409 },
+        );
+      const over = await c.query<{ adm: string; name: string; marks: string }>(
+        `SELECT s.admission_no AS adm, s.display_name AS name, me.marks::text
+           FROM mark_entries me JOIN students s ON s.id = me.student_id
+          WHERE me.exam_subject_id = $1 AND me.marks IS NOT NULL AND me.marks > $2
+          ORDER BY me.marks DESC LIMIT 10`,
+        [examSubjectId, m.maxMarks],
+      );
+      if (over.rows.length)
+        throw new DomainError(
+          'exams.marks_above_max',
+          `Marks above the master's maximum of ${String(m.maxMarks)}: ${over.rows
+            .map((x) => `${x.adm} ${x.name} (${String(Number(x.marks))})`)
+            .join(', ')}`,
+          { status: 409, extra: { students: over.rows } },
+        );
+      if (m.maxMarks === 0) {
+        const numbers = await c.query(
+          `SELECT 1 FROM mark_entries WHERE exam_subject_id = $1 AND marks IS NOT NULL LIMIT 1`,
+          [examSubjectId],
+        );
+        if (numbers.rowCount)
+          throw new DomainError(
+            'exams.marks_above_max',
+            `${es.subjectCode} is graded only in the master, but marks are entered`,
+            { status: 409 },
+          );
+      }
+      await c.query(
+        `UPDATE exam_subjects SET max_marks = $2, pass_marks = $3, grade_scale_id = $4, is_elective = $5 WHERE id = $1`,
+        [examSubjectId, m.maxMarks, m.passMarks, m.gradeScaleId, m.optional],
+      );
+      await c.query(`SELECT app.fit_parts_to_max($1)`, [examSubjectId]);
+      await this.audit.stage(ctx, c, {
+        action: 'exams.subjects.apply_master',
+        entityType: 'exam_subjects',
+        entityId: examSubjectId,
+        before: {
+          maxMarks: es.maxMarks,
+          passMarks: es.passMarks,
+          gradeScaleId: es.gradeScaleId,
+          isElective: es.isElective,
+        },
+        after: { ...m, reason },
       });
       return this.findExam(c, examId, yearId);
     });
