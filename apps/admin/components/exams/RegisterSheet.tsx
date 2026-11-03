@@ -16,6 +16,7 @@ export function RegisterSheet({ sheet, label }: { sheet: Sheet; label: string })
     'data-frozen': i === nameAt ? 'true' : undefined,
     'data-align': c.center ? 'center' : undefined,
     'data-strong': c.strong ? 'true' : undefined,
+    'data-wrap': c.wrap ? 'true' : undefined,
     title: c.title,
   });
   return (

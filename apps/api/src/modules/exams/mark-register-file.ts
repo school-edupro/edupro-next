@@ -57,6 +57,24 @@ function clip(font: PDFFont, text: string, size: number, width: number): string 
   return `${s}..`;
 }
 
+/** a long text broken over lines that fit the width (a word longer than the width is cut) */
+function wrapText(font: PDFFont, text: string, size: number, width: number): string[] {
+  const out: string[] = [];
+  for (const para of latin(text).split('\n')) {
+    let line = '';
+    for (const word of para.split(/\s+/).filter(Boolean)) {
+      const next = line ? `${line} ${word}` : word;
+      if (!line || font.widthOfTextAtSize(next, size) <= width) line = next;
+      else {
+        out.push(line);
+        line = word;
+      }
+    }
+    out.push(line);
+  }
+  return out.length ? out : [''];
+}
+
 /** a laid-out grid: each heading cell's column and row, with its spans */
 function grid(head: SheetCell[][]): Array<{ cell: SheetCell; col: number; row: number }> {
   const out: Array<{ cell: SheetCell; col: number; row: number }> = [];
@@ -242,27 +260,34 @@ export async function registerPdf(
     header();
     const rows = [...sheet.body.map((r) => r.cells), ...(sheet.foot ? [sheet.foot] : [])];
     rows.forEach((cells, ri) => {
-      const n = Math.max(1, ...cells.map((c) => (c.lines ?? c.t.split('\n')).length));
+      const isFoot = sheet.foot !== null && ri === rows.length - 1;
+      // a cell may span columns (the pass % of a summary); a long text wraps over lines
+      let col = 0;
+      const laid = cells.map((c) => {
+        const from = col;
+        col += c.span ?? 1;
+        const x0 = xs[from]!;
+        const x1 = xs[Math.min(col, xs.length - 1)]!;
+        const font = isFoot || c.tone === 'final' || c.strong ? bold : regular;
+        const lines =
+          c.lines ?? (c.wrap ? wrapText(font, fileText(c), size, x1 - x0 - 3) : undefined);
+        return { c, x0, x1, font, lines };
+      });
+      const n = Math.max(1, ...laid.map((x) => (x.lines ?? x.c.t.split('\n')).length));
       const h = n * lineH + 3;
       if (y - h < M) {
         fresh();
         header();
       }
-      const isFoot = sheet.foot !== null && ri === rows.length - 1;
-      // a cell may span columns (the pass % of a summary)
-      let col = 0;
-      cells.forEach((c) => {
-        const from = col;
-        col += c.span ?? 1;
-        drawCell(fileText(c), xs[from]!, xs[Math.min(col, xs.length - 1)]!, y, h, {
-          font: isFoot || c.tone === 'final' || c.strong ? bold : regular,
+      for (const { c, x0, x1, font, lines } of laid)
+        drawCell(fileText(c), x0, x1, y, h, {
+          font,
           bg: fill(c.tone),
           left: c.text && !c.center,
           centre: c.center,
           red: c.tone === 'star' || c.tone === 'code' || c.tone === 'warn',
-          lines: c.lines,
+          lines,
         });
-      });
       y -= h;
     });
   }
@@ -368,7 +393,7 @@ export async function registerXlsx(sheets: Sheet[], meta: RegisterFileMeta): Pro
           cell.alignment = {
             horizontal: c.center ? 'center' : c.text ? 'left' : 'right',
             vertical: 'middle',
-            wrapText: Boolean(c.lines) || (c.text && c.t.length > 40),
+            wrapText: Boolean(c.lines) || c.wrap || (c.text && c.t.length > 40),
           };
           if (c.tone === 'calc' || c.tone === 'final')
             cell.fill = {

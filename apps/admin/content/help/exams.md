@@ -200,7 +200,7 @@ see who submitted or verified it and to submit, verify, send back or reopen it.
 
 ## Mark registers
 
-**Exams → Mark registers** (the school's Term Mark Register) sets up once how a class's marks are worked
+**Exams → Registers → Mark Register** (the school's Term Mark Register) sets up once how a class's marks are worked
 out, then runs it for any section; the marks always come from the exam entry.
 
 1. **+ New mark register**: six steps with a preview on two sample students (type over a mark or a code
@@ -252,6 +252,30 @@ out, then runs it for any section; the marks always come from the exam entry.
    **Copy** makes one for other classes.
 4. **Assign** (managers, or someone given Assign) gives a teacher Run / Edit / Delete on one register;
    the **Rights report** shows who holds what.
+
+### Remark, Attendance and Height & Weight registers
+
+**Exams → Registers** opens with a switch at the top, as in the old Registers menu: **Mark Register**
+(the saved registers above), **Remark Register**, **Attendance Register** and **Height & Weight
+Register**. The last three are reports of what was entered; nothing is saved.
+
+1. Pick the **Class**, the **Section** (or **All sections**) and tick one or more **Exams** (only the
+   exams that have entries for the class are offered), then **Show**.
+2. **Remark Register**: per exam the general remark, each remark category used and participation, a
+   column each; **Promoted to** when it was given. Long remarks wrap in their cell.
+3. **Attendance Register**: per exam days present, days and %; with two or more exams an **Overall**
+   (all days present ÷ all days). Below the **Cut-off %** (default 75) is shown in red; each section has
+   a **Summary** (students, with attendance, class average %, how many below) and the list of those
+   below, lowest first.
+4. **Height & Weight Register**: per exam height, weight and **BMI** (Show / Hide); with two or more
+   exams the **Change** from the first measurement to the last; **Class averages** per exam. A student
+   measured twice in one exam shows the later measurement. It needs the health view right.
+5. **Download**: PDF (paper, way round, fit to width) or Excel of what is shown, or of all sections (a
+   section a page).
+
+The office (whoever manages or assigns mark registers) sees every section; a teacher sees the
+sections they teach this year (class teacher, subject teacher, coordinator: every section of the
+class), as set in **Academics → Teacher assignments**. Names typed in capitals print in proper case.
 
 ## Remarks by category
 

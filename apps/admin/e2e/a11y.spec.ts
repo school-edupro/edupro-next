@@ -274,6 +274,9 @@ const PAGES = [
   '/exams/subject-choices?tab=class&classId=172',
   '/exams/subject-choices?tab=students&sectionId=149&q=A2529&history=12355',
   '/exams/schemes',
+  '/exams/registers/remark?classId=169',
+  '/exams/registers/attendance?classId=169&section=all',
+  '/exams/registers/health?classId=169',
   // the register builder (docs/design/68), from blank
   '/exams/schemes/new',
   '/exams/indicators',

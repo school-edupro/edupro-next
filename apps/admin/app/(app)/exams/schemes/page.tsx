@@ -1,13 +1,15 @@
 import { Breadcrumbs, Button, Card, PageHeader } from '@edupro/ui';
 import { Notice } from '@/components/Notice';
 import { RegistersList } from '@/components/exams/RegistersList';
+import { RegistersSwitch } from '@/components/exams/RegistersSwitch';
 import { createMarkScheme } from '@/lib/exam-entry-actions';
-import { apiFetch } from '@/lib/api';
+import { apiFetch, getMe } from '@/lib/api';
 import type { RegisterRow, SchemePreset } from '@/lib/mark-schemes';
 import type { ClassRow, Exam, Page } from '@/lib/types';
 
 /**
- * Mark registers (docs/design/68), the school's Term Mark Register: the registers the person may use
+ * Mark registers (docs/design/68), the school's Term Mark Register, under the Registers switch
+ * (docs/design/69: Mark · Remark · Attendance · Height & Weight): the registers the person may use
  * (a manager sees every one), each with Run, Edit, Versions, Copy, Assign, Lock and Delete; a new one is
  * built in six steps, or started from a ready-made DPS Noida scheme with its exams mapped.
  */
@@ -17,7 +19,8 @@ export default async function MarkRegistersPage({
   searchParams: Promise<{ preset?: string; ok?: string; error?: string; detail?: string }>;
 }) {
   const sp = await searchParams;
-  const [list, presets, exams, classes] = await Promise.all([
+  const [me, list, presets, exams, classes] = await Promise.all([
+    getMe(),
     apiFetch<{ data: RegisterRow[]; canCreate: boolean; canAssign: boolean }>('/exams/schemes'),
     apiFetch<{ data: SchemePreset[] }>('/exams/schemes/presets').then((r) => r.data),
     apiFetch<{ data: Exam[] }>('/exams').then((r) => r.data),
@@ -32,6 +35,7 @@ export default async function MarkRegistersPage({
         title="Term mark registers"
         description="Set up once how a class's marks are worked out — subjects, each subject's columns, codes, grades, divisions — then Run it for any section: the marks come from the exam entry, the totals, %, grade, rank and result are worked out, and the sheet prints as PDF or Excel."
       />
+      <RegistersSwitch current="mark" permissions={me.permissions} />
       <Notice params={sp} />
       <Card elevated>
         <RegistersList

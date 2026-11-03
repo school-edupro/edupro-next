@@ -28,6 +28,7 @@ import { requireTenant, type RequestContext } from '../../common/http/request-co
 import { STORAGE_DRIVER } from '../files/storage';
 import { registerPdf, registerXlsx, type RegisterFileMeta } from './mark-register-file';
 import { buildSheet, byDivision, type Sheet } from './mark-register-sheet';
+import { registerGeneratedOn, registerLetterhead, registerLogo } from './register-head';
 import type {
   CopySchemeDto,
   CreateSchemeDto,
@@ -1584,50 +1585,6 @@ export class MarkSchemesService {
     return Object.fromEntries(r.rows.map((x) => [`${x.section}|${x.subject}`, x.names]));
   }
 
-  private async letterhead(c: PoolClient) {
-    const sc = await c.query<{
-      name: string;
-      logo: string | null;
-      address: Record<string, string> | null;
-    }>(
-      `SELECT name, NULLIF(branding->>'logoFileId', '') AS logo, address FROM schools WHERE id = app.current_school_id()`,
-    );
-    const s = sc.rows[0];
-    const logoId = s?.logo;
-    const f =
-      logoId && /^\d{1,18}$/.test(logoId)
-        ? (
-            await c.query<{ object_key: string; content_type: string }>(
-              `SELECT object_key, content_type FROM files WHERE id = $1 AND deleted_at IS NULL`,
-              [logoId],
-            )
-          ).rows[0]
-        : undefined;
-    const a = s?.address ?? {};
-    return {
-      school: s?.name ?? '',
-      address: [a.line1, a.line2, a.city, a.state, a.pincode].filter(Boolean).join(', '),
-      file: f,
-    };
-  }
-
-  /** When a paper was made, as the old reports print it: 31-10-2026 08:08 PM (India). */
-  private generatedOn() {
-    return new Date()
-      .toLocaleString('en-GB', {
-        timeZone: 'Asia/Kolkata',
-        day: '2-digit',
-        month: '2-digit',
-        year: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit',
-        hour12: true,
-      })
-      .replace(/\//g, '-')
-      .replace(',', '')
-      .toUpperCase();
-  }
-
   /**
    * Runs a register: one section, or a whole class ranked together (the merit list; by division too);
    * an exam-wise register on the exam picked; one subject's own sheet. On screen (with what to check),
@@ -1827,7 +1784,7 @@ export class MarkSchemesService {
             notes.push(`No marks at all yet in ${empty.map((e) => e.key).join(', ')}.`);
         }
       }
-      const head = q.format === 'json' ? null : await this.letterhead(c);
+      const head = q.format === 'json' ? null : await registerLetterhead(c);
       return {
         s,
         def,
@@ -1889,13 +1846,11 @@ export class MarkSchemesService {
         blocks:
           q.report === 'register'
             ? []
-            : out.sheets
-                .slice(0, out.firstSheets || out.sheets.length)
-                .map((x) => ({
-                  title: x.title ?? '',
-                  sheet: x,
-                  ...(bare.has(x) ? { band: false } : {}),
-                })),
+            : out.sheets.slice(0, out.firstSheets || out.sheets.length).map((x) => ({
+                title: x.title ?? '',
+                sheet: x,
+                ...(bare.has(x) ? { band: false } : {}),
+              })),
         /** the worked-out students, in the sheet's order: each subject's values, total, % and status */
         rows: out.rows.map((r) => ({
           ...r,
@@ -1906,16 +1861,7 @@ export class MarkSchemesService {
         notes: out.notes,
         counts: out.counts,
       };
-    let logo: RegisterFileMeta['logo'] = null;
-    if (out.head?.file)
-      try {
-        logo = {
-          contentType: out.head.file.content_type,
-          bytes: await this.storage.read(out.head.file.object_key),
-        };
-      } catch {
-        logo = null;
-      }
+    const logo = await registerLogo(this.storage, out.head?.file);
     const report = REPORTS.find((x) => x.kind === q.report);
     const label = [
       report
@@ -1936,7 +1882,7 @@ export class MarkSchemesService {
       address: out.head?.address ?? '',
       logo,
       label,
-      generatedOn: this.generatedOn(),
+      generatedOn: registerGeneratedOn(),
     };
     const stamp =
       `${out.s.name}-${q.report === 'register' ? '' : `${q.report}-`}${q.all ? 'all' : (out.sheets[0]?.place ?? '')}${out.exam ? `-${out.exam}` : ''}${q.subject ? `-${q.subject}` : ''}`

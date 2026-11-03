@@ -999,6 +999,8 @@ export interface SheetCell {
   center?: boolean;
   /** in bold */
   strong?: boolean;
+  /** long text (a remark): wraps over lines in the cell instead of being cut */
+  wrap?: boolean;
 }
 export interface Sheet {
   /** the section or class it is for */

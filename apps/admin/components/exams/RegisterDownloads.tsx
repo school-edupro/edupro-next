@@ -11,21 +11,24 @@ const KEY = 'edupro:register-paper';
  */
 export function RegisterDownloads({
   id,
-  place,
-  view,
-  exam,
-  subject,
+  place = '',
+  view = 'marks',
+  exam = null,
+  subject = null,
   report = 'register',
   extra = {},
+  target,
 }: {
-  id: string;
-  place: string;
-  view: string;
-  exam: string | null;
-  subject: string | null;
+  id?: string;
+  place?: string;
+  view?: string;
+  exam?: string | null;
+  subject?: string | null;
   /** a report instead of the register (docs/design/68, phase 2) */
   report?: string;
   extra?: Record<string, string>;
+  /** another register's files (docs/design/69): the route, what is shown, and what "all sections" sets */
+  target?: { path: string; query: Record<string, string>; all: Record<string, string> };
 }) {
   const [open, setOpen] = useState<null | 'one' | 'all'>(null);
   const [paper, setPaper] = useState<Paper>('Legal');
@@ -47,6 +50,12 @@ export function RegisterDownloads({
   }, []);
   const where = place ? place.replace(':', '') : 'first';
   const file = (format: 'pdf' | 'xlsx', all: boolean, more: Record<string, string> = {}) => {
+    if (target)
+      return `${target.path}/${format}?${new URLSearchParams({
+        ...target.query,
+        ...(all ? target.all : {}),
+        ...more,
+      }).toString()}`;
     const q = new URLSearchParams({
       ...(exam ? { exam } : {}),
       ...(subject ? { subject } : {}),
@@ -55,7 +64,7 @@ export function RegisterDownloads({
       ...extra,
       ...more,
     });
-    return `/api/exam-register/${id}/${format}/${where}/${view}?${q.toString()}`;
+    return `/api/exam-register/${id ?? ''}/${format}/${where}/${view}?${q.toString()}`;
   };
   const print = () => {
     try {

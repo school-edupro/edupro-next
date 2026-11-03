@@ -13788,6 +13788,38 @@ button.ep-subchoice__icon:hover {
 .ep-mr-sheet [data-text='true'] {
   text-align: left;
 }
+/* the Remark, Attendance and Height & Weight registers (docs/design/69) */
+.ep-streg-form {
+  display: grid;
+  gap: var(--sp-3);
+}
+.ep-streg-place {
+  margin: 0 0 var(--sp-2);
+  font-family: var(--font-heading);
+  font-size: var(--fs-h4, 1.125rem);
+  color: var(--text-heading);
+}
+.ep-streg-notes {
+  margin: 0 0 var(--sp-3);
+  padding-left: var(--sp-5);
+  color: var(--status-warning-text);
+  font-size: var(--fs-small);
+}
+.ep-streg-sheet + .ep-streg-sheet {
+  margin-top: var(--sp-4);
+}
+.ep-streg-title {
+  margin: 0 0 var(--sp-2);
+  font-size: var(--fs-body);
+  font-weight: var(--fw-semibold);
+  color: var(--text-heading);
+}
+/* a long text (a remark) wraps in its cell */
+.ep-mr-sheet [data-wrap='true'] {
+  white-space: normal;
+  min-width: 12rem;
+  max-width: 24rem;
+}
 .ep-mr-sheet [data-align='center'] {
   text-align: center;
 }
