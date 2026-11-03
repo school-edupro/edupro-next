@@ -110,5 +110,6 @@ others the sections they teach.
 ## Found while planning (for parts 2–3)
 
 - Teacher assignments of kind **Indicator** map a teacher to a **section only**: there is no record of
-  which indicators a teacher rates. "As per mapping" (part 3) needs one (which areas or items per
-  indicator assignment) — to be decided before part 3.
+  which indicators a teacher rates. **Decided 3 Nov 2026: areas on the assignment** — an Indicator
+  assignment also picks one or more indicator areas (the areas master) for its section; "As per
+  mapping" shows such a teacher only those areas' indicators (built with part 3).
