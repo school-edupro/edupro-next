@@ -237,6 +237,15 @@ export const MERGE_RULES: MergeRule[] = [
     key: ['academic_year_id', 'subject_id'],
     rule: 'the kept record’s subject choices',
   },
+  // a subject changed mid-year (docs/design/67): one change from a subject in a year
+  {
+    table: 'student_subject_changes',
+    col: 'student_id',
+    area: 'marks',
+    how: 'keep',
+    key: ['academic_year_id', 'from_subject_id'],
+    rule: 'the kept record’s subject changes',
+  },
   {
     table: 'report_card_holds',
     col: 'student_id',
