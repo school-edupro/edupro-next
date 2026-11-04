@@ -22,9 +22,10 @@
  *   5. "Term I result (sample)": the DPS VI-VIII scheme (periodic tests 15 + activities 5 + term 80)
  *      for these classes and those it had before, locked and worked out.
  *
- * Needs the local database (DATABASE_MIGRATOR_URL on localhost) and the API on :4000 (about 900 calls:
- * raise its rate limit for the run). From the repository root:
- *   set -a; source .env; set +a; node scripts/seed-exam-sample.mjs --classes VI,VIII --yes
+ * Needs the local database (DATABASE_MIGRATOR_URL on localhost, read from .env when not set) and the API
+ * on :4000 (about 900 calls; at the API's normal rate limit the script waits a minute or two where it
+ * is refused, a raised limit makes it quicker). From the repository root:
+ *   node scripts/seed-exam-sample.mjs --classes VI,VIII --yes
  * It can be run again: it clears what it made first (only in the classes named).
  */
 import { createRequire } from 'node:module';
@@ -65,6 +66,13 @@ if (SETUP && CLASSES.join(',') !== 'VI,VII') {
   process.exit(1);
 }
 
+// the repository's .env when the variables are not set already (it never replaces a set one)
+if (!process.env.DATABASE_MIGRATOR_URL)
+  try {
+    process.loadEnvFile(new URL('../.env', import.meta.url));
+  } catch {
+    // no .env: the check below refuses
+  }
 if (!/@(localhost|127\.0\.0\.1)(:\d+)?\//.test(process.env.DATABASE_MIGRATOR_URL ?? '')) {
   console.error('Refused: DATABASE_MIGRATOR_URL is not the local database.');
   process.exit(1);
@@ -78,17 +86,28 @@ if (!process.argv.includes('--yes')) {
 
 // ---- small helpers ---------------------------------------------------------------------------------
 let calls = 0;
+let waited = 0;
 async function api(user, method, path, body) {
   calls += 1;
-  const res = await fetch(`${API}${path}`, {
-    method,
-    headers: {
-      authorization: `Bearer dev:${user}`,
-      'x-school-id': SCHOOL,
-      ...(body === undefined ? {} : { 'content-type': 'application/json' }),
-    },
-    ...(body === undefined ? {} : { body: JSON.stringify(body) }),
-  });
+  let res;
+  // the API's rate limit counts per user and refuses before doing anything: wait it out and send again
+  for (let i = 0; ; i += 1) {
+    res = await fetch(`${API}${path}`, {
+      method,
+      headers: {
+        authorization: `Bearer dev:${user}`,
+        'x-school-id': SCHOOL,
+        ...(body === undefined ? {} : { 'content-type': 'application/json' }),
+      },
+      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+    });
+    if (res.status !== 429 || i >= 10) break;
+    const s = Number(res.headers.get('retry-after') ?? res.headers.get('x-ratelimit-reset')) || 10;
+    if (!waited) log(`  (the API's rate limit: waiting ${String(s)} s, then going on)`);
+    waited += s;
+    await res.text();
+    await new Promise((r) => setTimeout(r, (s + 1) * 1000));
+  }
   const text = await res.text();
   const json = text ? JSON.parse(text) : null;
   if (!res.ok)
@@ -657,4 +676,6 @@ log(
     : 'No message queued.',
 );
 await db.end();
-log(`Done in ${String(calls)} calls.`);
+log(
+  `Done in ${String(calls)} calls${waited ? ` (${String(waited)} s waiting for the API's rate limit)` : ''}.`,
+);
