@@ -247,6 +247,10 @@ out, then runs it for any section; the marks always come from the exam entry.
      subjects** and the **Weightage builder** save a long set-up. Copy to subjects says per subject
      what it leaves out (an exam the subject has no paper in, and an average left with nothing to
      average); a subject with none of the exams is greyed ("no paper in PT1-2026") and not copied to.
+     A subject entered in parts (Social Science: Geography, History) shows them with **Show its parts
+     in each exam** (each exam's parts in one cell with their sum), or a column each with **Parts in
+     columns**; Copy to subjects does it for such a subject when its tick is on. An **elective slot**
+     takes the columns its subjects had.
    - **Saving** lists everything to fix. A subject with no paper of its own in the register's exams
      comes first, with the cause ("Geography has no paper of its own in this register's exams: it is
      marked inside Social Science") and **Take them out**, which removes such subjects; save again.

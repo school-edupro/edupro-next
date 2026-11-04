@@ -242,6 +242,12 @@ export function RegisterBuilder({
         ],
       };
     });
+  // a slot made of subjects that have columns takes the first one's chain (a new slot: none yet)
+  const chainOf = (d: RegisterDef, members: string[]) =>
+    (
+      d.subjects.find((s) => !s.slot && members.includes(s.subjectId ?? '') && s.columns.length)
+        ?.columns ?? []
+    ).map((c) => ({ ...c }));
   const addSlot = (name = 'THIRD LANGUAGE', members: string[] = []) =>
     setDef((d) => ({
       ...d,
@@ -250,7 +256,7 @@ export function RegisterBuilder({
         {
           key: keyFor(`L${String(d.subjects.filter((s) => s.slot).length + 1)}`),
           slot: { name, members },
-          columns: [],
+          columns: chainOf(d, members),
           showTotal: true,
           round: 'none',
           grade: true,
@@ -262,7 +268,16 @@ export function RegisterBuilder({
     setDef((d) => ({
       ...d,
       subjects: d.subjects
-        .map((s) => (s.key === key && s.slot ? { ...s, slot: { ...s.slot, ...patch } } : s))
+        .map((s) =>
+          s.key === key && s.slot
+            ? {
+                ...s,
+                slot: { ...s.slot, ...patch },
+                // the slot's first members bring their columns (the language's chain)
+                columns: s.columns.length ? s.columns : chainOf(d, patch.members ?? []),
+              }
+            : s,
+        )
         // a member of a slot leaves the plain subjects
         .filter((s) => s.slot || !(patch.members ?? []).includes(s.subjectId ?? '')),
     }));

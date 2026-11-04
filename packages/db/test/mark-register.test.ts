@@ -481,7 +481,7 @@ describe('mark registers (docs/design/68)', () => {
         'ENG · D: Z is not a column of the subject',
         'ENG: a column is made from itself',
         'LANG: a slot needs a name and two or more subjects',
-        'LANG: add its columns',
+        'LANG: add its columns (step 3, Columns)',
       ]),
     );
   });

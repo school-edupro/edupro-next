@@ -211,3 +211,9 @@ shows "Ready-made scheme (DPS Noida)" with the codes `DPS_VI_VIII`, `DPS_IX`, `D
   `exam-promotion-remarks` on the new route and codes; 13 related suites (104 tests). The sample and a
   real Class III card (Alpha, NCERT set) printed to A4 PDF with Chromium as the worker does (six and
   eight pages, nothing split); Card designs and the designer's pictures with axe in a throwaway school.
+- **Later (4 Nov 2026):** the card shows at least Term I and Term II (or as many terms as a section's
+  `termLabels` names), a term whose exam is not made yet blank, as on the school's card; table rows
+  are 7.6 mm including their padding (they printed about 15 % taller than the page plan counted).
+  Alpha: the learning record installed (set `LR_I_II` 319, `LR_KEY`, remark categories LR_ENG, LR_HIN,
+  LR_EVS; Mathematics kept the school's MATHS), the set mapped to Classes I and II (HPC_CLASS1 to III
+  only) and given to ASS1 for both.

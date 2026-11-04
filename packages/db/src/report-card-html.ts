@@ -13,6 +13,7 @@ import {
   lrCoScholastic,
   lrCover,
   lrKey,
+  lrMinTerms,
   lrRecord,
   lrSubjects,
   type LrArt,
@@ -757,6 +758,7 @@ export function reportCardBody(
   const art = opts.art ?? {};
   // docs/design/73: which areas each learning-record page prints
   const plan = lrAreaPlan(d.hpc, layout.sections as LrSection[]);
+  lrMinTerms(layout.sections as LrSection[]);
   const parts = layout.sections.map((s) => {
     switch (s.type) {
       case 'header':

@@ -13,6 +13,7 @@ import {
   papersOf,
   weightageColumns,
   withExam,
+  withPartColumns,
 } from '@/lib/register-builder';
 
 const SLABS = '96 5, 91 4, 86 3, 81 2, 76 1';
@@ -68,6 +69,8 @@ export function RegisterColumns({
   const [name, setName] = useState('');
   const [copyOpen, setCopyOpen] = useState(false);
   const [copyTo, setCopyTo] = useState<string[]>([]);
+  // a subject entered in parts shows them when copied to (Social Science: Geography, History …)
+  const [copyParts, setCopyParts] = useState(true);
   const [note, setNote] = useState<string | null>(null);
   const [wOpen, setWOpen] = useState(false);
   const [wRows, setWRows] = useState<
@@ -254,7 +257,7 @@ export function RegisterColumns({
       ...d,
       subjects: d.subjects.map((x) => {
         if (!copyTo.includes(x.key)) return x;
-        const r = copyColumns(data, s, x, d);
+        const r = copyColumns(data, s, x, d, { parts: copyParts });
         if (!r.columns.length) return x;
         if (r.skipped.length)
           lines.push(`${titles[x.key] ?? x.key}: left out ${r.skipped.join(', ')}`);
@@ -344,7 +347,19 @@ export function RegisterColumns({
               className="ep-check__input"
               type="checkbox"
               checked={Boolean(s.childInColumns)}
-              onChange={(e) => setSubject({ childInColumns: e.target.checked })}
+              onChange={(e) => {
+                // ticked on whole marks only: its parts come in first, a column each
+                const r = e.target.checked ? withPartColumns(data, s, def) : null;
+                setSubject(
+                  r?.changed
+                    ? { childInColumns: true, columns: r.columns }
+                    : { childInColumns: e.target.checked },
+                );
+                if (r?.changed)
+                  setNote(
+                    `Its parts now show in ${String(r.changed)} exam column(s), a column each; the averages and the total stay as they were.`,
+                  );
+              }}
             />
             <span className="ep-check__box" aria-hidden="true" /> Parts in columns
           </label>
@@ -373,6 +388,21 @@ export function RegisterColumns({
         <Button size="sm" variant="ghost" onClick={openWeightage} disabled={!exams.length}>
           Weightage builder
         </Button>
+        {composite && withPartColumns(data, s, def).changed ? (
+          <Button
+            size="sm"
+            variant="secondary"
+            onClick={() => {
+              const r = withPartColumns(data, s, def);
+              setSubject({ columns: r.columns });
+              setNote(
+                `Its parts now show in ${String(r.changed)} exam column(s), in one cell with their sum; the averages and the total stay as they were.`,
+              );
+            }}
+          >
+            Show its parts in each exam
+          </Button>
+        ) : null}
       </div>
       <div className="ep-mr-subject__body">
         {note ? (
@@ -824,6 +854,16 @@ export function RegisterColumns({
           own maximum; a column on an exam the subject does not have is left out, with what is made
           from it. A subject with none of these exams is not offered.
         </p>
+        <label className="ep-check" style={{ marginBottom: 'var(--sp-2)' }}>
+          <input
+            className="ep-check__input"
+            type="checkbox"
+            checked={copyParts}
+            onChange={(e) => setCopyParts(e.target.checked)}
+          />
+          <span className="ep-check__box" aria-hidden="true" /> A subject entered in parts (Social
+          Science: Geography, History …) shows its parts, in one cell with their sum
+        </label>
         {fitting.length > 1 ? (
           <Button
             size="sm"

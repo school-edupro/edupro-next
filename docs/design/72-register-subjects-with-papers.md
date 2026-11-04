@@ -134,3 +134,12 @@ subjects)` (a plain subject, or a slot none of whose members has a paper, in the
   (Class VIII: step 2, the copy dialog, the save alert and Take them out; Class VI: Geography and
   History greyed) with axe at 1280 and 375 in a throwaway spec, nothing saved. Help:
   `apps/admin/content/help/exams.md` (Mark registers).
+- **Later (4 Nov 2026), found on register 365 (Class VI):** a subject entered in parts (Social Science:
+  Geography, History & Pol Science) copied from a whole-marks subject showed no parts, and **Parts in
+  columns** did nothing without part columns. `withPartColumns` (`lib/register-builder.ts`) turns each
+  whole-marks exam column of a subject with parts into its parts in one cell with their sum, the sum
+  keeping the column's key (averages and totals made from it stay): step 3's **Show its parts in each
+  exam**, **Parts in columns** ticked on whole marks (parts first, a column each), and **Copy to
+  subjects**'s tick "A subject entered in parts shows its parts" (on by default). A new **elective
+  slot** takes the columns of its first member that had some (the languages' chain) instead of
+  starting empty; "add its columns" names the step (step 3, Columns).

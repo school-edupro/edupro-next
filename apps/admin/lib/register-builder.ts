@@ -133,6 +133,59 @@ export function dropColumn(cols: RegColumn[], key: string): RegColumn[] {
   return dead.reduce(dropColumn, left);
 }
 
+/**
+ * A subject entered in parts (Social Science: Geography, History …) shows them: each whole-marks column
+ * of an exam where it has parts becomes the parts in one cell with their sum under it; the sum keeps
+ * the column's key and place, so the averages and totals made from it stay as they are.
+ */
+export function withPartColumns(
+  data: BuilderData | null,
+  s: RegSubject,
+  def: RegisterDef,
+): { columns: RegColumn[]; changed: number } {
+  let columns = [...s.columns];
+  let changed = 0;
+  for (const c of s.columns) {
+    if (c.kind !== 'raw' || !c.exam) continue;
+    const examId = def.exams.find((e) => e.key === c.exam)?.examId;
+    const parts = examId ? partsOf(data, s, examId) : [];
+    if (!parts.length) continue;
+    const group = columnKey(columns, `g${c.key}`);
+    const label = `${c.name} (${parts.map((x) => x.slice(0, 3).toUpperCase()).join('/')})`;
+    const made: RegColumn[] = [];
+    for (const p of parts) {
+      const col: RegColumn = {
+        key: columnKey([...columns, ...made], `${c.key}${p.slice(0, 3)}`),
+        name: p,
+        kind: 'part',
+        exam: c.exam,
+        part: p,
+        hidden: c.hidden,
+        subFrom: 'skip',
+        group,
+        groupLabel: label,
+        groupFoot: 'sum',
+      };
+      made.push(col);
+    }
+    const sum: RegColumn = {
+      key: c.key,
+      name: `${c.name} sum`,
+      kind: 'avg',
+      mode: 'sum',
+      of: made.map((x) => x.key),
+      hidden: true,
+      inTotal: c.inTotal,
+      round: c.round,
+      grade: c.grade,
+    };
+    const at = columns.findIndex((x) => x.key === c.key);
+    columns = [...columns.slice(0, at), ...made, sum, ...columns.slice(at + 1)];
+    changed += 1;
+  }
+  return { columns, changed };
+}
+
 /** an average or sum left with nothing to work on goes, and what is made from it (docs/design/72) */
 export function pruneColumns(cols: RegColumn[]): RegColumn[] {
   let out = cols;
@@ -154,6 +207,7 @@ export function copyColumns(
   from: RegSubject,
   to: RegSubject,
   def: RegisterDef,
+  opts: { parts?: boolean } = {},
 ): { columns: RegColumn[]; skipped: string[] } {
   const examIdOf = (key: string | undefined) => def.exams.find((e) => e.key === key)?.examId;
   const has = new Set(papersOf(data, to).map((p) => p.examId));
@@ -186,6 +240,8 @@ export function copyColumns(
     }
   }
   columns = pruneColumns(columns);
+  // a subject entered in parts shows them (in one cell with the sum), when asked
+  if (opts.parts) columns = withPartColumns(data, { ...to, columns }, def).columns;
   // what the copy left out: every column of the source not in the target (conversions of it too)
   const skipped = from.columns
     .filter((c) => !columns.some((x) => x.key === c.key))

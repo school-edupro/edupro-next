@@ -67,7 +67,7 @@ export const LR_CSS = `
   .lr-t { width: 100%; border-collapse: collapse; table-layout: fixed; font-size: 10.5pt; }
   .lr-t th { background: #3C9D4E; color: #fff; font-family: Poppins, Arial, sans-serif; font-weight: 600; font-size: 8pt;
     letter-spacing: 0.04em; text-transform: uppercase; padding: 1.6mm 1.4mm; border: 1px solid #2F7D3E; text-align: center; }
-  .lr-t td { border: 1px solid #52606D; padding: 0.8mm 1.8mm; height: 7.6mm; vertical-align: middle; line-height: 1.25; }
+  .lr-t td { box-sizing: border-box; border: 1px solid #52606D; padding: 0.8mm 1.8mm; height: 7.6mm; vertical-align: middle; line-height: 1.25; }
   .lr-t td.g { text-align: center; font-weight: 700; font-size: 11pt; }
   .lr-t td.g.text { font-weight: 400; font-size: 8pt; text-align: left; }
   .lr-t tr.grp td.n { font-weight: 700; text-transform: uppercase; font-size: 10pt; letter-spacing: 0.02em; }
@@ -158,23 +158,34 @@ const sameArea = (a: string, want: string) => {
   return x === w || shortName(x) === w;
 };
 
-/** the card's terms: the data's (docs/design/73), or each exam of the HPC as a filled term */
+const blankTerm = (code: string, filled: boolean): ReportCardTerm => ({
+  code,
+  name: code,
+  filled,
+  remark: null,
+  participation: null,
+  promotedTo: null,
+  attendance: null,
+  health: null,
+  items: [],
+});
+/** how many terms the card shows at least (the shared card: Term I and Term II, later ones blank) */
+let minTerms = 2;
+/**
+ * The card's terms: the data's (docs/design/73), or each exam of the HPC as a filled term; at least two
+ * (Term I and Term II, or as many as the layout names), the ones whose exam is not made yet blank.
+ */
 function termsOf(h: ReportCardHpc): ReportCardTerm[] {
-  if (h.terms?.length) return h.terms;
-  return h.exams.map((code) => ({
-    code,
-    name: code,
-    filled: true,
-    remark: null,
-    participation: null,
-    promotedTo: null,
-    attendance: null,
-    health: null,
-    items: [],
-  }));
+  const list = h.terms?.length ? [...h.terms] : h.exams.map((code) => blankTerm(code, true));
+  while (list.length < minTerms) list.push(blankTerm(`T${String(list.length + 1)}`, false));
+  return list;
 }
 const levelAt = (h: ReportCardHpc, i: ReportCardHpcItem, t: number) =>
   h.terms?.length ? (i.termLevels?.[t] ?? null) : (i.levels[t] ?? null);
+/** the layout's term names set how many terms show at least (none: two) */
+export function lrMinTerms(sections: LrSection[]) {
+  minTerms = Math.max(2, ...sections.map((s) => s.termLabels?.length ?? 0));
+}
 const noteAt = (h: ReportCardHpc, i: ReportCardHpcItem, t: number) =>
   h.terms?.length ? (i.termNotes?.[t] ?? null) : t === i.levels.length - 1 ? i.note : null;
 const termLabel = (s: LrSection, terms: ReportCardTerm[], t: number) =>
