@@ -40,6 +40,15 @@ export interface EditorRow {
   masterText?: string;
   /** with the master: not in the class's list */
   notInMaster?: boolean;
+  /** with the master: a part of this subject there, not a paper (0303) */
+  masterPartOf?: string;
+}
+/** a part line of the subject marks master */
+export interface MasterPart {
+  subjectId: string;
+  code: string;
+  name: string;
+  max: number;
 }
 interface Option {
   id: string;
@@ -64,7 +73,9 @@ const partsKey = (p: EditorPart[]) =>
  * every ticked subject), copy another class's, split a subject into parts in its row. Unsaved changes
  * are kept on screen and the page asks before it is left. With the subject marks master of the exam's
  * type for the class (docs/design/70) the papers and marks come from it: only the ticks and the parts
- * (adding up to the maximum) change here; a paper with marks that differs offers Apply (a reason).
+ * (adding up to the maximum) change here; a paper with marks that differs offers Apply (a reason). A
+ * subject whose sub-subjects are its parts there takes those parts, shown here, not changed (until
+ * marks are entered).
  */
 export function ExamSubjectsEditor({
   examId,
@@ -81,6 +92,7 @@ export function ExamSubjectsEditor({
   locked,
   fromMaster = null,
   masterMax = {},
+  masterParts = {},
 }: {
   examId: string;
   classId: string;
@@ -98,8 +110,13 @@ export function ExamSubjectsEditor({
   fromMaster?: { href: string; type: string; class: string } | null;
   /** the master's maximum of each subject of the class (a part takes its sub-subject's) */
   masterMax?: Record<string, number>;
+  /** each subject's parts in the master (its sub-subjects ticked "Part of") */
+  masterParts?: Record<string, MasterPart[]>;
 }) {
   const master = fromMaster !== null;
+  /** the master's parts of a paper: the paper takes them while it has no marks */
+  const fixedOf = (r: EditorRow): MasterPart[] =>
+    master && !r.marked ? (masterParts[r.subjectId] ?? []) : [];
   const t = useTranslations('examHub.setup');
   const leaving = useRef(false);
   const [rows, setRows] = useState<EditorRow[]>(initial);
@@ -235,6 +252,7 @@ export function ExamSubjectsEditor({
     setError(null);
     const on = rows.filter((r) => r.on);
     for (const r of on) {
+      if (fixedOf(r).length) continue;
       const withParts = r.parts.filter((p) => p.name.trim() && Number(p.max) > 0);
       const sum = withParts.reduce((a, p) => a + Number(p.max), 0);
       if (master && withParts.length && sum !== Number(r.max)) {
@@ -267,6 +285,7 @@ export function ExamSubjectsEditor({
       };
     });
     const parts: PartsInput[] = on
+      .filter((r) => !fixedOf(r).length)
       .filter((r) => partsKey(r.parts) !== (initialParts.get(r.subjectId) ?? '[]'))
       .map((r) => ({
         subjectId: r.subjectId,
@@ -401,7 +420,8 @@ export function ExamSubjectsEditor({
               const named = r.parts.filter((p) => p.name.trim() && Number(p.max) > 0);
               const partsMax = named.reduce((a, p) => a + Number(p.max), 0);
               const off = !r.on;
-              const fixed = locked || r.entryLocked;
+              const fixedRow = locked || r.entryLocked;
+              const fixed = fixedOf(r);
               return [
                 <tr key={r.subjectId} data-off={off ? 'true' : undefined}>
                   <td>
@@ -411,7 +431,7 @@ export function ExamSubjectsEditor({
                         className="ep-check__input"
                         type="checkbox"
                         checked={r.on}
-                        disabled={fixed}
+                        disabled={fixedRow}
                         onChange={(e) => change(r.subjectId, { on: e.target.checked })}
                       />
                       <span className="ep-check__box" aria-hidden="true" />
@@ -426,7 +446,11 @@ export function ExamSubjectsEditor({
                       <div className="ep-meter__text">🔒 {t('rowLocked')}</div>
                     ) : null}
                     {master && r.notInMaster ? (
-                      <div className="ep-xsubj__note">{t('notInMaster')}</div>
+                      <div className="ep-xsubj__note">
+                        {r.masterPartOf
+                          ? t('partInMaster', { subject: r.masterPartOf })
+                          : t('notInMaster')}
+                      </div>
                     ) : null}
                     {master && r.differs && !r.notInMaster && r.examSubjectId ? (
                       <div className="ep-xsubj__note">
@@ -501,7 +525,7 @@ export function ExamSubjectsEditor({
                         aria-label={`${t('max')} · ${r.name}`}
                         value={named.length ? String(partsMax) : r.max}
                         readOnly={named.length > 0}
-                        disabled={off || fixed}
+                        disabled={off || fixedRow}
                         onChange={(e) => change(r.subjectId, { max: e.target.value })}
                       />
                     )}
@@ -519,7 +543,7 @@ export function ExamSubjectsEditor({
                         aria-label={`${t('pass')} · ${r.name}`}
                         value={r.pass}
                         disabled={
-                          off || fixed || (!named.length && Number(r.max) === 0 && r.max !== '')
+                          off || fixedRow || (!named.length && Number(r.max) === 0 && r.max !== '')
                         }
                         onChange={(e) => change(r.subjectId, { pass: e.target.value })}
                       />
@@ -535,7 +559,7 @@ export function ExamSubjectsEditor({
                           className="ep-check__input"
                           type="checkbox"
                           checked={r.elective}
-                          disabled={off || fixed}
+                          disabled={off || fixedRow}
                           onChange={(e) => change(r.subjectId, { elective: e.target.checked })}
                         />
                         <span className="ep-check__box" aria-hidden="true" />
@@ -553,7 +577,7 @@ export function ExamSubjectsEditor({
                         className="ep-select"
                         aria-label={`${t('scale')} · ${r.name}`}
                         value={r.scaleId}
-                        disabled={off || fixed}
+                        disabled={off || fixedRow}
                         onChange={(e) => change(r.subjectId, { scaleId: e.target.value })}
                       >
                         <option value="">{t('classScaleOption')}</option>
@@ -571,10 +595,14 @@ export function ExamSubjectsEditor({
                       className="ep-btn ep-btn--ghost ep-btn--sm"
                       aria-expanded={open === r.subjectId}
                       aria-controls={`xs-parts-${r.subjectId}`}
-                      disabled={off || fixed}
+                      disabled={off || fixedRow}
                       onClick={() => setOpen(open === r.subjectId ? null : r.subjectId)}
                     >
-                      {named.length ? t('partsCount', { n: named.length }) : t('onePiece')}
+                      {fixed.length
+                        ? t('partsCount', { n: fixed.length })
+                        : named.length
+                          ? t('partsCount', { n: named.length })
+                          : t('onePiece')}
                     </button>
                   </td>
                 </tr>,
@@ -583,167 +611,156 @@ export function ExamSubjectsEditor({
                     <td colSpan={7}>
                       <div className="ep-xparts" id={`xs-parts-${r.subjectId}`}>
                         <strong>{t('editParts', { subject: r.name })}</strong>
-                        <p className="ep-field__help" style={{ margin: 0 }}>
-                          {t('partsHelp')}
-                        </p>
-                        {(() => {
-                          // every sub-subject with a line in the subject marks, as the parts at once
-                          const kids = r.children.filter((k) => masterMax[k.id] !== undefined);
-                          if (!master || !kids.length || r.parts.some((p) => p.entered))
-                            return null;
-                          const sum = kids.reduce((a, k) => a + (masterMax[k.id] ?? 0), 0);
-                          return (
-                            <div className="ep-xparts__master">
+                        {fixed.length ? (
+                          <p className="ep-field__help" style={{ margin: 0 }}>
+                            {t.rich('partsFixed', {
+                              parts: `${fixed.map((x) => `${x.name} ${String(x.max)}`).join(' + ')} = ${r.max}`,
+                              a: (chunks) => <a href={fromMaster?.href}>{chunks}</a>,
+                            })}
+                          </p>
+                        ) : (
+                          <>
+                            <p className="ep-field__help" style={{ margin: 0 }}>
+                              {t('partsHelp')}
+                            </p>
+                            {(() => {
+                              // sub-subjects that are papers of their own in the subject marks: ticked
+                              // "Part of" there, the subject is entered in them
+                              const kids = r.children.filter((k) => masterMax[k.id] !== undefined);
+                              if (!master || !kids.length || r.parts.some((p) => p.entered))
+                                return null;
+                              return (
+                                <p className="ep-field__help" style={{ margin: 0 }}>
+                                  {t.rich('partsTickInMaster', {
+                                    subjects: kids.map((k) => k.name).join(', '),
+                                    subject: r.name,
+                                    a: (chunks) => <a href={fromMaster?.href}>{chunks}</a>,
+                                  })}
+                                </p>
+                              );
+                            })()}
+                            {r.parts.map((p, i) => (
+                              <div key={String(i)} className="ep-xparts__row">
+                                <label
+                                  className="ep-field"
+                                  htmlFor={`xp-n-${r.subjectId}-${String(i)}`}
+                                >
+                                  <span className="ep-field__label">
+                                    {t('partName')} {i + 1}
+                                  </span>
+                                  <select
+                                    id={`xp-n-${r.subjectId}-${String(i)}`}
+                                    className="ep-select"
+                                    value={partChoice(r, p, i)}
+                                    onChange={(e) => pickPart(r, i, e.target.value)}
+                                  >
+                                    <option value="">{t('partChoose')}</option>
+                                    {r.children.map((k) => (
+                                      <option key={k.id} value={`k:${k.id}`}>
+                                        {k.name} ({k.code})
+                                      </option>
+                                    ))}
+                                    {PRESETS.map((x) => (
+                                      <option key={x} value={`p:${x}`}>
+                                        {t(x === 'Theory' ? 'partTheory' : 'partPractical')}
+                                      </option>
+                                    ))}
+                                    <option value="other">{t('partOther')}</option>
+                                  </select>
+                                  {partChoice(r, p, i) === 'other' ? (
+                                    <input
+                                      className="ep-input"
+                                      aria-label={t('partOtherName', { n: i + 1 })}
+                                      maxLength={60}
+                                      value={p.name}
+                                      onChange={(e) =>
+                                        changePart(r.subjectId, i, { name: e.target.value })
+                                      }
+                                      style={{ marginTop: 'var(--sp-1)' }}
+                                    />
+                                  ) : null}
+                                </label>
+                                <label
+                                  className="ep-field"
+                                  htmlFor={`xp-s-${r.subjectId}-${String(i)}`}
+                                >
+                                  <span className="ep-field__label">{t('partBy')}</span>
+                                  <select
+                                    id={`xp-s-${r.subjectId}-${String(i)}`}
+                                    className="ep-select"
+                                    value={p.subjectId}
+                                    onChange={(e) =>
+                                      changePart(r.subjectId, i, {
+                                        subjectId: e.target.value,
+                                        ...(masterMax[e.target.value] !== undefined
+                                          ? { max: String(masterMax[e.target.value]) }
+                                          : {}),
+                                      })
+                                    }
+                                  >
+                                    <option value="">{t('partItself', { subject: r.name })}</option>
+                                    {r.children.map((k) => (
+                                      <option key={k.id} value={k.id}>
+                                        {k.name} ({k.code})
+                                      </option>
+                                    ))}
+                                  </select>
+                                </label>
+                                <label
+                                  className="ep-field"
+                                  htmlFor={`xp-m-${r.subjectId}-${String(i)}`}
+                                  style={{ flex: '0 1 7rem' }}
+                                >
+                                  <span className="ep-field__label">{t('partMax')}</span>
+                                  <input
+                                    id={`xp-m-${r.subjectId}-${String(i)}`}
+                                    className="ep-input"
+                                    type="number"
+                                    min={0}
+                                    max={1000}
+                                    step="0.5"
+                                    value={p.max}
+                                    onChange={(e) =>
+                                      changePart(r.subjectId, i, { max: e.target.value })
+                                    }
+                                  />
+                                </label>
+                                {p.entered ? (
+                                  <span className="ep-meter__text">{t('partHasMarks')}</span>
+                                ) : (
+                                  <button
+                                    type="button"
+                                    className="ep-btn ep-btn--ghost ep-btn--sm"
+                                    aria-label={t('removePart', { n: i + 1 })}
+                                    onClick={() =>
+                                      change(r.subjectId, {
+                                        parts: r.parts.filter((_, n) => n !== i),
+                                      })
+                                    }
+                                  >
+                                    ✕
+                                  </button>
+                                )}
+                              </div>
+                            ))}
+                            <div>
                               <Button
                                 type="button"
-                                size="sm"
                                 variant="secondary"
                                 onClick={() =>
                                   change(r.subjectId, {
-                                    parts: kids.map((k) => ({
-                                      ...(r.parts.find((p) => p.subjectId === k.id)?.id
-                                        ? { id: r.parts.find((p) => p.subjectId === k.id)!.id }
-                                        : {}),
-                                      name: k.name,
-                                      subjectId: k.id,
-                                      max: String(masterMax[k.id]),
-                                      entered: 0,
-                                    })),
+                                    parts: [
+                                      ...r.parts,
+                                      { name: '', subjectId: '', max: '', entered: 0 },
+                                    ],
                                   })
                                 }
                               >
-                                {t('partsFromMaster')}
+                                {t('addPart')}
                               </Button>
-                              <span className="ep-field__help">
-                                {kids
-                                  .map((k) => `${k.name} ${String(masterMax[k.id])}`)
-                                  .join(' + ')}{' '}
-                                = {sum}
-                                {sum !== Number(r.max)
-                                  ? ` · ${t('partsMustAdd', { subject: r.name, max: r.max })}`
-                                  : ''}
-                              </span>
                             </div>
-                          );
-                        })()}
-                        {r.parts.map((p, i) => (
-                          <div key={String(i)} className="ep-xparts__row">
-                            <label
-                              className="ep-field"
-                              htmlFor={`xp-n-${r.subjectId}-${String(i)}`}
-                            >
-                              <span className="ep-field__label">
-                                {t('partName')} {i + 1}
-                              </span>
-                              <select
-                                id={`xp-n-${r.subjectId}-${String(i)}`}
-                                className="ep-select"
-                                value={partChoice(r, p, i)}
-                                onChange={(e) => pickPart(r, i, e.target.value)}
-                              >
-                                <option value="">{t('partChoose')}</option>
-                                {r.children.map((k) => (
-                                  <option key={k.id} value={`k:${k.id}`}>
-                                    {k.name} ({k.code})
-                                  </option>
-                                ))}
-                                {PRESETS.map((x) => (
-                                  <option key={x} value={`p:${x}`}>
-                                    {t(x === 'Theory' ? 'partTheory' : 'partPractical')}
-                                  </option>
-                                ))}
-                                <option value="other">{t('partOther')}</option>
-                              </select>
-                              {partChoice(r, p, i) === 'other' ? (
-                                <input
-                                  className="ep-input"
-                                  aria-label={t('partOtherName', { n: i + 1 })}
-                                  maxLength={60}
-                                  value={p.name}
-                                  onChange={(e) =>
-                                    changePart(r.subjectId, i, { name: e.target.value })
-                                  }
-                                  style={{ marginTop: 'var(--sp-1)' }}
-                                />
-                              ) : null}
-                            </label>
-                            <label
-                              className="ep-field"
-                              htmlFor={`xp-s-${r.subjectId}-${String(i)}`}
-                            >
-                              <span className="ep-field__label">{t('partBy')}</span>
-                              <select
-                                id={`xp-s-${r.subjectId}-${String(i)}`}
-                                className="ep-select"
-                                value={p.subjectId}
-                                onChange={(e) =>
-                                  changePart(r.subjectId, i, {
-                                    subjectId: e.target.value,
-                                    ...(masterMax[e.target.value] !== undefined
-                                      ? { max: String(masterMax[e.target.value]) }
-                                      : {}),
-                                  })
-                                }
-                              >
-                                <option value="">{t('partItself', { subject: r.name })}</option>
-                                {r.children.map((k) => (
-                                  <option key={k.id} value={k.id}>
-                                    {k.name} ({k.code})
-                                  </option>
-                                ))}
-                              </select>
-                            </label>
-                            <label
-                              className="ep-field"
-                              htmlFor={`xp-m-${r.subjectId}-${String(i)}`}
-                              style={{ flex: '0 1 7rem' }}
-                            >
-                              <span className="ep-field__label">{t('partMax')}</span>
-                              <input
-                                id={`xp-m-${r.subjectId}-${String(i)}`}
-                                className="ep-input"
-                                type="number"
-                                min={0}
-                                max={1000}
-                                step="0.5"
-                                value={p.max}
-                                onChange={(e) =>
-                                  changePart(r.subjectId, i, { max: e.target.value })
-                                }
-                              />
-                            </label>
-                            {p.entered ? (
-                              <span className="ep-meter__text">{t('partHasMarks')}</span>
-                            ) : (
-                              <button
-                                type="button"
-                                className="ep-btn ep-btn--ghost ep-btn--sm"
-                                aria-label={t('removePart', { n: i + 1 })}
-                                onClick={() =>
-                                  change(r.subjectId, { parts: r.parts.filter((_, n) => n !== i) })
-                                }
-                              >
-                                ✕
-                              </button>
-                            )}
-                          </div>
-                        ))}
-                        <div>
-                          <Button
-                            type="button"
-                            variant="secondary"
-                            onClick={() =>
-                              change(r.subjectId, {
-                                parts: [
-                                  ...r.parts,
-                                  { name: '', subjectId: '', max: '', entered: 0 },
-                                ],
-                              })
-                            }
-                          >
-                            {t('addPart')}
-                          </Button>
-                        </div>
+                          </>
+                        )}
                       </div>
                     </td>
                   </tr>

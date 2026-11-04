@@ -1,6 +1,6 @@
 # 70 · Subject marks master: an exam's papers and maximum marks come from a master
 
-Status: built 3 Nov 2026 (parts 1–2; migration 0302)
+Status: built 3 Nov 2026 (parts 1–2; migration 0302); part lines 4 Nov 2026 (migration 0303)
 
 ## Why
 
@@ -107,10 +107,45 @@ takes its papers from the master.
 
 - In the Subjects step's parts, a part picked as a sub-subject (or "entered by the teacher of" one) takes
   that sub-subject's maximum from the master (`masterMax`); with no line, what is left of the subject's
-  maximum. **Take the parts from the subject marks** makes a part for every sub-subject with a line, at
-  once (hidden once a part has marks), showing the sum against the subject's maximum.
-- Not built (left for a decision): making sub-subject lines parts automatically on new exams. The
-  school uses both shapes — in PT1 · VI Geography and History are papers of their own, in PT1 · VIII
-  Geography and Political Science are parts of Social Science — so a rule would split VI wrongly; an
-  explicit "Part of" on a master line would settle it.
+  maximum.
 - Unticked papers' marks (text from the master) show muted rather than faded (contrast).
+
+## Part lines (4 Nov 2026, user: a "Part of" tick)
+
+The school uses both shapes: in PT1 · VI Geography and History are papers of their own; in PT1 · VIII
+Geography 13 and Political Science 22 are the parts of Social Science 35. A rule (sub-subject lines are
+parts) would split VI wrongly, so a line says so itself.
+
+- Migration 0303: `exam_type_subjects.is_part` — a part of its subject (the line's subject's parent in the
+  subject master), with a maximum and no pass marks, scale or Optional (a check). The service checks the
+  subject is in the list as a paper and its part lines add up to its maximum (400
+  `exams.subject_marks_parts`). `app.apply_master_parts(exam_subject)`: a paper with no mark (whole or
+  in a part) of an unlocked exam takes the master's parts of its subject — one per part line, named after
+  the sub-subject (its teacher enters it), the line's maximum, the class order — when they add up to the
+  paper's maximum; its other parts go. Returns 1 when they changed.
+- Follow (`followSubjectMarks`): part lines are not papers (`NOT is_part`); then every unmarked paper
+  with part lines takes them (a change of the parts alone follows too); `fillExamFromSubjectMarks`
+  makes papers of the paper lines only, then their parts. Unticking "Part of" later leaves an exam's
+  parts as they are (they may be Class set-up's or the exam's own).
+- Exams: `subjectMarks` rows carry `partOf`; a paper's `master` is its paper line; `differs` also when
+  its parts differ from the master's (a marked paper). `setSubjects` refuses a part line as a new paper
+  (409 `exams.master_part`); `setParts` refuses an unmarked paper whose parts come from the master (409
+  `exams.parts_from_master`); a marked paper keeps changing its own parts. Apply on a paper marked as one
+  figure whose master has parts: 409 (clear the marks to take the parts).
+- Master: **copy** takes a subject's parts with it (the target's other parts of it go); to a class, a
+  part only where the class studies its subject; a target whose parts no longer add up refuses the copy
+  (409, nothing copied). **Fill from an exam**: a paper entered in parts by its sub-subjects (one part
+  each, adding up to it) gives part lines, and the master's other parts of a paper the exam holds go.
+  **Last year** copies the tick. Excel / PDF: a **Part of** column.
+- Admin, Subject marks: a **Part of** column (a tick naming the subject, for a line whose subject is
+  in the list); a part shows under its subject, its pass / scale / Optional replaced by "the subject's";
+  the sums live under the table ("Social Science 35 = Geography 13 + Political Science 22"); sub-subjects
+  that add up to their subject but are not ticked are offered **Make them parts of …**. "Max for all"
+  leaves parts alone.
+- Admin, the exam's Subjects step: part lines are not rows; a paper with master parts shows "n parts"
+  and, opened, the parts read-only with a link to Subject marks (until marked); a paper the exam holds
+  that is a part line says "A part of … in the subject marks: untick it"; a subject whose sub-subjects
+  are papers of their own in the master says how to tick them. The one-click "Take the parts from the
+  subject marks" (part 2 follow-up) is replaced by the tick. English and Hindi.
+- Tests: `apps/api/test/subject-marks-parts.e2e-spec.ts` (6); the exam suites unchanged; axe on the
+  list (ticked), an exam with master parts and the PT1-2026 · VIII hint.

@@ -24,7 +24,12 @@ export interface SubjectMarksRow {
   scaleId: string | null;
   scaleCode: string | null;
   optional: boolean;
+  /** the subject above it in the subject master (Social Science over Geography) */
+  parentId: string | null;
+  /** a part of that subject (0303): entered as its part, not a paper of its own */
+  isPart: boolean;
 }
+type Line = SaveSubjectMarksDto['rows'][number];
 const num = (v: string | null) => (v === null ? null : Number(v));
 
 /**
@@ -83,9 +88,12 @@ export class SubjectMarksService {
       scale_id: string | null;
       scale_code: string | null;
       optional: boolean;
+      parent_id: string | null;
+      is_part: boolean;
     }>(
       `SELECT m.subject_id::text, s.code, s.name, m.max_marks::text AS max, m.pass_marks::text AS pass,
-              m.grade_scale_id::text AS scale_id, g.code AS scale_code, m.is_optional AS optional
+              m.grade_scale_id::text AS scale_id, g.code AS scale_code, m.is_optional AS optional,
+              s.parent_id::text, m.is_part
          FROM exam_type_subjects m JOIN subjects s ON s.id = m.subject_id
          LEFT JOIN grade_scales g ON g.id = m.grade_scale_id
         WHERE m.academic_year_id = $1 AND m.exam_type_id = $2 AND m.class_id = $3
@@ -101,6 +109,8 @@ export class SubjectMarksService {
       scaleId: x.scale_id,
       scaleCode: x.scale_code,
       optional: x.optional,
+      parentId: x.parent_id,
+      isPart: x.is_part,
     }));
   }
 
@@ -119,8 +129,14 @@ export class SubjectMarksService {
       if (!type.rows[0] || !klass.rows[0])
         throw new DomainError('not-found', 'Exam type or class not found', { status: 404 });
       const rows = await this.rows(c, yearId, typeId, classId);
-      const studied = await c.query<{ id: string; code: string; name: string; elective: boolean }>(
-        `SELECT s.id::text, s.code, s.name, cs.is_elective AS elective
+      const studied = await c.query<{
+        id: string;
+        code: string;
+        name: string;
+        elective: boolean;
+        parentId: string | null;
+      }>(
+        `SELECT s.id::text, s.code, s.name, cs.is_elective AS elective, s.parent_id::text AS "parentId"
            FROM class_subjects cs JOIN subjects s ON s.id = cs.subject_id
           WHERE cs.class_id = $1 AND cs.academic_year_id = $2 AND cs.status = 'active'
           ORDER BY app.subject_seq($1, $2, s.id), s.code`,
@@ -165,22 +181,74 @@ export class SubjectMarksService {
       throw new DomainError('validation-failed', 'A subject is there twice', { status: 400 });
   }
 
-  private async upsert(
+  /**
+   * The part lines of a list (0303): each under a subject of the list (its parent in the subject master)
+   * that is a paper with marks, with a maximum and nothing else of its own; a subject's parts add up to
+   * its maximum. Null when the list is right, else what is wrong.
+   */
+  private partsProblem(
+    rows: Array<Line & { code: string; parentId: string | null }>,
+  ): string | null {
+    const by = new Map(rows.map((r) => [r.subjectId, r]));
+    for (const r of rows.filter((x) => x.isPart)) {
+      const p = r.parentId ? by.get(r.parentId) : undefined;
+      if (!r.parentId)
+        return `${r.code} has no subject above it in the subject master: it can't be a part`;
+      if (!p || p.isPart) return `${r.code} is a part: its subject must be in the list as a paper`;
+      if (r.max <= 0) return `${r.code} is a part: give it a maximum`;
+      if (r.pass !== null || r.scaleId || r.optional)
+        return `${r.code} is a part: its subject's pass marks, scale and Optional are for the total`;
+    }
+    for (const p of rows) {
+      const parts = rows.filter((x) => x.isPart && x.parentId === p.subjectId);
+      if (!parts.length) continue;
+      const sum = parts.reduce((a, x) => a + Math.round(x.max * 100), 0) / 100;
+      if (sum !== p.max)
+        return `The parts of ${p.code} (${parts.map((x) => `${x.code} ${String(x.max)}`).join(' + ')}) add up to ${String(sum)}, not its maximum of ${String(p.max)}`;
+    }
+    return null;
+  }
+
+  /** a list as saved: its part lines must still be right (after a copy into it) */
+  private async assertParts(
     c: PoolClient,
     yearId: string,
     typeId: string,
     classId: string,
-    r: SaveSubjectMarksDto['rows'][number],
+    to: string,
   ) {
+    const bad = this.partsProblem(await this.rows(c, yearId, typeId, classId));
+    if (bad) throw new DomainError('exams.subject_marks_parts', `${to}: ${bad}`, { status: 409 });
+  }
+
+  /** a subject's parts are the ones copied or filled: the list's other parts of it go */
+  private async keepOnlyParts(
+    c: PoolClient,
+    yearId: string,
+    typeId: string,
+    classId: string,
+    parentIds: string[],
+    keep: string[],
+  ) {
+    if (!parentIds.length) return;
     await c.query(
-      `INSERT INTO exam_type_subjects (school_id, academic_year_id, exam_type_id, class_id, subject_id, max_marks, pass_marks, grade_scale_id, is_optional, updated_by)
-       VALUES (app.current_school_id(), $1, $2, $3, $4, $5, $6, $7, $8, app.current_user_id())
+      `DELETE FROM exam_type_subjects m USING subjects s
+        WHERE s.id = m.subject_id AND m.academic_year_id = $1 AND m.exam_type_id = $2 AND m.class_id = $3
+          AND m.is_part AND s.parent_id = ANY($4::bigint[]) AND NOT (m.subject_id = ANY($5::bigint[]))`,
+      [yearId, typeId, classId, parentIds, keep],
+    );
+  }
+
+  private async upsert(c: PoolClient, yearId: string, typeId: string, classId: string, r: Line) {
+    await c.query(
+      `INSERT INTO exam_type_subjects (school_id, academic_year_id, exam_type_id, class_id, subject_id, max_marks, pass_marks, grade_scale_id, is_optional, is_part, updated_by)
+       VALUES (app.current_school_id(), $1, $2, $3, $4, $5, $6, $7, $8, $9, app.current_user_id())
        ON CONFLICT (academic_year_id, exam_type_id, class_id, subject_id) DO UPDATE
           SET max_marks = EXCLUDED.max_marks, pass_marks = EXCLUDED.pass_marks, grade_scale_id = EXCLUDED.grade_scale_id,
-              is_optional = EXCLUDED.is_optional, updated_by = EXCLUDED.updated_by, updated_at = now()
-        WHERE (exam_type_subjects.max_marks, exam_type_subjects.pass_marks, exam_type_subjects.grade_scale_id, exam_type_subjects.is_optional)
-              IS DISTINCT FROM (EXCLUDED.max_marks, EXCLUDED.pass_marks, EXCLUDED.grade_scale_id, EXCLUDED.is_optional)`,
-      [yearId, typeId, classId, r.subjectId, r.max, r.pass, r.scaleId, r.optional],
+              is_optional = EXCLUDED.is_optional, is_part = EXCLUDED.is_part, updated_by = EXCLUDED.updated_by, updated_at = now()
+        WHERE (exam_type_subjects.max_marks, exam_type_subjects.pass_marks, exam_type_subjects.grade_scale_id, exam_type_subjects.is_optional, exam_type_subjects.is_part)
+              IS DISTINCT FROM (EXCLUDED.max_marks, EXCLUDED.pass_marks, EXCLUDED.grade_scale_id, EXCLUDED.is_optional, EXCLUDED.is_part)`,
+      [yearId, typeId, classId, r.subjectId, r.max, r.pass, r.scaleId, r.optional, r.isPart],
     );
   }
 
@@ -196,14 +264,23 @@ export class SubjectMarksService {
       );
       if (ok.rows.length !== 2)
         throw new DomainError('not-found', 'Exam type or class not found', { status: 404 });
-      const subj = await c.query<{ id: string }>(
-        `SELECT id::text FROM subjects WHERE id = ANY($1::bigint[]) AND deleted_at IS NULL`,
+      const subj = await c.query<{ id: string; code: string; parent_id: string | null }>(
+        `SELECT id::text, code, parent_id::text FROM subjects WHERE id = ANY($1::bigint[]) AND deleted_at IS NULL`,
         [dto.rows.map((r) => r.subjectId)],
       );
       if (subj.rows.length !== dto.rows.length)
         throw new DomainError('validation-failed', 'A subject is not of this school', {
           status: 400,
         });
+      const of = new Map(subj.rows.map((x) => [x.id, x]));
+      const bad = this.partsProblem(
+        dto.rows.map((r) => ({
+          ...r,
+          code: of.get(r.subjectId)!.code,
+          parentId: of.get(r.subjectId)!.parent_id,
+        })),
+      );
+      if (bad) throw new DomainError('exams.subject_marks_parts', bad, { status: 400 });
       const scales = [...new Set(dto.rows.map((r) => r.scaleId).filter((x): x is string => !!x))];
       const sc = await c.query(`SELECT 1 FROM grade_scales WHERE id = ANY($1::bigint[])`, [scales]);
       if (sc.rows.length !== scales.length)
@@ -221,7 +298,7 @@ export class SubjectMarksService {
         action: 'exams.subject_marks.save',
         entityType: 'exam_type_subjects',
         entityId: `${dto.typeId}:${dto.classId}`,
-        before: { rows: before.map((x) => [x.code, x.max, x.pass]) },
+        before: { rows: before.map((x) => [x.code, x.max, x.pass, ...(x.isPart ? ['part'] : [])]) },
         after: { rows: dto.rows.length },
       });
       // the exams of the type follow where no mark is entered yet (docs/design/70, part 2)
@@ -243,13 +320,28 @@ export class SubjectMarksService {
         throw new DomainError('exams.subject_marks_empty', 'This list has no subjects to copy', {
           status: 409,
         });
-      const asRow = (x: SubjectMarksRow) => ({
+      const asRow = (x: SubjectMarksRow): Line => ({
         subjectId: x.subjectId,
         max: x.max,
         pass: x.pass,
         scaleId: x.scaleId,
         optional: x.optional,
+        isPart: x.isPart,
       });
+      // a subject copied takes its parts with it: the target's other parts of it go
+      const parents = src.filter((x) => !x.isPart).map((x) => x.subjectId);
+      const into = async (typeId: string, classId: string, rows: SubjectMarksRow[], to: string) => {
+        for (const x of rows) await this.upsert(c, yearId, typeId, classId, asRow(x));
+        await this.keepOnlyParts(
+          c,
+          yearId,
+          typeId,
+          classId,
+          parents.filter((p) => rows.some((x) => x.subjectId === p)),
+          rows.filter((x) => x.isPart).map((x) => x.subjectId),
+        );
+        await this.assertParts(c, yearId, typeId, classId, to);
+      };
       const out: Array<{ to: string; copied: number; left: string[] }> = [];
       const classes = await c.query<{ id: string; code: string; studied: string[] }>(
         `SELECT k.id::text, k.code,
@@ -259,12 +351,16 @@ export class SubjectMarksService {
         [dto.toClassIds.filter((x) => x !== dto.classId), yearId],
       );
       for (const k of classes.rows) {
-        const take = src.filter((x) => k.studied.includes(x.subjectId));
-        for (const x of take) await this.upsert(c, yearId, dto.typeId, k.id, asRow(x));
+        // what the class studies; a part only with its subject
+        const studies = (x: SubjectMarksRow) =>
+          k.studied.includes(x.subjectId) &&
+          (!x.isPart || (!!x.parentId && k.studied.includes(x.parentId)));
+        const take = src.filter(studies);
+        await into(dto.typeId, k.id, take, k.code);
         out.push({
           to: k.code,
           copied: take.length,
-          left: src.filter((x) => !k.studied.includes(x.subjectId)).map((x) => x.code),
+          left: src.filter((x) => !studies(x)).map((x) => x.code),
         });
       }
       const types = await c.query<{ id: string; code: string }>(
@@ -272,7 +368,7 @@ export class SubjectMarksService {
         [dto.toTypeIds.filter((x) => x !== dto.typeId)],
       );
       for (const t of types.rows) {
-        for (const x of src) await this.upsert(c, yearId, t.id, dto.classId, asRow(x));
+        await into(t.id, dto.classId, src, t.code);
         out.push({ to: t.code, copied: src.length, left: [] });
       }
       await this.audit.stage(ctx, c, {
@@ -294,7 +390,11 @@ export class SubjectMarksService {
     });
   }
 
-  /** Fills the master of an exam's type from the exam's own subjects, class by class. */
+  /**
+   * Fills the master of an exam's type from the exam's own subjects, class by class. A paper entered in
+   * parts by its sub-subjects (one part each, adding up to it) gives those as part lines; the master's
+   * other parts of a paper the exam holds go.
+   */
   async fillFromExam(ctx: RequestContext, examId: string) {
     const yearId = this.year(ctx);
     return this.db.tenant(requireTenant(ctx), async (c) => {
@@ -315,17 +415,41 @@ export class SubjectMarksService {
             WHERE es.exam_id = $1 AND (es.max_marks > 0 OR COALESCE(es.grade_scale_id, ec.grade_scale_id) IS NOT NULL)
            ON CONFLICT (academic_year_id, exam_type_id, class_id, subject_id) DO UPDATE
               SET max_marks = EXCLUDED.max_marks, pass_marks = EXCLUDED.pass_marks, grade_scale_id = EXCLUDED.grade_scale_id,
-                  is_optional = EXCLUDED.is_optional, updated_by = EXCLUDED.updated_by, updated_at = now()
+                  is_optional = EXCLUDED.is_optional, is_part = false, updated_by = EXCLUDED.updated_by, updated_at = now()
            RETURNING class_id)
          SELECT up.class_id::text, k.code, count(*)::int AS n FROM up JOIN classes k ON k.id = up.class_id
           GROUP BY 1, 2, k.display_order ORDER BY k.display_order`,
         [examId, yearId, ex.rows[0].type_id],
       );
+      const parts = await c.query<{ key: string }>(
+        `INSERT INTO exam_type_subjects (school_id, academic_year_id, exam_type_id, class_id, subject_id, max_marks, pass_marks, grade_scale_id, is_optional, is_part, updated_by)
+         SELECT app.current_school_id(), $2, $3, es.class_id, p.subject_id, p.max_marks, NULL, NULL, false, true, app.current_user_id()
+           FROM exam_subject_parts p JOIN exam_subjects es ON es.id = p.exam_subject_id
+          WHERE es.exam_id = $1 AND es.max_marks > 0
+            AND NOT EXISTS (SELECT 1 FROM exam_subject_parts q LEFT JOIN subjects qs ON qs.id = q.subject_id
+                             WHERE q.exam_subject_id = es.id AND qs.parent_id IS DISTINCT FROM es.subject_id)
+            AND (SELECT count(DISTINCT q.subject_id) = count(*) AND sum(q.max_marks) = es.max_marks
+                   FROM exam_subject_parts q WHERE q.exam_subject_id = es.id)
+            AND NOT EXISTS (SELECT 1 FROM exam_subjects x WHERE x.exam_id = es.exam_id AND x.class_id = es.class_id
+                             AND x.subject_id = p.subject_id)
+         ON CONFLICT (academic_year_id, exam_type_id, class_id, subject_id) DO UPDATE
+            SET max_marks = EXCLUDED.max_marks, pass_marks = NULL, grade_scale_id = NULL, is_optional = false, is_part = true,
+                updated_by = EXCLUDED.updated_by, updated_at = now()
+         RETURNING class_id::text || ':' || subject_id::text AS key`,
+        [examId, yearId, ex.rows[0].type_id],
+      );
+      await c.query(
+        `DELETE FROM exam_type_subjects m USING subjects s, exam_subjects es
+          WHERE s.id = m.subject_id AND es.exam_id = $1 AND es.class_id = m.class_id AND s.parent_id = es.subject_id
+            AND m.academic_year_id = $2 AND m.exam_type_id = $3 AND m.is_part
+            AND NOT (m.class_id::text || ':' || m.subject_id::text = ANY($4::text[]))`,
+        [examId, yearId, ex.rows[0].type_id, parts.rows.map((x) => x.key)],
+      );
       await this.audit.stage(ctx, c, {
         action: 'exams.subject_marks.fill',
         entityType: 'exam_type_subjects',
         entityId: ex.rows[0].type_id,
-        after: { from: ex.rows[0].code, classes: r.rows.length },
+        after: { from: ex.rows[0].code, classes: r.rows.length, parts: parts.rows.length },
       });
       return {
         typeId: ex.rows[0].type_id,
@@ -349,8 +473,8 @@ export class SubjectMarksService {
           status: 409,
         });
       const r = await c.query(
-        `INSERT INTO exam_type_subjects (school_id, academic_year_id, exam_type_id, class_id, subject_id, max_marks, pass_marks, grade_scale_id, is_optional, updated_by)
-         SELECT school_id, $1, exam_type_id, class_id, subject_id, max_marks, pass_marks, grade_scale_id, is_optional, app.current_user_id()
+        `INSERT INTO exam_type_subjects (school_id, academic_year_id, exam_type_id, class_id, subject_id, max_marks, pass_marks, grade_scale_id, is_optional, is_part, updated_by)
+         SELECT school_id, $1, exam_type_id, class_id, subject_id, max_marks, pass_marks, grade_scale_id, is_optional, is_part, app.current_user_id()
            FROM exam_type_subjects WHERE academic_year_id = $2 AND ($3::bigint IS NULL OR exam_type_id = $3::bigint)
          ON CONFLICT (academic_year_id, exam_type_id, class_id, subject_id) DO NOTHING`,
         [yearId, prev.rows[0].id, typeId ?? null],
@@ -369,7 +493,7 @@ export class SubjectMarksService {
     });
   }
 
-  /** An exam type's lists as one table (class, subject, maximum, pass, scale, optional): Excel or PDF. */
+  /** An exam type's lists as one table (class, subject, maximum, pass, scale, optional, part of): Excel or PDF. */
   async file(ctx: RequestContext, q: SubjectMarksFileDto) {
     const yearId = this.year(ctx);
     const out = await this.db.tenant(requireTenant(ctx), async (c) => {
@@ -386,9 +510,12 @@ export class SubjectMarksService {
         pass: string | null;
         scale: string | null;
         optional: boolean;
+        part_of: string | null;
       }>(
-        `SELECT k.name AS class, s.code, s.name, m.max_marks::text AS max, m.pass_marks::text AS pass, g.code AS scale, m.is_optional AS optional
+        `SELECT k.name AS class, s.code, s.name, m.max_marks::text AS max, m.pass_marks::text AS pass, g.code AS scale, m.is_optional AS optional,
+                CASE WHEN m.is_part THEN ps.code END AS part_of
            FROM exam_type_subjects m JOIN classes k ON k.id = m.class_id JOIN subjects s ON s.id = m.subject_id
+           LEFT JOIN subjects ps ON ps.id = s.parent_id
            LEFT JOIN grade_scales g ON g.id = m.grade_scale_id
           WHERE m.academic_year_id = $1 AND m.exam_type_id = $2
           ORDER BY k.display_order, app.subject_seq(m.class_id, $1, m.subject_id), s.code`,
@@ -411,6 +538,7 @@ export class SubjectMarksService {
           { t: 'Pass marks', center: true },
           { t: 'Grade scale', center: true },
           { t: 'Optional', center: true },
+          { t: 'Part of', center: true },
         ],
       ],
       body: out.rows.map((x, i) => ({
@@ -422,11 +550,12 @@ export class SubjectMarksService {
           { t: trim(x.pass), center: true },
           { t: x.scale ?? '', center: true },
           { t: x.optional ? 'Yes' : '', center: true },
+          { t: x.part_of ?? '', center: true },
         ],
       })),
       foot: null,
       frozen: 0,
-      widths: [10, 20, 6, 6, 8, 6],
+      widths: [10, 20, 6, 6, 8, 6, 6],
     };
     const meta = {
       school: out.head.school,

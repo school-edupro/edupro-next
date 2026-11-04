@@ -4090,7 +4090,9 @@
       "partsMustAdd": "The parts of {subject} must add up to its maximum of {max}",
       "gradeOnly": "Grade only",
       "optional": "Optional",
-      "partsFromMaster": "Take the parts from the subject marks"
+      "partsFixed": "From the subject marks: {parts}. Each part is entered by its subject’s teacher; change them in <a>Subject marks</a>.",
+      "partInMaster": "A part of {subject} in the subject marks, not a paper of its own: untick it",
+      "partsTickInMaster": "{subjects} are papers of their own in the subject marks. To enter {subject} in these parts, tick “Part of” on them in <a>Subject marks</a>."
     },
     "sheet": {
       "title": "Date sheet",

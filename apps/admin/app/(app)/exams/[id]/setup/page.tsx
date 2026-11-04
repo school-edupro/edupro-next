@@ -6,7 +6,11 @@ import { Notice } from '@/components/Notice';
 import { DateSheetEditor, type PaperRow } from '@/components/exams/DateSheetEditor';
 import { AreaTicks } from '@/components/exams/AreaTicks';
 import { ExamFrame } from '@/components/exams/ExamFrame';
-import { ExamSubjectsEditor, type EditorRow } from '@/components/exams/ExamSubjectsEditor';
+import {
+  ExamSubjectsEditor,
+  type EditorRow,
+  type MasterPart,
+} from '@/components/exams/ExamSubjectsEditor';
 import { apiFetch, getMe } from '@/lib/api';
 import { fillMasterFromExam, saveExamDetails } from '@/lib/exam-hub-actions';
 import type {
@@ -301,9 +305,20 @@ export default async function ExamSetupPage({
     const masterRows = exam.subjectMarks?.find((x) => x.classId === klass.classId)?.rows ?? null;
     const masterHref = `/exams/subject-marks?type=${exam.examTypeId}&class=${klass.classId}`;
     const fmt = (n: number | null) => (n === null ? '' : String(n));
+    // a part line (Geography, a part of Social Science) is not a paper: its subject is entered in it
+    const masterPapers = (masterRows ?? []).filter((m) => !m.partOf);
+    const masterParts: Record<string, MasterPart[]> = {};
+    for (const m of masterRows ?? [])
+      if (m.partOf)
+        (masterParts[m.partOf] ??= []).push({
+          subjectId: m.subjectId,
+          code: m.code,
+          name: m.name,
+          max: m.maxMarks,
+        });
     const masterInitial: EditorRow[] | null = masterRows
       ? [
-          ...masterRows.map((m): EditorRow => {
+          ...masterPapers.map((m): EditorRow => {
             const cur = current.find((s) => s.subjectId === m.subjectId);
             const own = cur ? row(cur) : null;
             const marked = !!cur?.marked;
@@ -322,13 +337,27 @@ export default async function ExamSetupPage({
               examSubjectId: cur?.id,
               marked,
               differs: !!cur?.differs,
-              masterText: `${m.maxMarks === 0 ? 'grade only' : fmt(m.maxMarks)}${m.passMarks !== null ? ` / ${fmt(m.passMarks)}` : ''}`,
+              masterText: `${m.maxMarks === 0 ? 'grade only' : fmt(m.maxMarks)}${m.passMarks !== null ? ` / ${fmt(m.passMarks)}` : ''}${
+                masterParts[m.subjectId]
+                  ? ` · ${masterParts[m.subjectId]!.map((p) => `${p.code} ${fmt(p.max)}`).join(' + ')}`
+                  : ''
+              }`,
             };
           }),
-          // a paper the exam holds that is not in the list
+          // a paper the exam holds that is not in the list (or is a part there)
           ...current
-            .filter((s) => !masterRows.some((m) => m.subjectId === s.subjectId))
-            .map((s): EditorRow => ({ ...row(s), examSubjectId: s.id, notInMaster: true })),
+            .filter((s) => !masterPapers.some((m) => m.subjectId === s.subjectId))
+            .map((s): EditorRow => ({
+              ...row(s),
+              examSubjectId: s.id,
+              notInMaster: true,
+              masterPartOf: (() => {
+                const line = masterRows.find((m) => m.subjectId === s.subjectId && m.partOf);
+                return line
+                  ? (masterPapers.find((m) => m.subjectId === line.partOf)?.name ?? undefined)
+                  : undefined;
+              })(),
+            })),
         ]
       : null;
     const fromClassList = !masterInitial && current.length === 0 && studied.length > 0;
@@ -385,6 +414,7 @@ export default async function ExamSetupPage({
                 : null
             }
             masterMax={Object.fromEntries((masterRows ?? []).map((m) => [m.subjectId, m.maxMarks]))}
+            masterParts={masterParts}
             addable={
               masterInitial
                 ? []

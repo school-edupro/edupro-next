@@ -13799,11 +13799,31 @@ button.ep-subchoice__icon:hover {
   font-weight: var(--fw-regular, 400);
   color: var(--status-warning-text);
 }
-.ep-xparts__master {
+/* a part line of the subject marks (0303): under its subject, ticked "Part of" */
+.ep-smparts__part {
+  padding-left: var(--sp-5);
+  font-weight: var(--fw-regular, 400);
+}
+.ep-smparts__part::before {
+  content: '↳\00a0';
+  color: var(--text-muted);
+}
+.ep-smparts__tick {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-1);
+  white-space: nowrap;
+}
+.ep-smparts {
+  display: grid;
+  gap: var(--sp-2);
+}
+.ep-smparts__offer {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: var(--sp-2);
+  margin: 0;
 }
 .ep-xsubj__apply {
   display: inline-flex;

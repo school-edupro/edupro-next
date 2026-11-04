@@ -48,7 +48,13 @@ export default async function SubjectMarksPage({
     type && klass
       ? await apiFetch<{
           rows: SubjectMarksRow[];
-          studied: Array<{ id: string; code: string; name: string; elective: boolean }>;
+          studied: Array<{
+            id: string;
+            code: string;
+            name: string;
+            elective: boolean;
+            parentId: string | null;
+          }>;
           updatedAt: string | null;
           updatedBy: string | null;
         }>(`/exams/subject-marks?typeId=${type.id}&classId=${klass.id}`)

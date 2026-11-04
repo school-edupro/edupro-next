@@ -18,6 +18,10 @@ export interface SubjectMarksRow {
   scaleId: string | null;
   scaleCode: string | null;
   optional: boolean;
+  /** the subject above it in the subject master */
+  parentId: string | null;
+  /** a part of that subject, not a paper of its own */
+  isPart: boolean;
 }
 const PAGE = '/exams/subject-marks';
 const okId = (v: string) => /^\d{1,18}$/.test(v);
@@ -54,7 +58,9 @@ async function act<T>(
 export async function saveSubjectMarks(body: {
   typeId: string;
   classId: string;
-  rows: Array<Pick<SubjectMarksRow, 'subjectId' | 'max' | 'pass' | 'scaleId' | 'optional'>>;
+  rows: Array<
+    Pick<SubjectMarksRow, 'subjectId' | 'max' | 'pass' | 'scaleId' | 'optional' | 'isPart'>
+  >;
 }): Promise<Out<{ rows: SubjectMarksRow[] }>> {
   if (!okId(body.typeId) || !okId(body.classId)) return { ok: false, error: 'Unknown list' };
   try {
@@ -87,7 +93,7 @@ export async function copySubjectMarks(fd: FormData) {
       `Copied to ${r.data
         .map(
           (x) =>
-            `${x.to} (${String(x.copied)}${x.left.length ? `; not studied there: ${x.left.join(', ')}` : ''})`,
+            `${x.to} (${String(x.copied)}${x.left.length ? `; not studied there (or a part whose subject is not): ${x.left.join(', ')}` : ''})`,
         )
         .join(', ')}`,
   );

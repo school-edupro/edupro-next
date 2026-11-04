@@ -106,6 +106,8 @@ export interface SubjectMarksLine {
   passMarks: number | null;
   gradeScaleId: string | null;
   optional: boolean;
+  /** a part of this subject (its parent in the subject master), not a paper of its own (0303) */
+  partOf: string | null;
 }
 
 export interface ExamRow {
@@ -441,9 +443,11 @@ export class ExamsService {
       pass: string | null;
       scale: string | null;
       optional: boolean;
+      part_of: string | null;
     }>(
       `SELECT m.class_id::text, m.subject_id::text, s.code, s.name, m.max_marks::text AS max, m.pass_marks::text AS pass,
-              m.grade_scale_id::text AS scale, m.is_optional AS optional
+              m.grade_scale_id::text AS scale, m.is_optional AS optional,
+              CASE WHEN m.is_part THEN s.parent_id::text END AS part_of
          FROM exams e JOIN exam_classes ec ON ec.exam_id = e.id
          JOIN exam_type_subjects m ON m.academic_year_id = e.academic_year_id AND m.exam_type_id = e.exam_type_id AND m.class_id = ec.class_id
          JOIN subjects s ON s.id = m.subject_id
@@ -470,7 +474,11 @@ export class ExamsService {
       passMarks: x.pass === null ? null : Number(x.pass),
       gradeScaleId: x.scale,
       optional: x.optional,
+      partOf: x.part_of,
     });
+    // a paper's parts as the master has them (sub-subject and maximum, in order) to tell them apart
+    const partsKey = (ps: Array<{ subjectId: string | null; maxMarks: number }>) =>
+      ps.map((p) => `${p.subjectId ?? ''}:${String(p.maxMarks)}`).join(',');
     const classesWithMaster = new Set(master.rows.map((x) => x.class_id));
     return {
       ...r.rows[0],
@@ -479,8 +487,17 @@ export class ExamsService {
         rows: master.rows.filter((x) => x.class_id === classId).map(line),
       })),
       subjects: subjects.rows.map((x) => {
-        const m = master.rows.find((y) => y.class_id === x.classId && y.subject_id === x.subjectId);
+        // a paper's line (a part line is not one); the master's parts of it
+        const m = master.rows.find(
+          (y) => y.class_id === x.classId && y.subject_id === x.subjectId && !y.part_of,
+        );
         const own = m ? line(m) : null;
+        const mine = parts.rows
+          .filter((p) => p.examSubjectId === x.id)
+          .map(({ examSubjectId: _es, ...p }) => p);
+        const masterParts = master.rows
+          .filter((y) => y.class_id === x.classId && y.part_of === x.subjectId)
+          .map((y) => ({ subjectId: y.subject_id, maxMarks: Number(y.max) }));
         return {
           ...x,
           marked: marked.has(x.id),
@@ -490,11 +507,14 @@ export class ExamsService {
               own.maxMarks !== Number(x.maxMarks) ||
               own.passMarks !== (x.passMarks === null ? null : Number(x.passMarks)) ||
               own.gradeScaleId !== x.gradeScaleId ||
-              own.optional !== x.isElective
+              own.optional !== x.isElective ||
+              (masterParts.length > 0 &&
+                partsKey(masterParts) !==
+                  partsKey(
+                    mine.map((p) => ({ subjectId: p.subjectId, maxMarks: Number(p.maxMarks) })),
+                  ))
             : false,
-          parts: parts.rows
-            .filter((p) => p.examSubjectId === x.id)
-            .map(({ examSubjectId: _es, ...p }) => p),
+          parts: mine,
           children: children.rows
             .filter((k) => k.parent === x.subjectId)
             .map((k) => ({ id: k.id, code: k.code, name: k.name })),
@@ -686,9 +706,14 @@ export class ExamsService {
             pass: string | null;
             scale: string | null;
             optional: boolean;
+            is_part: boolean;
+            code: string;
+            parent: string | null;
           }>(
-            `SELECT subject_id::text, max_marks::text AS max, pass_marks::text AS pass, grade_scale_id::text AS scale, is_optional AS optional
-               FROM exam_type_subjects WHERE academic_year_id = $1 AND exam_type_id = $2 AND class_id = $3`,
+            `SELECT m.subject_id::text, m.max_marks::text AS max, m.pass_marks::text AS pass, m.grade_scale_id::text AS scale,
+                    m.is_optional AS optional, m.is_part, s.code, p.code AS parent
+               FROM exam_type_subjects m JOIN subjects s ON s.id = m.subject_id LEFT JOIN subjects p ON p.id = s.parent_id
+              WHERE m.academic_year_id = $1 AND m.exam_type_id = $2 AND m.class_id = $3`,
             [yearId, exam.examTypeId, dto.classId],
           )
         ).rows.map((x) => [x.subject_id, x]),
@@ -708,7 +733,7 @@ export class ExamsService {
             gradeScaleId: cur.gradeScaleId,
           };
         const m = master.get(s.subjectId);
-        if (m)
+        if (m && !m.is_part)
           return {
             ...s,
             maxMarks: Number(m.max),
@@ -724,6 +749,12 @@ export class ExamsService {
             isElective: cur.isElective,
             gradeScaleId: cur.gradeScaleId,
           };
+        if (m)
+          throw new DomainError(
+            'exams.master_part',
+            `${m.code} is a part of ${m.parent ?? 'its subject'} in the subject marks of ${exam.examTypeCode}, not a paper of its own`,
+            { status: 409, extra: { subjectId: s.subjectId } },
+          );
         throw new DomainError(
           'exams.not_in_master',
           `A subject is not in the subject marks of ${exam.examTypeCode} for this class: add it there first`,
@@ -807,10 +838,10 @@ export class ExamsService {
         `DELETE FROM exam_subjects WHERE exam_id = $1 AND class_id = $2 AND NOT entry_locked AND NOT (subject_id = ANY($3::bigint[]))`,
         [examId, dto.classId, subjects.map((s) => s.subjectId)],
       );
-      // parts follow a new maximum while unmarked (0295); a subject the class enters in parts (Class
-      // set-up, docs/design/67) gets them, while it has none
+      // while unmarked: the master's parts of a subject (0303); else parts follow a new maximum (0295)
+      // and a subject the class enters in parts (Class set-up, docs/design/67) gets them, while it has none
       await c.query(
-        `SELECT app.fit_parts_to_max(id), app.apply_class_parts(id) FROM exam_subjects WHERE exam_id = $1 AND class_id = $2`,
+        `SELECT app.apply_master_parts(id), app.fit_parts_to_max(id), app.apply_class_parts(id) FROM exam_subjects WHERE exam_id = $1 AND class_id = $2`,
         [examId, dto.classId],
       );
       await this.audit.stage(ctx, c, {
@@ -861,6 +892,15 @@ export class ExamsService {
           `${es.subjectCode} is entered in parts and has marks: change the maximum of its parts instead`,
           { status: 409 },
         );
+      const masterParts = (exam.subjectMarks ?? [])
+        .find((x) => x.classId === es.classId)
+        ?.rows.filter((x) => x.partOf === es.subjectId);
+      if (masterParts?.length && es.marked)
+        throw new DomainError(
+          'exams.already_marked',
+          `${es.subjectCode} is entered in parts in the subject marks, but its marks are entered as one figure: clear them to take the parts`,
+          { status: 409 },
+        );
       const over = await c.query<{ adm: string; name: string; marks: string }>(
         `SELECT s.admission_no AS adm, s.display_name AS name, me.marks::text
            FROM mark_entries me JOIN students s ON s.id = me.student_id
@@ -892,7 +932,7 @@ export class ExamsService {
         `UPDATE exam_subjects SET max_marks = $2, pass_marks = $3, grade_scale_id = $4, is_elective = $5 WHERE id = $1`,
         [examSubjectId, m.maxMarks, m.passMarks, m.gradeScaleId, m.optional],
       );
-      await c.query(`SELECT app.fit_parts_to_max($1)`, [examSubjectId]);
+      await c.query(`SELECT app.apply_master_parts($1), app.fit_parts_to_max($1)`, [examSubjectId]);
       await this.audit.stage(ctx, c, {
         action: 'exams.subjects.apply_master',
         entityType: 'exam_subjects',
@@ -934,6 +974,18 @@ export class ExamsService {
           {
             status: 409,
           },
+        );
+      // while unmarked, a subject with parts in the subject marks takes them from there (0303)
+      if (
+        !es.marked &&
+        (exam.subjectMarks ?? [])
+          .find((x) => x.classId === es.classId)
+          ?.rows.some((x) => x.partOf === es.subjectId)
+      )
+        throw new DomainError(
+          'exams.parts_from_master',
+          `The parts of ${es.subjectCode} come from the subject marks of ${exam.examTypeCode}: change them there`,
+          { status: 409 },
         );
       const names = dto.parts.map((p) => p.name.toLowerCase());
       if (new Set(names).size !== names.length)

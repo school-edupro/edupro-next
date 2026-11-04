@@ -1980,6 +1980,8 @@ export interface SubjectMarksLine {
   passMarks: number | null;
   gradeScaleId: string | null;
   optional: boolean;
+  /** a part of this subject (its parent in the subject master), not a paper of its own */
+  partOf: string | null;
 }
 
 export interface ExamSubject {

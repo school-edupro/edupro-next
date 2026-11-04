@@ -18,6 +18,8 @@ export const SaveSubjectMarksSchema = z.object({
         pass: Marks.nullable(),
         scaleId: IdSchema.nullable(),
         optional: z.boolean(),
+        /** a part of its subject (the subject above it in the subject master), not a paper of its own */
+        isPart: z.boolean().default(false),
       }),
     )
     .max(60),
