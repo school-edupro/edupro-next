@@ -465,7 +465,10 @@ export function registerProblems(def: RegisterDef): string[] {
     if (s.slot && (!s.slot.name.trim() || s.slot.members.length < 2))
       out.push(`${label}: a slot needs a name and two or more subjects`);
     if (!s.slot && !s.subjectId) out.push(`${label}: choose the subject`);
-    if (!s.columns.length) out.push(`${label}: add its columns (step 3, Columns)`);
+    if (!s.columns.length)
+      out.push(
+        `${label}: add its columns (step 3, Columns: add them, or Copy to subjects from another subject)`,
+      );
     const keys = new Set<string>();
     for (const c of s.columns) {
       const at = `${label} · ${c.name || c.key}`;

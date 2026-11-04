@@ -16,7 +16,7 @@ import { useEffect, useMemo, useState, useTransition } from 'react';
 import { RegisterColumns } from '@/components/exams/RegisterColumns';
 import { RegisterSheet } from '@/components/exams/RegisterSheet';
 import type { BuilderData } from '@/lib/mark-schemes';
-import { membersOf, sampleStudents, subjectNote } from '@/lib/register-builder';
+import { copyColumns, membersOf, sampleStudents, subjectNote } from '@/lib/register-builder';
 import { builderData, registerDefOf, saveRegister } from '@/lib/register-actions';
 
 const STEPS = ['Details', 'Subjects', 'Columns', 'Mark codes', 'Totals', 'Final'] as const;
@@ -226,21 +226,20 @@ export function RegisterBuilder({
     setDef((d) => {
       if (!on) return { ...d, subjects: d.subjects.filter((s) => s.subjectId !== id || s.slot) };
       const info = data?.subjects.find((x) => x.id === id);
-      return {
-        ...d,
-        subjects: [
-          ...d.subjects,
-          {
-            key: keyFor(info?.code ?? id),
-            subjectId: id,
-            columns: [],
-            showTotal: true,
-            round: 'none',
-            grade: true,
-            pct: true,
-          },
-        ],
+      const added: RegSubject = {
+        key: keyFor(info?.code ?? id),
+        subjectId: id,
+        columns: [],
+        showTotal: true,
+        round: 'none',
+        grade: true,
+        pct: true,
       };
+      // a subject ticked once others have columns starts with the first one's chain (copied: the exams
+      // it has, its parts shown), so it is not left without columns; it can be changed in step 3
+      const model = d.subjects.find((x) => !x.slot && x.columns.length);
+      if (model) added.columns = copyColumns(data, model, added, d, { parts: true }).columns;
+      return { ...d, subjects: [...d.subjects, added] };
     });
   // a slot made of subjects that have columns takes the first one's chain (a new slot: none yet)
   const chainOf = (d: RegisterDef, members: string[]) =>

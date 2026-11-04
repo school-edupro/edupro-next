@@ -144,4 +144,6 @@ subjects)` (a plain subject, or a slot none of whose members has a paper, in the
   slot** takes the columns of its first member that had some (the languages' chain) instead of
   starting empty; "add its columns" names the step (step 3, Columns). The subject's panel then says so in a notice
   ("Social Science is entered in parts (…), but its exam columns read only the whole marks, so the parts
-  do not show in the register.") with the button beside it — the header button was easy to miss.
+  do not show in the register.") with the button beside it — the header button was easy to miss. A subject ticked in step 2 once others have columns starts with a copy of
+  the first one's chain (`copyColumns`, its parts shown; Hindi taken out of a language slot and ticked again
+  had been left with none); "add its columns" also says "or Copy to subjects from another subject".
