@@ -33,7 +33,7 @@ export async function saveRemarks(fd: FormData) {
     .map((studentId) => ({
       studentId,
       remark: str(fd, `remark-${studentId}`),
-      // the DPS Noida cards (docs/design/65): what the pupil took part in, the class promoted to
+      // the ready-made cards (docs/design/65): what the pupil took part in, the class promoted to
       participation: str(fd, `participation-${studentId}`) || null,
       promotedTo: str(fd, `promoted-${studentId}`) || null,
     }))

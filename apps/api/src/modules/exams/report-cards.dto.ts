@@ -224,3 +224,10 @@ export const SignatureSchema = z.object({
     .optional(),
 });
 export class SignatureDto extends createZodDto(SignatureSchema) {}
+
+/** docs/design/73: a picture of a card design (its slot in the path), PNG or JPEG up to 1 MB */
+export const TemplateArtSchema = z.object({
+  contentType: z.enum(['image/png', 'image/jpeg']),
+  base64: z.string().min(10).max(1_400_000),
+});
+export class TemplateArtDto extends createZodDto(TemplateArtSchema) {}

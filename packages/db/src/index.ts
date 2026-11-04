@@ -210,6 +210,8 @@ export * from './datasets';
 export * from './masters';
 export * from './report-card-data';
 export * from './report-card-html';
+export * from './learning-record';
+export * from './learning-record-html';
 export * from './mark-scheme';
 export * from './mark-register';
 export * from './mark-register-reports';

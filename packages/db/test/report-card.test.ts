@@ -1,13 +1,16 @@
 import { describe, expect, it } from 'vitest';
 import {
   DEFAULT_LAYOUTS,
-  DPS_NOIDA_TEMPLATES,
+  READY_MADE_TEMPLATES,
   HPC_TEMPLATES,
+  HPC_V1_LAYOUT,
   TEST_SLIP_TEMPLATES,
   reportCardBody,
   reportCardDocument,
 } from '../src/report-card-html';
 import { sampleReportCardData } from '../src/report-card-data';
+import { LEARNING_RECORD_SET, learningRecordRows } from '../src/learning-record';
+import { lrAreaPlan, lrPages, type LrSection } from '../src/learning-record-html';
 
 /**
  * Sprint 17 visual-diff harness: the rendered HTML of each band's default layout against the sample
@@ -53,9 +56,9 @@ describe('report-card renderer', () => {
   });
 });
 
-describe('the DPS Noida cards (docs/design/65, part 4)', () => {
+describe('the ready-made cards (docs/design/65, part 4)', () => {
   const card = (code: string, band: Parameters<typeof sampleReportCardData>[0]) => {
-    const t = DPS_NOIDA_TEMPLATES.find((x) => x.code === code)!;
+    const t = READY_MADE_TEMPLATES.find((x) => x.code === code)!;
     return reportCardDocument(
       { layout: t.layout, bodyHtml: null, stylesCss: '', pageWidth: '210mm', pageHeight: '297mm' },
       [{ data: sampleReportCardData(band) }],
@@ -63,19 +66,19 @@ describe('the DPS Noida cards (docs/design/65, part 4)', () => {
   };
 
   it('has a card for each class group, each with a band', () => {
-    expect(DPS_NOIDA_TEMPLATES.map((t) => [t.code, t.band])).toEqual([
-      ['dps_i_ii', 'primary'],
-      ['dps_iii_v', 'primary'],
-      ['dps_vi_viii', 'middle'],
-      ['dps_ix', 'secondary'],
-      ['dps_x', 'secondary'],
-      ['dps_xi', 'senior'],
-      ['dps_xii', 'senior'],
+    expect(READY_MADE_TEMPLATES.map((t) => [t.code, t.band])).toEqual([
+      ['lr_i_ii', 'primary'],
+      ['lr_iii_v', 'primary'],
+      ['rc_vi_viii', 'middle'],
+      ['rc_ix', 'secondary'],
+      ['rc_x', 'secondary'],
+      ['rc_xi', 'senior'],
+      ['rc_xii', 'senior'],
     ]);
   });
 
   it('VI-VIII: Term 1 and Term 2 side by side from the term results, signatures, seal, key', () => {
-    const html = card('dps_vi_viii', 'middle');
+    const html = card('rc_vi_viii', 'middle');
     expect(html).toContain(
       '<th class="ctr" colspan="5">Term 1</th><th class="ctr" colspan="5">Term 2</th>',
     );
@@ -97,7 +100,7 @@ describe('the DPS Noida cards (docs/design/65, part 4)', () => {
   });
 
   it('III-V: a cover page, then grades only; participation and the class teacher', () => {
-    const html = card('dps_iii_v', 'primary');
+    const html = card('lr_iii_v', 'primary');
     expect(html).toContain('<div class="cover">');
     expect(html).toContain('Learning curve');
     expect(html.indexOf('<div class="page-break">')).toBeGreaterThan(
@@ -114,7 +117,7 @@ describe('the DPS Noida cards (docs/design/65, part 4)', () => {
   });
 
   it('IX: the parts of the card, discipline on its own', () => {
-    const html = card('dps_ix', 'secondary');
+    const html = card('rc_ix', 'secondary');
     for (const part of [
       'Part 1 · Scholastic areas',
       'Part 2 · Co-scholastic areas',
@@ -133,38 +136,178 @@ describe('the DPS Noida cards (docs/design/65, part 4)', () => {
 });
 
 describe('the holistic progress card (docs/design/65, part 5)', () => {
-  const t = HPC_TEMPLATES[0]!;
+  // the first layout's sections still print (a school's own copy may keep them)
   const doc = (data = sampleReportCardData('pre_primary')) =>
     reportCardDocument(
-      { layout: t.layout, bodyHtml: null, stylesCss: '', pageWidth: '210mm', pageHeight: '297mm' },
+      {
+        layout: HPC_V1_LAYOUT,
+        bodyHtml: null,
+        stylesCss: '',
+        pageWidth: '210mm',
+        pageHeight: '297mm',
+      },
       [{ data }],
     );
 
-  it('prints domains, goals as headings and competencies with the level per term and its word', () => {
+  it('prints domains, goals as headings and competencies with the level', () => {
     const html = doc();
-    expect(t.band).toBe('pre_primary');
+    expect(HPC_TEMPLATES[0]!.band).toBe('pre_primary');
     expect(html).toContain('<h2>My progress</h2>');
-    expect(html).toContain('<th class="ctr">T1</th><th class="ctr">T2</th>');
-    expect(html).toContain('<td class="goal" colspan="4">Has a fit and flexible body</td>');
-    expect(html).toContain(
-      '<td class="sub">Runs, jumps, climbs and balances with control</td><td class="ctr"><span class="lvl">Progressing<small>Mountain</small></span></td><td class="ctr"><span class="lvl">Proficient<small>Sky</small></span></td>',
-    );
-    expect(html).toContain('Holds a crayon; tears paper with help');
-    // a written item spans the level columns
-    expect(html).toContain('<td colspan="3">Retells a story in her own words with joy</td>');
-    expect(html).toContain('<span><strong>Beginner</strong> Stream</span>');
+    expect(html).toContain('<th class="ctr">Level</th>');
+    expect(html).toContain('<td class="goal" colspan="3">Listening skills</td>');
+    expect(html).toContain('<td class="sub">Comprehension</td>');
+    expect(html).toContain('<span><strong>A*</strong> Outstanding</span>');
   });
 
   it('prints the three voices and the portfolio; nothing without the HPC', () => {
     const html = doc();
     expect(html).toContain('<div class="k">All about me</div>');
     expect(html).toContain('She reads picture books at home every evening.');
-    expect(html).toContain('A cheerful learner who helps her friends.');
     expect(html).toContain('<figcaption>My drawing of a tree</figcaption>');
     const none = doc({ ...sampleReportCardData('pre_primary'), hpc: null });
     expect(none).not.toContain('My progress');
     expect(none).not.toContain('All about me');
-    expect(none).not.toContain('My portfolio');
+  });
+});
+
+describe('the learning record on A4 (docs/design/73)', () => {
+  const t = HPC_TEMPLATES[0]!;
+  const like = {
+    layout: t.layout,
+    bodyHtml: null,
+    stylesCss: '',
+    pageWidth: '210mm',
+    pageHeight: '297mm',
+  };
+  const pages = (html: string) => html.split('<section class="lr-page').length - 1;
+
+  it('is six whole A4 pages a pupil, with no page break between two pupils', () => {
+    const d = sampleReportCardData('pre_primary');
+    const one = reportCardDocument(like, [{ data: d }]);
+    expect(pages(one)).toBe(6);
+    const two = reportCardDocument(like, [{ data: d }, { data: d }]);
+    expect(pages(two)).toBe(12);
+    expect(two).not.toContain('<div class="page-break"></div>');
+    expect(one).toContain('.page:has(.lr-page) { padding: 0 !important; }');
+  });
+
+  it('the cover: the school, the session, the title and the boxes', () => {
+    const html = reportCardDocument(like, [{ data: sampleReportCardData('pre_primary') }]);
+    expect(html).toContain('<div class="l">Session 2026-27</div>');
+    expect(html).toContain(
+      '<div class="ti">Learning curve</div><div class="ca">(Progress record)</div>',
+    );
+    expect(html).toContain('<div class="box">My name is<b>Aarav Sharma</b></div>');
+    expect(html).toContain('<div class="box">I am a shining star of<b>VI-A</b></div>');
+    expect(html).toContain('<div class="box">I was born on<b>12-06-2014</b></div>');
+    // the pupil's name at the top of every page after the cover
+    expect(html.split('<div class="lr-who">Aarav Sharma&nbsp;&nbsp;A2481</div>').length - 1).toBe(
+      5,
+    );
+  });
+
+  it('the subjects: Term I and Term II, the skill groups, the subject remarks by term', () => {
+    const html = reportCardDocument(like, [{ data: sampleReportCardData('pre_primary') }]);
+    expect(html).toContain(
+      '<th style="width:25mm">Term I grade</th><th style="width:25mm">Term II grade</th>',
+    );
+    expect(html).toContain('<tr class="grp"><td class="side" rowspan="19">');
+    expect(html).toContain(
+      '<td class="n">Listening skills</td><td class="g"></td><td class="g"></td>',
+    );
+    expect(html).toContain(
+      '<div class="h">English remarks</div><div class="t">Reads simple sentences',
+    );
+    // Term II is not filled yet: its remark box and grades are blank
+    expect(html).toContain(
+      '</div><div class="tag">Term I</div><div class="t"></div><div class="tag">Term II</div>',
+    );
+    // English and Mathematics on one page, Hindi, EVS and General knowledge on the next (GK by initials)
+    const subjects = html.split('<h2 class="lr-title">Scholastic area</h2>');
+    expect(subjects).toHaveLength(3);
+    expect(subjects[1]).toContain('>English<');
+    expect(subjects[1]).toContain('>Mathematics<');
+    expect(subjects[2]).toContain('>Hindi<');
+    expect(subjects[2]).toContain('>GK<');
+  });
+
+  it('the co-scholastic page, the record page and the evaluation key', () => {
+    const html = reportCardDocument(like, [{ data: sampleReportCardData('pre_primary') }]);
+    const co = html
+      .split('<h2 class="lr-title">Co-scholastic area</h2>')[1]!
+      .split('</section>')[0]!;
+    expect(co).toContain('Personal and social traits');
+    expect(co).toContain('Horse riding');
+    expect(co).not.toContain('remarks');
+    expect(html).toContain('<div class="val">121</div>');
+    expect(html).toContain('<div class="val">109 / 123</div>');
+    expect(html).toContain('<div class="by">– Meera Joshi, Anita Rao</div>');
+    expect(html).toContain('Celebration of special days');
+    expect(html).toContain(
+      '<tr><td class="gr">A*</td><td>Outstanding</td><td class="rg">91 – 100 %</td></tr>',
+    );
+    expect(html).toContain(
+      '<tr><td class="gr">D</td><td>Scope for improvement</td><td class="rg">50 % and below</td></tr>',
+    );
+  });
+
+  it('keeps an area whole on a page; one longer than a page has a page of its own', () => {
+    const item = (n: number) => ({
+      code: `X${String(n)}`,
+      name: `Skill ${String(n)}`,
+      kind: 'level' as const,
+      description: null,
+      levels: [],
+      note: null,
+      descriptor: null,
+      children: [],
+    });
+    const area = (name: string, n: number) => ({
+      area: name,
+      items: Array.from({ length: n }, (_, i) => item(i)),
+    });
+    const p = lrPages([area('A', 20), area('B', 8), area('C', 5), area('D', 40)], true);
+    expect(p.map((x) => x.map((a) => a.area))).toEqual([['A', 'B'], ['C'], ['D']]);
+  });
+
+  it('any set: the observation and written areas are co-scholastic, the rest the subjects', () => {
+    const d = sampleReportCardData('pre_primary');
+    const lvl = (code: string, kind: 'level' | 'text' = 'level') => ({
+      code,
+      name: code,
+      kind,
+      description: null,
+      levels: [],
+      note: null,
+      descriptor: null,
+      children: [],
+    });
+    d.hpc = {
+      ...d.hpc!,
+      areas: [
+        { area: 'Language and literacy development · English', items: [lvl('EN1')] },
+        { area: 'Positive learning habits', items: [lvl('LH1')] },
+        { area: 'Self assessment', items: [lvl('SA1', 'text')] },
+      ],
+      scales: [{ levels: ['Rarely', 'Always'], areas: ['Positive learning habits'] }],
+    };
+    const plan = lrAreaPlan(d.hpc, t.layout.sections as LrSection[]);
+    const by = (type: string) =>
+      [...plan.entries()]
+        .filter(([s]) => s.type === type)
+        .flatMap(([, list]) => list.map((a) => a.area));
+    expect(by('lr_co_scholastic')).toEqual(['Positive learning habits', 'Self assessment']);
+    expect(by('lr_subjects')).toEqual(['Language and literacy development · English']);
+  });
+
+  it('the ready-made set: codes unique, every skill under its group', () => {
+    const rows = learningRecordRows();
+    expect(new Set(rows.map((r) => r.code)).size).toBe(rows.length);
+    expect(rows.filter((r) => r.area === 'English')).toHaveLength(19);
+    expect(rows.every((r) => !r.parentCode || rows.some((x) => x.code === r.parentCode))).toBe(
+      true,
+    );
+    expect(LEARNING_RECORD_SET.grades).toEqual(['A*', 'A', 'B*', 'B', 'C', 'D']);
   });
 });
 

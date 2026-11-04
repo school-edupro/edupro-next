@@ -6,10 +6,18 @@ import {
   reportCardDocument,
   sampleReportCardData,
   DEFAULT_LAYOUTS,
-  DPS_NOIDA_TEMPLATES,
+  READY_MADE_TEMPLATES,
   HPC_TEMPLATES,
+  HPC_V1_LAYOUT,
+  LEARNING_RECORD_KEY,
+  LEARNING_RECORD_REMARKS,
+  LEARNING_RECORD_SET,
+  LR_ART_SLOTS,
   TEST_SLIP_TEMPLATES,
+  learningRecordRows,
   type ClassBand,
+  type LrArt,
+  type ReportCardData,
 } from '@edupro/db';
 import { AuditService } from '../../common/audit/audit.service';
 import { DbService } from '../../common/db/db.service';
@@ -25,6 +33,7 @@ import type {
   GenerateCardsDto,
   PreviewDto,
   RenderBatchDto,
+  TemplateArtDto,
   UpdateReleaseDto,
   UpdateTemplateDto,
 } from './report-cards.dto';
@@ -53,6 +62,8 @@ export interface TemplateRow {
   version: number;
   status: 'active' | 'inactive';
   updatedAt: string;
+  /** docs/design/73: the design's pictures, slot → file id */
+  assets: Record<string, string>;
 }
 
 export interface ReleaseRow {
@@ -84,7 +95,7 @@ export interface ReleaseRow {
   publishedClasses: number;
 }
 
-const T_COLS = `id::text, code, name, band::text, layout, body_html, styles_css, page_width, page_height, version, status::text, updated_at`;
+const T_COLS = `id::text, code, name, band::text, layout, body_html, styles_css, page_width, page_height, version, status::text, updated_at, assets`;
 const toTemplate = (r: Record<string, unknown>): TemplateRow => ({
   id: String(r.id),
   code: String(r.code),
@@ -98,6 +109,7 @@ const toTemplate = (r: Record<string, unknown>): TemplateRow => ({
   version: Number(r.version),
   status: r.status as TemplateRow['status'],
   updatedAt: new Date(r.updated_at as string).toISOString(),
+  assets: (r.assets as Record<string, string> | null) ?? {},
 });
 
 /**
@@ -208,11 +220,14 @@ export class ReportCardsService {
   }
 
   /**
-   * The DPS Noida cards (docs/design/65, part 4) or the HPC (part 5) as templates; one the school
+   * The ready-made cards (docs/design/65, part 4) or the HPC (part 5) as templates; one the school
    * already has stays.
    */
-  async installDps(ctx: RequestContext, which: 'dps' | 'hpc' = 'dps'): Promise<TemplateRow[]> {
-    const list = which === 'hpc' ? HPC_TEMPLATES : DPS_NOIDA_TEMPLATES;
+  async installReadyMade(
+    ctx: RequestContext,
+    which: 'ready_made' | 'hpc' = 'ready_made',
+  ): Promise<TemplateRow[]> {
+    const list = which === 'hpc' ? HPC_TEMPLATES : READY_MADE_TEMPLATES;
     return this.db.tenant(requireTenant(ctx), async (c) => {
       for (const t of list)
         await c.query(
@@ -221,6 +236,7 @@ export class ReportCardsService {
            ON CONFLICT (school_id, code) DO NOTHING`,
           [t.code, t.name, t.band, JSON.stringify(t.layout)],
         );
+      if (which === 'hpc') await this.installLearningRecord(c);
       await this.audit.stage(ctx, c, {
         action: `exams.report_card.templates_${which}`,
         entityType: 'report_card_templates',
@@ -232,6 +248,219 @@ export class ReportCardsService {
         `SELECT ${T_COLS} FROM report_card_templates WHERE deleted_at IS NULL ORDER BY band, code`,
       );
       return r.rows.map(toTemplate);
+    });
+  }
+
+  /**
+   * docs/design/73: the Holistic progress card as the A4 learning record — a copy still on the first
+   * layout takes the new one (a changed copy stays, the new one beside it as "… v2"); the ready-made
+   * Learning record (I–II) set, the areas it uses, its key's grade scale and the subjects' remark
+   * categories, each only when the school has none.
+   */
+  private async installLearningRecord(c: PoolClient) {
+    const t = HPC_TEMPLATES[0]!;
+    const up = await c.query(
+      `UPDATE report_card_templates SET layout = $2::jsonb, version = version + 1, updated_at = now()
+        WHERE code = $1 AND deleted_at IS NULL AND layout = $3::jsonb`,
+      [t.code, JSON.stringify(t.layout), JSON.stringify(HPC_V1_LAYOUT)],
+    );
+    if (!up.rowCount)
+      await c.query(
+        `INSERT INTO report_card_templates (school_id, code, name, band, layout)
+         SELECT app.current_school_id(), $1, $2, $3::class_band, $4::jsonb
+          WHERE NOT EXISTS (SELECT 1 FROM report_card_templates WHERE code = $5 AND layout = $4::jsonb AND deleted_at IS NULL)
+         ON CONFLICT (school_id, code) DO NOTHING`,
+        [`${t.code}_v2`, `${t.name} v2`, t.band, JSON.stringify(t.layout), t.code],
+      );
+    // the areas, after the school's own, in the card's order
+    const set = LEARNING_RECORD_SET;
+    for (const a of set.areas)
+      await c.query(
+        `INSERT INTO indicator_areas (school_id, name, sort_order)
+         SELECT app.current_school_id(), $1::text, COALESCE((SELECT max(sort_order) FROM indicator_areas), 0) + 10
+          WHERE NOT EXISTS (SELECT 1 FROM indicator_areas WHERE lower(name) = lower($1::text))`,
+        [a.area],
+      );
+    const have = await c.query(
+      `SELECT 1 FROM indicator_sets WHERE code = $1 AND deleted_at IS NULL`,
+      [set.code],
+    );
+    if (!have.rowCount) {
+      const setId = (
+        await c.query<{ id: string }>(
+          `INSERT INTO indicator_sets (school_id, code, name, grades, kind, level_words, status, created_by, updated_by)
+           VALUES (app.current_school_id(), $1, $2, $3::text[], 'hpc', $4::jsonb, 'active', app.current_user_id(), app.current_user_id())
+           RETURNING id::text`,
+          [set.code, set.name, set.grades, JSON.stringify(set.levelWords)],
+        )
+      ).rows[0]!.id;
+      const ids = new Map<string, string>();
+      for (const r of learningRecordRows()) {
+        const id = (
+          await c.query<{ id: string }>(
+            `INSERT INTO indicators (school_id, set_id, code, name, area, sort_order, parent_id, kind)
+             VALUES (app.current_school_id(), $1, $2, $3, $4, $5, $6, 'level') RETURNING id::text`,
+            [
+              setId,
+              r.code,
+              r.name,
+              r.area,
+              r.sortOrder,
+              r.parentCode ? ids.get(r.parentCode)! : null,
+            ],
+          )
+        ).rows[0]!.id;
+        ids.set(r.code, id);
+      }
+    }
+    const key = LEARNING_RECORD_KEY;
+    const scale = await c.query(
+      `SELECT 1 FROM grade_scales WHERE code = $1 AND deleted_at IS NULL`,
+      [key.code],
+    );
+    if (!scale.rowCount) {
+      const scaleId = (
+        await c.query<{ id: string }>(
+          `INSERT INTO grade_scales (school_id, code, name, description, status)
+           VALUES (app.current_school_id(), $1, $2, 'The evaluation key of the Learning record (I–II)', 'active')
+           RETURNING id::text`,
+          [key.code, key.name],
+        )
+      ).rows[0]!.id;
+      for (const [i, b] of key.bands.entries())
+        await c.query(
+          `INSERT INTO grade_bands (school_id, scale_id, min_pct, max_pct, grade, remark, sort_order)
+           VALUES (app.current_school_id(), $1, $2, $3, $4, $5, $6)`,
+          [scaleId, b.minPct, b.maxPct, b.grade, b.remark, i],
+        );
+    }
+    // the subjects' remark categories (Balvatika to II), when the subject has none
+    const early = (
+      await c.query<{ id: string }>(
+        `SELECT id::text FROM classes
+          WHERE deleted_at IS NULL AND (band::text = 'pre_primary' OR upper(code) IN ('I', 'II', '1', '2'))`,
+      )
+    ).rows.map((x) => x.id);
+    for (const [i, r] of LEARNING_RECORD_REMARKS.entries()) {
+      const sub = await c.query<{ id: string }>(
+        `SELECT id::text FROM subjects WHERE deleted_at IS NULL AND (upper(code) = ANY($1::text[]) OR lower(name) = ANY($2::text[]))
+          ORDER BY (upper(code) = ANY($1::text[])) DESC, id LIMIT 1`,
+        [r.subjects.map((x) => x.toUpperCase()), r.subjects.map((x) => x.toLowerCase())],
+      );
+      const subjectId = sub.rows[0]?.id ?? null;
+      const exists = await c.query(
+        `SELECT 1 FROM remark_categories WHERE code = $1 OR ($2::bigint IS NOT NULL AND subject_id = $2::bigint)`,
+        [r.code, subjectId],
+      );
+      if (exists.rowCount) continue;
+      await c.query(
+        `INSERT INTO remark_categories (school_id, code, name, subject_id, class_ids, free_text, sort_order, status, updated_by)
+         VALUES (app.current_school_id(), $1, $2, $3, $4::bigint[], true, $5, 'active', app.current_user_id())`,
+        [r.code, r.name, subjectId, early, 200 + i * 10],
+      );
+    }
+  }
+
+  /** docs/design/73: a design's pictures as data URIs, and the school's logo on the card. */
+  private async pictures(
+    c: PoolClient,
+    t: Pick<TemplateRow, 'assets'>,
+    data: ReportCardData,
+  ): Promise<LrArt> {
+    const art: LrArt = {};
+    const slots = Object.entries(t.assets ?? {}).filter(([k]) =>
+      (LR_ART_SLOTS as readonly string[]).includes(k),
+    );
+    if (slots.length) {
+      const files = await c.query<{ id: string; object_key: string; content_type: string }>(
+        `SELECT id::text, object_key, content_type FROM files WHERE id = ANY($1::bigint[]) AND deleted_at IS NULL`,
+        [slots.map(([, id]) => id)],
+      );
+      const list = slots.map(([slot, id]) => {
+        const f = files.rows.find((x) => x.id === id);
+        return {
+          slot,
+          objectKey: f?.object_key ?? null,
+          contentType: f?.content_type ?? null,
+          dataUri: null as string | null,
+        };
+      });
+      await this.signatures.fill(list);
+      for (const x of list) art[x.slot as keyof LrArt] = x.dataUri;
+    }
+    if (!data.school.logoObjectKey) {
+      const logo = await c.query<{ object_key: string; content_type: string }>(
+        `SELECT f.object_key, f.content_type FROM schools s JOIN files f ON f.id::text = NULLIF(s.branding->>'logoFileId', '') AND f.deleted_at IS NULL
+          WHERE s.id = app.current_school_id()`,
+      );
+      data.school.logoObjectKey = logo.rows[0]?.object_key ?? null;
+      data.school.logoContentType = logo.rows[0]?.content_type ?? null;
+    }
+    const logo = {
+      objectKey: data.school.logoObjectKey ?? null,
+      contentType: data.school.logoContentType ?? null,
+      dataUri: null as string | null,
+    };
+    await this.signatures.fill([logo]);
+    data.school.logoDataUri = logo.dataUri;
+    return art;
+  }
+
+  /** docs/design/73: a picture of a card design, set, shown or taken out (slot: cover_art, logo_2 …). */
+  async setArt(ctx: RequestContext, id: string, slot: string, dto: TemplateArtDto) {
+    if (!(LR_ART_SLOTS as readonly string[]).includes(slot))
+      throw new DomainError('validation-failed', 'Not a picture of the card', { status: 400 });
+    const tenant = requireTenant(ctx);
+    return this.db.tenant(tenant, async (c) => {
+      const t = await this.findTemplate(c, id);
+      if (!t) throw new DomainError('not-found', 'Template not found', { status: 404 });
+      const fileId = await this.signatures.storeImage(c, tenant.schoolId, dto, {
+        maxBytes: 1_000_000,
+        prefix: 'card-art',
+        owner: 'report_card_template',
+      });
+      await c.query(
+        `UPDATE report_card_templates SET assets = assets || jsonb_build_object($2::text, $3::text), updated_at = now() WHERE id = $1`,
+        [id, slot, fileId],
+      );
+      await this.audit.stage(ctx, c, {
+        action: 'exams.report_card.template_art',
+        entityType: 'report_card_templates',
+        entityId: id,
+        after: { slot, fileId },
+      });
+      return (await this.findTemplate(c, id))!;
+    });
+  }
+
+  async removeArt(ctx: RequestContext, id: string, slot: string) {
+    return this.db.tenant(requireTenant(ctx), async (c) => {
+      const t = await this.findTemplate(c, id);
+      if (!t) throw new DomainError('not-found', 'Template not found', { status: 404 });
+      await c.query(
+        `UPDATE report_card_templates SET assets = assets - $2::text, updated_at = now() WHERE id = $1`,
+        [id, slot],
+      );
+      await this.audit.stage(ctx, c, {
+        action: 'exams.report_card.template_art_removed',
+        entityType: 'report_card_templates',
+        entityId: id,
+        after: { slot },
+      });
+      return (await this.findTemplate(c, id))!;
+    });
+  }
+
+  async artImage(ctx: RequestContext, id: string, slot: string) {
+    return this.db.tenant(requireTenant(ctx), async (c) => {
+      const t = await this.findTemplate(c, id);
+      const fileId = t?.assets[slot];
+      const img = fileId ? await this.signatures.fileImage(c, fileId) : null;
+      if (!img) throw new DomainError('not-found', 'No picture', { status: 404 });
+      return {
+        filename: `${slot}.${img.contentType === 'image/png' ? 'png' : 'jpg'}`,
+        ...img,
+      };
     });
   }
 
@@ -355,11 +584,12 @@ export class ReportCardsService {
         });
         await this.signatures.fill(data.signatures ?? []);
         await this.signatures.fill(data.hpc?.portfolio ?? []);
-        return { html: reportCardDocument(like, [{ data }]) };
+        const art = await this.pictures(c, t, data);
+        return { html: reportCardDocument({ ...like, art }, [{ data }]) };
       }
-      return {
-        html: reportCardDocument(like, [{ data: sampleReportCardData(dto.band ?? t.band) }]),
-      };
+      const sample = sampleReportCardData(dto.band ?? t.band);
+      const art = await this.pictures(c, t, sample);
+      return { html: reportCardDocument({ ...like, art }, [{ data: sample }]) };
     });
   }
 
@@ -1408,6 +1638,7 @@ export class ReportCardsService {
     });
     await this.signatures.fill(data.signatures ?? []);
     await this.signatures.fill(data.hpc?.portfolio ?? []);
+    const art = await this.pictures(c, t, data);
     return reportCardDocument(
       {
         layout: t.layout,
@@ -1415,6 +1646,7 @@ export class ReportCardsService {
         stylesCss: t.stylesCss,
         pageWidth: t.pageWidth,
         pageHeight: t.pageHeight,
+        art,
       },
       [{ data }],
     );

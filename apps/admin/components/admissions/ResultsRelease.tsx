@@ -33,7 +33,7 @@ const stepWords = (x: ResultsReleaseLog) => {
 };
 
 /**
- * Results to families (docs/design/57, part 4), the DPS "Adm Unlock": from a date and time the
+ * Results to families (docs/design/57, part 4), the legacy "Adm Unlock": from a date and time the
  * candidate portal shows each part's marks, the total and %. Changed or withdrawn freely until it
  * passes; once published, revoked or moved with a reason (a later time hides the marks again until
  * then, docs/design/59), and the families may be told by email, SMS and WhatsApp. Every step is in the

@@ -16,7 +16,7 @@ import { apiFetch, getMe } from '@/lib/api';
 const okId = (x: string | undefined) => (x && /^\d{1,18}$/.test(x) ? x : undefined);
 
 /**
- * Test results (docs/design/57, part 2), the DPS "Result Report": for a session, class and Test or
+ * Test results (docs/design/57, part 2), the legacy "Result Report": for a session, class and Test or
  * Interview stage, each candidate with marks by part of the class's paper, total, % and below cut-off;
  * entered on the screen or by the class's sheet (Select / Hold decided with the marks); filtered by
  * slot, name or number, percentage band, cut-off and state; exported as Excel or PDF. With no class

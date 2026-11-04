@@ -1,6 +1,6 @@
 # 73 · The learning record on A4: the Balvatika–II card like the school's, no "DPS" in the product
 
-Status: planned 4 Nov 2026 (decisions below); parts 1–3 to build on "go part N"
+Status: built 4 Nov 2026, parts 1–3 (migrations 0307–0308)
 
 ## Why
 
@@ -168,3 +168,46 @@ shows "Ready-made scheme (DPS Noida)" with the codes `DPS_VI_VIII`, `DPS_IX`, `D
 
 - Alpha's draft release "Class I to III" (ASS1) uses `hpc_foundational` for Classes I, II and III; Class
   III takes the NEP set `HPC_CLASS1` too (the Class I set), filled with sample grades on 4 Nov.
+
+## As built (4 Nov 2026, parts 1–3)
+
+- **0307** renamed the ready-made cards in every school (518 rows: codes `lr_i_ii`, `lr_iii_v`,
+  `rc_vi_viii` … `rc_xii`; the shipped names to "Learning record (I-II)" … "Report card XII (pre-term /
+  mid-term)", a school's own name kept) and `mark_schemes.preset` `DPS_*` → `CLASS_*` (130 rows).
+  `READY_MADE_TEMPLATES`, `POST /exams/report-cards/templates/ready-made` (`installReadyMade`), the
+  buttons **Install the ready-made cards** and, new, **Install the learning record (Balvatika–II)**
+  (Card designs), "Ready-made scheme" on Registers; comments and API descriptions without the name.
+- **Data** (`report-card-data.ts`): `ReportCardHpc.terms` (the year's exams with the card's set code
+  for the class by date, `filled` up to the release's last exam; per term the remark, participation,
+  promoted to, attendance, height / weight, the remarks by category with the subject's name and code),
+  `termLevels` / `termNotes` per item, `key` (the set's grades and words, the % of an active grade scale
+  with exactly those grades, `LR_KEY` first), `setCode`; `classTeachers`; the school's logo
+  (`branding.logoFileId`) — filled now by the preview, the family's page and the worker (it was never
+  printed before). The sample is the Learning record with Term I filled.
+- **Ready-made set** (`learning-record.ts`): `LR_I_II` (7 areas, skill groups as headings, A*–D with
+  words), `LR_KEY` (91–100 … 0–50), remark categories `LR_ENG`, `LR_MAT`, `LR_HIN`, `LR_EVS` (the subject
+  by code or name; classes: the pre-primary band and I–II), the areas added to the area master after
+  the school's own; all by `POST /exams/report-cards/templates/hpc`, each once.
+- **Renderer** (`learning-record-html.ts`): `lr_cover`, `lr_subjects`, `lr_co_scholastic`, `lr_record`,
+  `lr_key` as 210 × 296 mm pages (`.page:has(.lr-page)` drops the frame's margins; no page break
+  between pupils); `lrAreaPlan` (co-scholastic: the named areas, else those on levels of their own or
+  written; subjects: the named, else the rest; an area no section names goes to the last subjects
+  section); `lrPages` (areas whole; rows of 7.6 mm, names wrapping at the skill column's width); an
+  area's remarks by its subject (the name, or the part after "·"); the side label in initials when too
+  long ("GK"); the key with the other scales' lines. The Holistic progress card's template is this
+  layout (`HPC_V1_LAYOUT` kept): 0308 moved every copy still on the first layout (30) and the install
+  does it too (a changed copy: the new one beside it as `hpc_foundational_v2`).
+- **Pictures** (0308 `report_card_templates.assets`): `PUT / GET / DELETE
+/exams/report-cards/templates/:id/art/:slot` (slots `cover_art`, `cover_corner`, `logo_2`,
+  `scholastic`, `co_scholastic`, `record`; PNG / JPEG up to 1 MB, stored like the signatures through
+  `ReportCardSignaturesService.storeImage`); the designer's **Pictures** (upload, replace, remove; shown
+  through `/api/report-cards/templates/[id]/art/[slot]`); the worker fills them and the logo.
+- Not printed on the new pages: the HPC's three voices and the portfolio (the first layout's sections
+  still render for a school that keeps them).
+- Tests: `packages/db/test/report-card.test.ts` (the first layout's sections; the learning record:
+  six pages, two pupils twelve, the cover, the subjects and remarks by term, co-scholastic / record /
+  key, pages keeping areas whole, the plan for any set, the ready-made rows); `exam-hpc.e2e-spec.ts`
+  (the card and the ready-made set once, Term I then Term II, the pictures); `exam-schemes` /
+  `exam-promotion-remarks` on the new route and codes; 13 related suites (104 tests). The sample and a
+  real Class III card (Alpha, NCERT set) printed to A4 PDF with Chromium as the worker does (six and
+  eight pages, nothing split); Card designs and the designer's pictures with axe in a throwaway school.

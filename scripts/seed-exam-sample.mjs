@@ -19,7 +19,7 @@
  *   4. The stage of mid-October: PT1, PT2 and both activity tests submitted, verified and worked out;
  *      Term I submitted for verification, the second class's B section Science and Social Science still
  *      in progress, the first class's A section Computer Science entered but not submitted.
- *   5. "Term I result (sample)": the DPS VI-VIII scheme (periodic tests 15 + activities 5 + term 80)
+ *   5. "Term I result (sample)": the ready-made VI-VIII scheme (periodic tests 15 + activities 5 + term 80)
  *      for these classes and those it had before, locked and worked out.
  *
  * Needs the local database (DATABASE_MIGRATOR_URL on localhost, read from .env when not set) and the API
@@ -650,7 +650,7 @@ const scheme = await api(ADMIN, 'POST', '/exams/schemes', {
   termCode: 'T1',
   // in the exam's class order
   classIds: exam.PT1.classes.map((k) => k.classId).filter((id) => schemeClassIds.has(id)),
-  preset: 'DPS_VI_VIII',
+  preset: 'CLASS_VI_VIII',
   examMap: {
     MT1: exam.PT1.id,
     MT2: exam.PT2.id,

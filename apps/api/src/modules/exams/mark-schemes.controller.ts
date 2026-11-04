@@ -27,7 +27,7 @@ export class MarkSchemesController {
   constructor(private readonly svc: MarkSchemesService) {}
 
   @Get('presets')
-  @ApiOperation({ summary: 'The ready-made schemes (the old DPS Noida formulas)' })
+  @ApiOperation({ summary: 'The ready-made schemes' })
   @AuthenticatedOnly()
   presets() {
     return this.svc.presets();

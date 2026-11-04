@@ -504,7 +504,7 @@ export class MarkSchemesService {
     return r.rows;
   }
 
-  /** a ready-made scheme (DPS Noida) as a register: its columns under every subject, languages in a slot */
+  /** a ready-made scheme as a register: its columns under every subject, languages in a slot */
   private async fromPreset(
     c: PoolClient,
     yearId: string,

@@ -172,6 +172,17 @@ see who submitted or verified it and to submit, verify, send back or reopen it.
      The release opens in its workspace, with four steps:
    - **Set-up**: the name, the exams and the card design of each class (a class's own design comes
      before its band's: Class IX and X can print different cards).
+     **Card designs** (Report cards → Card designs) has the ready-made designs: **Install the
+     ready-made cards** (Learning record I–II and III–V, Report card VI–VIII, IX, X, XI, XII) and
+     **Install the learning record (Balvatika–II)**. The learning record prints on A4 like the school's
+     old card: the cover ("My name is …", the photo), the subjects' skills with a Term I and a Term II
+     grade and each subject's remarks beside them, the co-scholastic areas, health / attendance / "I
+     participated in" / "My teachers say" / signatures, and the evaluation key. The terms are the year's
+     exams that use the card's indicator set, by date: a Term I card leaves Term II blank. Installing it
+     also adds the indicator set **Learning record (I–II)** (A* to D), its key and English, Mathematics,
+     Hindi and EVS remark categories; give the set to the Class I–II exams (Exams → Set-up), or keep the
+     NCERT set, which prints on the same pages. In the **Designer** of a learning record, **Pictures**
+     takes the school's own pictures (cover, a second emblem, one per page; PNG or JPEG up to 1 MB).
    - **Readiness**: class by class, a checklist of what is done (✓) and what is still needed (!): the
      card design, the term result worked out from a locked mark register, each exam's papers verified,
      remarks and attendance. Each line links to the page that fixes it. The principal can publish

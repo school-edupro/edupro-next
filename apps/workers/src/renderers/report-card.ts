@@ -5,6 +5,7 @@ import {
   tenantForJob,
   type Db,
   type JobEnvelope,
+  type LrArt,
   type ReportCardData,
 } from '@edupro/db';
 import type { StorageDriver } from '@edupro/storage';
@@ -16,6 +17,8 @@ interface TemplateLike {
   stylesCss: string;
   pageWidth: string;
   pageHeight: string;
+  /** docs/design/73: the design's pictures as data URIs */
+  art?: LrArt;
 }
 
 interface Release {
@@ -70,6 +73,7 @@ async function loadRelease(c: Q, id: string): Promise<Release> {
 
 async function templateFor(
   c: Q,
+  storage: StorageDriver,
   rel: Release,
   band: string,
   classId?: string | null,
@@ -83,15 +87,32 @@ async function templateFor(
     styles_css: string;
     page_width: string;
     page_height: string;
+    assets: Record<string, string> | null;
   }>(
     byId
-      ? `SELECT id::text, layout, body_html, styles_css, page_width, page_height FROM report_card_templates WHERE id = $1 AND deleted_at IS NULL`
-      : `SELECT id::text, layout, body_html, styles_css, page_width, page_height FROM report_card_templates WHERE band = $1::class_band AND status = 'active' AND deleted_at IS NULL ORDER BY code LIMIT 1`,
+      ? `SELECT id::text, layout, body_html, styles_css, page_width, page_height, assets FROM report_card_templates WHERE id = $1 AND deleted_at IS NULL`
+      : `SELECT id::text, layout, body_html, styles_css, page_width, page_height, assets FROM report_card_templates WHERE band = $1::class_band AND status = 'active' AND deleted_at IS NULL ORDER BY code LIMIT 1`,
     [byId ?? band],
   );
   const t = r.rows[0];
   if (!t) throw new Error(`no report-card template for band ${band}`);
+  // docs/design/73: the school's pictures of the design, as data URIs
+  const art: LrArt = {};
+  const slots = Object.entries(t.assets ?? {});
+  if (slots.length) {
+    const files = await c.query<{ id: string; object_key: string; content_type: string }>(
+      `SELECT id::text, object_key, content_type FROM files WHERE id = ANY($1::bigint[]) AND deleted_at IS NULL`,
+      [slots.map(([, id]) => id)],
+    );
+    for (const [slot, id] of slots) {
+      const f = files.rows.find((x) => x.id === id);
+      art[slot as keyof LrArt] = f
+        ? await photoDataUri(storage, f.object_key, f.content_type)
+        : null;
+    }
+  }
   return {
+    art,
     id: t.id,
     layout: t.layout,
     bodyHtml: t.body_html,
@@ -118,6 +139,12 @@ async function pupilCard(
     storage,
     data.student.photoObjectKey,
     data.student.photoContentType,
+  );
+  // the school's logo (docs/design/73)
+  data.school.logoDataUri = await photoDataUri(
+    storage,
+    data.school.logoObjectKey ?? null,
+    data.school.logoContentType ?? null,
   );
   for (const g of [...(data.signatures ?? []), ...(data.hpc?.portfolio ?? [])])
     g.dataUri = await photoDataUri(storage, g.objectKey, g.contentType);
@@ -179,7 +206,13 @@ export async function renderReportCard(
   return db.withTenant(tenantForJob(envelope, year), async (c) => {
     const rel = await loadRelease(c as Q, releaseId);
     const card = await pupilCard(c as Q, storage, rel, studentId);
-    const t = await templateFor(c as Q, rel, card.data.student.band, card.data.student.classId);
+    const t = await templateFor(
+      c as Q,
+      storage,
+      rel,
+      card.data.student.band,
+      card.data.student.classId,
+    );
     await recordCard(c as Q, rel, studentId, exportId, card.withheld);
     return { html: reportCardDocument(t, [card]), width: t.pageWidth, height: t.pageHeight };
   });
@@ -218,6 +251,7 @@ export async function renderReportCardBatch(
       );
     const t = await templateFor(
       c as Q,
+      storage,
       rel,
       bandFor(k.rows[0].band, k.rows[0].display_order),
       k.rows[0].class_id,

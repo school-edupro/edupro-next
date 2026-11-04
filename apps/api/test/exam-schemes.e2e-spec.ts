@@ -1,5 +1,5 @@
 /**
- * Mark schemes and registers (docs/design/65, part 3): a scheme from the ready-made DPS Noida VI-VIII
+ * Mark schemes and registers (docs/design/65, part 3): a scheme from the ready-made VI-VIII
  * formula (PT 15 + SE 5 + term 80) with its exams mapped, tried on a section as a draft, locked as the
  * class's term 1 result and worked out into term results (codes, compartment, competition ranks);
  * another result scheme for the same class and term is refused; a new version replaces the old one;
@@ -153,13 +153,19 @@ describe('mark schemes and registers (e2e)', () => {
       code: string;
       examKeys: Array<{ key: string }>;
     }>;
-    expect(p.map((x) => x.code)).toEqual(['DPS_VI_VIII', 'DPS_IX', 'DPS_X', 'DPS_XI', 'DPS_XII']);
+    expect(p.map((x) => x.code)).toEqual([
+      'CLASS_VI_VIII',
+      'CLASS_IX',
+      'CLASS_X',
+      'CLASS_XI',
+      'CLASS_XII',
+    ]);
     const short = await call(admin, 'POST', '/exams/schemes', {
       name: 'Term 1 result',
       purpose: 'result',
       termCode: 't1',
       classIds: [classId],
-      preset: 'DPS_VI_VIII',
+      preset: 'CLASS_VI_VIII',
       examMap: { MT1: exam.MT1 },
     });
     expect(short.statusCode).toBe(400);
@@ -169,7 +175,7 @@ describe('mark schemes and registers (e2e)', () => {
       purpose: 'result',
       termCode: 't1',
       classIds: [classId],
-      preset: 'DPS_VI_VIII',
+      preset: 'CLASS_VI_VIII',
       examMap: map(),
     });
     expect(ok.statusCode).toBe(201);
@@ -265,7 +271,7 @@ describe('mark schemes and registers (e2e)', () => {
       purpose: 'result',
       termCode: 'T1',
       classIds: [classId],
-      preset: 'DPS_VI_VIII',
+      preset: 'CLASS_VI_VIII',
       examMap: map(),
     });
     const clash = await call(admin, 'POST', `/exams/schemes/${other.json().id as string}/lock`);
@@ -374,35 +380,35 @@ describe('mark schemes and registers (e2e)', () => {
           name: 'A register of my own',
           purpose: 'register',
           classIds: [classId],
-          preset: 'DPS_VI_VIII',
+          preset: 'CLASS_VI_VIII',
           examMap: map(),
         })
       ).statusCode,
     ).toBe(403);
   });
 
-  // ---- part 4: the DPS Noida cards ------------------------------------------------------------------
+  // ---- part 4: the ready-made cards ------------------------------------------------------------------
   const PNG =
     'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=';
 
-  it('installs the DPS Noida cards; signatures by role with images, the seal', async () => {
-    const t = await call(admin, 'POST', '/exams/report-cards/templates/dps');
+  it('installs the ready-made cards; signatures by role with images, the seal', async () => {
+    const t = await call(admin, 'POST', '/exams/report-cards/templates/ready-made');
     expect(t.statusCode).toBe(201);
-    const dps = (t.json().data as Array<{ id: string; code: string; band: string }>).filter((x) =>
-      x.code.startsWith('dps_'),
+    const ready = (t.json().data as Array<{ id: string; code: string; band: string }>).filter((x) =>
+      /^(lr|rc)_/.test(x.code),
     );
-    expect(dps.map((x) => x.code)).toEqual(
+    expect(ready.map((x) => x.code)).toEqual(
       expect.arrayContaining([
-        'dps_i_ii',
-        'dps_iii_v',
-        'dps_vi_viii',
-        'dps_ix',
-        'dps_x',
-        'dps_xi',
-        'dps_xii',
+        'lr_i_ii',
+        'lr_iii_v',
+        'rc_vi_viii',
+        'rc_ix',
+        'rc_x',
+        'rc_xi',
+        'rc_xii',
       ]),
     );
-    ids.dpsMiddle = dps.find((x) => x.code === 'dps_vi_viii')!.id;
+    ids.readyMiddle = ready.find((x) => x.code === 'rc_vi_viii')!.id;
     const url = '/exams/report-cards/signatures';
     expect(
       (
@@ -484,7 +490,7 @@ describe('mark schemes and registers (e2e)', () => {
           termCode: 'T1X',
           name: 'Wrong key',
           examIds: [exam.T1],
-          templates: { 'class-6': ids.dpsMiddle },
+          templates: { 'class-6': ids.readyMiddle },
         })
       ).statusCode,
     ).toBe(400);
@@ -492,14 +498,14 @@ describe('mark schemes and registers (e2e)', () => {
       termCode: 'T1',
       name: 'Term 1',
       examIds: [exam.MT1, exam.MT2, exam.SE1, exam.SE2, exam.T1],
-      templates: { [`class_${classId}`]: ids.dpsMiddle },
+      templates: { [`class_${classId}`]: ids.readyMiddle },
     });
     expect(rel.statusCode).toBe(201);
     ids.release = rel.json().id;
     const pv = await call(
       admin,
       'POST',
-      `/exams/report-cards/templates/${ids.dpsMiddle!}/preview`,
+      `/exams/report-cards/templates/${ids.readyMiddle!}/preview`,
       {
         releaseId: ids.release,
         studentId: student.Asha,

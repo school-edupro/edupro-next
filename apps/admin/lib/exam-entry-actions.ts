@@ -429,12 +429,59 @@ export async function markSchemeStep(fd: FormData) {
   );
 }
 
-// ---- the DPS Noida cards (docs/design/65, part 4) -------------------------------------------------
-export async function installDpsCards() {
+// ---- the ready-made cards (docs/design/65, part 4) -------------------------------------------------
+export async function installReadyMadeCards() {
   return run(
     '/exams/report-cards/templates',
-    () => apiFetch('/exams/report-cards/templates/dps', { method: 'POST' }),
-    'The DPS Noida cards are installed: choose them per class on the release',
+    () => apiFetch('/exams/report-cards/templates/ready-made', { method: 'POST' }),
+    'The ready-made cards are installed: choose them per class on the release',
+  );
+}
+
+/** docs/design/73: the learning record (Balvatika to II) and its ready-made set, key and remarks */
+export async function installLearningRecord() {
+  return run(
+    '/exams/report-cards/templates',
+    () => apiFetch('/exams/report-cards/templates/hpc', { method: 'POST' }),
+    'The learning record is installed: give the set Learning record (I–II) to the Class I–II exams, or keep yours',
+  );
+}
+
+/** docs/design/73: a card design's picture (PNG or JPEG up to 1 MB) */
+export async function saveCardArt(fd: FormData) {
+  const id = str(fd, 'templateId');
+  const slot = str(fd, 'slot');
+  const path = `/exams/report-cards/templates?edit=${id}`;
+  if (!okId(id) || !/^[a-z0-9_]{2,20}$/.test(slot))
+    back('/exams/report-cards/templates', 'not-found');
+  const file = fd.get('file');
+  if (!(file instanceof File) || file.size === 0)
+    back(path, 'validation-failed', 'Choose a picture');
+  if (!['image/png', 'image/jpeg'].includes(file.type))
+    back(path, 'validation-failed', 'The picture must be a PNG or JPEG');
+  if (file.size > 1_000_000) back(path, 'validation-failed', 'The picture is larger than 1 MB');
+  const base64 = Buffer.from(await file.arrayBuffer()).toString('base64');
+  return run(
+    path,
+    () =>
+      apiFetch(`/exams/report-cards/templates/${id}/art/${slot}`, {
+        method: 'PUT',
+        body: JSON.stringify({ contentType: file.type, base64 }),
+      }),
+    'Picture saved',
+  );
+}
+
+export async function removeCardArt(fd: FormData) {
+  const id = str(fd, 'templateId');
+  const slot = str(fd, 'slot');
+  const path = `/exams/report-cards/templates?edit=${id}`;
+  if (!okId(id) || !/^[a-z0-9_]{2,20}$/.test(slot))
+    back('/exams/report-cards/templates', 'not-found');
+  return run(
+    path,
+    () => apiFetch(`/exams/report-cards/templates/${id}/art/${slot}`, { method: 'DELETE' }),
+    'Picture taken out',
   );
 }
 

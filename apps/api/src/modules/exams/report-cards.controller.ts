@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Patch, Post, Put, Query } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Post, Put, Query } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { RequirePermission } from '../../common/access/require-permission.decorator';
 import { DomainError } from '../../common/errors/domain-error';
@@ -11,6 +11,7 @@ import {
   GenerateCardsDto,
   HoldDto,
   SignatureDto,
+  TemplateArtDto,
   PreviewDto,
   RenderBatchDto,
   REPORT_CARDS,
@@ -30,20 +31,20 @@ export class ReportCardsController {
     private readonly signatures: ReportCardSignaturesService,
   ) {}
 
-  @Post('templates/dps')
+  @Post('templates/ready-made')
   @ApiOperation({
-    summary: 'Install the DPS Noida report cards (I-II, III-V, VI-VIII, IX, X, XI, XII)',
+    summary: 'Install the ready-made report cards (I-II, III-V, VI-VIII, IX, X, XI, XII)',
   })
   @RequirePermission(REPORT_CARDS.manage)
-  async installDps(@ReqCtx() ctx: RequestContext) {
-    return { data: await this.cards.installDps(ctx) };
+  async installReadyMade(@ReqCtx() ctx: RequestContext) {
+    return { data: await this.cards.installReadyMade(ctx) };
   }
 
   @Post('templates/hpc')
   @ApiOperation({ summary: 'Install the holistic progress card (Balvatika to II)' })
   @RequirePermission(REPORT_CARDS.manage)
   async installHpc(@ReqCtx() ctx: RequestContext) {
-    return { data: await this.cards.installDps(ctx, 'hpc') };
+    return { data: await this.cards.installReadyMade(ctx, 'hpc') };
   }
 
   @Get('signatures')
@@ -106,6 +107,35 @@ export class ReportCardsController {
     @Body() body: UpdateTemplateDto,
   ) {
     return this.cards.updateTemplate(ctx, id, body);
+  }
+
+  @Put('templates/:id/art/:slot')
+  @ApiOperation({
+    summary:
+      "A card design's picture (docs/design/73): cover_art, cover_corner, logo_2, scholastic, co_scholastic, record",
+  })
+  @RequirePermission(REPORT_CARDS.manage)
+  setArt(
+    @ReqCtx() ctx: RequestContext,
+    @Param('id') id: string,
+    @Param('slot') slot: string,
+    @Body() body: TemplateArtDto,
+  ) {
+    return this.cards.setArt(ctx, id, slot, body);
+  }
+
+  @Delete('templates/:id/art/:slot')
+  @ApiOperation({ summary: "Take a card design's picture out" })
+  @RequirePermission(REPORT_CARDS.manage)
+  removeArt(@ReqCtx() ctx: RequestContext, @Param('id') id: string, @Param('slot') slot: string) {
+    return this.cards.removeArt(ctx, id, slot);
+  }
+
+  @Get('templates/:id/art/:slot')
+  @ApiOperation({ summary: "A card design's picture (base64), for the designer" })
+  @RequirePermission(REPORT_CARDS.view)
+  artImage(@ReqCtx() ctx: RequestContext, @Param('id') id: string, @Param('slot') slot: string) {
+    return this.cards.artImage(ctx, id, slot);
   }
 
   @Post('templates/:id/preview')

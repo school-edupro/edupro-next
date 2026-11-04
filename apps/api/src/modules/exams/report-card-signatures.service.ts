@@ -62,11 +62,27 @@ export class ReportCardSignaturesService {
   }
 
   private async image(c: PoolClient, schoolId: string, img: NonNullable<SignatureDto['image']>) {
+    return this.storeImage(c, schoolId, img, {
+      maxBytes: 300_000,
+      prefix: 'signature',
+      owner: 'report_card_signature',
+    });
+  }
+
+  /** A PNG or JPEG for the cards (a signature; a card design's picture, docs/design/73): the file's id. */
+  async storeImage(
+    c: PoolClient,
+    schoolId: string,
+    img: { contentType: 'image/png' | 'image/jpeg'; base64: string },
+    o: { maxBytes: number; prefix: string; owner: string },
+  ) {
     const bytes = Buffer.from(img.base64, 'base64');
-    if (bytes.length > 300_000)
-      throw new DomainError('validation-failed', 'The image is larger than 300 KB', {
-        status: 400,
-      });
+    if (bytes.length > o.maxBytes)
+      throw new DomainError(
+        'validation-failed',
+        `The image is larger than ${o.maxBytes >= 1_000_000 ? `${String(Math.round(o.maxBytes / 1_000_000))} MB` : `${String(Math.round(o.maxBytes / 1000))} KB`}`,
+        { status: 400 },
+      );
     const png = bytes.subarray(0, 4).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47]));
     const jpg = bytes.subarray(0, 3).equals(Buffer.from([0xff, 0xd8, 0xff]));
     if ((img.contentType === 'image/png' && !png) || (img.contentType === 'image/jpeg' && !jpg))
@@ -74,14 +90,14 @@ export class ReportCardSignaturesService {
     const key = objectKeyFor(
       schoolId,
       png ? 'png' : 'jpg',
-      `signature-${randomBytes(8).toString('hex')}`,
+      `${o.prefix}-${randomBytes(8).toString('hex')}`,
     );
     await this.storage.write(key, bytes, img.contentType);
     return (
       await c.query<{ id: string }>(
         `INSERT INTO files (school_id, bucket, object_key, content_type, size_bytes, sha256, original_name, owner_entity_type,
                             classification, storage_driver, status, created_by, updated_by)
-         VALUES (app.current_school_id(), $1, $2, $3, $4, $5, 'signature', 'report_card_signature', 'internal', $6, 'ready',
+         VALUES (app.current_school_id(), $1, $2, $3, $4, $5, $7, $8, 'internal', $6, 'ready',
                  app.current_user_id(), app.current_user_id())
          RETURNING id::text`,
         [
@@ -91,6 +107,8 @@ export class ReportCardSignaturesService {
           bytes.length,
           createHash('sha256').update(bytes).digest('hex'),
           this.storage.name,
+          o.prefix,
+          o.owner,
         ],
       )
     ).rows[0]!.id;
@@ -169,6 +187,17 @@ export class ReportCardSignaturesService {
         base64: bytes.toString('base64'),
       };
     });
+  }
+
+  /** A stored file's image (a card design's picture). */
+  async fileImage(c: PoolClient, fileId: string) {
+    const r = await c.query<{ object_key: string; content_type: string }>(
+      `SELECT object_key, content_type FROM files WHERE id = $1 AND deleted_at IS NULL`,
+      [fileId],
+    );
+    if (!r.rows[0]) return null;
+    const bytes = await this.storage.read(r.rows[0].object_key);
+    return { contentType: r.rows[0].content_type, base64: bytes.toString('base64') };
   }
 
   /** The card's signature images as data URIs (the preview; the worker does the same for the PDF). */

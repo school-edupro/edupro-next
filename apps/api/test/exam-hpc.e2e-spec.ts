@@ -366,13 +366,51 @@ describe('the holistic progress card (e2e)', () => {
     ).toBe(true);
   });
 
-  it('prints the HPC card: levels with their words and meaning, the three voices, the portfolio', async () => {
+  it('prints the HPC card as the A4 learning record; the ready-made set, its key and remarks come once', async () => {
     const t = await call(admin, 'POST', '/exams/report-cards/templates/hpc');
     expect(t.statusCode).toBe(201);
-    const tpl = (t.json().data as Array<{ id: string; code: string; band: string }>).find(
-      (x) => x.code === 'hpc_foundational',
-    )!;
+    const tpl = (
+      t.json().data as Array<{
+        id: string;
+        code: string;
+        band: string;
+        layout: { sections: Array<{ type: string }> };
+      }>
+    ).find((x) => x.code === 'hpc_foundational')!;
     expect(tpl.band).toBe('pre_primary');
+    expect(tpl.layout.sections.map((x) => x.type)).toEqual([
+      'lr_cover',
+      'lr_subjects',
+      'lr_subjects',
+      'lr_co_scholastic',
+      'lr_record',
+      'lr_key',
+    ]);
+    // docs/design/73: the ready-made Learning record (I–II), its key and the subjects' remarks, once
+    expect((await call(admin, 'POST', '/exams/report-cards/templates/hpc')).statusCode).toBe(201);
+    const sets = (await call(admin, 'GET', '/exams/indicator-sets')).json().data as Array<{
+      code: string;
+      grades: string[];
+    }>;
+    expect(sets.filter((x) => x.code === 'LR_I_II')).toHaveLength(1);
+    expect(sets.find((x) => x.code === 'LR_I_II')!.grades).toEqual([
+      'A*',
+      'A',
+      'B*',
+      'B',
+      'C',
+      'D',
+    ]);
+    const scales = (await call(admin, 'GET', '/exams/grade-scales')).json().data as Array<{
+      code: string;
+    }>;
+    expect(scales.filter((x) => x.code === 'LR_KEY')).toHaveLength(1);
+    const cats = (await call(admin, 'GET', '/exams/remark-categories')).json().data as Array<{
+      code: string;
+    }>;
+    expect(cats.map((x) => x.code)).toEqual(
+      expect.arrayContaining(['LR_ENG', 'LR_MAT', 'LR_HIN', 'LR_EVS']),
+    );
     const rel = await call(admin, 'POST', '/exams/report-cards/releases', {
       termCode: 'T1',
       name: 'Term 1',
@@ -388,17 +426,15 @@ describe('the holistic progress card (e2e)', () => {
     });
     expect(pv.statusCode).toBe(201);
     const html = pv.json().html as string;
-    expect(html).toContain('My progress');
+    // whole A4 pages: the cover, the subjects, the record and the key (the NCERT set has no observation areas here)
+    expect(html.split('<section class="lr-page').length - 1).toBeGreaterThanOrEqual(4);
+    expect(html).toContain('<div class="ti">Learning curve</div>');
+    expect(html).toContain('<div class="box">My name is<b>Anu Hpc</b></div>');
     expect(html).toContain('Physical development');
     expect(html).toContain('Develops habits that keep them healthy and safe');
-    expect(html).toContain('Progressing<small>Mountain</small>');
-    expect(html).toContain('Does it with some help');
+    expect(html).toContain('<td class="g">Progressing</td>');
     expect(html).toContain('Washes hands before lunch on her own');
-    expect(html).toContain('I like painting and my cat.');
-    expect(html).toContain('She tells us stories from school every day.');
-    expect(html).toContain('A curious learner.');
-    expect(html).toContain(`data:image/png;base64,${PNG}`);
-    expect(html).toContain('My painting');
+    expect(html).toContain('>Term I grade</th>');
   });
 
   it('a section rated on levels of its own: its items take them, the card keys them', async () => {
@@ -476,6 +512,97 @@ describe('the holistic progress card (e2e)', () => {
     ).json().html as string;
     expect(html).toContain('Recognizes all the letters of the alphabet');
     expect(html).toContain('<strong>Socio-emotional and ethical learning:</strong>');
-    expect(html).toContain('<span class="lvl">Mostly</span>');
+    expect(html).toContain('<td class="g">Mostly</td>');
+  });
+
+  it('Term I and Term II side by side: a Term I card leaves Term II blank, a Term II card fills both', async () => {
+    const type = (
+      await call(admin, 'POST', '/exams/types', { code: 'TRM2', name: 'Term 2' })
+    ).json().id;
+    const t2 = (
+      await call(admin, 'POST', '/exams', {
+        examTypeId: type,
+        code: 'T2',
+        name: 'Term 2',
+        classes: [{ classId }],
+      })
+    ).json().id as string;
+    // the same set as Term 1 uses now (the test before gave it a set of its own)
+    const t1Set = (
+      await call(admin, 'GET', `/exams/${examId}/indicators?classSectionId=${section}`)
+    ).json().set.id as string;
+    expect(
+      (await call(admin, 'PUT', `/exams/${t2}/indicator-sets`, { classId, setId: t1Set }))
+        .statusCode,
+    ).toBe(200);
+    expect(
+      (
+        await call(clerk, 'PUT', `/exams/${t2}/indicators`, {
+          classSectionId: section,
+          rows: [
+            {
+              studentId: student.Anu,
+              indicatorId: (
+                await call(clerk, 'GET', `/exams/${t2}/indicators?classSectionId=${section}`)
+              )
+                .json()
+                .indicators.find((i: Item) => i.code === 'EN-C11').id,
+              grade: 'Progressing',
+            },
+          ],
+        })
+      ).statusCode,
+    ).toBe(200);
+    const card = async (examIds: string[]) => {
+      const rel = await call(admin, 'POST', '/exams/report-cards/releases', {
+        termCode: examIds.includes(examId) ? 'TA' : 'TB',
+        name: `Card ${String(examIds.length)}`,
+        examIds,
+        templates: { [`class_${classId}`]: tplId },
+      });
+      expect(rel.statusCode).toBe(201);
+      return (
+        await call(admin, 'POST', `/exams/report-cards/templates/${tplId}/preview`, {
+          releaseId: rel.json().id,
+          studentId: student.Anu,
+        })
+      ).json().html as string;
+    };
+    const first = await card([examId]);
+    // EN-C11: Proficient in Term 1 (the test before), Progressing in Term 2
+    expect(first).toContain('<td class="g">Proficient</td><td class="g"></td>');
+    const both = await card([t2]);
+    expect(both).toContain('<td class="g">Proficient</td><td class="g">Progressing</td>');
+  });
+
+  it("a card design's pictures: set, shown, printed in place, taken out", async () => {
+    const url = `/exams/report-cards/templates/${tplId}/art`;
+    expect(
+      (await call(admin, 'PUT', `${url}/elsewhere`, { contentType: 'image/png', base64: PNG }))
+        .statusCode,
+    ).toBe(400);
+    const set = await call(admin, 'PUT', `${url}/cover_art`, {
+      contentType: 'image/png',
+      base64: PNG,
+    });
+    expect(set.statusCode).toBe(200);
+    expect(Object.keys(set.json().assets)).toEqual(['cover_art']);
+    const img = await call(admin, 'GET', `${url}/cover_art`);
+    expect(img.json()).toMatchObject({
+      contentType: 'image/png',
+      base64: PNG,
+      filename: 'cover_art.png',
+    });
+    const html = (
+      await call(admin, 'POST', `/exams/report-cards/templates/${tplId}/preview`, {
+        releaseId,
+        studentId: student.Anu,
+      })
+    ).json().html as string;
+    expect(html).toContain(`<div class="art"><img class="" src="data:image/png;base64,${PNG}"`);
+    const out = await call(admin, 'DELETE', `${url}/cover_art`);
+    expect(out.statusCode).toBe(200);
+    expect(out.json().assets).toEqual({});
+    expect((await call(admin, 'GET', `${url}/cover_art`)).statusCode).toBe(404);
   });
 });

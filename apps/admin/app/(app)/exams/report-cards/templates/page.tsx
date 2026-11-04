@@ -11,11 +11,25 @@ import {
 import { getTranslations } from 'next-intl/server';
 import { Notice } from '@/components/Notice';
 import { rcInstallDefaults, rcSaveTemplate } from '@/lib/actions';
-import { installDpsCards } from '@/lib/exam-entry-actions';
+import {
+  installLearningRecord,
+  installReadyMadeCards,
+  removeCardArt,
+  saveCardArt,
+} from '@/lib/exam-entry-actions';
 import { apiFetch, getMe } from '@/lib/api';
 import type { ReportCardTemplate } from '@/lib/types';
 
 const BANDS = ['pre_primary', 'primary', 'middle', 'secondary', 'senior'];
+/** docs/design/73: the pictures a learning-record design prints, where */
+const ART: Array<{ slot: string; label: string; where: string }> = [
+  { slot: 'cover_art', label: 'Cover picture', where: 'The lower half of the cover' },
+  { slot: 'cover_corner', label: 'Cover corner', where: 'Beside the title, left of the photo' },
+  { slot: 'logo_2', label: 'Second emblem', where: 'Top right of the cover and on the key page' },
+  { slot: 'scholastic', label: 'Scholastic pages', where: 'Bottom right, beside the note' },
+  { slot: 'co_scholastic', label: 'Co-scholastic page', where: 'Down the right of the table' },
+  { slot: 'record', label: 'Health record page', where: 'Beside height, weight and attendance' },
+];
 
 /** Sprint 17: the report-card designer (layout JSON, CSS, optional HTML body) with preview. */
 export default async function ReportCardTemplatesPage({
@@ -59,9 +73,14 @@ export default async function ReportCardTemplatesPage({
                   {r('installDefaults')}
                 </Button>
               </form>
-              <form action={installDpsCards}>
+              <form action={installReadyMadeCards}>
                 <Button type="submit" variant="secondary" size="sm">
-                  Install the DPS Noida cards
+                  Install the ready-made cards
+                </Button>
+              </form>
+              <form action={installLearningRecord}>
+                <Button type="submit" variant="secondary" size="sm">
+                  Install the learning record (Balvatika–II)
                 </Button>
               </form>
             </span>
@@ -225,6 +244,88 @@ export default async function ReportCardTemplatesPage({
                 <Button type="submit">{r('save')}</Button>
               </div>
             </form>
+            {editing &&
+            ((editing.layout as { sections?: Array<{ type?: string }> }).sections ?? []).some((x) =>
+              String(x.type ?? '').startsWith('lr_'),
+            ) ? (
+              <section
+                aria-labelledby="art-h"
+                style={{
+                  marginTop: 'var(--sp-4)',
+                  borderTop: '1px solid var(--border-default)',
+                  paddingTop: 'var(--sp-3)',
+                }}
+              >
+                <h3 id="art-h" className="ep-field__label" style={{ marginTop: 0 }}>
+                  Pictures (the school&apos;s own; PNG or JPEG up to 1 MB)
+                </h3>
+                <p className="ep-field__help" style={{ marginTop: 0 }}>
+                  They print in their places on every card of this design; an empty one prints
+                  nothing.
+                </p>
+                <div style={{ display: 'grid', gap: 'var(--sp-3)' }}>
+                  {ART.map((a) => {
+                    const has = Boolean(editing.assets?.[a.slot]);
+                    return (
+                      <div
+                        key={a.slot}
+                        style={{
+                          display: 'flex',
+                          gap: 'var(--sp-3)',
+                          alignItems: 'center',
+                          flexWrap: 'wrap',
+                        }}
+                      >
+                        <div style={{ width: '4rem', flex: 'none' }}>
+                          {has ? (
+                            <img
+                              src={`/api/report-cards/templates/${editing.id}/art/${a.slot}?v=${editing.updatedAt}`}
+                              alt={a.label}
+                              style={{ maxWidth: '100%', maxHeight: '4rem', objectFit: 'contain' }}
+                            />
+                          ) : (
+                            <span className="ep-field__help">None</span>
+                          )}
+                        </div>
+                        <div style={{ flex: 1, minWidth: '12rem' }}>
+                          <strong>{a.label}</strong>
+                          <div className="ep-field__help" style={{ margin: 0 }}>
+                            {a.where}
+                          </div>
+                        </div>
+                        <form
+                          action={saveCardArt}
+                          style={{ display: 'flex', gap: 'var(--sp-2)', alignItems: 'center' }}
+                        >
+                          <input type="hidden" name="templateId" value={editing.id} />
+                          <input type="hidden" name="slot" value={a.slot} />
+                          <input
+                            type="file"
+                            name="file"
+                            accept="image/png,image/jpeg"
+                            aria-label={`${a.label}: choose a picture`}
+                            className="ep-input"
+                            style={{ maxWidth: '14rem' }}
+                          />
+                          <Button type="submit" size="sm" variant="secondary">
+                            {has ? 'Replace' : 'Upload'}
+                          </Button>
+                        </form>
+                        {has ? (
+                          <form action={removeCardArt}>
+                            <input type="hidden" name="templateId" value={editing.id} />
+                            <input type="hidden" name="slot" value={a.slot} />
+                            <Button type="submit" size="sm" variant="ghost">
+                              Remove
+                            </Button>
+                          </form>
+                        ) : null}
+                      </div>
+                    );
+                  })}
+                </div>
+              </section>
+            ) : null}
             {editing ? (
               <iframe
                 title={r('preview')}

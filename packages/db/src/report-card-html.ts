@@ -6,6 +6,18 @@
  */
 import { documentHtml, renderTemplate } from './template-engine';
 import type { ReportCardData, ReportCardHpcItem } from './report-card-data';
+import {
+  LR_CSS,
+  isLearningRecord,
+  lrAreaPlan,
+  lrCoScholastic,
+  lrCover,
+  lrKey,
+  lrRecord,
+  lrSubjects,
+  type LrArt,
+  type LrSection,
+} from './learning-record-html';
 
 export type ReportCardSectionType =
   | 'header'
@@ -19,7 +31,7 @@ export type ReportCardSectionType =
   | 'grade_scale'
   | 'signatures'
   | 'hpc_descriptors'
-  // docs/design/65 part 4 (the DPS Noida cards)
+  // docs/design/65 part 4 (the ready-made cards)
   | 'term_marks'
   | 'cover'
   | 'participation'
@@ -30,7 +42,13 @@ export type ReportCardSectionType =
   // docs/design/65 part 5 (the HPC)
   | 'hpc_record'
   | 'hpc_feedback'
-  | 'portfolio';
+  | 'portfolio'
+  // docs/design/73 (the learning record on A4: whole pages)
+  | 'lr_cover'
+  | 'lr_subjects'
+  | 'lr_co_scholastic'
+  | 'lr_record'
+  | 'lr_key';
 
 export interface ReportCardSection {
   type: ReportCardSectionType;
@@ -75,6 +93,14 @@ export interface ReportCardSection {
   categories?: string[];
   /** remarks: the class teacher's general remark too (default true) */
   general?: boolean;
+  /** docs/design/73, lr_cover: the line under the title */
+  caption?: string;
+  /** lr_subjects, lr_co_scholastic, lr_record: the term columns' names (default Term I, Term II …) */
+  termLabels?: string[];
+  /** lr_subjects, lr_co_scholastic: the note at the foot of the page */
+  note?: string;
+  /** lr_subjects: the remarks column beside the subjects (default on) */
+  remarks?: boolean;
 }
 
 export interface ReportCardLayout {
@@ -723,11 +749,14 @@ function portfolio(d: ReportCardData, s: ReportCardSection): string {
 export function reportCardBody(
   d: ReportCardData,
   layout: ReportCardLayout,
-  opts: { withheld?: string | null } = {},
+  opts: { withheld?: string | null; art?: LrArt } = {},
 ): string {
   if (opts.withheld) {
     return `<div class="rc">${header(d, layout)}${student(d, { type: 'student', showPhoto: false })}<div class="withheld">${esc(opts.withheld)}</div></div>`;
   }
+  const art = opts.art ?? {};
+  // docs/design/73: which areas each learning-record page prints
+  const plan = lrAreaPlan(d.hpc, layout.sections as LrSection[]);
   const parts = layout.sections.map((s) => {
     switch (s.type) {
       case 'header':
@@ -776,6 +805,16 @@ export function reportCardBody(
         return hpcFeedback(d, s);
       case 'portfolio':
         return portfolio(d, s);
+      case 'lr_cover':
+        return lrCover(d, s, art);
+      case 'lr_subjects':
+        return lrSubjects(d, s, art, plan.get(s) ?? []);
+      case 'lr_co_scholastic':
+        return lrCoScholastic(d, s, art, plan.get(s) ?? []);
+      case 'lr_record':
+        return lrRecord(d, s, art);
+      case 'lr_key':
+        return lrKey(d, s, art);
       default:
         return '';
     }
@@ -789,6 +828,8 @@ export interface ReportCardTemplateLike {
   stylesCss: string;
   pageWidth: string;
   pageHeight: string;
+  /** docs/design/73: the school's pictures by slot, as data URIs (filled by the caller) */
+  art?: LrArt;
 }
 
 export function layoutOf(
@@ -807,34 +848,37 @@ export function reportCardDocument(
   pupils: Array<{ data: ReportCardData; withheld?: string | null }>,
 ): string {
   const bodies = pupils.map(({ data, withheld }, i) => {
+    const layout = layoutOf(t, data.student.band);
     const body =
       t.bodyHtml && !withheld
         ? renderTemplate(t.bodyHtml, data as unknown as Record<string, unknown>)
-        : reportCardBody(data, layoutOf(t, data.student.band), { withheld });
-    return i < pupils.length - 1 ? `${body}<div class="page-break"></div>` : body;
+        : reportCardBody(data, layout, { withheld, art: t.art });
+    // the learning record's pages break by themselves (docs/design/73)
+    const whole = !t.bodyHtml && !withheld && isLearningRecord(layout.sections);
+    return i < pupils.length - 1 && !whole ? `${body}<div class="page-break"></div>` : body;
   });
   return documentHtml({
     body: bodies.join('\n'),
-    css: `${REPORT_CARD_CSS}\n${t.stylesCss}`,
+    css: `${REPORT_CARD_CSS}\n${LR_CSS}\n${t.stylesCss}`,
     pageWidth: t.pageWidth,
     pageHeight: t.pageHeight,
   });
 }
 
 /**
- * The DPS Noida report cards (docs/design/65 part 4) as layouts on this engine; installed as templates
- * (codes dps_*) and chosen per class on a release (IX and X differ in the same band).
+ * The ready-made report cards (docs/design/65 part 4, docs/design/73) as layouts on this engine; installed as templates
+ * (codes lr_* and rc_*) and chosen per class on a release (IX and X differ in the same band).
  */
 const SIGN = ['class_teacher', 'coordinator', 'principal'];
-export const DPS_NOIDA_TEMPLATES: Array<{
+export const READY_MADE_TEMPLATES: Array<{
   code: string;
   name: string;
   band: ReportCardData['student']['band'];
   layout: ReportCardLayout;
 }> = [
   {
-    code: 'dps_i_ii',
-    name: 'DPS Noida I-II learning record',
+    code: 'lr_i_ii',
+    name: 'Learning record (I-II)',
     band: 'primary',
     layout: {
       subtitle: 'Learning record',
@@ -855,8 +899,8 @@ export const DPS_NOIDA_TEMPLATES: Array<{
     },
   },
   {
-    code: 'dps_iii_v',
-    name: 'DPS Noida III-V learning record',
+    code: 'lr_iii_v',
+    name: 'Learning record (III-V)',
     band: 'primary',
     layout: {
       subtitle: 'Learning record',
@@ -878,8 +922,8 @@ export const DPS_NOIDA_TEMPLATES: Array<{
     },
   },
   {
-    code: 'dps_vi_viii',
-    name: 'DPS Noida VI-VIII (Term 1 and Term 2)',
+    code: 'rc_vi_viii',
+    name: 'Report card VI-VIII (Term 1 and Term 2)',
     band: 'middle',
     layout: {
       subtitle: 'Report card',
@@ -899,8 +943,8 @@ export const DPS_NOIDA_TEMPLATES: Array<{
     },
   },
   {
-    code: 'dps_ix',
-    name: 'DPS Noida IX',
+    code: 'rc_ix',
+    name: 'Report card IX',
     band: 'secondary',
     layout: {
       subtitle: 'Report card',
@@ -920,8 +964,8 @@ export const DPS_NOIDA_TEMPLATES: Array<{
     },
   },
   {
-    code: 'dps_x',
-    name: 'DPS Noida X (pre-term / mid-term)',
+    code: 'rc_x',
+    name: 'Report card X (pre-term / mid-term)',
     band: 'secondary',
     layout: {
       subtitle: 'Report card',
@@ -938,8 +982,8 @@ export const DPS_NOIDA_TEMPLATES: Array<{
     },
   },
   {
-    code: 'dps_xi',
-    name: 'DPS Noida XI',
+    code: 'rc_xi',
+    name: 'Report card XI',
     band: 'senior',
     layout: {
       subtitle: 'Report card',
@@ -958,8 +1002,8 @@ export const DPS_NOIDA_TEMPLATES: Array<{
     },
   },
   {
-    code: 'dps_xii',
-    name: 'DPS Noida XII (pre-term / mid-term)',
+    code: 'rc_xii',
+    name: 'Report card XII (pre-term / mid-term)',
     band: 'senior',
     layout: {
       subtitle: 'Report card',
@@ -980,7 +1024,7 @@ export const DPS_NOIDA_TEMPLATES: Array<{
  * The periodic-test slips (1 Nov 2026): the default design of an exam card (PT1, PT2 …), one per band
  * from Class I. A school may change them in Card designs or pick another per class on the release.
  */
-export const TEST_SLIP_TEMPLATES: typeof DPS_NOIDA_TEMPLATES = (
+export const TEST_SLIP_TEMPLATES: typeof READY_MADE_TEMPLATES = (
   [
     ['primary', 'I-V'],
     ['middle', 'VI-VIII'],
@@ -1009,25 +1053,47 @@ export const TEST_SLIP_TEMPLATES: typeof DPS_NOIDA_TEMPLATES = (
  * the foundational stage): the domains' competencies with the level per term, the child's, parent's
  * and teacher's words, and portfolio photos. Band pre-primary; Classes I and II take it per class.
  */
-export const HPC_TEMPLATES: typeof DPS_NOIDA_TEMPLATES = [
+export const HPC_TEMPLATES: typeof READY_MADE_TEMPLATES = [
   {
     code: 'hpc_foundational',
     name: 'Holistic progress card (Balvatika to II)',
     band: 'pre_primary',
+    // docs/design/73: the learning record on A4 — cover, the subjects (two pages), co-scholastic, record, key
     layout: {
-      subtitle: 'Holistic progress card',
+      subtitle: 'Learning curve',
       sections: [
-        { type: 'cover', title: 'Holistic progress card' },
-        { type: 'header' },
-        { type: 'student', showPhoto: false },
-        { type: 'hpc_record', title: 'My progress' },
-        { type: 'page_break' },
-        { type: 'hpc_feedback', title: 'In our words' },
-        { type: 'portfolio', title: 'My portfolio' },
-        { type: 'attendance' },
-        { type: 'health' },
-        { type: 'signatures', roles: ['class_teacher', 'parent', 'principal'] },
+        { type: 'lr_cover', title: 'Learning curve', caption: '(Progress record)' },
+        { type: 'lr_subjects', title: 'Scholastic area', areas: ['English', 'Mathematics'] },
+        {
+          type: 'lr_subjects',
+          title: 'Scholastic area',
+          areas: ['Hindi', 'EVS', 'General knowledge'],
+        },
+        {
+          type: 'lr_co_scholastic',
+          title: 'Co-scholastic area',
+          areas: ['Personal and social traits', 'Activities'],
+        },
+        { type: 'lr_record', title: 'Health record & attendance' },
+        { type: 'lr_key', title: 'Evaluation key' },
       ],
     },
   },
 ];
+
+/** The Holistic progress card's first layout (docs/design/65 part 5), to upgrade unchanged copies (0308). */
+export const HPC_V1_LAYOUT: ReportCardLayout = {
+  subtitle: 'Holistic progress card',
+  sections: [
+    { type: 'cover', title: 'Holistic progress card' },
+    { type: 'header' },
+    { type: 'student', showPhoto: false },
+    { type: 'hpc_record', title: 'My progress' },
+    { type: 'page_break' },
+    { type: 'hpc_feedback', title: 'In our words' },
+    { type: 'portfolio', title: 'My portfolio' },
+    { type: 'attendance' },
+    { type: 'health' },
+    { type: 'signatures', roles: ['class_teacher', 'parent', 'principal'] },
+  ],
+};

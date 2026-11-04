@@ -11,7 +11,7 @@ import type { ClassRow, Exam, Page } from '@/lib/types';
  * Mark registers (docs/design/68), the school's Term Mark Register, under the Registers switch
  * (docs/design/69: Mark · Remark · Attendance · Height & Weight): the registers the person may use
  * (a manager sees every one), each with Run, Edit, Versions, Copy, Assign, Lock and Delete; a new one is
- * built in six steps, or started from a ready-made DPS Noida scheme with its exams mapped.
+ * built in six steps, or started from a ready-made scheme with its exams mapped.
  */
 export default async function MarkRegistersPage({
   searchParams,
@@ -49,7 +49,7 @@ export default async function MarkRegistersPage({
         <Card elevated title="Start from a ready-made scheme" style={{ marginTop: 'var(--sp-4)' }}>
           <form method="get" style={{ marginBottom: 'var(--sp-3)' }}>
             <label className="ep-field">
-              <span className="ep-field__label">Ready-made scheme (DPS Noida)</span>
+              <span className="ep-field__label">Ready-made scheme</span>
               <select className="ep-select" name="preset" defaultValue={preset?.code ?? ''}>
                 <option value="">Choose one</option>
                 {presets.map((p) => (

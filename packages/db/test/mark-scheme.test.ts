@@ -78,7 +78,7 @@ const preset = (code: string, exams: string[]): SchemeDef => {
     exams: exams.map((key, i) => ({ key, examId: String(i + 1) })),
   };
 };
-const VI = preset('DPS_VI_VIII', ['MT1', 'MT2', 'SE1', 'SE2', 'TERM']);
+const VI = preset('CLASS_VI_VIII', ['MT1', 'MT2', 'SE1', 'SE2', 'TERM']);
 
 describe('mark schemes (docs/design/65, part 3)', () => {
   it('rounds as the old register did', () => {
@@ -266,7 +266,7 @@ describe('mark schemes (docs/design/65, part 3)', () => {
   });
 
   it('X: the Monday tests take what the theory leaves of 100; the additional subject stays out', () => {
-    const X = preset('DPS_X', ['MT1', 'MT2', 'TERM']);
+    const X = preset('CLASS_X', ['MT1', 'MT2', 'TERM']);
     const [r] = computeScheme(
       X,
       [
@@ -294,7 +294,7 @@ describe('mark schemes (docs/design/65, part 3)', () => {
   });
 
   it('XI: theory and practical must each reach 33 %', () => {
-    const XI = preset('DPS_XI', ['WT1', 'WT2', 'ASL', 'TERM']);
+    const XI = preset('CLASS_XI', ['WT1', 'WT2', 'ASL', 'TERM']);
     // theory 60 + practical 20, ASL 10: the weekly tests take the 10 left of 100
     const term = (th: number, pr: number) =>
       mark(80, th + pr, { Theory: [60, th], Practical: [20, pr] });

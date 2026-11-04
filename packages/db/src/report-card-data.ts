@@ -6,6 +6,7 @@
  */
 import type { PoolClient } from 'pg';
 import type { RegisterDef } from './mark-register';
+import { LEARNING_RECORD_KEY, LEARNING_RECORD_SET, learningRecordRows } from './learning-record';
 import { printedColumns, type SchemeDef } from './mark-scheme';
 
 export type ClassBand = 'pre_primary' | 'primary' | 'middle' | 'secondary' | 'senior';
@@ -40,6 +41,9 @@ export interface ReportCardData {
     address: string;
     phone: string | null;
     logoDataUri: string | null;
+    /** the school's logo (branding), read by the renderer's caller (docs/design/73) */
+    logoObjectKey?: string | null;
+    logoContentType?: string | null;
   };
   release: { termCode: string; name: string; academicYear: string };
   student: {
@@ -114,6 +118,8 @@ export interface ReportCardData {
     dataUri: string | null;
   }>;
   classTeacher?: string | null;
+  /** every class teacher of the section (docs/design/73: "My teachers say …") */
+  classTeachers?: string[];
   codes?: Array<{ code: string; name: string }>;
   participation?: string | null;
   promotedTo?: string | null;
@@ -135,11 +141,46 @@ export interface ReportCardHpcItem {
   /** what the last level means for this item */
   descriptor: string | null;
   children: ReportCardHpcItem[];
+  /** docs/design/73: the level and the written note per term (ReportCardHpc.terms; blank: not filled) */
+  termLevels?: Array<string | null>;
+  termNotes?: Array<string | null>;
+}
+
+/**
+ * docs/design/73: a term of the card — an exam of the year that takes the card's indicator set for the
+ * class, by date — filled when it is one of the release's exams or before them, else blank.
+ */
+export interface ReportCardTerm {
+  code: string;
+  name: string;
+  filled: boolean;
+  remark: string | null;
+  participation: string | null;
+  promotedTo: string | null;
+  attendance: { present: number; total: number } | null;
+  health: { heightCm: string | null; weightKg: string | null } | null;
+  /** the remarks by category: its code and name, the subject's name and code */
+  items: Array<{
+    code: string;
+    category: string;
+    subject: string | null;
+    subjectCode: string | null;
+    text: string;
+  }>;
 }
 
 export interface ReportCardHpc {
   /** the term's exams with the HPC, in order (codes) */
   exams: string[];
+  /** docs/design/73: the set's code, its terms side by side and the evaluation key */
+  setCode?: string;
+  terms?: ReportCardTerm[];
+  key?: Array<{
+    grade: string;
+    words: string | null;
+    minPct: number | null;
+    maxPct: number | null;
+  }>;
   levels: string[];
   levelWords: Record<string, string>;
   /** sections rated on levels of their own (observations: Always ... Rarely), for the legend */
@@ -233,8 +274,13 @@ export async function loadReportCardData(
     affiliation_no: string | null;
     address: Record<string, string>;
     contact: Record<string, string>;
+    logo_key: string | null;
+    logo_type: string | null;
   }>(
-    `SELECT name, short_name, affiliation_no, address, contact FROM schools WHERE id = app.current_school_id()`,
+    `SELECT s.name, s.short_name, s.affiliation_no, s.address, s.contact, f.object_key AS logo_key, f.content_type AS logo_type
+       FROM schools s
+       LEFT JOIN files f ON f.id::text = NULLIF(s.branding->>'logoFileId', '') AND f.deleted_at IS NULL
+      WHERE s.id = app.current_school_id()`,
   );
   const school = sc.rows[0]!;
   const st = await c.query<{
@@ -554,7 +600,7 @@ export async function loadReportCardData(
                          AND ta.valid_to IS NULL AND ta.academic_year_id = en.academic_year_id
        JOIN employees em ON em.id = ta.employee_id
       WHERE en.student_id = $1 AND en.academic_year_id = app.current_academic_year_id() AND en.status = 'active'
-      ORDER BY ta.id LIMIT 1`,
+      ORDER BY ta.id`,
     [input.studentId],
   );
   const mc = await c.query<{ code: string; name: string }>(
@@ -583,6 +629,8 @@ export async function loadReportCardData(
         .join(', '),
       phone: school.contact?.phone ?? null,
       logoDataUri: null,
+      logoObjectKey: school.logo_key,
+      logoContentType: school.logo_type,
     },
     release: { termCode: input.termCode, name: input.termName, academicYear: s.year_code },
     student: {
@@ -660,6 +708,7 @@ export async function loadReportCardData(
       dataUri: null,
     })),
     classTeacher: ct.rows[0]?.name ?? null,
+    classTeachers: [...new Set(ct.rows.map((x) => x.name))],
     codes: mc.rows,
     participation: extra.rows.find((x) => x.participation)?.participation ?? null,
     promotedTo: extra.rows.find((x) => x.promoted_to)?.promoted_to ?? null,
@@ -732,7 +781,38 @@ async function loadHpc(
       WHERE ie.exam_id = ANY($1::bigint[]) AND ie.student_id = $2`,
     [hpcExams, studentId],
   );
+  // docs/design/73: the card's terms — the year's exams with this set for the class, by date
+  const termRows = (
+    await c.query<{ id: string; code: string; name: string }>(
+      `SELECT e.id::text, e.code, e.name
+         FROM exam_indicator_sets es JOIN indicator_sets s ON s.id = es.set_id
+         JOIN exams e ON e.id = es.exam_id AND e.deleted_at IS NULL
+        WHERE es.class_id = $1 AND s.code = (SELECT code FROM indicator_sets WHERE id = $2)
+          AND e.academic_year_id = (SELECT academic_year_id FROM exams WHERE id = $3)
+        ORDER BY e.starts_on NULLS LAST, e.id`,
+      [classId, last.set_id, last.exam_id],
+    )
+  ).rows;
+  const reach = Math.max(...termRows.map((t, i) => (hpcExams.includes(t.id) ? i : -1)));
+  const termIds = termRows.map((t) => t.id);
+  const filledIds = termIds.filter((_, i) => i <= reach);
+  const tent = filledIds.length
+    ? (
+        await c.query<{ exam_id: string; code: string; grade: string | null; note: string | null }>(
+          `SELECT ie.exam_id::text, i.code, ie.grade, ie.note FROM indicator_entries ie JOIN indicators i ON i.id = ie.indicator_id
+            WHERE ie.exam_id = ANY($1::bigint[]) AND ie.student_id = $2`,
+          [filledIds, studentId],
+        )
+      ).rows
+    : [];
   const node = (i: (typeof items.rows)[number]): ReportCardHpcItem => {
+    const termOf = (pick: (e: (typeof tent)[number]) => string | null) =>
+      termIds.map((ex) => {
+        const e = filledIds.includes(ex)
+          ? tent.find((x) => x.exam_id === ex && x.code === i.code)
+          : undefined;
+        return e ? pick(e) : null;
+      });
     const levels = hpcExams.map(
       (ex) => ent.rows.find((e) => e.exam_id === ex && e.code === i.code)?.grade ?? null,
     );
@@ -749,6 +829,8 @@ async function loadHpc(
       note: (notes[notes.length - 1] as string | undefined) ?? null,
       descriptor: lastLevel ? (i.descriptors?.[lastLevel] ?? null) : null,
       children: items.rows.filter((ch) => ch.parent_id === i.id).map(node),
+      termLevels: termOf((e) => e.grade),
+      termNotes: termOf((e) => e.note),
     };
   };
   const areas = new Map<string, ReportCardHpcItem[]>();
@@ -782,8 +864,118 @@ async function loadHpc(
       ORDER BY p.created_at DESC LIMIT 6`,
     [hpcExams, studentId],
   );
+  // by term: the remark and what the pupil took part in, the remarks by category, attendance, health
+  const byExam = <T extends { exam_id: string }>(rows: T[]) =>
+    new Map(rows.map((r) => [r.exam_id, r]));
+  const rem = byExam(
+    (
+      await c.query<{
+        exam_id: string;
+        remark: string | null;
+        participation: string | null;
+        promoted_to: string | null;
+      }>(
+        `SELECT exam_id::text, remark, participation, promoted_to FROM exam_remarks WHERE exam_id = ANY($1::bigint[]) AND student_id = $2`,
+        [filledIds, studentId],
+      )
+    ).rows,
+  );
+  const att = byExam(
+    (
+      await c.query<{ exam_id: string; days_present: number; days_total: number }>(
+        `SELECT exam_id::text, days_present, days_total FROM exam_attendance WHERE exam_id = ANY($1::bigint[]) AND student_id = $2`,
+        [filledIds, studentId],
+      )
+    ).rows,
+  );
+  const hr = byExam(
+    (
+      await c.query<{ exam_id: string; height_cm: string | null; weight_kg: string | null }>(
+        `SELECT DISTINCT ON (exam_id) exam_id::text, height_cm::text, weight_kg::text FROM health_records
+          WHERE exam_id = ANY($1::bigint[]) AND student_id = $2 ORDER BY exam_id, recorded_on DESC`,
+        [filledIds, studentId],
+      )
+    ).rows,
+  );
+  const ri = (
+    await c.query<{
+      exam_id: string;
+      code: string;
+      category: string;
+      subject: string | null;
+      subject_code: string | null;
+      text: string;
+    }>(
+      `SELECT i.exam_id::text, rc.code, rc.name AS category, sub.name AS subject, sub.code AS subject_code, i.text
+         FROM exam_remark_items i JOIN remark_categories rc ON rc.id = i.category_id AND rc.status = 'active'
+         LEFT JOIN subjects sub ON sub.id = rc.subject_id
+        WHERE i.exam_id = ANY($1::bigint[]) AND i.student_id = $2 ORDER BY rc.sort_order, rc.code`,
+      [filledIds, studentId],
+    )
+  ).rows;
+  const terms = termRows.map((t, i) => {
+    const filled = i <= reach;
+    const r = filled ? rem.get(t.id) : undefined;
+    const a = filled ? att.get(t.id) : undefined;
+    const h = filled ? hr.get(t.id) : undefined;
+    return {
+      code: t.code,
+      name: t.name,
+      filled,
+      remark: r?.remark ?? null,
+      participation: r?.participation ?? null,
+      promotedTo: r?.promoted_to ?? null,
+      attendance: a ? { present: a.days_present, total: a.days_total } : null,
+      health: h ? { heightCm: h.height_cm, weightKg: h.weight_kg } : null,
+      items: filled
+        ? ri
+            .filter((x) => x.exam_id === t.id)
+            .map((x) => ({
+              code: x.code,
+              category: x.category,
+              subject: x.subject,
+              subjectCode: x.subject_code,
+              text: x.text,
+            }))
+        : [],
+    };
+  });
+  // the evaluation key: the set's grades, their words, and the % of a grade scale with the same grades
+  const bands = (
+    await c.query<{
+      code: string;
+      grade: string;
+      min_pct: string;
+      max_pct: string;
+      remark: string | null;
+    }>(
+      `SELECT g.code, b.grade, b.min_pct::text, b.max_pct::text, b.remark
+         FROM grade_scales g JOIN grade_bands b ON b.scale_id = g.id
+        WHERE g.deleted_at IS NULL AND g.status = 'active'
+          AND (SELECT array_agg(x.grade ORDER BY x.grade) FROM grade_bands x WHERE x.scale_id = g.id)
+              = (SELECT array_agg(v ORDER BY v) FROM unnest($1::text[]) AS v)
+        ORDER BY (g.code = 'LR_KEY') DESC, g.id, b.sort_order`,
+      [last.grades],
+    )
+  ).rows;
+  const scaleCode = bands[0]?.code;
+  const key = last.grades.map((g) => {
+    const b = bands.find((x) => x.code === scaleCode && x.grade === g);
+    return {
+      grade: g,
+      words: last.level_words?.[g] ?? b?.remark ?? null,
+      minPct: b ? Number(b.min_pct) : null,
+      maxPct: b ? Number(b.max_pct) : null,
+    };
+  });
+  const setCode = (
+    await c.query<{ code: string }>(`SELECT code FROM indicator_sets WHERE id = $1`, [last.set_id])
+  ).rows[0]?.code;
   return {
     exams: sets.rows.map((x) => x.code),
+    setCode,
+    terms,
+    key,
     levels: last.grades,
     levelWords: last.level_words ?? {},
     scales: [...scales.values()],
@@ -926,7 +1118,7 @@ export function sampleReportCardData(band: ClassBand = 'primary'): ReportCardDat
     },
     fees: { balance: '0.00', defaulter: false },
     today: '2026-09-28',
-    // the DPS Noida cards' parts (docs/design/65 part 4): two terms of a VI-VIII scheme, signatures
+    // the ready-made cards' parts (docs/design/65 part 4): two terms of a VI-VIII scheme, signatures
     termResults: ['T1', 'T2'].map((term, i) => {
       const cols = [
         { key: 'PT', label: 'Periodic test (15)', total: false },
@@ -988,6 +1180,7 @@ export function sampleReportCardData(band: ClassBand = 'primary'): ReportCardDat
       },
     ],
     classTeacher: 'Meera Joshi',
+    classTeachers: ['Meera Joshi', 'Anita Rao'],
     codes: [
       { code: 'AB', name: 'Absent' },
       { code: 'ML', name: 'Medical leave' },
@@ -998,67 +1191,115 @@ export function sampleReportCardData(band: ClassBand = 'primary'): ReportCardDat
   };
 }
 
+/**
+ * The sample progress card (docs/design/73): the ready-made Learning record (I–II) with Term I filled and
+ * Term II blank, as a Term I card prints, so the designer's preview shows the A4 learning record.
+ */
 function sampleHpc(): ReportCardHpc {
-  const item = (
-    code: string,
-    name: string,
-    levels: Array<string | null>,
-    descriptor: string | null = null,
-  ): ReportCardHpcItem => ({
-    code,
-    name,
+  const rows = learningRecordRows();
+  const grades = LEARNING_RECORD_SET.grades;
+  // a steady pupil: mostly B and B*, some A
+  const gradeOf = (n: number) => grades[[3, 2, 3, 1, 3, 2, 4, 3][n % 8]!]!;
+  const nodeOf = (r: (typeof rows)[number], n: number): ReportCardHpcItem => ({
+    code: r.code,
+    name: r.name,
     kind: 'level',
     description: null,
-    levels,
+    levels: [
+      r.parentCode === null && rows.some((x) => x.parentCode === r.code) ? null : gradeOf(n),
+    ],
     note: null,
-    descriptor,
+    descriptor: null,
     children: [],
+    termLevels: [
+      r.parentCode === null && rows.some((x) => x.parentCode === r.code) ? null : gradeOf(n),
+      null,
+    ],
+    termNotes: [null, null],
+  });
+  const areas = LEARNING_RECORD_SET.areas.map((a) => {
+    const own = rows.filter((r) => r.area === a.area);
+    const items = own
+      .filter((r) => r.parentCode === null)
+      .map((r) => {
+        const head = nodeOf(r, r.sortOrder);
+        head.children = own
+          .filter((x) => x.parentCode === r.code)
+          .map((x) => nodeOf(x, x.sortOrder));
+        return head;
+      });
+    return { area: a.area, items };
+  });
+  const remark = (code: string, category: string, subject: string, text: string) => ({
+    code,
+    category,
+    subject,
+    subjectCode: code.slice(3),
+    text,
   });
   return {
-    exams: ['T1', 'T2'],
-    levels: ['Beginner', 'Progressing', 'Proficient'],
-    levelWords: { Beginner: 'Stream', Progressing: 'Mountain', Proficient: 'Sky' },
-    areas: [
+    exams: ['T1'],
+    setCode: LEARNING_RECORD_SET.code,
+    terms: [
       {
-        area: 'Physical development',
+        code: 'T1',
+        name: 'Term I',
+        filled: true,
+        remark:
+          'An affectionate child; enjoys interacting with friends and is gaining confidence in class.',
+        participation:
+          'Celebration of special days (Earth Day, Independence Day, Hindi Diwas); the annual day show',
+        promotedTo: null,
+        attendance: { present: 109, total: 123 },
+        health: { heightCm: '121.0', weightKg: '23.0' },
         items: [
-          {
-            ...item('PD3', 'Has a fit and flexible body', [null, null]),
-            children: [
-              item('PD3A', 'Runs, jumps, climbs and balances with control', [
-                'Progressing',
-                'Proficient',
-              ]),
-              item(
-                'PD3B',
-                'Uses the fingers with control',
-                ['Beginner', 'Progressing'],
-                'Holds a crayon; tears paper with help',
-              ),
-            ],
-          },
+          remark(
+            'LR_ENG',
+            'English',
+            'English',
+            'Reads simple sentences with growing confidence; regular reading at home will help further.',
+          ),
+          remark(
+            'LR_MAT',
+            'Mathematics',
+            'Mathematics',
+            'Has a good grasp of number concepts; follow-up work will build speed.',
+          ),
+          remark(
+            'LR_HIN',
+            'Hindi',
+            'Hindi',
+            'Recognises the letters and matras taught; should practise writing neatly.',
+          ),
+          remark(
+            'LR_EVS',
+            'EVS',
+            'EVS',
+            'Shows keen interest in the surroundings and asks good questions.',
+          ),
         ],
       },
       {
-        area: 'Language and literacy',
-        items: [
-          {
-            ...item('LL1', 'Talks and listens well', [null, null]),
-            children: [
-              item('LL1A', 'Listens and answers; speaks in full sentences', [
-                'Progressing',
-                'Progressing',
-              ]),
-              {
-                ...item('LL1N', 'What the teacher noticed', [null, null]),
-                kind: 'text',
-                note: 'Retells a story in her own words with joy',
-              },
-            ],
-          },
-        ],
+        code: 'T2',
+        name: 'Term II',
+        filled: false,
+        remark: null,
+        participation: null,
+        promotedTo: null,
+        attendance: null,
+        health: null,
+        items: [],
       },
     ],
+    key: LEARNING_RECORD_KEY.bands.map((b) => ({
+      grade: b.grade,
+      words: b.remark,
+      minPct: b.minPct,
+      maxPct: b.maxPct,
+    })),
+    levels: grades,
+    levelWords: LEARNING_RECORD_SET.levelWords,
+    areas,
     feedback: {
       self: 'I like drawing and playing with my friends. I can count to fifty.',
       parent: 'She reads picture books at home every evening.',

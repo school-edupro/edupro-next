@@ -2440,6 +2440,8 @@ export interface ReportCardTemplate {
   version: number;
   status: 'active' | 'inactive';
   updatedAt: string;
+  /** docs/design/73: the design's pictures, slot → file id */
+  assets?: Record<string, string>;
 }
 export interface ReportCardRelease {
   id: string;

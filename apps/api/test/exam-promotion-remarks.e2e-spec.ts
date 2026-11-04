@@ -404,12 +404,12 @@ describe('promotion proposals and remark categories (e2e)', () => {
       rows: [{ studentId: student.Dev, categoryId: cat.GEN, bankCode: 'GEN1', text: null }],
     });
     expect(locked.json().type).toBe('exams.entry_locked');
-    const tpl = (await call(admin, 'POST', '/exams/report-cards/templates/dps')).json()
+    const tpl = (await call(admin, 'POST', '/exams/report-cards/templates/ready-made')).json()
       .data as Array<{
       id: string;
       code: string;
     }>;
-    const middle = tpl.find((t) => t.code === 'dps_vi_viii')!.id;
+    const middle = tpl.find((t) => t.code === 'rc_vi_viii')!.id;
     const rel = (
       await call(admin, 'POST', '/exams/report-cards/releases', {
         termCode: 'T2',

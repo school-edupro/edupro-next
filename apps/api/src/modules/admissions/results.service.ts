@@ -152,7 +152,7 @@ type Prepared =
     };
 
 /**
- * Test and interview results by part (docs/design/57, part 2), the DPS "Result Report": for a session,
+ * Test and interview results by part (docs/design/57, part 2), the legacy "Result Report": for a session,
  * class and Test / Interview stage, each candidate who reached the stage with a mark per part of the
  * class's paper, absent, total, %, below cut-off and where they stand; entered on the screen or by the
  * class's sheet (all parts together; a Decision column takes Select or Hold, decided at the level the

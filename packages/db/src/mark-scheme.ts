@@ -368,7 +368,7 @@ export function computeScheme(
   }));
 }
 
-/** Ready-made schemes from the old DPS Noida cards: the exams are named by key, mapped when used. */
+/** Ready-made schemes from the school's old cards: the exams are named by key, mapped when used. */
 export const SCHEME_PRESETS: Array<{
   code: string;
   name: string;
@@ -376,7 +376,7 @@ export const SCHEME_PRESETS: Array<{
   def: Omit<SchemeDef, 'exams'> & { examKeys: Array<{ key: string; label: string }> };
 }> = [
   {
-    code: 'DPS_VI_VIII',
+    code: 'CLASS_VI_VIII',
     name: 'Classes VI-VIII (one term)',
     description:
       'Periodic test 15 (the average of MT1 and MT2 converted) + subject enrichment 5 (the average of SE1 and SE2) + the term exam 80 = 100, whole numbers (half up).',
@@ -425,7 +425,7 @@ export const SCHEME_PRESETS: Array<{
     },
   },
   {
-    code: 'DPS_IX',
+    code: 'CLASS_IX',
     name: 'Class IX (term 1)',
     description:
       'Monday tests 15 (average converted) + subject enrichment 5 + the term exam 80 (theory and practical) = 100; additional subjects (AI, IFM) out of the total.',
@@ -456,7 +456,7 @@ export const SCHEME_PRESETS: Array<{
     },
   },
   {
-    code: 'DPS_X',
+    code: 'CLASS_X',
     name: 'Class X (pre-term / mid-term)',
     description:
       'The Monday tests (average) converted to what the theory leaves of 100, + the theory paper (50, 70 or 80) = 100; the sixth subject out of the total.',
@@ -485,7 +485,7 @@ export const SCHEME_PRESETS: Array<{
     },
   },
   {
-    code: 'DPS_XI',
+    code: 'CLASS_XI',
     name: 'Class XI (term 1)',
     description:
       'Weekly tests (average) converted to what the rest leaves of 100 + ASL 10 + the term exam (theory and practical); theory and practical 33 % each; the additional subject printed last and out of the total.',
@@ -539,7 +539,7 @@ export const SCHEME_PRESETS: Array<{
     },
   },
   {
-    code: 'DPS_XII',
+    code: 'CLASS_XII',
     name: 'Class XII (pre-term / mid-term)',
     description:
       'Monday test 2 (converted to what the theory leaves of 100) + the theory paper = 100, whole numbers; all six subjects count.',
