@@ -1,28 +1,31 @@
 #!/usr/bin/env node
 /**
- * Sample exam data for classes VI and VII of the Alpha demo school (docs/design/67): Periodic Test 1 and
- * 2, Activity Test 1 and 2, and Term I. Everything goes through the API as the demo users, so every rule
- * applies as on screen (who takes a subject, codes, parts, locks, results); only the clearing of an
- * earlier run (and of PT1's hand-entered VI-VII marks) is done in the database, as the API never deletes
- * marks. Nothing is published or released and no message is sent.
+ * Sample exam data for two classes of the Alpha demo school (docs/design/67): Periodic Test 1 and 2,
+ * Activity Test 1 and 2, and Term I; VI and VII unless --classes says otherwise (e.g. --classes VI,VIII).
+ * Everything goes through the API as the demo users, so every rule applies as on screen (who takes a
+ * subject, codes, parts, locks, results); only the clearing of an earlier run (and of the classes'
+ * hand-entered marks) is done in the database, as the API never deletes marks. Nothing is published or
+ * released and no message is sent.
  *
- *   1. Class VII gets a subject template (VI keeps its own); every VI-VII student gets their subjects
- *      (VI-A a language each, VII the compulsory ones); Term I gets its subjects (out of 80, Art and PE
- *      graded A-C in VII), Social Science in its class parts.
+ *   1. Only with --setup (the first VI-VII run): Class VII gets a subject template (VI keeps its own);
+ *      every VI-VII student gets their subjects (VI-A a language each, VII the compulsory ones); Term I
+ *      gets its subjects (out of 80, Art and PE graded A-C in VII), Social Science in its class parts.
+ *      Without it the classes' subjects, choices and exam subjects stay as set up.
  *   2. Marks for every student who takes a subject: a steady level per student with some spread; AB
  *      (absent) twice and ML (medical leave) three times, each in a fixed place.
- *   3. What each exam takes: attendance and general remarks (PT1, PT2, Term I); Term I indicators and
- *      height / weight.
+ *   3. What each exam takes (its areas): attendance and remarks (the general remark and the remark
+ *      categories the class takes; Term I also what the student took part in); Term I co-scholastic
+ *      indicators and height / weight / blood group.
  *   4. The stage of mid-October: PT1, PT2 and both activity tests submitted, verified and worked out;
- *      Term I submitted for verification, VII-B Science and Social Science still in progress, VI-A
- *      Computer Science entered but not submitted.
- *   5. "Term I result (sample)": the DPS VI-VIII scheme (periodic tests 15 + activities 5 + term 80),
- *      locked and worked out.
+ *      Term I submitted for verification, the second class's B section Science and Social Science still
+ *      in progress, the first class's A section Computer Science entered but not submitted.
+ *   5. "Term I result (sample)": the DPS VI-VIII scheme (periodic tests 15 + activities 5 + term 80)
+ *      for these classes and those it had before, locked and worked out.
  *
- * Needs the local database (DATABASE_MIGRATOR_URL on localhost) and the API on :4000 (about 800 calls:
+ * Needs the local database (DATABASE_MIGRATOR_URL on localhost) and the API on :4000 (about 900 calls:
  * raise its rate limit for the run). From the repository root:
- *   set -a; source .env; set +a; node scripts/seed-exam-sample.mjs --yes
- * It can be run again: it clears what it made first.
+ *   set -a; source .env; set +a; node scripts/seed-exam-sample.mjs --classes VI,VIII --yes
+ * It can be run again: it clears what it made first (only in the classes named).
  */
 import { createRequire } from 'node:module';
 
@@ -40,8 +43,27 @@ const EXAMS = {
   ACT2: 'ACT2',
   TERM: 'TERM1-I-2026',
 };
-const CLASSES = ['VI', 'VII'];
+const arg = (name) => {
+  const i = process.argv.indexOf(name);
+  return i > 0 ? process.argv[i + 1] : undefined;
+};
+const CLASSES = (arg('--classes') ?? 'VI,VII')
+  .split(',')
+  .map((x) => x.trim().toUpperCase())
+  .filter(Boolean);
+/** the first VI-VII run's subject set-up (step 2) */
+const SETUP = process.argv.includes('--setup');
 const SCHEME = 'Term I result (sample)';
+/** where the fixed codes and stages fall: the first class and the second (or the first again) */
+const [C1, C2 = C1] = CLASSES;
+if (!CLASSES.length || CLASSES.length > 3) {
+  console.error('Refused: name one to three classes, e.g. --classes VI,VIII');
+  process.exit(1);
+}
+if (SETUP && CLASSES.join(',') !== 'VI,VII') {
+  console.error('Refused: --setup is the subject set-up of the VI-VII sample only');
+  process.exit(1);
+}
 
 if (!/@(localhost|127\.0\.0\.1)(:\d+)?\//.test(process.env.DATABASE_MIGRATOR_URL ?? '')) {
   console.error('Refused: DATABASE_MIGRATOR_URL is not the local database.');
@@ -124,6 +146,7 @@ log(
 const db = new pg.Client({ connectionString: process.env.DATABASE_MIGRATOR_URL });
 await db.connect();
 const examIds = Object.values(exam).map((e) => e.id);
+const schemeClassIds = new Set(classIds);
 const before = Number(
   (
     await db.query(`SELECT coalesce(max(id), 0) AS n FROM comms_messages WHERE school_id = $1`, [
@@ -177,139 +200,151 @@ try {
       WHERE exam_id = ANY($1::bigint[]) AND class_id = ANY($2::bigint[])`,
     [examIds, classIds],
   );
-  const old = (
-    await db.query(`SELECT id FROM mark_schemes WHERE school_id = $1 AND name = $2`, [
-      SCHOOL,
-      SCHEME,
-    ])
-  ).rows.map((x) => x.id);
+  const oldRows = (
+    await db.query(
+      `SELECT id, class_ids::text[] AS class_ids FROM mark_schemes WHERE school_id = $1 AND name = $2`,
+      [SCHOOL, SCHEME],
+    )
+  ).rows;
+  const old = oldRows.map((x) => x.id);
+  // the register keeps the classes it had (another class's sample stays in it)
+  for (const r of oldRows) for (const id of r.class_ids) schemeClassIds.add(id);
   await db.query(`DELETE FROM term_results WHERE scheme_id = ANY($1::bigint[])`, [old]);
   await db.query(`DELETE FROM mark_schemes WHERE id = ANY($1::bigint[])`, [old]);
-  await db.query(`DELETE FROM student_subject_changes WHERE student_id = ANY($1::bigint[])`, [
-    students,
-  ]);
+  // the set-up's subject choices are made again; otherwise the students' subject changes stay
+  if (SETUP)
+    await db.query(`DELETE FROM student_subject_changes WHERE student_id = ANY($1::bigint[])`, [
+      students,
+    ]);
   await db.query('COMMIT');
   log(
-    `Cleared ${String(es.length)} exam subjects of VI-VII and ${String(students.length)} students' entries`,
+    `Cleared ${String(es.length)} exam subjects of ${CLASSES.join(', ')} and ${String(students.length)} students' entries`,
   );
 } catch (e) {
   await db.query('ROLLBACK');
   throw e;
 }
 
-// ---- 2. subjects: VII's template, everyone's choices, Term I's subjects -----------------------------
+// ---- 2. subjects (--setup only): VII's template, everyone's choices, Term I's subjects ---------------
 const classOf = (code) => classes.find((k) => k.code === code);
-const vi = classOf('VI');
-const vii = classOf('VII');
-const viSetup = await api(ADMIN, 'GET', `/exams/subject-choices/setup?classId=${vi.id}`);
-const sstParts =
-  viSetup.subjects
-    .find((x) => x.code === 'SST')
-    ?.parts?.map((p) => ({ subjectId: p.subjectId, share: p.share })) ?? [];
-const viiOrder = ['ENG', 'HIN', 'MAT', 'SCI', 'SST', 'CS', 'ART', 'PE'];
-const viiSetup = await api(ADMIN, 'GET', `/exams/subject-choices/setup?classId=${vii.id}`);
-await api(ADMIN, 'PUT', '/exams/subject-choices/setup', {
-  classId: vii.id,
-  groups: [],
-  subjects: [
-    ...viiOrder
-      .map((c) => viiSetup.subjects.find((x) => x.code === c))
-      .filter(Boolean)
-      .map((x) => ({
-        subjectId: x.id,
-        take: 'all',
-        group: null,
-        parts: x.code === 'SST' ? sstParts : [],
-      })),
-    ...viiSetup.subjects
-      .filter((x) => !viiOrder.includes(x.code))
-      .map((x) => ({ subjectId: x.id, take: 'free', group: null, parts: [] })),
-  ],
-  streams: [],
-});
-log('Class VII: subject template set');
+if (SETUP) {
+  const vi = classOf('VI');
+  const vii = classOf('VII');
+  const viSetup = await api(ADMIN, 'GET', `/exams/subject-choices/setup?classId=${vi.id}`);
+  const sstParts =
+    viSetup.subjects
+      .find((x) => x.code === 'SST')
+      ?.parts?.map((p) => ({ subjectId: p.subjectId, share: p.share })) ?? [];
+  const viiOrder = ['ENG', 'HIN', 'MAT', 'SCI', 'SST', 'CS', 'ART', 'PE'];
+  const viiSetup = await api(ADMIN, 'GET', `/exams/subject-choices/setup?classId=${vii.id}`);
+  await api(ADMIN, 'PUT', '/exams/subject-choices/setup', {
+    classId: vii.id,
+    groups: [],
+    subjects: [
+      ...viiOrder
+        .map((c) => viiSetup.subjects.find((x) => x.code === c))
+        .filter(Boolean)
+        .map((x) => ({
+          subjectId: x.id,
+          take: 'all',
+          group: null,
+          parts: x.code === 'SST' ? sstParts : [],
+        })),
+      ...viiSetup.subjects
+        .filter((x) => !viiOrder.includes(x.code))
+        .map((x) => ({ subjectId: x.id, take: 'free', group: null, parts: [] })),
+    ],
+    streams: [],
+  });
+  log('Class VII: subject template set');
 
-const langGroup = viSetup.groups.find((g) => g.max === 1);
-const viLangs = ['HIN', 'HIN', 'HIN', 'SAN', 'HIN', 'FREN', 'GERM', 'SAN', 'SPA'];
-for (const s of sections) {
-  const list = await api(ADMIN, 'GET', `/exams/subject-choices?classSectionId=${s.id}`);
-  if (s.classId === vii.id) {
-    await api(OFFICE, 'POST', '/exams/subject-choices/defaults', { classSectionId: s.id });
-  } else if (langGroup) {
-    // VI: a language from Subject-2 for each student without one
-    const rows = list.rows
-      .filter((r) => !langGroup.subjectIds.some((id) => r.subjects.some((x) => x.subjectId === id)))
-      .map((r, i) => {
-        const want = viSetup.subjects.find((x) => x.code === viLangs[i % viLangs.length]);
-        const lang = langGroup.subjectIds.includes(want?.id) ? want.id : langGroup.subjectIds[0];
-        return { studentId: r.studentId, subjects: [{ subjectId: lang }] };
-      });
-    if (rows.length) {
-      const out = await api(OFFICE, 'PUT', '/exams/subject-choices', {
-        classSectionId: s.id,
-        partial: true,
-        rows,
-      });
-      if (out.refused?.length)
-        log(
-          `  ${s.code}: not set`,
-          out.refused.map((x) => `${x.name}: ${x.error}`),
-        );
+  const langGroup = viSetup.groups.find((g) => g.max === 1);
+  const viLangs = ['HIN', 'HIN', 'HIN', 'SAN', 'HIN', 'FREN', 'GERM', 'SAN', 'SPA'];
+  for (const s of sections) {
+    const list = await api(ADMIN, 'GET', `/exams/subject-choices?classSectionId=${s.id}`);
+    if (s.classId === vii.id) {
+      await api(OFFICE, 'POST', '/exams/subject-choices/defaults', { classSectionId: s.id });
+    } else if (langGroup) {
+      // VI: a language from Subject-2 for each student without one
+      const rows = list.rows
+        .filter(
+          (r) => !langGroup.subjectIds.some((id) => r.subjects.some((x) => x.subjectId === id)),
+        )
+        .map((r, i) => {
+          const want = viSetup.subjects.find((x) => x.code === viLangs[i % viLangs.length]);
+          const lang = langGroup.subjectIds.includes(want?.id) ? want.id : langGroup.subjectIds[0];
+          return { studentId: r.studentId, subjects: [{ subjectId: lang }] };
+        });
+      if (rows.length) {
+        const out = await api(OFFICE, 'PUT', '/exams/subject-choices', {
+          classSectionId: s.id,
+          partial: true,
+          rows,
+        });
+        if (out.refused?.length)
+          log(
+            `  ${s.code}: not set`,
+            out.refused.map((x) => `${x.name}: ${x.error}`),
+          );
+      }
     }
   }
-}
-log('Subject choices set for VI-VII');
+  log('Subject choices set for VI-VII');
 
-// Term I: every subject a student takes, out of 80 (pass 27), a paper a day from the exam's first day
-// (the languages of a group on one day); VII's Art and PE graded A-C
-const dayOf = (n) => {
-  const d = new Date(`${exam.TERM.startsOn ?? '2026-10-01'}T00:00:00Z`);
-  d.setUTCDate(d.getUTCDate() + n);
-  return d.toISOString().slice(0, 10);
-};
-const termSubjects = async (k, order) => {
-  const setup = await api(ADMIN, 'GET', `/exams/subject-choices/setup?classId=${k.id}`);
-  const taken = setup.subjects.filter((x) => x.take !== 'free').map((x) => x.code);
-  const codes = order ?? taken;
-  const groupDay = new Map();
-  let day = 0;
-  return codes
-    .map((c) => setup.subjects.find((x) => x.code === c))
-    .filter(Boolean)
-    .map((x) => {
-      const graded = k.code === 'VII' && ['ART', 'PE'].includes(x.code) && coScholastic;
-      if (graded) return { subjectId: x.id, maxMarks: 0, gradeScaleId: coScholastic.id };
-      let n = x.groupId ? groupDay.get(x.groupId) : undefined;
-      if (n === undefined) {
-        n = day;
-        day += 1;
-        if (x.groupId) groupDay.set(x.groupId, n);
-      }
-      return { subjectId: x.id, maxMarks: 80, passMarks: 27, examOn: dayOf(n) };
+  // Term I: every subject a student takes, out of 80 (pass 27), a paper a day from the exam's first day
+  // (the languages of a group on one day); VII's Art and PE graded A-C
+  const dayOf = (n) => {
+    const d = new Date(`${exam.TERM.startsOn ?? '2026-10-01'}T00:00:00Z`);
+    d.setUTCDate(d.getUTCDate() + n);
+    return d.toISOString().slice(0, 10);
+  };
+  const termSubjects = async (k, order) => {
+    const setup = await api(ADMIN, 'GET', `/exams/subject-choices/setup?classId=${k.id}`);
+    const taken = setup.subjects.filter((x) => x.take !== 'free').map((x) => x.code);
+    const codes = order ?? taken;
+    const groupDay = new Map();
+    let day = 0;
+    return codes
+      .map((c) => setup.subjects.find((x) => x.code === c))
+      .filter(Boolean)
+      .map((x) => {
+        const graded = k.code === 'VII' && ['ART', 'PE'].includes(x.code) && coScholastic;
+        if (graded) return { subjectId: x.id, maxMarks: 0, gradeScaleId: coScholastic.id };
+        let n = x.groupId ? groupDay.get(x.groupId) : undefined;
+        if (n === undefined) {
+          n = day;
+          day += 1;
+          if (x.groupId) groupDay.set(x.groupId, n);
+        }
+        return { subjectId: x.id, maxMarks: 80, passMarks: 27, examOn: dayOf(n) };
+      });
+  };
+  for (const k of [vi, vii])
+    await api(ADMIN, 'PUT', `/exams/${exam.TERM.id}/subjects`, {
+      classId: k.id,
+      subjects: await termSubjects(k, k.code === 'VII' ? viiOrder : null),
     });
-};
-for (const k of [vi, vii])
-  await api(ADMIN, 'PUT', `/exams/${exam.TERM.id}/subjects`, {
-    classId: k.id,
-    subjects: await termSubjects(k, k.code === 'VII' ? viiOrder : null),
-  });
-log('Term I: subjects set for VI-VII');
+  log('Term I: subjects set for VI-VII');
+} else log(`Subjects of ${CLASSES.join(', ')}: as set up`);
 
 // ---- 3. marks ------------------------------------------------------------------------------------
 const shift = { PT1: 0, PT2: 0.02, ACT1: 0.06, ACT2: 0.05, TERM: -0.03 };
-/** Term I left in progress: VII-B Science and Social Science (the last three not entered) */
+/** Term I left in progress: the second class's B section, Science and Social Science (the last three not entered) */
 const inProgress = (key, sec, code) =>
-  key === 'TERM' && sec.code === 'VII-B' && ['SCI', 'SST'].includes(code);
+  key === 'TERM' && sec.code === `${C2}-B` && ['SCI', 'SST'].includes(code);
+/** Term I entered and not submitted: the first class's A section, Computer Science */
+const notSubmitted = (key, sec, code) => key === 'TERM' && sec.code === `${C1}-A` && code === 'CS';
 /**
  * A few codes, each in its place (exam, section, subject, the nth student who takes it): AB twice (as
  * the school's codes say, it counts 0 and holds the term result as Absent), ML three times (left out).
+ * A subject in parts takes AB only.
  */
 const CODES = [
-  ['PT1', 'VI-A', 'MAT', 3, 'AB'],
-  ['PT2', 'VII-A', 'SCI', 5, 'ML'],
-  ['ACT2', 'VI-B', 'ENG', 2, 'ML'],
-  ['TERM', 'VII-A', 'HIN', 4, 'ML'],
-  ['TERM', 'VI-B', 'SST', 6, 'AB'],
+  ['PT1', `${C1}-A`, 'MAT', 3, 'AB'],
+  ['PT2', `${C2}-A`, 'MAT', 5, 'ML'],
+  ['ACT2', `${C1}-B`, 'ENG', 2, 'ML'],
+  ['TERM', `${C2}-A`, 'HIN', 4, 'ML'],
+  ['TERM', `${C1}-B`, 'SST', 6, 'AB'],
 ];
 const sheetsOf = async (key) => {
   const e = await api(ADMIN, 'GET', `/exams/${exam[key].id}`);
@@ -422,17 +457,90 @@ const remarkOf = (studentId, key) => {
   const pool = l > 0.8 ? REMARKS.top : l > 0.55 ? REMARKS.good : REMARKS.low;
   return pool[Math.floor(rand(`rem:${key}:${studentId}`) * pool.length)];
 };
+const band = (studentId) => {
+  const l = level(studentId);
+  return l > 0.8 ? 'top' : l > 0.55 ? 'good' : 'low';
+};
+/** how a listed remark reads, to give it to a student of that level */
+const tone = (text) =>
+  /\b(needs?|support|should|less)\b/i.test(text)
+    ? 'low'
+    : /excellent|outstanding|quickly|confiden|courteous|respectful|aiming high/i.test(text)
+      ? 'top'
+      : 'good';
+/** a free-text category without a subject ("Any other"): a third of the students, in Term I */
+const OTHER = [
+  'Represented the school in an inter-school competition.',
+  'Took an active part in the inter-house quiz.',
+  'Helped look after the class library this term.',
+  'Won a prize at the science exhibition.',
+];
+const TOOK_PART = [
+  'Inter-house quiz',
+  'Annual sports day (relay)',
+  'Science exhibition',
+  'English debate',
+  'Art and craft fair',
+  'Yoga day',
+  'School choir',
+];
+const tookPart = (id) => {
+  const a = TOOK_PART[Math.floor(rand(`tp1:${id}`) * TOOK_PART.length)];
+  const b = TOOK_PART[Math.floor(rand(`tp2:${id}`) * TOOK_PART.length)];
+  return rand(`tp:${id}`) < 0.3 ? null : a === b ? a : `${a}; ${b}`;
+};
+const NOTES = [
+  'Takes part with interest.',
+  'Works neatly and with care.',
+  'Shows good effort and new ideas.',
+];
+const HEIGHT = { VI: 138, VII: 143, VIII: 149 };
 const DAYS = { PT1: 46, PT2: 22, TERM: 112 };
 for (const key of ['PT1', 'PT2', 'TERM']) {
   const areas = exam[key].areas ?? [];
   for (const s of sections) {
     const list = await api(ADMIN, 'GET', `/exams/subject-choices?classSectionId=${s.id}`);
     const ids = list.rows.map((r) => r.studentId);
-    if (areas.includes('remarks'))
+    if (areas.includes('remarks')) {
       await api(ADMIN, 'PUT', `/exams/${exam[key].id}/remarks`, {
         classSectionId: s.id,
-        rows: ids.map((id) => ({ studentId: id, remark: remarkOf(id, key) })),
+        rows: ids.map((id) => ({
+          studentId: id,
+          remark: remarkOf(id, key),
+          ...(key === 'TERM' ? { participation: tookPart(id) } : {}),
+        })),
       });
+      // the remark categories the class takes: a listed one for everyone (a remark of their level),
+      // a subject's for everyone, "Any other" for a third in Term I
+      const sheet = await api(
+        ADMIN,
+        'GET',
+        `/exams/${exam[key].id}/remark-items?classSectionId=${s.id}`,
+      );
+      const rows = [];
+      for (const k of sheet.categories.filter((x) => x.may)) {
+        const bank = k.bank.filter((b) => b.text.trim().split(/\s+/).length >= 3);
+        for (const id of ids) {
+          if (!k.freeText) {
+            if (!bank.length) break;
+            const fits = bank.filter((b) => tone(b.text) === band(id));
+            const pool = fits.length ? fits : bank;
+            const b = pool[Math.floor(rand(`cat:${key}:${k.id}:${id}`) * pool.length)];
+            rows.push({ studentId: id, categoryId: k.id, text: null, bankCode: b.code });
+          } else if (k.subjectId) {
+            rows.push({ studentId: id, categoryId: k.id, text: remarkOf(id, `${key}:${k.code}`) });
+          } else if (key === 'TERM' && rand(`oth:${k.id}:${id}`) < 0.34) {
+            const t = OTHER[Math.floor(rand(`otht:${id}`) * OTHER.length)];
+            rows.push({ studentId: id, categoryId: k.id, text: t });
+          }
+        }
+      }
+      if (rows.length)
+        await api(ADMIN, 'PUT', `/exams/${exam[key].id}/remark-items`, {
+          classSectionId: s.id,
+          rows,
+        });
+    }
     if (areas.includes('attendance'))
       await api(ADMIN, 'PUT', `/exams/${exam[key].id}/attendance`, {
         classSectionId: s.id,
@@ -452,12 +560,22 @@ for (const key of ['PT1', 'PT2', 'TERM']) {
         `/exams/${exam[key].id}/indicators?classSectionId=${s.id}`,
       );
       const levels = sheet.set?.grades ?? [];
-      const items = (sheet.indicators ?? []).filter((i) => !i.heading && i.kind === 'level');
-      if (levels.length && items.length)
+      const items = (sheet.indicators ?? []).filter(
+        (i) =>
+          !i.heading &&
+          (i.kind === 'text' || (i.kind === 'level' && (i.levels?.length || levels.length))),
+      );
+      if (items.length)
         await api(ADMIN, 'PUT', `/exams/${exam[key].id}/indicators`, {
           classSectionId: s.id,
           rows: ids.flatMap((id) =>
             items.map((i) => {
+              if (i.kind === 'text')
+                return {
+                  studentId: id,
+                  indicatorId: i.id,
+                  note: NOTES[Math.floor(rand(`note:${i.id}:${id}`) * NOTES.length)],
+                };
               const v = clamp(level(id) + (rand(`ind:${i.id}:${id}`) - 0.5) * 0.3, 0, 1);
               const own = i.levels?.length ? i.levels : levels;
               return {
@@ -470,7 +588,7 @@ for (const key of ['PT1', 'PT2', 'TERM']) {
         });
     }
     if (key === 'TERM' && areas.includes('health')) {
-      const base = s.classId === vi.id ? 138 : 143;
+      const base = HEIGHT[classes.find((k) => k.id === s.classId)?.code] ?? 145;
       const groups = ['A+', 'B+', 'O+', 'AB+', 'O+', 'B+', 'A-', 'O-'];
       await api(ADMIN, 'PUT', `/exams/${exam[key].id}/health`, {
         classSectionId: s.id,
@@ -487,13 +605,14 @@ for (const key of ['PT1', 'PT2', 'TERM']) {
       });
     }
   }
-  log(`${exam[key].code}: ${areas.filter((a) => a !== 'marks').join(', ')} filled`);
+  const besides = areas.filter((a) => a !== 'marks');
+  log(`${exam[key].code}: ${besides.length ? `${besides.join(', ')} filled` : 'marks only'}`);
 }
 
 // ---- 5. the stage of mid-October -----------------------------------------------------------------
 for (const x of entered) {
   if (!x.complete) continue;
-  if (x.key === 'TERM' && x.s.code === 'VI-A' && x.code === 'CS') continue; // entered, not submitted
+  if (notSubmitted(x.key, x.s, x.code)) continue; // entered, not submitted
   const body = { classSectionId: x.s.id, subjectId: x.subjectId };
   await api(OFFICE, 'POST', `/exams/${exam[x.key].id}/entry-status/submit`, body);
   if (x.key !== 'TERM')
@@ -502,7 +621,7 @@ for (const x of entered) {
 for (const key of ['PT1', 'PT2', 'ACT1', 'ACT2'])
   await api(ADMIN, 'POST', `/exams/${exam[key].id}/results/compute`);
 log(
-  'PT1, PT2, ACT1, ACT2 verified and worked out; Term I submitted (VII-B SCI and SST in progress, VI-A CS not submitted)',
+  `PT1, PT2, ACT1, ACT2 verified and worked out; Term I submitted (${C2}-B SCI and SST in progress, ${C1}-A CS not submitted)`,
 );
 
 // ---- 6. the Term I result ------------------------------------------------------------------------
@@ -510,7 +629,8 @@ const scheme = await api(ADMIN, 'POST', '/exams/schemes', {
   name: SCHEME,
   purpose: 'result',
   termCode: 'T1',
-  classIds,
+  // in the exam's class order
+  classIds: exam.PT1.classes.map((k) => k.classId).filter((id) => schemeClassIds.has(id)),
   preset: 'DPS_VI_VIII',
   examMap: {
     MT1: exam.PT1.id,

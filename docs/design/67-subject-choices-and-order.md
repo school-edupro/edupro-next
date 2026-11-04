@@ -274,6 +274,18 @@ scheme in the database (the API never deletes marks); run again, it gives the sa
   locked and worked out: 24 pass, 3 compartment, 1 fail, 2 absent, 3 incomplete (VII-B). Not released;
   no message is queued (the script checks).
 
+**Classes VI and VIII (4 Nov).** `--classes VI,VIII` (one to three classes; VI,VII is the default)
+fills the same five exams for VI-A, VI-B, VIII-A and VIII-B, clearing only those classes (VII stays as
+it is). The subject set-up (VII's template, VI-A's languages, Term I's subjects) now runs only with
+`--setup`, for the first VI-VII run: otherwise the classes' subjects, choices, exam subjects and
+students' subject changes stay as the school set them. New since the first run: the remark
+categories the class takes (a listed category gets one of its remarks for the student's level for
+everyone, a subject's category everyone, "Any other" a third in Term I), what the student took part in
+(Term I), written indicators, height by class. The codes and stages fall in the first class (AB in
+VI-A Mathematics, VI-A Computer Science not submitted) and the second (VIII-B Science and Social
+Science in progress). "Term I result (sample)" keeps the classes it had and adds these: VI 13 pass,
+1 compartment, 1 fail, 2 absent; VIII 13 pass, 3 incomplete (VIII-B); VII incomplete (nothing entered).
+
 **Found while seeding: parts follow a new maximum (0295).** Term I's Social Science for VI was out of
 40 in parts of 20 + 20; set to 80, the parts stayed 20 + 20, so no one could score above 40.
 `app.fit_parts_to_max` now resizes the parts in their ratio when the exam's subjects change the
