@@ -152,3 +152,7 @@ category.
 - Tests: `apps/api/test/entry-by-mapping.e2e-spec.ts` (6); 22 related suites pass (191 tests); axe on the
   teacher pages (three logins, desktop and phone) and the admin pages in a throwaway school; the teacher
   a11y list gains /health and the attendance view.
+- **Later (4 Nov 2026):** the teacher app's Indicators page shows the teacher's areas as tabs (links,
+  `ep-tabs-links`) with what is entered of each, "Marathi (0/40)" (their indicators × pupils), instead of
+  an Area drop-down behind Open (a mapped teacher saw only the first area and took the others as
+  missing); the area stays when the exam or section changes, if it applies there.

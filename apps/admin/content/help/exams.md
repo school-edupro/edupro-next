@@ -114,7 +114,8 @@
   assignments) rates only its areas (or the single indicators it names) in that section; the class
   teacher's page says who else enters an area. A subject category (e.g. Mathematics) is also its
   subject teacher's; a **Remarks** assignment gives categories to any teacher. A teacher with nothing
-  to write is told why ("No remark category is set for Class VI…"). Both pages have **By Excel** with
+  to write is told why ("No remark category is set for Class VI…"). The teacher app shows a teacher's
+  indicator areas as tabs, each with what is entered ("Marathi (0/40)"). Both pages have **By Excel** with
   only that teacher's columns. The teacher app's home lists **To enter**: per open exam, what is theirs
   and not done (marks not submitted, indicators, remark categories, height and weight).
 - The progress card: in the teacher app **Indicators and progress card** (or **Exams → open exam →

@@ -138,6 +138,22 @@ export default async function IndicatorsPage({
     ...new Set(items.filter((i) => !i.heading && shown(i)).map((i) => i.area ?? 'Other')),
   ];
   const area = areas.includes(sp.area ?? '') ? sp.area! : areas[0];
+  // every area a tab with what is entered of it (the teacher's indicators × pupils)
+  const tabs = areas.map((a) => {
+    const its = items.filter((i) => !i.heading && shown(i) && (i.area ?? 'Other') === a);
+    const rows = sheet?.rows ?? [];
+    const done = rows.reduce(
+      (n, r) => n + its.filter((i) => r.grades[i.id]?.grade || r.grades[i.id]?.note).length,
+      0,
+    );
+    const q = new URLSearchParams({
+      ...(exam ? { exam: exam.id } : {}),
+      ...(chosen ? { section: chosen.classSectionId } : {}),
+      area: a,
+      ...(sp.student ? { student: sp.student } : {}),
+    });
+    return { area: a, done, total: its.length * rows.length, href: `/indicators?${q.toString()}` };
+  });
   const groups = items
     .filter((i) => !i.parentId && (i.area ?? 'Other') === area)
     .map((i) => ({ item: i, kids: items.filter((k) => k.parentId === i.id && shown(k)) }))
@@ -231,23 +247,25 @@ export default async function IndicatorsPage({
               ))}
             </select>
           </label>
-          {areas.length ? (
-            <label className="ep-field" style={{ minWidth: 220 }}>
-              <span className="ep-field__label">{t(lang, 'Area')}</span>
-              <select className="ep-input" name="area" defaultValue={area}>
-                {areas.map((a) => (
-                  <option key={a} value={a}>
-                    {t(lang, a)}
-                  </option>
-                ))}
-              </select>
-            </label>
-          ) : null}
+          {area ? <input type="hidden" name="area" value={area} /> : null}
           <Button type="submit" variant="secondary">
             {t(lang, 'Open')}
           </Button>
         </form>
       </Card>
+      {tabs.length > 1 ? (
+        <nav
+          className="ep-tabs-links"
+          aria-label={t(lang, 'Areas')}
+          style={{ marginBottom: 'var(--sp-3)' }}
+        >
+          {tabs.map((x) => (
+            <a key={x.area} href={x.href} aria-current={x.area === area ? 'page' : undefined}>
+              {t(lang, x.area)} ({x.done}/{x.total})
+            </a>
+          ))}
+        </nav>
+      ) : null}
       {loadError ? <Card>{t(lang, loadError)}</Card> : null}
       {!loadError && exam && sections.length === 0 ? (
         <Card>

@@ -13,6 +13,7 @@ export async function currentLang(): Promise<Lang> {
 }
 
 const DICT: Record<string, string> = {
+  Areas: 'क्षेत्र',
   'Remarks by category: the class teacher every one, a subject teacher their subject’s, others those given to them':
     'श्रेणी अनुसार टिप्पणियाँ: कक्षा अध्यापक सभी, विषय अध्यापक अपने विषय की, अन्य उन्हें दी गई',
   'By Excel': 'एक्सेल से',
