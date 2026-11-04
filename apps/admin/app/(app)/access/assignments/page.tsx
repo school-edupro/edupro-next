@@ -3,6 +3,7 @@ import { getTranslations } from 'next-intl/server';
 import { Notice } from '@/components/Notice';
 import { grantRole, revokeAssignment } from '@/lib/actions';
 import { apiFetch } from '@/lib/api';
+import { sectionBound } from '@/lib/section-bound';
 import type { Assignment, Membership, Page, Role, School } from '@/lib/types';
 
 export default async function AssignmentsPage({
@@ -86,7 +87,10 @@ export default async function AssignmentsPage({
                 a.scopes.length ? (
                   <a href={`/access/assignments/${a.id}`}>{a.scopes.length} scope(s)</a>
                 ) : (
-                  <a href={`/access/assignments/${a.id}`}>all</a>
+                  <a href={`/access/assignments/${a.id}`}>
+                    {/* a teacher role the system gave is bound to its sections */}
+                    {sectionBound(a) ? 'none' : 'all'}
+                  </a>
                 ),
             },
             {

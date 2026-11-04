@@ -433,7 +433,8 @@
     },
     "access_assignments_detail": {
       "kicker": "Access",
-      "description": "Scopes limit this assignment to specific sections. No scope means the role applies to every section."
+      "description": "Scopes limit this assignment to specific sections. No scope means the role applies to every section.",
+      "descriptionTeacher": "This role came with the staff login or from Teacher assignments: it reaches only the sections ticked here (Academics → Teacher assignments sets them), and with none ticked no section."
     },
     "access_assignments": {
       "kicker": "Access",

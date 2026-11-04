@@ -179,19 +179,28 @@ export class AccessService implements OnApplicationBootstrap {
 
   // ---- scopes ----------------------------------------------------------------------------------------
 
-  /** Scope ids the user may act on; null = unrestricted (an assignment granting the permission has no scope rows). */
+  /**
+   * Scope ids the user may act on; null = unrestricted (an assignment granting the permission has no scope
+   * rows). A Class Teacher or Subject Teacher role the system gave — with the staff login ('employee
+   * onboarded', 0176) or from Teacher assignments ('teacher assignment sync', 0016) — is bound to the
+   * sections Teacher assignments set (ADR-004): with none it reaches no section, not the whole school
+   * (4 Nov 2026). A role granted by hand in Access keeps "no scope = every section".
+   */
   async scopesFor(
     tenant: TenantContext,
     permission: string,
     scopeType: ScopeType,
   ): Promise<string[] | null> {
     return this.db.tenant(tenant, async (c) => {
-      const r = await c.query<{ scopes: string[] | null }>(
+      const r = await c.query<{ scopes: string[] | null; section_bound: boolean }>(
         `SELECT (
                   SELECT array_agg(s.scope_id::text)
                     FROM user_role_scopes s
                    WHERE s.user_role_id = ur.id AND s.scope_type = $2::scope_type
-                ) AS scopes
+                ) AS scopes,
+                ($2::scope_type = 'class_section' AND r.school_id IS NULL
+                 AND r.code IN ('class_teacher', 'subject_teacher')
+                 AND ur.reason IN ('employee onboarded', 'teacher assignment sync')) AS section_bound
            FROM user_roles ur
            JOIN roles r ON r.id = ur.role_id AND r.status = 'active' AND r.deleted_at IS NULL
            JOIN role_permissions rp ON rp.role_id = ur.role_id AND rp.permission_code = $1
@@ -204,7 +213,10 @@ export class AccessService implements OnApplicationBootstrap {
       if (r.rowCount === 0) return [];
       const union = new Set<string>();
       for (const row of r.rows) {
-        if (row.scopes === null) return null;
+        if (row.scopes === null) {
+          if (row.section_bound) continue;
+          return null;
+        }
         for (const id of row.scopes) union.add(id);
       }
       return [...union];

@@ -3,6 +3,7 @@ import { getTranslations } from 'next-intl/server';
 import { Notice } from '@/components/Notice';
 import { setAssignmentScopes } from '@/lib/actions';
 import { apiFetch } from '@/lib/api';
+import { sectionBound } from '@/lib/section-bound';
 import type { Assignment, ClassRow, Page, SectionRow } from '@/lib/types';
 
 export default async function AssignmentPage({
@@ -53,7 +54,7 @@ async function ScopeEditor({
       <PageHeader
         kicker={t('kicker')}
         title={`${assignment.userName}: ${assignment.roleName}`}
-        description={t('description')}
+        description={t(sectionBound(assignment) ? 'descriptionTeacher' : 'description')}
         actions={
           <Badge tone={assignment.active ? 'success' : 'danger'}>
             {assignment.active ? 'active' : 'inactive'}

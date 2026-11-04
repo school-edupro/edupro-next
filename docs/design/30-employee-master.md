@@ -40,7 +40,9 @@ experience, remarks and transfers). Built in three parts.
   inactive with a system remark.
 - **Login** `app.employee_create_login` (SECURITY DEFINER): links an account with the same email (or the
   only one with the same mobile), else makes one; staff membership with the employee id; Subject Teacher
-  role for teaching, contract and visiting staff.
+  role for teaching, contract and visiting staff. Since 0304 (4 Nov 2026) it also syncs the Teacher
+  assignments the person already holds in an active year (their roles and sections); the teacher role given
+  with the login (or by the sync) with no section reaches no section (it had reached the whole school).
 - **Admin**: `/people/employees/new` (quick onboard, "Complete the profile" / "Onboard another"),
   `/people/employees/:id` with tabs Profile (section tabs, completeness, jump to missing, save only
   what changed), Education, Languages, Experience, Transfers and remarks, Posting and documents; Make a

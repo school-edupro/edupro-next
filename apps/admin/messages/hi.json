@@ -433,7 +433,8 @@
     },
     "access_assignments_detail": {
       "kicker": "पहुँच",
-      "description": "Scopes limit this assignment to specific sections. No scope means the role applies to every section."
+      "description": "Scopes limit this assignment to specific sections. No scope means the role applies to every section.",
+      "descriptionTeacher": "यह भूमिका स्टाफ़ लॉगिन के साथ या अध्यापक असाइनमेंट से मिली है: यह केवल यहाँ टिक किए सेक्शन तक पहुँचती है (शैक्षणिक → अध्यापक असाइनमेंट इन्हें तय करता है), और कोई टिक न हो तो किसी सेक्शन तक नहीं।"
     },
     "access_assignments": {
       "kicker": "पहुँच",
