@@ -179,6 +179,7 @@ export class TeacherAssignmentsService {
           q.employeeId
             ? `Teacher ${one((r) => `${r.employeeName} (${r.employeeCode})`) ?? ''}`
             : 'All teachers',
+          q.kind ? `Type ${KIND[q.kind] ?? q.kind}` : 'All types',
           q.includeEnded ? 'Ended ones included' : '',
           generatedOn(),
         ].filter(Boolean),

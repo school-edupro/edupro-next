@@ -1107,7 +1107,9 @@
     "free": "खाली",
     "delete": "हटाएँ",
     "deactivate": "निष्क्रिय करें",
-    "activate": "सक्रिय करें"
+    "activate": "सक्रिय करें",
+    "assignmentType": "आवंटन का प्रकार",
+    "allTypes": "सभी प्रकार"
   },
   "imports": {
     "kind": "आप क्या आयात कर रहे हैं?",

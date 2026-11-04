@@ -1107,7 +1107,9 @@
     "free": "free",
     "delete": "Delete",
     "deactivate": "Deactivate",
-    "activate": "Activate"
+    "activate": "Activate",
+    "assignmentType": "Assignment type",
+    "allTypes": "All types"
   },
   "imports": {
     "kind": "What are you importing?",

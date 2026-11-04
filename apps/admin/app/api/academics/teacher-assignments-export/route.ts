@@ -10,6 +10,9 @@ export async function GET(req: NextRequest) {
     const v = sp.get(k) ?? '';
     if (/^\d{1,18}$/.test(v)) q.set(k, v);
   }
+  const kind = sp.get('kind') ?? '';
+  if (['class_teacher', 'subject_teacher', 'coordinator', 'indicator'].includes(kind))
+    q.set('kind', kind);
   if (sp.get('includeEnded')) q.set('includeEnded', 'true');
   const res = await apiFetchRaw(`/academics/teacher-assignments/export?${q.toString()}`);
   if (!res.ok) return NextResponse.json({ type: 'request-error' }, { status: res.status });

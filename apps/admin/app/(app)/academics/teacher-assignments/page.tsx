@@ -8,6 +8,8 @@ import { apiFetch, getMe } from '@/lib/api';
 import { sectionOptions } from '@/lib/sections';
 import type { Employee, Page, Subject, TeacherAssignment } from '@/lib/types';
 
+const KINDS = ['class_teacher', 'subject_teacher', 'coordinator', 'indicator'] as const;
+
 /** S6-02: teacher assignments; saving one grants the role and section scopes through the database. */
 export default async function TeacherAssignmentsPage({
   searchParams,
@@ -19,6 +21,7 @@ export default async function TeacherAssignmentsPage({
     detail?: string;
     classSectionId?: string;
     employeeId?: string;
+    kind?: string;
     includeEnded?: string;
   }>;
 }) {
@@ -34,6 +37,8 @@ export default async function TeacherAssignmentsPage({
   const query = new URLSearchParams();
   if (sp.classSectionId) query.set('classSectionId', sp.classSectionId);
   if (/^\d{1,18}$/.test(sp.employeeId ?? '')) query.set('employeeId', sp.employeeId!);
+  const kind = KINDS.find((k) => k === sp.kind) ?? '';
+  if (kind) query.set('kind', kind);
   if (sp.includeEnded) query.set('includeEnded', 'true');
   const [assignments, sections, employees, subjects, areas] = await Promise.all([
     apiFetch<{ data: TeacherAssignment[] }>(`/academics/teacher-assignments?${query.toString()}`),
@@ -118,6 +123,16 @@ export default async function TeacherAssignmentsPage({
                   value: e.id,
                   label: `${e.displayName} (${e.employeeCode})`,
                 })),
+              ]}
+            />
+            <SelectField
+              id="kind"
+              name="kind"
+              label={a('assignmentType')}
+              defaultValue={kind}
+              options={[
+                { value: '', label: a('allTypes') },
+                ...KINDS.map((k) => ({ value: k, label: a(`assignmentKinds.${k}`) })),
               ]}
             />
             <label style={{ display: 'flex', gap: 'var(--sp-2)', alignItems: 'center' }}>
