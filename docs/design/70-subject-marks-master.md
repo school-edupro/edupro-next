@@ -102,3 +102,15 @@ takes its papers from the master.
   **Fill the subject marks from this exam**, and the papers listed. English and Hindi.
 - Tests: `subject-marks.e2e-spec.ts` (10: part 1's 6 and following, differs and Apply, the save, new /
   added class / copied exams); the exam suites without a master pass unchanged; a11y for the step.
+
+## After part 2 (4 Nov 2026, user: "parts of Social Science: the marks from the master")
+
+- In the Subjects step's parts, a part picked as a sub-subject (or "entered by the teacher of" one) takes
+  that sub-subject's maximum from the master (`masterMax`); with no line, what is left of the subject's
+  maximum. **Take the parts from the subject marks** makes a part for every sub-subject with a line, at
+  once (hidden once a part has marks), showing the sum against the subject's maximum.
+- Not built (left for a decision): making sub-subject lines parts automatically on new exams. The
+  school uses both shapes — in PT1 · VI Geography and History are papers of their own, in PT1 · VIII
+  Geography and Political Science are parts of Social Science — so a rule would split VI wrongly; an
+  explicit "Part of" on a master line would settle it.
+- Unticked papers' marks (text from the master) show muted rather than faded (contrast).

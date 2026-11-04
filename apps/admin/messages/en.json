@@ -4089,7 +4089,8 @@
       "applyCancel": "Cancel",
       "partsMustAdd": "The parts of {subject} must add up to its maximum of {max}",
       "gradeOnly": "Grade only",
-      "optional": "Optional"
+      "optional": "Optional",
+      "partsFromMaster": "Take the parts from the subject marks"
     },
     "sheet": {
       "title": "Date sheet",

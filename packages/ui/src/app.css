@@ -13165,8 +13165,12 @@ a.ep-pub-foot__item {
 .ep-xsubj .ep-select {
   min-width: 5.5rem;
 }
-.ep-xsubj tr[data-off='true'] td:not(:first-child) {
+/* a paper not sat: its boxes dimmed; its marks as text (from the master) muted, still readable */
+.ep-xsubj tr[data-off='true'] td:not(:first-child) :is(input, select, button, label) {
   opacity: 0.55;
+}
+.ep-xsubj tr[data-off='true'] td:not(:first-child) {
+  color: var(--text-muted);
 }
 .ep-xparts {
   display: grid;
@@ -13794,6 +13798,12 @@ button.ep-subchoice__icon:hover {
   font-size: var(--fs-caption);
   font-weight: var(--fw-regular, 400);
   color: var(--status-warning-text);
+}
+.ep-xparts__master {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-2);
 }
 .ep-xsubj__apply {
   display: inline-flex;

@@ -80,6 +80,7 @@ export function ExamSubjectsEditor({
   next,
   locked,
   fromMaster = null,
+  masterMax = {},
 }: {
   examId: string;
   classId: string;
@@ -95,6 +96,8 @@ export function ExamSubjectsEditor({
   locked: boolean;
   /** the subject marks master this class's papers come from (docs/design/70) */
   fromMaster?: { href: string; type: string; class: string } | null;
+  /** the master's maximum of each subject of the class (a part takes its sub-subject's) */
+  masterMax?: Record<string, number>;
 }) {
   const master = fromMaster !== null;
   const t = useTranslations('examHub.setup');
@@ -193,14 +196,34 @@ export function ExamSubjectsEditor({
     return p.name || typed.has(`${r.subjectId}|${String(i)}`) ? 'other' : '';
   };
   /** a part picked from the list: a sub-subject is entered by its own teacher */
+  /**
+   * A part's maximum when it is picked (docs/design/70): its sub-subject's line in the subject marks
+   * master (Geography 13 of Social Science 35); else, with the master, what is left of the subject's
+   * maximum after the other parts; a maximum already typed stays unless the master has one.
+   */
+  const partMax = (r: EditorRow, i: number, subjectId: string): string => {
+    const own = subjectId ? masterMax[subjectId] : undefined;
+    if (own !== undefined) return String(own);
+    const p = r.parts[i];
+    if (!master || (p && p.max.trim())) return p?.max ?? '';
+    const left =
+      Number(r.max) - r.parts.reduce((a, x, n) => (n === i ? a : a + (Number(x.max) || 0)), 0);
+    return left > 0 ? String(left) : '';
+  };
   const pickPart = (r: EditorRow, i: number, value: string) => {
     const key = `${r.subjectId}|${String(i)}`;
     const next = new Set(typed);
     next.delete(key);
     if (value.startsWith('k:')) {
       const kid = r.children.find((k) => k.id === value.slice(2));
-      if (kid) changePart(r.subjectId, i, { name: kid.name, subjectId: kid.id });
-    } else if (value.startsWith('p:')) changePart(r.subjectId, i, { name: value.slice(2) });
+      if (kid)
+        changePart(r.subjectId, i, {
+          name: kid.name,
+          subjectId: kid.id,
+          max: partMax(r, i, kid.id),
+        });
+    } else if (value.startsWith('p:'))
+      changePart(r.subjectId, i, { name: value.slice(2), max: partMax(r, i, '') });
     else if (value === 'other') {
       next.add(key);
       changePart(r.subjectId, i, { name: '' });
@@ -563,6 +586,46 @@ export function ExamSubjectsEditor({
                         <p className="ep-field__help" style={{ margin: 0 }}>
                           {t('partsHelp')}
                         </p>
+                        {(() => {
+                          // every sub-subject with a line in the subject marks, as the parts at once
+                          const kids = r.children.filter((k) => masterMax[k.id] !== undefined);
+                          if (!master || !kids.length || r.parts.some((p) => p.entered))
+                            return null;
+                          const sum = kids.reduce((a, k) => a + (masterMax[k.id] ?? 0), 0);
+                          return (
+                            <div className="ep-xparts__master">
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="secondary"
+                                onClick={() =>
+                                  change(r.subjectId, {
+                                    parts: kids.map((k) => ({
+                                      ...(r.parts.find((p) => p.subjectId === k.id)?.id
+                                        ? { id: r.parts.find((p) => p.subjectId === k.id)!.id }
+                                        : {}),
+                                      name: k.name,
+                                      subjectId: k.id,
+                                      max: String(masterMax[k.id]),
+                                      entered: 0,
+                                    })),
+                                  })
+                                }
+                              >
+                                {t('partsFromMaster')}
+                              </Button>
+                              <span className="ep-field__help">
+                                {kids
+                                  .map((k) => `${k.name} ${String(masterMax[k.id])}`)
+                                  .join(' + ')}{' '}
+                                = {sum}
+                                {sum !== Number(r.max)
+                                  ? ` · ${t('partsMustAdd', { subject: r.name, max: r.max })}`
+                                  : ''}
+                              </span>
+                            </div>
+                          );
+                        })()}
                         {r.parts.map((p, i) => (
                           <div key={String(i)} className="ep-xparts__row">
                             <label
@@ -614,7 +677,12 @@ export function ExamSubjectsEditor({
                                 className="ep-select"
                                 value={p.subjectId}
                                 onChange={(e) =>
-                                  changePart(r.subjectId, i, { subjectId: e.target.value })
+                                  changePart(r.subjectId, i, {
+                                    subjectId: e.target.value,
+                                    ...(masterMax[e.target.value] !== undefined
+                                      ? { max: String(masterMax[e.target.value]) }
+                                      : {}),
+                                  })
                                 }
                               >
                                 <option value="">{t('partItself', { subject: r.name })}</option>

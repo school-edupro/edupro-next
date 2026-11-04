@@ -384,6 +384,7 @@ export default async function ExamSetupPage({
                 ? { href: masterHref, type: exam.examTypeCode, class: klass.classCode }
                 : null
             }
+            masterMax={Object.fromEntries((masterRows ?? []).map((m) => [m.subjectId, m.maxMarks]))}
             addable={
               masterInitial
                 ? []
