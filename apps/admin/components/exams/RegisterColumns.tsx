@@ -388,27 +388,48 @@ export function RegisterColumns({
         <Button size="sm" variant="ghost" onClick={openWeightage} disabled={!exams.length}>
           Weightage builder
         </Button>
-        {composite && withPartColumns(data, s, def).changed ? (
-          <Button
-            size="sm"
-            variant="secondary"
-            onClick={() => {
-              const r = withPartColumns(data, s, def);
-              setSubject({ columns: r.columns });
-              setNote(
-                `Its parts now show in ${String(r.changed)} exam column(s), in one cell with their sum; the averages and the total stay as they were.`,
-              );
-            }}
-          >
-            Show its parts in each exam
-          </Button>
-        ) : null}
       </div>
       <div className="ep-mr-subject__body">
         {note ? (
           <p className="ep-alert ep-alert--info" role="status" style={{ marginTop: 0 }}>
             {note}
           </p>
+        ) : null}
+        {/* a subject entered in parts whose exam columns read the whole marks: its parts do not show */}
+        {composite && !note && withPartColumns(data, s, def).changed ? (
+          <div
+            className="ep-alert ep-alert--warning"
+            role="status"
+            style={{
+              marginTop: 0,
+              display: 'flex',
+              gap: 'var(--sp-3)',
+              alignItems: 'center',
+              flexWrap: 'wrap',
+            }}
+          >
+            <span style={{ flex: 1, minWidth: '16rem' }}>
+              {titles[s.key]} is entered in parts (
+              {[...new Set(papersOf(data, s).flatMap((p) => p.parts.map((x) => x.name)))].join(
+                ', ',
+              )}
+              ), but its exam columns read only the whole marks, so the parts do not show in the
+              register.
+            </span>
+            <Button
+              size="sm"
+              variant="secondary"
+              onClick={() => {
+                const r = withPartColumns(data, s, def);
+                setSubject({ columns: r.columns });
+                setNote(
+                  `Its parts now show in ${String(r.changed)} exam column(s), in one cell with their sum (tick Parts in columns for a column each); the averages and the total stay as they were. Save the register to keep it.`,
+                );
+              }}
+            >
+              Show its parts in each exam
+            </Button>
+          </div>
         ) : null}
         {!cols.length ? (
           <p className="ep-field__help" style={{ marginTop: 0 }}>

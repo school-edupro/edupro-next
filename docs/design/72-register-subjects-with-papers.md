@@ -142,4 +142,6 @@ subjects)` (a plain subject, or a slot none of whose members has a paper, in the
   exam**, **Parts in columns** ticked on whole marks (parts first, a column each), and **Copy to
   subjects**'s tick "A subject entered in parts shows its parts" (on by default). A new **elective
   slot** takes the columns of its first member that had some (the languages' chain) instead of
-  starting empty; "add its columns" names the step (step 3, Columns).
+  starting empty; "add its columns" names the step (step 3, Columns). The subject's panel then says so in a notice
+  ("Social Science is entered in parts (…), but its exam columns read only the whole marks, so the parts
+  do not show in the register.") with the button beside it — the header button was easy to miss.
