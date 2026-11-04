@@ -8,9 +8,13 @@ import {
   defaultCodes,
   examView,
   newRegisterDef,
+  noPaperMessage,
   orderStudents,
   properCase,
   registerProblems,
+  subjectStanding,
+  subjectsWithoutPaper,
+  type PaperSubject,
   type RegColumn,
   type RegisterDef,
   type RegMark,
@@ -486,5 +490,114 @@ describe('mark registers (docs/design/68)', () => {
     const db = readFileSync(join(__dirname, '../src/mark-register.ts'), 'utf8');
     const ui = readFileSync(join(__dirname, '../../ui/src/mark-register.ts'), 'utf8');
     expect(ui.split('\n').slice(1).join('\n')).toBe(db);
+  });
+});
+
+describe('subjects without a paper of their own (docs/design/72)', () => {
+  // exams 1 (PT1), 2 (PT2), 3 (ACT2); Social Science in parts Geography and History in PT1 and PT2;
+  // Geography a paper of its own in ACT2 only; Japanese on the class list, no paper
+  const subjects: PaperSubject[] = [
+    {
+      id: 'ENG',
+      name: 'English',
+      papers: [
+        { examId: '1', parts: [] },
+        { examId: '2', parts: [] },
+      ],
+    },
+    {
+      id: 'SST',
+      name: 'Social Science',
+      papers: [
+        { examId: '1', parts: [{ subjectId: 'GEO' }, { subjectId: 'HIST' }] },
+        { examId: '2', parts: [{ subjectId: 'GEO' }, { subjectId: 'HIST' }, { subjectId: null }] },
+      ],
+    },
+    { id: 'GEO', name: 'Geography', papers: [{ examId: '3', parts: [] }] },
+    { id: 'HIST', name: 'History', papers: [] },
+    { id: 'JAPA', name: 'Japanese', papers: [] },
+  ];
+
+  it('tells a paper of its own from a part and from neither, in all exams or in some', () => {
+    expect(subjectStanding(subjects, 'ENG')).toEqual({
+      kind: 'own',
+      ownExams: ['1', '2'],
+      inside: [],
+    });
+    expect(subjectStanding(subjects, 'HIST')).toEqual({
+      kind: 'part',
+      ownExams: [],
+      inside: ['SST'],
+    });
+    expect(subjectStanding(subjects, 'GEO')).toEqual({
+      kind: 'own',
+      ownExams: ['3'],
+      inside: ['SST'],
+    });
+    expect(subjectStanding(subjects, 'GEO', ['1', '2']).kind).toBe('part');
+    expect(subjectStanding(subjects, 'JAPA').kind).toBe('none');
+    expect(subjectStanding(subjects, 'SST', ['3'])).toEqual({
+      kind: 'none',
+      ownExams: [],
+      inside: [],
+    });
+  });
+
+  it("lists the register's subjects without a paper in its exams, and says why", () => {
+    const cols: RegColumn[] = [
+      { key: 'PT1', name: 'PT1', kind: 'raw', exam: 'PT1' },
+      { key: 'AV', name: 'Average', kind: 'avg', mode: 'all', of: [] },
+    ];
+    const def = reg(
+      [
+        subject('ENG', cols),
+        subject('GEO', cols),
+        subject('HIST', cols),
+        subject('JAPA', cols),
+        { key: 'L', slot: { name: 'LANG', members: ['HIST', 'JAPA'] }, columns: cols },
+        { key: 'L2', slot: { name: 'LANG2', members: ['ENG', 'JAPA'] }, columns: cols },
+      ],
+      ['PT1', 'PT2'],
+    );
+    const list = subjectsWithoutPaper(def, subjects);
+    expect(list).toEqual([
+      { key: 'GEO', name: 'Geography', inside: ['Social Science'] },
+      { key: 'HIST', name: 'History', inside: ['Social Science'] },
+      { key: 'JAPA', name: 'Japanese', inside: [] },
+      { key: 'L', name: 'LANG', inside: ['Social Science'] },
+    ]);
+    expect(noPaperMessage(list.slice(0, 2))).toBe(
+      "Geography and History have no paper of their own in this register's exams: they are marked inside Social Science",
+    );
+    expect(noPaperMessage(list.slice(2, 3))).toBe("Japanese has no paper in this register's exams");
+    expect(noPaperMessage([])).toBeNull();
+    // with ACT2 read too, Geography has its own paper
+    const withAct2 = { ...def, exams: [...def.exams, { key: 'ACT2', examId: '3' }] };
+    expect(subjectsWithoutPaper(withAct2, subjects).map((x) => x.key)).toEqual([
+      'HIST',
+      'JAPA',
+      'L',
+    ]);
+    // before the register reads an exam there is nothing to say
+    expect(subjectsWithoutPaper({ ...def, exams: [] }, subjects)).toEqual([]);
+  });
+
+  it('an average with nothing to average says so', () => {
+    const def = reg(
+      [
+        subject('ENG', [
+          { key: 'A', name: 'A', kind: 'raw', exam: 'T' },
+          { key: 'AV', name: 'average', kind: 'avg', mode: 'all', of: [] },
+          { key: 'SU', name: 'Sum', kind: 'avg', mode: 'sum', of: [] },
+        ]),
+      ],
+      ['T'],
+    );
+    expect(registerProblems(def)).toEqual(
+      expect.arrayContaining([
+        'ENG · average: nothing to average, choose the columns it is made from',
+        'ENG · Sum: nothing to add up, choose the columns it is made from',
+      ]),
+    );
   });
 });

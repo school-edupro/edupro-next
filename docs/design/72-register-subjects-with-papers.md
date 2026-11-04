@@ -1,6 +1,6 @@
 # 72 · Register builder: subjects without a paper of their own
 
-Status: planned 4 Nov 2026 (decisions below); parts 1–2 to build on "go part N"
+Status: built 4 Nov 2026, parts 1–2 (no migration)
 
 ## Why
 
@@ -53,7 +53,7 @@ to nobody) is offered as a subject of its own.
   - `partOf`: the subjects whose papers carry it as a part, with the exams and classes
     (`exam_subject_parts.subject_id`; e.g. Geography: Social Science in PT1, PT2, ACT1, ACT2, Term I);
   - each part gains `subjectId` beside its `code`.
-  Its `papers` stay as they are (Geography: ACT2 · VIII, out of 5).
+    Its `papers` stay as they are (Geography: ACT2 · VIII, out of 5).
 - **`packages/ui` / `apps/admin/lib/register-builder.ts`:** `subjectStanding(data, subjectId, examIds?)`
   → `own` (a paper in the exams), `part` (no paper; a part of …), `none` (neither); `examIds` absent:
   every exam of the year (step 2 before any column), present: the register's exams (save check).
@@ -103,3 +103,34 @@ to nobody) is offered as a subject of its own.
   inside Science and Social Science; and ACT2 VIII has no Science paper. Under part 1 Geography and
   Political Science would show "own paper: ACT2 (VIII)". If that set-up is not meant, the school changes
   ACT2's subjects for VIII (Exams → Set-up → Classes and subjects).
+
+## As built (4 Nov 2026, parts 1–2)
+
+- **Engine** (`packages/db/src/mark-register.ts`, copied to `packages/ui` by
+  `scripts/sync-mark-register.mjs`): `PaperSubject`, `subjectStanding(subjects, id, examIds?)` (own /
+  part / none, the exams of its own papers, the subjects it is inside), `subjectsWithoutPaper(def,
+subjects)` (a plain subject, or a slot none of whose members has a paper, in the register's exams;
+  nothing before it reads an exam), `noPaperMessage` (the words used by the builder and the API);
+  `registerProblems` says "nothing to average / add up, choose the columns it is made from". The
+  `partOf` of the plan is worked out from the parts' `subjectId` instead of being sent.
+- **API** (`MarkSchemesService`): the builder's parts carry `subjectId`; `assertPapers` on create,
+  update, copy and lock refuses with `exams.register_subject_no_paper` (409, `extra.subjects`); **copy
+  for other classes** keeps only subjects with a paper in the register's exams for those classes (a
+  subject only on their list, or only a part, is in `dropped`; a register that reads no exam yet keeps
+  the classes' lists). Presets are untouched (their subjects come from the papers).
+- **Admin**: `subjectNote` (`lib/register-builder.ts`) for step 2's tiles (parts named on the main
+  subject; "own paper: ACT2 (VIII); else inside Social Science"); the greyed group **Not a subject of
+  their own in this year's exams**; a subject already in the register without a paper stays tickable
+  (warning tone) to untick; slot members only from subjects with a paper; a warning with **Take them
+  out** in step 2 once the register reads exams. `pruneColumns` and `copyColumns` (left-out list = every
+  source column not in the target, conversions included); the copy dialog greys a subject the chain
+  does not fit ("no paper in PT1-2026", the exam's code), says what each other one loses, **Tick every
+  subject it fits**. Saving lists every problem (no longer the first six), the cause first, with
+  **Take them out** (also in step 6's list).
+- Tests: `packages/db/test/mark-register.test.ts` (+3: standing, without paper and the words, the
+  average message); `apps/api/test/register-subject-papers.e2e-spec.ts` (builder parts, refusal, save
+  and lock, copy leaving out a subject on the list); the register suites pass (6 suites, 44 tests);
+  `copyColumns` / `pruneColumns` / `subjectNote` checked with a throwaway script; the builder on Alpha
+  (Class VIII: step 2, the copy dialog, the save alert and Take them out; Class VI: Geography and
+  History greyed) with axe at 1280 and 375 in a throwaway spec, nothing saved. Help:
+  `apps/admin/content/help/exams.md` (Mark registers).

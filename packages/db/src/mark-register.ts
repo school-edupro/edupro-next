@@ -476,7 +476,10 @@ export function registerProblems(def: RegisterDef): string[] {
         out.push(`${at}: choose one of the register's exams`);
       if (c.kind === 'part' && !c.part?.trim()) out.push(`${at}: choose the part`);
       if (c.kind === 'avg') {
-        if (!c.of?.length) out.push(`${at}: choose the columns it is made from`);
+        if (!c.of?.length)
+          out.push(
+            `${at}: nothing to ${c.mode === 'sum' ? 'add up' : 'average'}, choose the columns it is made from`,
+          );
         if (c.mode === 'best' && !(c.best && c.best >= 1)) out.push(`${at}: give the best N`);
       }
       if (c.kind === 'conv') {
@@ -508,6 +511,96 @@ export function registerProblems(def: RegisterDef): string[] {
   }
   if (def.divisions.some((d) => !d.name.trim())) out.push('Name every division');
   return out;
+}
+
+// ---- subjects without a paper of their own (docs/design/72) ----------------------------------------
+/** a subject in the year's exams: its papers (one an exam for a class) and the sub-subjects of their parts */
+export interface PaperSubject {
+  id: string;
+  name: string;
+  papers: Array<{ examId: string; parts: Array<{ subjectId?: string | null }> }>;
+}
+export interface SubjectStanding {
+  /** own: a paper of its own in the exams; part: only a part of another subject's paper; none: neither */
+  kind: 'own' | 'part' | 'none';
+  /** the exams it has a paper of its own in */
+  ownExams: string[];
+  /** the subjects whose papers carry it as a part (in the exams) */
+  inside: string[];
+}
+
+/** What a subject is in the exams (all of them when none are named): a paper of its own, a part, or neither. */
+export function subjectStanding(
+  subjects: PaperSubject[],
+  id: string,
+  examIds?: string[],
+): SubjectStanding {
+  const inExams = (examId: string) => !examIds || examIds.includes(examId);
+  const me = subjects.find((x) => x.id === id);
+  const ownExams = [
+    ...new Set((me?.papers ?? []).filter((p) => inExams(p.examId)).map((p) => p.examId)),
+  ];
+  const inside = subjects
+    .filter(
+      (x) =>
+        x.id !== id &&
+        x.papers.some((p) => inExams(p.examId) && p.parts.some((q) => q.subjectId === id)),
+    )
+    .map((x) => x.id);
+  return { kind: ownExams.length ? 'own' : inside.length ? 'part' : 'none', ownExams, inside };
+}
+
+export interface NoPaperSubject {
+  /** the register subject's key */
+  key: string;
+  name: string;
+  /** the names of the subjects it is marked inside (empty: no paper and no part) */
+  inside: string[];
+}
+
+/**
+ * The register's subjects with no paper of their own in its exams (a slot: when none of its members has
+ * one). Nothing before the register reads an exam.
+ */
+export function subjectsWithoutPaper(def: RegisterDef, subjects: PaperSubject[]): NoPaperSubject[] {
+  const examIds = def.exams.map((e) => e.examId);
+  if (!examIds.length) return [];
+  const nameOf = (id: string) => subjects.find((x) => x.id === id)?.name ?? id;
+  const out: NoPaperSubject[] = [];
+  for (const s of def.subjects) {
+    const ids = s.slot ? s.slot.members : s.subjectId ? [s.subjectId] : [];
+    if (!ids.length) continue;
+    const st = ids.map((id) => subjectStanding(subjects, id, examIds));
+    if (st.some((x) => x.kind === 'own')) continue;
+    out.push({
+      key: s.key,
+      name: s.slot ? s.slot.name : nameOf(s.subjectId!),
+      inside: [...new Set(st.flatMap((x) => x.inside))].map(nameOf),
+    });
+  }
+  return out;
+}
+
+const andList = (xs: string[]) =>
+  xs.length < 2 ? (xs[0] ?? '') : `${xs.slice(0, -1).join(', ')} and ${xs[xs.length - 1]!}`;
+
+/** Why those subjects cannot be in the register, in words (null: none) */
+export function noPaperMessage(list: NoPaperSubject[]): string | null {
+  if (!list.length) return null;
+  const lines: string[] = [];
+  const parts = list.filter((x) => x.inside.length);
+  const none = list.filter((x) => !x.inside.length);
+  if (parts.length) {
+    const one = parts.length === 1;
+    lines.push(
+      `${andList(parts.map((x) => x.name))} ${one ? 'has' : 'have'} no paper of ${one ? 'its' : 'their'} own in this register's exams: ${one ? 'it is' : 'they are'} marked inside ${andList([...new Set(parts.flatMap((x) => x.inside))])}`,
+    );
+  }
+  if (none.length)
+    lines.push(
+      `${andList(none.map((x) => x.name))} ${none.length === 1 ? 'has' : 'have'} no paper in this register's exams`,
+    );
+  return lines.join('; ');
 }
 
 // ---- working out ----------------------------------------------------------------------------------

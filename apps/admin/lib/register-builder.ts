@@ -1,4 +1,11 @@
-import type { RegColumn, RegisterDef, RegMark, RegStudent, RegSubject } from '@edupro/ui';
+import {
+  subjectStanding,
+  type RegColumn,
+  type RegisterDef,
+  type RegMark,
+  type RegStudent,
+  type RegSubject,
+} from '@edupro/ui';
 import type { BuilderData } from './mark-schemes';
 
 /**
@@ -16,6 +23,34 @@ export function papersOf(data: BuilderData | null, s: RegSubject): Paper[] {
   if (!data) return [];
   const ids = membersOf(s);
   return data.subjects.filter((x) => ids.includes(x.id)).flatMap((x) => x.papers);
+}
+
+/**
+ * docs/design/72: how step 2 shows a subject of the classes — a paper of its own (tickable), only a
+ * part of another subject's paper, or no paper in the year's exams (neither tickable on its own) — and
+ * the words of its note: its parts, the exams it has its own paper in when it is also a part elsewhere.
+ */
+export function subjectNote(
+  data: BuilderData,
+  id: string,
+): { kind: 'own' | 'part' | 'none'; note: string; parts: string[] } {
+  const st = subjectStanding(data.subjects, id);
+  const nameOf = (x: string) => data.subjects.find((y) => y.id === x)?.name ?? x;
+  const papers = data.subjects.find((x) => x.id === id)?.papers ?? [];
+  const parts = [...new Set(papers.flatMap((p) => p.parts.map((q) => q.name)))];
+  const inside = st.inside.map(nameOf).join(', ');
+  if (st.kind === 'part') return { kind: 'part', note: `marked inside ${inside}`, parts };
+  if (st.kind === 'none') return { kind: 'none', note: 'no paper in this year’s exams', parts };
+  if (!st.inside.length) return { kind: 'own', note: '', parts };
+  const own = data.exams
+    .filter((e) => st.ownExams.includes(e.id))
+    .map((e) => {
+      const cls = [
+        ...new Set(papers.filter((p) => p.examId === e.id).map((p) => p.classCode)),
+      ].join(', ');
+      return `${e.code} (${cls})`;
+    });
+  return { kind: 'own', note: `own paper: ${own.join(', ')}; else inside ${inside}`, parts };
 }
 
 /** the exams a subject has, each with its maximum (or the lowest–highest across classes) */
@@ -87,7 +122,6 @@ export function columnKey(cols: RegColumn[], base: string): string {
   return key;
 }
 
-
 /** a column out, and anything made from it out of its sources (a conversion of it goes too) */
 export function dropColumn(cols: RegColumn[], key: string): RegColumn[] {
   const left = cols
@@ -99,10 +133,21 @@ export function dropColumn(cols: RegColumn[], key: string): RegColumn[] {
   return dead.reduce(dropColumn, left);
 }
 
+/** an average or sum left with nothing to work on goes, and what is made from it (docs/design/72) */
+export function pruneColumns(cols: RegColumn[]): RegColumn[] {
+  let out = cols;
+  for (;;) {
+    const empty = out.find((c) => c.kind === 'avg' && !c.of?.length);
+    if (!empty) return out;
+    out = dropColumn(out, empty.key);
+  }
+}
+
 /**
  * Copy to subjects: the source's chain into each target. Each target keeps its own maximum (read when
- * it runs); a column on an exam the target does not have is left out, with what is made from it; a
- * part is matched by name, else the chain reads the target's parts or its whole marks.
+ * it runs); a column on an exam the target does not have is left out, with what is made from it (an
+ * average or sum left with nothing to work on too, docs/design/72); a part is matched by name, else
+ * the chain reads the target's parts or its whole marks. Nothing left: the chain does not fit it.
  */
 export function copyColumns(
   data: BuilderData | null,
@@ -117,12 +162,11 @@ export function copyColumns(
     memberExam: undefined,
     memberTarget: undefined,
   }));
-  const skipped: string[] = [];
-  for (const c of [...columns]) {
+  for (const c of columns) {
     if (!(c.kind === 'raw' || c.kind === 'part')) continue;
+    if (!columns.some((x) => x.key === c.key)) continue;
     const examId = examIdOf(c.exam);
     if (!examId || !has.has(examId)) {
-      skipped.push(c.name);
       columns = dropColumn(columns, c.key);
       continue;
     }
@@ -137,13 +181,15 @@ export function copyColumns(
               ? { ...x, kind: 'raw', part: undefined, group: undefined, name: c.exam ?? x.name }
               : x,
           );
-        else {
-          skipped.push(c.name);
-          columns = dropColumn(columns, c.key);
-        }
+        else columns = dropColumn(columns, c.key);
       }
     }
   }
+  columns = pruneColumns(columns);
+  // what the copy left out: every column of the source not in the target (conversions of it too)
+  const skipped = from.columns
+    .filter((c) => !columns.some((x) => x.key === c.key))
+    .map((c) => c.name);
   return { columns, skipped };
 }
 

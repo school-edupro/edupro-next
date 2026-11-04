@@ -6,6 +6,9 @@ import {
   REPORTS,
   fromV1,
   isRegisterDef,
+  noPaperMessage,
+  subjectsWithoutPaper,
+  type PaperSubject,
   orderStudents,
   registerProblems,
   SCHEME_PRESETS,
@@ -419,6 +422,57 @@ export class MarkSchemesService {
     );
     if (k.rows.length !== new Set(classIds).size)
       throw new DomainError('validation-failed', 'A class is not of this school', { status: 400 });
+    await this.assertPapers(c, def, classIds);
+  }
+
+  /** docs/design/72: every subject has a paper of its own in the register's exams (not only a part) */
+  private async assertPapers(c: PoolClient, def: RegisterDef, classIds: string[]) {
+    const without = subjectsWithoutPaper(
+      def,
+      await this.paperSubjects(
+        c,
+        def.exams.map((e) => e.examId),
+        classIds,
+      ),
+    );
+    if (without.length)
+      throw new DomainError(
+        'exams.register_subject_no_paper',
+        `${noPaperMessage(without) ?? ''}. Take them out of the register (step 2, Subjects).`,
+        { status: 409, extra: { subjects: without } },
+      );
+  }
+
+  /** the subjects with papers in the exams for the classes, and the sub-subjects of the papers' parts */
+  private async paperSubjects(
+    c: PoolClient,
+    examIds: string[],
+    classIds: string[],
+  ): Promise<PaperSubject[]> {
+    if (!examIds.length) return [];
+    const r = await c.query<{
+      id: string;
+      name: string;
+      exam_id: string | null;
+      parts: Array<{ subjectId: string | null }> | null;
+    }>(
+      `SELECT sub.id::text, sub.name, es.exam_id::text,
+              (SELECT json_agg(json_build_object('subjectId', p.subject_id::text)) FROM exam_subject_parts p WHERE p.exam_subject_id = es.id) AS parts
+         FROM exam_subjects es JOIN subjects sub ON sub.id = es.subject_id
+        WHERE es.exam_id = ANY($1::bigint[]) AND es.class_id = ANY($2::bigint[])
+       UNION ALL
+       SELECT sub.id::text, sub.name, NULL, NULL FROM subjects sub
+        WHERE sub.id IN (SELECT p.subject_id FROM exam_subject_parts p JOIN exam_subjects es ON es.id = p.exam_subject_id
+                          WHERE es.exam_id = ANY($1::bigint[]) AND es.class_id = ANY($2::bigint[]))`,
+      [examIds, classIds],
+    );
+    const by = new Map<string, PaperSubject>();
+    for (const x of r.rows) {
+      const s = by.get(x.id) ?? { id: x.id, name: x.name, papers: [] };
+      if (x.exam_id) s.papers.push({ examId: x.exam_id, parts: x.parts ?? [] });
+      by.set(x.id, s);
+    }
+    return [...by.values()];
   }
 
   /** register names are unique in the year (capitals and extra spaces do not count); versions share one */
@@ -614,6 +668,7 @@ export class MarkSchemesService {
           status: 409,
           extra: { problems },
         });
+      await this.assertPapers(c, def, cur.class_ids);
       if (cur.purpose === 'result') {
         const clash = await c.query<{ id: string; name: string; code: string }>(
           `SELECT m.id::text, m.name, k.code FROM mark_schemes m JOIN classes k ON k.id = ANY(m.class_ids)
@@ -884,8 +939,10 @@ export class MarkSchemesService {
   }
 
   /**
-   * A copy for other classes, saved at once: a subject the new classes do not have is left out (a slot
-   * keeps the members they have); the maxima are read from each class's exams when it runs.
+   * A copy for other classes, saved at once: a subject the new classes do not have a paper of in the
+   * register's exams is left out (a slot keeps the members they have; docs/design/72: a subject only on
+   * their subject list, or only a part, goes too); the maxima are read from each class's exams when it
+   * runs. A register that reads no exam yet keeps the subjects on the classes' lists.
    */
   async copy(ctx: RequestContext, id: string, dto: CopySchemeDto) {
     this.mustManage(ctx);
@@ -897,8 +954,9 @@ export class MarkSchemesService {
       const offered = new Set(
         (
           await c.query<{ id: string }>(
-            `SELECT DISTINCT subject_id::text AS id FROM class_subjects WHERE class_id = ANY($1::bigint[]) AND academic_year_id = $2 AND status = 'active'
-             UNION SELECT DISTINCT subject_id::text FROM exam_subjects WHERE class_id = ANY($1::bigint[]) AND exam_id = ANY($3::bigint[])`,
+            `SELECT DISTINCT subject_id::text AS id FROM exam_subjects WHERE class_id = ANY($1::bigint[]) AND exam_id = ANY($3::bigint[])
+             UNION SELECT DISTINCT subject_id::text FROM class_subjects
+              WHERE cardinality($3::bigint[]) = 0 AND class_id = ANY($1::bigint[]) AND academic_year_id = $2 AND status = 'active'`,
             [dto.classIds, yearId, def.exams.map((e) => e.examId)],
           )
         ).rows.map((x) => x.id),
@@ -1202,10 +1260,15 @@ export class MarkSchemesService {
         class_code: string;
         max: string;
         weightage: string | null;
-        parts: Array<{ name: string; code: string | null; max: number }> | null;
+        parts: Array<{
+          name: string;
+          code: string | null;
+          subjectId: string | null;
+          max: number;
+        }> | null;
       }>(
         `SELECT es.exam_id::text, es.subject_id::text, k.code AS class_code, es.max_marks::text AS max, es.weightage::text,
-                (SELECT json_agg(json_build_object('name', p.name, 'code', ps.code, 'max', p.max_marks) ORDER BY p.sort_order, p.id)
+                (SELECT json_agg(json_build_object('name', p.name, 'code', ps.code, 'subjectId', p.subject_id::text, 'max', p.max_marks) ORDER BY p.sort_order, p.id)
                    FROM exam_subject_parts p LEFT JOIN subjects ps ON ps.id = p.subject_id WHERE p.exam_subject_id = es.id) AS parts
            FROM exam_subjects es JOIN exams e ON e.id = es.exam_id AND e.academic_year_id = $2 AND e.deleted_at IS NULL
            JOIN classes k ON k.id = es.class_id
@@ -1240,6 +1303,7 @@ export class MarkSchemesService {
               parts: (p.parts ?? []).map((x) => ({
                 name: x.name,
                 code: x.code,
+                subjectId: x.subjectId,
                 max: Number(x.max),
               })),
             })),

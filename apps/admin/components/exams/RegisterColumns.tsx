@@ -234,6 +234,20 @@ export function RegisterColumns({
   };
 
   const others = def.subjects.filter((x) => x.key !== s.key);
+  // docs/design/72: what the copy would do to each subject (nothing left: it does not fit)
+  const chainExams = [
+    ...new Set(cols.filter((c) => c.kind === 'raw' || c.kind === 'part').map((c) => c.exam ?? '')),
+  ]
+    .filter(Boolean)
+    // the exam's own code (PT1-2026), not the register's key for it
+    .map((k) => {
+      const examId = def.exams.find((e) => e.key === k)?.examId;
+      return data?.exams.find((e) => e.id === examId)?.code ?? k;
+    });
+  const fits = copyOpen
+    ? Object.fromEntries(others.map((x) => [x.key, copyColumns(data, s, x, def)]))
+    : {};
+  const fitting = others.filter((x) => fits[x.key]?.columns.length);
   const applyCopy = () => {
     const lines: string[] = [];
     setDef((d) => ({
@@ -241,6 +255,7 @@ export function RegisterColumns({
       subjects: d.subjects.map((x) => {
         if (!copyTo.includes(x.key)) return x;
         const r = copyColumns(data, s, x, d);
+        if (!r.columns.length) return x;
         if (r.skipped.length)
           lines.push(`${titles[x.key] ?? x.key}: left out ${r.skipped.join(', ')}`);
         return { ...x, columns: r.columns };
@@ -403,9 +418,7 @@ export function RegisterColumns({
                 maxLength={60}
                 onChange={(e) => setCol(c.key, { name: e.target.value })}
               />
-              <span className="ep-mr-col__desc">
-                {describe(c, cols)}
-              </span>
+              <span className="ep-mr-col__desc">{describe(c, cols)}</span>
             </span>
             <span className="ep-mr-col__opts">
               <label>
@@ -809,25 +822,45 @@ export function RegisterColumns({
         <p style={{ marginTop: 0 }}>
           The same chain is built in each subject ticked (what it had is replaced). Each keeps its
           own maximum; a column on an exam the subject does not have is left out, with what is made
-          from it.
+          from it. A subject with none of these exams is not offered.
         </p>
-        <span className="ep-mr-pills">
-          {others.map((x) => (
-            <label key={x.key} className="ep-check">
-              <input
-                className="ep-check__input"
-                type="checkbox"
-                checked={copyTo.includes(x.key)}
-                onChange={(e) =>
-                  setCopyTo((p) =>
-                    e.target.checked ? [...p, x.key] : p.filter((k) => k !== x.key),
-                  )
-                }
-              />
-              <span className="ep-check__box" aria-hidden="true" /> {titles[x.key]}
-            </label>
-          ))}
-        </span>
+        {fitting.length > 1 ? (
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={() => setCopyTo(fitting.map((x) => x.key))}
+            style={{ marginBottom: 'var(--sp-2)' }}
+          >
+            Tick every subject it fits
+          </Button>
+        ) : null}
+        <div className="ep-mr-copy-list">
+          {others.map((x) => {
+            const fit = fits[x.key];
+            const none = !fit?.columns.length;
+            return (
+              <label key={x.key} className="ep-check" data-off={none ? 'true' : undefined}>
+                <input
+                  className="ep-check__input"
+                  type="checkbox"
+                  disabled={none}
+                  checked={!none && copyTo.includes(x.key)}
+                  onChange={(e) =>
+                    setCopyTo((p) =>
+                      e.target.checked ? [...p, x.key] : p.filter((k) => k !== x.key),
+                    )
+                  }
+                />
+                <span className="ep-check__box" aria-hidden="true" /> {titles[x.key]}
+                {none ? (
+                  <small> — no paper in {chainExams.join(', ') || 'these exams'}</small>
+                ) : fit.skipped.length ? (
+                  <small> — leaves out {fit.skipped.join(', ')}</small>
+                ) : null}
+              </label>
+            );
+          })}
+        </div>
       </Dialog>
 
       <Dialog

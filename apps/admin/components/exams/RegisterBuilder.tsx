@@ -4,7 +4,9 @@ import {
   buildSheet,
   computeRegister,
   countedColumns,
+  noPaperMessage,
   registerProblems,
+  subjectsWithoutPaper,
   type RegCode,
   type RegisterDef,
   type RegSubject,
@@ -14,7 +16,7 @@ import { useEffect, useMemo, useState, useTransition } from 'react';
 import { RegisterColumns } from '@/components/exams/RegisterColumns';
 import { RegisterSheet } from '@/components/exams/RegisterSheet';
 import type { BuilderData } from '@/lib/mark-schemes';
-import { membersOf, sampleStudents } from '@/lib/register-builder';
+import { membersOf, sampleStudents, subjectNote } from '@/lib/register-builder';
 import { builderData, registerDefOf, saveRegister } from '@/lib/register-actions';
 
 const STEPS = ['Details', 'Subjects', 'Columns', 'Mark codes', 'Totals', 'Final'] as const;
@@ -71,7 +73,12 @@ export function RegisterBuilder({
   const [def, setDefState] = useState<RegisterDef>(init.def);
   const [data, setData] = useState<BuilderData | null>(initialData);
   const [given, setGiven] = useState<Record<string, string>>({});
-  const [msg, setMsg] = useState<{ tone: 'danger' | 'info'; text: string } | null>(null);
+  const [msg, setMsg] = useState<{
+    tone: 'danger' | 'info';
+    text: string;
+    /** the problems, one a line */
+    lines?: string[];
+  } | null>(null);
   const [importFrom, setImportFrom] = useState('');
   const [pending, start] = useTransition();
   const setDef = (fn: (d: RegisterDef) => RegisterDef) => setDefState((d) => fn(d));
@@ -124,14 +131,33 @@ export function RegisterBuilder({
     return ex ? `${key} · ${ex.name}` : key;
   };
 
+  // docs/design/72: the subjects with no paper of their own in the register's exams (marked inside another)
+  const noPaper = useMemo(
+    () => (data ? subjectsWithoutPaper(def, data.subjects) : []),
+    [def, data],
+  );
+  const takeOut = () => {
+    const gone = new Set(noPaper.map((x) => x.key));
+    setDef((d) => ({ ...d, subjects: d.subjects.filter((x) => !gone.has(x.key)) }));
+    setMsg({
+      tone: 'info',
+      text: `Taken out of the register: ${noPaper.map((x) => x.name).join(', ')}. Save it again.`,
+    });
+  };
   const problems = useMemo(() => {
-    const out = registerProblems(def);
+    // their own column problems go with them: the cause comes first, once
+    const gone = new Set(noPaper.map((x) => x.key));
+    const out = registerProblems(
+      gone.size ? { ...def, subjects: def.subjects.filter((x) => !gone.has(x.key)) } : def,
+    );
+    const why = noPaperMessage(noPaper);
+    if (why) out.unshift(why);
     if (name.trim().length < 2) out.unshift('Give the register a name');
     if (!classIds.length) out.unshift('Choose the classes');
     if (purpose === 'result' && !/^[A-Z0-9_]{1,12}$/.test(termCode.trim().toUpperCase()))
       out.unshift('A result register needs its term (T1, T2 …)');
     return out;
-  }, [def, name, classIds, purpose, termCode]);
+  }, [def, noPaper, name, classIds, purpose, termCode]);
 
   const preview = useMemo(() => {
     if (!data || !def.subjects.some((s) => s.columns.length) || !def.grades.length) return null;
@@ -158,7 +184,7 @@ export function RegisterBuilder({
   const save = () => {
     setMsg(null);
     if (problems.length) {
-      setMsg({ tone: 'danger', text: `To fix first: ${problems.slice(0, 6).join('; ')}` });
+      setMsg({ tone: 'danger', text: 'To fix first:', lines: problems });
       return;
     }
     start(async () => {
@@ -264,12 +290,13 @@ export function RegisterBuilder({
       small?: string;
       checked: boolean;
       disabled?: boolean;
+      tone?: 'warning';
     }>,
     onChange: (id: string, on: boolean) => void,
   ) => (
     <div className="ep-mr-tiles" role="group" aria-label={name}>
       {items.map((x) => (
-        <label key={x.id} className="ep-mr-tile">
+        <label key={x.id} className="ep-mr-tile" data-tone={x.tone}>
           <input
             type="checkbox"
             checked={x.checked}
@@ -436,20 +463,62 @@ export function RegisterBuilder({
         Subjects for this register *
       </p>
       {!data ? <p className="ep-field__help">Choose the classes first (step 1).</p> : null}
+      {noPaper.length ? (
+        <div className="ep-alert ep-alert--warning" style={{ marginBottom: 'var(--sp-3)' }}>
+          {noPaperMessage(noPaper)}.{' '}
+          <Button size="sm" variant="secondary" onClick={takeOut}>
+            Take them out
+          </Button>
+        </div>
+      ) : null}
       {data
         ? tiles(
             'Subjects',
-            data.subjects.map((x) => ({
-              id: x.id,
-              label: `${x.name} (${x.code})`,
-              small:
-                x.classes.join(', ') + (x.papers.some((p) => p.parts.length) ? ' · composite' : ''),
-              checked: plainUsed.has(x.id),
-              disabled: slotUsed.has(x.id),
-            })),
+            data.subjects
+              .map((x) => ({ x, n: subjectNote(data, x.id) }))
+              .filter(({ x, n }) => n.kind === 'own' || plainUsed.has(x.id))
+              .map(({ x, n }) => ({
+                id: x.id,
+                label: `${x.name} (${x.code})`,
+                small: [
+                  x.classes.join(', '),
+                  n.parts.length ? `parts: ${n.parts.join(', ')} (step 3: Each part a column)` : '',
+                  n.kind === 'own'
+                    ? n.note
+                    : `${n.kind === 'part' ? 'no paper of its own: ' : ''}${n.note} — untick it`,
+                ]
+                  .filter(Boolean)
+                  .join(' · '),
+                checked: plainUsed.has(x.id),
+                disabled: slotUsed.has(x.id),
+                tone: n.kind === 'own' ? undefined : ('warning' as const),
+              })),
             toggleSubject,
           )
         : null}
+      {data &&
+      data.subjects.some((x) => !plainUsed.has(x.id) && subjectNote(data, x.id).kind !== 'own') ? (
+        <>
+          <p className="ep-field__label" style={{ margin: 'var(--sp-4) 0 var(--sp-2)' }}>
+            Not a subject of their own in this year’s exams
+          </p>
+          {tiles(
+            'Not a subject of their own',
+            data.subjects
+              .filter((x) => !plainUsed.has(x.id))
+              .map((x) => ({ x, n: subjectNote(data, x.id) }))
+              .filter(({ n }) => n.kind !== 'own')
+              .map(({ x, n }) => ({
+                id: x.id,
+                label: `${x.name} (${x.code})`,
+                small: n.note,
+                checked: false,
+                disabled: true,
+              })),
+            () => undefined,
+          )}
+        </>
+      ) : null}
       <div style={{ display: 'flex', gap: 'var(--sp-2)', margin: 'var(--sp-4) 0' }}>
         <Button size="sm" variant="secondary" onClick={() => addSlot()} disabled={!data}>
           + Elective slot
@@ -500,12 +569,17 @@ export function RegisterBuilder({
             <div className="ep-mr-subject__body">
               {tiles(
                 `Members of ${s.slot!.name}`,
-                (data?.subjects ?? []).map((x) => ({
-                  id: x.id,
-                  label: x.name,
-                  checked: s.slot!.members.includes(x.id),
-                  disabled: !s.slot!.members.includes(x.id) && slotUsed.has(x.id),
-                })),
+                (data?.subjects ?? [])
+                  .filter(
+                    (x) =>
+                      s.slot!.members.includes(x.id) || subjectNote(data!, x.id).kind === 'own',
+                  )
+                  .map((x) => ({
+                    id: x.id,
+                    label: x.name,
+                    checked: s.slot!.members.includes(x.id),
+                    disabled: !s.slot!.members.includes(x.id) && slotUsed.has(x.id),
+                  })),
                 (id, on) =>
                   setSlot(s.key, {
                     members: on
@@ -1242,6 +1316,23 @@ export function RegisterBuilder({
           style={{ marginBottom: 'var(--sp-3)' }}
         >
           {msg.text}
+          {msg.lines?.length ? (
+            <ul style={{ margin: 'var(--sp-1) 0 0', paddingLeft: 'var(--sp-5)' }}>
+              {msg.lines.map((p) => (
+                <li key={p}>{p}</li>
+              ))}
+            </ul>
+          ) : null}
+          {msg.lines && noPaper.length ? (
+            <Button
+              size="sm"
+              variant="secondary"
+              onClick={takeOut}
+              style={{ marginTop: 'var(--sp-2)' }}
+            >
+              Take them out
+            </Button>
+          ) : null}
         </div>
       ) : null}
       {body[step]}
@@ -1253,6 +1344,16 @@ export function RegisterBuilder({
               <li key={p}>{p}</li>
             ))}
           </ul>
+          {noPaper.length ? (
+            <Button
+              size="sm"
+              variant="secondary"
+              onClick={takeOut}
+              style={{ marginTop: 'var(--sp-2)' }}
+            >
+              Take them out
+            </Button>
+          ) : null}
         </div>
       ) : null}
       <div

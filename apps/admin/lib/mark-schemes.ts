@@ -63,7 +63,8 @@ export interface BuilderData {
       classCode: string;
       max: number;
       weightage: number | null;
-      parts: Array<{ name: string; code: string | null; max: number }>;
+      /** subjectId: the part's sub-subject (Geography in Social Science), docs/design/72 */
+      parts: Array<{ name: string; code: string | null; subjectId?: string | null; max: number }>;
     }>;
   }>;
   slots: Array<{ name: string; members: string[] }>;

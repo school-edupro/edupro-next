@@ -13626,6 +13626,29 @@ button.ep-subchoice__icon:hover {
   color: var(--text-muted);
   font-size: var(--fs-caption);
 }
+/* docs/design/72: a subject that cannot be ticked on its own (a part of another, or no paper) */
+.ep-mr-tile:has(input:disabled) {
+  cursor: default;
+  border-style: dashed;
+  background: var(--surface-subtle);
+}
+/* a subject in the register without a paper of its own: to untick */
+.ep-mr-tile[data-tone='warning'] {
+  border-color: var(--status-warning);
+  background: var(--status-warning-bg);
+}
+/* Copy to subjects: one subject a line, with what the copy does to it */
+.ep-mr-copy-list {
+  display: grid;
+  gap: var(--sp-1);
+}
+.ep-mr-copy-list small {
+  color: var(--text-muted);
+  font-size: var(--fs-caption);
+}
+.ep-mr-copy-list [data-off='true'] {
+  cursor: default;
+}
 .ep-mr-choice {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));

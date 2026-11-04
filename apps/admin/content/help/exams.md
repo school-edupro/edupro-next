@@ -222,12 +222,22 @@ out, then runs it for any section; the marks always come from the exam entry.
      or exam-wise: pick the exam at Run). **The term result** makes the term results for report cards
      and promotion.
    - **Subjects**: tick them; **+ Elective slot** (or **Use the classes' choice groups**) makes one
-     block of several subjects, each student with their own.
+     block of several subjects, each student with their own. Only a subject with a paper of its own
+     can be ticked: a subject's parts are named on its tile (Social Science — parts: Geography, History;
+     show them with **Each part a column** in step 3), and a part that is not a paper (Geography marked
+     inside Social Science) or a subject with no paper in the year's exams is listed greyed under **Not
+     a subject of their own**, with the reason. A part that is also a paper in some exam says which
+     ("own paper: ACT2 (VIII); else inside Social Science").
    - **Columns**, per subject: pick the exam, then **Same marks as entry** (or its parts), **Average /
      best of / sum**, **Conversion** (scale to a maximum, or a weightage %; "the rest" of a total out
      of) or **Attendance** slabs. Per column: in the total, a grade, round off (.5 kept), hide (kept in
      the maths), show code, and **sub from** (where an ML pro-rata takes its marks). **Copy to
-     subjects** and the **Weightage builder** save a long set-up.
+     subjects** and the **Weightage builder** save a long set-up. Copy to subjects says per subject
+     what it leaves out (an exam the subject has no paper in, and an average left with nothing to
+     average); a subject with none of the exams is greyed ("no paper in PT1-2026") and not copied to.
+   - **Saving** lists everything to fix. A subject with no paper of its own in the register's exams
+     comes first, with the cause ("Geography has no paper of its own in this register's exams: it is
+     marked inside Social Science") and **Take them out**, which removes such subjects; save again.
    - **Mark codes**, per exam: count 0, leave out of the maximum, fixed or % marks, pro-rata; holds the
      total ("–"); show the value with "*".
    - **Totals** (round off, grade, % per subject) and **Final** (total, %, grade, rank, result, pass %,
