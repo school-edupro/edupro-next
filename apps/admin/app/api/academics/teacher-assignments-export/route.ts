@@ -11,7 +11,7 @@ export async function GET(req: NextRequest) {
     if (/^\d{1,18}$/.test(v)) q.set(k, v);
   }
   const kind = sp.get('kind') ?? '';
-  if (['class_teacher', 'subject_teacher', 'coordinator', 'indicator'].includes(kind))
+  if (['class_teacher', 'subject_teacher', 'coordinator', 'indicator', 'remarks'].includes(kind))
     q.set('kind', kind);
   if (sp.get('includeEnded')) q.set('includeEnded', 'true');
   const res = await apiFetchRaw(`/academics/teacher-assignments/export?${q.toString()}`);

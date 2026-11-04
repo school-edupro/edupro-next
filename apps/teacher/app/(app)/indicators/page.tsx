@@ -3,6 +3,7 @@ import { redirect } from 'next/navigation';
 import { ApiError } from '@edupro/bff';
 import { FileLinks } from '@/components/FileLinks';
 import { PortfolioUpload } from '@/components/PortfolioUpload';
+import { SheetCard } from '@/components/SheetCard';
 import { bff } from '@/lib/bff';
 import { currentLang, t } from '@/lib/i18n';
 import { removePhoto, saveLevels, saveWords } from './actions';
@@ -17,6 +18,8 @@ interface EntrySection {
   classSectionId: string;
   code: string;
   register: boolean;
+  /** the teacher rates indicators here (class teacher or an Indicator assignment; docs/design/71) */
+  indicators?: boolean;
 }
 interface Item {
   id: string;
@@ -27,10 +30,16 @@ interface Item {
   /** its own levels (a section with its own scale); none: the set's */
   levels?: string[] | null;
   heading: boolean;
+  /** the teacher rates it (docs/design/71) */
+  mine?: boolean;
+  /** the teachers given its area in the section */
+  enteredBy?: string[];
 }
 interface Sheet {
   section: { id: string; code: string };
   locked: boolean;
+  /** all: every indicator is the teacher's; mapped: those marked mine (docs/design/71) */
+  reach?: 'all' | 'mapped' | 'none';
   set: {
     name: string;
     grades: string[];
@@ -55,6 +64,7 @@ interface Photo {
 const ERRORS: Record<string, string> = {
   'exams.entry_locked': 'Indicator entry is locked; ask the coordinator to reopen it.',
   'exams.not_assigned': 'Only the class teacher of this section can enter these.',
+  'exams.indicator_not_mapped': 'Some of these indicators are not given to you in this section.',
   'exams.feedback_by_family':
     'The parent wrote this in the parent app; it is kept as they wrote it.',
   'exams.portfolio_full': 'A child has up to twelve photos in an exam; remove one first.',
@@ -105,7 +115,7 @@ export default async function IndicatorsPage({
   const sections = exam
     ? (
         await bff.api.fetch<{ data: EntrySection[] }>(`/exams/${exam.id}/entry/sections`)
-      ).data.filter((s) => s.register)
+      ).data.filter((s) => s.register || s.indicators)
     : [];
   const chosen = sections.find((s) => s.classSectionId === sp.section) ?? sections[0];
   let sheet: Sheet | null = null;
@@ -121,15 +131,25 @@ export default async function IndicatorsPage({
     }
   }
   const items = sheet?.indicators ?? [];
-  const areas = [...new Set(items.map((i) => i.area ?? 'Other'))];
+  // a teacher given areas sees only theirs (the class teacher every one; docs/design/71)
+  const mapped = sheet?.reach === 'mapped';
+  const shown = (i: Item) => !mapped || i.mine === true;
+  const areas = [
+    ...new Set(items.filter((i) => !i.heading && shown(i)).map((i) => i.area ?? 'Other')),
+  ];
   const area = areas.includes(sp.area ?? '') ? sp.area! : areas[0];
   const groups = items
     .filter((i) => !i.parentId && (i.area ?? 'Other') === area)
-    .map((i) => ({ item: i, kids: items.filter((k) => k.parentId === i.id) }));
+    .map((i) => ({ item: i, kids: items.filter((k) => k.parentId === i.id && shown(k)) }))
+    .filter((g) => g.kids.length || (!g.item.heading && shown(g.item)));
+  const others = [
+    ...new Set(items.filter((i) => (i.area ?? 'Other') === area).flatMap((i) => i.enteredBy ?? [])),
+  ];
   const cells = groups.flatMap((g) => (g.kids.length ? g.kids : [g.item]));
   const hasGoals = groups.some((g) => g.kids.length);
   const open = !!sheet && !sheet.locked;
-  const hpc = sheet?.set?.kind === 'hpc';
+  // the child's words and photos stay with the class teacher
+  const hpc = sheet?.set?.kind === 'hpc' && !mapped;
   const child = sheet?.rows.find((r) => r.studentId === sp.student) ?? sheet?.rows[0];
   const photos =
     hpc && exam && chosen && child
@@ -230,12 +250,20 @@ export default async function IndicatorsPage({
       </Card>
       {loadError ? <Card>{t(lang, loadError)}</Card> : null}
       {!loadError && exam && sections.length === 0 ? (
-        <Card>{t(lang, 'You are not the class teacher of a section in this exam.')}</Card>
+        <Card>
+          {t(
+            lang,
+            'You rate no section in this exam: the class teacher does, or a teacher given areas in Teacher assignments.',
+          )}
+        </Card>
+      ) : null}
+      {sheet?.set && !areas.length ? (
+        <Card>{t(lang, 'No indicator of this section is given to you.')}</Card>
       ) : null}
       {sheet && !sheet.set ? (
         <Card>{t(lang, 'This section has no indicators in this exam.')}</Card>
       ) : null}
-      {sheet?.set && exam && chosen ? (
+      {sheet?.set && exam && chosen && area ? (
         <Card
           title={`${sheet.section.code} · ${t(lang, area ?? '')}`}
           actions={
@@ -248,6 +276,18 @@ export default async function IndicatorsPage({
             )
           }
         >
+          {mapped ? (
+            <p className="ep-field__help" style={{ marginTop: 0 }}>
+              {t(
+                lang,
+                'Only the indicators given to you are shown; the class teacher sees them all.',
+              )}
+            </p>
+          ) : others.length ? (
+            <p className="ep-field__help" style={{ marginTop: 0 }}>
+              {t(lang, 'Also entered by')}: {others.join(', ')}
+            </p>
+          ) : null}
           <form action={saveLevels}>
             {hidden()}
             {cells.map((c) => (
@@ -347,6 +387,19 @@ export default async function IndicatorsPage({
             ) : null}
           </form>
         </Card>
+      ) : null}
+      {sheet?.set && exam && chosen && areas.length ? (
+        <SheetCard
+          kind="indicators"
+          examId={exam.id}
+          sectionId={chosen.classSectionId}
+          lang={lang}
+          canUpload={open}
+          help={t(
+            lang,
+            'The sheet holds the indicators you rate in this section, filled with what is entered; a level from its list, or your words for a written item.',
+          )}
+        />
       ) : null}
       {hpc && sheet && exam && chosen && child ? (
         <Card

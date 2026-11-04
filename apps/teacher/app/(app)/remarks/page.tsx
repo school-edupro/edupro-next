@@ -3,6 +3,7 @@ import { redirect } from 'next/navigation';
 import { ApiError } from '@edupro/bff';
 import { bff } from '@/lib/bff';
 import { currentLang, t } from '@/lib/i18n';
+import { SheetCard } from '@/components/SheetCard';
 import { saveRemarkItems } from './actions';
 
 interface Exam {
@@ -14,12 +15,16 @@ interface Exam {
 interface Sheet {
   section: { id: string; code: string };
   locked: boolean;
+  /** why the teacher has nothing to write here (docs/design/71) */
+  reason?: string | null;
   categories: Array<{
     id: string;
     name: string;
     subjectName: string | null;
     freeText: boolean;
     may: boolean;
+    /** who writes it in the section */
+    writtenBy?: string[];
     bank: Array<{ code: string; text: string }>;
   }>;
   rows: Array<{
@@ -32,7 +37,7 @@ interface Sheet {
 const ERRORS: Record<string, string> = {
   'exams.entry_locked': 'Remarks are locked; ask the coordinator to reopen them.',
   'exams.not_assigned':
-    'You write only your own sections’ remarks (a subject teacher, their subject’s).',
+    'You write only the categories given to you: the class teacher all, a subject teacher their subject’s, others those named in Teacher assignments.',
   'exams.remark_list_only': 'This category takes one of its listed remarks only.',
   'validation-failed': 'Some values were not accepted.',
 };
@@ -74,10 +79,10 @@ export default async function RemarksPage({
   const exam = exams.find((e) => e.id === sp.exam) ?? exams[0];
   const sections = exam
     ? (
-        await bff.api.fetch<{ data: Array<{ classSectionId: string; code: string }> }>(
-          `/exams/${exam.id}/entry/sections`,
-        )
-      ).data
+        await bff.api.fetch<{
+          data: Array<{ classSectionId: string; code: string; remarks?: boolean }>;
+        }>(`/exams/${exam.id}/entry/sections`)
+      ).data.filter((s) => s.remarks ?? true)
     : [];
   const chosen = sections.find((s) => s.classSectionId === sp.section) ?? sections[0];
   let sheet: Sheet | null = null;
@@ -157,7 +162,9 @@ export default async function RemarksPage({
       </Card>
       {loadError ? <Card>{t(lang, loadError)}</Card> : null}
       {sheet && !cats.length ? (
-        <Card>{t(lang, 'There is no remark category for you to write in this section.')}</Card>
+        <Card>
+          {t(lang, sheet.reason ?? 'There is no remark category for you to write in this section.')}
+        </Card>
       ) : null}
       {sheet && exam && chosen && cats.length ? (
         <Card
@@ -172,6 +179,15 @@ export default async function RemarksPage({
             )
           }
         >
+          {(sheet.categories ?? []).some((k) => !k.may) ? (
+            <p className="ep-field__help" style={{ marginTop: 0 }}>
+              {t(lang, 'Written by others here')}:{' '}
+              {sheet.categories
+                .filter((k) => !k.may)
+                .map((k) => `${k.name} (${(k.writtenBy ?? []).join(', ')})`)
+                .join(' · ')}
+            </p>
+          ) : null}
           {cats.map((k) =>
             k.freeText ? (
               <datalist key={k.id} id={`rb-${k.id}`}>
@@ -260,6 +276,19 @@ export default async function RemarksPage({
             ) : null}
           </form>
         </Card>
+      ) : null}
+      {sheet && exam && chosen && cats.length ? (
+        <SheetCard
+          kind="remarks"
+          examId={exam.id}
+          sectionId={chosen.classSectionId}
+          lang={lang}
+          canUpload={open}
+          help={t(
+            lang,
+            'The sheet holds the categories you write in this section, filled with what is written; a category that takes its list only accepts a listed remark.',
+          )}
+        />
       ) : null}
     </main>
   );

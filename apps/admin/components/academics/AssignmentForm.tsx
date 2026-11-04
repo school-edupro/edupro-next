@@ -12,26 +12,43 @@ const KINDS: Array<[string, string]> = [
   ['subject_teacher', 'Subject teacher'],
   ['coordinator', 'Coordinator'],
   ['indicator', 'Indicator'],
+  ['remarks', 'Remarks'],
 ];
+
+/** an indicator of a set, with its area and the classes its set is for */
+export type IndicatorOption = ChipOption & { area: string | null; classIds: string[] };
+/** a remark category with its classes (none: every class) */
+export type CategoryOption = ChipOption & { classIds: string[] };
 
 /**
  * Teacher assignment: the employee, the teacher type, the classes and the subjects, in one go. Every
  * class picked is saved with every subject picked. A class teacher is the actual class teacher of the
- * section when the box is ticked, else a co-class teacher. The same can be uploaded from Excel.
+ * section when the box is ticked, else a co-class teacher. An Indicator teacher names the areas (and
+ * optionally single indicators) they rate; a Remarks teacher the remark categories they write
+ * (docs/design/71). The same can be uploaded from Excel.
  */
 export function AssignmentForm({
   employees,
   sections,
   subjects,
+  areas = [],
+  indicators = [],
+  categories = [],
 }: {
   employees: ChipOption[];
-  sections: ChipOption[];
+  sections: Array<ChipOption & { classId?: string }>;
   subjects: ChipOption[];
+  areas?: ChipOption[];
+  indicators?: IndicatorOption[];
+  categories?: CategoryOption[];
 }) {
   const [employeeId, setEmployeeId] = useState('');
   const [kind, setKind] = useState('class_teacher');
   const [classes, setClasses] = useState<string[]>([]);
   const [subjectIds, setSubjectIds] = useState<string[]>([]);
+  const [areaIds, setAreaIds] = useState<string[]>([]);
+  const [indicatorIds, setIndicatorIds] = useState<string[]>([]);
+  const [categoryIds, setCategoryIds] = useState<string[]>([]);
   const [isActual, setIsActual] = useState(true);
   const [formKey, setFormKey] = useState(0);
   const [msg, setMsg] = useState<AssignResult | null>(null);
@@ -39,6 +56,21 @@ export function AssignmentForm({
   const file = useRef<HTMLInputElement>(null);
   const needsSubject = kind === 'subject_teacher';
   const takesSubject = kind === 'subject_teacher' || kind === 'class_teacher';
+  // the classes picked: an indicator of the sets they use; a category every one of them takes
+  const classIds = [
+    ...new Set(sections.filter((x) => classes.includes(x.value)).map((x) => x.classId ?? '')),
+  ];
+  const areaNames = areas
+    .filter((x) => areaIds.includes(x.value))
+    .map((x) => x.label.trim().toLowerCase());
+  const indicatorOptions = indicators.filter(
+    (i) =>
+      (!classIds.length || i.classIds.some((c) => classIds.includes(c))) &&
+      (!areaNames.length || areaNames.includes((i.area ?? '').trim().toLowerCase())),
+  );
+  const categoryOptions = categories.filter(
+    (k) => !k.classIds.length || classIds.every((c) => k.classIds.includes(c)),
+  );
   const submit = () =>
     start(async () => {
       setMsg(null);
@@ -46,18 +78,29 @@ export function AssignmentForm({
       if (!classes.length) return setMsg({ ok: false, error: 'Select at least one class.' });
       if (needsSubject && !subjectIds.length)
         return setMsg({ ok: false, error: 'Select at least one subject for a subject teacher.' });
+      if (kind === 'remarks' && !categoryIds.length)
+        return setMsg({ ok: false, error: 'Select the remark categories the teacher writes.' });
       const r = await bulkTeacherAssignments({
         employeeId,
         kind,
         classSectionIds: classes,
         subjectIds: takesSubject ? subjectIds : [],
         isActual: kind === 'class_teacher' ? isActual : true,
+        areaIds: kind === 'indicator' ? areaIds : [],
+        indicatorIds:
+          kind === 'indicator'
+            ? indicatorIds.filter((x) => indicatorOptions.some((o) => o.value === x))
+            : [],
+        remarkCategoryIds: kind === 'remarks' ? categoryIds : [],
       });
       setMsg(r);
       if (r.ok) {
         setEmployeeId('');
         setClasses([]);
         setSubjectIds([]);
+        setAreaIds([]);
+        setIndicatorIds([]);
+        setCategoryIds([]);
         setFormKey(formKey + 1);
       }
     });
@@ -121,6 +164,34 @@ export function AssignmentForm({
           <div />
         )}
       </div>
+      {kind === 'indicator' ? (
+        <div className="ep-hd__row ep-hd__row--top">
+          <ChipPicker
+            label="Indicator areas"
+            options={areas}
+            value={areaIds}
+            onChange={setAreaIds}
+            help="The areas this teacher rates in these classes (none: every area). The class teacher still enters every area."
+          />
+          <ChipPicker
+            label="Only these indicators (optional)"
+            options={indicatorOptions}
+            value={indicatorIds.filter((x) => indicatorOptions.some((o) => o.value === x))}
+            onChange={setIndicatorIds}
+            help="Narrow the areas to single indicators of the classes' sets; none picked: every indicator of the areas."
+          />
+        </div>
+      ) : null}
+      {kind === 'remarks' ? (
+        <ChipPicker
+          label="Remark categories"
+          required
+          options={categoryOptions}
+          value={categoryIds}
+          onChange={setCategoryIds}
+          help="The categories this teacher writes in these classes (the class teacher writes every category)."
+        />
+      ) : null}
       {kind === 'class_teacher' ? (
         <label style={{ display: 'flex', gap: 'var(--sp-2)', alignItems: 'center' }}>
           <input

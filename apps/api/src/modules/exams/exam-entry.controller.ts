@@ -4,11 +4,13 @@ import { RequirePermission } from '../../common/access/require-permission.decora
 import { ReqCtx, type RequestContext } from '../../common/http/request-context';
 import { ExamEntryService } from './exam-entry.service';
 import { ExamResultsService } from './exam-results.service';
+import { MyEntryService } from './my-entry.service';
 import {
   AnalysisQueryDto,
   EntryQueryDto,
   EXAMS,
   MarksUploadDto,
+  SectionSheetUploadDto,
   PromotionProposalsQueryDto,
   RegisterSheetQueryDto,
   PutExamAttendanceDto,
@@ -31,7 +33,17 @@ export class ExamEntryController {
   constructor(
     private readonly entry: ExamEntryService,
     private readonly results: ExamResultsService,
+    private readonly myEntry: MyEntryService,
   ) {}
+
+  @Get('my-entry')
+  @ApiOperation({
+    summary: "The signed-in teacher's entry not done yet, per open exam (docs/design/71)",
+  })
+  @RequirePermission(EXAMS.marksView)
+  async toEnter(@ReqCtx() ctx: RequestContext) {
+    return { data: await this.myEntry.toEnter(ctx) };
+  }
 
   // ---- masters -----------------------------------------------------------------------------------
   @Get('indicator-sets')
@@ -128,6 +140,30 @@ export class ExamEntryController {
     return this.entry.indicators(ctx, id, q);
   }
 
+  @Get(':id/indicators/excel')
+  @ApiOperation({
+    summary: "The section's indicators the caller rates, as an Excel sheet (base64)",
+  })
+  @RequirePermission(EXAMS.marksView)
+  indicatorsExcel(
+    @ReqCtx() ctx: RequestContext,
+    @Param('id') id: string,
+    @Query() q: EntryQueryDto,
+  ) {
+    return this.entry.indicatorsExcel(ctx, id, q);
+  }
+
+  @Post(':id/indicators/upload')
+  @ApiOperation({ summary: 'A filled indicators sheet: preview, then save with apply' })
+  @RequirePermission(EXAMS.indicatorEnter)
+  indicatorsUpload(
+    @ReqCtx() ctx: RequestContext,
+    @Param('id') id: string,
+    @Body() dto: SectionSheetUploadDto,
+  ) {
+    return this.entry.indicatorsUpload(ctx, id, dto);
+  }
+
   @Put(':id/indicators')
   @RequirePermission(EXAMS.indicatorEnter, {
     description: 'Enter co-scholastic and HPC indicators',
@@ -172,6 +208,33 @@ export class ExamEntryController {
     @Body() dto: PutExamAttendanceDto,
   ) {
     return this.entry.putAttendance(ctx, id, dto);
+  }
+
+  @Get(':id/health')
+  @ApiOperation({
+    summary: "A section's height and weight for the exam, with each pupil's last reading",
+  })
+  @RequirePermission(EXAMS.healthView)
+  health(@ReqCtx() ctx: RequestContext, @Param('id') id: string, @Query() q: EntryQueryDto) {
+    return this.entry.healthSheet(ctx, id, q);
+  }
+
+  @Get(':id/health/excel')
+  @ApiOperation({ summary: "A section's height and weight as an Excel sheet to fill (base64)" })
+  @RequirePermission(EXAMS.healthView)
+  healthExcel(@ReqCtx() ctx: RequestContext, @Param('id') id: string, @Query() q: EntryQueryDto) {
+    return this.entry.healthExcel(ctx, id, q);
+  }
+
+  @Post(':id/health/upload')
+  @ApiOperation({ summary: 'A filled height and weight sheet: preview, then save with apply' })
+  @RequirePermission(EXAMS.healthEnter)
+  healthUpload(
+    @ReqCtx() ctx: RequestContext,
+    @Param('id') id: string,
+    @Body() dto: SectionSheetUploadDto,
+  ) {
+    return this.entry.healthUpload(ctx, id, dto);
   }
 
   @Put(':id/health')

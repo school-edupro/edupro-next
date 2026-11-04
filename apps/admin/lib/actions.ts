@@ -985,14 +985,30 @@ export async function endTeacherAssignment(fd: FormData) {
 /** An Indicator assignment's indicator areas (docs/design/69): the grade registers "as per mapping". */
 export async function setAssignmentAreas(fd: FormData) {
   const id = str(fd, 'id');
-  const areaIds = fd
-    .getAll('areaId')
-    .map(String)
-    .filter((x) => /^\d{1,18}$/.test(x));
+  const ids = (field: string) =>
+    fd
+      .getAll(field)
+      .map(String)
+      .filter((x) => /^\d{1,18}$/.test(x));
   return run('/academics/teacher-assignments', () =>
     apiFetch(`/academics/teacher-assignments/${id}/areas`, {
       method: 'PUT',
-      body: JSON.stringify({ areaIds }),
+      body: JSON.stringify({ areaIds: ids('areaId'), indicatorIds: ids('indicatorId') }),
+    }),
+  );
+}
+
+/** A Remarks assignment's remark categories (docs/design/71). */
+export async function setAssignmentCategories(fd: FormData) {
+  const id = str(fd, 'id');
+  const categoryIds = fd
+    .getAll('categoryId')
+    .map(String)
+    .filter((x) => /^\d{1,18}$/.test(x));
+  return run('/academics/teacher-assignments', () =>
+    apiFetch(`/academics/teacher-assignments/${id}/categories`, {
+      method: 'PUT',
+      body: JSON.stringify({ categoryIds }),
     }),
   );
 }

@@ -1061,7 +1061,8 @@
       "class_teacher": "कक्षा शिक्षक",
       "subject_teacher": "विषय शिक्षक",
       "coordinator": "समन्वयक",
-      "indicator": "संकेतक"
+      "indicator": "संकेतक",
+      "remarks": "टिप्पणियाँ"
     },
     "assignments": "आवंटन",
     "noAssignments": "इस सत्र में कोई आवंटन नहीं",

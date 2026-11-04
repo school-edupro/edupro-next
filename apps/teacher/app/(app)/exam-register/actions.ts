@@ -8,7 +8,7 @@ const ids = (fd: FormData, prefix: string): string[] =>
   [...fd.keys()].filter((k) => k.startsWith(prefix)).map((k) => k.slice(prefix.length));
 
 async function put(fd: FormData, path: string, body: Record<string, unknown>, what: string) {
-  const back = `/exam-register?exam=${str(fd, 'examId')}&section=${str(fd, 'classSectionId')}`;
+  const back = `/exam-register?exam=${str(fd, 'examId')}&section=${str(fd, 'classSectionId')}${str(fd, 'only') ? '&only=attendance' : ''}`;
   let out: Record<string, number> | undefined;
   try {
     out = await bff.api.fetch(`/exams/${str(fd, 'examId')}/${path}`, {
@@ -78,7 +78,7 @@ export async function saveHealth(fd: FormData) {
 
 /** docs/design/65: exam attendance counted from daily attendance between two dates. */
 export async function attendanceFromDaily(fd: FormData) {
-  const back = `/exam-register?exam=${str(fd, 'examId')}&section=${str(fd, 'classSectionId')}`;
+  const back = `/exam-register?exam=${str(fd, 'examId')}&section=${str(fd, 'classSectionId')}${str(fd, 'only') ? '&only=attendance' : ''}`;
   let out: { filled: number; kept: number; noDays: number; from: string; to: string } | undefined;
   try {
     out = await bff.api.fetch(`/exams/${str(fd, 'examId')}/attendance/from-daily`, {

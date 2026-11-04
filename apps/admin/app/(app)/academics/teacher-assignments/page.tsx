@@ -2,13 +2,27 @@ import { Badge, Button, Card, DataTable, PageHeader, SelectField } from '@edupro
 import { getTranslations } from 'next-intl/server';
 import { Notice } from '@/components/Notice';
 import { AssignmentForm } from '@/components/academics/AssignmentForm';
-import { endTeacherAssignment, setAssignmentAreas } from '@/lib/actions';
+import { endTeacherAssignment, setAssignmentAreas, setAssignmentCategories } from '@/lib/actions';
 import { AcademicsNav } from '@/components/academics/AcademicsNav';
 import { apiFetch, getMe } from '@/lib/api';
 import { sectionOptions } from '@/lib/sections';
 import type { Employee, Page, Subject, TeacherAssignment } from '@/lib/types';
 
-const KINDS = ['class_teacher', 'subject_teacher', 'coordinator', 'indicator'] as const;
+const KINDS = ['class_teacher', 'subject_teacher', 'coordinator', 'indicator', 'remarks'] as const;
+
+interface SetRow {
+  id: string;
+  name: string;
+  classIds: string[];
+  indicators: Array<{ id: string; code: string; name: string; area: string | null }>;
+}
+interface CategoryRow {
+  id: string;
+  code: string;
+  name: string;
+  classIds: string[];
+  status: string;
+}
 
 /** S6-02: teacher assignments; saving one grants the role and section scopes through the database. */
 export default async function TeacherAssignmentsPage({
@@ -40,7 +54,7 @@ export default async function TeacherAssignmentsPage({
   const kind = KINDS.find((k) => k === sp.kind) ?? '';
   if (kind) query.set('kind', kind);
   if (sp.includeEnded) query.set('includeEnded', 'true');
-  const [assignments, sections, employees, subjects, areas] = await Promise.all([
+  const [assignments, sections, employees, subjects, areas, sets, categories] = await Promise.all([
     apiFetch<{ data: TeacherAssignment[] }>(`/academics/teacher-assignments?${query.toString()}`),
     sectionOptions(),
     apiFetch<Page<Employee>>('/people/employees?size=200&employeeType=teaching')
@@ -53,7 +67,17 @@ export default async function TeacherAssignmentsPage({
     )
       .then((r) => r.data.filter((x) => x.status === 'active'))
       .catch(() => [] as Array<{ id: string; name: string; status: string }>),
+    // the indicators of each set and the remark categories, for Indicator and Remarks rows (docs/design/71)
+    apiFetch<{ data: SetRow[] }>('/exams/indicator-sets')
+      .then((r) => r.data)
+      .catch(() => [] as SetRow[]),
+    apiFetch<{ data: CategoryRow[] }>('/exams/remark-categories')
+      .then((r) => r.data.filter((x) => x.status === 'active'))
+      .catch(() => [] as CategoryRow[]),
   ]);
+  const indicators = sets.flatMap((set) =>
+    set.indicators.map((i) => ({ ...i, classIds: set.classIds, setName: set.name })),
+  );
 
   return (
     <>
@@ -90,6 +114,18 @@ export default async function TeacherAssignmentsPage({
             }))}
             sections={sections}
             subjects={subjects.map((s) => ({ value: s.id, label: `${s.name} (${s.code})` }))}
+            areas={areas.map((x) => ({ value: x.id, label: x.name }))}
+            indicators={indicators.map((i) => ({
+              value: i.id,
+              label: `${i.code} · ${i.name} (${i.setName})`,
+              area: i.area,
+              classIds: i.classIds,
+            }))}
+            categories={categories.map((k) => ({
+              value: k.id,
+              label: `${k.name} (${k.code})`,
+              classIds: k.classIds,
+            }))}
           />
         </Card>
       ) : null}
@@ -194,7 +230,22 @@ export default async function TeacherAssignmentsPage({
                 header: a('subject'),
                 render: (r) =>
                   r.kind === 'indicator' ? (
-                    <IndicatorAreas row={r} areas={areas} canManage={canManage && !r.validTo} />
+                    <IndicatorAreas
+                      row={r}
+                      areas={areas}
+                      indicators={indicators.filter(
+                        (i) => !r.classId || i.classIds.includes(r.classId),
+                      )}
+                      canManage={canManage && !r.validTo}
+                    />
+                  ) : r.kind === 'remarks' ? (
+                    <RemarkCategories
+                      row={r}
+                      categories={categories.filter(
+                        (k) => !k.classIds.length || !r.classId || k.classIds.includes(r.classId),
+                      )}
+                      canManage={canManage && !r.validTo}
+                    />
                   ) : r.subjectName ? (
                     `${r.subjectName} (${r.subjectCode})`
                   ) : (
@@ -236,20 +287,31 @@ export default async function TeacherAssignmentsPage({
 }
 
 /**
- * An Indicator assignment's indicator areas (docs/design/69): the grade registers run "as per mapping"
- * show the teacher only these areas of the section; none ticked covers every area.
+ * An Indicator assignment's indicator areas (docs/design/69) and, optionally, single indicators of them
+ * (docs/design/71): the teacher enters only these in the section and the grade registers run "as per
+ * mapping" show only these areas; none ticked covers every area.
  */
 function IndicatorAreas({
   row,
   areas,
+  indicators,
   canManage,
 }: {
   row: TeacherAssignment;
   areas: Array<{ id: string; name: string }>;
+  indicators: Array<{ id: string; code: string; name: string; area: string | null }>;
   canManage: boolean;
 }) {
   const mine = row.indicatorAreas ?? [];
-  const text = mine.length ? mine.map((x) => x.name).join(', ') : 'All indicator areas';
+  const single = row.indicators ?? [];
+  const text = [
+    mine.length ? mine.map((x) => x.name).join(', ') : 'All indicator areas',
+    single.length ? `only ${single.map((x) => x.code).join(', ')}` : '',
+  ]
+    .filter(Boolean)
+    .join(' · ');
+  const byArea = new Map<string, typeof indicators>();
+  for (const i of indicators) byArea.set(i.area ?? '', [...(byArea.get(i.area ?? '') ?? []), i]);
   if (!canManage || !areas.length) return <span>{text}</span>;
   return (
     <details className="ep-gr-filter">
@@ -275,9 +337,82 @@ function IndicatorAreas({
             ))}
           </div>
         </fieldset>
+        {indicators.length ? (
+          <fieldset className="ep-field" style={{ border: 0, padding: 0, margin: 0 }}>
+            <legend className="ep-field__label">
+              Only these indicators (optional; they must lie in the areas ticked)
+            </legend>
+            {[...byArea.entries()].map(([area, items]) => (
+              <div key={area || '-'}>
+                <div className="ep-kicker">{area || 'No area'}</div>
+                <div className="ep-mr-tiles">
+                  {items.map((x) => (
+                    <label key={x.id} className="ep-mr-tile">
+                      <input
+                        type="checkbox"
+                        name="indicatorId"
+                        value={x.id}
+                        defaultChecked={single.some((y) => y.id === x.id)}
+                      />
+                      <span>
+                        {x.code} · {x.name}
+                      </span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </fieldset>
+        ) : null}
         <div>
           <Button type="submit" variant="secondary" size="sm">
             Save areas
+          </Button>
+        </div>
+      </form>
+    </details>
+  );
+}
+
+/** A Remarks assignment's remark categories (docs/design/71): the teacher writes these in the section. */
+function RemarkCategories({
+  row,
+  categories,
+  canManage,
+}: {
+  row: TeacherAssignment;
+  categories: Array<{ id: string; code: string; name: string }>;
+  canManage: boolean;
+}) {
+  const mine = row.remarkCategories ?? [];
+  const text = mine.map((x) => x.name).join(', ') || '-';
+  if (!canManage || !categories.length) return <span>{text}</span>;
+  return (
+    <details className="ep-gr-filter">
+      <summary>{text}</summary>
+      <form action={setAssignmentCategories} className="ep-streg-form">
+        <input type="hidden" name="id" value={row.id} />
+        <fieldset className="ep-field" style={{ border: 0, padding: 0, margin: 0 }}>
+          <legend className="ep-field__label">
+            The remark categories {row.employeeName} writes in {row.classCode}-{row.section}
+          </legend>
+          <div className="ep-mr-tiles">
+            {categories.map((x) => (
+              <label key={x.id} className="ep-mr-tile">
+                <input
+                  type="checkbox"
+                  name="categoryId"
+                  value={x.id}
+                  defaultChecked={mine.some((y) => y.id === x.id)}
+                />
+                <span>{x.name}</span>
+              </label>
+            ))}
+          </div>
+        </fieldset>
+        <div>
+          <Button type="submit" variant="secondary" size="sm">
+            Save categories
           </Button>
         </div>
       </form>

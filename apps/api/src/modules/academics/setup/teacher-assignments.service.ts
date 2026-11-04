@@ -23,12 +23,13 @@ export interface TeacherAssignmentRow {
   employeeName: string;
   userId: string | null;
   classSectionId: string;
+  classId: string;
   classCode: string;
   section: string;
   subjectId: string | null;
   subjectCode: string | null;
   subjectName: string | null;
-  kind: 'class_teacher' | 'subject_teacher' | 'coordinator' | 'indicator';
+  kind: 'class_teacher' | 'subject_teacher' | 'coordinator' | 'indicator' | 'remarks';
   canMarkAttendance: boolean;
   canPostHomework: boolean;
   canAnswerQueries: boolean;
@@ -38,6 +39,10 @@ export interface TeacherAssignmentRow {
   validTo: string | null;
   /** an Indicator assignment: the indicator areas the teacher rates (none named: every area) */
   indicatorAreas: Array<{ id: string; name: string }>;
+  /** and single indicators of those areas (none named: every indicator of the areas; docs/design/71) */
+  indicators: Array<{ id: string; code: string; name: string; area: string | null }>;
+  /** a Remarks assignment: the remark categories the teacher writes */
+  remarkCategories: Array<{ id: string; code: string; name: string }>;
 }
 
 interface AssignmentDb {
@@ -48,6 +53,7 @@ interface AssignmentDb {
   employee_name: string;
   user_id: string | null;
   class_section_id: string;
+  class_id: string;
   class_code: string;
   section: string;
   subject_id: string | null;
@@ -61,14 +67,20 @@ interface AssignmentDb {
   valid_from: string;
   valid_to: string | null;
   areas: Array<{ id: string; name: string }> | null;
+  indicators: TeacherAssignmentRow['indicators'] | null;
+  categories: TeacherAssignmentRow['remarkCategories'] | null;
 }
 
 const SELECT = `SELECT ta.id::text, ta.academic_year_id::text, ta.employee_id::text, e.employee_code, e.display_name AS employee_name,
-        e.user_id::text, ta.class_section_id::text, c.code AS class_code, cs.name AS section,
+        e.user_id::text, ta.class_section_id::text, cs.class_id::text, c.code AS class_code, cs.name AS section,
         ta.subject_id::text, s.code AS subject_code, s.name AS subject_name, ta.kind,
         ta.can_mark_attendance, ta.can_post_homework, ta.can_answer_queries, ta.is_actual, ta.valid_from::text, ta.valid_to::text,
         (SELECT jsonb_agg(jsonb_build_object('id', ia.id::text, 'name', ia.name) ORDER BY ia.sort_order, ia.name)
-           FROM indicator_areas ia WHERE ia.id = ANY(ta.indicator_area_ids)) AS areas
+           FROM indicator_areas ia WHERE ia.id = ANY(ta.indicator_area_ids)) AS areas,
+        (SELECT jsonb_agg(jsonb_build_object('id', i.id::text, 'code', i.code, 'name', i.name, 'area', i.area) ORDER BY i.area, i.sort_order, i.code)
+           FROM indicators i WHERE i.id = ANY(ta.indicator_ids)) AS indicators,
+        (SELECT jsonb_agg(jsonb_build_object('id', rc.id::text, 'code', rc.code, 'name', rc.name) ORDER BY rc.sort_order, rc.code)
+           FROM remark_categories rc WHERE rc.id = ANY(ta.remark_category_ids)) AS categories
    FROM teacher_assignments ta
    JOIN employees e ON e.id = ta.employee_id
    JOIN class_sections cs ON cs.id = ta.class_section_id
@@ -83,6 +95,7 @@ const toRow = (r: AssignmentDb): TeacherAssignmentRow => ({
   employeeName: r.employee_name,
   userId: r.user_id,
   classSectionId: r.class_section_id,
+  classId: r.class_id,
   classCode: r.class_code,
   section: r.section,
   subjectId: r.subject_id,
@@ -96,7 +109,17 @@ const toRow = (r: AssignmentDb): TeacherAssignmentRow => ({
   validFrom: r.valid_from,
   validTo: r.valid_to,
   indicatorAreas: r.areas ?? [],
+  indicators: r.indicators ?? [],
+  remarkCategories: r.categories ?? [],
 });
+
+/** What an Indicator or Remarks assignment names (docs/design/71); empty for the other kinds. */
+interface Mapping {
+  areaIds: string[];
+  indicatorIds: string[];
+  categoryIds: string[];
+}
+const NO_MAPPING: Mapping = { areaIds: [], indicatorIds: [], categoryIds: [] };
 
 /**
  * Teacher assignments (S6-02). Each assignment is the source of truth for who teaches what; the database
@@ -165,6 +188,7 @@ export class TeacherAssignmentsService {
       subject_teacher: 'Subject teacher',
       coordinator: 'Coordinator',
       indicator: 'Indicator',
+      remarks: 'Remarks',
     };
     const one = <T>(pick: (r: TeacherAssignmentRow) => T) => (rows[0] ? pick(rows[0]) : null);
     return registerFile(
@@ -190,7 +214,7 @@ export class TeacherAssignmentsService {
           { label: 'Teacher', width: 16 },
           { label: 'Type', width: 10 },
           { label: 'Class', width: 6 },
-          { label: 'Subject', width: 14 },
+          { label: 'Subject / what', width: 14 },
           { label: 'Since', width: 7 },
           { label: 'Status', width: 8 },
         ],
@@ -200,7 +224,18 @@ export class TeacherAssignmentsService {
           r.employeeName,
           r.kind === 'class_teacher' && !r.isActual ? 'Co-class teacher' : (KIND[r.kind] ?? r.kind),
           `${r.classCode}-${r.section}`,
-          r.subjectName ? `${r.subjectName} (${r.subjectCode ?? ''})` : '',
+          r.subjectName
+            ? `${r.subjectName} (${r.subjectCode ?? ''})`
+            : r.kind === 'indicator'
+              ? [
+                  r.indicatorAreas.map((a) => a.name).join('; ') || 'Every area',
+                  r.indicators.map((i) => i.code).join(', '),
+                ]
+                  .filter(Boolean)
+                  .join(' · ')
+              : r.kind === 'remarks'
+                ? r.remarkCategories.map((k) => k.name).join('; ')
+                : '',
           r.validFrom,
           r.validTo ? `Ended ${r.validTo}` : 'Active',
         ]),
@@ -229,6 +264,85 @@ export class TeacherAssignmentsService {
     // eslint-disable-next-line no-restricted-syntax -- SELECT is a constant; values are bound parameters
     const r = await c.query<AssignmentDb>(`${SELECT} WHERE ta.id = $1`, [id]);
     return r.rows[0] ? toRow(r.rows[0]) : null;
+  }
+
+  /**
+   * What an Indicator or Remarks assignment names, checked (docs/design/71): areas of the school; single
+   * indicators that lie in those areas (any area when none is named); remark categories, at least one for
+   * Remarks. Other kinds name nothing.
+   */
+  private async mapping(
+    c: PoolClient,
+    kind: TeacherAssignmentRow['kind'],
+    m: Mapping,
+  ): Promise<Mapping> {
+    const uniq = (a: string[]) => [...new Set(a)];
+    if (kind === 'remarks') {
+      const ids = uniq(m.categoryIds);
+      if (!ids.length)
+        throw new DomainError('validation-failed', 'Pick at least one remark category', {
+          status: 400,
+        });
+      const k = await c.query<{ id: string }>(
+        `SELECT id::text FROM remark_categories WHERE id = ANY($1::bigint[]) AND status = 'active'`,
+        [ids],
+      );
+      if (k.rows.length !== ids.length)
+        throw new DomainError('validation-failed', 'A remark category is not of this school', {
+          status: 400,
+        });
+      return { ...NO_MAPPING, categoryIds: ids };
+    }
+    if (kind !== 'indicator') return NO_MAPPING;
+    const areaIds = uniq(m.areaIds);
+    const indicatorIds = uniq(m.indicatorIds);
+    const areas = await c.query<{ id: string; name: string }>(
+      `SELECT id::text, name FROM indicator_areas WHERE id = ANY($1::bigint[])`,
+      [areaIds],
+    );
+    if (areas.rows.length !== areaIds.length)
+      throw new DomainError('validation-failed', 'An indicator area is not of this school', {
+        status: 400,
+      });
+    if (indicatorIds.length) {
+      const ind = await c.query<{ id: string; code: string; area: string | null }>(
+        `SELECT id::text, code, area FROM indicators WHERE id = ANY($1::bigint[])`,
+        [indicatorIds],
+      );
+      if (ind.rows.length !== indicatorIds.length)
+        throw new DomainError('validation-failed', 'An indicator is not of this school', {
+          status: 400,
+        });
+      const names = new Set(areas.rows.map((a) => a.name.trim().toLowerCase()));
+      const outside = names.size
+        ? ind.rows.filter((i) => !names.has((i.area ?? '').trim().toLowerCase()))
+        : [];
+      if (outside.length)
+        throw new DomainError(
+          'assignment.indicator_outside_areas',
+          `${outside.map((i) => i.code).join(', ')} ${outside.length === 1 ? 'is' : 'are'} not in the areas picked`,
+          { status: 400 },
+        );
+    }
+    return { areaIds, indicatorIds, categoryIds: [] };
+  }
+
+  /** A remark category the section's class does not take: why it is left out, else null. */
+  private async categoriesOff(
+    c: PoolClient,
+    sectionId: string,
+    categoryIds: string[],
+  ): Promise<string | null> {
+    if (!categoryIds.length) return null;
+    const r = await c.query<{ name: string; class_name: string }>(
+      `SELECT rc.name, k.name AS class_name FROM remark_categories rc, class_sections cs JOIN classes k ON k.id = cs.class_id
+        WHERE cs.id = $1 AND rc.id = ANY($2::bigint[])
+          AND cardinality(rc.class_ids) > 0 AND NOT cs.class_id = ANY(rc.class_ids)`,
+      [sectionId, categoryIds],
+    );
+    return r.rows.length
+      ? `${r.rows.map((x) => `"${x.name}"`).join(', ')} ${r.rows.length === 1 ? 'is' : 'are'} not set for ${r.rows[0]!.class_name} (Exams → Remark categories)`
+      : null;
   }
 
   async create(
@@ -262,13 +376,21 @@ export class TeacherAssignmentsService {
         );
         if (subj.rowCount === 0) throw new DomainError('not-found', 'Subject not found');
       }
+      const map = await this.mapping(c, dto.kind, {
+        areaIds: dto.areaIds,
+        indicatorIds: dto.indicatorIds,
+        categoryIds: dto.remarkCategoryIds,
+      });
+      const off = await this.categoriesOff(c, dto.classSectionId, map.categoryIds);
+      if (off) throw new DomainError('assignment.category_not_for_class', off, { status: 409 });
       let id: string;
       try {
         const r = await c.query<{ id: string }>(
           `INSERT INTO teacher_assignments (school_id, academic_year_id, employee_id, class_section_id, subject_id, kind,
-                    can_mark_attendance, can_post_homework, can_answer_queries, valid_from, is_actual, created_by, updated_by)
+                    can_mark_attendance, can_post_homework, can_answer_queries, valid_from, is_actual,
+                    indicator_area_ids, indicator_ids, remark_category_ids, created_by, updated_by)
            VALUES (app.current_school_id(), $1, $2, $3, $4, $5::teacher_assignment_kind, $6, $7, $8, COALESCE($9::date, CURRENT_DATE),
-                   $10, app.current_user_id(), app.current_user_id())
+                   $10, $11::bigint[], $12::bigint[], $13::bigint[], app.current_user_id(), app.current_user_id())
            RETURNING id::text`,
           [
             yearId,
@@ -281,6 +403,9 @@ export class TeacherAssignmentsService {
             dto.canAnswerQueries,
             dto.validFrom ?? null,
             dto.kind !== 'class_teacher' || dto.isActual,
+            map.areaIds,
+            map.indicatorIds,
+            map.categoryIds,
           ],
         );
         id = r.rows[0]!.id;
@@ -323,8 +448,12 @@ export class TeacherAssignmentsService {
       sectionId: string;
       subjectId: string | null;
       isActual: boolean;
+      map?: Mapping;
     },
   ): Promise<string | null> {
+    const map = x.map ?? NO_MAPPING;
+    const off = await this.categoriesOff(c, x.sectionId, map.categoryIds);
+    if (off) return off;
     if (x.subjectId) {
       const taught = await c.query<{ any: boolean; has: boolean }>(
         `SELECT EXISTS (SELECT 1 FROM class_subjects cs2 JOIN class_sections s ON s.class_id = cs2.class_id WHERE s.id = $1 AND cs2.academic_year_id = $3 AND cs2.status = 'active') AS any,
@@ -346,8 +475,10 @@ export class TeacherAssignmentsService {
           : `${other.rows[0].name} is the class teacher; end that first, or save this one as a co-class teacher`;
     }
     const r = await c.query(
-      `INSERT INTO teacher_assignments (school_id, academic_year_id, employee_id, class_section_id, subject_id, kind, is_actual, created_by, updated_by)
-       SELECT app.current_school_id(), $1, $2, $3, $4, $5::teacher_assignment_kind, $6, app.current_user_id(), app.current_user_id()
+      `INSERT INTO teacher_assignments (school_id, academic_year_id, employee_id, class_section_id, subject_id, kind, is_actual,
+                    indicator_area_ids, indicator_ids, remark_category_ids, created_by, updated_by)
+       SELECT app.current_school_id(), $1, $2, $3, $4, $5::teacher_assignment_kind, $6, $7::bigint[], $8::bigint[], $9::bigint[],
+              app.current_user_id(), app.current_user_id()
         WHERE NOT EXISTS (SELECT 1 FROM teacher_assignments ta WHERE ta.academic_year_id = $1 AND ta.employee_id = $2 AND ta.class_section_id = $3
                              AND ta.kind = $5::teacher_assignment_kind AND COALESCE(ta.subject_id, 0) = COALESCE($4::bigint, 0) AND ta.valid_to IS NULL)`,
       [
@@ -357,9 +488,16 @@ export class TeacherAssignmentsService {
         x.subjectId,
         x.kind,
         x.kind !== 'class_teacher' || x.isActual,
+        x.kind === 'indicator' ? map.areaIds : [],
+        x.kind === 'indicator' ? map.indicatorIds : [],
+        x.kind === 'remarks' ? map.categoryIds : [],
       ],
     );
-    return r.rowCount ? null : 'already assigned';
+    return r.rowCount
+      ? null
+      : x.kind === 'indicator' || x.kind === 'remarks'
+        ? `already assigned: change what it names on its row`
+        : 'already assigned';
   }
 
   /** What a bulk save writes: a class teacher's classes (and the subjects taught there), else every class with every subject. */
@@ -405,6 +543,11 @@ export class TeacherAssignmentsService {
       );
       if (subjects.rows.length !== new Set(dto.subjectIds).size)
         throw new DomainError('not-found', 'Subject not found');
+      const map = await this.mapping(c, dto.kind, {
+        areaIds: dto.areaIds,
+        indicatorIds: dto.indicatorIds,
+        categoryIds: dto.remarkCategoryIds,
+      });
       const label = (sectionId: string, subjectId: string | null) =>
         [
           names.rows.find((n) => n.id === sectionId)?.name,
@@ -419,6 +562,7 @@ export class TeacherAssignmentsService {
           ...line,
           employeeId: dto.employeeId,
           isActual: dto.isActual,
+          map,
         });
         if (why) skipped.push({ what: label(line.sectionId, line.subjectId), why });
         else created += 1;
@@ -450,15 +594,18 @@ export class TeacherAssignmentsService {
     'subject teacher': 'subject_teacher',
     coordinator: 'coordinator',
     indicator: 'indicator',
+    remarks: 'remarks',
   };
+  /** columns of the format added later (docs/design/71): read when the sheet has them */
+  private static readonly MAPPING = ['Indicator areas', 'Indicators', 'Remark categories'];
 
   private async lists(c: PoolClient, yearId: string) {
     const [staff, sections, subjects] = await Promise.all([
       c.query<{ id: string; code: string; name: string }>(
         `SELECT id::text, employee_code AS code, display_name AS name FROM employees WHERE deleted_at IS NULL AND status = 'active' ORDER BY display_name`,
       ),
-      c.query<{ id: string; name: string }>(
-        `SELECT cs.id::text, k.code || '-' || cs.name AS name FROM class_sections cs JOIN classes k ON k.id = cs.class_id
+      c.query<{ id: string; name: string; class_id: string }>(
+        `SELECT cs.id::text, k.code || '-' || cs.name AS name, cs.class_id::text FROM class_sections cs JOIN classes k ON k.id = cs.class_id
           WHERE cs.academic_year_id = $1 AND cs.deleted_at IS NULL ORDER BY k.display_order, cs.name`,
         [yearId],
       ),
@@ -466,7 +613,29 @@ export class TeacherAssignmentsService {
         `SELECT id::text, code, name FROM subjects WHERE deleted_at IS NULL AND status = 'active' ORDER BY name`,
       ),
     ]);
-    return { staff: staff.rows, sections: sections.rows, subjects: subjects.rows };
+    const [areas, indicators, categories] = await Promise.all([
+      c.query<{ id: string; name: string }>(
+        `SELECT id::text, name FROM indicator_areas WHERE status = 'active' ORDER BY sort_order, name`,
+      ),
+      // an indicator by its code within the sets a class uses (codes repeat across sets)
+      c.query<{ id: string; code: string; area: string | null; class_ids: string[] }>(
+        `SELECT i.id::text, i.code, i.area, COALESCE(array_agg(m.class_id::text) FILTER (WHERE m.class_id IS NOT NULL), '{}') AS class_ids
+           FROM indicators i JOIN indicator_sets s ON s.id = i.set_id AND s.deleted_at IS NULL
+           LEFT JOIN indicator_set_classes m ON m.set_id = s.id
+          GROUP BY i.id, i.code, i.area`,
+      ),
+      c.query<{ id: string; code: string; name: string }>(
+        `SELECT id::text, code, name FROM remark_categories WHERE status = 'active' ORDER BY sort_order, code`,
+      ),
+    ]);
+    return {
+      staff: staff.rows,
+      sections: sections.rows,
+      subjects: subjects.rows,
+      areas: areas.rows,
+      indicators: indicators.rows,
+      categories: categories.rows,
+    };
   }
 
   /** The Excel format: one row per teacher, type, class and subject, with drop-downs. */
@@ -493,12 +662,35 @@ export class TeacherAssignmentsService {
           { header: 'Class', width: 14, required: true, options: l.sections.map((s) => s.name) },
           { header: 'Subject', width: 30, options: l.subjects.map((s) => `${s.code} · ${s.name}`) },
           { header: 'Actual class teacher', width: 20, options: ['Yes', 'No'] },
+          {
+            header: 'Indicator areas',
+            width: 34,
+            note: 'Indicator only: the areas the teacher rates, separated by ;  Empty: every area.',
+          },
+          {
+            header: 'Indicators',
+            width: 24,
+            note: 'Indicator only, optional: single indicator codes of those areas, separated by ;',
+          },
+          {
+            header: 'Remark categories',
+            width: 28,
+            note: 'Remarks only: the categories the teacher writes (code or name), separated by ;',
+          },
         ],
         guide: [
           'One row for each teacher, teacher type, class and subject. Pick every value from its drop-down.',
           'Class teacher: leave Subject empty. "Actual class teacher" Yes = the class teacher of the section (one per section); No = a co-class teacher. Empty means Yes.',
           'Subject teacher: Subject is needed. A teacher who teaches two subjects in a class has two rows.',
-          'Coordinator and Indicator: Subject may be left empty.',
+          'Coordinator, Indicator and Remarks: Subject may be left empty.',
+          `Indicator: "Indicator areas" names the areas the teacher rates (empty: every area), e.g. ${l.areas
+            .slice(0, 2)
+            .map((a) => a.name)
+            .join('; ')}. "Indicators" may narrow them to single indicator codes.`,
+          `Remarks: "Remark categories" names the categories the teacher writes, e.g. ${l.categories
+            .slice(0, 2)
+            .map((k) => k.code)
+            .join('; ')}.`,
           'A row that is already assigned is left as it is. Nothing is removed by an upload.',
         ],
       }),
@@ -509,7 +701,11 @@ export class TeacherAssignmentsService {
   async import(ctx: RequestContext, fileBase64: string) {
     const tenant = requireTenant(ctx);
     const yearId = this.requireYear(tenant);
-    const rows = await readSheet(fileBase64, TeacherAssignmentsService.HEADERS);
+    const rows = await readSheet(
+      fileBase64,
+      TeacherAssignmentsService.HEADERS,
+      TeacherAssignmentsService.MAPPING,
+    );
     if (!rows.length)
       throw new DomainError('validation-failed', 'The sheet has no filled row', { status: 400 });
     return this.db.tenant(tenant, async (c) => {
@@ -523,7 +719,13 @@ export class TeacherAssignmentsService {
         sectionId: string;
         subjectId: string | null;
         isActual: boolean;
+        map: Mapping;
       }> = [];
+      const list = (cell: string | undefined, sep: RegExp) =>
+        (cell ?? '')
+          .split(sep)
+          .map((x) => x.trim())
+          .filter(Boolean);
       for (const { row, cells } of rows) {
         const empCode = codeOf(cells.Employee!).toLowerCase();
         const emp = l.staff.find(
@@ -538,6 +740,29 @@ export class TeacherAssignmentsService {
             )
           : null;
         const actual = cells['Actual class teacher']!.toLowerCase();
+        // the mapping of an Indicator / Remarks row (docs/design/71); area names may hold commas
+        const areaNames = list(cells['Indicator areas'], /[;\n]/);
+        const areas = areaNames.map(
+          (n) => l.areas.find((a) => a.name.toLowerCase() === n.toLowerCase())?.id,
+        );
+        const codes = list(cells.Indicators, /[;,\n]/).map(codeOf);
+        const indicators = codes.map((code) => {
+          const hits = l.indicators.filter(
+            (i) =>
+              i.code.toLowerCase() === code.toLowerCase() &&
+              (!section || i.class_ids.includes(section.class_id)),
+          );
+          return hits.length === 1 ? hits[0]!.id : undefined;
+        });
+        const catNames = list(cells['Remark categories'], /[;\n]/).map(codeOf);
+        const cats = catNames.map(
+          (n) =>
+            l.categories.find(
+              (k) =>
+                k.code.toLowerCase() === n.toLowerCase() ||
+                k.name.toLowerCase() === n.toLowerCase(),
+            )?.id,
+        );
         const problems = [
           emp ? null : `Employee "${cells.Employee!}" is not on the list`,
           kind ? null : `Teacher type "${cells['Teacher type']!}" is not on the list`,
@@ -547,6 +772,22 @@ export class TeacherAssignmentsService {
             ? 'Subject is needed for a subject teacher'
             : null,
           ['', 'yes', 'no'].includes(actual) ? null : 'Actual class teacher must be Yes or No',
+          areas.some((a) => !a)
+            ? `Indicator area "${areaNames[areas.findIndex((a) => !a)]!}" is not on the list`
+            : null,
+          indicators.some((i) => !i)
+            ? `Indicator "${codes[indicators.findIndex((i) => !i)]!}" is not one of the class's sets`
+            : null,
+          cats.some((k) => !k)
+            ? `Remark category "${catNames[cats.findIndex((k) => !k)]!}" is not on the list`
+            : null,
+          kind === 'remarks' && !catNames.length
+            ? 'Remark categories are needed for Remarks'
+            : null,
+          kind !== 'indicator' && (areaNames.length || codes.length)
+            ? 'Indicator areas and Indicators are for an Indicator row'
+            : null,
+          kind !== 'remarks' && catNames.length ? 'Remark categories are for a Remarks row' : null,
         ].filter(Boolean);
         if (problems.length) errors.push({ row, message: problems.join('; ') });
         else
@@ -557,6 +798,11 @@ export class TeacherAssignmentsService {
             sectionId: section!.id,
             subjectId: kind === 'class_teacher' ? null : (subject?.id ?? null),
             isActual: actual !== 'no',
+            map: {
+              areaIds: areas as string[],
+              indicatorIds: indicators as string[],
+              categoryIds: cats as string[],
+            },
           });
       }
       // a sheet with a wrong row is not half-saved: correct it and upload again
@@ -564,7 +810,13 @@ export class TeacherAssignmentsService {
       let created = 0;
       const skipped: Array<{ what: string; why: string }> = [];
       for (const x of ready) {
-        const why = await this.place(c, yearId, x);
+        let why: string | null;
+        try {
+          why = await this.place(c, yearId, { ...x, map: await this.mapping(c, x.kind, x.map) });
+        } catch (e) {
+          if (!(e instanceof DomainError)) throw e;
+          why = e.message;
+        }
         if (why) skipped.push({ what: `Row ${String(x.row)}`, why });
         else created += 1;
       }
@@ -586,15 +838,16 @@ export class TeacherAssignmentsService {
     });
   }
 
-  /** Ends an assignment today and re-synchronises the teacher's roles and scopes. */
   /**
-   * The indicator areas an Indicator assignment covers (docs/design/69): a grade register run "as per
-   * mapping" shows the teacher only these areas of the section; none named covers every area.
+   * The indicator areas an Indicator assignment covers (docs/design/69), and optionally single indicators
+   * of them (docs/design/71): the teacher enters only these in the section, and a grade register run "as
+   * per mapping" shows only these areas; none named covers every area.
    */
   async setAreas(
     ctx: RequestContext,
     id: string,
     areaIds: string[],
+    indicatorIds: string[] = [],
   ): Promise<TeacherAssignmentRow> {
     const tenant = requireTenant(ctx);
     return this.db.tenant(tenant, async (c) => {
@@ -606,31 +859,61 @@ export class TeacherAssignmentsService {
           'Only an Indicator assignment names indicator areas',
           { status: 409 },
         );
-      const ids = [...new Set(areaIds)];
-      const known = await c.query<{ id: string }>(
-        `SELECT id::text FROM indicator_areas WHERE id = ANY($1::bigint[])`,
-        [ids],
-      );
-      if (known.rows.length !== ids.length)
-        throw new DomainError('validation-failed', 'An indicator area is not of this school', {
-          status: 400,
-        });
+      const map = await this.mapping(c, 'indicator', { ...NO_MAPPING, areaIds, indicatorIds });
       await c.query(
-        `UPDATE teacher_assignments SET indicator_area_ids = $2::bigint[], updated_at = now(), updated_by = app.current_user_id() WHERE id = $1`,
-        [id, ids],
+        `UPDATE teacher_assignments SET indicator_area_ids = $2::bigint[], indicator_ids = $3::bigint[], updated_at = now(),
+                updated_by = app.current_user_id() WHERE id = $1`,
+        [id, map.areaIds, map.indicatorIds],
       );
       const after = (await this.find(c, id))!;
       await this.audit.stage(ctx, c, {
         action: 'academics.teacher_assignment.areas',
         entityType: 'teacher_assignments',
         entityId: id,
-        before: { areas: before.indicatorAreas },
-        after: { areas: after.indicatorAreas },
+        before: { areas: before.indicatorAreas, indicators: before.indicators },
+        after: { areas: after.indicatorAreas, indicators: after.indicators },
       });
       return after;
     });
   }
 
+  /** The remark categories a Remarks assignment names (docs/design/71): the teacher writes these. */
+  async setCategories(
+    ctx: RequestContext,
+    id: string,
+    categoryIds: string[],
+  ): Promise<TeacherAssignmentRow> {
+    const tenant = requireTenant(ctx);
+    return this.db.tenant(tenant, async (c) => {
+      const before = await this.find(c, id);
+      if (!before) throw new DomainError('not-found', 'Assignment not found');
+      if (before.kind !== 'remarks')
+        throw new DomainError(
+          'assignment.not_remarks',
+          'Only a Remarks assignment names remark categories',
+          { status: 409 },
+        );
+      const map = await this.mapping(c, 'remarks', { ...NO_MAPPING, categoryIds });
+      const off = await this.categoriesOff(c, before.classSectionId, map.categoryIds);
+      if (off) throw new DomainError('assignment.category_not_for_class', off, { status: 409 });
+      await c.query(
+        `UPDATE teacher_assignments SET remark_category_ids = $2::bigint[], updated_at = now(), updated_by = app.current_user_id()
+          WHERE id = $1`,
+        [id, map.categoryIds],
+      );
+      const after = (await this.find(c, id))!;
+      await this.audit.stage(ctx, c, {
+        action: 'academics.teacher_assignment.categories',
+        entityType: 'teacher_assignments',
+        entityId: id,
+        before: { categories: before.remarkCategories },
+        after: { categories: after.remarkCategories },
+      });
+      return after;
+    });
+  }
+
+  /** Ends an assignment today and re-synchronises the teacher's roles and scopes. */
   async end(ctx: RequestContext, id: string): Promise<TeacherAssignmentRow> {
     const tenant = requireTenant(ctx);
     return this.db.tenant(tenant, async (c) => {

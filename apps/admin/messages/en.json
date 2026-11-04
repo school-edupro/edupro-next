@@ -1061,7 +1061,8 @@
       "class_teacher": "Class teacher",
       "subject_teacher": "Subject teacher",
       "coordinator": "Coordinator",
-      "indicator": "Indicator"
+      "indicator": "Indicator",
+      "remarks": "Remarks"
     },
     "assignments": "Assignments",
     "noAssignments": "No assignments in this year",

@@ -57,12 +57,15 @@ export default async function ExamRegisterPage({
   searchParams: Promise<{
     exam?: string;
     section?: string;
+    /** "attendance": the exam attendance only (its own menu item; docs/design/71) */
+    only?: string;
     ok?: string;
     error?: string;
     detail?: string;
   }>;
 }) {
   const sp = await searchParams;
+  const only = sp.only === 'attendance';
   const lang = await currentLang();
   let exams: Exam[];
   try {
@@ -105,17 +108,20 @@ export default async function ExamRegisterPage({
     }
   }
   const locked = !!reg?.exam.marksLocked;
+  const showHealth = !!reg?.healthVisible && !only;
   return (
     <main style={{ padding: 'var(--sp-4)', maxWidth: 960, margin: '0 auto' }}>
       <PageHeader
-        kicker={t(lang, 'Exam register')}
+        kicker={t(lang, only ? 'Exam attendance' : 'Exam register')}
         title={exam ? `${exam.name} (${exam.code})` : t(lang, 'Exam register')}
         description={
           reg
             ? `${reg.section.code} · ${
-                reg.healthVisible
-                  ? t(lang, 'remarks, exam attendance, height and weight')
-                  : t(lang, 'remarks, exam attendance')
+                only
+                  ? t(lang, 'exam attendance')
+                  : showHealth
+                    ? t(lang, 'remarks, exam attendance, height and weight')
+                    : t(lang, 'remarks, exam attendance')
               }`
             : t(lang, 'Class teachers fill the register for their section.')
         }
@@ -170,6 +176,7 @@ export default async function ExamRegisterPage({
               ))}
             </select>
           </label>
+          {only ? <input type="hidden" name="only" value="attendance" /> : null}
           <Button type="submit" variant="secondary">
             {t(lang, 'Open register')}
           </Button>
@@ -195,6 +202,7 @@ export default async function ExamRegisterPage({
           <form>
             <input type="hidden" name="examId" value={exam.id} />
             <input type="hidden" name="classSectionId" value={chosen.classSectionId} />
+            {only ? <input type="hidden" name="only" value="attendance" /> : null}
             <datalist id="remark-bank">
               {reg.remarkBank.map((b) => (
                 <option key={b.code} value={b.text} />
@@ -203,15 +211,15 @@ export default async function ExamRegisterPage({
             <div style={{ overflowX: 'auto' }}>
               <table
                 className="ep-table ep-table--dense"
-                style={{ width: '100%', minWidth: reg.healthVisible ? 900 : 640 }}
+                style={{ width: '100%', minWidth: showHealth ? 900 : 640 }}
               >
                 <thead>
                   <tr>
                     <th>#</th>
                     <th>{t(lang, 'Pupil')}</th>
-                    <th>{t(lang, 'Remark')}</th>
+                    {!only ? <th>{t(lang, 'Remark')}</th> : null}
                     <th>{t(lang, 'Present / total days')}</th>
-                    {reg.healthVisible ? (
+                    {showHealth ? (
                       <>
                         <th>{t(lang, 'Height cm')}</th>
                         <th>{t(lang, 'Weight kg')}</th>
@@ -233,38 +241,40 @@ export default async function ExamRegisterPage({
                             : ''}
                         </div>
                       </td>
-                      <td>
-                        <input
-                          className="ep-input"
-                          name={`remark-${r.studentId}`}
-                          list="remark-bank"
-                          aria-label={`${t(lang, 'Remark')} · ${r.name}`}
-                          defaultValue={r.remark ?? ''}
-                          maxLength={600}
-                          disabled={locked}
-                          style={{ minWidth: 220 }}
-                        />
-                        <input
-                          className="ep-input"
-                          name={`participation-${r.studentId}`}
-                          aria-label={`${t(lang, 'Took part in')} · ${r.name}`}
-                          placeholder={t(lang, 'Took part in')}
-                          defaultValue={r.participation ?? ''}
-                          maxLength={300}
-                          disabled={locked}
-                          style={{ minWidth: 220, marginTop: 'var(--sp-1)' }}
-                        />
-                        <input
-                          className="ep-input"
-                          name={`promoted-${r.studentId}`}
-                          aria-label={`${t(lang, 'Promoted to')} · ${r.name}`}
-                          placeholder={t(lang, 'Promoted to (final term)')}
-                          defaultValue={r.promotedTo ?? ''}
-                          maxLength={40}
-                          disabled={locked}
-                          style={{ minWidth: 160, marginTop: 'var(--sp-1)' }}
-                        />
-                      </td>
+                      {!only ? (
+                        <td>
+                          <input
+                            className="ep-input"
+                            name={`remark-${r.studentId}`}
+                            list="remark-bank"
+                            aria-label={`${t(lang, 'Remark')} · ${r.name}`}
+                            defaultValue={r.remark ?? ''}
+                            maxLength={600}
+                            disabled={locked}
+                            style={{ minWidth: 220 }}
+                          />
+                          <input
+                            className="ep-input"
+                            name={`participation-${r.studentId}`}
+                            aria-label={`${t(lang, 'Took part in')} · ${r.name}`}
+                            placeholder={t(lang, 'Took part in')}
+                            defaultValue={r.participation ?? ''}
+                            maxLength={300}
+                            disabled={locked}
+                            style={{ minWidth: 220, marginTop: 'var(--sp-1)' }}
+                          />
+                          <input
+                            className="ep-input"
+                            name={`promoted-${r.studentId}`}
+                            aria-label={`${t(lang, 'Promoted to')} · ${r.name}`}
+                            placeholder={t(lang, 'Promoted to (final term)')}
+                            defaultValue={r.promotedTo ?? ''}
+                            maxLength={40}
+                            disabled={locked}
+                            style={{ minWidth: 160, marginTop: 'var(--sp-1)' }}
+                          />
+                        </td>
+                      ) : null}
                       <td style={{ whiteSpace: 'nowrap' }}>
                         <input
                           className="ep-input"
@@ -290,7 +300,7 @@ export default async function ExamRegisterPage({
                           style={{ width: 72 }}
                         />
                       </td>
-                      {reg.healthVisible ? (
+                      {showHealth ? (
                         <>
                           <td>
                             <input
@@ -353,13 +363,15 @@ export default async function ExamRegisterPage({
                   flexWrap: 'wrap',
                 }}
               >
-                <Button type="submit" formAction={saveRemarks} variant="secondary">
-                  {t(lang, 'Save remarks')}
-                </Button>
+                {!only ? (
+                  <Button type="submit" formAction={saveRemarks} variant="secondary">
+                    {t(lang, 'Save remarks')}
+                  </Button>
+                ) : null}
                 <Button type="submit" formAction={saveAttendance} variant="secondary">
                   {t(lang, 'Save exam attendance')}
                 </Button>
-                {reg.healthVisible ? (
+                {showHealth ? (
                   <Button type="submit" formAction={saveHealth}>
                     {t(lang, 'Save height and weight')}
                   </Button>
@@ -386,6 +398,7 @@ export default async function ExamRegisterPage({
             >
               <input type="hidden" name="examId" value={exam.id} />
               <input type="hidden" name="classSectionId" value={chosen.classSectionId} />
+              {only ? <input type="hidden" name="only" value="attendance" /> : null}
               <p className="ep-field__help" style={{ margin: 0, flexBasis: '100%' }}>
                 {t(
                   lang,

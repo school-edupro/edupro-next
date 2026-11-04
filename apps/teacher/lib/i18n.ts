@@ -13,6 +13,69 @@ export async function currentLang(): Promise<Lang> {
 }
 
 const DICT: Record<string, string> = {
+  'Remarks by category: the class teacher every one, a subject teacher their subject’s, others those given to them':
+    'श्रेणी अनुसार टिप्पणियाँ: कक्षा अध्यापक सभी, विषय अध्यापक अपने विषय की, अन्य उन्हें दी गई',
+  'By Excel': 'एक्सेल से',
+  'Download the sheet': 'शीट डाउनलोड करें',
+  'Upload the filled sheet (.xlsx)': 'भरी हुई शीट अपलोड करें (.xlsx)',
+  'Checking the sheet…': 'शीट जाँची जा रही है…',
+  'rows read': 'पंक्तियाँ पढ़ी गईं',
+  'ready to save': 'सहेजने को तैयार',
+  'with a problem': 'में समस्या',
+  'Save the rows': 'पंक्तियाँ सहेजें',
+  'Nothing was saved.': 'कुछ सहेजा नहीं गया।',
+  'The file is larger than 1.4 MB': 'फ़ाइल 1.4 MB से बड़ी है',
+  'The file could not be read': 'फ़ाइल पढ़ी नहीं जा सकी',
+  Row: 'पंक्ति',
+  'Admission no': 'प्रवेश संख्या',
+  Problem: 'समस्या',
+  'You rate no section in this exam: the class teacher does, or a teacher given areas in Teacher assignments.':
+    'इस परीक्षा में आप किसी अनुभाग का मूल्यांकन नहीं करते: यह कक्षा अध्यापक करते हैं, या अध्यापक असाइनमेंट में क्षेत्र दिए गए अध्यापक।',
+  'No indicator of this section is given to you.': 'इस अनुभाग का कोई संकेतक आपको नहीं दिया गया है।',
+  'Only the indicators given to you are shown; the class teacher sees them all.':
+    'केवल आपको दिए गए संकेतक दिखाए गए हैं; कक्षा अध्यापक सभी देखते हैं।',
+  'Also entered by': 'इन्हें भी भरते हैं',
+  'The sheet holds the indicators you rate in this section, filled with what is entered; a level from its list, or your words for a written item.':
+    'शीट में इस अनुभाग के आपके संकेतक हैं, जो भरा जा चुका है उसके साथ; सूची से स्तर, या लिखित मद के लिए अपने शब्द।',
+  'Some of these indicators are not given to you in this section.':
+    'इनमें से कुछ संकेतक इस अनुभाग में आपको नहीं दिए गए हैं।',
+  'Written by others here': 'यहाँ अन्य लोग लिखते हैं',
+  'The sheet holds the categories you write in this section, filled with what is written; a category that takes its list only accepts a listed remark.':
+    'शीट में इस अनुभाग की आपकी श्रेणियाँ हैं, जो लिखा जा चुका है उसके साथ; केवल सूची वाली श्रेणी में सूची की टिप्पणी ही चलती है।',
+  'You write only the categories given to you: the class teacher all, a subject teacher their subject’s, others those named in Teacher assignments.':
+    'आप केवल आपको दी गई श्रेणियाँ लिखते हैं: कक्षा अध्यापक सभी, विषय अध्यापक अपने विषय की, अन्य वे जो अध्यापक असाइनमेंट में दी गई हैं।',
+  'Height and weight': 'लंबाई और वज़न',
+  'The class teacher enters each pupil’s height and weight in the term exams.':
+    'कक्षा अध्यापक सत्र परीक्षाओं में हर विद्यार्थी की लंबाई और वज़न भरते हैं।',
+  'health check': 'स्वास्थ्य जाँच',
+  'No exam of this year takes height and weight.':
+    'इस वर्ष की कोई परीक्षा लंबाई और वज़न नहीं लेती।',
+  'This exam does not take height and weight.': 'यह परीक्षा लंबाई और वज़न नहीं लेती।',
+  'Last reading': 'पिछली माप',
+  'Only the class teacher of this section enters height and weight.':
+    'इस अनुभाग की लंबाई और वज़न केवल कक्षा अध्यापक भरते हैं।',
+  'The sheet lists the section with each pupil’s last reading; fill height in cm and weight in kg (BMI is worked out).':
+    'शीट में अनुभाग के विद्यार्थी और उनकी पिछली माप हैं; लंबाई सेमी में और वज़न किग्रा में भरें (BMI अपने आप निकलता है)।',
+  'Height and weight is locked for this class; ask the coordinator to reopen it.':
+    'इस कक्षा के लिए लंबाई और वज़न बंद है; समन्वयक से फिर से खुलवाएँ।',
+  'A value was not accepted: height 40 to 250 cm, weight 3 to 200 kg.':
+    'एक मान स्वीकार नहीं हुआ: लंबाई 40 से 250 सेमी, वज़न 3 से 200 किग्रा।',
+  'Your section’s height and weight in each term exam':
+    'हर सत्र परीक्षा में आपके अनुभाग की लंबाई और वज़न',
+  'Exam attendance': 'परीक्षा उपस्थिति',
+  'exam attendance': 'परीक्षा उपस्थिति',
+  'Days present for each exam, or counted from daily attendance':
+    'हर परीक्षा के उपस्थित दिन, या दैनिक उपस्थिति से गिने हुए',
+  'Rate the indicators given to you (the class teacher: every one) and the progress card':
+    'आपको दिए गए संकेतकों का मूल्यांकन करें (कक्षा अध्यापक: सभी) और प्रगति कार्ड',
+  'Exam entries to finish': 'पूरी करनी बाकी परीक्षा प्रविष्टियाँ',
+  'To enter': 'भरना बाकी',
+  What: 'क्या',
+  Entered: 'भरे गए',
+  Enter: 'भरें',
+  remarks: 'टिप्पणियाँ',
+  and: 'और',
+  more: 'अधिक',
   'With me now': 'अभी मेरे पास',
   overdue: 'समय से अधिक',
   'none overdue': 'कोई देर नहीं',

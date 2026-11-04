@@ -183,6 +183,15 @@ export const MarksUploadSchema = z.object({
 });
 export class MarksUploadDto extends createZodDto(MarksUploadSchema) {}
 
+/** A filled sheet of a section (indicators, remarks, height and weight; docs/design/71): `apply` saves it. */
+export const SectionSheetUploadSchema = z.object({
+  classSectionId: IdSchema,
+  /** the .xlsx file, base64 */
+  file: z.string().min(10).max(2_000_000),
+  apply: z.boolean().default(false),
+});
+export class SectionSheetUploadDto extends createZodDto(SectionSheetUploadSchema) {}
+
 /** Locks of one class of an exam per entry type; marks lock every subject of the class. */
 export const ClassLocksSchema = z.object({
   classId: IdSchema,

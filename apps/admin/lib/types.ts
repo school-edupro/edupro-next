@@ -357,7 +357,8 @@ export interface SearchHit {
 
 // ---- Sprint 6 -----------------------------------------------------------------------------------
 export type SubjectKind = 'scholastic' | 'co_scholastic' | 'language' | 'vocational';
-export type AssignmentKind = 'class_teacher' | 'subject_teacher' | 'coordinator' | 'indicator';
+export type AssignmentKind =
+  'class_teacher' | 'subject_teacher' | 'coordinator' | 'indicator' | 'remarks';
 export type PeriodKind = 'teaching' | 'break' | 'assembly' | 'activity';
 
 export interface Subject {
@@ -407,6 +408,11 @@ export interface TeacherAssignment {
   validTo: string | null;
   /** an Indicator assignment: the indicator areas it covers (none: every area; docs/design/69) */
   indicatorAreas?: Array<{ id: string; name: string }>;
+  /** and single indicators of them (none: every indicator of the areas; docs/design/71) */
+  indicators?: Array<{ id: string; code: string; name: string; area: string | null }>;
+  /** a Remarks assignment: the remark categories the teacher writes (docs/design/71) */
+  remarkCategories?: Array<{ id: string; code: string; name: string }>;
+  classId?: string;
 }
 
 export interface Period {

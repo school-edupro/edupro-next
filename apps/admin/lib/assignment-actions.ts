@@ -33,6 +33,10 @@ export async function bulkTeacherAssignments(input: {
   classSectionIds: string[];
   subjectIds: string[];
   isActual: boolean;
+  /** Indicator: the areas and (optionally) single indicators; Remarks: the categories (docs/design/71) */
+  areaIds?: string[];
+  indicatorIds?: string[];
+  remarkCategoryIds?: string[];
 }): Promise<AssignResult> {
   try {
     const r = await apiFetch<{ created: number; skipped: Array<{ what: string; why: string }> }>(

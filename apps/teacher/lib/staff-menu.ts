@@ -91,13 +91,13 @@ export const STAFF_MENU: StaffGroup[] = [
       {
         href: '/indicators',
         label: 'Indicators and progress card',
-        help: 'Rate your section on the indicators and the progress card',
+        help: 'Rate the indicators given to you (the class teacher: every one) and the progress card',
         allowed: (can) => can('exams.indicator.enter'),
       },
       {
         href: '/remarks',
         label: 'Remarks',
-        help: 'Remarks by category for your sections (a subject teacher, their subject’s)',
+        help: 'Remarks by category: the class teacher every one, a subject teacher their subject’s, others those given to them',
         allowed: (can) => can('exams.remark.enter') || can('exams.marks.enter'),
       },
       {
@@ -111,6 +111,18 @@ export const STAFF_MENU: StaffGroup[] = [
         label: 'Exam date sheet',
         help: 'Papers of each exam for your classes',
         allowed: (can) => can('exams.marks.view'),
+      },
+      {
+        href: '/health',
+        label: 'Height and weight',
+        help: 'Your section’s height and weight in each term exam',
+        allowed: (can) => can('exams.health.enter'),
+      },
+      {
+        href: '/exam-register?only=attendance',
+        label: 'Exam attendance',
+        help: 'Days present for each exam, or counted from daily attendance',
+        allowed: (can) => can('exams.attendance.enter'),
       },
       {
         href: '/exam-register',

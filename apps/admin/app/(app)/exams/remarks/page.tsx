@@ -5,7 +5,7 @@ import { ExamSetupNav } from '@/components/exams/ExamSetupNav';
 import { Notice } from '@/components/Notice';
 import { apiFetch, getMe } from '@/lib/api';
 import { saveBankRemark, saveRemarkCategory } from '@/lib/remark-actions';
-import type { ClassRow, Page, SubjectRow } from '@/lib/types';
+import type { ClassRow, Page, SubjectRow, TeacherAssignment } from '@/lib/types';
 
 interface Category {
   id: string;
@@ -49,14 +49,31 @@ export default async function RemarkCategoriesPage({
   const me = await getMe();
   if (!me.permissions.includes('exams.master.view')) notFound();
   const canManage = me.permissions.includes('exams.master.manage');
-  const [cats, bank, classes, subjects] = await Promise.all([
+  const [cats, bank, classes, subjects, mapped] = await Promise.all([
     apiFetch<{ data: Category[] }>('/exams/remark-categories').then((r) => r.data),
     apiFetch<{ data: BankRemark[] }>('/exams/remark-bank?all=1').then((r) => r.data),
     apiFetch<Page<ClassRow>>('/academics/classes?size=200').then((r) => r.data),
     apiFetch<{ data: SubjectRow[] }>('/academics/subjects?size=200')
       .then((r) => r.data)
       .catch(() => [] as SubjectRow[]),
+    // teachers named for categories in Teacher assignments → Remarks (docs/design/71)
+    apiFetch<{ data: TeacherAssignment[] }>('/academics/teacher-assignments?kind=remarks')
+      .then((r) => r.data)
+      .catch(() => [] as TeacherAssignment[]),
   ]);
+  const writtenBy = (k: Category) => {
+    const named = mapped.filter((m) => (m.remarkCategories ?? []).some((x) => x.id === k.id));
+    const teachers = new Set(named.map((m) => m.employeeId)).size;
+    return [
+      'Class teacher',
+      k.subjectName ? `${k.subjectName} teacher` : '',
+      teachers
+        ? `+ ${String(teachers)} named (${String(named.length)} section${named.length === 1 ? '' : 's'})`
+        : '',
+    ]
+      .filter(Boolean)
+      .join(', ');
+  };
   const editing = cats.find((k) => k.code === sp.edit) ?? null;
   const remark = bank.find((b) => b.code === sp.remark) ?? null;
   // classes by name (a code like DEMO reads like a setting; "Fee Demo" does not)
@@ -90,6 +107,7 @@ export default async function RemarkCategoriesPage({
                     <th scope="col">Subject</th>
                     <th scope="col">Classes</th>
                     <th scope="col">Takes</th>
+                    <th scope="col">Written by</th>
                     <th scope="col">Status</th>
                     <th scope="col">
                       <span className="ep-sr-only">Change</span>
@@ -104,6 +122,9 @@ export default async function RemarkCategoriesPage({
                       <td>{k.subjectName ?? '—'}</td>
                       <td>{classNames(k.classIds)}</td>
                       <td>{k.freeText ? 'Free text or the list' : 'The list only'}</td>
+                      <td>
+                        <a href="/academics/teacher-assignments?kind=remarks">{writtenBy(k)}</a>
+                      </td>
                       <td>
                         <Badge tone={k.status === 'active' ? 'success' : 'neutral'}>
                           {k.status === 'active' ? 'In use' : 'Not in use'}

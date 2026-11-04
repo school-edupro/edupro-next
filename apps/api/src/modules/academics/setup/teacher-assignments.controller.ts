@@ -5,6 +5,7 @@ import { RequirePermission } from '../../../common/access/require-permission.dec
 import { ReqCtx, type RequestContext } from '../../../common/http/request-context';
 import {
   AssignmentAreasDto,
+  AssignmentCategoriesDto,
   BulkTeacherAssignmentDto,
   CreateTeacherAssignmentDto,
   ImportTeacherAssignmentsDto,
@@ -88,12 +89,24 @@ export class TeacherAssignmentsController {
 
   @Put(':id/areas')
   @ApiOperation({
-    summary: "An Indicator assignment's indicator areas (none: every area)",
-    description: 'A grade register run as per mapping shows the teacher only these areas',
+    summary: "An Indicator assignment's indicator areas (none: every area) and single indicators",
+    description:
+      'The teacher enters only these in the section (docs/design/71); a grade register run as per mapping shows only these areas',
   })
   @RequirePermission(ACADEMICS.assignmentManage)
   areas(@ReqCtx() ctx: RequestContext, @Param('id') id: string, @Body() body: AssignmentAreasDto) {
-    return this.assignments.setAreas(ctx, id, body.areaIds);
+    return this.assignments.setAreas(ctx, id, body.areaIds, body.indicatorIds);
+  }
+
+  @Put(':id/categories')
+  @ApiOperation({ summary: "A Remarks assignment's remark categories (the teacher writes these)" })
+  @RequirePermission(ACADEMICS.assignmentManage)
+  categories(
+    @ReqCtx() ctx: RequestContext,
+    @Param('id') id: string,
+    @Body() body: AssignmentCategoriesDto,
+  ) {
+    return this.assignments.setCategories(ctx, id, body.categoryIds);
   }
 
   @Post(':id/end')

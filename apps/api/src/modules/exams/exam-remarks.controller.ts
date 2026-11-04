@@ -8,6 +8,7 @@ import {
   EntryQueryDto,
   EXAMS,
   PutRemarkItemsDto,
+  SectionSheetUploadDto,
   SchemePromotionQueryDto,
   SendPromotionsDto,
   UpsertRemarkCategoryDto,
@@ -62,6 +63,24 @@ export class ExamRemarksController {
   @RequirePermission(EXAMS.marksView)
   items(@ReqCtx() ctx: RequestContext, @Param('id') id: string, @Query() q: EntryQueryDto) {
     return this.remarks.items(ctx, id, q);
+  }
+
+  @Get(':id/remark-items/excel')
+  @ApiOperation({ summary: "The section's remark categories the caller writes, as an Excel sheet" })
+  @RequirePermission(EXAMS.marksView)
+  itemsExcel(@ReqCtx() ctx: RequestContext, @Param('id') id: string, @Query() q: EntryQueryDto) {
+    return this.remarks.itemsExcel(ctx, id, q);
+  }
+
+  @Post(':id/remark-items/upload')
+  @ApiOperation({ summary: 'A filled remarks sheet: preview, then save with apply' })
+  @AuthenticatedOnly()
+  itemsUpload(
+    @ReqCtx() ctx: RequestContext,
+    @Param('id') id: string,
+    @Body() dto: SectionSheetUploadDto,
+  ) {
+    return this.remarks.itemsUpload(ctx, id, dto);
   }
 
   @Put(':id/remark-items')

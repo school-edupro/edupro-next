@@ -136,6 +136,8 @@ const cellText = (v: ExcelJS.CellValue): string => {
 export async function readSheet(
   fileBase64: string,
   headers: string[],
+  /** columns read when the sheet has them (an older format may not): '' when absent */
+  optional: string[] = [],
 ): Promise<Array<{ row: number; cells: Record<string, string> }>> {
   const wb = new ExcelJS.Workbook();
   try {
@@ -160,12 +162,16 @@ export async function readSheet(
       `The sheet has no column "${missing.join('", "')}". Download the format and fill that.`,
       { status: 400 },
     );
+  const opt = optional.map((h) => found.indexOf(h.toLowerCase()));
   const out: Array<{ row: number; cells: Record<string, string> }> = [];
   ws.eachRow((row, n) => {
     if (n === 1) return;
     const cells: Record<string, string> = {};
     headers.forEach((h, i) => {
       cells[h] = cellText(row.getCell(at[i]! + 1).value);
+    });
+    optional.forEach((h, i) => {
+      cells[h] = opt[i]! === -1 ? '' : cellText(row.getCell(opt[i]! + 1).value);
     });
     if (Object.values(cells).some((v) => v !== '')) out.push({ row: n, cells });
   });

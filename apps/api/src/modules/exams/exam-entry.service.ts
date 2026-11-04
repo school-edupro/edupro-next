@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { ForbiddenException, Injectable } from '@nestjs/common';
 import type { PoolClient, TenantContext } from '@edupro/db';
 import { ScopePolicy } from '../../common/access/scope.policy';
 import { AuditService } from '../../common/audit/audit.service';
@@ -11,6 +11,7 @@ import {
   EXAMS,
   type EntryQueryDto,
   type MarksUploadDto,
+  type SectionSheetUploadDto,
   type PutExamAttendanceDto,
   type AttendanceFromDailyDto,
   type PutHealthDto,
@@ -29,6 +30,10 @@ export interface EntrySection {
   code: string;
   /** The caller may enter the class register (remarks, attendance, health): class teacher or unscoped. */
   register: boolean;
+  /** The caller rates indicators here: class teacher, coordinator, unscoped, or an Indicator assignment (docs/design/71) */
+  indicators: boolean;
+  /** The caller may write some remark category here: class teacher, coordinator, subject teacher or a Remarks assignment */
+  remarks: boolean;
   subjects: Array<{
     examSubjectId: string;
     subjectId: string;
@@ -142,6 +147,24 @@ const areaOff = (area: string) =>
     extra: { area },
   });
 const savedEntries = (n: number) => `${n} saved ${n === 1 ? 'entry' : 'entries'}`;
+
+/** What a caller rates in a section (docs/design/71). */
+export type IndicatorReach =
+  | { kind: 'all' }
+  | { kind: 'none' }
+  | { kind: 'mapped'; rows: Array<{ areas: string[]; indicatorIds: string[] }> };
+
+/** One Indicator assignment covers an indicator: its single indicators, else its areas (none: every area). */
+const covers = (
+  m: { areas: string[]; indicatorIds: string[] },
+  i: { id: string; area: string | null },
+) =>
+  m.indicatorIds.length
+    ? m.indicatorIds.includes(i.id)
+    : !m.areas.length || m.areas.includes((i.area ?? '').trim().toLowerCase());
+
+const reachCovers = (reach: IndicatorReach, i: { id: string; area: string | null }) =>
+  reach.kind === 'all' || (reach.kind === 'mapped' && reach.rows.some((m) => covers(m, i)));
 
 export interface Kind {
   permission: string;
@@ -349,6 +372,8 @@ export class ExamEntryService {
         class_id: string;
         code: string;
         register: boolean;
+        indicators: boolean;
+        remarks: boolean;
         subject_ids: string[] | null;
         unscoped: boolean;
       }>(
@@ -358,8 +383,13 @@ export class ExamEntryService {
          )
          SELECT cs.id::text, cs.class_id::text, k.code || '-' || cs.name AS code,
                 ($3::bigint[] IS NULL OR EXISTS (SELECT 1 FROM me WHERE me.class_section_id = cs.id AND me.kind IN ('class_teacher', 'coordinator'))) AS register,
+                ($3::bigint[] IS NULL OR EXISTS (SELECT 1 FROM me WHERE me.class_section_id = cs.id
+                                                   AND me.kind::text IN ('class_teacher', 'coordinator', 'indicator'))) AS indicators,
+                ($3::bigint[] IS NULL OR EXISTS (SELECT 1 FROM me WHERE me.class_section_id = cs.id
+                                                   AND me.kind::text IN ('class_teacher', 'coordinator', 'subject_teacher', 'remarks'))) AS remarks,
+                -- a scoped teacher who is not the class teacher sees their own subjects only (none: none, not all)
                 CASE WHEN $3::bigint[] IS NULL OR EXISTS (SELECT 1 FROM me WHERE me.class_section_id = cs.id AND me.kind IN ('class_teacher', 'coordinator')) THEN NULL
-                     ELSE array_agg(DISTINCT me.subject_id::text) FILTER (WHERE me.subject_id IS NOT NULL) END AS subject_ids,
+                     ELSE COALESCE(array_agg(DISTINCT me.subject_id::text) FILTER (WHERE me.subject_id IS NOT NULL), '{}') END AS subject_ids,
                 ($3::bigint[] IS NULL) AS unscoped
            FROM class_sections cs JOIN classes k ON k.id = cs.class_id
            JOIN exam_classes ec ON ec.exam_id = $1 AND ec.class_id = cs.class_id
@@ -392,12 +422,14 @@ export class ExamEntryService {
             ORDER BY app.subject_seq(es.class_id, $4, es.subject_id), sub.code`,
           [examId, s.class_id, s.id, yearId, s.subject_ids],
         );
-        if (!s.register && subs.rowCount === 0) continue;
+        if (!s.register && !s.indicators && !s.remarks && subs.rowCount === 0) continue;
         out.push({
           classSectionId: s.id,
           classId: s.class_id,
           code: s.code,
           register: s.register,
+          indicators: s.indicators,
+          remarks: s.remarks,
           subjects: await Promise.all(
             subs.rows.map(async (x) => ({
               parts: await this.partsOf(c, x.id, x.subject_id, s.subject_ids),
@@ -820,6 +852,42 @@ export class ExamEntryService {
     };
   }
 
+  /**
+   * Which indicators of a section the caller rates (docs/design/71): everything for an unscoped office,
+   * the class teacher (or co-class teacher) and a coordinator; for an Indicator assignment its areas, or
+   * its single indicators when it names some (no area named: every area); outside the caller's sections
+   * or with no such assignment, nothing.
+   */
+  async indicatorReach(
+    c: PoolClient,
+    tenant: TenantContext,
+    yearId: string,
+    sectionId: string,
+  ): Promise<IndicatorReach> {
+    const allowed = await this.scopes.filter(tenant, EXAMS.indicatorEnter, 'class_section');
+    if (allowed === null) return { kind: 'all' };
+    if (!allowed.includes(sectionId)) return { kind: 'none' };
+    const r = await c.query<{ kind: string; areas: string[] | null; indicator_ids: string[] }>(
+      `SELECT ta.kind::text, ta.indicator_ids::text[] AS indicator_ids,
+              (SELECT array_agg(lower(btrim(ia.name))) FROM indicator_areas ia WHERE ia.id = ANY(ta.indicator_area_ids)) AS areas
+         FROM teacher_assignments ta JOIN employees e ON e.id = ta.employee_id
+        WHERE e.user_id = app.current_user_id() AND ta.class_section_id = $1 AND ta.academic_year_id = $2 AND ta.valid_to IS NULL
+          AND ta.kind::text IN ('class_teacher', 'coordinator', 'indicator')`,
+      [sectionId, yearId],
+    );
+    if (r.rows.some((x) => x.kind !== 'indicator')) return { kind: 'all' };
+    if (!r.rows.length) return { kind: 'none' };
+    return {
+      kind: 'mapped',
+      rows: r.rows.map((x) => ({ areas: x.areas ?? [], indicatorIds: x.indicator_ids })),
+    };
+  }
+
+  /** Whether a reach covers an indicator (for the "To enter" list). */
+  reachCovers(reach: IndicatorReach, i: { id: string; area: string | null }) {
+    return reachCovers(reach, i);
+  }
+
   async indicators(ctx: RequestContext, examId: string, q: EntryQueryDto) {
     const tenant = requireTenant(ctx);
     const yearId = this.year(tenant);
@@ -828,6 +896,20 @@ export class ExamEntryService {
       const section = await this.section(c, q.classSectionId, yearId, examId);
       await this.scopes.assert(tenant, EXAMS.marksView, 'class_section', section.id);
       const set = await this.classSet(c, examId, section.class_id);
+      const reach = await this.indicatorReach(c, tenant, yearId, section.id);
+      // the teachers given areas of the section, so the class teacher sees who else enters what
+      const mapped = await c.query<{
+        name: string;
+        areas: string[] | null;
+        indicator_ids: string[];
+      }>(
+        `SELECT e.display_name || ' (' || e.employee_code || ')' AS name, ta.indicator_ids::text[] AS indicator_ids,
+                (SELECT array_agg(lower(btrim(ia.name))) FROM indicator_areas ia WHERE ia.id = ANY(ta.indicator_area_ids)) AS areas
+           FROM teacher_assignments ta JOIN employees e ON e.id = ta.employee_id
+          WHERE ta.class_section_id = $1 AND ta.academic_year_id = $2 AND ta.valid_to IS NULL AND ta.kind = 'indicator'
+          ORDER BY e.display_name`,
+        [section.id, yearId],
+      );
       const roster = await this.roster(c, yearId, section.id);
       const entries = await c.query<{
         student_id: string;
@@ -892,7 +974,15 @@ export class ExamEntryService {
               levelWords: set.levelWords,
             }
           : null,
-        indicators: set?.indicators ?? [],
+        /** all: every indicator is the caller's; mapped: those marked mine; none: only to read */
+        reach: reach.kind,
+        indicators: (set?.indicators ?? []).map((i) => ({
+          ...i,
+          mine: reachCovers(reach, i),
+          enteredBy: mapped.rows
+            .filter((m) => covers({ areas: m.areas ?? [], indicatorIds: m.indicator_ids }, i))
+            .map((m) => m.name),
+        })),
         rows: roster.map((s) => ({
           ...s,
           grades: byStudent.get(s.studentId) ?? {},
@@ -910,7 +1000,13 @@ export class ExamEntryService {
     return this.db.tenant(tenant, async (c) => {
       const exam = await this.exam(c, examId, yearId);
       const section = await this.section(c, dto.classSectionId, yearId, examId);
-      await this.assertMayEnter(c, tenant, yearId, section.id, INDICATORS);
+      const reach = await this.indicatorReach(c, tenant, yearId, section.id);
+      if (reach.kind === 'none')
+        throw new DomainError(
+          'exams.not_assigned',
+          'You rate no indicator in this section: its class teacher does, or a teacher given its areas in Teacher assignments',
+          { status: 403 },
+        );
       if (exam.marks_locked)
         throw new DomainError('exams.entry_locked', 'The exam is locked', { status: 409 });
       await this.assertTypeOpen(c, examId, section.class_id, INDICATORS);
@@ -924,6 +1020,20 @@ export class ExamEntryService {
         );
       const items = new Map(set.indicators.map((i) => [i.id, i]));
       this.assertRoster(dto.rows, await this.roster(c, yearId, section.id));
+      const notMine = [
+        ...new Set(
+          dto.rows
+            .map((r) => items.get(r.indicatorId))
+            .filter((i) => i && !reachCovers(reach, i))
+            .map((i) => i!.code),
+        ),
+      ];
+      if (notMine.length)
+        throw new DomainError(
+          'exams.indicator_not_mapped',
+          `${notMine.join(', ')} ${notMine.length === 1 ? 'is' : 'are'} not given to you in this section (Teacher assignments)`,
+          { status: 409, extra: { codes: notMine } },
+        );
       for (const r of dto.rows) {
         const it = items.get(r.indicatorId);
         if (!it)
@@ -1260,18 +1370,38 @@ export class ExamEntryService {
         HEALTH,
       );
       this.assertRoster(dto.rows, await this.roster(c, yearId, section.id));
+      // one record per pupil per exam (docs/design/71): a later save changes it (only the fields sent;
+      // null clears one), whatever day it was first taken
+      const COLS: Array<[keyof (typeof dto.rows)[number], string]> = [
+        ['heightCm', 'height_cm'],
+        ['weightKg', 'weight_kg'],
+        ['bloodGroup', 'blood_group'],
+        ['visionLeft', 'vision_left'],
+        ['visionRight', 'vision_right'],
+        ['dental', 'dental'],
+        ['notes', 'notes'],
+      ];
       let n = 0;
       for (const r of dto.rows) {
-        if (
-          r.heightCm == null &&
-          r.weightKg == null &&
-          r.bloodGroup == null &&
-          !r.visionLeft &&
-          !r.visionRight &&
-          !r.dental &&
-          !r.notes
-        )
+        if (COLS.every(([k]) => r[k] === undefined)) continue;
+        const empty = COLS.every(([k]) => r[k] == null || r[k] === '');
+        const had = await c.query<{ id: string }>(
+          `SELECT id::text FROM health_records WHERE student_id = $1 AND exam_id = $2 ORDER BY recorded_on DESC, id DESC LIMIT 1`,
+          [r.studentId, examId],
+        );
+        if (had.rows[0]) {
+          const sent = COLS.filter(([k]) => r[k] !== undefined);
+          const sets = sent.map(([, col], i) => col + ' = $' + String(i + 3)).join(', ');
+          const u = await c.query(
+            // eslint-disable-next-line no-restricted-syntax -- the column names are the fixed list above; values are bound
+            `UPDATE health_records SET ${sets}, recorded_on = COALESCE($2::date, recorded_on), recorded_by = app.current_user_id()
+              WHERE id = $1`,
+            [had.rows[0].id, dto.recordedOn ?? null, ...sent.map(([k]) => r[k] ?? null)],
+          );
+          n += u.rowCount ?? 0;
           continue;
+        }
+        if (empty) continue; // nothing to clear, nothing to record
         const u = await c.query(
           `INSERT INTO health_records (school_id, student_id, recorded_on, exam_id, height_cm, weight_kg, blood_group, vision_left, vision_right, dental, notes, recorded_by)
            VALUES (app.current_school_id(), $1, COALESCE($2::date, CURRENT_DATE), $3, $4, $5, $6, $7, $8, $9, $10, app.current_user_id())
@@ -1791,6 +1921,322 @@ export class ExamEntryService {
             };
           }),
       });
+    return { ...preview, applied: true };
+  }
+
+  // ---- indicators by Excel (docs/design/71) --------------------------------------------------------
+  /** The indicators of a section the caller rates, as a sheet to fill (what is entered already in it). */
+  async indicatorsExcel(ctx: RequestContext, examId: string, q: EntryQueryDto) {
+    const sheet = await this.indicators(ctx, examId, q);
+    const cols = this.indicatorColumns(sheet);
+    const bytes = await templateSheet({
+      sheet: 'Indicators',
+      columns: [
+        { header: 'Admission no', width: 16, required: true, format: 'text' },
+        { header: 'Roll no', width: 8 },
+        { header: 'Name', width: 28 },
+        ...cols.map((c) => ({
+          header: c.header,
+          width: c.text ? 36 : 14,
+          ...(c.text ? {} : { options: c.levels }),
+          note: c.text ? 'A written observation' : `A level: ${c.levels.join(', ')}`,
+        })),
+      ],
+      guide: [
+        `${sheet.exam.name} · ${sheet.section.code} · ${sheet.set!.name}`,
+        'Pick a level from the drop-down; a written item takes your observation as text.',
+        'Leave a cell empty to keep what is entered.',
+        'Only the indicators given to you are in the sheet. Do not change the Admission no column; upload the sheet on the indicators page, check, then save.',
+      ],
+      rows: sheet.rows.map((r) => [
+        r.admissionNo,
+        r.rollNo,
+        r.name,
+        ...cols.map((c) => {
+          const g = r.grades[c.id];
+          return (c.text ? g?.note : g?.grade) ?? null;
+        }),
+      ]),
+    });
+    return {
+      filename: `indicators-${sheet.exam.code}-${sheet.section.code}.xlsx`
+        .toLowerCase()
+        .replace(/[^\w.-]+/g, '-'),
+      contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      base64: bytes.toString('base64'),
+    };
+  }
+
+  private indicatorColumns(sheet: Awaited<ReturnType<ExamEntryService['indicators']>>) {
+    if (!sheet.set)
+      throw new DomainError(
+        'exams.no_indicator_set',
+        'No indicator set is assigned to this class',
+        {
+          status: 409,
+        },
+      );
+    const cols = sheet.indicators
+      .filter((i) => i.mine && !i.heading)
+      .map((i) => ({
+        id: i.id,
+        code: i.code,
+        header: `${i.code} · ${i.name}`.slice(0, 120),
+        text: i.kind === 'text',
+        levels: i.levels ?? sheet.set!.grades,
+      }));
+    if (!cols.length)
+      throw new DomainError(
+        'exams.not_assigned',
+        'You rate no indicator in this section: its class teacher does, or a teacher given its areas in Teacher assignments',
+        { status: 403 },
+      );
+    return cols;
+  }
+
+  /** A filled indicators sheet: every cell checked (a level of the item, or text); `apply` saves it. */
+  async indicatorsUpload(ctx: RequestContext, examId: string, dto: SectionSheetUploadDto) {
+    const sheet = await this.indicators(ctx, examId, { classSectionId: dto.classSectionId });
+    const cols = this.indicatorColumns(sheet);
+    const rows = await readSheet(
+      dto.file,
+      ['Admission no'],
+      cols.map((c) => c.header),
+    );
+    const byNo = new Map(sheet.rows.map((r) => [r.admissionNo.trim().toLowerCase(), r]));
+    const seen = new Set<string>();
+    const checked = rows.map(({ row, cells }) => {
+      const no = cells['Admission no']!.trim();
+      const student = byNo.get(no.toLowerCase());
+      const values: Record<string, string> = {};
+      const parsed: Array<{ indicatorId: string; grade: string | null; note: string | null }> = [];
+      let error: string | null = null;
+      if (!student) error = `No student with admission no ${no} in ${sheet.section.code}`;
+      else if (seen.has(student.studentId)) error = 'The student is in the sheet twice';
+      if (student) seen.add(student.studentId);
+      for (const c of cols) {
+        const raw = (cells[c.header] ?? '').trim();
+        values[c.header] = raw;
+        if (raw === '' || error) continue;
+        const had = student!.grades[c.id];
+        if (c.text) {
+          if (raw.length > 600) error = `${c.code}: more than 600 letters`;
+          else parsed.push({ indicatorId: c.id, grade: null, note: raw });
+        } else {
+          const level = c.levels.find((l) => l.toLowerCase() === raw.toLowerCase());
+          if (!level) error = `${c.code}: ${raw} is not a level (${c.levels.join(', ')})`;
+          else parsed.push({ indicatorId: c.id, grade: level, note: had?.note ?? null });
+        }
+      }
+      return { row, admissionNo: no, name: student?.name ?? null, student, values, parsed, error };
+    });
+    const errors = checked.filter((x) => x.error).length;
+    const preview = {
+      columns: cols.map((c) => c.header),
+      rows: checked.map((x) => ({
+        row: x.row,
+        admissionNo: x.admissionNo,
+        name: x.name,
+        values: x.values,
+        error: x.error,
+      })),
+      ready: checked.filter((x) => !x.error && x.parsed.length).length,
+      errors,
+      applied: false,
+    };
+    if (!dto.apply || errors || !preview.ready) return preview;
+    const all = checked.flatMap((x) =>
+      x.parsed.map((v) => ({ studentId: x.student!.studentId, ...v })),
+    );
+    for (let i = 0; i < all.length; i += 3000)
+      await this.putIndicators(ctx, examId, {
+        classSectionId: dto.classSectionId,
+        rows: all.slice(i, i + 3000),
+      });
+    return { ...preview, applied: true };
+  }
+
+  // ---- height and weight (docs/design/71, part 3) -----------------------------------------------------
+  /**
+   * The class teacher's height and weight sheet of a section for an exam: per pupil this exam's reading
+   * and the last one before it (another exam or a school health check), BMI worked out by the database.
+   */
+  async healthSheet(ctx: RequestContext, examId: string, q: EntryQueryDto) {
+    const tenant = requireTenant(ctx);
+    const yearId = this.year(tenant);
+    return this.db.tenant(tenant, async (c) => {
+      const exam = await this.exam(c, examId, yearId);
+      const section = await this.section(c, q.classSectionId, yearId, examId);
+      await this.scopes.assert(tenant, EXAMS.marksView, 'class_section', section.id);
+      const takes = await c.query<{ on: boolean; locked: boolean }>(
+        `SELECT 'health' = ANY(e.areas) AS on, (e.marks_locked OR COALESCE(ec.health_locked, false)) AS locked
+           FROM exams e LEFT JOIN exam_classes ec ON ec.exam_id = e.id AND ec.class_id = $2 WHERE e.id = $1`,
+        [examId, section.class_id],
+      );
+      let canEnter = ctx.permissions?.has(EXAMS.healthEnter) ?? false;
+      if (canEnter)
+        try {
+          await this.assertMayEnter(c, tenant, yearId, section.id, HEALTH);
+        } catch (e) {
+          if (!(e instanceof DomainError) && !(e instanceof ForbiddenException)) throw e;
+          canEnter = false;
+        }
+      const roster = await this.roster(c, yearId, section.id);
+      const recs = await c.query<{
+        student_id: string;
+        mine: boolean;
+        height_cm: string | null;
+        weight_kg: string | null;
+        bmi: string | null;
+        blood_group: string | null;
+        recorded_on: string;
+        exam_name: string | null;
+      }>(
+        `SELECT DISTINCT ON (h.student_id, h.exam_id IS NOT DISTINCT FROM $1::bigint)
+                h.student_id::text, (h.exam_id IS NOT DISTINCT FROM $1::bigint) AS mine, h.height_cm::text, h.weight_kg::text,
+                h.bmi::text, h.blood_group, h.recorded_on::text, x.name AS exam_name
+           FROM health_records h LEFT JOIN exams x ON x.id = h.exam_id
+          WHERE h.student_id = ANY($2::bigint[])
+            AND (h.exam_id IS NOT DISTINCT FROM $1::bigint
+                 OR h.recorded_on <= COALESCE((SELECT max(recorded_on) FROM health_records WHERE exam_id = $1 AND student_id = h.student_id), CURRENT_DATE))
+          ORDER BY h.student_id, h.exam_id IS NOT DISTINCT FROM $1::bigint, h.recorded_on DESC, h.id DESC`,
+        [examId, roster.map((r) => r.studentId)],
+      );
+      const reading = (x: (typeof recs.rows)[number]) => ({
+        heightCm: x.height_cm,
+        weightKg: x.weight_kg,
+        bmi: x.bmi,
+        bloodGroup: x.blood_group,
+        recordedOn: x.recorded_on,
+        examName: x.exam_name,
+      });
+      return {
+        exam: { id: exam.id, code: exam.code, name: exam.name },
+        section: { id: section.id, code: section.code },
+        /** the exam takes height and weight (its areas) */
+        takes: Boolean(takes.rows[0]?.on),
+        locked: Boolean(takes.rows[0]?.locked),
+        canEnter,
+        rows: roster.map((s) => {
+          const now = recs.rows.find((x) => x.student_id === s.studentId && x.mine);
+          const last = recs.rows.find((x) => x.student_id === s.studentId && !x.mine);
+          return {
+            ...s,
+            current: now ? reading(now) : null,
+            last: last ? reading(last) : null,
+          };
+        }),
+      };
+    });
+  }
+
+  private static readonly HEALTH_COLS = ['Height (cm)', 'Weight (kg)', 'Blood group'];
+  private static readonly BLOOD = ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'];
+
+  /** A section's height and weight for an exam as a sheet to fill. */
+  async healthExcel(ctx: RequestContext, examId: string, q: EntryQueryDto) {
+    const sheet = await this.healthSheet(ctx, examId, q);
+    const bytes = await templateSheet({
+      sheet: 'Height and weight',
+      columns: [
+        { header: 'Admission no', width: 16, required: true, format: 'text' },
+        { header: 'Roll no', width: 8 },
+        { header: 'Name', width: 28 },
+        { header: 'Last reading', width: 26 },
+        { header: 'Height (cm)', width: 12, format: 'number', note: '40 to 250' },
+        { header: 'Weight (kg)', width: 12, format: 'number', note: '3 to 200' },
+        { header: 'Blood group', width: 12, options: ExamEntryService.BLOOD },
+      ],
+      guide: [
+        `${sheet.exam.name} · ${sheet.section.code}`,
+        'Height in centimetres (40 to 250), weight in kilograms (3 to 200); BMI is worked out.',
+        'Leave a cell empty to keep what is entered. "Last reading" is for reference and is not read.',
+        'Do not change the Admission no column; upload the sheet on the Height and weight page, check, then save.',
+      ],
+      rows: sheet.rows.map((r) => [
+        r.admissionNo,
+        r.rollNo,
+        r.name,
+        r.last
+          ? `${r.last.heightCm ?? '-'} cm · ${r.last.weightKg ?? '-'} kg (${r.last.recordedOn})`
+          : null,
+        r.current?.heightCm == null ? null : Number(r.current.heightCm),
+        r.current?.weightKg == null ? null : Number(r.current.weightKg),
+        r.current?.bloodGroup ?? r.last?.bloodGroup ?? null,
+      ]),
+    });
+    return {
+      filename: `height-weight-${sheet.exam.code}-${sheet.section.code}.xlsx`
+        .toLowerCase()
+        .replace(/[^\w.-]+/g, '-'),
+      contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      base64: bytes.toString('base64'),
+    };
+  }
+
+  /** A filled height and weight sheet: ranges and blood groups checked; `apply` saves it. */
+  async healthUpload(ctx: RequestContext, examId: string, dto: SectionSheetUploadDto) {
+    const sheet = await this.healthSheet(ctx, examId, { classSectionId: dto.classSectionId });
+    const rows = await readSheet(dto.file, ['Admission no', ...ExamEntryService.HEALTH_COLS]);
+    const byNo = new Map(sheet.rows.map((r) => [r.admissionNo.trim().toLowerCase(), r]));
+    const seen = new Set<string>();
+    const num = (raw: string, lo: number, hi: number) => {
+      const n = Number(raw);
+      return /^\d+(\.\d{1,2})?$/.test(raw) && n >= lo && n <= hi ? n : null;
+    };
+    const checked = rows.map(({ row, cells }) => {
+      const no = cells['Admission no']!.trim();
+      const student = byNo.get(no.toLowerCase());
+      const values: Record<string, string> = {};
+      for (const h of ExamEntryService.HEALTH_COLS) values[h] = (cells[h] ?? '').trim();
+      const v: { heightCm?: number; weightKg?: number; bloodGroup?: string } = {};
+      let error: string | null = null;
+      if (!student) error = `No student with admission no ${no} in ${sheet.section.code}`;
+      else if (seen.has(student.studentId)) error = 'The student is in the sheet twice';
+      if (student) seen.add(student.studentId);
+      const h = values['Height (cm)']!;
+      const w = values['Weight (kg)']!;
+      const bg = values['Blood group']!.toUpperCase().replace(/\s+/g, '');
+      if (!error && h) {
+        const n = num(h, 40, 250);
+        if (n === null) error = `Height ${h} is not 40 to 250 cm`;
+        else v.heightCm = n;
+      }
+      if (!error && w) {
+        const n = num(w, 3, 200);
+        if (n === null) error = `Weight ${w} is not 3 to 200 kg`;
+        else v.weightKg = n;
+      }
+      if (!error && bg) {
+        if (!ExamEntryService.BLOOD.includes(bg)) error = `${bg} is not a blood group`;
+        else if (bg !== (student!.current?.bloodGroup ?? student!.last?.bloodGroup ?? ''))
+          v.bloodGroup = bg;
+      }
+      return { row, admissionNo: no, name: student?.name ?? null, student, values, v, error };
+    });
+    const errors = checked.filter((x) => x.error).length;
+    const ready = checked.filter((x) => !x.error && Object.keys(x.v).length);
+    const preview = {
+      columns: ExamEntryService.HEALTH_COLS,
+      rows: checked.map((x) => ({
+        row: x.row,
+        admissionNo: x.admissionNo,
+        name: x.name,
+        values: x.values,
+        error: x.error,
+      })),
+      ready: ready.length,
+      errors,
+      applied: false,
+    };
+    if (!dto.apply || errors || !ready.length) return preview;
+    await this.putHealth(ctx, examId, {
+      classSectionId: dto.classSectionId,
+      rows: ready.map((x) => ({
+        studentId: x.student!.studentId,
+        ...(x.v as { heightCm?: number; weightKg?: number; bloodGroup?: 'A+' }),
+      })),
+    });
     return { ...preview, applied: true };
   }
 }

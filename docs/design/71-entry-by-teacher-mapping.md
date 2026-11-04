@@ -1,6 +1,6 @@
 # 71 · Who enters what: indicators and remarks by teacher mapping, height and weight in the teacher app
 
-Status: planned 4 Nov 2026 (decisions below); parts 1–3 to build on "go part N"
+Status: built 4 Nov 2026, parts 1–3 (migrations 0305–0306)
 
 ## Why
 
@@ -114,3 +114,41 @@ category.
   Exams → Set-up → Remark categories and bank.
 - The demo login dev-teacher (E006) has no assignment now and holds an unscoped _Exam office_ role
   granted by hand (it enters marks in every section).
+
+## As built (4 Nov 2026, parts 1–3)
+
+- **0305** adds `remarks` to `teacher_assignment_kind` (its own file: a new enum value is not usable in
+  the transaction that adds it). **0306**: `teacher_assignments.indicator_ids` (Indicator only) and
+  `remark_category_ids` (Remarks only, at least one; checks); `app.sync_teacher_scopes` holds the Subject
+  Teacher role while the person has a subject teacher, Indicator or Remarks assignment and scopes it to
+  the sections of all four teaching kinds; Indicator-only teachers synced once (E002 on Alpha: IX-A,
+  IX-B, X-A, X-B again).
+- **Assignments API**: create / bulk take `areaIds`, `indicatorIds`, `remarkCategoryIds` (indicators must
+  lie in the areas: 400 `assignment.indicator_outside_areas`; a category the section's class does not
+  take is left out / 409 `assignment.category_not_for_class`); `PUT :id/areas` takes `indicatorIds`;
+  `PUT :id/categories`; rows carry `classId`, `indicators`, `remarkCategories`; the Excel format has the
+  optional columns Indicator areas, Indicators (codes within the class's sets), Remark categories
+  (`readSheet` reads optional columns); the list's Excel / PDF names them.
+- **Entry API**: `/entry/sections` flags `indicators` and `remarks` per section and a scoped
+  non-class-teacher sees only their own subjects (no subject: none — it was every subject);
+  `ExamEntryService.indicatorReach` (all / mapped / none); `GET :id/indicators` marks each indicator
+  `mine` with `enteredBy` and `reach`; `PUT` refuses others' (409 `exams.indicator_not_mapped`);
+  `GET :id/indicators/excel`, `POST :id/indicators/upload`. Remarks: `may` also for a Remarks assignment
+  naming the category; `writtenBy` per category and `reason` when nothing is the caller's;
+  `GET :id/remark-items/excel`, `POST :id/remark-items/upload`. Height and weight: one record per pupil
+  per exam (a later save changes the fields sent, null clears one); `GET :id/health` (this exam's
+  reading and the last before it, `takes`, `locked`, `canEnter`), `GET :id/health/excel`,
+  `POST :id/health/upload` (height 40–250 cm, weight 3–200 kg, the DTO's ranges; blood group).
+  `GET /exams/my-entry` (`MyEntryService`): the teacher's lines not done per open exam.
+- **Admin**: Assign a teacher picks areas and single indicators (of the chosen classes' sets, of the
+  areas picked) for Indicator and categories (those every chosen class takes) for Remarks; the list's
+  fold-outs edit them; type filter has Remarks; Remark categories show **Written by**.
+- **Teacher app**: Indicators (the sections the teacher rates; a mapped teacher only their columns, the
+  class teacher every one with "Also entered by"; the HPC words and photos stay the class teacher's),
+  Remarks (the sections where they write something, the reason when nothing, "Written by others here"),
+  **Height and weight** (new), **Exam attendance** (`/exam-register?only=attendance`), each with **By
+  Excel** (`/api/sheet`, `SheetCard`, `SheetUpload`); the home's **To enter** (a figure and a table).
+  Hindi for the new words.
+- Tests: `apps/api/test/entry-by-mapping.e2e-spec.ts` (6); 22 related suites pass (191 tests); axe on the
+  teacher pages (three logins, desktop and phone) and the admin pages in a throwaway school; the teacher
+  a11y list gains /health and the attendance view.

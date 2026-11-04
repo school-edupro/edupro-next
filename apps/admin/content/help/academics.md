@@ -13,7 +13,12 @@
 
 1. **Academics → Classes and sections** (roll numbers per section), **Subjects** with display order.
 2. **Teacher assignments**: class teacher and subject teachers per section; the assignment grants the
-   scoped role automatically and ends it when the assignment ends.
+   scoped role automatically and ends it when the assignment ends. Two more types say who enters what
+   besides the class teacher: **Indicator** (the indicator areas a teacher rates, e.g. the art teacher
+   Art Education; optionally single indicators of them) and **Remarks** (the remark categories a teacher
+   writes, e.g. the PE teacher Sports). Pick them on **Assign a teacher**, in the Excel format (columns
+   Indicator areas, Indicators, Remark categories, separated by ;), or open a row's areas / categories
+   to change them. A teacher's login made after their assignments takes them at once.
 3. **Timetable**: periods and slots; a teacher cannot be in two sections in the same period.
 4. **Holidays and almanac**: the school calendar the apps show.
 

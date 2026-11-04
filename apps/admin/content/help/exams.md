@@ -105,7 +105,18 @@
   show the marks as text: entering and reopening are never the same person.
 - The exam register belongs to the class teacher: in the admin, **Remarks** (the general remark and
   the categories, saved together), **Attendance → Exam attendance** (the % shows as you type) and
-  **Attendance → Health** (height, weight and blood group; the BMI shows as you type).
+  **Attendance → Health** (height, weight and blood group; the BMI shows as you type). In the teacher
+  app the class teacher has **Height and weight** (the exams that take it, each pupil's last reading,
+  BMI worked out on saving; one record per pupil per exam) and **Exam attendance** as their own items,
+  each with **By Excel** (download the sheet, fill, upload, check, save).
+- **Who enters what** (indicators and remarks): the class teacher enters every indicator and every
+  remark category of the section. A teacher given an **Indicator** assignment (Academics → Teacher
+  assignments) rates only its areas (or the single indicators it names) in that section; the class
+  teacher's page says who else enters an area. A subject category (e.g. Mathematics) is also its
+  subject teacher's; a **Remarks** assignment gives categories to any teacher. A teacher with nothing
+  to write is told why ("No remark category is set for Class VI…"). Both pages have **By Excel** with
+  only that teacher's columns. The teacher app's home lists **To enter**: per open exam, what is theirs
+  and not done (marks not submitted, indicators, remark categories, height and weight).
 - The progress card: in the teacher app **Indicators and progress card** (or **Exams → open exam →
   Indicators**) the class teacher moves between the areas (tabs; nothing is lost) and gives each
   child a level per competency, saving every area at once
@@ -284,7 +295,7 @@ with which headers.
    student) or Excel of what is shown, or of every section.
 4. **As per mapping**: in **Academics → Teacher assignments**, an **Indicator** assignment's row shows
    its indicator areas ("All indicator areas" until some are ticked): open it to tick the areas that
-   teacher rates in the section. A register set to As per mapping shows such a teacher only those areas
+   teacher rates in the section (and, optionally, single indicators of them). A register set to As per mapping shows such a teacher only those areas
    (no Indicator assignment of the section: nothing, with a note). Register managers see every area.
 
 ### Remark, Attendance and Height & Weight registers

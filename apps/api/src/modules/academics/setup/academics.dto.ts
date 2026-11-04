@@ -8,6 +8,7 @@ export const AssignmentKindSchema = z.enum([
   'subject_teacher',
   'coordinator',
   'indicator',
+  'remarks',
 ]);
 export const PeriodKindSchema = z.enum(['teaching', 'break', 'assembly', 'activity']);
 const TimeSchema = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, 'must be HH:MM');
@@ -64,16 +65,37 @@ export const CreateTeacherAssignmentSchema = z
     canAnswerQueries: z.boolean().default(true),
     validFrom: DateSchema.optional(),
     isActual: z.boolean().default(true),
+    /** Indicator: the areas, and optionally single indicators of them (docs/design/71) */
+    areaIds: z.array(IdSchema).max(60).default([]),
+    indicatorIds: z.array(IdSchema).max(300).default([]),
+    /** Remarks: the remark categories the teacher writes (docs/design/71) */
+    remarkCategoryIds: z.array(IdSchema).max(40).default([]),
   })
   .refine((v) => v.kind !== 'subject_teacher' || v.subjectId, {
     message: 'subjectId is required for a subject teacher',
     path: ['subjectId'],
+  })
+  .refine((v) => v.kind !== 'remarks' || v.remarkCategoryIds.length > 0, {
+    message: 'Pick at least one remark category',
+    path: ['remarkCategoryIds'],
   });
 export class CreateTeacherAssignmentDto extends createZodDto(CreateTeacherAssignmentSchema) {}
 
-/** An Indicator assignment's indicator areas (docs/design/69); none: every area. */
-export const AssignmentAreasSchema = z.object({ areaIds: z.array(IdSchema).max(60) });
+/**
+ * An Indicator assignment's indicator areas (docs/design/69); none: every area. Optionally single
+ * indicators of those areas (docs/design/71); none: every indicator of the areas.
+ */
+export const AssignmentAreasSchema = z.object({
+  areaIds: z.array(IdSchema).max(60),
+  indicatorIds: z.array(IdSchema).max(300).default([]),
+});
 export class AssignmentAreasDto extends createZodDto(AssignmentAreasSchema) {}
+
+/** A Remarks assignment's remark categories (docs/design/71): at least one. */
+export const AssignmentCategoriesSchema = z.object({
+  categoryIds: z.array(IdSchema).min(1, 'Pick at least one remark category').max(40),
+});
+export class AssignmentCategoriesDto extends createZodDto(AssignmentCategoriesSchema) {}
 
 /** One teacher, one type, many classes and many subjects: every class with every subject. */
 export const BulkTeacherAssignmentSchema = z
@@ -84,10 +106,19 @@ export const BulkTeacherAssignmentSchema = z
     subjectIds: z.array(IdSchema).max(40).default([]),
     /** Class teacher only: the actual class teacher of the section (else a co-class teacher). */
     isActual: z.boolean().default(true),
+    /** Indicator: the areas, and optionally single indicators of them (docs/design/71) */
+    areaIds: z.array(IdSchema).max(60).default([]),
+    indicatorIds: z.array(IdSchema).max(300).default([]),
+    /** Remarks: the remark categories the teacher writes */
+    remarkCategoryIds: z.array(IdSchema).max(40).default([]),
   })
   .refine((v) => v.kind !== 'subject_teacher' || v.subjectIds.length > 0, {
     message: 'Pick at least one subject for a subject teacher',
     path: ['subjectIds'],
+  })
+  .refine((v) => v.kind !== 'remarks' || v.remarkCategoryIds.length > 0, {
+    message: 'Pick at least one remark category',
+    path: ['remarkCategoryIds'],
   });
 export class BulkTeacherAssignmentDto extends createZodDto(BulkTeacherAssignmentSchema) {}
 

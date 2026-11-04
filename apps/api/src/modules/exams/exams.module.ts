@@ -15,6 +15,7 @@ import { ExamRemarksController } from './exam-remarks.controller';
 import { RemarkCategoriesService } from './remark-categories.service';
 import { SchemePromotionService } from './scheme-promotion.service';
 import { ExamEntryService } from './exam-entry.service';
+import { MyEntryService } from './my-entry.service';
 import { ExamResultsService } from './exam-results.service';
 import { ExamStatusController } from './exam-status.controller';
 import { SubjectMarksController } from './subject-marks.controller';
@@ -63,6 +64,7 @@ import { SubjectChoicesService } from './subject-choices.service';
     BoardResultsController,
   ],
   providers: [
+    MyEntryService,
     ExamsService,
     ExamDateSheetsService,
     ExamEntryService,
