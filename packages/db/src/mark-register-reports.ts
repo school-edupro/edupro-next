@@ -337,6 +337,18 @@ function summary(i: ReportInput): ReportBlock[] {
 }
 
 // ---- Analysis --------------------------------------------------------------------------------------
+/** the register's analysis bands (step 6): in order low to high, the cumulative cut-offs, a %'s band */
+function analysisBands(def: RegisterDef) {
+  const bands = [...def.analysis.bands].sort((a, b) => b.fromPct - a.fromPct);
+  const reach = (p: number, op: '>=' | '>', at: number) => (op === '>' ? p > at : p >= at);
+  return {
+    ordered: [...bands].reverse(),
+    cumulative: def.analysis.cumulative,
+    reach,
+    bandOf: (p: number) => bands.find((b) => reach(p, b.op, b.fromPct))?.label ?? null,
+  };
+}
+
 /**
  * Per subject (each language of a slot apart): the students, absent, appeared, the register's % bands,
  * the cumulative counts, highest, lowest, average and passing %. A class with one subject picked: a row
@@ -346,11 +358,7 @@ function summary(i: ReportInput): ReportBlock[] {
  * then each of its sections.
  */
 function analysis(i: ReportInput): ReportBlock[] {
-  const bands = [...i.def.analysis.bands].sort((a, b) => b.fromPct - a.fromPct);
-  const cuml = i.def.analysis.cumulative;
-  const reach = (p: number, op: '>=' | '>', at: number) => (op === '>' ? p > at : p >= at);
-  const bandOf = (p: number) => bands.find((b) => reach(p, b.op, b.fromPct))?.label ?? null;
-  const ordered = [...bands].reverse();
+  const { ordered, cumulative: cuml, reach, bandOf } = analysisBands(i.def);
   const figureCols: Col[] = [
     ['Students', 1],
     ['Absent', 1],
@@ -1119,7 +1127,6 @@ function compare(i: ReportInput): ReportBlock[] {
       pass: appeared.length ? (passed.length / appeared.length) * 100 : null,
       compartment: list.filter((r) => r.result === 'compartment').length,
       fail: list.filter((r) => r.result === 'fail').length,
-      absent: list.filter((r) => r.result === 'absent').length,
     };
   });
   const isClass = (n: number) => n === places.length - 1;
@@ -1138,14 +1145,63 @@ function compare(i: ReportInput): ReportBlock[] {
     ...(isClass(n) ? { tone: 'final' as const } : {}),
   });
   const upTo = i.def.final.compartmentUpTo;
+  // the legacy's Result Analysis figures, on the final total and its %, a column per section
+  const { ordered, cumulative, reach, bandOf } = analysisBands(i.def);
+  const counted = (label: string, pick: (o: (typeof overall)[number]) => RegStudentResult[]) => [
+    { t: label, text: true, strong: true },
+    ...overall.map((o, n): SheetCell => {
+      const c = count(
+        i,
+        `${places[n]!} · ${label}`,
+        pick(o).map((r) => ({ r })),
+      );
+      return {
+        ...c,
+        center: true,
+        ...(isClass(n) ? { tone: 'final' as const, strong: true } : {}),
+      };
+    }),
+  ];
+  const finals = (o: (typeof overall)[number]) => o.appeared.filter((r) => r.total !== null);
   const overallRows: SheetCell[][] = [
+    counted('Total students', (o) => o.list),
+    counted('Absent (final withheld)', (o) => o.list.filter((r) => r.result === 'absent')),
+    counted('Appeared', (o) => o.appeared),
+    ...ordered.map((b) =>
+      counted(b.label, (o) =>
+        o.appeared.filter((r) => r.pct !== null && bandOf(r.pct) === b.label),
+      ),
+    ),
+    ...cumulative.map((c) =>
+      counted(`${c.op}${String(c.pct)}%`, (o) =>
+        o.appeared.filter((r) => r.pct !== null && reach(r.pct, c.op, c.pct)),
+      ),
+    ),
     [
-      { t: 'Students', text: true, strong: true },
-      ...overall.map((o, n) => cell(String(o.list.length), n)),
+      { t: 'Highest marks', text: true, strong: true },
+      ...overall.map((o, n) => {
+        const f = finals(o);
+        return cell(
+          f.length
+            ? `${cutFixed(Math.max(...f.map((r) => r.total!)), 'auto')} / ${cutFixed(Math.max(...f.map((r) => r.max)), 'auto')}`
+            : '',
+          n,
+        );
+      }),
     ],
     [
-      { t: 'Appeared', text: true, strong: true },
-      ...overall.map((o, n) => cell(String(o.appeared.length), n)),
+      { t: 'Lowest marks', text: true, strong: true },
+      ...overall.map((o, n) => {
+        const f = finals(o);
+        return cell(f.length ? cutFixed(Math.min(...f.map((r) => r.total!)), 'auto') : '', n);
+      }),
+    ],
+    [
+      { t: 'Average marks', text: true, strong: true },
+      ...overall.map((o, n) => {
+        const f = finals(o);
+        return cell(f.length ? cutFixed(avg(f.map((r) => r.total!))!, 2) : '', n);
+      }),
     ],
     [
       { t: 'Average Final %', text: true, strong: true },
@@ -1167,10 +1223,6 @@ function compare(i: ReportInput): ReportBlock[] {
       { t: `Fail (more than ${String(upTo)} failed)`, text: true, strong: true },
       ...overall.map((o, n) => cell(String(o.fail), n)),
     ],
-    [
-      { t: 'Absent (final withheld)', text: true, strong: true },
-      ...overall.map((o, n) => cell(String(o.absent), n)),
-    ],
   ];
   const head = block(
     i,
@@ -1183,6 +1235,8 @@ function compare(i: ReportInput): ReportBlock[] {
     if (n === places.length) h.tone = 'final';
   }
   head.band = false;
+  head.sheet.note =
+    'Total students, absent, appeared, the % bands, the cumulative counts and the highest, lowest and average marks: the final total and its %; appeared = a final worked out (pass, compartment or fail)';
   const bySubject = block(i, 'Section comparison by subject (▲ the best section)', cols, rows, [
     { t: '', span: 1 },
     ...places.map((p) => ({ t: p, span: 3 })),

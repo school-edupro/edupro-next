@@ -213,3 +213,10 @@ At-risk, Failing students, Compare sections) on the same computed rows.
   section in the same layout (a section's count lists name it). One subject picked for a class keeps its
   section-wise rows with the teachers. Checked: unit tests, `mark-registers` e2e (its analysis check
   reads the ENGLISH column), register 418 for VIII and VIII-A with axe.
+- **Later (5 Nov 2026)**: **Compare sections**' "Overall result" carries the Result Analysis figures for
+  each section and the class, on the final total and its %: Total students, Absent (final withheld),
+  Appeared, the register's % bands, the cumulative counts, Highest / Lowest / Average marks, then the
+  average final %, pass %, compartment and fail as before (each count opens its students). The bands
+  come from one helper (`analysisBands`) shared with Analysis. A count in an amber (final) cell takes the
+  darker link colour (`--text-link-hover`) so it keeps 4.5:1. Checked: the unit test (figures worked by
+  hand), `mark-registers` e2e, register 418 for VIII with axe.

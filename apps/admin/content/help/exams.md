@@ -323,8 +323,10 @@ out, then runs it for any section; the marks always come from the exam entry.
      margin of 5 or 10 over the pass %; counts by subject.
    - **Failing students**: each failing subject with its %, NIL where nobody fails.
    - **Compare sections** (a class's all sections, as the old register prints it): "Overall result" —
-     students, appeared, average final %, pass %, compartment, fail and absent for each section and
-     the class (the best section ▲) — then each subject's average %, pass % and highest by section.
+     for each section and the class: total students, absent, appeared, the students in each % band and
+     the cumulative counts (on the final %), the highest, lowest and average marks (the final total),
+     average final %, pass %, compartment and fail (the best section ▲; a count opens its students) —
+     then each subject's average %, pass % and highest by section.
 3. **Lock** pins a register: saving it then makes its next version (a draft); **Versions** restores an
    old one as a new register; **Delete** sends a draft to the bin (**Deleted** brings it back);
    **Copy** makes one for other classes.

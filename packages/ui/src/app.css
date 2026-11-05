@@ -14118,6 +14118,10 @@ button.ep-subchoice__icon:hover {
 .ep-mr-drill:hover {
   color: var(--text-link-hover);
 }
+/* a count in an amber (final) cell: the darker link colour keeps 4.5:1 on the amber */
+.ep-mr-sheet [data-tone='final'] .ep-mr-drill {
+  color: var(--text-link-hover);
+}
 .ep-mr-drill-line {
   display: block;
   margin-top: var(--sp-1);

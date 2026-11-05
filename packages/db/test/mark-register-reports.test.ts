@@ -293,15 +293,41 @@ describe('mark register reports (docs/design/68, phase 2)', () => {
       'VI-B',
       'Class',
     ]);
+    // finals: VI-A a1 175 (87.5%), a2 80 (40%), a4 69 (34.5%), a3 absent, a5 incomplete;
+    // VI-B b1 170 (85%), b2 30 (15%), b3 80 of 100 (80%: its ML is left out)
     expect(overall!.sheet.body.map((r) => r.cells.map((x) => x.t))).toEqual([
-      ['Students', '5', '3', '8'],
+      ['Total students', '5', '3', '8'],
+      ['Absent (final withheld)', '1', '0', '1'],
       ['Appeared', '3', '3', '6'],
+      ['0-32', '0', '1', '1'],
+      ['33-40', '1', '0', '1'],
+      ['40-50', '1', '0', '1'],
+      ['50-60', '0', '0', '0'],
+      ['60-70', '0', '0', '0'],
+      ['70-80', '0', '0', '0'],
+      ['80-90', '1', '2', '3'],
+      ['90-100', '0', '0', '0'],
+      ['>=50%', '1', '2', '3'],
+      ['>=60%', '1', '2', '3'],
+      ['>=70%', '1', '2', '3'],
+      ['>=80%', '1', '2', '3'],
+      ['>=90%', '0', '0', '0'],
+      ['Highest marks', '175 / 200', '170 / 200', '175 / 200'],
+      ['Lowest marks', '69', '30', '30'],
+      ['Average marks', '108.00', '93.33', '100.67'],
       ['Average Final %', '54%', '60% ▲', '57%'],
       ['Pass % (Result PASS ÷ appeared)', '66.67% ▲', '66.67% ▲', '66.67%'],
       ['Compartment (1 failed)', '1', '0', '1'],
       ['Fail (more than 1 failed)', '0', '1', '1'],
-      ['Absent (final withheld)', '1', '0', '1'],
     ]);
+    // a count opens its students with their final
+    expect(lines(overall!.sheet)['0-32']).toBeDefined();
+    const low = overall!.sheet.body.find((r) => r.cells[0]!.t === '0-32')!.cells[2]!;
+    expect(low.drill).toEqual({
+      title: 'VI-B · 0-32',
+      cols: ['#', 'Name', 'Adm No', 'Section', 'Marks', '%'],
+      rows: [['1', 'b2', 'b2', 'VI-B', '30 / 200', '15%']],
+    });
     // the class column in amber
     expect(overall!.sheet.body[0]!.cells[3]!.tone).toBe('final');
     const eng = lines(c!.sheet).ENGLISH!;
