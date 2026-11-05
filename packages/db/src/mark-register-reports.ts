@@ -402,7 +402,8 @@ function analysis(i: ReportInput): ReportBlock[] {
  * The legacy's Marks Entry Status. A section: a row per subject (each member of a slot apart) with its
  * teachers and students, a column per exam — entered of how many with Complete / Partial / Not
  * started, the pending students on a click, "–" where the subject has no such exam — and the share of
- * every subject at the foot. A class: its sections against the subjects, the % entered of every exam.
+ * every subject at the foot. A class: that table for each section in turn (the same exams, so they line
+ * up), then its sections against the subjects, the % entered of every exam.
  */
 function entry(i: ReportInput): ReportBlock[] {
   const sections = [...new Map(i.students.map((s) => [s.sectionId, s.section])).entries()];
@@ -454,11 +455,13 @@ function entry(i: ReportInput): ReportBlock[] {
     const v = of > 0 ? Math.round((got / of) * 1000) / 10 : 0;
     return `${Number.isInteger(v) ? String(v) : v.toFixed(1)}%`;
   };
-  if (!i.merit) {
-    const exams = i.def.exams.filter((e) => lines.some((l) => l.exams[e.key]));
-    const sectionId = sections[0]?.[0] ?? '';
+  // the exams some subject of the place has: a class's section tables share them
+  const exams = i.def.exams.filter((e) => lines.some((l) => l.exams[e.key]));
+  /** one section's table, as the legacy prints it */
+  const sectionTable = (sectionId: string, section: string): ReportBlock => {
     const classTeacher = i.teachers?.[`${sectionId}|class`]?.join(', ');
-    const rows = lines.map((l, n): SheetCell[] => [
+    const mine = lines.filter((l) => l.sectionId === sectionId);
+    const rows = mine.map((l, n): SheetCell[] => [
       { t: String(n + 1), center: true },
       { t: l.subject, text: true, strong: true },
       { t: (i.teachers?.[`${l.sectionId}|${l.subjectId}`] ?? []).join(', '), text: true },
@@ -480,7 +483,7 @@ function entry(i: ReportInput): ReportBlock[] {
             ? {
                 drillLabel: `${String(pending.length)} pending`,
                 drill: {
-                  title: `${l.subject} · ${e.key} · pending`,
+                  title: `${l.subject}${i.merit ? ` · ${section}` : ''} · ${e.key} · pending`,
                   cols: ['#', 'Name', 'Adm No', 'Roll'],
                   rows: pending.map((st, k) => [
                     String(k + 1),
@@ -496,7 +499,7 @@ function entry(i: ReportInput): ReportBlock[] {
     ]);
     const out = block(
       i,
-      `Marks Entry Status — ${i.place}`,
+      `Marks Entry Status — ${section}`,
       [
         ['#', 0.5],
         ['Subject', 2.6, true],
@@ -510,8 +513,8 @@ function entry(i: ReportInput): ReportBlock[] {
     out.sheet.foot = [
       { t: 'All subjects', span: 4, center: true, strong: true, tone: 'final' },
       ...exams.map((e): SheetCell => {
-        const of = lines.reduce((a, l) => a + (l.exams[e.key]?.takers.length ?? 0), 0);
-        const got = lines.reduce((a, l) => a + (l.exams[e.key]?.done.length ?? 0), 0);
+        const of = mine.reduce((a, l) => a + (l.exams[e.key]?.takers.length ?? 0), 0);
+        const got = mine.reduce((a, l) => a + (l.exams[e.key]?.done.length ?? 0), 0);
         return {
           t: `${pctText(got, of)} (${String(got)} / ${String(of)})`,
           center: true,
@@ -527,11 +530,13 @@ function entry(i: ReportInput): ReportBlock[] {
       'click “pending” for the names',
       ...(classTeacher ? [`Class teacher: ${classTeacher}`] : []),
     ].join(' · ');
-    return [out];
-  }
-  // a class: the sections against the subjects, the share entered of every exam
+    return out;
+  };
+  if (!i.merit) return [sectionTable(sections[0]?.[0] ?? '', i.place)];
+  // a class: each section's table, then the sections against the subjects, the share of every exam
   const subjects = [...new Set(lines.map((l) => l.subject))];
   return [
+    ...sections.map(([sectionId, section]) => sectionTable(sectionId, section)),
     block(
       i,
       `Marks Entry Status — ${i.place} (% entered, every exam)`,

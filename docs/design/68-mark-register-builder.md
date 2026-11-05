@@ -195,3 +195,7 @@ At-risk, Failing students, Compare sections) on the same computed rows.
   (a new page when full), the Excel stacks them in the place's sheet under their titles. Admin: the
   Reports menu, the Top / margin choices, the downloads of what is shown.
 - Tests: unit `mark-register-reports` (8), e2e reports (1 more in `mark-registers`), a11y every report.
+- **Later (5 Nov 2026)**, asked from register 418's Run (`place=c:<class>&report=entry`): Entry status for a
+  class's all sections shows each section's own table first (as the section view prints it, the class's
+  exams in every table so they line up; the pending list's title names the section), then the grid of
+  the % entered. Checked: the unit test, `mark-registers` e2e, register 418 for VIII with axe.

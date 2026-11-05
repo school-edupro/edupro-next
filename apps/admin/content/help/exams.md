@@ -306,7 +306,9 @@ out, then runs it for any section; the marks always come from the exam entry.
    - **Entry status** (as the old register prints it): a row per subject with its teachers and
      students, a column per exam — entered of how many with Complete / Partial, "▶ 1 pending" opens the
      names, "–" where the subject has no such paper — and the % of all subjects at the foot; the class
-     teacher in the line above. A class's all sections: a grid of the % entered.
+     teacher in the line above. A class's all sections: that table for each section in turn (the same
+     exams, so they line up; "pending" names the section), then a grid of the % entered per section and
+     subject.
    - **Toppers** (as the old register prints them): "Overall Toppers — Top 3 / 5 / 10 · by Final
      Total" with position, final total, % and grade (ties shown), each section's top 3 in a class,
      then "Subject Toppers" — every subject's highest with all ties, "Full marks" marked.

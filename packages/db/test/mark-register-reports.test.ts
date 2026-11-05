@@ -155,7 +155,21 @@ describe('mark register reports (docs/design/68, phase 2)', () => {
     // every subject of the exam: 9 of 10 entered
     expect(s!.sheet.foot!.map((c) => c.t)).toEqual(['All subjects', '90% (9 / 10)']);
     expect(s!.sheet.note).toContain('Entered = any mark (0 included) or code (AB, ML …)');
-    const [g] = buildReport('entry', input(true));
+    // a class: each section's table in turn (the same exams), then the sections against the subjects
+    const [a, b, g, more] = buildReport('entry', input(true));
+    expect([a!.title, b!.title, g!.title]).toEqual([
+      'Marks Entry Status — VI-A',
+      'Marks Entry Status — VI-B',
+      'Marks Entry Status — VI · all sections (% entered, every exam)',
+    ]);
+    expect(more).toBeUndefined();
+    expect(a!.sheet.body.map((r) => r.cells.map((c) => c.t))).toEqual(
+      s!.sheet.body.map((r) => r.cells.map((c) => c.t)),
+    );
+    expect(a!.sheet.body[1]!.cells[4]!.drill!.title).toBe('MATHS · VI-A · T · pending');
+    expect(b!.sheet.head).toEqual(a!.sheet.head);
+    expect(b!.sheet.foot!.map((c) => c.t)).toEqual(['All subjects', '100% (6 / 6)']);
+    expect(b!.sheet.note).toContain('Entered = any mark');
     expect(lines(g!.sheet)['VI-A']).toEqual(['VI-A', '100%', '80%']);
     expect(lines(g!.sheet)['VI-B']).toEqual(['VI-B', '100%', '100%']);
   });
