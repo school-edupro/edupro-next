@@ -1655,6 +1655,10 @@ export class MarkSchemesService {
    * or a PDF / Excel of it, or of every section (a section a page / a sheet).
    */
   async register(ctx: RequestContext, id: string, q: RegisterQueryDto) {
+    if (q.pctFrom !== undefined && q.pctTo !== undefined && q.pctFrom > q.pctTo)
+      throw new DomainError('validation-failed', 'The % "from" is above the % "to"', {
+        status: 400,
+      });
     const tenant = requireTenant(ctx);
     const yearId = this.year(tenant);
     // a report's tables that name themselves in their first heading (no band over them)
@@ -1809,6 +1813,9 @@ export class MarkSchemesService {
             teachers,
             subject: q.subject,
             top: q.top,
+            pctFrom: q.pctFrom ?? null,
+            pctTo: q.pctTo ?? null,
+            lowest: q.lowest ?? false,
             margin: q.margin,
           })) {
             sheets.push(b.sheet);

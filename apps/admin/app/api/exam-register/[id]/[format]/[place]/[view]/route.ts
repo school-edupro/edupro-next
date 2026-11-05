@@ -30,8 +30,15 @@ export async function GET(
   const report = sp.get('report');
   if (report && /^(summary|analysis|entry|toppers|teacher|risk|failing|compare)$/.test(report))
     q.set('report', report);
+  // toppers (docs/design/76): any N 1–100 or all, a % range, the lowest first
   const top = sp.get('top');
-  if (top && ['3', '5', '10'].includes(top)) q.set('top', top);
+  if (top && (top === 'all' || (/^\d{1,3}$/.test(top) && +top >= 1 && +top <= 100)))
+    q.set('top', top);
+  for (const k of ['pctFrom', 'pctTo']) {
+    const v = sp.get(k);
+    if (v && /^\d{1,3}(\.\d{1,2})?$/.test(v) && +v <= 100) q.set(k, v);
+  }
+  if (sp.get('lowest') === '1') q.set('lowest', '1');
   const margin = sp.get('margin');
   if (margin && ['5', '10'].includes(margin)) q.set('margin', margin);
   const paper = sp.get('paper');

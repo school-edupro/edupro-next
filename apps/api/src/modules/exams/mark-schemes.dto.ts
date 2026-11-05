@@ -252,12 +252,16 @@ export const RegisterQuerySchema = z.object({
       'compare',
     ])
     .default('register'),
-  /** Toppers: the top N */
-  top: z.coerce
-    .number()
-    .int()
-    .refine((n) => [3, 5, 10].includes(n), '3, 5 or 10')
+  /** Toppers: the top N, 1–100; "all" (or empty) = everyone in the % range (docs/design/76) */
+  top: z
+    .union([z.literal('all'), z.literal(''), z.coerce.number().int().min(1).max(100)])
+    .transform((v) => (v === 'all' || v === '' ? null : v))
     .default(3),
+  /** Toppers: only students whose % (the final, or the subject's) is in this range */
+  pctFrom: z.coerce.number().min(0).max(100).optional(),
+  pctTo: z.coerce.number().min(0).max(100).optional(),
+  /** Toppers: the same lists from the bottom */
+  lowest: Flag.optional(),
   /** At-risk: how far above the pass % is borderline */
   margin: z.coerce
     .number()

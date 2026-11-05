@@ -230,10 +230,86 @@ describe('mark register reports (docs/design/68, phase 2)', () => {
       'A2',
     ]);
     expect(top!.sheet.body[0]!.cells[4]!.ratio).toBe(true);
-    expect(secA!.title).toBe('Top 3 of VI-A · by Final Total');
+    // a section takes the same N; positions within the list (a2's compartment is not a topper)
+    expect(secA!.title).toBe('Top 2 of VI-A · by Final Total');
+    expect(secA!.sheet.body.map((r) => [r.cells[0]!.badge!.label, r.cells[1]!.t])).toEqual([
+      ['1', 'a1'],
+      ['2', 'a4'],
+    ]);
     const eng = subjects!.sheet.body.find((r) => r.cells[0]!.t === 'ENGLISH')!.cells;
     expect(eng.map((c) => c.t)).toEqual(['ENGLISH', 'b1', 'VI-B', 'b1', '100 / 100', '100%']);
     expect(eng[1]!.badge).toEqual({ label: 'Full marks', tone: 'success' });
+  });
+
+  it('toppers (doc 76): a subject’s own toppers, any N, a % range, the lowest first', () => {
+    const names = (b: { sheet: Sheet }) =>
+      b.sheet.body.map((r) => [r.cells[0]!.badge?.label ?? '', r.cells[1]!.t]);
+    // English for the class: b1 100, a1 90, a5 70, a4 35, a2 30, b2 20 (a3 AB and b3 ML left out)
+    const eng = buildReport('toppers', input(true, { subject: 'ENG', order: ['ENG'], top: 2 }));
+    expect(eng.map((b) => b.title)).toEqual([
+      'English toppers — Top 2 of the class · by the subject’s %',
+      'English toppers — Top 2 of VI-A · by the subject’s %',
+      'English toppers — Top 2 of VI-B · by the subject’s %',
+    ]);
+    expect(names(eng[0]!)).toEqual([
+      ['1', 'b1'],
+      ['2', 'a1'],
+    ]);
+    expect(eng[0]!.sheet.body[0]!.cells.slice(4).map((c) => c.t)).toEqual([
+      '100 / 100',
+      '100%',
+      'A1',
+    ]);
+    expect(eng[0]!.sheet.body[0]!.cells[1]!.badge).toEqual({
+      label: 'Full marks',
+      tone: 'success',
+    });
+    expect(names(eng[1]!)).toEqual([
+      ['1', 'a1'],
+      ['2', 'a5'],
+    ]);
+    expect(names(eng[2]!)).toEqual([
+      ['1', 'b1'],
+      ['2', 'b2'],
+    ]);
+    // the lowest in English among 25%–80%: a2 30, a4 35 (a5 70 is third)
+    const low = buildReport(
+      'toppers',
+      input(true, { subject: 'ENG', order: ['ENG'], top: 2, lowest: true, pctFrom: 25, pctTo: 80 }),
+    );
+    expect(low[0]!.title).toBe('English — Lowest 2 of the class · by the subject’s % · 25%–80%');
+    expect(names(low[0]!)).toEqual([
+      ['1', 'a2'],
+      ['2', 'a4'],
+    ]);
+    expect(low[0]!.sheet.body[0]!.cells[0]!.badge!.tone).toBe('warning');
+    // a section with a subject: its own list only
+    expect(
+      buildReport('toppers', input(false, { subject: 'ENG', order: ['ENG'] })).map((b) => b.title),
+    ).toEqual(['English toppers — Top 3 of VI-A · by the subject’s %']);
+    // everyone at 80% and above (no N): a1 175, b1 170, b3 80 of 100 (all passed)
+    const all = buildReport('toppers', input(true, { top: null, pctFrom: 80 }));
+    expect(all[0]!.title).toBe('Overall Toppers — All of the class · by Final Total · 80%–100%');
+    expect(names(all[0]!)).toEqual([
+      ['1', 'a1'],
+      ['2', 'b1'],
+      ['3', 'b3'],
+    ]);
+    // nobody in the range: said so
+    const none = buildReport('toppers', input(true, { pctFrom: 99 }));
+    expect(none[0]!.sheet.body.map((r) => r.cells.map((c) => c.t))).toEqual([
+      ['Nobody in this range'],
+    ]);
+    // the lowest finals of the class (a compartment and a fail count): b2 30, a4 69
+    const lowest = buildReport('toppers', input(true, { top: 2, lowest: true }));
+    expect(lowest[0]!.title).toBe('Overall — Lowest 2 of the class · by Final Total');
+    expect(names(lowest[0]!)).toEqual([
+      ['1', 'b2'],
+      ['2', 'a4'],
+    ]);
+    const subjectsLow = lowest[lowest.length - 1]!;
+    expect(subjectsLow.title).toBe('Lowest in each subject (all ties shown)');
+    expect(lines(subjectsLow.sheet).ENGLISH!.slice(1, 2)).toEqual(['b2']);
   });
 
   it('teacher-wise as the legacy prints it: a block per teacher with their classes and a total; no teacher last', () => {

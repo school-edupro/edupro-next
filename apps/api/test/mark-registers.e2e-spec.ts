@@ -484,6 +484,32 @@ describe('mark registers like the legacy Term Mark Register (e2e)', () => {
       'Dev',
       'Bhanu',
     ]);
+    // doc 76: a subject's own toppers for the class and each section, any N, a % range, the lowest
+    const first = (b: { sheet: Sheet }) => b.sheet.body.map((r) => r.cells[1]!.t.split(' ')[0]);
+    const engTop = await run(`${VI}&report=toppers&top=2&subject=ENG`);
+    expect(engTop.blocks.map((b) => b.title)).toEqual([
+      'English toppers — Top 2 of the class · by the subject’s %',
+      'English toppers — Top 2 of VI-A · by the subject’s %',
+      'English toppers — Top 2 of VI-B · by the subject’s %',
+    ]);
+    // VI-A English: Asha 88, Chitra 75, Bhanu 64
+    expect(first(engTop.blocks[1]!)).toEqual(['Asha', 'Chitra']);
+    const engLow = await run(
+      `${VI}&report=toppers&subject=ENG&top=all&lowest=1&pctFrom=60&pctTo=80`,
+    );
+    expect(engLow.blocks[1]!.title).toBe(
+      'English — All of VI-A, lowest first · by the subject’s % · 60%–80%',
+    );
+    expect(first(engLow.blocks[1]!)).toEqual(['Bhanu', 'Chitra']);
+    expect(
+      (
+        await call(
+          office,
+          'GET',
+          `/exams/schemes/${ids.reg!}/register?${VI}&report=toppers&pctFrom=80&pctTo=60`,
+        )
+      ).statusCode,
+    ).toBe(400);
     // no subject teacher is assigned in this school: every line is under "No teacher mapped"
     const teacher = await run(`${A}&report=teacher`);
     expect(teacher.blocks.map((b) => b.title)).toEqual(['NO TEACHER MAPPED']);

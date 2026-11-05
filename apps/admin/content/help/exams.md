@@ -313,9 +313,15 @@ out, then runs it for any section; the marks always come from the exam entry.
      teacher in the line above. A class's all sections: that table for each section in turn (the same
      exams, so they line up; "pending" names the section), then a grid of the % entered per section and
      subject.
-   - **Toppers** (as the old register prints them): "Overall Toppers — Top 3 / 5 / 10 · by Final
-     Total" with position, final total, % and grade (ties shown), each section's top 3 in a class,
-     then "Subject Toppers" — every subject's highest with all ties, "Full marks" marked.
+   - **Toppers** (as the old register prints them): "Overall Toppers — Top N · by Final Total" with
+     position, final total, % and grade (every tie at the last position shown), each section's top N in
+     a class, then "Subject Toppers" — every subject's highest with all ties, "Full marks" marked.
+     **Top** takes any number up to 100 (empty = everyone in the % range); **% from – to** keeps only
+     the students whose % is in the range before the top N is taken (the final % with All subjects,
+     the subject's %); **Order: Lowest first** gives the same lists from the bottom (every final
+     counted, not only a pass). With a **Subject** picked the report is that subject's own toppers, by
+     its %: the class, then each section (each language of a slot apart), of everyone with marks in
+     it. Press **Show** after typing the numbers; the downloads follow the filters.
    - **Teacher-wise** (as the old register prints it): a block per subject teacher (Academics →
      Teacher assignments) with each section and subject — students, appeared, average %, pass %,
      highest, failed, "shared" when two teachers share it — and their total; "No teacher mapped" last.

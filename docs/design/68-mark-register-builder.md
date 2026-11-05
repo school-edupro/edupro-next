@@ -220,3 +220,5 @@ At-risk, Failing students, Compare sections) on the same computed rows.
   come from one helper (`analysisBands`) shared with Analysis. A count in an amber (final) cell takes the
   darker link colour (`--text-link-hover`) so it keeps 4.5:1. Checked: the unit test (figures worked by
   hand), `mark-registers` e2e, register 418 for VIII with axe.
+- **Later (5 Nov 2026)**: **Toppers** — any N, a % range, Lowest first, a subject's own toppers by
+  class and section: docs/design/76.

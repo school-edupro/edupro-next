@@ -53,8 +53,13 @@ export interface ReportInput {
   teachers?: Record<string, string[]>;
   /** one subject picked at Run (its register key): Analysis of a class then goes section by section */
   subject?: string;
-  /** Toppers: the top N */
-  top?: number;
+  /** Toppers: the top N (1–100), null = everyone in the % range; none given = 3 (docs/design/76) */
+  top?: number | null;
+  /** Toppers: only students whose % (the final, or the subject's when one is picked) is in this range */
+  pctFrom?: number | null;
+  pctTo?: number | null;
+  /** Toppers: the same lists from the bottom */
+  lowest?: boolean;
   /** At-risk: how far above the pass % is borderline */
   margin?: number;
 }
@@ -679,22 +684,137 @@ const pctOf = (v: number | null) => {
 
 /**
  * The legacy's Toppers: "Overall Toppers — Top N · by Final Total" (position, student, admission no,
- * final total, %, grade; every tie at a position shown; each section's top 3 in a class), then
- * "Subject Toppers": every subject's highest marks with all ties, "Full marks" marked.
+ * final total, %, grade; every tie at the last position shown), each section's top N in a class, then
+ * "Subject Toppers": every subject's highest marks with all ties, "Full marks" marked. docs/design/76:
+ * N is any number (none = everyone in the range); a % range keeps the students whose % is in it before
+ * the top N is taken; **lowest** gives the same lists from the bottom; a subject picked gives that
+ * subject's own toppers (by its %) for the class and each section, each language of a slot apart, of
+ * everyone with marks in it. Positions are competition positions (1, 1, 3) within each list.
  */
 function toppers(i: ReportInput): ReportBlock[] {
-  const n = i.top ?? 3;
-  const rankOf = (r: RegStudentResult) => (i.merit ? r.rankInClass : r.rankInSection);
-  const passed = i.rows.filter((r) => r.result === 'pass' && rankOf(r) !== null);
-  const list = (
-    rows: RegStudentResult[],
-    rank: (r: RegStudentResult) => number | null,
-    top: number,
-  ) =>
-    rows
-      .filter((r) => (rank(r) ?? Infinity) <= top)
-      .sort((a, b) => rank(a)! - rank(b)! || a.name.localeCompare(b.name));
-  const by = i.def.final.rankBy === 'pct' ? 'Final %' : 'Final Total';
+  const n = i.top === undefined ? 3 : i.top;
+  const low = Boolean(i.lowest);
+  const from = i.pctFrom ?? null;
+  const to = i.pctTo ?? null;
+  const inRange = (p: number | null) =>
+    p !== null && (from === null || p >= from - 1e-9) && (to === null || p <= to + 1e-9);
+  const rangeText =
+    from === null && to === null
+      ? ''
+      : ` · ${cutFixed(from ?? 0, 'auto')}%–${cutFixed(to ?? 100, 'auto')}%`;
+  /** "Top 5 of VIII-A", "Lowest 5 of the class", "All of VIII-A, lowest first" */
+  const head = (where: string) =>
+    (n === null
+      ? `All ${where}${low ? ', lowest first' : ''}`
+      : `${low ? 'Lowest' : 'Top'} ${String(n)} ${where}`
+    )
+      .replace(/\s+,/, ',')
+      .trim();
+  /**
+   * The first N of a pool by a value, highest first (or lowest), with competition positions; every one
+   * tied at the last position is kept.
+   */
+  const pick = <T>(pool: T[], value: (x: T) => number, tie: (x: T) => string) => {
+    const sorted = [...pool].sort(
+      (a, b) => (low ? value(a) - value(b) : value(b) - value(a)) || tie(a).localeCompare(tie(b)),
+    );
+    const out: Array<{ x: T; at: number }> = [];
+    let at = 0;
+    sorted.forEach((x, k) => {
+      if (k === 0 || Math.abs(value(x) - value(sorted[k - 1]!)) > 1e-9) at = k + 1;
+      if (n === null || at <= n) out.push({ x, at });
+    });
+    return out;
+  };
+  const position = (at: number): SheetCell => ({
+    t: '',
+    center: true,
+    badge: { label: String(at), tone: low ? 'warning' : 'info' },
+  });
+  const nobody = (cols: Col[]): SheetCell[][] => [
+    [
+      {
+        t: from === null && to === null ? 'Nobody to list' : 'Nobody in this range',
+        text: true,
+        span: cols.length,
+      },
+    ],
+  ];
+  const amber = (b: ReportBlock) => {
+    for (const h of b.sheet.head[0]!.slice(-3)) h.tone = 'final';
+    for (const h of b.sheet.head[0]!)
+      if (h.t !== 'Student Name' && h.t !== 'Section') h.center = true;
+    return b;
+  };
+  const sectionsOf = () => [...new Set(i.rows.map((r) => r.section))].sort();
+
+  // a subject picked: its own toppers, the class and each section (each language of a slot apart)
+  if (i.subject) {
+    const cols: Col[] = [
+      ['Position', 1, true],
+      ['Student Name', 4, true],
+      ...(i.merit ? [['Section', 1.2, true] as Col] : []),
+      ['Adm No', 1.8],
+      ['Marks', 2],
+      ['%', 1.4],
+      ['Grade', 1.1],
+    ];
+    type Taker = { r: RegStudentResult; x: RegSubjectResult };
+    const table = (title: string, takers: Taker[]) => {
+      const pool = takers.filter(
+        (y) =>
+          !y.x.withheld && !y.x.missing && y.x.total !== null && y.x.max > 0 && inRange(y.x.pct),
+      );
+      const rows = pick(
+        pool,
+        (y) => y.x.pct!,
+        (y) => y.r.name,
+      ).map(({ x: y, at }): SheetCell[] => {
+        const full = !low && Math.abs(y.x.total! - y.x.max) < 1e-9;
+        return [
+          position(at),
+          {
+            t: nameOf(i, y.r),
+            text: true,
+            strong: true,
+            ...(full ? { badge: { label: 'Full marks', tone: 'success' as const } } : {}),
+          },
+          ...(i.merit ? [{ t: y.r.section, text: true } as SheetCell] : []),
+          { t: y.r.admissionNo, center: true },
+          {
+            t: `${cutFixed(y.x.total!, 'auto')} / ${cutFixed(y.x.max, 'auto')}`,
+            tone: 'final',
+            center: true,
+            ratio: true,
+          },
+          { t: pctOf(y.x.pct), tone: 'final', center: true, strong: true },
+          { t: y.x.grade ?? '', tone: 'final', center: true, strong: true },
+        ];
+      });
+      return amber(block(i, title, cols, rows.length ? rows : nobody(cols)));
+    };
+    const out: ReportBlock[] = [];
+    for (const s of subjectsOf({ ...i, order: [i.subject] })) {
+      const what = `${s.label} ${low ? '—' : 'toppers —'}`;
+      out.push(
+        table(
+          `${what} ${head(`of ${i.merit ? 'the class' : i.place}`)} · by the subject’s %${rangeText}`,
+          s.list,
+        ),
+      );
+      if (i.merit)
+        for (const sec of sectionsOf()) {
+          const mine = s.list.filter((y) => y.r.section === sec);
+          if (mine.length)
+            out.push(table(`${what} ${head(`of ${sec}`)} · by the subject’s %${rangeText}`, mine));
+        }
+    }
+    return out;
+  }
+
+  // every subject: the final, the class (or section) and each section, then each subject's highest
+  const byPct = i.def.final.rankBy === 'pct';
+  const by = byPct ? 'Final %' : 'Final Total';
   const cols: Col[] = [
     ['Position', 1, true],
     ['Student Name', 4, true],
@@ -704,65 +824,63 @@ function toppers(i: ReportInput): ReportBlock[] {
     ['%', 1.4],
     ['Grade', 1.1],
   ];
-  const line = (r: RegStudentResult, rank: number | null): SheetCell[] => [
-    { t: '', center: true, badge: { label: String(rank ?? ''), tone: 'info' } },
-    { t: nameOf(i, r), text: true, strong: true },
-    ...(i.merit ? [{ t: r.section, text: true } as SheetCell] : []),
-    { t: r.admissionNo, center: true },
-    {
-      t: r.total === null ? '' : `${cutFixed(r.total, 'auto')} / ${cutFixed(r.max, 'auto')}`,
-      tone: 'final',
-      center: true,
-      ratio: true,
-    },
-    { t: r.pct === null ? '' : pctOf(r.pct), tone: 'final', center: true, strong: true },
-    { t: r.grade ?? '', tone: 'final', center: true, strong: true },
-  ];
-  const amber = (b: ReportBlock) => {
-    for (const h of b.sheet.head[0]!.slice(-3)) h.tone = 'final';
-    for (const h of b.sheet.head[0]!)
-      if (h.t !== 'Student Name' && h.t !== 'Section') h.center = true;
-    return b;
+  // toppers: who passed; the lowest: everyone with a final (pass, compartment or fail)
+  const pool = i.rows.filter(
+    (r) =>
+      r.total !== null &&
+      (low ? ['pass', 'compartment', 'fail'].includes(r.result) : r.result === 'pass') &&
+      inRange(r.pct),
+  );
+  const finalTable = (title: string, rows: RegStudentResult[]) => {
+    const lines = pick(
+      rows,
+      (r) => (byPct ? (r.pct ?? 0) : r.total!),
+      (r) => r.name,
+    ).map(({ x: r, at }): SheetCell[] => [
+      position(at),
+      { t: nameOf(i, r), text: true, strong: true },
+      ...(i.merit ? [{ t: r.section, text: true } as SheetCell] : []),
+      { t: r.admissionNo, center: true },
+      {
+        t: `${cutFixed(r.total!, 'auto')} / ${cutFixed(r.max, 'auto')}`,
+        tone: 'final',
+        center: true,
+        ratio: true,
+      },
+      { t: r.pct === null ? '' : pctOf(r.pct), tone: 'final', center: true, strong: true },
+      { t: r.grade ?? '', tone: 'final', center: true, strong: true },
+    ]);
+    return amber(block(i, title, cols, lines.length ? lines : nobody(cols)));
   };
   const out = [
-    amber(
-      block(
-        i,
-        `Overall Toppers — Top ${String(n)}${i.merit ? ' of the class' : ''} · by ${by}`,
-        cols,
-        list(passed, rankOf, n).map((r) => line(r, rankOf(r))),
-      ),
+    finalTable(
+      `${low ? 'Overall' : 'Overall Toppers'} — ${head(i.merit ? 'of the class' : '')} · by ${by}${rangeText}`,
+      pool,
     ),
   ];
   if (i.merit)
-    for (const sec of [...new Set(i.rows.map((r) => r.section))].sort())
+    for (const sec of sectionsOf())
       out.push(
-        amber(
-          block(
-            i,
-            `Top 3 of ${sec} · by ${by}`,
-            cols,
-            list(
-              passed.filter((r) => r.section === sec),
-              (r) => r.rankInSection,
-              3,
-            ).map((r) => line(r, r.rankInSection)),
-          ),
+        finalTable(
+          `${head(`of ${sec}`)} · by ${by}${rangeText}`,
+          pool.filter((r) => r.section === sec),
         ),
       );
-  // every subject's topper, every one tied at the top
+  // every subject's highest (or lowest), every one tied at it
   const rows: SheetCell[][] = [];
   for (const s of subjectsOf(i)) {
     const ok = s.list.filter(
-      (y) => !y.x.withheld && y.x.total !== null && !y.x.missing && y.x.max > 0,
+      (y) => !y.x.withheld && y.x.total !== null && !y.x.missing && y.x.max > 0 && inRange(y.x.pct),
     );
     if (!ok.length) continue;
-    const best = Math.max(...ok.map((y) => y.x.total!));
+    const edge = low
+      ? Math.min(...ok.map((y) => y.x.total!))
+      : Math.max(...ok.map((y) => y.x.total!));
     const top = ok
-      .filter((y) => Math.abs(y.x.total! - best) < 1e-9)
+      .filter((y) => Math.abs(y.x.total! - edge) < 1e-9)
       .sort((a, b) => a.r.name.localeCompare(b.r.name));
     for (const [k, y] of top.entries()) {
-      const full = Math.abs(y.x.total! - y.x.max) < 1e-9;
+      const full = !low && Math.abs(y.x.total! - y.x.max) < 1e-9;
       rows.push([
         { t: k === 0 ? s.label.toUpperCase() : '', text: true, strong: true },
         {
@@ -782,18 +900,19 @@ function toppers(i: ReportInput): ReportBlock[] {
       ]);
     }
   }
+  const subjectCols: Col[] = [
+    ['Subject', 3, true],
+    [low ? 'Lowest' : 'Topper', 5, true],
+    ...(i.merit ? [['Section', 1.2, true] as Col] : []),
+    ['Adm No', 1.8],
+    ['Marks', 1.8],
+    ['%', 1.4],
+  ];
   const subjects = block(
     i,
-    'Subject Toppers — highest in each subject (all ties shown)',
-    [
-      ['Subject', 3, true],
-      ['Topper', 5, true],
-      ...(i.merit ? [['Section', 1.2, true] as Col] : []),
-      ['Adm No', 1.8],
-      ['Marks', 1.8],
-      ['%', 1.4],
-    ],
-    rows,
+    `${low ? 'Lowest in each subject' : 'Subject Toppers — highest in each subject'} (all ties shown)${rangeText}`,
+    subjectCols,
+    rows.length ? rows : nobody(subjectCols),
   );
   for (const h of subjects.sheet.head[0]!.slice(-2)) h.tone = 'calc';
   for (const h of subjects.sheet.head[0]!.slice(-3)) h.center = true;

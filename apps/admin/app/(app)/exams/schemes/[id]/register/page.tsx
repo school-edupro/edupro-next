@@ -50,6 +50,10 @@ export default async function RunRegisterPage({
     report?: string;
     top?: string;
     margin?: string;
+    /** toppers: the % range and the order (docs/design/76) */
+    pctFrom?: string;
+    pctTo?: string;
+    order?: string;
   }>;
 }) {
   const { id } = await params;
@@ -67,10 +71,30 @@ export default async function RunRegisterPage({
   if (sp.exam && /^[A-Z][A-Z0-9_]{0,11}$/.test(sp.exam)) q.set('exam', sp.exam);
   if (sp.subject && /^[A-Za-z0-9_~-]{1,32}$/.test(sp.subject)) q.set('subject', sp.subject);
   const report = REPORT_KINDS.includes(sp.report ?? '') ? sp.report! : 'register';
-  const top = ['3', '5', '10'].includes(sp.top ?? '') ? sp.top! : '3';
+  // toppers (docs/design/76): any N 1–100 (an emptied box = everyone in the range), a % range, lowest
+  const topIn = (sp.top ?? '3').trim();
+  const top =
+    topIn === '' || topIn === 'all'
+      ? 'all'
+      : /^\d{1,3}$/.test(topIn) && +topIn >= 1 && +topIn <= 100
+        ? String(+topIn)
+        : '3';
+  const pctIn = (v: string | undefined) =>
+    v && /^\d{1,3}(\.\d{1,2})?$/.test(v.trim()) && +v <= 100 ? String(+v) : '';
+  let pctFrom = pctIn(sp.pctFrom);
+  let pctTo = pctIn(sp.pctTo);
+  // typed the wrong way round: the range is still meant
+  if (pctFrom && pctTo && +pctFrom > +pctTo) [pctFrom, pctTo] = [pctTo, pctFrom];
+  const lowest = sp.order === 'low';
   const margin = ['5', '10'].includes(sp.margin ?? '') ? sp.margin! : '5';
   q.set('report', report);
-  if (report === 'toppers') q.set('top', top);
+  const topperQuery: Record<string, string> = {
+    top,
+    ...(pctFrom ? { pctFrom } : {}),
+    ...(pctTo ? { pctTo } : {}),
+    ...(lowest ? { lowest: '1' } : {}),
+  };
+  if (report === 'toppers') for (const [k, v] of Object.entries(topperQuery)) q.set(k, v);
   if (report === 'risk') q.set('margin', margin);
   const reg = await apiFetch<RunResponse>(`/exams/schemes/${id}/register?${q.toString()}`).catch(
     (e: unknown) => {
@@ -145,16 +169,60 @@ export default async function RunRegisterPage({
             </label>
             {report !== 'register' ? <input type="hidden" name="report" value={report} /> : null}
             {report === 'toppers' ? (
-              <label className="ep-field" style={{ margin: 0, minWidth: '7rem' }}>
-                <span className="ep-field__label">Top</span>
-                <select className="ep-select" name="top" defaultValue={top}>
-                  {['3', '5', '10'].map((n) => (
-                    <option key={n} value={n}>
-                      {n}
-                    </option>
-                  ))}
-                </select>
-              </label>
+              <>
+                <label className="ep-field" style={{ margin: 0, width: '6rem' }}>
+                  <span className="ep-field__label">Top</span>
+                  <input
+                    className="ep-input"
+                    type="number"
+                    name="top"
+                    min={1}
+                    max={100}
+                    step={1}
+                    inputMode="numeric"
+                    placeholder="All"
+                    defaultValue={top === 'all' ? '' : top}
+                    aria-describedby="toppers-help"
+                  />
+                </label>
+                <label className="ep-field" style={{ margin: 0, width: '6.5rem' }}>
+                  <span className="ep-field__label">% from</span>
+                  <input
+                    className="ep-input"
+                    type="number"
+                    name="pctFrom"
+                    min={0}
+                    max={100}
+                    step="any"
+                    placeholder="0"
+                    defaultValue={pctFrom}
+                  />
+                </label>
+                <label className="ep-field" style={{ margin: 0, width: '6.5rem' }}>
+                  <span className="ep-field__label">% to</span>
+                  <input
+                    className="ep-input"
+                    type="number"
+                    name="pctTo"
+                    min={0}
+                    max={100}
+                    step="any"
+                    placeholder="100"
+                    defaultValue={pctTo}
+                  />
+                </label>
+                <label className="ep-field" style={{ margin: 0, minWidth: '9rem' }}>
+                  <span className="ep-field__label">Order</span>
+                  <select className="ep-select" name="order" defaultValue={lowest ? 'low' : 'high'}>
+                    <option value="high">Highest first</option>
+                    <option value="low">Lowest first</option>
+                  </select>
+                </label>
+                {/* the number boxes do not send the form by themselves */}
+                <button type="submit" className="ep-btn ep-btn--secondary ep-btn--sm">
+                  Show
+                </button>
+              </>
             ) : null}
             {report === 'risk' ? (
               <label className="ep-field" style={{ margin: 0, minWidth: '9rem' }}>
@@ -210,9 +278,16 @@ export default async function RunRegisterPage({
             exam={reg.exam}
             subject={sp.subject ?? null}
             report={report}
-            extra={report === 'toppers' ? { top } : report === 'risk' ? { margin } : {}}
+            extra={report === 'toppers' ? topperQuery : report === 'risk' ? { margin } : {}}
           />
         </div>
+        {report === 'toppers' ? (
+          <p id="toppers-help" className="ep-field__help" style={{ margin: 'var(--sp-2) 0 0' }}>
+            Top: any number up to 100; leave it empty to list everyone in the % range. % from–to:
+            the final % with All subjects, the subject’s % with a subject picked. A subject picked
+            lists its own toppers for the class and each section.
+          </p>
+        ) : null}
       </Card>
       {reg.notes.length ? (
         <div className="ep-alert ep-alert--warning" style={{ marginBottom: 'var(--sp-3)' }}>
