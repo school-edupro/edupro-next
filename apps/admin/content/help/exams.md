@@ -301,12 +301,12 @@ out, then runs it for any section; the marks always come from the exam entry.
      in 1, 2 … subjects (compartment or fail), absent, medical leave, not entered, each with its % of
      those who appeared, and the pass %; then a table per group: student, admission no, the subjects
      with their %, the final.
-   - **Analysis**: per subject (each language of a slot apart) the students in each % band, the
-     cumulative counts, highest, lowest, average and passing % (bands set in step 6). A class's all
-     sections with one **Subject** picked: a row per section with its teachers of the subject (each
-     language of a slot apart), then **All sections** together. A class's all sections with **All
-     subjects**: the consolidated table (the class as one, a row per subject) first, then that
-     section-wise table for every subject in turn.
+   - **Analysis** (as the old Result Analysis prints it): the subjects across the top (each language of a
+     slot apart) and down the side the total students, absent, appeared, the students in each % band,
+     the cumulative counts (bands set in step 6), the highest, lowest and average marks and the passing
+     %; a count opens its students. A section: its one table. A class's all sections: the class as one,
+     then each section in the same layout. A class's all sections with one **Subject** picked: a row per
+     section with its teachers of the subject (each language of a slot apart), then **All sections**.
    - **Entry status** (as the old register prints it): a row per subject with its teachers and
      students, a column per exam — entered of how many with Complete / Partial, "▶ 1 pending" opens the
      names, "–" where the subject has no such paper — and the % of all subjects at the foot; the class

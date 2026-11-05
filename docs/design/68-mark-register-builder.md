@@ -205,7 +205,11 @@ At-risk, Failing students, Compare sections) on the same computed rows.
   each language apart), then the usual figures — and **All sections** at the end; a count's list names
   the section. For one section it is as before. Checked: a unit test, `mark-registers` e2e, register
   418 for VIII (English, Maths / IT, the third language) with axe.
-- **Later (5 Nov 2026)**: a class's all sections with **All subjects** gives the consolidated table
-  first ("Result analysis — consolidated, VIII · all sections", a row per subject for the class as one),
-  then the section-wise table of every subject in the register's order (the API loads the sections'
-  teachers for a class's Analysis). One section keeps its single table.
+- **Later (5 Nov 2026)**, from the legacy's Result Analysis shown by the school (it replaces a short-lived
+  "consolidated, then each subject section-wise" page): Analysis of a section, or of a class's all
+  sections with every subject, is laid out with the subjects across the top (each language of a slot
+  apart) and the figures down the side (Total students, Absent, Appeared, the bands, the cumulative
+  counts, Highest / Lowest / Average marks, Passing %); a class gives the class as one, then each
+  section in the same layout (a section's count lists name it). One subject picked for a class keeps its
+  section-wise rows with the teachers. Checked: unit tests, `mark-registers` e2e (its analysis check
+  reads the ENGLISH column), register 418 for VIII and VIII-A with axe.

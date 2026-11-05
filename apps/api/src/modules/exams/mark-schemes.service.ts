@@ -1790,9 +1790,11 @@ export class MarkSchemesService {
           );
         else {
           // a report (docs/design/68, phase 2): its tables, one after another
-          // a class's Analysis names each section's teachers of a subject too (section-wise tables)
+          // a class's subject-wise Analysis names each section's teachers of the subject too
           const teachers =
-            q.report === 'entry' || q.report === 'teacher' || (q.report === 'analysis' && p.merit)
+            q.report === 'entry' ||
+            q.report === 'teacher' ||
+            (q.report === 'analysis' && p.merit && q.subject)
               ? await this.teachersOf(c, yearId, [...new Set(students.map((x) => x.sectionId))])
               : undefined;
           const only = q.subject ? order.filter((k) => k === q.subject) : order;

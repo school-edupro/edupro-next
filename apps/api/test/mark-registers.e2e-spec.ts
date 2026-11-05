@@ -460,10 +460,15 @@ describe('mark registers like the legacy Term Mark Register (e2e)', () => {
       'MATHEMATICS (AB)',
       '–',
     ]);
-    const ana = firstCol((await run(`${A}&report=analysis`)).blocks[0]!);
+    // the legacy's Result Analysis: the subjects across the top, the figures down the side
+    const ana = (await run(`${A}&report=analysis`)).blocks[0]!;
+    expect(ana.title).toBe('Result analysis — VI-A');
+    const at = ana.sheet.head[0]!.findIndex((c) => c.t === 'ENGLISH');
+    const eng = ana.sheet.body.map((r) => r.cells[at]!.t);
     // English: Asha 88, Bhanu 64, Chitra 75
-    expect(ana.English!.slice(1, 4)).toEqual(['3', '0', '3']);
-    expect(ana.English!.slice(-4)).toEqual(['88 / 100', '64', '75.67', '100.00']);
+    expect(eng.slice(0, 3)).toEqual(['3', '0', '3']);
+    expect(eng.slice(-4)).toEqual(['88 / 100', '64', '75.67', '100.00']);
+    expect(firstCol(ana)['Total students']![at]).toBe('3');
     const entry = (await run(`${A}&report=entry`)).blocks[0]!;
     // the legacy's entry status: each exam entered of how many, Complete (or "–": no such paper)
     expect(entry.title).toBe('Marks Entry Status — VI-A');

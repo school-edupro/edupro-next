@@ -341,8 +341,9 @@ function summary(i: ReportInput): ReportBlock[] {
  * Per subject (each language of a slot apart): the students, absent, appeared, the register's % bands,
  * the cumulative counts, highest, lowest, average and passing %. A class with one subject picked: a row
  * per section with its teachers of the subject (each language of a slot apart), then all the sections
- * together, as the legacy's subject-wise analysis; a class with every subject: the consolidated table
- * (the class as one), then that section-wise table for each subject in turn.
+ * together, as the legacy's subject-wise analysis. Otherwise (a section, or a class with every subject)
+ * the legacy's Result Analysis: the subjects across the top, the figures down the side — a class as one,
+ * then each of its sections.
  */
 function analysis(i: ReportInput): ReportBlock[] {
   const bands = [...i.def.analysis.bands].sort((a, b) => b.fromPct - a.fromPct);
@@ -445,22 +446,47 @@ function analysis(i: ReportInput): ReportBlock[] {
       group(lead.length + 3),
     );
   };
+  /** the legacy's words down the side for the figures' columns */
+  const sideLabel: Record<string, string> = {
+    Students: 'Total students',
+    Highest: 'Highest marks',
+    Lowest: 'Lowest marks',
+    Average: 'Average marks',
+  };
+  /**
+   * A place's analysis as the legacy's Result Analysis prints it: its subjects across the top (each
+   * language of a slot apart), the figures down the side; a count's list names the section when asked.
+   */
+  const across = (place: string, rows: RegStudentResult[], named: boolean): ReportBlock => {
+    const subjects = subjectsOf({ ...i, rows });
+    const cols = subjects.map((s) => figures(named ? `${place} · ${s.label}` : s.label, s.list));
+    return block(
+      i,
+      `Result analysis — ${place}`,
+      [['Figure', 2.6, true], ...subjects.map((s): Col => [s.label.toUpperCase(), 1.5])],
+      figureCols.map(([label], k): SheetCell[] => [
+        { t: sideLabel[label] ?? label, text: true, strong: true },
+        ...cols.map((c) => c[k]!),
+      ]),
+    );
+  };
   if (i.merit && i.subject) {
     const one = sectionWise(i.subject);
     if (one) return [one];
   }
-  const consolidated = block(
-    i,
-    i.merit
-      ? `Result analysis — consolidated, ${i.place} (by the subject’s %)`
-      : 'Result analysis (by the subject’s %)',
-    [['Subject', 3, true], ...figureCols],
-    subjectsOf(i).map((s) => [{ t: s.label, text: true }, ...figures(s.label, s.list)]),
-    group(4),
-  );
-  // a class, every subject: the consolidated table, then each subject section by section
-  if (!i.merit) return [consolidated];
-  return [consolidated, ...i.order.map(sectionWise).filter((b): b is ReportBlock => b !== null)];
+  if (!i.merit) return [across(i.place, i.rows, false)];
+  // a class, every subject: the class as one, then each section, in the same layout
+  const sections = [...new Map(i.rows.map((r) => [r.sectionId, r.section])).entries()];
+  return [
+    across(i.place, i.rows, false),
+    ...sections.map(([id, section]) =>
+      across(
+        section,
+        i.rows.filter((r) => r.sectionId === id),
+        true,
+      ),
+    ),
+  ];
 }
 
 // ---- Entry status ----------------------------------------------------------------------------------
