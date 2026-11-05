@@ -151,7 +151,11 @@ export function clTermMarks(d: ReportCardData, s: ClSection): string {
     return `<div class="cl-sep"></div><table class="cl-t"><tbody><tr><td class="l">The term results are not worked out yet.</td></tr></tbody></table>`;
   const parts = t.columns.filter((c) => !c.total);
   const total = t.columns.find((c) => c.total);
-  const maxes = [...new Set(t.subjects.map((x) => x.max).filter((x) => x > 0))];
+  // the maximum most subjects have (French out of 80 among subjects out of 100 still heads "100 Marks")
+  const counts = new Map<number, number>();
+  for (const x of t.subjects) if (x.max > 0) counts.set(x.max, (counts.get(x.max) ?? 0) + 1);
+  const common = [...counts].sort((a, b) => b[1] - a[1] || b[0] - a[0])[0]?.[0];
+  const maxes = common === undefined ? [] : [common];
   const label = s.termLabel ?? periodOf(d, true);
   const marks = maxes.length === 1 ? ` (${plain(maxes[0])} Marks)` : '';
   const dec = s.decimals ?? 2;

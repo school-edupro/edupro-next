@@ -85,6 +85,22 @@ describe('the classic card (docs/design/74)', () => {
     expect(r[2]).toEqual(['English', '12.75', '4.50', '62.00', '79', 'B1']);
     // no total rows; Term 2 on its own
     expect(r).toHaveLength(4);
+    // a subject with another maximum: the term is headed by the one most subjects have
+    const d = term();
+    const t1 = d.termResults![0]!;
+    const odd = {
+      ...d,
+      termResults: [
+        {
+          ...t1,
+          subjects: [...t1.subjects, { ...t1.subjects[0]!, code: 'FR', name: 'French', max: 80 }],
+        },
+      ],
+    };
+    expect(rows(clTermMarks(odd, { type: 'cl_term_marks' }))[0]).toEqual([
+      'SCHOLASTIC AREAS',
+      'TERM-1 (100 Marks)',
+    ]);
     const t2 = rows(
       clTermMarks(term(), { type: 'cl_term_marks', terms: ['T2'], termLabel: 'TERM-2' }),
     );

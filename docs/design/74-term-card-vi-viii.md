@@ -181,9 +181,14 @@ The other bands' slips and cards; a Term 2 / annual version of this card (the sa
   VIII (its status unchanged, nothing sent). VIII-A's Term 1 card and PT1 slip printed to PDF: one A4
   page each, the boxes in the shared card's order. The designer's preview with axe: clean (after the
   header's green was darkened).
-- **Differences from the shared card that are Alpha's data**: the key's lowest grade has no word (the
-  school's grade scale has no remark for E; the card prints "E (Needs Improvement)" once it has); the
-  principal's signature is set for IX-XII only; the second emblem is not uploaded; register 364 puts
-  Hindi and the foreign languages in one slot, so a pupil with Hindi and French prints one of them.
+- **Then, asked (5 Nov 2026)**: register 364's SUBJECT-2 slot split into SECOND LANGUAGE (Hindi,
+  Sanskrit) and THIRD LANGUAGE (French, German, Spanish, Japanese) as version 2 (id 417), locked and
+  worked out (49 term results), so a VIII pupil prints Hindi and French; grade E of the CBSE
+  eight-point scale (id 6, VI-IX) has the remark "Needs improvement", so the key reads "E (Needs
+  Improvement)". Backups in the session's scratchpad. The term heading takes the maximum most
+  subjects have (Alpha's French is out of 80 in VIII: its Term exam is out of 60), so it still reads
+  "TERM-1 (100 Marks)".
+- **Left as Alpha's data**: the principal's signature is set for IX-XII only (VI-VIII print the vice
+  principal's); the second emblem is not uploaded; the mother's name of the pupil checked is empty.
   The workers render the PDFs with the package built before they started: they take the new card
   when restarted.
