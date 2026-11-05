@@ -304,7 +304,9 @@ out, then runs it for any section; the marks always come from the exam entry.
    - **Analysis**: per subject (each language of a slot apart) the students in each % band, the
      cumulative counts, highest, lowest, average and passing % (bands set in step 6). A class's all
      sections with one **Subject** picked: a row per section with its teachers of the subject (each
-     language of a slot apart), then **All sections** together.
+     language of a slot apart), then **All sections** together. A class's all sections with **All
+     subjects**: the consolidated table (the class as one, a row per subject) first, then that
+     section-wise table for every subject in turn.
    - **Entry status** (as the old register prints it): a row per subject with its teachers and
      students, a column per exam — entered of how many with Complete / Partial, "▶ 1 pending" opens the
      names, "–" where the subject has no such paper — and the % of all subjects at the foot; the class

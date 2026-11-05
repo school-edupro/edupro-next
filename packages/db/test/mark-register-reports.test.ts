@@ -142,7 +142,7 @@ describe('mark register reports (docs/design/68, phase 2)', () => {
     });
   });
 
-  it('analysis of a class with one subject: a row per section with its teachers, then all sections', () => {
+  it('analysis of a class: one subject a row per section with its teachers, then all sections; every subject consolidated first', () => {
     const [a, more] = buildReport('analysis', input(true, { subject: 'ENG', order: ['ENG'] }));
     expect(more).toBeUndefined();
     expect(a!.title).toBe('Result analysis — English, section-wise (by the subject’s %)');
@@ -164,8 +164,20 @@ describe('mark register reports (docs/design/68, phase 2)', () => {
     expect(rows[2]!.slice(-4)).toEqual(['100 / 100', '20', '57.50', '66.67']);
     // a count names the section in its list's title
     expect(a!.sheet.body[1]!.cells[2]!.drill!.title).toBe('VI-B · English · Students');
-    // a class without a subject picked keeps the subjects' rows
-    expect(lines(buildReport('analysis', input(true))[0]!.sheet).Maths).toBeDefined();
+    // a class with every subject: the consolidated table, then each subject section by section
+    const all = buildReport('analysis', input(true));
+    expect(all.map((b) => b.title)).toEqual([
+      'Result analysis — consolidated, VI · all sections (by the subject’s %)',
+      'Result analysis — English, section-wise (by the subject’s %)',
+      'Result analysis — Maths, section-wise (by the subject’s %)',
+    ]);
+    expect(lines(all[0]!.sheet).English!.slice(1, 4)).toEqual(['8', '1', '6']);
+    expect(all[1]!.sheet.body.map((r) => r.cells.map((c) => c.t))).toEqual(rows);
+    expect(lines(all[2]!.sheet)['VI-A']!.slice(0, 3)).toEqual(['VI-A', 'Mr Das', '5']);
+    // one section keeps its one table
+    expect(buildReport('analysis', input(false)).map((b) => b.title)).toEqual([
+      'Result analysis (by the subject’s %)',
+    ]);
   });
 
   it('entry status as the legacy prints it: subjects by exam with a badge, who is pending, the share at the foot', () => {

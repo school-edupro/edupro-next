@@ -203,5 +203,9 @@ At-risk, Failing students, Compare sections) on the same computed rows.
   class's all sections with one subject picked (`ReportInput.subject`, from Run's `subject`) is a row per
   section — Section, its teachers of the subject (the API loads them for this case), Subject (a slot:
   each language apart), then the usual figures — and **All sections** at the end; a count's list names
-  the section. Without a subject, or for one section, it is as before. Checked: a unit test,
-  `mark-registers` e2e, register 418 for VIII (English, Maths / IT, the third language) with axe.
+  the section. For one section it is as before. Checked: a unit test, `mark-registers` e2e, register
+  418 for VIII (English, Maths / IT, the third language) with axe.
+- **Later (5 Nov 2026)**: a class's all sections with **All subjects** gives the consolidated table
+  first ("Result analysis — consolidated, VIII · all sections", a row per subject for the class as one),
+  then the section-wise table of every subject in the register's order (the API loads the sections'
+  teachers for a class's Analysis). One section keeps its single table.
