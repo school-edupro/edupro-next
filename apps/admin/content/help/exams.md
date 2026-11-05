@@ -210,7 +210,23 @@ see who submitted or verified it and to submit, verify, send back or reopen it.
      (**Publish VI**) or **Publish every class**; each class's families get a message and see the cards
      in the parent app (withheld and held cards stay hidden). **Revoke VI** (with a reason) hides that
      class's cards again and lets its marks be reopened; revoking the last class withdraws the release.
-     The table shows, per class, whether it is ready, when it was published and how many messages went.
+     The table shows, per class, whether it is ready, how many cards are held (**Held**: a click lists
+     them), when it was published and how many messages went.
+   - **Held cards** (under the class table): the cards held back from the parent and student portal,
+     with filters **Class**, **Section** and **Search** (name, admission no or the reason's words), who
+     held each and when; **Excel** and **PDF** of the list as filtered. **Show again** (one, or tick
+     several) opens the card; where its class is published the family gets the result message at once.
+     Cards the fee rule withholds are only counted here ("Withheld for fees"): they open once paid.
+     **Hold cards…** opens a side window (the old Report Card Hide page): one **Reason** for the students
+     held together (kept for the school; the family sees only "held, contact the office"), and **Also
+     hold in** the year's other published cards when wanted. Then either **Pick students** — Class →
+     Section → a tick per student (tick-all at the top; a held student shows its reason and **Show
+     again**) → **Hold n cards** — or **Upload Excel** — **Download the format**, write an admission no
+     per row (and a reason when it differs from the one typed), upload: every row is checked first (not
+     found, not in this card's classes, not in your classes, held already, twice in the sheet, no reason)
+     and **Hold n cards** holds the rows without a problem. A hold covers this card only. The principal
+     and the school admin hold in every class, a coordinator in their classes; a class teacher sees their
+     section's held cards, read only.
 4. Families see their child's published cards in the parent app (**Results**): **View report card**
    opens the card at once (to read, print or save), and **Report card PDF** also makes the PDF in the
    background (the page shows it by itself when it is ready; the workers make it; asking again while it
@@ -253,7 +269,7 @@ out, then runs it for any section; the marks always come from the exam entry.
      and whether they show (**Show its parts in each exam** when its columns read only the whole
      marks), and **Child subjects in columns** (a column each, under the exam's name in the heading;
      off: in one cell with their sum). In
-     **Subject order** it is marked *composite* and its sub-subjects are listed under it with their
+     **Subject order** it is marked _composite_ and its sub-subjects are listed under it with their
      own ▲ ▼: their order is the order of their columns in every exam, whatever the subject order.
    - **Columns**, per subject: pick the exam, then **Same marks as entry** (or its parts; a
      composite subject starts on its parts in one cell with their sum), **Average /

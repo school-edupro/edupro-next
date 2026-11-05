@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import ExcelJS from 'exceljs';
 import type { PoolClient } from '@edupro/db';
 import {
   bandFor,
@@ -20,23 +21,38 @@ import {
   type ReportCardData,
 } from '@edupro/db';
 import { AuditService } from '../../common/audit/audit.service';
+import { readSheet, templateSheet } from '../../common/excel/sheet';
 import { DbService } from '../../common/db/db.service';
 import { DomainError } from '../../common/errors/domain-error';
 import { requireTenant, type RequestContext } from '../../common/http/request-context';
 import { ViewerService } from '../academics/daily/viewer.service';
+import { tablePdf } from '../engagement/table-pdf';
 import { ReportsService } from '../reports/reports.service';
 import { cardExportInSight, cardScopeOf, type CardScope } from './card-scope';
 import { ReportCardSignaturesService } from './report-card-signatures.service';
 import type {
+  BulkHoldDto,
   CreateReleaseDto,
   CreateTemplateDto,
   GenerateCardsDto,
+  HoldsFileDto,
+  HoldsQueryDto,
+  HoldsUploadDto,
   PreviewDto,
   RenderBatchDto,
   TemplateArtDto,
   UpdateReleaseDto,
   UpdateTemplateDto,
 } from './report-cards.dto';
+
+/** a day as the school writes it (05 Nov 2026), in India's time */
+const dayText = (iso: string) =>
+  new Date(iso).toLocaleDateString('en-IN', {
+    timeZone: 'Asia/Kolkata',
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+  });
 
 /** the legacy ranges, in the titles of the PDFs (the Download Log) */
 const RANGE_LABEL: Record<string, string> = {
@@ -1094,12 +1110,14 @@ export class ReportCardsService {
 
   /**
    * The families of the release's classes (guardians who take notifications), but not those whose card
-   * is held, get the result message by SMS and e-mail. Returns the messages queued.
+   * is held, get the result message by SMS and e-mail. Returns the messages queued. `only`: just these
+   * students (cards shown again, docs/design/75), leaving out those the fee rule withholds today.
    */
   private async tellFamilies(
     c: PoolClient,
     releaseId: string,
     classIds: string[],
+    only?: { studentIds: string[]; skipFeeDue: boolean },
   ): Promise<Map<string, number>> {
     await c.query(`SELECT app.exam_seed_templates(app.current_school_id())`);
     const r = await c.query<{
@@ -1123,8 +1141,11 @@ export class ReportCardsService {
          JOIN guardians g ON g.id = sg.guardian_id AND g.deleted_at IS NULL
         WHERE r.id = $1 AND cs.class_id = ANY($2::bigint[])
           AND NOT EXISTS (SELECT 1 FROM report_card_holds h WHERE h.release_id = r.id AND h.student_id = s.id)
+          AND ($3::bigint[] IS NULL OR s.id = ANY($3::bigint[]))
+          AND NOT ($4::boolean AND r.hide_defaulters AND (SELECT COALESCE(sum(d.balance), 0) FROM mart.fee_dues d
+                WHERE d.student_id = s.id AND d.academic_year_id = r.academic_year_id AND d.due_on <= CURRENT_DATE) > r.defaulter_min)
         ORDER BY s.id, g.id`,
-      [releaseId, classIds],
+      [releaseId, classIds, only?.studentIds ?? null, only?.skipFeeDue ?? false],
     );
     const n = new Map<string, number>();
     for (const x of r.rows) {
@@ -1166,11 +1187,14 @@ export class ReportCardsService {
            ON CONFLICT (release_id, student_id) DO UPDATE SET reason = EXCLUDED.reason, held_by = EXCLUDED.held_by, held_at = now()`,
           [releaseId, dto.studentId, dto.reason!.trim()],
         );
-      else
-        await c.query(`DELETE FROM report_card_holds WHERE release_id = $1 AND student_id = $2`, [
-          releaseId,
-          dto.studentId,
-        ]);
+      else {
+        const gone = await c.query(
+          `DELETE FROM report_card_holds WHERE release_id = $1 AND student_id = $2`,
+          [releaseId, dto.studentId],
+        );
+        // shown again on a published class: the family is told (docs/design/75)
+        if (gone.rowCount) await this.tellShownAgain(c, rel, [dto.studentId]);
+      }
       await this.audit.stage(ctx, c, {
         action: dto.held ? 'exams.report_card.hold' : 'exams.report_card.unhold',
         entityType: 'report_card_releases',
@@ -1179,6 +1203,533 @@ export class ReportCardsService {
       });
       return (await this.findRelease(c, releaseId, scope))!;
     });
+  }
+
+  // ---- holds in bulk (docs/design/75) ------------------------------------------------------------
+  /** The held cards of a release in the person's sections; the fee rule's count beside them. */
+  async holds(ctx: RequestContext, releaseId: string, q: HoldsQueryDto) {
+    return this.db.tenant(requireTenant(ctx), async (c) => {
+      const scope = await cardScopeOf(c, ctx);
+      const rel = await this.findRelease(c, releaseId, scope);
+      if (!rel) throw new DomainError('not-found', 'Release not found', { status: 404 });
+      this.assertPlaceInSight(scope, q);
+      return {
+        data: await this.heldRows(c, releaseId, scope, q),
+        /** cards the fee rule withholds today (null: the release has no fee rule) */
+        feeWithheld: rel.hideDefaulters ? await this.feeWithheldCount(c, rel, scope, q) : null,
+      };
+    });
+  }
+
+  /** The held cards as Excel or an A4 PDF (the list as filtered on the Publish tab). */
+  async holdsFile(ctx: RequestContext, releaseId: string, q: HoldsFileDto) {
+    const { rel, rows, school, place } = await this.db.tenant(requireTenant(ctx), async (c) => {
+      const scope = await cardScopeOf(c, ctx);
+      const rel = await this.findRelease(c, releaseId, scope);
+      if (!rel) throw new DomainError('not-found', 'Release not found', { status: 404 });
+      this.assertPlaceInSight(scope, q);
+      const s = await c.query<{ school: string; place: string | null }>(
+        `SELECT (SELECT name FROM schools WHERE id = app.current_school_id()) AS school,
+                COALESCE((SELECT k.code || '-' || cs.name FROM class_sections cs JOIN classes k ON k.id = cs.class_id WHERE cs.id = $1::bigint),
+                         (SELECT code FROM classes WHERE id = $2::bigint)) AS place`,
+        [q.classSectionId ?? null, q.classId ?? null],
+      );
+      return {
+        rel,
+        rows: await this.heldRows(c, releaseId, scope, q),
+        school: s.rows[0]?.school ?? '',
+        place: s.rows[0]?.place ?? null,
+      };
+    });
+    const title = `Held report cards · ${rel.name}`;
+    const filters = [place ? `Class: ${place}` : 'All classes', q.q ? `Search: ${q.q}` : null]
+      .filter(Boolean)
+      .join(' · ');
+    const made = `Made on ${dayText(new Date().toISOString())}`;
+    const head = ['Sr', 'Admission no', 'Student', 'Class', 'Reason', 'Held by', 'Held on'];
+    const body = rows.map((x, i) => [
+      i + 1,
+      x.admissionNo,
+      x.name,
+      x.section,
+      x.reason,
+      x.heldBy ?? '',
+      dayText(x.heldAt),
+    ]);
+    const stem = `held-report-cards-${rel.termCode}${place ? `-${place}` : ''}`
+      .toLowerCase()
+      .replace(/[^\w.-]+/g, '-');
+    if (q.format === 'xlsx') {
+      const wb = new ExcelJS.Workbook();
+      const ws = wb.addWorksheet('Held cards');
+      ws.addRow([school]).font = { bold: true, size: 13 };
+      ws.addRow([title]).font = { bold: true };
+      ws.addRow([`${filters} · ${made}`]);
+      ws.addRow([]);
+      const h = ws.addRow(head);
+      h.font = { bold: true };
+      for (const r of body) ws.addRow(r);
+      [6, 16, 30, 12, 48, 22, 14].forEach((w, k) => {
+        ws.getColumn(k + 1).width = w;
+      });
+      ws.getColumn(5).alignment = { wrapText: true, vertical: 'top' };
+      return {
+        filename: `${stem}.xlsx`,
+        contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        base64: Buffer.from(await wb.xlsx.writeBuffer()).toString('base64'),
+      };
+    }
+    const bytes = await tablePdf({
+      school,
+      title,
+      subtitle: [filters, made],
+      columns: [
+        { label: 'Sr', width: 0.5, center: true },
+        { label: 'Admission no', width: 1.3 },
+        { label: 'Student', width: 2.4 },
+        { label: 'Class', width: 1 },
+        { label: 'Reason', width: 3.6 },
+        { label: 'Held by', width: 1.6 },
+        { label: 'Held on', width: 1.1 },
+      ],
+      rows: body,
+      wrap: true,
+    });
+    return {
+      filename: `${stem}.pdf`,
+      contentType: 'application/pdf',
+      base64: bytes.toString('base64'),
+    };
+  }
+
+  /**
+   * Holds many students' cards with one reason (and, when asked, in the year's other published cards
+   * whose classes they are in), or shows them again; a card shown again on a published class sends the
+   * family the result message. Students outside the card's classes or the person's sections are refused
+   * with the cause; nothing else is touched.
+   */
+  async bulkHolds(ctx: RequestContext, releaseId: string, dto: BulkHoldDto) {
+    const reason = dto.reason?.trim() ?? '';
+    if (dto.held && reason.length < 3)
+      throw new DomainError('validation-failed', 'Give the reason for holding the cards', {
+        status: 400,
+      });
+    return this.db.tenant(requireTenant(ctx), async (c) => {
+      const scope = await cardScopeOf(c, ctx);
+      const rel = await this.findRelease(c, releaseId, scope);
+      if (!rel) throw new DomainError('not-found', 'Release not found', { status: 404 });
+      const found = await this.holdCandidates(c, releaseId, scope, {
+        ids: dto.studentIds ?? [],
+        nos: dto.admissionNos ?? [],
+      });
+      const refused: Array<{ key: string; name: string | null; error: string }> = [];
+      for (const id of new Set(dto.studentIds ?? []))
+        if (!found.some((f) => f.studentId === id))
+          refused.push({ key: id, name: null, error: 'Not a pupil of this year' });
+      for (const no of new Set(dto.admissionNos ?? []))
+        if (!found.some((f) => f.admissionNo.trim().toLowerCase() === no.trim().toLowerCase()))
+          refused.push({ key: no, name: null, error: `No pupil with admission no ${no}` });
+      for (const f of found)
+        if (f.problem) refused.push({ key: f.admissionNo, name: f.name, error: f.problem });
+      const ok = found.filter((f) => !f.problem);
+      const view = (f: (typeof ok)[number]) => ({
+        studentId: f.studentId,
+        name: f.name,
+        admissionNo: f.admissionNo,
+        section: f.section,
+        reason: f.heldReason,
+      });
+      let held = 0;
+      let alsoHeld = 0;
+      let lifted: string[] = [];
+      let notified = 0;
+      if (dto.held) {
+        const also = await this.otherPublished(c, scope, rel, dto.alsoReleaseIds);
+        held = await this.insertHolds(
+          c,
+          releaseId,
+          ok.filter((f) => f.heldReason === null).map((f) => ({ studentId: f.studentId, reason })),
+        );
+        alsoHeld = await this.holdInOthers(c, also, ok, () => reason);
+      } else {
+        const gone = await c.query<{ student_id: string }>(
+          `DELETE FROM report_card_holds WHERE release_id = $1 AND student_id = ANY($2::bigint[])
+           RETURNING student_id::text`,
+          [releaseId, ok.map((f) => f.studentId)],
+        );
+        lifted = gone.rows.map((x) => x.student_id);
+        notified = await this.tellShownAgain(c, rel, lifted);
+      }
+      if (held || alsoHeld || lifted.length)
+        await this.audit.stage(ctx, c, {
+          action: dto.held ? 'exams.report_card.hold_bulk' : 'exams.report_card.unhold_bulk',
+          entityType: 'report_card_releases',
+          entityId: releaseId,
+          after: {
+            studentIds: dto.held ? ok.map((f) => f.studentId) : lifted,
+            ...(dto.held ? { reason, alsoReleaseIds: dto.alsoReleaseIds ?? [] } : {}),
+          },
+        });
+      return {
+        held,
+        alsoHeld,
+        lifted: lifted.length,
+        notified,
+        /** already as asked: held (with their reason) when holding, not held when showing again */
+        unchanged: ok
+          .filter((f) => (dto.held ? f.heldReason !== null : !lifted.includes(f.studentId)))
+          .map(view),
+        refused,
+      };
+    });
+  }
+
+  /** The Excel to fill: admission numbers and reasons (the names are only for the person's own check). */
+  async holdsTemplate(ctx: RequestContext, releaseId: string) {
+    const rel = await this.release(ctx, releaseId);
+    const bytes = await templateSheet({
+      sheet: 'Hold cards',
+      columns: [
+        { header: 'Admission no', width: 16, required: true, format: 'text' },
+        { header: 'Student name', width: 28, note: 'Not read: for your own check.' },
+        {
+          header: 'Reason',
+          width: 48,
+          note: '3 to 300 letters. Empty: the reason typed on the screen is used.',
+        },
+      ],
+      guide: [
+        `Holding report cards back from the parent and student portal · ${rel.name}`,
+        'One row per student: the admission number, and the reason the card is held.',
+        'A row without a reason takes the reason typed on the screen before uploading.',
+        "Only students of this card's classes (and of your own classes) can be held.",
+        'Upload the sheet in Report cards → Publish → Hold cards; check the list, then save.',
+        'Families see "held, contact the office"; the reason is kept for the school.',
+      ],
+    });
+    return {
+      filename: `hold-report-cards-${rel.termCode}.xlsx`.toLowerCase().replace(/[^\w.-]+/g, '-'),
+      contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      base64: bytes.toString('base64'),
+    };
+  }
+
+  /**
+   * An uploaded holds sheet: every row checked (a pupil of this year in one of the card's classes and of
+   * the person's sections, once in the sheet, not held already, a reason of its own or the screen's);
+   * `apply` holds the rows without a problem and leaves the rest.
+   */
+  async holdsUpload(ctx: RequestContext, releaseId: string, dto: HoldsUploadDto) {
+    const rows = await readSheet(dto.file, ['Admission no'], ['Reason']);
+    const fallback = dto.reason?.trim() ?? '';
+    return this.db.tenant(requireTenant(ctx), async (c) => {
+      const scope = await cardScopeOf(c, ctx);
+      const rel = await this.findRelease(c, releaseId, scope);
+      if (!rel) throw new DomainError('not-found', 'Release not found', { status: 404 });
+      const found = await this.holdCandidates(c, releaseId, scope, {
+        ids: [],
+        nos: rows.map((r) => r.cells['Admission no'] ?? '').filter(Boolean),
+      });
+      const byNo = new Map(found.map((f) => [f.admissionNo.trim().toLowerCase(), f]));
+      const seen = new Set<string>();
+      const checked = rows.map(({ row, cells }) => {
+        const no = (cells['Admission no'] ?? '').trim();
+        const f = no ? byNo.get(no.toLowerCase()) : undefined;
+        const why = (cells.Reason ?? '').trim() || fallback;
+        let error: string | null = null;
+        if (!no) error = 'No admission no';
+        else if (!f) error = `No pupil with admission no ${no} this year`;
+        else if (seen.has(f.studentId)) error = 'In the sheet twice';
+        else if (f.problem) error = f.problem;
+        else if (f.heldReason !== null) error = `Held already: ${f.heldReason}`;
+        else if (why.length < 3) error = 'Give the reason (in the sheet, or on the screen)';
+        else if (why.length > 300) error = 'The reason is longer than 300 letters';
+        if (f) seen.add(f.studentId);
+        return { row, admissionNo: no, name: f ? `${f.name} (${f.section})` : null, error, f, why };
+      });
+      const good = checked.filter((x) => !x.error && x.f);
+      let applied = false;
+      if (dto.apply && good.length) {
+        const also = await this.otherPublished(c, scope, rel, dto.alsoReleaseIds);
+        await this.insertHolds(
+          c,
+          releaseId,
+          good.map((x) => ({ studentId: x.f!.studentId, reason: x.why })),
+        );
+        const reasonOf = new Map(good.map((x) => [x.f!.studentId, x.why]));
+        await this.holdInOthers(
+          c,
+          also,
+          good.map((x) => x.f!),
+          (id) => reasonOf.get(id)!,
+        );
+        await this.audit.stage(ctx, c, {
+          action: 'exams.report_card.hold_upload',
+          entityType: 'report_card_releases',
+          entityId: releaseId,
+          after: {
+            studentIds: good.map((x) => x.f!.studentId),
+            alsoReleaseIds: dto.alsoReleaseIds ?? [],
+          },
+        });
+        applied = true;
+      }
+      return {
+        rows: checked.map(({ row, admissionNo, name, error }) => ({
+          row,
+          admissionNo,
+          name,
+          error,
+        })),
+        ready: good.length,
+        errors: checked.length - good.length,
+        applied,
+      };
+    });
+  }
+
+  /** a class or section asked for must be in the person's sight */
+  private assertPlaceInSight(scope: CardScope, q: { classId?: string; classSectionId?: string }) {
+    if (
+      !scope.all &&
+      ((q.classSectionId && !scope.sections.includes(q.classSectionId)) ||
+        (q.classId && !scope.classes.includes(q.classId)))
+    )
+      throw this.outOfSight();
+  }
+
+  /** the held cards of this year's active pupils, in class, section and roll order */
+  private async heldRows(
+    c: PoolClient,
+    releaseId: string,
+    scope: CardScope,
+    q: { classId?: string; classSectionId?: string; q?: string },
+  ) {
+    const words = q.q ? `%${q.q.toLowerCase().replace(/[\\%_]/g, (m) => `\\${m}`)}%` : null;
+    const r = await c.query<{
+      student_id: string;
+      name: string;
+      admission_no: string;
+      roll_no: number | null;
+      class_id: string;
+      section_id: string;
+      section: string;
+      reason: string;
+      held_by: string | null;
+      held_at: Date;
+    }>(
+      `SELECT s.id::text AS student_id, s.display_name AS name, s.admission_no, e.roll_no, cs.class_id::text,
+              cs.id::text AS section_id, k.code || '-' || cs.name AS section, h.reason, u.display_name AS held_by, h.held_at
+         FROM report_card_holds h
+         JOIN students s ON s.id = h.student_id AND s.deleted_at IS NULL
+         JOIN enrolments e ON e.student_id = s.id AND e.academic_year_id = app.current_academic_year_id() AND e.status = 'active'
+         JOIN class_sections cs ON cs.id = e.class_section_id AND cs.deleted_at IS NULL
+         JOIN classes k ON k.id = cs.class_id
+         LEFT JOIN users u ON u.id = h.held_by
+        WHERE h.release_id = $1
+          AND ($2::bigint IS NULL OR cs.class_id = $2::bigint)
+          AND ($3::bigint IS NULL OR cs.id = $3::bigint)
+          AND ($4::bigint[] IS NULL OR cs.id = ANY($4::bigint[]))
+          AND ($5::text IS NULL OR lower(s.display_name) LIKE $5 OR lower(s.admission_no) LIKE $5 OR lower(h.reason) LIKE $5)
+        ORDER BY k.display_order, k.code, cs.name, e.roll_no NULLS LAST, s.display_name`,
+      [
+        releaseId,
+        q.classId ?? null,
+        q.classSectionId ?? null,
+        scope.all ? null : scope.sections,
+        words,
+      ],
+    );
+    return r.rows.map((x) => ({
+      studentId: x.student_id,
+      name: x.name,
+      admissionNo: x.admission_no,
+      rollNo: x.roll_no,
+      classId: x.class_id,
+      sectionId: x.section_id,
+      section: x.section,
+      reason: x.reason,
+      heldBy: x.held_by,
+      heldAt: new Date(x.held_at).toISOString(),
+    }));
+  }
+
+  /** the active pupils of the release's classes (in the person's sections) the fee rule withholds today */
+  private async feeWithheldCount(
+    c: PoolClient,
+    rel: ReleaseRow,
+    scope: CardScope,
+    q: { classId?: string; classSectionId?: string },
+  ): Promise<number> {
+    const r = await c.query<{ n: number }>(
+      `SELECT count(*)::int AS n
+         FROM report_card_releases r
+         JOIN enrolments e ON e.academic_year_id = r.academic_year_id AND e.status = 'active'
+         JOIN class_sections cs ON cs.id = e.class_section_id AND cs.deleted_at IS NULL
+        WHERE r.id = $1
+          AND cs.class_id IN (SELECT ec.class_id FROM exam_classes ec WHERE ec.exam_id = ANY(r.exam_ids))
+          AND ($2::bigint IS NULL OR cs.class_id = $2::bigint)
+          AND ($3::bigint IS NULL OR cs.id = $3::bigint)
+          AND ($4::bigint[] IS NULL OR cs.id = ANY($4::bigint[]))
+          AND (SELECT COALESCE(sum(d.balance), 0) FROM mart.fee_dues d
+                WHERE d.student_id = e.student_id AND d.academic_year_id = r.academic_year_id AND d.due_on <= CURRENT_DATE) > r.defaulter_min`,
+      [rel.id, q.classId ?? null, q.classSectionId ?? null, scope.all ? null : scope.sections],
+    );
+    return r.rows[0]?.n ?? 0;
+  }
+
+  /** the classes a release carries (its exams' classes) */
+  private async releaseClassIds(c: PoolClient, releaseId: string): Promise<string[]> {
+    const r = await c.query<{ id: string }>(
+      `SELECT DISTINCT ec.class_id::text AS id FROM report_card_releases r
+         JOIN exam_classes ec ON ec.exam_id = ANY(r.exam_ids) WHERE r.id = $1`,
+      [releaseId],
+    );
+    return r.rows.map((x) => x.id);
+  }
+
+  /**
+   * The pupils named (by id or admission no) among this year's active pupils, each with its hold on the
+   * release and the reason it may not be held there: not in one of the card's classes, or not in the
+   * person's sections.
+   */
+  private async holdCandidates(
+    c: PoolClient,
+    releaseId: string,
+    scope: CardScope,
+    by: { ids: string[]; nos: string[] },
+  ) {
+    const classes = await this.releaseClassIds(c, releaseId);
+    const r = await c.query<{
+      id: string;
+      name: string;
+      admission_no: string;
+      class_id: string;
+      section_id: string;
+      section: string;
+      held_reason: string | null;
+    }>(
+      `SELECT DISTINCT ON (s.id) s.id::text, s.display_name AS name, s.admission_no, cs.class_id::text,
+              cs.id::text AS section_id, k.code || '-' || cs.name AS section, h.reason AS held_reason
+         FROM enrolments e
+         JOIN class_sections cs ON cs.id = e.class_section_id AND cs.deleted_at IS NULL
+         JOIN classes k ON k.id = cs.class_id
+         JOIN students s ON s.id = e.student_id AND s.deleted_at IS NULL
+         LEFT JOIN report_card_holds h ON h.release_id = $1 AND h.student_id = s.id
+        WHERE e.academic_year_id = app.current_academic_year_id() AND e.status = 'active'
+          AND (s.id = ANY($2::bigint[]) OR lower(btrim(s.admission_no)) = ANY($3::text[]))
+        ORDER BY s.id, e.id DESC`,
+      [releaseId, by.ids, by.nos.map((x) => x.trim().toLowerCase())],
+    );
+    return r.rows.map((x) => ({
+      studentId: x.id,
+      name: x.name,
+      admissionNo: x.admission_no,
+      classId: x.class_id,
+      sectionId: x.section_id,
+      section: x.section,
+      heldReason: x.held_reason,
+      problem: !classes.includes(x.class_id)
+        ? `${x.section} is not one of this card's classes`
+        : !scope.all && !scope.sections.includes(x.section_id)
+          ? `${x.section} is not one of your classes`
+          : null,
+    }));
+  }
+
+  /** this year's other published cards asked for, each in the person's sight (else refused) */
+  private async otherPublished(
+    c: PoolClient,
+    scope: CardScope,
+    rel: ReleaseRow,
+    ids: string[] | undefined,
+  ): Promise<string[]> {
+    const out: string[] = [];
+    for (const id of new Set(ids ?? [])) {
+      if (id === rel.id) continue;
+      const o = await this.findRelease(c, id, scope);
+      if (!o || o.status !== 'released' || o.academicYearId !== rel.academicYearId)
+        throw new DomainError(
+          'validation-failed',
+          "A card can also be held only in this year's published cards",
+          { status: 400 },
+        );
+      out.push(id);
+    }
+    return out;
+  }
+
+  /** holds on one release, each with its reason; one held already is left as it is. Returns the new ones. */
+  private async insertHolds(
+    c: PoolClient,
+    releaseId: string,
+    items: Array<{ studentId: string; reason: string }>,
+  ): Promise<number> {
+    if (!items.length) return 0;
+    const r = await c.query(
+      `INSERT INTO report_card_holds (school_id, release_id, student_id, reason, held_by)
+       SELECT app.current_school_id(), $1, x.sid, x.reason, app.current_user_id()
+         FROM unnest($2::bigint[], $3::text[]) AS x(sid, reason)
+       ON CONFLICT (release_id, student_id) DO NOTHING`,
+      [releaseId, items.map((x) => x.studentId), items.map((x) => x.reason)],
+    );
+    return r.rowCount ?? 0;
+  }
+
+  /** the same students held in other releases too, where their class is one of that release's */
+  private async holdInOthers(
+    c: PoolClient,
+    releaseIds: string[],
+    students: Array<{ studentId: string; classId: string }>,
+    reasonOf: (studentId: string) => string,
+  ): Promise<number> {
+    let n = 0;
+    for (const id of releaseIds) {
+      const classes = await this.releaseClassIds(c, id);
+      n += await this.insertHolds(
+        c,
+        id,
+        students
+          .filter((s) => classes.includes(s.classId))
+          .map((s) => ({ studentId: s.studentId, reason: reasonOf(s.studentId) })),
+      );
+    }
+    return n;
+  }
+
+  /**
+   * Cards shown again where the student's class is published: the families get the result message, as
+   * when the class was published (a card the fee rule withholds sends nothing: it opens once paid).
+   */
+  private async tellShownAgain(
+    c: PoolClient,
+    rel: ReleaseRow,
+    studentIds: string[],
+  ): Promise<number> {
+    if (!studentIds.length || rel.status !== 'released') return 0;
+    const open = await c.query<{ class_id: string }>(
+      `SELECT class_id::text FROM report_card_release_classes WHERE release_id = $1 AND status = 'released'`,
+      [rel.id],
+    );
+    if (!open.rowCount) return 0;
+    const told = await this.tellFamilies(
+      c,
+      rel.id,
+      open.rows.map((x) => x.class_id),
+      { studentIds, skipFeeDue: true },
+    );
+    for (const [classId, n] of told)
+      await c.query(
+        `UPDATE report_card_release_classes SET notified_count = notified_count + $3 WHERE release_id = $1 AND class_id = $2`,
+        [rel.id, classId, n],
+      );
+    const total = [...told.values()].reduce((a, n) => a + n, 0);
+    if (total)
+      await c.query(
+        `UPDATE report_card_releases SET notified_at = now(), notified_count = notified_count + $2 WHERE id = $1`,
+        [rel.id, total],
+      );
+    return total;
   }
 
   /**
@@ -1402,7 +1953,11 @@ export class ReportCardsService {
                 cs.id::text AS section_id, cs.class_id::text AS class_id, k.code || '-' || cs.name AS section,
                 e.status::text AS enrolment_status,
                 rc.export_id::text, rc.withheld, rc.withheld_reason, rc.rendered_at, x.status AS export_status,
-                h.reason AS held_reason
+                h.reason AS held_reason,
+                -- the fee rule as it stands today (docs/design/75: the hold window shows it)
+                (SELECT rr.hide_defaulters AND (SELECT COALESCE(sum(d.balance), 0) FROM mart.fee_dues d
+                    WHERE d.student_id = s.id AND d.academic_year_id = rr.academic_year_id AND d.due_on <= CURRENT_DATE) > rr.defaulter_min
+                   FROM report_card_releases rr WHERE rr.id = $1) AS fee_due
            FROM enrolments e
            JOIN class_sections cs ON cs.id = e.class_section_id AND cs.deleted_at IS NULL
            JOIN classes k ON k.id = cs.class_id
@@ -1440,6 +1995,8 @@ export class ReportCardsService {
         renderedAt: x.rendered_at ? new Date(x.rendered_at as string).toISOString() : null,
         /** held back by the school for this student (docs/design/65) */
         heldReason: (x.held_reason as string | null) ?? null,
+        /** the fee rule withholds the card today (docs/design/75) */
+        feeDue: Boolean(x.fee_due),
       }));
     });
   }

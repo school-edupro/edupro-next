@@ -15,7 +15,7 @@ const Svg = ({ d }: { d: string }) => (
   </svg>
 );
 
-/** A file as two icons: View opens it in the browser, Download saves it (`?save=1`); no file names. */
+/** A file as two icons: View opens it in the browser, Download saves it (`save=1`); no file names. */
 export function ViewDownload({ href, what }: { href: string; what: string }) {
   return (
     <span style={{ display: 'inline-flex', gap: 'var(--sp-1)' }}>
@@ -31,7 +31,7 @@ export function ViewDownload({ href, what }: { href: string; what: string }) {
       </a>
       <a
         className="ep-btn ep-btn--ghost ep-btn--sm"
-        href={`${href}?save=1`}
+        href={`${href}${href.includes('?') ? '&' : '?'}save=1`}
         aria-label={`Download ${what}`}
         title="Download"
       >

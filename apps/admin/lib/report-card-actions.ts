@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { ApiError, apiFetch } from './api';
+import type { UploadPreview } from './exam-entry-actions';
 
 /**
  * The report-card release workspace (docs/design/65): make a release, its set-up, the PDFs, holds and
@@ -165,6 +166,8 @@ export interface LineStudent {
   section: string;
   heldReason: string | null;
   withheld: boolean;
+  /** the fee rule withholds the card today (docs/design/75) */
+  feeDue: boolean;
 }
 
 /** the students of a line's section or class with the status chosen, section by section in roll order */
@@ -179,9 +182,9 @@ export async function lineStudents(
   try {
     const q = new URLSearchParams({ status });
     for (const [k, v] of Object.entries(p)) if (v) q.set(k, v);
-    const r = await apiFetch<{ data: Array<LineStudent & { heldReason?: string | null }> }>(
-      `/exams/report-cards/releases/${releaseId}/cards?${q.toString()}`,
-    );
+    const r = await apiFetch<{
+      data: Array<LineStudent & { heldReason?: string | null; feeDue?: boolean }>;
+    }>(`/exams/report-cards/releases/${releaseId}/cards?${q.toString()}`);
     return {
       ok: true,
       data: r.data.map((x) => ({
@@ -192,6 +195,7 @@ export async function lineStudents(
         section: x.section,
         heldReason: x.heldReason ?? null,
         withheld: x.withheld,
+        feeDue: x.feeDue ?? false,
       })),
     };
   } catch (e) {
@@ -271,6 +275,116 @@ export async function releaseExports(releaseId: string): Promise<Out<ExportLogRo
       `/exams/report-cards/releases/${releaseId}/exports`,
     );
     return { ok: true, data: r.data };
+  } catch (e) {
+    return fail(e);
+  }
+}
+
+// ---- holds in bulk (docs/design/75) ---------------------------------------------------------------
+export interface HeldRow {
+  studentId: string;
+  name: string;
+  admissionNo: string;
+  rollNo: number | null;
+  classId: string;
+  sectionId: string;
+  section: string;
+  reason: string;
+  heldBy: string | null;
+  heldAt: string;
+}
+export interface HoldFilter {
+  classId?: string;
+  classSectionId?: string;
+  q?: string;
+}
+const filterQuery = (f: HoldFilter) => {
+  const q = new URLSearchParams();
+  if (f.classSectionId && okId(f.classSectionId)) q.set('classSectionId', f.classSectionId);
+  else if (f.classId && okId(f.classId)) q.set('classId', f.classId);
+  if (f.q?.trim()) q.set('q', f.q.trim().slice(0, 60));
+  return q;
+};
+
+/** the release's held cards in the person's classes, as filtered; the fee rule's count beside them */
+export async function releaseHolds(
+  releaseId: string,
+  f: HoldFilter,
+): Promise<Out<{ data: HeldRow[]; feeWithheld: number | null }>> {
+  if (!okId(releaseId)) return { ok: false, error: 'Unknown report card' };
+  try {
+    const q = filterQuery(f).toString();
+    return {
+      ok: true,
+      data: await apiFetch(`/exams/report-cards/releases/${releaseId}/holds${q ? `?${q}` : ''}`),
+    };
+  } catch (e) {
+    return fail(e);
+  }
+}
+
+export interface BulkHoldResult {
+  held: number;
+  alsoHeld: number;
+  lifted: number;
+  notified: number;
+  unchanged: Array<{ studentId: string; name: string; section: string; reason: string | null }>;
+  refused: Array<{ key: string; name: string | null; error: string }>;
+}
+
+/** many cards held with one reason (also in other published cards), or shown again */
+export async function bulkHold(
+  releaseId: string,
+  input: { studentIds: string[]; held: boolean; reason?: string; alsoReleaseIds?: string[] },
+): Promise<Out<BulkHoldResult>> {
+  const ids = input.studentIds.filter(okId).slice(0, 500);
+  if (!okId(releaseId) || !ids.length) return { ok: false, error: 'Tick the students' };
+  try {
+    const r = await apiFetch<BulkHoldResult>(
+      `/exams/report-cards/releases/${releaseId}/holds/bulk`,
+      {
+        method: 'POST',
+        body: JSON.stringify({
+          studentIds: ids,
+          held: input.held,
+          ...(input.held ? { reason: (input.reason ?? '').trim() } : {}),
+          ...(input.held && input.alsoReleaseIds?.length
+            ? { alsoReleaseIds: input.alsoReleaseIds.filter(okId) }
+            : {}),
+        }),
+      },
+    );
+    revalidatePath(`/exams/report-cards/${releaseId}`);
+    return { ok: true, data: r };
+  } catch (e) {
+    return fail(e);
+  }
+}
+
+/** an Excel of admission numbers (and reasons): checked, then the good rows held with apply */
+export async function uploadHolds(
+  releaseId: string,
+  reason: string,
+  alsoReleaseIds: string[],
+  file: string,
+  apply: boolean,
+): Promise<Out<UploadPreview>> {
+  if (!okId(releaseId)) return { ok: false, error: 'Unknown report card' };
+  try {
+    const r = await apiFetch<UploadPreview>(
+      `/exams/report-cards/releases/${releaseId}/holds/upload`,
+      {
+        method: 'POST',
+        body: JSON.stringify({
+          file,
+          apply,
+          ...(reason.trim() ? { reason: reason.trim() } : {}),
+          ...(alsoReleaseIds.length ? { alsoReleaseIds: alsoReleaseIds.filter(okId) } : {}),
+        }),
+      },
+    );
+    if (r.applied) revalidatePath(`/exams/report-cards/${releaseId}`);
+    return { ok: true, data: r };
   } catch (e) {
     return fail(e);
   }

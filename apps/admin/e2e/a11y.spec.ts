@@ -845,6 +845,43 @@ test.describe('accessibility (axe)', () => {
     ).toEqual([]);
   });
 
+  test('no serious or critical violations on the Hold cards window (pick and Excel)', async ({
+    page,
+  }) => {
+    await page.goto('/exams/report-cards/1?tab=publish');
+    await page.waitForLoadState('networkidle');
+    const skip = page.getByRole('button', { name: 'Skip' });
+    if (await skip.isVisible().catch(() => false)) await skip.click();
+    const open = page.getByRole('button', { name: 'Hold cards…' });
+    test.skip(!(await open.isVisible().catch(() => false)), 'no report card to hold in');
+    await open.click();
+    await page.getByRole('heading', { name: 'Hold report cards' }).waitFor();
+    await page.getByRole('region', { name: 'Students to hold' }).waitFor();
+    const check = async () =>
+      (
+        await new AxeBuilder({ page })
+          .options({ iframes: false })
+          .setLegacyMode()
+          .withTags(['wcag2a', 'wcag2aa'])
+          .analyze()
+      ).violations
+        .filter((v) => v.impact === 'serious' || v.impact === 'critical')
+        .map(
+          (v) =>
+            `${v.id}: ${v.nodes
+              .map((n) => n.target.join(' '))
+              .slice(0, 3)
+              .join(' | ')}`,
+        );
+    await page.mouse.move(0, 0);
+    await page.waitForTimeout(400);
+    const bad = (await check()).map((x) => `pick ${x}`);
+    await page.getByRole('button', { name: 'Upload Excel' }).click();
+    await page.getByText('Upload the filled sheet').waitFor();
+    bad.push(...(await check()).map((x) => `excel ${x}`));
+    expect(bad).toEqual([]);
+  });
+
   test('no serious or critical violations on the book list export picker', async ({ page }) => {
     await page.goto('/library?view=copies');
     await page.waitForLoadState('networkidle');

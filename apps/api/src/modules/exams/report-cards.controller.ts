@@ -4,12 +4,16 @@ import { RequirePermission } from '../../common/access/require-permission.decora
 import { DomainError } from '../../common/errors/domain-error';
 import { ReqCtx, type RequestContext } from '../../common/http/request-context';
 import {
+  BulkHoldDto,
   CardsQueryDto,
   ClassPublishDto,
   CreateReleaseDto,
   CreateTemplateDto,
   GenerateCardsDto,
   HoldDto,
+  HoldsFileDto,
+  HoldsQueryDto,
+  HoldsUploadDto,
   SignatureDto,
   TemplateArtDto,
   PreviewDto,
@@ -192,6 +196,52 @@ export class ReportCardsController {
   @RequirePermission(REPORT_CARDS.manage)
   hold(@ReqCtx() ctx: RequestContext, @Param('id') id: string, @Body() body: HoldDto) {
     return this.cards.setHold(ctx, id, body);
+  }
+
+  @Get('releases/:id/holds')
+  @ApiOperation({
+    summary: 'The held cards of a release (docs/design/75), by class, section or words',
+  })
+  @RequirePermission(REPORT_CARDS.view)
+  holds(@ReqCtx() ctx: RequestContext, @Param('id') id: string, @Query() q: HoldsQueryDto) {
+    return this.cards.holds(ctx, id, q);
+  }
+
+  @Get('releases/:id/holds/file')
+  @ApiOperation({ summary: 'The held cards as Excel or PDF (base64)' })
+  @RequirePermission(REPORT_CARDS.view)
+  holdsFile(@ReqCtx() ctx: RequestContext, @Param('id') id: string, @Query() q: HoldsFileDto) {
+    return this.cards.holdsFile(ctx, id, q);
+  }
+
+  @Post('releases/:id/holds/bulk')
+  @ApiOperation({
+    summary:
+      'Hold many cards with one reason (also in other published cards), or show them again; the family is told when a published card is shown again',
+  })
+  @RequirePermission(REPORT_CARDS.manage)
+  bulkHolds(@ReqCtx() ctx: RequestContext, @Param('id') id: string, @Body() body: BulkHoldDto) {
+    return this.cards.bulkHolds(ctx, id, body);
+  }
+
+  @Get('releases/:id/holds/template')
+  @ApiOperation({ summary: 'The Excel to fill with admission numbers and reasons (base64)' })
+  @RequirePermission(REPORT_CARDS.manage)
+  holdsTemplate(@ReqCtx() ctx: RequestContext, @Param('id') id: string) {
+    return this.cards.holdsTemplate(ctx, id);
+  }
+
+  @Post('releases/:id/holds/upload')
+  @ApiOperation({
+    summary: 'A filled holds sheet: every row checked; apply holds the rows without a problem',
+  })
+  @RequirePermission(REPORT_CARDS.manage)
+  holdsUpload(
+    @ReqCtx() ctx: RequestContext,
+    @Param('id') id: string,
+    @Body() body: HoldsUploadDto,
+  ) {
+    return this.cards.holdsUpload(ctx, id, body);
   }
 
   @Get('releases/:id/readiness')

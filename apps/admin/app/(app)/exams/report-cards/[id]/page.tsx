@@ -6,6 +6,7 @@ import { ConfirmAction } from '@/components/ConfirmAction';
 import { Notice } from '@/components/Notice';
 import { CardsTable } from '@/components/exams/rc/CardsTable';
 import { DownloadLog } from '@/components/exams/rc/DownloadLog';
+import { HeldCards } from '@/components/exams/rc/HeldCards';
 import { ScopeNote } from '@/components/exams/rc/ScopeNote';
 import { ApiError, apiFetch, getMe } from '@/lib/api';
 import { saveReleaseSetup, setClassPublish, setReleaseStatus } from '@/lib/report-card-actions';
@@ -28,7 +29,7 @@ type Tab = (typeof TABS)[number];
  * the fee-due rule) · Readiness (what each class still needs, with where to fix it) · Cards (the legacy
  * Exam Report Card: a line per card design, a section or class, a roll-order range or one admission
  * number, Generate and the eye; the Download Log) · Publish (to the principal, then class by class to the
- * families; revoke a class with a reason).
+ * families; revoke a class with a reason; the held cards and Hold cards…, docs/design/75).
  */
 export default async function ReleasePage({
   params,
@@ -37,6 +38,8 @@ export default async function ReleasePage({
   params: Promise<{ id: string }>;
   searchParams: Promise<{
     tab?: string;
+    /** Publish: the held list opens on this class (the class table's Held column) */
+    held?: string;
     ok?: string;
     error?: string;
     detail?: string;
@@ -45,7 +48,7 @@ export default async function ReleasePage({
   const { id } = await params;
   const sp = await searchParams;
   if (!/^\d{1,18}$/.test(id)) notFound();
-  const [me, ready, exams, tp, t, locale] = await Promise.all([
+  const [me, ready, exams, releases, tp, t, locale] = await Promise.all([
     getMe(),
     apiFetch<ReleaseReadiness>(`/exams/report-cards/releases/${id}/readiness`).catch(
       (e: unknown) => {
@@ -54,6 +57,10 @@ export default async function ReleasePage({
       },
     ),
     apiFetch<{ data: Exam[] }>('/exams').then((x) => x.data),
+    // the year's other published cards (Hold cards… may hold there too, docs/design/75)
+    apiFetch<{ data: Array<{ id: string; termCode: string; name: string; status: string }> }>(
+      '/exams/report-cards/releases',
+    ).then((x) => x.data),
     getTranslations('pages.exams_report_cards'),
     getTranslations('rcRelease'),
     getLocale(),
@@ -494,6 +501,7 @@ export default async function ReleasePage({
                 <tr>
                   <th scope="col">{t('class')}</th>
                   <th scope="col">{t('kStudents')}</th>
+                  <th scope="col">{t('kHeld')}</th>
                   <th scope="col">{t('readyCol')}</th>
                   <th scope="col">{t('publishCol')}</th>
                   <th scope="col">
@@ -513,6 +521,7 @@ export default async function ReleasePage({
                   ].filter(Boolean) as string[];
                   const p = k.publish;
                   const n = k.sections.reduce((a, c) => a + c.students, 0);
+                  const held = k.sections.reduce((a, c) => a + c.held, 0);
                   return (
                     <tr key={k.classId}>
                       <td>
@@ -522,6 +531,18 @@ export default async function ReleasePage({
                         </span>
                       </td>
                       <td>{n}</td>
+                      <td>
+                        {held ? (
+                          <a
+                            href={here('publish', `&held=${k.classId}#held`)}
+                            aria-label={t('heldOf', { n: held, cls: k.code })}
+                          >
+                            {held}
+                          </a>
+                        ) : (
+                          0
+                        )}
+                      </td>
                       <td>
                         {gaps.length ? (
                           <>
@@ -609,6 +630,24 @@ export default async function ReleasePage({
             </table>
           </div>
           {!canPublish ? <p className="ep-field__help">{t('publishWho')}</p> : null}
+        </Card>
+      ) : null}
+      {tab === 'publish' ? (
+        <Card elevated style={{ marginTop: 'var(--sp-4)' }}>
+          <HeldCards
+            releaseId={rel.id}
+            published={published.length > 0}
+            classes={ready.classes.map((k) => ({
+              id: k.classId,
+              code: k.code,
+              sections: k.sections.map((c) => ({ id: c.id, code: c.code })),
+            }))}
+            others={releases
+              .filter((r) => r.id !== rel.id && r.status === 'released')
+              .map((r) => ({ id: r.id, termCode: r.termCode, name: r.name }))}
+            canManage={canManage}
+            startClassId={sp.held}
+          />
         </Card>
       ) : null}
     </>

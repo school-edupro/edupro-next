@@ -224,6 +224,47 @@ export const HoldSchema = z.object({
 });
 export class HoldDto extends createZodDto(HoldSchema) {}
 
+/** docs/design/75: the held cards of a release, by class, section or words (name, admission no, reason). */
+export const HoldsQuerySchema = z.object({
+  classId: IdSchema.optional(),
+  classSectionId: IdSchema.optional(),
+  q: z.string().trim().max(60).optional(),
+});
+export class HoldsQueryDto extends createZodDto(HoldsQuerySchema) {}
+export const HoldsFileSchema = HoldsQuerySchema.extend({
+  format: z.enum(['xlsx', 'pdf']).default('xlsx'),
+});
+export class HoldsFileDto extends createZodDto(HoldsFileSchema) {}
+
+/**
+ * docs/design/75: hold many students' cards with one reason (also in the year's other published cards
+ * when asked), or show them again; by student or by admission number.
+ */
+export const BulkHoldSchema = z
+  .object({
+    studentIds: z.array(IdSchema).max(500).optional(),
+    admissionNos: z.array(z.string().trim().min(1).max(40)).max(500).optional(),
+    held: z.boolean(),
+    reason: z.string().trim().max(300).optional(),
+    alsoReleaseIds: z.array(IdSchema).max(10).optional(),
+  })
+  .refine((x) => (x.studentIds?.length ?? 0) + (x.admissionNos?.length ?? 0) > 0, {
+    message: 'Choose the students',
+    path: ['studentIds'],
+  });
+export class BulkHoldDto extends createZodDto(BulkHoldSchema) {}
+
+/** docs/design/75: an Excel of admission numbers (and reasons) to hold: checked, then held with apply. */
+export const HoldsUploadSchema = z.object({
+  /** the .xlsx file, base64 */
+  file: z.string().min(10).max(2_000_000),
+  apply: z.boolean().default(false),
+  /** for the rows without a reason of their own */
+  reason: z.string().trim().max(300).optional(),
+  alsoReleaseIds: z.array(IdSchema).max(10).optional(),
+});
+export class HoldsUploadDto extends createZodDto(HoldsUploadSchema) {}
+
 /** A signature (or the school seal) for the cards: the role, the words under it, an image (docs/design/65). */
 export const SignatureSchema = z.object({
   role: z.enum([

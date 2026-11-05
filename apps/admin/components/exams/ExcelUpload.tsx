@@ -8,15 +8,28 @@ type Out = { ok: true; data: UploadPreview } | { ok: false; error: string };
 
 /**
  * Upload a filled Excel sheet (marks or subject choices, docs/design/65): every row is checked first and
- * shown; Save writes it only when no row has an error.
+ * shown; Save writes it only when no row has an error — or, with `partial` (holds, docs/design/75), the
+ * rows without one, the others listed and left out.
  */
 export function ExcelUpload({
   label,
   upload,
+  partial = false,
+  saveLabel,
+  savedText,
+  onSaved,
 }: {
   label: string;
   /** bound on the page to the exam / section / subject */
   upload: (file: string, apply: boolean) => Promise<Out>;
+  /** save the rows without an error even when others have one */
+  partial?: boolean;
+  /** the Save button's words for n rows (default "Save n rows") */
+  saveLabel?: (n: number) => string;
+  /** the message once n rows are saved (default "n rows saved.") */
+  savedText?: (n: number) => string;
+  /** after a save (the page refreshes too) */
+  onSaved?: () => void;
 }) {
   const t = useTranslations('examHub.upload');
   const router = useRouter();
@@ -74,7 +87,12 @@ export function ExcelUpload({
       {preview ? (
         <div className={`ep-alert ep-alert--${preview.errors ? 'danger' : 'info'}`} role="status">
           {t('read', { rows: preview.rows.length, ready: preview.ready })}
-          {preview.errors ? t('withErrors', { n: preview.errors }) : ''}.
+          {preview.errors
+            ? partial
+              ? t('withErrorsLeftOut', { n: preview.errors })
+              : t('withErrors', { n: preview.errors })
+            : ''}
+          .
         </div>
       ) : null}
       {bad.length ? (
@@ -102,7 +120,7 @@ export function ExcelUpload({
           </table>
         </div>
       ) : null}
-      {preview && !preview.errors && preview.ready ? (
+      {preview && (partial || !preview.errors) && preview.ready ? (
         <div className="ep-form-actions">
           <button
             type="button"
@@ -112,16 +130,20 @@ export function ExcelUpload({
               start(async () => {
                 const r = await upload(file!, true);
                 if (r.ok && r.data.applied) {
-                  setMsg({ tone: 'success', text: t('saved', { n: r.data.ready }) });
+                  setMsg({
+                    tone: 'success',
+                    text: savedText ? savedText(r.data.ready) : t('saved', { n: r.data.ready }),
+                  });
                   setPreview(null);
                   setFile(null);
                   if (input.current) input.current.value = '';
+                  onSaved?.();
                   router.refresh();
                 } else setMsg({ tone: 'danger', text: r.ok ? t('nothingSaved') : r.error });
               })
             }
           >
-            {t('saveRows', { n: preview.ready })}
+            {saveLabel ? saveLabel(preview.ready) : t('saveRows', { n: preview.ready })}
           </button>
         </div>
       ) : null}
