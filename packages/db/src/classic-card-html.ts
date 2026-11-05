@@ -65,25 +65,25 @@ const titleCase = (v: string) =>
   v.toLowerCase().replace(/(^|[\s(-])([a-z])/g, (_, a: string, b: string) => a + b.toUpperCase());
 
 export const CL_CSS = `
-  .page:has(.cl) { padding: 8mm 7mm !important; }
+  .page:has(.cl) { padding: 6mm 7mm !important; }
   .cl { border: 1px solid #3C9D4E; font-family: Arial, Helvetica, sans-serif; color: #111; font-size: 10pt; line-height: 1.25; }
   .cl * { box-sizing: border-box; }
   .rc .cl tr:nth-child(even) td { background: transparent; }
-  .cl-head { display: flex; align-items: center; gap: 4mm; padding: 2mm 3mm; border-bottom: 1px solid #3C9D4E; }
-  .cl-head .lg { width: 24mm; height: 22mm; display: flex; align-items: center; justify-content: center; flex: none; }
+  .cl-head { display: flex; align-items: center; gap: 4mm; padding: 1.6mm 3mm; border-bottom: 1px solid #3C9D4E; }
+  .cl-head .lg { width: 24mm; height: 20mm; display: flex; align-items: center; justify-content: center; flex: none; }
   .cl-head .lg img { max-width: 100%; max-height: 100%; object-fit: contain; }
-  .cl-head .sc { flex: 1; text-align: center; color: #1E8A3C; }
+  .cl-head .sc { flex: 1; text-align: center; color: #1B7F37; }
   .cl-head .n { font-size: 17pt; font-weight: 700; text-transform: uppercase; letter-spacing: 0.01em; }
   .cl-head .a { font-size: 11pt; text-transform: uppercase; }
   .cl-head .f { font-size: 9pt; }
-  .cl-title { text-align: center; font-weight: 700; font-size: 12.5pt; padding: 2mm 0 1.5mm; line-height: 1.2; }
-  .cl-pupil { display: grid; grid-template-columns: 1.45fr 1fr; padding: 0 2mm 1.5mm; }
-  .cl-kv { display: grid; grid-template-columns: 32mm 5mm 1fr; font-size: 10.5pt; line-height: 1.65; }
+  .cl-title { text-align: center; font-weight: 700; font-size: 12.5pt; padding: 1.6mm 0 1mm; line-height: 1.2; }
+  .cl-pupil { display: grid; grid-template-columns: 1.45fr 1fr; padding: 0 2mm 1mm; }
+  .cl-kv { display: grid; grid-template-columns: 32mm 5mm 1fr; font-size: 10.5pt; line-height: 1.55; }
   .cl-kv .k { font-weight: 700; }
   .cl-kv .v { text-transform: uppercase; }
-  .cl-sep { height: 2.2mm; border-top: 1px solid #3C9D4E; }
+  .cl-sep { height: 1.6mm; border-top: 1px solid #3C9D4E; }
   .rc .cl table.cl-t { width: 100%; border-collapse: collapse; margin: 0; table-layout: fixed; }
-  .rc .cl .cl-t th, .rc .cl .cl-t td { border: 1px solid #3C9D4E; padding: 1mm 1.6mm; font-size: 10.5pt; height: 7.6mm;
+  .rc .cl .cl-t th, .rc .cl .cl-t td { border: 1px solid #3C9D4E; padding: 0.8mm 1.6mm; font-size: 10.5pt; height: 7mm;
     vertical-align: middle; color: #111; }
   .rc .cl .cl-t th { background: #E9E9E9; font-weight: 700; text-align: center; text-transform: none; letter-spacing: 0; }
   .rc .cl .cl-t th.l, .rc .cl .cl-t td.l { text-align: left; }
@@ -92,15 +92,15 @@ export const CL_CSS = `
   .cl-t tr > :first-child { border-left: 0 !important; }
   .cl-t tr > :last-child { border-right: 0 !important; }
   .rc .cl .cl-side td.gap { border-top: 0; border-bottom: 0; padding: 0; background: #fff; }
-  .rc .cl .cl-rem td { height: auto; min-height: 14mm; vertical-align: top; padding: 1.6mm 1.6mm 2.4mm; white-space: pre-line; }
-  .cl-pd { display: flex; justify-content: space-between; padding: 1.6mm 1.6mm 0; font-size: 10.5pt; }
+  .rc .cl .cl-rem td { height: 12mm; vertical-align: top; padding: 1.2mm 1.6mm 1.6mm; white-space: pre-line; line-height: 1.3; }
+  .cl-pd { display: flex; justify-content: space-between; padding: 1.2mm 1.6mm 0; font-size: 10.5pt; }
   .cl-pd b { margin-right: 2mm; }
-  .cl-sign { display: grid; grid-template-columns: repeat(var(--n), 1fr); align-items: end; padding: 0 1.6mm 1.4mm; }
+  .cl-sign { display: grid; grid-template-columns: repeat(var(--n), 1fr); align-items: end; padding: 0 1.6mm 1mm; }
   .cl-sign > div { text-align: center; font-weight: 700; font-size: 10.5pt; }
-  .cl-sign .im { height: 15mm; display: flex; align-items: flex-end; justify-content: center; }
-  .cl-sign .im img { max-height: 15mm; max-width: 30mm; object-fit: contain; }
-  .cl-sign .stamp img { max-height: 17mm; max-width: 22mm; }
-  .rc .cl .cl-key td, .rc .cl .cl-key th { height: 6.6mm; font-size: 10pt; }
+  .cl-sign .im { height: 13mm; display: flex; align-items: flex-end; justify-content: center; }
+  .cl-sign .im img { max-height: 13mm; max-width: 30mm; object-fit: contain; }
+  .cl-sign .stamp img { max-height: 15mm; max-width: 22mm; }
+  .rc .cl .cl-key td, .rc .cl .cl-key th { height: 6.2mm; font-size: 10pt; }
   .rc .cl .cl-key th { background: #fff; font-weight: 400; text-align: left; }
 `;
 

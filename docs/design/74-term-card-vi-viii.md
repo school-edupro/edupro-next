@@ -139,3 +139,51 @@ rows shrink a little for more); the print CSS in hex as the other card styles.
 
 The other bands' slips and cards; a Term 2 / annual version of this card (the same sections with
 `termLabel` "TERM-2" can be added later); the card's photo (the shared card has none).
+
+## As built (5 Nov 2026)
+
+- **Sections** (`packages/db/src/classic-card-html.ts`, exported; `CL_CSS` in every card document):
+  `cl_header` (logo, the name, "( address )", "Affiliated to <board>[, Delhi for CBSE], Affiliation No.
+  …" when there is a number, the second emblem `logo_2`; "ACADEMIC SESSION: 2026-2027" from 2026-27
+  and the title, or the release's name with `releaseTitle`), `cl_student`, `cl_term_marks` (the
+  release's term, else option `terms[0]`, else the first; "TERM-1 (100 Marks)" when every subject has
+  one maximum; the parts to `decimals` (2), the total as the register works it out; a heading's
+  "(15)" on a line of its own), `cl_exam_marks` (one test: maximum / obtained / grade, then TOTAL and
+  PERCENTAGE rows; several tests: each one's marks and grade and the total), `cl_co_health` (one
+  table, a narrow gap column between the sides, so the rows always meet; the co-scholastic items of
+  every area but Discipline, each with its last grade; height and weight without trailing zeros; the
+  last exam with attendance, % to one decimal; the shorter side takes blank rows), `cl_discipline`
+  (nothing when there is no Discipline area or item), `cl_remark` (the general remark of the latest
+  exam, then the categories' words, four lines at most), `cl_sign` (Place: the school's town, Date: the
+  day the card is made; parent, class teacher, coordinator, vice principal, principal and the seal,
+  each image over its name), `cl_grade_key` (the bands high to low, the lowest "<n> & Below", the
+  lowest grade with its remark when the scale has one). The frame: `<div class="cl">` inside `.rc`;
+  the page's padding 6 × 7 mm; rows 7 mm; the header's green #1B7F37 (5.1 : 1 on white), the rules
+  #3C9D4E, the headings' fill #E9E9E9.
+- **Data**: `school.board` (schools.board) and `school.city` (address.city); the sample has both.
+- **Designs**: `CLASSIC_TERM_LAYOUT` → ready-made `rc_vi_viii_t1` "Report card VI-VIII (Term 1)";
+  `CLASSIC_SLIP_LAYOUT` → `test_slip_middle`; 0309 moves a slip still on the first layout (the other
+  bands' slips unchanged).
+- **Designer**: Pictures shows the second emblem only for a `cl_` design. The API's layout schema now
+  takes the `lr_` and `cl_` section types, `mode: 'slip'`, the learning record's `caption`,
+  `termLabels`, `note`, `remarks`, the classic `releaseTitle`, `termLabel`, `decimals`, and up to seven
+  signing roles — the learning record's and the slip's layouts were refused on save before.
+- **Help**: the VI-VIII card and slip; the term card's example no longer names a school.
+- **Tests**: `packages/db/test/classic-card.test.ts` (9: each section's rows, the slip with one and with
+  two tests, the rows meeting with more areas, the six places with images and the seal, the key, the
+  designs, a frame per pupil); `report-card.test.ts` (the ready-made list; the old slip tests on the
+  I-V slip); API e2e `exam-schemes` (installed once; the Term 1 card from a release: the session, the
+  term heading, the parts, 79, the six places, the seal's image, the key; the designer saves a classic
+  layout with `termLabel` and `decimals`), `exam-hpc` (the learning record's layout saves); the card
+  suites pass (exam-schemes, exam-hpc, exam-promotion-remarks, exams-v2, sprint17, sprint18: 50 tests).
+- **On Alpha**: 0309 applied (Periodic test slip (VI-VIII), id 1092, v2); the ready-made cards
+  installed (Report card VI-VIII (Term 1), id 1450); the Term 1 release (1) prints it for VI, VII and
+  VIII (its status unchanged, nothing sent). VIII-A's Term 1 card and PT1 slip printed to PDF: one A4
+  page each, the boxes in the shared card's order. The designer's preview with axe: clean (after the
+  header's green was darkened).
+- **Differences from the shared card that are Alpha's data**: the key's lowest grade has no word (the
+  school's grade scale has no remark for E; the card prints "E (Needs Improvement)" once it has); the
+  principal's signature is set for IX-XII only; the second emblem is not uploaded; register 364 puts
+  Hindi and the foreign languages in one slot, so a pupil with Hindi and French prints one of them.
+  The workers render the PDFs with the package built before they started: they take the new card
+  when restarted.
