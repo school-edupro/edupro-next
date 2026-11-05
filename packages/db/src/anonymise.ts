@@ -19,7 +19,7 @@ export const ANONYMISE_STATEMENTS: string[] = [
   `UPDATE users SET display_name = 'User ' || id, mobile = CASE WHEN mobile IS NULL THEN NULL ELSE '7' || lpad((id % 1000000000)::text, 9, '0') END, email = CASE WHEN email IS NULL THEN NULL ELSE 'user' || id || '@example.test' END, oneauth_sub = CASE WHEN oneauth_sub LIKE 'pending:%' THEN 'pending:7' || lpad((id % 1000000000)::text, 9, '0') ELSE oneauth_sub END WHERE oneauth_sub NOT LIKE 'dev-%'`,
   // communication and files
   `UPDATE comms_messages SET recipient_address = CASE WHEN channel = 'email' THEN 'recipient' || id || '@example.test' ELSE '7' || lpad((id % 1000000000)::text, 9, '0') END, body = '[anonymised]', subject = CASE WHEN subject IS NULL THEN NULL ELSE '[anonymised]' END, variables = '{}'::jsonb`,
-  `UPDATE comms_templates SET sender_id = NULL`,
+  `UPDATE comms_templates SET sender_id = NULL WHERE sender_id IS NOT NULL`,
   `UPDATE files SET original_name = 'file-' || id`,
   // audit images keep structure, lose personal values
   `UPDATE audit_logs SET before = CASE WHEN before IS NULL THEN NULL ELSE '{"anonymised": true}'::jsonb END, after = CASE WHEN after IS NULL THEN NULL ELSE '{"anonymised": true}'::jsonb END, diff = NULL, ip = NULL, user_agent = NULL`,

@@ -4,6 +4,7 @@
  * checksum for an applied file fails loudly: applied migrations are immutable (ADR-006).
  *
  * Usage: DATABASE_MIGRATOR_URL=postgresql://... tsx src/migrate.ts
+ * `migrate(url)` is the same run for tests that build a small database of their own.
  */
 import { createHash } from 'node:crypto';
 import { readdir, readFile } from 'node:fs/promises';
@@ -12,10 +13,10 @@ import { Client } from 'pg';
 
 const MIGRATIONS_DIR = join(__dirname, '..', 'migrations');
 
-async function main(): Promise<void> {
-  const url = process.env.DATABASE_MIGRATOR_URL;
-  if (!url) throw new Error('DATABASE_MIGRATOR_URL is required');
-
+export async function migrate(
+  url: string,
+  log: (line: string) => void = (line) => process.stdout.write(line),
+): Promise<void> {
   const client = new Client({ connectionString: url, application_name: 'edupro-migrate' });
   await client.connect();
 
@@ -55,7 +56,7 @@ async function main(): Promise<void> {
         continue;
       }
 
-      process.stdout.write(`applying ${file} ... `);
+      log(`applying ${file} ... `);
       await client.query('BEGIN');
       try {
         await client.query(sql);
@@ -64,22 +65,30 @@ async function main(): Promise<void> {
           checksum,
         ]);
         await client.query('COMMIT');
-        process.stdout.write('ok\n');
+        log('ok\n');
       } catch (error) {
         await client.query('ROLLBACK');
-        process.stdout.write('failed\n');
+        log('failed\n');
         throw error;
       }
     }
 
     await client.query('SELECT pg_advisory_unlock(727001)');
-    process.stdout.write(`migrations up to date (${files.length} files)\n`);
+    log(`migrations up to date (${files.length} files)\n`);
   } finally {
     await client.end();
   }
 }
 
-main().catch((error) => {
-  console.error(error);
-  process.exit(1);
-});
+async function main(): Promise<void> {
+  const url = process.env.DATABASE_MIGRATOR_URL;
+  if (!url) throw new Error('DATABASE_MIGRATOR_URL is required');
+  await migrate(url);
+}
+
+if (require.main === module) {
+  main().catch((error) => {
+    console.error(error);
+    process.exit(1);
+  });
+}
