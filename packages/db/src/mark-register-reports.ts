@@ -51,6 +51,8 @@ export interface ReportInput {
   titles: Record<string, string>;
   /** a section's subject teachers (`${sectionId}|${subjectId}`) and class teacher (`${sectionId}|class`) */
   teachers?: Record<string, string[]>;
+  /** one subject picked at Run (its register key): Analysis of a class then goes section by section */
+  subject?: string;
   /** Toppers: the top N */
   top?: number;
   /** At-risk: how far above the pass % is borderline */
@@ -335,14 +337,19 @@ function summary(i: ReportInput): ReportBlock[] {
 }
 
 // ---- Analysis --------------------------------------------------------------------------------------
+/**
+ * Per subject (each language of a slot apart): the students, absent, appeared, the register's % bands,
+ * the cumulative counts, highest, lowest, average and passing %. A class with one subject picked: a row
+ * per section with its teachers of the subject (each language of a slot apart), then all the sections
+ * together, as the legacy's subject-wise analysis.
+ */
 function analysis(i: ReportInput): ReportBlock[] {
   const bands = [...i.def.analysis.bands].sort((a, b) => b.fromPct - a.fromPct);
   const cuml = i.def.analysis.cumulative;
   const reach = (p: number, op: '>=' | '>', at: number) => (op === '>' ? p > at : p >= at);
   const bandOf = (p: number) => bands.find((b) => reach(p, b.op, b.fromPct))?.label ?? null;
   const ordered = [...bands].reverse();
-  const cols: Col[] = [
-    ['Subject', 3, true],
+  const figureCols: Col[] = [
     ['Students', 1],
     ['Absent', 1],
     ['Appeared', 1],
@@ -353,16 +360,17 @@ function analysis(i: ReportInput): ReportBlock[] {
     ['Average', 1.1],
     ['Passing %', 1.1],
   ];
-  const rows = subjectsOf(i).map((s) => {
-    const absent = s.list.filter((y) => y.x.withheld);
-    const appeared = s.list.filter((y) => !y.x.withheld && y.x.pct !== null && !y.x.missing);
+  type Taker = { r: RegStudentResult; x: RegSubjectResult };
+  /** the figures of some takers of a subject, from Students to Passing % */
+  const figures = (title: string, list: Taker[]): SheetCell[] => {
+    const absent = list.filter((y) => y.x.withheld);
+    const appeared = list.filter((y) => !y.x.withheld && y.x.pct !== null && !y.x.missing);
     const totals = appeared.map((y) => y.x.total!);
     const max = Math.max(0, ...appeared.map((y) => y.x.max));
     const passed = appeared.filter((y) => y.x.status === 'pass');
-    const at = (label: string, l: typeof s.list) => count(i, `${s.label} · ${label}`, l);
+    const at = (label: string, l: Taker[]) => count(i, `${title} · ${label}`, l);
     return [
-      { t: s.label, text: true },
-      at('Students', s.list),
+      at('Students', list),
       at('Absent', absent),
       at('Appeared', appeared),
       ...ordered.map((b) =>
@@ -386,14 +394,66 @@ function analysis(i: ReportInput): ReportBlock[] {
       { t: totals.length ? cutFixed(avg(totals)!, 2) : '' },
       { t: pct(passed.length, appeared.length), tone: 'final' as const },
     ];
-  });
+  };
+  const group = (lead: number) => [
+    { t: '', span: lead },
+    { t: 'Students in each band', span: ordered.length },
+    { t: 'Cumulative', span: cuml.length },
+    { t: '', span: 4 },
+  ];
+  const subjects = subjectsOf(i);
+  const one = i.merit && i.subject ? i.def.subjects.find((x) => x.key === i.subject) : undefined;
+  if (one) {
+    // a class, one subject: section by section, then the class
+    const sections = [...new Map(i.rows.map((r) => [r.sectionId, r.section])).entries()];
+    const slot = Boolean(one.slot);
+    const lead: Col[] = [
+      ['Section', 1.3, true],
+      ['Teacher', 3, true],
+      ...(slot ? [['Subject', 2, true] as Col] : []),
+    ];
+    const rows: SheetCell[][] = [];
+    for (const [sectionId, section] of sections)
+      for (const s of subjects) {
+        const list = s.list.filter((y) => y.r.sectionId === sectionId);
+        if (!list.length) continue;
+        rows.push([
+          { t: section, text: true, strong: true },
+          {
+            t: (i.teachers?.[`${sectionId}|${list[0]!.x.subjectId}`] ?? []).join(', '),
+            text: true,
+          },
+          ...(slot ? [{ t: s.label, text: true } as SheetCell] : []),
+          ...figures(`${section} · ${s.label}`, list),
+        ]);
+      }
+    for (const s of subjects)
+      rows.push([
+        { t: 'All sections', text: true, strong: true, tone: 'final' },
+        { t: '', tone: 'final' },
+        ...(slot ? [{ t: s.label, text: true, tone: 'final' } as SheetCell] : []),
+        ...figures(`${i.place} · ${s.label}`, s.list).map((c) => ({ ...c, strong: true })),
+      ]);
+    const name = slot ? (one.slot?.name ?? one.key) : (i.titles[one.key] ?? one.key);
+    return [
+      block(
+        i,
+        `Result analysis — ${name}, section-wise (by the subject’s %)`,
+        [...lead, ...figureCols],
+        rows,
+        group(lead.length + 3),
+      ),
+    ];
+  }
+  const rows = subjects.map((s) => [{ t: s.label, text: true }, ...figures(s.label, s.list)]);
   return [
-    block(i, 'Result analysis (by the subject’s %)', cols, rows, [
-      { t: '', span: 4 },
-      { t: 'Students in each band', span: ordered.length },
-      { t: 'Cumulative', span: cuml.length },
-      { t: '', span: 4 },
-    ]),
+    block(
+      i,
+      'Result analysis (by the subject’s %)',
+      [['Subject', 3, true], ...figureCols],
+      rows,
+      group(4),
+    ),
   ];
 }
 

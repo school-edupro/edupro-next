@@ -199,3 +199,9 @@ At-risk, Failing students, Compare sections) on the same computed rows.
   class's all sections shows each section's own table first (as the section view prints it, the class's
   exams in every table so they line up; the pending list's title names the section), then the grid of
   the % entered. Checked: the unit test, `mark-registers` e2e, register 418 for VIII with axe.
+- **Later (5 Nov 2026)**, from a legacy subject-wise analysis shown by the school: **Analysis** of a
+  class's all sections with one subject picked (`ReportInput.subject`, from Run's `subject`) is a row per
+  section — Section, its teachers of the subject (the API loads them for this case), Subject (a slot:
+  each language apart), then the usual figures — and **All sections** at the end; a count's list names
+  the section. Without a subject, or for one section, it is as before. Checked: a unit test,
+  `mark-registers` e2e, register 418 for VIII (English, Maths / IT, the third language) with axe.

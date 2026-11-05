@@ -142,6 +142,32 @@ describe('mark register reports (docs/design/68, phase 2)', () => {
     });
   });
 
+  it('analysis of a class with one subject: a row per section with its teachers, then all sections', () => {
+    const [a, more] = buildReport('analysis', input(true, { subject: 'ENG', order: ['ENG'] }));
+    expect(more).toBeUndefined();
+    expect(a!.title).toBe('Result analysis — English, section-wise (by the subject’s %)');
+    expect(a!.sheet.head[0]!.slice(0, 4).map((c) => c.t)).toEqual([
+      'Section',
+      'Teacher',
+      'Students',
+      'Absent',
+    ]);
+    const rows = a!.sheet.body.map((r) => r.cells.map((c) => c.t));
+    // VI-A as the section's own analysis; VI-B: b3's ML leaves nothing to count (not appeared)
+    expect(rows.map((r) => r.slice(0, 5))).toEqual([
+      ['VI-A', 'Mrs Rao', '5', '1', '4'],
+      ['VI-B', 'Mrs Rao', '3', '0', '2'],
+      ['All sections', '', '8', '1', '6'],
+    ]);
+    const own = lines(buildReport('analysis', input(false))[0]!.sheet).English!;
+    expect(rows[0]!.slice(2)).toEqual(own.slice(1));
+    expect(rows[2]!.slice(-4)).toEqual(['100 / 100', '20', '57.50', '66.67']);
+    // a count names the section in its list's title
+    expect(a!.sheet.body[1]!.cells[2]!.drill!.title).toBe('VI-B · English · Students');
+    // a class without a subject picked keeps the subjects' rows
+    expect(lines(buildReport('analysis', input(true))[0]!.sheet).Maths).toBeDefined();
+  });
+
   it('entry status as the legacy prints it: subjects by exam with a badge, who is pending, the share at the foot', () => {
     const [s] = buildReport('entry', input(false));
     expect(s!.title).toBe('Marks Entry Status — VI-A');
