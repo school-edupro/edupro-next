@@ -60,6 +60,11 @@ export interface ReportInput {
   pctTo?: number | null;
   /** Toppers: the same lists from the bottom */
   lowest?: boolean;
+  /** Failing students: the number of subjects failed, from – to (to none = and more; docs/design/77) */
+  failFrom?: number | null;
+  failTo?: number | null;
+  /** Failing students: a student's father / mother mobile ("F 98… · M 97…"), by student id */
+  parents?: Record<string, string>;
   /** At-risk: how far above the pass % is borderline */
   margin?: number;
 }
@@ -1139,54 +1144,223 @@ function atRisk(i: ReportInput): ReportBlock[] {
 }
 
 // ---- Failing students ------------------------------------------------------------------------------
+/**
+ * Failing students (docs/design/77): students with a final worked out (Compartment / Fail), kept by the
+ * number of subjects failed (from – to) and the final % (from – to), and by a subject picked (those
+ * failing it). First the counts — sections and the class against Failed in 1 / 2 / 3 / 4 / 5+, then each
+ * subject against the sections — then a table per number failed: a line per student with the parents'
+ * mobiles, the class teacher, every subject's marks (the failed ones in red), the final and the
+ * teachers of the failed subjects.
+ */
 function failing(i: ReportInput): ReportBlock[] {
-  const rows: SheetCell[][] = [];
-  for (const sec of [...new Set(i.rows.map((r) => r.section))].sort()) {
-    const of = i.rows.filter((r) => r.section === sec && r.failed.length);
-    if (!of.length) {
-      rows.push([
-        { t: sec, text: true },
-        { t: 'NIL', text: true, tone: 'calc' },
-        { t: '' },
-        { t: '' },
-        { t: '' },
-        { t: '' },
-      ]);
-      continue;
-    }
-    for (const r of of)
-      for (const [n, code] of r.failed.entries()) {
-        const x = Object.values(r.subjects).find((y) => y?.code === code);
-        rows.push([
-          { t: n === 0 ? sec : '', text: true },
-          { t: n === 0 ? nameOf(i, r) : '', text: true },
-          { t: x ? `${x.name} (${x.code})` : code, text: true },
-          { t: x?.pct === null || x?.pct === undefined ? '' : cutFixed(x.pct, 2), tone: 'code' },
-          {
-            t:
-              n === 0 && r.total !== null
-                ? `${cutFixed(r.total, 'auto')} / ${cutFixed(r.max, 'auto')}`
-                : '',
-          },
-          { t: n === 0 && r.pct !== null ? cutFixed(r.pct, 2) : '' },
-        ]);
-      }
+  const from = Math.max(1, i.failFrom ?? 1);
+  const to = i.failTo ?? null;
+  const pFrom = i.pctFrom ?? null;
+  const pTo = i.pctTo ?? null;
+  const inPct = (p: number | null) =>
+    p !== null && (pFrom === null || p >= pFrom - 1e-9) && (pTo === null || p <= pTo + 1e-9);
+  const inCount = (n: number) => n >= from && (to === null || n <= to);
+  /** the subjects a student failed that count in the final (register key and result) */
+  const failedOf = (r: RegStudentResult) =>
+    Object.entries(r.subjects).filter(
+      (e): e is [string, RegSubjectResult] => !!e[1] && e[1].inFinal && e[1].status === 'fail',
+    );
+  const sections = [...new Set(i.rows.map((r) => r.section))].sort();
+  // with a final, failing, in the % range, failing the subject picked
+  const base = i.rows.filter(
+    (r) =>
+      (r.result === 'compartment' || r.result === 'fail') &&
+      inPct(r.pct) &&
+      failedOf(r).length > 0 &&
+      (!i.subject || failedOf(r).some(([k]) => k === i.subject)),
+  );
+  const listed = base.filter((r) => inCount(failedOf(r).length));
+  const filters = [
+    `failing in ${to === null ? `${String(from)} or more` : from === to ? String(from) : `${String(from)}–${String(to)}`} subject${to === 1 ? '' : 's'}`,
+    pFrom !== null || pTo !== null
+      ? `final ${cutFixed(pFrom ?? 0, 'auto')}%–${cutFixed(pTo ?? 100, 'auto')}%`
+      : '',
+    i.subject ? `failing ${i.titles[i.subject] ?? i.subject}` : '',
+  ].filter(Boolean);
+  const out: ReportBlock[] = [];
+
+  // the counts: sections and the class against the number of subjects failed
+  const buckets = [1, 2, 3, 4, 5];
+  const bucketOf = (n: number) => Math.min(n, 5);
+  const places = i.merit ? [...sections, 'Class'] : sections;
+  const counts = block(
+    i,
+    'Students failing — by the number of subjects failed',
+    [
+      ['Section', 1.6, true],
+      ...buckets.map((b): Col => [b === 5 ? 'Failed in 5+' : `Failed in ${String(b)}`, 1.3]),
+      ['Total', 1.2],
+    ],
+    places.map((p): SheetCell[] => {
+      const mine = p === 'Class' ? base : base.filter((r) => r.section === p);
+      const cls = p === 'Class';
+      const look = cls ? { tone: 'final' as const, strong: true } : {};
+      return [
+        { t: p, text: true, strong: true, ...look },
+        ...buckets.map((b): SheetCell => ({
+          ...count(
+            i,
+            `${p} · failed in ${b === 5 ? '5 or more' : String(b)}`,
+            mine.filter((r) => bucketOf(failedOf(r).length) === b).map((r) => ({ r })),
+          ),
+          center: true,
+          ...look,
+        })),
+        {
+          ...count(
+            i,
+            `${p} · failing`,
+            mine.map((r) => ({ r })),
+          ),
+          center: true,
+          ...look,
+        },
+      ];
+    }),
+  );
+  // the count range's columns marked
+  for (const [k, b] of buckets.entries()) {
+    const h = counts.sheet.head[0]![k + 1]!;
+    h.center = true;
+    if (b === 5 ? to === null || to >= 5 : inCount(b)) h.tone = 'final';
   }
-  return [
-    block(
-      i,
-      'Students failing in one or more subjects',
-      [
-        ['Section', 1.2, true],
-        ['Student', 4, true],
-        ['Failing subject', 4, true],
-        ['Its %', 1.1],
-        ['Total', 1.6],
-        ['%', 1],
-      ],
-      rows,
-    ),
+  counts.sheet.head[0]![buckets.length + 1]!.center = true;
+  counts.sheet.note = `Students with a final worked out (Compartment / Fail); ${filters.join(' · ')}; the shaded columns are the range listed below`;
+  out.push(counts);
+
+  // each subject: how many failed it, by section and the class
+  const subjectRows = subjectsOf(i).map((s): SheetCell[] => [
+    { t: s.label.toUpperCase(), text: true, strong: true },
+    ...places.map((p): SheetCell => {
+      const cls = p === 'Class';
+      return {
+        ...count(
+          i,
+          `${p} · failed ${s.label}`,
+          s.list.filter(
+            (y) =>
+              base.includes(y.r) &&
+              (cls || y.r.section === p) &&
+              y.x.inFinal &&
+              y.x.status === 'fail',
+          ),
+        ),
+        center: true,
+        ...(cls ? { tone: 'final' as const, strong: true } : {}),
+      };
+    }),
+  ]);
+  const bySubject = block(
+    i,
+    'Students failing — by subject',
+    [['Subject', 3, true], ...places.map((p): Col => [p, 1.3])],
+    subjectRows,
+  );
+  for (const h of bySubject.sheet.head[0]!.slice(1)) h.center = true;
+  if (i.merit) bySubject.sheet.head[0]![places.length]!.tone = 'final';
+  out.push(bySubject);
+
+  // a table per number of subjects failed: a line per student with every subject's marks
+  // the register's subjects someone listed takes (the tables share them, so they line up)
+  const subjectKeys = i.order.filter(
+    (k) => i.def.subjects.some((x) => x.key === k) && listed.some((r) => r.subjects[k]),
+  );
+  const cols: Col[] = [
+    ...(i.merit ? [['Section', 1.1, true] as Col] : []),
+    ['Roll', 0.8],
+    ['Student', 3.4, true],
+    ['Adm No', 1.5],
+    ['Parent mobile', 2.8, true],
+    ['Class teacher', 2.4, true],
+    ...subjectKeys.map((k): Col => [(i.titles[k] ?? k).toUpperCase(), 1.6]),
+    ['Final total', 1.7],
+    ['%', 1],
+    ['Result', 1.5],
+    ['Teachers of the failed subjects', 4.5, true],
   ];
+  const line = (r: RegStudentResult): SheetCell[] => {
+    const failed = failedOf(r);
+    return [
+      ...(i.merit ? [{ t: r.section, text: true } as SheetCell] : []),
+      { t: r.rollNo === null ? '' : String(r.rollNo), center: true },
+      { t: nameOf(i, r), text: true, strong: true },
+      { t: r.admissionNo, center: true },
+      { t: i.parents?.[r.studentId] ?? '', text: true },
+      { t: (i.teachers?.[`${r.sectionId}|class`] ?? []).join(', '), text: true },
+      ...subjectKeys.map((k): SheetCell => {
+        const x = r.subjects[k];
+        if (!x) return { t: '—', center: true, tone: 'none' };
+        const slot = Boolean(i.def.subjects.find((s) => s.key === k)?.slot);
+        const marks =
+          x.total === null ? '' : `${cutFixed(x.total, 'auto')} / ${cutFixed(x.max, 'auto')}`;
+        const fail = x.inFinal && x.status === 'fail';
+        return {
+          t: slot ? `${x.code} ${marks}`.trim() : marks,
+          center: true,
+          ...(fail ? { tone: 'code' as const, title: `Failed ${x.name}` } : {}),
+        };
+      }),
+      {
+        t: r.total === null ? '' : `${cutFixed(r.total, 'auto')} / ${cutFixed(r.max, 'auto')}`,
+        tone: 'final',
+        center: true,
+        ratio: true,
+      },
+      { t: r.pct === null ? '' : pctOf(r.pct), tone: 'final', center: true },
+      { t: RESULT[r.result], tone: 'final', text: true, strong: true },
+      {
+        t: failed
+          .map(
+            ([, x]) =>
+              `${x.code} – ${(i.teachers?.[`${r.sectionId}|${x.subjectId}`] ?? []).join(', ') || 'no teacher mapped'}`,
+          )
+          .join(' · '),
+        text: true,
+      },
+    ];
+  };
+  const order = (a: RegStudentResult, b: RegStudentResult) =>
+    a.section.localeCompare(b.section) ||
+    (a.rollNo ?? Infinity) - (b.rollNo ?? Infinity) ||
+    a.name.localeCompare(b.name);
+  const numbers = [...new Set(listed.map((r) => failedOf(r).length))].sort((a, b) => a - b);
+  for (const n of numbers) {
+    const of = listed.filter((r) => failedOf(r).length === n).sort(order);
+    const b = block(
+      i,
+      `Failed in ${String(n)} subject${n === 1 ? '' : 's'} — ${String(of.length)} student${of.length === 1 ? '' : 's'}`,
+      cols,
+      of.map(line),
+    );
+    for (const h of b.sheet.head[0]!)
+      if (
+        ![
+          'Student',
+          'Parent mobile',
+          'Class teacher',
+          'Teachers of the failed subjects',
+          'Section',
+        ].includes(h.t)
+      )
+        h.center = true;
+    for (const h of b.sheet.head[0]!.slice(-4, -1)) h.tone = 'final';
+    out.push(b);
+  }
+  if (!numbers.length)
+    out.push(
+      block(
+        i,
+        'Students failing',
+        [['Students', 10, true]],
+        [[{ t: `Nobody ${filters.join(' · ')}`, text: true }]],
+      ),
+    );
+  return out;
 }
 
 // ---- Compare sections ------------------------------------------------------------------------------

@@ -327,7 +327,15 @@ out, then runs it for any section; the marks always come from the exam entry.
      highest, failed, "shared" when two teachers share it — and their total; "No teacher mapped" last.
    - **At-risk**: failing (high), compartment (medium), borderline subjects or absent (watch), with a
      margin of 5 or 10 over the pass %; counts by subject.
-   - **Failing students**: each failing subject with its %, NIL where nobody fails.
+   - **Failing students**: the students with a final worked out (Compartment / Fail). **Failed in from
+     – to** picks by the number of subjects failed (2 to 2 = exactly two, 3 to 4, 2 to empty = two and
+     more) and **Final % from – to** by the final; a **Subject** picked keeps those failing it. First
+     the counts — sections and the class against Failed in 1 / 2 / 3 / 4 / 5+ (the range shaded) — and
+     each subject's failures by section, then a table per number failed ("Failed in 2 subjects"): a line
+     per student with the parents' mobiles (F / M), the class teacher, every subject's marks (the failed
+     ones in red), the final, the result and the teachers of the failed subjects. Press **Show** after
+     typing the numbers; the downloads follow the filters. Students whose marks are still missing are
+     not listed (the note above names them).
    - **Compare sections** (a class's all sections, as the old register prints it): "Overall result" —
      for each section and the class: total students, absent, appeared, the students in each % band and
      the cumulative counts (on the final %), the highest, lowest and average marks (the final total),

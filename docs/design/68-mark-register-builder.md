@@ -222,3 +222,6 @@ At-risk, Failing students, Compare sections) on the same computed rows.
   hand), `mark-registers` e2e, register 418 for VIII with axe.
 - **Later (5 Nov 2026)**: **Toppers** — any N, a % range, Lowest first, a subject's own toppers by
   class and section: docs/design/76.
+- **Later (5 Nov 2026)**: **Failing students** — by the number of subjects failed and the final %,
+  counts by number and by subject, a table per number with every subject's marks, the parents' mobiles
+  and the teachers: docs/design/77.

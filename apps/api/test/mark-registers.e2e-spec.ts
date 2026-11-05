@@ -516,8 +516,27 @@ describe('mark registers like the legacy Term Mark Register (e2e)', () => {
     expect(teacher.blocks[0]!.sheet.foot![0]!.t).toMatch(/^Total — \d+ classes$/);
     const risk = (await run(`${A}&report=risk&margin=10`)).blocks[0]!;
     expect(risk.sheet.body.map((r) => r.cells[0]!.t)).toContain('Watch');
-    const failing = (await run(`${VI}&report=failing`)).blocks[0]!;
-    expect(failing.sheet.body.map((r) => r.cells[1]!.t)).toEqual(['NIL', 'NIL']);
+    // doc 77: the counts by number failed and by subject, then a table per number (nobody here)
+    const failing = (await run(`${VI}&report=failing&failFrom=2&pctTo=60`)).blocks;
+    expect(failing.map((b) => b.title)).toEqual([
+      'Students failing — by the number of subjects failed',
+      'Students failing — by subject',
+      'Students failing',
+    ]);
+    expect(failing[0]!.sheet.note).toContain('failing in 2 or more subjects · final 0%–60%');
+    expect(failing[0]!.sheet.body.map((r) => r.cells[0]!.t)).toEqual(['VI-A', 'VI-B', 'Class']);
+    expect(failing[2]!.sheet.body[0]!.cells[0]!.t).toBe(
+      'Nobody failing in 2 or more subjects · final 0%–60%',
+    );
+    expect(
+      (
+        await call(
+          office,
+          'GET',
+          `/exams/schemes/${ids.reg!}/register?${VI}&report=failing&failFrom=3&failTo=2`,
+        )
+      ).statusCode,
+    ).toBe(400);
     const cmp = await run(`${VI}&report=compare`);
     // the overall result first (the legacy's), then by subject
     expect(cmp.blocks[0]!.sheet.head[0]!.map((c) => c.t)).toEqual([

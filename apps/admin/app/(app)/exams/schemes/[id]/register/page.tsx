@@ -54,6 +54,9 @@ export default async function RunRegisterPage({
     pctFrom?: string;
     pctTo?: string;
     order?: string;
+    /** failing students: the number of subjects failed (docs/design/77) */
+    failFrom?: string;
+    failTo?: string;
   }>;
 }) {
   const { id } = await params;
@@ -95,6 +98,19 @@ export default async function RunRegisterPage({
     ...(lowest ? { lowest: '1' } : {}),
   };
   if (report === 'toppers') for (const [k, v] of Object.entries(topperQuery)) q.set(k, v);
+  // failing students (docs/design/77): failed in from – to subjects, the final % from – to
+  const countIn = (v: string | undefined) =>
+    v && /^\d{1,2}$/.test(v.trim()) && +v >= 1 && +v <= 10 ? String(+v) : '';
+  let failFrom = countIn(sp.failFrom);
+  let failTo = countIn(sp.failTo);
+  if (failFrom && failTo && +failFrom > +failTo) [failFrom, failTo] = [failTo, failFrom];
+  const failingQuery: Record<string, string> = {
+    ...(failFrom ? { failFrom } : {}),
+    ...(failTo ? { failTo } : {}),
+    ...(pctFrom ? { pctFrom } : {}),
+    ...(pctTo ? { pctTo } : {}),
+  };
+  if (report === 'failing') for (const [k, v] of Object.entries(failingQuery)) q.set(k, v);
   if (report === 'risk') q.set('margin', margin);
   const reg = await apiFetch<RunResponse>(`/exams/schemes/${id}/register?${q.toString()}`).catch(
     (e: unknown) => {
@@ -224,6 +240,69 @@ export default async function RunRegisterPage({
                 </button>
               </>
             ) : null}
+            {report === 'failing' ? (
+              <>
+                <label className="ep-field" style={{ margin: 0, width: '7rem' }}>
+                  <span className="ep-field__label">Failed in from</span>
+                  <input
+                    className="ep-input"
+                    type="number"
+                    name="failFrom"
+                    min={1}
+                    max={10}
+                    step={1}
+                    inputMode="numeric"
+                    placeholder="1"
+                    defaultValue={failFrom}
+                    aria-describedby="failing-help"
+                  />
+                </label>
+                <label className="ep-field" style={{ margin: 0, width: '7rem' }}>
+                  <span className="ep-field__label">Failed in to</span>
+                  <input
+                    className="ep-input"
+                    type="number"
+                    name="failTo"
+                    min={1}
+                    max={10}
+                    step={1}
+                    inputMode="numeric"
+                    placeholder="any"
+                    defaultValue={failTo}
+                    aria-describedby="failing-help"
+                  />
+                </label>
+                <label className="ep-field" style={{ margin: 0, width: '7rem' }}>
+                  <span className="ep-field__label">Final % from</span>
+                  <input
+                    className="ep-input"
+                    type="number"
+                    name="pctFrom"
+                    min={0}
+                    max={100}
+                    step="any"
+                    placeholder="0"
+                    defaultValue={pctFrom}
+                  />
+                </label>
+                <label className="ep-field" style={{ margin: 0, width: '7rem' }}>
+                  <span className="ep-field__label">Final % to</span>
+                  <input
+                    className="ep-input"
+                    type="number"
+                    name="pctTo"
+                    min={0}
+                    max={100}
+                    step="any"
+                    placeholder="100"
+                    defaultValue={pctTo}
+                  />
+                </label>
+                <button type="submit" className="ep-btn ep-btn--secondary ep-btn--sm">
+                  Show
+                </button>
+              </>
+            ) : null}
             {report === 'risk' ? (
               <label className="ep-field" style={{ margin: 0, minWidth: '9rem' }}>
                 <span className="ep-field__label">Borderline margin</span>
@@ -278,9 +357,24 @@ export default async function RunRegisterPage({
             exam={reg.exam}
             subject={sp.subject ?? null}
             report={report}
-            extra={report === 'toppers' ? topperQuery : report === 'risk' ? { margin } : {}}
+            extra={
+              report === 'toppers'
+                ? topperQuery
+                : report === 'failing'
+                  ? failingQuery
+                  : report === 'risk'
+                    ? { margin }
+                    : {}
+            }
           />
         </div>
+        {report === 'failing' ? (
+          <p id="failing-help" className="ep-field__help" style={{ margin: 'var(--sp-2) 0 0' }}>
+            Students with a final worked out (Compartment / Fail). Failed in from–to: the number of
+            subjects failed (2 to 2 = exactly two; to empty = and more). Final %: the student’s
+            final. A subject picked lists only the students failing it.
+          </p>
+        ) : null}
         {report === 'toppers' ? (
           <p id="toppers-help" className="ep-field__help" style={{ margin: 'var(--sp-2) 0 0' }}>
             Top: any number up to 100; leave it empty to list everyone in the % range. % from–to:

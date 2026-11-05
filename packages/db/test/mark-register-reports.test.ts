@@ -346,18 +346,92 @@ describe('mark register reports (docs/design/68, phase 2)', () => {
     expect(lines(bySubject!.sheet).English).toEqual(['English', '1', '1', '1']);
   });
 
-  it('failing students: each failing subject with its %, NIL for a section where nobody fails', () => {
-    const [f] = buildReport('failing', input(true));
-    expect(f!.sheet.body.map((r) => r.cells.map((c) => c.t).slice(0, 4))).toEqual([
-      ['VI-A', 'a2', 'English (ENG)', '30.00'],
-      ['VI-B', 'b2', 'English (ENG)', '20.00'],
-      ['', '', 'Maths (MAT)', '10.00'],
+  it('failing students (doc 77): counts by number failed and by subject, then a table per number with every subject', () => {
+    // a2: English 30 of 100 (Compartment, final 80 / 200 = 40%); b2: English 20, Maths 10 (Fail, 15%)
+    const parents = { a2: 'F 9800000001', b2: 'F 9800000002 · M 9800000003' };
+    const blocks = buildReport('failing', input(true, { parents }));
+    expect(blocks.map((b) => b.title)).toEqual([
+      'Students failing — by the number of subjects failed',
+      'Students failing — by subject',
+      'Failed in 1 subject — 1 student',
+      'Failed in 2 subjects — 1 student',
     ]);
-    const [one] = buildReport(
-      'failing',
-      input(false, { rows: rows.filter((r) => r.sectionId === 'B' && r.studentId !== 'b2') }),
+    const [counts, bySubject, one, two] = blocks;
+    expect(counts!.sheet.body.map((r) => r.cells.map((c) => c.t))).toEqual([
+      ['VI-A', '1', '0', '0', '0', '0', '1'],
+      ['VI-B', '0', '1', '0', '0', '0', '1'],
+      ['Class', '1', '1', '0', '0', '0', '2'],
+    ]);
+    expect(counts!.sheet.note).toContain('failing in 1 or more subjects');
+    expect(lines(bySubject!.sheet).ENGLISH).toEqual(['ENGLISH', '1', '1', '2']);
+    expect(lines(bySubject!.sheet).MATHS).toEqual(['MATHS', '0', '1', '1']);
+    expect(one!.sheet.head[0]!.map((c) => c.t)).toEqual([
+      'Section',
+      'Roll',
+      'Student',
+      'Adm No',
+      'Parent mobile',
+      'Class teacher',
+      'ENGLISH',
+      'MATHS',
+      'Final total',
+      '%',
+      'Result',
+      'Teachers of the failed subjects',
+    ]);
+    expect(one!.sheet.body.map((r) => r.cells.map((c) => c.t))).toEqual([
+      [
+        'VI-A',
+        '',
+        'a2',
+        'a2',
+        'F 9800000001',
+        'Ms Iyer',
+        '30 / 100',
+        '50 / 100',
+        '80 / 200',
+        '40%',
+        'Compartment',
+        'ENG – Mrs Rao',
+      ],
+    ]);
+    // a failed subject in red, a passed one plain
+    expect(one!.sheet.body[0]!.cells[6]!.tone).toBe('code');
+    expect(one!.sheet.body[0]!.cells[7]!.tone).toBeUndefined();
+    expect(two!.sheet.body[0]!.cells.slice(4).map((c) => c.t)).toEqual([
+      'F 9800000002 · M 9800000003',
+      '',
+      '20 / 100',
+      '10 / 100',
+      '30 / 200',
+      '15%',
+      'Fail',
+      'ENG – Mrs Rao · MAT – no teacher mapped',
+    ]);
+    // failing in 2 or more: b2 only; the range's columns shaded in the counts
+    const two2 = buildReport('failing', input(true, { failFrom: 2 }));
+    expect(two2.map((b) => b.title).slice(2)).toEqual(['Failed in 2 subjects — 1 student']);
+    expect(two2[0]!.sheet.note).toContain('failing in 2 or more subjects');
+    expect(two2[0]!.sheet.head[0]![1]!.tone).toBeUndefined();
+    expect(two2[0]!.sheet.head[0]![2]!.tone).toBe('final');
+    // a final of 30% and above: a2 only
+    const pct = buildReport('failing', input(true, { pctFrom: 30 }));
+    expect(lines(pct[0]!.sheet).Class!.slice(-1)).toEqual(['1']);
+    expect(pct.map((b) => b.title).slice(2)).toEqual(['Failed in 1 subject — 1 student']);
+    // failing Maths: b2 only
+    const mat = buildReport('failing', input(true, { subject: 'MAT' }));
+    expect(mat.map((b) => b.title).slice(2)).toEqual(['Failed in 2 subjects — 1 student']);
+    expect(mat[0]!.sheet.note).toContain('failing Maths');
+    // nobody in the range: said so
+    const none = buildReport('failing', input(true, { failFrom: 3 }));
+    expect(none[none.length - 1]!.sheet.body[0]!.cells[0]!.t).toBe(
+      'Nobody failing in 3 or more subjects',
     );
-    expect(one!.sheet.body[0]!.cells[1]!.t).toBe('NIL');
+    // one section: no Section column, no class line
+    const [sec] = buildReport('failing', input(false));
+    expect(sec!.sheet.body.map((r) => r.cells.map((c) => c.t))).toEqual([
+      ['VI-A', '1', '0', '0', '0', '0', '1'],
+    ]);
   });
 
   it('compare sections as the legacy prints it: the overall result by section and class (best ▲), then by subject', () => {

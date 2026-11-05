@@ -39,6 +39,11 @@ export async function GET(
     if (v && /^\d{1,3}(\.\d{1,2})?$/.test(v) && +v <= 100) q.set(k, v);
   }
   if (sp.get('lowest') === '1') q.set('lowest', '1');
+  // failing students (docs/design/77): the number of subjects failed, from – to
+  for (const k of ['failFrom', 'failTo']) {
+    const v = sp.get(k);
+    if (v && /^\d{1,2}$/.test(v) && +v >= 1 && +v <= 10) q.set(k, v);
+  }
   const margin = sp.get('margin');
   if (margin && ['5', '10'].includes(margin)) q.set('margin', margin);
   const paper = sp.get('paper');

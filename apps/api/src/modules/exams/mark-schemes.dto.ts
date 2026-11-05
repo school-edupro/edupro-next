@@ -262,6 +262,9 @@ export const RegisterQuerySchema = z.object({
   pctTo: z.coerce.number().min(0).max(100).optional(),
   /** Toppers: the same lists from the bottom */
   lowest: Flag.optional(),
+  /** Failing students: the number of subjects failed, from – to (docs/design/77) */
+  failFrom: z.coerce.number().int().min(1).max(10).optional(),
+  failTo: z.coerce.number().int().min(1).max(10).optional(),
   /** At-risk: how far above the pass % is borderline */
   margin: z.coerce
     .number()

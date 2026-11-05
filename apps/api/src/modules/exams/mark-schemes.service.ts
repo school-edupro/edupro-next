@@ -1635,6 +1635,40 @@ export class MarkSchemesService {
    * Each section's subject teachers (`${sectionId}|${subjectId}` → their names) and its class teacher
    * (`${sectionId}|class`).
    */
+  /**
+   * The father's and mother's mobiles of some students ("F 98… · M 97…"; a primary guardian's when
+   * neither is recorded), for the Failing students report's follow-up calls (docs/design/77).
+   */
+  private async parentMobiles(
+    c: PoolClient,
+    studentIds: string[],
+  ): Promise<Record<string, string>> {
+    if (!studentIds.length) return {};
+    const r = await c.query<{ student: string; relation: string; mobile: string }>(
+      `SELECT sg.student_id::text AS student, sg.relation::text AS relation, g.mobile
+         FROM student_guardians sg JOIN guardians g ON g.id = sg.guardian_id AND g.deleted_at IS NULL
+        WHERE sg.student_id = ANY($1::bigint[]) AND g.mobile IS NOT NULL AND btrim(g.mobile) <> ''
+        ORDER BY sg.student_id, (sg.relation::text = 'father') DESC, (sg.relation::text = 'mother') DESC,
+                 sg.is_primary DESC, g.id`,
+      [studentIds],
+    );
+    const out: Record<string, string> = {};
+    for (const id of new Set(r.rows.map((x) => x.student))) {
+      const mine = r.rows.filter((x) => x.student === id);
+      const fm = mine.filter((x) => x.relation === 'father' || x.relation === 'mother');
+      const shown = fm.length ? fm : mine.slice(0, 1);
+      out[id] = [
+        ...new Map(
+          shown.map((x) => [
+            x.mobile,
+            `${x.relation === 'father' ? 'F' : x.relation === 'mother' ? 'M' : 'G'} ${x.mobile}`,
+          ]),
+        ).values(),
+      ].join(' · ');
+    }
+    return out;
+  }
+
   private async teachersOf(c: PoolClient, yearId: string, sectionIds: string[]) {
     const r = await c.query<{ section: string; subject: string; names: string[] }>(
       `SELECT ta.class_section_id::text AS section,
@@ -1659,6 +1693,12 @@ export class MarkSchemesService {
       throw new DomainError('validation-failed', 'The % "from" is above the % "to"', {
         status: 400,
       });
+    if (q.failFrom !== undefined && q.failTo !== undefined && q.failFrom > q.failTo)
+      throw new DomainError(
+        'validation-failed',
+        'The number of subjects "from" is above the "to"',
+        { status: 400 },
+      );
     const tenant = requireTenant(ctx);
     const yearId = this.year(tenant);
     // a report's tables that name themselves in their first heading (no band over them)
@@ -1798,10 +1838,22 @@ export class MarkSchemesService {
           const teachers =
             q.report === 'entry' ||
             q.report === 'teacher' ||
+            q.report === 'failing' ||
             (q.report === 'analysis' && p.merit && q.subject)
               ? await this.teachersOf(c, yearId, [...new Set(students.map((x) => x.sectionId))])
               : undefined;
-          const only = q.subject ? order.filter((k) => k === q.subject) : order;
+          // Failing students show every subject's marks, a subject picked only choosing the students
+          const only =
+            q.subject && q.report !== 'failing' ? order.filter((k) => k === q.subject) : order;
+          const parents =
+            q.report === 'failing'
+              ? await this.parentMobiles(
+                  c,
+                  rows
+                    .filter((r) => r.result === 'compartment' || r.result === 'fail')
+                    .map((r) => r.studentId),
+                )
+              : undefined;
           for (const b of buildReport(q.report, {
             def,
             rows,
@@ -1816,6 +1868,9 @@ export class MarkSchemesService {
             pctFrom: q.pctFrom ?? null,
             pctTo: q.pctTo ?? null,
             lowest: q.lowest ?? false,
+            failFrom: q.failFrom ?? null,
+            failTo: q.failTo ?? null,
+            parents,
             margin: q.margin,
           })) {
             sheets.push(b.sheet);
