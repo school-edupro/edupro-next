@@ -64,7 +64,7 @@ const PROVIDERS: Record<Ch, ProviderDef[]> = {
       fields: [
         { key: 'user', label: 'Account user' },
         { key: 'key', label: 'API key', secret: true },
-        { key: 'senderId', label: 'Default sender id (header)', placeholder: 'e.g. DPSNOI' },
+        { key: 'senderId', label: 'Default sender id (header)', placeholder: 'e.g. ALPHAS' },
         { key: 'entityId', label: 'DLT principal entity id' },
         { key: 'url', label: 'Gateway address', placeholder: 'http://smsbhejo.org/submitsms.jsp' },
         { key: 'countryPrefix', label: 'Send numbers with 91 in front', type: 'checkbox' },

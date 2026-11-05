@@ -282,7 +282,7 @@ export const LabelsSchema = z.object({
   copies: z.number().int().min(1).max(3).default(1),
   /** labels of the first sheet already used */
   skip: z.number().int().min(0).max(299).default(0),
-  /** the line above the title: the library's name, the school's, both as "DPSN(Sr Library)", or none */
+  /** the line above the title: the library's name, the school's, both as "APS(Sr Library)", or none */
   top: z.enum(['library', 'school', 'school_library', 'none']).default('library'),
   /** standard: number left, call no. right; centred: top line, number, bars, call no. centred */
   layout: z.enum(['standard', 'centred']).default('standard'),

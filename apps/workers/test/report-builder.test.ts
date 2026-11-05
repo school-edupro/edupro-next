@@ -36,9 +36,9 @@ const built = (withLogo: boolean): BuiltReport => ({
     filtersText: ['Religion is one of Hindu, Sikh'],
   },
   letterhead: {
-    name: 'Delhi Public School, Noida',
-    address: 'Sector 30, Noida, Uttar Pradesh, 201303',
-    affiliation: 'CBSE Affiliation No. 2130176',
+    name: 'Alpha Public School',
+    address: 'Sector 30, Noida, Uttar Pradesh, 201301',
+    affiliation: 'CBSE Affiliation No. 2130001',
     contact: '0120-1234567',
     logo: withLogo
       ? { dataUri: `data:image/png;base64,${PNG}`, extension: 'png', base64: PNG }
@@ -64,9 +64,9 @@ describe('report builder letterhead', () => {
     const ws = wb.worksheets[0]!;
     const texts = [1, 2, 3, 4, 5, 6].map((r) => String(ws.getCell(r, 1).value ?? ''));
     expect(texts).toEqual([
-      'Delhi Public School, Noida',
-      'Sector 30, Noida, Uttar Pradesh, 201303',
-      'CBSE Affiliation No. 2130176 · 0120-1234567',
+      'Alpha Public School',
+      'Sector 30, Noida, Uttar Pradesh, 201301',
+      'CBSE Affiliation No. 2130001 · 0120-1234567',
       'Class list',
       'Academic year 2026-27 · Generated 30-09-2026 20:41 IST by Asha Admin · 2 students',
       'Filters: Religion is one of Hindu, Sikh',

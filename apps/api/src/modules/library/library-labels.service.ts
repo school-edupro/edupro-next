@@ -174,7 +174,7 @@ export class LibraryLabelsService {
         accessionNo: x.accession_no,
         title: q.showTitle ? x.title : null,
         callNo: x.call_no,
-        // "DPSN(Sr Library)": the school's short name (else its name) and the copy's library
+        // "APS(Sr Library)": the school's short name (else its name) and the copy's library
         top:
           q.top === 'library'
             ? x.library

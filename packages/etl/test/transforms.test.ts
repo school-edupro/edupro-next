@@ -188,7 +188,7 @@ describe('codes, trash, mojibake, php', () => {
 
   it('repairs double-encoded UTF-8 and leaves clean text alone', () => {
     expect(repairMojibake('Ã ')).toBe('à');
-    expect(repairMojibake('Delhi Public School')).toBe('Delhi Public School');
+    expect(repairMojibake('Alpha Public School')).toBe('Alpha Public School');
   });
 
   it('reads PHP serialised arrays', () => {

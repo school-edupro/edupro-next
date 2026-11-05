@@ -354,7 +354,7 @@ describe('admission form engine (docs/design/39)', () => {
       ] ?? null,
     locality: (n) => ({ 'sunder vihar': 30, 'beyond 15 km': 20 })[n.toLowerCase()] ?? null,
     alumni: (school, passout) =>
-      school === 'DPS - Faridabad'
+      school === 'APS - Faridabad'
         ? (({ '12': 12, '10': 12 } as Record<string, number>)[passout] ?? null)
         : null,
     most: (table, role) =>
@@ -425,7 +425,7 @@ describe('admission form engine (docs/design/39)', () => {
           cap: 20,
           spec: {
             table: 'alumni_school',
-            school: 'DPS - Faridabad',
+            school: 'APS - Faridabad',
             sources: [
               { role: 'father', field: '', classField: 'father_alumni_class' },
               { role: 'mother', field: '', classField: 'mother_alumni_class' },

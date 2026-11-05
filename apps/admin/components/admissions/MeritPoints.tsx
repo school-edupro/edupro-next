@@ -1097,7 +1097,7 @@ function TableSpec({
             className="ep-input"
             maxLength={120}
             disabled={!canEdit}
-            placeholder="e.g. DPS - Faridabad (as in the Alumni schools table)"
+            placeholder="e.g. APS - Faridabad (as in the Alumni schools table)"
             value={spec.school ?? ''}
             onChange={(e) => onChange({ ...spec, school: e.target.value })}
           />

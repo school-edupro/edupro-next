@@ -89,12 +89,12 @@ Do these once; review them each session.
    Subjects (and elective slots such as the third language), Columns (each subject's chain: an exam's
    marks or parts, average / best of N / sum, conversion by scale or weightage, attendance; Copy to
    subjects, Weightage builder), Mark codes (per exam), Totals, Final (grading, divisions, display) —
-   with a live preview; or start from a ready-made DPS Noida scheme (VI-VIII, IX, X, XI, XII). **Run**
+   with a live preview; or start from a ready-made scheme (VI-VIII, IX, X, XI, XII). **Run**
    shows a section, a whole class ranked together (by rank or division), an exam (exam-wise) or one
    subject, and downloads PDF / Excel (one section or all). A register marked **the term result**
    (one locked per class and term) makes the term results; **Assign** gives a teacher Run / Edit /
    Delete / Assign on one register.
-5. **Report cards** — Exams → Report cards → Templates: **Install the DPS Noida cards** (I-II, III-V,
+5. **Report cards** — Exams → Report cards → Templates: **Install the ready-made cards** (I-II, III-V,
    VI-VIII, IX, X, XI, XII); for Balvatika to Class II, **Add the progress card template** on Exams →
    Indicators and HPC.
    **Signatures and seal**: principal, vice principal, headmistress, coordinator, class teacher, exam
@@ -236,7 +236,7 @@ own reports.
 - Parents write their feedback in the parent app while it is open.
 - The **progress card template** prints the domains with the level of each term and what it means,
   the three voices, the portfolio, attendance, health and signatures. Classes I and II take it per
-  class on the release (or the DPS Noida I-II learning record instead).
+  class on the release (or the ready-made Learning record (I-II) instead).
 
 ## 10. Controls
 

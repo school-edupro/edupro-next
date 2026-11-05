@@ -452,7 +452,7 @@ async function seedAll() {
                   father_alumni_school:
                     i % 11 === 0
                       ? SCHOOL_NAME
-                      : pick([SCHOOL_NAME, 'Beta Public School', 'DPS - Faridabad']),
+                      : pick([SCHOOL_NAME, 'Beta Public School', 'APS - Faridabad']),
                   father_alumni_class: i % 2 ? 'XII' : 'X',
                 }
               : {}),
@@ -475,7 +475,7 @@ async function seedAll() {
                   mother_cbse_roll: String(8000000 + i),
                   mother_passout_year: String(1997 + (i % 10)),
                   mother_alumni_school:
-                    i % 11 === 0 ? SCHOOL_NAME : pick([SCHOOL_NAME, 'DPS - Faridabad']),
+                    i % 11 === 0 ? SCHOOL_NAME : pick([SCHOOL_NAME, 'APS - Faridabad']),
                   mother_alumni_class: 'XII',
                 }
               : {}),

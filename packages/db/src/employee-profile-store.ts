@@ -141,7 +141,7 @@ export function employeeCompleteness(values: ProfileValues): {
   };
 }
 
-/** The next code: the prefix most codes use, its highest number plus one (DPSN692 → DPSN693). */
+/** The next code: the prefix most codes use, its highest number plus one (APS692 → APS693). */
 export async function nextEmployeeCode(c: PoolClient): Promise<string> {
   const r = await c.query<{ prefix: string; n: string; width: number }>(
     `SELECT substring(employee_code FROM '^(.*?)[0-9]+$') AS prefix,

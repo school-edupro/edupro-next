@@ -2160,7 +2160,7 @@ export const PROFILE_LIST_DEFAULTS: Record<string, string[]> = {
     'Telugu',
     'Urdu',
   ],
-  GroupSchool: ['DPS R.K. Puram', 'DPS Vasant Vihar', 'DPS East of Kailash'],
+  GroupSchool: ['APS - Faridabad', 'APS - Gurugram', 'APS - Greater Noida'],
   SchoolRecognition: ['Recognized', 'Unrecognized'],
   Medium: ['English', 'Hindi', 'Other'],
   StudentType: ['Day Scholar', 'Boys Hostel', 'Girls Hostel'],

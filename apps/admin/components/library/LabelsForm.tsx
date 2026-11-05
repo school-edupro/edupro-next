@@ -315,7 +315,7 @@ export function LabelsForm({
                   ],
                   [
                     'centred',
-                    'Centred: school short name (library), the number, the bars, the call no. — like DPSN(Sr Library) / 24897 / bars / 823',
+                    'Centred: school short name (library), the number, the bars, the call no. — like APS(Sr Library) / 24897 / bars / 823',
                   ],
                 ] as const
               ).map(([k, label]) => (
@@ -344,7 +344,7 @@ export function LabelsForm({
               { value: 'school', label: 'The school’s name' },
               {
                 value: 'school_library',
-                label: 'School short name (library), e.g. DPSN(Sr Library)',
+                label: 'School short name (library), e.g. APS(Sr Library)',
               },
               { value: 'none', label: 'Nothing' },
             ]}
