@@ -1,7 +1,7 @@
 /**
  * The Run reports of a mark register (docs/design/68, phase 2), as the school's Term Mark Register has
- * them: Result summary, Analysis, Entry status, Toppers, Teacher-wise, At-risk, Failing students and
- * Compare sections. Pure functions over the register's worked-out rows (and, for entry status, the
+ * them: Result summary, Analysis, Entry status, Missing marks, Absent students (docs/design/78), Toppers,
+ * Teacher-wise, At-risk, Failing students and Compare sections. Pure functions over the register's worked-out rows (and, for entry status, the
  * loaded marks): each gives titled tables in the register's sheet form, so the screen, the PDF and the
  * Excel lay them out as they do the register. A count carries the students it stands for (shown on a
  * click). Every report reads the same results as the register, so the figures always agree.
@@ -10,6 +10,7 @@ import {
   cutFixed,
   properCase,
   type RegisterDef,
+  type RegMark,
   type RegStudent,
   type RegStudentResult,
   type RegSubjectResult,
@@ -18,12 +19,24 @@ import {
 } from './mark-register';
 
 export type ReportKind =
-  'summary' | 'analysis' | 'entry' | 'toppers' | 'teacher' | 'risk' | 'failing' | 'compare';
+  | 'summary'
+  | 'analysis'
+  | 'entry'
+  | 'missing'
+  | 'absent'
+  | 'toppers'
+  | 'teacher'
+  | 'risk'
+  | 'failing'
+  | 'compare';
 
 export const REPORTS: Array<{ kind: ReportKind; label: string; merit?: boolean }> = [
   { kind: 'summary', label: 'Result summary' },
   { kind: 'analysis', label: 'Analysis' },
   { kind: 'entry', label: 'Entry status' },
+  // docs/design/78
+  { kind: 'missing', label: 'Missing marks' },
+  { kind: 'absent', label: 'Absent students' },
   { kind: 'toppers', label: 'Toppers' },
   { kind: 'teacher', label: 'Teacher-wise' },
   { kind: 'risk', label: 'At-risk' },
@@ -67,6 +80,8 @@ export interface ReportInput {
   parents?: Record<string, string>;
   /** At-risk: how far above the pass % is borderline */
   margin?: number;
+  /** Missing marks, Absent students: one exam's key (none: every exam; docs/design/78) */
+  exam?: string;
 }
 
 type Col = [label: string, width: number, text?: boolean];
@@ -678,6 +693,334 @@ function entry(i: ReportInput): ReportBlock[] {
       ]),
     ),
   ];
+}
+
+// ---- Missing marks and absentees (docs/design/78) --------------------------------------------------
+/** a student's paper of a subject in an exam: the class has the paper and the student takes it */
+type Paper = {
+  key: string;
+  subjectId: string;
+  subject: string;
+  exam: string;
+  st: RegStudent;
+  mark: RegMark;
+};
+/** every paper of the place, in the register's subject order then exam order (the exam picked only) */
+function papersOf(i: ReportInput): Paper[] {
+  const out: Paper[] = [];
+  const exams = i.def.exams.filter((e) => !i.exam || e.key === i.exam);
+  for (const k of i.order) {
+    const s = i.def.subjects.find((x) => x.key === k);
+    if (!s || (i.subject && k !== i.subject)) continue;
+    const members = s.slot ? s.slot.members : [s.subjectId ?? ''];
+    for (const e of exams)
+      for (const m of members)
+        for (const st of i.students) {
+          const sub = st.subjects.find((x) => x.subjectId === m);
+          const mark = sub?.marks[e.key];
+          if (!sub || !mark) continue;
+          out.push({
+            key: k,
+            subjectId: m,
+            subject: (s.slot ? sub.name : (i.titles[k] ?? k)).toUpperCase(),
+            exam: e.key,
+            st,
+            mark,
+          });
+        }
+  }
+  return out;
+}
+/** a paper with nothing entered: no mark and no code; in parts, the parts not entered (named) */
+const missingOf = (p: Paper): string[] | null => {
+  if (p.mark.entered) return null;
+  if (!p.mark.parts.length) return [];
+  const left = p.mark.parts.filter((x) => !x.entered);
+  return left.length ? left.map((x) => x.name) : null;
+};
+/** a paper marked absent: AB on it, or its parts marked absent (named) */
+const absentOf = (p: Paper): string[] | null => {
+  if ((p.mark.code ?? '').trim().toUpperCase() === 'AB') return [];
+  const parts = p.mark.parts.filter((x) => x.absent);
+  return parts.length ? parts.map((x) => x.name) : null;
+};
+const sectionsOf = (i: ReportInput) =>
+  [...new Map(i.students.map((s) => [s.sectionId, s.section])).entries()].sort((a, b) =>
+    a[1].localeCompare(b[1]),
+  );
+const byRoll = (a: RegStudent, b: RegStudent) =>
+  (a.rollNo ?? Infinity) - (b.rollNo ?? Infinity) || a.name.localeCompare(b.name);
+const stName = (i: ReportInput, st: RegStudent) =>
+  i.def.display.properCase ? properCase(st.name) : st.name;
+const plural = (n: number, one: string) => `${String(n)} ${one}${n === 1 ? '' : 's'}`;
+/** the filters a report was made with, for its titles and notes */
+const filtersOf = (i: ReportInput) =>
+  [i.exam ? `exam ${i.exam}` : 'every exam', i.subject ? (i.titles[i.subject] ?? i.subject) : '']
+    .filter(Boolean)
+    .join(' · ');
+/** a student's papers as "MT1: ENGLISH, SOCIAL SCIENCE (Geography) · TERM: SCIENCE" */
+const listOf = (ps: Array<{ p: Paper; parts: string[] }>) => {
+  const exams = [...new Set(ps.map((x) => x.p.exam))];
+  return exams
+    .map(
+      (e) =>
+        `${e}: ${ps
+          .filter((x) => x.p.exam === e)
+          .map((x) => `${x.p.subject}${x.parts.length ? ` (${x.parts.join(', ')})` : ''}`)
+          .join(', ')}`,
+    )
+    .join(' · ');
+};
+
+/**
+ * Missing marks (docs/design/78): who still has a paper with nothing entered — the counts per section
+ * and exam, then per section a line per subject × exam with its teacher, missing / takers and the names.
+ */
+function missing(i: ReportInput): ReportBlock[] {
+  const all = papersOf(i);
+  const miss = all
+    .map((p) => ({ p, parts: missingOf(p) }))
+    .filter((x): x is { p: Paper; parts: string[] } => x.parts !== null);
+  const exams = i.def.exams.filter((e) => all.some((p) => p.exam === e.key));
+  const sections = sectionsOf(i);
+  const what = filtersOf(i);
+  const drillOf = (title: string, list: typeof miss): SheetCell => {
+    const who = [...new Set(list.map((x) => x.p.st))].sort(byRoll);
+    if (!list.length) return { t: '0', center: true };
+    return {
+      t: String(list.length),
+      center: true,
+      strong: true,
+      drillLabel: plural(who.length, 'student'),
+      drill: {
+        title,
+        cols: ['#', 'Name', 'Adm No', ...(i.merit ? ['Section'] : []), 'Missing'],
+        rows: who.map((st, n) => [
+          String(n + 1),
+          stName(i, st),
+          st.admissionNo,
+          ...(i.merit ? [st.section] : []),
+          listOf(list.filter((x) => x.p.st === st)),
+        ]),
+      },
+    };
+  };
+  const places: Array<[string, string]> = i.merit
+    ? [...sections, ['', 'Class']]
+    : sections.slice(0, 1).map(([id]) => [id, i.place]);
+  const counts = block(
+    i,
+    `Missing marks — ${i.place} (papers with nothing entered)`,
+    [['Section', 1.6, true], ...exams.map((e): Col => [e.key, 1.6]), ['Total', 1.4]],
+    places.map(([id, label]): SheetCell[] => {
+      const mine = id ? miss.filter((x) => x.p.st.sectionId === id) : miss;
+      const look = i.merit && !id ? { tone: 'final' as const } : {};
+      return [
+        { t: label, text: true, strong: true, ...look },
+        ...exams.map((e): SheetCell => ({
+          ...drillOf(
+            `${label} · ${e.key} · missing`,
+            mine.filter((x) => x.p.exam === e.key),
+          ),
+          ...look,
+        })),
+        { ...drillOf(`${label} · missing`, mine), ...look },
+      ];
+    }),
+  );
+  for (const h of counts.sheet.head[0]!.slice(1)) h.center = true;
+  counts.sheet.note = `${what} · a count is the papers missing, under it the students (click for the names) · Missing = no mark and no code; a code (AB, ML …) counts as entered`;
+  const out: ReportBlock[] = [counts];
+  for (const [sectionId, section] of sections) {
+    const mine = miss.filter((x) => x.p.st.sectionId === sectionId);
+    // a line per subject × exam with anything missing, in the papers' order
+    const lines: Array<{ key: string; subjectId: string; subject: string; exam: string }> = [];
+    for (const x of mine)
+      if (!lines.some((l) => l.subjectId === x.p.subjectId && l.exam === x.p.exam))
+        lines.push({
+          key: x.p.key,
+          subjectId: x.p.subjectId,
+          subject: x.p.subject,
+          exam: x.p.exam,
+        });
+    const rows = lines.map((l, n): SheetCell[] => {
+      const takers = all.filter(
+        (p) => p.st.sectionId === sectionId && p.subjectId === l.subjectId && p.exam === l.exam,
+      );
+      const left = mine
+        .filter((x) => x.p.subjectId === l.subjectId && x.p.exam === l.exam)
+        .sort((a, b) => byRoll(a.p.st, b.p.st));
+      return [
+        { t: String(n + 1), center: true },
+        { t: l.subject, text: true, strong: true },
+        { t: l.exam, center: true },
+        {
+          t: (i.teachers?.[`${sectionId}|${l.subjectId}`] ?? []).join(', ') || 'no teacher mapped',
+          text: true,
+        },
+        {
+          t: `${String(left.length)} / ${String(takers.length)}`,
+          center: true,
+          strong: true,
+          tone: 'code',
+        },
+        {
+          t: left
+            .map(
+              (x) =>
+                `${x.p.st.rollNo === null ? '' : `${String(x.p.st.rollNo)} `}${stName(i, x.p.st)}${x.parts.length ? ` (${x.parts.join(', ')})` : ''}`,
+            )
+            .join(', '),
+          text: true,
+          wrap: true,
+        },
+      ];
+    });
+    const b = block(
+      i,
+      `Missing marks — ${section}`,
+      [
+        ['#', 0.5],
+        ['Subject', 2.6, true],
+        ['Exam', 1.2],
+        ['Teacher', 3, true],
+        ['Missing / takers', 1.6],
+        ['Students', 9, true],
+      ],
+      rows.length
+        ? rows
+        : [
+            [
+              { t: '' },
+              { t: 'Nothing missing', text: true, strong: true },
+              { t: '' },
+              { t: '' },
+              { t: '' },
+              { t: '' },
+            ],
+          ],
+    );
+    for (const h of b.sheet.head[0]!)
+      if (['#', 'Exam', 'Missing / takers'].includes(h.t)) h.center = true;
+    const ct = i.teachers?.[`${sectionId}|class`]?.join(', ');
+    b.sheet.note = [what, ...(ct ? [`Class teacher: ${ct}`] : [])].join(' · ');
+    out.push(b);
+  }
+  return out;
+}
+
+/**
+ * Absentees (docs/design/78): AB on a paper, or a part marked absent — the counts per section and exam,
+ * then per section a line per absent student with the parents' mobiles, the class teacher and where.
+ */
+function absent(i: ReportInput): ReportBlock[] {
+  const all = papersOf(i);
+  const abs = all
+    .map((p) => ({ p, parts: absentOf(p) }))
+    .filter((x): x is { p: Paper; parts: string[] } => x.parts !== null);
+  const exams = i.def.exams.filter((e) => all.some((p) => p.exam === e.key));
+  const sections = sectionsOf(i);
+  const what = filtersOf(i);
+  const drillOf = (title: string, list: typeof abs): SheetCell => {
+    const who = [...new Set(list.map((x) => x.p.st))].sort(byRoll);
+    if (!who.length) return { t: '0', center: true };
+    return {
+      t: String(who.length),
+      center: true,
+      strong: true,
+      drill: {
+        title,
+        cols: ['#', 'Name', 'Adm No', ...(i.merit ? ['Section'] : []), 'Absent in'],
+        rows: who.map((st, n) => [
+          String(n + 1),
+          stName(i, st),
+          st.admissionNo,
+          ...(i.merit ? [st.section] : []),
+          listOf(list.filter((x) => x.p.st === st)),
+        ]),
+      },
+    };
+  };
+  const places: Array<[string, string]> = i.merit
+    ? [...sections, ['', 'Class']]
+    : sections.slice(0, 1).map(([id]) => [id, i.place]);
+  const counts = block(
+    i,
+    `Absent — ${i.place} (students marked AB)`,
+    [
+      ['Section', 1.6, true],
+      ...exams.map((e): Col => [e.key, 1.4]),
+      ['Students', 1.3],
+      ['Papers', 1.2],
+    ],
+    places.map(([id, label]): SheetCell[] => {
+      const mine = id ? abs.filter((x) => x.p.st.sectionId === id) : abs;
+      const look = i.merit && !id ? { tone: 'final' as const } : {};
+      return [
+        { t: label, text: true, strong: true, ...look },
+        ...exams.map((e): SheetCell => ({
+          ...drillOf(
+            `${label} · ${e.key} · absent`,
+            mine.filter((x) => x.p.exam === e.key),
+          ),
+          ...look,
+        })),
+        { ...drillOf(`${label} · absent`, mine), ...look },
+        { t: String(mine.length), center: true, ...look },
+      ];
+    }),
+  );
+  for (const h of counts.sheet.head[0]!.slice(1)) h.center = true;
+  counts.sheet.note = `${what} · a count is the students absent (click for the names) · Absent = AB on a paper, or a part marked absent`;
+  const out: ReportBlock[] = [counts];
+  for (const [sectionId, section] of sections) {
+    const mine = abs.filter((x) => x.p.st.sectionId === sectionId);
+    const who = [...new Set(mine.map((x) => x.p.st))].sort(byRoll);
+    const ct = (i.teachers?.[`${sectionId}|class`] ?? []).join(', ');
+    const rows = who.map((st): SheetCell[] => {
+      const ps = mine.filter((x) => x.p.st === st);
+      return [
+        { t: st.rollNo === null ? '' : String(st.rollNo), center: true },
+        { t: stName(i, st), text: true, strong: true },
+        { t: st.admissionNo, center: true },
+        { t: i.parents?.[st.studentId] ?? '', text: true },
+        { t: ct, text: true },
+        { t: listOf(ps), text: true, wrap: true },
+        { t: String(ps.length), center: true, strong: true, tone: 'code' },
+      ];
+    });
+    const b = block(
+      i,
+      `Absent — ${section}${who.length ? ` (${plural(who.length, 'student')})` : ''}`,
+      [
+        ['Roll', 0.8],
+        ['Student', 3.2, true],
+        ['Adm No', 1.5],
+        ['Parent mobile', 2.8, true],
+        ['Class teacher', 2.4, true],
+        ['Absent in', 7, true],
+        ['Papers', 1],
+      ],
+      rows.length
+        ? rows
+        : [
+            [
+              { t: '' },
+              { t: 'Nobody absent', text: true, strong: true },
+              { t: '' },
+              { t: '' },
+              { t: '' },
+              { t: '' },
+              { t: '' },
+            ],
+          ],
+    );
+    for (const h of b.sheet.head[0]!)
+      if (['Roll', 'Adm No', 'Papers'].includes(h.t)) h.center = true;
+    b.sheet.note = what;
+    out.push(b);
+  }
+  return out;
 }
 
 // ---- Toppers ---------------------------------------------------------------------------------------
@@ -1551,6 +1894,10 @@ export function buildReport(kind: ReportKind, i: ReportInput): ReportBlock[] {
       return analysis(i);
     case 'entry':
       return entry(i);
+    case 'missing':
+      return missing(i);
+    case 'absent':
+      return absent(i);
     case 'toppers':
       return toppers(i);
     case 'teacher':
