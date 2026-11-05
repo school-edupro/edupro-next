@@ -38,6 +38,9 @@ export interface ReportCardData {
     name: string;
     shortName: string | null;
     affiliationNo: string | null;
+    /** docs/design/74: the board it is affiliated to (CBSE …) and its town (the card's Place) */
+    board?: string | null;
+    city?: string | null;
     address: string;
     phone: string | null;
     logoDataUri: string | null;
@@ -272,12 +275,13 @@ export async function loadReportCardData(
     name: string;
     short_name: string | null;
     affiliation_no: string | null;
+    board: string | null;
     address: Record<string, string>;
     contact: Record<string, string>;
     logo_key: string | null;
     logo_type: string | null;
   }>(
-    `SELECT s.name, s.short_name, s.affiliation_no, s.address, s.contact, f.object_key AS logo_key, f.content_type AS logo_type
+    `SELECT s.name, s.short_name, s.affiliation_no, s.board, s.address, s.contact, f.object_key AS logo_key, f.content_type AS logo_type
        FROM schools s
        LEFT JOIN files f ON f.id::text = NULLIF(s.branding->>'logoFileId', '') AND f.deleted_at IS NULL
       WHERE s.id = app.current_school_id()`,
@@ -624,6 +628,8 @@ export async function loadReportCardData(
       name: school.name,
       shortName: school.short_name,
       affiliationNo: school.affiliation_no,
+      board: school.board,
+      city: addr.city ?? null,
       address: [addr.line1, addr.line2, addr.city, addr.state, addr.pincode]
         .filter(Boolean)
         .join(', '),
@@ -1040,6 +1046,8 @@ export function sampleReportCardData(band: ClassBand = 'primary'): ReportCardDat
       name: 'Alpha Public School',
       shortName: 'APS',
       affiliationNo: '2130001',
+      board: 'CBSE',
+      city: 'Noida',
       address: 'Sector 30, Noida, Uttar Pradesh, 201301',
       phone: '0120-4000000',
       logoDataUri: null,

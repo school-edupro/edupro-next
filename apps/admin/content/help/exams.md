@@ -155,8 +155,10 @@ see who submitted or verified it and to submit, verify, send back or reopen it.
    - **Exam card** (a periodic test such as PT1 or PT2): tick the test; the code and name come from it.
      It prints the **Periodic test slip** of each band (maximum marks, marks obtained and grade per
      subject, then the total, percentage and grade; no rank, no pass or fail). No term result is needed.
+     The VI–VIII slip is one A4 page of ruled boxes, as the Term 1 card below.
    - **Term card** (T1, T2): every exam of the term; prints the term result of the locked mark register
-     with that term code (for example the DPS Noida VI-VIII card).
+     with that term code (for example the VI-VIII card: Periodic test, Subject enrichment and the term
+     exam, the marks obtained and the grade).
    - **Annual card**: every exam of the year.
      A class can have **several cards live at once**: for Class VI make an exam card PT1, an exam card PT2
      and a term card T1, and publish each for Class VI. Families see every published card in the parent
@@ -173,8 +175,14 @@ see who submitted or verified it and to submit, verify, send back or reopen it.
    - **Set-up**: the name, the exams and the card design of each class (a class's own design comes
      before its band's: Class IX and X can print different cards).
      **Card designs** (Report cards → Card designs) has the ready-made designs: **Install the
-     ready-made cards** (Learning record I–II and III–V, Report card VI–VIII, IX, X, XI, XII) and
-     **Install the learning record (Balvatika–II)**. The learning record prints on A4 like the school's
+     ready-made cards** (Learning record I–II and III–V, Report card VI–VIII, Report card VI–VIII
+     (Term 1), IX, X, XI, XII) and
+     **Install the learning record (Balvatika–II)**. **Report card VI–VIII (Term 1)** prints one A4
+     page of ruled boxes: the school with a logo each side (the second one is the design's **Second
+     emblem** picture), the pupil, the term's parts with the marks obtained and the grade, the
+     co-scholastic grades beside height, weight and attendance, discipline, the class teacher's
+     remark, place and date, the parent's, class teacher's, coordinator's, vice principal's and
+     principal's signatures and the seal (their images from Signatures), and the grading key. The learning record prints on A4 like the school's
      old card: the cover ("My name is …", the photo), the subjects' skills with a Term I and a Term II
      grade and each subject's remarks beside them, the co-scholastic areas, health / attendance / "I
      participated in" / "My teachers say" / signatures, and the evaluation key. The terms are the year's

@@ -31,7 +31,12 @@ describe('mark schemes and registers (e2e)', () => {
   const exam: Record<string, string> = {};
   const ids: Record<string, string> = {};
   const s = stamp('MS');
-  const call = (u: SeededUser, method: 'GET' | 'POST' | 'PUT', url: string, json?: unknown) =>
+  const call = (
+    u: SeededUser,
+    method: 'GET' | 'POST' | 'PUT' | 'PATCH',
+    url: string,
+    json?: unknown,
+  ) =>
     inject({
       method,
       url,
@@ -402,6 +407,7 @@ describe('mark schemes and registers (e2e)', () => {
         'lr_i_ii',
         'lr_iii_v',
         'rc_vi_viii',
+        'rc_vi_viii_t1',
         'rc_ix',
         'rc_x',
         'rc_xi',
@@ -409,6 +415,11 @@ describe('mark schemes and registers (e2e)', () => {
       ]),
     );
     ids.readyMiddle = ready.find((x) => x.code === 'rc_vi_viii')!.id;
+    ids.classic = ready.find((x) => x.code === 'rc_vi_viii_t1')!.id;
+    // installing again adds nothing
+    const again = (await call(admin, 'POST', '/exams/report-cards/templates/ready-made')).json()
+      .data as Array<{ code: string }>;
+    expect(again.filter((x) => x.code === 'rc_vi_viii_t1')).toHaveLength(1);
     const url = '/exams/report-cards/signatures';
     expect(
       (
@@ -531,5 +542,45 @@ describe('mark schemes and registers (e2e)', () => {
       classSectionId: section.A,
     });
     expect(batch.statusCode).toBe(201);
+  });
+
+  it('the Term 1 card for VI-VIII (docs/design/74): ruled boxes, the term parts, six signing places', async () => {
+    const pv = await call(admin, 'POST', `/exams/report-cards/templates/${ids.classic!}/preview`, {
+      releaseId: ids.release,
+      studentId: student.Asha,
+    });
+    expect(pv.statusCode).toBe(201);
+    const html = pv.json().html as string;
+    expect(html).toContain('<div class="cl">');
+    expect(html).toContain('ACADEMIC SESSION:');
+    expect(html).toContain('TERM-1 (100 Marks)');
+    expect(html).toContain('Periodic test<br />(15)');
+    // English 79 of the term result; its parts with two decimals
+    expect(html).toMatch(/ENGLISH|English/);
+    expect(html).toContain('<td class="c">79</td>');
+    expect(html).toMatch(/<td class="c">\d+\.\d{2}<\/td>/);
+    for (const k of ['Parent', 'Class Teacher', 'Coordinator', 'Vice Principal', 'Principal'])
+      expect(html).toContain(`</div>${k}</div>`);
+    expect(html).toContain(`data:image/png;base64,${PNG}`);
+    expect(html).toContain('alt="School seal"');
+    expect(html).toContain('E (Needs Improvement)');
+    // the designer saves a classic layout with its options
+    const tpl = (await call(admin, 'GET', '/exams/report-cards/templates'))
+      .json()
+      .data.find((x: { id: string }) => x.id === ids.classic) as {
+      layout: { sections: Array<Record<string, unknown>> };
+    };
+    const sections = tpl.layout.sections.map((x) =>
+      x.type === 'cl_term_marks' ? { ...x, termLabel: 'TERM-I', decimals: 1 } : x,
+    );
+    const saved = await call(admin, 'PATCH', `/exams/report-cards/templates/${ids.classic!}`, {
+      layout: { ...tpl.layout, sections },
+    });
+    expect(saved.statusCode).toBe(200);
+    expect(saved.json().layout.sections).toContainEqual({
+      type: 'cl_term_marks',
+      termLabel: 'TERM-I',
+      decimals: 1,
+    });
   });
 });

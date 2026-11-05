@@ -34,6 +34,22 @@ const SectionSchema = z.object({
     'hpc_record',
     'hpc_feedback',
     'portfolio',
+    // docs/design/73: the learning record on A4
+    'lr_cover',
+    'lr_subjects',
+    'lr_co_scholastic',
+    'lr_record',
+    'lr_key',
+    // docs/design/74: the classic card
+    'cl_header',
+    'cl_student',
+    'cl_term_marks',
+    'cl_exam_marks',
+    'cl_co_health',
+    'cl_discipline',
+    'cl_remark',
+    'cl_sign',
+    'cl_grade_key',
   ]),
   title: z.string().trim().max(80).optional(),
   showGrades: z.boolean().optional(),
@@ -42,7 +58,7 @@ const SectionSchema = z.object({
   showPhoto: z.boolean().optional(),
   labels: z.array(z.string().trim().min(1).max(40)).max(5).optional(),
   /** scholastic: per-exam columns (cce) or the term's components (docs/design/65 fix: kept on save) */
-  mode: z.enum(['marks', 'cce', 'components']).optional(),
+  mode: z.enum(['marks', 'cce', 'components', 'slip']).optional(),
   columns: z
     .array(
       z.object({
@@ -71,13 +87,22 @@ const SectionSchema = z.object({
         'parent',
       ]),
     )
-    .max(5)
+    .max(7)
     .optional(),
   areas: z.array(z.string().trim().max(60)).max(10).optional(),
   examCodes: z.array(z.string().trim().max(20)).max(12).optional(),
   /** docs/design/65 part 7: remarks' categories (codes) and whether the general remark prints */
   categories: z.array(z.string().trim().max(12)).max(12).optional(),
   general: z.boolean().optional(),
+  /** docs/design/73: the learning record's caption, term names, page note and remarks column */
+  caption: z.string().trim().max(120).optional(),
+  termLabels: z.array(z.string().trim().max(30)).max(6).optional(),
+  note: z.string().trim().max(400).optional(),
+  remarks: z.boolean().optional(),
+  /** docs/design/74: the classic card's title from the release, the term's heading, the decimals */
+  releaseTitle: z.boolean().optional(),
+  termLabel: z.string().trim().max(40).optional(),
+  decimals: z.number().int().min(0).max(2).optional(),
 });
 export const LayoutSchema = z.object({
   sections: z.array(SectionSchema).min(1).max(12),

@@ -30,6 +30,25 @@ const ART: Array<{ slot: string; label: string; where: string }> = [
   { slot: 'co_scholastic', label: 'Co-scholastic page', where: 'Down the right of the table' },
   { slot: 'record', label: 'Health record page', where: 'Beside height, weight and attendance' },
 ];
+// docs/design/74: the classic card (one A4 page of ruled boxes) prints the second emblem only
+const CLASSIC_ART: typeof ART = [
+  {
+    slot: 'logo_2',
+    label: 'Second emblem',
+    where: 'Top right of the header, beside the school name',
+  },
+];
+/** the pictures a design prints: the learning record's, the classic card's, or none */
+const artOf = (layout: unknown): typeof ART => {
+  const types = ((layout as { sections?: Array<{ type?: string }> }).sections ?? []).map((x) =>
+    String(x.type ?? ''),
+  );
+  return types.some((t) => t.startsWith('lr_'))
+    ? ART
+    : types.some((t) => t.startsWith('cl_'))
+      ? CLASSIC_ART
+      : [];
+};
 
 /** Sprint 17: the report-card designer (layout JSON, CSS, optional HTML body) with preview. */
 export default async function ReportCardTemplatesPage({
@@ -244,10 +263,7 @@ export default async function ReportCardTemplatesPage({
                 <Button type="submit">{r('save')}</Button>
               </div>
             </form>
-            {editing &&
-            ((editing.layout as { sections?: Array<{ type?: string }> }).sections ?? []).some((x) =>
-              String(x.type ?? '').startsWith('lr_'),
-            ) ? (
+            {editing && artOf(editing.layout).length ? (
               <section
                 aria-labelledby="art-h"
                 style={{
@@ -264,7 +280,7 @@ export default async function ReportCardTemplatesPage({
                   nothing.
                 </p>
                 <div style={{ display: 'grid', gap: 'var(--sp-3)' }}>
-                  {ART.map((a) => {
+                  {artOf(editing.layout).map((a) => {
                     const has = Boolean(editing.assets?.[a.slot]);
                     return (
                       <div

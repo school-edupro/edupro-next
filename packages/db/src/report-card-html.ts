@@ -5,6 +5,7 @@
  * layout renderer while keeping the page frame. Batch rendering concatenates one page per pupil.
  */
 import { documentHtml, renderTemplate } from './template-engine';
+import { CL_CSS, clSection, isClassicCard, type ClSection } from './classic-card-html';
 import type { ReportCardData, ReportCardHpcItem } from './report-card-data';
 import {
   LR_CSS,
@@ -49,7 +50,17 @@ export type ReportCardSectionType =
   | 'lr_subjects'
   | 'lr_co_scholastic'
   | 'lr_record'
-  | 'lr_key';
+  | 'lr_key'
+  // docs/design/74 (the classic card: one A4 page of ruled boxes)
+  | 'cl_header'
+  | 'cl_student'
+  | 'cl_term_marks'
+  | 'cl_exam_marks'
+  | 'cl_co_health'
+  | 'cl_discipline'
+  | 'cl_remark'
+  | 'cl_sign'
+  | 'cl_grade_key';
 
 export interface ReportCardSection {
   type: ReportCardSectionType;
@@ -102,6 +113,12 @@ export interface ReportCardSection {
   note?: string;
   /** lr_subjects: the remarks column beside the subjects (default on) */
   remarks?: boolean;
+  /** docs/design/74, cl_header: the release's name as the title (an exam card) */
+  releaseTitle?: boolean;
+  /** cl_term_marks: the term's heading (default TERM-1 from T1) */
+  termLabel?: string;
+  /** cl_term_marks: decimals of the parts (default 2) */
+  decimals?: number;
 }
 
 export interface ReportCardLayout {
@@ -818,10 +835,14 @@ export function reportCardBody(
       case 'lr_key':
         return lrKey(d, s, art);
       default:
-        return '';
+        // docs/design/74: the classic card's sections
+        return s.type.startsWith('cl_') ? clSection(d, s as ClSection, art) : '';
     }
   });
-  return `<div class="rc">${parts.join('\n')}</div>`;
+  // the classic card's boxes sit in one ruled frame
+  return isClassicCard(layout.sections)
+    ? `<div class="rc"><div class="cl">${parts.join('\n')}</div></div>`
+    : `<div class="rc">${parts.join('\n')}</div>`;
 }
 
 export interface ReportCardTemplateLike {
@@ -861,7 +882,7 @@ export function reportCardDocument(
   });
   return documentHtml({
     body: bodies.join('\n'),
-    css: `${REPORT_CARD_CSS}\n${LR_CSS}\n${t.stylesCss}`,
+    css: `${REPORT_CARD_CSS}\n${LR_CSS}\n${CL_CSS}\n${t.stylesCss}`,
     pageWidth: t.pageWidth,
     pageHeight: t.pageHeight,
   });
@@ -872,6 +893,36 @@ export function reportCardDocument(
  * (codes lr_* and rc_*) and chosen per class on a release (IX and X differ in the same band).
  */
 const SIGN = ['class_teacher', 'coordinator', 'principal'];
+/** docs/design/74: the classic card's six signing places (the seal follows them) */
+const CLASSIC_SIGN = ['parent', 'class_teacher', 'coordinator', 'vice_principal', 'principal'];
+/** docs/design/74: the Term 1 card for VI-VIII (the term result's parts, marks obtained and grade) */
+export const CLASSIC_TERM_LAYOUT: ReportCardLayout = {
+  subtitle: 'Report card',
+  sections: [
+    { type: 'cl_header', title: 'REPORT CARD' },
+    { type: 'cl_student' },
+    { type: 'cl_term_marks' },
+    { type: 'cl_co_health' },
+    { type: 'cl_discipline' },
+    { type: 'cl_remark' },
+    { type: 'cl_sign', roles: CLASSIC_SIGN },
+    { type: 'cl_grade_key' },
+  ],
+};
+/** docs/design/74: the periodic test slip for VI-VIII in the classic card's look (one exam's marks) */
+export const CLASSIC_SLIP_LAYOUT: ReportCardLayout = {
+  subtitle: 'Test report',
+  sections: [
+    { type: 'cl_header', releaseTitle: true },
+    { type: 'cl_student' },
+    { type: 'cl_exam_marks' },
+    { type: 'cl_co_health' },
+    { type: 'cl_discipline' },
+    { type: 'cl_remark' },
+    { type: 'cl_sign', roles: CLASSIC_SIGN },
+    { type: 'cl_grade_key' },
+  ],
+};
 export const READY_MADE_TEMPLATES: Array<{
   code: string;
   name: string;
@@ -943,6 +994,13 @@ export const READY_MADE_TEMPLATES: Array<{
         { type: 'evaluation_key' },
       ],
     },
+  },
+  {
+    // docs/design/74: the school's old Term 1 card for VI-VIII, one A4 page of ruled boxes
+    code: 'rc_vi_viii_t1',
+    name: 'Report card VI-VIII (Term 1)',
+    band: 'middle',
+    layout: CLASSIC_TERM_LAYOUT,
   },
   {
     code: 'rc_ix',
@@ -1037,17 +1095,21 @@ export const TEST_SLIP_TEMPLATES: typeof READY_MADE_TEMPLATES = (
   code: `test_slip_${band}`,
   name: `Periodic test slip (${classes})`,
   band,
-  layout: {
-    subtitle: 'Test report',
-    sections: [
-      { type: 'header' },
-      { type: 'student', showPhoto: false },
-      { type: 'scholastic', mode: 'slip', title: 'Marks' },
-      { type: 'attendance' },
-      { type: 'remarks', title: "Class teacher's remark" },
-      { type: 'signatures', roles: ['class_teacher', 'parent', 'principal'] },
-    ],
-  },
+  // docs/design/74: VI-VIII in the classic card's look
+  layout:
+    band === 'middle'
+      ? CLASSIC_SLIP_LAYOUT
+      : {
+          subtitle: 'Test report',
+          sections: [
+            { type: 'header' },
+            { type: 'student', showPhoto: false },
+            { type: 'scholastic', mode: 'slip', title: 'Marks' },
+            { type: 'attendance' },
+            { type: 'remarks', title: "Class teacher's remark" },
+            { type: 'signatures', roles: ['class_teacher', 'parent', 'principal'] },
+          ],
+        },
 }));
 
 /**

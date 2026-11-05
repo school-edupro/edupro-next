@@ -52,7 +52,7 @@ describe('the holistic progress card (e2e)', () => {
   const s = stamp('HPC');
   const call = (
     u: SeededUser,
-    method: 'GET' | 'POST' | 'PUT' | 'DELETE',
+    method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE',
     url: string,
     json?: unknown,
   ) =>
@@ -386,6 +386,12 @@ describe('the holistic progress card (e2e)', () => {
       'lr_record',
       'lr_key',
     ]);
+    // the designer saves it with its options (docs/design/74: the lr_ sections were refused before)
+    const saved = await call(admin, 'PATCH', `/exams/report-cards/templates/${tpl.id}`, {
+      layout: tpl.layout,
+    });
+    expect(saved.statusCode).toBe(200);
+    expect(saved.json().layout).toEqual(tpl.layout);
     // docs/design/73: the ready-made Learning record (I–II), its key and the subjects' remarks, once
     expect((await call(admin, 'POST', '/exams/report-cards/templates/hpc')).statusCode).toBe(201);
     const sets = (await call(admin, 'GET', '/exams/indicator-sets')).json().data as Array<{

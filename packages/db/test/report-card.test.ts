@@ -70,6 +70,7 @@ describe('the ready-made cards (docs/design/65, part 4)', () => {
       ['lr_i_ii', 'primary'],
       ['lr_iii_v', 'primary'],
       ['rc_vi_viii', 'middle'],
+      ['rc_vi_viii_t1', 'middle'],
       ['rc_ix', 'secondary'],
       ['rc_x', 'secondary'],
       ['rc_xi', 'senior'],
@@ -351,9 +352,10 @@ describe('remarks by category and promotion (docs/design/65, part 7)', () => {
 });
 
 describe('the periodic-test slip (an exam card, 1 Nov 2026)', () => {
-  const slip = TEST_SLIP_TEMPLATES.find((t) => t.band === 'middle')!;
+  // VI-VIII's is the classic card's (docs/design/74, its own tests); I-V keeps this one
+  const slip = TEST_SLIP_TEMPLATES.find((t) => t.band === 'primary')!;
   const one = () => {
-    const d = sampleReportCardData('middle');
+    const d = sampleReportCardData('primary');
     // an exam card carries one test: PT1 only
     return {
       ...d,
@@ -369,7 +371,10 @@ describe('the periodic-test slip (an exam card, 1 Nov 2026)', () => {
       'secondary',
       'senior',
     ]);
-    expect(slip.name).toBe('Periodic test slip (VI-VIII)');
+    expect(slip.name).toBe('Periodic test slip (I-V)');
+    expect(TEST_SLIP_TEMPLATES.find((t) => t.band === 'middle')!.name).toBe(
+      'Periodic test slip (VI-VIII)',
+    );
   });
 
   it('one test: maximum, marks obtained and grade per subject, then total, percentage, grade', () => {
@@ -385,7 +390,7 @@ describe('the periodic-test slip (an exam card, 1 Nov 2026)', () => {
   });
 
   it('several tests: a marks and grade column each, then the total', () => {
-    const d = sampleReportCardData('middle');
+    const d = sampleReportCardData('primary');
     const html = reportCardBody(d, slip.layout);
     for (const e of d.exams) expect(html).toContain(`${e.code} (`);
     expect(html).not.toContain('Marks obtained');
