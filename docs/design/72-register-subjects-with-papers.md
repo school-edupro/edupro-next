@@ -159,3 +159,13 @@ subjects)` (a plain subject, or a slot none of whose members has a paper, in the
   of a composite subject starts on "Parts in one cell (+ sum)". Checked on register 365 (Social
   Science: Geography, History & Pol Science; Computer Science: Theory, Practical) in a throwaway spec,
   axe clean, nothing saved; the API e2e saves and reads back `childOrder`.
+- **Later (5 Nov 2026), parts a column each read twice alike:** with **Child subjects in columns** on,
+  each exam's parts headed only by their names (GEOGRAPHY, HISTORY & POL SCIENCE, then again for the
+  next exam), so the preview looked as if the parts came twice. `buildSheet` now adds a third heading
+  row whenever a part of a group prints as a column of its own: the exam (the group's heading without
+  its "(GEO/HIS)") spans its parts in the second row, the parts are under it, every other heading of
+  that row reaches down two rows; a sheet without such parts keeps its two rows. The screen's sticky
+  heading has a third offset; the PDF splits "MT1 (35)" over two lines in any heading that reaches the
+  last row (the Excel export already merged any shape). Checked: an engine test, the register e2e
+  suites (39 tests), a sample PDF, and register 365's preview (Social Science: MT1, MT2, ACT1, ACT2, HY
+  each over Geography | History & Pol Science) with axe, nothing saved.

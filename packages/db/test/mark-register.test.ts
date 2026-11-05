@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
+  buildSheet,
   computeRegister,
   countedColumns,
   cutFixed,
@@ -322,6 +323,88 @@ describe('mark registers (docs/design/68)', () => {
     expect(by.vi!.subjects.SCI!.values.CH).toMatchObject({ out: true, max: 0 });
     // Biology absent: AB counts 0 and withholds
     expect(by.vi!.subjects.SCI).toMatchObject({ withheld: true, status: 'absent' });
+  });
+
+  it('parts a column each: the exam heads its parts in a third heading row (docs/design/72)', () => {
+    // MT1 and MT2 each read Geography and History: without the exam over them they read twice alike
+    const cols = (e: string): RegColumn[] => [
+      ...(['Geography', 'History'] as const).map((p): RegColumn => ({
+        key: `${e}${p.slice(0, 3)}`,
+        name: p.toUpperCase(),
+        kind: 'part',
+        exam: e,
+        part: p,
+        group: `g${e}`,
+        groupLabel: `${e} (GEO/HIS)`,
+        groupFoot: 'sum',
+      })),
+      {
+        key: e,
+        name: `${e} sum`,
+        kind: 'avg',
+        mode: 'sum',
+        of: [`${e}Geo`, `${e}His`],
+        hidden: true,
+        inTotal: true,
+      },
+    ];
+    const sst = subject('SST', [...cols('MT1'), ...cols('MT2')], { childInColumns: true });
+    const eng = subject('ENG', [
+      { key: 'E', name: 'MT1', kind: 'raw', exam: 'MT1', inTotal: true },
+    ]);
+    const def = reg([eng, sst], ['MT1', 'MT2']);
+    const m = mark(35, null, [
+      ['Geography', 13, 10],
+      ['History', 22, 17],
+    ]);
+    const rows = computeRegister(def, [
+      pupil('a', [
+        { id: 'ENG', marks: { MT1: mark(35, 30) } },
+        { id: 'SST', marks: { MT1: m, MT2: m } },
+      ]),
+    ]);
+    const opts = {
+      place: 'VI-A',
+      merit: false,
+      division: false,
+      order: ['ENG', 'SST'],
+      titles: { ENG: 'English', SST: 'Social Science' },
+    };
+    const sheet = buildSheet(def, rows, opts);
+    expect(sheet.head).toHaveLength(3);
+    const t = (row: number) =>
+      sheet.head[row]!.map(
+        (c) => `${c.t}${c.span ? `*${String(c.span)}` : ''}${c.rows ? `^${String(c.rows)}` : ''}`,
+      );
+    expect(t(0)).toEqual([
+      'Sr^3',
+      'Student^3',
+      'Adm no^3',
+      'English*4',
+      'Social Science*7',
+      'FINAL RESULT*6',
+    ]);
+    // English's columns over two rows; Social Science: MT1 and MT2 over their parts
+    expect(t(1).slice(0, 9)).toEqual([
+      'MT1 (35)^2',
+      'Total (35)^2',
+      '%^2',
+      'Grade^2',
+      'MT1*2',
+      'MT2*2',
+      'Total (70)^2',
+      '%^2',
+      'Grade^2',
+    ]);
+    expect(t(2)).toEqual(['GEOGRAPHY (13)', 'HISTORY (22)', 'GEOGRAPHY (13)', 'HISTORY (22)']);
+    expect(sheet.body[0]!.cells).toHaveLength(sheet.widths.length);
+    // in one cell (the switch off): two rows as before
+    const one = buildSheet(
+      { ...def, subjects: [eng, { ...sst, childInColumns: false }] },
+      rows,
+      opts,
+    );
+    expect(one.head).toHaveLength(2);
   });
 
   it('total out of, "the rest" of it, rounding (.5 kept per column, .5 up for the final) and a grade per column', () => {

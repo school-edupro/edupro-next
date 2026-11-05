@@ -1219,6 +1219,9 @@ export function buildSheet(def: RegisterDef, rows: RegStudentResult[], o: SheetO
   const name = (n: string) => (d.properCase ? properCase(n) : n);
   const head1: SheetCell[] = [];
   const head2: SheetCell[] = [];
+  // a third row when a subject's parts print a column each: the exam over its parts (MT1 over
+  // GEOGRAPHY, HISTORY), so the same part of two exams is told apart
+  const head3: SheetCell[] = [];
   const widths: number[] = [];
   const studentCols = d.studentCols.filter((c) => c.show || c.key === 'name');
   const STUDENT: Record<string, [string, number]> = {
@@ -1258,11 +1261,37 @@ export function buildSheet(def: RegisterDef, rows: RegStudentResult[], o: SheetO
     for (const s of subjects)
       plans.push({ title: o.titles[s.key] ?? s.key, subject: s, printed: printedOf(s) });
 
+  // parts printed a column each come as columns of a group (printedOf keeps a group in one cell otherwise)
+  const inGroup = (x: Printed) => (x.kind === 'col' && x.col.kind === 'part' && x.col.group) || '';
+  const rowsN = plans.some((p) => p.printed.some(inGroup)) ? 3 : 2;
+  for (const c of head1) c.rows = rowsN;
+  // the group's heading without the parts it names ("MT1 (GEO/HIS)" → "MT1")
+  const groupTitle = (c: RegColumn) =>
+    (c.groupLabel ?? 'Parts').replace(/\s*\([^()]*\/[^()]*\)$/, '') || 'Parts';
+
   for (const p of plans) {
     const span = p.printed.length;
     if (!span) continue;
     head1.push({ t: p.title, span, text: true });
-    for (const x of p.printed) {
+    // in three rows: a column of a group (and its grade after it) goes under the group's heading
+    let open: { group: string; cell: SheetCell } | null = null;
+    const place = (x: Printed, prev: Printed | undefined): ((c: SheetCell) => void) => {
+      if (rowsN === 2) return (c) => head2.push(c);
+      const g = inGroup(x) || (x.kind === 'grade' && prev ? inGroup(prev) : '');
+      if (!g) {
+        open = null;
+        return (c) => head2.push({ ...c, rows: 2 });
+      }
+      if (open?.group !== g) {
+        const col = x.kind === 'col' ? x.col : (prev as { col: RegColumn }).col;
+        open = { group: g, cell: { t: groupTitle(col), span: 0, text: true } };
+        head2.push(open.cell);
+      }
+      open.cell.span = (open.cell.span ?? 0) + 1;
+      return (c) => head3.push(c);
+    };
+    p.printed.forEach((x, xi) => {
+      const put = place(x, p.printed[xi - 1]);
       const key = p.subject?.key;
       const list = key ? takers(key) : [];
       const mx = (k: string) =>
@@ -1280,23 +1309,23 @@ export function buildSheet(def: RegisterDef, rows: RegStudentResult[], o: SheetO
         m && !label.includes(`(${m})`) ? `${label} (${m})` : label;
       switch (x.kind) {
         case 'member':
-          head2.push({ t: 'Subject', text: true });
+          put({ t: 'Subject', text: true });
           widths.push(1.1);
           break;
         case 'col':
-          head2.push({ t: withMax(x.col.name, mx(x.col.key)) });
+          put({ t: withMax(x.col.name, mx(x.col.key)) });
           widths.push(1.1);
           break;
         case 'grade':
-          head2.push({ t: 'Gr' });
+          put({ t: 'Gr' });
           widths.push(0.8);
           break;
         case 'group':
-          head2.push({ t: x.label, text: true });
+          put({ t: x.label, text: true });
           widths.push(1.9);
           break;
         case 'total':
-          head2.push({
+          put({
             t: withMax(
               p.subject?.totalLabel ?? 'Total',
               d.showMax && key
@@ -1310,14 +1339,14 @@ export function buildSheet(def: RegisterDef, rows: RegStudentResult[], o: SheetO
           widths.push(1.1);
           break;
         case 'pct':
-          head2.push({ t: '%' });
+          put({ t: '%' });
           widths.push(1);
           break;
         default:
-          head2.push({ t: 'Grade' });
+          put({ t: 'Grade' });
           widths.push(0.9);
       }
-    }
+    });
   }
 
   // the final, or the subject's own rank and result
@@ -1335,7 +1364,7 @@ export function buildSheet(def: RegisterDef, rows: RegStudentResult[], o: SheetO
   if (finalHeads.length) {
     head1.push({ t: o.subject ? 'RESULT' : 'FINAL RESULT', span: finalHeads.length, text: true });
     for (const [t, w] of finalHeads) {
-      head2.push({ t, tone: 'final' });
+      head2.push({ t, tone: 'final', ...(rowsN === 3 ? { rows: 2 } : {}) });
       widths.push(w);
     }
   }
@@ -1539,7 +1568,14 @@ export function buildSheet(def: RegisterDef, rows: RegStudentResult[], o: SheetO
       for (const on of [f.grade, f.rank, d.divisionLabel, f.result]) if (on) foot.push({ t: '' });
     }
   }
-  return { place: o.place, head: [head1, head2], body, foot, frozen, widths };
+  return {
+    place: o.place,
+    head: rowsN === 3 ? [head1, head2, head3] : [head1, head2],
+    body,
+    foot,
+    frozen,
+    widths,
+  };
 }
 
 /** the merit list by division: 1st Div, 2nd Div, Pass, then compartment, fail, absent, incomplete */

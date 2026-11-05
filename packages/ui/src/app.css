@@ -13812,6 +13812,10 @@ button.ep-subchoice__icon:hover {
 .ep-mr-sheet thead tr + tr th {
   top: 2.1rem;
 }
+/* a third heading row: the parts under their exam (docs/design/72) */
+.ep-mr-sheet thead tr + tr + tr th {
+  top: 4.2rem;
+}
 .ep-mr-sheet [data-text='true'] {
   text-align: left;
 }

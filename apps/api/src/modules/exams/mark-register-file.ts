@@ -211,9 +211,12 @@ export async function registerPdf(
         const x1 = xs[g.col + (g.cell.span ?? 1)]!;
         const h = rowTop(g.row + (g.cell.rows ?? 1)) - rowTop(g.row);
         const words = g.cell.t.split(' (');
-        // the name over its maximum, in the columns' two-line row only
+        // the name over its maximum, in a column's heading that reaches the two-line (last) row
         const lines =
-          words.length > 1 && (g.cell.span ?? 1) === 1 && headRows > 1 && g.row === headRows - 1
+          words.length > 1 &&
+          (g.cell.span ?? 1) === 1 &&
+          headRows > 1 &&
+          g.row + (g.cell.rows ?? 1) === headRows
             ? [words[0]!, `(${words.slice(1).join(' (')}`]
             : [g.cell.t];
         drawCell(g.cell.t, x0, x1, top - rowTop(g.row), h, {

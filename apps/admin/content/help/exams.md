@@ -242,7 +242,8 @@ out, then runs it for any section; the marks always come from the exam entry.
      ("own paper: ACT2 (VIII); else inside Social Science").
      A ticked subject entered in parts is listed under **Composite subjects** with its sub-subjects
      and whether they show (**Show its parts in each exam** when its columns read only the whole
-     marks), and **Child subjects in columns** (a column each; off: in one cell with their sum). In
+     marks), and **Child subjects in columns** (a column each, under the exam's name in the heading;
+     off: in one cell with their sum). In
      **Subject order** it is marked *composite* and its sub-subjects are listed under it with their
      own ▲ ▼: their order is the order of their columns in every exam, whatever the subject order.
    - **Columns**, per subject: pick the exam, then **Same marks as entry** (or its parts; a
