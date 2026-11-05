@@ -111,6 +111,7 @@ export const RegSubjectSchema = z.object({
   pct: z.boolean().optional(),
   countInFinal: z.boolean().optional(),
   childInColumns: z.boolean().optional(),
+  childOrder: z.array(z.string().trim().min(1).max(60)).max(12).optional(),
   totalLabel: z.string().trim().max(40).optional(),
 });
 const RegCodeSchema = z.object({

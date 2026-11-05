@@ -80,6 +80,60 @@ export function partsOf(data: BuilderData | null, s: RegSubject, examId: string)
   const out: string[] = [];
   for (const p of papersOf(data, s).filter((x) => x.examId === examId))
     for (const part of p.parts) if (!out.includes(part.name)) out.push(part.name);
+  return sortParts(out, s.childOrder);
+}
+
+/** parts in the register's order: those it names first, the rest after them as they came */
+export function sortParts(list: string[], order?: string[]): string[] {
+  if (!order?.length) return list;
+  const rank = (x: string) => {
+    const i = order.indexOf(x);
+    return i < 0 ? order.length + list.indexOf(x) : i;
+  };
+  return [...list].sort((a, b) => rank(a) - rank(b));
+}
+
+/** a composite subject's parts (its sub-subjects) across its papers, in the register's order */
+export function childrenOf(data: BuilderData | null, s: RegSubject): string[] {
+  const out: string[] = [];
+  for (const p of papersOf(data, s))
+    for (const part of p.parts) if (!out.includes(part.name)) out.push(part.name);
+  return sortParts(out, s.childOrder);
+}
+
+/**
+ * The subject's part columns put in the parts' order: within each cell of parts (or an exam's own
+ * part columns) the columns change places, the rest stay where they are; a cell's heading that names
+ * the parts (PT1 (GEO/HIS)) names them in the new order.
+ */
+export function withChildOrder(columns: RegColumn[], order: string[]): RegColumn[] {
+  const out = [...columns];
+  const abbr = (cs: RegColumn[]) =>
+    cs.map((c) => (c.part ?? '').slice(0, 3).toUpperCase()).join('/');
+  const sets = new Map<string, number[]>();
+  columns.forEach((c, i) => {
+    if (c.kind !== 'part' || !c.part) return;
+    const k = c.group ? `g:${c.group}` : `e:${c.exam ?? ''}:${c.hidden ? 'h' : 's'}`;
+    sets.set(k, [...(sets.get(k) ?? []), i]);
+  });
+  for (const at of sets.values()) {
+    const cols = at.map((i) => columns[i]!);
+    if (new Set(cols.map((c) => c.part)).size !== cols.length) continue;
+    const names = sortParts(
+      cols.map((c) => c.part!),
+      order,
+    );
+    const sorted = names.map((n) => cols.find((c) => c.part === n)!);
+    const was = `(${abbr(cols)})`;
+    const now = `(${abbr(sorted)})`;
+    at.forEach((i, j) => {
+      const c = sorted[j]!;
+      out[i] =
+        c.groupLabel?.endsWith(was) && was !== now
+          ? { ...c, groupLabel: `${c.groupLabel.slice(0, -was.length)}${now}` }
+          : c;
+    });
+  }
   return out;
 }
 

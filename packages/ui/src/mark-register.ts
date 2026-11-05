@@ -95,6 +95,8 @@ export interface RegSubject {
   countInFinal?: boolean;
   /** the parts as columns of their own */
   childInColumns?: boolean;
+  /** the parts' order (their names), docs/design/72: the rest after them as the papers have them */
+  childOrder?: string[];
   /** the subject total's heading */
   totalLabel?: string;
 }

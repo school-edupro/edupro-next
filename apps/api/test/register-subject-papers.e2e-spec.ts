@@ -158,14 +158,26 @@ describe('register subjects need a paper of their own (docs/design/72, e2e)', ()
     );
     expect(bad.json().subjects.map((x: { key: string }) => x.key)).toEqual(['GEO', 'HIST']);
 
+    // the parts' order and a column each are kept (step 2, Subject order)
+    const both = def(['ENG', 'SST']);
+    both.subjects[1] = {
+      ...both.subjects[1]!,
+      childOrder: ['History', 'Geography'],
+      childInColumns: true,
+    };
     const ok = await call('POST', '/exams/schemes', {
       name: 'VI Register',
       purpose: 'register',
       classIds: [cls.VI],
-      def: def(['ENG', 'SST']),
+      def: both,
     });
     expect(ok.statusCode).toBe(201);
     expect(ok.json()).toMatchObject({ status: 'draft', problems: [] });
+    const got = await call('GET', `/exams/schemes/${ok.json().id as string}`);
+    expect(got.json().def.subjects[1]).toMatchObject({
+      childOrder: ['History', 'Geography'],
+      childInColumns: true,
+    });
     const lock = await call('POST', `/exams/schemes/${ok.json().id as string}/lock`);
     expect(lock.json().status).toBe('locked');
 

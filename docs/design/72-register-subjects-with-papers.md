@@ -147,3 +147,15 @@ subjects)` (a plain subject, or a slot none of whose members has a paper, in the
   do not show in the register.") with the button beside it — the header button was easy to miss. A subject ticked in step 2 once others have columns starts with a copy of
   the first one's chain (`copyColumns`, its parts shown; Hindi taken out of a language slot and ticked again
   had been left with none); "add its columns" also says "or Copy to subjects from another subject".
+- **Later (5 Nov 2026), as the old register's step 2:** step 2 has a **Composite subjects** box: each
+  ticked subject with parts, its sub-subjects (the part's name, the master subject's name in brackets
+  when it differs), whether they show (**Show its parts in each exam** while its columns read whole
+  marks) and **Child subjects in columns** (`childInColumns`, the same as step 3's **Parts in
+  columns**). **Subject order** marks it *composite* and lists its sub-subjects under it with ▲ ▼: the
+  order is kept on the subject (`RegSubject.childOrder`, part names; the API keeps it, at most 12) and
+  applied to its columns (`withChildOrder`: inside each cell of parts, or an exam's own part columns,
+  the columns change places and a heading naming the parts follows), so the sheet needs no change;
+  new part columns follow it (`partsOf` / `childrenOf` sort by it). In step 3 **Same marks as entry**
+  of a composite subject starts on "Parts in one cell (+ sum)". Checked on register 365 (Social
+  Science: Geography, History & Pol Science; Computer Science: Theory, Practical) in a throwaway spec,
+  axe clean, nothing saved; the API e2e saves and reads back `childOrder`.

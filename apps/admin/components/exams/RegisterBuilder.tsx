@@ -16,7 +16,16 @@ import { useEffect, useMemo, useState, useTransition } from 'react';
 import { RegisterColumns } from '@/components/exams/RegisterColumns';
 import { RegisterSheet } from '@/components/exams/RegisterSheet';
 import type { BuilderData } from '@/lib/mark-schemes';
-import { copyColumns, membersOf, sampleStudents, subjectNote } from '@/lib/register-builder';
+import {
+  childrenOf,
+  copyColumns,
+  membersOf,
+  papersOf,
+  sampleStudents,
+  subjectNote,
+  withChildOrder,
+  withPartColumns,
+} from '@/lib/register-builder';
 import { builderData, registerDefOf, saveRegister } from '@/lib/register-actions';
 
 const STEPS = ['Details', 'Subjects', 'Columns', 'Mark codes', 'Totals', 'Final'] as const;
@@ -293,6 +302,41 @@ export function RegisterBuilder({
       ...d,
       subjects: d.subjects.map((s) => (s.key === key ? { ...s, ...patch } : s)),
     }));
+  // a composite subject (entered in parts: Social Science — History, Geography …): its parts, their
+  // order and whether they print a column each (docs/design/72)
+  const composites = def.subjects
+    .filter((s) => !s.slot)
+    .map((s) => ({ s, kids: childrenOf(data, s) }))
+    .filter((x) => x.kids.length > 0);
+  const kidsOf = new Map(composites.map((x) => [x.s.key, x.kids]));
+  const kidLabel = (s: RegSubject, part: string) => {
+    const id = papersOf(data, s)
+      .flatMap((p) => p.parts)
+      .find((p) => p.name === part)?.subjectId;
+    const master = id ? data?.subjects.find((x) => x.id === id)?.name : undefined;
+    return master && master.toLowerCase() !== part.toLowerCase() ? `${part} (${master})` : part;
+  };
+  const [partNote, setPartNote] = useState<string | null>(null);
+  const showParts = (s: RegSubject, inColumns = Boolean(s.childInColumns)) => {
+    const r = withPartColumns(data, s, def);
+    setSubject(s.key, { columns: r.columns, ...(inColumns ? { childInColumns: true } : {}) });
+    setPartNote(
+      `${titles[s.key] ?? ''}: its parts now show in ${String(r.changed)} exam column(s), ${inColumns ? 'a column each' : 'in one cell with their sum'}; the averages and the total stay as they were. Save the register to keep it.`,
+    );
+  };
+  const setChildInColumns = (s: RegSubject, on: boolean) => {
+    // ticked on whole marks: the parts come in first
+    if (on && withPartColumns(data, s, def).changed) return showParts(s, true);
+    setSubject(s.key, { childInColumns: on });
+    setPartNote(null);
+  };
+  const moveChild = (s: RegSubject, j: number, by: -1 | 1) => {
+    const list = [...(kidsOf.get(s.key) ?? [])];
+    const k = j + by;
+    if (k < 0 || k >= list.length) return;
+    [list[j], list[k]] = [list[k]!, list[j]!];
+    setSubject(s.key, { childOrder: list, columns: withChildOrder(s.columns, list) });
+  };
   const setCodes = (exam: string, list: RegCode[]) =>
     setDef((d) => ({ ...d, codes: { ...d.codes, [exam]: list } }));
 
@@ -604,17 +648,80 @@ export function RegisterBuilder({
             </div>
           </div>
         ))}
-      {def.subjects.length > 1 ? (
+      {composites.length ? (
+        <section
+          className="ep-alert ep-alert--info"
+          aria-label="Composite subjects"
+          style={{ display: 'block', marginTop: 'var(--sp-4)' }}
+        >
+          <strong>Composite subjects (their parts from the exam papers)</strong>
+          <ul style={{ margin: 'var(--sp-2) 0', paddingLeft: 'var(--sp-5)' }}>
+            {composites.map(({ s, kids }) => {
+              const whole = withPartColumns(data, s, def).changed;
+              const shown = s.columns.some((c) => c.kind === 'part');
+              return (
+                <li key={s.key} style={{ marginBottom: 'var(--sp-2)' }}>
+                  <strong>{titles[s.key]}</strong> has sub-subjects:{' '}
+                  {kids.map((k) => kidLabel(s, k)).join(', ')}.{' '}
+                  {whole ? (
+                    <>
+                      Its exam columns read only the whole marks, so they do not show yet.{' '}
+                      <Button size="sm" variant="secondary" onClick={() => showParts(s)}>
+                        Show its parts in each exam
+                      </Button>
+                    </>
+                  ) : shown ? (
+                    s.childInColumns ? (
+                      'They print a column each in every exam.'
+                    ) : (
+                      'They print in one cell with their sum in every exam.'
+                    )
+                  ) : (
+                    'In step 3, Same marks as entry brings them in.'
+                  )}
+                  <label className="ep-check" style={{ display: 'flex', marginTop: 'var(--sp-1)' }}>
+                    <input
+                      className="ep-check__input"
+                      type="checkbox"
+                      checked={Boolean(s.childInColumns)}
+                      onChange={(e) => setChildInColumns(s, e.target.checked)}
+                    />
+                    <span className="ep-check__box" aria-hidden="true" /> Child subjects in columns
+                    (off: in one cell with their sum)
+                  </label>
+                </li>
+              );
+            })}
+          </ul>
+          {partNote ? (
+            <p role="status" style={{ margin: '0 0 var(--sp-2)' }}>
+              {partNote}
+            </p>
+          ) : null}
+          <span className="ep-field__help" style={{ margin: 0 }}>
+            Their order is set under the subject in the order below.
+          </span>
+        </section>
+      ) : null}
+      {def.subjects.length > 1 || composites.some((x) => x.kids.length > 1) ? (
         <div style={{ marginTop: 'var(--sp-4)' }}>
-          {check(
-            'Use this order in the register (off: the class’s subject order)',
-            Boolean(def.ownOrder),
-            (v) => setDef((d) => ({ ...d, ownOrder: v })),
-          )}
+          <p className="ep-field__label" style={{ marginBottom: 'var(--sp-2)' }}>
+            Subject order
+          </p>
+          {def.subjects.length > 1
+            ? check(
+                'Use this order in the register (off: the class’s subject order)',
+                Boolean(def.ownOrder),
+                (v) => setDef((d) => ({ ...d, ownOrder: v })),
+              )
+            : null}
           <ol style={{ margin: 0, paddingLeft: 'var(--sp-5)' }}>
             {def.subjects.map((s, i) => (
               <li key={s.key} style={{ marginBottom: 'var(--sp-1)' }}>
                 {titles[s.key]}{' '}
+                {kidsOf.has(s.key) ? (
+                  <span className="ep-badge ep-badge--info">composite</span>
+                ) : null}{' '}
                 <button
                   type="button"
                   className="ep-btn ep-btn--ghost ep-btn--sm"
@@ -633,6 +740,36 @@ export function RegisterBuilder({
                 >
                   ▼
                 </button>
+                {(kidsOf.get(s.key)?.length ?? 0) > 1 ? (
+                  <ol
+                    aria-label={`Parts of ${titles[s.key] ?? ''}`}
+                    style={{ margin: 'var(--sp-1) 0 0', paddingLeft: 'var(--sp-5)' }}
+                  >
+                    {kidsOf.get(s.key)!.map((k, j, all) => (
+                      <li key={k} style={{ marginBottom: 'var(--sp-1)' }}>
+                        {kidLabel(s, k)}{' '}
+                        <button
+                          type="button"
+                          className="ep-btn ep-btn--ghost ep-btn--sm"
+                          aria-label={`Move ${k} up`}
+                          disabled={j === 0}
+                          onClick={() => moveChild(s, j, -1)}
+                        >
+                          ▲
+                        </button>
+                        <button
+                          type="button"
+                          className="ep-btn ep-btn--ghost ep-btn--sm"
+                          aria-label={`Move ${k} down`}
+                          disabled={j === all.length - 1}
+                          onClick={() => moveChild(s, j, 1)}
+                        >
+                          ▼
+                        </button>
+                      </li>
+                    ))}
+                  </ol>
+                ) : null}
               </li>
             ))}
           </ol>

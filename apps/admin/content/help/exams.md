@@ -240,7 +240,13 @@ out, then runs it for any section; the marks always come from the exam entry.
      inside Social Science) or a subject with no paper in the year's exams is listed greyed under **Not
      a subject of their own**, with the reason. A part that is also a paper in some exam says which
      ("own paper: ACT2 (VIII); else inside Social Science").
-   - **Columns**, per subject: pick the exam, then **Same marks as entry** (or its parts), **Average /
+     A ticked subject entered in parts is listed under **Composite subjects** with its sub-subjects
+     and whether they show (**Show its parts in each exam** when its columns read only the whole
+     marks), and **Child subjects in columns** (a column each; off: in one cell with their sum). In
+     **Subject order** it is marked *composite* and its sub-subjects are listed under it with their
+     own ▲ ▼: their order is the order of their columns in every exam, whatever the subject order.
+   - **Columns**, per subject: pick the exam, then **Same marks as entry** (or its parts; a
+     composite subject starts on its parts in one cell with their sum), **Average /
      best of / sum**, **Conversion** (scale to a maximum, or a weightage %; "the rest" of a total out
      of) or **Attendance** slabs. Per column: in the total, a grade, round off (.5 kept), hide (kept in
      the maths), show code, and **sub from** (where an ML pro-rata takes its marks). **Copy to

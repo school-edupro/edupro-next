@@ -54,7 +54,9 @@ export function RegisterColumns({
   const composite = papersOf(data, s).some((p) => p.parts.length > 0);
   const [examId, setExamId] = useState(exams[0]?.examId ?? '');
   const [kind, setKind] = useState<AddKind>('same');
-  const [how, setHow] = useState<'whole' | 'parts' | 'breakup'>('whole');
+  // a composite subject's Same marks as entry brings its parts in, in one cell with the sum
+  const [howSet, setHow] = useState<'whole' | 'parts' | 'breakup' | null>(null);
+  const how = howSet ?? (composite ? 'breakup' : 'whole');
   const [avgFrom, setAvgFrom] = useState<'cols' | 'parts'>('cols');
   const [picked, setPicked] = useState<string[]>([]);
   const [mode, setMode] = useState<'all' | 'best' | 'sum'>('all');
