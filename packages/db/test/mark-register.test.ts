@@ -407,6 +407,105 @@ describe('mark registers (docs/design/68)', () => {
     expect(one.head).toHaveLength(2);
   });
 
+  it('parts across classes: each class its own parts, whole marks where none; exam-wise totals the parts', () => {
+    // Science in parts in VIII only; Social Science: History in VI, Political Science in VIII
+    const group = (e: string, parts: string[]): RegColumn[] => [
+      ...parts.map((p, i): RegColumn => ({
+        key: `${e}${p.slice(0, 3)}`,
+        name: p,
+        kind: 'part',
+        exam: e,
+        part: p,
+        ...(i === 0 ? { wholeIfNoParts: true } : {}),
+        group: `g${e}`,
+        groupLabel: `${e} (parts)`,
+        groupFoot: 'sum',
+      })),
+      {
+        key: e,
+        name: `${e} sum`,
+        kind: 'avg',
+        mode: 'sum',
+        of: parts.map((p) => `${e}${p.slice(0, 3)}`),
+        hidden: true,
+        inTotal: true,
+      },
+    ];
+    const sci = subject('SCI', [
+      ...group('PT', ['Physics', 'Chemistry', 'Biology']),
+      ...group('T', ['Physics', 'Chemistry', 'Biology']),
+    ]);
+    const sst = subject('SST', [
+      ...group('PT', ['Geography', 'History', 'Political']),
+      ...group('T', ['Geography', 'History', 'Political']),
+    ]);
+    const def = { ...reg([sci, sst], ['PT', 'T']), type: 'examwise' as const };
+    const kids = [
+      pupil('vi', [
+        { id: 'SCI', marks: { PT: mark(35, 30), T: mark(80, 60) } },
+        {
+          id: 'SST',
+          marks: {
+            PT: mark(35, null, [
+              ['Geography', 13, 10],
+              ['History', 22, 17],
+            ]),
+            T: mark(80, 50),
+          },
+        },
+      ]),
+      pupil('viii', [
+        {
+          id: 'SCI',
+          marks: {
+            PT: mark(35, null, [
+              ['Physics', 11, 9],
+              ['Chemistry', 12, 10],
+              ['Biology', 12, 11],
+            ]),
+            T: mark(80, 70),
+          },
+        },
+        {
+          id: 'SST',
+          marks: {
+            PT: mark(35, null, [
+              ['Geography', 13, 8],
+              ['Political', 22, 20],
+            ]),
+            T: mark(80, 60),
+          },
+        },
+      ]),
+    ];
+    const rows = computeRegister(def, kids, { exam: 'PT' });
+    const by = Object.fromEntries(rows.map((r) => [r.name, r]));
+    // the parts' sum is the exam's total; whole marks where the class has no parts
+    expect(by.vi!.subjects.SCI).toMatchObject({ total: 30, max: 35 });
+    expect(by.viii!.subjects.SCI).toMatchObject({ total: 30, max: 35 });
+    expect(by.vi!.subjects.SST).toMatchObject({ total: 27, max: 35 });
+    expect(by.viii!.subjects.SST).toMatchObject({ total: 28, max: 35 });
+    expect(by.viii).toMatchObject({ total: 58, max: 70 });
+    // no extra whole-marks column: the parts cell, then the total
+    const view = examView(def, 'PT');
+    expect(view.subjects[0]!.columns.some((c) => c.key.startsWith('__'))).toBe(false);
+    const sheet = buildSheet(def, rows, {
+      place: 'VI-VIII',
+      merit: false,
+      division: false,
+      order: ['SCI', 'SST'],
+      titles: { SCI: 'Science', SST: 'Social Science' },
+      exam: 'PT',
+    });
+    const cells = (name: string) => sheet.body.find((r) => r.studentId === name)!.cells;
+    const at = sheet.head[1]!.findIndex((c) => c.t === 'PT (parts)');
+    const sstAt = sheet.head[1]!.findIndex((c, i) => i > at && c.t === 'PT (parts)');
+    expect(cells('vi')[at + 3]!.t).toBe('30');
+    expect(cells('viii')[at + 3]!.lines).toEqual(['PHYS 9', 'CHEM 10', 'BIOL 11', 'Sum 30']);
+    expect(cells('vi')[sstAt + 3]!.lines).toEqual(['GEOG 10', 'HIST 17', 'Sum 27']);
+    expect(cells('viii')[sstAt + 3]!.lines).toEqual(['GEOG 8', 'POLI 20', 'Sum 28']);
+  });
+
   it('total out of, "the rest" of it, rounding (.5 kept per column, .5 up for the final) and a grade per column', () => {
     const s = subject(
       'ENG',

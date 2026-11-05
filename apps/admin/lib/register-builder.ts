@@ -214,6 +214,8 @@ export function withPartColumns(
         kind: 'part',
         exam: c.exam,
         part: p,
+        // a class that enters the subject without parts gives its whole marks here
+        ...(made.length ? {} : { wholeIfNoParts: true }),
         hidden: c.hidden,
         subFrom: 'skip',
         group,

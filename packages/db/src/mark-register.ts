@@ -212,6 +212,8 @@ export interface RegCell {
   missing?: boolean;
   /** out of the marks and the maximum (a code, or the class has no such exam / part) */
   out?: boolean;
+  /** a part column's whole marks: the class enters the subject without parts (wholeIfNoParts) */
+  whole?: boolean;
   grade?: string | null;
 }
 
@@ -750,9 +752,10 @@ function subjectFor(ctx: Ctx): RegSubjectResult {
         const p = partOf(m, c.part);
         if (!p) {
           if (c.wholeIfNoParts && !m.parts.length) {
-            if (m.code) return coded(e, m.code, m.max, c);
-            if (!m.entered || m.marks === null) return { v: null, max: m.max, missing: true };
-            return { v: m.marks, max: m.max };
+            if (m.code) return { ...coded(e, m.code, m.max, c), whole: true };
+            if (!m.entered || m.marks === null)
+              return { v: null, max: m.max, missing: true, whole: true };
+            return { v: m.marks, max: m.max, whole: true };
           }
           return { v: null, max: 0, out: true };
         }
@@ -926,7 +929,19 @@ export function examView(def: RegisterDef, exam: string): RegisterDef {
         const e = leafExams(s.columns, k);
         return e.size > 0 && [...e].every((x) => x === exam);
       };
-      const own = s.columns.find((c) => c.kind === 'raw' && c.exam === exam);
+      // the exam's own column: its whole marks, or the sum of its parts (a subject entered in parts)
+      const own =
+        s.columns.find((c) => c.kind === 'raw' && c.exam === exam) ??
+        s.columns.find(
+          (c) =>
+            c.kind === 'avg' &&
+            c.mode === 'sum' &&
+            !!c.of?.length &&
+            c.of.every((k) => {
+              const x = s.columns.find((y) => y.key === k);
+              return x?.kind === 'part' && x.exam === exam;
+            }),
+        );
       const columns: RegColumn[] = s.columns.map((c) => ({
         ...c,
         inTotal: own ? c.key === own.key : false,
@@ -1126,6 +1141,8 @@ export interface SheetOptions {
   order: string[];
   /** a register subject's heading (its subject's name, or the slot's) */
   titles: Record<string, string>;
+  /** an exam-wise register: the exam picked (only its columns print, as its totals are worked) */
+  exam?: string;
 }
 
 const RESULT: Record<RegStudentResult['result'], string> = {
@@ -1204,7 +1221,8 @@ function cellText(c: RegCell | undefined, dec: 'auto' | 1 | 2): SheetCell {
 const calcKinds = new Set(['avg', 'conv', 'attendance']);
 
 /** Lays a register out for some students (already worked out and in order). */
-export function buildSheet(def: RegisterDef, rows: RegStudentResult[], o: SheetOptions): Sheet {
+export function buildSheet(def0: RegisterDef, rows: RegStudentResult[], o: SheetOptions): Sheet {
+  const def = def0.type === 'examwise' && o.exam ? examView(def0, o.exam) : def0;
   const d = def.display;
   const dec = numDec(d.decimals) as 'auto' | 1 | 2;
   const fdec = d.finalDecimals === 'auto' ? dec : d.finalDecimals;
@@ -1418,15 +1436,22 @@ export function buildSheet(def: RegisterDef, rows: RegStudentResult[], o: SheetO
         case 'grade':
           return { t: x.values[p.col.key]?.grade ?? '', tone: 'calc' };
         case 'group': {
-          const lines = p.cols.map((c) => {
+          // the parts the student's class has (Social Science: History in VI, Political Science in VII)
+          const mine = p.cols.filter((c) => !x.values[c.key]?.out);
+          if (!mine.length) return { t: '' };
+          // a class that enters the subject without parts: its whole marks, as a plain cell
+          const whole = mine.length === 1 && x.values[mine[0]!.key]?.whole;
+          if (whole) {
+            const c = cellText(x.values[mine[0]!.key], dec);
+            return c.tone ? c : { ...c, tone: 'calc' };
+          }
+          const lines = mine.map((c) => {
             const v = x.values[c.key];
             const short = c.name.slice(0, 4).toUpperCase();
             const t = cellText(v, dec).t;
             return `${short} ${t}${d.childMax && v && v.max > 0 && t ? ` / ${cutFixed(v.max, dec)}` : ''}`;
           });
-          const vals = p.cols
-            .map((c) => x.values[c.key])
-            .filter((v): v is RegCell => !!v && !v.out);
+          const vals = mine.map((c) => x.values[c.key]).filter((v): v is RegCell => !!v && !v.out);
           const got = vals.reduce((a, v) => a + (v.v ?? 0), 0);
           const of = vals.reduce((a, v) => a + v.max, 0);
           const sum = `Sum ${cutFixed(got, dec)}${d.childMax ? ` / ${cutFixed(of, dec)}` : ''}`;

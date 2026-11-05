@@ -394,6 +394,10 @@ describe('mark registers like the legacy Term Mark Register (e2e)', () => {
     expect(term.exam).toBe('TERM');
     const asha = term.rows.find((x: { studentId: string }) => x.studentId === student.Asha);
     expect(asha).toMatchObject({ total: 210, max: 240 });
+    // the sheet prints the exam's own columns only (not the unit tests' conversion)
+    const english = columnsOf(term.sheet as Sheet).filter((x) => x.startsWith('English · '));
+    expect(english.some((x) => x.startsWith('English · Term'))).toBe(true);
+    expect(english.some((x) => x.startsWith('English · UT'))).toBe(false);
     await call(office, 'PUT', `/exams/schemes/${ids.reg!}`, {
       def: { ...cur.def, type: 'general' },
     });

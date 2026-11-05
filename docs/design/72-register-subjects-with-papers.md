@@ -169,3 +169,22 @@ subjects)` (a plain subject, or a slot none of whose members has a paper, in the
   last row (the Excel export already merged any shape). Checked: an engine test, the register e2e
   suites (39 tests), a sample PDF, and register 365's preview (Social Science: MT1, MT2, ACT1, ACT2, HY
   each over Geography | History & Pol Science) with axe, nothing saved.
+- **Later (5 Nov 2026), an exam-wise register for VI-VIII (made from the old register's guide):** two
+  gaps. (1) Classes differ in a subject's parts: Science is in parts in VIII only, Social Science has
+  History in VI and Political Science in VII-VIII. A parts cell now prints only the parts the
+  student's class has, a blank cell when it has none, and the class's whole marks as a plain cell when
+  it enters the subject without parts (the group's first part has `wholeIfNoParts`, set by
+  `withPartColumns` and by step 3's parts in one cell). (2) Exam-wise: `examView` takes a subject's sum
+  of the exam's parts as the exam's own column (no extra whole-marks column), and `buildSheet` applies
+  the same view (`SheetOptions.exam`, given by Run and the preview), so the sheet prints the picked
+  exam only — it printed every exam's columns before. Register **411 "Examwise Register Class
+  VI-VIII"** made on Alpha (draft): exam-wise, VI-VIII, roll order, subjects in the header; English,
+  Hindi, Mathematics, Science (phyisic / Chemistry / BIOLOGY, as Alpha's master spells them), Sanskrit,
+  Computer Science (whole marks), Social Science (History & Pol Science / Political Science /
+  Geography); the class's subject order; PT1, PT2, ACT1, ACT2, Term I; codes AB (0, holds the total),
+  ML (pro-rata from the other exams, 100 %), L, EX, NA (left out of the maximum) for every exam; final
+  total / % / grade / rank by total, .5 up, no result column; optional subjects by the subject choices,
+  additional ones out; Sr, Adm no, Student (roll hidden); division label, proper case, auto decimals;
+  CBSE A1-E; 60 / 45 / 33; no analysis. Checked: an engine test, the register e2e (exam-wise prints
+  its exam only), Run for VI-A, VII-A (no marks yet), VIII-A on PT1 and Term I, and the builder's
+  steps with axe.

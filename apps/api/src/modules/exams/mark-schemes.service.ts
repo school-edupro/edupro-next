@@ -1785,6 +1785,7 @@ export class MarkSchemesService {
               subject: q.subject,
               order,
               titles,
+              exam,
             }),
           );
         else {

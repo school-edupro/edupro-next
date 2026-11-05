@@ -138,7 +138,7 @@ export function RegisterColumns({
         return col;
       };
       const partCols = (hidden: boolean, group?: string) =>
-        parts.map((p) =>
+        parts.map((p, i) =>
           push({
             name: p,
             kind: 'part',
@@ -148,6 +148,8 @@ export function RegisterColumns({
             subFrom: 'skip',
             ...(group
               ? {
+                  // a class that enters the subject without parts gives its whole marks here
+                  ...(i === 0 ? { wholeIfNoParts: true } : {}),
                   group,
                   groupLabel: `${examCode} (${parts.map((x) => x.slice(0, 3).toUpperCase()).join('/')})`,
                   groupFoot: 'sum' as const,

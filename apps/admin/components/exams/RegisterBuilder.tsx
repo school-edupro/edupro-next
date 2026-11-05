@@ -172,9 +172,8 @@ export function RegisterBuilder({
     if (!data || !def.subjects.some((s) => s.columns.length) || !def.grades.length) return null;
     try {
       const students = sampleStudents(def, data, given);
-      const rows = computeRegister(def, students, {
-        exam: def.type === 'examwise' ? def.exams[0]?.key : undefined,
-      });
+      const exam = def.type === 'examwise' ? def.exams[0]?.key : undefined;
+      const rows = computeRegister(def, students, { exam });
       return {
         students,
         sheet: buildSheet(def, rows, {
@@ -183,6 +182,7 @@ export function RegisterBuilder({
           division: false,
           order: def.subjects.map((s) => s.key),
           titles,
+          exam,
         }),
       };
     } catch {

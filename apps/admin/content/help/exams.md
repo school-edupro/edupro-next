@@ -231,7 +231,8 @@ out, then runs it for any section; the marks always come from the exam entry.
    such as AB to try the formulas).
    - **Details**: the name (unique in the year), the classes, student order (roll, A–Z, rank), layout
      (subjects across the top, or Subject-1, Subject-2 … for different electives) and type (general,
-     or exam-wise: pick the exam at Run). **The term result** makes the term results for report cards
+     or exam-wise: pick the exam at Run; the sheet then shows that exam's marks only, with its total,
+     %, grade and rank). **The term result** makes the term results for report cards
      and promotion.
    - **Subjects**: tick them; **+ Elective slot** (or **Use the classes' choice groups**) makes one
      block of several subjects, each student with their own. Only a subject with a paper of its own
@@ -256,8 +257,10 @@ out, then runs it for any section; the marks always come from the exam entry.
      average); a subject with none of the exams is greyed ("no paper in PT1-2026") and not copied to.
      A subject entered in parts (Social Science: Geography, History) shows them with **Show its parts
      in each exam** (each exam's parts in one cell with their sum), or a column each with **Parts in
-     columns**; Copy to subjects does it for such a subject when its tick is on. An **elective slot**
-     takes the columns its subjects had.
+     columns**; Copy to subjects does it for such a subject when its tick is on. Each class shows its
+     own parts (History in VI, Political Science in VII), and a class that enters the subject as
+     whole marks (Science without parts in VI) shows them in its place. An **elective slot** takes
+     the columns its subjects had.
    - **Saving** lists everything to fix. A subject with no paper of its own in the register's exams
      comes first, with the cause ("Geography has no paper of its own in this register's exams: it is
      marked inside Social Science") and **Take them out**, which removes such subjects; save again.
