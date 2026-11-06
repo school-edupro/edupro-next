@@ -19,40 +19,46 @@ export default async function StaffLayout({ children }: { children: ReactNode })
     throw error;
   }
   // the header badge and what waits on this person; best effort, never blocks the page
-  const [unread, approvals, profileChanges, exits, noDues, admissions] = await Promise.all([
-    bff.api
-      .fetch<{ unread: number }>('/comms/inbox/unread')
-      .then((r) => r.unread)
-      .catch(() => 0),
-    bff.api
-      .fetch<{ data: unknown[] }>('/engagement/mine/consent-approvals')
-      .then((r) => r.data.length)
-      .catch(() => 0),
-    bff.api
-      .fetch<{ awaitingMe: number }>('/people/staff-profile-approvals')
-      .then((r) => r.awaitingMe)
-      .catch(() => 0),
-    bff.api
-      .fetch<{ data: unknown[] }>('/people/exits/to-approve')
-      .then((r) => r.data.length)
-      .catch(() => 0),
-    bff.api
-      .fetch<{ data: unknown[] }>('/people/exits/clearance/mine')
-      .then((r) => r.data.length)
-      .catch(() => 0),
-    // admission registrations at my levels, and those I decided lately (docs/design/50)
-    bff.api
-      .fetch<{ waiting: number; decided: number }>('/admissions/approvals?size=1')
-      .then((r) => r.waiting + r.decided)
-      .catch(() => 0),
-  ]);
+  const [unread, approvals, profileChanges, exits, noDues, admissions, purchase] =
+    await Promise.all([
+      bff.api
+        .fetch<{ unread: number }>('/comms/inbox/unread')
+        .then((r) => r.unread)
+        .catch(() => 0),
+      bff.api
+        .fetch<{ data: unknown[] }>('/engagement/mine/consent-approvals')
+        .then((r) => r.data.length)
+        .catch(() => 0),
+      bff.api
+        .fetch<{ awaitingMe: number }>('/people/staff-profile-approvals')
+        .then((r) => r.awaitingMe)
+        .catch(() => 0),
+      bff.api
+        .fetch<{ data: unknown[] }>('/people/exits/to-approve')
+        .then((r) => r.data.length)
+        .catch(() => 0),
+      bff.api
+        .fetch<{ data: unknown[] }>('/people/exits/clearance/mine')
+        .then((r) => r.data.length)
+        .catch(() => 0),
+      // admission registrations at my levels, and those I decided lately (docs/design/50)
+      bff.api
+        .fetch<{ waiting: number; decided: number }>('/admissions/approvals?size=1')
+        .then((r) => r.waiting + r.decided)
+        .catch(() => 0),
+      // purchase indents at my approval level (docs/design/83)
+      bff.api
+        .fetch<{ total: number }>('/purchase/indents?view=waiting&status=submitted&size=1')
+        .then((r) => r.total)
+        .catch(() => 0),
+    ]);
   return (
     <StaffShell
       me={me}
       lang={lang}
       currentPath={currentPath}
       unread={unread}
-      waiting={{ approvals, profileChanges, exits, noDues, admissions }}
+      waiting={{ approvals, profileChanges, exits, noDues, admissions, purchase }}
     >
       {children}
     </StaffShell>

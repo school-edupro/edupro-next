@@ -24,6 +24,8 @@ export interface StaffWaiting {
   noDues?: number;
   /** admission registrations at a level I am named in, and those I decided lately (docs/design/50) */
   admissions?: number;
+  /** purchase indents waiting at my approval level, or a colleague's handed to me (docs/design/83) */
+  purchase?: number;
 }
 export interface StaffGroup {
   id: string;
@@ -228,6 +230,12 @@ export const STAFF_MENU: StaffGroup[] = [
         label: 'Exits to approve',
         help: 'Resignations of colleagues waiting for your decision',
         allowed: (_can, w) => (w.exits ?? 0) > 0,
+      },
+      {
+        href: '/purchase',
+        label: 'Purchase indents',
+        help: 'Ask for what your department needs; decide the indents waiting for you',
+        allowed: (can, w) => can('purchase.indent.raise') || (w.purchase ?? 0) > 0,
       },
       {
         href: '/no-dues',

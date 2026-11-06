@@ -254,6 +254,15 @@ export const MERGE_RULES: MergeRule[] = [
     key: ['release_id'],
     rule: 'the kept record’s held report cards',
   },
+  // parents told of a released report card (docs/design/82): once per release and channel
+  {
+    table: 'report_card_told',
+    col: 'student_id',
+    area: 'marks',
+    how: 'keep',
+    key: ['release_id', 'channel'],
+    rule: 'the kept record’s “parents told” marks',
+  },
   {
     table: 'term_results',
     col: 'student_id',

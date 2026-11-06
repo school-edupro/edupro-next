@@ -245,7 +245,17 @@
     "staffProfileApprovals": "Staff profile approvals",
     "staffProfileSettings": "Staff profile settings",
     "myProfile": "My profile",
-    "myAcr": "My ACR"
+    "myAcr": "My ACR",
+    "purchase": "Purchase",
+    "purchaseIndents": "Purchase Indents",
+    "purchaseDelegations": "Hand over my approvals",
+    "purchaseHome": "Purchase set-up",
+    "vendors": "Vendors",
+    "vendorApprovals": "Vendor approvals",
+    "purchaseSetup": "Items, units and HSN",
+    "paymentTerms": "Payment terms",
+    "purchaseApprovals": "Who approves",
+    "purchaseSettings": "Purchase settings"
   },
   "shell": {
     "primaryNavigation": "Primary",
@@ -2935,7 +2945,8 @@
       "communication": "Communication",
       "system": "System",
       "library": "Library",
-      "staff": "People"
+      "staff": "People",
+      "purchase": "Purchase"
     },
     "title": {
       "fees": "Fees setup",
@@ -2946,7 +2957,8 @@
       "communication": "Communication setup",
       "system": "System setup",
       "library": "Library setup",
-      "staff": "Staff setup"
+      "staff": "Staff setup",
+      "purchase": "Purchase setup"
     },
     "description": "Masters of this school. Add or edit a row, upload an Excel sheet to add or update many at once, export the list as Excel or PDF, and update one column on ticked rows in bulk.",
     "perPage": "Records per page",

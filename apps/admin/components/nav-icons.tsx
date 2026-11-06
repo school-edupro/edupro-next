@@ -4,6 +4,7 @@
  */
 const P = {
   home: 'M3 11.5 12 4l9 7.5M5 10v10h5v-6h4v6h5V10',
+  cart: 'M3 4h2.5l2.2 10.5a1.5 1.5 0 0 0 1.5 1.2h8.2a1.5 1.5 0 0 0 1.5-1.2L20.5 8H6.4M10 20a1 1 0 1 0 0-2 1 1 0 0 0 0 2M17 20a1 1 0 1 0 0-2 1 1 0 0 0 0 2',
   calendar:
     'M5 5h14a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1ZM4 10h16M8 3v4M16 3v4',
   users:
@@ -79,6 +80,7 @@ export const SECTION_ICON: Record<string, IconName> = {
   transport: 'bus',
   hostel: 'bed',
   library: 'book',
+  purchase: 'cart',
   insights: 'chart',
   reports: 'file',
   system: 'settings',

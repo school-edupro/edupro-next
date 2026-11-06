@@ -14458,3 +14458,50 @@ button.ep-subchoice__icon:hover {
   border-radius: var(--radius-sm);
   background: var(--mob-white);
 }
+
+/* ---- Purchase (docs/design/83) -------------------------------------------------------------- */
+.ep-purch-steps {
+  margin: 0;
+  padding-left: var(--sp-5);
+  display: grid;
+  gap: var(--sp-3);
+}
+.ep-purch-lines {
+  display: grid;
+  gap: var(--sp-2);
+}
+.ep-purch-line {
+  display: grid;
+  gap: var(--sp-2);
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 140px), 1fr));
+  align-items: end;
+}
+.ep-purch-line--wide {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 10rem), 1fr));
+  align-items: start;
+  padding: var(--sp-3);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  margin: 0;
+}
+.ep-purch-line--wide > * {
+  min-width: 0;
+}
+/* the item on a row of its own; quantity, rate, note and amount beneath */
+.ep-purch-line__item {
+  grid-column: 1 / -1;
+}
+.ep-purch-amount {
+  display: block;
+  font-weight: var(--fw-semibold);
+  padding: var(--sp-2) 0;
+}
+.ep-purch-total {
+  margin: 0;
+  font-size: var(--fs-body-lg);
+}
+.ep-purch-compare {
+  display: grid;
+  gap: var(--sp-3);
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr));
+}

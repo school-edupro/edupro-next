@@ -1,0 +1,499 @@
+'use server';
+/** Purchase, part 1 (docs/design/83): vendors, approvals, payment terms, settings, department approvals. */
+import { revalidatePath } from 'next/cache';
+import { redirect } from 'next/navigation';
+import { ApiError, apiFetch } from './api';
+import type { ApprovalLevel } from './recruitment';
+
+const pick = (fd: FormData, k: string) => String(fd.get(k) ?? '').trim();
+const okId = (id: string) => /^\d{1,18}$/.test(id);
+const detailOf = (e: ApiError) => {
+  const errs = e.problem.errors as Array<{ path?: string; message?: string }> | undefined;
+  if (Array.isArray(errs) && errs.length)
+    return errs.map((x) => [x.path, x.message].filter(Boolean).join(': ')).join('; ');
+  return typeof e.problem.detail === 'string' && e.problem.detail
+    ? e.problem.detail
+    : e.problem.type;
+};
+/** Back to a purchase page with what happened (only this app's purchase pages). */
+function back(to: string, status: 'ok' | string, detail?: string): never {
+  const url = new URL(to.startsWith('/purchase') ? to : '/purchase', 'http://edupro.local');
+  for (const k of ['ok', 'error', 'detail']) url.searchParams.delete(k);
+  url.searchParams.set(status === 'ok' ? 'ok' : 'error', status === 'ok' ? '1' : status);
+  if (detail) url.searchParams.set('detail', detail.slice(0, 300));
+  revalidatePath(url.pathname);
+  redirect(`${url.pathname}${url.search}`);
+}
+async function run(to: string, fn: () => Promise<unknown>, done: string): Promise<never> {
+  try {
+    await fn();
+  } catch (e) {
+    if (e instanceof ApiError) back(to, e.problem.type, detailOf(e));
+    throw e;
+  }
+  back(to, 'ok', done);
+}
+
+// ---- vendors --------------------------------------------------------------------------------------
+export type SaveResult =
+  | { ok: true; id: string; changeWaiting?: boolean }
+  | {
+      ok: false;
+      type: string;
+      error: string;
+      duplicates?: Array<{ code: string; name: string; field: string }>;
+    };
+
+/** A vendor added (it waits for approval) or changed; the form keeps what was typed on a refusal. */
+export async function saveVendor(
+  id: string | null,
+  body: Record<string, unknown>,
+): Promise<SaveResult> {
+  try {
+    const r = await apiFetch<{ id: string; changeWaiting?: boolean }>(
+      id ? `/purchase/vendors/${id}` : '/purchase/vendors',
+      { method: id ? 'PATCH' : 'POST', body: JSON.stringify(body) },
+    );
+    revalidatePath('/purchase/vendors');
+    return { ok: true, id: r.id, changeWaiting: r.changeWaiting };
+  } catch (e) {
+    if (e instanceof ApiError)
+      return {
+        ok: false,
+        type: e.problem.type,
+        error: detailOf(e),
+        duplicates: e.problem.duplicates as
+          Array<{ code: string; name: string; field: string }> | undefined,
+      };
+    throw e;
+  }
+}
+
+export async function decideVendor(fd: FormData) {
+  const id = pick(fd, 'id');
+  const approve = pick(fd, 'approve') === '1';
+  const to = pick(fd, 'back') || '/purchase/vendor-approvals';
+  if (!okId(id)) back(to, 'validation-failed', 'Unknown vendor');
+  return run(
+    to,
+    () =>
+      apiFetch(`/purchase/vendors/${id}/decide`, {
+        method: 'POST',
+        body: JSON.stringify({ approve, note: pick(fd, 'reason') || undefined }),
+      }),
+    approve ? 'Vendor approved: it can now be used' : 'Vendor rejected',
+  );
+}
+
+export async function decideVendorChange(fd: FormData) {
+  const id = pick(fd, 'id');
+  const approve = pick(fd, 'approve') === '1';
+  const to = pick(fd, 'back') || '/purchase/vendor-approvals';
+  if (!okId(id)) back(to, 'validation-failed', 'Unknown change');
+  return run(
+    to,
+    () =>
+      apiFetch(`/purchase/vendor-changes/${id}/decide`, {
+        method: 'POST',
+        body: JSON.stringify({ approve, note: pick(fd, 'reason') || undefined }),
+      }),
+    approve ? 'Change approved: the new details are in force' : 'Change rejected',
+  );
+}
+
+export async function withdrawVendorChange(fd: FormData) {
+  const id = pick(fd, 'id');
+  const to = pick(fd, 'back') || '/purchase/vendors';
+  if (!okId(id)) back(to, 'validation-failed', 'Unknown change');
+  return run(
+    to,
+    () => apiFetch(`/purchase/vendor-changes/${id}/withdraw`, { method: 'POST' }),
+    'Change withdrawn',
+  );
+}
+
+export async function setVendorStatus(fd: FormData) {
+  const id = pick(fd, 'id');
+  const status = pick(fd, 'status');
+  const to = `/purchase/vendors/${id}`;
+  if (!okId(id) || !['active', 'inactive', 'blacklisted'].includes(status))
+    back('/purchase/vendors', 'validation-failed', 'Unknown vendor');
+  return run(
+    to,
+    () =>
+      apiFetch(`/purchase/vendors/${id}/status`, {
+        method: 'PUT',
+        body: JSON.stringify({ status, reason: pick(fd, 'reason') || undefined }),
+      }),
+    status === 'blacklisted'
+      ? 'Vendor blacklisted: it is not offered on any PR or PO'
+      : status === 'inactive'
+        ? 'Vendor made inactive'
+        : 'Vendor active again',
+  );
+}
+
+/** A PDF or photo uploaded through the file service; its id. */
+async function uploadOne(entry: File): Promise<string> {
+  if (!/^(application\/pdf|image\/(png|jpeg|webp))$/.test(entry.type) || entry.size > 5_242_880)
+    throw new ApiError(400, {
+      type: 'validation-failed',
+      detail: 'A PDF or a photo (JPEG, PNG) up to 5 MB',
+    });
+  const reg = await apiFetch<{
+    file: { id: string };
+    upload: { url: string; method: string; headers?: Record<string, string> };
+  }>('/platform/files', {
+    method: 'POST',
+    body: JSON.stringify({
+      fileName: entry.name.slice(0, 200),
+      contentType: entry.type,
+      sizeBytes: entry.size,
+      classification: 'internal',
+    }),
+  });
+  const target = reg.upload.url.startsWith('http')
+    ? reg.upload.url
+    : `${process.env.API_BASE_URL ?? 'http://localhost:4000'}${reg.upload.url}`;
+  const headers = new Headers({ 'content-type': entry.type });
+  for (const [k, v] of Object.entries(reg.upload.headers ?? {})) headers.set(k, v);
+  const put = await fetch(target, {
+    method: reg.upload.method || 'PUT',
+    headers,
+    body: Buffer.from(await entry.arrayBuffer()),
+  });
+  if (!put.ok) throw new ApiError(put.status, { type: 'file.upload_failed' });
+  return reg.file.id;
+}
+
+export async function addVendorDocument(fd: FormData) {
+  const id = pick(fd, 'id');
+  const kind = pick(fd, 'kind');
+  const file = fd.get('file');
+  const to = `/purchase/vendors/${id}`;
+  if (!okId(id)) back('/purchase/vendors', 'validation-failed', 'Unknown vendor');
+  if (!(file instanceof File) || file.size === 0) back(to, 'validation-failed', 'Choose the file');
+  return run(
+    to,
+    async () =>
+      apiFetch(`/purchase/vendors/${id}/documents`, {
+        method: 'POST',
+        body: JSON.stringify({ kind, fileId: await uploadOne(file) }),
+      }),
+    'Document added',
+  );
+}
+
+export async function removeVendorDocument(fd: FormData) {
+  const id = pick(fd, 'id');
+  const docId = pick(fd, 'docId');
+  const to = `/purchase/vendors/${id}`;
+  if (!okId(id) || !okId(docId)) back('/purchase/vendors', 'validation-failed', 'Unknown document');
+  return run(
+    to,
+    () => apiFetch(`/purchase/vendors/${id}/documents/${docId}`, { method: 'DELETE' }),
+    'Document removed',
+  );
+}
+
+export type ImportResult =
+  | {
+      ok: true;
+      dryRun: boolean;
+      rows: number;
+      good: number;
+      saved: number;
+      results: Array<{ row: number; code: string; ok: boolean; error?: string }>;
+    }
+  | { ok: false; error: string };
+
+export async function importVendors(file: string, dryRun: boolean): Promise<ImportResult> {
+  try {
+    const r = await apiFetch<Omit<Extract<ImportResult, { ok: true }>, 'ok'>>(
+      '/purchase/vendors/import',
+      { method: 'POST', body: JSON.stringify({ file, dryRun }) },
+    );
+    if (!dryRun) revalidatePath('/purchase/vendors');
+    return { ok: true, ...r };
+  } catch (e) {
+    if (e instanceof ApiError) return { ok: false, error: detailOf(e) };
+    throw e;
+  }
+}
+
+// ---- payment terms --------------------------------------------------------------------------------
+export async function savePaymentTerm(
+  id: string | null,
+  body: Record<string, unknown>,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  try {
+    await apiFetch(id ? `/purchase/payment-terms/${id}` : '/purchase/payment-terms', {
+      method: id ? 'PUT' : 'POST',
+      body: JSON.stringify(body),
+    });
+    revalidatePath('/purchase/payment-terms');
+    return { ok: true };
+  } catch (e) {
+    if (e instanceof ApiError) return { ok: false, error: detailOf(e) };
+    throw e;
+  }
+}
+
+// ---- settings and committee -----------------------------------------------------------------------
+const num = (fd: FormData, k: string) => Number(pick(fd, k).replace(/,/g, ''));
+
+export async function savePurchaseSettings(fd: FormData) {
+  const to = '/purchase/settings';
+  const sig = pick(fd, 'committeeSignatures');
+  const alert = pick(fd, 'largePoAlert');
+  return run(
+    to,
+    () =>
+      apiFetch('/purchase/settings', {
+        method: 'PUT',
+        body: JSON.stringify({
+          gstin: pick(fd, 'gstin') || null,
+          billingAddress: pick(fd, 'billingAddress') || null,
+          deliveryAddress: pick(fd, 'deliveryAddress') || null,
+          piPrefix: pick(fd, 'piPrefix'),
+          prPrefix: pick(fd, 'prPrefix'),
+          poPrefix: pick(fd, 'poPrefix'),
+          directLimit: num(fd, 'directLimit'),
+          committeeLimit: num(fd, 'committeeLimit'),
+          committeeQuotes: num(fd, 'committeeQuotes'),
+          committeeSignatures: sig ? Number(sig) : null,
+          emergencyEnabled: fd.get('emergencyEnabled') === 'on',
+          poTerms: pick(fd, 'poTerms') || null,
+          poValidityDays: num(fd, 'poValidityDays'),
+          purchaseDepartmentId: pick(fd, 'purchaseDepartmentId') || null,
+          poSignatures: pick(fd, 'poSignatures')
+            .split(',')
+            .map((x) => x.trim())
+            .filter(Boolean),
+          largePoAlert: alert ? Number(alert.replace(/,/g, '')) : null,
+          splitWindowDays: num(fd, 'splitWindowDays'),
+        }),
+      }),
+    'Purchase settings saved',
+  );
+}
+
+export async function addCommitteeMember(fd: FormData) {
+  const employeeId = pick(fd, 'employeeId');
+  if (!okId(employeeId)) back('/purchase/settings', 'validation-failed', 'Pick the employee');
+  return run(
+    '/purchase/settings',
+    () =>
+      apiFetch('/purchase/committee', {
+        method: 'POST',
+        body: JSON.stringify({ employeeId, role: pick(fd, 'role') || undefined }),
+      }),
+    'Added to the purchase committee',
+  );
+}
+
+export async function removeCommitteeMember(fd: FormData) {
+  const id = pick(fd, 'id');
+  if (!okId(id)) back('/purchase/settings', 'validation-failed', 'Unknown member');
+  return run(
+    '/purchase/settings',
+    () => apiFetch(`/purchase/committee/${id}`, { method: 'DELETE' }),
+    'Taken off the purchase committee',
+  );
+}
+
+// ---- who approves per department ------------------------------------------------------------------
+export async function saveDepartmentLevels(
+  departmentId: string,
+  doc: string,
+  levels: ApprovalLevel[],
+): Promise<
+  { ok: true; moved: number; approved: number; warnings?: string[] } | { ok: false; error: string }
+> {
+  try {
+    const r = await apiFetch<{ warnings: string[] }>(`/purchase/approvals/${departmentId}/${doc}`, {
+      method: 'PUT',
+      body: JSON.stringify({
+        levels: levels.map((l) => ({
+          name: l.name.trim(),
+          by: l.by,
+          employeeIds: l.by === 'employees' ? l.employeeIds : [],
+          ...(l.by === 'designation' && l.designation ? { designation: l.designation } : {}),
+          slaHours: l.slaHours,
+        })),
+      }),
+    });
+    revalidatePath('/purchase/approvals');
+    return { ok: true, moved: 0, approved: 0, warnings: r.warnings };
+  } catch (e) {
+    if (e instanceof ApiError) return { ok: false, error: detailOf(e) };
+    throw e;
+  }
+}
+
+export async function saveDepartmentRules(fd: FormData) {
+  const id = pick(fd, 'departmentId');
+  const to = `/purchase/approvals?department=${id}`;
+  if (!okId(id)) back('/purchase/approvals', 'validation-failed', 'Pick the department');
+  return run(
+    to,
+    () =>
+      apiFetch(`/purchase/approvals/${id}/rules`, {
+        method: 'PUT',
+        body: JSON.stringify({
+          bypassLimit: num(fd, 'bypassLimit') || 0,
+          rateContractBypass: fd.get('rateContractBypass') === 'on',
+        }),
+      }),
+    'Bypass rules saved',
+  );
+}
+
+// ---- copy from another school ---------------------------------------------------------------------
+export async function copyFromSchool(fd: FormData) {
+  const schoolId = pick(fd, 'schoolId');
+  const parts = fd.getAll('parts').map(String);
+  if (!okId(schoolId) || !parts.length)
+    back('/purchase', 'validation-failed', 'Pick the school and what to copy');
+  let copied: Record<string, number> = {};
+  try {
+    copied = (
+      await apiFetch<{ copied: Record<string, number> }>('/purchase/copy-from', {
+        method: 'POST',
+        body: JSON.stringify({ schoolId, parts }),
+      })
+    ).copied;
+  } catch (e) {
+    if (e instanceof ApiError) back('/purchase', e.problem.type, detailOf(e));
+    throw e;
+  }
+  const words: Record<string, string> = {
+    uoms: 'units',
+    hsn: 'HSN / SAC codes',
+    categories: 'categories',
+    items: 'items',
+    paymentTerms: 'payment terms',
+    vendors: 'vendors (waiting for approval)',
+  };
+  const said = Object.entries(copied)
+    .filter(([, n]) => n > 0)
+    .map(([k, n]) => `${String(n)} ${words[k] ?? k}`);
+  back('/purchase', 'ok', said.length ? `Copied: ${said.join(', ')}` : 'Nothing new to copy');
+}
+
+// ---- part 2: the Purchase Indent ------------------------------------------------------------------
+export type IndentSaveResult =
+  | { ok: true; id: string; number?: string }
+  /** id: a new PI saved as a draft although sending it failed */
+  | { ok: false; error: string; id?: string };
+
+/** A PI saved as a draft (or changed), and sent for approval when asked; the form keeps what was typed. */
+export async function saveIndent(
+  id: string | null,
+  body: Record<string, unknown>,
+  submit: boolean,
+): Promise<IndentSaveResult> {
+  if (id && !okId(id)) return { ok: false, error: 'Unknown indent' };
+  let saved: string | null = id;
+  try {
+    const r = await apiFetch<{ id: string }>(id ? `/purchase/indents/${id}` : '/purchase/indents', {
+      method: id ? 'PUT' : 'POST',
+      body: JSON.stringify(body),
+    });
+    saved = r.id;
+    revalidatePath('/purchase/indents');
+    if (!submit) return { ok: true, id: r.id };
+    const s = await apiFetch<{ id: string; number: string }>(`/purchase/indents/${r.id}/submit`, {
+      method: 'POST',
+    });
+    return { ok: true, id: s.id, number: s.number };
+  } catch (e) {
+    if (e instanceof ApiError)
+      return saved && !id
+        ? { ok: false, id: saved, error: `Saved as a draft, not sent: ${detailOf(e)}` }
+        : { ok: false, error: detailOf(e) };
+    throw e;
+  }
+}
+
+export async function submitIndent(fd: FormData) {
+  const id = pick(fd, 'id');
+  const to = `/purchase/indents/${id}`;
+  if (!okId(id)) back('/purchase/indents', 'validation-failed', 'Unknown indent');
+  return run(
+    to,
+    () => apiFetch(`/purchase/indents/${id}/submit`, { method: 'POST' }),
+    'Sent for approval',
+  );
+}
+
+export async function cancelIndent(fd: FormData) {
+  const id = pick(fd, 'id');
+  const to = `/purchase/indents/${id}`;
+  if (!okId(id)) back('/purchase/indents', 'validation-failed', 'Unknown indent');
+  return run(
+    to,
+    () =>
+      apiFetch(`/purchase/indents/${id}/cancel`, {
+        method: 'POST',
+        body: JSON.stringify({ reason: pick(fd, 'reason') }),
+      }),
+    'Indent withdrawn',
+  );
+}
+
+export async function decideIndent(fd: FormData) {
+  const id = pick(fd, 'id');
+  const action = pick(fd, 'action');
+  const to = `/purchase/indents/${id}`;
+  if (!okId(id) || !['approve', 'reject', 'send_back'].includes(action))
+    back('/purchase/indents', 'validation-failed', 'Unknown indent');
+  return run(
+    to,
+    () =>
+      apiFetch(`/purchase/indents/${id}/decide`, {
+        method: 'POST',
+        body: JSON.stringify({ action, note: pick(fd, 'reason') || undefined }),
+      }),
+    action === 'approve'
+      ? 'Approved'
+      : action === 'reject'
+        ? 'Rejected: the raiser sees the reason'
+        : 'Sent back to the raiser for changes',
+  );
+}
+
+/** My PI, PR and PO approvals handed to a colleague for some days (the school admin: anyone's). */
+export async function delegatePurchase(fd: FormData) {
+  const to = '/purchase/delegations';
+  const fromUserId = pick(fd, 'fromUserId');
+  const toEmployeeId = pick(fd, 'toEmployeeId');
+  if (!okId(toEmployeeId) || (fromUserId && !okId(fromUserId)))
+    back(to, 'validation-failed', 'Pick the colleague');
+  return run(
+    to,
+    () =>
+      apiFetch('/purchase/delegations', {
+        method: 'POST',
+        body: JSON.stringify({
+          fromUserId: fromUserId || undefined,
+          toEmployeeId,
+          startsOn: pick(fd, 'startsOn'),
+          endsOn: pick(fd, 'endsOn'),
+          reason: pick(fd, 'reason'),
+        }),
+      }),
+    'Approvals handed over for those days',
+  );
+}
+
+export async function revokePurchaseDelegation(fd: FormData) {
+  const id = pick(fd, 'id');
+  const to = '/purchase/delegations';
+  if (!okId(id)) back(to, 'validation-failed', 'Unknown delegation');
+  return run(
+    to,
+    () => apiFetch(`/purchase/delegations/${id}`, { method: 'DELETE' }),
+    'Delegation ended',
+  );
+}

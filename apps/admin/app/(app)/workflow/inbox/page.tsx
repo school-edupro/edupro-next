@@ -121,6 +121,11 @@ export default async function InboxPage({
                 <a href={`/people/recruitment/${s.instance.entityId}`}>{w('viewEntity')}</a>
               </p>
             ) : null}
+            {s.instance.entityType === 'purchase_indent' ? (
+              <p style={{ marginTop: 'var(--sp-2)' }}>
+                <a href={`/purchase/indents/${s.instance.entityId}`}>{w('viewEntity')}</a>
+              </p>
+            ) : null}
             <form action={actOnStep} style={{ marginTop: 'var(--sp-3)' }}>
               <NoEnterSubmit />
               <input type="hidden" name="id" value={s.id} />

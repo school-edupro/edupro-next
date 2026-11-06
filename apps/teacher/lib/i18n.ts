@@ -13,6 +13,37 @@ export async function currentLang(): Promise<Lang> {
 }
 
 const DICT: Record<string, string> = {
+  // purchase indents (docs/design/83)
+  Approvals: 'स्वीकृतियाँ',
+  'Away? Hand over your purchase approvals': 'बाहर हैं? अपनी क्रय स्वीकृतियाँ सौंपें',
+  Back: 'वापस',
+  Change: 'बदलें',
+  'End now': 'अभी समाप्त करें',
+  'Hand over my approvals': 'मेरी स्वीकृतियाँ सौंपें',
+  'Indents to show': 'दिखाने वाले इंडेंट',
+  Items: 'सामग्री',
+  'Nothing is waiting for your approval.': 'आपकी स्वीकृति के लिए कुछ प्रतीक्षा में नहीं है।',
+  'Open and decide': 'खोलें और निर्णय लें',
+  'Pick the colleague': 'सहकर्मी चुनें',
+  'Purchase indents': 'क्रय इंडेंट',
+  'Raise an indent': 'इंडेंट बनाएँ',
+  'Raised by me': 'मेरे द्वारा बनाए गए',
+  'Remark (needed to send back or reject; the raiser sees it)':
+    'टिप्पणी (वापस भेजने या अस्वीकार करने के लिए आवश्यक; बनाने वाला इसे देखता है)',
+  'To (the whole day)': 'तक (पूरा दिन)',
+  'Waiting for me': 'मेरी प्रतीक्षा में',
+  'What to change': 'क्या बदलना है',
+  Withdraw: 'वापस लें',
+  'Withdraw it: why': 'वापस लें: क्यों',
+  'You have not raised an indent yet.': 'आपने अभी तक कोई इंडेंट नहीं बनाया है।',
+  'Your decision': 'आपका निर्णय',
+  'Your indent': 'आपका इंडेंट',
+  'Ask for what your department needs; your department’s approvers decide in turn.':
+    'अपने विभाग की ज़रूरत की सामग्री माँगें; आपके विभाग के स्वीकर्ता बारी-बारी से निर्णय लेते हैं।',
+  'Save it as a draft to finish later, or send it to your department’s approvers. It gets its number when sent.':
+    'बाद में पूरा करने के लिए मसौदे के रूप में सहेजें, या अपने विभाग के स्वीकर्ताओं को भेजें। भेजने पर इसे संख्या मिलती है।',
+  'Away for some days? A colleague approves your purchase indents, requisitions and orders in your place for those days. Other approvals stay with you.':
+    'कुछ दिन बाहर हैं? उन दिनों एक सहकर्मी आपकी जगह आपके क्रय इंडेंट, माँग-पत्र और आदेश स्वीकृत करेगा। अन्य स्वीकृतियाँ आपके पास रहेंगी।',
   Areas: 'क्षेत्र',
   'Remarks by category: the class teacher every one, a subject teacher their subject’s, others those given to them':
     'श्रेणी अनुसार टिप्पणियाँ: कक्षा अध्यापक सभी, विषय अध्यापक अपने विषय की, अन्य उन्हें दी गई',

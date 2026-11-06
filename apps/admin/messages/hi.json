@@ -245,7 +245,17 @@
     "staffProfileApprovals": "स्टाफ़ प्रोफ़ाइल अनुमोदन",
     "staffProfileSettings": "स्टाफ़ प्रोफ़ाइल सेटिंग",
     "myProfile": "मेरी प्रोफ़ाइल",
-    "myAcr": "मेरा ACR"
+    "myAcr": "मेरा ACR",
+    "purchase": "क्रय",
+    "purchaseIndents": "क्रय मांग पत्र (इंडेंट)",
+    "purchaseDelegations": "मेरी स्वीकृतियाँ सौंपें",
+    "purchaseHome": "क्रय सेटअप",
+    "vendors": "विक्रेता",
+    "vendorApprovals": "विक्रेता अनुमोदन",
+    "purchaseSetup": "वस्तुएँ, इकाइयाँ और HSN",
+    "paymentTerms": "भुगतान शर्तें",
+    "purchaseApprovals": "कौन अनुमोदन करता है",
+    "purchaseSettings": "क्रय सेटिंग्स"
   },
   "shell": {
     "primaryNavigation": "मुख्य",
@@ -2935,7 +2945,8 @@
       "communication": "संचार",
       "system": "सिस्टम",
       "library": "पुस्तकालय",
-      "staff": "लोग"
+      "staff": "लोग",
+      "purchase": "क्रय"
     },
     "title": {
       "fees": "शुल्क सेटअप",
@@ -2946,7 +2957,8 @@
       "communication": "संचार सेटअप",
       "system": "सिस्टम सेटअप",
       "library": "पुस्तकालय सेटअप",
-      "staff": "स्टाफ़ सेटअप"
+      "staff": "स्टाफ़ सेटअप",
+      "purchase": "क्रय सेटअप"
     },
     "description": "इस विद्यालय के मास्टर। पंक्ति जोड़ें या संपादित करें, एक साथ कई जोड़ने/बदलने के लिए Excel शीट अपलोड करें, सूची Excel या PDF में निर्यात करें, और चुनी पंक्तियों का एक कॉलम थोक में बदलें।",
     "perPage": "प्रति पृष्ठ रिकॉर्ड",

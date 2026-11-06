@@ -69,6 +69,11 @@ export const LevelSchema = z.object({
    * earlier level, counts as approved (vacancy approval).
    */
   autoSkip: z.boolean().optional(),
+  /**
+   * Nobody approves what they raised (purchase, docs/design/83): the requester is left out of the level's
+   * approvers; a level only they hold passes to the next one, and the last such level to the school admin.
+   */
+  noSelfApproval: z.boolean().optional(),
 });
 
 export const CreateDefinitionSchema = z.object({

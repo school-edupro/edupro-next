@@ -19,7 +19,8 @@ export interface ApprovalGroup {
     | 'file'
     | 'acr'
     | 'vacancy'
-    | 'admission';
+    | 'admission'
+    | 'purchase';
   title: string;
   help: string;
   href: string;
@@ -36,6 +37,15 @@ interface ProfileInbox {
     createdAt: string;
   }>;
   page: { total: number };
+}
+interface PurchaseIndentRow {
+  id: string;
+  number: string | null;
+  department: string;
+  raisedBy: string;
+  estimate: number;
+  priority: 'normal' | 'urgent';
+  submittedAt: string | null;
 }
 interface WorkflowItem {
   id: string;
@@ -80,8 +90,14 @@ export async function myApprovals(
       : null,
     has.has('workflow.inbox.act')
       ? apiFetch<{ data: WorkflowItem[] }>('/workflow/inbox')
-          // vacancies have their own group below
-          .then((r) => r.data.filter((x) => x.instance.entityType !== 'vacancy'))
+          // vacancies and purchase indents have their own groups below
+          .then((r) =>
+            r.data.filter(
+              (x) =>
+                x.instance.entityType !== 'vacancy' &&
+                !x.instance.entityType?.startsWith('purchase'),
+            ),
+          )
           .then((data): ApprovalGroup => ({
             key: 'workflow',
             title: 'Approval steps',
@@ -98,6 +114,30 @@ export async function myApprovals(
           }))
           .catch(() => null)
       : null,
+    // purchase indents wait on the department's levels by name (HOD, a designation, named staff), not
+    // on a permission: everyone is asked, and the group shows only when something waits (docs/design/83)
+    apiFetch<{ data: PurchaseIndentRow[]; total: number }>(
+      `/purchase/indents?view=waiting&status=submitted&size=${String(size)}`,
+    )
+      .then((r): ApprovalGroup | null =>
+        r.total
+          ? {
+              key: 'purchase',
+              title: 'Purchase Indents',
+              help: 'Indents of your department waiting for your approval',
+              href: '/purchase/indents?view=waiting',
+              count: r.total,
+              items: r.data.map((x) => ({
+                id: x.id,
+                title: `${x.number ?? 'Indent'} · ${x.department}`,
+                detail: `₹${x.estimate.toLocaleString('en-IN')} · ${x.raisedBy}${x.priority === 'urgent' ? ' · urgent' : ''}`,
+                href: `/purchase/indents/${x.id}`,
+                since: x.submittedAt,
+              })),
+            }
+          : null,
+      )
+      .catch(() => null),
     // fee requests one approver decides on their own pages: receipt cancel, cheque bounce, date
     // corrections (the ones that ride the approval levels come through "Approval steps")
     has.has('fees.adjustment.approve')

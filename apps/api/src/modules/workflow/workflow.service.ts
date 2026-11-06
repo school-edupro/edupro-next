@@ -25,6 +25,8 @@ export interface Level {
   autoIfRequester?: boolean;
   /** The steps are worked out again as the request moves and when the set-up changes (replan). */
   autoSkip?: boolean;
+  /** The requester never approves: their level passes on, the last one to the school admin (purchase). */
+  noSelfApproval?: boolean;
 }
 
 /** Why a step was decided without anybody acting on it (replan). */
@@ -32,6 +34,7 @@ const NOBODY = 'Nobody at this level';
 const RAISED = "Raised by this level's approver";
 const EARLIER = 'Approved at an earlier level by the same person';
 const TAKEN_OUT = 'Taken out of the approval levels';
+const PASSED = 'Raised by this level’s approver: passed on (nobody approves their own)';
 const sameSet = (a: readonly string[], b: readonly string[]) =>
   a.length === b.length && a.every((x) => b.includes(x));
 
@@ -211,7 +214,9 @@ export class WorkflowService {
       `SELECT d.id::text, d.code, d.name, d.entity_type, d.levels, d.creator_roles, d.status, (SELECT count(*)::int FROM workflow_instances i WHERE i.definition_id = d.id AND i.status = 'pending') AS open
          FROM workflow_definitions d WHERE d.deleted_at IS NULL AND d.code <> ALL($1::text[])
           -- a consent form's own levels are set on the form (docs/design/28-consent-forms.md)
-          AND d.entity_type <> 'consent_response' ORDER BY d.entity_type, d.code`,
+          AND d.entity_type <> 'consent_response'
+          -- purchase levels are set per department on Purchase → Who approves (docs/design/83)
+          AND d.entity_type NOT LIKE 'purchase%' ORDER BY d.entity_type, d.code`,
       [[...WorkflowService.MODULE_OWNED, ...WorkflowService.MIRRORS]],
     );
     return r.rows.map((x) => ({
@@ -818,7 +823,10 @@ export class WorkflowService {
     let current: Plan | null = null;
     let anybody = false;
     for (const level of [...inst.levels].sort((a, b) => a.level - b.level)) {
-      const assignees = await this.resolveAssignees(c, level.resolver, requester, scope);
+      const held = await this.resolveAssignees(c, level.resolver, requester, scope);
+      // nobody approves their own (purchase): the requester is left out of such a level
+      const selfOut = !!level.noSelfApproval && !!requester && held.includes(requester);
+      const assignees = selfOut ? held.filter((a) => a !== requester) : held;
       if (assignees.length) anybody = true;
       const base = { level, assignees, actedBy: null, actedAt: null, note: null };
       const own = steps.find((s) => s.level === level.level);
@@ -834,7 +842,7 @@ export class WorkflowService {
       if (current)
         p = assignees.length
           ? { ...base, status: 'pending' }
-          : { ...base, status: 'skipped', note: NOBODY };
+          : { ...base, status: 'skipped', note: selfOut ? PASSED : NOBODY };
       else if (kept)
         p = {
           ...base,
@@ -851,7 +859,7 @@ export class WorkflowService {
           actedAt: earlier.acted_at,
           note: EARLIER,
         };
-      else if (requester && assignees.includes(requester))
+      else if (!level.noSelfApproval && requester && assignees.includes(requester))
         p = {
           ...base,
           status: 'approved',
@@ -859,12 +867,27 @@ export class WorkflowService {
           actedAt: own?.acted_by === requester && own.acted_at ? own.acted_at : new Date(),
           note: RAISED,
         };
-      else if (!assignees.length) p = { ...base, status: 'skipped', note: NOBODY };
+      else if (!assignees.length)
+        p = { ...base, status: 'skipped', note: selfOut ? PASSED : NOBODY };
       else {
         p = { ...base, status: 'pending' };
         current = p;
       }
       plan.push(p);
+    }
+    // the last level passed on because its approver raised the request: the school admin decides
+    const last = plan[plan.length - 1];
+    if (!current && last && last.level.noSelfApproval && last.note === PASSED) {
+      const admins = (
+        await this.resolveAssignees(c, { kind: 'role', roleCode: 'school_admin' }, requester, scope)
+      ).filter((a) => a !== requester);
+      if (admins.length) {
+        last.assignees = admins;
+        last.status = 'pending';
+        last.note = null;
+        current = last;
+        anybody = true;
+      }
     }
     if (!plan.length || (!anybody && !approvals.length)) return { outcome: 'none', moved: false };
     const was = steps.find((s) => s.level === inst.current_level && s.status === 'pending') ?? null;
@@ -1005,7 +1028,8 @@ export class WorkflowService {
   /** Steps the user may act on: assigned, or delegated to them by an assignee (active delegation). */
   static readonly MAY_ACT = `(app.current_user_id() = ANY(s.assignee_user_ids)
        OR EXISTS (SELECT 1 FROM delegations d WHERE d.to_user_id = app.current_user_id() AND d.from_user_id = ANY(s.assignee_user_ids)
-                     AND d.revoked_at IS NULL AND now() BETWEEN d.starts_at AND d.ends_at))`;
+                     AND d.revoked_at IS NULL AND now() BETWEEN d.starts_at AND d.ends_at
+                     AND (d.scope = 'all' OR EXISTS (SELECT 1 FROM workflow_instances wi WHERE wi.id = s.instance_id AND wi.entity_type LIKE 'purchase%'))))`;
 
   async inbox(ctx: RequestContext): Promise<InboxItem[]> {
     return this.db.tenant(requireTenant(ctx), async (c) => {
@@ -1116,8 +1140,10 @@ export class WorkflowService {
       if (!step.assignees.includes(ctx.user.id)) {
         const d = await c.query<{ from_user_id: string }>(
           `SELECT d.from_user_id::text FROM delegations d WHERE d.to_user_id = app.current_user_id() AND d.from_user_id = ANY($1::bigint[])
-             AND d.revoked_at IS NULL AND now() BETWEEN d.starts_at AND d.ends_at LIMIT 1`,
-          [step.assignees],
+             AND d.revoked_at IS NULL AND now() BETWEEN d.starts_at AND d.ends_at
+             AND (d.scope = 'all' OR EXISTS (SELECT 1 FROM workflow_instances wi WHERE wi.id = $2 AND wi.entity_type LIKE 'purchase%'))
+           LIMIT 1`,
+          [step.assignees, step.instance_id],
         );
         if (!d.rows[0])
           throw new DomainError('workflow.not_assignee', 'This step is not assigned to you', {
@@ -1125,11 +1151,26 @@ export class WorkflowService {
           });
         delegatedFrom = d.rows[0].from_user_id;
       }
-      const inst = await c.query<{ status: string; current_level: number; levels: Level[] }>(
-        `SELECT i.status::text, i.current_level, d.levels FROM workflow_instances i
+      const inst = await c.query<{
+        status: string;
+        current_level: number;
+        levels: Level[];
+        requested_by: string | null;
+      }>(
+        `SELECT i.status::text, i.current_level, d.levels, i.requested_by::text FROM workflow_instances i
            JOIN workflow_definitions d ON d.id = i.definition_id WHERE i.id = $1 FOR UPDATE OF i`,
         [step.instance_id],
       );
+      // nobody approves their own (purchase): not as an approver, not as someone's delegate
+      if (
+        inst.rows[0]!.requested_by === ctx.user.id &&
+        inst.rows[0]!.levels.find((l) => l.level === step.level)?.noSelfApproval
+      )
+        throw new DomainError(
+          'workflow.self_approval',
+          'You raised this request: another approver decides it',
+          { status: 403 },
+        );
       if (inst.rows[0]!.status !== 'pending' || inst.rows[0]!.current_level !== step.level)
         throw new DomainError('workflow.not_current', 'The instance is not waiting on this step', {
           status: 409,

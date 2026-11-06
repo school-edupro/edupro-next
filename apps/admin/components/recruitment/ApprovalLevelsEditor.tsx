@@ -13,7 +13,9 @@ const BY: Record<Exclude<ApprovalBy, 'role' | 'manager'>, string> = {
 };
 type SaveLevels = (
   levels: ApprovalLevel[],
-) => Promise<{ ok: true; moved: number; approved: number } | { ok: false; error: string }>;
+) => Promise<
+  { ok: true; moved: number; approved: number; warnings?: string[] } | { ok: false; error: string }
+>;
 
 /**
  * Who approves a vacancy, level by level (docs/design/34-recruitment.md, part 5): named employees, everyone
@@ -32,6 +34,7 @@ export function ApprovalLevelsEditor({
   allowManager = false,
   allowRole = false,
   idPrefix = 'ra',
+  maxLevels = 6,
 }: {
   setup: ApprovalSetup;
   /** Saves the levels (vacancy approval by default). */
@@ -46,6 +49,8 @@ export function ApprovalLevelsEditor({
   /** Offer everyone holding a role (the principal's sign-in, accounts …). */
   allowRole?: boolean;
   idPrefix?: string;
+  /** How many levels may be set (purchase: 3). */
+  maxLevels?: number;
 }) {
   const canEdit = setup.can.manage;
   const choices: Array<[ApprovalBy, string]> = [
@@ -98,7 +103,7 @@ export function ApprovalLevelsEditor({
         r.ok
           ? {
               tone: 'success',
-              text: `Saved.${r.moved ? ` ${String(r.moved)} ${r.moved > 1 ? waitingNoun[1] : waitingNoun[0]} waiting moved to the new people.` : ''}${r.approved ? ` ${String(r.approved)} had nothing left to wait for and ${r.approved > 1 ? 'are' : 'is'} approved.` : ''}`,
+              text: `Saved.${r.moved ? ` ${String(r.moved)} ${r.moved > 1 ? waitingNoun[1] : waitingNoun[0]} waiting moved to the new people.` : ''}${r.approved ? ` ${String(r.approved)} had nothing left to wait for and ${r.approved > 1 ? 'are' : 'is'} approved.` : ''}${r.warnings?.length ? ` Check: ${r.warnings.join('; ')}.` : ''}`,
             }
           : { tone: 'danger', text: r.error },
       );
@@ -315,7 +320,7 @@ export function ApprovalLevelsEditor({
             type="button"
             className="ep-btn ep-btn--ghost"
             onClick={add}
-            disabled={rows.length >= 6}
+            disabled={rows.length >= maxLevels}
           >
             Add a level
           </button>

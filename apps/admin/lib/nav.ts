@@ -572,6 +572,37 @@ export const NAV: Array<{
     ],
   },
   {
+    // docs/design/83: purchase, part 1 (the masters) and part 2 (indents)
+    section: 'purchase',
+    items: [
+      { href: '/purchase/indents', label: 'purchaseIndents', permission: 'purchase.indent.raise' },
+      {
+        href: '/purchase/delegations',
+        label: 'purchaseDelegations',
+        permission: 'purchase.indent.raise',
+      },
+      { href: '/purchase', label: 'purchaseHome', permission: 'purchase.master.view' },
+      { href: '/purchase/vendors', label: 'vendors', permission: 'purchase.master.view' },
+      {
+        href: '/purchase/vendor-approvals',
+        label: 'vendorApprovals',
+        permission: 'purchase.master.view',
+      },
+      { href: '/masters/purchase', label: 'purchaseSetup', permission: 'purchase.master.view' },
+      {
+        href: '/purchase/payment-terms',
+        label: 'paymentTerms',
+        permission: 'purchase.master.view',
+      },
+      {
+        href: '/purchase/approvals',
+        label: 'purchaseApprovals',
+        permission: 'purchase.master.view',
+      },
+      { href: '/purchase/settings', label: 'purchaseSettings', permission: 'purchase.master.view' },
+    ],
+  },
+  {
     section: 'insights',
     items: [
       {
