@@ -86,11 +86,15 @@
   Filter by type, class or stage.
 - An exam opens on its **Overview**: the next step, the figures, and class by class how many marks
   are entered and verified, indicators, remarks, attendance, health and results. Every page of the
-  exam has the same tabs: Overview · Set-up · Marks · Indicators · Remarks · Attendance · Results ·
-  Reports.
-- **Entry locks** on the Overview: one click locks or opens marks, indicators, remarks, attendance or
-  health of a class. Locking needs no special right; opening a locked area needs the unlock right.
-  **Lock the whole exam** (at the top) asks first.
+  exam has the same tabs: Overview · Set-up · Marks · Indicators · Remarks · Attendance.
+- **Lock the whole exam** (at the top) and the **Entry locks** on the Overview (marks, indicators,
+  remarks, attendance or health of a class) are the **school admin's** alone: coordinators and the exam
+  office enter, submit, verify and send back as before, but do not lock or open. While the exam is
+  locked no one enters or changes marks. **Unlocking the whole exam** also reopens every submitted and
+  verified subject sheet (the dialog says how many and asks the reason, kept in each sheet's history),
+  so every teacher can enter again and submit again for verification; a class whose results are
+  published on a report card stays as it is (revoke the class first). A single sheet can still be
+  reopened from its tile in Marks status.
 
 ## Marks entry
 

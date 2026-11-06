@@ -1,6 +1,7 @@
 import { Alert, Badge, Breadcrumbs, PageHeader } from '@edupro/ui';
 import { getTranslations } from 'next-intl/server';
 import { ConfirmAction } from '@/components/ConfirmAction';
+import { apiFetch } from '@/lib/api';
 import { toggleExamLock } from '@/lib/exam-hub-actions';
 import type { Exam, ExamStage } from '@/lib/types';
 import { ExamTabs, type ExamTab } from './ExamTabs';
@@ -8,20 +9,23 @@ import { STAGE_TONE } from './StageSteps';
 
 /**
  * The top of every page of an exam (docs/design/66): its name, type and dates, its stage, the date
- * sheet, a copy for the next term, the whole-exam lock (asked first), and the exam's tabs.
+ * sheet, a copy for the next term, the whole-exam lock (asked first), and the exam's tabs. 6 Nov 2026:
+ * the lock is the school admin's (exams.lock.manage); unlocking reopens the submitted and verified
+ * marks, so the dialog says how many and asks the reason.
  */
 export async function ExamFrame({
   exam,
   stage,
   current,
   canManage,
-  canUnlock,
+  canLock,
 }: {
   exam: Exam;
   stage: ExamStage | null;
   current: ExamTab;
   canManage: boolean;
-  canUnlock: boolean;
+  /** lock and unlock the whole exam (the school admin) */
+  canLock: boolean;
 }) {
   const [t, s, l, a] = await Promise.all([
     getTranslations('examHub.overview'),
@@ -38,6 +42,15 @@ export async function ExamFrame({
     results: ['marks'],
     reports: ['marks'],
   };
+  // what unlocking reopens: the submitted and verified sheets
+  const toReopen =
+    exam.marksLocked && canLock
+      ? await apiFetch<{ counts: { submitted: number; verified: number } }>(
+          `/exams/${exam.id}/entry-status`,
+        )
+          .then((r) => r.counts.submitted + r.counts.verified)
+          .catch(() => 0)
+      : 0;
   const need = areaOf[current];
   const off = need && exam.areas ? !need.some((x) => exam.areas!.includes(x)) : false;
   const dates =
@@ -73,16 +86,17 @@ export async function ExamFrame({
                 {t('copy')}
               </a>
             ) : null}
-            {canManage && (!exam.marksLocked || canUnlock) ? (
+            {canLock ? (
               <ConfirmAction
                 action={toggleExamLock}
                 fields={{ examId: exam.id, to: exam.marksLocked ? 'open' : 'lock' }}
                 label={exam.marksLocked ? t('unlockWhole') : t('lockWhole')}
                 title={exam.marksLocked ? t('unlockWholeTitle') : t('lockWholeTitle')}
                 confirmLabel={exam.marksLocked ? t('unlockWhole') : t('lockWhole')}
+                {...(toReopen ? { reason: { label: t('unlockReason') } } : {})}
               >
                 {exam.marksLocked
-                  ? t('unlockWholeBody', { name: exam.name })
+                  ? `${t('unlockWholeBody', { name: exam.name })}${toReopen ? ` ${t('unlockReopens', { n: toReopen })}` : ''}`
                   : t('lockWholeBody', { name: exam.name })}
               </ConfirmAction>
             ) : null}

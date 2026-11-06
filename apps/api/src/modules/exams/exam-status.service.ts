@@ -6,7 +6,12 @@ import { DbService } from '../../common/db/db.service';
 import { DomainError } from '../../common/errors/domain-error';
 import { requireTenant, type RequestContext } from '../../common/http/request-context';
 import { ExamEntryService, MARKS } from './exam-entry.service';
-import { EXAMS, type EntryStatusActionDto, type EntryStatusNoteDto } from './exams.dto';
+import {
+  EXAMS,
+  type EntryStatusActionDto,
+  type EntryStatusNoteDto,
+  type ExamLockDto,
+} from './exams.dto';
 import { MarkSchemesService } from './mark-schemes.service';
 
 type Status = 'open' | 'submitted' | 'verified';
@@ -344,6 +349,77 @@ export class ExamStatusService {
         after: { classSectionId: section.id, note },
       });
       return this.one(c, tenant, ctx, es.id, section.id, yearId);
+    });
+  }
+
+  /**
+   * 6 Nov 2026: the whole exam locked (no one enters) or unlocked by the school admin. Unlocking also
+   * reopens every submitted and verified sheet, with the reason in each sheet's history, so every teacher
+   * can enter again — but not a class whose results are published in a released card (it is revoked
+   * first, as a single reopen asks); those are named in the answer.
+   */
+  async lockWhole(ctx: RequestContext, examId: string, dto: ExamLockDto) {
+    const tenant = requireTenant(ctx);
+    const yearId = this.entry.year(tenant);
+    return this.db.tenant(tenant, async (c) => {
+      await this.entry.exam(c, examId, yearId);
+      const held = await c.query<{
+        es: string;
+        section: string;
+        status: Status;
+        class_id: string;
+        class_code: string;
+      }>(
+        `SELECT st.exam_subject_id::text AS es, st.class_section_id::text AS section, st.status::text AS status,
+                es.class_id::text, k.code AS class_code
+           FROM exam_entry_status st JOIN exam_subjects es ON es.id = st.exam_subject_id
+           JOIN classes k ON k.id = es.class_id
+          WHERE es.exam_id = $1 AND st.status IN ('submitted', 'verified')`,
+        [examId],
+      );
+      const published = await c.query<{ class_id: string; name: string }>(
+        `SELECT DISTINCT x.class_id::text, r.name FROM report_card_releases r
+           JOIN report_card_release_classes x ON x.release_id = r.id AND x.status = 'released'
+          WHERE $1::bigint = ANY(r.exam_ids)`,
+        [examId],
+      );
+      const out = new Map(published.rows.map((x) => [x.class_id, x.name]));
+      const reopen = dto.locked ? [] : held.rows.filter((x) => !out.has(x.class_id));
+      const reason = dto.reason?.trim() ?? '';
+      if (reopen.length && reason.length < 3)
+        throw new DomainError(
+          'validation-failed',
+          `Unlocking reopens ${String(reopen.length)} submitted or verified sheet${reopen.length === 1 ? '' : 's'}: give the reason`,
+          { status: 400, extra: { sheets: reopen.length } },
+        );
+      await c.query(
+        `UPDATE exams SET marks_locked = $2, updated_at = now(), updated_by = app.current_user_id() WHERE id = $1`,
+        [examId, dto.locked],
+      );
+      await c.query(
+        `UPDATE exam_subjects SET entry_locked = $2, locked_by = CASE WHEN $2 THEN app.current_user_id() END,
+                locked_at = CASE WHEN $2 THEN now() END WHERE exam_id = $1`,
+        [examId, dto.locked],
+      );
+      for (const x of reopen)
+        await this.move(c, x.es, x.section, x.status, 'open', `Reopened with the exam: ${reason}`);
+      if (reopen.length) await c.query(`SELECT app.compute_exam_results($1)`, [examId]);
+      const kept = dto.locked
+        ? []
+        : [
+            ...new Map(
+              held.rows
+                .filter((x) => out.has(x.class_id))
+                .map((x) => [x.class_id, `${x.class_code} (${out.get(x.class_id)!})`]),
+            ).values(),
+          ];
+      await this.audit.stage(ctx, c, {
+        action: dto.locked ? 'exams.exam.lock' : 'exams.exam.unlock',
+        entityType: 'exams',
+        entityId: examId,
+        after: { locked: dto.locked, reopened: reopen.length, kept, ...(reason ? { reason } : {}) },
+      });
+      return { locked: dto.locked, reopened: reopen.length, kept };
     });
   }
 

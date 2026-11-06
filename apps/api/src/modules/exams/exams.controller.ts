@@ -173,7 +173,7 @@ export class ExamsController {
 
   @Post(':id/subjects/lock')
   @ApiOperation({ summary: 'Lock or unlock marks entry for subjects of one class' })
-  @RequirePermission(EXAMS.masterManage)
+  @RequirePermission(EXAMS.lockManage)
   lock(@ReqCtx() ctx: RequestContext, @Param('id') id: string, @Body() dto: LockExamSubjectsDto) {
     return this.exams.lockSubjects(ctx, id, dto);
   }
@@ -183,7 +183,7 @@ export class ExamsController {
     summary:
       'Lock or open entry of one class per type: marks, indicators, remarks, attendance, health',
   })
-  @RequirePermission(EXAMS.masterManage)
+  @RequirePermission(EXAMS.lockManage)
   classLocks(@ReqCtx() ctx: RequestContext, @Param('id') id: string, @Body() dto: ClassLocksDto) {
     return this.exams.classLocks(ctx, id, dto);
   }

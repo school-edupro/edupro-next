@@ -17,6 +17,7 @@ import type {
   UpsertGradeScaleDto,
   SetPartsDto,
 } from './exams.dto';
+import { EXAMS } from './exams.dto';
 import { examProgress, type ExamProgress } from './exam-progress';
 import { fillExamFromSubjectMarks, followSubjectMarks } from './subject-marks-follow';
 
@@ -600,6 +601,13 @@ export class ExamsService {
   async updateExam(ctx: RequestContext, id: string, dto: UpdateExamDto): Promise<ExamRow> {
     const tenant = requireTenant(ctx);
     const yearId = this.year(tenant);
+    // 6 Nov 2026: the whole exam's lock is the school admin's (PUT /exams/:id/lock reopens with it)
+    if (dto.marksLocked !== undefined && !ctx.permissions?.has(EXAMS.lockManage))
+      throw new DomainError(
+        'permission-denied',
+        'Locking or unlocking the whole exam needs exams.lock.manage',
+        { status: 403 },
+      );
     return this.db.tenant(tenant, async (c) => {
       const before = await this.findExam(c, id, yearId);
       if (dto.classes) {

@@ -353,7 +353,8 @@ describe('exam entry, fee reports and the assistant everywhere (e2e, Sprint 15)'
     });
     expect(byClassTeacher.statusCode).toBe(200);
 
-    // lock ENG: entry refused; a teacher cannot unlock, the coordinator can (exams.marks.unlock)
+    // lock ENG: entry refused; a teacher cannot unlock, nor the coordinator (6 Nov 2026: the school
+    // admin's alone, exams.lock.manage); the admin can
     const lock = await inject({
       method: 'POST',
       url: `/exams/${examId}/subjects/lock`,
@@ -380,10 +381,17 @@ describe('exam entry, fee reports and the assistant everywhere (e2e, Sprint 15)'
       json: { classId, subjectIds: [eng], locked: false },
     });
     expect(teacherUnlock.statusCode).toBe(403);
-    const unlock = await inject({
+    const byCoordinator = await inject({
       method: 'POST',
       url: `/exams/${examId}/subjects/lock`,
       headers: h(coordinator),
+      json: { classId, subjectIds: [eng], locked: false },
+    });
+    expect(byCoordinator.statusCode).toBe(403);
+    const unlock = await inject({
+      method: 'POST',
+      url: `/exams/${examId}/subjects/lock`,
+      headers: h(),
       json: { classId, subjectIds: [eng], locked: false },
     });
     expect(unlock.statusCode).toBe(201);

@@ -182,7 +182,7 @@ export default async function ExamMarksPage({
         stage={progress?.stage ?? null}
         current="marks"
         canManage={me.permissions.includes('exams.master.manage')}
-        canUnlock={me.permissions.includes('exams.marks.unlock')}
+        canLock={me.permissions.includes('exams.lock.manage')}
       />
       <SubNav
         label={t('nav')}

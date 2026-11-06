@@ -48,7 +48,12 @@ describe('promotion proposals and remark categories (e2e)', () => {
   const student: Record<string, string> = {};
   const cat: Record<string, string> = {};
   const s = stamp('PR');
-  const call = (u: SeededUser, method: 'GET' | 'POST' | 'PUT', url: string, json?: unknown) =>
+  const call = (
+    u: SeededUser,
+    method: 'GET' | 'POST' | 'PUT' | 'PATCH',
+    url: string,
+    json?: unknown,
+  ) =>
     inject({
       method,
       url,
@@ -545,5 +550,51 @@ describe('promotion proposals and remark categories (e2e)', () => {
     ).toBe(true);
     const after = await proposals();
     expect(of(after.rows, 'Bhanu')).toMatchObject({ result: 'pass', proposal: 'promote' });
+
+    // 6 Nov 2026: the whole exam locked and unlocked by the school admin alone; unlocking reopens the
+    // verified sheet (a reason asked), so its teacher can enter again
+    const whole = (u: SeededUser, body: Record<string, unknown>) =>
+      call(u, 'PUT', `/exams/${examId}/lock`, body);
+    expect((await whole(classTeacher, { locked: true })).statusCode).toBe(403);
+    expect(
+      (await call(classTeacher, 'PATCH', `/exams/${examId}`, { marksLocked: true })).statusCode,
+    ).toBe(403);
+    expect((await whole(admin, { locked: true })).json()).toEqual({
+      locked: true,
+      reopened: 0,
+      kept: [],
+    });
+    const entry = () =>
+      call(englishTeacher, 'PUT', `/exams/${examId}/marks`, {
+        classSectionId: section.A,
+        subjectId: subject.ENG,
+        rows: [{ studentId: student.Bhanu, marks: 41 }],
+      });
+    // an open sheet is refused by the lock (the verified English sheet is refused as verified)
+    const maths = await call(classTeacher, 'PUT', `/exams/${examId}/marks`, {
+      classSectionId: section.A,
+      subjectId: subject.MAT,
+      rows: [{ studentId: student.Bhanu, marks: 30 }],
+    });
+    expect(maths.json().type).toBe('exams.entry_locked');
+    expect((await entry()).statusCode).toBe(409);
+    const noReason = await whole(admin, { locked: false });
+    expect(noReason.statusCode).toBe(400);
+    expect(noReason.json().detail).toBe(
+      'Unlocking reopens 1 submitted or verified sheet: give the reason',
+    );
+    expect((await whole(admin, { locked: false, reason: 'Correct the ENG marks' })).json()).toEqual(
+      { locked: false, reopened: 1, kept: [] },
+    );
+    const st = (await call(admin, 'GET', `/exams/${examId}/entry-status`)).json().data as Array<{
+      classSectionId: string;
+      subjectId: string;
+      status: string;
+      remark: string | null;
+    }>;
+    expect(
+      st.find((x) => x.classSectionId === section.A && x.subjectId === subject.ENG),
+    ).toMatchObject({ status: 'open', remark: 'Reopened with the exam: Correct the ENG marks' });
+    expect((await entry()).statusCode).toBe(200);
   });
 });

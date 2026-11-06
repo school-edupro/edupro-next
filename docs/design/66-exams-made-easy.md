@@ -248,3 +248,15 @@ submitted / verified and when, the remark, the actions (submit, verify or send b
   ran) is on the Overview (`WorkOutResults`, `#results`); when it is the next step, the Overview shows
   the button itself and the exams list's next step links to `/exams/:id#results`. The Analysis, Mark
   register, Promotion and Reports pages are kept at their addresses (old links still open them).
+- **Later (6 Nov 2026), asked**: locking and unlocking (the whole exam, a class's entry locks) is the
+  school admin's alone — a new right `exams.lock.manage` (0310) for `school_admin` and `group_admin`;
+  `POST /exams/:id/subjects/lock` and `PUT /exams/:id/class-locks` need it, and `PATCH /exams/:id` with
+  `marksLocked` too. The whole-exam lock is `PUT /exams/:id/lock {locked, reason?}`
+  (`ExamStatusService.lockWhole`): locking locks every subject; unlocking opens them and reopens every
+  submitted and verified sheet (each logged "Reopened with the exam: <reason>"; a reason of 3 letters
+  or more when any is reopened, else 400), then works the results out again — except a class published
+  in a released card (named in the answer `kept`). The admin's dialog says how many sheets reopen and
+  asks the reason; the page then says how many were reopened and which classes were kept. Teachers'
+  submit / verify / send back / single reopen stay as they were. Tests: exam-promotion-remarks (403 for
+  a teacher, the lock refusing entry, the reason asked, the verified sheet reopened and enterable),
+  exam-hub (the exam office refused), sprint14/15 (the coordinator refused, the admin allowed).

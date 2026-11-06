@@ -9,6 +9,8 @@ export const EXAMS = {
   marksEnter: 'exams.marks.enter',
   marksView: 'exams.marks.view',
   marksUnlock: 'exams.marks.unlock',
+  /** 6 Nov 2026: lock and unlock a whole exam or a class's entry (the school admin's) */
+  lockManage: 'exams.lock.manage',
   indicatorEnter: 'exams.indicator.enter',
   remarkEnter: 'exams.remark.enter',
   attendanceEnter: 'exams.attendance.enter',
@@ -732,3 +734,11 @@ export const EntryStatusNoteSchema = z.object({
   note: z.string().trim().min(3, 'Give the reason (3 letters or more)').max(500),
 });
 export class EntryStatusNoteDto extends createZodDto(EntryStatusNoteSchema) {}
+
+/** 6 Nov 2026: lock or unlock the whole exam; unlocking reopens its submitted and verified marks */
+export const ExamLockSchema = z.object({
+  locked: z.boolean(),
+  /** why, when unlocking reopens submitted or verified marks (kept in each sheet's history) */
+  reason: z.string().trim().max(300).optional(),
+});
+export class ExamLockDto extends createZodDto(ExamLockSchema) {}

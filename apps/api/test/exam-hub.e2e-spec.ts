@@ -88,7 +88,7 @@ describe('exams made easy (e2e)', () => {
         [school.id],
       );
       await c.query(
-        `INSERT INTO role_permissions (role_id, permission_code) VALUES ($1, 'exams.master.view'), ($1, 'exams.master.manage')`,
+        `INSERT INTO role_permissions (role_id, permission_code) VALUES ($1, 'exams.master.view'), ($1, 'exams.master.manage'), ($1, 'exams.lock.manage')`,
         [role.rows[0]!.id],
       );
       await c.query(
@@ -365,6 +365,8 @@ describe('exams made easy (e2e)', () => {
       .data.find((e: { code: string }) => e.code === 'PT-2').id as string;
     const lock = (body: Record<string, boolean>, u = office) =>
       call(u, 'PUT', `/exams/${pt}/class-locks`, { classId, ...body });
+    // 6 Nov 2026: locking is the lock right's alone (the school admin's); the exam office has none
+    expect((await lock({ remarks: true }, examOffice)).statusCode).toBe(403);
     expect((await lock({ remarks: true })).statusCode).toBe(200);
     // the old page sent every box: the ones left open opened nothing
     expect(

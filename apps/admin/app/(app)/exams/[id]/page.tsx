@@ -37,6 +37,8 @@ export default async function ExamOverviewPage({
   ]);
   const canManage = me.permissions.includes('exams.master.manage');
   const canUnlock = me.permissions.includes('exams.marks.unlock');
+  // 6 Nov 2026: locking and unlocking (the exam, a class) is the school admin's
+  const canLock = me.permissions.includes('exams.lock.manage');
   const next = nextStep(exam.id, p);
   const m = p.totals.marks;
   const of = (a: number, b: number) => t('of', { a, b });
@@ -60,7 +62,7 @@ export default async function ExamOverviewPage({
         stage={p.stage}
         current="overview"
         canManage={canManage}
-        canUnlock={canUnlock}
+        canLock={canLock}
       />
       <Notice params={sp} />
       <div style={{ display: 'grid', gap: 'var(--sp-4)' }}>
@@ -265,7 +267,7 @@ export default async function ExamOverviewPage({
                         const blocked = st === 'locked' && !canUnlock;
                         return (
                           <td key={a}>
-                            {canManage ? (
+                            {canLock ? (
                               <form action={toggleClassLock}>
                                 <input type="hidden" name="examId" value={exam.id} />
                                 <input type="hidden" name="classId" value={k.classId} />

@@ -122,7 +122,7 @@ export default async function ExamStatusPage({
         stage={progress?.stage ?? null}
         current="marks"
         canManage={me.permissions.includes('exams.master.manage')}
-        canUnlock={canReopen}
+        canLock={me.permissions.includes('exams.lock.manage')}
       />
       <SubNav
         label={t('nav')}

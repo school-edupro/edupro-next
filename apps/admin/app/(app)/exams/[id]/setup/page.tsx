@@ -526,7 +526,7 @@ export default async function ExamSetupPage({
         stage={p.stage}
         current="setup"
         canManage={canManage}
-        canUnlock={me.permissions.includes('exams.marks.unlock')}
+        canLock={me.permissions.includes('exams.lock.manage')}
       />
       <nav aria-label={t('steps')} style={{ marginBottom: 'var(--sp-4)' }}>
         <ol className="ep-xstages">

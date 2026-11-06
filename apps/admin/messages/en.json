@@ -4062,6 +4062,8 @@
       "lockWholeBody": "No one can enter or change marks in {name} until it is opened again.",
       "unlockWholeTitle": "Open the exam for marks again?",
       "unlockWholeBody": "Teachers can enter and change marks in {name} again.",
+      "unlockReopens": "It also reopens {n} submitted or verified subject sheets, so their teachers can enter and change marks again (they submit them again for verification).",
+      "unlockReason": "Why reopen the marks? (kept in each sheet's history)",
       "copy": "Copy",
       "dateSheet": "Date sheet"
     },

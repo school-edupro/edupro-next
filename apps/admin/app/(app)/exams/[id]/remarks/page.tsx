@@ -89,7 +89,7 @@ export default async function ExamRemarksPage({
         stage={progress?.stage ?? null}
         current="remarks"
         canManage={me.permissions.includes('exams.master.manage')}
-        canUnlock={me.permissions.includes('exams.marks.unlock')}
+        canLock={me.permissions.includes('exams.lock.manage')}
       />
       <Notice params={sp} />
       <Card style={{ marginBottom: 'var(--sp-4)' }}>

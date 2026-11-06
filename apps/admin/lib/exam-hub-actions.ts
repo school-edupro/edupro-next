@@ -238,14 +238,33 @@ export async function toggleClassLock(fd: FormData) {
   );
 }
 
+/**
+ * 6 Nov 2026: lock or unlock the whole exam (the school admin); unlocking reopens the submitted and
+ * verified marks with the reason, and the page says how many (and which classes stay, published).
+ */
 export async function toggleExamLock(fd: FormData) {
   const examId = str(fd, 'examId');
-  return run(`/exams/${examId}`, () =>
-    apiFetch(`/exams/${examId}`, {
-      method: 'PATCH',
-      body: JSON.stringify({ marksLocked: str(fd, 'to') === 'lock' }),
-    }),
-  );
+  const locked = str(fd, 'to') === 'lock';
+  const reason = str(fd, 'reason');
+  const r = await call<{ reopened: number; kept: string[] }>(`/exams/${examId}/lock`, 'PUT', {
+    locked,
+    ...(reason ? { reason } : {}),
+  });
+  if (!r.ok) back(`/exams/${examId}`, 'validation', r.error);
+  const detail = locked
+    ? 'The whole exam is locked: no one can enter or change marks.'
+    : [
+        'The exam is open for marks again.',
+        r.data.reopened
+          ? `${String(r.data.reopened)} submitted or verified sheet${r.data.reopened === 1 ? '' : 's'} reopened: their teachers can enter again.`
+          : '',
+        r.data.kept.length
+          ? `Not reopened (results published; revoke the class first): ${r.data.kept.join(', ')}.`
+          : '',
+      ]
+        .filter(Boolean)
+        .join(' ');
+  back(`/exams/${examId}`, 'ok', detail);
 }
 
 // ---- promotion from the exam's results -------------------------------------------------------------

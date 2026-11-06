@@ -721,10 +721,18 @@ describe('adjustments, hostel, misc, exams and the assistant (e2e, Sprint 14)', 
       passMarks: '13.00',
       entryLocked: false,
     });
-    const lock = await inject({
+    // 6 Nov 2026: locking is the school admin's (exams.lock.manage), not the coordinator's
+    const byCoordinator = await inject({
       method: 'POST',
       url: `/exams/${exam.json().id}/subjects/lock`,
       headers: h(coordinator),
+      json: { classId, locked: true },
+    });
+    expect(byCoordinator.statusCode).toBe(403);
+    const lock = await inject({
+      method: 'POST',
+      url: `/exams/${exam.json().id}/subjects/lock`,
+      headers: h(),
       json: { classId, locked: true },
     });
     expect(lock.json().subjects[0].entryLocked).toBe(true);

@@ -71,7 +71,7 @@ export default async function ExamAttendancePage({
         stage={progress?.stage ?? null}
         current="attendance"
         canManage={me.permissions.includes('exams.master.manage')}
-        canUnlock={me.permissions.includes('exams.marks.unlock')}
+        canLock={me.permissions.includes('exams.lock.manage')}
       />
       <SubNav
         label={t('attNav')}

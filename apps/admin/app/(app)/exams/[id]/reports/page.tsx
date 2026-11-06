@@ -98,7 +98,7 @@ export default async function ExamReportsPage({
         stage={progress?.stage ?? null}
         current="reports"
         canManage={me.permissions.includes('exams.master.manage')}
-        canUnlock={me.permissions.includes('exams.marks.unlock')}
+        canLock={me.permissions.includes('exams.lock.manage')}
       />
       <Card style={{ marginBottom: 'var(--sp-4)' }}>
         <form method="get" className="ep-rp__row" aria-label={t('report')}>

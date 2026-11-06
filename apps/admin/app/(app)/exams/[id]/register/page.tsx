@@ -55,7 +55,7 @@ export default async function RegisterPage({
         stage={progress?.stage ?? null}
         current="results"
         canManage={canManage}
-        canUnlock={me.permissions.includes('exams.marks.unlock')}
+        canLock={me.permissions.includes('exams.lock.manage')}
       />
       <ResultsHead
         examId={id}

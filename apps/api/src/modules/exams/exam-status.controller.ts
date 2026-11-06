@@ -1,8 +1,14 @@
-import { Body, Controller, Get, Param, Post, Query } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, Put, Query } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { RequirePermission } from '../../common/access/require-permission.decorator';
 import { ReqCtx, type RequestContext } from '../../common/http/request-context';
-import { EntryStatusActionDto, EntryStatusNoteDto, EntryStatusQueryDto, EXAMS } from './exams.dto';
+import {
+  EntryStatusActionDto,
+  EntryStatusNoteDto,
+  EntryStatusQueryDto,
+  EXAMS,
+  ExamLockDto,
+} from './exams.dto';
 import { ExamStatusService } from './exam-status.service';
 
 /**
@@ -74,5 +80,15 @@ export class ExamStatusController {
   @RequirePermission(EXAMS.marksUnlock)
   reopen(@ReqCtx() ctx: RequestContext, @Param('id') id: string, @Body() dto: EntryStatusNoteDto) {
     return this.svc.reopen(ctx, id, dto);
+  }
+
+  @Put(':id/lock')
+  @ApiOperation({
+    summary:
+      'Lock or unlock the whole exam (the school admin); unlocking reopens its submitted and verified marks, with a reason',
+  })
+  @RequirePermission(EXAMS.lockManage)
+  lock(@ReqCtx() ctx: RequestContext, @Param('id') id: string, @Body() dto: ExamLockDto) {
+    return this.svc.lockWhole(ctx, id, dto);
   }
 }
