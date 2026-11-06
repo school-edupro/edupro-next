@@ -6,6 +6,7 @@ import { DomainError } from '../../common/errors/domain-error';
 import { requireTenant, type RequestContext } from '../../common/http/request-context';
 import { WorkflowService, type InstanceRow } from '../workflow/workflow.service';
 import { syncFlow } from './purchase-flow';
+import { draftOrdersFor } from './purchase-order-core';
 import { PurchaseVendorsService } from './purchase-vendors.service';
 import {
   PURCHASE,
@@ -873,6 +874,8 @@ export class PurchaseIndentsService implements OnModuleInit {
       `UPDATE purchase_indents SET route = 'to_order', bypass_rule = $2, bypass_note = $3 WHERE id = $1`,
       [id, rule, note],
     );
+    // every line on a contract: the draft POs at once (one per contract vendor), for the purchase office
+    if (rule === 'rate_contract') await draftOrdersFor(c, pr.rows[0]!.id, null);
     await this.audit.stage(ctx, c, {
       action: 'purchase.requisition.auto_approve',
       entityType: 'purchase_requisitions',

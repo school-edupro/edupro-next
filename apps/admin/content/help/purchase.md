@@ -3,8 +3,8 @@
 Staff ask for what their department needs on a **Purchase Indent (PI)**; the department's approvers
 decide it in turn; the purchase office turns approved PIs into a **Requisition (PR)** and an **Order
 (PO)**. This page covers the masters they pick from (units, HSN / SAC codes with GST, item categories
-and items, payment terms, vendors, rate contracts, who approves, the settings), the PI and the PR. (The
-PO screens come next.)
+and items, payment terms, vendors, rate contracts, who approves, the settings), the PI, the PR, the
+PO and the emergency purchase.
 
 ## Who does what
 
@@ -17,6 +17,9 @@ PO screens come next.)
 | **The department's approvers** (HOD, Principal…)    | Approve, send back or reject the PIs at their level; hand their approvals to a colleague when away   |
 | **Purchase office** (requisitions)                  | Makes PRs from approved PIs (or directly), enters quotes, chooses vendors, sends PRs for approval    |
 | **The purchase committee** (named in settings)      | Signs the comparative statement of a PR in the committee tier, in the admin or the staff app         |
+| **Purchase office** (orders)                        | Checks the draft POs, sends them for approval, e-mails them to vendors, closes and amends them       |
+| **School admin** (orders)                           | Cancels an approved PO (its own right)                                                               |
+| **The Principal** (or the designation in settings)  | Ratifies an emergency purchase                                                                       |
 
 ## Set it up, in this order
 
@@ -145,12 +148,53 @@ On the PR:
     **documents** and choose the vendor with the agreed rates.
 - **Send for approval** says what is still missing (the Sourcing card lists it too). The PR goes to its
   department's PR levels (Purchase → Who approves); nobody approves their own.
-- **Approved**: the lines bought wait for the purchase order (next part); a PI all of whose lines are
-  issued from the store closes ("Issued from the store"). **Rejected** or **cancelled**: its PIs go
+- **Approved**: one draft **purchase order per chosen vendor** is made at once (Purchase Orders →
+  Drafts); a PI all of whose lines are issued from the store closes ("Issued from the store"). **Rejected** or **cancelled**: its PIs go
   back to To requisition with the reason. **Reopen to change** an approved PR (before any order): it
   goes back to draft and is approved again (the next revision).
 - Approvers and committee members find theirs in **My approvals** or the staff app (**Office →
   Purchase requisitions**); a PI's raiser opens the PR from the PI.
+
+## Purchase Orders
+
+**Purchase → Purchase Orders.** Approving a requisition drafts one PO per chosen vendor; a PI whose lines
+are all on rate contracts drafts its PO at once. **Purchase → To order** lists what is left to order —
+lines of a cancelled or rejected PO, or of a requisition the system approved under a department's limit
+(no vendor chosen yet): tick the lines, pick the vendor, **Draft the PO**.
+
+On a draft PO:
+
+- **Change**: the vendor's quotation reference, PO date, validity, delivery date and address, the payment
+  term (the vendor's, else the school's default), terms and conditions; each line's words, HSN / SAC,
+  quantity (no more than the requisition still needs), rate, discount % and GST %; other charges
+  (freight, installation, packing) with their GST. A rate-contract line keeps the contract rate unless
+  you give the reason. Taking a line off sends it back to To order.
+- **GST** is worked out from the vendor and the school's state (Purchase settings): **CGST + SGST** for a
+  registered vendor in the same state, **IGST** for one in another state, **none** for an unregistered
+  or composition vendor. A **reverse-charge** service (e.g. an advocate's legal services) shows the GST
+  the school pays itself, apart from the vendor's total. The total is rounded to the rupee and given in
+  words; the GST summary is by HSN / SAC and rate.
+- **MSME**: a micro or small vendor on a payment term longer than 45 days is warned (they must be paid
+  within 45 days).
+- **Send for approval**: the department's PO levels (Purchase → Who approves); nobody approves their own
+  PO — their level passes on.
+- **Approved**: **View / Download** the PDF (DRAFT is printed across it until approved), then **E-mail the
+  PO with the PDF** to the vendor (the address is the vendor's, change it if needed). The words are the
+  template "Purchase: order to the vendor" on Communication → Templates; every e-mail is listed on the PO
+  with its delivery status. The items' last purchase rate is updated.
+- **Close** when the goods have come; **Amend** to change an approved PO — the next revision (R1, R2…)
+  opens as a draft and is approved again; the old one stays in force until then and is then marked
+  replaced; **Cancel** an approved PO needs the cancel right (the school admin) and a reason — tell the
+  vendor; its lines go back to To order.
+
+## Emergency purchase
+
+When something could not wait (a burst pipe, a broken generator), the purchase office records it after
+the fact: **Purchase Orders → Record an emergency purchase** — the vendor, what was bought (item or in
+words, quantity, rate, GST), the vendor's **bill** (PDF or photo) and **why it could not wait**. Then
+**Send for ratification**: everyone with the designation set on Purchase settings (the Principal by
+default) ratifies it or not, in the admin or the staff app. It is marked **Emergency** on screen and on
+the PDF. Purchase settings can switch emergency purchases off.
 
 ## Hand over my approvals
 
@@ -184,3 +228,7 @@ hand over anyone's.
   every line, the certificate, the quotes, the committee's signatures or the tender documents.
 - **The committee's signatures disappeared.** The lines, a quote or the vendors chosen changed after
   they signed: they sign the new statement.
+- **Why is the GST IGST?** The vendor's state (from its GSTIN) is not the school's. Check the vendor's
+  GSTIN and the school's GSTIN on Purchase settings.
+- **I cannot cancel an approved PO.** Cancelling one the vendor may already have needs the cancel right
+  (the school admin). Amend it instead to change it.

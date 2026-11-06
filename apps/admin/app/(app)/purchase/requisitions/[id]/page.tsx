@@ -6,6 +6,7 @@ import { Notice } from '@/components/Notice';
 import { ApiError, apiFetch } from '@/lib/api';
 import {
   inr,
+  ORDER_STATUS,
   REQUISITION_STATUS,
   TIER,
   type IndentStep,
@@ -791,6 +792,22 @@ export default async function RequisitionPage({
               <a href="/purchase/settings">Purchase settings</a>.
             </p>
           )}
+        </section>
+      ) : null}
+
+      {pr.orders.length ? (
+        <section className="ep-card" aria-labelledby="pr-orders">
+          <h2 id="pr-orders" className="ep-card__title">
+            Purchase orders
+          </h2>
+          <ul className="ep-purch-checks">
+            {pr.orders.map((o) => (
+              <li key={o.id}>
+                <a href={`/purchase/orders/${o.id}`}>{o.label}</a> · {o.vendor} · {inr(o.total)}{' '}
+                <Badge tone={ORDER_STATUS[o.status].tone}>{ORDER_STATUS[o.status].label}</Badge>
+              </li>
+            ))}
+          </ul>
         </section>
       ) : null}
 

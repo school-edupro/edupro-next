@@ -22,7 +22,8 @@ export interface ApprovalGroup {
     | 'admission'
     | 'purchase'
     | 'requisition'
-    | 'cs_sign';
+    | 'cs_sign'
+    | 'order';
   title: string;
   help: string;
   href: string;
@@ -39,6 +40,16 @@ interface ProfileInbox {
     createdAt: string;
   }>;
   page: { total: number };
+}
+interface PurchaseOrderRow {
+  id: string;
+  label: string;
+  emergency: boolean;
+  vendor: string;
+  department: string | null;
+  total: number;
+  submittedAt: string | null;
+  createdAt: string;
 }
 interface PurchaseRequisitionRow {
   id: string;
@@ -144,6 +155,29 @@ export async function myApprovals(
                 detail: `₹${x.estimate.toLocaleString('en-IN')} · ${x.raisedBy}${x.priority === 'urgent' ? ' · urgent' : ''}`,
                 href: `/purchase/indents/${x.id}`,
                 since: x.submittedAt,
+              })),
+            }
+          : null,
+      )
+      .catch(() => null),
+    // purchase orders and emergency purchases at my level (docs/design/83)
+    apiFetch<{ data: PurchaseOrderRow[]; waitingForMe: number }>(
+      `/purchase/orders?view=waiting&status=submitted&size=${String(size)}`,
+    )
+      .then((r): ApprovalGroup | null =>
+        r.waitingForMe
+          ? {
+              key: 'order',
+              title: 'Purchase Orders',
+              help: 'Orders waiting for your approval, and emergency purchases to ratify',
+              href: '/purchase/orders?tab=waiting',
+              count: r.waitingForMe,
+              items: r.data.map((x) => ({
+                id: x.id,
+                title: `${x.label}${x.emergency ? ' · emergency' : ''} · ${x.vendor}`,
+                detail: `₹${x.total.toLocaleString('en-IN')}${x.department ? ` · ${x.department}` : ''}`,
+                href: `/purchase/orders/${x.id}`,
+                since: x.submittedAt ?? x.createdAt,
               })),
             }
           : null,

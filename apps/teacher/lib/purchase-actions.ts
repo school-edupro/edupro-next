@@ -216,3 +216,27 @@ export async function unsignRequisition(fd: FormData) {
     'Your signature withdrawn',
   );
 }
+
+// ---- part 4: purchase orders and emergency purchases to approve -----------------------------------
+const poDecision = (decision: 'approve' | 'send_back' | 'reject') => async (fd: FormData) => {
+  const id = pick(fd, 'id');
+  if (!okId(id)) back('/purchase/orders', 'validation-failed', 'Unknown purchase order');
+  return run(
+    `/purchase/orders/${id}`,
+    () =>
+      apiFetch(`/purchase/orders/${id}/decide`, {
+        method: 'POST',
+        body: JSON.stringify({ action: decision, note: pick(fd, 'reason') || undefined }),
+      }),
+    decision === 'approve' ? 'Approved' : decision === 'reject' ? 'Rejected' : 'Sent back',
+  );
+};
+export async function approveOrder(fd: FormData) {
+  return poDecision('approve')(fd);
+}
+export async function sendBackOrder(fd: FormData) {
+  return poDecision('send_back')(fd);
+}
+export async function rejectOrder(fd: FormData) {
+  return poDecision('reject')(fd);
+}

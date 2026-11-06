@@ -218,6 +218,7 @@ export class PurchaseSetupService {
         committee_quotes: number;
         committee_signatures: number | null;
         emergency_enabled: boolean;
+        emergency_ratifier: string;
         po_terms: string | null;
         po_validity_days: number;
         purchase_department_id: string | null;
@@ -252,6 +253,7 @@ export class PurchaseSetupService {
         committeeQuotes: x.committee_quotes,
         committeeSignatures: x.committee_signatures,
         emergencyEnabled: x.emergency_enabled,
+        emergencyRatifier: x.emergency_ratifier,
         poTerms: x.po_terms,
         poValidityDays: x.po_validity_days,
         purchaseDepartmentId: x.purchase_department_id,
@@ -301,7 +303,7 @@ export class PurchaseSetupService {
                 pi_prefix = $5, pr_prefix = $6, po_prefix = $7, direct_limit = $8, committee_limit = $9,
                 committee_quotes = $10, committee_signatures = $11, emergency_enabled = $12, po_terms = $13,
                 po_validity_days = $14, purchase_department_id = $15, po_signatures = $16::text[], large_po_alert = $17,
-                split_window_days = $18, updated_at = now(), updated_by = app.current_user_id()`,
+                split_window_days = $18, emergency_ratifier = $19, updated_at = now(), updated_by = app.current_user_id()`,
         [
           dto.gstin,
           dto.gstin ? dto.gstin.slice(0, 2) : null,
@@ -321,6 +323,7 @@ export class PurchaseSetupService {
           dto.poSignatures,
           dto.largePoAlert,
           dto.splitWindowDays,
+          dto.emergencyRatifier,
         ],
       );
       await this.audit.stage(ctx, c, {

@@ -28,6 +28,8 @@ export interface StaffWaiting {
   purchase?: number;
   /** purchase requisitions at my level, and comparative statements for me to sign (the committee) */
   requisitions?: number;
+  /** purchase orders and emergency purchases at my level */
+  orders?: number;
 }
 export interface StaffGroup {
   id: string;
@@ -244,6 +246,12 @@ export const STAFF_MENU: StaffGroup[] = [
         label: 'Purchase requisitions',
         help: 'Requisitions waiting for your approval; comparative statements to sign (the purchase committee)',
         allowed: (_can, w) => (w.requisitions ?? 0) > 0,
+      },
+      {
+        href: '/purchase/orders',
+        label: 'Purchase orders',
+        help: 'Purchase orders waiting for your approval; emergency purchases to ratify',
+        allowed: (_can, w) => (w.orders ?? 0) > 0,
       },
       {
         href: '/no-dues',

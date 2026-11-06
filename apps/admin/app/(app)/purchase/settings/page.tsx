@@ -164,8 +164,25 @@ export default async function PurchaseSettingsPage({
                 defaultChecked={s.emergencyEnabled}
               />
               <span className="ep-check__box" />
-              Allow emergency purchases (recorded after the fact; the Principal ratifies each one)
+              Allow emergency purchases (recorded after the fact, with the vendor’s bill; ratified
+              afterwards)
             </label>
+            <FormRow columns={3}>
+              <label className="ep-field" htmlFor="ps-ratifier">
+                <span className="ep-field__label">Who ratifies them (designation)</span>
+                <input
+                  id="ps-ratifier"
+                  name="emergencyRatifier"
+                  className="ep-input"
+                  maxLength={80}
+                  defaultValue={s.emergencyRatifier}
+                  required
+                />
+                <span className="ep-field__help">
+                  Everyone with this designation; the school admin when nobody holds it.
+                </span>
+              </label>
+            </FormRow>
           </FormSection>
           <FormSection title="Purchase order">
             <FormRow columns={3}>

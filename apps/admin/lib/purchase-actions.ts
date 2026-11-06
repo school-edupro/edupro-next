@@ -263,6 +263,7 @@ export async function savePurchaseSettings(fd: FormData) {
           committeeQuotes: num(fd, 'committeeQuotes'),
           committeeSignatures: sig ? Number(sig) : null,
           emergencyEnabled: fd.get('emergencyEnabled') === 'on',
+          emergencyRatifier: pick(fd, 'emergencyRatifier') || 'Principal',
           poTerms: pick(fd, 'poTerms') || null,
           poValidityDays: num(fd, 'poValidityDays'),
           purchaseDepartmentId: pick(fd, 'purchaseDepartmentId') || null,
@@ -742,4 +743,151 @@ export async function saveChoices(fd: FormData) {
       }),
     'Vendors saved',
   );
+}
+
+// ---- part 4: the Purchase Order -------------------------------------------------------------------
+const poPage = (id: string) => `/purchase/orders/${id}`;
+
+/** A draft PO for ticked lines of an approved requisition, to the vendor chosen (To order). */
+export async function draftOrder(fd: FormData) {
+  const requisitionId = pick(fd, 'requisitionId');
+  const vendorId = pick(fd, 'vendorId');
+  const lineIds = fd.getAll('lineId').map(String).filter(okId);
+  if (!okId(requisitionId) || !okId(vendorId) || !lineIds.length)
+    back('/purchase/to-order', 'validation-failed', 'Pick the vendor and tick the lines');
+  let made: { id: string; number: string } | null = null;
+  try {
+    made = await apiFetch<{ id: string; number: string }>('/purchase/orders', {
+      method: 'POST',
+      body: JSON.stringify({ requisitionId, vendorId, lineIds }),
+    });
+  } catch (e) {
+    if (e instanceof ApiError) back('/purchase/to-order', e.problem.type, detailOf(e));
+    throw e;
+  }
+  back(poPage(made.id), 'ok', `${made.number} drafted: check it and send it for approval`);
+}
+
+export type OrderSaveResult = { ok: true; id: string } | { ok: false; error: string };
+
+/** A draft PO's header, lines and charges saved (the GST and totals are worked out by the API). */
+export async function saveOrder(
+  id: string,
+  body: Record<string, unknown>,
+): Promise<OrderSaveResult> {
+  if (!okId(id)) return { ok: false, error: 'Unknown purchase order' };
+  try {
+    await apiFetch(`/purchase/orders/${id}`, { method: 'PUT', body: JSON.stringify(body) });
+    revalidatePath(poPage(id));
+    return { ok: true, id };
+  } catch (e) {
+    if (e instanceof ApiError) return { ok: false, error: detailOf(e) };
+    throw e;
+  }
+}
+
+const poAction =
+  (
+    path: string,
+    done: string | ((r: Record<string, unknown>) => string),
+    body?: (fd: FormData) => unknown,
+  ) =>
+  async (fd: FormData) => {
+    const id = pick(fd, 'id');
+    if (!okId(id)) back('/purchase/orders', 'validation-failed', 'Unknown purchase order');
+    let r: Record<string, unknown> = {};
+    try {
+      r = await apiFetch<Record<string, unknown>>(`/purchase/orders/${id}${path}`, {
+        method: 'POST',
+        ...(body ? { body: JSON.stringify(body(fd)) } : {}),
+      });
+    } catch (e) {
+      if (e instanceof ApiError) back(poPage(id), e.problem.type, detailOf(e));
+      throw e;
+    }
+    // an amendment opens the new revision
+    const to = typeof r.id === 'string' && r.id !== id && path === '/amend' ? r.id : id;
+    back(poPage(to), 'ok', typeof done === 'string' ? done : done(r));
+  };
+
+export async function submitOrder(fd: FormData) {
+  return poAction('/submit', 'Sent for approval')(fd);
+}
+export async function decideOrder(fd: FormData) {
+  const action = pick(fd, 'action');
+  if (!['approve', 'reject', 'send_back'].includes(action))
+    back('/purchase/orders', 'validation-failed', 'Unknown decision');
+  return poAction(
+    '/decide',
+    action === 'approve'
+      ? 'Approved'
+      : action === 'reject'
+        ? 'Rejected'
+        : 'Sent back to the purchase office',
+    (f) => ({ action, note: pick(f, 'reason') || undefined }),
+  )(fd);
+}
+export async function sendOrder(fd: FormData) {
+  return poAction('/send', 'Queued to the vendor with the PDF attached', (f) => ({
+    to: pick(f, 'to'),
+  }))(fd);
+}
+export async function closeOrder(fd: FormData) {
+  return poAction('/close', 'Closed', (f) => ({ reason: pick(f, 'reason') }))(fd);
+}
+export async function cancelOrder(fd: FormData) {
+  return poAction('/cancel', 'Cancelled: its lines are to order again', (f) => ({
+    reason: pick(f, 'reason'),
+  }))(fd);
+}
+export async function amendOrder(fd: FormData) {
+  return poAction('/amend', 'Amendment opened: change it and send it for approval', (f) => ({
+    reason: pick(f, 'reason'),
+  }))(fd);
+}
+
+/** An emergency purchase: the vendor, the lines, the vendor's bill (uploaded here) and the reason. */
+export async function recordEmergency(fd: FormData) {
+  const to = '/purchase/emergency';
+  const bill = fd.get('bill');
+  if (!(bill instanceof File) || !bill.size)
+    back(to, 'validation-failed', "Attach the vendor's bill");
+  const lines = [0, 1, 2, 3, 4, 5]
+    .map((i) => ({
+      item: pick(fd, `item_${String(i)}`),
+      description: pick(fd, `desc_${String(i)}`),
+      quantity: pick(fd, `qty_${String(i)}`),
+      uomId: pick(fd, `uom_${String(i)}`),
+      rate: pick(fd, `rate_${String(i)}`),
+      gstRate: pick(fd, `gst_${String(i)}`),
+    }))
+    .filter((l) => (l.item || l.description) && l.quantity && l.rate)
+    .map((l) => ({
+      ...(l.item
+        ? { itemId: l.item }
+        : { description: l.description, uomId: l.uomId || undefined }),
+      quantity: l.quantity,
+      rate: l.rate,
+      ...(l.gstRate !== '' ? { gstRate: l.gstRate } : {}),
+    }));
+  let made: { id: string; number: string } | null = null;
+  try {
+    const billFileId = await uploadOne(bill);
+    made = await apiFetch<{ id: string; number: string }>('/purchase/emergency-purchases', {
+      method: 'POST',
+      body: JSON.stringify({
+        vendorId: pick(fd, 'vendorId'),
+        departmentId: pick(fd, 'departmentId') || undefined,
+        reason: pick(fd, 'reason'),
+        billRef: pick(fd, 'billRef') || undefined,
+        poDate: pick(fd, 'poDate') || undefined,
+        billFileId,
+        lines,
+      }),
+    });
+  } catch (e) {
+    if (e instanceof ApiError) back(to, e.problem.type, detailOf(e));
+    throw e;
+  }
+  back(poPage(made.id), 'ok', `${made.number} recorded: send it for ratification`);
 }

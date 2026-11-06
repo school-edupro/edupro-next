@@ -14,6 +14,13 @@ export async function currentLang(): Promise<Lang> {
 
 const DICT: Record<string, string> = {
   // purchase indents (docs/design/83)
+  'Purchase orders': 'क्रय आदेश',
+  'Orders waiting for your approval, and emergency purchases to ratify.':
+    'आपकी स्वीकृति की प्रतीक्षा में आदेश, और अनुसमर्थन हेतु आपातकालीन क्रय।',
+  'Why an emergency': 'आपातकाल क्यों',
+  Payment: 'भुगतान',
+  Ratify: 'अनुसमर्थन करें',
+  'Do not ratify': 'अनुसमर्थन न करें',
   'Purchase requisitions': 'क्रय माँग-पत्र',
   'Requisitions waiting for your approval, and comparative statements for the purchase committee to sign.':
     'आपकी स्वीकृति की प्रतीक्षा में माँग-पत्र, और क्रय समिति के हस्ताक्षर हेतु तुलनात्मक विवरण।',

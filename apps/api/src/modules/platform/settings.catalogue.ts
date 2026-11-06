@@ -465,6 +465,8 @@ export const MODULE_FLAGS = [
   'exams',
   'transport',
   'library',
+  // docs/design/83: indents, requisitions, orders (the staff app's purchase screens follow the rights)
+  'purchase',
   'insights',
   'reports',
   'system',

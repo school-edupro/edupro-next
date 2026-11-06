@@ -288,6 +288,7 @@ export interface RequisitionDetail extends Omit<RequisitionRow, 'quotes'> {
     }>;
   };
   requirements: Array<{ key: string; label: string; met: boolean }>;
+  orders: Array<{ id: string; label: string; status: OrderStatus; total: number; vendor: string }>;
   steps: IndentStep[];
   history: Array<{ kind: string; actor: string | null; note: string | null; at: string }>;
   can: {
@@ -337,4 +338,231 @@ export interface RequisitionFormLists {
     gstStatus: 'regular' | 'composition' | 'unregistered';
     msmeType: string | null;
   }>;
+}
+
+// ---- part 4: the Purchase Order -------------------------------------------------------------------
+export type OrderStatus =
+  | 'draft'
+  | 'submitted'
+  | 'approved'
+  | 'sent'
+  | 'closed'
+  | 'rejected'
+  | 'sent_back'
+  | 'cancelled'
+  | 'superseded';
+
+export const ORDER_STATUS: Record<
+  OrderStatus,
+  { label: string; tone: 'success' | 'warning' | 'neutral' | 'danger' | 'info' }
+> = {
+  draft: { label: 'Draft', tone: 'neutral' },
+  submitted: { label: 'Waiting for approval', tone: 'warning' },
+  approved: { label: 'Approved: to send', tone: 'info' },
+  sent: { label: 'Sent to the vendor', tone: 'success' },
+  closed: { label: 'Closed', tone: 'neutral' },
+  rejected: { label: 'Rejected', tone: 'danger' },
+  sent_back: { label: 'Sent back for changes', tone: 'warning' },
+  cancelled: { label: 'Cancelled', tone: 'neutral' },
+  superseded: { label: 'Replaced by an amendment', tone: 'neutral' },
+};
+/** An emergency purchase's statuses read as ratification. */
+export const EMERGENCY_STATUS: Partial<Record<OrderStatus, string>> = {
+  draft: 'Recorded: send for ratification',
+  submitted: 'Waiting for ratification',
+  approved: 'Ratified',
+  rejected: 'Not ratified',
+};
+
+export const CHARGE_KIND = {
+  freight: 'Freight',
+  installation: 'Installation',
+  packing: 'Packing',
+  other: 'Other',
+} as const;
+
+export interface OrderRow {
+  id: string;
+  number: string;
+  revision: number;
+  label: string;
+  supersedesId: string | null;
+  newerId: string | null;
+  amendReason: string | null;
+  status: OrderStatus;
+  emergency: boolean;
+  requisitionId: string | null;
+  requisition: string | null;
+  departmentId: string | null;
+  department: string | null;
+  vendorId: string;
+  vendor: string;
+  vendorCode: string;
+  total: number;
+  poDate: string;
+  deliveryDate: string | null;
+  submittedAt: string | null;
+  approvedAt: string | null;
+  decidedAt: string | null;
+  sentAt: string | null;
+  createdBy: string | null;
+  createdAt: string;
+  waitingWith: string | null;
+  msmeWarning: string | null;
+  lines: number;
+}
+
+export interface OrderLine {
+  id: string;
+  seq: number;
+  requisitionLineId: string | null;
+  itemId: string | null;
+  itemCode: string | null;
+  description: string;
+  hsnCode: string | null;
+  quantity: number;
+  maxQuantity: number | null;
+  uomId: string;
+  uom: string;
+  rate: number;
+  discountPct: number;
+  gstRate: number;
+  reverseCharge: boolean;
+  exempt: boolean;
+  taxable: number;
+  cgst: number;
+  sgst: number;
+  igst: number;
+  rcm: number;
+  total: number;
+  contractRate: number | null;
+  rateChangeReason: string | null;
+}
+
+export interface OrderDetail extends OrderRow {
+  emergencyReason: string | null;
+  billFileId: string | null;
+  billRef: string | null;
+  vendorStatus: string;
+  vendorEmail: string | null;
+  vendorGstStatus: 'regular' | 'composition' | 'unregistered';
+  vendorDetail: {
+    gstin: string | null;
+    pan: string | null;
+    address: string | null;
+    state: string | null;
+    msme: string | null;
+    phone: string | null;
+  };
+  supply: 'intra' | 'inter';
+  quoteRef: string | null;
+  deliveryAddress: string | null;
+  paymentTermId: string | null;
+  paymentText: string | null;
+  validityDays: number;
+  validUntil: string;
+  terms: string | null;
+  totals: {
+    taxable: number;
+    cgst: number;
+    sgst: number;
+    igst: number;
+    rcm: number;
+    roundOff: number;
+    total: number;
+  };
+  words: string;
+  decisionNote: string | null;
+  closedAt: string | null;
+  closedNote: string | null;
+  lineItems: OrderLine[];
+  charges: Array<{
+    id: string;
+    kind: keyof typeof CHARGE_KIND;
+    label: string;
+    ownLabel: string | null;
+    amount: number;
+    gstRate: number;
+    gst: number;
+    total: number;
+  }>;
+  summary: Array<{
+    hsn: string | null;
+    gstRate: number;
+    reverseCharge: boolean;
+    taxable: number;
+    cgst: number;
+    sgst: number;
+    igst: number;
+    rcm: number;
+  }>;
+  revisions: Array<{
+    id: string;
+    revision: number;
+    label: string;
+    status: OrderStatus;
+    approvedAt: string | null;
+  }>;
+  sends: Array<{
+    id: string;
+    to: string;
+    at: string;
+    by: string | null;
+    messageStatus: string | null;
+    fileId: string | null;
+  }>;
+  paymentTerms: Array<{ id: string; name: string }>;
+  steps: IndentStep[];
+  history: Array<{ kind: string; actor: string | null; note: string | null; at: string }>;
+  can: {
+    edit: boolean;
+    submit: boolean;
+    decide: boolean;
+    send: boolean;
+    close: boolean;
+    amend: boolean;
+    cancel: boolean;
+  };
+}
+
+export interface ToOrderGroup {
+  requisitionId: string;
+  number: string;
+  department: string | null;
+  autoRule: string | null;
+  requiredBy: string | null;
+  vendorId: string | null;
+  vendor: string | null;
+  vendorActive: boolean;
+  lines: Array<{
+    id: string;
+    seq: number;
+    item: string;
+    quantity: number;
+    uom: string;
+    rate: number;
+  }>;
+}
+
+export interface OrderFormLists {
+  vendors: Array<{
+    id: string;
+    code: string;
+    name: string;
+    gstStatus: string;
+    email: string | null;
+  }>;
+  items: Array<{
+    id: string;
+    code: string;
+    name: string;
+    uomId: string;
+    uom: string;
+    gstRate: number | null;
+  }>;
+  uoms: Array<{ id: string; code: string; name: string }>;
+  departments: Array<{ id: string; name: string }>;
+  emergencyEnabled: boolean;
+  emergencyRatifier: string;
+  purchaseDepartmentId: string | null;
 }

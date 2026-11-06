@@ -427,3 +427,72 @@ confirmed with the school's CA before go-live; the settings keep them editable.
 - **Tests**: `purchase-requisitions.e2e-spec.ts` (6: combining two departments' indents, direct with
   the certificate, the committee's quotes / L1 / reason / signatures cleared, the tender, from the store
   and reject / cancel / close, reopen and who sees what); the indent and masters suites pass.
+
+## As built — part 4, the Purchase Order and emergency purchase (6 Nov 2026)
+
+- **Migration 0319**: rights `purchase.order.manage` (admins, Purchase office), `purchase.order.cancel`
+  (admins only: cancelling an approved PO), `purchase.emergency.record` (admins, Purchase office);
+  `purchase_settings.emergency_ratifier` (a designation, "Principal" by default); `purchase_orders`
+  (number + `revision` with `supersedes_id` and the amendment's reason; status draft / submitted /
+  approved / sent / closed / rejected / sent_back / cancelled / superseded; `emergency` with its reason,
+  the vendor's bill file and number; the requisition and department; the vendor's GST status and state
+  when worked out, intra- / inter-state supply; quotation reference, PO date, delivery date and address,
+  payment term and its words, validity days, terms; the MSME warning; taxable, CGST, SGST, IGST,
+  reverse-charge GST, round-off, total; approval and send dates; closed with a note),
+  `purchase_order_lines` (the requisition line, item, words, HSN / SAC, quantity, unit, rate, discount %,
+  GST rate, reverse charge / exempt from the HSN, the taxes, the contract and the reason a contract rate
+  changed), `purchase_order_charges` (freight, installation, packing, other with GST),
+  `purchase_order_sends` (to, the PDF file, the outbox message); the e-mail template
+  `purchase_order` (Communication → Templates) seeded for every school.
+- **GST** (`purchase-gst.ts`, unit-tested): taxable = quantity × rate less discount; a regular vendor in
+  the school's state CGST + SGST (half each), in another state IGST; an unregistered or composition
+  vendor none; a reverse-charge line none from the vendor and the GST the school pays shown apart (a
+  reverse-charge SAC keeps its rate whoever the vendor is); an exempt line none; per-paisa per line, the
+  total rounded to the rupee; the GST summary by HSN and rate.
+- **Drafting** (`purchase-order-core.ts`): approving a requisition drafts **one PO per chosen vendor**
+  with the lines still to order (in the requisition maker's name); the indent's rate-contract bypass
+  drafts its PO at once (made by the system); To order lists what is left — lines of a cancelled or
+  rejected PO, of a requisition the system approved under the limit (no vendor yet) — to draft by
+  vendor. A PO starts with the school's delivery address, validity and terms, and the vendor's payment
+  term (else the default). Each change works the GST, totals, payment words and MSME warning (micro /
+  small vendor, a term over 45 days) out again. Placed POs (approved, sent, closed) make the
+  requisition `part_ordered` / `ordered` and its indents "Ordered"; a cancelled one gives the lines
+  back. A requisition with a PO past draft cannot be reopened; reopening drops its draft POs.
+- **API** `PurchaseOrdersService` (+ controller): list (all / waiting for me; status, emergency,
+  search; counts of drafts, to send, to order), To order, draft from ticked lines (only an active
+  vendor: 409 `purchase.vendor_not_active`), the detail (vendor, terms, lines, charges, totals and words,
+  GST summary, revisions, e-mails with the message's status, approvals, history, what the user may do),
+  change a draft (quantity no more than the requisition still needs; a rate-contract rate only with a
+  reason: 400 `purchase.contract_rate`; lines taken off go back to To order), send for approval (the
+  school's state needed for a registered vendor: 409 `purchase.school_state_missing`; the department's
+  PO levels, nobody approves their own; the maker is refused), decide, approve (an amendment supersedes
+  the revision before it; the items' last purchase rate and date), cancel (the cancel right once
+  approved), close, amend (the next revision as a draft; the old one in force until it is approved),
+  the **PDF** (`purchase-order-pdf.ts`, pdf-lib: the band with the school's GSTIN, vendor and order
+  boxes, bill-to and deliver-to, the lines table across pages, charges, totals, amount in words,
+  reverse-charge note, GST summary, payment, MSME, emergency reason, terms, signatures from Purchase
+  settings, "Approved in EduPro by …", page numbers; DRAFT / CANCELLED / SUPERSEDED across it), **e-mail
+  to the vendor** (the PDF stored as a file, the template filled, the message queued with it attached,
+  logged; the PO becomes "Sent"), **emergency purchase** (switched on in settings; an active vendor, the
+  lines, the bill — a PDF or photo the user uploaded — and the reason; ratified by the
+  `purchase_emergency` level: everyone with the ratifier designation, the school admin when it is
+  overdue; not ratified = rejected).
+- **Admin**: Purchase → To order (by requisition and vendor: tick, pick the vendor, Draft the PO),
+  Purchase Orders (All / Waiting for me / Drafts / Approved: to send / Emergency; search), a PO (status
+  and actions — approve or ratify, send back, reject, send for approval, amend, close, cancel; the MSME
+  alert; Send to the vendor with the address; vendor and terms; lines with GST; totals in words; GST
+  summary; e-mails; revisions; approvals; history; View / Download the PDF), Change (`OrderForm`:
+  header, lines, charges), Record an emergency purchase; Purchase settings: who ratifies; a requisition
+  lists its POs; My approvals: Purchase Orders; the workflow inbox links to the PO.
+- **Staff app**: Office → Purchase orders (when one waits): approve / send back / reject (an emergency:
+  ratify or not) with a remark, the lines and totals, the PDF; Hindi labels.
+- **Found in the browser check**: the Purchase office role could not upload or open files (vendor
+  documents, quotes, tender documents, the emergency bill) — migrations **0320** (upload) and **0321**
+  (view) grant them; and the Purchase menu was hidden by the pilot module switches — `purchase` is now
+  one of `platform.modules_enabled`'s modules (on by default; a school with its own saved list switches
+  it on in Settings).
+- **Tests**: `purchase-orders.e2e-spec.ts` (8: drafts per vendor with CGST + SGST / IGST / none and
+  reverse charge, the MSME warning; pending and blacklisted vendors refused; changing a draft;
+  the maker's level passing on, the last rate and the requisition; the PDF and the e-mail; amend /
+  supersede, cancel's right, close; the emergency purchase ratified; the rate-contract indent's PO);
+  `purchase-gst.spec.ts` (4); the indent, requisition and masters suites pass.

@@ -131,6 +131,11 @@ export default async function InboxPage({
                 <a href={`/purchase/requisitions/${s.instance.entityId}`}>{w('viewEntity')}</a>
               </p>
             ) : null}
+            {s.instance.entityType === 'purchase_order' ? (
+              <p style={{ marginTop: 'var(--sp-2)' }}>
+                <a href={`/purchase/orders/${s.instance.entityId}`}>{w('viewEntity')}</a>
+              </p>
+            ) : null}
             <form action={actOnStep} style={{ marginTop: 'var(--sp-3)' }}>
               <NoEnterSubmit />
               <input type="hidden" name="id" value={s.id} />

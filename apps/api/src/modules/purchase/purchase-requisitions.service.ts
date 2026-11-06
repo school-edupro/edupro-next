@@ -6,6 +6,7 @@ import { DomainError } from '../../common/errors/domain-error';
 import { requireTenant, type RequestContext } from '../../common/http/request-context';
 import { WorkflowService, type InstanceRow } from '../workflow/workflow.service';
 import { syncFlow } from './purchase-flow';
+import { draftOrdersFor } from './purchase-order-core';
 import { PurchaseVendorsService } from './purchase-vendors.service';
 import {
   PURCHASE,
@@ -653,6 +654,19 @@ export class PurchaseRequisitionsService implements OnModuleInit {
       const mine = pr.workflow_instance_id
         ? await c.query<{ id: string }>(MY_STEP, [pr.workflow_instance_id])
         : { rows: [] };
+      const orders = await c.query<{
+        id: string;
+        number: string;
+        revision: number;
+        status: string;
+        total: string;
+        vendor: string;
+      }>(
+        `SELECT po.id::text, po.number, po.revision, po.status, po.total::text, v.legal_name AS vendor
+           FROM purchase_orders po JOIN vendors v ON v.id = po.vendor_id
+          WHERE po.requisition_id = $1 ORDER BY po.number, po.revision`,
+        [id],
+      );
       const manage = this.manages(ctx);
       const open = (OPEN as readonly string[]).includes(pr.status) && !pr.auto_rule;
       const approvedYet = instance?.steps.some((x) => x.status === 'approved') ?? false;
@@ -774,6 +788,13 @@ export class PurchaseRequisitionsService implements OnModuleInit {
           })),
         },
         requirements: req,
+        orders: orders.rows.map((o) => ({
+          id: o.id,
+          label: o.revision ? `${o.number}-R${String(o.revision)}` : o.number,
+          status: o.status,
+          total: Number(o.total),
+          vendor: o.vendor,
+        })),
         steps: instance?.steps ?? [],
         history: history.map((h) => ({
           kind: h.kind,
@@ -1637,11 +1658,19 @@ export class PurchaseRequisitionsService implements OnModuleInit {
                            WHERE il.indent_id = pi.id AND (rl.fulfil IS DISTINCT FROM 'store' OR r.status <> 'approved'))`,
       [id, `Issued from the store (${pr.number})`],
     );
+    // the draft POs: one per chosen vendor, made in the name of the requisition's maker
+    const maker = (
+      await c.query<{ created_by: string | null }>(
+        `SELECT created_by::text FROM purchase_requisitions WHERE id = $1`,
+        [id],
+      )
+    ).rows[0]!.created_by;
+    const orders = await draftOrdersFor(c, id, maker);
     await this.audit.stage(ctx, c, {
       action: 'purchase.requisition.approved',
       entityType: 'purchase_requisitions',
       entityId: id,
-      after: { number: pr.number },
+      after: { number: pr.number, draftOrders: orders.map((o) => o.number) },
     });
   }
 
@@ -1705,6 +1734,22 @@ export class PurchaseRequisitionsService implements OnModuleInit {
             status: 409,
           },
         );
+      const placed = await c.query(
+        `SELECT 1 FROM purchase_orders WHERE requisition_id = $1 AND status NOT IN ('draft', 'sent_back', 'rejected', 'cancelled')`,
+        [prId],
+      );
+      if (placed.rowCount)
+        throw new DomainError(
+          'purchase.requisition_closed',
+          'A purchase order of it has gone for approval or to the vendor: amend or cancel that order instead',
+          { status: 409 },
+        );
+      // its draft POs are dropped; new ones are drafted when it is approved again
+      await c.query(
+        `UPDATE purchase_orders SET status = 'cancelled', decision_note = 'The requisition was reopened', updated_at = now()
+          WHERE requisition_id = $1 AND status IN ('draft', 'sent_back')`,
+        [prId],
+      );
       await c.query(
         `UPDATE purchase_requisitions SET status = 'draft', revision = revision + 1, decision_note = $2, approved_at = NULL,
                 updated_at = now() WHERE id = $1`,

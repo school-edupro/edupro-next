@@ -12,6 +12,9 @@ export const PURCHASE = {
   indentView: 'purchase.indent.view',
   indentAnyDepartment: 'purchase.indent.any_department',
   requisitionManage: 'purchase.requisition.manage',
+  orderManage: 'purchase.order.manage',
+  orderCancel: 'purchase.order.cancel',
+  emergencyRecord: 'purchase.emergency.record',
 } as const;
 
 const opt = (max: number) =>
@@ -185,6 +188,8 @@ export const SettingsSchema = z
     committeeQuotes: z.coerce.number().int().min(1).max(10),
     committeeSignatures: z.coerce.number().int().min(1).max(20).nullable().default(null),
     emergencyEnabled: z.boolean(),
+    /** who ratifies an emergency purchase: everyone with this designation */
+    emergencyRatifier: z.string().trim().min(2).max(80).default('Principal'),
     poTerms: opt(4000),
     poValidityDays: z.coerce.number().int().min(1).max(365),
     purchaseDepartmentId: IdSchema.nullable().default(null),
@@ -441,3 +446,112 @@ export class RequisitionFileDto extends createZodDto(RequisitionFileSchema) {}
 
 export const SignSchema = z.object({ note: opt(300) });
 export class SignDto extends createZodDto(SignSchema) {}
+
+// ---- part 4: the Purchase Order -------------------------------------------------------------------
+/** A draft PO for chosen lines of an approved requisition (lines without a vendor take this one). */
+export const CreateOrderSchema = z.object({
+  requisitionId: IdSchema,
+  lineIds: z.array(IdSchema).min(1, 'Tick the lines').max(200),
+  vendorId: IdSchema,
+});
+export class CreateOrderDto extends createZodDto(CreateOrderSchema) {}
+
+const OrderCharge = z.object({
+  kind: z.enum(['freight', 'installation', 'packing', 'other']),
+  label: opt(80),
+  amount: Money,
+  gstRate: Gst.default(0),
+});
+
+export const UpdateOrderSchema = z.object({
+  quoteRef: opt(60),
+  poDate: Day.optional(),
+  deliveryDate: Day.nullish(),
+  deliveryAddress: opt(500),
+  paymentTermId: IdSchema.nullish(),
+  validityDays: z.coerce.number().int().min(1).max(365),
+  terms: opt(4000),
+  /** the lines kept (a line left out goes back to To order) */
+  lines: z
+    .array(
+      z.object({
+        id: IdSchema,
+        description: z.string().trim().min(1).max(300),
+        hsnCode: z
+          .string()
+          .trim()
+          .regex(/^[0-9]{4,8}$/, 'an HSN / SAC code of 4 to 8 digits')
+          .nullish()
+          .or(z.literal('').transform(() => null)),
+        quantity: z.coerce.number().gt(0).max(999999),
+        rate: Money,
+        discountPct: z.coerce.number().min(0).max(100).default(0),
+        gstRate: Gst,
+        /** a rate-contract line whose rate changes: why */
+        rateChangeReason: opt(300),
+      }),
+    )
+    .min(1, 'Keep at least one line')
+    .max(200),
+  charges: z.array(OrderCharge).max(10).default([]),
+});
+export class UpdateOrderDto extends createZodDto(UpdateOrderSchema) {}
+
+export const OrderListQuerySchema = z.object({
+  view: z.enum(['all', 'waiting']).default('all'),
+  status: z
+    .enum([
+      'draft',
+      'submitted',
+      'approved',
+      'sent',
+      'closed',
+      'rejected',
+      'sent_back',
+      'cancelled',
+      'superseded',
+    ])
+    .optional(),
+  emergency: z
+    .enum(['1', '0'])
+    .optional()
+    .transform((v) => (v === undefined ? undefined : v === '1')),
+  q: z.string().trim().max(80).optional(),
+  page: z.coerce.number().int().min(1).default(1),
+  size: z.coerce.number().int().min(1).max(200).default(50),
+});
+export class OrderListQueryDto extends createZodDto(OrderListQuerySchema) {}
+
+export const SendOrderSchema = z.object({
+  to: z.string().trim().email('an e-mail address').max(150),
+});
+export class SendOrderDto extends createZodDto(SendOrderSchema) {}
+
+/** An emergency purchase recorded after the fact: the vendor's bill and the reason; ratified later. */
+export const EmergencySchema = z.object({
+  vendorId: IdSchema,
+  departmentId: IdSchema.optional(),
+  reason: z.string().trim().min(10).max(1000),
+  billFileId: IdSchema,
+  billRef: opt(60),
+  poDate: Day.optional(),
+  lines: z
+    .array(
+      z
+        .object({
+          itemId: IdSchema.optional(),
+          description: z.string().trim().min(2).max(300).optional(),
+          quantity: z.coerce.number().gt(0).max(999999),
+          uomId: IdSchema.optional(),
+          rate: Money,
+          gstRate: Gst.optional(),
+        })
+        .refine((l) => !!l.itemId || (!!l.description && !!l.uomId), {
+          message: 'Pick an item, or describe it with its unit',
+          path: ['itemId'],
+        }),
+    )
+    .min(1)
+    .max(50),
+});
+export class EmergencyDto extends createZodDto(EmergencySchema) {}
