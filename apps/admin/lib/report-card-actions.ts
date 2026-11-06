@@ -115,7 +115,8 @@ export async function setReleaseStatus(fd: FormData) {
       }),
     {
       submitted: 'Sent to the principal',
-      released: 'Published: families are told and see the cards in the app',
+      released:
+        'Published: families see the cards in the app; send the message from Message to parents',
       withdrawn: 'Withdrawn from the families',
       draft: 'Back to a draft',
     }[status],
@@ -138,8 +139,43 @@ export async function setClassPublish(fd: FormData) {
         body: JSON.stringify({ status, ...(reason ? { reason } : {}) }),
       }),
     status === 'released'
-      ? `${str(fd, 'label')} published: its families are told`
+      ? `${str(fd, 'label')} published: send the message from Message to parents when you choose`
       : `${str(fd, 'label')} revoked`,
+  );
+}
+
+/**
+ * docs/design/82: the principal sends the report card message to the families of a published class
+ * (or every published class) not told yet, on the channels ticked.
+ */
+export async function tellParents(fd: FormData) {
+  const id = str(fd, 'id');
+  const classId = str(fd, 'classId');
+  if (!okId(id) || (classId && !okId(classId)))
+    back('/exams/report-cards', 'validation-failed', 'Unknown class');
+  const channels = fd
+    .getAll('channels')
+    .map(String)
+    .filter((x) => x === 'email' || x === 'sms');
+  const to = backTo(fd, id);
+  let r: { told: { email: number; sms: number }; messages: number };
+  try {
+    r = await apiFetch(`/exams/report-cards/releases/${id}/tell`, {
+      method: 'POST',
+      body: JSON.stringify({ channels, ...(classId ? { classIds: [classId] } : {}) }),
+    });
+  } catch (error) {
+    if (error instanceof ApiError) back(to, error.problem.type, detailOf(error));
+    throw error;
+  }
+  const by = [
+    r.told.email ? `${String(r.told.email)} by e-mail` : '',
+    r.told.sms ? `${String(r.told.sms)} by SMS` : '',
+  ].filter(Boolean);
+  back(
+    to,
+    'ok',
+    `Sent to the parents: ${by.join(' and ') || 'no family'} (${String(r.messages)} messages queued)`,
   );
 }
 

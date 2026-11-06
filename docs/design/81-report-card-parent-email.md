@@ -98,3 +98,5 @@ the card's PDF to the e-mail; a message when a card is taken back (none is sent,
   Results; the preview equal to it, SMS needs_dlt; 404), `report-card-holds` (the exam's name, not the
   release's; a school's own text template previewed with its {{term}}). Release 316 on Alpha in the
   browser with axe (frames skipped): clean; nothing published or sent.
+- **Later (6 Nov 2026)**: publishing no longer sends the message; the principal sends it from Message to
+  parents when they choose, to the families not told yet (docs/design/82).

@@ -224,13 +224,20 @@ Pick a tile to see who submitted or verified it and to submit, verify, send back
      release, with who made it and when; **Settings** opens the Set-up step and **User Guide** this page.
      The PDFs are made by the workers: if a PDF waits, it appears in the Download Log once ready.
    - **Publish**: the office **Sends to the principal**. The principal publishes **class by class**
-     (**Publish VI**) or **Publish every class**; each class's families get a message and see the cards
-     in the parent app (withheld and held cards stay hidden). **Revoke VI** (with a reason) hides that
+     (**Publish VI**) or **Publish every class**; each class's families see the cards in the parent app
+     (withheld and held cards stay hidden). **Publishing sends no message**: the principal sends it
+     afterwards from **Message to parents**, when they choose. **Revoke VI** (with a reason) hides that
      class's cards again and lets its marks be reopened; revoking the last class withdraws the release.
      The table shows, per class, whether it is ready, how many cards are held (**Held**: a click lists
      them), when it was published and how many messages went.
-   - **Message to parents** (under the class table): what the families get when a class is published.
-     The **e-mail** is shown exactly as it arrives — a letter on the school's letterhead: "the
+   - **Message to parents** (under the class table): a row per published class with, for **E-mail**
+     and **SMS**, how many families are told and how many not yet (and how many have no e-mail or
+     mobile), the held cards and those withheld for fees. **Send to VI's parents** (or **Send to every
+     published class**; the principal only) asks which way — **E-mail** and/or **SMS** (greyed out until
+     its DLT template id is added) — and sends only to the families not told yet that way: each family
+     is told once per release and channel, never for a held card or one withheld for fees. When nothing
+     can be sent it says why (everyone told, or the SMS waiting for its DLT id). Below it, the **e-mail**
+     is shown exactly as it arrives — a letter on the school's letterhead: "the
      Assement 1 report card of Aarav (class I-A) is now published", with a **View report card** button
      to the parent app's Results — filled for a pupil of this release; the **SMS**'s words below it.
      Each says whether it goes out (an SMS only once its DLT template id is added under Communication →
@@ -241,7 +248,8 @@ Pick a tile to see who submitted or verified it and to submit, verify, send back
    - **Held cards** (under the class table): the cards held back from the parent and student portal,
      with filters **Class**, **Section** and **Search** (name, admission no or the reason's words), who
      held each and when; **Excel** and **PDF** of the list as filtered. **Show again** (one, or tick
-     several) opens the card; where its class is published the family gets the result message at once.
+     several) opens the card; no message is sent: the family is counted in Message to parents' "not yet"
+     and told with the next Send.
      Cards the fee rule withholds are only counted here ("Withheld for fees"): they open once paid.
      **Hold cards…** opens a side window (the old Report Card Hide page): one **Reason** for the students
      held together (kept for the school; the family sees only "held, contact the office"), and **Also

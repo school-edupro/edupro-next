@@ -1,6 +1,6 @@
 # 82 · Publishing sends nothing: the user sends the message to parents when they choose
 
-Status: planned 6 Nov 2026. Asked by the school after doc 81, on the release's Publish tab: "one gap:
+Status: built 6 Nov 2026 (migration 0314; **As built** at the end). Asked by the school after doc 81, on the release's Publish tab: "one gap:
 e-mail/SMS not sent at the time of publish; it is optional: the user publishes the report card, and
 sending the e-mail or SMS after that depends on the user".
 
@@ -71,3 +71,29 @@ sends nothing new to them).
 ## Not in scope
 
 A reminder to families already told; a message when a card is revoked; scheduling the send; WhatsApp.
+
+## As built (6 Nov 2026)
+
+- **Migration 0314**: `report_card_told` (release × pupil × channel, the messages queued, who and
+  when; tenant RLS), filled for the classes told before (each pupil of a class with
+  `notified_count` > 0, not held, on the channels whose template was ready). Alpha: release 316's
+  Class III, 16 pupils told by e-mail.
+- **API** (`report-cards.service.ts`): `openClasses` only opens; Show again (one, bulk, Excel) only
+  shows (`notified` stays 0 in the replies); `tellPupils()` (the published classes' pupils: held, fee,
+  has e-mail / mobile, told per channel) feeds both `tell()` — `POST
+/exams/report-cards/releases/:id/tell` (`exams.result.publish`; 409 when no class is published, a
+  class not published, or nobody waits; 400 for a channel not ready; audit `exams.report_card.tell`;
+  returns `{ told: { email, sms }, messages }`) — and the preview's `classes` / `total` counts (told,
+  waiting, noAddress per channel; held; withheld).
+- **Admin**: Message to parents' class table (Class · Pupils with held / withheld · E-mail · SMS: "16
+  told · 0 not yet", "4 without an e-mail") with **Send to VI's parents** and **Send to every
+  published class** (two or more classes); `ConfirmAction` gained `choices` (ticks posted by name; "Tick
+  at least one."); the server action `tellParents`; when nothing can be sent, why ("16 families wait
+  for the SMS, which goes once its DLT template id is added…"). Publish dialogs ("No message is sent:
+  send it from Message to parents…", the button now "Publish"), Held cards' words, the done messages.
+- **Tests**: `exams-v2` (publishing queues nothing; the counts; Send needs the publish right, a tick,
+  a ready channel, a published class; Send e-mail tells one family; again → 409; published again
+  tells nobody again), `report-card-holds` (Show again sends nothing, waits, then Send tells).
+  Release 316 in the browser with axe: the table, no Send (all told by e-mail), the SMS's reason; the
+  dialog checked on a throwaway page with made-up counts (ticks, the disabled SMS, the error); nothing
+  sent.

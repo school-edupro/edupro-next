@@ -485,7 +485,6 @@ export default async function ReleasePage({
                 {notReady.length
                   ? ` ${t('publishNotReady', { n: notReady.length, list: notReadyList })}`
                   : ''}
-                {message ? ` ${t('publishSeeMessage')}` : ''}
               </ConfirmAction>
             ) : null}
             {canPublish && published.length ? (
@@ -606,7 +605,6 @@ export default async function ReleasePage({
                             {gaps.length
                               ? ` ${t('publishClassGaps', { list: gaps.join(', ') })}`
                               : ''}
-                            {message ? ` ${t('publishSeeMessage')}` : ''}
                           </ConfirmAction>
                         ) : null}
                         {canPublish && p?.status === 'released' ? (
@@ -645,6 +643,9 @@ export default async function ReleasePage({
       {tab === 'publish' && message ? (
         <ParentMessage
           data={message}
+          releaseId={rel.id}
+          back={here('publish')}
+          canSend={canPublish}
           canOpenTemplates={me.permissions.includes('comms.template.view')}
         />
       ) : null}
