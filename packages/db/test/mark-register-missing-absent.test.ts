@@ -121,13 +121,12 @@ describe('missing marks and absent students (docs/design/78)', () => {
     const [counts, a, b] = buildReport('missing', input(true));
     expect(heads(counts!.sheet)).toEqual(['Section', 'PT', 'T', 'Total']);
     expect(cells(counts!.sheet)).toEqual([
-      ['VI-A', '0', '2', '2'],
-      ['VI-B', '1', '0', '1'],
-      ['Class', '1', '2', '3'],
+      ['VI-A', '0', '2 papers · 1 student', '2 papers · 1 student'],
+      ['VI-B', '1 paper · 1 student', '0', '1 paper · 1 student'],
+      ['Class', '1 paper · 1 student', '2 papers · 1 student', '3 papers · 2 students'],
     ]);
     // the count's students open on a click: who, and what is missing
     const t = counts!.sheet.body[0]!.cells[2]!;
-    expect(t.drillLabel).toBe('1 student');
     expect(t.drill!.rows).toEqual([
       ['1', 'a2', 'ADM-a2', 'VI-A', 'T: ENGLISH, SOCIAL SCIENCE (History)'],
     ]);

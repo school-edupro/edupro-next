@@ -1,6 +1,6 @@
 # 78 · Missing marks and absentees: two more reports on a mark register's Run
 
-Status: plan (6 Nov 2026). Asked by the school on a mark register's Run (`/exams/schemes/417/register`,
+Status: built 6 Nov 2026 (no migration; **As built** at the end). Asked by the school on a mark register's Run (`/exams/schemes/417/register`,
 Reports): "add missing report and absent report".
 
 ## What there is
@@ -82,3 +82,28 @@ PDF like the other reports.
 Messages to teachers or parents from these reports (they are lists to print or download; Alpha has live
 providers); missing co-scholastic grades, remarks or attendance (Entry status of those stays on the
 exam's own pages).
+
+## As built (6 Nov 2026)
+
+- **Engine** (`packages/db/src/mark-register-reports.ts`): `papersOf()` (each student's paper of a
+  subject in an exam: the class has the paper and the student takes the subject; the register's
+  subject order, then exam order; `ReportInput.exam` one exam, `subject` one subject), `missingOf()`
+  (no mark and no code; in parts, the parts with no entry), `absentOf()` (code AB, or parts marked
+  absent); `missing()` — the counts (sections, the class; each exam and Total: "3 papers · 2
+  students", the same text on screen and in the files, the names and what is missing on a click), then
+  a table per section (#, Subject, Exam, Teacher or "no teacher mapped", Missing / takers in red, the
+  students by roll with the parts missing; "Nothing missing"; the class teacher in the note);
+  `absent()` — the counts (students per exam, Students, Papers), then a table per section (Roll,
+  Student, Adm No, Parent mobile, Class teacher, Absent in, Papers; "Nobody absent"). `REPORTS`:
+  "Missing marks", "Absent students" after Entry status.
+- **API**: `report=missing|absent`; for them `exam` applies on any register (an exam-wise register: the
+  exam picked), returned as the run's `exam` and `examName` (the page heading and the file names say
+  it); the sections' teachers for both, the parents' mobiles for `absent`.
+- **Admin**: the Run page's **Exam** picker for these two (All exams + each exam on a general
+  register), a help line under the filters; the download route takes the two kinds.
+- **Tests**: unit `mark-register-missing-absent.test.ts` (5: the menu; counts, drill, lines with
+  teachers and a missing part; one exam, one subject, nothing missing; absent with AB on a paper and a
+  part, ML not counted, a slot's own language, parents, class teacher; one exam, one subject, nobody
+  absent); e2e `mark-registers` (the titles, nothing missing, Chitra absent in UT1 Maths, `exam=UT2` on
+  a general register, an unknown exam refused). Register 417 on Alpha in the browser with axe (VII-A
+  Missing marks at MT1, VI-A Absent students): clean.

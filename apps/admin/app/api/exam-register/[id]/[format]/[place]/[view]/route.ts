@@ -28,7 +28,10 @@ export async function GET(
   if (subject && /^[A-Za-z0-9_~-]{1,32}$/.test(subject)) q.set('subject', subject);
   if (sp.get('all') === '1') q.set('all', '1');
   const report = sp.get('report');
-  if (report && /^(summary|analysis|entry|toppers|teacher|risk|failing|compare)$/.test(report))
+  if (
+    report &&
+    /^(summary|analysis|entry|missing|absent|toppers|teacher|risk|failing|compare)$/.test(report)
+  )
     q.set('report', report);
   // toppers (docs/design/76): any N 1–100 or all, a % range, the lowest first
   const top = sp.get('top');

@@ -322,6 +322,17 @@ out, then runs it for any section; the marks always come from the exam entry.
      counted, not only a pass). With a **Subject** picked the report is that subject's own toppers, by
      its %: the class, then each section (each language of a slot apart), of everyone with marks in
      it. Press **Show** after typing the numbers; the downloads follow the filters.
+   - **Missing marks**: the papers with nothing entered (no mark and no code; a code such as AB or ML
+     counts as entered). First each section (and the class) against the exams — "3 papers · 2
+     students", a click for the names and what is missing — then a table per section: a line per
+     subject and exam with anything missing, its teacher (or "no teacher mapped"), missing / takers and
+     the students by roll (a subject in parts names the parts missing). **Exam** picks one exam or All
+     exams; a **Subject** picked lists that subject only.
+   - **Absent students**: AB on a paper, or a part marked absent (Geography in Social Science); ML and
+     the other codes are not absences. First each section against the exams (students absent, a click
+     for the names), then a table per section: a line per absent student with the parents' mobiles, the
+     class teacher, where absent ("MT1: MATHEMATICS · TERM: SOCIAL SCIENCE (Geography)") and how many
+     papers. **Exam** and **Subject** as for Missing marks.
    - **Teacher-wise** (as the old register prints it): a block per subject teacher (Academics →
      Teacher assignments) with each section and subject — students, appeared, average %, pass %,
      highest, failed, "shared" when two teachers share it — and their total; "No teacher mapped" last.

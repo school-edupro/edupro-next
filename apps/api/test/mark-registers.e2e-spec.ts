@@ -430,7 +430,7 @@ describe('mark registers like the legacy Term Mark Register (e2e)', () => {
     expect(texts).toContain('THIRD LANGUAGE');
   });
 
-  it('the Run reports: summary, analysis, entry status, toppers, teacher-wise, at-risk, failing, compare; their files', async () => {
+  it('the Run reports: summary, analysis, entry status, missing, absent, toppers, teacher-wise, at-risk, failing, compare; their files', async () => {
     const run = (q: string) =>
       call(office, 'GET', `/exams/schemes/${ids.reg!}/register?${q}`).then((r) => {
         expect(r.statusCode).toBe(200);
@@ -534,6 +534,53 @@ describe('mark registers like the legacy Term Mark Register (e2e)', () => {
           office,
           'GET',
           `/exams/schemes/${ids.reg!}/register?${VI}&report=failing&failFrom=3&failTo=2`,
+        )
+      ).statusCode,
+    ).toBe(400);
+    // doc 78: missing marks (everything is entered here) and the absentees (Chitra AB in Maths UT1)
+    const miss = (await run(`${VI}&report=missing`)).blocks;
+    expect(miss.map((x) => x.title)).toEqual([
+      'Missing marks — VI · all sections (papers with nothing entered)',
+      'Missing marks — VI-A',
+      'Missing marks — VI-B',
+    ]);
+    expect(miss[0]!.sheet.body.map((r) => r.cells.at(-1)!.t)).toEqual(['0', '0', '0']);
+    expect(miss[1]!.sheet.body[0]!.cells[1]!.t).toBe('Nothing missing');
+    const abs = await run(`${A}&report=absent`);
+    expect(abs.blocks[0]!.sheet.head[0]!.map((c) => c.t)).toEqual([
+      'Section',
+      'UT1',
+      'UT2',
+      'TERM',
+      'Students',
+      'Papers',
+    ]);
+    expect(abs.blocks[1]!.title).toBe('Absent — VI-A (1 student)');
+    expect(abs.blocks[1]!.sheet.body.map((r) => r.cells.map((c) => c.t))).toEqual([
+      [
+        expect.any(String),
+        'Chitra Register',
+        `${s}-3`,
+        expect.any(String),
+        expect.any(String),
+        'UT1: MATHEMATICS',
+        '1',
+      ],
+    ]);
+    // one exam on a general register: the exam is named; an exam not of the register is refused
+    const ut2 = await call(
+      office,
+      'GET',
+      `/exams/schemes/${ids.reg!}/register?${A}&report=absent&exam=UT2`,
+    );
+    expect(ut2.json()).toMatchObject({ exam: 'UT2' });
+    expect(ut2.json().blocks[1].sheet.body[0].cells[1].t).toBe('Nobody absent');
+    expect(
+      (
+        await call(
+          office,
+          'GET',
+          `/exams/schemes/${ids.reg!}/register?${A}&report=missing&exam=NOPE`,
         )
       ).statusCode,
     ).toBe(400);

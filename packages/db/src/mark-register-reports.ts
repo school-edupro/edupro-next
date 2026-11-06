@@ -787,11 +787,11 @@ function missing(i: ReportInput): ReportBlock[] {
   const drillOf = (title: string, list: typeof miss): SheetCell => {
     const who = [...new Set(list.map((x) => x.p.st))].sort(byRoll);
     if (!list.length) return { t: '0', center: true };
+    // the screen and the files print the same: the papers and their students
     return {
-      t: String(list.length),
+      t: `${plural(list.length, 'paper')} · ${plural(who.length, 'student')}`,
       center: true,
       strong: true,
-      drillLabel: plural(who.length, 'student'),
       drill: {
         title,
         cols: ['#', 'Name', 'Adm No', ...(i.merit ? ['Section'] : []), 'Missing'],
@@ -829,7 +829,7 @@ function missing(i: ReportInput): ReportBlock[] {
     }),
   );
   for (const h of counts.sheet.head[0]!.slice(1)) h.center = true;
-  counts.sheet.note = `${what} · a count is the papers missing, under it the students (click for the names) · Missing = no mark and no code; a code (AB, ML …) counts as entered`;
+  counts.sheet.note = `${what} · the papers missing and their students (click for the names) · Missing = no mark and no code; a code (AB, ML …) counts as entered`;
   const out: ReportBlock[] = [counts];
   for (const [sectionId, section] of sections) {
     const mine = miss.filter((x) => x.p.st.sectionId === sectionId);

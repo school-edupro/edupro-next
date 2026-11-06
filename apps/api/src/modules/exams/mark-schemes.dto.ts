@@ -232,7 +232,7 @@ export const RegisterQuerySchema = z.object({
   classId: IdSchema.optional(),
   view: z.enum(['marks', 'merit', 'division']).default('marks'),
   format: z.enum(['json', 'xlsx', 'pdf']).default('json'),
-  /** an exam-wise register: the exam's key */
+  /** an exam-wise register: the exam's key; Missing marks / Absent students: one exam (docs/design/78) */
   exam: Key.optional(),
   /** one subject's own sheet: its register key */
   subject: Token.optional(),
@@ -245,6 +245,8 @@ export const RegisterQuerySchema = z.object({
       'summary',
       'analysis',
       'entry',
+      'missing',
+      'absent',
       'toppers',
       'teacher',
       'risk',

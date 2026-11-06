@@ -11,6 +11,8 @@ const REPORT_KINDS = [
   'summary',
   'analysis',
   'entry',
+  'missing',
+  'absent',
   'toppers',
   'teacher',
   'risk',
@@ -132,6 +134,8 @@ export default async function RunRegisterPage({
     return `/exams/schemes/${s.id}/register?${l.toString()}`;
   };
   const reportLabel = reg.reports.find((x) => x.kind === report)?.label ?? 'Register';
+  // docs/design/78: Missing marks and Absent students take one exam, or every exam, on any register
+  const byExam = report === 'missing' || report === 'absent';
   return (
     <>
       <Breadcrumbs
@@ -160,10 +164,11 @@ export default async function RunRegisterPage({
                 ))}
               </select>
             </label>
-            {s.type === 'examwise' ? (
+            {s.type === 'examwise' || byExam ? (
               <label className="ep-field" style={{ margin: 0, minWidth: '8rem' }}>
                 <span className="ep-field__label">Exam</span>
                 <select className="ep-select" name="exam" defaultValue={reg.exam ?? ''}>
+                  {s.type !== 'examwise' ? <option value="">All exams</option> : null}
                   {reg.exams.map((e) => (
                     <option key={e} value={e}>
                       {e}
@@ -368,6 +373,15 @@ export default async function RunRegisterPage({
             }
           />
         </div>
+        {byExam ? (
+          <p className="ep-field__help" style={{ margin: 'var(--sp-2) 0 0' }}>
+            {report === 'missing'
+              ? 'Papers with nothing entered (no mark and no code), per section a line per subject and exam with its teacher and the students; a subject in parts names the parts missing. A code such as AB or ML counts as entered.'
+              : 'Students marked AB on a paper, or on a part of one (Geography in Social Science), with the parents’ mobiles and the class teacher. ML and other codes are not absences.'}{' '}
+            Pick an exam, or All exams; a subject picked lists that subject only. Click a count for
+            the names.
+          </p>
+        ) : null}
         {report === 'failing' ? (
           <p id="failing-help" className="ep-field__help" style={{ margin: 'var(--sp-2) 0 0' }}>
             Students with a final worked out (Compartment / Fail). Failed in from–to: the number of

@@ -1723,6 +1723,9 @@ export class MarkSchemesService {
       if (q.exam && !def.exams.some((e) => e.key === q.exam))
         throw new DomainError('validation-failed', 'Not an exam of this register', { status: 400 });
       const exam = def.type === 'examwise' ? (q.exam ?? def.exams[0]?.key) : undefined;
+      // docs/design/78: Missing marks and Absent students take one exam (or every exam) on any register
+      const reportExam =
+        q.report === 'missing' || q.report === 'absent' ? (q.exam ?? exam) : undefined;
       // what to lay out: [place, class, sections or null (the whole class)]
       const places: Array<{
         place: string;
@@ -1837,6 +1840,8 @@ export class MarkSchemesService {
           // a class's subject-wise Analysis names each section's teachers of the subject too
           const teachers =
             q.report === 'entry' ||
+            q.report === 'missing' ||
+            q.report === 'absent' ||
             q.report === 'teacher' ||
             q.report === 'failing' ||
             (q.report === 'analysis' && p.merit && q.subject)
@@ -1853,7 +1858,12 @@ export class MarkSchemesService {
                     .filter((r) => r.result === 'compartment' || r.result === 'fail')
                     .map((r) => r.studentId),
                 )
-              : undefined;
+              : q.report === 'absent'
+                ? await this.parentMobiles(
+                    c,
+                    rows.map((r) => r.studentId),
+                  )
+                : undefined;
           for (const b of buildReport(q.report, {
             def,
             rows,
@@ -1872,6 +1882,7 @@ export class MarkSchemesService {
             failTo: q.failTo ?? null,
             parents,
             margin: q.margin,
+            exam: reportExam,
           })) {
             sheets.push(b.sheet);
             if (b.band === false) bare.add(b.sheet);
@@ -1926,7 +1937,7 @@ export class MarkSchemesService {
         order: firstOrder,
         notes,
         counts,
-        exam,
+        exam: exam ?? reportExam,
         titles,
         head,
       };
