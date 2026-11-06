@@ -335,6 +335,46 @@ export class ExamEntryService {
       );
   }
 
+  /**
+   * 6 Nov 2026 (asked): a sheet the admin opened for entry while the exam or class is locked is entered by
+   * its subject teacher only — or, when the section has no subject teacher of it, the class teacher; the
+   * office (unscoped: admin, exam office) as before. Otherwise the usual rule stands.
+   */
+  async assertOpenedSheetTeacher(
+    c: PoolClient,
+    tenant: TenantContext,
+    yearId: string,
+    examSubjectId: string,
+    sectionId: string,
+    subjectIds: string[],
+  ) {
+    const st = await c.query<{ opened: boolean }>(
+      `SELECT (st.entry_open AND (e.marks_locked OR es.entry_locked)) AS opened
+         FROM exam_entry_status st JOIN exam_subjects es ON es.id = st.exam_subject_id JOIN exams e ON e.id = es.exam_id
+        WHERE st.exam_subject_id = $1 AND st.class_section_id = $2`,
+      [examSubjectId, sectionId],
+    );
+    if (!st.rows[0]?.opened) return;
+    if ((await this.scopes.filter(tenant, MARKS.permission, 'class_section')) === null) return;
+    const r = await c.query<{ mine: boolean; mapped: boolean; class_teacher: boolean }>(
+      `SELECT bool_or(ta.kind = 'subject_teacher' AND ta.subject_id = ANY($3::bigint[]) AND e.user_id = app.current_user_id()) AS mine,
+              bool_or(ta.kind = 'subject_teacher' AND ta.subject_id = ANY($3::bigint[])) AS mapped,
+              bool_or(ta.kind = 'class_teacher' AND e.user_id = app.current_user_id()) AS class_teacher
+         FROM teacher_assignments ta JOIN employees e ON e.id = ta.employee_id
+        WHERE ta.class_section_id = $1 AND ta.academic_year_id = $2 AND ta.valid_to IS NULL`,
+      [sectionId, yearId, subjectIds],
+    );
+    const x = r.rows[0];
+    if (x?.mine || (!x?.mapped && x?.class_teacher)) return;
+    throw new DomainError(
+      'exams.not_assigned',
+      x?.mapped
+        ? 'This sheet was reopened for its subject teacher only'
+        : 'This sheet was reopened for the class teacher only (no subject teacher is mapped)',
+      { status: 403 },
+    );
+  }
+
   /** An entry type locked on the exam's class (docs/design/65). */
   async assertTypeOpen(c: PoolClient, examId: string, classId: string, kind: Kind) {
     const takes = await c.query<{ on: boolean }>(
@@ -412,7 +452,9 @@ export class ExamEntryService {
           entry_locked: boolean;
           entered: number;
         }>(
-          `SELECT es.id::text, es.subject_id::text, sub.code, sub.name, es.max_marks::text, es.pass_marks::text, es.entry_locked,
+          `SELECT es.id::text, es.subject_id::text, sub.code, sub.name, es.max_marks::text, es.pass_marks::text,
+                  (es.entry_locked AND NOT COALESCE((SELECT st.entry_open FROM exam_entry_status st
+                                                      WHERE st.exam_subject_id = es.id AND st.class_section_id = $3), false)) AS entry_locked,
                   (SELECT count(*)::int FROM mark_entries m JOIN enrolments e ON e.student_id = m.student_id AND e.class_section_id = $3 AND e.academic_year_id = $4 AND e.status = 'active'
                     WHERE m.exam_subject_id = es.id) AS entered
              FROM exam_subjects es JOIN subjects sub ON sub.id = es.subject_id
@@ -548,12 +590,16 @@ export class ExamEntryService {
         verified_by: string | null;
         verified_at: Date | null;
         remark: string | null;
+        entry_open: boolean;
       }>(
-        `SELECT st.status, su.display_name AS submitted_by, st.submitted_at, vu.display_name AS verified_by, st.verified_at, st.remark
+        `SELECT st.status, su.display_name AS submitted_by, st.submitted_at, vu.display_name AS verified_by, st.verified_at, st.remark,
+                st.entry_open
            FROM exam_entry_status st LEFT JOIN users su ON su.id = st.submitted_by LEFT JOIN users vu ON vu.id = st.verified_by
           WHERE st.exam_subject_id = $1 AND st.class_section_id = $2`,
         [es.id, section.id],
       );
+      // 6 Nov 2026: a sheet the admin opened for entry is open while the exam or class stays locked
+      const entryOpen = Boolean(st.rows[0]?.entry_open);
       const status = {
         status: st.rows[0]?.status ?? ('open' as const),
         submittedBy: st.rows[0]?.submitted_by ?? null,
@@ -561,6 +607,7 @@ export class ExamEntryService {
         verifiedBy: st.rows[0]?.verified_by ?? null,
         verifiedAt: st.rows[0]?.verified_at?.toISOString() ?? null,
         remark: st.rows[0]?.remark ?? null,
+        entryOpen,
       };
       const grades = es.scale_id
         ? (
@@ -606,7 +653,14 @@ export class ExamEntryService {
           [m.part_id]: { marks: m.marks, absent: m.absent },
         });
       return {
-        exam: { id: exam.id, code: exam.code, name: exam.name, marksLocked: exam.marks_locked },
+        exam: {
+          id: exam.id,
+          code: exam.code,
+          name: exam.name,
+          marksLocked: exam.marks_locked && !entryOpen,
+        },
+        /** the locks themselves (an opened sheet passes them) */
+        locks: { exam: exam.marks_locked, subject: es.entry_locked },
         examSubject: {
           parts,
           id: es.id,
@@ -615,7 +669,7 @@ export class ExamEntryService {
           name: es.name,
           maxMarks: es.max_marks,
           passMarks: es.pass_marks,
-          entryLocked: es.entry_locked,
+          entryLocked: es.entry_locked && !entryOpen,
           gradeOnly: Number(es.max_marks) === 0,
         },
         section: { id: section.id, code: section.code },
@@ -659,6 +713,7 @@ export class ExamEntryService {
         );
       await this.assertMayEnter(c, tenant, yearId, section.id, MARKS, dto.subjectId);
       await this.assertEntryOpen(c, es.id, section.id);
+      await this.assertOpenedSheetTeacher(c, tenant, yearId, es.id, section.id, [dto.subjectId]);
       this.assertRoster(dto.rows, await this.roster(c, yearId, section.id));
       const r = await c
         .query<{ o_inserted: number; o_updated: number }>(
@@ -729,6 +784,15 @@ export class ExamEntryService {
         await this.assertMayEnter(c, tenant, yearId, section.id, MARKS, part.es_subject);
       }
       await this.assertEntryOpen(c, part.es_id, section.id);
+      // a sheet opened for entry: the part's teacher or the subject's (else the class teacher)
+      await this.assertOpenedSheetTeacher(
+        c,
+        tenant,
+        yearId,
+        part.es_id,
+        section.id,
+        [part.subject_id, part.es_subject].filter((x): x is string => !!x),
+      );
       this.assertRoster(dto.rows, await this.roster(c, yearId, section.id));
       for (const r of dto.rows) {
         const marks = r.absent ? null : (r.marks ?? null);

@@ -1180,7 +1180,15 @@ export class ExamsService {
             WHERE exam_id = $1 AND class_id = $2 AND entry_locked <> $3`,
           [examId, dto.classId, dto.marks],
         );
-      if (dto.marks !== undefined) await this.wholeLockFollows(c, examId);
+      if (dto.marks !== undefined) {
+        await this.wholeLockFollows(c, examId);
+        // the class's sheets opened for entry one by one close: the class is locked or open as a whole
+        await c.query(
+          `UPDATE exam_entry_status st SET entry_open = false, updated_at = now()
+             FROM exam_subjects es WHERE es.id = st.exam_subject_id AND es.exam_id = $1 AND es.class_id = $2 AND st.entry_open`,
+          [examId, dto.classId],
+        );
+      }
       const done = impact.length
         ? await reopenExamMarks(c, examId, dto.classId, reason, `Reopened with ${klass.classCode}`)
         : null;

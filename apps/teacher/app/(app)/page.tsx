@@ -39,6 +39,8 @@ interface ToEnter {
   done: number;
   total: number;
   href: string;
+  /** reopened for entry by the admin: correct and submit it */
+  reopened?: boolean;
 }
 
 export default async function HomePage() {
@@ -204,6 +206,7 @@ export default async function HomePage() {
                     <td>
                       {t(lang, x.what)}
                       {x.area === 'remarks' ? ` (${t(lang, 'remarks')})` : ''}
+                      {x.reopened ? ` (${t(lang, 'Reopened')})` : ''}
                     </td>
                     <td>
                       {x.done} {t(lang, 'of')} {x.total}

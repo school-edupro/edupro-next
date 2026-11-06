@@ -15,6 +15,8 @@ export interface ToEnterLine {
   total: number;
   /** the teacher app page that enters it */
   href: string;
+  /** 6 Nov 2026: a sheet reopened for entry by the admin (listed until submitted, however full) */
+  reopened?: boolean;
 }
 
 /**
@@ -22,6 +24,10 @@ export interface ToEnterLine {
  * yet — marks of their subjects not submitted, the indicators they rate, the remark categories they
  * write, and (class teacher) height and weight. From their own teacher assignments only; an office user
  * without assignments gets nothing.
+ *
+ * 6 Nov 2026: a locked subject (the exam's or the class's lock) is not listed, unless its sheet was
+ * reopened for entry (docs/design/66): then its subject teacher sees it — or the class teacher when no
+ * subject teacher is mapped — even in a wholly locked exam (whose other entry stays off the list).
  */
 @Injectable()
 export class MyEntryService {
@@ -58,11 +64,15 @@ export class MyEntryService {
         name: string;
         areas: string[];
         class_ids: string[];
+        locked: boolean;
       }>(
-        `SELECT e.id::text, e.name, e.areas::text[] AS areas,
+        `SELECT e.id::text, e.name, e.areas::text[] AS areas, e.marks_locked AS locked,
                 COALESCE((SELECT array_agg(ec.class_id::text) FROM exam_classes ec WHERE ec.exam_id = e.id), '{}') AS class_ids
            FROM exams e
-          WHERE e.academic_year_id = $1 AND e.deleted_at IS NULL AND NOT e.marks_locked
+          WHERE e.academic_year_id = $1 AND e.deleted_at IS NULL
+            AND (NOT e.marks_locked OR EXISTS (
+                 SELECT 1 FROM exam_entry_status st JOIN exam_subjects es ON es.id = st.exam_subject_id
+                  WHERE es.exam_id = e.id AND st.entry_open AND st.status = 'open'))
           ORDER BY e.starts_on NULLS LAST, e.id`,
         [yearId],
       );
@@ -86,31 +96,57 @@ export class MyEntryService {
             (m) => m.kind === 'class_teacher' || m.kind === 'coordinator',
           );
           const base = { examId: e.id, exam: e.name, sectionId: s.section_id, section: s.section };
-          // marks: my subjects here, not submitted yet
-          if (e.areas.includes('marks'))
-            for (const m of mineHere.filter((x) => x.kind === 'subject_teacher' && x.subject_id)) {
-              const r = await c.query<{ open: boolean; takers: number; done: number }>(
-                `SELECT COALESCE((SELECT st.status = 'open' FROM exam_entry_status st WHERE st.exam_subject_id = es.id AND st.class_section_id = $4), true) AS open,
-                        (SELECT count(*)::int FROM unnest($5::bigint[]) AS k(id)
-                          WHERE app.student_exam_subject_kind(k.id, es.exam_id, es.subject_id) IS NOT NULL) AS takers,
-                        ((SELECT count(*)::int FROM mark_entries me WHERE me.exam_subject_id = es.id AND me.student_id = ANY($5::bigint[]))
-                         + (SELECT count(DISTINCT mp.student_id)::int FROM mark_part_entries mp JOIN exam_subject_parts p ON p.id = mp.part_id
-                             WHERE p.exam_subject_id = es.id AND mp.student_id = ANY($5::bigint[])
-                               AND NOT EXISTS (SELECT 1 FROM mark_entries me2 WHERE me2.exam_subject_id = es.id AND me2.student_id = mp.student_id))) AS done
-                   FROM exam_subjects es WHERE es.exam_id = $1 AND es.class_id = $2 AND es.subject_id = $3`,
-                [e.id, s.class_id, m.subject_id, s.section_id, kids],
-              );
-              const x = r.rows[0];
-              if (x?.open)
-                push({
-                  ...base,
-                  area: 'marks',
-                  what: m.subject ?? 'Subject',
-                  done: Math.min(x.done, x.takers),
-                  total: x.takers,
-                  href: `/marks?exam=${e.id}&pick=${encodeURIComponent(`${s.section_id}|${m.subject_id}`)}`,
-                });
+          // marks: my subjects here, not submitted yet and not locked (or reopened for entry); a sheet
+          // reopened for entry whose subject has no subject teacher here is the class teacher's
+          if (e.areas.includes('marks')) {
+            const mySubjects = mineHere
+              .filter((x) => x.kind === 'subject_teacher' && x.subject_id)
+              .map((x) => x.subject_id!);
+            const classTeacher = mineHere.some((m) => m.kind === 'class_teacher');
+            const r = await c.query<{
+              subject_id: string;
+              name: string;
+              open: boolean;
+              opened: boolean;
+              mapped: boolean;
+              takers: number;
+              done: number;
+            }>(
+              `SELECT es.subject_id::text, sub.name,
+                      COALESCE(st.status, 'open') = 'open' AND (NOT ($4 OR es.entry_locked) OR COALESCE(st.entry_open, false)) AS open,
+                      COALESCE(st.entry_open AND st.status = 'open' AND ($4 OR es.entry_locked), false) AS opened,
+                      EXISTS (SELECT 1 FROM teacher_assignments ta WHERE ta.class_section_id = $3 AND ta.academic_year_id = $7
+                                 AND ta.valid_to IS NULL AND ta.kind = 'subject_teacher' AND ta.subject_id = es.subject_id) AS mapped,
+                      (SELECT count(*)::int FROM unnest($5::bigint[]) AS k(id)
+                        WHERE app.student_exam_subject_kind(k.id, es.exam_id, es.subject_id) IS NOT NULL) AS takers,
+                      ((SELECT count(*)::int FROM mark_entries me WHERE me.exam_subject_id = es.id AND me.student_id = ANY($5::bigint[]))
+                       + (SELECT count(DISTINCT mp.student_id)::int FROM mark_part_entries mp JOIN exam_subject_parts p ON p.id = mp.part_id
+                           WHERE p.exam_subject_id = es.id AND mp.student_id = ANY($5::bigint[])
+                             AND NOT EXISTS (SELECT 1 FROM mark_entries me2 WHERE me2.exam_subject_id = es.id AND me2.student_id = mp.student_id))) AS done
+                 FROM exam_subjects es JOIN subjects sub ON sub.id = es.subject_id
+                 LEFT JOIN exam_entry_status st ON st.exam_subject_id = es.id AND st.class_section_id = $3
+                WHERE es.exam_id = $1 AND es.class_id = $2
+                  AND (es.subject_id = ANY($6::bigint[]) OR ($8 AND st.entry_open))
+                ORDER BY app.subject_seq(es.class_id, $7, es.subject_id), sub.code`,
+              [e.id, s.class_id, s.section_id, e.locked, kids, mySubjects, yearId, classTeacher],
+            );
+            for (const x of r.rows) {
+              const mine = mySubjects.includes(x.subject_id) || (x.opened && !x.mapped);
+              if (!mine || !x.open || (e.locked && !x.opened)) continue;
+              const line: ToEnterLine = {
+                ...base,
+                area: 'marks',
+                what: x.name,
+                done: Math.min(x.done, x.takers),
+                total: x.takers,
+                href: `/marks?exam=${e.id}&pick=${encodeURIComponent(`${s.section_id}|${x.subject_id}`)}`,
+              };
+              if (x.opened && x.takers > 0) out.push({ ...line, reopened: true });
+              else push(line);
             }
+          }
+          // a wholly locked exam lists only its sheets reopened for entry
+          if (e.locked) continue;
           // indicators I rate here
           if (e.areas.includes('indicators')) {
             const set = await this.entry.classSet(c, e.id, s.class_id);

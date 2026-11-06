@@ -280,3 +280,25 @@ submitted / verified and when, the remark, the actions (submit, verify or send b
   Reopen marks. Tests: exam-promotion-remarks (the locked class with a verified sheet and a published
   card: the reason asked, the card withdrawn, the sheet reopened, entry allowed; an open class reopened
   with a reason).
+- **Later (6 Nov 2026), asked (Term 1, VI-A English)**: reopen **one sheet** (a section's subject) for
+  entry while the exam or its class stays locked, so only that teacher enters. Decided: that section
+  and subject only; its subject teacher enters, else the section's class teacher when no subject
+  teacher is mapped (the exam office, unscoped, as before); it closes when the teacher submits it.
+  Migration 0312: `exam_entry_status.entry_open`; `app.enter_marks` lets a row through the exam / subject
+  lock when its student's section's sheet is open for entry (and open). `POST
+/exams/:id/entry-status/open-entry` {classSectionId, subjectId, note} (`exams.lock.manage`, the
+  reason 3 letters or more): 409 `exams.entry_open` when the sheet is open and unlocked or opened
+  already; a submitted or verified sheet is moved to open ("Reopened for entry: …"); the class's
+  published card taken back (`takeBackCards`, needs `exams.result.publish`); logged "Opened for entry:
+  …"; audit `exams.marks.open_entry`. Entry (`assertOpenedSheetTeacher`, in putMarks and putPartMarks,
+  so the Excel upload too): 403 "This sheet was reopened for its subject teacher only" / "… for the
+  class teacher only (no subject teacher is mapped)". It closes on submit (`move` keeps it only while
+  open), on Lock / Unlock the whole exam, and on any change of the class's marks lock. The sheet reads
+  open for its teacher (`exam.marksLocked`, `examSubject.entryLocked` net of it; `locks` the locks
+  themselves; `status.entryOpen`); the entry-status rows carry `entryOpen`. Admin: **Reopen for entry**
+  on the marks page (Marks → Enter marks, the sheet picked) for the lock right while the sheet is
+  locked — a dialog with the reason, what reopens and the card taken back; the status badge shows
+  "Open for entry (closes when submitted)" there and in Marks status. Tests: exam-promotion-remarks
+  (the right and the reason, the subject teacher in and the class teacher out, Mathematics with no
+  subject teacher, the rest still locked, submit closes it, a verified sheet with a published card,
+  the class lock closing it).

@@ -13,7 +13,7 @@ import {
   type ExamLockDto,
 } from './exams.dto';
 import { MarkSchemesService } from './mark-schemes.service';
-import { impactWords, reopenExamMarks, reopenImpact } from './exam-reopen';
+import { impactWords, reopenExamMarks, reopenImpact, takeBackCards } from './exam-reopen';
 
 type Status = 'open' | 'submitted' | 'verified';
 
@@ -36,6 +36,8 @@ export interface EntryStatusRow {
   verifiedBy: string | null;
   verifiedAt: string | null;
   remark: string | null;
+  /** 6 Nov 2026: opened for entry by the admin while the exam or its class is locked */
+  entryOpen: boolean;
   /** the caller may verify / send back this one */
   canVerify: boolean;
 }
@@ -50,7 +52,8 @@ const ROWS = `
            WHERE en.class_section_id = cs.id AND en.academic_year_id = e.academic_year_id AND en.status = 'active'
              AND app.student_exam_subject_kind(en.student_id, e.id, es.subject_id) IS NOT NULL) AS entered,
          COALESCE(st.status, 'open') AS status, su.display_name AS submitted_by, st.submitted_at, st.submitted_by::text AS submitted_by_id,
-         vu.display_name AS verified_by, st.verified_at, st.remark
+         vu.display_name AS verified_by, st.verified_at, st.remark,
+         COALESCE(st.entry_open AND (e.marks_locked OR es.entry_locked), false) AS entry_open
     FROM exams e
     JOIN exam_classes ec ON ec.exam_id = e.id
     JOIN class_sections cs ON cs.class_id = ec.class_id AND cs.academic_year_id = e.academic_year_id AND cs.deleted_at IS NULL AND cs.status = 'active'
@@ -80,6 +83,7 @@ interface Raw {
   verified_by: string | null;
   verified_at: Date | null;
   remark: string | null;
+  entry_open: boolean;
 }
 
 /**
@@ -142,6 +146,7 @@ export class ExamStatusService {
       verifiedBy: r.verified_by,
       verifiedAt: r.verified_at?.toISOString() ?? null,
       remark: r.remark,
+      entryOpen: r.entry_open,
       // the one who submitted verifies their own only with the verify right
       canVerify:
         (may.all || may.sections.has(r.class_section_id)) && (r.submitted_by_id !== me || may.all),
@@ -234,6 +239,8 @@ export class ExamStatusService {
                              WHEN EXCLUDED.status = 'open' THEN NULL ELSE exam_entry_status.submitted_at END,
          verified_by = CASE WHEN EXCLUDED.status = 'verified' THEN app.current_user_id() END,
          verified_at = CASE WHEN EXCLUDED.status = 'verified' THEN now() END,
+         -- a sheet opened for entry closes again once it is submitted (6 Nov 2026)
+         entry_open = CASE WHEN EXCLUDED.status = 'open' THEN exam_entry_status.entry_open ELSE false END,
          remark = EXCLUDED.remark, updated_at = now()`,
       [esId, sectionId, to, note],
     );
@@ -386,6 +393,12 @@ export class ExamStatusService {
                 locked_at = CASE WHEN $2 THEN now() END WHERE exam_id = $1`,
         [examId, dto.locked],
       );
+      // the sheets opened for entry one by one close: the whole exam is locked or open now
+      await c.query(
+        `UPDATE exam_entry_status st SET entry_open = false, updated_at = now()
+           FROM exam_subjects es WHERE es.id = st.exam_subject_id AND es.exam_id = $1 AND st.entry_open`,
+        [examId],
+      );
       const done = impact.length
         ? await reopenExamMarks(c, examId, null, reason, 'Reopened with the exam')
         : { reopened: 0, revoked: [] as string[] };
@@ -396,6 +409,77 @@ export class ExamStatusService {
         after: { locked: dto.locked, ...done, ...(reason ? { reason } : {}) },
       });
       return { locked: dto.locked, ...done };
+    });
+  }
+
+  /**
+   * 6 Nov 2026 (asked): the school admin reopens ONE sheet (an exam × section × subject) for entry while
+   * the exam or its class stays locked — submitted or verified marks go back to open, the class's
+   * published card is taken back (as a class opened), and the sheet is marked open for entry: only its
+   * subject teacher (else the section's class teacher) enters, and it closes when submitted.
+   */
+  async openEntry(ctx: RequestContext, examId: string, dto: EntryStatusNoteDto) {
+    const tenant = requireTenant(ctx);
+    return this.db.tenant(tenant, async (c) => {
+      const { yearId, section, es, row } = await this.place(
+        c,
+        tenant,
+        examId,
+        dto.classSectionId,
+        dto.subjectId,
+      );
+      const lock = await c.query<{ locked: boolean; open: boolean }>(
+        `SELECT (e.marks_locked OR es.entry_locked) AS locked,
+                COALESCE((SELECT st.entry_open FROM exam_entry_status st
+                           WHERE st.exam_subject_id = es.id AND st.class_section_id = $2), false) AS open
+           FROM exam_subjects es JOIN exams e ON e.id = es.exam_id WHERE es.id = $1`,
+        [es.id, section.id],
+      );
+      const { locked, open } = lock.rows[0]!;
+      if (row.status === 'open' && (!locked || open))
+        throw new DomainError('exams.entry_open', 'This sheet is open for entry already', {
+          status: 409,
+        });
+      const cards = (await reopenImpact(c, examId, section.class_id)).some((x) => x.cards.length);
+      if (cards && !ctx.permissions?.has(EXAMS.resultPublish))
+        throw new DomainError(
+          'permission-denied',
+          'Taking a published card back needs exams.result.publish',
+          { status: 403 },
+        );
+      const revoked = cards ? await takeBackCards(c, examId, section.class_id, dto.note) : [];
+      if (row.status !== 'open')
+        await this.move(
+          c,
+          es.id,
+          section.id,
+          row.status,
+          'open',
+          `Reopened for entry: ${dto.note}`,
+        );
+      if (locked) {
+        await c.query(
+          `INSERT INTO exam_entry_status (school_id, exam_subject_id, class_section_id, status, entry_open, remark)
+           VALUES (app.current_school_id(), $1, $2, 'open', true, $3)
+           ON CONFLICT (exam_subject_id, class_section_id) DO UPDATE SET entry_open = true, remark = EXCLUDED.remark, updated_at = now()`,
+          [es.id, section.id, `Opened for entry: ${dto.note}`],
+        );
+        if (row.status === 'open')
+          await c.query(
+            `INSERT INTO exam_entry_status_log (school_id, exam_subject_id, class_section_id, from_status, to_status, note, actor_user_id)
+             VALUES (app.current_school_id(), $1, $2, 'open', 'open', $3, app.current_user_id())`,
+            [es.id, section.id, `Opened for entry: ${dto.note}`],
+          );
+      }
+      if (row.status !== 'open') await c.query(`SELECT app.compute_exam_results($1)`, [examId]);
+      await this.audit.stage(ctx, c, {
+        action: 'exams.marks.open_entry',
+        entityType: 'exam_subjects',
+        entityId: es.id,
+        before: { status: row.status, locked },
+        after: { classSectionId: section.id, reason: dto.note, revoked },
+      });
+      return { ...(await this.one(c, tenant, ctx, es.id, section.id, yearId)), revoked };
     });
   }
 

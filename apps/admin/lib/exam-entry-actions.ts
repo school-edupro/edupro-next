@@ -334,6 +334,27 @@ export async function markEntryStatus(fd: FormData) {
   );
 }
 
+/**
+ * 6 Nov 2026: the school admin reopens one sheet (a section's subject) for entry while the exam or its
+ * class stays locked; its subject teacher (else the class teacher) enters, and it closes when submitted.
+ */
+export async function openSheetForEntry(fd: FormData) {
+  const examId = str(fd, 'examId');
+  const backTo = str(fd, 'back') || `/exams/${examId}/marks`;
+  const r = await call<{ revoked?: string[] }>(`/exams/${examId}/entry-status/open-entry`, 'POST', {
+    classSectionId: str(fd, 'classSectionId'),
+    subjectId: str(fd, 'subjectId'),
+    note: str(fd, 'reason'),
+  });
+  if (!r.ok) back(backTo, 'validation', r.error);
+  const revoked = r.data.revoked ?? [];
+  back(
+    backTo,
+    'ok',
+    `Open for entry: its subject teacher (or the class teacher when none is mapped) can enter now; it closes again when submitted.${revoked.length ? ` Taken back from the published card: ${revoked.join(', ')}.` : ''}`,
+  );
+}
+
 // ---- mark schemes (docs/design/65, part 3) --------------------------------------------------------
 export async function createMarkScheme(fd: FormData) {
   const preset = str(fd, 'preset');

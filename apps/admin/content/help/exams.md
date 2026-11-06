@@ -99,6 +99,13 @@
   tile in Marks status. After locking the whole exam, opening one class (its Marks
   lock on the Overview) lets that class's teachers enter while the other classes stay locked; the
   button at the top then reads **Lock the whole exam** again (the exam is no longer wholly locked).
+- **Reopen one sheet for entry** while the exam (or its class) stays locked: **Marks → Enter marks**,
+  pick the section and the subject, then **Reopen for entry** (school admin only) and give the reason.
+  Only that section's subject opens: its **subject teacher** enters (the section's **class teacher**
+  when no subject teacher is mapped in Teacher assignments); everyone else, and every other subject,
+  stays locked. Its submitted or verified marks go back to open, and the class's published report card
+  is taken back (the dialog says which). The sheet shows **Open for entry** until the teacher
+  **submits** it, which closes it again; locking or opening the whole exam or the class closes it too.
 
 ## Marks entry
 

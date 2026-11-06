@@ -4212,6 +4212,12 @@
       "viewOnly": "You can read these marks; you cannot enter them. Marks are entered by the subject teacher, the class teacher or the exam office (Access → give the Exam office role to an office login); your role verifies and reopens them.",
       "closed": "The marks are submitted or verified: the verifier sends them back (or someone with the unlock right reopens them) before they change.",
       "lockedNote": "Entry is locked for this subject; open it on the exam's Overview.",
+      "openForEntry": "Reopen for entry",
+      "openForEntryTitle": "Reopen {sheet} for entry?",
+      "openForEntryBody": "Only this sheet opens: its subject teacher (or the section's class teacher when no subject teacher is mapped) can enter and change its marks, while the rest of the exam stays locked. It closes again when it is submitted.",
+      "openForEntryReopens": "Its submitted or verified marks go back to open (they are submitted again for verification).",
+      "openForEntryCards": "The class's published report card is taken back ({cards}): families stop seeing it until it is published again (no message is sent).",
+      "openForEntryReason": "Why reopen this sheet? (kept in its history)",
       "excel": "Excel",
       "excelHelp": "Download the sheet with the students who take {subject}, fill the marks or codes, and upload it: every row is checked before anything is saved.",
       "download": "Download the marks sheet",
@@ -4343,7 +4349,8 @@
       "whatToCorrect": "What to correct",
       "sendBack": "Send back",
       "whyReopen": "Why reopen",
-      "reopen": "Reopen"
+      "reopen": "Reopen",
+      "openForEntry": "Open for entry (closes when submitted)"
     },
     "att": {
       "intro": "Count it from daily attendance (late, half day, on duty, stay back and short leave count as present), then correct any student. It prints on the report card.",

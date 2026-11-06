@@ -70,6 +70,35 @@ export const impactWords = (list: ReopenImpact[]): string =>
     )
     .join('; ');
 
+/** the released cards of the exam a class is published on, taken back with the reason (no message) */
+export async function takeBackCards(
+  c: PoolClient,
+  examId: string,
+  classId: string,
+  reason: string,
+): Promise<string[]> {
+  const impact = await reopenImpact(c, examId, classId);
+  const out: string[] = [];
+  for (const x of impact)
+    for (const k of x.cards) {
+      await c.query(
+        `UPDATE report_card_release_classes SET status = 'withdrawn', withdrawn_at = now(),
+                withdrawn_by = app.current_user_id(), withdrawn_reason = $3
+          WHERE release_id = $1 AND class_id = $2 AND status = 'released'`,
+        [k.releaseId, x.classId, reason],
+      );
+      await c.query(
+        `UPDATE report_card_releases SET status = 'withdrawn', withdrawn_at = now(), withdrawn_by = app.current_user_id(),
+                withdrawn_reason = $2, updated_at = now()
+          WHERE id = $1 AND status = 'released'
+            AND NOT EXISTS (SELECT 1 FROM report_card_release_classes x WHERE x.release_id = $1 AND x.status = 'released')`,
+        [k.releaseId, reason],
+      );
+      out.push(`${x.classCode} ("${k.name}")`);
+    }
+  return out;
+}
+
 /** takes the cards back and reopens the sheets (the exam or one class), then works the results out */
 export async function reopenExamMarks(
   c: PoolClient,
@@ -81,23 +110,7 @@ export async function reopenExamMarks(
   const impact = await reopenImpact(c, examId, classId);
   const revoked: string[] = [];
   for (const x of impact)
-    for (const k of x.cards) {
-      await c.query(
-        `UPDATE report_card_release_classes SET status = 'withdrawn', withdrawn_at = now(),
-                withdrawn_by = app.current_user_id(), withdrawn_reason = $3
-          WHERE release_id = $1 AND class_id = $2 AND status = 'released'`,
-        [k.releaseId, x.classId, reason],
-      );
-      // the last class taken back: the release is withdrawn with that reason
-      await c.query(
-        `UPDATE report_card_releases SET status = 'withdrawn', withdrawn_at = now(), withdrawn_by = app.current_user_id(),
-                withdrawn_reason = $2, updated_at = now()
-          WHERE id = $1 AND status = 'released'
-            AND NOT EXISTS (SELECT 1 FROM report_card_release_classes x WHERE x.release_id = $1 AND x.status = 'released')`,
-        [k.releaseId, reason],
-      );
-      revoked.push(`${x.classCode} ("${k.name}")`);
-    }
+    if (x.cards.length) revoked.push(...(await takeBackCards(c, examId, x.classId, reason)));
   const rows = await c.query<{ es: string; section: string; status: string }>(
     `SELECT st.exam_subject_id::text AS es, st.class_section_id::text AS section, st.status::text AS status
        FROM exam_entry_status st JOIN exam_subjects es ON es.id = st.exam_subject_id

@@ -13,8 +13,9 @@ import { ExcelUpload } from '@/components/exams/ExcelUpload';
 import { MarksSheet } from '@/components/exams/MarksSheet';
 import { SubNav } from '@/components/exams/SubNav';
 import { ApiError, apiFetch, getMe } from '@/lib/api';
-import { uploadExamMarks } from '@/lib/exam-entry-actions';
-import type { Exam, ExamProgress } from '@/lib/types';
+import { ConfirmAction } from '@/components/ConfirmAction';
+import { openSheetForEntry, uploadExamMarks } from '@/lib/exam-entry-actions';
+import type { Exam, ExamProgress, LockImpact } from '@/lib/types';
 
 interface Part {
   id: string;
@@ -24,6 +25,7 @@ interface Part {
 }
 interface EntrySection {
   classSectionId: string;
+  classId: string;
   code: string;
   subjects: Array<{
     subjectId: string;
@@ -48,6 +50,8 @@ interface Sheet {
     parts: Part[];
   };
   section: { id: string; code: string };
+  /** the locks themselves (6 Nov 2026: an opened sheet passes them) */
+  locks?: { exam: boolean; subject: boolean };
   codes: Array<{ code: string; name: string }>;
   grades: string[];
   status: EntryStatus;
@@ -112,6 +116,7 @@ export default async function ExamMarksPage({
             label: `${sub.name} · ${p.name} (${n(p.maxMarks)})`,
             section: s.code,
             classSectionId: s.classSectionId,
+            classId: s.classId,
             subjectId: sub.subjectId,
             partId: p.id as string | null,
           }))
@@ -122,6 +127,7 @@ export default async function ExamMarksPage({
               label: `${sub.name}${Number(sub.maxMarks) === 0 ? ` (${t('grade')})` : ''} · ${t('enteredCount', { n: sub.entered })}${sub.entryLocked ? ` · ${t('locked')}` : ''}`,
               section: s.code,
               classSectionId: s.classSectionId,
+              classId: s.classId,
               subjectId: sub.subjectId,
               partId: null as string | null,
             },
@@ -145,6 +151,8 @@ export default async function ExamMarksPage({
       )
     : null;
   const canEnter = me.permissions.includes('exams.marks.enter');
+  // 6 Nov 2026: the school admin reopens one sheet for entry while the exam or class stays locked
+  const canLock = me.permissions.includes('exams.lock.manage');
   // submitted or verified marks are closed too (docs/design/65, part 2)
   const locked =
     !!sheet &&
@@ -169,6 +177,19 @@ export default async function ExamMarksPage({
   const taken = sheet?.rows.filter((r) => r.taken) ?? [];
   const missing = taken.filter((r) => r.marks === null && !r.code && !r.grade).length;
   const backTo = `/exams/${id}/marks?pick=${encodeURIComponent(chosen?.value ?? '')}`;
+  // what reopening this sheet takes back: its class's published report cards
+  const cards =
+    canLock &&
+    chosen &&
+    sheet &&
+    (sheet.locks?.exam || sheet.locks?.subject) &&
+    !sheet.status.entryOpen
+      ? await apiFetch<{ data: LockImpact[] }>(
+          `/exams/${id}/lock-impact?classId=${encodeURIComponent(chosen.classId)}`,
+        )
+          .then((r) => r.data.flatMap((x) => x.cards.map((k) => `"${k.name}"`)))
+          .catch(() => [] as string[])
+      : [];
   const link = (o: (typeof options)[number]) =>
     `/exams/${id}/marks?pick=${encodeURIComponent(o.value)}`;
   const seen = new Set<string>();
@@ -286,6 +307,29 @@ export default async function ExamMarksPage({
                 canVerify={verifier}
                 canReopen={me.permissions.includes('exams.marks.unlock')}
               />
+              {canLock && !sheet.status.entryOpen && (sheet.locks?.exam || sheet.locks?.subject) ? (
+                <ConfirmAction
+                  action={openSheetForEntry}
+                  fields={{
+                    examId: exam.id,
+                    classSectionId: chosen.classSectionId,
+                    subjectId: chosen.subjectId,
+                    back: backTo,
+                  }}
+                  label={t('openForEntry')}
+                  title={t('openForEntryTitle', { sheet: `${sheet.section.code} · ${es.name}` })}
+                  confirmLabel={t('openForEntry')}
+                  reason={{ label: t('openForEntryReason') }}
+                >
+                  {[
+                    t('openForEntryBody', { sheet: `${sheet.section.code} · ${es.name}` }),
+                    sheet.status.status !== 'open' ? t('openForEntryReopens') : '',
+                    cards.length ? t('openForEntryCards', { cards: cards.join(', ') }) : '',
+                  ]
+                    .filter(Boolean)
+                    .join(' ')}
+                </ConfirmAction>
+              ) : null}
             </div>
             {canEnter && !locked ? (
               <p className="ep-field__help" style={{ marginTop: 0 }}>

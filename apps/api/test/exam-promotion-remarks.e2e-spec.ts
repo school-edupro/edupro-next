@@ -662,4 +662,133 @@ describe('promotion proposals and remark categories (e2e)', () => {
     });
     expect((await entry()).statusCode).toBe(200);
   });
+
+  // 6 Nov 2026 (asked): one sheet (a section's subject) reopened for entry while the exam stays locked:
+  // the school admin alone, with a reason; only its subject teacher (else the class teacher) enters; the
+  // rest stays locked; it closes when submitted, and when the exam or the class is locked or opened
+  it('reopens one sheet for entry while the exam stays locked, for its own teacher', async () => {
+    const whole = (body: Record<string, unknown>) =>
+      call(admin, 'PUT', `/exams/${examId}/lock`, body);
+    const open = (u: SeededUser, sub: string, note?: string) =>
+      call(u, 'POST', `/exams/${examId}/entry-status/open-entry`, {
+        classSectionId: section.A,
+        subjectId: subject[sub],
+        ...(note === undefined ? {} : { note }),
+      });
+    const enter = (u: SeededUser, sub: string, marks: number) =>
+      call(u, 'PUT', `/exams/${examId}/marks`, {
+        classSectionId: section.A,
+        subjectId: subject[sub],
+        rows: [{ studentId: student.Bhanu, marks }],
+      });
+    const sheet = async (u: SeededUser, sub: string) =>
+      (
+        await call(
+          u,
+          'GET',
+          `/exams/${examId}/marks?classSectionId=${section.A!}&subjectId=${subject[sub]!}`,
+        )
+      ).json() as {
+        exam: { marksLocked: boolean };
+        examSubject: { entryLocked: boolean };
+        locks: { exam: boolean; subject: boolean };
+        status: { status: string; entryOpen: boolean; remark: string | null };
+      };
+    const row = async (sub: string) =>
+      (
+        (await call(admin, 'GET', `/exams/${examId}/entry-status`)).json().data as Array<{
+          classSectionId: string;
+          subjectId: string;
+          status: string;
+          entryOpen: boolean;
+        }>
+      ).find((x) => x.classSectionId === section.A && x.subjectId === subject[sub])!;
+
+    // the ENG sheet is open (the last test); the whole exam is locked
+    expect((await whole({ locked: true })).statusCode).toBe(200);
+    expect((await enter(englishTeacher, 'ENG', 42)).json().type).toBe('exams.entry_locked');
+    // the school admin's right, with a reason
+    expect((await open(classTeacher, 'ENG', 'Fix Bhanu')).statusCode).toBe(403);
+    expect((await open(admin, 'ENG')).statusCode).toBe(400);
+    const opened = await open(admin, 'ENG', 'Fix Bhanu');
+    expect(opened.statusCode).toBe(201);
+    expect(opened.json()).toMatchObject({ status: 'open', entryOpen: true, revoked: [] });
+    expect((await open(admin, 'ENG', 'Again')).json().type).toBe('exams.entry_open');
+    // the teacher's To enter lists it (however full) while the rest of the locked exam stays off it
+    const todo = (u: SeededUser) =>
+      call(u, 'GET', '/exams/my-entry').then((r) =>
+        (r.json().data as Array<{ area: string; what: string; reopened?: boolean }>).map(
+          (x) => `${x.area}:${x.what}${x.reopened ? ' (reopened)' : ''}`,
+        ),
+      );
+    expect(await todo(englishTeacher)).toEqual(['marks:English (reopened)']);
+    expect(await todo(classTeacher)).toEqual([]);
+    // the sheet reads open for its teacher; the locks themselves stay
+    expect(await sheet(englishTeacher, 'ENG')).toMatchObject({
+      exam: { marksLocked: false },
+      examSubject: { entryLocked: false },
+      locks: { exam: true },
+      status: { status: 'open', entryOpen: true, remark: 'Opened for entry: Fix Bhanu' },
+    });
+    expect((await row('ENG')).entryOpen).toBe(true);
+    expect((await row('MAT')).entryOpen).toBe(false);
+    // only its subject teacher enters (the exam office, unscoped, as before); the class teacher is refused
+    expect((await enter(englishTeacher, 'ENG', 42)).statusCode).toBe(200);
+    const ct = await enter(classTeacher, 'ENG', 43);
+    expect(ct.statusCode).toBe(403);
+    expect(ct.json().detail).toBe('This sheet was reopened for its subject teacher only');
+    // the rest of the exam stays locked
+    expect((await enter(classTeacher, 'MAT', 31)).json().type).toBe('exams.entry_locked');
+    // Mathematics has no subject teacher: opened, its class teacher enters
+    expect((await open(admin, 'MAT', 'Fix the maths')).statusCode).toBe(201);
+    expect(await todo(classTeacher)).toEqual(['marks:Mathematics (reopened)']);
+    expect((await enter(classTeacher, 'MAT', 31)).statusCode).toBe(200);
+    // submitting closes it: the sheet is submitted, then locked again once sent back
+    expect(
+      (
+        await call(englishTeacher, 'POST', `/exams/${examId}/entry-status/submit`, {
+          classSectionId: section.A,
+          subjectId: subject.ENG,
+        })
+      ).statusCode,
+    ).toBe(201);
+    expect(await row('ENG')).toMatchObject({ status: 'submitted', entryOpen: false });
+    expect(await todo(englishTeacher)).toEqual([]);
+    expect((await sheet(englishTeacher, 'ENG')).exam.marksLocked).toBe(true);
+    // a submitted sheet with a published card: opened again, the card taken back, the sheet reopened
+    expect(
+      (
+        await call(admin, 'POST', `/exams/${examId}/entry-status/verify`, {
+          classSectionId: section.A,
+          subjectId: subject.ENG,
+        })
+      ).statusCode,
+    ).toBe(201);
+    const card = (
+      await call(admin, 'POST', '/exams/report-cards/releases', {
+        kind: 'exam',
+        termCode: 'PT8',
+        name: 'Sheet card',
+        examIds: [examId],
+      })
+    ).json().id as string;
+    await call(admin, 'PUT', `/exams/report-cards/releases/${card}/classes/${klass.VI!}`, {
+      status: 'released',
+    });
+    const again = await open(admin, 'ENG', 'One mark wrong');
+    expect(again.json()).toMatchObject({
+      status: 'open',
+      entryOpen: true,
+      revoked: ['VI ("Sheet card")'],
+    });
+    expect((await enter(englishTeacher, 'ENG', 44)).statusCode).toBe(200);
+    // locking or opening the class closes every opened sheet of it
+    await call(admin, 'PUT', `/exams/${examId}/class-locks`, {
+      classId: klass.VI,
+      marks: true,
+    });
+    expect((await row('ENG')).entryOpen).toBe(false);
+    expect((await row('MAT')).entryOpen).toBe(false);
+    expect((await enter(englishTeacher, 'ENG', 45)).json().type).toBe('exams.entry_locked');
+  });
 });

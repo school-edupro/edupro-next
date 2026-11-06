@@ -9,6 +9,8 @@ export interface EntryStatus {
   verifiedBy: string | null;
   verifiedAt: string | null;
   remark: string | null;
+  /** 6 Nov 2026: opened for entry by the admin while the exam or class is locked */
+  entryOpen?: boolean;
 }
 
 const TONE = { open: 'neutral', submitted: 'warning', verified: 'success' } as const;
@@ -29,6 +31,12 @@ export async function EntryStatusBadge({ s }: { s: EntryStatus }) {
   return (
     <span>
       <Badge tone={TONE[s.status]}>{t(s.status)}</Badge>
+      {s.entryOpen ? (
+        <>
+          {' '}
+          <Badge tone="info">{t('openForEntry')}</Badge>
+        </>
+      ) : null}
       {s.status === 'submitted' && s.submittedBy ? (
         <span className="ep-kicker">
           {' '}

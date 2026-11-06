@@ -82,6 +82,20 @@ export class ExamStatusController {
     return this.svc.reopen(ctx, id, dto);
   }
 
+  @Post(':id/entry-status/open-entry')
+  @ApiOperation({
+    summary:
+      'Reopen one sheet (section × subject) for entry while the exam or class stays locked (the school admin, with a reason)',
+  })
+  @RequirePermission(EXAMS.lockManage)
+  openEntry(
+    @ReqCtx() ctx: RequestContext,
+    @Param('id') id: string,
+    @Body() dto: EntryStatusNoteDto,
+  ) {
+    return this.svc.openEntry(ctx, id, dto);
+  }
+
   @Get(':id/lock-impact')
   @ApiOperation({
     summary:
