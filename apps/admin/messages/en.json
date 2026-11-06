@@ -3373,7 +3373,8 @@
     "pmSendWho": "Only the principal (results publish right) sends the message.",
     "pmWaitsOn": "Nothing to send now: {n} families wait for the {channel}, which goes once {why}.",
     "pmWhyDlt": "its DLT template id is added under Communication → Templates",
-    "pmWhyOff": "its template is switched on under Communication → Templates"
+    "pmWhyOff": "its template is switched on under Communication → Templates",
+    "pmTickNone": "{channel} (nobody waits: {told} told)"
   },
   "rcHolds": {
     "title": "Held cards ({n})",

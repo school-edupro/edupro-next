@@ -18,6 +18,7 @@ export function ConfirmAction({
   confirmVariant = 'primary',
   reason,
   choices,
+  blocked,
 }: {
   action: (fd: FormData) => void | Promise<void>;
   fields: Record<string, string>;
@@ -38,6 +39,8 @@ export function ConfirmAction({
     legend: string;
     items: Array<{ value: string; label: string; checked?: boolean; disabled?: boolean }>;
   };
+  /** Nothing can be done now: the dialog says why and offers only Close (docs/design/82). */
+  blocked?: string;
 }) {
   const form = useRef<HTMLFormElement>(null);
   const [open, setOpen] = useState(false);
@@ -68,25 +71,35 @@ export function ConfirmAction({
           onClose={() => {
             if (!busy) setOpen(false);
           }}
-          primary={{
-            label: confirmLabel,
-            variant: confirmVariant,
-            loading: busy,
-            onClick: () => {
-              if (choices && !picked.length) {
-                setError('Tick at least one.');
-                return;
-              }
-              if (reason && text.trim().length < 3) {
-                setError('Give a reason of at least 3 characters.');
-                return;
-              }
-              setBusy(true);
-              form.current?.requestSubmit();
-            },
-          }}
+          secondaryLabel={blocked ? 'Close' : undefined}
+          primary={
+            blocked
+              ? undefined
+              : {
+                  label: confirmLabel,
+                  variant: confirmVariant,
+                  loading: busy,
+                  onClick: () => {
+                    if (choices && !picked.length) {
+                      setError('Tick at least one.');
+                      return;
+                    }
+                    if (reason && text.trim().length < 3) {
+                      setError('Give a reason of at least 3 characters.');
+                      return;
+                    }
+                    setBusy(true);
+                    form.current?.requestSubmit();
+                  },
+                }
+          }
         >
           <div className="ep-prose">{children}</div>
+          {blocked ? (
+            <p className="ep-alert ep-alert--warning" style={{ marginTop: 'var(--sp-3)' }}>
+              {blocked}
+            </p>
+          ) : null}
           {choices ? (
             <fieldset
               className="ep-field"

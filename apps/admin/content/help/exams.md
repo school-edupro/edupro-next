@@ -235,8 +235,9 @@ Pick a tile to see who submitted or verified it and to submit, verify, send back
      mobile), the held cards and those withheld for fees. **Send to VI's parents** (or **Send to every
      published class**; the principal only) asks which way — **E-mail** and/or **SMS** (greyed out until
      its DLT template id is added) — and sends only to the families not told yet that way: each family
-     is told once per release and channel, never for a held card or one withheld for fees. When nothing
-     can be sent it says why (everyone told, or the SMS waiting for its DLT id). Below it, the **e-mail**
+     is told once per release and channel, never for a held card or one withheld for fees. Each published class
+     has its Send button; when nothing can be sent, its dialog says why (everyone told, or the SMS
+     waiting for its DLT id) and offers only Close. Below it, the **e-mail**
      is shown exactly as it arrives — a letter on the school's letterhead: "the
      Assement 1 report card of Aarav (class I-A) is now published", with a **View report card** button
      to the parent app's Results — filled for a pupil of this release; the **SMS**'s words below it.

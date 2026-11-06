@@ -66,7 +66,9 @@ export async function ParentMessage({
       label:
         state('email') === 'off'
           ? t('pmTickOff', { channel: t('pmEmail') })
-          : t('pmTickEmail', { n: k.email.waiting }),
+          : k.email.waiting
+            ? t('pmTickEmail', { n: k.email.waiting })
+            : t('pmTickNone', { channel: t('pmEmail'), told: k.email.told }),
       disabled: state('email') !== 'ready' || !k.email.waiting,
       checked: true,
     },
@@ -77,7 +79,9 @@ export async function ParentMessage({
           ? t('pmTickOff', { channel: t('pmSms') })
           : state('sms') === 'needs_dlt'
             ? t('pmTickSmsDlt')
-            : t('pmTickSms', { n: k.sms.waiting }),
+            : k.sms.waiting
+              ? t('pmTickSms', { n: k.sms.waiting })
+              : t('pmTickNone', { channel: t('pmSms'), told: k.sms.told }),
       disabled: state('sms') !== 'ready' || !k.sms.waiting,
       checked: true,
     },
@@ -107,6 +111,7 @@ export async function ParentMessage({
       confirmLabel={t('pmSendConfirm')}
       variant={classId ? 'secondary' : 'primary'}
       choices={{ name: 'channels', legend: t('pmChannels'), items: ticks(k) }}
+      blocked={sendable(k) ? undefined : blocked(k)}
     >
       {t('pmSendBody')}
     </ConfirmAction>
@@ -158,11 +163,7 @@ export async function ParentMessage({
                     <td>{cell(k.email, t('pmNoEmail', { n: k.email.noAddress }))}</td>
                     <td>{cell(k.sms, t('pmNoMobile', { n: k.sms.noAddress }))}</td>
                     {canSend ? (
-                      <td>
-                        {sendable(k)
-                          ? send(k, k.classId, k.code, t('pmSendClass', { cls: k.code }))
-                          : null}
-                      </td>
+                      <td>{send(k, k.classId, k.code, t('pmSendClass', { cls: k.code }))}</td>
                     ) : null}
                   </tr>
                 ))}
