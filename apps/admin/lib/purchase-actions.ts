@@ -891,3 +891,112 @@ export async function recordEmergency(fd: FormData) {
   }
   back(poPage(made.id), 'ok', `${made.number} recorded: send it for ratification`);
 }
+
+// ---- phase 2, part 6: stores and stock ------------------------------------------------------------
+export type StoreSaveResult = { ok: true; id: string } | { ok: false; error: string };
+
+/** A sub-store added, or a store's details and keepers changed. */
+export async function saveStore(
+  id: string | null,
+  body: Record<string, unknown>,
+): Promise<StoreSaveResult> {
+  if (id && !okId(id)) return { ok: false, error: 'Unknown store' };
+  try {
+    const r = await apiFetch<{ id: string }>(id ? `/purchase/stores/${id}` : '/purchase/stores', {
+      method: id ? 'PUT' : 'POST',
+      body: JSON.stringify(body),
+    });
+    revalidatePath('/purchase/stores');
+    return { ok: true, id: r.id };
+  } catch (e) {
+    if (e instanceof ApiError) return { ok: false, error: detailOf(e) };
+    throw e;
+  }
+}
+
+/** The reorder level, reorder quantity and maximum of the items of a store (one form row each). */
+export async function saveStoreLevels(fd: FormData) {
+  const id = pick(fd, 'id');
+  if (!okId(id)) back('/purchase/stores', 'validation-failed', 'Unknown store');
+  const lines = fd
+    .getAll('itemId')
+    .map(String)
+    .filter(okId)
+    .map((itemId) => {
+      const n = (k: string) => {
+        const v = pick(fd, `${k}_${itemId}`);
+        return v === '' ? null : v;
+      };
+      return {
+        itemId,
+        reorderLevel: n('level') ?? 0,
+        reorderQty: n('qty'),
+        maxQty: n('max'),
+      };
+    });
+  // a new item's levels, from the last row
+  const added = pick(fd, 'newItemId');
+  if (okId(added) && !lines.some((l) => l.itemId === added))
+    lines.push({
+      itemId: added,
+      reorderLevel: pick(fd, 'level_new') || 0,
+      reorderQty: pick(fd, 'qty_new') || null,
+      maxQty: pick(fd, 'max_new') || null,
+    });
+  return run(
+    `/purchase/stores/${id}`,
+    () =>
+      apiFetch(`/purchase/stores/${id}/levels`, { method: 'PUT', body: JSON.stringify({ lines }) }),
+    'Reorder levels saved',
+  );
+}
+
+export type OpeningResult = { ok: true; posted: number } | { ok: false; error: string };
+
+export async function postOpening(
+  storeId: string,
+  body: Record<string, unknown>,
+): Promise<OpeningResult> {
+  if (!okId(storeId)) return { ok: false, error: 'Unknown store' };
+  try {
+    const r = await apiFetch<{ posted: number }>(`/purchase/stores/${storeId}/opening`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    });
+    revalidatePath(`/purchase/stores/${storeId}`);
+    return { ok: true, posted: r.posted };
+  } catch (e) {
+    if (e instanceof ApiError) return { ok: false, error: detailOf(e) };
+    throw e;
+  }
+}
+
+export type OpeningImportResult =
+  | {
+      ok: true;
+      dryRun: boolean;
+      good: number;
+      bad: number;
+      posted: number;
+      rows: Array<{ row: number; code: string; ok: boolean; error?: string }>;
+    }
+  | { ok: false; error: string };
+
+export async function importOpening(
+  storeId: string,
+  file: string,
+  dryRun: boolean,
+): Promise<OpeningImportResult> {
+  if (!okId(storeId)) return { ok: false, error: 'Unknown store' };
+  try {
+    const r = await apiFetch<Omit<Extract<OpeningImportResult, { ok: true }>, 'ok'>>(
+      `/purchase/stores/${storeId}/opening-import`,
+      { method: 'POST', body: JSON.stringify({ file, dryRun }) },
+    );
+    if (!dryRun) revalidatePath(`/purchase/stores/${storeId}`);
+    return { ok: true, ...r };
+  } catch (e) {
+    if (e instanceof ApiError) return { ok: false, error: detailOf(e) };
+    throw e;
+  }
+}

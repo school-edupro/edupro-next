@@ -572,7 +572,7 @@ export const NAV: Array<{
     ],
   },
   {
-    // docs/design/83: purchase — masters (1), indents (2), requisitions (3), orders (4), reports (5)
+    // docs/design/83: purchase — masters (1), indents (2), requisitions (3), orders (4), reports (5); phase 2 stores (doc 84)
     section: 'purchase',
     items: [
       {
@@ -604,6 +604,8 @@ export const NAV: Array<{
         permission: 'purchase.emergency.record',
       },
       { href: '/purchase/reports', label: 'purchaseReports', permission: 'purchase.report.view' },
+      { href: '/purchase/stores', label: 'purchaseStores', permission: 'purchase.store.view' },
+      { href: '/purchase/stock', label: 'stockInHand', permission: 'purchase.store.view' },
       { href: '/purchase', label: 'purchaseHome', permission: 'purchase.master.view' },
       { href: '/purchase/vendors', label: 'vendors', permission: 'purchase.master.view' },
       {

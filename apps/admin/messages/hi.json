@@ -256,6 +256,8 @@
     "purchaseOrders": "क्रय आदेश",
     "emergencyPurchase": "आपातकालीन क्रय",
     "purchaseReports": "क्रय रिपोर्ट",
+    "purchaseStores": "भंडार",
+    "stockInHand": "उपलब्ध स्टॉक",
     "purchaseHome": "क्रय सेटअप",
     "vendors": "विक्रेता",
     "vendorApprovals": "विक्रेता अनुमोदन",

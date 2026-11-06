@@ -256,6 +256,8 @@
     "purchaseOrders": "Purchase Orders",
     "emergencyPurchase": "Emergency purchase",
     "purchaseReports": "Purchase reports",
+    "purchaseStores": "Stores",
+    "stockInHand": "Stock in hand",
     "purchaseHome": "Purchase set-up",
     "vendors": "Vendors",
     "vendorApprovals": "Vendor approvals",

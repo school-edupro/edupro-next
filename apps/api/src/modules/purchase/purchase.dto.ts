@@ -16,6 +16,9 @@ export const PURCHASE = {
   orderCancel: 'purchase.order.cancel',
   emergencyRecord: 'purchase.emergency.record',
   reportView: 'purchase.report.view',
+  storeView: 'purchase.store.view',
+  storeOperate: 'purchase.store.operate',
+  storeManage: 'purchase.store.manage',
 } as const;
 
 const opt = (max: number) =>
@@ -590,3 +593,83 @@ export const ReportQuerySchema = z
   })
   .refine((q) => !q.from || !q.to || q.from <= q.to, { message: 'From is after to', path: ['to'] });
 export class ReportQueryDto extends createZodDto(ReportQuerySchema) {}
+
+// ---- phase 2, part 6: stores and stock (docs/design/84) -------------------------------------------
+const Qty = z.coerce.number().gt(0).max(9999999);
+export const StoreSchema = z.object({
+  code: upper(
+    /^[A-Z0-9][A-Z0-9_-]{0,19}$/,
+    'up to 20 capital letters, digits, hyphen or underscore',
+  ),
+  name: z.string().trim().min(2).max(80),
+  departmentId: IdSchema.nullish(),
+  location: opt(200),
+  keeperIds: z.array(IdSchema).max(20).default([]),
+  status: z.enum(['active', 'inactive']).default('active'),
+});
+export class StoreDto extends createZodDto(StoreSchema) {}
+
+export const StoreLevelsSchema = z.object({
+  lines: z
+    .array(
+      z
+        .object({
+          itemId: IdSchema,
+          reorderLevel: z.coerce.number().min(0).max(9999999),
+          reorderQty: Qty.nullish(),
+          maxQty: Qty.nullish(),
+        })
+        .refine((l) => !l.maxQty || l.maxQty >= l.reorderLevel, {
+          message: 'The maximum is below the reorder level',
+          path: ['maxQty'],
+        }),
+    )
+    .max(1000),
+});
+export class StoreLevelsDto extends createZodDto(StoreLevelsSchema) {}
+
+export const OpeningLineSchema = z.object({
+  itemId: IdSchema,
+  qty: Qty,
+  /** per store unit */
+  rate: z.coerce.number().min(0).max(1e10),
+  batch: opt(40),
+  expiry: Day.optional(),
+});
+export const OpeningSchema = z.object({
+  lines: z.array(OpeningLineSchema).min(1).max(500),
+  day: Day.optional(),
+});
+export class OpeningDto extends createZodDto(OpeningSchema) {}
+
+export const OpeningImportSchema = z.object({
+  file: z.string().min(10).max(2_000_000),
+  dryRun: z.boolean().default(true),
+});
+export class OpeningImportDto extends createZodDto(OpeningImportSchema) {}
+
+export const StockQuerySchema = z.object({
+  storeId: IdSchema.optional(),
+  categoryId: IdSchema.optional(),
+  q: z.string().trim().max(80).optional(),
+  /** below the reorder level only */
+  below: z
+    .enum(['1', '0'])
+    .optional()
+    .transform((v) => v === '1'),
+  /** items with nothing in stock too (those with a reorder level) */
+  empty: z
+    .enum(['1', '0'])
+    .optional()
+    .transform((v) => v === '1'),
+  format: z.enum(['xlsx', 'pdf']).optional(),
+});
+export class StockQueryDto extends createZodDto(StockQuerySchema) {}
+
+export const LedgerQuerySchema = z.object({
+  storeId: IdSchema.optional(),
+  from: Day.optional(),
+  to: Day.optional(),
+  format: z.enum(['xlsx', 'pdf']).optional(),
+});
+export class LedgerQueryDto extends createZodDto(LedgerQuerySchema) {}

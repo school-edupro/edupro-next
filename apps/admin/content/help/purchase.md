@@ -21,6 +21,7 @@ PO and the emergency purchase.
 | **School admin** (orders)                           | Cancels an approved PO (its own right)                                                               |
 | **The Principal** (or the designation in settings)  | Ratifies an emergency purchase                                                                       |
 | **Auditor** (read only)                             | The purchase dashboard and reports                                                                   |
+| **Store keeper** (its own role, per store)          | Keeps the stores given to them: opening stock now; receipts, issues, returns and counts next         |
 
 ## Set it up, in this order
 
@@ -240,6 +241,37 @@ it with every row and the filters in words.
    the PO with the PDF** to the vendor.
 5. The chairs come: **Close** the PO. The tracker shows PI/0007 → PR/0004 → PO/0009 with the dates; the
    chair's last purchase rate is now ₹1,150.
+
+## Stores and stock
+
+**Purchase → Stores.** The **main store** (made by itself, under the purchase office's department)
+receives what the school buys; **sub-stores** (a lab, the sports room, the library) sit under it.
+**Add a sub-store** (the purchase office or the school admin): code, name, department, where it is,
+and its **keepers** — employees who also need the **Store keeper** role (Access → Users). A keeper works
+only the stores they keep; the purchase office works all of them. A store holding stock cannot be made
+inactive; the main store is always active.
+
+**How an item is kept** (Items, units and HSN → Items): **Kept in stock** (no for a service), the
+**store unit** when the store counts in something smaller than the purchase unit (a box of 10 pieces:
+store unit NOS, 10 store units per unit), **Batch and expiry** (lab chemicals, first aid: the earliest
+expiry goes out first), **Serial numbers** (assets). The units cannot change once stock has moved.
+
+**Opening stock** (on a store's page): what the store holds on the day it starts — per item the
+quantity in the store unit and what one cost, the batch and expiry for an item kept by batch; or **from
+Excel** (download the format, fill it, **Check**, then **Post the good rows**). Once per store and item:
+stock found different later is put right by a physical count.
+
+**Reorder levels** (on a store's page, the purchase office): per item the **reorder level** (when the
+free stock — in stock less reserved — falls to it, the item is listed for reordering), the **reorder
+quantity** and the **maximum**.
+
+**Stock in hand** (Purchase → Stock in hand): every store's items with quantity, reserved, average
+rate, value, the reorder level and the earliest expiry; filter by store, category, a search or **below
+the reorder level**; Excel or PDF. Open an item for its **stock register**: every move in and out with
+the balance and value after it, the batches in hand, and the balance in each store.
+
+Stock is valued at the **weighted average**: each receipt re-averages the item's rate in that store and
+issues go out at the average. The register is never changed: a mistake is put right by another move.
 
 ## Hand over my approvals
 

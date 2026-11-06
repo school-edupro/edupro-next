@@ -997,3 +997,85 @@ export interface PurchaseDashboard {
   byDepartment: Array<{ department: string; total: number }>;
   byMonth: Array<{ month: string; label: string; total: number }>;
 }
+
+// ---- phase 2, part 6: stores and stock (docs/design/84) -------------------------------------------
+export interface Store {
+  id: string;
+  code: string;
+  name: string;
+  kind: 'main' | 'sub';
+  parent: string | null;
+  departmentId: string | null;
+  department: string | null;
+  location: string | null;
+  status: 'active' | 'inactive';
+  items: number;
+  value: number;
+  belowReorder: number;
+  mine: boolean;
+  keepers: Array<{ id: string; code: string; name: string }>;
+}
+
+export interface StockRow {
+  storeId: string;
+  store: string;
+  itemId: string;
+  code: string;
+  name: string;
+  category: string;
+  unit: string;
+  tracksBatch: boolean;
+  qty: number;
+  reserved: number;
+  free: number;
+  value: number;
+  avgRate: number;
+  reorderLevel: number | null;
+  reorderQty: number | null;
+  maxQty: number | null;
+  below: boolean;
+  lastMoveOn: string | null;
+  earliestExpiry: string | null;
+}
+
+export interface StoreDetail extends Store {
+  stock: StockRow[];
+  can: { manage: boolean; operate: boolean };
+}
+
+export interface StoreFormLists {
+  employees: Array<{ id: string; code: string; name: string; designation: string | null }>;
+  departments: Array<{ id: string; name: string }>;
+  items: Array<{ id: string; code: string; name: string; unit: string; tracksBatch: boolean }>;
+}
+
+export interface StockLedger {
+  item: {
+    id: string;
+    code: string;
+    name: string;
+    unit: string;
+    purchaseUnit: string;
+    perUnit: number;
+    tracksBatch: boolean;
+    tracked: boolean;
+  };
+  balances: StockRow[];
+  batches: Array<{ store: string; batch: string; expiry: string | null; qty: number }>;
+  moves: Array<{
+    id: string;
+    day: string;
+    store: string;
+    kind: string;
+    what: string;
+    qty: number;
+    rate: number;
+    value: number;
+    balanceQty: number;
+    balanceValue: number;
+    batch: string | null;
+    expiry: string | null;
+    note: string | null;
+    by: string | null;
+  }>;
+}
