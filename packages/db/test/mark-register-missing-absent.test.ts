@@ -216,3 +216,52 @@ describe('missing marks and absent students (docs/design/78)', () => {
     ]);
   });
 });
+
+describe('attendance between two dates (docs/design/79)', () => {
+  const daily = {
+    a1: { a: 2, p: 18, x: 0 },
+    a2: { a: 1, p: 12, x: 5 },
+    b1: { a: 0, p: 20, x: 0 },
+  };
+  const dates = { daily, from: '2026-04-01', to: '2026-11-06' };
+
+  it('is on the Reports menu', () => {
+    expect(REPORTS.map((r) => r.kind)).toContain('attendance');
+  });
+
+  it('a table per section as the old report: A, P, X, Total, % without the leave; nothing marked: 0s', () => {
+    const [a, b, ...rest] = buildReport('attendance', input(true, dates));
+    expect(rest).toHaveLength(0);
+    expect(a!.title).toBe('Attendance — VI-A · 01-Apr-2026 to 06-Nov-2026');
+    expect(heads(a!.sheet)).toEqual([
+      'SRN',
+      'Class',
+      'Roll No',
+      'Student ID',
+      'Name',
+      'A',
+      'P',
+      'X',
+      'Total',
+      '%',
+    ]);
+    // a2: 12 present of 18 days less 5 on leave = 92.31%; a3 nothing marked
+    expect(cells(a!.sheet)).toEqual([
+      ['1', 'VI-A', '1', 'ADM-a1', 'a1', '2', '18', '0', '20', '90%'],
+      ['2', 'VI-A', '2', 'ADM-a2', 'a2', '1', '12', '5', '18', '92.31%'],
+      ['3', 'VI-A', '3', 'ADM-a3', 'a3', '0', '0', '0', '0', ''],
+    ]);
+    expect(a!.sheet.note).toContain('% = P × 100 ÷ (Total − X)');
+    expect(a!.sheet.note).toContain('1 pupil with nothing marked: 0s, no %');
+    expect(cells(b!.sheet)).toEqual([
+      ['1', 'VI-B', '1', 'ADM-b1', 'b1', '0', '20', '0', '20', '100%'],
+    ]);
+    expect(b!.sheet.note).not.toContain('nothing marked');
+  });
+
+  it('a section: its own table only, by roll', () => {
+    const one = buildReport('attendance', input(false, dates));
+    expect(one).toHaveLength(1);
+    expect(cells(one[0]!.sheet).map((r) => r[4])).toEqual(['a1', 'a2', 'a3']);
+  });
+});

@@ -1,6 +1,6 @@
 /**
  * The Run reports of a mark register (docs/design/68, phase 2), as the school's Term Mark Register has
- * them: Result summary, Analysis, Entry status, Missing marks, Absent students (docs/design/78), Toppers,
+ * them: Result summary, Analysis, Entry status, Missing marks, Absent students (docs/design/78), Attendance (79), Toppers,
  * Teacher-wise, At-risk, Failing students and Compare sections. Pure functions over the register's worked-out rows (and, for entry status, the
  * loaded marks): each gives titled tables in the register's sheet form, so the screen, the PDF and the
  * Excel lay them out as they do the register. A count carries the students it stands for (shown on a
@@ -24,6 +24,7 @@ export type ReportKind =
   | 'entry'
   | 'missing'
   | 'absent'
+  | 'attendance'
   | 'toppers'
   | 'teacher'
   | 'risk'
@@ -37,6 +38,8 @@ export const REPORTS: Array<{ kind: ReportKind; label: string; merit?: boolean }
   // docs/design/78
   { kind: 'missing', label: 'Missing marks' },
   { kind: 'absent', label: 'Absent students' },
+  // docs/design/79
+  { kind: 'attendance', label: 'Attendance' },
   { kind: 'toppers', label: 'Toppers' },
   { kind: 'teacher', label: 'Teacher-wise' },
   { kind: 'risk', label: 'At-risk' },
@@ -82,6 +85,11 @@ export interface ReportInput {
   margin?: number;
   /** Missing marks, Absent students: one exam's key (none: every exam; docs/design/78) */
   exam?: string;
+  /** Attendance (docs/design/79): each pupil's days absent, present and on leave between the dates */
+  daily?: Record<string, { a: number; p: number; x: number }>;
+  /** Attendance: the dates counted (ISO) */
+  from?: string;
+  to?: string;
 }
 
 type Col = [label: string, width: number, text?: boolean];
@@ -1023,6 +1031,92 @@ function absent(i: ReportInput): ReportBlock[] {
   return out;
 }
 
+// ---- Attendance (docs/design/79) -------------------------------------------------------------------
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+/** 2026-10-06 → 06-Oct-2026 */
+const dMonY = (iso: string | undefined) => {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso ?? '');
+  return m ? `${m[3]!}-${MONTHS[Number(m[2]) - 1] ?? m[2]!}-${m[1]!}` : (iso ?? '');
+};
+
+/**
+ * Attendance between two dates (docs/design/79), as the old Attendance Report: a table per section, every
+ * pupil by roll with A (absent), P (present: every mark but A and LV), X (on leave), Total = A + P + X
+ * and % = P × 100 ÷ (Total − X); a pupil with nothing marked shows 0s and no %.
+ */
+function attendance(i: ReportInput): ReportBlock[] {
+  const range = `${dMonY(i.from)} to ${dMonY(i.to)}`;
+  return sectionsOf(i).map(([sectionId, section]) => {
+    const pupils = i.students.filter((st) => st.sectionId === sectionId).sort(byRoll);
+    const rows = pupils.map((st, n): SheetCell[] => {
+      const d = i.daily?.[st.studentId] ?? { a: 0, p: 0, x: 0 };
+      const total = d.a + d.p + d.x;
+      const of = total - d.x;
+      return [
+        { t: String(n + 1), center: true },
+        { t: section, center: true },
+        { t: st.rollNo === null ? '' : String(st.rollNo), center: true },
+        { t: st.admissionNo, center: true },
+        { t: stName(i, st), text: true, strong: true },
+        { t: String(d.a), center: true, ...(d.a ? { tone: 'code' as const } : {}) },
+        { t: String(d.p), center: true },
+        { t: String(d.x), center: true },
+        { t: String(total), center: true, tone: 'calc' },
+        { t: of > 0 ? pctOf((d.p * 100) / of) : '', center: true, tone: 'final', strong: true },
+      ];
+    });
+    const b = block(
+      i,
+      `Attendance — ${section} · ${range}`,
+      [
+        ['SRN', 0.7],
+        ['Class', 1.3],
+        ['Roll No', 0.9],
+        ['Student ID', 1.5],
+        ['Name', 4, true],
+        ['A', 0.8],
+        ['P', 0.8],
+        ['X', 0.8],
+        ['Total', 0.9],
+        ['%', 1.1],
+      ],
+      rows.length
+        ? rows
+        : [
+            [
+              { t: '' },
+              { t: '' },
+              { t: '' },
+              { t: '' },
+              { t: 'No pupils', text: true },
+              { t: '' },
+              { t: '' },
+              { t: '' },
+              { t: '' },
+              { t: '' },
+            ],
+          ],
+    );
+    for (const h of b.sheet.head[0]!) if (h.t !== 'Name') h.center = true;
+    b.sheet.head[0]![9]!.title = '(P × 100) ÷ (Total − X)';
+    const marked = pupils.filter((st) => {
+      const d = i.daily?.[st.studentId];
+      return d && d.a + d.p + d.x > 0;
+    }).length;
+    b.sheet.note = [
+      'A = absent',
+      'P = present (late, short leave, half day, on duty and stay back count as present)',
+      'X = on leave',
+      'Total = A + P + X',
+      '% = P × 100 ÷ (Total − X)',
+      ...(marked < pupils.length
+        ? [`${plural(pupils.length - marked, 'pupil')} with nothing marked: 0s, no %`]
+        : []),
+    ].join(' · ');
+    return b;
+  });
+}
+
 // ---- Toppers ---------------------------------------------------------------------------------------
 /** a % as the legacy prints it: up to two decimals, trailing zeros dropped (100%, 97.44%, 81.9%) */
 const pctOf = (v: number | null) => {
@@ -1898,6 +1992,8 @@ export function buildReport(kind: ReportKind, i: ReportInput): ReportBlock[] {
       return missing(i);
     case 'absent':
       return absent(i);
+    case 'attendance':
+      return attendance(i);
     case 'toppers':
       return toppers(i);
     case 'teacher':
