@@ -7,6 +7,7 @@ import { Notice } from '@/components/Notice';
 import { CardsTable } from '@/components/exams/rc/CardsTable';
 import { DownloadLog } from '@/components/exams/rc/DownloadLog';
 import { HeldCards } from '@/components/exams/rc/HeldCards';
+import { ParentMessage, type ParentMessageData } from '@/components/exams/rc/ParentMessage';
 import { ScopeNote } from '@/components/exams/rc/ScopeNote';
 import { ApiError, apiFetch, getMe } from '@/lib/api';
 import { saveReleaseSetup, setClassPublish, setReleaseStatus } from '@/lib/report-card-actions';
@@ -91,6 +92,13 @@ export default async function ReleasePage({
   });
   const notReadyList = notReady.map((k) => k.code).join(', ');
   const published = ready.classes.filter((k) => k.publish?.status === 'released');
+  // docs/design/81: what the families get when a class is published
+  const message =
+    tab === 'publish'
+      ? await apiFetch<ParentMessageData>(
+          `/exams/report-cards/releases/${rel.id}/parent-message`,
+        ).catch(() => null)
+      : null;
   const at = STEP_OF[rel.status];
   const link = (href: string) => (chunks: ReactNode) => <a href={href}>{chunks}</a>;
 
@@ -477,6 +485,7 @@ export default async function ReleasePage({
                 {notReady.length
                   ? ` ${t('publishNotReady', { n: notReady.length, list: notReadyList })}`
                   : ''}
+                {message ? ` ${t('publishSeeMessage')}` : ''}
               </ConfirmAction>
             ) : null}
             {canPublish && published.length ? (
@@ -597,6 +606,7 @@ export default async function ReleasePage({
                             {gaps.length
                               ? ` ${t('publishClassGaps', { list: gaps.join(', ') })}`
                               : ''}
+                            {message ? ` ${t('publishSeeMessage')}` : ''}
                           </ConfirmAction>
                         ) : null}
                         {canPublish && p?.status === 'released' ? (
@@ -631,6 +641,12 @@ export default async function ReleasePage({
           </div>
           {!canPublish ? <p className="ep-field__help">{t('publishWho')}</p> : null}
         </Card>
+      ) : null}
+      {tab === 'publish' && message ? (
+        <ParentMessage
+          data={message}
+          canOpenTemplates={me.permissions.includes('comms.template.view')}
+        />
       ) : null}
       {tab === 'publish' ? (
         <Card elevated style={{ marginTop: 'var(--sp-4)' }}>

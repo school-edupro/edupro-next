@@ -3333,7 +3333,22 @@
     "yourClasses": "You see only your own classes: {list}. The principal sees every class.",
     "noClassesTitle": "No class is assigned to you",
     "noClasses": "Report cards show the classes you coordinate and the sections you are class teacher of. None is assigned to you this year: the office assigns them in <a>Teacher assignments</a>.",
-    "heldOf": "{n} held in {cls}: see them below"
+    "heldOf": "{n} held in {cls}: see them below",
+    "publishSeeMessage": "The e-mail they get is under Message to parents on this tab.",
+    "pmTitle": "Message to parents",
+    "pmIntro": "When a class is published, each pupil's guardians who receive messages are told: held cards, and fee defaulters when this release hides them, are left out. {told} messages queued so far for this release.",
+    "pmFor": "Shown as {name} ({cls}), a pupil of this release, would get it.",
+    "pmSample": "Shown with sample words: no pupil of this release has a family to tell yet.",
+    "pmEmail": "E-mail",
+    "pmSms": "SMS",
+    "pmSubject": "Subject",
+    "pmState_ready": "Goes out",
+    "pmState_off": "Switched off: not sent",
+    "pmState_needs_dlt": "Not sent until its DLT template id is added",
+    "pmFrame": "The {channel} as parents get it",
+    "pmEdit": "Edit the {channel} template (Communication → Templates)",
+    "pmEditWho": "The wording is edited under Communication → Templates (the template right).",
+    "pmFirstPublish": "The template is made with these words on the first publish; then it can be edited under Communication → Templates."
   },
   "rcHolds": {
     "title": "Held cards ({n})",

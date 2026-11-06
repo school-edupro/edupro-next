@@ -229,6 +229,15 @@ Pick a tile to see who submitted or verified it and to submit, verify, send back
      class's cards again and lets its marks be reopened; revoking the last class withdraws the release.
      The table shows, per class, whether it is ready, how many cards are held (**Held**: a click lists
      them), when it was published and how many messages went.
+   - **Message to parents** (under the class table): what the families get when a class is published.
+     The **e-mail** is shown exactly as it arrives — a letter on the school's letterhead: "the
+     Assement 1 report card of Aarav (class I-A) is now published", with a **View report card** button
+     to the parent app's Results — filled for a pupil of this release; the **SMS**'s words below it.
+     Each says whether it goes out (an SMS only once its DLT template id is added under Communication →
+     Templates). **Edit the e-mail template** opens it under Communication → Templates, where the
+     wording is changed for every release. Its placeholders are filled for each pupil: exam (the
+     release's exams), class (the pupil's class), name, school, link (the parent app's Results) and term
+     (the release's name).
    - **Held cards** (under the class table): the cards held back from the parent and student portal,
      with filters **Class**, **Section** and **Search** (name, admission no or the reason's words), who
      held each and when; **Excel** and **PDF** of the list as filtered. **Show again** (one, or tick

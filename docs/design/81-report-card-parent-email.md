@@ -1,6 +1,6 @@
 # 81 · The parents' "report card published" e-mail, seen on the release's Publish tab
 
-Status: planned 6 Nov 2026. Asked by the school on a release's Publish tab
+Status: built 6 Nov 2026 (migration 0313; **As built** at the end). Asked by the school on a release's Publish tab
 (`/exams/report-cards/316?tab=publish`): "in this page user publish a report card we also send a email
 to parents report card live, user view email template".
 
@@ -76,3 +76,25 @@ to parents report card live, user view email template".
 
 Sending a test e-mail from the page (Alpha's providers are live); WhatsApp for this message; attaching
 the card's PDF to the e-mail; a message when a card is taken back (none is sent, as decided earlier).
+
+## As built (6 Nov 2026)
+
+- **Migration 0313**: `app.exam_result_defaults()` holds the default words (the e-mail letter, HTML; the
+  SMS text); the e-mail still on the old default became the letter (its subject too when not reworded),
+  the SMS still on the old default with no DLT id took the new words; `app.exam_seed_templates` makes new
+  schools' templates from the same defaults. Alpha's two templates were on the old words and changed.
+- **API** (`report-cards.service.ts`): `messageWords()` builds name, class ("I-A"), exam ("A and B"
+  for several), school, link (`PARENT_APP_URL/results`) and term, used by `tellFamilies` and the
+  preview; `parentMessage()` behind `GET /exams/report-cards/releases/:id/parent-message` (the
+  release's readers, its scope): the first pupil in sight with a family to tell (held cards out), else
+  sample words; e-mail and SMS with `state` ready / off / needs_dlt, the template id (null: made on the
+  first publish, the defaults shown) and the subject and body filled by `fillTemplate()`, the mirror of
+  `app.send_template`. The template editor's sample words gained name, exam, term and link.
+- **Admin**: `components/exams/rc/ParentMessage.tsx` under the Publish tab's classes — who is told and
+  how many so far, "Shown as Aarohi Reddy (I-A), a pupil of this release, would get it", the e-mail in a
+  sandboxed frame with its subject and state, the SMS's words and state, "Edit the … template" for the
+  template right (else who edits it); the Publish dialogs point to it.
+- **Tests**: `exams-v2` (the queued e-mail: HTML, the subject, the exam and class, the button to
+  Results; the preview equal to it, SMS needs_dlt; 404), `report-card-holds` (the exam's name, not the
+  release's; a school's own text template previewed with its {{term}}). Release 316 on Alpha in the
+  browser with axe (frames skipped): clean; nothing published or sent.
