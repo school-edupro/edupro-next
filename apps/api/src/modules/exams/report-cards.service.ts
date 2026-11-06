@@ -42,6 +42,7 @@ import type {
   PreviewDto,
   RenderBatchDto,
   TemplateArtDto,
+  TellDto,
   UpdateReleaseDto,
   UpdateTemplateDto,
 } from './report-cards.dto';
@@ -849,11 +850,11 @@ export class ReportCardsService {
   }
 
   /**
-   * Opens the given classes of a release (every class it carries when null) that are not open yet, and
-   * tells only those classes' families; the release and each class keep the count of messages queued.
+   * Opens the given classes of a release (every class it carries when null) that are not open yet. No
+   * message goes (docs/design/82, 6 Nov 2026): the principal tells the families afterwards (`tell`).
    */
   private async openClasses(c: PoolClient, releaseId: string, classIds: string[] | null) {
-    const opened = await c.query<{ class_id: string }>(
+    await c.query(
       `INSERT INTO report_card_release_classes (school_id, release_id, class_id, status, released_at, released_by)
        SELECT DISTINCT app.current_school_id(), r.id, ec.class_id, 'released', now(), app.current_user_id()
          FROM report_card_releases r JOIN exam_classes ec ON ec.exam_id = ANY(r.exam_ids)
@@ -864,19 +865,6 @@ export class ReportCardsService {
         WHERE report_card_release_classes.status <> 'released'
        RETURNING class_id::text`,
       [releaseId, classIds],
-    );
-    const ids = opened.rows.map((x) => x.class_id);
-    if (!ids.length) return;
-    const told = await this.tellFamilies(c, releaseId, ids);
-    for (const [classId, n] of told)
-      await c.query(
-        `UPDATE report_card_release_classes SET notified_count = notified_count + $3 WHERE release_id = $1 AND class_id = $2`,
-        [releaseId, classId, n],
-      );
-    const total = [...told.values()].reduce((a, n) => a + n, 0);
-    await c.query(
-      `UPDATE report_card_releases SET notified_at = now(), notified_count = notified_count + $2 WHERE id = $1`,
-      [releaseId, total],
     );
   }
 
@@ -1186,9 +1174,11 @@ export class ReportCardsService {
            LEFT JOIN comms_templates t ON t.code = 'result_published' AND t.channel::text = d.channel AND t.deleted_at IS NULL
           ORDER BY d.channel = 'email' DESC`,
       );
+      const counts = this.toldCounts(await this.tellPupils(c, releaseId, null, scope));
       return {
         sample,
         told: rel.notifiedCount,
+        ...counts,
         channels: t.rows.map((x) => ({
           channel: x.channel,
           templateId: x.id,
@@ -1206,60 +1196,204 @@ export class ReportCardsService {
   }
 
   /**
-   * The families of the release's classes (guardians who take notifications), but not those whose card
-   * is held, get the result message by SMS and e-mail. Returns the messages queued. `only`: just these
-   * students (cards shown again, docs/design/75), leaving out those the fee rule withholds today.
+   * The pupils of the release's published classes (every one, or those asked) as the families' message
+   * sees them (docs/design/82): held, withheld for fees, whether a guardian who takes messages has an
+   * e-mail or a 10-digit mobile, and whether the family was told on each channel. The counts on the
+   * Publish tab and the send read the same rows.
    */
-  private async tellFamilies(
+  private async tellPupils(
     c: PoolClient,
     releaseId: string,
-    classIds: string[],
-    only?: { studentIds: string[]; skipFeeDue: boolean },
-  ): Promise<Map<string, number>> {
-    await c.query(`SELECT app.exam_seed_templates(app.current_school_id())`);
-    const words = await this.messageWords(c, releaseId);
-    const r = await c.query<{
-      name: string;
-      class: string;
-      mobile: string | null;
-      email: string | null;
-      user_id: string | null;
-      class_id: string;
-    }>(
-      `SELECT DISTINCT ON (s.id, g.id) s.display_name AS name, k.code || '-' || cs.name AS class, cs.class_id::text,
-              g.mobile, g.email::text AS email, g.user_id::text
+    classIds: string[] | null,
+    scope: CardScope,
+  ) {
+    const r = await c.query<TellPupil>(
+      `SELECT DISTINCT ON (s.id) s.id::text AS student_id, s.display_name AS name, k.code || '-' || cs.name AS class,
+              x.class_id::text, k.code AS class_code, k.display_order,
+              EXISTS (SELECT 1 FROM report_card_holds h WHERE h.release_id = r.id AND h.student_id = s.id) AS held,
+              COALESCE(r.hide_defaulters AND (SELECT COALESCE(sum(d.balance), 0) FROM mart.fee_dues d
+                WHERE d.student_id = s.id AND d.academic_year_id = r.academic_year_id AND d.due_on <= CURRENT_DATE) > r.defaulter_min, false) AS fee,
+              EXISTS (SELECT 1 FROM student_guardians sg JOIN guardians g ON g.id = sg.guardian_id AND g.deleted_at IS NULL
+                       WHERE sg.student_id = s.id AND sg.receives_notifications AND COALESCE(btrim(g.email::text), '') <> '') AS has_email,
+              EXISTS (SELECT 1 FROM student_guardians sg JOIN guardians g ON g.id = sg.guardian_id AND g.deleted_at IS NULL
+                       WHERE sg.student_id = s.id AND sg.receives_notifications AND g.mobile ~ '^[6-9][0-9]{9}$') AS has_sms,
+              EXISTS (SELECT 1 FROM report_card_told t WHERE t.release_id = r.id AND t.student_id = s.id AND t.channel = 'email') AS told_email,
+              EXISTS (SELECT 1 FROM report_card_told t WHERE t.release_id = r.id AND t.student_id = s.id AND t.channel = 'sms') AS told_sms
          FROM report_card_releases r
-         JOIN exam_classes ec ON ec.exam_id = ANY(r.exam_ids)
-         JOIN classes k ON k.id = ec.class_id
-         JOIN class_sections cs ON cs.class_id = ec.class_id AND cs.academic_year_id = r.academic_year_id AND cs.deleted_at IS NULL
+         JOIN report_card_release_classes x ON x.release_id = r.id AND x.status = 'released'
+         JOIN classes k ON k.id = x.class_id
+         JOIN class_sections cs ON cs.class_id = x.class_id AND cs.academic_year_id = r.academic_year_id AND cs.deleted_at IS NULL
          JOIN enrolments en ON en.class_section_id = cs.id AND en.academic_year_id = r.academic_year_id AND en.status = 'active'
          JOIN students s ON s.id = en.student_id AND s.deleted_at IS NULL
-         JOIN student_guardians sg ON sg.student_id = s.id AND sg.receives_notifications
-         JOIN guardians g ON g.id = sg.guardian_id AND g.deleted_at IS NULL
-        WHERE r.id = $1 AND cs.class_id = ANY($2::bigint[])
-          AND NOT EXISTS (SELECT 1 FROM report_card_holds h WHERE h.release_id = r.id AND h.student_id = s.id)
-          AND ($3::bigint[] IS NULL OR s.id = ANY($3::bigint[]))
-          AND NOT ($4::boolean AND r.hide_defaulters AND (SELECT COALESCE(sum(d.balance), 0) FROM mart.fee_dues d
-                WHERE d.student_id = s.id AND d.academic_year_id = r.academic_year_id AND d.due_on <= CURRENT_DATE) > r.defaulter_min)
-        ORDER BY s.id, g.id`,
-      [releaseId, classIds, only?.studentIds ?? null, only?.skipFeeDue ?? false],
+        WHERE r.id = $1 AND ($2::bigint[] IS NULL OR x.class_id = ANY($2::bigint[]))
+          AND ($3 OR cs.id = ANY($4::bigint[]))
+        ORDER BY s.id, en.id DESC`,
+      [releaseId, classIds, scope.all, scope.sections],
     );
-    const n = new Map<string, number>();
-    for (const x of r.rows) {
-      const vars = JSON.stringify(words(x));
-      for (const [channel, to] of [
-        ['sms', /^[6-9][0-9]{9}$/.test(x.mobile ?? '') ? x.mobile : null],
-        ['email', x.email],
-      ] as const) {
-        if (!to) continue;
-        const m = await c.query<{ id: string | null }>(
-          `SELECT app.send_template('result_published', $1, $2, $3::jsonb, $4)::text AS id`,
-          [channel, to, vars, x.user_id],
-        );
-        if (m.rows[0]?.id) n.set(x.class_id, (n.get(x.class_id) ?? 0) + 1);
+    return r.rows;
+  }
+
+  /**
+   * docs/design/82: the principal tells the families of the release's published classes (every one, or
+   * those asked) on the channels picked — only the pupils not told yet on that channel, never a held card
+   * or one withheld for fees — through the families' message (doc 81's words). Each pupil told is kept
+   * per channel; the release and each class keep the count of messages queued.
+   */
+  async tell(ctx: RequestContext, releaseId: string, dto: TellDto) {
+    return this.db.tenant(requireTenant(ctx), async (c) => {
+      const scope = await cardScopeOf(c, ctx);
+      const rel = await this.findRelease(c, releaseId, scope);
+      if (!rel) throw new DomainError('not-found', 'Release not found', { status: 404 });
+      const open = await c.query<{ class_id: string; code: string }>(
+        `SELECT x.class_id::text, k.code FROM report_card_release_classes x JOIN classes k ON k.id = x.class_id
+          WHERE x.release_id = $1 AND x.status = 'released'`,
+        [releaseId],
+      );
+      const asked = dto.classIds?.length ? [...new Set(dto.classIds)] : null;
+      if (!open.rowCount)
+        throw new DomainError('report_card.status', 'No class of this release is published', {
+          status: 409,
+        });
+      for (const id of asked ?? [])
+        if (!open.rows.some((x) => x.class_id === id))
+          throw new DomainError('report_card.status', 'Only a published class can be told', {
+            status: 409,
+          });
+      await c.query(`SELECT app.exam_seed_templates(app.current_school_id())`);
+      const channels = [...new Set(dto.channels)];
+      const ready = await c.query<{ channel: 'email' | 'sms'; status: string; dlt: string | null }>(
+        `SELECT channel::text AS channel, status::text AS status, dlt_template_id AS dlt FROM comms_templates
+          WHERE code = 'result_published' AND channel::text = ANY($1::text[]) AND deleted_at IS NULL`,
+        [channels],
+      );
+      for (const ch of channels) {
+        const t = ready.rows.find((x) => x.channel === ch);
+        if (!t || t.status !== 'active')
+          throw new DomainError(
+            'validation-failed',
+            `The ${ch === 'email' ? 'e-mail' : 'SMS'} template "Exams: result published" is switched off under Communication → Templates`,
+            { status: 400 },
+          );
+        if (ch === 'sms' && !t.dlt?.trim())
+          throw new DomainError(
+            'validation-failed',
+            'The SMS needs its DLT template id under Communication → Templates ("Exams: result published")',
+            { status: 400 },
+          );
       }
-    }
-    return n;
+      const pupils = await this.tellPupils(c, releaseId, asked, scope);
+      const waiting = (ch: 'email' | 'sms') =>
+        pupils.filter(
+          (p) =>
+            !p.held &&
+            !p.fee &&
+            (ch === 'email' ? p.has_email && !p.told_email : p.has_sms && !p.told_sms),
+        );
+      if (channels.every((ch) => !waiting(ch).length))
+        throw new DomainError(
+          'report_card.told',
+          'Every family that can be told on this channel is told already',
+          { status: 409 },
+        );
+      const ids = [...new Set(channels.flatMap((ch) => waiting(ch).map((p) => p.student_id)))];
+      const g = await c.query<{
+        student_id: string;
+        mobile: string | null;
+        email: string | null;
+        user_id: string | null;
+      }>(
+        `SELECT DISTINCT ON (sg.student_id, g.id) sg.student_id::text, g.mobile, g.email::text AS email, g.user_id::text
+           FROM student_guardians sg JOIN guardians g ON g.id = sg.guardian_id AND g.deleted_at IS NULL
+          WHERE sg.student_id = ANY($1::bigint[]) AND sg.receives_notifications
+          ORDER BY sg.student_id, g.id`,
+        [ids],
+      );
+      const words = await this.messageWords(c, releaseId);
+      const byClass = new Map<string, number>();
+      const told = { email: 0, sms: 0 };
+      let messages = 0;
+      for (const ch of channels)
+        for (const p of waiting(ch)) {
+          const vars = JSON.stringify(words(p));
+          let n = 0;
+          for (const x of g.rows.filter((y) => y.student_id === p.student_id)) {
+            const to =
+              ch === 'email'
+                ? x.email?.trim() || null
+                : /^[6-9][0-9]{9}$/.test(x.mobile ?? '')
+                  ? x.mobile
+                  : null;
+            if (!to) continue;
+            const m = await c.query<{ id: string | null }>(
+              `SELECT app.send_template('result_published', $1, $2, $3::jsonb, $4)::text AS id`,
+              [ch, to, vars, x.user_id],
+            );
+            if (m.rows[0]?.id) n += 1;
+          }
+          if (!n) continue;
+          await c.query(
+            `INSERT INTO report_card_told (school_id, release_id, student_id, channel, messages, told_by)
+             VALUES (app.current_school_id(), $1, $2, $3::comms_channel, $4, app.current_user_id())
+             ON CONFLICT (release_id, student_id, channel) DO NOTHING`,
+            [releaseId, p.student_id, ch, n],
+          );
+          told[ch] += 1;
+          messages += n;
+          byClass.set(p.class_id, (byClass.get(p.class_id) ?? 0) + n);
+        }
+      for (const [classId, n] of byClass)
+        await c.query(
+          `UPDATE report_card_release_classes SET notified_count = notified_count + $3 WHERE release_id = $1 AND class_id = $2`,
+          [releaseId, classId, n],
+        );
+      if (messages)
+        await c.query(
+          `UPDATE report_card_releases SET notified_at = now(), notified_count = notified_count + $2 WHERE id = $1`,
+          [releaseId, messages],
+        );
+      await this.audit.stage(ctx, c, {
+        action: 'exams.report_card.tell',
+        entityType: 'report_card_releases',
+        entityId: releaseId,
+        after: { classIds: asked, channels, told, messages },
+      });
+      return { told, messages };
+    });
+  }
+
+  /** The Publish tab's counts (docs/design/82): per published class, who is told and who waits. */
+  private toldCounts(pupils: TellPupil[]) {
+    const by = new Map<string, TellPupil[]>();
+    for (const p of pupils) by.set(p.class_id, [...(by.get(p.class_id) ?? []), p]);
+    const count = (list: TellPupil[]) => {
+      const send = list.filter((p) => !p.held && !p.fee);
+      const of = (ch: 'email' | 'sms') => ({
+        told: list.filter((p) => (ch === 'email' ? p.told_email : p.told_sms)).length,
+        waiting: send.filter((p) =>
+          ch === 'email' ? p.has_email && !p.told_email : p.has_sms && !p.told_sms,
+        ).length,
+        noAddress: send.filter((p) =>
+          ch === 'email' ? !p.has_email && !p.told_email : !p.has_sms && !p.told_sms,
+        ).length,
+      });
+      return {
+        pupils: list.length,
+        held: list.filter((p) => p.held).length,
+        withheld: list.filter((p) => !p.held && p.fee).length,
+        email: of('email'),
+        sms: of('sms'),
+      };
+    };
+    return {
+      classes: [...by.values()]
+        .sort(
+          (a, b) =>
+            a[0]!.display_order - b[0]!.display_order ||
+            a[0]!.class_code.localeCompare(b[0]!.class_code),
+        )
+        .map((list) => ({ classId: list[0]!.class_id, code: list[0]!.class_code, ...count(list) })),
+      total: count(pupils),
+    };
   }
 
   /** One student's card held back by the school (the old "Report Card Hide"), or shown again. */
@@ -1285,12 +1419,11 @@ export class ReportCardsService {
           [releaseId, dto.studentId, dto.reason!.trim()],
         );
       else {
-        const gone = await c.query(
-          `DELETE FROM report_card_holds WHERE release_id = $1 AND student_id = $2`,
-          [releaseId, dto.studentId],
-        );
-        // shown again on a published class: the family is told (docs/design/75)
-        if (gone.rowCount) await this.tellShownAgain(c, rel, [dto.studentId]);
+        // shown again: no message (docs/design/82); the pupil waits in the Publish tab's "Not told yet"
+        await c.query(`DELETE FROM report_card_holds WHERE release_id = $1 AND student_id = $2`, [
+          releaseId,
+          dto.studentId,
+        ]);
       }
       await this.audit.stage(ctx, c, {
         action: dto.held ? 'exams.report_card.hold' : 'exams.report_card.unhold',
@@ -1439,7 +1572,8 @@ export class ReportCardsService {
       let held = 0;
       let alsoHeld = 0;
       let lifted: string[] = [];
-      let notified = 0;
+      // shown again: no message (docs/design/82); kept 0 for the callers
+      const notified = 0;
       if (dto.held) {
         const also = await this.otherPublished(c, scope, rel, dto.alsoReleaseIds);
         held = await this.insertHolds(
@@ -1455,7 +1589,6 @@ export class ReportCardsService {
           [releaseId, ok.map((f) => f.studentId)],
         );
         lifted = gone.rows.map((x) => x.student_id);
-        notified = await this.tellShownAgain(c, rel, lifted);
       }
       if (held || alsoHeld || lifted.length)
         await this.audit.stage(ctx, c, {
@@ -1792,41 +1925,6 @@ export class ReportCardsService {
       );
     }
     return n;
-  }
-
-  /**
-   * Cards shown again where the student's class is published: the families get the result message, as
-   * when the class was published (a card the fee rule withholds sends nothing: it opens once paid).
-   */
-  private async tellShownAgain(
-    c: PoolClient,
-    rel: ReleaseRow,
-    studentIds: string[],
-  ): Promise<number> {
-    if (!studentIds.length || rel.status !== 'released') return 0;
-    const open = await c.query<{ class_id: string }>(
-      `SELECT class_id::text FROM report_card_release_classes WHERE release_id = $1 AND status = 'released'`,
-      [rel.id],
-    );
-    if (!open.rowCount) return 0;
-    const told = await this.tellFamilies(
-      c,
-      rel.id,
-      open.rows.map((x) => x.class_id),
-      { studentIds, skipFeeDue: true },
-    );
-    for (const [classId, n] of told)
-      await c.query(
-        `UPDATE report_card_release_classes SET notified_count = notified_count + $3 WHERE release_id = $1 AND class_id = $2`,
-        [rel.id, classId, n],
-      );
-    const total = [...told.values()].reduce((a, n) => a + n, 0);
-    if (total)
-      await c.query(
-        `UPDATE report_card_releases SET notified_at = now(), notified_count = notified_count + $2 WHERE id = $1`,
-        [rel.id, total],
-      );
-    return total;
   }
 
   /**
@@ -2432,4 +2530,20 @@ export function fillTemplate(
     subject: subject === null ? null : subject.slice(0, 200),
     body: body.replace(/\s{2,}/g, ' ').trim(),
   };
+}
+
+/** a pupil of a published class as the families' message sees them (docs/design/82) */
+interface TellPupil {
+  student_id: string;
+  name: string;
+  class: string;
+  class_id: string;
+  class_code: string;
+  display_order: number;
+  held: boolean;
+  fee: boolean;
+  has_email: boolean;
+  has_sms: boolean;
+  told_email: boolean;
+  told_sms: boolean;
 }

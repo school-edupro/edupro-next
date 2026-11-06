@@ -240,7 +240,7 @@ describe('report card holds in bulk (e2e)', () => {
     ).toBe('%PDF');
   });
 
-  it('showing a card again on a published class tells the family; one without a guardian sends nothing', async () => {
+  it('showing a card again sends nothing; the family waits for the next Send (docs/design/82)', async () => {
     const before = await told();
     const r = await call(admin, 'POST', `${base(term)}/holds/bulk`, {
       studentIds: [student.Asha, student.Bhanu, student.Chitra],
@@ -249,9 +249,21 @@ describe('report card holds in bulk (e2e)', () => {
     expect(r.statusCode).toBe(201);
     expect(r.json()).toMatchObject({
       lifted: 2,
-      notified: 1,
+      notified: 0,
       unchanged: [expect.objectContaining({ name: 'Chitra Hold' })],
     });
+    expect(await told()).toBe(before);
+    // Asha (her mother has an e-mail) waits on the term card; Send tells her family only
+    const waiting = async (id: string) =>
+      (
+        (await call(admin, 'GET', `${base(id)}/parent-message`)).json() as {
+          total: { email: { waiting: number; told: number } };
+        }
+      ).total.email;
+    expect(await waiting(term)).toEqual(expect.objectContaining({ waiting: 1, told: 0 }));
+    expect(
+      (await call(admin, 'POST', `${base(term)}/tell`, { channels: ['email'] })).json(),
+    ).toEqual({ told: { email: 1, sms: 0 }, messages: 1 });
     expect(await told()).toBe(before + 1);
     // the card opens for the family; the test card stays held
     const terms = (
@@ -261,11 +273,16 @@ describe('report card holds in bulk (e2e)', () => {
     ).children[0]!.terms;
     expect(terms.find((x) => x.releaseId === term)).toMatchObject({ held: false });
     expect(terms.find((x) => x.releaseId === pt)).toMatchObject({ held: true });
-    // the preview panel's single Show again tells the family too
+    // the preview panel's single Show again sends nothing either; the test card's Send tells her
     expect(
       (await call(admin, 'PUT', `${base(pt)}/holds`, { studentId: student.Asha, held: false }))
         .statusCode,
     ).toBe(200);
+    expect(await told()).toBe(before + 1);
+    expect(await waiting(pt)).toEqual(expect.objectContaining({ waiting: 1 }));
+    expect(
+      (await call(admin, 'POST', `${base(pt)}/tell`, { channels: ['email'] })).statusCode,
+    ).toBe(201);
     expect(await told()).toBe(before + 2);
     // docs/design/81: the message names the exam ("PT1"), not the release ("Periodic Test 1"), and the
     // class; {{term}} stays the release's name for a school's own wording

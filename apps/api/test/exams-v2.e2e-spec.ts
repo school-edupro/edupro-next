@@ -703,9 +703,63 @@ describe('examinations v2 (e2e)', () => {
       json: { status: 'released' },
     });
     expect(pub.statusCode).toBe(200);
+    // docs/design/82: publishing sends nothing; the principal sends afterwards
+    expect(pub.json()).toMatchObject({ status: 'released', notifiedCount: 0 });
+    const queued = () =>
+      withMigrator(
+        async (c) =>
+          (
+            await c.query<{ n: number }>(
+              `SELECT count(*)::int AS n FROM comms_messages m JOIN comms_templates t ON t.id = m.template_id
+                WHERE m.school_id = $1 AND t.code = 'result_published'`,
+              [school.id],
+            )
+          ).rows[0]!.n,
+      );
+    expect(await queued()).toBe(0);
+    type Counts = {
+      pupils: number;
+      held: number;
+      withheld: number;
+      email: { told: number; waiting: number; noAddress: number };
+      sms: { told: number; waiting: number; noAddress: number };
+    };
+    const counts = async () =>
+      (await call(admin, 'GET', `${url}/parent-message`)).json() as {
+        classes: Array<Counts & { classId: string; code: string }>;
+        total: Counts;
+      };
+    // Asha (her father has an e-mail and a mobile) waits; Bhanu is held; the other two have no family
+    expect((await counts()).classes).toEqual([
+      expect.objectContaining({
+        classId,
+        code: 'XI',
+        held: 1,
+        email: { told: 0, waiting: 1, noAddress: 2 },
+        sms: { told: 0, waiting: 1, noAddress: 2 },
+      }),
+    ]);
+    const tell = (u: SeededUser, body: Record<string, unknown>) =>
+      call(u, 'POST', `${url}/tell`, body);
+    expect((await tell(clerk, { channels: ['email'] })).statusCode).toBe(403);
+    expect((await tell(admin, { channels: [] })).statusCode).toBe(400);
+    const noDlt = await tell(admin, { channels: ['sms'] });
+    expect(noDlt.statusCode).toBe(400);
+    expect(noDlt.json().detail).toContain('DLT template id');
+    expect((await tell(admin, { channels: ['email'], classIds: ['999999999'] })).statusCode).toBe(
+      409,
+    );
     // Asha's father by e-mail (SMS goes once the school gives the template its DLT id); Bhanu's card is
     // held: no message for him
-    expect(pub.json()).toMatchObject({ status: 'released', notifiedCount: 1 });
+    expect((await tell(admin, { channels: ['email'] })).json()).toEqual({
+      told: { email: 1, sms: 0 },
+      messages: 1,
+    });
+    const again = await tell(admin, { channels: ['email'], classIds: [classId] });
+    expect(again.statusCode).toBe(409);
+    expect(again.json().type).toBe('report_card.told');
+    expect((await counts()).total).toMatchObject({ email: { told: 1, waiting: 0, noAddress: 2 } });
+    expect((await call(admin, 'GET', url)).json()).toMatchObject({ notifiedCount: 1 });
     const msgs = await withMigrator(
       async (c) =>
         (
@@ -824,8 +878,11 @@ describe('examinations v2 (e2e)', () => {
     expect(pub.statusCode).toBe(200);
     expect(pub.json()).toMatchObject({ status: 'released', classCount: 1, publishedClasses: 1 });
     expect((await call(admin, 'PUT', cls, { status: 'released' })).statusCode).toBe(409);
-    // Asha's father is told again (Bhanu's card is still held): 1 then, 1 now
-    expect(await publishOf()).toMatchObject({ status: 'released', notified: 2 });
+    // docs/design/82: published again, nobody is told again (Asha's father was told once, by e-mail)
+    expect(await publishOf()).toMatchObject({ status: 'released', notified: 1 });
+    expect((await call(admin, 'POST', `${url}/tell`, { channels: ['email'] })).json().type).toBe(
+      'report_card.told',
+    );
     const terms = async () =>
       (
         (await call(parent, 'GET', '/exams/mine/results')).json().children as Array<{

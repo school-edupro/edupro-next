@@ -19,9 +19,11 @@ import {
   PreviewDto,
   RenderBatchDto,
   REPORT_CARDS,
+  TellDto,
   UpdateReleaseDto,
   UpdateTemplateDto,
 } from './report-cards.dto';
+import { EXAMS } from './exams.dto';
 import { ReportCardSignaturesService } from './report-card-signatures.service';
 import { ReportCardsService } from './report-cards.service';
 
@@ -176,6 +178,16 @@ export class ReportCardsController {
   @RequirePermission(REPORT_CARDS.view)
   release(@ReqCtx() ctx: RequestContext, @Param('id') id: string) {
     return this.cards.release(ctx, id);
+  }
+
+  @Post('releases/:id/tell')
+  @ApiOperation({
+    summary:
+      'Send the report card message to the families of published classes not told yet (e-mail and/or SMS)',
+  })
+  @RequirePermission(EXAMS.resultPublish)
+  tell(@ReqCtx() ctx: RequestContext, @Param('id') id: string, @Body() body: TellDto) {
+    return this.cards.tell(ctx, id, body);
   }
 
   @Get('releases/:id/parent-message')

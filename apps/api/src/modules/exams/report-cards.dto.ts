@@ -174,6 +174,16 @@ export const UpdateReleaseSchema = CreateReleaseSchema.omit({ termCode: true, ki
   .refine((v) => Object.keys(v).length > 0, { message: 'at least one field is required' });
 export class UpdateReleaseDto extends createZodDto(UpdateReleaseSchema) {}
 
+/**
+ * docs/design/82: tell the families of the release's published classes (none named: every one) on the
+ * channels picked; only those not told yet on a channel.
+ */
+export const TellSchema = z.object({
+  classIds: z.array(IdSchema).max(100).optional(),
+  channels: z.array(z.enum(['email', 'sms'])).min(1, 'Tick E-mail or SMS'),
+});
+export class TellDto extends createZodDto(TellSchema) {}
+
 export const RenderBatchSchema = z.object({ classSectionId: IdSchema });
 export class RenderBatchDto extends createZodDto(RenderBatchSchema) {}
 
