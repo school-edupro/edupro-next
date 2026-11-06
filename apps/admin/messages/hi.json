@@ -249,6 +249,8 @@
     "purchase": "क्रय",
     "purchaseIndents": "क्रय मांग पत्र (इंडेंट)",
     "purchaseDelegations": "मेरी स्वीकृतियाँ सौंपें",
+    "toRequisition": "माँग-पत्र हेतु इंडेंट",
+    "purchaseRequisitions": "क्रय माँग-पत्र (रिक्विज़िशन)",
     "purchaseHome": "क्रय सेटअप",
     "vendors": "विक्रेता",
     "vendorApprovals": "विक्रेता अनुमोदन",

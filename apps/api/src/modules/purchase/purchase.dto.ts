@@ -11,6 +11,7 @@ export const PURCHASE = {
   indentRaise: 'purchase.indent.raise',
   indentView: 'purchase.indent.view',
   indentAnyDepartment: 'purchase.indent.any_department',
+  requisitionManage: 'purchase.requisition.manage',
 } as const;
 
 const opt = (max: number) =>
@@ -311,3 +312,132 @@ export const PurchaseDelegationSchema = z
   })
   .refine((d) => d.endsOn >= d.startsOn, { message: 'Ends after it starts', path: ['endsOn'] });
 export class PurchaseDelegationDto extends createZodDto(PurchaseDelegationSchema) {}
+
+// ---- part 3: the Purchase Requisition -------------------------------------------------------------
+const Money = z.coerce.number().min(0).max(1e10);
+const Gst = z.coerce.number().min(0).max(40);
+
+export const RequisitionLineSchema = z
+  .object({
+    /** a line already on the PR (its indent lines stay with it); none: a new line */
+    id: IdSchema.optional(),
+    itemId: IdSchema.optional(),
+    freeText: z.string().trim().min(2).max(300).optional(),
+    quantity: z.coerce.number().gt(0).max(999999),
+    uomId: IdSchema.optional(),
+    estRate: Money.optional(),
+    /** buy it, or issue it from the store (phase 1: marked with a note) */
+    fulfil: z.enum(['buy', 'store']).default('buy'),
+    storeNote: opt(300),
+    note: opt(300),
+  })
+  .refine((l) => !!l.itemId || !!l.freeText || !!l.id, {
+    message: 'Pick an item, or describe one not in the list',
+    path: ['itemId'],
+  })
+  .refine((l) => l.fulfil !== 'store' || !!l.storeNote, {
+    message: 'Say what the store issues (e.g. 20 from the stock room)',
+    path: ['storeNote'],
+  });
+
+/** A PR from approved indents (their lines combined by item), or the purchase office's own. */
+export const CreateRequisitionSchema = z
+  .object({
+    indentIds: z.array(IdSchema).max(50).default([]),
+    /** a direct PR: the department it is for */
+    departmentId: IdSchema.optional(),
+    purpose: z.string().trim().min(3).max(500).optional(),
+    requiredBy: Day.optional(),
+    lines: z.array(RequisitionLineSchema).max(200).default([]),
+  })
+  .refine((d) => d.indentIds.length > 0 || (d.lines.length > 0 && !!d.departmentId), {
+    message: 'Pick approved indents, or the department and the lines of a direct requisition',
+    path: ['indentIds'],
+  });
+export class CreateRequisitionDto extends createZodDto(CreateRequisitionSchema) {}
+
+export const UpdateRequisitionSchema = z.object({
+  purpose: z.string().trim().min(3).max(500),
+  requiredBy: Day.nullish(),
+  lines: z.array(RequisitionLineSchema).min(1, 'Keep at least one line').max(200),
+});
+export class UpdateRequisitionDto extends createZodDto(UpdateRequisitionSchema) {}
+
+export const RequisitionListQuerySchema = z.object({
+  /** waiting: at my approval level; sign: comparative statements waiting for my signature */
+  view: z.enum(['all', 'waiting', 'sign']).default('all'),
+  status: z
+    .enum([
+      'draft',
+      'sourcing',
+      'submitted',
+      'approved',
+      'rejected',
+      'sent_back',
+      'cancelled',
+      'part_ordered',
+      'ordered',
+    ])
+    .optional(),
+  q: z.string().trim().max(80).optional(),
+  page: z.coerce.number().int().min(1).default(1),
+  size: z.coerce.number().int().min(1).max(200).default(50),
+});
+export class RequisitionListQueryDto extends createZodDto(RequisitionListQuerySchema) {}
+
+export const QuoteSchema = z
+  .object({
+    vendorId: IdSchema,
+    quoteRef: opt(60),
+    quoteDate: Day.optional(),
+    validUntil: Day.optional(),
+    deliveryDays: z.coerce.number().int().min(0).max(365).optional(),
+    fileId: IdSchema.optional(),
+    note: opt(500),
+    /** the vendor's rate for the lines it quoted (a line left out: not quoted) */
+    lines: z
+      .array(z.object({ lineId: IdSchema, rate: Money, gstRate: Gst.optional(), note: opt(300) }))
+      .min(1, 'Enter the rate of at least one line')
+      .max(200),
+  })
+  .refine((q) => !q.validUntil || !q.quoteDate || q.validUntil >= q.quoteDate, {
+    message: 'Valid until is before the quote date',
+    path: ['validUntil'],
+  });
+export class QuoteDto extends createZodDto(QuoteSchema) {}
+
+/** The vendor and rate per line: from a quote, or (direct / tender) as agreed. */
+export const ChoicesSchema = z.object({
+  lines: z
+    .array(
+      z.object({
+        lineId: IdSchema,
+        vendorId: IdSchema.nullish(),
+        rate: Money.optional(),
+        gstRate: Gst.optional(),
+        /** why a vendor dearer than the lowest quote */
+        reason: opt(300),
+      }),
+    )
+    .min(1)
+    .max(200),
+});
+export class ChoicesDto extends createZodDto(ChoicesSchema) {}
+
+export const CertificateSchema = z.object({ text: z.string().trim().min(20).max(1000) });
+export class CertificateDto extends createZodDto(CertificateSchema) {}
+
+export const TenderSchema = z.object({
+  tenderRef: z.string().trim().min(2).max(120),
+  note: opt(1000),
+});
+export class TenderDto extends createZodDto(TenderSchema) {}
+
+export const RequisitionFileSchema = z.object({
+  fileId: IdSchema,
+  kind: z.enum(['tender', 'other']).default('tender'),
+});
+export class RequisitionFileDto extends createZodDto(RequisitionFileSchema) {}
+
+export const SignSchema = z.object({ note: opt(300) });
+export class SignDto extends createZodDto(SignSchema) {}

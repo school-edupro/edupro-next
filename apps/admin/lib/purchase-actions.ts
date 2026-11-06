@@ -497,3 +497,249 @@ export async function revokePurchaseDelegation(fd: FormData) {
     'Delegation ended',
   );
 }
+
+// ---- part 3: the Purchase Requisition -------------------------------------------------------------
+const prPage = (id: string) => `/purchase/requisitions/${id}`;
+
+/** Approved indents ticked on To requisition: one PR (their lines added up by item). */
+export async function makeRequisition(fd: FormData) {
+  const indentIds = fd.getAll('indentId').map(String).filter(okId);
+  if (!indentIds.length) back('/purchase/to-requisition', 'validation-failed', 'Tick the indents');
+  let made: { id: string; number: string } | null = null;
+  try {
+    made = await apiFetch<{ id: string; number: string }>('/purchase/requisitions', {
+      method: 'POST',
+      body: JSON.stringify({ indentIds }),
+    });
+  } catch (e) {
+    if (e instanceof ApiError) back('/purchase/to-requisition', e.problem.type, detailOf(e));
+    throw e;
+  }
+  revalidatePath('/purchase/to-requisition');
+  back(prPage(made.id), 'ok', `${made.number} made from ${String(indentIds.length)} indent(s)`);
+}
+
+export async function closeIndent(fd: FormData) {
+  const id = pick(fd, 'id');
+  if (!okId(id)) back('/purchase/to-requisition', 'validation-failed', 'Unknown indent');
+  return run(
+    '/purchase/to-requisition',
+    () =>
+      apiFetch(`/purchase/indents/${id}/close`, {
+        method: 'POST',
+        body: JSON.stringify({ reason: pick(fd, 'reason') }),
+      }),
+    'Indent closed',
+  );
+}
+
+export type RequisitionSaveResult = { ok: true; id: string } | { ok: false; error: string };
+
+/** A direct PR made, or a PR's header and lines changed; the form keeps what was typed. */
+export async function saveRequisition(
+  id: string | null,
+  body: Record<string, unknown>,
+): Promise<RequisitionSaveResult> {
+  if (id && !okId(id)) return { ok: false, error: 'Unknown requisition' };
+  try {
+    const r = await apiFetch<{ id: string }>(
+      id ? `/purchase/requisitions/${id}` : '/purchase/requisitions',
+      { method: id ? 'PUT' : 'POST', body: JSON.stringify(body) },
+    );
+    revalidatePath('/purchase/requisitions');
+    return { ok: true, id: r.id };
+  } catch (e) {
+    if (e instanceof ApiError) return { ok: false, error: detailOf(e) };
+    throw e;
+  }
+}
+
+const prAction =
+  (path: string, method: string, done: string, body?: (fd: FormData) => unknown) =>
+  async (fd: FormData) => {
+    const id = pick(fd, 'id');
+    if (!okId(id)) back('/purchase/requisitions', 'validation-failed', 'Unknown requisition');
+    return run(
+      prPage(id),
+      () =>
+        apiFetch(`/purchase/requisitions/${id}${path}`, {
+          method,
+          ...(body ? { body: JSON.stringify(body(fd)) } : {}),
+        }),
+      done,
+    );
+  };
+
+export async function submitRequisition(fd: FormData) {
+  return prAction('/submit', 'POST', 'Sent for approval')(fd);
+}
+export async function cancelRequisition(fd: FormData) {
+  return prAction(
+    '/cancel',
+    'POST',
+    'Requisition cancelled: its indents wait for a PR again',
+    (f) => ({
+      reason: pick(f, 'reason'),
+    }),
+  )(fd);
+}
+export async function reopenRequisition(fd: FormData) {
+  return prAction('/reopen', 'POST', 'Reopened: change it and send it for approval again', (f) => ({
+    reason: pick(f, 'reason'),
+  }))(fd);
+}
+export async function decideRequisition(fd: FormData) {
+  const action = pick(fd, 'action');
+  if (!['approve', 'reject', 'send_back'].includes(action))
+    back('/purchase/requisitions', 'validation-failed', 'Unknown decision');
+  return prAction(
+    '/decide',
+    'POST',
+    action === 'approve'
+      ? 'Approved'
+      : action === 'reject'
+        ? 'Rejected: its indents wait for a PR again'
+        : 'Sent back to the purchase office',
+    (f) => ({ action, note: pick(f, 'reason') || undefined }),
+  )(fd);
+}
+export async function signRequisition(fd: FormData) {
+  return prAction('/sign', 'POST', 'You signed the comparative statement', (f) => ({
+    note: pick(f, 'reason') || undefined,
+  }))(fd);
+}
+export async function unsignRequisition(fd: FormData) {
+  return prAction('/sign', 'DELETE', 'Your signature withdrawn')(fd);
+}
+export async function certifyRequisition(fd: FormData) {
+  return prAction('/certificate', 'PUT', 'Certificate recorded', (f) => ({
+    text: pick(f, 'text'),
+  }))(fd);
+}
+export async function uncertifyRequisition(fd: FormData) {
+  return prAction('/certificate', 'DELETE', 'Certificate removed')(fd);
+}
+export async function saveTender(fd: FormData) {
+  return prAction('/tender', 'PUT', 'Tender reference saved', (f) => ({
+    tenderRef: pick(f, 'tenderRef'),
+    note: pick(f, 'note') || undefined,
+  }))(fd);
+}
+
+export async function addRequisitionFile(fd: FormData) {
+  const id = pick(fd, 'id');
+  const file = fd.get('file');
+  if (!okId(id)) back('/purchase/requisitions', 'validation-failed', 'Unknown requisition');
+  if (!(file instanceof File) || !file.size)
+    back(prPage(id), 'validation-failed', 'Choose the file');
+  return run(
+    prPage(id),
+    async () =>
+      apiFetch(`/purchase/requisitions/${id}/files`, {
+        method: 'POST',
+        body: JSON.stringify({ kind: 'tender', fileId: await uploadOne(file) }),
+      }),
+    'Document attached',
+  );
+}
+
+export async function removeRequisitionFile(fd: FormData) {
+  const id = pick(fd, 'id');
+  const fileId = pick(fd, 'fileId');
+  if (!okId(id) || !okId(fileId))
+    back('/purchase/requisitions', 'validation-failed', 'Unknown file');
+  return run(
+    prPage(id),
+    () => apiFetch(`/purchase/requisitions/${id}/files/${fileId}`, { method: 'DELETE' }),
+    'Document removed',
+  );
+}
+
+/** A vendor's quote: its details, the file, and a rate (and GST) per line it quoted. */
+export async function saveQuote(fd: FormData) {
+  const id = pick(fd, 'id');
+  const quoteId = pick(fd, 'quoteId');
+  if (!okId(id) || (quoteId && !okId(quoteId)))
+    back('/purchase/requisitions', 'validation-failed', 'Unknown requisition');
+  const to = `${prPage(id)}/quote${quoteId ? `?quoteId=${quoteId}` : ''}`;
+  const lines = fd
+    .getAll('lineId')
+    .map(String)
+    .filter(okId)
+    .map((lineId) => ({
+      lineId,
+      rate: pick(fd, `rate_${lineId}`),
+      gstRate: pick(fd, `gst_${lineId}`),
+      note: pick(fd, `note_${lineId}`),
+    }))
+    .filter((l) => l.rate !== '')
+    .map((l) => ({
+      lineId: l.lineId,
+      rate: l.rate,
+      ...(l.gstRate !== '' ? { gstRate: l.gstRate } : {}),
+      ...(l.note ? { note: l.note } : {}),
+    }));
+  const file = fd.get('file');
+  try {
+    const fileId = file instanceof File && file.size ? await uploadOne(file) : undefined;
+    await apiFetch(`/purchase/requisitions/${id}/quotes${quoteId ? `/${quoteId}` : ''}`, {
+      method: quoteId ? 'PUT' : 'POST',
+      body: JSON.stringify({
+        vendorId: pick(fd, 'vendorId'),
+        quoteRef: pick(fd, 'quoteRef') || undefined,
+        quoteDate: pick(fd, 'quoteDate') || undefined,
+        validUntil: pick(fd, 'validUntil') || undefined,
+        deliveryDays: pick(fd, 'deliveryDays') || undefined,
+        note: pick(fd, 'note') || undefined,
+        ...(fileId ? { fileId } : {}),
+        lines,
+      }),
+    });
+  } catch (e) {
+    if (e instanceof ApiError) back(to, e.problem.type, detailOf(e));
+    throw e;
+  }
+  back(prPage(id), 'ok', quoteId ? 'Quote changed' : 'Quote added');
+}
+
+export async function removeQuote(fd: FormData) {
+  const id = pick(fd, 'id');
+  const quoteId = pick(fd, 'quoteId');
+  if (!okId(id) || !okId(quoteId))
+    back('/purchase/requisitions', 'validation-failed', 'Unknown quote');
+  return run(
+    prPage(id),
+    () => apiFetch(`/purchase/requisitions/${id}/quotes/${quoteId}`, { method: 'DELETE' }),
+    'Quote removed: lines chosen from it lost their vendor',
+  );
+}
+
+/** The vendor per line: one that quoted it takes its quoted rate; another needs the agreed rate. */
+export async function saveChoices(fd: FormData) {
+  const id = pick(fd, 'id');
+  if (!okId(id)) back('/purchase/requisitions', 'validation-failed', 'Unknown requisition');
+  const lines = fd
+    .getAll('lineId')
+    .map(String)
+    .filter(okId)
+    .map((lineId) => {
+      const vendorId = pick(fd, `vendor_${lineId}`);
+      const rate = pick(fd, `rate_${lineId}`);
+      const reason = pick(fd, `reason_${lineId}`);
+      return {
+        lineId,
+        vendorId: vendorId || null,
+        ...(rate !== '' ? { rate } : {}),
+        ...(reason ? { reason } : {}),
+      };
+    });
+  return run(
+    prPage(id),
+    () =>
+      apiFetch(`/purchase/requisitions/${id}/choices`, {
+        method: 'PUT',
+        body: JSON.stringify({ lines }),
+      }),
+    'Vendors saved',
+  );
+}

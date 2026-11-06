@@ -572,7 +572,7 @@ export const NAV: Array<{
     ],
   },
   {
-    // docs/design/83: purchase, part 1 (the masters) and part 2 (indents)
+    // docs/design/83: purchase, part 1 (the masters), 2 (indents) and 3 (requisitions)
     section: 'purchase',
     items: [
       { href: '/purchase/indents', label: 'purchaseIndents', permission: 'purchase.indent.raise' },
@@ -580,6 +580,16 @@ export const NAV: Array<{
         href: '/purchase/delegations',
         label: 'purchaseDelegations',
         permission: 'purchase.indent.raise',
+      },
+      {
+        href: '/purchase/to-requisition',
+        label: 'toRequisition',
+        permission: 'purchase.requisition.manage',
+      },
+      {
+        href: '/purchase/requisitions',
+        label: 'purchaseRequisitions',
+        permission: 'purchase.requisition.manage',
       },
       { href: '/purchase', label: 'purchaseHome', permission: 'purchase.master.view' },
       { href: '/purchase/vendors', label: 'vendors', permission: 'purchase.master.view' },

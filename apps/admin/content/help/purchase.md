@@ -3,7 +3,7 @@
 Staff ask for what their department needs on a **Purchase Indent (PI)**; the department's approvers
 decide it in turn; the purchase office turns approved PIs into a **Requisition (PR)** and an **Order
 (PO)**. This page covers the masters they pick from (units, HSN / SAC codes with GST, item categories
-and items, payment terms, vendors, rate contracts, who approves, the settings) and the PI. (The PR and
+and items, payment terms, vendors, rate contracts, who approves, the settings), the PI and the PR. (The
 PO screens come next.)
 
 ## Who does what
@@ -15,6 +15,8 @@ PO screens come next.)
 | **School admin**                                    | Settings, the purchase committee, who approves per department, the bypass rules                      |
 | **Any staff member** (teachers, office staff)       | Raises PIs for their own department, in the admin or the staff app                                   |
 | **The department's approvers** (HOD, Principal…)    | Approve, send back or reject the PIs at their level; hand their approvals to a colleague when away   |
+| **Purchase office** (requisitions)                  | Makes PRs from approved PIs (or directly), enters quotes, chooses vendors, sends PRs for approval    |
+| **The purchase committee** (named in settings)      | Signs the comparative statement of a PR in the committee tier, in the admin or the staff app         |
 
 ## Set it up, in this order
 
@@ -113,6 +115,43 @@ PR (when the department allows it) and the PO takes the contract rate.
     large purchase being split into small ones;
   - **otherwise** it waits for the purchase office's PR (**Waiting for the PR**).
 
+## Purchase Requisitions
+
+**Purchase → To requisition** lists the approved PIs waiting for the purchase office. Tick the ones to
+buy together and **Make a requisition**: the same item's lines are added up into one line and each PI
+stays linked to it. PIs of several departments make a **combined** PR, approved by the department set
+on Purchase settings ("the department whose levels approve a PR combining departments"). **Close** a
+PI you will not buy (issued from stock, no longer needed) with the reason; its raiser sees it.
+**Direct requisition** (Purchase → Purchase Requisitions) is for a need that did not come through a PI.
+
+On the PR:
+
+- **Change the lines**: match a line asked for in words to an item from the list, change a quantity,
+  or mark a line **From the store** with what the store issues (no vendor needed). A line that came
+  from a PI stays on the PR.
+- **Sourcing** follows the PR's **value before GST** (the larger of the estimate and the chosen
+  rates), with the limits from Purchase settings (GFR 2017 by default):
+  - **direct purchase** (up to ₹50,000): a vendor and rate per line — **Add a quote**, or pick a vendor
+    and type the agreed rate in the comparative statement — and **Record the certificate** ("I am
+    personally satisfied that the goods … at a reasonable price") in the purchase officer's name;
+  - **purchase committee** (up to ₹2.5 lakh): at least 3 quotes (**Add a quote**: the vendor, its
+    reference, date, validity, delivery days, the file, and the rate of each line it quoted; the GST
+    is the item's for a registered vendor, none for an unregistered or composition one). The
+    **comparative statement** shows for each line what the school pays per unit with GST and marks the
+    lowest **L1**; choose the vendor per line — a dearer one needs the reason. Then the committee
+    members sign it (as many as Purchase settings asks). **Changing the lines, a quote or the vendors
+    clears the signatures**;
+  - **tender** (above): run the tender outside EduPro; record its **reference**, attach its
+    **documents** and choose the vendor with the agreed rates.
+- **Send for approval** says what is still missing (the Sourcing card lists it too). The PR goes to its
+  department's PR levels (Purchase → Who approves); nobody approves their own.
+- **Approved**: the lines bought wait for the purchase order (next part); a PI all of whose lines are
+  issued from the store closes ("Issued from the store"). **Rejected** or **cancelled**: its PIs go
+  back to To requisition with the reason. **Reopen to change** an approved PR (before any order): it
+  goes back to draft and is approved again (the next revision).
+- Approvers and committee members find theirs in **My approvals** or the staff app (**Office →
+  Purchase requisitions**); a PI's raiser opens the PR from the PI.
+
 ## Hand over my approvals
 
 Away for some days? **Purchase → Hand over my approvals** (staff app: the link under Purchase indents):
@@ -141,3 +180,7 @@ hand over anyone's.
   on Purchase → Who approves.
 - **My PI was approved but no PR came.** It waits in Waiting for the PR unless every line is on a rate
   contract or it is within the department's limit; the indent says which rule applied, or why not.
+- **Why can't I send the PR for approval?** The dialog lists what its tier still needs: a vendor on
+  every line, the certificate, the quotes, the committee's signatures or the tender documents.
+- **The committee's signatures disappeared.** The lines, a quote or the vendors chosen changed after
+  they signed: they sign the new statement.

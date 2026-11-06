@@ -165,3 +165,54 @@ export async function rejectIndent(fd: FormData) {
   fd.set('decision', 'reject');
   return decideIndent(fd);
 }
+
+// ---- part 3: requisitions to approve, comparative statements to sign ------------------------------
+const prDecision = (decision: 'approve' | 'send_back' | 'reject') => async (fd: FormData) => {
+  const id = pick(fd, 'id');
+  const to = `/purchase/requisitions/${id}`;
+  if (!okId(id)) back('/purchase/requisitions', 'validation-failed', 'Unknown requisition');
+  return run(
+    to,
+    () =>
+      apiFetch(`/purchase/requisitions/${id}/decide`, {
+        method: 'POST',
+        body: JSON.stringify({ action: decision, note: pick(fd, 'reason') || undefined }),
+      }),
+    decision === 'approve'
+      ? 'Approved'
+      : decision === 'reject'
+        ? 'Rejected'
+        : 'Sent back to the purchase office',
+  );
+};
+export async function approveRequisition(fd: FormData) {
+  return prDecision('approve')(fd);
+}
+export async function sendBackRequisition(fd: FormData) {
+  return prDecision('send_back')(fd);
+}
+export async function rejectRequisition(fd: FormData) {
+  return prDecision('reject')(fd);
+}
+export async function signRequisition(fd: FormData) {
+  const id = pick(fd, 'id');
+  if (!okId(id)) back('/purchase/requisitions', 'validation-failed', 'Unknown requisition');
+  return run(
+    `/purchase/requisitions/${id}`,
+    () =>
+      apiFetch(`/purchase/requisitions/${id}/sign`, {
+        method: 'POST',
+        body: JSON.stringify({ note: pick(fd, 'reason') || undefined }),
+      }),
+    'You signed the comparative statement',
+  );
+}
+export async function unsignRequisition(fd: FormData) {
+  const id = pick(fd, 'id');
+  if (!okId(id)) back('/purchase/requisitions', 'validation-failed', 'Unknown requisition');
+  return run(
+    `/purchase/requisitions/${id}`,
+    () => apiFetch(`/purchase/requisitions/${id}/sign`, { method: 'DELETE' }),
+    'Your signature withdrawn',
+  );
+}

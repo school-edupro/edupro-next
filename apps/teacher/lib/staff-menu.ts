@@ -26,6 +26,8 @@ export interface StaffWaiting {
   admissions?: number;
   /** purchase indents waiting at my approval level, or a colleague's handed to me (docs/design/83) */
   purchase?: number;
+  /** purchase requisitions at my level, and comparative statements for me to sign (the committee) */
+  requisitions?: number;
 }
 export interface StaffGroup {
   id: string;
@@ -236,6 +238,12 @@ export const STAFF_MENU: StaffGroup[] = [
         label: 'Purchase indents',
         help: 'Ask for what your department needs; decide the indents waiting for you',
         allowed: (can, w) => can('purchase.indent.raise') || (w.purchase ?? 0) > 0,
+      },
+      {
+        href: '/purchase/requisitions',
+        label: 'Purchase requisitions',
+        help: 'Requisitions waiting for your approval; comparative statements to sign (the purchase committee)',
+        allowed: (_can, w) => (w.requisitions ?? 0) > 0,
       },
       {
         href: '/no-dues',

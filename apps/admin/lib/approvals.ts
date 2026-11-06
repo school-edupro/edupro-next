@@ -20,7 +20,9 @@ export interface ApprovalGroup {
     | 'acr'
     | 'vacancy'
     | 'admission'
-    | 'purchase';
+    | 'purchase'
+    | 'requisition'
+    | 'cs_sign';
   title: string;
   help: string;
   href: string;
@@ -37,6 +39,15 @@ interface ProfileInbox {
     createdAt: string;
   }>;
   page: { total: number };
+}
+interface PurchaseRequisitionRow {
+  id: string;
+  number: string;
+  department: string | null;
+  purpose: string | null;
+  estimate: number;
+  submittedAt: string | null;
+  createdAt: string;
 }
 interface PurchaseIndentRow {
   id: string;
@@ -138,6 +149,44 @@ export async function myApprovals(
           : null,
       )
       .catch(() => null),
+    // purchase requisitions at my level and comparative statements for the committee (docs/design/83)
+    apiFetch<{ data: PurchaseRequisitionRow[]; waitingForMe: number; toSign: number }>(
+      `/purchase/requisitions?view=waiting&status=submitted&size=${String(size)}`,
+    )
+      .then(async (r): Promise<ApprovalGroup[]> => {
+        const out: ApprovalGroup[] = [];
+        const item = (x: PurchaseRequisitionRow) => ({
+          id: x.id,
+          title: `${x.number} · ${x.department ?? ''}`,
+          detail: `₹${x.estimate.toLocaleString('en-IN')}${x.purpose ? ` · ${x.purpose}` : ''}`,
+          href: `/purchase/requisitions/${x.id}`,
+          since: x.submittedAt ?? x.createdAt,
+        });
+        if (r.waitingForMe)
+          out.push({
+            key: 'requisition',
+            title: 'Purchase Requisitions',
+            help: 'Requisitions waiting for your approval',
+            href: '/purchase/requisitions?view=waiting',
+            count: r.waitingForMe,
+            items: r.data.map(item),
+          });
+        if (r.toSign) {
+          const sign = await apiFetch<{ data: PurchaseRequisitionRow[] }>(
+            `/purchase/requisitions?view=sign&size=${String(size)}`,
+          ).catch(() => ({ data: [] }));
+          out.push({
+            key: 'cs_sign',
+            title: 'Comparative statements to sign',
+            help: 'As the purchase committee: the quotes and the vendors chosen',
+            href: '/purchase/requisitions?view=sign',
+            count: r.toSign,
+            items: sign.data.map(item),
+          });
+        }
+        return out;
+      })
+      .catch(() => []),
     // fee requests one approver decides on their own pages: receipt cancel, cheque bounce, date
     // corrections (the ones that ride the approval levels come through "Approval steps")
     has.has('fees.adjustment.approve')
@@ -530,5 +579,6 @@ export async function myApprovals(
       )
       .catch(() => null),
   ]);
-  return groups.filter((g): g is ApprovalGroup => g !== null);
+  // a source may give several groups (purchase requisitions: to approve, to sign)
+  return groups.flat().filter((g): g is ApprovalGroup => g !== null);
 }

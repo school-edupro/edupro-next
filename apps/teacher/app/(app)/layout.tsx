@@ -19,7 +19,7 @@ export default async function StaffLayout({ children }: { children: ReactNode })
     throw error;
   }
   // the header badge and what waits on this person; best effort, never blocks the page
-  const [unread, approvals, profileChanges, exits, noDues, admissions, purchase] =
+  const [unread, approvals, profileChanges, exits, noDues, admissions, purchase, requisitions] =
     await Promise.all([
       bff.api
         .fetch<{ unread: number }>('/comms/inbox/unread')
@@ -51,6 +51,13 @@ export default async function StaffLayout({ children }: { children: ReactNode })
         .fetch<{ total: number }>('/purchase/indents?view=waiting&status=submitted&size=1')
         .then((r) => r.total)
         .catch(() => 0),
+      // purchase requisitions at my level, and comparative statements to sign
+      bff.api
+        .fetch<{ waitingForMe: number; toSign: number }>(
+          '/purchase/requisitions?view=waiting&status=submitted&size=1',
+        )
+        .then((r) => r.waitingForMe + r.toSign)
+        .catch(() => 0),
     ]);
   return (
     <StaffShell
@@ -58,7 +65,7 @@ export default async function StaffLayout({ children }: { children: ReactNode })
       lang={lang}
       currentPath={currentPath}
       unread={unread}
-      waiting={{ approvals, profileChanges, exits, noDues, admissions, purchase }}
+      waiting={{ approvals, profileChanges, exits, noDues, admissions, purchase, requisitions }}
     >
       {children}
     </StaffShell>

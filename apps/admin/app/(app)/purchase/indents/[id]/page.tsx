@@ -144,7 +144,7 @@ export default async function IndentPage({
               <p>
                 {pi.requisitions.map((r) => (
                   <span key={r.id}>
-                    PR {r.number}
+                    PR <a href={`/purchase/requisitions/${r.id}`}>{r.number}</a>
                     {r.autoRule ? ' (approved by the system)' : ''}{' '}
                   </span>
                 ))}

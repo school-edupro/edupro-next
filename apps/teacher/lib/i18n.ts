@@ -14,6 +14,25 @@ export async function currentLang(): Promise<Lang> {
 
 const DICT: Record<string, string> = {
   // purchase indents (docs/design/83)
+  'Purchase requisitions': 'क्रय माँग-पत्र',
+  'Requisitions waiting for your approval, and comparative statements for the purchase committee to sign.':
+    'आपकी स्वीकृति की प्रतीक्षा में माँग-पत्र, और क्रय समिति के हस्ताक्षर हेतु तुलनात्मक विवरण।',
+  'Waiting for your approval': 'आपकी स्वीकृति की प्रतीक्षा में',
+  'Comparative statements to sign': 'हस्ताक्षर हेतु तुलनात्मक विवरण',
+  'Open and sign': 'खोलें और हस्ताक्षर करें',
+  'Remark (needed to send back or reject)': 'टिप्पणी (वापस भेजने या अस्वीकार करने के लिए आवश्यक)',
+  'Your signature (purchase committee)': 'आपके हस्ताक्षर (क्रय समिति)',
+  'You confirm the quotes below and the vendor chosen for each line.':
+    'आप नीचे दिए कोटेशन और प्रत्येक पंक्ति के लिए चुने गए विक्रेता की पुष्टि करते हैं।',
+  'Remark (optional)': 'टिप्पणी (वैकल्पिक)',
+  'Sign the comparative statement': 'तुलनात्मक विवरण पर हस्ताक्षर करें',
+  'You have signed it.': 'आपने हस्ताक्षर कर दिए हैं।',
+  'Withdraw my signature': 'मेरे हस्ताक्षर वापस लें',
+  Lines: 'पंक्तियाँ',
+  'Comparative statement': 'तुलनात्मक विवरण',
+  'What the school pays per unit, with GST; the lowest is L1.':
+    'जीएसटी सहित प्रति इकाई विद्यालय का भुगतान; सबसे कम L1 है।',
+  'Committee signatures': 'समिति के हस्ताक्षर',
   Approvals: 'स्वीकृतियाँ',
   'Away? Hand over your purchase approvals': 'बाहर हैं? अपनी क्रय स्वीकृतियाँ सौंपें',
   Back: 'वापस',

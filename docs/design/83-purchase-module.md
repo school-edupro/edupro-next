@@ -372,3 +372,58 @@ confirmed with the school's CA before go-live; the settings keep them editable.
   school admin, send back / resubmit / reject, the purchase delegation, withdraw and no approvers); the
   suites on the engine (workflow, recruitment, exits, fees, admissions, corrections, merges) pass.
   `merge-rules.ts` gains `report_card_told` (missed in 0314; the student-merges test caught it).
+
+## As built — part 3, the Purchase Requisition (6 Nov 2026)
+
+- **Migration 0318**: right `purchase.requisition.manage` (admins, Purchase office); no right to approve
+  or sign — the department's PR levels and the purchase committee decide (the plan's
+  `purchase.committee.sign` is not needed). `purchase_requisitions` gains needed by, `combined`, `tier`
+  (none / direct / committee / tender), the reasonable-price certificate (text, by, at), the tender
+  reference and note, the workflow instance, submitted / decided, the decision note, `revision`, and the
+  statuses `part_ordered` / `ordered` (part 4); lines gain the store note, the chosen GST rate and the
+  reason for a dearer choice; an indent line sits on one requisition at a time (unique index);
+  `purchase_requisition_files` (tender documents), `purchase_quotes` (one per vendor per PR: reference,
+  date, validity, delivery days, file, note) + `purchase_quote_lines` (rate and GST per PR line),
+  `purchase_cs_signoffs` (a committee member's signature).
+- **API** `PurchaseRequisitionsService` (+ `PurchaseRequisitionsController`): the indents waiting
+  (`requisition-candidates`), make a PR from ticked indents — the same catalogue item and unit added up
+  (weighted estimate), lines in words apart, every indent line kept as a source; several departments →
+  `combined`, approved by the department in Purchase settings (409 `purchase.no_purchase_department`
+  when unset) — or a direct PR (department, lines priced from the contract / last rate); change the
+  lines (a line from an indent stays: matched to an item, its quantity changed, or marked **from the
+  store** with what is issued); quotes (active vendors only; GST from the item's HSN for a regular
+  vendor, none for unregistered or composition); the comparative statement ranks each line on the rate
+  with GST — the lowest **L1**; choices (from a quote at its rate, or for direct / tender an agreed
+  rate; dearer than L1 → 400 `purchase.choice_reason` without a reason); the certificate (GFR 2017
+  rule 154 wording offered); the tender reference and documents; a committee member signs once every
+  line bought has its vendor; **any change of lines, quotes or choices clears the signatures**. The
+  **tier** is worked out again on each change from the larger of the estimate and the chosen rates
+  (before GST): up to the direct limit, the committee limit, or above. **Send for approval** checks the
+  tier's requirements (409 `purchase.sourcing_incomplete` with the list): a vendor and rate on every
+  line bought, all active; direct — the certificate; committee — the set number of quotes, every choice
+  from its quote, reasons, quotes still valid, the required signatures; tender — the reference and a
+  document. Then the department's PR levels on the engine (the same sync as PIs, nobody approves their
+  own: the maker cannot). Approve: an indent all of whose lines are issued from the store is closed
+  ("Issued from the store"); reject or cancel: the sources are released and the indents go back to
+  "Waiting for the PR" with the reason; reopen an approved PR (no order yet): back to draft, revision
+  +1; the purchase office closes an indent it will not buy. Who sees a PR: the purchase office (and the
+  indent-view right), its approvers, the committee (committee-tier PRs), the raisers of its indents
+  (read-only).
+- **Admin**: Purchase → To requisition (approved indents with their lines, tick and make one PR;
+  Close with a reason; a note when departments are mixed and no purchase department is set), Purchase
+  Requisitions (All / Waiting for me / To sign; status and search; From indents (n) and Direct
+  requisition), a requisition (status and actions with the requirements in the Send dialog; Sourcing:
+  the value, the limits, the checklist; lines with their indents; quotes with View / Download of the
+  file, Change, Remove; the comparative statement with L1 and the choice per line — quoted vendors
+  with what the school pays, other vendors at an agreed rate outside the committee tier, the reason;
+  the certificate; the tender reference and documents; the committee's signatures; approvals;
+  history), Add / change a quote (rates per line, GST defaulting to the item's), Change the lines
+  (`RequisitionForm`), Direct requisition. My approvals: Purchase Requisitions and Comparative
+  statements to sign; the workflow inbox links to the PR; an indent links to its PR.
+- **Staff app**: Office → Purchase requisitions (when one waits for me or a statement waits for my
+  signature): approve / send back / reject with a remark, sign or withdraw a signature, the lines, the
+  comparative statement and the signatures; Hindi labels.
+- **POs from an approved PR** (one per chosen vendor) come with part 4.
+- **Tests**: `purchase-requisitions.e2e-spec.ts` (6: combining two departments' indents, direct with
+  the certificate, the committee's quotes / L1 / reason / signatures cleared, the tender, from the store
+  and reject / cancel / close, reopen and who sees what); the indent and masters suites pass.

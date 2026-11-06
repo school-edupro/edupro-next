@@ -14500,6 +14500,13 @@ button.ep-subchoice__icon:hover {
   margin: 0;
   font-size: var(--fs-body-lg);
 }
+.ep-purch-checks {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: var(--sp-2);
+}
 .ep-purch-compare {
   display: grid;
   gap: var(--sp-3);
