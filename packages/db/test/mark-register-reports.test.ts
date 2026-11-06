@@ -312,25 +312,98 @@ describe('mark register reports (docs/design/68, phase 2)', () => {
     expect(lines(subjectsLow.sheet).ENGLISH!.slice(1, 2)).toEqual(['b2']);
   });
 
-  it('teacher-wise as the legacy prints it: a block per teacher with their classes and a total; no teacher last', () => {
+  it('teacher-wise (docs/design/80): the Result Analysis figures down, a column per class and the Total', () => {
     const blocks = buildReport('teacher', input(true));
-    expect(blocks.map((b) => b.title)).toEqual(['MR DAS', 'MRS RAO', 'NO TEACHER MAPPED']);
+    expect(blocks.map((b) => b.title)).toEqual([
+      'MR DAS — 1 class',
+      'MRS RAO — 2 classes',
+      'NO TEACHER MAPPED — 1 class',
+    ]);
     expect(blocks[0]!.sheet.note).toContain('Teacher = the teacher assignments');
     const rao = blocks[1]!.sheet;
-    expect(rao.body.map((r) => r.cells.map((c) => c.t))).toEqual([
-      ['VI-A', 'ENGLISH', '5', '4', '56.25%', '75%', '90', '1'],
-      ['VI-B', 'ENGLISH', '3', '2', '60%', '50%', '100', '1'],
+    expect(rao.head[0]!.map((c) => c.t)).toEqual([
+      'Figure',
+      'VI-A · ENGLISH',
+      'VI-B · ENGLISH',
+      'Total',
     ]);
-    expect(rao.foot!.map((c) => c.t)).toEqual([
-      'Total — 2 classes',
-      '8',
-      '6',
-      '57.5%',
-      '66.67%',
-      '',
-      '2',
+    const by = lines(rao);
+    expect(Object.keys(by)).toEqual([
+      'Total students',
+      'Absent',
+      'Appeared',
+      '0-32',
+      '33-40',
+      '40-50',
+      '50-60',
+      '60-70',
+      '70-80',
+      '80-90',
+      '90-100',
+      '>=50%',
+      '>=60%',
+      '>=70%',
+      '>=80%',
+      '>=90%',
+      'Highest marks',
+      'Lowest marks',
+      'Average marks',
+      'Passing %',
+      'Average %',
+      'Failed',
     ]);
-    expect(blocks[2]!.sheet.body.map((r) => r.cells[1]!.t)).toEqual(['MATHS']);
+    expect(by['Total students']).toEqual(['Total students', '5', '3', '8']);
+    expect(by['Appeared']).toEqual(['Appeared', '4', '2', '6']);
+    expect(by['Highest marks']).toEqual(['Highest marks', '90 / 100', '100 / 100', '100 / 100']);
+    expect(by['Passing %']).toEqual(['Passing %', '75.00', '50.00', '66.67']);
+    expect(by['Average %']).toEqual(['Average %', '56.25%', '60%', '57.5%']);
+    expect(by['Failed']).toEqual(['Failed', '1', '1', '2']);
+    // a count opens its students
+    const failed = rao.body.find((r) => r.cells[0]!.t === 'Failed')!.cells[3]!;
+    expect(failed.drill!.rows.map((r) => r[1])).toEqual(['a2', 'b2']);
+    expect(lines(blocks[2]!.sheet)['Total students']).toEqual(['Total students', '3', '3']);
+    expect(blocks[2]!.sheet.head[0]![1]!.t).toBe('VI-B · MATHS');
+  });
+
+  it('teacher-wise: a shared class is marked; the Total leaves out marks of two maxima', () => {
+    const half = students.map((st) => ({
+      ...st,
+      subjects: st.subjects.map((x) =>
+        x.subjectId === 'MAT'
+          ? {
+              ...x,
+              marks: {
+                T: x.marks.T
+                  ? {
+                      ...x.marks.T,
+                      max: 50,
+                      marks: x.marks.T.marks === null ? null : x.marks.T.marks / 2,
+                    }
+                  : undefined,
+              },
+            }
+          : x,
+      ),
+    }));
+    const halfRows = computeRegister(def, half);
+    const [one] = buildReport('teacher', {
+      ...input(false),
+      rows: halfRows.filter((r) => r.sectionId === 'A'),
+      students: half.filter((x) => x.sectionId === 'A'),
+      teachers: { 'A|ENG': ['Mrs Rao', 'Mr Das'], 'A|MAT': ['Mr Das'] },
+    });
+    expect(one!.title).toBe('MR DAS — 2 classes');
+    expect(one!.sheet.head[0]!.map((c) => c.t)).toEqual([
+      'Figure',
+      'VI-A · ENGLISH (shared)',
+      'VI-A · MATHS',
+      'Total',
+    ]);
+    const by = lines(one!.sheet);
+    expect(by['Highest marks']!.slice(1)).toEqual(['90 / 100', '42.5 / 50', '']);
+    expect(by['Average marks']![3]).toBe('');
+    // the counts and the % still add up
+    expect(by['Total students']![3]).toBe('10');
   });
 
   it('at-risk: failing high, compartment medium, borderline and absent to watch; counts by subject', () => {

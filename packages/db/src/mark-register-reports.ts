@@ -383,14 +383,11 @@ function analysisBands(def: RegisterDef) {
 }
 
 /**
- * Per subject (each language of a slot apart): the students, absent, appeared, the register's % bands,
- * the cumulative counts, highest, lowest, average and passing %. A class with one subject picked: a row
- * per section with its teachers of the subject (each language of a slot apart), then all the sections
- * together, as the legacy's subject-wise analysis. Otherwise (a section, or a class with every subject)
- * the legacy's Result Analysis: the subjects across the top, the figures down the side — a class as one,
- * then each of its sections.
+ * The Result Analysis figures of some takers of a subject (docs/design/68, 80): Students, Absent,
+ * Appeared, the register's % bands, the cumulative counts, Highest (out of the maximum), Lowest, Average
+ * and Passing %; each count opens its students. Analysis and Teacher-wise both use them.
  */
-function analysis(i: ReportInput): ReportBlock[] {
+function analysisFigures(i: ReportInput) {
   const { ordered, cumulative: cuml, reach, bandOf } = analysisBands(i.def);
   const figureCols: Col[] = [
     ['Students', 1],
@@ -403,7 +400,6 @@ function analysis(i: ReportInput): ReportBlock[] {
     ['Average', 1.1],
     ['Passing %', 1.1],
   ];
-  type Taker = { r: RegStudentResult; x: RegSubjectResult };
   /** the figures of some takers of a subject, from Students to Passing % */
   const figures = (title: string, list: Taker[]): SheetCell[] => {
     const absent = list.filter((y) => y.x.withheld);
@@ -438,6 +434,20 @@ function analysis(i: ReportInput): ReportBlock[] {
       { t: pct(passed.length, appeared.length), tone: 'final' as const },
     ];
   };
+  return { ordered, cuml, figureCols, figures };
+}
+type Taker = { r: RegStudentResult; x: RegSubjectResult };
+
+/**
+ * Per subject (each language of a slot apart): the students, absent, appeared, the register's % bands,
+ * the cumulative counts, highest, lowest, average and passing %. A class with one subject picked: a row
+ * per section with its teachers of the subject (each language of a slot apart), then all the sections
+ * together, as the legacy's subject-wise analysis. Otherwise (a section, or a class with every subject)
+ * the legacy's Result Analysis: the subjects across the top, the figures down the side — a class as one,
+ * then each of its sections.
+ */
+function analysis(i: ReportInput): ReportBlock[] {
+  const { ordered, cuml, figureCols, figures } = analysisFigures(i);
   const group = (lead: number) => [
     { t: '', span: lead },
     { t: 'Students in each band', span: ordered.length },
@@ -1364,18 +1374,14 @@ function toppers(i: ReportInput): ReportBlock[] {
 
 // ---- Teacher-wise ----------------------------------------------------------------------------------
 /**
- * The legacy's Teacher-wise result: a block per subject teacher (from the teacher assignments) with
- * their sections and subjects — students, appeared, average %, pass %, highest, failed; a subject two
- * teachers share is marked — and their total; the lines with no teacher last, to fix the mapping.
+ * Teacher-wise (docs/design/80): a block per subject teacher with the Result Analysis figures down the
+ * side — Total students … Passing %, then Average % and Failed — a column per class they teach
+ * (section × subject; "(shared)" when two teachers share it) and their Total; in the Total, Highest,
+ * Lowest and Average marks only when every class has the same maximum. "No teacher mapped" last.
  */
 function teacherWise(i: ReportInput): ReportBlock[] {
   const NONE = 'No teacher mapped';
-  type Line = {
-    subject: string;
-    section: string;
-    shared: boolean;
-    list: Array<{ r: RegStudentResult; x: RegSubjectResult }>;
-  };
+  type Line = { subject: string; section: string; shared: boolean; list: Taker[] };
   const byTeacher = new Map<string, Map<string, Line>>();
   for (const s of subjectsOf(i))
     for (const y of s.list) {
@@ -1395,11 +1401,34 @@ function teacherWise(i: ReportInput): ReportBlock[] {
         byTeacher.set(t, lines);
       }
     }
-  const stats = (list: Line['list']) => {
-    const appeared = list.filter((y) => !y.x.withheld && y.x.pct !== null && !y.x.missing);
-    const failed = appeared.filter((y) => y.x.status === 'fail');
-    return { appeared, failed, pcts: appeared.map((y) => y.x.pct!) };
+  const { figureCols, figures } = analysisFigures(i);
+  /** the legacy's words down the side, as the Result Analysis */
+  const side: Record<string, string> = {
+    Students: 'Total students',
+    Highest: 'Highest marks',
+    Lowest: 'Lowest marks',
+    Average: 'Average marks',
   };
+  const labels = [...figureCols.map(([l]) => side[l] ?? l), 'Average %', 'Failed'];
+  const appearedOf = (list: Taker[]) =>
+    list.filter((y) => !y.x.withheld && y.x.pct !== null && !y.x.missing);
+  /** a column's figures: the Analysis', then Average % and Failed */
+  const column = (title: string, list: Taker[]): SheetCell[] => {
+    const appeared = appearedOf(list);
+    const pcts = appeared.map((y) => y.x.pct!);
+    return [
+      ...figures(title, list),
+      { t: pcts.length ? pctOf(avg(pcts)) : '', tone: 'calc' as const },
+      count(
+        i,
+        `${title} · Failed`,
+        appeared.filter((y) => y.x.status === 'fail'),
+      ),
+    ];
+  };
+  const marksRows = ['Highest', 'Lowest', 'Average'].map((l) =>
+    figureCols.findIndex(([x]) => x === l),
+  );
   const teachers = [...byTeacher.keys()].sort((a, b) =>
     a === NONE ? 1 : b === NONE ? -1 : a.localeCompare(b),
   );
@@ -1408,89 +1437,38 @@ function teacherWise(i: ReportInput): ReportBlock[] {
     const lines = [...byTeacher.get(t)!.values()].sort(
       (a, b) => a.section.localeCompare(b.section) || a.subject.localeCompare(b.subject),
     );
-    const rows = lines.map((l): SheetCell[] => {
-      const st = stats(l.list);
-      const title = `${l.subject} · ${l.section}`;
-      return [
-        { t: l.section, text: true, strong: true },
-        {
-          t: l.subject,
-          text: true,
-          strong: true,
-          ...(l.shared ? { badge: { label: 'shared', tone: 'neutral' as const } } : {}),
-        },
-        { ...count(i, `${title} · Students`, l.list), center: true },
-        { ...count(i, `${title} · Appeared`, st.appeared), center: true },
-        { t: st.pcts.length ? pctOf(avg(st.pcts)) : '', tone: 'calc', center: true },
-        {
-          t: st.appeared.length
-            ? pctOf(((st.appeared.length - st.failed.length) / st.appeared.length) * 100)
-            : '',
-          center: true,
-          strong: true,
-        },
-        {
-          t: st.appeared.length
-            ? cutFixed(Math.max(...st.appeared.map((y) => y.x.total!)), 'auto')
-            : '',
-          center: true,
-        },
-        { ...count(i, `${title} · Failed`, st.failed), center: true },
-      ];
-    });
+    const cols = lines.map((l) => column(`${l.subject} · ${l.section}`, l.list));
     const all = lines.flatMap((l) => l.list);
-    const st = stats(all);
+    const total = column(`${t} · Total`, all);
+    // marks across classes out of different maxima do not add up
+    const maxima = new Set(appearedOf(all).map((y) => y.x.max));
+    if (maxima.size > 1) for (const k of marksRows) if (k >= 0) total[k] = { t: '' };
     const b = block(
       i,
-      t.toUpperCase(),
+      `${t.toUpperCase()} — ${String(lines.length)} class${lines.length === 1 ? '' : 'es'}`,
       [
-        ['Section', 1.4, true],
-        ['Subject', 3.2, true],
-        ['Students', 1.2],
-        ['Appeared', 1.2],
-        ['Avg %', 1.2],
-        ['Pass %', 1.2],
-        ['Highest', 1.1],
-        ['Failed', 1],
+        ['Figure', 2.6, true],
+        ...lines.map((l): Col => [
+          `${l.section} · ${l.subject}${l.shared ? ' (shared)' : ''}`,
+          1.6,
+        ]),
+        ['Total', 1.6],
       ],
-      rows,
+      labels.map((label, k): SheetCell[] => [
+        { t: label, text: true, strong: true },
+        ...cols.map((c) => ({ ...c[k]!, center: true })),
+        { ...total[k]!, center: true, strong: true, tone: 'final' as const },
+      ]),
     );
-    for (const h of b.sheet.head[0]!.slice(2)) h.center = true;
-    b.sheet.head[0]![4]!.tone = 'calc';
-    b.sheet.foot = [
-      {
-        t: `Total — ${String(lines.length)} class${lines.length === 1 ? '' : 'es'}`,
-        span: 2,
-        text: true,
-        strong: true,
-        tone: 'final',
-      },
-      { t: String(all.length), center: true, strong: true, tone: 'final' },
-      { t: String(st.appeared.length), center: true, strong: true, tone: 'final' },
-      // the average over every student who appeared (each class weighted by its size)
-      {
-        t: st.pcts.length ? pctOf(Math.round(avg(st.pcts)! * 10) / 10) : '',
-        center: true,
-        strong: true,
-        tone: 'final',
-      },
-      {
-        t: st.appeared.length
-          ? pctOf(((st.appeared.length - st.failed.length) / st.appeared.length) * 100)
-          : '',
-        center: true,
-        strong: true,
-        tone: 'final',
-      },
-      { t: '', tone: 'final' },
-      { t: String(st.failed.length), center: true, strong: true, tone: 'final' },
-    ];
+    for (const h of b.sheet.head[0]!.slice(1)) h.center = true;
+    b.sheet.head[0]!.at(-1)!.tone = 'final';
     out.push(b);
   }
   if (out[0])
     out[0].sheet.note = [
       'Teacher = the teacher assignments (Academics → Teacher assignments: the section’s subject teacher)',
-      'figures = each line’s own subject summary (AB and withheld left out, Pass % = passed ÷ appeared)',
+      'the figures as the Result Analysis (absent = AB or withheld, appeared = a % worked out, Passing % = passed ÷ appeared)',
+      'Total = every class of the teacher; its marks only when the classes have the same maximum',
       `“${NONE}” = assign the teacher to credit them`,
     ].join(' · ');
   return out;
