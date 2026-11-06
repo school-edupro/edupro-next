@@ -94,7 +94,8 @@ describe('report-card PDF jobs', () => {
       await exportFor('report_card'),
     );
     expect(r.html).toContain('Asha Card');
-    expect(r.html).toContain('Marks obtained');
+    // the VI-VIII test slip prints in the school's classic boxes since doc 74 ("Marks Obtained")
+    expect(r.html).toContain('Marks Obtained');
   });
 
   it('prints the chosen students of a class in one PDF, with the year the API sends', async () => {

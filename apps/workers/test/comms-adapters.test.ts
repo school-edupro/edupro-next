@@ -5,6 +5,7 @@ import { EmsWhatsAppAdapter } from '../src/adapters/ems-whatsapp.adapter';
 import { MetaWhatsAppAdapter } from '../src/adapters/meta-whatsapp.adapter';
 import { Msg91Adapter } from '../src/adapters/msg91.adapter';
 import { SmsBhejoAdapter } from '../src/adapters/smsbhejo.adapter';
+import { SMTP_MAX_CONNECTIONS, SmtpAdapter, smtpPool } from '../src/adapters/smtp.adapter';
 
 const fake = (status: number, body: unknown) => {
   const calls: Array<{ url: string; init: RequestInit | undefined }> = [];
@@ -260,5 +261,26 @@ describe('FCM adapter', () => {
     await expect(
       new FcmAdapter(account, fn).send({ ...base, channel: 'push', to: 'old', body: 'x' }),
     ).rejects.toBeInstanceOf(DeadToken);
+  });
+});
+
+describe('SMTP adapter', () => {
+  it('shares one pooled transport per server with at most two connections (6 Nov 2026: 421 too many connections)', () => {
+    const opts = { host: 'mail.example.invalid', port: 587, auth: { user: 'u', pass: 'p' } };
+    const a = smtpPool(opts);
+    expect(smtpPool({ ...opts })).toBe(a);
+    expect(smtpPool({ ...opts, host: 'other.example.invalid' })).not.toBe(a);
+    const o = a.options as { pool?: boolean; maxConnections?: number };
+    expect(o.pool).toBe(true);
+    expect(o.maxConnections).toBe(SMTP_MAX_CONNECTIONS);
+    expect(SMTP_MAX_CONNECTIONS).toBe(2);
+    // a connection URL is pooled too, and adapters made again keep the same pool
+    const u = smtpPool('smtp://localhost:1025');
+    expect((u.options as { pool?: boolean; maxConnections?: number }).maxConnections).toBe(2);
+    const x = new SmtpAdapter('smtp://localhost:1025', 'office@example.invalid');
+    const y = new SmtpAdapter('smtp://localhost:1025', 'office@example.invalid');
+    expect((x as unknown as { transport: unknown }).transport).toBe(u);
+    expect((y as unknown as { transport: unknown }).transport).toBe(u);
+    for (const tr of [a, u]) tr.close();
   });
 });
