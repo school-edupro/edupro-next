@@ -562,7 +562,7 @@ describe('promotion proposals and remark categories (e2e)', () => {
     expect((await whole(admin, { locked: true })).json()).toEqual({
       locked: true,
       reopened: 0,
-      kept: [],
+      revoked: [],
     });
     const entry = () =>
       call(englishTeacher, 'PUT', `/exams/${examId}/marks`, {
@@ -580,11 +580,9 @@ describe('promotion proposals and remark categories (e2e)', () => {
     expect((await entry()).statusCode).toBe(409);
     const noReason = await whole(admin, { locked: false });
     expect(noReason.statusCode).toBe(400);
-    expect(noReason.json().detail).toBe(
-      'Unlocking reopens 1 submitted or verified sheet: give the reason',
-    );
+    expect(noReason.json().detail).toBe('Unlocking reopens VI: 1 sheet: give the reason');
     expect((await whole(admin, { locked: false, reason: 'Correct the ENG marks' })).json()).toEqual(
-      { locked: false, reopened: 1, kept: [] },
+      { locked: false, reopened: 1, revoked: [] },
     );
     const st = (await call(admin, 'GET', `/exams/${examId}/entry-status`)).json().data as Array<{
       classSectionId: string;
@@ -612,5 +610,56 @@ describe('promotion proposals and remark categories (e2e)', () => {
     });
     expect(relocked.json().marksLocked).toBe(true);
     expect((await entry()).json().type).toBe('exams.entry_locked');
+
+    // a class opened again whose sheet is verified and whose card is published: the reason asked, the
+    // card taken back (no message), the sheet reopened, its teacher enters
+    const classLock = (marks: boolean, reason?: string) =>
+      call(admin, 'PUT', `/exams/${examId}/class-locks`, {
+        classId: klass.VI,
+        marks,
+        ...(reason ? { reason } : {}),
+      });
+    expect((await classLock(false)).statusCode).toBe(200);
+    expect((await step(classTeacher, 'submit')).statusCode).toBe(201);
+    expect((await step(admin, 'verify')).statusCode).toBe(201);
+    const card = (
+      await call(admin, 'POST', '/exams/report-cards/releases', {
+        kind: 'exam',
+        termCode: 'PT9',
+        name: 'Test card',
+        examIds: [examId],
+      })
+    ).json().id as string;
+    expect(
+      (
+        await call(admin, 'PUT', `/exams/report-cards/releases/${card}/classes/${klass.VI}`, {
+          status: 'released',
+        })
+      ).statusCode,
+    ).toBe(200);
+    expect((await classLock(true)).statusCode).toBe(200);
+    const asked = await classLock(false);
+    expect(asked.statusCode).toBe(400);
+    expect(asked.json().detail).toBe(
+      'Opening VI reopens VI: 1 sheet, the card "Test card": give the reason',
+    );
+    const reopened = await classLock(false, 'Correct the ENG marks again');
+    expect(reopened.json()).toMatchObject({
+      marksLocked: false,
+      reopened: 1,
+      revoked: ['VI ("Test card")'],
+    });
+    expect((await entry()).statusCode).toBe(200);
+    const rel = (await call(admin, 'GET', `/exams/report-cards/releases/${card}`)).json();
+    expect(rel).toMatchObject({ status: 'withdrawn', publishedClasses: 0 });
+    // an open class's verified marks reopened on purpose (Reopen marks: a reason sent)
+    expect((await step(classTeacher, 'submit')).statusCode).toBe(201);
+    expect((await step(admin, 'verify')).statusCode).toBe(201);
+    expect((await classLock(false)).json()).not.toHaveProperty('reopened');
+    expect((await classLock(false, 'One more correction')).json()).toMatchObject({
+      reopened: 1,
+      revoked: [],
+    });
+    expect((await entry()).statusCode).toBe(200);
   });
 });

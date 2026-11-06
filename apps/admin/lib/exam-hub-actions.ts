@@ -230,12 +230,29 @@ export async function toggleClassLock(fd: FormData) {
   const examId = str(fd, 'examId');
   const area = str(fd, 'area');
   if (!AREAS.has(area)) back(`/exams/${examId}`, 'validation');
-  return run(`/exams/${examId}`, () =>
-    apiFetch(`/exams/${examId}/class-locks`, {
-      method: 'PUT',
-      body: JSON.stringify({ classId: str(fd, 'classId'), [area]: str(fd, 'to') === 'lock' }),
-    }),
+  const reason = str(fd, 'reason');
+  const r = await call<{ reopened?: number; revoked?: string[] }>(
+    `/exams/${examId}/class-locks`,
+    'PUT',
+    {
+      classId: str(fd, 'classId'),
+      [area]: str(fd, 'to') === 'lock',
+      ...(reason ? { reason } : {}),
+    },
   );
+  if (!r.ok) back(`/exams/${examId}`, 'validation', r.error);
+  // 6 Nov 2026: a class opened again says what it reopened and took back
+  const detail = [
+    r.data.reopened
+      ? `${String(r.data.reopened)} submitted or verified sheet${r.data.reopened === 1 ? '' : 's'} reopened: their teachers can enter again.`
+      : '',
+    r.data.revoked?.length
+      ? `Taken back from the published card (families no longer see it; publish it again when the marks are final): ${r.data.revoked.join(', ')}.`
+      : '',
+  ]
+    .filter(Boolean)
+    .join(' ');
+  back(`/exams/${examId}`, 'ok', detail || undefined);
 }
 
 /**
@@ -246,7 +263,7 @@ export async function toggleExamLock(fd: FormData) {
   const examId = str(fd, 'examId');
   const locked = str(fd, 'to') === 'lock';
   const reason = str(fd, 'reason');
-  const r = await call<{ reopened: number; kept: string[] }>(`/exams/${examId}/lock`, 'PUT', {
+  const r = await call<{ reopened: number; revoked: string[] }>(`/exams/${examId}/lock`, 'PUT', {
     locked,
     ...(reason ? { reason } : {}),
   });
@@ -258,8 +275,8 @@ export async function toggleExamLock(fd: FormData) {
         r.data.reopened
           ? `${String(r.data.reopened)} submitted or verified sheet${r.data.reopened === 1 ? '' : 's'} reopened: their teachers can enter again.`
           : '',
-        r.data.kept.length
-          ? `Not reopened (results published; revoke the class first): ${r.data.kept.join(', ')}.`
+        r.data.revoked.length
+          ? `Taken back from the published card (families no longer see it; publish it again when the marks are final): ${r.data.revoked.join(', ')}.`
           : '',
       ]
         .filter(Boolean)

@@ -2072,6 +2072,14 @@ export interface ExamClassProgress {
   computedAt: string | null;
   stage: ExamStage;
 }
+/** 6 Nov 2026: what opening the exam or a class reopens and takes back (GET /exams/:id/lock-impact) */
+export interface LockImpact {
+  classId: string;
+  classCode: string;
+  reopen: number;
+  cards: Array<{ releaseId: string; name: string }>;
+}
+
 export interface ExamProgress {
   areas?: string[];
   stage: ExamStage;

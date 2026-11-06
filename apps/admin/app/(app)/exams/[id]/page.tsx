@@ -8,7 +8,8 @@ import { WorkOutResults } from '@/components/exams/WorkOutResults';
 import { nextStep } from '@/components/exams/next-step';
 import { apiFetch, getMe } from '@/lib/api';
 import { toggleClassLock } from '@/lib/exam-hub-actions';
-import type { Exam, ExamDone, ExamProgress } from '@/lib/types';
+import { ConfirmAction } from '@/components/ConfirmAction';
+import type { Exam, ExamDone, ExamProgress, LockImpact } from '@/lib/types';
 
 type Area = 'marks' | 'indicators' | 'remarks' | 'attendance' | 'health';
 const AREAS: Area[] = ['marks', 'indicators', 'remarks', 'attendance', 'health'];
@@ -39,6 +40,12 @@ export default async function ExamOverviewPage({
   const canUnlock = me.permissions.includes('exams.marks.unlock');
   // 6 Nov 2026: locking and unlocking (the exam, a class) is the school admin's
   const canLock = me.permissions.includes('exams.lock.manage');
+  // what opening a class's marks reopens and takes back (6 Nov 2026): asked first, with the reason
+  const impacts = canLock
+    ? await apiFetch<{ data: LockImpact[] }>(`/exams/${id}/lock-impact`)
+        .then((r) => r.data)
+        .catch(() => [] as LockImpact[])
+    : [];
   const next = nextStep(exam.id, p);
   const m = p.totals.marks;
   const of = (a: number, b: number) => t('of', { a, b });
@@ -265,30 +272,100 @@ export default async function ExamOverviewPage({
                           state: stateWord[st],
                         });
                         const blocked = st === 'locked' && !canUnlock;
+                        const impact =
+                          a === 'marks' && st === 'locked' && !blocked
+                            ? impacts.find((x) => x.classId === k.classId)
+                            : undefined;
+                        // an open class whose sheets are still submitted / verified (or published):
+                        // its teachers are kept out until they are reopened
+                        const still =
+                          canLock && canUnlock && a === 'marks' && st === 'open'
+                            ? impacts.find((x) => x.classId === k.classId)
+                            : undefined;
+                        const reopenButton = still ? (
+                          <ConfirmAction
+                            action={toggleClassLock}
+                            fields={{ examId: exam.id, classId: k.classId, area: a, to: 'open' }}
+                            label={t('reopenClass')}
+                            title={t('openClassTitle', { class: k.classCode })}
+                            confirmLabel={t('openClass')}
+                            reason={{ label: t('openClassReason') }}
+                          >
+                            {[
+                              t('openClassBody', { class: k.classCode }),
+                              still.reopen ? t('openClassReopens', { n: still.reopen }) : '',
+                              still.cards.length
+                                ? t('openClassCards', {
+                                    class: k.classCode,
+                                    cards: still.cards.map((x) => `"${x.name}"`).join(', '),
+                                  })
+                                : '',
+                            ]
+                              .filter(Boolean)
+                              .join(' ')}
+                          </ConfirmAction>
+                        ) : null;
                         return (
                           <td key={a}>
-                            {canLock ? (
-                              <form action={toggleClassLock}>
-                                <input type="hidden" name="examId" value={exam.id} />
-                                <input type="hidden" name="classId" value={k.classId} />
-                                <input type="hidden" name="area" value={a} />
-                                <input
-                                  type="hidden"
-                                  name="to"
-                                  value={st === 'locked' ? 'open' : 'lock'}
-                                />
-                                <button
-                                  type="submit"
-                                  className="ep-xlock"
-                                  aria-pressed={st === 'locked'}
-                                  aria-label={label}
-                                  disabled={blocked}
-                                  title={blocked ? t('noUnlock') : undefined}
-                                >
-                                  <span aria-hidden="true">{st === 'open' ? '🔓' : '🔒'}</span>
-                                  {stateWord[st]}
-                                </button>
-                              </form>
+                            {canLock && impact ? (
+                              <ConfirmAction
+                                action={toggleClassLock}
+                                fields={{
+                                  examId: exam.id,
+                                  classId: k.classId,
+                                  area: a,
+                                  to: 'open',
+                                }}
+                                label={`🔒 ${stateWord[st]}`}
+                                title={t('openClassTitle', { class: k.classCode })}
+                                confirmLabel={t('openClass')}
+                                reason={{ label: t('openClassReason') }}
+                              >
+                                {[
+                                  t('openClassBody', { class: k.classCode }),
+                                  impact.reopen ? t('openClassReopens', { n: impact.reopen }) : '',
+                                  impact.cards.length
+                                    ? t('openClassCards', {
+                                        class: k.classCode,
+                                        cards: impact.cards.map((x) => `"${x.name}"`).join(', '),
+                                      })
+                                    : '',
+                                ]
+                                  .filter(Boolean)
+                                  .join(' ')}
+                              </ConfirmAction>
+                            ) : canLock ? (
+                              <span
+                                style={{
+                                  display: 'inline-flex',
+                                  gap: 'var(--sp-2)',
+                                  alignItems: 'center',
+                                  flexWrap: 'wrap',
+                                }}
+                              >
+                                <form action={toggleClassLock}>
+                                  <input type="hidden" name="examId" value={exam.id} />
+                                  <input type="hidden" name="classId" value={k.classId} />
+                                  <input type="hidden" name="area" value={a} />
+                                  <input
+                                    type="hidden"
+                                    name="to"
+                                    value={st === 'locked' ? 'open' : 'lock'}
+                                  />
+                                  <button
+                                    type="submit"
+                                    className="ep-xlock"
+                                    aria-pressed={st === 'locked'}
+                                    aria-label={label}
+                                    disabled={blocked}
+                                    title={blocked ? t('noUnlock') : undefined}
+                                  >
+                                    <span aria-hidden="true">{st === 'open' ? '🔓' : '🔒'}</span>
+                                    {stateWord[st]}
+                                  </button>
+                                </form>
+                                {reopenButton}
+                              </span>
                             ) : (
                               <Badge tone={st === 'open' ? 'neutral' : 'warning'}>
                                 {stateWord[st]}

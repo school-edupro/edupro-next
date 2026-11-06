@@ -3,7 +3,7 @@ import { getTranslations } from 'next-intl/server';
 import { ConfirmAction } from '@/components/ConfirmAction';
 import { apiFetch } from '@/lib/api';
 import { toggleExamLock } from '@/lib/exam-hub-actions';
-import type { Exam, ExamStage } from '@/lib/types';
+import type { Exam, ExamStage, LockImpact } from '@/lib/types';
 import { ExamTabs, type ExamTab } from './ExamTabs';
 import { STAGE_TONE } from './StageSteps';
 
@@ -42,15 +42,15 @@ export async function ExamFrame({
     results: ['marks'],
     reports: ['marks'],
   };
-  // what unlocking reopens: the submitted and verified sheets
-  const toReopen =
+  // what unlocking reopens (the submitted and verified sheets) and takes back (published cards)
+  const impact =
     exam.marksLocked && canLock
-      ? await apiFetch<{ counts: { submitted: number; verified: number } }>(
-          `/exams/${exam.id}/entry-status`,
-        )
-          .then((r) => r.counts.submitted + r.counts.verified)
-          .catch(() => 0)
-      : 0;
+      ? await apiFetch<{ data: LockImpact[] }>(`/exams/${exam.id}/lock-impact`)
+          .then((r) => r.data)
+          .catch(() => [] as LockImpact[])
+      : [];
+  const toReopen = impact.reduce((a, x) => a + x.reopen, 0);
+  const cards = impact.flatMap((x) => x.cards.map((k) => `${x.classCode} on "${k.name}"`));
   const need = areaOf[current];
   const off = need && exam.areas ? !need.some((x) => exam.areas!.includes(x)) : false;
   const dates =
@@ -93,10 +93,10 @@ export async function ExamFrame({
                 label={exam.marksLocked ? t('unlockWhole') : t('lockWhole')}
                 title={exam.marksLocked ? t('unlockWholeTitle') : t('lockWholeTitle')}
                 confirmLabel={exam.marksLocked ? t('unlockWhole') : t('lockWhole')}
-                {...(toReopen ? { reason: { label: t('unlockReason') } } : {})}
+                {...(toReopen || cards.length ? { reason: { label: t('unlockReason') } } : {})}
               >
                 {exam.marksLocked
-                  ? `${t('unlockWholeBody', { name: exam.name })}${toReopen ? ` ${t('unlockReopens', { n: toReopen })}` : ''}`
+                  ? `${t('unlockWholeBody', { name: exam.name })}${toReopen ? ` ${t('unlockReopens', { n: toReopen })}` : ''}${cards.length ? ` ${t('unlockCards', { cards: cards.join(', ') })}` : ''}`
                   : t('lockWholeBody', { name: exam.name })}
               </ConfirmAction>
             ) : null}

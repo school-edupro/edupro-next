@@ -90,11 +90,13 @@
 - **Lock the whole exam** (at the top) and the **Entry locks** on the Overview (marks, indicators,
   remarks, attendance or health of a class) are the **school admin's** alone: coordinators and the exam
   office enter, submit, verify and send back as before, but do not lock or open. While the exam is
-  locked no one enters or changes marks. **Unlocking the whole exam** also reopens every submitted and
-  verified subject sheet (the dialog says how many and asks the reason, kept in each sheet's history),
-  so every teacher can enter again and submit again for verification; a class whose results are
-  published on a report card stays as it is (revoke the class first). A single sheet can still be
-  reopened from its tile in Marks status. After locking the whole exam, opening one class (its Marks
+  locked no one enters or changes marks. **Unlocking the whole exam**, or **opening a class's marks**,
+  lets its teachers enter again: it also reopens the submitted and verified subject sheets and takes
+  the class's published report card back (families stop seeing it until it is published again; no
+  message is sent). The dialog says how many sheets and which cards, and asks the reason (kept in each
+  sheet's history). A class that is already open but still has verified sheets or a published card shows
+  **Reopen marks** beside its lock, with the same dialog. A single sheet can still be reopened from its
+  tile in Marks status. After locking the whole exam, opening one class (its Marks
   lock on the Overview) lets that class's teachers enter while the other classes stay locked; the
   button at the top then reads **Lock the whole exam** again (the exam is no longer wholly locked).
 

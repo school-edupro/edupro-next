@@ -82,6 +82,20 @@ export class ExamStatusController {
     return this.svc.reopen(ctx, id, dto);
   }
 
+  @Get(':id/lock-impact')
+  @ApiOperation({
+    summary:
+      'What opening the exam (or a class) would reopen and take back: sheets per class, published cards',
+  })
+  @RequirePermission(EXAMS.lockManage)
+  lockImpact(
+    @ReqCtx() ctx: RequestContext,
+    @Param('id') id: string,
+    @Query() q: EntryStatusQueryDto,
+  ) {
+    return this.svc.lockImpact(ctx, id, q.classId);
+  }
+
   @Put(':id/lock')
   @ApiOperation({
     summary:

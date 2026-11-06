@@ -202,6 +202,8 @@ export const ClassLocksSchema = z.object({
   remarks: z.boolean().optional(),
   attendance: z.boolean().optional(),
   health: z.boolean().optional(),
+  /** 6 Nov 2026: why marks open again (asked when it reopens sheets or takes a card back) */
+  reason: z.string().trim().max(300).optional(),
 });
 export class ClassLocksDto extends createZodDto(ClassLocksSchema) {}
 

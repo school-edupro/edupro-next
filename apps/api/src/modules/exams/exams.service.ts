@@ -18,6 +18,7 @@ import type {
   SetPartsDto,
 } from './exams.dto';
 import { EXAMS } from './exams.dto';
+import { impactWords, reopenExamMarks, reopenImpact } from './exam-reopen';
 import { examProgress, type ExamProgress } from './exam-progress';
 import { fillExamFromSubjectMarks, followSubjectMarks } from './subject-marks-follow';
 
@@ -1128,7 +1129,11 @@ export class ExamsService {
    * Locks of one class of an exam per entry type (docs/design/65): marks (every subject of the class),
    * indicators, remarks, attendance, health. Opening any of them again needs exams.marks.unlock.
    */
-  async classLocks(ctx: RequestContext, examId: string, dto: ClassLocksDto): Promise<ExamRow> {
+  async classLocks(
+    ctx: RequestContext,
+    examId: string,
+    dto: ClassLocksDto,
+  ): Promise<ExamRow & { reopened?: number; revoked?: string[] }> {
     const tenant = requireTenant(ctx);
     const yearId = this.year(tenant);
     return this.db.tenant(tenant, async (c) => {
@@ -1151,6 +1156,24 @@ export class ExamsService {
         throw new DomainError('permission-denied', 'Opening entry again needs exams.marks.unlock', {
           status: 403,
         });
+      // 6 Nov 2026: a class's marks opened again reopen its submitted and verified sheets and take
+      // its published card back (with the reason), so its teachers can enter
+      // a locked class opened, or an open class's marks reopened on purpose (a reason sent)
+      const reopening = dto.marks === false && (marksLocked || !!dto.reason?.trim());
+      const impact = reopening ? await reopenImpact(c, examId, dto.classId) : [];
+      const reason = dto.reason?.trim() ?? '';
+      if (impact.length && reason.length < 3)
+        throw new DomainError(
+          'validation-failed',
+          `Opening ${klass.classCode} reopens ${impactWords(impact)}: give the reason`,
+          { status: 400, extra: { impact } },
+        );
+      if (impact.some((x) => x.cards.length) && !ctx.permissions?.has(EXAMS.resultPublish))
+        throw new DomainError(
+          'permission-denied',
+          'Taking a published card back needs exams.result.publish',
+          { status: 403 },
+        );
       if (dto.marks !== undefined)
         await c.query(
           `UPDATE exam_subjects SET entry_locked = $3, locked_by = CASE WHEN $3 THEN app.current_user_id() END, locked_at = CASE WHEN $3 THEN now() END
@@ -1158,6 +1181,9 @@ export class ExamsService {
           [examId, dto.classId, dto.marks],
         );
       if (dto.marks !== undefined) await this.wholeLockFollows(c, examId);
+      const done = impact.length
+        ? await reopenExamMarks(c, examId, dto.classId, reason, `Reopened with ${klass.classCode}`)
+        : null;
       await c.query(
         `UPDATE exam_classes SET indicators_locked = COALESCE($3, indicators_locked), remarks_locked = COALESCE($4, remarks_locked),
                 attendance_locked = COALESCE($5, attendance_locked), health_locked = COALESCE($6, health_locked)
@@ -1175,9 +1201,9 @@ export class ExamsService {
         action: opening ? 'exams.class.unlock' : 'exams.class.lock',
         entityType: 'exams',
         entityId: examId,
-        after: dto,
+        after: { ...dto, ...(done ? { reopened: done.reopened, revoked: done.revoked } : {}) },
       });
-      return this.findExam(c, examId, yearId);
+      return { ...(await this.findExam(c, examId, yearId)), ...(done ?? {}) };
     });
   }
 

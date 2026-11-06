@@ -266,3 +266,17 @@ submitted / verified and when, the remark, the actions (submit, verify or send b
   (`ExamsService.wholeLockFollows`, `bool_and(entry_locked)`); 0311 cleared it on exams with an open
   subject (Alpha's PT1). Test: exam-promotion-remarks (the whole exam locked, the class opened: the flag
   off and entry allowed; the class locked: the flag on again).
+- **Later (6 Nov 2026), asked again (PT1, Class VI)**: opening a class must let its teachers enter, as
+  the whole-exam unlock does, and a published class is taken back from its card (decided). One step,
+  `exam-reopen.ts`: `reopenImpact` (per class: the submitted / verified sheets, the released cards that
+  carry the exam) and `reopenExamMarks` (the card class withdrawn with the reason — the release
+  withdrawn when no class is left, no message sent — the sheets reopened and logged "Reopened with VI: …"
+  / "Reopened with the exam: …", the results worked out again). Used by `PUT /exams/:id/lock` (unlock)
+  and `PUT /exams/:id/class-locks` (marks false on a locked class, or with a reason on an open one —
+  "Reopen marks"); a reason is asked when anything reopens ("Opening VI reopens VI: 19 sheets, the card
+  "Periodic Test 1": give the reason", 400), taking a card back needs `exams.result.publish` too;
+  `GET /exams/:id/lock-impact` feeds the dialogs. The Overview: a locked class with something to reopen
+  opens through a dialog with the reason; an open class with verified sheets or a published card shows
+  Reopen marks. Tests: exam-promotion-remarks (the locked class with a verified sheet and a published
+  card: the reason asked, the card withdrawn, the sheet reopened, entry allowed; an open class reopened
+  with a reason).
