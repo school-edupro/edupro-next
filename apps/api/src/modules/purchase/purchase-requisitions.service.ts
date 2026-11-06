@@ -6,6 +6,12 @@ import { DomainError } from '../../common/errors/domain-error';
 import { requireTenant, type RequestContext } from '../../common/http/request-context';
 import { WorkflowService, type InstanceRow } from '../workflow/workflow.service';
 import { syncFlow } from './purchase-flow';
+import {
+  issuedAgainst,
+  releaseRequisition,
+  reserveRequisition,
+  storeProblems,
+} from './purchase-stock-core';
 import { draftOrdersFor } from './purchase-order-core';
 import { PurchaseVendorsService } from './purchase-vendors.service';
 import {
@@ -130,6 +136,14 @@ interface LineRow {
   est_rate: string;
   fulfil: 'buy' | 'store';
   store_note: string | null;
+  store_id: string | null;
+  store: string | null;
+  stock_tracked: boolean;
+  per_unit: string;
+  in_store: string | null;
+  reserved_in_store: string | null;
+  held: string;
+  issued: string;
   note: string | null;
   vendor_id: string | null;
   vendor: string | null;
@@ -409,6 +423,10 @@ export class PurchaseRequisitionsService implements OnModuleInit {
       await c.query<LineRow>(
         `SELECT l.id::text, l.seq, l.item_id::text, i.code AS item_code, i.name AS item, l.free_text, l.quantity::text,
                 l.uom_id::text, u.code AS uom, u.decimals, l.est_rate::text, l.fulfil, l.store_note, l.note,
+                l.store_id::text, st.name AS store, COALESCE(i.stock_tracked, false) AS stock_tracked,
+                COALESCE(i.stock_per_unit, 1)::text AS per_unit, sb.qty::text AS in_store, sb.reserved::text AS reserved_in_store,
+                COALESCE((SELECT sum(r.qty - r.issued_qty) FROM stock_reservations r WHERE r.requisition_line_id = l.id AND r.status = 'open'), 0)::text AS held,
+                COALESCE((SELECT sum(r.issued_qty) FROM stock_reservations r WHERE r.requisition_line_id = l.id), 0)::text AS issued,
                 l.vendor_id::text, v.legal_name AS vendor, v.status AS vendor_status, l.rate::text, l.gst_rate::text,
                 l.choice_reason, l.contract_id::text,
                 COALESCE(i.gst_rate, h.gst_rate)::text AS item_gst
@@ -417,6 +435,8 @@ export class PurchaseRequisitionsService implements OnModuleInit {
            LEFT JOIN purchase_hsn h ON h.id = i.hsn_id
            JOIN purchase_uoms u ON u.id = l.uom_id
            LEFT JOIN vendors v ON v.id = l.vendor_id
+           LEFT JOIN stores st ON st.id = l.store_id
+           LEFT JOIN stock_balances sb ON sb.store_id = l.store_id AND sb.item_id = l.item_id
           WHERE l.requisition_id = $1 ORDER BY l.seq`,
         [id],
       )
@@ -530,12 +550,23 @@ export class PurchaseRequisitionsService implements OnModuleInit {
     const out: Array<{ key: string; label: string; met: boolean }> = [];
     const add = (key: string, label: string, met: boolean) => out.push({ key, label, met });
     add('lines', 'At least one line', lines.length > 0);
-    if (lines.some((l) => l.fulfil === 'store'))
+    if (lines.some((l) => l.fulfil === 'store')) {
       add(
         'store',
-        'Every line issued from the store says what is issued',
-        lines.filter((l) => l.fulfil === 'store').every((l) => !!l.store_note),
+        'Every line issued from the store names its store (or, for an item not kept in stock, says what is issued)',
+        lines
+          .filter((l) => l.fulfil === 'store')
+          .every((l) => (l.stock_tracked ? !!l.store_id : !!l.store_id || !!l.store_note)),
       );
+      const short = await storeProblems(c, id);
+      add(
+        'stock',
+        short.length
+          ? `Enough free stock for the lines from the store (${short.join('; ')})`
+          : 'Enough free stock for the lines from the store (it is reserved when sent)',
+        short.length === 0,
+      );
+    }
     if (buy.length) {
       const unpriced = buy.filter((l) => !l.vendor_id || l.rate === null);
       add(
@@ -721,6 +752,20 @@ export class PurchaseRequisitionsService implements OnModuleInit {
             estRate: Number(l.est_rate),
             fulfil: l.fulfil,
             storeNote: l.store_note,
+            storeId: l.store_id,
+            store: l.store,
+            stockTracked: l.stock_tracked,
+            /** in the store unit: in hand, reserved (by everyone), held for this line, issued against it */
+            stock:
+              l.fulfil === 'store' && l.store_id
+                ? {
+                    perUnit: Number(l.per_unit),
+                    inStore: Number(l.in_store ?? 0),
+                    reserved: Number(l.reserved_in_store ?? 0),
+                    held: Number(l.held),
+                    issued: Number(l.issued),
+                  }
+                : null,
             note: l.note,
             vendorId: l.vendor_id,
             vendor: l.vendor,
@@ -1008,8 +1053,9 @@ export class PurchaseRequisitionsService implements OnModuleInit {
         status: 400,
       });
     await c.query(
-      `INSERT INTO purchase_requisition_lines (school_id, requisition_id, seq, item_id, free_text, quantity, uom_id, est_rate, fulfil, store_note, note)
-       VALUES (app.current_school_id(), $1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+      `INSERT INTO purchase_requisition_lines (school_id, requisition_id, seq, item_id, free_text, quantity, uom_id, est_rate, fulfil, store_note, note,
+                                               store_id)
+       VALUES (app.current_school_id(), $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
       [
         pr,
         seq,
@@ -1021,6 +1067,7 @@ export class PurchaseRequisitionsService implements OnModuleInit {
         l.fulfil,
         l.fulfil === 'store' ? (l.storeNote ?? null) : null,
         l.note ?? null,
+        l.fulfil === 'store' ? (l.storeId ?? null) : null,
       ],
     );
   }
@@ -1086,6 +1133,7 @@ export class PurchaseRequisitionsService implements OnModuleInit {
                     free_text = CASE WHEN $3::bigint IS NOT NULL THEN NULL ELSE COALESCE($4::text, free_text) END,
                     quantity = $5, uom_id = COALESCE($6::bigint, uom_id), est_rate = COALESCE($7::numeric, est_rate), fulfil = $8::text,
                     store_note = CASE WHEN $8::text = 'store' THEN $9::text END, note = $10::text,
+                    store_id = CASE WHEN $8::text = 'store' THEN $11::bigint END,
                     vendor_id = CASE WHEN $8::text = 'store' THEN NULL ELSE vendor_id END,
                     rate = CASE WHEN $8::text = 'store' THEN NULL ELSE rate END,
                     gst_rate = CASE WHEN $8::text = 'store' THEN NULL ELSE gst_rate END,
@@ -1102,6 +1150,7 @@ export class PurchaseRequisitionsService implements OnModuleInit {
               l.fulfil,
               l.storeNote ?? null,
               note,
+              l.storeId ?? null,
             ],
           );
         } else await this.insertLine(c, id, seq, l);
@@ -1518,6 +1567,8 @@ export class PurchaseRequisitionsService implements OnModuleInit {
           `Who approves ${flow.department}'s Purchase Requisitions is not set: ask the school admin (Purchase → Who approves)`,
           { status: 409 },
         );
+      // what comes from the store is held for it while it is decided
+      await reserveRequisition(c, prId);
       const instance = await this.workflow.start(c, ctx, {
         definitionCode: flow.code,
         entityType: 'purchase_requisition',
@@ -1580,6 +1631,7 @@ export class PurchaseRequisitionsService implements OnModuleInit {
           `UPDATE purchase_requisitions SET status = 'sent_back', decision_note = $2, decided_at = now(), updated_at = now() WHERE id = $1`,
           [prId, dto.note],
         );
+        await releaseRequisition(c, prId, `${pr.number} was sent back`);
         await this.audit.stage(ctx, c, {
           action: 'purchase.requisition.send_back',
           entityType: 'purchase_requisitions',
@@ -1639,6 +1691,7 @@ export class PurchaseRequisitionsService implements OnModuleInit {
         [id, note],
       );
       await this.release(c, id, `${pr.number} was rejected${note ? `: ${note}` : ''}`);
+      await releaseRequisition(c, id, `${pr.number} was rejected`);
       return;
     }
     await c.query(
@@ -1656,7 +1709,7 @@ export class PurchaseRequisitionsService implements OnModuleInit {
                            LEFT JOIN purchase_requisition_lines rl ON rl.id = src.requisition_line_id
                            LEFT JOIN purchase_requisitions r ON r.id = rl.requisition_id
                            WHERE il.indent_id = pi.id AND (rl.fulfil IS DISTINCT FROM 'store' OR r.status <> 'approved'))`,
-      [id, `Issued from the store (${pr.number})`],
+      [id, `From the store on ${pr.number}`],
     );
     // the draft POs: one per chosen vendor, made in the name of the requisition's maker
     const maker = (
@@ -1711,6 +1764,7 @@ export class PurchaseRequisitionsService implements OnModuleInit {
         [prId, dto.reason],
       );
       const released = await this.release(c, prId, `${pr.number} was cancelled: ${dto.reason}`);
+      await releaseRequisition(c, prId, `${pr.number} was cancelled`);
       await this.audit.stage(ctx, c, {
         action: 'purchase.requisition.cancel',
         entityType: 'purchase_requisitions',
@@ -1744,6 +1798,13 @@ export class PurchaseRequisitionsService implements OnModuleInit {
           'A purchase order of it has gone for approval or to the vendor: amend or cancel that order instead',
           { status: 409 },
         );
+      if (await issuedAgainst(c, prId))
+        throw new DomainError(
+          'purchase.requisition_closed',
+          'The store has issued against it already: raise another requisition for the change',
+          { status: 409 },
+        );
+      await releaseRequisition(c, prId, `${pr.number} was reopened`);
       // its draft POs are dropped; new ones are drafted when it is approved again
       await c.query(
         `UPDATE purchase_orders SET status = 'cancelled', decision_note = 'The requisition was reopened', updated_at = now()
@@ -1817,16 +1878,33 @@ export class PurchaseRequisitionsService implements OnModuleInit {
         decimals: boolean;
         rate: string | null;
         gst: string | null;
+        stock_tracked: boolean;
+        per_unit: string;
+        store_uom: string | null;
       }>(
         `SELECT i.id::text, i.code, i.name, c.name AS category, u.id::text AS uom_id, u.code AS uom, u.decimals,
                 COALESCE((SELECT rc.rate FROM purchase_rate_contracts rc JOIN vendors v ON v.id = rc.vendor_id AND v.status = 'active'
                            WHERE rc.item_id = i.id AND rc.status = 'active'
                              AND (now() AT TIME ZONE 'Asia/Kolkata')::date BETWEEN rc.valid_from AND rc.valid_to LIMIT 1),
                          i.last_purchase_rate)::text AS rate,
-                COALESCE(i.gst_rate, h.gst_rate)::text AS gst
+                COALESCE(i.gst_rate, h.gst_rate)::text AS gst, i.stock_tracked, i.stock_per_unit::text AS per_unit,
+                su.code AS store_uom
            FROM purchase_items i JOIN purchase_item_categories c ON c.id = i.category_id JOIN purchase_uoms u ON u.id = i.uom_id
            LEFT JOIN purchase_hsn h ON h.id = i.hsn_id
+           LEFT JOIN purchase_uoms su ON su.id = i.stock_uom_id
           WHERE i.status = 'active' ORDER BY c.name, i.name LIMIT 5000`,
+      );
+      // the stores and what each holds (in the store unit), for lines issued from the store
+      const stores = await c.query<{ id: string; code: string; name: string }>(
+        `SELECT id::text, code, name FROM stores WHERE status = 'active' ORDER BY (kind = 'main') DESC, name`,
+      );
+      const stock = await c.query<{
+        store_id: string;
+        item_id: string;
+        qty: string;
+        reserved: string;
+      }>(
+        `SELECT store_id::text, item_id::text, qty::text, reserved::text FROM stock_balances WHERE qty > 0 OR reserved > 0`,
       );
       const uoms = await c.query<{ id: string; code: string; name: string; decimals: boolean }>(
         `SELECT id::text, code, name, decimals FROM purchase_uoms WHERE status = 'active' ORDER BY code`,
@@ -1852,6 +1930,16 @@ export class PurchaseRequisitionsService implements OnModuleInit {
           decimals: x.decimals,
           rate: x.rate === null ? null : Number(x.rate),
           gstRate: x.gst === null ? null : Number(x.gst),
+          stockTracked: x.stock_tracked,
+          perUnit: Number(x.per_unit),
+          storeUom: x.store_uom ?? x.uom,
+        })),
+        stores: stores.rows,
+        stock: stock.rows.map((b) => ({
+          storeId: b.store_id,
+          itemId: b.item_id,
+          qty: Number(b.qty),
+          reserved: Number(b.reserved),
         })),
         uoms: uoms.rows,
         vendors: vendors.rows.map((v) => ({

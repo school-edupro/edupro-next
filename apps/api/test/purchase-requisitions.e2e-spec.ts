@@ -436,13 +436,16 @@ describe('purchase requisitions (e2e)', () => {
       lines: [{ id: line.id, quantity: 5, fulfil: 'store' }],
     });
     expect(bad.statusCode).toBe(400);
+    // a kept-in-stock item comes from a store holding it: 8 reams in the main store
+    const main = (await call(office, 'GET', '/purchase/stores')).json().data[0].id as string;
+    await call(office, 'POST', `/purchase/stores/${main}/opening`, {
+      lines: [{ itemId: ids.PAPER, qty: 8, rate: 250 }],
+    });
     expect(
       (
         await call(office, 'PUT', `/purchase/requisitions/${ids.pr4!}`, {
           purpose: pr.purpose,
-          lines: [
-            { id: line.id, quantity: 5, fulfil: 'store', storeNote: '5 reams from the stock room' },
-          ],
+          lines: [{ id: line.id, quantity: 5, fulfil: 'store', storeId: main }],
         })
       ).statusCode,
     ).toBe(200);
@@ -462,7 +465,7 @@ describe('purchase requisitions (e2e)', () => {
     await call(hod, 'POST', `/purchase/requisitions/${ids.pr4!}/decide`, { action: 'approve' });
     expect((await call(office, 'GET', `/purchase/indents/${ids.D!}`)).json()).toMatchObject({
       route: 'closed',
-      bypassNote: expect.stringContaining('Issued from the store'),
+      bypassNote: expect.stringContaining('From the store'),
     });
     // rejected: its indent waits for a PR again, with why
     ids.E = await indent('Science', teacher, [[ids.PEN!, null, 10, 10]]);

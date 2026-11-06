@@ -640,3 +640,35 @@ export interface ReceiptDetail extends ReceiptRow {
   }>;
   can: { inspect: boolean; cancel: boolean };
 }
+
+// ---- phase 2, part 8: issues to acknowledge; my stores (docs/design/84) -----------------------------
+export interface IssueRow {
+  id: string;
+  number: string;
+  kindLabel: string;
+  status: 'issued' | 'acknowledged';
+  store: string;
+  department: string;
+  indent: string | null;
+  takenBy: string | null;
+  purpose: string | null;
+  issuedOn: string;
+  issuedBy: string | null;
+  acknowledgedAt: string | null;
+  acknowledgedBy: string | null;
+  ackNote: string | null;
+  lines: number;
+  value: number;
+}
+export interface IssueDetail extends IssueRow {
+  lineItems: Array<{
+    id: string;
+    itemCode: string;
+    item: string;
+    unit: string;
+    qty: number;
+    batch: string | null;
+    returned: number;
+  }>;
+  can: { acknowledge: boolean };
+}

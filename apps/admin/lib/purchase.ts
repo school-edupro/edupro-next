@@ -480,6 +480,17 @@ export interface RequisitionLine {
   estRate: number;
   fulfil: 'buy' | 'store';
   storeNote: string | null;
+  storeId: string | null;
+  store: string | null;
+  stockTracked: boolean;
+  /** in the store unit: in hand, reserved by everyone, held for this line, issued against it */
+  stock: {
+    perUnit: number;
+    inStore: number;
+    reserved: number;
+    held: number;
+    issued: number;
+  } | null;
   note: string | null;
   vendorId: string | null;
   vendor: string | null;
@@ -589,7 +600,13 @@ export interface RequisitionFormLists {
     decimals: boolean;
     rate: number | null;
     gstRate: number | null;
+    stockTracked: boolean;
+    perUnit: number;
+    storeUom: string;
   }>;
+  stores: Array<{ id: string; code: string; name: string }>;
+  /** in the store unit */
+  stock: Array<{ storeId: string; itemId: string; qty: number; reserved: number }>;
   uoms: Array<{ id: string; code: string; name: string; decimals: boolean }>;
   vendors: Array<{
     id: string;
@@ -708,6 +725,7 @@ export interface OrderLine {
   received: number;
   accepted: number;
   rejected: number;
+  returned: number;
 }
 
 export interface OrderDetail extends OrderRow {
@@ -864,7 +882,13 @@ export type PurchaseReport =
   | 'gst_summary'
   | 'msme_vendors'
   | 'grn_register'
-  | 'pending_deliveries';
+  | 'pending_deliveries'
+  | 'consumption'
+  | 'slow_moving'
+  | 'expiring'
+  | 'below_reorder'
+  | 'transfers'
+  | 'count_differences';
 
 type Filter = 'period' | 'department' | 'vendor' | 'item' | 'status';
 /** Each report: what it shows and the filters it takes (status: the choices). */
@@ -975,6 +999,42 @@ export const REPORTS: Record<
     help: 'Lines of approved and sent orders still to come (by PO date): ordered, received, accepted, rejected, still to come, the delivery date and days late.',
     filters: ['period', 'department', 'vendor', 'item', 'status'],
     status: { late: 'Late only' },
+  },
+  consumption: {
+    help: 'What each department was issued in the period, by item: issues, quantity and value, less what came back to the store.',
+    filters: ['period', 'department', 'item'],
+  },
+  slow_moving: {
+    help: 'Items in stock with no issue for a while (dead stock when never issued): in hand, value, the last issue and receipt.',
+    filters: ['item', 'status'],
+    status: {
+      n90: 'No issue in 90 days',
+      n180: 'No issue in 180 days',
+      n365: 'No issue in a year',
+    },
+  },
+  expiring: {
+    help: 'Batches in stock expiring soon (or already expired): store, batch, expiry, days left, quantity and value.',
+    filters: ['item', 'status'],
+    status: {
+      d30: 'Within 30 days',
+      d60: 'Within 60 days',
+      d90: 'Within 90 days',
+      expired: 'Expired already',
+    },
+  },
+  below_reorder: {
+    help: 'Items whose free stock (in hand less reserved) is at or below the store’s reorder level, with what is on order.',
+    filters: ['item'],
+  },
+  transfers: {
+    help: 'Transfers between stores sent in the period: from, to, value, status; in transit until received.',
+    filters: ['period', 'status'],
+    status: { in_transit: 'In transit', received: 'Received', cancelled: 'Cancelled' },
+  },
+  count_differences: {
+    help: 'Differences found by approved physical counts: book, counted, difference, value and the reason.',
+    filters: ['period', 'item'],
   },
 };
 
@@ -1091,6 +1151,8 @@ export interface StockRow {
 
 export interface StoreDetail extends Store {
   stock: StockRow[];
+  counts: Array<{ id: string; number: string; status: CountStatus; countedOn: string }>;
+  countedThisYear: boolean;
   can: { manage: boolean; operate: boolean };
 }
 
@@ -1290,4 +1352,261 @@ export interface ToReceiveRow {
   goods: boolean;
   services: boolean;
   madeByMe: boolean;
+}
+
+// ---- phase 2, part 8: issues, returns, transfers, counts (docs/design/84) ---------------------------
+export interface IssueRow {
+  id: string;
+  number: string;
+  kind: 'receipt' | 'indent' | 'counter';
+  kindLabel: string;
+  status: 'issued' | 'acknowledged';
+  storeId: string;
+  store: string;
+  departmentId: string;
+  department: string;
+  indentId: string | null;
+  indent: string | null;
+  requisitionId: string | null;
+  requisition: string | null;
+  receiptId: string | null;
+  receipt: string | null;
+  takenById: string | null;
+  takenBy: string | null;
+  purpose: string | null;
+  issuedOn: string;
+  issuedBy: string | null;
+  ackOnPaper: boolean;
+  acknowledgedAt: string | null;
+  acknowledgedBy: string | null;
+  ackNote: string | null;
+  lines: number;
+  value: number;
+  receiver: boolean;
+}
+export interface IssueDetail extends IssueRow {
+  lineItems: Array<{
+    id: string;
+    itemId: string;
+    itemCode: string;
+    item: string;
+    unit: string;
+    qty: number;
+    rate: number;
+    value: number;
+    batch: string | null;
+    returned: number;
+    returnable: number;
+    indent: string | null;
+  }>;
+  returns: Array<{
+    id: string;
+    number: string;
+    returnedOn: string;
+    lines: number;
+    by: string | null;
+  }>;
+  can: { acknowledge: boolean; acknowledgeOnPaper: boolean; returnToStore: boolean };
+}
+export interface ToIssueGroup {
+  requisitionId: string;
+  requisition: string;
+  storeId: string;
+  store: string;
+  department: string | null;
+  purpose: string | null;
+  indents: string | null;
+  approvedAt: string | null;
+  lines: Array<{
+    reservationId: string;
+    itemId: string;
+    itemCode: string;
+    item: string;
+    unit: string;
+    tracksBatch: boolean;
+    reserved: number;
+    issued: number;
+    toIssue: number;
+    inHand: number;
+  }>;
+}
+export interface IssueFormLists {
+  stores: Array<{ id: string; code: string; name: string }>;
+  stock: Array<{
+    storeId: string;
+    itemId: string;
+    code: string;
+    name: string;
+    unit: string;
+    tracksBatch: boolean;
+    qty: number;
+    reserved: number;
+    free: number;
+  }>;
+  batches: Array<{
+    storeId: string;
+    itemId: string;
+    batch: string;
+    expiry: string | null;
+    qty: number;
+  }>;
+  departments: Array<{ id: string; name: string }>;
+  staff: Array<{ id: string; code: string; name: string; department: string | null }>;
+}
+export interface ReturnRow {
+  id: string;
+  number: string;
+  kind: 'to_store' | 'to_vendor';
+  store: string;
+  returnedOn: string;
+  department: string | null;
+  vendor: string | null;
+  doc: string | null;
+  docId: string | null;
+  lines: number;
+  value: number;
+  by: string | null;
+}
+export interface ReturnDetail {
+  id: string;
+  number: string;
+  kind: 'to_store' | 'to_vendor';
+  store: string;
+  returnedOn: string;
+  department: string | null;
+  vendor: string | null;
+  issue: string | null;
+  issueId: string | null;
+  order: string | null;
+  orderId: string | null;
+  dispatch: string | null;
+  note: string | null;
+  by: string | null;
+  lineItems: Array<{
+    id: string;
+    item: string;
+    unit: string;
+    source: 'issue' | 'rejected' | 'stock';
+    condition: 'unused' | 'damaged' | null;
+    qty: number;
+    rate: number;
+    value: number;
+    batch: string | null;
+    reason: string | null;
+    replacement: boolean;
+    receipt: string | null;
+  }>;
+}
+export interface Returnable {
+  order: { id: string; label: string; vendor: string; status: string };
+  lines: Array<{
+    receiptLineId: string;
+    receipt: string;
+    receiptId: string;
+    store: string;
+    storeId: string;
+    item: string;
+    unit: string;
+    batch: string | null;
+    rejected: number;
+    rejectReason: string | null;
+    rejectedLeft: number;
+    accepted: number;
+    stockLeft: number;
+    inStore: number;
+  }>;
+}
+export type TransferStatus = 'in_transit' | 'received' | 'cancelled';
+export const TRANSFER_STATUS: Record<
+  TransferStatus,
+  { label: string; tone: 'success' | 'warning' | 'neutral' | 'danger' }
+> = {
+  in_transit: { label: 'In transit', tone: 'warning' },
+  received: { label: 'Received', tone: 'success' },
+  cancelled: { label: 'Cancelled', tone: 'neutral' },
+};
+export interface TransferRow {
+  id: string;
+  number: string;
+  status: TransferStatus;
+  fromStoreId: string;
+  fromStore: string;
+  toStoreId: string;
+  toStore: string;
+  sentOn: string;
+  receivedOn: string | null;
+  note: string | null;
+  receiveNote: string | null;
+  sentBy: string | null;
+  receivedBy: string | null;
+  lines: number;
+  value: number;
+  receiver: boolean;
+}
+export interface TransferDetail extends TransferRow {
+  lineItems: Array<{
+    id: string;
+    itemId: string;
+    itemCode: string;
+    item: string;
+    unit: string;
+    qty: number;
+    rate: number;
+    value: number;
+    batch: string | null;
+    expiry: string | null;
+  }>;
+  can: { receive: boolean; cancel: boolean };
+}
+export type CountStatus = 'counting' | 'submitted' | 'approved' | 'cancelled';
+export const COUNT_STATUS: Record<
+  CountStatus,
+  { label: string; tone: 'success' | 'warning' | 'neutral' | 'danger' | 'info' }
+> = {
+  counting: { label: 'Counting', tone: 'info' },
+  submitted: { label: 'Waiting for approval', tone: 'warning' },
+  approved: { label: 'Approved: adjusted', tone: 'success' },
+  cancelled: { label: 'Cancelled', tone: 'neutral' },
+};
+export interface CountRow {
+  id: string;
+  number: string;
+  status: CountStatus;
+  storeId: string;
+  store: string;
+  categoryId: string | null;
+  category: string | null;
+  countedOn: string;
+  countedBy: string | null;
+  note: string | null;
+  submittedAt: string | null;
+  decidedAt: string | null;
+  decidedBy: string | null;
+  decisionNote: string | null;
+  startedBy: string | null;
+  lines: number;
+  counted: number;
+  differences: number;
+  value: number;
+}
+export interface CountDetail extends CountRow {
+  lineItems: Array<{
+    id: string;
+    itemId: string;
+    itemCode: string;
+    item: string;
+    category: string;
+    unit: string;
+    tracksBatch: boolean;
+    batch: string | null;
+    expiry: string | null;
+    book: number | null;
+    counted: number | null;
+    difference: number | null;
+    reason: string | null;
+    added: boolean;
+    rate: number | null;
+    value: number | null;
+  }>;
+  can: { count: boolean; submit: boolean; decide: boolean; cancel: boolean };
 }

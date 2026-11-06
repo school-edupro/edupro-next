@@ -9,6 +9,7 @@ import { STORAGE_DRIVER } from '../files/storage';
 import { WorkflowService, type InstanceRow } from '../workflow/workflow.service';
 import { syncFlow } from './purchase-flow';
 import { purchaseReceiptPdf, type ReceiptPdfData } from './purchase-receipt-pdf';
+import { postIssues, shareAmongIndents, type IssueShare } from './purchase-stock-core';
 import { postStock, PurchaseStoresService } from './purchase-stores.service';
 import {
   PURCHASE,
@@ -134,6 +135,7 @@ interface OrderLine {
   received_qty: string;
   accepted_qty: string;
   rejected_qty: string;
+  returned_qty: string;
   waiting: string;
   taxable: string;
   gst: string;
@@ -237,7 +239,7 @@ export class PurchaseReceiptsService implements OnModuleInit {
     return (
       await c.query<OrderLine>(
         `SELECT l.id::text, l.seq, l.description, l.item_id::text, i.code AS item_code, i.item_type, l.hsn_code, l.quantity::text,
-                u.code AS uom, l.received_qty::text, l.accepted_qty::text, l.rejected_qty::text,
+                u.code AS uom, l.received_qty::text, l.accepted_qty::text, l.rejected_qty::text, l.returned_qty::text,
                 COALESCE((SELECT sum(gl.received_qty) FROM goods_receipt_lines gl JOIN goods_receipts g ON g.id = gl.receipt_id
                            WHERE gl.order_line_id = l.id AND g.status = 'inspecting'), 0)::text AS waiting,
                 l.taxable::text, (l.cgst + l.sgst + l.igst + l.rcm_gst)::text AS gst,
@@ -261,7 +263,9 @@ export class PurchaseReceiptsService implements OnModuleInit {
   static async refreshOrder(c: PoolClient, orderId: string) {
     await c.query(
       `UPDATE purchase_order_lines l
-          SET received_qty = COALESCE(s.rec, 0), accepted_qty = COALESCE(s.acc, 0), rejected_qty = COALESCE(s.rej, 0)
+          SET received_qty = COALESCE(s.rec, 0), accepted_qty = COALESCE(s.acc, 0), rejected_qty = COALESCE(s.rej, 0),
+              returned_qty = COALESCE((SELECT sum(rl.qty) FROM stock_return_lines rl JOIN goods_receipt_lines gl2 ON gl2.id = rl.receipt_line_id
+                                        WHERE gl2.order_line_id = l.id AND rl.source = 'stock' AND rl.replacement), 0)
          FROM (SELECT ol.id,
                       sum(gl.received_qty) FILTER (WHERE g.status <> 'cancelled') AS rec,
                       sum(gl.accepted_qty) FILTER (WHERE g.status IN ('accepted', 'rejected')) AS acc,
@@ -274,9 +278,19 @@ export class PurchaseReceiptsService implements OnModuleInit {
       [orderId],
     );
     const q = (
-      await c.query<{ any_in: boolean; all_in: boolean; all_accepted: boolean; status: string }>(
-        `SELECT bool_or(l.received_qty > 0) AS any_in, bool_and(l.received_qty - l.rejected_qty >= l.quantity) AS all_in,
-                bool_and(l.accepted_qty >= l.quantity) AS all_accepted, max(po.status) AS status
+      await c.query<{
+        any_in: boolean;
+        all_in: boolean;
+        all_accepted: boolean;
+        status: string;
+        auto_closed: boolean;
+        sent: boolean;
+      }>(
+        `SELECT bool_or(l.received_qty > 0) AS any_in,
+                bool_and(l.received_qty - l.rejected_qty - l.returned_qty >= l.quantity) AS all_in,
+                bool_and(l.accepted_qty - l.returned_qty >= l.quantity) AS all_accepted, max(po.status) AS status,
+                bool_and(po.closed_note IS NOT DISTINCT FROM 'Received and accepted in full') AS auto_closed,
+                bool_and(po.sent_at IS NOT NULL) AS sent
            FROM purchase_order_lines l JOIN purchase_orders po ON po.id = l.order_id WHERE l.order_id = $1`,
         [orderId],
       )
@@ -293,6 +307,14 @@ export class PurchaseReceiptsService implements OnModuleInit {
         [orderId],
       );
       return { closed: true };
+    }
+    // goods sent back for a replacement reopen a PO that had closed by itself
+    if (!q.all_accepted && q.status === 'closed' && q.auto_closed) {
+      await c.query(
+        `UPDATE purchase_orders SET status = $2, closed_at = NULL, closed_note = NULL, updated_at = now() WHERE id = $1`,
+        [orderId, q.sent ? 'sent' : 'approved'],
+      );
+      return { closed: false, reopened: true };
     }
     return { closed: false };
   }
@@ -373,18 +395,18 @@ export class PurchaseReceiptsService implements OnModuleInit {
         `SELECT po.id::text, po.number, po.revision, v.legal_name AS vendor, d.name AS department, po.po_date::text,
                 po.delivery_date::text, po.receipt_status,
                 (SELECT count(*)::int FROM purchase_order_lines l WHERE l.order_id = po.id) AS lines,
-                (SELECT count(*)::int FROM purchase_order_lines l WHERE l.order_id = po.id AND l.received_qty - l.rejected_qty < l.quantity) AS open_lines,
+                (SELECT count(*)::int FROM purchase_order_lines l WHERE l.order_id = po.id AND l.received_qty - l.rejected_qty - l.returned_qty < l.quantity) AS open_lines,
                 EXISTS (SELECT 1 FROM purchase_order_lines l LEFT JOIN purchase_items i ON i.id = l.item_id
-                         WHERE l.order_id = po.id AND l.received_qty - l.rejected_qty < l.quantity
+                         WHERE l.order_id = po.id AND l.received_qty - l.rejected_qty - l.returned_qty < l.quantity
                            AND NOT (COALESCE(i.item_type = 'service', false) OR (l.item_id IS NULL AND COALESCE(l.hsn_code LIKE '99%', false)))) AS goods,
                 EXISTS (SELECT 1 FROM purchase_order_lines l LEFT JOIN purchase_items i ON i.id = l.item_id
-                         WHERE l.order_id = po.id AND l.received_qty - l.rejected_qty < l.quantity
+                         WHERE l.order_id = po.id AND l.received_qty - l.rejected_qty - l.returned_qty < l.quantity
                            AND (COALESCE(i.item_type = 'service', false) OR (l.item_id IS NULL AND COALESCE(l.hsn_code LIKE '99%', false)))) AS services,
                 (po.created_by = app.current_user_id()) AS mine
            FROM purchase_orders po JOIN vendors v ON v.id = po.vendor_id LEFT JOIN departments d ON d.id = po.department_id
           WHERE po.status IN ('approved', 'sent')
             AND NOT EXISTS (SELECT 1 FROM purchase_orders n WHERE n.supersedes_id = po.id AND n.status NOT IN ('rejected', 'cancelled'))
-            AND EXISTS (SELECT 1 FROM purchase_order_lines l WHERE l.order_id = po.id AND l.received_qty - l.rejected_qty < l.quantity)
+            AND EXISTS (SELECT 1 FROM purchase_order_lines l WHERE l.order_id = po.id AND l.received_qty - l.rejected_qty - l.returned_qty < l.quantity)
             AND ($1::text IS NULL OR po.number ILIKE '%' || $1 || '%' OR v.legal_name ILIKE '%' || $1 || '%')
           ORDER BY po.delivery_date NULLS LAST, po.po_date, po.id LIMIT 300`,
         [q.q ?? null],
@@ -456,7 +478,7 @@ export class PurchaseReceiptsService implements OnModuleInit {
         mainStoreId: mainId,
         stores: stores.rows,
         lines: lines.map((l) => {
-          const net = Number(l.received_qty) - Number(l.rejected_qty);
+          const net = Number(l.received_qty) - Number(l.rejected_qty) - Number(l.returned_qty);
           const qty = Number(l.quantity);
           return {
             id: l.id,
@@ -625,7 +647,7 @@ export class PurchaseReceiptsService implements OnModuleInit {
       }
       for (const [id, got] of sum) {
         const ol = byId.get(id)!;
-        const net = Number(ol.received_qty) - Number(ol.rejected_qty);
+        const net = Number(ol.received_qty) - Number(ol.rejected_qty) - Number(ol.returned_qty);
         const max = round(Number(ol.quantity) * (1 + tol / 100) - net);
         if (got > max + 1e-9)
           problems.push(
@@ -1257,96 +1279,44 @@ export class PurchaseReceiptsService implements OnModuleInit {
    * before); the rest stays in the store.
    */
   private async issueToIndents(c: PoolClient, receiptId: string, storeId: string, day: string) {
-    const rows = await c.query<{
-      receipt_line_id: string;
+    const lines = await c.query<{
+      requisition_line_id: string;
       item_id: string;
       description: string;
       per_unit: string;
       accepted: string;
       batch_no: string | null;
-      indent_line_id: string;
-      indent_id: string;
-      department_id: string;
-      asked: string;
-      issued: string;
-      taker: string | null;
-      purpose: string;
     }>(
-      `SELECT gl.id::text AS receipt_line_id, ol.item_id::text, ol.description, i.stock_per_unit::text AS per_unit,
-              gl.accepted_qty::text AS accepted, gl.batch_no, src.indent_line_id::text, pil.indent_id::text, pi.department_id::text,
-              src.quantity::text AS asked,
-              COALESCE((SELECT sum(sil.qty) FROM stock_issue_lines sil WHERE sil.indent_line_id = src.indent_line_id), 0)::text AS issued,
-              COALESCE(pi.on_behalf_employee_id, (SELECT e.id FROM employees e WHERE e.user_id = pi.raised_by AND e.deleted_at IS NULL LIMIT 1))::text AS taker,
-              pi.purpose
+      `SELECT ol.requisition_line_id::text, ol.item_id::text, ol.description, i.stock_per_unit::text AS per_unit,
+              gl.accepted_qty::text AS accepted, gl.batch_no
          FROM goods_receipt_lines gl
-         JOIN purchase_order_lines ol ON ol.id = gl.order_line_id
+         JOIN purchase_order_lines ol ON ol.id = gl.order_line_id AND ol.requisition_line_id IS NOT NULL
          JOIN purchase_items i ON i.id = ol.item_id AND i.stock_tracked
-         JOIN purchase_requisition_sources src ON src.requisition_line_id = ol.requisition_line_id
-         JOIN purchase_indent_lines pil ON pil.id = src.indent_line_id
-         JOIN purchase_indents pi ON pi.id = pil.indent_id AND pi.status = 'approved'
-        WHERE gl.receipt_id = $1 AND gl.accepted_qty > 0
-        ORDER BY gl.seq, pi.id, pil.seq`,
+        WHERE gl.receipt_id = $1 AND gl.accepted_qty > 0 ORDER BY gl.seq`,
       [receiptId],
     );
-    const left = new Map<string, number>();
-    const issues = new Map<string, string>();
-    const out: string[] = [];
-    for (const r of rows.rows) {
-      const per = Number(r.per_unit);
-      if (!left.has(r.receipt_line_id))
-        left.set(r.receipt_line_id, round(Number(r.accepted) * per));
-      const avail = left.get(r.receipt_line_id)!;
-      const need = round(Number(r.asked) * per - Number(r.issued));
-      const take = round(Math.min(avail, need));
-      if (take <= 0) continue;
-      left.set(r.receipt_line_id, round(avail - take));
-      let issueId = issues.get(r.indent_id);
-      if (!issueId) {
-        const number = (
-          await c.query<{ n: string }>(`SELECT app.purchase_next_number('issue') AS n`)
-        ).rows[0]!.n;
-        issueId = (
-          await c.query<{ id: string }>(
-            `INSERT INTO stock_issues (school_id, number, store_id, department_id, kind, indent_id, receipt_id, taken_by_employee_id,
-                                       purpose, issued_on, created_by)
-             VALUES (app.current_school_id(), $1, $2, $3, 'receipt', $4, $5, $6, $7, $8, app.current_user_id()) RETURNING id::text`,
-            [
-              number,
-              storeId,
-              r.department_id,
-              r.indent_id,
-              receiptId,
-              r.taker,
-              r.purpose.slice(0, 300),
-              day,
-            ],
-          )
-        ).rows[0]!.id;
-        issues.set(r.indent_id, issueId);
-        out.push(number);
-      }
-      const moveId = await postStock(
+    const shares: IssueShare[] = [];
+    for (const l of lines.rows)
+      for (const s of await shareAmongIndents(
         c,
-        {
-          storeId,
-          itemId: r.item_id,
-          kind: 'issue',
-          qty: -take,
-          batch: r.batch_no,
-          docType: 'stock_issue',
-          docId: issueId,
-          note: 'Issued on receipt for the indent',
-          day,
-        },
-        r.description,
-      );
-      await c.query(
-        `INSERT INTO stock_issue_lines (school_id, issue_id, item_id, indent_line_id, qty, rate, value, batch_no, move_id)
-         SELECT app.current_school_id(), $1, $2, $3, $4, m.rate, -m.value, $5, m.id FROM stock_moves m WHERE m.id = $6`,
-        [issueId, r.item_id, r.indent_line_id, take, r.batch_no, moveId],
-      );
-    }
-    return out;
+        l.requisition_line_id,
+        Number(l.accepted) * Number(l.per_unit),
+        null,
+      ))
+        shares.push({
+          ...s,
+          itemId: l.item_id,
+          name: l.description,
+          batch: l.batch_no,
+          reservationId: null,
+        });
+    const made = await postIssues(
+      c,
+      { storeId, kind: 'receipt', receiptId, day, purpose: null },
+      shares,
+      (m, name) => postStock(c, m, name),
+    );
+    return made.map((m) => m.number);
   }
 
   async cancel(ctx: RequestContext, id: string, dto: ReasonDto) {

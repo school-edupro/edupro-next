@@ -276,6 +276,17 @@ export default async function ReceiptPage({
         ) : null}
       </section>
 
+      {goods && g.lineItems.some((l) => (l.rejected ?? 0) > 0) ? (
+        <p>
+          <a
+            className="ep-btn ep-btn--secondary ep-btn--sm"
+            href={`/purchase/returns/new?order=${g.orderId}`}
+          >
+            Return rejected goods to the vendor
+          </a>
+        </p>
+      ) : null}
+
       {g.issues.length ? (
         <section className="ep-card" aria-labelledby="gr-iss">
           <h2 id="gr-iss" className="ep-card__title">
@@ -284,7 +295,7 @@ export default async function ReceiptPage({
           <ul className="ep-purch-checks">
             {g.issues.map((x) => (
               <li key={x.id}>
-                <strong>{x.number}</strong> to {x.department}
+                <a href={`/purchase/issues/${x.id}`}>{x.number}</a> to {x.department}
                 {x.indent ? (
                   <>
                     {' '}

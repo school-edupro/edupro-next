@@ -284,9 +284,29 @@ export class PurchaseStoresService {
       const s = all.data.find((x) => x.id === id);
       if (!s) throw new DomainError('not-found', 'Store not found', { status: 404 });
       const stock = await this.stockRows(c, { storeId: id, empty: true, below: false });
+      // the physical counts of the store (GFR 213: at least once a year)
+      const counts = await c.query<{
+        id: string;
+        number: string;
+        status: string;
+        counted_on: string;
+        this_year: boolean;
+      }>(
+        `SELECT id::text, number, status, counted_on::text,
+                counted_on >= make_date(left(app.purchase_fy((now() AT TIME ZONE 'Asia/Kolkata')::date), 4)::int, 4, 1) AS this_year
+           FROM stock_counts WHERE store_id = $1 AND status <> 'cancelled' ORDER BY counted_on DESC, id DESC LIMIT 5`,
+        [id],
+      );
       return {
         ...s,
         stock,
+        counts: counts.rows.map((k) => ({
+          id: k.id,
+          number: k.number,
+          status: k.status,
+          countedOn: k.counted_on,
+        })),
+        countedThisYear: counts.rows.some((k) => k.status === 'approved' && k.this_year),
         can: {
           manage: this.has(ctx, PURCHASE.storeManage),
           operate:

@@ -21,8 +21,10 @@ PO, the emergency purchase, the stores and receiving what was ordered.
 | **School admin** (orders)                            | Cancels an approved PO (its own right)                                                               |
 | **The Principal** (or the designation in settings)   | Ratifies an emergency purchase                                                                       |
 | **Auditor** (read only)                              | The purchase dashboard and reports                                                                   |
-| **Store keeper** (its own role, per store)           | Keeps the stores given to them: opening stock, receives what comes against POs; issues next          |
+| **Store keeper** (its own role, per store)           | Keeps the stores given to them: opening stock, receipts, issues, returns, transfers and counts       |
 | **The department's inspectors** (the HOD by default) | Inspect and accept what was received for the department's POs, in the admin or the staff app         |
+| **Whoever took it, the indent's raiser or the HOD**  | Acknowledges what the store issued to the department (admin or staff app)                            |
+| **School admin** (stores)                            | Approves physical counts (never one they took part in)                                               |
 
 ## Set it up, in this order
 
@@ -133,8 +135,9 @@ PI you will not buy (issued from stock, no longer needed) with the reason; its r
 On the PR:
 
 - **Change the lines**: match a line asked for in words to an item from the list, change a quantity,
-  or mark a line **From the store** with what the store issues (no vendor needed). A line that came
-  from a PI stays on the PR.
+  or mark a line **From the store** (no vendor needed): an item kept in stock names the **store** it
+  comes from — the list shows what each store has free (in hand less reserved); an item not kept in
+  stock says what the store issues. A line that came from a PI stays on the PR.
 - **Sourcing** follows the PR's **value before GST** (the larger of the estimate and the chosen
   rates), with the limits from Purchase settings (GFR 2017 by default):
   - **direct purchase** (up to ₹50,000): a vendor and rate per line — **Add a quote**, or pick a vendor
@@ -149,10 +152,13 @@ On the PR:
     clears the signatures**;
   - **tender** (above): run the tender outside EduPro; record its **reference**, attach its
     **documents** and choose the vendor with the agreed rates.
-- **Send for approval** says what is still missing (the Sourcing card lists it too). The PR goes to its
+- **Send for approval** says what is still missing (the Sourcing card lists it too) — including **not
+  enough free stock** for a line from the store. Sending **reserves** that stock for the PR; sending
+  it back, rejecting, cancelling or reopening it lets the reservation go. The PR goes to its
   department's PR levels (Purchase → Who approves); nobody approves their own.
 - **Approved**: one draft **purchase order per chosen vendor** is made at once (Purchase Orders →
-  Drafts); a PI all of whose lines are issued from the store closes ("Issued from the store"). **Rejected** or **cancelled**: its PIs go
+  Drafts); a PI all of whose lines come from the store closes ("From the store on PR/…") and the store
+  keeper finds the lines under **Issues → To issue**. **Rejected** or **cancelled**: its PIs go
   back to To requisition with the reason. **Reopen to change** an approved PR (before any order): it
   goes back to draft and is approved again (the next revision).
 - Approvers and committee members find theirs in **My approvals** or the staff app (**Office →
@@ -320,6 +326,55 @@ clock.
 The **PDF** on each receipt is the goods received and inspection note (or the completion certificate)
 with who received and who inspected it. **Reports**: the **Goods receipt register** and **Pending
 deliveries** (late only, if you like).
+
+## Issues, returns and transfers
+
+**Purchase → Issues.** **To issue** lists, per approved requisition and store, what it **reserved** and
+is still to go out. **Issue** gives it out: how much now (a part is fine — the rest stays reserved),
+the batch if you want a particular one (otherwise the **earliest expiry goes first**), and who took it
+(otherwise the indent's raiser). The quantity is shared among the indents the line came from — each
+indent gets its own issue (`ISS/2026-27/0001`). Goods bought for an indent are issued the moment they
+are accepted on a goods receipt.
+
+**Counter issue** is the quick way for a need that has no indent: the store, the department, who took
+it, the purpose and the items. Only **free** stock goes out — what requisitions reserved stays.
+
+Every issue goes out at the store's **average cost**, and prints as an **issue slip** with _Received
+by_. The department **acknowledges** it: whoever took it, the indent's raiser or the HOD presses
+**Acknowledge: received** (admin, My approvals, or the staff app → **Issued to my department**). For a
+department without a sign-in the keeper presses **Record the signed slip** and says who signed it.
+
+**Goods brought back** (on the issue): unused goods go back into stock at the rate they went out at;
+damaged goods are recorded with what is wrong and stay out of stock (for condemnation later).
+
+**Return to the vendor** (the PO's Deliveries, or a goods receipt with rejected lines): goods
+**rejected at inspection** (they never entered stock) and goods **found defective** later (they come
+out of stock at the average). Tick **A replacement is wanted** and the order waits for it — an order
+that had closed by itself opens again; otherwise close the order short. The return note
+(`RTN/2026-27/0001`) prints with the carrier or docket. The debit note follows with the bill (phase 3).
+
+**Purchase → Transfers → Send to another store**: from a store you keep, any items with free stock
+(batch by batch). They leave your store at once and stay **in transit** until the receiving keeper
+presses **Receive** (in at the same cost, batch and expiry). The sender can **cancel** one still in
+transit: the items go back.
+
+## Physical count
+
+Every store is counted **at least once a year** (GFR 2017 rule 213); **Purchase → Physical counts**
+shows when each was last counted. **Start a count** (the keeper): the whole store or one category. The
+book quantity of every item (each batch for batch items) is taken then; the sheet is **blind** — it
+shows the book quantity only once a line is counted.
+
+Count on screen, or **Download the sheet (Excel)**, fill **Counted** and upload it. Add a line for an
+item or batch found that is not listed. Every line needs a count (0 when none is found) and every
+difference a **reason**; then **Send for approval**.
+
+The **school admin** (not someone who counted) sees book, counted, the difference and its value, and
+**approves** — each difference posts as an **adjustment** at the average rate — or **sends it back** to
+count again. The statement prints with the differences.
+
+**Stock reports**: issues by department (consumption), slow-moving and dead stock, expiring soon,
+below reorder level, transfers, count differences — with stock in hand and each item's register.
 
 ## Hand over my approvals
 

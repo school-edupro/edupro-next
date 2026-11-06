@@ -316,3 +316,67 @@ line is accepted in full (closing short stays by hand with the reason).
   change, serial numbers; the PDF, the GRN register, pending deliveries, Who approves).
 - **Not yet** (part 8): the issue slip PDF and the department's acknowledgement, returning rejected
   goods to the vendor, reservations, counter issues, transfers, counts.
+
+## As built — part 8, issues, returns, transfers and counts (6 Nov 2026)
+
+Settled while building: stock is **reserved when the PR is sent** for approval (refused when not enough
+is free), and let go when it is sent back, rejected, cancelled or reopened; a PR the store has issued
+against cannot be reopened. A kept-in-stock item "from the store" must name its store (a note stays for
+an item not kept in stock). Returns into the store: **unused** goes back into stock at the issue rate,
+**damaged** is recorded only (for condemnation, part 9). The count is **blind** until a line is counted,
+and its approver is never someone who started or sent it. "Items marked for condemnation cannot be
+issued" waits for part 9.
+
+- **Migration 0325**: right `purchase.count.approve` (group and school admins);
+  `purchase_requisition_lines.store_id`; `stock_reservations` (store, item, PR line, quantity in the
+  store unit, issued, open / done / released) and `app.stock_reserved_refresh` (the balance's reserved
+  from the open reservations); `stock_issues` gain `requisition_id` and `ack_on_paper`,
+  `stock_issue_lines` gain `reservation_id` and `returned_qty`; `purchase_order_lines.returned_qty`
+  (sent back from stock with a replacement wanted); `stock_returns` + `_lines` (to the store against an
+  issue, or to the vendor against a PO; source issue / rejected / stock; condition; replacement; the
+  move — a vendor return's quantity is in the PO line's unit), `stock_transfers` + `_lines` (in
+  transit / received / cancelled; out and in moves), `stock_counts` + `_lines` (one open count per
+  store; book quantity taken at the start; counted, reason, added; the adjustment's rate, value and
+  move).
+- **Shared** (`purchase-stock-core.ts`): `storeProblems` / `reserveRequisition` / `releaseRequisition` /
+  `issuedAgainst`, `freeStock`, `mustOperateStore`, `postIssues` (one issue per indent, or per
+  department; issue moves at the average; reservations used up) and `shareAmongIndents` (a PR line's
+  quantity shared to the indent lines it came from, oldest first, up to what each asked for less what
+  it was issued) — the part 7 auto-issue on acceptance now uses them too; `purchase-stock-pdf.ts` (one
+  layout for the issue slip, return note, transfer note and count sheet / statement).
+- **Requisitions**: the requirement "Enough free stock" (and the store named); the PR form lists the
+  stores with what is free; a line shows the store and what it holds reserved or was issued.
+- **API**: `PurchaseIssuesService` (list — the stores see all, a department its own; to-issue groups per
+  PR and store in the stores I keep; the counter form lists; issue against reservations or at the
+  counter — never more than the free stock; acknowledge by whoever took it, the indent's raiser or the
+  HOD, or a signed slip recorded by the keeper; return to the store; the slip PDF),
+  `PurchaseReturnsService` (what of a PO can go back; the vendor return — rejected goods without a stock
+  move, defective ones out of stock at the average; the PO's quantities worked out again, a PO closed by
+  itself reopened for the replacement; the list, a return and its note PDF), `PurchaseTransfersService`
+  (send batch by batch from free stock, receive by the receiving keeper, cancel back by the sender; the
+  note PDF), `PurchaseCountsService` (start, blind lines, save, Excel sheet and import with lines found
+  added, submit with every line counted and differences explained, approve into `adjustment` moves at
+  the average — the last rate in when the average is nothing — or send back, cancel; the sheet /
+  statement PDF; when each store was last counted) and one controller. The PO's received status now
+  counts what went back from stock for a replacement (`refreshOrder`).
+- **Reports**: issues by department (consumption, net of what came back), slow-moving and dead stock
+  (no issue in 90 / 180 / 365 days), expiring soon (30 / 60 / 90 days, or expired), below reorder level
+  (with what is on order), transfers, count differences.
+- **Admin**: Purchase → Issues (To issue, waiting for acknowledgement, to acknowledge, all; Counter
+  issue; an issue with its acknowledgement, slip and goods brought back), Returns (list, Return to the
+  vendor from the PO's Deliveries or a receipt with rejected goods, a return note), Transfers (to
+  receive, in transit, all; Send to another store; receive / cancel), Physical counts (the stores and
+  when last counted, Start a count, the count sheet on screen or Excel, send, approve / send back); the
+  store shows whether it was counted this year; the requisition form's store per line; the PO's
+  returned quantity; My approvals gains issues to acknowledge and counts to approve. Help: Issues,
+  returns and transfers; Physical count.
+- **Staff app**: Issued to my department (acknowledge, the slip), Stock in my stores (keepers).
+- **Tests**: `purchase-issues.e2e-spec.ts` (9: reservation on send and release on send-back; issue
+  against the reservation to the indent with the earliest expiry first and the PR no longer reopened;
+  the counter issue never taking reserved stock; acknowledgement and the signed slip; goods brought
+  back; transfer received and cancelled; the blind count from Excel approved into an adjustment by the
+  admin only; rejected and defective goods to the vendor with the PO reopened for the replacement; the
+  six reports); `purchase-requisitions.e2e-spec.ts` updated (a kept-in-stock item from the store names
+  its store).
+- **Not yet** (part 9): reorder → indent, assets and depreciation, condemnation and disposal (the
+  damaged returns wait for it), the employee's assets.

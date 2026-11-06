@@ -1072,3 +1072,191 @@ export async function cancelReceipt(fd: FormData) {
     'Receipt cancelled: what it brought counts as still to come',
   );
 }
+
+// ---- phase 2, part 8: issues, returns, transfers, counts ------------------------------------------
+export type StockActionResult =
+  { ok: true; id: string; number?: string; detail?: string } | { ok: false; error: string };
+const stockCall = async (
+  path: string,
+  method: 'POST' | 'PUT',
+  body: unknown,
+  pick: (r: Record<string, unknown>) => { id: string; number?: string; detail?: string },
+  revalidate: string[],
+): Promise<StockActionResult> => {
+  try {
+    const r = await apiFetch<Record<string, unknown>>(path, { method, body: JSON.stringify(body) });
+    for (const p of revalidate) revalidatePath(p);
+    return { ok: true, ...pick(r) };
+  } catch (e) {
+    if (e instanceof ApiError) return { ok: false, error: detailOf(e) };
+    throw e;
+  }
+};
+
+/** An issue against a requisition's reservations, or at the counter; the first issue made opens. */
+export async function makeIssue(body: Record<string, unknown>): Promise<StockActionResult> {
+  return stockCall(
+    '/purchase/issues',
+    'POST',
+    body,
+    (r) => {
+      const made = (r.issues as Array<{ id: string; number: string }> | undefined) ?? [];
+      return {
+        id: made[0]?.id ?? '',
+        number: made.map((m) => m.number).join(', '),
+        detail: made.length > 1 ? `${String(made.length)} issues made (one per indent)` : undefined,
+      };
+    },
+    ['/purchase/issues'],
+  );
+}
+
+export async function acknowledgeIssue(fd: FormData) {
+  const id = pick(fd, 'id');
+  if (!okId(id)) back('/purchase/issues', 'validation-failed', 'Unknown issue');
+  return run(
+    `/purchase/issues/${id}`,
+    () =>
+      apiFetch(`/purchase/issues/${id}/acknowledge`, {
+        method: 'POST',
+        body: JSON.stringify({
+          note: pick(fd, 'reason') || pick(fd, 'note') || undefined,
+          onPaper: pick(fd, 'onPaper') === '1',
+        }),
+      }),
+    'Acknowledged',
+  );
+}
+
+export async function returnToStore(
+  issueId: string,
+  body: Record<string, unknown>,
+): Promise<StockActionResult> {
+  if (!okId(issueId)) return { ok: false, error: 'Unknown issue' };
+  return stockCall(
+    `/purchase/issues/${issueId}/return`,
+    'POST',
+    body,
+    (r) => ({ id: String(r.id), number: String(r.number) }),
+    [`/purchase/issues/${issueId}`, '/purchase/returns'],
+  );
+}
+
+export async function returnToVendor(body: Record<string, unknown>): Promise<StockActionResult> {
+  return stockCall(
+    '/purchase/vendor-returns',
+    'POST',
+    body,
+    (r) => ({
+      id: String(r.id),
+      number: String(r.number),
+      detail: r.reopened ? 'The PO is open again for the replacement' : undefined,
+    }),
+    ['/purchase/returns'],
+  );
+}
+
+export async function makeTransfer(body: Record<string, unknown>): Promise<StockActionResult> {
+  return stockCall(
+    '/purchase/transfers',
+    'POST',
+    body,
+    (r) => ({ id: String(r.id), number: String(r.number) }),
+    ['/purchase/transfers'],
+  );
+}
+
+const transferAction = (path: '/receive' | '/cancel', done: string) => async (fd: FormData) => {
+  const id = pick(fd, 'id');
+  if (!okId(id)) back('/purchase/transfers', 'validation-failed', 'Unknown transfer');
+  return run(
+    `/purchase/transfers/${id}`,
+    () =>
+      apiFetch(`/purchase/transfers/${id}${path}`, {
+        method: 'POST',
+        body: JSON.stringify({ note: pick(fd, 'reason') || undefined }),
+      }),
+    done,
+  );
+};
+export async function receiveTransfer(fd: FormData) {
+  return transferAction('/receive', 'Received into the store')(fd);
+}
+export async function cancelTransfer(fd: FormData) {
+  return transferAction('/cancel', 'Cancelled: the items are back in the sending store')(fd);
+}
+
+/** A physical count started: the store (and a category); opens the count. */
+export async function startCount(fd: FormData) {
+  const storeId = pick(fd, 'storeId');
+  if (!okId(storeId)) back('/purchase/counts', 'validation-failed', 'Pick the store');
+  let made: { id: string; number: string } | null = null;
+  try {
+    made = await apiFetch<{ id: string; number: string }>('/purchase/counts', {
+      method: 'POST',
+      body: JSON.stringify({
+        storeId,
+        categoryId: pick(fd, 'categoryId') || null,
+        note: pick(fd, 'note') || undefined,
+      }),
+    });
+  } catch (e) {
+    if (e instanceof ApiError) back('/purchase/counts', e.problem.type, detailOf(e));
+    throw e;
+  }
+  back(`/purchase/counts/${made.id}`, 'ok', `${made.number} started: count what is on the shelves`);
+}
+
+export async function saveCountLines(
+  id: string,
+  body: Record<string, unknown>,
+): Promise<StockActionResult> {
+  if (!okId(id)) return { ok: false, error: 'Unknown count' };
+  return stockCall(`/purchase/counts/${id}/lines`, 'PUT', body, () => ({ id }), [
+    `/purchase/counts/${id}`,
+  ]);
+}
+
+export async function importCount(id: string, file: string): Promise<StockActionResult> {
+  if (!okId(id)) return { ok: false, error: 'Unknown count' };
+  return stockCall(
+    `/purchase/counts/${id}/import`,
+    'POST',
+    { file },
+    (r) => ({ id, detail: `${String(r.counted)} lines counted from the sheet` }),
+    [`/purchase/counts/${id}`],
+  );
+}
+
+const countAction =
+  (path: string, done: string, body?: (fd: FormData) => unknown) => async (fd: FormData) => {
+    const id = pick(fd, 'id');
+    if (!okId(id)) back('/purchase/counts', 'validation-failed', 'Unknown count');
+    return run(
+      `/purchase/counts/${id}`,
+      () =>
+        apiFetch(`/purchase/counts/${id}${path}`, {
+          method: 'POST',
+          ...(body ? { body: JSON.stringify(body(fd)) } : {}),
+        }),
+      done,
+    );
+  };
+export async function submitCount(fd: FormData) {
+  return countAction('/submit', 'Sent for approval')(fd);
+}
+export async function approveCount(fd: FormData) {
+  return countAction('/decide', 'Approved: the differences are posted', (f) => ({
+    action: 'approve',
+    note: pick(f, 'reason') || undefined,
+  }))(fd);
+}
+export async function sendBackCount(fd: FormData) {
+  return countAction('/decide', 'Sent back to count again', (f) => ({
+    action: 'send_back',
+    note: pick(f, 'reason'),
+  }))(fd);
+}
+export async function cancelCount(fd: FormData) {
+  return countAction('/cancel', 'Count cancelled', (f) => ({ note: pick(f, 'reason') }))(fd);
+}

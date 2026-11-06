@@ -349,7 +349,22 @@ export default async function RequisitionPage({
                     {l.fulfil === 'store' ? (
                       <>
                         <Badge tone="info">From the store</Badge>
-                        <span className="ep-mr-col__desc">{l.storeNote}</span>
+                        {l.store ? <span className="ep-mr-col__desc">{l.store}</span> : null}
+                        {l.stock ? (
+                          <span className="ep-mr-col__desc">
+                            {l.stock.held
+                              ? `${l.stock.held.toLocaleString('en-IN')} reserved`
+                              : l.stock.issued
+                                ? ''
+                                : `${(l.stock.inStore - l.stock.reserved).toLocaleString('en-IN')} free now`}
+                            {l.stock.issued
+                              ? `${l.stock.held ? ' · ' : ''}${l.stock.issued.toLocaleString('en-IN')} issued`
+                              : ''}
+                          </span>
+                        ) : null}
+                        {l.storeNote ? (
+                          <span className="ep-mr-col__desc">{l.storeNote}</span>
+                        ) : null}
                       </>
                     ) : (
                       <>

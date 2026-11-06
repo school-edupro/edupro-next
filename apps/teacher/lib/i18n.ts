@@ -16,6 +16,13 @@ const DICT: Record<string, string> = {
   // purchase indents (docs/design/83)
   'Purchase orders': 'क्रय आदेश',
   'Goods received to inspect': 'निरीक्षण हेतु प्राप्त माल',
+  'Issued to my department': 'मेरे विभाग को निर्गत',
+  'What the store issued to you or your department: confirm you received it.':
+    'भंडार ने आपको या आपके विभाग को जो निर्गत किया: प्राप्ति की पुष्टि करें।',
+  'Nothing is waiting for your acknowledgement.': 'आपकी पुष्टि के लिए कुछ प्रतीक्षा में नहीं है।',
+  'Open and acknowledge': 'खोलें और पुष्टि करें',
+  'Acknowledge: received': 'पुष्टि करें: प्राप्त हुआ',
+  'Stock in my stores': 'मेरे भंडारों का स्टॉक',
   'Goods and services your department received: check them and accept or reject.':
     'आपके विभाग को प्राप्त माल और सेवाएँ: जाँचें और स्वीकार या अस्वीकार करें।',
   'Nothing is waiting for your inspection.': 'आपके निरीक्षण के लिए कुछ प्रतीक्षा में नहीं है।',

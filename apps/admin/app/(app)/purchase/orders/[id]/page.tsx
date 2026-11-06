@@ -623,14 +623,17 @@ export default async function OrderPage({
                     <td style={{ textAlign: 'right' }}>{l.accepted}</td>
                     <td style={{ textAlign: 'right' }}>
                       {l.rejected}
-                      {l.rejected ? (
-                        <span className="ep-mr-col__desc">to return to the vendor</span>
+                      {l.returned ? (
+                        <span className="ep-mr-col__desc">
+                          {l.returned} more sent back from stock for a replacement
+                        </span>
                       ) : null}
                     </td>
                     <td style={{ textAlign: 'right' }}>
                       {Math.max(
                         0,
-                        Math.round((l.quantity - l.received + l.rejected) * 1000) / 1000,
+                        Math.round((l.quantity - l.received + l.rejected + l.returned) * 1000) /
+                          1000,
                       )}
                     </td>
                   </tr>
@@ -656,6 +659,18 @@ export default async function OrderPage({
           ) : (
             <p className="ep-field__help">Nothing has come yet.</p>
           )}
+          {po.receiptList.some(
+            (g) => g.kind === 'goods' && ['accepted', 'rejected'].includes(g.status),
+          ) ? (
+            <p>
+              <a
+                className="ep-btn ep-btn--secondary ep-btn--sm"
+                href={`/purchase/returns/new?order=${po.id}`}
+              >
+                Return goods to the vendor
+              </a>
+            </p>
+          ) : null}
         </section>
       ) : null}
 

@@ -19,6 +19,7 @@ export const PURCHASE = {
   storeView: 'purchase.store.view',
   storeOperate: 'purchase.store.operate',
   storeManage: 'purchase.store.manage',
+  countApprove: 'purchase.count.approve',
 } as const;
 
 const opt = (max: number) =>
@@ -339,8 +340,9 @@ export const RequisitionLineSchema = z
     quantity: z.coerce.number().gt(0).max(999999),
     uomId: IdSchema.optional(),
     estRate: Money.optional(),
-    /** buy it, or issue it from the store (phase 1: marked with a note) */
+    /** buy it, or issue it from the store (the store named for a kept-in-stock item; else a note) */
     fulfil: z.enum(['buy', 'store']).default('buy'),
+    storeId: IdSchema.nullish(),
     storeNote: opt(300),
     note: opt(300),
   })
@@ -348,9 +350,9 @@ export const RequisitionLineSchema = z
     message: 'Pick an item, or describe one not in the list',
     path: ['itemId'],
   })
-  .refine((l) => l.fulfil !== 'store' || !!l.storeNote, {
-    message: 'Say what the store issues (e.g. 20 from the stock room)',
-    path: ['storeNote'],
+  .refine((l) => l.fulfil !== 'store' || !!l.storeId || !!l.storeNote, {
+    message: 'Pick the store it is issued from (or say what the store issues)',
+    path: ['storeId'],
   });
 
 /** A PR from approved indents (their lines combined by item), or the purchase office's own. */
@@ -580,6 +582,12 @@ export const PURCHASE_REPORTS = [
   'msme_vendors',
   'grn_register',
   'pending_deliveries',
+  'consumption',
+  'slow_moving',
+  'expiring',
+  'below_reorder',
+  'transfers',
+  'count_differences',
 ] as const;
 export type PurchaseReport = (typeof PURCHASE_REPORTS)[number];
 
@@ -593,7 +601,7 @@ export const ReportQuerySchema = z
     status: z
       .string()
       .trim()
-      .regex(/^[a-z_]{2,20}$/)
+      .regex(/^[a-z0-9_]{2,20}$/)
       .optional(),
     format: z.enum(['xlsx', 'pdf']).optional(),
   })
@@ -748,3 +756,166 @@ export const ReceiptListQuerySchema = z.object({
   page: z.coerce.number().int().min(1).max(10000).default(1),
 });
 export class ReceiptListQueryDto extends createZodDto(ReceiptListQuerySchema) {}
+
+// ---- phase 2, part 8: issues, returns, transfers, counts (docs/design/84) ----------------------------
+const StoreQty = z.coerce.number().gt(0).max(9999999);
+export const IssueSchema = z
+  .object({
+    /** against an approved requisition's reserved lines, or at the counter */
+    kind: z.enum(['indent', 'counter']),
+    storeId: IdSchema,
+    requisitionId: IdSchema.optional(),
+    departmentId: IdSchema.optional(),
+    takenByEmployeeId: IdSchema.nullish(),
+    purpose: opt(300),
+    lines: z
+      .array(
+        z.object({
+          reservationId: IdSchema.optional(),
+          itemId: IdSchema.optional(),
+          /** in the store unit */
+          qty: StoreQty,
+          batch: opt(40),
+        }),
+      )
+      .min(1)
+      .max(200),
+  })
+  .refine((d) => d.kind !== 'indent' || !!d.requisitionId, {
+    message: 'Pick the requisition',
+    path: ['requisitionId'],
+  })
+  .refine(
+    (d) => d.kind !== 'counter' || (!!d.departmentId && !!d.takenByEmployeeId && !!d.purpose),
+    {
+      message: 'Give the department, who took it and the purpose',
+      path: ['takenByEmployeeId'],
+    },
+  );
+export class IssueDto extends createZodDto(IssueSchema) {}
+
+export const AcknowledgeSchema = z.object({
+  note: opt(300),
+  /** the store records a slip signed on paper (the department has no sign-in) */
+  onPaper: z.boolean().default(false),
+});
+export class AcknowledgeDto extends createZodDto(AcknowledgeSchema) {}
+
+export const ReturnToStoreSchema = z.object({
+  returnedOn: Day.optional(),
+  note: opt(1000),
+  lines: z
+    .array(
+      z.object({
+        issueLineId: IdSchema,
+        qty: StoreQty,
+        condition: z.enum(['unused', 'damaged']),
+        reason: opt(300),
+      }),
+    )
+    .min(1)
+    .max(200),
+});
+export class ReturnToStoreDto extends createZodDto(ReturnToStoreSchema) {}
+
+export const VendorReturnSchema = z.object({
+  orderId: IdSchema,
+  returnedOn: Day.optional(),
+  dispatch: opt(300),
+  note: opt(1000),
+  lines: z
+    .array(
+      z.object({
+        receiptLineId: IdSchema,
+        /** goods rejected at inspection, or taken out of stock (found defective) */
+        source: z.enum(['rejected', 'stock']),
+        /** in the PO line's unit */
+        qty: StoreQty,
+        reason: z.string().trim().min(3).max(300),
+        replacement: z.boolean().default(true),
+      }),
+    )
+    .min(1)
+    .max(200),
+});
+export class VendorReturnDto extends createZodDto(VendorReturnSchema) {}
+
+export const TransferSchema = z
+  .object({
+    fromStoreId: IdSchema,
+    toStoreId: IdSchema,
+    note: opt(500),
+    lines: z
+      .array(z.object({ itemId: IdSchema, qty: StoreQty, batch: opt(40) }))
+      .min(1)
+      .max(200),
+  })
+  .refine((d) => d.fromStoreId !== d.toStoreId, {
+    message: 'Pick another store to send to',
+    path: ['toStoreId'],
+  });
+export class TransferDto extends createZodDto(TransferSchema) {}
+
+export const NoteSchema = z.object({ note: opt(500) });
+export class NoteDto extends createZodDto(NoteSchema) {}
+
+export const CountSchema = z.object({
+  storeId: IdSchema,
+  categoryId: IdSchema.nullish(),
+  countedOn: Day.optional(),
+  note: opt(1000),
+});
+export class CountDto extends createZodDto(CountSchema) {}
+
+export const CountLinesSchema = z.object({
+  countedBy: opt(200),
+  lines: z
+    .array(
+      z
+        .object({
+          lineId: IdSchema.optional(),
+          /** found in the count but not on the list */
+          itemId: IdSchema.optional(),
+          batch: opt(40),
+          expiry: Day.optional(),
+          countedQty: z.coerce.number().min(0).max(9999999).nullable(),
+          reason: opt(300),
+        })
+        .refine((l) => !!l.lineId || !!l.itemId, { message: 'Pick the item', path: ['itemId'] }),
+    )
+    .max(5000),
+});
+export class CountLinesDto extends createZodDto(CountLinesSchema) {}
+
+export const CountDecisionSchema = z.object({
+  action: z.enum(['approve', 'send_back']),
+  note: opt(1000),
+});
+export class CountDecisionDto extends createZodDto(CountDecisionSchema) {}
+
+export const CountImportSchema = z.object({
+  file: z.string().min(10).max(2_000_000),
+});
+export class CountImportDto extends createZodDto(CountImportSchema) {}
+
+export const StockDocQuerySchema = z.object({
+  status: z
+    .string()
+    .trim()
+    .regex(/^[a-z_]{2,20}$/)
+    .optional(),
+  kind: z
+    .string()
+    .trim()
+    .regex(/^[a-z_]{2,20}$/)
+    .optional(),
+  storeId: IdSchema.optional(),
+  /** issues: waiting for my acknowledgement; transfers: waiting for me to receive */
+  mine: z
+    .enum(['1', '0'])
+    .optional()
+    .transform((v) => v === '1'),
+  q: z.string().trim().max(80).optional(),
+  page: z.coerce.number().int().min(1).max(10000).default(1),
+});
+export class StockDocQueryDto extends createZodDto(StockDocQuerySchema) {}

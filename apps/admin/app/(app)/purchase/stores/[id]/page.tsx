@@ -91,6 +91,30 @@ export default async function StorePage({
               <dd>{s.parent}</dd>
             </div>
           ) : null}
+          <div>
+            <dt>Physical count</dt>
+            <dd>
+              <Badge tone={s.countedThisYear ? 'success' : 'warning'}>
+                {s.countedThisYear ? 'Counted this year' : 'Not counted this year'}
+              </Badge>{' '}
+              {s.counts.length ? (
+                <>
+                  Last:{' '}
+                  <a
+                    href={`/purchase/counts/${s.counts[0]!.id}`}
+                    style={{ textDecoration: 'underline' }}
+                  >
+                    {s.counts[0]!.number}
+                  </a>{' '}
+                  ({s.counts[0]!.countedOn})
+                </>
+              ) : (
+                <a href="/purchase/counts" style={{ textDecoration: 'underline' }}>
+                  Start a count
+                </a>
+              )}
+            </dd>
+          </div>
         </dl>
       </section>
 

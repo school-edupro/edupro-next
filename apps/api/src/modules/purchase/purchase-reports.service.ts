@@ -52,6 +52,15 @@ const words: Record<string, string> = {
   accepted: 'Accepted',
   goods: 'Goods received',
   late: 'Late only',
+  in_transit: 'In transit',
+  received: 'Received',
+  expired: 'Expired already',
+  d30: 'Within 30 days',
+  d60: 'Within 60 days',
+  d90: 'Within 90 days',
+  n90: 'No issue in 90 days',
+  n180: 'No issue in 180 days',
+  n365: 'No issue in a year',
   service: 'Completion certificate',
 };
 const w = (v: string | null | undefined) => (v ? (words[v] ?? v) : '');
@@ -71,6 +80,12 @@ export const REPORT_NAMES: Record<PurchaseReport, string> = {
   msme_vendors: 'MSME vendors',
   grn_register: 'Goods receipt register',
   pending_deliveries: 'Pending deliveries',
+  consumption: 'Issues by department (consumption)',
+  slow_moving: 'Slow-moving and dead stock',
+  expiring: 'Expiring soon',
+  below_reorder: 'Below reorder level',
+  transfers: 'Transfers between stores',
+  count_differences: 'Physical count differences',
 };
 
 export interface ReportResult {
@@ -827,17 +842,19 @@ export class PurchaseReportsService {
           received: string;
           accepted: string;
           rejected: string;
+          returned: string;
           due: string | null;
           late: number | null;
         }>(
           `SELECT po.id::text, po.number || CASE WHEN po.revision > 0 THEN '-R' || po.revision ELSE '' END AS po, v.legal_name AS vendor,
                   d.name AS dept, l.description AS item, u.code AS uom, l.quantity::text AS ordered, l.received_qty::text AS received,
-                  l.accepted_qty::text AS accepted, l.rejected_qty::text AS rejected, po.delivery_date::text AS due,
+                  l.accepted_qty::text AS accepted, l.rejected_qty::text AS rejected, l.returned_qty::text AS returned,
+                  po.delivery_date::text AS due,
                   CASE WHEN po.delivery_date < (now() AT TIME ZONE 'Asia/Kolkata')::date
                        THEN ((now() AT TIME ZONE 'Asia/Kolkata')::date - po.delivery_date) END AS late
              FROM purchase_order_lines l JOIN purchase_orders po ON po.id = l.order_id JOIN vendors v ON v.id = po.vendor_id
              JOIN purchase_uoms u ON u.id = l.uom_id LEFT JOIN departments d ON d.id = po.department_id
-            WHERE po.status IN ('approved', 'sent') AND l.received_qty - l.rejected_qty < l.quantity
+            WHERE po.status IN ('approved', 'sent') AND l.received_qty - l.rejected_qty - l.returned_qty < l.quantity
               AND NOT EXISTS (SELECT 1 FROM purchase_orders n WHERE n.supersedes_id = po.id AND n.status NOT IN ('rejected', 'cancelled'))
               AND po.po_date BETWEEN $1::date AND $2::date AND ($3::bigint IS NULL OR po.department_id = $3)
               AND ($4::bigint IS NULL OR po.vendor_id = $4) AND ($5::bigint IS NULL OR l.item_id = $5)
@@ -870,12 +887,311 @@ export class PurchaseReportsService {
             Number(x.received),
             Number(x.accepted),
             Number(x.rejected),
-            Math.round((Number(x.ordered) - Number(x.received) + Number(x.rejected)) * 1000) / 1000,
+            Math.round(
+              (Number(x.ordered) - Number(x.received) + Number(x.rejected) + Number(x.returned)) *
+                1000,
+            ) / 1000,
             x.due,
             x.late,
           ]),
           links: r.rows.map((x) => `/purchase/orders/${x.id}`),
           sum: [],
+        };
+      }
+      case 'consumption': {
+        const r = await c.query<{
+          dept: string;
+          item: string;
+          code: string;
+          unit: string;
+          issues: number;
+          qty: string;
+          value: string;
+        }>(
+          `SELECT d.name AS dept, i.name AS item, i.code, COALESCE(su.code, u.code) AS unit, count(DISTINCT si.id)::int AS issues,
+                  sum(l.qty - l.returned_qty)::text AS qty,
+                  sum(l.value - round(l.returned_qty * l.rate, 2))::text AS value
+             FROM stock_issue_lines l JOIN stock_issues si ON si.id = l.issue_id JOIN departments d ON d.id = si.department_id
+             JOIN purchase_items i ON i.id = l.item_id JOIN purchase_uoms u ON u.id = i.uom_id
+             LEFT JOIN purchase_uoms su ON su.id = i.stock_uom_id
+            WHERE si.issued_on BETWEEN $1::date AND $2::date AND ($3::bigint IS NULL OR si.department_id = $3)
+              AND ($4::bigint IS NULL OR l.item_id = $4)
+            GROUP BY d.name, i.name, i.code, su.code, u.code ORDER BY d.name, sum(l.value) DESC LIMIT $5`,
+          [s.from, s.to, s.dept, s.item, limit + 1],
+        );
+        return {
+          columns: [
+            { label: 'Department', width: 2.4 },
+            { label: 'Item', width: 3 },
+            { label: 'Unit', width: 1 },
+            { label: 'Issues', type: 'number', width: 1 },
+            { label: 'Quantity (net of returns)', type: 'number' },
+            { label: 'Value (₹)', type: 'money' },
+          ] as FileColumn[],
+          rows: r.rows.map((x) => [
+            x.dept,
+            `${x.item} (${x.code})`,
+            x.unit,
+            x.issues,
+            Number(x.qty),
+            Math.round(Number(x.value) * 100) / 100,
+          ]),
+          sum: [5],
+        };
+      }
+      case 'slow_moving': {
+        const days = /^n\d{2,3}$/.test(s.status ?? '') ? Number(s.status!.slice(1)) : 180;
+        const r = await c.query<{
+          item_id: string;
+          store: string;
+          item: string;
+          code: string;
+          unit: string;
+          qty: string;
+          value: string;
+          last_issue: string | null;
+          last_in: string | null;
+          idle: number | null;
+        }>(
+          `SELECT b.item_id::text, st.name AS store, i.name AS item, i.code, COALESCE(su.code, u.code) AS unit, b.qty::text, b.value::text,
+                  li.last_issue::text, (SELECT max(m.moved_on) FROM stock_moves m WHERE m.store_id = b.store_id AND m.item_id = b.item_id AND m.qty > 0)::text AS last_in,
+                  ((now() AT TIME ZONE 'Asia/Kolkata')::date - COALESCE(li.last_issue,
+                     (SELECT min(m.moved_on) FROM stock_moves m WHERE m.store_id = b.store_id AND m.item_id = b.item_id))) AS idle
+             FROM stock_balances b JOIN stores st ON st.id = b.store_id JOIN purchase_items i ON i.id = b.item_id
+             JOIN purchase_uoms u ON u.id = i.uom_id LEFT JOIN purchase_uoms su ON su.id = i.stock_uom_id
+             LEFT JOIN LATERAL (SELECT max(m.moved_on) AS last_issue FROM stock_moves m
+                                 WHERE m.store_id = b.store_id AND m.item_id = b.item_id AND m.kind IN ('issue', 'transfer_out')) li ON true
+            WHERE b.qty > 0 AND ($1::bigint IS NULL OR b.item_id = $1)
+              AND COALESCE(li.last_issue, '1900-01-01'::date) < (now() AT TIME ZONE 'Asia/Kolkata')::date - $2::int
+            ORDER BY b.value DESC LIMIT $3`,
+          [s.item, days, limit + 1],
+        );
+        return {
+          columns: [
+            { label: 'Store', width: 1.8 },
+            { label: 'Item', width: 3 },
+            { label: 'Unit', width: 1 },
+            { label: 'In hand', type: 'number' },
+            { label: 'Value (₹)', type: 'money' },
+            { label: 'Last issued', type: 'date' },
+            { label: 'Days without an issue', type: 'number' },
+            { label: 'Last received', type: 'date' },
+          ] as FileColumn[],
+          rows: r.rows.map((x) => [
+            x.store,
+            `${x.item} (${x.code})`,
+            x.unit,
+            Number(x.qty),
+            Number(x.value),
+            x.last_issue,
+            x.idle,
+            x.last_in,
+          ]),
+          links: r.rows.map((x) => `/purchase/stock/${x.item_id}`),
+          sum: [4],
+        };
+      }
+      case 'expiring': {
+        const expired = s.status === 'expired';
+        const days = /^d\d{1,3}$/.test(s.status ?? '') ? Number(s.status!.slice(1)) : 90;
+        const r = await c.query<{
+          item_id: string;
+          store: string;
+          item: string;
+          code: string;
+          unit: string;
+          batch: string;
+          expiry: string;
+          left: number;
+          qty: string;
+          value: string;
+        }>(
+          `SELECT sb.item_id::text, st.name AS store, i.name AS item, i.code, COALESCE(su.code, u.code) AS unit, sb.batch_no AS batch,
+                  sb.expiry::text, (sb.expiry - (now() AT TIME ZONE 'Asia/Kolkata')::date) AS left, sb.qty_left::text AS qty,
+                  round(sb.qty_left * COALESCE(b.avg_rate, 0), 2)::text AS value
+             FROM stock_batches sb JOIN stores st ON st.id = sb.store_id JOIN purchase_items i ON i.id = sb.item_id
+             JOIN purchase_uoms u ON u.id = i.uom_id LEFT JOIN purchase_uoms su ON su.id = i.stock_uom_id
+             LEFT JOIN stock_balances b ON b.store_id = sb.store_id AND b.item_id = sb.item_id
+            WHERE sb.qty_left > 0 AND sb.expiry IS NOT NULL AND ($1::bigint IS NULL OR sb.item_id = $1)
+              AND sb.expiry <= (now() AT TIME ZONE 'Asia/Kolkata')::date + $2::int
+              AND (NOT $3 OR sb.expiry < (now() AT TIME ZONE 'Asia/Kolkata')::date)
+            ORDER BY sb.expiry, st.name LIMIT $4`,
+          [s.item, expired ? 0 : days, expired, limit + 1],
+        );
+        return {
+          columns: [
+            { label: 'Store', width: 1.8 },
+            { label: 'Item', width: 3 },
+            { label: 'Batch', width: 1.4 },
+            { label: 'Expiry', type: 'date' },
+            { label: 'Days left', type: 'number' },
+            { label: 'Quantity', type: 'number' },
+            { label: 'Unit', width: 1 },
+            { label: 'Value (₹)', type: 'money' },
+          ] as FileColumn[],
+          rows: r.rows.map((x) => [
+            x.store,
+            `${x.item} (${x.code})`,
+            x.batch,
+            x.expiry,
+            x.left,
+            Number(x.qty),
+            x.unit,
+            Number(x.value),
+          ]),
+          links: r.rows.map((x) => `/purchase/stock/${x.item_id}`),
+          sum: [7],
+        };
+      }
+      case 'below_reorder': {
+        const r = await c.query<{
+          item_id: string;
+          store: string;
+          item: string;
+          code: string;
+          unit: string;
+          qty: string;
+          reserved: string;
+          level: string;
+          reorder: string | null;
+          on_order: string;
+        }>(
+          `SELECT l.item_id::text, st.name AS store, i.name AS item, i.code, COALESCE(su.code, u.code) AS unit,
+                  COALESCE(b.qty, 0)::text AS qty, COALESCE(b.reserved, 0)::text AS reserved, l.reorder_level::text AS level,
+                  l.reorder_qty::text AS reorder,
+                  COALESCE((SELECT sum((ol.quantity - ol.received_qty + ol.rejected_qty + ol.returned_qty) * i.stock_per_unit)
+                              FROM purchase_order_lines ol JOIN purchase_orders po ON po.id = ol.order_id
+                             WHERE ol.item_id = l.item_id AND po.status IN ('approved', 'sent')), 0)::text AS on_order
+             FROM item_store_levels l JOIN stores st ON st.id = l.store_id JOIN purchase_items i ON i.id = l.item_id
+             JOIN purchase_uoms u ON u.id = i.uom_id LEFT JOIN purchase_uoms su ON su.id = i.stock_uom_id
+             LEFT JOIN stock_balances b ON b.store_id = l.store_id AND b.item_id = l.item_id
+            WHERE l.reorder_level > 0 AND COALESCE(b.qty, 0) - COALESCE(b.reserved, 0) <= l.reorder_level
+              AND ($1::bigint IS NULL OR l.item_id = $1)
+            ORDER BY st.name, i.name LIMIT $2`,
+          [s.item, limit + 1],
+        );
+        return {
+          columns: [
+            { label: 'Store', width: 1.8 },
+            { label: 'Item', width: 3 },
+            { label: 'Unit', width: 1 },
+            { label: 'In hand', type: 'number' },
+            { label: 'Reserved', type: 'number' },
+            { label: 'Free', type: 'number' },
+            { label: 'Reorder level', type: 'number' },
+            { label: 'Reorder quantity', type: 'number' },
+            { label: 'On order', type: 'number' },
+          ] as FileColumn[],
+          rows: r.rows.map((x) => [
+            x.store,
+            `${x.item} (${x.code})`,
+            x.unit,
+            Number(x.qty),
+            Number(x.reserved),
+            Math.round((Number(x.qty) - Number(x.reserved)) * 1000) / 1000,
+            Number(x.level),
+            x.reorder === null ? null : Number(x.reorder),
+            Number(x.on_order),
+          ]),
+          links: r.rows.map((x) => `/purchase/stock/${x.item_id}`),
+          sum: [],
+        };
+      }
+      case 'transfers': {
+        const r = await c.query<{
+          id: string;
+          number: string;
+          sent: string;
+          from_store: string;
+          to_store: string;
+          lines: number;
+          value: string;
+          status: string;
+          received: string | null;
+        }>(
+          `SELECT t.id::text, t.number, t.sent_on::text AS sent, fs.name AS from_store, ts.name AS to_store,
+                  (SELECT count(*)::int FROM stock_transfer_lines l WHERE l.transfer_id = t.id) AS lines,
+                  COALESCE((SELECT sum(l.value) FROM stock_transfer_lines l WHERE l.transfer_id = t.id), 0)::text AS value,
+                  t.status, t.received_on::text AS received
+             FROM stock_transfers t JOIN stores fs ON fs.id = t.from_store_id JOIN stores ts ON ts.id = t.to_store_id
+            WHERE t.sent_on BETWEEN $1::date AND $2::date AND ($3::text IS NULL OR t.status = $3)
+            ORDER BY t.sent_on, t.number LIMIT $4`,
+          [s.from, s.to, s.status, limit + 1],
+        );
+        return {
+          columns: [
+            { label: 'Transfer', width: 2.2 },
+            { label: 'Sent', type: 'date' },
+            { label: 'From', width: 1.8 },
+            { label: 'To', width: 1.8 },
+            { label: 'Lines', type: 'number', width: 1 },
+            { label: 'Value (₹)', type: 'money' },
+            { label: 'Status', width: 1.4 },
+            { label: 'Received', type: 'date' },
+          ] as FileColumn[],
+          rows: r.rows.map((x) => [
+            x.number,
+            x.sent,
+            x.from_store,
+            x.to_store,
+            x.lines,
+            Number(x.value),
+            w(x.status),
+            x.received,
+          ]),
+          links: r.rows.map((x) => `/purchase/transfers/${x.id}`),
+          sum: [5],
+        };
+      }
+      case 'count_differences': {
+        const r = await c.query<{
+          id: string;
+          number: string;
+          day: string;
+          store: string;
+          item: string;
+          code: string;
+          batch: string | null;
+          book: string;
+          counted: string;
+          value: string | null;
+          reason: string | null;
+        }>(
+          `SELECT k.id::text, k.number, k.counted_on::text AS day, st.name AS store, i.name AS item, i.code, l.batch_no AS batch,
+                  l.book_qty::text AS book, l.counted_qty::text AS counted, l.value::text, l.reason
+             FROM stock_count_lines l JOIN stock_counts k ON k.id = l.count_id AND k.status = 'approved'
+             JOIN stores st ON st.id = k.store_id JOIN purchase_items i ON i.id = l.item_id
+            WHERE l.counted_qty <> l.book_qty AND k.counted_on BETWEEN $1::date AND $2::date AND ($3::bigint IS NULL OR l.item_id = $3)
+            ORDER BY k.counted_on, k.number, i.name LIMIT $4`,
+          [s.from, s.to, s.item, limit + 1],
+        );
+        return {
+          columns: [
+            { label: 'Count', width: 2.2 },
+            { label: 'Counted on', type: 'date' },
+            { label: 'Store', width: 1.8 },
+            { label: 'Item', width: 3 },
+            { label: 'Batch', width: 1.2 },
+            { label: 'Book', type: 'number' },
+            { label: 'Counted', type: 'number' },
+            { label: 'Difference', type: 'number' },
+            { label: 'Value (₹)', type: 'money' },
+            { label: 'Reason', width: 3 },
+          ] as FileColumn[],
+          rows: r.rows.map((x) => [
+            x.number,
+            x.day,
+            x.store,
+            `${x.item} (${x.code})`,
+            x.batch,
+            Number(x.book),
+            Number(x.counted),
+            Math.round((Number(x.counted) - Number(x.book)) * 1000) / 1000,
+            x.value === null ? null : Number(x.value),
+            x.reason,
+          ]),
+          links: r.rows.map((x) => `/purchase/counts/${x.id}`),
+          sum: [8],
         };
       }
       case 'msme_vendors': {
@@ -1120,10 +1436,10 @@ export class PurchaseReportsService {
                   (SELECT count(*)::int FROM goods_receipts WHERE status = 'inspecting'
                       AND received_on + 15 < (now() AT TIME ZONE 'Asia/Kolkata')::date) AS deemed,
                   (SELECT count(DISTINCT po.id)::int FROM purchase_orders po JOIN purchase_order_lines l ON l.order_id = po.id
-                    WHERE po.status IN ('approved', 'sent') AND l.received_qty - l.rejected_qty < l.quantity
+                    WHERE po.status IN ('approved', 'sent') AND l.received_qty - l.rejected_qty - l.returned_qty < l.quantity
                       AND po.delivery_date < (now() AT TIME ZONE 'Asia/Kolkata')::date) AS late,
                   (SELECT count(DISTINCT po.id)::int FROM purchase_orders po JOIN purchase_order_lines l ON l.order_id = po.id
-                    WHERE po.status IN ('approved', 'sent') AND l.received_qty - l.rejected_qty < l.quantity) AS to_receive,
+                    WHERE po.status IN ('approved', 'sent') AND l.received_qty - l.rejected_qty - l.returned_qty < l.quantity) AS to_receive,
                   (SELECT COALESCE(sum(round(gl.accepted_qty * gl.unit_cost, 2)), 0) FROM goods_receipt_lines gl
                      JOIN goods_receipts g ON g.id = gl.receipt_id WHERE g.status = 'accepted' AND g.accepted_on >= $1::date)::text AS accepted_month,
                   (SELECT COALESCE(sum(value), 0) FROM stock_balances)::text AS stock_value,

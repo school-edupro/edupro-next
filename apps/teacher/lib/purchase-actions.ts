@@ -276,3 +276,18 @@ export async function acceptReceipt(fd: FormData) {
 export async function rejectReceipt(fd: FormData) {
   return inspection('reject')(fd);
 }
+
+// ---- phase 2, part 8: acknowledging what the store issued ---------------------------------------
+export async function acknowledgeIssue(fd: FormData) {
+  const id = pick(fd, 'id');
+  if (!okId(id)) back('/purchase/issues', 'validation-failed', 'Unknown issue');
+  return run(
+    `/purchase/issues/${id}`,
+    () =>
+      apiFetch(`/purchase/issues/${id}/acknowledge`, {
+        method: 'POST',
+        body: JSON.stringify({ note: pick(fd, 'note') || undefined }),
+      }),
+    'Acknowledged: received',
+  );
+}

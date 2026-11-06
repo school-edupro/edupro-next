@@ -478,8 +478,9 @@ export class PurchaseOrdersService implements OnModuleInit {
         received_qty: string;
         accepted_qty: string;
         rejected_qty: string;
+        returned_qty: string;
       }>(
-        `SELECT l.id::text, l.seq, l.received_qty::text, l.accepted_qty::text, l.rejected_qty::text, l.requisition_line_id::text, l.item_id::text, i.code AS item_code, l.description, l.hsn_code,
+        `SELECT l.id::text, l.seq, l.received_qty::text, l.accepted_qty::text, l.rejected_qty::text, l.returned_qty::text, l.requisition_line_id::text, l.item_id::text, i.code AS item_code, l.description, l.hsn_code,
                 l.quantity::text, l.uom_id::text, u.code AS uom, l.rate::text, l.discount_pct::text, l.gst_rate::text, l.reverse_charge,
                 l.exempt, l.taxable::text, l.cgst::text, l.sgst::text, l.igst::text, l.rcm_gst::text, l.total::text, l.contract_id::text,
                 rc.rate::text AS contract_rate, l.rate_change_reason,
@@ -681,6 +682,7 @@ export class PurchaseOrdersService implements OnModuleInit {
           received: Number(l.received_qty),
           accepted: Number(l.accepted_qty),
           rejected: Number(l.rejected_qty),
+          returned: Number(l.returned_qty),
         })),
         charges: charges.map((x) => ({
           id: x.id,

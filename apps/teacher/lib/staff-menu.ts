@@ -32,6 +32,8 @@ export interface StaffWaiting {
   orders?: number;
   /** goods and services received, waiting for my inspection or signature (docs/design/84) */
   receipts?: number;
+  /** what a store issued to my department, waiting for my acknowledgement */
+  issues?: number;
 }
 export interface StaffGroup {
   id: string;
@@ -260,6 +262,18 @@ export const STAFF_MENU: StaffGroup[] = [
         label: 'Goods received to inspect',
         help: 'Goods and services your department received: check them and accept or reject',
         allowed: (_can, w) => (w.receipts ?? 0) > 0,
+      },
+      {
+        href: '/purchase/issues',
+        label: 'Issued to my department',
+        help: 'What the store issued to you or your department: confirm you received it',
+        allowed: (_can, w) => (w.issues ?? 0) > 0,
+      },
+      {
+        href: '/purchase/my-stores',
+        label: 'Stock in my stores',
+        help: 'What the stores you keep hold: in hand, reserved, free and below the reorder level',
+        allowed: (can) => can('purchase.store.operate'),
       },
       {
         href: '/no-dues',

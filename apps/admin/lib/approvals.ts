@@ -24,7 +24,9 @@ export interface ApprovalGroup {
     | 'requisition'
     | 'cs_sign'
     | 'order'
-    | 'receipt';
+    | 'receipt'
+    | 'issue_ack'
+    | 'count';
   title: string;
   help: string;
   href: string;
@@ -216,6 +218,68 @@ export async function myApprovals(
           : null,
       )
       .catch(() => null),
+    // what a store issued to my department, waiting for my acknowledgement (docs/design/84, part 8)
+    apiFetch<{
+      rows: Array<{
+        id: string;
+        number: string;
+        department: string;
+        store: string;
+        value: number;
+        issuedOn: string;
+      }>;
+      toAcknowledge: number;
+    }>(`/purchase/issues?mine=1`)
+      .then((r): ApprovalGroup | null =>
+        r.toAcknowledge
+          ? {
+              key: 'issue_ack',
+              title: 'Issues to acknowledge',
+              help: 'What the store issued to your department: confirm you received it',
+              href: '/purchase/issues?tab=mine',
+              count: r.toAcknowledge,
+              items: r.rows.slice(0, size).map((x) => ({
+                id: x.id,
+                title: `${x.number} · ${x.department}`,
+                detail: `From ${x.store} · ₹${x.value.toLocaleString('en-IN')}`,
+                href: `/purchase/issues/${x.id}`,
+                since: x.issuedOn,
+              })),
+            }
+          : null,
+      )
+      .catch(() => null),
+    // physical counts waiting for approval (docs/design/84, part 8)
+    has.has('purchase.count.approve')
+      ? apiFetch<{
+          rows: Array<{
+            id: string;
+            number: string;
+            store: string;
+            differences: number;
+            submittedAt: string | null;
+          }>;
+        }>(`/purchase/counts?status=submitted`)
+          .then((r): ApprovalGroup | null =>
+            r.rows.length
+              ? {
+                  key: 'count',
+                  title: 'Physical counts to approve',
+                  help: 'Store counts sent for approval: their differences post when approved',
+                  href: '/purchase/counts',
+                  count: r.rows.length,
+                  items: r.rows.slice(0, size).map((x) => ({
+                    id: x.id,
+                    title: `${x.number} · ${x.store}`,
+                    detail: `${String(x.differences)} difference${x.differences === 1 ? '' : 's'}`,
+                    href: `/purchase/counts/${x.id}`,
+                    since: x.submittedAt,
+                  })),
+                }
+              : null,
+          )
+          .catch(() => null)
+      : null,
     // purchase requisitions at my level and comparative statements for the committee (docs/design/83)
     apiFetch<{ data: PurchaseRequisitionRow[]; waitingForMe: number; toSign: number }>(
       `/purchase/requisitions?view=waiting&status=submitted&size=${String(size)}`,

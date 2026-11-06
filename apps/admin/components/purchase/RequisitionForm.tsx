@@ -18,6 +18,7 @@ interface Line {
   uomId: string;
   estRate: string;
   fulfil: 'buy' | 'store';
+  storeId: string;
   storeNote: string;
   note: string;
 }
@@ -30,6 +31,7 @@ const blank = (): Line => ({
   uomId: '',
   estRate: '',
   fulfil: 'buy',
+  storeId: '',
   storeNote: '',
   note: '',
 });
@@ -70,6 +72,7 @@ export function RequisitionForm({
           uomId: l.uomId,
           estRate: String(l.estRate),
           fulfil: l.fulfil,
+          storeId: l.storeId ?? '',
           storeNote: l.storeNote ?? '',
           note: l.note ?? '',
         }))
@@ -98,6 +101,16 @@ export function RequisitionForm({
       : 0;
   };
   const total = lines.reduce((s, l) => s + amountOf(l), 0);
+  const qty = (n: number) => n.toLocaleString('en-IN', { maximumFractionDigits: 3 });
+  /** what a store holds of an item: in hand, reserved, free (in the store unit) */
+  const stockOf = (storeId: string, itemId: string) => {
+    const b = lists.stock.find((x) => x.storeId === storeId && x.itemId === itemId);
+    return {
+      qty: b?.qty ?? 0,
+      reserved: b?.reserved ?? 0,
+      free: (b?.qty ?? 0) - (b?.reserved ?? 0),
+    };
+  };
 
   const send = () => {
     setError(null);
@@ -115,7 +128,9 @@ export function RequisitionForm({
           quantity: l.quantity,
           ...(l.estRate !== '' ? { estRate: l.estRate } : {}),
           fulfil: l.fulfil,
-          ...(l.fulfil === 'store' ? { storeNote: l.storeNote } : {}),
+          ...(l.fulfil === 'store'
+            ? { storeId: l.storeId || null, storeNote: l.storeNote || undefined }
+            : {}),
           ...(l.note.trim() ? { note: l.note } : {}),
         })),
     };
@@ -312,7 +327,40 @@ export function RequisitionForm({
                     ))}
                   </div>
                 </fieldset>
-                {l.fulfil === 'store' ? (
+                {l.fulfil === 'store' && items.get(l.itemId)?.stockTracked ? (
+                  <label className="ep-field" htmlFor={`rf-l${n}-store`}>
+                    <span className="ep-field__label" data-required="true">
+                      Issued from
+                    </span>
+                    <select
+                      id={`rf-l${n}-store`}
+                      className="ep-select"
+                      value={l.storeId}
+                      aria-describedby={`rf-l${n}-stock`}
+                      onChange={(e) => setLine(i, { storeId: e.target.value })}
+                    >
+                      <option value="">Pick the store</option>
+                      {lists.stores.map((st) => {
+                        const b = stockOf(st.id, l.itemId);
+                        return (
+                          <option key={st.id} value={st.id}>
+                            {st.name} — {qty(b.free)} free
+                          </option>
+                        );
+                      })}
+                    </select>
+                    <span id={`rf-l${n}-stock`} className="ep-field__help">
+                      {(() => {
+                        const it = items.get(l.itemId)!;
+                        if (!l.storeId)
+                          return `In the store unit (${it.storeUom}); reserved when sent`;
+                        const b = stockOf(l.storeId, l.itemId);
+                        const need = Number(l.quantity || 0) * it.perUnit;
+                        return `${qty(b.qty)} ${it.storeUom} in hand, ${qty(b.reserved)} reserved${need ? `; this line needs ${qty(need)}` : ''}`;
+                      })()}
+                    </span>
+                  </label>
+                ) : l.fulfil === 'store' ? (
                   <label className="ep-field" htmlFor={`rf-l${n}-store`}>
                     <span className="ep-field__label" data-required="true">
                       What the store issues
