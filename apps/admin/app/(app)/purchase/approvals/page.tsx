@@ -7,7 +7,7 @@ import { DOC_LABEL, inr, type DepartmentApprovals, type PurchaseDoc } from '@/li
 import { saveDepartmentLevels, saveDepartmentRules } from '@/lib/purchase-actions';
 import type { ApprovalSetup } from '@/lib/recruitment';
 
-const DOCS: PurchaseDoc[] = ['indent', 'requisition', 'order'];
+const DOCS: PurchaseDoc[] = ['indent', 'requisition', 'order', 'inspection'];
 const INTRO: Record<PurchaseDoc, string> = {
   indent:
     'A PI the department raises goes through these levels in order. A level nobody holds is skipped; a level held by the person who raised it passes to the next level (nobody approves their own).',
@@ -15,10 +15,13 @@ const INTRO: Record<PurchaseDoc, string> = {
     'A PR for this department goes through these levels (a PR combining departments uses the purchase office department’s, set in Settings).',
   order:
     'A PO for this department goes through these levels. Its maker never approves it: their level passes to the next.',
+  inspection:
+    'Goods and services received against this department’s POs are inspected and accepted at these levels. When none is set, the department’s HOD inspects (the school admin when there is no HOD). Whoever received it never inspects it; POs above the committee limit are inspected by the purchase committee instead.',
 };
 
 /**
- * Who approves (docs/design/83, part 1): per department, up to three levels for its PIs, PRs and POs —
+ * Who approves (docs/design/83, part 1): per department, up to three levels for its PIs, PRs, POs and
+ * the inspection of what is received (doc 84, part 7) —
  * named employees, everyone with a designation, or the department's HOD — and the department's bypass
  * rules (a PI under its limit, or all on rate contract, skips the PR; part 2).
  */
@@ -83,6 +86,9 @@ export default async function PurchaseApprovalsPage({
               <th scope="col" className="is-numeric">
                 PO levels
               </th>
+              <th scope="col" className="is-numeric">
+                Inspection levels
+              </th>
               <th scope="col">Skips the PR</th>
             </tr>
           </thead>
@@ -95,7 +101,7 @@ export default async function PurchaseApprovalsPage({
                 <td>{d.hod ? d.hod.name : '—'}</td>
                 {DOCS.map((doc) => (
                   <td key={doc} className="is-numeric">
-                    {d.levels[doc].length || '—'}
+                    {d.levels[doc].length || (doc === 'inspection' ? 'HOD' : '—')}
                   </td>
                 ))}
                 <td>
@@ -183,7 +189,11 @@ export default async function PurchaseApprovalsPage({
               <ApprovalLevelsEditor
                 setup={setupFor(doc)}
                 save={saveDepartmentLevels.bind(null, dep.id, doc)}
-                title={`${dep.name}: who approves a ${DOC_LABEL[doc]}`}
+                title={
+                  doc === 'inspection'
+                    ? `${dep.name}: who inspects goods and services received`
+                    : `${dep.name}: who approves a ${DOC_LABEL[doc]}`
+                }
                 intro={INTRO[doc]}
                 hodLabel={`HOD of ${dep.name}`}
                 hodHelp={`The HOD set on ${dep.name} approves.`}

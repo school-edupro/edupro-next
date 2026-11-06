@@ -1,7 +1,13 @@
 import { Badge, Breadcrumbs, PageHeader } from '@edupro/ui';
 import { Notice } from '@/components/Notice';
 import { apiFetch, getMe } from '@/lib/api';
-import { EMERGENCY_STATUS, inr, ORDER_STATUS, type OrderRow } from '@/lib/purchase';
+import {
+  EMERGENCY_STATUS,
+  inr,
+  ORDER_STATUS,
+  RECEIPT_STATUS_OF_ORDER,
+  type OrderRow,
+} from '@/lib/purchase';
 
 const TABS = [
   ['all', 'All'],
@@ -173,6 +179,11 @@ export default async function OrdersPage({
                     </Badge>
                     {x.status === 'submitted' && x.waitingWith ? (
                       <span className="ep-mr-col__desc">With {x.waitingWith}</span>
+                    ) : null}
+                    {['approved', 'sent'].includes(x.status) && x.receiptStatus !== 'none' ? (
+                      <span className="ep-mr-col__desc">
+                        {RECEIPT_STATUS_OF_ORDER[x.receiptStatus]}
+                      </span>
                     ) : null}
                   </td>
                 </tr>

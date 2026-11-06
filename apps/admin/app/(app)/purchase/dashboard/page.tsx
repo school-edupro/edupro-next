@@ -83,6 +83,59 @@ export default async function PurchaseDashboardPage() {
           }
           hint="placed orders"
         />
+        <KpiTile
+          label="To receive"
+          value={num(f.toReceive, '/purchase/to-receive')}
+          hint="orders with something still to come"
+        />
+        <KpiTile
+          label="Late deliveries"
+          value={num(
+            f.lateOrders,
+            reports({ report: 'pending_deliveries', status: 'late', from: '2000-04-01' }),
+          )}
+          hint="orders past their delivery date"
+        />
+        <KpiTile
+          label="Waiting for inspection"
+          value={num(f.inspecting, '/purchase/receipts?tab=inspecting')}
+          hint={
+            f.deemedAccepted
+              ? `${String(f.deemedAccepted)} past 15 days (deemed accepted)`
+              : 'goods and services received'
+          }
+        />
+        <KpiTile
+          label="Accepted this month"
+          value={
+            <a
+              className="ep-cdash__num"
+              href={reports({
+                report: 'grn_register',
+                from: d.monthFrom,
+                to: d.today,
+                status: 'accepted',
+              })}
+            >
+              {lakh(f.acceptedThisMonthValue)}
+            </a>
+          }
+          hint="goods and services received"
+        />
+        <KpiTile
+          label="Stock value"
+          value={
+            <a className="ep-cdash__num" href="/purchase/stock">
+              {lakh(f.stockValue)}
+            </a>
+          }
+          hint="in every store, at the average"
+        />
+        <KpiTile
+          label="Below reorder level"
+          value={num(f.belowReorder, '/purchase/stock?below=1')}
+          hint="items in a store"
+        />
       </div>
 
       <div className="ep-chart__grid2">

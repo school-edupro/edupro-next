@@ -269,6 +269,37 @@ export default async function PurchaseSettingsPage({
               </label>
             </FormRow>
           </FormSection>
+          <FormSection
+            title="Goods received"
+            description="How the store takes in what comes against a PO."
+          >
+            <FormRow columns={2}>
+              <label className="ep-field" htmlFor="ps-tol">
+                <span className="ep-field__label">More than ordered allowed (%)</span>
+                <input
+                  id="ps-tol"
+                  name="receiptTolerancePct"
+                  className="ep-input"
+                  inputMode="decimal"
+                  defaultValue={String(s.receiptTolerancePct)}
+                />
+                <span className="ep-field__help">
+                  Per PO line; 0 refuses anything beyond the order. Most schools keep 0.
+                </span>
+              </label>
+            </FormRow>
+            <label className="ep-check" htmlFor="ps-gstcost">
+              <input
+                id="ps-gstcost"
+                name="stockGstInCost"
+                className="ep-check__input"
+                type="checkbox"
+                defaultChecked={s.stockGstInCost}
+              />
+              <span className="ep-check__box" />
+              GST paid is part of the stock cost (leave on unless the school takes input tax credit)
+            </label>
+          </FormSection>
           {can ? (
             <FormActions>
               <Button type="submit">Save the settings</Button>

@@ -29,6 +29,7 @@ export default async function StaffLayout({ children }: { children: ReactNode })
     purchase,
     requisitions,
     orders,
+    receipts,
   ] = await Promise.all([
     bff.api
       .fetch<{ unread: number }>('/comms/inbox/unread')
@@ -72,6 +73,11 @@ export default async function StaffLayout({ children }: { children: ReactNode })
       .fetch<{ waitingForMe: number }>('/purchase/orders?view=waiting&status=submitted&size=1')
       .then((r) => r.waitingForMe)
       .catch(() => 0),
+    // goods and services received for my inspection or signature (docs/design/84)
+    bff.api
+      .fetch<{ waiting: number }>('/purchase/receipts-waiting')
+      .then((r) => r.waiting)
+      .catch(() => 0),
   ]);
   return (
     <StaffShell
@@ -88,6 +94,7 @@ export default async function StaffLayout({ children }: { children: ReactNode })
         purchase,
         requisitions,
         orders,
+        receipts,
       }}
     >
       {children}

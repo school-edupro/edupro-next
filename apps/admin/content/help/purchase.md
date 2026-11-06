@@ -4,24 +4,25 @@ Staff ask for what their department needs on a **Purchase Indent (PI)**; the dep
 decide it in turn; the purchase office turns approved PIs into a **Requisition (PR)** and an **Order
 (PO)**. This page covers the masters they pick from (units, HSN / SAC codes with GST, item categories
 and items, payment terms, vendors, rate contracts, who approves, the settings), the PI, the PR, the
-PO and the emergency purchase.
+PO, the emergency purchase, the stores and receiving what was ordered.
 
 ## Who does what
 
-| Who                                                 | What                                                                                                 |
-| --------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
-| **Purchase office** (its own role)                  | Keeps items, units, HSN codes, categories, payment terms, rate contracts; adds and changes vendors   |
-| **Someone with vendor approval** (the school admin) | Approves a new vendor and a change of a vendor's bank account, GSTIN or PAN — never one they entered |
-| **School admin**                                    | Settings, the purchase committee, who approves per department, the bypass rules                      |
-| **Any staff member** (teachers, office staff)       | Raises PIs for their own department, in the admin or the staff app                                   |
-| **The department's approvers** (HOD, Principal…)    | Approve, send back or reject the PIs at their level; hand their approvals to a colleague when away   |
-| **Purchase office** (requisitions)                  | Makes PRs from approved PIs (or directly), enters quotes, chooses vendors, sends PRs for approval    |
-| **The purchase committee** (named in settings)      | Signs the comparative statement of a PR in the committee tier, in the admin or the staff app         |
-| **Purchase office** (orders)                        | Checks the draft POs, sends them for approval, e-mails them to vendors, closes and amends them       |
-| **School admin** (orders)                           | Cancels an approved PO (its own right)                                                               |
-| **The Principal** (or the designation in settings)  | Ratifies an emergency purchase                                                                       |
-| **Auditor** (read only)                             | The purchase dashboard and reports                                                                   |
-| **Store keeper** (its own role, per store)          | Keeps the stores given to them: opening stock now; receipts, issues, returns and counts next         |
+| Who                                                  | What                                                                                                 |
+| ---------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
+| **Purchase office** (its own role)                   | Keeps items, units, HSN codes, categories, payment terms, rate contracts; adds and changes vendors   |
+| **Someone with vendor approval** (the school admin)  | Approves a new vendor and a change of a vendor's bank account, GSTIN or PAN — never one they entered |
+| **School admin**                                     | Settings, the purchase committee, who approves per department, the bypass rules                      |
+| **Any staff member** (teachers, office staff)        | Raises PIs for their own department, in the admin or the staff app                                   |
+| **The department's approvers** (HOD, Principal…)     | Approve, send back or reject the PIs at their level; hand their approvals to a colleague when away   |
+| **Purchase office** (requisitions)                   | Makes PRs from approved PIs (or directly), enters quotes, chooses vendors, sends PRs for approval    |
+| **The purchase committee** (named in settings)       | Signs the comparative statement of a PR in the committee tier, in the admin or the staff app         |
+| **Purchase office** (orders)                         | Checks the draft POs, sends them for approval, e-mails them to vendors, closes and amends them       |
+| **School admin** (orders)                            | Cancels an approved PO (its own right)                                                               |
+| **The Principal** (or the designation in settings)   | Ratifies an emergency purchase                                                                       |
+| **Auditor** (read only)                              | The purchase dashboard and reports                                                                   |
+| **Store keeper** (its own role, per store)           | Keeps the stores given to them: opening stock, receives what comes against POs; issues next          |
+| **The department's inspectors** (the HOD by default) | Inspect and accept what was received for the department's POs, in the admin or the staff app         |
 
 ## Set it up, in this order
 
@@ -272,6 +273,53 @@ the balance and value after it, the batches in hand, and the balance in each sto
 
 Stock is valued at the **weighted average**: each receipt re-averages the item's rate in that store and
 issues go out at the average. The register is never changed: a mistake is put right by another move.
+
+## Receiving goods and services
+
+**Purchase → To receive** lists the approved and sent POs the vendor still owes something on, the
+earliest delivery date first and the late ones marked. When the delivery comes, the **store keeper**
+(or the purchase office — never the person who made the PO) presses **Receive goods**:
+
+- the **store** it goes into (the main store unless you keep another), the day, the vendor's **challan**
+  and **invoice** numbers and dates, and a photo or PDF of them;
+- per line the quantity **received** (what is still to come is filled in) and what was **refused at the
+  door** with the reason (damaged, wrong, more than ordered). More than ordered is refused unless
+  Purchase settings allows a few per cent over; the **batch** and expiry of an item kept by batch; the
+  **serial numbers** (one per line) of an asset, when it has them.
+
+A delivery in parts gets one receipt each time (`GRN/2026-27/0001`). A receipt entered wrongly is
+**cancelled** (while it waits for inspection) and recorded again.
+
+**Inspection.** The receipt then waits for the PO's department: its **Inspection** levels on Purchase →
+Who approves, or the department's **HOD** when none is set (the school admin when there is no HOD). For
+a PO above the committee limit the **purchase committee** inspects instead: its members sign the same
+inspection, and changing it asks the others to sign again. Nobody inspects what they received. The
+inspector (in the admin under My approvals, or in the staff app) marks per line what is **accepted** and
+what is **rejected** with the reason — ticking the rejected serial numbers — or **rejects it all**.
+
+**On acceptance**:
+
+- the accepted quantity **enters the store** at what each unit cost on the PO: the rate after discount,
+  its GST (unless Purchase settings leaves GST out of the stock cost) and its share of the freight and
+  other charges, shared by value;
+- what was bought **for an indent** goes straight to that department on an **issue**
+  (`ISS/2026-27/0001`) — up to what the indent asked for; the rest stays in the store;
+- the PO's **Deliveries** show ordered, received, accepted, rejected and still to come; **rejected**
+  goods wait to go back to the vendor (returns come with issues); a PO whose lines are all accepted
+  **closes by itself**, otherwise **Close short** with the reason. Once something has come, a PO can no
+  longer be cancelled or amended.
+
+**Services** have no goods: **Work done (services)** on the PO records what was done; the department
+**certifies** it the same way (`SCC/2026-27/0001`, the completion certificate).
+
+**The 15 days.** Under the MSMED Act a delivery with no written objection within 15 days counts as
+accepted. Each receipt shows that **deemed acceptance** date; past it the receipt is marked, and the
+dashboard counts them. The acceptance date (or the deemed date) starts the vendor's 45-day payment
+clock.
+
+The **PDF** on each receipt is the goods received and inspection note (or the completion certificate)
+with who received and who inspected it. **Reports**: the **Goods receipt register** and **Pending
+deliveries** (late only, if you like).
 
 ## Hand over my approvals
 

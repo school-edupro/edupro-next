@@ -17,7 +17,7 @@ import type {
   SettingsDto,
 } from './purchase.dto';
 
-const DOCS = ['indent', 'requisition', 'order'] as const;
+const DOCS = ['indent', 'requisition', 'order', 'inspection'] as const;
 type Doc = (typeof DOCS)[number];
 
 interface TermLine {
@@ -219,6 +219,8 @@ export class PurchaseSetupService {
         committee_signatures: number | null;
         emergency_enabled: boolean;
         emergency_ratifier: string;
+        stock_gst_in_cost: boolean;
+        receipt_tolerance_pct: string;
         po_terms: string | null;
         po_validity_days: number;
         purchase_department_id: string | null;
@@ -254,6 +256,8 @@ export class PurchaseSetupService {
         committeeSignatures: x.committee_signatures,
         emergencyEnabled: x.emergency_enabled,
         emergencyRatifier: x.emergency_ratifier,
+        stockGstInCost: x.stock_gst_in_cost,
+        receiptTolerancePct: Number(x.receipt_tolerance_pct),
         poTerms: x.po_terms,
         poValidityDays: x.po_validity_days,
         purchaseDepartmentId: x.purchase_department_id,
@@ -303,7 +307,8 @@ export class PurchaseSetupService {
                 pi_prefix = $5, pr_prefix = $6, po_prefix = $7, direct_limit = $8, committee_limit = $9,
                 committee_quotes = $10, committee_signatures = $11, emergency_enabled = $12, po_terms = $13,
                 po_validity_days = $14, purchase_department_id = $15, po_signatures = $16::text[], large_po_alert = $17,
-                split_window_days = $18, emergency_ratifier = $19, updated_at = now(), updated_by = app.current_user_id()`,
+                split_window_days = $18, emergency_ratifier = $19, stock_gst_in_cost = $20,
+                receipt_tolerance_pct = $21, updated_at = now(), updated_by = app.current_user_id()`,
         [
           dto.gstin,
           dto.gstin ? dto.gstin.slice(0, 2) : null,
@@ -324,6 +329,8 @@ export class PurchaseSetupService {
           dto.largePoAlert,
           dto.splitWindowDays,
           dto.emergencyRatifier,
+          dto.stockGstInCost,
+          dto.receiptTolerancePct,
         ],
       );
       await this.audit.stage(ctx, c, {

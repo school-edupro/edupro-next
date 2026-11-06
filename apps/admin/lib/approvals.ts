@@ -23,7 +23,8 @@ export interface ApprovalGroup {
     | 'purchase'
     | 'requisition'
     | 'cs_sign'
-    | 'order';
+    | 'order'
+    | 'receipt';
   title: string;
   help: string;
   href: string;
@@ -50,6 +51,16 @@ interface PurchaseOrderRow {
   total: number;
   submittedAt: string | null;
   createdAt: string;
+}
+interface PurchaseReceiptRow {
+  id: string;
+  number: string;
+  kind: 'goods' | 'service';
+  order: string;
+  vendor: string;
+  department: string | null;
+  receivedOn: string;
+  overdue: boolean;
 }
 interface PurchaseRequisitionRow {
   id: string;
@@ -178,6 +189,28 @@ export async function myApprovals(
                 detail: `₹${x.total.toLocaleString('en-IN')}${x.department ? ` · ${x.department}` : ''}`,
                 href: `/purchase/orders/${x.id}`,
                 since: x.submittedAt ?? x.createdAt,
+              })),
+            }
+          : null,
+      )
+      .catch(() => null),
+    // goods receipts and completion certificates to inspect (the department's levels, or the
+    // committee's signatures above its limit) — docs/design/84, part 7
+    apiFetch<{ rows: PurchaseReceiptRow[]; waitingForMe: number }>(`/purchase/receipts?mine=1`)
+      .then((r): ApprovalGroup | null =>
+        r.waitingForMe
+          ? {
+              key: 'receipt',
+              title: 'Goods received to inspect',
+              help: 'Goods and services received against orders, waiting for your inspection or signature',
+              href: '/purchase/receipts?tab=waiting',
+              count: r.waitingForMe,
+              items: r.rows.slice(0, size).map((x) => ({
+                id: x.id,
+                title: `${x.number} · ${x.vendor}`,
+                detail: `${x.order}${x.department ? ` · ${x.department}` : ''}${x.overdue ? ' · past 15 days' : ''}`,
+                href: `/purchase/receipts/${x.id}`,
+                since: x.receivedOn,
               })),
             }
           : null,

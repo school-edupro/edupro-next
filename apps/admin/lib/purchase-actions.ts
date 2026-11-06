@@ -273,6 +273,8 @@ export async function savePurchaseSettings(fd: FormData) {
             .filter(Boolean),
           largePoAlert: alert ? Number(alert.replace(/,/g, '')) : null,
           splitWindowDays: num(fd, 'splitWindowDays'),
+          stockGstInCost: fd.get('stockGstInCost') === 'on',
+          receiptTolerancePct: num(fd, 'receiptTolerancePct') || 0,
         }),
       }),
     'Purchase settings saved',
@@ -999,4 +1001,74 @@ export async function importOpening(
     if (e instanceof ApiError) return { ok: false, error: detailOf(e) };
     throw e;
   }
+}
+
+// ---- phase 2, part 7: goods receipts and completion certificates ------------------------------------
+export type ReceiptSaveResult =
+  { ok: true; id: string; number: string } | { ok: false; error: string };
+
+/**
+ * What came against a PO (or the work done): the details and lines as JSON in `body`, the challan /
+ * invoice photo or PDF in `file` (optional). The form keeps what was typed when it is refused.
+ */
+export async function recordReceipt(fd: FormData): Promise<ReceiptSaveResult> {
+  let body: Record<string, unknown>;
+  try {
+    body = JSON.parse(String(fd.get('body') ?? '{}')) as Record<string, unknown>;
+  } catch {
+    return { ok: false, error: 'The form could not be read' };
+  }
+  try {
+    const file = fd.get('file');
+    const fileId = file instanceof File && file.size ? await uploadOne(file) : undefined;
+    const r = await apiFetch<{ id: string; number: string }>('/purchase/receipts', {
+      method: 'POST',
+      body: JSON.stringify({ ...body, ...(fileId ? { fileId } : {}) }),
+    });
+    revalidatePath('/purchase/receipts');
+    if (typeof body.orderId === 'string') revalidatePath(poPage(body.orderId));
+    return { ok: true, id: r.id, number: r.number };
+  } catch (e) {
+    if (e instanceof ApiError) return { ok: false, error: detailOf(e) };
+    throw e;
+  }
+}
+
+export type InspectResult = { ok: true; status: string } | { ok: false; error: string };
+
+/** The inspector's decision: accept (line by line, rejecting some) or reject all with the reason. */
+export async function inspectReceipt(
+  id: string,
+  body: Record<string, unknown>,
+): Promise<InspectResult> {
+  if (!okId(id)) return { ok: false, error: 'Unknown receipt' };
+  try {
+    const r = await apiFetch<{ status: string; orderId: string }>(
+      `/purchase/receipts/${id}/inspect`,
+      {
+        method: 'POST',
+        body: JSON.stringify(body),
+      },
+    );
+    revalidatePath(`/purchase/receipts/${id}`);
+    revalidatePath(poPage(r.orderId));
+    return { ok: true, status: r.status };
+  } catch (e) {
+    if (e instanceof ApiError) return { ok: false, error: detailOf(e) };
+    throw e;
+  }
+}
+
+export async function cancelReceipt(fd: FormData) {
+  const id = pick(fd, 'id');
+  if (!okId(id)) back('/purchase/receipts', 'validation-failed', 'Unknown receipt');
+  return run(
+    `/purchase/receipts/${id}`,
+    () =>
+      apiFetch(`/purchase/receipts/${id}/cancel`, {
+        method: 'POST',
+        body: JSON.stringify({ reason: pick(fd, 'reason') }),
+      }),
+    'Receipt cancelled: what it brought counts as still to come',
+  );
 }

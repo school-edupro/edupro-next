@@ -114,6 +114,8 @@ interface PoRow {
   waiting_with: string | null;
   lines: number;
   newer: string | null;
+  receipt_status: 'none' | 'part' | 'received';
+  receipts: number;
 }
 
 // eslint-disable-next-line no-restricted-syntax -- PERSON is a fixed fragment
@@ -130,7 +132,8 @@ const SELECT = `
             FROM workflow_instances i JOIN workflow_steps st ON st.instance_id = i.id AND st.level = i.current_level AND st.status = 'pending'
            WHERE i.id = po.workflow_instance_id AND i.status = 'pending') AS waiting_with,
          (SELECT count(*)::int FROM purchase_order_lines l WHERE l.order_id = po.id) AS lines,
-         (SELECT n.id::text FROM purchase_orders n WHERE n.supersedes_id = po.id AND n.status NOT IN ('rejected', 'cancelled') LIMIT 1) AS newer
+         (SELECT n.id::text FROM purchase_orders n WHERE n.supersedes_id = po.id AND n.status NOT IN ('rejected', 'cancelled') LIMIT 1) AS newer,
+         po.receipt_status, (SELECT count(*)::int FROM goods_receipts g WHERE g.order_id = po.id AND g.status <> 'cancelled') AS receipts
     FROM purchase_orders po
     JOIN vendors v ON v.id = po.vendor_id
     LEFT JOIN purchase_requisitions r ON r.id = po.requisition_id
@@ -230,6 +233,8 @@ export class PurchaseOrdersService implements OnModuleInit {
       waitingWith: r.waiting_with,
       msmeWarning: r.msme_warning,
       lines: r.lines,
+      receiptStatus: r.receipt_status,
+      receipts: r.receipts,
     };
   }
 
@@ -470,8 +475,11 @@ export class PurchaseOrdersService implements OnModuleInit {
         contract_rate: string | null;
         rate_change_reason: string | null;
         max_qty: string | null;
+        received_qty: string;
+        accepted_qty: string;
+        rejected_qty: string;
       }>(
-        `SELECT l.id::text, l.seq, l.requisition_line_id::text, l.item_id::text, i.code AS item_code, l.description, l.hsn_code,
+        `SELECT l.id::text, l.seq, l.received_qty::text, l.accepted_qty::text, l.rejected_qty::text, l.requisition_line_id::text, l.item_id::text, i.code AS item_code, l.description, l.hsn_code,
                 l.quantity::text, l.uom_id::text, u.code AS uom, l.rate::text, l.discount_pct::text, l.gst_rate::text, l.reverse_charge,
                 l.exempt, l.taxable::text, l.cgst::text, l.sgst::text, l.igst::text, l.rcm_gst::text, l.total::text, l.contract_id::text,
                 rc.rate::text AS contract_rate, l.rate_change_reason,
@@ -586,6 +594,22 @@ export class PurchaseOrdersService implements OnModuleInit {
       const mine = po.workflow_instance_id
         ? await c.query<{ id: string }>(MY_STEP, [po.workflow_instance_id])
         : { rows: [] };
+      const receipts = await c.query<{
+        id: string;
+        number: string;
+        kind: string;
+        status: string;
+        received_on: string;
+        accepted_on: string | null;
+        store: string | null;
+        by: string | null;
+      }>(
+        // eslint-disable-next-line no-restricted-syntax -- PERSON is a fixed fragment
+        `SELECT g.id::text, g.number, g.kind, g.status, g.received_on::text, g.accepted_on::text, st.name AS store,
+                (SELECT ${PERSON('u')} FROM users u WHERE u.id = g.created_by) AS by
+           FROM goods_receipts g LEFT JOIN stores st ON st.id = g.store_id WHERE g.order_id = $1 ORDER BY g.received_on, g.id`,
+        [id],
+      );
       const manage = this.has(ctx, PURCHASE.orderManage);
       const approvedYet = instance?.steps.some((s) => s.status === 'approved') ?? false;
       const placed = ['approved', 'sent'].includes(po.status);
@@ -654,6 +678,9 @@ export class PurchaseOrdersService implements OnModuleInit {
           ...lineTax(l),
           contractRate: l.contract_rate === null ? null : Number(l.contract_rate),
           rateChangeReason: l.rate_change_reason,
+          received: Number(l.received_qty),
+          accepted: Number(l.accepted_qty),
+          rejected: Number(l.rejected_qty),
         })),
         charges: charges.map((x) => ({
           id: x.id,
@@ -716,12 +743,29 @@ export class PurchaseOrdersService implements OnModuleInit {
           decide: mine.rows.length > 0 && po.created_by !== String(ctx.user.id),
           send: manage && placed && !po.emergency,
           close: manage && placed,
-          amend: manage && placed && !po.emergency && !po.newer,
+          amend: manage && placed && !po.emergency && !po.newer && !po.receipts,
           cancel:
-            (manage &&
+            !po.receipts &&
+            ((manage &&
               (EDITABLE.includes(po.status) || (po.status === 'submitted' && !approvedYet))) ||
-            (this.has(ctx, PURCHASE.orderCancel) && placed),
+              (this.has(ctx, PURCHASE.orderCancel) && placed)),
+          receive:
+            placed &&
+            !po.newer &&
+            po.receipt_status !== 'received' &&
+            po.created_by !== String(ctx.user.id) &&
+            (this.has(ctx, PURCHASE.storeOperate) || this.has(ctx, PURCHASE.storeManage) || manage),
         },
+        receiptList: receipts.rows.map((g) => ({
+          id: g.id,
+          number: g.number,
+          kind: g.kind,
+          status: g.status,
+          receivedOn: g.received_on,
+          acceptedOn: g.accepted_on,
+          store: g.store,
+          by: g.by,
+        })),
       };
     });
   }
@@ -1033,6 +1077,12 @@ export class PurchaseOrdersService implements OnModuleInit {
           },
         );
       if (!placed) this.mustManage(ctx);
+      if (po.receipts)
+        throw new DomainError(
+          'purchase.order_received',
+          'Goods or work have been received against this PO: close it short instead',
+          { status: 409 },
+        );
       if (po.status === 'submitted' && po.workflow_instance_id) {
         const done = await c.query(
           `SELECT 1 FROM workflow_steps WHERE instance_id = $1 AND status = 'approved'`,
@@ -1064,7 +1114,7 @@ export class PurchaseOrdersService implements OnModuleInit {
     });
   }
 
-  /** Fulfilled (phase 1: by hand, until goods receipts come). */
+  /** Short-closed by hand with the reason (a PO accepted in full closes by itself, part 7). */
   async close(ctx: RequestContext, id: string, dto: ReasonDto) {
     this.mustManage(ctx);
     return this.db.tenant(requireTenant(ctx), async (c) => {
@@ -1100,6 +1150,12 @@ export class PurchaseOrdersService implements OnModuleInit {
         throw new DomainError('conflict', 'An amendment of this PO is already open', {
           status: 409,
         });
+      if (po.receipts)
+        throw new DomainError(
+          'purchase.order_received',
+          'Goods or work have been received against this PO: close it short and raise a new PO for the change',
+          { status: 409 },
+        );
       const n = (
         await c.query<{ id: string }>(
           `INSERT INTO purchase_orders (school_id, number, revision, supersedes_id, amend_reason, status, requisition_id, department_id, vendor_id,

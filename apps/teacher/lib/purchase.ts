@@ -566,3 +566,77 @@ export interface OrderFormLists {
   emergencyRatifier: string;
   purchaseDepartmentId: string | null;
 }
+
+// ---- phase 2, part 7: goods receipts and completion certificates to inspect (docs/design/84) -------
+export type ReceiptStatus = 'inspecting' | 'accepted' | 'rejected' | 'cancelled';
+export const RECEIPT_STATUS: Record<
+  ReceiptStatus,
+  { label: string; tone: 'success' | 'warning' | 'neutral' | 'danger' }
+> = {
+  inspecting: { label: 'Waiting for inspection', tone: 'warning' },
+  accepted: { label: 'Accepted', tone: 'success' },
+  rejected: { label: 'Rejected', tone: 'danger' },
+  cancelled: { label: 'Cancelled', tone: 'neutral' },
+};
+export interface ReceiptRow {
+  id: string;
+  number: string;
+  kind: 'goods' | 'service';
+  status: ReceiptStatus;
+  inspection: 'department' | 'committee';
+  orderId: string;
+  order: string;
+  department: string | null;
+  vendor: string;
+  vendorCode: string;
+  store: string | null;
+  receivedOn: string;
+  challanNo: string | null;
+  invoiceNo: string | null;
+  hasFile: boolean;
+  note: string | null;
+  acceptedOn: string | null;
+  deemedOn: string;
+  overdue: boolean;
+  decidedBy: string | null;
+  decisionNote: string | null;
+  createdBy: string | null;
+  waitingWith: string | null;
+  lines: number;
+  acceptedValue: number;
+}
+export interface ReceiptDetail extends ReceiptRow {
+  lineItems: Array<{
+    id: string;
+    seq: number;
+    poSeq: number;
+    description: string;
+    itemCode: string | null;
+    uom: string;
+    ordered: number;
+    received: number;
+    refused: number;
+    refusedReason: string | null;
+    batch: string | null;
+    expiry: string | null;
+    serials: string[];
+    workDone: string | null;
+    accepted: number | null;
+    rejected: number | null;
+    rejectReason: string | null;
+    rejectedSerials: string[];
+    value: number | null;
+  }>;
+  committee: {
+    required: number;
+    members: Array<{ name: string; signedAt: string | null; me: boolean }>;
+  } | null;
+  issues: Array<{
+    id: string;
+    number: string;
+    department: string;
+    indent: string | null;
+    status: string;
+  }>;
+  can: { inspect: boolean; cancel: boolean };
+}

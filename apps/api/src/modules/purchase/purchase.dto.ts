@@ -194,6 +194,10 @@ export const SettingsSchema = z
     emergencyEnabled: z.boolean(),
     /** who ratifies an emergency purchase: everyone with this designation */
     emergencyRatifier: z.string().trim().min(2).max(80).default('Principal'),
+    /** the GST paid is part of the stock cost */
+    stockGstInCost: z.boolean().default(true),
+    /** how much more than ordered a delivery may bring, per PO line */
+    receiptTolerancePct: z.coerce.number().min(0).max(50).default(0),
     poTerms: opt(4000),
     poValidityDays: z.coerce.number().int().min(1).max(365),
     purchaseDepartmentId: IdSchema.nullable().default(null),
@@ -574,6 +578,8 @@ export const PURCHASE_REPORTS = [
   'comparative',
   'gst_summary',
   'msme_vendors',
+  'grn_register',
+  'pending_deliveries',
 ] as const;
 export type PurchaseReport = (typeof PURCHASE_REPORTS)[number];
 
@@ -673,3 +679,72 @@ export const LedgerQuerySchema = z.object({
   format: z.enum(['xlsx', 'pdf']).optional(),
 });
 export class LedgerQueryDto extends createZodDto(LedgerQuerySchema) {}
+
+// ---- phase 2, part 7: goods receipts and completion certificates (docs/design/84) -----------------
+const Qty0 = z.coerce.number().min(0).max(9999999);
+export const ReceiptLineSchema = z
+  .object({
+    orderLineId: IdSchema,
+    /** in the PO line's unit: taken in */
+    receivedQty: Qty0,
+    /** refused at the door (damaged, wrong, more than ordered) */
+    refusedQty: Qty0.default(0),
+    refusedReason: opt(300),
+    batch: opt(40),
+    expiry: Day.optional(),
+    serials: z.array(z.string().trim().min(1).max(60)).max(500).default([]),
+    /** a service: what was done */
+    workDone: opt(1000),
+  })
+  .refine((l) => l.receivedQty > 0 || l.refusedQty > 0, {
+    message: 'Give the quantity received or refused',
+    path: ['receivedQty'],
+  })
+  .refine((l) => l.refusedQty === 0 || !!l.refusedReason, {
+    message: 'Say why it was refused',
+    path: ['refusedReason'],
+  });
+export const ReceiptSchema = z.object({
+  orderId: IdSchema,
+  kind: z.enum(['goods', 'service']).default('goods'),
+  storeId: IdSchema.nullish(),
+  receivedOn: Day,
+  challanNo: opt(60),
+  challanDate: Day.optional(),
+  invoiceNo: opt(60),
+  invoiceDate: Day.optional(),
+  fileId: IdSchema.nullish(),
+  note: opt(1000),
+  lines: z.array(ReceiptLineSchema).min(1).max(500),
+});
+export class ReceiptDto extends createZodDto(ReceiptSchema) {}
+
+export const InspectionLineSchema = z.object({
+  lineId: IdSchema,
+  acceptedQty: Qty0,
+  rejectedQty: Qty0.default(0),
+  reason: opt(300),
+  rejectedSerials: z.array(z.string().trim().min(1).max(60)).max(500).default([]),
+});
+export const InspectionSchema = z.object({
+  /** accept (in full or in part, line by line) or reject all of it */
+  action: z.enum(['accept', 'reject']),
+  lines: z.array(InspectionLineSchema).max(500).default([]),
+  note: opt(1000),
+});
+export class InspectionDto extends createZodDto(InspectionSchema) {}
+
+export const ReceiptListQuerySchema = z.object({
+  status: z.enum(['inspecting', 'accepted', 'rejected', 'cancelled']).optional(),
+  kind: z.enum(['goods', 'service']).optional(),
+  orderId: IdSchema.optional(),
+  storeId: IdSchema.optional(),
+  /** waiting for me to inspect or sign */
+  mine: z
+    .enum(['1', '0'])
+    .optional()
+    .transform((v) => v === '1'),
+  q: z.string().trim().max(80).optional(),
+  page: z.coerce.number().int().min(1).max(10000).default(1),
+});
+export class ReceiptListQueryDto extends createZodDto(ReceiptListQuerySchema) {}

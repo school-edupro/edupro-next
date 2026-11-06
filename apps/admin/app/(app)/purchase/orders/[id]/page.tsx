@@ -4,7 +4,15 @@ import { ConfirmAction } from '@/components/ConfirmAction';
 import { FileLinks } from '@/components/FileLinks';
 import { Notice } from '@/components/Notice';
 import { ApiError, apiFetch } from '@/lib/api';
-import { EMERGENCY_STATUS, ORDER_STATUS, type IndentStep, type OrderDetail } from '@/lib/purchase';
+import {
+  EMERGENCY_STATUS,
+  ORDER_STATUS,
+  RECEIPT_KIND,
+  RECEIPT_STATUS,
+  RECEIPT_STATUS_OF_ORDER,
+  type IndentStep,
+  type OrderDetail,
+} from '@/lib/purchase';
 import {
   amendOrder,
   cancelOrder,
@@ -143,6 +151,12 @@ export default async function OrderPage({
             {po.amendReason ? `: ${po.amendReason}` : ''}.
           </p>
         ) : null}
+        {['approved', 'sent', 'closed'].includes(po.status) ? (
+          <p style={{ marginTop: 0 }}>
+            Deliveries: {RECEIPT_STATUS_OF_ORDER[po.receiptStatus].toLowerCase()}
+            {po.receipts ? ` (${String(po.receipts)} receipt${po.receipts === 1 ? '' : 's'})` : ''}.
+          </p>
+        ) : null}
         {po.newerId ? (
           <p>
             An amendment of this PO is open:{' '}
@@ -159,6 +173,22 @@ export default async function OrderPage({
             : ''}
         </p>
         <div style={{ display: 'flex', gap: 'var(--sp-2)', flexWrap: 'wrap' }}>
+          {po.can.receive ? (
+            <>
+              <a
+                className="ep-btn ep-btn--primary ep-btn--sm"
+                href={`/purchase/receipts/new?order=${po.id}`}
+              >
+                Receive goods
+              </a>
+              <a
+                className="ep-btn ep-btn--secondary ep-btn--sm"
+                href={`/purchase/receipts/new?order=${po.id}&kind=service`}
+              >
+                Work done (services)
+              </a>
+            </>
+          ) : null}
           {po.can.decide ? (
             <>
               <ConfirmAction
@@ -230,13 +260,18 @@ export default async function OrderPage({
             <ConfirmAction
               action={closeOrder}
               fields={{ id: po.id }}
-              label="Close"
-              title={`Close ${po.label}?`}
+              label={po.receipts ? 'Close short' : 'Close'}
+              title={`Close ${po.label}${po.receipts ? ' short' : ''}?`}
               confirmLabel="Close"
               variant="secondary"
-              reason={{ label: 'What happened (e.g. all goods received)' }}
+              reason={{
+                label: po.receipts
+                  ? 'What will not come and why'
+                  : 'What happened (e.g. the vendor cannot supply)',
+              }}
             >
-              The order is fulfilled; nothing more is expected from the vendor.
+              Nothing more is expected from the vendor. A PO whose lines are all accepted closes by
+              itself.
             </ConfirmAction>
           ) : null}
           {po.can.cancel ? (
@@ -547,6 +582,82 @@ export default async function OrderPage({
           </div>
         ) : null}
       </section>
+
+      {po.receiptList.length || ['approved', 'sent'].includes(po.status) ? (
+        <section className="ep-card" aria-labelledby="po-del">
+          <h2 id="po-del" className="ep-card__title">
+            Deliveries
+          </h2>
+          <div className="ep-table-wrap" tabIndex={0} role="region" aria-labelledby="po-del">
+            <table className="ep-table">
+              <thead>
+                <tr>
+                  <th scope="col">Item</th>
+                  <th scope="col" style={{ textAlign: 'right' }}>
+                    Ordered
+                  </th>
+                  <th scope="col" style={{ textAlign: 'right' }}>
+                    Received
+                  </th>
+                  <th scope="col" style={{ textAlign: 'right' }}>
+                    Accepted
+                  </th>
+                  <th scope="col" style={{ textAlign: 'right' }}>
+                    Rejected
+                  </th>
+                  <th scope="col" style={{ textAlign: 'right' }}>
+                    Still to come
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {po.lineItems.map((l) => (
+                  <tr key={l.id}>
+                    <td>
+                      {l.seq}. {l.description}
+                    </td>
+                    <td style={{ textAlign: 'right' }}>
+                      {l.quantity} {l.uom}
+                    </td>
+                    <td style={{ textAlign: 'right' }}>{l.received}</td>
+                    <td style={{ textAlign: 'right' }}>{l.accepted}</td>
+                    <td style={{ textAlign: 'right' }}>
+                      {l.rejected}
+                      {l.rejected ? (
+                        <span className="ep-mr-col__desc">to return to the vendor</span>
+                      ) : null}
+                    </td>
+                    <td style={{ textAlign: 'right' }}>
+                      {Math.max(
+                        0,
+                        Math.round((l.quantity - l.received + l.rejected) * 1000) / 1000,
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          {po.receiptList.length ? (
+            <ul className="ep-purch-checks" style={{ marginTop: 'var(--sp-3)' }}>
+              {po.receiptList.map((g) => (
+                <li key={g.id}>
+                  <a href={`/purchase/receipts/${g.id}`}>{g.number}</a> {RECEIPT_KIND[g.kind]} ·{' '}
+                  {when(g.receivedOn)}
+                  {g.store ? ` · ${g.store}` : ''}
+                  {g.by ? ` · by ${g.by}` : ''}{' '}
+                  <Badge tone={RECEIPT_STATUS[g.status].tone}>
+                    {RECEIPT_STATUS[g.status].label}
+                  </Badge>
+                  {g.acceptedOn ? ` on ${when(g.acceptedOn)}` : ''}
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="ep-field__help">Nothing has come yet.</p>
+          )}
+        </section>
+      ) : null}
 
       {po.sends.length ? (
         <section className="ep-card" aria-labelledby="po-sends">

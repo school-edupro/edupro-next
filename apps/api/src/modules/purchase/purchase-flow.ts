@@ -2,7 +2,7 @@ import type { PoolClient } from '@edupro/db';
 import type { Resolver } from '../workflow/workflow.dto';
 import type { Level } from '../workflow/workflow.service';
 
-export type PurchaseDocType = 'indent' | 'requisition' | 'order';
+export type PurchaseDocType = 'indent' | 'requisition' | 'order' | 'inspection';
 
 interface SetupLevel {
   name: string;
@@ -35,26 +35,54 @@ export async function syncFlow(
   doc: PurchaseDocType,
   departmentId: string,
 ): Promise<{ code: string; levels: number; department: string }> {
-  const r = await c.query<{ name: string; levels: SetupLevel[] | null }>(
-    `SELECT d.name, a.levels FROM departments d
+  const r = await c.query<{ name: string; levels: SetupLevel[] | null; hod_signs_in: boolean }>(
+    `SELECT d.name, a.levels,
+            EXISTS (SELECT 1 FROM employees h WHERE h.id = d.hod_employee_id AND h.user_id IS NOT NULL
+                       AND h.status = 'active' AND h.deleted_at IS NULL) AS hod_signs_in
+       FROM departments d
        LEFT JOIN purchase_department_approvals a ON a.department_id = d.id AND a.doc_type = $2
       WHERE d.id = $1`,
     [departmentId, doc],
   );
   const dep = r.rows[0];
-  const setup = dep?.levels ?? [];
-  const levels: Level[] = setup.map((l, i) => ({
-    level: i + 1,
-    name: l.name,
-    resolver: resolverOf(l),
-    ...(l.slaHours ? { slaHours: l.slaHours } : {}),
-    escalateTo:
-      i + 1 < setup.length ? resolverOf(setup[i + 1]!) : { kind: 'role', roleCode: 'school_admin' },
-    autoSkip: true,
-    noSelfApproval: true,
-  }));
+  let setup = dep?.levels ?? [];
+  // receipts are inspected by the department's HOD when nothing else is set (the school admin when the
+  // department has no HOD who signs in)
+  const adminOnly = doc === 'inspection' && !setup.length && !dep?.hod_signs_in;
+  if (doc === 'inspection' && !setup.length && !adminOnly)
+    setup = [
+      { name: 'Head of department', by: 'hod', employeeIds: [], designation: null, slaHours: null },
+    ];
+  const levels: Level[] = adminOnly
+    ? [
+        {
+          level: 1,
+          name: 'School admin (no HOD set)',
+          resolver: { kind: 'role', roleCode: 'school_admin' },
+          autoSkip: true,
+          noSelfApproval: true,
+        },
+      ]
+    : setup.map((l, i) => ({
+        level: i + 1,
+        name: l.name,
+        resolver: resolverOf(l),
+        ...(l.slaHours ? { slaHours: l.slaHours } : {}),
+        escalateTo:
+          i + 1 < setup.length
+            ? resolverOf(setup[i + 1]!)
+            : { kind: 'role', roleCode: 'school_admin' },
+        autoSkip: true,
+        noSelfApproval: true,
+      }));
   const code = flowCode(doc, departmentId);
-  const name = `${doc === 'indent' ? 'Purchase Indent' : doc === 'requisition' ? 'Purchase Requisition' : 'Purchase Order'} · ${dep?.name ?? departmentId}`;
+  const title = {
+    indent: 'Purchase Indent',
+    requisition: 'Purchase Requisition',
+    order: 'Purchase Order',
+    inspection: 'Inspection of receipts',
+  }[doc];
+  const name = `${title} · ${dep?.name ?? departmentId}`;
   const upd = await c.query(
     `UPDATE workflow_definitions SET name = $2, levels = $3::jsonb, creator_roles = '{}', status = 'active', updated_at = now(),
             updated_by = app.current_user_id()

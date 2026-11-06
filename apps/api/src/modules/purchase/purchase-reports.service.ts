@@ -48,6 +48,11 @@ const words: Record<string, string> = {
   regular: 'Regular',
   composition: 'Composition',
   unregistered: 'Unregistered',
+  inspecting: 'Waiting for inspection',
+  accepted: 'Accepted',
+  goods: 'Goods received',
+  late: 'Late only',
+  service: 'Completion certificate',
 };
 const w = (v: string | null | undefined) => (v ? (words[v] ?? v) : '');
 
@@ -64,6 +69,8 @@ export const REPORT_NAMES: Record<PurchaseReport, string> = {
   comparative: 'Comparative statements',
   gst_summary: 'GST summary of purchase orders',
   msme_vendors: 'MSME vendors',
+  grn_register: 'Goods receipt register',
+  pending_deliveries: 'Pending deliveries',
 };
 
 export interface ReportResult {
@@ -743,6 +750,134 @@ export class PurchaseReportsService {
           sum: [3, 4, 5, 6, 7],
         };
       }
+      case 'grn_register': {
+        const r = await c.query<{
+          id: string;
+          number: string;
+          kind: string;
+          day: string;
+          po: string;
+          vendor: string;
+          dept: string | null;
+          store: string | null;
+          papers: string | null;
+          value: string;
+          status: string;
+          accepted_on: string | null;
+          deemed: string;
+        }>(
+          `SELECT g.id::text, g.number, g.kind, g.received_on::text AS day,
+                  po.number || CASE WHEN po.revision > 0 THEN '-R' || po.revision ELSE '' END AS po, v.legal_name AS vendor,
+                  d.name AS dept, st.name AS store, NULLIF(concat_ws(' · ', g.challan_no, g.invoice_no), '') AS papers,
+                  COALESCE((SELECT sum(round(gl.accepted_qty * gl.unit_cost, 2)) FROM goods_receipt_lines gl WHERE gl.receipt_id = g.id), 0)::text AS value,
+                  g.status, g.accepted_on::text, (g.received_on + 15)::text AS deemed
+             FROM goods_receipts g JOIN purchase_orders po ON po.id = g.order_id JOIN vendors v ON v.id = po.vendor_id
+             LEFT JOIN departments d ON d.id = po.department_id LEFT JOIN stores st ON st.id = g.store_id
+            WHERE g.received_on BETWEEN $1::date AND $2::date AND ($3::bigint IS NULL OR po.department_id = $3)
+              AND ($4::bigint IS NULL OR po.vendor_id = $4)
+              AND ($5::bigint IS NULL OR EXISTS (SELECT 1 FROM goods_receipt_lines gl JOIN purchase_order_lines ol ON ol.id = gl.order_line_id
+                                                  WHERE gl.receipt_id = g.id AND ol.item_id = $5))
+              AND ($6::text IS NULL OR g.status = $6 OR g.kind = $6)
+            ORDER BY g.received_on, g.number LIMIT $7`,
+          [...P, limit + 1],
+        );
+        return {
+          columns: [
+            { label: 'Receipt', width: 2.2 },
+            { label: 'Kind', width: 1.8 },
+            { label: 'Received', type: 'date' },
+            { label: 'Order', width: 2.2 },
+            { label: 'Vendor', width: 2.6 },
+            { label: 'Department', width: 2 },
+            { label: 'Store', width: 1.6 },
+            { label: 'Challan / invoice', width: 2 },
+            { label: 'Accepted value (₹)', type: 'money' },
+            { label: 'Status', width: 1.8 },
+            { label: 'Accepted on', type: 'date' },
+            { label: 'Deemed accepted', type: 'date' },
+          ] as FileColumn[],
+          rows: r.rows.map((x) => [
+            x.number,
+            w(x.kind),
+            x.day,
+            x.po,
+            x.vendor,
+            x.dept,
+            x.store,
+            x.papers,
+            Math.round(Number(x.value) * 100) / 100,
+            w(x.status),
+            x.accepted_on,
+            x.status === 'inspecting' ? x.deemed : null,
+          ]),
+          links: r.rows.map((x) => `/purchase/receipts/${x.id}`),
+          sum: [8],
+        };
+      }
+      case 'pending_deliveries': {
+        // what placed orders still wait for (PO date in the period), latest delivery date first
+        const r = await c.query<{
+          id: string;
+          po: string;
+          vendor: string;
+          dept: string | null;
+          item: string;
+          uom: string;
+          ordered: string;
+          received: string;
+          accepted: string;
+          rejected: string;
+          due: string | null;
+          late: number | null;
+        }>(
+          `SELECT po.id::text, po.number || CASE WHEN po.revision > 0 THEN '-R' || po.revision ELSE '' END AS po, v.legal_name AS vendor,
+                  d.name AS dept, l.description AS item, u.code AS uom, l.quantity::text AS ordered, l.received_qty::text AS received,
+                  l.accepted_qty::text AS accepted, l.rejected_qty::text AS rejected, po.delivery_date::text AS due,
+                  CASE WHEN po.delivery_date < (now() AT TIME ZONE 'Asia/Kolkata')::date
+                       THEN ((now() AT TIME ZONE 'Asia/Kolkata')::date - po.delivery_date) END AS late
+             FROM purchase_order_lines l JOIN purchase_orders po ON po.id = l.order_id JOIN vendors v ON v.id = po.vendor_id
+             JOIN purchase_uoms u ON u.id = l.uom_id LEFT JOIN departments d ON d.id = po.department_id
+            WHERE po.status IN ('approved', 'sent') AND l.received_qty - l.rejected_qty < l.quantity
+              AND NOT EXISTS (SELECT 1 FROM purchase_orders n WHERE n.supersedes_id = po.id AND n.status NOT IN ('rejected', 'cancelled'))
+              AND po.po_date BETWEEN $1::date AND $2::date AND ($3::bigint IS NULL OR po.department_id = $3)
+              AND ($4::bigint IS NULL OR po.vendor_id = $4) AND ($5::bigint IS NULL OR l.item_id = $5)
+              AND ($6::text IS NULL OR ($6 = 'late' AND po.delivery_date < (now() AT TIME ZONE 'Asia/Kolkata')::date))
+            ORDER BY po.delivery_date NULLS LAST, po.number, l.seq LIMIT $7`,
+          [...P, limit + 1],
+        );
+        return {
+          columns: [
+            { label: 'Order', width: 2.2 },
+            { label: 'Vendor', width: 2.6 },
+            { label: 'Department', width: 2 },
+            { label: 'Item', width: 3 },
+            { label: 'Unit', width: 1 },
+            { label: 'Ordered', type: 'number' },
+            { label: 'Received', type: 'number' },
+            { label: 'Accepted', type: 'number' },
+            { label: 'Rejected', type: 'number' },
+            { label: 'Still to come', type: 'number' },
+            { label: 'Deliver by', type: 'date' },
+            { label: 'Days late', type: 'number' },
+          ] as FileColumn[],
+          rows: r.rows.map((x) => [
+            x.po,
+            x.vendor,
+            x.dept,
+            x.item,
+            x.uom,
+            Number(x.ordered),
+            Number(x.received),
+            Number(x.accepted),
+            Number(x.rejected),
+            Math.round((Number(x.ordered) - Number(x.received) + Number(x.rejected)) * 1000) / 1000,
+            x.due,
+            x.late,
+          ]),
+          links: r.rows.map((x) => `/purchase/orders/${x.id}`),
+          sum: [],
+        };
+      }
       case 'msme_vendors': {
         const r = await c.query<{
           id: string;
@@ -959,6 +1094,13 @@ export class PurchaseReportsService {
           po_year_value: string;
           emergency: number;
           alert: string | null;
+          inspecting: number;
+          deemed: number;
+          late: number;
+          to_receive: number;
+          accepted_month: string;
+          stock_value: string;
+          below: number;
         }>(
           // eslint-disable-next-line no-restricted-syntax -- fixed fragments
           `SELECT (SELECT count(*)::int FROM purchase_indents WHERE status = 'submitted'
@@ -973,7 +1115,20 @@ export class PurchaseReportsService {
                   (SELECT COALESCE(sum(po.total), 0) FROM purchase_orders po WHERE ${PLACED} AND po.po_date >= $1::date)::text AS po_month_value,
                   (SELECT COALESCE(sum(po.total), 0) FROM purchase_orders po WHERE ${PLACED} AND po.po_date >= $2::date)::text AS po_year_value,
                   (SELECT count(*)::int FROM purchase_orders po WHERE po.emergency AND po.status IN ('draft', 'submitted')) AS emergency,
-                  (SELECT large_po_alert::text FROM purchase_settings WHERE school_id = app.current_school_id()) AS alert`,
+                  (SELECT large_po_alert::text FROM purchase_settings WHERE school_id = app.current_school_id()) AS alert,
+                  (SELECT count(*)::int FROM goods_receipts WHERE status = 'inspecting') AS inspecting,
+                  (SELECT count(*)::int FROM goods_receipts WHERE status = 'inspecting'
+                      AND received_on + 15 < (now() AT TIME ZONE 'Asia/Kolkata')::date) AS deemed,
+                  (SELECT count(DISTINCT po.id)::int FROM purchase_orders po JOIN purchase_order_lines l ON l.order_id = po.id
+                    WHERE po.status IN ('approved', 'sent') AND l.received_qty - l.rejected_qty < l.quantity
+                      AND po.delivery_date < (now() AT TIME ZONE 'Asia/Kolkata')::date) AS late,
+                  (SELECT count(DISTINCT po.id)::int FROM purchase_orders po JOIN purchase_order_lines l ON l.order_id = po.id
+                    WHERE po.status IN ('approved', 'sent') AND l.received_qty - l.rejected_qty < l.quantity) AS to_receive,
+                  (SELECT COALESCE(sum(round(gl.accepted_qty * gl.unit_cost, 2)), 0) FROM goods_receipt_lines gl
+                     JOIN goods_receipts g ON g.id = gl.receipt_id WHERE g.status = 'accepted' AND g.accepted_on >= $1::date)::text AS accepted_month,
+                  (SELECT COALESCE(sum(value), 0) FROM stock_balances)::text AS stock_value,
+                  (SELECT count(*)::int FROM item_store_levels l LEFT JOIN stock_balances b ON b.store_id = l.store_id AND b.item_id = l.item_id
+                    WHERE l.reorder_level > 0 AND COALESCE(b.qty, 0) - COALESCE(b.reserved, 0) <= l.reorder_level) AS below`,
           [month, fy],
         )
       ).rows[0]!;
@@ -1036,6 +1191,13 @@ export class PurchaseReportsService {
           ordersThisMonthValue: Number(f.po_month_value),
           ordersThisYearValue: Number(f.po_year_value),
           emergencyWaiting: f.emergency,
+          inspecting: f.inspecting,
+          deemedAccepted: f.deemed,
+          lateOrders: f.late,
+          toReceive: f.to_receive,
+          acceptedThisMonthValue: Number(f.accepted_month),
+          stockValue: Number(f.stock_value),
+          belowReorder: f.below,
         },
         largePoAlert: f.alert === null ? null : Number(f.alert),
         oldestPending: pending.rows.slice(0, 10).map((r, i) => ({

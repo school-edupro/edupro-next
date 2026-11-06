@@ -245,3 +245,74 @@ average; manufacturing or kits.
   stock once per item with batches, services and missing batches refused, a keeper only in their store;
   the weighted average, the average out, earliest expiry first, never below nothing, the ledger and the
   units frozen; stock in hand with reorder levels and the files, the stock register; opening from Excel).
+
+## As built — part 7, goods receipts and completion certificates (6 Nov 2026)
+
+Confirmed while building: **GST is part of the stock cost** (a setting, on by default); **excess is
+refused** beyond a tolerance % per PO line (Purchase settings, default 0); numbers `GRN/2026-27/0001`
+for goods and `SCC/2026-27/0001` for completion certificates; **the PO closes by itself** when every
+line is accepted in full (closing short stays by hand with the reason).
+
+- **Migration 0324**: `purchase_settings` gains `stock_gst_in_cost` and `receipt_tolerance_pct`;
+  `purchase_department_approvals` takes the doc type `inspection`; `purchase_numbering` takes
+  `completion` (`SCC/`); `purchase_orders.receipt_status` (none, part, received);
+  `purchase_order_lines` gain `received_qty`, `accepted_qty`, `rejected_qty`; `goods_receipts` (goods
+  into a store or a service; the PO, store, day received, challan and invoice with their dates, a file,
+  note; inspecting → accepted / rejected / cancelled; inspection by the department or the committee;
+  the workflow; the acceptance date; who decided; audit), `goods_receipt_lines` (per PO line received,
+  refused at the door with the reason, batch, expiry, serial numbers, work done; accepted, rejected
+  with the reason, rejected serial numbers; the unit cost at acceptance), `goods_receipt_signoffs` (the
+  committee's signatures, cleared when the inspection changes); `stock_issues` + `stock_issue_lines`
+  (made now for what a receipt brings for an indent — kind `receipt`; part 8 adds the indent and
+  counter kinds, the slip and the acknowledgement).
+- **Inspection**: `syncFlow(c, 'inspection', department)` — the department's Inspection levels on
+  Who approves, or one level "Head of department" when none is set, or the school admin when the
+  department has no HOD who signs in; levels re-planned as usual, the receiver left out (their level
+  passes on). A PO above the committee limit is inspected by the **purchase committee**: members who
+  sign in, never the receiver; `committee_signatures` of them (all when not set) sign the same
+  inspection; a member changing it clears the others' signatures. A PO without a department uses the
+  purchase office's.
+- **API** `PurchaseReceiptsService` (+ controller): the receipt list (status, kind, PO, store, search,
+  "waiting for me"; the deemed-acceptance date 15 days after delivery and whether it has passed), the
+  count waiting for me, **To receive** (approved and sent POs with something to come; goods and / or
+  services; late; made by me), the **form** (per PO line ordered, received, accepted, rejected, waiting
+  for inspection, still to come, the most allowed with the tolerance; the stores I may receive into),
+  **receive** (not by the PO's maker; a goods receipt by the store's keepers or the store managers, a
+  completion certificate by the purchase office or a keeper; goods and service lines kept apart; a batch
+  for a batch item; serial numbers, when given, one per unit and never twice for the item; what was
+  done for a service; all refused at the door is a rejected receipt with nothing to inspect),
+  **inspect** (accept line by line — accepted + rejected = received, a reason for a rejection, the
+  rejected serial numbers ticked — or reject it all with the reason; nobody inspects what they
+  received), **cancel** (while inspecting, by whoever recorded it or the store / purchase managers),
+  the **PDF** (goods received and inspection note / completion certificate; "NOT INSPECTED" across one
+  waiting) and the vendor's **file** through the receipt (so an inspector without file rights sees
+  it). On acceptance (`finalise`): lines without an outcome are accepted as they came; each line's unit
+  cost is the PO line's taxable value + its GST (unless the setting leaves it out) + its share of the
+  PO's other charges (with their GST) by taxable value, over the quantity; kept-in-stock goods post a
+  `receipt` move at that cost per store unit with the batch; **issued at once** (`issueToIndents`): for
+  each accepted line bought through a requisition, the indent lines it came from (approved indents,
+  oldest first) get what they asked for less what they were issued before — one issue per indent, the
+  same batch, out at the average; then the PO's quantities, receipt status and closing.
+- **PO**: its lines show received, accepted and rejected; `receiptStatus`, the receipts list,
+  `can.receive`; **cancel and amend are refused once anything has been received** (close it short;
+  a new PO for a change).
+- **Reports**: Goods receipt register (status or kind), Pending deliveries (late only). **Dashboard**:
+  twelve figures (to receive, late deliveries, waiting for inspection with those past 15 days, accepted
+  this month, stock value, below reorder level added).
+- **Admin**: Purchase → To receive, Goods receipts (tabs: waiting for me, waiting for inspection,
+  accepted, rejected, all), Receive goods / Work done (the form keeps what was typed when refused), a
+  receipt's page (status and the deemed date, the vendor's papers, the inspection form, what came with
+  the cost per unit, the issues made, the committee's signatures, the levels), the PO's **Deliveries**
+  card and Receive buttons, **Close short**; Who approves gains the Inspection column (HOD when not
+  set); Purchase settings gains Goods received; My approvals gains "Goods received to inspect". Help:
+  Receiving goods and services.
+- **Staff app**: Goods received to inspect (menu count), a receipt with the inspection form (accept
+  line by line, rejected serial numbers, reject all), its PDF and the vendor's papers; Hindi.
+- **Tests**: `purchase-receipts.e2e-spec.ts` (7: the maker cannot receive, the form; excess refused,
+  a batch needed, service lines kept apart, a receipt cancelled; part received with a refusal, the
+  HOD's inspection accepting part; the cost with GST and freight, the indent's share issued at once
+  with the batch, the rest in stock; a completion certificate, a rejected receipt, a replacement, the
+  PO closing by itself and no longer cancellable; the committee's signatures signed again after a
+  change, serial numbers; the PDF, the GRN register, pending deliveries, Who approves).
+- **Not yet** (part 8): the issue slip PDF and the department's acknowledgement, returning rejected
+  goods to the vendor, reservations, counter issues, transfers, counts.

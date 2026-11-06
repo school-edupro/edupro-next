@@ -137,6 +137,8 @@ export interface PurchaseSettings {
   poSignatures: string[];
   largePoAlert: number | null;
   splitWindowDays: number;
+  stockGstInCost: boolean;
+  receiptTolerancePct: number;
   updatedAt: string;
   committee: Array<{
     id: string;
@@ -148,11 +150,12 @@ export interface PurchaseSettings {
   }>;
 }
 
-export type PurchaseDoc = 'indent' | 'requisition' | 'order';
+export type PurchaseDoc = 'indent' | 'requisition' | 'order' | 'inspection';
 export const DOC_LABEL: Record<PurchaseDoc, string> = {
   indent: 'Purchase Indent (PI)',
   requisition: 'Purchase Requisition (PR)',
   order: 'Purchase Order (PO)',
+  inspection: 'Inspection of goods and services received',
 };
 
 export interface DepartmentApprovals {
@@ -667,7 +670,15 @@ export interface OrderRow {
   waitingWith: string | null;
   msmeWarning: string | null;
   lines: number;
+  receiptStatus: 'none' | 'part' | 'received';
+  receipts: number;
 }
+
+export const RECEIPT_STATUS_OF_ORDER: Record<OrderRow['receiptStatus'], string> = {
+  none: 'Nothing received yet',
+  part: 'Part received',
+  received: 'Received',
+};
 
 export interface OrderLine {
   id: string;
@@ -694,6 +705,9 @@ export interface OrderLine {
   total: number;
   contractRate: number | null;
   rateChangeReason: string | null;
+  received: number;
+  accepted: number;
+  rejected: number;
 }
 
 export interface OrderDetail extends OrderRow {
@@ -779,7 +793,18 @@ export interface OrderDetail extends OrderRow {
     close: boolean;
     amend: boolean;
     cancel: boolean;
+    receive: boolean;
   };
+  receiptList: Array<{
+    id: string;
+    number: string;
+    kind: 'goods' | 'service';
+    status: ReceiptStatus;
+    receivedOn: string;
+    acceptedOn: string | null;
+    store: string | null;
+    by: string | null;
+  }>;
 }
 
 export interface ToOrderGroup {
@@ -837,7 +862,9 @@ export type PurchaseReport =
   | 'item_history'
   | 'comparative'
   | 'gst_summary'
-  | 'msme_vendors';
+  | 'msme_vendors'
+  | 'grn_register'
+  | 'pending_deliveries';
 
 type Filter = 'period' | 'department' | 'vendor' | 'item' | 'status';
 /** Each report: what it shows and the filters it takes (status: the choices). */
@@ -932,6 +959,23 @@ export const REPORTS: Record<
     help: 'Micro, small and medium vendors, their payment terms (over 45 days marked) and the orders placed.',
     filters: ['period', 'vendor'],
   },
+  grn_register: {
+    help: 'Every goods receipt and completion certificate by the day received: the order, vendor, store, challan or invoice, the value accepted, status, and the MSME deemed-acceptance date of those not inspected.',
+    filters: ['period', 'department', 'vendor', 'item', 'status'],
+    status: {
+      inspecting: 'Waiting for inspection',
+      accepted: 'Accepted',
+      rejected: 'Rejected',
+      cancelled: 'Cancelled',
+      goods: 'Goods received only',
+      service: 'Completion certificates only',
+    },
+  },
+  pending_deliveries: {
+    help: 'Lines of approved and sent orders still to come (by PO date): ordered, received, accepted, rejected, still to come, the delivery date and days late.',
+    filters: ['period', 'department', 'vendor', 'item', 'status'],
+    status: { late: 'Late only' },
+  },
 };
 
 export interface ReportColumn {
@@ -971,6 +1015,13 @@ export interface PurchaseDashboard {
     ordersThisMonthValue: number;
     ordersThisYearValue: number;
     emergencyWaiting: number;
+    inspecting: number;
+    deemedAccepted: number;
+    lateOrders: number;
+    toReceive: number;
+    acceptedThisMonthValue: number;
+    stockValue: number;
+    belowReorder: number;
   };
   largePoAlert: number | null;
   oldestPending: Array<{
@@ -1078,4 +1129,165 @@ export interface StockLedger {
     note: string | null;
     by: string | null;
   }>;
+}
+
+// ---- phase 2, part 7: goods receipts and completion certificates (docs/design/84) ------------------
+export type ReceiptStatus = 'inspecting' | 'accepted' | 'rejected' | 'cancelled';
+export const RECEIPT_STATUS: Record<
+  ReceiptStatus,
+  { label: string; tone: 'success' | 'warning' | 'neutral' | 'danger' }
+> = {
+  inspecting: { label: 'Waiting for inspection', tone: 'warning' },
+  accepted: { label: 'Accepted', tone: 'success' },
+  rejected: { label: 'Rejected', tone: 'danger' },
+  cancelled: { label: 'Cancelled', tone: 'neutral' },
+};
+export const RECEIPT_KIND = {
+  goods: 'Goods receipt (GRN)',
+  service: 'Completion certificate',
+} as const;
+
+export interface ReceiptRow {
+  id: string;
+  number: string;
+  kind: 'goods' | 'service';
+  status: ReceiptStatus;
+  inspection: 'department' | 'committee';
+  orderId: string;
+  order: string;
+  departmentId: string | null;
+  department: string | null;
+  vendor: string;
+  vendorCode: string;
+  msme: string | null;
+  storeId: string | null;
+  store: string | null;
+  receivedOn: string;
+  challanNo: string | null;
+  challanDate: string | null;
+  invoiceNo: string | null;
+  invoiceDate: string | null;
+  hasFile: boolean;
+  note: string | null;
+  acceptedOn: string | null;
+  deemedOn: string;
+  overdue: boolean;
+  decidedAt: string | null;
+  decidedBy: string | null;
+  decisionNote: string | null;
+  cancelReason: string | null;
+  createdBy: string | null;
+  createdAt: string;
+  waitingWith: string | null;
+  lines: number;
+  acceptedValue: number;
+}
+
+export interface ReceiptLine {
+  id: string;
+  seq: number;
+  orderLineId: string;
+  poSeq: number;
+  description: string;
+  itemCode: string | null;
+  uom: string;
+  storeUom: string | null;
+  perUnit: number;
+  ordered: number;
+  received: number;
+  refused: number;
+  refusedReason: string | null;
+  batch: string | null;
+  expiry: string | null;
+  serials: string[];
+  workDone: string | null;
+  accepted: number | null;
+  rejected: number | null;
+  rejectReason: string | null;
+  rejectedSerials: string[];
+  unitCost: number | null;
+  value: number | null;
+  stockTracked: boolean;
+}
+
+export interface ReceiptDetail extends ReceiptRow {
+  lineItems: ReceiptLine[];
+  steps: IndentStep[];
+  history: Array<{ kind: string; actor: string | null; note: string | null; at: string }>;
+  committee: {
+    required: number;
+    members: Array<{
+      name: string;
+      designation: string | null;
+      role: string | null;
+      signedAt: string | null;
+      me: boolean;
+    }>;
+  } | null;
+  issues: Array<{
+    id: string;
+    number: string;
+    department: string;
+    indent: string | null;
+    indentId: string | null;
+    status: 'issued' | 'acknowledged';
+    lines: number;
+    value: number;
+  }>;
+  can: { inspect: boolean; cancel: boolean };
+  madeByMe: boolean;
+}
+
+export interface ReceiptForm {
+  order: {
+    id: string;
+    label: string;
+    status: string;
+    vendor: string;
+    department: string | null;
+    poDate: string;
+    deliveryDate: string | null;
+    total: number;
+  };
+  madeByMe: boolean;
+  inspection: 'department' | 'committee';
+  tolerancePct: number;
+  mainStoreId: string;
+  stores: Array<{ id: string; code: string; name: string; kind: string }>;
+  lines: Array<{
+    id: string;
+    seq: number;
+    description: string;
+    itemCode: string | null;
+    uom: string;
+    storeUom: string | null;
+    perUnit: number;
+    ordered: number;
+    received: number;
+    accepted: number;
+    rejected: number;
+    waiting: number;
+    outstanding: number;
+    max: number;
+    service: boolean;
+    stockTracked: boolean;
+    tracksBatch: boolean;
+    tracksSerial: boolean;
+  }>;
+}
+
+export interface ToReceiveRow {
+  id: string;
+  label: string;
+  vendor: string;
+  department: string | null;
+  poDate: string;
+  deliveryDate: string | null;
+  late: boolean;
+  receiptStatus: 'none' | 'part' | 'received';
+  lines: number;
+  openLines: number;
+  goods: boolean;
+  services: boolean;
+  madeByMe: boolean;
 }

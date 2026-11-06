@@ -240,3 +240,39 @@ export async function sendBackOrder(fd: FormData) {
 export async function rejectOrder(fd: FormData) {
   return poDecision('reject')(fd);
 }
+
+// ---- phase 2, part 7: inspecting goods and services received --------------------------------------
+const inspection = (action: 'accept' | 'reject') => async (fd: FormData) => {
+  const id = pick(fd, 'id');
+  if (!okId(id)) back('/purchase/receipts', 'validation-failed', 'Unknown receipt');
+  const lines = fd
+    .getAll('line')
+    .map(String)
+    .filter(okId)
+    .map((lineId) => ({
+      lineId,
+      acceptedQty: pick(fd, `acc_${lineId}`) || 0,
+      rejectedQty: pick(fd, `rej_${lineId}`) || 0,
+      reason: pick(fd, `why_${lineId}`) || undefined,
+      rejectedSerials: fd.getAll(`sn_${lineId}`).map(String),
+    }));
+  return run(
+    `/purchase/receipts/${id}`,
+    () =>
+      apiFetch(`/purchase/receipts/${id}/inspect`, {
+        method: 'POST',
+        body: JSON.stringify({
+          action,
+          note: pick(fd, 'note') || undefined,
+          lines: action === 'accept' ? lines : [],
+        }),
+      }),
+    action === 'accept' ? 'Inspection recorded' : 'Rejected',
+  );
+};
+export async function acceptReceipt(fd: FormData) {
+  return inspection('accept')(fd);
+}
+export async function rejectReceipt(fd: FormData) {
+  return inspection('reject')(fd);
+}

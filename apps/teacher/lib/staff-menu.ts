@@ -30,6 +30,8 @@ export interface StaffWaiting {
   requisitions?: number;
   /** purchase orders and emergency purchases at my level */
   orders?: number;
+  /** goods and services received, waiting for my inspection or signature (docs/design/84) */
+  receipts?: number;
 }
 export interface StaffGroup {
   id: string;
@@ -252,6 +254,12 @@ export const STAFF_MENU: StaffGroup[] = [
         label: 'Purchase orders',
         help: 'Purchase orders waiting for your approval; emergency purchases to ratify',
         allowed: (_can, w) => (w.orders ?? 0) > 0,
+      },
+      {
+        href: '/purchase/receipts',
+        label: 'Goods received to inspect',
+        help: 'Goods and services your department received: check them and accept or reject',
+        allowed: (_can, w) => (w.receipts ?? 0) > 0,
       },
       {
         href: '/no-dues',
