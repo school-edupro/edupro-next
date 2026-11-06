@@ -15,6 +15,7 @@ export const PURCHASE = {
   orderManage: 'purchase.order.manage',
   orderCancel: 'purchase.order.cancel',
   emergencyRecord: 'purchase.emergency.record',
+  reportView: 'purchase.report.view',
 } as const;
 
 const opt = (max: number) =>
@@ -555,3 +556,37 @@ export const EmergencySchema = z.object({
     .max(50),
 });
 export class EmergencyDto extends createZodDto(EmergencySchema) {}
+
+// ---- part 5: reports ------------------------------------------------------------------------------
+export const PURCHASE_REPORTS = [
+  'pi_register',
+  'pr_register',
+  'po_register',
+  'tracker',
+  'pending',
+  'overrides',
+  'department_spend',
+  'vendor_purchases',
+  'item_history',
+  'comparative',
+  'gst_summary',
+  'msme_vendors',
+] as const;
+export type PurchaseReport = (typeof PURCHASE_REPORTS)[number];
+
+export const ReportQuerySchema = z
+  .object({
+    from: Day.optional(),
+    to: Day.optional(),
+    departmentId: IdSchema.optional(),
+    vendorId: IdSchema.optional(),
+    itemId: IdSchema.optional(),
+    status: z
+      .string()
+      .trim()
+      .regex(/^[a-z_]{2,20}$/)
+      .optional(),
+    format: z.enum(['xlsx', 'pdf']).optional(),
+  })
+  .refine((q) => !q.from || !q.to || q.from <= q.to, { message: 'From is after to', path: ['to'] });
+export class ReportQueryDto extends createZodDto(ReportQuerySchema) {}

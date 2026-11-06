@@ -542,4 +542,80 @@ describe('purchase orders (e2e)', () => {
     expect(no.json().type).toBe('purchase.contract_rate');
     expect((await change('The contract rate excludes the new refill')).statusCode).toBe(200);
   });
+
+  it('the reports and the dashboard match what was done; every report as Excel and PDF', async () => {
+    const rep = async (name: string, qs = '') => {
+      const r = await call(office, 'GET', `/purchase/reports/${name}${qs}`);
+      expect(r.statusCode).toBe(200);
+      return r.json() as {
+        rows: unknown[][];
+        columns: Array<{ label: string }>;
+        totals?: unknown[];
+      };
+    };
+    const col = (r: { columns: Array<{ label: string }> }, label: string) =>
+      r.columns.findIndex((c) => c.label === label);
+    expect((await call(teacher, 'GET', '/purchase/reports/po_register')).statusCode).toBe(403);
+    expect((await call(office, 'GET', '/purchase/reports/nonsense')).statusCode).toBe(404);
+    const po = await rep('po_register');
+    expect(po.rows).toHaveLength(6);
+    const ov = await rep('overrides');
+    expect(new Set(ov.rows.map((r) => r[0]))).toEqual(
+      new Set([
+        'PR skipped: rate contract',
+        'Emergency purchase',
+        'Order cancelled after approval',
+        'Order amended',
+        'Contract rate changed',
+      ]),
+    );
+    expect((await rep('overrides', '?status=emergency')).rows).toHaveLength(1);
+    // spend counts placed orders: R1 (closed) and the emergency purchase (ratified)
+    const vend = await rep('vendor_purchases');
+    expect(vend.rows.map((r) => [r[0], r[4], r[7]])).toEqual([
+      ['V3', 1, 8000],
+      ['V1', 1, 4838],
+    ]);
+    const msme = await rep('msme_vendors');
+    expect(msme.rows[0]!.slice(0, 3)).toEqual(['V3', 'Local Advocate', 'Micro']);
+    expect(msme.rows[0]![col(msme, 'Over 45 days')]).toBe('Yes');
+    const gst = await rep('gst_summary');
+    expect(gst.rows.find((r) => r[0] === '9403')!.slice(3, 5)).toEqual([3600, 324]);
+    expect(gst.rows.find((r) => r[0] === 'Other charges')!.slice(3, 5)).toEqual([500, 45]);
+    expect((await rep('tracker')).rows[0]![0]).toMatch(/^PI\//);
+    expect((await rep('pr_register')).rows).toHaveLength(2);
+    expect((await rep('item_history')).rows).toHaveLength(2);
+    const dash = (await call(office, 'GET', '/purchase/dashboard')).json();
+    expect(dash.figures).toMatchObject({
+      pending: 0,
+      toOrder: 1,
+      ordersThisMonth: 2,
+      ordersThisMonthValue: 12838,
+    });
+    expect(dash.figures.toOrder).toBe(
+      (await call(office, 'GET', '/purchase/to-order'))
+        .json()
+        .data.reduce((a: number, g: { lines: unknown[] }) => a + g.lines.length, 0),
+    );
+    expect(dash.largest[0]).toMatchObject({ total: 8000 });
+    for (const name of [
+      'pi_register',
+      'pr_register',
+      'po_register',
+      'tracker',
+      'pending',
+      'overrides',
+      'department_spend',
+      'vendor_purchases',
+      'item_history',
+      'comparative',
+      'gst_summary',
+      'msme_vendors',
+    ])
+      for (const format of ['xlsx', 'pdf']) {
+        const f = await call(office, 'GET', `/purchase/reports/${name}?format=${format}`);
+        expect([name, format, f.statusCode]).toEqual([name, format, 200]);
+        expect(f.json().filename).toMatch(new RegExp(`\\.${format}$`));
+      }
+  });
 });

@@ -20,6 +20,7 @@ PO and the emergency purchase.
 | **Purchase office** (orders)                        | Checks the draft POs, sends them for approval, e-mails them to vendors, closes and amends them       |
 | **School admin** (orders)                           | Cancels an approved PO (its own right)                                                               |
 | **The Principal** (or the designation in settings)  | Ratifies an emergency purchase                                                                       |
+| **Auditor** (read only)                             | The purchase dashboard and reports                                                                   |
 
 ## Set it up, in this order
 
@@ -195,6 +196,50 @@ words, quantity, rate, GST), the vendor's **bill** (PDF or photo) and **why it c
 **Send for ratification**: everyone with the designation set on Purchase settings (the Principal by
 default) ratifies it or not, in the admin or the staff app. It is marked **Emergency** on screen and on
 the PDF. Purchase settings can switch emergency purchases off.
+
+## The dashboard and reports
+
+**Purchase → Purchase dashboard**: the figures first — open indents, waiting for approval, to
+requisition, to order (lines), orders this month and what was ordered this year; each opens the list it
+counts. Then the oldest approvals waiting (with the days and whether past the SLA), the largest orders
+of the year and those over the alert amount (Purchase settings), then spend by department and by month.
+Spend counts **orders placed** with vendors (approved, sent or closed) by their PO date, this financial
+year (April to March).
+
+**Purchase → Purchase reports**: pick a report, set the filters (the period — this financial year to
+today unless changed —, a department, a vendor, an item, a status), **Show**; **Excel** or **PDF** saves
+it with every row and the filters in words.
+
+| Report                    | What it shows                                                                                                                         |
+| ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| Purchase Indent register  | every indent sent: department, raiser, estimate, status, where it went                                                                |
+| Requisition register      | every PR: the sourcing tier, quotes, vendors chosen, value, status                                                                    |
+| Purchase Order register   | every PO by date: vendor, taxable, GST, reverse charge, total, status, revision                                                       |
+| Status tracker            | each indent line to its PR and PO, the vendor and when it was ordered                                                                 |
+| Pending approvals         | what waits now, with whom, their delegate, since when, past the SLA or not                                                            |
+| **Overrides**             | PRs skipped by a rule, the split guard, vendors other than L1, emergency purchases, cancelled and amended POs, contract rates changed |
+| Department spend by month | placed orders by department and month                                                                                                 |
+| Purchases by vendor       | orders, taxable, GST and total per vendor, its MSME type                                                                              |
+| Item purchase history     | an item's orders: dates, vendors, quantities, rates                                                                                   |
+| Comparative statements    | every quote on every PR line: with GST, L1, the vendor chosen and why, the signatures                                                 |
+| GST summary               | GST on placed orders by HSN / SAC and rate; reverse charge (paid by the school) apart                                                 |
+| MSME vendors              | micro, small and medium vendors, their payment terms (over 45 days marked), orders placed                                             |
+
+## A worked example: chairs for the chemistry lab
+
+1. **The teacher raises an indent** (staff app, Office → Purchase indents): Science, "chairs for the
+   chemistry lab", 10 student chairs at the last rate of ₹1,200 — ₹12,000. Sent: **PI/2026-27/0007**.
+2. **The HOD of Science approves it**, then the Principal (Science's PI levels). Science's limit for
+   skipping the PR is ₹10,000, so it waits for the PR ("Waiting for the PR").
+3. **The purchase office makes the requisition** (To requisition: ticks PI/0007 with another Science
+   indent for 4 chairs): **PR/2026-27/0004**, 14 chairs, ₹16,800 — a **direct purchase** (under
+   ₹50,000). It picks the vendor with the agreed rate ₹1,150, records the reasonable-price certificate
+   and sends it; Science's HOD approves it.
+4. **The PO is drafted** at once: **PO/2026-27/0009** to the vendor (in the school's state: CGST 9% +
+   SGST 9%). The office adds ₹500 freight, sends it for approval (HOD, then Principal), then **E-mails
+   the PO with the PDF** to the vendor.
+5. The chairs come: **Close** the PO. The tracker shows PI/0007 → PR/0004 → PO/0009 with the dates; the
+   chair's last purchase rate is now ₹1,150.
 
 ## Hand over my approvals
 

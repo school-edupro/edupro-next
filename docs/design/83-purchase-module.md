@@ -496,3 +496,38 @@ confirmed with the school's CA before go-live; the settings keep them editable.
   the maker's level passing on, the last rate and the requisition; the PDF and the e-mail; amend /
   supersede, cancel's right, close; the emergency purchase ratified; the rate-contract indent's PO);
   `purchase-gst.spec.ts` (4); the indent, requisition and masters suites pass.
+
+## As built — part 5, reports, dashboard and help (6 Nov 2026)
+
+- **Migration 0322**: right `purchase.report.view` (school and group admins, Purchase office,
+  auditor).
+- **API** `PurchaseReportsService` (+ `PurchaseReportsController`): `GET purchase/reports/:report` —
+  on screen (the first 500 rows, with a link per row to its document) or with `format=xlsx|pdf` the
+  file (every row; the shared `libraryFile`: Excel with "About this report", A4 landscape PDF with the
+  filters under the title); filters `from` / `to` (the financial year to today by default), department,
+  vendor, item, status (or the override kind; the PO register also takes `placed`), the filters in
+  words. Twelve reports: the **PI register**, **PR register** (tier, quotes, vendors chosen), **PO
+  register** (taxable, GST, reverse charge, total, revision, emergency), the **status tracker** (each
+  indent line → PR → live POs and their vendor), **pending approvals** (the level, approvers, their
+  active delegates, waiting since the previous level acted, days, past the SLA), **overrides** (PR
+  skipped by a rule with its figures, the split guard's "Not skipped", vendors other than L1 with the
+  reason, emergency purchases and whether ratified, orders cancelled after approval, amendments, contract
+  rates changed), **department spend by month**, **purchases by vendor**, **item history**,
+  **comparative statements** (each quote with GST, L1, chosen, reason, signatures), the **GST
+  summary** (lines by HSN / SAC and rate, other charges apart, reverse charge paid by the school) and
+  **MSME vendors** (term, longest days, over 45 marked, orders placed). Spend counts placed orders
+  (approved, sent, closed) by PO date. `GET purchase/dashboard`: the figures (open indents, waiting for
+  approval, to requisition, to order lines, orders this month and value, ordered this year, emergencies
+  waiting), the ten oldest pending, the ten largest orders of the year, orders over the alert amount,
+  spend by department and by month. `GET purchase/report-filters` for the pickers.
+- **Admin**: Purchase → Purchase dashboard (the figure cards open the lists they count — the pending
+  report, To requisition, To order, the PO register of placed orders this month, department spend —
+  then the tables, then two small charts) and Purchase reports (report picker, the filters the report
+  takes, the table with totals, Excel / PDF through `/api/purchase/report`). Help: who reads the
+  reports, the table of reports, a worked example from an indent to a closed PO.
+- **Not done**: "Settings lists approvers with no delegate" from the plan (the delegations page lists
+  who has handed over).
+- **Tests**: `purchase-orders.e2e-spec.ts` gains the reports and dashboard against what it did (the PO
+  register's six orders, the five override kinds, vendor spend, MSME, the GST summary with charges
+  apart, the tracker, the dashboard's figures equal to To order) and every report as Excel and PDF; the
+  right refused to a teacher; an unknown report 404.

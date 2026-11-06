@@ -14507,6 +14507,10 @@ button.ep-subchoice__icon:hover {
   display: grid;
   gap: var(--sp-2);
 }
+/* a link inside a line of words is told apart by more than its colour */
+.ep-purch-checks a {
+  text-decoration: underline;
+}
 .ep-purch-compare {
   display: grid;
   gap: var(--sp-3);

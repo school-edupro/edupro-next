@@ -823,3 +823,177 @@ export interface OrderFormLists {
   emergencyRatifier: string;
   purchaseDepartmentId: string | null;
 }
+
+// ---- part 5: reports and the dashboard ------------------------------------------------------------
+export type PurchaseReport =
+  | 'pi_register'
+  | 'pr_register'
+  | 'po_register'
+  | 'tracker'
+  | 'pending'
+  | 'overrides'
+  | 'department_spend'
+  | 'vendor_purchases'
+  | 'item_history'
+  | 'comparative'
+  | 'gst_summary'
+  | 'msme_vendors';
+
+type Filter = 'period' | 'department' | 'vendor' | 'item' | 'status';
+/** Each report: what it shows and the filters it takes (status: the choices). */
+export const REPORTS: Record<
+  PurchaseReport,
+  { help: string; filters: Filter[]; status?: Record<string, string> }
+> = {
+  pi_register: {
+    help: 'Every indent sent in the period: department, raiser, estimate, status and where it went.',
+    filters: ['period', 'department', 'vendor', 'item', 'status'],
+    status: {
+      submitted: 'Waiting for approval',
+      approved: 'Approved',
+      rejected: 'Rejected',
+      sent_back: 'Sent back',
+      cancelled: 'Withdrawn',
+    },
+  },
+  pr_register: {
+    help: 'Every requisition: its sourcing tier, quotes, vendors chosen, value and status.',
+    filters: ['period', 'department', 'vendor', 'item', 'status'],
+    status: {
+      draft: 'Draft',
+      sourcing: 'Sourcing',
+      submitted: 'Waiting for approval',
+      approved: 'Approved',
+      part_ordered: 'Partly ordered',
+      ordered: 'Ordered',
+      rejected: 'Rejected',
+      cancelled: 'Cancelled',
+    },
+  },
+  po_register: {
+    help: 'Every purchase order by PO date: vendor, taxable value, GST, reverse charge, total, status and revision.',
+    filters: ['period', 'department', 'vendor', 'item', 'status'],
+    status: {
+      placed: 'Placed (approved, sent or closed)',
+      draft: 'Draft',
+      submitted: 'Waiting for approval',
+      approved: 'Approved',
+      sent: 'Sent to the vendor',
+      closed: 'Closed',
+      cancelled: 'Cancelled',
+      superseded: 'Replaced by an amendment',
+      rejected: 'Rejected',
+    },
+  },
+  tracker: {
+    help: 'Each indent line to its requisition and order, with the vendor and when it was ordered.',
+    filters: ['period', 'department', 'vendor', 'item', 'status'],
+    status: { submitted: 'Waiting for approval', approved: 'Approved', rejected: 'Rejected' },
+  },
+  pending: {
+    help: 'Indents, requisitions and orders waiting for approval now: with whom, their delegate, since when, and whether past the SLA.',
+    filters: ['department'],
+  },
+  overrides: {
+    help: 'What an auditor asks about: requisitions skipped by a rule, the split guard, vendors other than the lowest, emergency purchases, cancelled and amended orders, contract rates changed.',
+    filters: ['period', 'department', 'status'],
+    status: {
+      rate_contract: 'PR skipped: rate contract',
+      under_limit: 'PR skipped: under the limit',
+      split_guard: 'Split guard: PR not skipped',
+      not_l1: 'Vendor not the lowest (L1)',
+      emergency: 'Emergency purchase',
+      cancelled: 'Order cancelled after approval',
+      amended: 'Order amended',
+      contract_rate: 'Contract rate changed',
+    },
+  },
+  department_spend: {
+    help: 'Placed orders (approved, sent, closed) by department and month.',
+    filters: ['period', 'department', 'vendor'],
+  },
+  vendor_purchases: {
+    help: 'Placed orders per vendor: how many, taxable value, GST, total, the MSME type.',
+    filters: ['period', 'department', 'vendor'],
+  },
+  item_history: {
+    help: 'An item’s purchases on placed orders: dates, vendors, quantities and rates.',
+    filters: ['period', 'department', 'vendor', 'item'],
+  },
+  comparative: {
+    help: 'Every quote on every requisition line: the rate with GST, L1, the vendor chosen and why, the committee’s signatures.',
+    filters: ['period', 'department', 'vendor', 'item'],
+  },
+  gst_summary: {
+    help: 'The GST on placed orders by HSN / SAC and rate; reverse charge (paid by the school) apart.',
+    filters: ['period', 'department', 'vendor'],
+  },
+  msme_vendors: {
+    help: 'Micro, small and medium vendors, their payment terms (over 45 days marked) and the orders placed.',
+    filters: ['period', 'vendor'],
+  },
+};
+
+export interface ReportColumn {
+  label: string;
+  type?: 'text' | 'number' | 'money' | 'date';
+  width?: number;
+}
+export interface ReportResult {
+  report: PurchaseReport;
+  name: string;
+  words: string;
+  columns: ReportColumn[];
+  rows: Array<Array<string | number | null>>;
+  totals?: Array<string | number | null>;
+  more: number;
+  links?: Array<string | null>;
+  from: string;
+  to: string;
+}
+export interface ReportFilters {
+  departments: Array<{ id: string; name: string }>;
+  vendors: Array<{ id: string; code: string; name: string }>;
+  items: Array<{ id: string; code: string; name: string }>;
+  reports: Record<PurchaseReport, string>;
+}
+
+export interface PurchaseDashboard {
+  fyFrom: string;
+  monthFrom: string;
+  today: string;
+  figures: {
+    openIndents: number;
+    pending: number;
+    toRequisition: number;
+    toOrder: number;
+    ordersThisMonth: number;
+    ordersThisMonthValue: number;
+    ordersThisYearValue: number;
+    emergencyWaiting: number;
+  };
+  largePoAlert: number | null;
+  oldestPending: Array<{
+    kind: string;
+    label: string;
+    department: string | null;
+    amount: number;
+    level: string;
+    waitingWith: string;
+    since: string;
+    days: number;
+    overdue: boolean;
+    href: string | null;
+  }>;
+  largest: Array<{
+    id: string;
+    label: string;
+    vendor: string;
+    department: string | null;
+    date: string;
+    total: number;
+  }>;
+  overAlert: Array<{ id: string; label: string; vendor: string; date: string; total: number }>;
+  byDepartment: Array<{ department: string; total: number }>;
+  byMonth: Array<{ month: string; label: string; total: number }>;
+}
