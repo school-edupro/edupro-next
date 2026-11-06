@@ -44,6 +44,29 @@ interface Instalment {
   dueOn: string;
 }
 
+// dates relative to today, so a test does not turn into a short notice as the calendar moves on
+const NOTICE_DAYS = 30; // the default notice, checked in the first test
+const SESSION_END = '2027-03-31'; // the session seedSchool makes: 2026-27
+/** Today as the service takes it when no request date is given: in IST. */
+const todayIst = () => new Date(Date.now() + 5.5 * 3600e3).toISOString().slice(0, 10);
+const addDays = (d: string, n: number) =>
+  new Date(Date.parse(`${d}T00:00:00Z`) + n * 86400e3).toISOString().slice(0, 10);
+const monthEnd = (d: string) => {
+  const [y, m] = d.split('-').map(Number) as [number, number];
+  return new Date(Date.UTC(y, m, 0)).toISOString().slice(0, 10);
+};
+const monthOf = (d: string) => `${d.slice(0, 7)}-01`;
+/**
+ * Asked today (held back near the end of the session) to leave at the month end after a full notice,
+ * still inside the session: the fee stops with the leaving month.
+ */
+const fullNotice = () => {
+  const latest = addDays(SESSION_END, -(NOTICE_DAYS + 1));
+  const requestedOn = todayIst() < latest ? todayIst() : latest;
+  const leavingOn = monthEnd(addDays(requestedOn, NOTICE_DAYS));
+  return { requestedOn, leavingOn, feeUntil: monthOf(leavingOn) };
+};
+
 describe('hostel withdrawal (e2e)', () => {
   let app: NestFastifyApplication;
   let inject: ReturnType<typeof injector>;
@@ -273,14 +296,17 @@ describe('hostel withdrawal (e2e)', () => {
     // take the warden off "who may start": refused by the approval levels
     const f = await hwFlow();
     await patchFlow(f.id, { creatorRoles: f.creatorRoles.filter((r) => r !== 'warden') });
-    const off = await post(
-      `/hostel/students/${ids.carry}/withdrawal`,
-      { leavingOn: '2026-10-31', reason: 'parent_request' },
-      warden,
-    );
-    expect(off.statusCode).toBe(403);
-    expect(off.json().type).toContain('workflow.creator_not_allowed');
-    await patchFlow(f.id, { creatorRoles: f.creatorRoles });
+    try {
+      const off = await post(
+        `/hostel/students/${ids.carry}/withdrawal`,
+        { leavingOn: '2026-10-31', reason: 'parent_request' },
+        warden,
+      );
+      expect(off.statusCode).toBe(403);
+      expect(off.json().type).toContain('workflow.creator_not_allowed');
+    } finally {
+      await patchFlow(f.id, { creatorRoles: f.creatorRoles });
+    }
     // the Hostel Clerk starts it with the damages and mess dues; asked today for the month end: short notice
     const w = await post(
       `/hostel/students/${ids.carry}/withdrawal`,
@@ -380,8 +406,10 @@ describe('hostel withdrawal (e2e)', () => {
   });
 
   it('not approved keeps the bed; with the levels switched off the office completes it', async () => {
+    const notice = fullNotice();
     const w = await post(`/hostel/students/${ids.again}/withdrawal`, {
-      leavingOn: '2026-11-30',
+      requestedOn: notice.requestedOn,
+      leavingOn: notice.leavingOn,
       reason: 'discipline',
     });
     const id = (w.json() as HW).id;
@@ -404,16 +432,22 @@ describe('hostel withdrawal (e2e)', () => {
     // the school switches the levels off: the office completes it directly
     const f = await hwFlow();
     await patchFlow(f.id, { status: 'inactive' });
-    const w2 = await post(`/hostel/students/${ids.again}/withdrawal`, {
-      leavingOn: '2026-11-30',
-      reason: 'discipline',
-    });
-    const row = w2.json() as HW;
-    expect(row.approval).toBeNull();
-    expect(row.canComplete).toBe(true);
-    const done = await post(`/hostel/withdrawals/${row.id}/complete`, { feeChoice: 'carry' });
-    expect(done.json()).toMatchObject({ status: 'completed', feeUntil: '2026-11-01' });
-    await patchFlow(f.id, { status: 'active' });
+    try {
+      const w2 = await post(`/hostel/students/${ids.again}/withdrawal`, {
+        requestedOn: notice.requestedOn,
+        leavingOn: notice.leavingOn,
+        reason: 'discipline',
+      });
+      const row = w2.json() as HW;
+      expect(row.noticeShort).toBe(false);
+      expect(row.approval).toBeNull();
+      expect(row.canComplete).toBe(true);
+      const done = await post(`/hostel/withdrawals/${row.id}/complete`, { feeChoice: 'carry' });
+      expect(done.json()).toMatchObject({ status: 'completed', feeUntil: notice.feeUntil });
+    } finally {
+      // switched back on even if a check above fails, so the later tests still go through the levels
+      await patchFlow(f.id, { status: 'active' });
+    }
   });
 
   it('cancel closes the approval and keeps the bed; the register lists them, as Excel too', async () => {
