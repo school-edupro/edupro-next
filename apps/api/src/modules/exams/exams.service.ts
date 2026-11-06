@@ -684,6 +684,20 @@ export class ExamsService {
     });
   }
 
+  /**
+   * 6 Nov 2026: the whole exam counts as locked only while every subject of it is locked — a class
+   * opened again (Class VIII after Lock the whole exam) clears it, so that class's teachers enter while
+   * the others stay locked by their own locks; every class locked one by one sets it again.
+   */
+  private async wholeLockFollows(c: PoolClient, examId: string) {
+    await c.query(
+      `UPDATE exams e SET marks_locked = x.whole, updated_at = now(), updated_by = app.current_user_id()
+         FROM (SELECT bool_and(entry_locked) AS whole FROM exam_subjects WHERE exam_id = $1) x
+        WHERE e.id = $1 AND x.whole IS NOT NULL AND e.marks_locked <> x.whole`,
+      [examId],
+    );
+  }
+
   /** Replaces the subject list of one class in the exam; locked rows keep their lock. */
   async setSubjects(
     ctx: RequestContext,
@@ -1099,6 +1113,7 @@ export class ExamsService {
           WHERE exam_id = $1 AND class_id = $2 AND ($4::bigint[] IS NULL OR subject_id = ANY($4::bigint[]))`,
         [examId, dto.classId, dto.locked, dto.subjectIds ?? null],
       );
+      await this.wholeLockFollows(c, examId);
       await this.audit.stage(ctx, c, {
         action: dto.locked ? 'exams.subjects.lock' : 'exams.subjects.unlock',
         entityType: 'exams',
@@ -1142,6 +1157,7 @@ export class ExamsService {
             WHERE exam_id = $1 AND class_id = $2 AND entry_locked <> $3`,
           [examId, dto.classId, dto.marks],
         );
+      if (dto.marks !== undefined) await this.wholeLockFollows(c, examId);
       await c.query(
         `UPDATE exam_classes SET indicators_locked = COALESCE($3, indicators_locked), remarks_locked = COALESCE($4, remarks_locked),
                 attendance_locked = COALESCE($5, attendance_locked), health_locked = COALESCE($6, health_locked)

@@ -94,7 +94,9 @@
   verified subject sheet (the dialog says how many and asks the reason, kept in each sheet's history),
   so every teacher can enter again and submit again for verification; a class whose results are
   published on a report card stays as it is (revoke the class first). A single sheet can still be
-  reopened from its tile in Marks status.
+  reopened from its tile in Marks status. After locking the whole exam, opening one class (its Marks
+  lock on the Overview) lets that class's teachers enter while the other classes stay locked; the
+  button at the top then reads **Lock the whole exam** again (the exam is no longer wholly locked).
 
 ## Marks entry
 

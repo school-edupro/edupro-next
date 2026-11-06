@@ -596,5 +596,21 @@ describe('promotion proposals and remark categories (e2e)', () => {
       st.find((x) => x.classSectionId === section.A && x.subjectId === subject.ENG),
     ).toMatchObject({ status: 'open', remark: 'Reopened with the exam: Correct the ENG marks' });
     expect((await entry()).statusCode).toBe(200);
+
+    // the whole exam locked, then one class opened: the exam is no longer wholly locked and that class's
+    // teachers enter; the class locked again: the whole exam is locked again
+    await whole(admin, { locked: true });
+    const opened = await call(admin, 'PUT', `/exams/${examId}/class-locks`, {
+      classId: klass.VI,
+      marks: false,
+    });
+    expect(opened.json().marksLocked).toBe(false);
+    expect((await entry()).statusCode).toBe(200);
+    const relocked = await call(admin, 'PUT', `/exams/${examId}/class-locks`, {
+      classId: klass.VI,
+      marks: true,
+    });
+    expect(relocked.json().marksLocked).toBe(true);
+    expect((await entry()).json().type).toBe('exams.entry_locked');
   });
 });

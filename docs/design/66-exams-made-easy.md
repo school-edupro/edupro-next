@@ -260,3 +260,9 @@ submitted / verified and when, the remark, the actions (submit, verify or send b
   submit / verify / send back / single reopen stay as they were. Tests: exam-promotion-remarks (403 for
   a teacher, the lock refusing entry, the reason asked, the verified sheet reopened and enterable),
   exam-hub (the exam office refused), sprint14/15 (the coordinator refused, the admin allowed).
+- **Later (6 Nov 2026), found on PT1**: after Lock the whole exam, opening Class VIII left `exams.marks_locked`
+  on, and that flag kept VIII's teachers out. The flag now means "every subject is locked": opening or
+  locking a class (`class-locks` marks, `subjects/lock`) sets it from the subjects
+  (`ExamsService.wholeLockFollows`, `bool_and(entry_locked)`); 0311 cleared it on exams with an open
+  subject (Alpha's PT1). Test: exam-promotion-remarks (the whole exam locked, the class opened: the flag
+  off and entry allowed; the class locked: the flag on again).
