@@ -25,11 +25,17 @@ export default async function setup(): Promise<() => Promise<void>> {
     return r.rows[0]!.m;
   });
   return async () => {
+    // the run's schools retired, and their queued messages cancelled: none may reach a live provider
     await withClient((c) =>
       c.query(
-        `UPDATE schools SET status = 'inactive', updated_at = now()
-          WHERE id > $1::bigint AND status = 'active'
-            AND (name = code OR (name LIKE '% School _' AND code = regexp_replace(name, ' School (.)$', '\\1')))`,
+        `WITH gone AS (
+           UPDATE schools SET status = 'inactive', updated_at = now()
+            WHERE id > $1::bigint AND status = 'active'
+              AND (name = code OR (name LIKE '% School _' AND code = regexp_replace(name, ' School (.)$', '\\1')))
+           RETURNING id)
+         UPDATE comms_messages SET status = 'cancelled', last_error = 'Not sent: a test school, retired after the run',
+                updated_at = now()
+          WHERE school_id IN (SELECT id FROM gone) AND status IN ('queued', 'sending')`,
         [before],
       ),
     );

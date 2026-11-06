@@ -34,8 +34,8 @@ describe('notification processor (S3-02)', () => {
   });
   afterAll(() => db.close());
 
-  async function queueMessage(): Promise<string> {
-    return db.withTenant(tenantOf(school), async (c) => {
+  async function queueMessage(sch: SeededSchool = school): Promise<string> {
+    return db.withTenant(tenantOf(sch), async (c) => {
       const t = await c.query<{ id: string }>(
         `INSERT INTO comms_templates (school_id, code, channel, name, body, dlt_template_id, dlt_entity_id)
          VALUES (app.current_school_id(), $1, 'sms', 'Fee reminder', 'Dear {{name}}, fees are due', '1107160000000000001', '1101000000000000001') RETURNING id::text`,
@@ -44,15 +44,15 @@ describe('notification processor (S3-02)', () => {
       const m = await c.query<{ id: string }>(
         `INSERT INTO comms_messages (school_id, template_id, channel, recipient_user_id, recipient_address, body, variables)
          VALUES (app.current_school_id(), $1, 'sms', $2, '9999999999', 'Dear Asha, fees are due', '{"name":"Asha"}'::jsonb) RETURNING id::text`,
-        [t.rows[0]!.id, school.userId],
+        [t.rows[0]!.id, sch.userId],
       );
       return m.rows[0]!.id;
     });
   }
 
-  const envelope = (messageId: string) => ({
-    schoolId: school.id,
-    userId: school.userId,
+  const envelope = (messageId: string, sch: SeededSchool = school) => ({
+    schoolId: sch.id,
+    userId: sch.userId,
     requestId: null,
     kind: 'comms.message',
     payload: { messageId },
@@ -118,5 +118,35 @@ describe('notification processor (S3-02)', () => {
       c.query('SELECT status, attempts FROM comms_messages WHERE id = $1', [messageId]),
     );
     expect(row.rows[0]).toMatchObject({ status: 'cancelled', attempts: 0 });
+  });
+
+  it('a school that is not active sends nothing: its message is cancelled, no provider is called', async () => {
+    const off = await seedSchool(stamp('WNO'));
+    const messageId = await queueMessage(off);
+    await withMigrator((c) =>
+      c.query(`UPDATE schools SET status = 'inactive' WHERE id = $1`, [off.id]),
+    );
+    const calls: string[] = [];
+    const spy: ChannelAdapter = {
+      name: 'spy',
+      async send(m) {
+        calls.push(m.to);
+        return { providerMessageId: 'x', delivered: true };
+      },
+    };
+    await notificationProcessor(
+      db,
+      adapters(spy),
+      log,
+    )({ data: envelope(messageId, off), attemptsMade: 0, opts: { attempts: 3 } });
+    expect(calls).toEqual([]);
+    const row = await withMigrator((c) =>
+      c.query('SELECT status, attempts, last_error FROM comms_messages WHERE id = $1', [messageId]),
+    );
+    expect(row.rows[0]).toMatchObject({
+      status: 'cancelled',
+      attempts: 0,
+      last_error: 'Not sent: the school is not active',
+    });
   });
 });

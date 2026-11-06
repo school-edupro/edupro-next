@@ -27,6 +27,8 @@ interface MessageDbRow {
   attempts: number;
   /** a sign-in code's message: not sent once the code has expired */
   expired: boolean;
+  /** the school's status: a school that is not active sends nothing */
+  school_status: string | null;
   format: 'text' | 'html';
   params: string[] | null;
   attachments: Array<{ fileId: string; name: string | null; contentType: string }>;
@@ -153,6 +155,7 @@ export function notificationProcessor(
       const r = await c.query<MessageDbRow>(
         `SELECT m.id::text, m.channel, m.recipient_address, m.subject, m.body, m.status, m.attempts, m.format, m.params, m.attachments, m.variables->>'link' AS link,
                 COALESCE(m.expires_at < now(), false) AS expired,
+                (SELECT s.status::text FROM schools s WHERE s.id = m.school_id) AS school_status,
                 t.dlt_template_id, t.dlt_entity_id, t.sender_id, t.wa_template_name, t.wa_language, t.wa_header, t.wa_params,
                 (SELECT jsonb_build_object('provider', p.provider, 'config', p.config, 'secret', p.secret, 'active', p.active, 'updated_at', p.updated_at)
                    FROM comms_providers p WHERE p.channel = m.channel) AS provider
@@ -168,6 +171,19 @@ export function notificationProcessor(
     }
     if (row.status === 'cancelled' || row.status === 'sent' || row.status === 'delivered') {
       log.info({ messageId, status: row.status }, 'message already final; skipping');
+      return;
+    }
+    // 6 Nov 2026: a school that is not active sends nothing — its queued messages are cancelled, never
+    // handed to a provider (the retired test schools kept test keys under live providers' names, and
+    // the worker called the live SMS gateway with them)
+    if (row.school_status && row.school_status !== 'active') {
+      await db.withTenant(tenant, (c) =>
+        c.query(
+          `UPDATE comms_messages SET status = 'cancelled', last_error = 'Not sent: the school is not active', updated_at = now() WHERE id = $1`,
+          [messageId],
+        ),
+      );
+      log.info({ messageId, schoolId: envelope.schoolId }, 'school not active; message cancelled');
       return;
     }
     if (row.expired) {

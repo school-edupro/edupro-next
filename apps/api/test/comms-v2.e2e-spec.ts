@@ -28,6 +28,9 @@ const xlsx = async (rows: Array<Array<string | number>>) => {
 };
 
 describe('communication v2 (e2e)', () => {
+  // the providers saved here carry test keys under live providers' names: each points at a dead local
+  // address (nothing listens on port 9), so workers running during the tests reach no real gateway
+  const DEAD = 'http://127.0.0.1:9';
   let app: NestFastifyApplication;
   let inject: ReturnType<typeof injector>;
   let school: SeededSchool;
@@ -121,6 +124,16 @@ describe('communication v2 (e2e)', () => {
     });
   });
   afterAll(async () => {
+    // this school's providers carry test keys under live providers' names (MSG91, smsbhejo, Meta, FCM):
+    // its queued messages are cancelled and its providers removed, so nothing of it reaches them
+    await withMigrator(async (c) => {
+      await c.query(
+        `UPDATE comms_messages SET status = 'cancelled', last_error = 'Not sent: test messages', updated_at = now()
+          WHERE school_id = $1 AND status IN ('queued', 'sending')`,
+        [school.id],
+      );
+      await c.query(`DELETE FROM comms_providers WHERE school_id = $1`, [school.id]);
+    });
     await app.close();
   });
 
@@ -405,7 +418,7 @@ describe('communication v2 (e2e)', () => {
       headers: h(),
       json: {
         provider: 'msg91',
-        config: { senderId: 'ALPHAS', route: '4' },
+        config: { senderId: 'ALPHAS', route: '4', baseUrl: DEAD },
         secrets: { authKey: 'secret-key-123' },
       },
     });
@@ -532,7 +545,7 @@ describe('communication v2 (e2e)', () => {
       headers: h(),
       json: {
         provider: 'meta_whatsapp',
-        config: { phoneNumberId: `${s}PN`, apiVersion: 'v21.0' },
+        config: { phoneNumberId: `${s}PN`, apiVersion: 'v21.0', baseUrl: DEAD },
         secrets: { accessToken: 'tok', appSecret: 'app-secret' },
       },
     });
@@ -658,7 +671,7 @@ describe('communication v2 (e2e)', () => {
       headers: h(),
       json: {
         provider: 'smsbhejo',
-        config: { user: 'school', entityId: '1101' },
+        config: { user: 'school', entityId: '1101', url: `${DEAD}/submitsms.jsp` },
         secrets: { key: 'live-key-xyz' },
         active: false,
       },
@@ -684,7 +697,11 @@ describe('communication v2 (e2e)', () => {
       method: 'PUT',
       url: '/comms/providers/sms',
       headers: h(),
-      json: { provider: 'smsbhejo', config: { user: 'school', entityId: '1101' }, active: true },
+      json: {
+        provider: 'smsbhejo',
+        config: { user: 'school', entityId: '1101', url: `${DEAD}/submitsms.jsp` },
+        active: true,
+      },
     });
   });
 
