@@ -242,3 +242,9 @@ submitted, verified (✓); "—" when nobody in the section takes it. A row ends
 foot of a column with the marks entered. Picking a tile opens a card above the grid: entered of takers, who
 submitted / verified and when, the remark, the actions (submit, verify or send back, reopen with a reason) and
 "Open the marks sheet". The figures stay on top (total, open, missing, waiting, verified).
+
+- **Later (6 Nov 2026), asked**: the exam's **Results** and **Reports** tabs are gone — the mark
+  registers' Run reports cover them (docs/design/68, 76-80). **Work out results** (with when it last
+  ran) is on the Overview (`WorkOutResults`, `#results`); when it is the next step, the Overview shows
+  the button itself and the exams list's next step links to `/exams/:id#results`. The Analysis, Mark
+  register, Promotion and Reports pages are kept at their addresses (old links still open them).

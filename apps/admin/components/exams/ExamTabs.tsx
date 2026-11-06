@@ -5,7 +5,8 @@ export type ExamTab =
 
 /**
  * The pages of one exam (docs/design/66): the same tabs on each, so nothing is two clicks away; an area
- * the exam does not take has no tab (results and reports go with marks).
+ * the exam does not take has no tab. 6 Nov 2026: no Results and Reports tabs (the mark registers' Run
+ * reports cover them; Work out results is on the Overview); their pages still open at their addresses.
  */
 export async function ExamTabs({
   examId,
@@ -26,12 +27,6 @@ export async function ExamTabs({
     ...(on('remarks') ? ([['remarks', '/remarks']] as Array<[ExamTab, string]>) : []),
     ...(on('attendance') || on('health')
       ? ([['attendance', on('attendance') ? '/attendance' : '/health']] as Array<[ExamTab, string]>)
-      : []),
-    ...(on('marks')
-      ? ([
-          ['results', '/analysis'],
-          ['reports', '/reports'],
-        ] as Array<[ExamTab, string]>)
       : []),
   ];
   return (

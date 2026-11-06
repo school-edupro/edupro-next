@@ -3133,7 +3133,7 @@ export async function revokeServiceKey(fd: FormData) {
 
 export async function computeExamResults(fd: FormData) {
   const id = str(fd, 'examId');
-  const back = str(fd, 'back') || `/exams/${id}/analysis`;
+  const back = str(fd, 'back') || `/exams/${id}`;
   return run(back, () => apiFetch(`/exams/${id}/results/compute`, { method: 'POST' }));
 }
 

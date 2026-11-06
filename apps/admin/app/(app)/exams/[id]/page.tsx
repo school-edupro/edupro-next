@@ -4,6 +4,7 @@ import { Notice } from '@/components/Notice';
 import { ExamFrame } from '@/components/exams/ExamFrame';
 import { Meter } from '@/components/exams/Meter';
 import { STAGE_TONE, StageSteps } from '@/components/exams/StageSteps';
+import { WorkOutResults } from '@/components/exams/WorkOutResults';
 import { nextStep } from '@/components/exams/next-step';
 import { apiFetch, getMe } from '@/lib/api';
 import { toggleClassLock } from '@/lib/exam-hub-actions';
@@ -68,10 +69,33 @@ export default async function ExamOverviewPage({
           <p>
             <strong>{n('title')}:</strong> {n(next.key, { n: next.n })}
           </p>
-          <a className="ep-btn ep-btn--primary ep-btn--sm" href={next.href}>
-            {n(`${next.key}Go`)}
-          </a>
+          {/* the next step is to work the results out: the button itself, not a link */}
+          {next.key === 'compute' && canManage ? null : (
+            <a className="ep-btn ep-btn--primary ep-btn--sm" href={next.href}>
+              {n(`${next.key}Go`)}
+            </a>
+          )}
         </div>
+        {on('marks') ? (
+          // 6 Nov 2026: Work out results lives here (the Results tab is gone)
+          <div id="results" className="ep-xnext">
+            <p>
+              <strong>{t('results')}:</strong>
+            </p>
+            <WorkOutResults
+              examId={exam.id}
+              computedAt={
+                p.classes
+                  .map((k) => k.computedAt)
+                  .filter((x): x is string => !!x)
+                  .sort()
+                  .at(-1) ?? null
+              }
+              canCompute={canManage}
+              back={`/exams/${exam.id}`}
+            />
+          </div>
+        ) : null}
         <div className="ep-kpis">
           <KpiTile label={t('students')} value={String(p.totals.students)} />
           {on('marks') ? (

@@ -1,11 +1,11 @@
-import { Button } from '@edupro/ui';
 import { getTranslations } from 'next-intl/server';
-import { computeExamResults } from '@/lib/actions';
 import { SubNav } from './SubNav';
+import { WorkOutResults } from './WorkOutResults';
 
 /**
- * The Results tab's top (docs/design/66): its pages (analysis, mark register, promotion), when the
- * results were worked out, and Work out results for whoever manages the exam.
+ * The Results pages' top (docs/design/66): its pages (analysis, mark register, promotion), when the
+ * results were worked out, and Work out results for whoever manages the exam. The pages are no longer
+ * on the exam's tabs (6 Nov 2026) but still open at their addresses.
  */
 export async function ResultsHead({
   examId,
@@ -40,22 +40,7 @@ export async function ResultsHead({
           label: t(k),
         }))}
       />
-      <span style={{ display: 'inline-flex', gap: 'var(--sp-3)', alignItems: 'center' }}>
-        <span className="ep-meter__text">
-          {computedAt
-            ? t('computedAt', { at: computedAt.slice(0, 16).replace('T', ' ') })
-            : t('notComputed')}
-        </span>
-        {canCompute ? (
-          <form action={computeExamResults}>
-            <input type="hidden" name="examId" value={examId} />
-            <input type="hidden" name="back" value={back} />
-            <Button type="submit" size="sm">
-              {t('compute')}
-            </Button>
-          </form>
-        ) : null}
-      </span>
+      <WorkOutResults examId={examId} computedAt={computedAt} canCompute={canCompute} back={back} />
     </div>
   );
 }

@@ -133,11 +133,12 @@ see who submitted or verified it and to submit, verify, send back or reopen it.
 
 ## Results and report cards
 
-- **Results** tab of an exam: **Analysis**, **Mark register** (by section; Excel, and PDF to view or
-  download) and **Promotion** (proposals from the results; **Record** sends the ticked decisions to
-  People → Promotions, where they are applied). **Work out results** sits on all three.
-- **Reports** tab: the analyses (section-wise subjects, ranges, toppers, subject teachers, upload
-  status, missing marks), each as Excel and PDF.
+- **Work out results** is on the exam's **Overview** (with when they were last worked out): the
+  totals, %, grade and rank of each pupil, used by the exam report cards and the dashboards. When it is
+  the next step, the Overview's next step is this button.
+- An exam has no Results or Reports tab: the analyses, the register, toppers, teacher-wise, missing
+  marks, absentees and attendance are a **mark register**'s Run reports (Exams → Registers). The old
+  pages (Analysis, Mark register, Promotion, Reports) still open from an old link.
 - **Date sheet in the apps**: families see their child's papers under **Exam date sheet** in the
   parent app once the exam is shown on the parent portal; teachers see their classes' date sheets in
   the teacher app (**Exam date sheet**).

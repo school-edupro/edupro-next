@@ -26,7 +26,8 @@ export function nextStep(
     case 'results':
       return p.classes.every((k) => k.computedAt || k.students === 0)
         ? { key: 'release', href: '/exams/report-cards', n: 0 }
-        : { key: 'compute', href: `/exams/${examId}/analysis`, n: 0 };
+        : // Work out results is on the exam's Overview (6 Nov 2026)
+          { key: 'compute', href: `/exams/${examId}#results`, n: 0 };
     default:
       return { key: 'released', href: '/exams/report-cards', n: 0 };
   }
