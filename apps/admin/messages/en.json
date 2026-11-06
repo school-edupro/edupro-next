@@ -3371,10 +3371,13 @@
     "pmSendConfirm": "Send",
     "pmAllTold": "Every family that can be told is told.",
     "pmSendWho": "Only the principal (results publish right) sends the message.",
-    "pmWaitsOn": "Nothing to send now: {n} families wait for the {channel}, which goes once {why}.",
+    "pmWaitsOn": "Nothing to send now: {n, plural, one {# family waits} other {# families wait}} for the {channel}, which goes once {why}.",
     "pmWhyDlt": "its DLT template id is added under Communication → Templates",
     "pmWhyOff": "its template is switched on under Communication → Templates",
-    "pmTickNone": "{channel} (nobody waits: {told} told)"
+    "pmTickNone": "{channel} (nobody waits: {told} told)",
+    "pmPending": "{n} still in the outbox",
+    "pmOutbox": "{n, plural, one {# family's message is} other {# families' messages are}} still in the outbox: told means the message is queued; it goes out when the message service (the workers) runs. A cancelled or failed message makes the family “not yet” again.",
+    "pmOutboxLink": "See the queued messages (Communication → Messages)"
   },
   "rcHolds": {
     "title": "Held cards ({n})",

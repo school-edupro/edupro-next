@@ -235,16 +235,17 @@ Pick a tile to see who submitted or verified it and to submit, verify, send back
      mobile), the held cards and those withheld for fees. **Send to VI's parents** (or **Send to every
      published class**; the principal only) asks which way — **E-mail** and/or **SMS** (greyed out until
      its DLT template id is added) — and sends only to the families not told yet that way: each family
-     is told once per release and channel, never for a held card or one withheld for fees. Each published class
-     has its Send button; when nothing can be sent, its dialog says why (everyone told, or the SMS
+     is told once per release and channel, never for a held card or one withheld for fees. **Told** means the message is queued: it goes out when the message service (the workers)
+     runs, and the box says how many are "still in the outbox" (Communication → Messages lists them); a
+     family whose message is cancelled or fails is "not yet" again and can be sent again. Each published
+     class has its Send button; when nothing can be sent, its dialog says why (everyone told, or the SMS
      waiting for its DLT id) and offers only Close. Below it, the **e-mail**
      is shown exactly as it arrives — a letter on the school's letterhead: "the
      Assement 1 report card of Aarav (class I-A) is now published", with a **View report card** button
      to the parent app's Results — filled for a pupil of this release; the **SMS**'s words below it.
      Each says whether it goes out (an SMS only once its DLT template id is added under Communication →
      Templates). **Edit the e-mail template** opens it under Communication → Templates, where the
-     wording is changed for every release. Its placeholders are filled for each pupil: exam (the
-     release's exams), class (the pupil's class), name, school, link (the parent app's Results) and term
+     wording is changed for every release. Its placeholders are filled for each pupil: exam (the exam's name; the card's own name when it carries several exams), class (the pupil's class), name, school, link (the parent app's Results) and term
      (the release's name).
    - **Held cards** (under the class table): the cards held back from the parent and student portal,
      with filters **Class**, **Section** and **Search** (name, admission no or the reason's words), who

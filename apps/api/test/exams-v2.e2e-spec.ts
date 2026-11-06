@@ -735,8 +735,8 @@ describe('examinations v2 (e2e)', () => {
         classId,
         code: 'XI',
         held: 1,
-        email: { told: 0, waiting: 1, noAddress: 2 },
-        sms: { told: 0, waiting: 1, noAddress: 2 },
+        email: { told: 0, pending: 0, waiting: 1, noAddress: 2 },
+        sms: { told: 0, pending: 0, waiting: 1, noAddress: 2 },
       }),
     ]);
     const tell = (u: SeededUser, body: Record<string, unknown>) =>
@@ -810,6 +810,39 @@ describe('examinations v2 (e2e)', () => {
       (await call(admin, 'GET', '/exams/report-cards/releases/999999999/parent-message'))
         .statusCode,
     ).toBe(404);
+    // docs/design/82: told = a message not cancelled or failed; it waits in the outbox until sent
+    expect((await counts()).total.email).toMatchObject({ told: 1, pending: 1, waiting: 0 });
+    const ours = `SELECT id FROM comms_templates WHERE school_id = $1 AND code = 'result_published'`;
+    await withMigrator((c) =>
+      c.query(
+        `UPDATE comms_messages SET status = 'cancelled' WHERE school_id = $1 AND template_id IN (${ours})`,
+        [school.id],
+      ),
+    );
+    expect((await counts()).total.email).toMatchObject({ told: 0, waiting: 1 });
+    expect((await tell(admin, { channels: ['email'] })).json()).toEqual({
+      told: { email: 1, sms: 0 },
+      messages: 1,
+    });
+    await withMigrator((c) =>
+      c.query(
+        `UPDATE comms_messages SET status = 'sent' WHERE school_id = $1 AND status = 'queued' AND template_id IN (${ours})`,
+        [school.id],
+      ),
+    );
+    expect((await counts()).total.email).toMatchObject({ told: 1, pending: 0, waiting: 0 });
+    // the SMS goes once the template has its DLT id
+    await withMigrator((c) =>
+      c.query(
+        `UPDATE comms_templates SET dlt_template_id = '1107000000000000001' WHERE school_id = $1 AND code = 'result_published' AND channel = 'sms'`,
+        [school.id],
+      ),
+    );
+    expect((await tell(admin, { channels: ['sms', 'email'] })).json()).toEqual({
+      told: { email: 0, sms: 1 },
+      messages: 1,
+    });
+    expect((await counts()).total.sms).toMatchObject({ told: 1, pending: 1, waiting: 0 });
     const mine = (await call(parent, 'GET', '/exams/mine/results')).json().children as Array<{
       student: { name: string };
       terms: Array<{ held: boolean; withheld: boolean }>;
@@ -878,8 +911,9 @@ describe('examinations v2 (e2e)', () => {
     expect(pub.statusCode).toBe(200);
     expect(pub.json()).toMatchObject({ status: 'released', classCount: 1, publishedClasses: 1 });
     expect((await call(admin, 'PUT', cls, { status: 'released' })).statusCode).toBe(409);
-    // docs/design/82: published again, nobody is told again (Asha's father was told once, by e-mail)
-    expect(await publishOf()).toMatchObject({ status: 'released', notified: 1 });
+    // docs/design/82: published again, nobody is told again (Asha's father: the e-mail, cancelled and
+    // sent again, and the SMS — three messages)
+    expect(await publishOf()).toMatchObject({ status: 'released', notified: 3 });
     expect((await call(admin, 'POST', `${url}/tell`, { channels: ['email'] })).json().type).toBe(
       'report_card.told',
     );

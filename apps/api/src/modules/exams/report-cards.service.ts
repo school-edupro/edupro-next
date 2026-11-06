@@ -1100,7 +1100,7 @@ export class ReportCardsService {
 
   /**
    * The words of the families' message (docs/design/81), the same for the messages and the preview: the
-   * pupil's name and class ("I-A"), the release's exams ("Periodic Test 1 and Half Yearly"), the school,
+   * pupil's name and class ("I-A"), the exam (one exam's name, else the card's name), the school,
    * the parent app's Results, and the release's name as {{term}} (the old word, kept).
    */
   private async messageWords(c: PoolClient, releaseId: string) {
@@ -1113,10 +1113,9 @@ export class ReportCardsService {
     );
     const x = r.rows[0];
     const names = x?.exams ?? [];
-    const exam =
-      names.length > 1
-        ? `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]!}`
-        : (names[0] ?? x?.term ?? '');
+    // one exam: its name; a card of several exams (a term card): the card's own name (6 Nov 2026, found
+    // on Term 1 with five exams: the subject listed all five)
+    const exam = names.length === 1 ? names[0]! : (x?.term ?? '');
     const link = `${this.env.PARENT_APP_URL.replace(/\/+$/, '')}/results`;
     return (pupil: { name: string; class: string }): Record<string, string> => ({
       name: pupil.name,
@@ -1208,6 +1207,7 @@ export class ReportCardsService {
     scope: CardScope,
   ) {
     const r = await c.query<TellPupil>(
+      // eslint-disable-next-line no-restricted-syntax -- TOLD is a fixed fragment; values are bound parameters
       `SELECT DISTINCT ON (s.id) s.id::text AS student_id, s.display_name AS name, k.code || '-' || cs.name AS class,
               x.class_id::text, k.code AS class_code, k.display_order,
               EXISTS (SELECT 1 FROM report_card_holds h WHERE h.release_id = r.id AND h.student_id = s.id) AS held,
@@ -1217,8 +1217,9 @@ export class ReportCardsService {
                        WHERE sg.student_id = s.id AND sg.receives_notifications AND COALESCE(btrim(g.email::text), '') <> '') AS has_email,
               EXISTS (SELECT 1 FROM student_guardians sg JOIN guardians g ON g.id = sg.guardian_id AND g.deleted_at IS NULL
                        WHERE sg.student_id = s.id AND sg.receives_notifications AND g.mobile ~ '^[6-9][0-9]{9}$') AS has_sms,
-              EXISTS (SELECT 1 FROM report_card_told t WHERE t.release_id = r.id AND t.student_id = s.id AND t.channel = 'email') AS told_email,
-              EXISTS (SELECT 1 FROM report_card_told t WHERE t.release_id = r.id AND t.student_id = s.id AND t.channel = 'sms') AS told_sms
+              EXISTS (${TOLD('email')}) AS told_email, EXISTS (${TOLD('sms')}) AS told_sms,
+              EXISTS (${TOLD('email')} AND NOT EXISTS (SELECT 1 FROM comms_messages m WHERE m.id = ANY(t.message_ids) AND m.status IN ('sent', 'delivered'))) AS pending_email,
+              EXISTS (${TOLD('sms')} AND NOT EXISTS (SELECT 1 FROM comms_messages m WHERE m.id = ANY(t.message_ids) AND m.status IN ('sent', 'delivered'))) AS pending_sms
          FROM report_card_releases r
          JOIN report_card_release_classes x ON x.release_id = r.id AND x.status = 'released'
          JOIN classes k ON k.id = x.class_id
@@ -1315,7 +1316,7 @@ export class ReportCardsService {
       for (const ch of channels)
         for (const p of waiting(ch)) {
           const vars = JSON.stringify(words(p));
-          let n = 0;
+          const sent: string[] = [];
           for (const x of g.rows.filter((y) => y.student_id === p.student_id)) {
             const to =
               ch === 'email'
@@ -1328,14 +1329,17 @@ export class ReportCardsService {
               `SELECT app.send_template('result_published', $1, $2, $3::jsonb, $4)::text AS id`,
               [ch, to, vars, x.user_id],
             );
-            if (m.rows[0]?.id) n += 1;
+            if (m.rows[0]?.id) sent.push(m.rows[0].id);
           }
+          const n = sent.length;
           if (!n) continue;
+          // told again after a cancelled or failed message: the row takes the new messages
           await c.query(
-            `INSERT INTO report_card_told (school_id, release_id, student_id, channel, messages, told_by)
-             VALUES (app.current_school_id(), $1, $2, $3::comms_channel, $4, app.current_user_id())
-             ON CONFLICT (release_id, student_id, channel) DO NOTHING`,
-            [releaseId, p.student_id, ch, n],
+            `INSERT INTO report_card_told (school_id, release_id, student_id, channel, messages, message_ids, told_by)
+             VALUES (app.current_school_id(), $1, $2, $3::comms_channel, $4, $5::bigint[], app.current_user_id())
+             ON CONFLICT (release_id, student_id, channel) DO UPDATE
+                SET messages = EXCLUDED.messages, message_ids = EXCLUDED.message_ids, told_at = now(), told_by = EXCLUDED.told_by`,
+            [releaseId, p.student_id, ch, n, sent],
           );
           told[ch] += 1;
           messages += n;
@@ -1369,6 +1373,8 @@ export class ReportCardsService {
       const send = list.filter((p) => !p.held && !p.fee);
       const of = (ch: 'email' | 'sms') => ({
         told: list.filter((p) => (ch === 'email' ? p.told_email : p.told_sms)).length,
+        // told, but every message still in the outbox (the message service has not sent it yet)
+        pending: list.filter((p) => (ch === 'email' ? p.pending_email : p.pending_sms)).length,
         waiting: send.filter((p) =>
           ch === 'email' ? p.has_email && !p.told_email : p.has_sms && !p.told_sms,
         ).length,
@@ -2546,4 +2552,16 @@ interface TellPupil {
   has_sms: boolean;
   told_email: boolean;
   told_sms: boolean;
+  pending_email: boolean;
+  pending_sms: boolean;
 }
+
+/**
+ * SQL: the pupil `s` of release `r` was told on the channel — a told row one of whose messages is not
+ * cancelled or failed (docs/design/82; a row with no message ids, from before they were kept, counts).
+ */
+const TOLD = (channel: 'email' | 'sms') =>
+  // eslint-disable-next-line no-restricted-syntax -- channel is one of the two fixed names above
+  `SELECT 1 FROM report_card_told t WHERE t.release_id = r.id AND t.student_id = s.id AND t.channel = '${channel}'
+      AND (cardinality(t.message_ids) = 0 OR EXISTS (SELECT 1 FROM comms_messages m WHERE m.id = ANY(t.message_ids)
+           AND m.status NOT IN ('cancelled', 'failed')))`;

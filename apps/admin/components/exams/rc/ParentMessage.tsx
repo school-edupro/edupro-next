@@ -5,6 +5,8 @@ import { tellParents } from '@/lib/report-card-actions';
 
 interface ChannelCount {
   told: number;
+  /** told, every message still in the outbox */
+  pending: number;
   waiting: number;
   noAddress: number;
 }
@@ -119,12 +121,21 @@ export async function ParentMessage({
   const cell = (c: ChannelCount, none: string) => (
     <>
       {t('pmToldWaiting', { told: c.told, waiting: c.waiting })}
+      {c.pending ? (
+        <span className="ep-mr-col__desc">{t('pmPending', { n: c.pending })}</span>
+      ) : null}
       {c.noAddress ? <span className="ep-mr-col__desc">{none}</span> : null}
     </>
   );
   return (
     <Card elevated title={t('pmTitle')} style={{ marginTop: 'var(--sp-4)' }}>
       <p style={{ marginTop: 0 }}>{t('pmIntro', { told: data.told })}</p>
+      {data.total.email.pending || data.total.sms.pending ? (
+        <p className="ep-alert ep-alert--info">
+          {t('pmOutbox', { n: data.total.email.pending + data.total.sms.pending })}{' '}
+          <a href="/comms/messages?status=queued">{t('pmOutboxLink')}</a>
+        </p>
+      ) : null}
       {data.classes.length ? (
         <>
           <div

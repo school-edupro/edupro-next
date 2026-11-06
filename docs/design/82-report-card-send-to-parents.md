@@ -97,3 +97,14 @@ A reminder to families already told; a message when a card is revoked; schedulin
   Release 316 in the browser with axe: the table, no Send (all told by e-mail), the SMS's reason; the
   dialog checked on a throwaway page with made-up counts (ticks, the disabled SMS, the error); nothing
   sent.
+- **Later (6 Nov 2026), found on Alpha (release 1)**: 0314's fill marked whole classes told — VI's 15
+  e-mails had been cancelled (1 Nov) and 3 VI pupils have no e-mail, yet all 17 counted told, so VI
+  could not be sent. Migration 0315: `report_card_told.message_ids`; the filled rows made again from
+  the messages that exist (release name and pupil name in the message, sent to one of the pupil's
+  guardians, not cancelled or failed). **Told = a told row with a message that is not cancelled or
+  failed** (`TOLD()` in the service), so a cancelled or failed message makes the family "not yet" again
+  and Send replaces the row's messages; **pending** = told with every message still queued — the box
+  says "16 still in the outbox" and links Communication → Messages (queued). Release 1 after it: VI 1
+  to send (16 withheld for fees), VII and VIII 16 each in the outbox. The plural ("1 family waits").
+  Tests: exams-v2 (cancelled → not yet → Send again; sent → no longer pending; SMS once a DLT id is
+  given).

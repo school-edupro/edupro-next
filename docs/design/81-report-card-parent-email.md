@@ -100,3 +100,6 @@ the card's PDF to the e-mail; a message when a card is taken back (none is sent,
   browser with axe (frames skipped): clean; nothing published or sent.
 - **Later (6 Nov 2026)**: publishing no longer sends the message; the principal sends it from Message to
   parents when they choose, to the families not told yet (docs/design/82).
+- **Later (6 Nov 2026)**: {{exam}} is the exam's name only when the card carries one exam; a card of
+  several exams (Term 1 with five) uses the card's own name ("Term 1 (2026-27) report card of …"), as
+  listing every exam made an 80-word subject.
