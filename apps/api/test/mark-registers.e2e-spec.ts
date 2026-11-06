@@ -430,7 +430,7 @@ describe('mark registers like the legacy Term Mark Register (e2e)', () => {
     expect(texts).toContain('THIRD LANGUAGE');
   });
 
-  it('the Run reports: summary, analysis, entry status, missing, absent, toppers, teacher-wise, at-risk, failing, compare; their files', async () => {
+  it('the Run reports: summary, analysis, entry status, missing, absent, attendance, toppers, teacher-wise, at-risk, failing, compare; their files', async () => {
     const run = (q: string) =>
       call(office, 'GET', `/exams/schemes/${ids.reg!}/register?${q}`).then((r) => {
         expect(r.statusCode).toBe(200);
@@ -581,6 +581,60 @@ describe('mark registers like the legacy Term Mark Register (e2e)', () => {
           office,
           'GET',
           `/exams/schemes/${ids.reg!}/register?${A}&report=missing&exam=NOPE`,
+        )
+      ).statusCode,
+    ).toBe(400);
+    // doc 79: the day attendance between two dates (VI-A: Asha P P LV, Bhanu A P late, Chitra none)
+    await withMigrator(async (c) => {
+      const codes: Record<string, string[]> = { Asha: ['P', 'P', 'LV'], Bhanu: ['A', 'P', 'L'] };
+      for (const [d, day] of ['2026-07-01', '2026-07-02', '2026-07-03'].entries()) {
+        const sess = await c.query<{ id: string }>(
+          `INSERT INTO attendance_sessions (school_id, academic_year_id, class_section_id, on_date, kind)
+           VALUES ($1, $2, $3, $4::date, 'day') RETURNING id::text`,
+          [school.id, school.yearId, section['VI-A'], day],
+        );
+        for (const [who, list] of Object.entries(codes))
+          await c.query(
+            `INSERT INTO attendance_marks (school_id, session_id, student_id, code) VALUES ($1, $2, $3, $4::attendance_code)`,
+            [school.id, sess.rows[0]!.id, student[who], list[d]],
+          );
+      }
+    });
+    const att = (q: string) =>
+      call(office, 'GET', `/exams/schemes/${ids.reg!}/register?${A}&report=attendance${q}`).then(
+        (r) =>
+          r.json() as {
+            range: { from: string; to: string };
+            notes: string[];
+            blocks: Array<{ title: string; sheet: Sheet }>;
+          },
+      );
+    const whole = await att('');
+    // by default the session's first day and today; the marks' notes are not shown
+    expect(whole.range.from).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    expect(whole.range.to >= '2026-07-03').toBe(true);
+    expect(whole.notes).toEqual([]);
+    const july = await att('&from=2026-07-01&to=2026-07-03');
+    expect(july.blocks.map((b) => b.title)).toEqual([
+      'Attendance — VI-A · 01-Jul-2026 to 03-Jul-2026',
+    ]);
+    const line = (b: { sheet: Sheet }, n: string) =>
+      b.sheet.body
+        .find((r) => r.cells[4]!.t === n)!
+        .cells.slice(5)
+        .map((c) => c.t);
+    // A, P, X, Total, %: leave out of the %, late counted present; nothing marked: 0s and no %
+    expect(line(july.blocks[0]!, 'Asha Register')).toEqual(['0', '2', '1', '3', '100%']);
+    expect(line(july.blocks[0]!, 'Bhanu Register')).toEqual(['1', '2', '0', '3', '66.67%']);
+    expect(line(july.blocks[0]!, 'Chitra Register')).toEqual(['0', '0', '0', '0', '']);
+    const two = await att('&from=2026-07-01&to=2026-07-02');
+    expect(line(two.blocks[0]!, 'Bhanu Register')).toEqual(['1', '1', '0', '2', '50%']);
+    expect(
+      (
+        await call(
+          office,
+          'GET',
+          `/exams/schemes/${ids.reg!}/register?${A}&report=attendance&from=2026-07-03&to=2026-07-01`,
         )
       ).statusCode,
     ).toBe(400);

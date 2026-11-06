@@ -1042,7 +1042,7 @@ const dMonY = (iso: string | undefined) => {
 /**
  * Attendance between two dates (docs/design/79), as the old Attendance Report: a table per section, every
  * pupil by roll with A (absent), P (present: every mark but A and LV), X (on leave), Total = A + P + X
- * and % = P × 100 ÷ (Total − X); a pupil with nothing marked shows 0s and no %.
+ * and % = P × 100 ÷ (Total - X); a pupil with nothing marked shows 0s and no %.
  */
 function attendance(i: ReportInput): ReportBlock[] {
   const range = `${dMonY(i.from)} to ${dMonY(i.to)}`;
@@ -1098,7 +1098,7 @@ function attendance(i: ReportInput): ReportBlock[] {
           ],
     );
     for (const h of b.sheet.head[0]!) if (h.t !== 'Name') h.center = true;
-    b.sheet.head[0]![9]!.title = '(P × 100) ÷ (Total − X)';
+    b.sheet.head[0]![9]!.title = '(P × 100) ÷ (Total - X)';
     const marked = pupils.filter((st) => {
       const d = i.daily?.[st.studentId];
       return d && d.a + d.p + d.x > 0;
@@ -1108,7 +1108,7 @@ function attendance(i: ReportInput): ReportBlock[] {
       'P = present (late, short leave, half day, on duty and stay back count as present)',
       'X = on leave',
       'Total = A + P + X',
-      '% = P × 100 ÷ (Total − X)',
+      '% = P × 100 ÷ (Total - X)',
       ...(marked < pupils.length
         ? [`${plural(pupils.length - marked, 'pupil')} with nothing marked: 0s, no %`]
         : []),

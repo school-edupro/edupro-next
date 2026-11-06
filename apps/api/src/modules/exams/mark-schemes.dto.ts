@@ -247,6 +247,7 @@ export const RegisterQuerySchema = z.object({
       'entry',
       'missing',
       'absent',
+      'attendance',
       'toppers',
       'teacher',
       'risk',
@@ -267,6 +268,15 @@ export const RegisterQuerySchema = z.object({
   /** Failing students: the number of subjects failed, from – to (docs/design/77) */
   failFrom: z.coerce.number().int().min(1).max(10).optional(),
   failTo: z.coerce.number().int().min(1).max(10).optional(),
+  /** Attendance: the dates counted (docs/design/79; none: the session's first day, today) */
+  from: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, 'must be YYYY-MM-DD')
+    .optional(),
+  to: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, 'must be YYYY-MM-DD')
+    .optional(),
   /** At-risk: how far above the pass % is borderline */
   margin: z.coerce
     .number()

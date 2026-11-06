@@ -1,6 +1,6 @@
 # 79 · Attendance report on a mark register's Run: A, P, X, Total and % between two dates
 
-Status: plan (6 Nov 2026). Asked by the school on a mark register's Run (`/exams/schemes/417/register`,
+Status: built 6 Nov 2026 (no migration; **As built** at the end). Asked by the school on a mark register's Run (`/exams/schemes/417/register`,
 Reports), with the old system's Excel (`~/Downloads/Attendance_Report.xls`; a real class's report: its
 layout and wording only are used here).
 
@@ -68,3 +68,22 @@ reads as 0 %, which is not what it means); the % to two decimals, trailing zeros
 
 The Attendance module's own reports (Attendance → Registers stays as it is); period-wise (subject)
 attendance; messages to parents.
+
+## As built (6 Nov 2026)
+
+- **Engine** (`attendance()` in `packages/db/src/mark-register-reports.ts`; `ReportInput.daily`, `from`,
+  `to`): a table per section ("Attendance — VI-A · 06-Oct-2026 to 06-Nov-2026"), every pupil of the
+  section by roll: SRN, Class, Roll No, Student ID, Name, A (red when some), P, X, Total, % (to two
+  decimals, blank with nothing to count); the note gives the rule and how many pupils have nothing
+  marked. "Total - X" is written with a hyphen: the PDF's font has no minus sign.
+- **API**: `report=attendance`, `from` / `to` (YYYY-MM-DD; From after To refused, 400); by default the
+  session's first day (`academic_years.start_date`) and today in IST; `dailyAttendance()` counts the day
+  marks of the place's sections between them in one query (A, LV, every other code as present);
+  returned as `range`; the marks' notes are not added for this report; the file names carry the dates.
+- **Admin**: the Run page's **From** / **To** (date) and **Show** for this report, the help line; the
+  result chips and the Subject picker hidden for it; the downloads take `from` / `to`.
+- **Tests**: unit (3: the menu; the columns, Total, % without the leave, nothing marked and the note, a
+  class with two sections; one section by roll); `mark-registers` e2e (three days marked for VI-A: the
+  default range, a range and a shorter one with A / P / X / Total / %, From after To refused). Register
+  417 on Alpha: Class VI from 01-Apr-2026 (VI-A 27 days marked), the Excel and the PDF (one page), the
+  page in the browser with axe: clean.

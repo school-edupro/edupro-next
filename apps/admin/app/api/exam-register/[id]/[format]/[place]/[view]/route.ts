@@ -30,7 +30,9 @@ export async function GET(
   const report = sp.get('report');
   if (
     report &&
-    /^(summary|analysis|entry|missing|absent|toppers|teacher|risk|failing|compare)$/.test(report)
+    /^(summary|analysis|entry|missing|absent|attendance|toppers|teacher|risk|failing|compare)$/.test(
+      report,
+    )
   )
     q.set('report', report);
   // toppers (docs/design/76): any N 1–100 or all, a % range, the lowest first
@@ -46,6 +48,11 @@ export async function GET(
   for (const k of ['failFrom', 'failTo']) {
     const v = sp.get(k);
     if (v && /^\d{1,2}$/.test(v) && +v >= 1 && +v <= 10) q.set(k, v);
+  }
+  // the attendance report's dates (docs/design/79)
+  for (const k of ['from', 'to']) {
+    const v = sp.get(k);
+    if (v && /^\d{4}-\d{2}-\d{2}$/.test(v)) q.set(k, v);
   }
   const margin = sp.get('margin');
   if (margin && ['5', '10'].includes(margin)) q.set('margin', margin);

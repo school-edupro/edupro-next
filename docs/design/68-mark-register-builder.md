@@ -225,3 +225,8 @@ At-risk, Failing students, Compare sections) on the same computed rows.
 - **Later (5 Nov 2026)**: **Failing students** — by the number of subjects failed and the final %,
   counts by number and by subject, a table per number with every subject's marks, the parents' mobiles
   and the teachers: docs/design/77.
+- **Later (6 Nov 2026)**: **Missing marks** (by subject and teacher, with the names) and **Absent
+  students** (AB on a paper or a part, a line per student with the parents' mobiles), an Exam picker on
+  any register: docs/design/78.
+- **Later (6 Nov 2026)**: **Attendance** — the day attendance between From and To as the old Attendance
+  Report (A, P, X, Total, % = P × 100 ÷ (Total − X)), a table per section: docs/design/79.

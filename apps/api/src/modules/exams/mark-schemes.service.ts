@@ -1684,6 +1684,31 @@ export class MarkSchemesService {
   }
 
   /**
+   * docs/design/79: each pupil's day attendance between two dates — absent (A), on leave (LV), and
+   * present (every other mark: late, short leave, half day, on duty, stay back), as the monthly register.
+   */
+  private async dailyAttendance(
+    c: PoolClient,
+    sectionIds: string[],
+    studentIds: string[],
+    range: { from: string; to: string },
+  ): Promise<Record<string, { a: number; p: number; x: number }>> {
+    if (!studentIds.length) return {};
+    const r = await c.query<{ student: string; a: number; p: number; x: number }>(
+      `SELECT m.student_id::text AS student,
+              count(*) FILTER (WHERE m.code = 'A')::int AS a,
+              count(*) FILTER (WHERE m.code = 'LV')::int AS x,
+              count(*) FILTER (WHERE m.code NOT IN ('A', 'LV'))::int AS p
+         FROM attendance_marks m JOIN attendance_sessions s ON s.id = m.session_id
+        WHERE s.kind = 'day' AND s.class_section_id = ANY($1::bigint[]) AND s.on_date BETWEEN $2::date AND $3::date
+          AND m.student_id = ANY($4::bigint[])
+        GROUP BY m.student_id`,
+      [sectionIds, range.from, range.to, studentIds],
+    );
+    return Object.fromEntries(r.rows.map((x) => [x.student, { a: x.a, p: x.p, x: x.x }]));
+  }
+
+  /**
    * Runs a register: one section, or a whole class ranked together (the merit list; by division too);
    * an exam-wise register on the exam picked; one subject's own sheet. On screen (with what to check),
    * or a PDF / Excel of it, or of every section (a section a page / a sheet).
@@ -1691,6 +1716,10 @@ export class MarkSchemesService {
   async register(ctx: RequestContext, id: string, q: RegisterQueryDto) {
     if (q.pctFrom !== undefined && q.pctTo !== undefined && q.pctFrom > q.pctTo)
       throw new DomainError('validation-failed', 'The % "from" is above the % "to"', {
+        status: 400,
+      });
+    if (q.from && q.to && q.from > q.to)
+      throw new DomainError('validation-failed', 'The "from" date is after the "to" date', {
         status: 400,
       });
     if (q.failFrom !== undefined && q.failTo !== undefined && q.failFrom > q.failTo)
@@ -1726,6 +1755,20 @@ export class MarkSchemesService {
       // docs/design/78: Missing marks and Absent students take one exam (or every exam) on any register
       const reportExam =
         q.report === 'missing' || q.report === 'absent' ? (q.exam ?? exam) : undefined;
+      // docs/design/79: the attendance report's dates, by default the session's first day and today
+      const range =
+        q.report === 'attendance'
+          ? await c
+              .query<{ start: string; today: string }>(
+                `SELECT y.start_date::text AS start, (now() AT TIME ZONE 'Asia/Kolkata')::date::text AS today
+                   FROM academic_years y WHERE y.id = $1`,
+                [yearId],
+              )
+              .then((r) => ({
+                from: q.from ?? r.rows[0]?.start ?? q.to ?? '',
+                to: q.to ?? r.rows[0]?.today ?? '',
+              }))
+          : null;
       // what to lay out: [place, class, sections or null (the whole class)]
       const places: Array<{
         place: string;
@@ -1864,6 +1907,14 @@ export class MarkSchemesService {
                     rows.map((r) => r.studentId),
                   )
                 : undefined;
+          const daily = range
+            ? await this.dailyAttendance(
+                c,
+                [...new Set(students.map((x) => x.sectionId))],
+                students.map((x) => x.studentId),
+                range,
+              )
+            : undefined;
           for (const b of buildReport(q.report, {
             def,
             rows,
@@ -1883,13 +1934,16 @@ export class MarkSchemesService {
             parents,
             margin: q.margin,
             exam: reportExam,
+            daily,
+            ...(range ? { from: range.from, to: range.to } : {}),
           })) {
             sheets.push(b.sheet);
             if (b.band === false) bare.add(b.sheet);
           }
           if (!firstSheets) firstSheets = sheets.length;
         }
-        if (q.format === 'json') {
+        // the marks' notes do not concern the attendance report
+        if (q.format === 'json' && q.report !== 'attendance') {
           const none = order.filter((k) => !rows.some((r) => r.subjects[k]));
           if (none.length)
             notes.push(`Nobody here takes ${none.map((k) => titles[k]).join(', ')}: left out.`);
@@ -1938,6 +1992,7 @@ export class MarkSchemesService {
         notes,
         counts,
         exam: exam ?? reportExam,
+        range,
         titles,
         head,
       };
@@ -2002,6 +2057,8 @@ export class MarkSchemesService {
         })),
         notes: out.notes,
         counts: out.counts,
+        /** the attendance report's dates (docs/design/79) */
+        range: out.range,
       };
     const logo = await registerLogo(this.storage, out.head?.file);
     const report = REPORTS.find((x) => x.kind === q.report);
@@ -2027,7 +2084,7 @@ export class MarkSchemesService {
       generatedOn: registerGeneratedOn(),
     };
     const stamp =
-      `${out.s.name}-${q.report === 'register' ? '' : `${q.report}-`}${q.all ? 'all' : (out.sheets[0]?.place ?? '')}${out.exam ? `-${out.exam}` : ''}${q.subject ? `-${q.subject}` : ''}`
+      `${out.s.name}-${q.report === 'register' ? '' : `${q.report}-`}${q.all ? 'all' : (out.sheets[0]?.place ?? '')}${out.exam ? `-${out.exam}` : ''}${out.range ? `-${out.range.from}-to-${out.range.to}` : ''}${q.subject ? `-${q.subject}` : ''}`
         .toLowerCase()
         .replace(/[^\w.-]+/g, '-');
     if (q.format === 'xlsx')

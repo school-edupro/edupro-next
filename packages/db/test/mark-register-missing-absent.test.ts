@@ -251,7 +251,7 @@ describe('attendance between two dates (docs/design/79)', () => {
       ['2', 'VI-A', '2', 'ADM-a2', 'a2', '1', '12', '5', '18', '92.31%'],
       ['3', 'VI-A', '3', 'ADM-a3', 'a3', '0', '0', '0', '0', ''],
     ]);
-    expect(a!.sheet.note).toContain('% = P × 100 ÷ (Total − X)');
+    expect(a!.sheet.note).toContain('% = P × 100 ÷ (Total - X)');
     expect(a!.sheet.note).toContain('1 pupil with nothing marked: 0s, no %');
     expect(cells(b!.sheet)).toEqual([
       ['1', 'VI-B', '1', 'ADM-b1', 'b1', '0', '20', '0', '20', '100%'],

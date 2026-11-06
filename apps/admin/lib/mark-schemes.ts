@@ -97,6 +97,8 @@ export interface RunResponse {
   rows: Array<Omit<RegStudentResult, 'subjects'> & { subjects: unknown[] }>;
   notes: string[];
   counts: Record<string, number>;
+  /** the attendance report's dates (docs/design/79) */
+  range?: { from: string; to: string } | null;
 }
 export const SCHEME_STATUS: Record<
   MarkScheme['status'],

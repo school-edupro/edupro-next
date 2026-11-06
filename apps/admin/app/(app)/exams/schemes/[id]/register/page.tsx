@@ -13,6 +13,7 @@ const REPORT_KINDS = [
   'entry',
   'missing',
   'absent',
+  'attendance',
   'toppers',
   'teacher',
   'risk',
@@ -59,6 +60,9 @@ export default async function RunRegisterPage({
     /** failing students: the number of subjects failed (docs/design/77) */
     failFrom?: string;
     failTo?: string;
+    /** attendance: the dates counted (docs/design/79) */
+    from?: string;
+    to?: string;
   }>;
 }) {
   const { id } = await params;
@@ -114,6 +118,15 @@ export default async function RunRegisterPage({
   };
   if (report === 'failing') for (const [k, v] of Object.entries(failingQuery)) q.set(k, v);
   if (report === 'risk') q.set('margin', margin);
+  // attendance (docs/design/79): From and To (none: the session's first day and today)
+  const dateIn = (v: string | undefined) => (v && /^\d{4}-\d{2}-\d{2}$/.test(v) ? v : '');
+  let from = dateIn(sp.from);
+  let to = dateIn(sp.to);
+  if (from && to && from > to) [from, to] = [to, from];
+  if (report === 'attendance') {
+    if (from) q.set('from', from);
+    if (to) q.set('to', to);
+  }
   const reg = await apiFetch<RunResponse>(`/exams/schemes/${id}/register?${q.toString()}`).catch(
     (e: unknown) => {
       if (e instanceof ApiError && (e.status === 404 || e.status === 403)) notFound();
@@ -177,7 +190,11 @@ export default async function RunRegisterPage({
                 </select>
               </label>
             ) : null}
-            <label className="ep-field" style={{ margin: 0, minWidth: '12rem' }}>
+            <label
+              className="ep-field"
+              style={{ margin: 0, minWidth: '12rem' }}
+              hidden={report === 'attendance'}
+            >
               <span className="ep-field__label">Subject</span>
               <select className="ep-select" name="subject" defaultValue={sp.subject ?? ''}>
                 <option value="">All subjects</option>
@@ -189,6 +206,31 @@ export default async function RunRegisterPage({
               </select>
             </label>
             {report !== 'register' ? <input type="hidden" name="report" value={report} /> : null}
+            {report === 'attendance' ? (
+              <>
+                <label className="ep-field" style={{ margin: 0, width: '10rem' }}>
+                  <span className="ep-field__label">From</span>
+                  <input
+                    className="ep-input"
+                    type="date"
+                    name="from"
+                    defaultValue={reg.range?.from ?? from}
+                  />
+                </label>
+                <label className="ep-field" style={{ margin: 0, width: '10rem' }}>
+                  <span className="ep-field__label">To</span>
+                  <input
+                    className="ep-input"
+                    type="date"
+                    name="to"
+                    defaultValue={reg.range?.to ?? to}
+                  />
+                </label>
+                <button type="submit" className="ep-btn ep-btn--secondary ep-btn--sm">
+                  Show
+                </button>
+              </>
+            ) : null}
             {report === 'toppers' ? (
               <>
                 <label className="ep-field" style={{ margin: 0, width: '6rem' }}>
@@ -369,10 +411,20 @@ export default async function RunRegisterPage({
                   ? failingQuery
                   : report === 'risk'
                     ? { margin }
-                    : {}
+                    : report === 'attendance' && reg.range
+                      ? { from: reg.range.from, to: reg.range.to }
+                      : {}
             }
           />
         </div>
+        {report === 'attendance' ? (
+          <p className="ep-field__help" style={{ margin: 'var(--sp-2) 0 0' }}>
+            The day attendance between From and To (by default the session&apos;s first day and
+            today), a table per section as the old Attendance Report: A absent, P present (late,
+            short leave, half day, on duty and stay back count as present), X on leave, Total = A +
+            P + X, % = P × 100 ÷ (Total − X). A pupil with nothing marked shows 0s and no %.
+          </p>
+        ) : null}
         {byExam ? (
           <p className="ep-field__help" style={{ margin: 'var(--sp-2) 0 0' }}>
             {report === 'missing'
@@ -407,7 +459,8 @@ export default async function RunRegisterPage({
         </div>
       ) : null}
       <p className="ep-mr-pills" style={{ marginTop: 0 }}>
-        {Object.entries(reg.counts).map(([k, n]) => (
+        {/* the results' counts do not concern the attendance report */}
+        {(report === 'attendance' ? [] : Object.entries(reg.counts)).map(([k, n]) => (
           <Badge key={k} tone={RESULT[k]?.tone ?? 'neutral'}>
             {`${RESULT[k]?.label ?? k} ${String(n)}`}
           </Badge>

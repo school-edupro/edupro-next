@@ -333,6 +333,12 @@ out, then runs it for any section; the marks always come from the exam entry.
      for the names), then a table per section: a line per absent student with the parents' mobiles, the
      class teacher, where absent ("MT1: MATHEMATICS · TERM: SOCIAL SCIENCE (Geography)") and how many
      papers. **Exam** and **Subject** as for Missing marks.
+   - **Attendance**: the day attendance between **From** and **To** (by default the session's first day
+     and today; press **Show** after changing them), a table per section as the old Attendance Report:
+     SRN, Class, Roll No, Student ID, Name, **A** (absent), **P** (present — late, short leave, half
+     day, on duty and stay back count as present), **X** (on leave), **Total** = A + P + X and **%** =
+     P × 100 ÷ (Total − X), so leave does not lower it. Every pupil is listed; one with nothing marked
+     shows 0s and no %. The downloads carry the dates.
    - **Teacher-wise** (as the old register prints it): a block per subject teacher (Academics →
      Teacher assignments) with each section and subject — students, appeared, average %, pass %,
      highest, failed, "shared" when two teachers share it — and their total; "No teacher mapped" last.
