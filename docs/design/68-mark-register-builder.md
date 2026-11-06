@@ -230,3 +230,5 @@ At-risk, Failing students, Compare sections) on the same computed rows.
   any register: docs/design/78.
 - **Later (6 Nov 2026)**: **Attendance** — the day attendance between From and To as the old Attendance
   Report (A, P, X, Total, % = P × 100 ÷ (Total − X)), a table per section: docs/design/79.
+- **Later (6 Nov 2026)**: **Teacher-wise** with the Result Analysis figures down the side, a column per
+  class the teacher teaches and a Total: docs/design/80.

@@ -1,6 +1,6 @@
 # 80 · Teacher-wise with the Result Analysis figures
 
-Status: plan (6 Nov 2026). Asked by the school on a mark register's Run, Reports → Teacher-wise
+Status: built 6 Nov 2026 (no migration; **As built** at the end). Asked by the school on a mark register's Run, Reports → Teacher-wise
 (`/exams/schemes/417/register?place=s:143&report=teacher`), with a screenshot of the Result Analysis
 figures: "in this page add share parameter".
 
@@ -50,3 +50,18 @@ figures: "in this page add share parameter".
 
 A teacher's own login seeing only their block (the Run rights stay as they are); exam-wise splits of a
 teacher's classes (an exam-wise register already shows the exam picked).
+
+## As built (6 Nov 2026)
+
+- **Engine** (`packages/db/src/mark-register-reports.ts`): `analysisFigures()` — the Result Analysis
+  figures taken out of `analysis()` (the bands and cut-offs, the figures' columns and `figures(title,
+takers)`), used by Analysis and Teacher-wise alike; `teacherWise()` — a block per teacher titled
+  "MRS RAO — 2 classes", the rows Total students … Passing %, Average % (over the students who
+  appeared), Failed; a column per class "VI-A · ENGLISH" ("(shared)" in the heading when two teachers
+  share it: visible in print, not a tooltip) and Total (shaded), whose Highest / Lowest / Average marks
+  are blank when the classes' maxima differ; the note as before plus the Total's rule.
+- **Tests**: unit (the rows and columns, the figures matching the old Teacher-wise totals, a count's
+  students, a shared class, two maxima leaving the Total's marks blank); `mark-registers` e2e (the
+  title, Total last, the rows, the Total adding up the classes). Register 417 on Alpha, VI-A and Class
+  VI in the browser with axe: clean.
+- **Help** and doc 68's list.

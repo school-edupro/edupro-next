@@ -339,9 +339,12 @@ out, then runs it for any section; the marks always come from the exam entry.
      day, on duty and stay back count as present), **X** (on leave), **Total** = A + P + X and **%** =
      P × 100 ÷ (Total − X), so leave does not lower it. Every pupil is listed; one with nothing marked
      shows 0s and no %. The downloads carry the dates.
-   - **Teacher-wise** (as the old register prints it): a block per subject teacher (Academics →
-     Teacher assignments) with each section and subject — students, appeared, average %, pass %,
-     highest, failed, "shared" when two teachers share it — and their total; "No teacher mapped" last.
+   - **Teacher-wise**: a block per subject teacher (Academics → Teacher assignments) with the Result
+     Analysis figures down the side — Total students, Absent, Appeared, the % bands, the cumulative
+     counts (>=50% …), Highest, Lowest and Average marks, Passing % — then Average % and Failed; a
+     column per class the teacher teaches ("VI-A · ENGLISH", "(shared)" when two teachers share it) and
+     a **Total** of all of them (its Highest, Lowest and Average marks only when the classes have the
+     same maximum). A count opens its students; "No teacher mapped" last.
    - **At-risk**: failing (high), compartment (medium), borderline subjects or absent (watch), with a
      margin of 5 or 10 over the pass %; counts by subject.
    - **Failing students**: the students with a final worked out (Compartment / Fail). **Failed in from

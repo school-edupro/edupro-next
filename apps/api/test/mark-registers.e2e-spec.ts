@@ -512,8 +512,27 @@ describe('mark registers like the legacy Term Mark Register (e2e)', () => {
     ).toBe(400);
     // no subject teacher is assigned in this school: every line is under "No teacher mapped"
     const teacher = await run(`${A}&report=teacher`);
-    expect(teacher.blocks.map((b) => b.title)).toEqual(['NO TEACHER MAPPED']);
-    expect(teacher.blocks[0]!.sheet.foot![0]!.t).toMatch(/^Total — \d+ classes$/);
+    // doc 80: the Result Analysis figures down the side, a column per class and the Total
+    expect(teacher.blocks.map((b) => b.title)).toEqual([
+      expect.stringMatching(/^NO TEACHER MAPPED — \d+ classes$/),
+    ]);
+    const tw = teacher.blocks[0]!.sheet;
+    expect(tw.head[0]!.at(-1)!.t).toBe('Total');
+    expect(tw.body.map((r) => r.cells[0]!.t)).toEqual(
+      expect.arrayContaining([
+        'Total students',
+        'Absent',
+        'Appeared',
+        'Passing %',
+        'Average %',
+        'Failed',
+      ]),
+    );
+    const students = tw.body.find((r) => r.cells[0]!.t === 'Total students')!.cells;
+    // the Total adds up the classes
+    expect(Number(students.at(-1)!.t)).toBe(
+      students.slice(1, -1).reduce((a, c) => a + Number(c.t), 0),
+    );
     const risk = (await run(`${A}&report=risk&margin=10`)).blocks[0]!;
     expect(risk.sheet.body.map((r) => r.cells[0]!.t)).toContain('Watch');
     // doc 77: the counts by number failed and by subject, then a table per number (nobody here)
