@@ -53,6 +53,15 @@ const words: Record<string, string> = {
   goods: 'Goods received',
   late: 'Late only',
   in_transit: 'In transit',
+  in_store: 'In store',
+  in_use: 'In use',
+  under_repair: 'Under repair',
+  lost: 'Lost',
+  returned: 'Returned to the vendor',
+  written_off: 'Written off',
+  disposed: 'Disposed of',
+  held: 'On the books',
+  approval: 'Waiting for approval',
   received: 'Received',
   expired: 'Expired already',
   d30: 'Within 30 days',
@@ -86,6 +95,9 @@ export const REPORT_NAMES: Record<PurchaseReport, string> = {
   below_reorder: 'Below reorder level',
   transfers: 'Transfers between stores',
   count_differences: 'Physical count differences',
+  asset_register: 'Asset register',
+  fixed_assets: 'Fixed-asset register (by category)',
+  condemnations: 'Condemnations and disposals',
 };
 
 export interface ReportResult {
@@ -1194,6 +1206,182 @@ export class PurchaseReportsService {
           sum: [8],
         };
       }
+      case 'asset_register': {
+        const r = await c.query<{
+          id: string;
+          tag: string;
+          item: string;
+          category: string;
+          make: string | null;
+          serial: string | null;
+          acquired: string | null;
+          cost: string;
+          book: string;
+          status: string;
+          place: string | null;
+          custodian: string | null;
+          warranty: string | null;
+        }>(
+          `SELECT a.id::text, a.tag, i.name AS item, cat.name AS category, NULLIF(concat_ws(' ', a.make, a.model), '') AS make,
+                  a.serial_no AS serial, a.acquired_on::text AS acquired, a.cost::text,
+                  COALESCE((SELECT d.closing FROM asset_depreciation d WHERE d.asset_id = a.id ORDER BY d.fy DESC LIMIT 1), a.cost)::text AS book,
+                  a.status, NULLIF(concat_ws(' · ', COALESCE(st.name, d.name), a.location), '') AS place, ce.display_name AS custodian,
+                  a.warranty_until::text AS warranty
+             FROM assets a JOIN purchase_items i ON i.id = a.item_id JOIN purchase_item_categories cat ON cat.id = i.category_id
+             LEFT JOIN stores st ON st.id = a.store_id LEFT JOIN departments d ON d.id = a.department_id
+             LEFT JOIN employees ce ON ce.id = a.custodian_employee_id
+            WHERE ($1::bigint IS NULL OR a.department_id = $1) AND ($2::bigint IS NULL OR a.item_id = $2)
+              AND ($3::text IS NULL OR a.status = $3 OR ($3 = 'held' AND a.status IN ('in_store', 'in_use', 'in_transit', 'under_repair', 'lost')))
+            ORDER BY cat.name, a.tag LIMIT $4`,
+          [s.dept, s.item, s.status, limit + 1],
+        );
+        return {
+          columns: [
+            { label: 'Tag', width: 2 },
+            { label: 'Item', width: 2.6 },
+            { label: 'Category', width: 1.8 },
+            { label: 'Make / model', width: 2 },
+            { label: 'Serial', width: 1.6 },
+            { label: 'Acquired', type: 'date' },
+            { label: 'Cost (₹)', type: 'money' },
+            { label: 'Book value (₹)', type: 'money' },
+            { label: 'Status', width: 1.4 },
+            { label: 'Where', width: 2.2 },
+            { label: 'Custodian', width: 2 },
+            { label: 'Warranty until', type: 'date' },
+          ] as FileColumn[],
+          rows: r.rows.map((x) => [
+            x.tag,
+            x.item,
+            x.category,
+            x.make,
+            x.serial,
+            x.acquired,
+            Number(x.cost),
+            Number(x.book),
+            w(x.status),
+            x.place,
+            x.custodian,
+            x.warranty,
+          ]),
+          links: r.rows.map((x) => `/purchase/assets/${x.id}`),
+          sum: [6, 7],
+        };
+      }
+      case 'fixed_assets': {
+        // the financial year of the period's end: opening, additions, depreciation, disposals, closing
+        const fy = fyStart(s.to);
+        const fyEnd = `${String(Number(fy.slice(0, 4)) + 1)}-03-31`;
+        const fyCode = `${fy.slice(0, 4)}-${String(Number(fy.slice(0, 4)) + 1).slice(2)}`;
+        const prevCode = `${String(Number(fy.slice(0, 4)) - 1)}-${fy.slice(2, 4)}`;
+        const r = await c.query<{
+          category: string;
+          opening: string;
+          additions: string;
+          depreciation: string;
+          disposals: string;
+          assets: number;
+        }>(
+          `WITH a AS (
+             SELECT a.id, cat.name AS category, a.cost, COALESCE(a.acquired_on, a.put_to_use_on, (a.created_at AT TIME ZONE 'Asia/Kolkata')::date) AS acq,
+                    a.left_on, a.book_value_at_exit,
+                    COALESCE((SELECT d.closing FROM asset_depreciation d WHERE d.asset_id = a.id AND d.fy = $3), a.cost) AS opening_book,
+                    COALESCE((SELECT d.depreciation FROM asset_depreciation d WHERE d.asset_id = a.id AND d.fy = $4), 0) AS dep
+               FROM assets a JOIN purchase_items i ON i.id = a.item_id JOIN purchase_item_categories cat ON cat.id = i.category_id
+              WHERE a.status <> 'returned')
+           SELECT category,
+                  COALESCE(sum(opening_book) FILTER (WHERE acq < $1::date AND (left_on IS NULL OR left_on >= $1::date)), 0)::text AS opening,
+                  COALESCE(sum(cost) FILTER (WHERE acq BETWEEN $1::date AND $2::date), 0)::text AS additions,
+                  COALESCE(sum(dep), 0)::text AS depreciation,
+                  COALESCE(sum(book_value_at_exit) FILTER (WHERE left_on BETWEEN $1::date AND $2::date), 0)::text AS disposals,
+                  count(*) FILTER (WHERE acq <= $2::date AND (left_on IS NULL OR left_on > $2::date))::int AS assets
+             FROM a WHERE acq <= $2::date AND (left_on IS NULL OR left_on >= $1::date)
+            GROUP BY category ORDER BY category LIMIT $5`,
+          [fy, fyEnd, prevCode, fyCode, limit + 1],
+        );
+        return {
+          columns: [
+            { label: `Category (${fyCode})`, width: 2.6 },
+            { label: 'Opening (₹)', type: 'money' },
+            { label: 'Additions (₹)', type: 'money' },
+            { label: 'Depreciation (₹)', type: 'money' },
+            { label: 'Disposals (₹)', type: 'money' },
+            { label: 'Closing (₹)', type: 'money' },
+            { label: 'Assets at the end', type: 'number', width: 1 },
+          ] as FileColumn[],
+          rows: r.rows.map((x) => {
+            const o = Number(x.opening);
+            const ad = Number(x.additions);
+            const dp = Number(x.depreciation);
+            const ds = Number(x.disposals);
+            return [
+              x.category,
+              o,
+              ad,
+              dp,
+              ds,
+              Math.round((o + ad - dp - ds) * 100) / 100,
+              x.assets,
+            ];
+          }),
+          sum: [1, 2, 3, 4, 5, 6],
+        };
+      }
+      case 'condemnations': {
+        const r = await c.query<{
+          id: string;
+          number: string;
+          title: string;
+          status: string;
+          created: string;
+          lines: number;
+          value: string;
+          written_off: string | null;
+          method: string | null;
+          disposed: string | null;
+          amount: string | null;
+          party: string | null;
+        }>(
+          `SELECT k.id::text, k.number, k.title, k.status, (k.created_at AT TIME ZONE 'Asia/Kolkata')::date::text AS created,
+                  (SELECT count(*)::int FROM condemnation_lines l WHERE l.condemnation_id = k.id) AS lines,
+                  COALESCE((SELECT sum(l.book_value) FROM condemnation_lines l WHERE l.condemnation_id = k.id), 0)::text AS value,
+                  k.written_off_on::text AS written_off, dp.method, dp.disposed_on::text AS disposed, dp.amount::text, dp.party
+             FROM condemnations k LEFT JOIN disposals dp ON dp.condemnation_id = k.id
+            WHERE (k.created_at AT TIME ZONE 'Asia/Kolkata')::date BETWEEN $1::date AND $2::date AND ($3::text IS NULL OR k.status = $3)
+            ORDER BY k.created_at LIMIT $4`,
+          [s.from, s.to, s.status, limit + 1],
+        );
+        return {
+          columns: [
+            { label: 'Condemnation', width: 2.2 },
+            { label: 'Proposal', width: 3 },
+            { label: 'Proposed', type: 'date' },
+            { label: 'Lines', type: 'number', width: 1 },
+            { label: 'Book value (₹)', type: 'money' },
+            { label: 'Status', width: 1.6 },
+            { label: 'Written off', type: 'date' },
+            { label: 'Disposed', type: 'date' },
+            { label: 'How', width: 1.6 },
+            { label: 'To', width: 2 },
+            { label: 'Realised (₹)', type: 'money' },
+          ] as FileColumn[],
+          rows: r.rows.map((x) => [
+            x.number,
+            x.title,
+            x.created,
+            x.lines,
+            Number(x.value),
+            w(x.status),
+            x.written_off,
+            x.disposed,
+            x.method,
+            x.party,
+            x.amount === null ? null : Number(x.amount),
+          ]),
+          links: r.rows.map((x) => `/purchase/condemnations/${x.id}`),
+          sum: [4, 10],
+        };
+      }
       case 'msme_vendors': {
         const r = await c.query<{
           id: string;
@@ -1444,7 +1632,15 @@ export class PurchaseReportsService {
                      JOIN goods_receipts g ON g.id = gl.receipt_id WHERE g.status = 'accepted' AND g.accepted_on >= $1::date)::text AS accepted_month,
                   (SELECT COALESCE(sum(value), 0) FROM stock_balances)::text AS stock_value,
                   (SELECT count(*)::int FROM item_store_levels l LEFT JOIN stock_balances b ON b.store_id = l.store_id AND b.item_id = l.item_id
-                    WHERE l.reorder_level > 0 AND COALESCE(b.qty, 0) - COALESCE(b.reserved, 0) <= l.reorder_level) AS below`,
+                    JOIN stores st ON st.id = l.store_id AND st.status = 'active'
+                    JOIN purchase_items it ON it.id = l.item_id AND it.status = 'active'
+                    WHERE l.reorder_level > 0
+                      AND GREATEST(COALESCE(b.qty, 0) - COALESCE(b.reserved, 0), 0)
+                          + COALESCE((SELECT sum((ol.quantity - ol.received_qty + ol.rejected_qty + ol.returned_qty) * it.stock_per_unit)
+                                        FROM purchase_order_lines ol JOIN purchase_orders po ON po.id = ol.order_id
+                                       WHERE ol.item_id = l.item_id AND po.status IN ('approved', 'sent')
+                                         AND ol.quantity - ol.received_qty + ol.rejected_qty + ol.returned_qty > 0), 0)
+                          <= l.reorder_level) AS below`,
           [month, fy],
         )
       ).rows[0]!;

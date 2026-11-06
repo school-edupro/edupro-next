@@ -20,6 +20,8 @@ export const PURCHASE = {
   storeOperate: 'purchase.store.operate',
   storeManage: 'purchase.store.manage',
   countApprove: 'purchase.count.approve',
+  assetManage: 'purchase.asset.manage',
+  condemnationApprove: 'purchase.condemnation.approve',
 } as const;
 
 const opt = (max: number) =>
@@ -588,6 +590,9 @@ export const PURCHASE_REPORTS = [
   'below_reorder',
   'transfers',
   'count_differences',
+  'asset_register',
+  'fixed_assets',
+  'condemnations',
 ] as const;
 export type PurchaseReport = (typeof PURCHASE_REPORTS)[number];
 
@@ -919,3 +924,133 @@ export const StockDocQuerySchema = z.object({
   page: z.coerce.number().int().min(1).max(10000).default(1),
 });
 export class StockDocQueryDto extends createZodDto(StockDocQuerySchema) {}
+
+// ---- phase 2, part 9: reorder, assets, depreciation, condemnation (docs/design/84) ------------------
+export const ReorderIndentSchema = z.object({
+  storeId: IdSchema,
+  /** the items to put on the indent, with the quantity in the purchase unit */
+  lines: z
+    .array(z.object({ itemId: IdSchema, quantity: z.coerce.number().gt(0).max(999999) }))
+    .min(1)
+    .max(200),
+});
+export class ReorderIndentDto extends createZodDto(ReorderIndentSchema) {}
+
+const AssetCondition = z.enum(['good', 'fair', 'poor', 'unserviceable']);
+export const AssetSchema = z.object({
+  description: opt(300),
+  make: opt(80),
+  model: opt(80),
+  serialNo: opt(60),
+  location: opt(120),
+  condition: AssetCondition.default('good'),
+  putToUseOn: Day.nullish(),
+  warrantyUntil: Day.nullish(),
+  insurer: opt(120),
+  policyNo: opt(60),
+  insuredValue: z.coerce.number().min(0).max(1e10).nullish(),
+  insuranceRenewal: Day.nullish(),
+  note: opt(1000),
+});
+export class AssetDto extends createZodDto(AssetSchema) {}
+
+export const AssetMoveSchema = z
+  .object({
+    kind: z.enum(['custody', 'repair_out', 'repair_back', 'lost', 'found']),
+    movedOn: Day.optional(),
+    /** custody: the department, the place, the person who keeps it (none: back to nobody) */
+    departmentId: IdSchema.nullish(),
+    location: opt(120),
+    custodianId: IdSchema.nullish(),
+    /** repair: the vendor, when it should be back, what it cost (on return) */
+    vendorId: IdSchema.nullish(),
+    expectedBack: Day.optional(),
+    cost: z.coerce.number().min(0).max(1e10).nullish(),
+    note: opt(500),
+  })
+  .refine((m) => !['lost', 'repair_out'].includes(m.kind) || !!m.note, {
+    message: 'Say what happened',
+    path: ['note'],
+  });
+export class AssetMoveDto extends createZodDto(AssetMoveSchema) {}
+
+export const AssetListQuerySchema = z.object({
+  status: z
+    .string()
+    .trim()
+    .regex(/^[a-z_]{2,20}$/)
+    .optional(),
+  itemId: IdSchema.optional(),
+  categoryId: IdSchema.optional(),
+  departmentId: IdSchema.optional(),
+  storeId: IdSchema.optional(),
+  custodianId: IdSchema.optional(),
+  q: z.string().trim().max(80).optional(),
+  /** warranty or insurance ending within 60 days */
+  expiring: z
+    .enum(['1', '0'])
+    .optional()
+    .transform((v) => v === '1'),
+  page: z.coerce.number().int().min(1).max(10000).default(1),
+});
+export class AssetListQueryDto extends createZodDto(AssetListQuerySchema) {}
+
+export const AssetLabelsSchema = z.object({ ids: z.array(IdSchema).min(1).max(600) });
+export class AssetLabelsDto extends createZodDto(AssetLabelsSchema) {}
+
+export const AssetImportSchema = z.object({
+  file: z.string().min(10).max(4_000_000),
+  dryRun: z.boolean().default(true),
+});
+export class AssetImportDto extends createZodDto(AssetImportSchema) {}
+
+export const DepreciationRunSchema = z.object({
+  fy: z.string().regex(/^\d{4}-\d{2}$/, 'a financial year like 2025-26'),
+  dryRun: z.boolean().default(true),
+});
+export class DepreciationRunDto extends createZodDto(DepreciationRunSchema) {}
+
+const ReasonKind = z.enum(['unserviceable', 'obsolete', 'surplus', 'expired', 'damaged', 'lost']);
+export const CondemnationSchema = z.object({
+  title: z.string().trim().min(3).max(200),
+  note: opt(2000),
+  lines: z
+    .array(
+      z
+        .object({
+          kind: z.enum(['asset', 'stock']),
+          assetId: IdSchema.optional(),
+          storeId: IdSchema.optional(),
+          itemId: IdSchema.optional(),
+          batch: opt(40),
+          /** stock: in the store unit */
+          qty: z.coerce.number().gt(0).max(9999999).optional(),
+          reasonKind: ReasonKind,
+          reason: opt(300),
+        })
+        .refine((l) => (l.kind === 'asset' ? !!l.assetId : !!l.storeId && !!l.itemId && !!l.qty), {
+          message: 'An asset, or a store, item and quantity',
+          path: ['assetId'],
+        }),
+    )
+    .min(1)
+    .max(500),
+});
+export class CondemnationDto extends createZodDto(CondemnationSchema) {}
+
+export const CondemnationDecisionSchema = z.object({
+  action: z.enum(['approve', 'reject', 'send_back']),
+  note: opt(1000),
+});
+export class CondemnationDecisionDto extends createZodDto(CondemnationDecisionSchema) {}
+
+export const DisposalSchema = z.object({
+  method: z.enum(['auction', 'tender_sale', 'sale', 'buyback', 'scrap', 'donation', 'destruction']),
+  disposedOn: Day,
+  party: opt(200),
+  amount: z.coerce.number().min(0).max(1e10).default(0),
+  reference: opt(120),
+  note: opt(1000),
+  fileId: IdSchema.nullish(),
+});
+export class DisposalDto extends createZodDto(DisposalSchema) {}

@@ -572,7 +572,7 @@ export const NAV: Array<{
     ],
   },
   {
-    // docs/design/83: purchase — masters (1), indents (2), requisitions (3), orders (4), reports (5); phase 2 stores (6), receipts (7), issues, returns, transfers, counts (8) (doc 84)
+    // docs/design/83: purchase — masters (1), indents (2), requisitions (3), orders (4), reports (5); phase 2 stores (6), receipts (7), issues, returns, transfers, counts (8), reorder, assets, condemnation (9) (doc 84)
     section: 'purchase',
     items: [
       {
@@ -612,6 +612,9 @@ export const NAV: Array<{
       { href: '/purchase/returns', label: 'stockReturns', permission: 'purchase.store.view' },
       { href: '/purchase/transfers', label: 'stockTransfers', permission: 'purchase.store.view' },
       { href: '/purchase/counts', label: 'stockCounts', permission: 'purchase.store.view' },
+      { href: '/purchase/reorder', label: 'reorder', permission: 'purchase.store.view' },
+      { href: '/purchase/assets', label: 'assetRegister', permission: 'purchase.store.view' },
+      { href: '/purchase/condemnations', label: 'condemnation', permission: 'purchase.store.view' },
       { href: '/purchase', label: 'purchaseHome', permission: 'purchase.master.view' },
       { href: '/purchase/vendors', label: 'vendors', permission: 'purchase.master.view' },
       {

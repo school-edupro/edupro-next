@@ -31,6 +31,7 @@ export default async function StaffLayout({ children }: { children: ReactNode })
     orders,
     receipts,
     issues,
+    assets,
   ] = await Promise.all([
     bff.api
       .fetch<{ unread: number }>('/comms/inbox/unread')
@@ -84,6 +85,11 @@ export default async function StaffLayout({ children }: { children: ReactNode })
       .fetch<{ toAcknowledge: number }>('/purchase/issues?mine=1&page=1')
       .then((r) => r.toAcknowledge)
       .catch(() => 0),
+    // assets in my care and those handed to me (docs/design/84, part 9)
+    bff.api
+      .fetch<{ rows: unknown[]; pending: unknown[] }>('/purchase/assets-mine')
+      .then((r) => r.rows.length + r.pending.length)
+      .catch(() => 0),
   ]);
   return (
     <StaffShell
@@ -102,6 +108,7 @@ export default async function StaffLayout({ children }: { children: ReactNode })
         orders,
         receipts,
         issues,
+        assets,
       }}
     >
       {children}

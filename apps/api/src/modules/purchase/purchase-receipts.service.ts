@@ -9,6 +9,7 @@ import { STORAGE_DRIVER } from '../files/storage';
 import { WorkflowService, type InstanceRow } from '../workflow/workflow.service';
 import { syncFlow } from './purchase-flow';
 import { purchaseReceiptPdf, type ReceiptPdfData } from './purchase-receipt-pdf';
+import { assetsFromReceipt } from './purchase-asset-core';
 import { postIssues, shareAmongIndents, type IssueShare } from './purchase-stock-core';
 import { postStock, PurchaseStoresService } from './purchase-stores.service';
 import {
@@ -1263,13 +1264,15 @@ export class PurchaseReceiptsService implements OnModuleInit {
               decided_by = app.current_user_id(), updated_at = now() WHERE id = $1`,
       [id, status, day],
     );
+    // accepted units of asset items join the asset register (in the store) before any issue
+    const assets = g.kind === 'goods' ? await assetsFromReceipt(c, id, day) : 0;
     const issued = g.kind === 'goods' ? await this.issueToIndents(c, id, g.store_id!, day) : [];
     const po = await PurchaseReceiptsService.refreshOrder(c, g.order_id);
     await this.audit.stage(ctx, c, {
       action: status === 'accepted' ? 'purchase.receipt.accept' : 'purchase.receipt.reject',
       entityType: 'goods_receipts',
       entityId: id,
-      after: { number: g.number, issued, orderClosed: po.closed },
+      after: { number: g.number, issued, assets, orderClosed: po.closed },
     });
   }
 

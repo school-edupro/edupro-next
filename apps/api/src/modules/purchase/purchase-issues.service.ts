@@ -20,6 +20,7 @@ import {
   type IssueShare,
 } from './purchase-stock-core';
 import { purchaseStockPdf } from './purchase-stock-pdf';
+import { assetsBack } from './purchase-asset-core';
 import { postStock } from './purchase-stores.service';
 import {
   PURCHASE,
@@ -733,6 +734,14 @@ export class PurchaseIssuesService {
           `UPDATE stock_issue_lines SET returned_qty = returned_qty + $2 WHERE id = $1`,
           [il.id, l.qty],
         );
+        await assetsBack(c, {
+          issueLineId: il.id,
+          qty: l.qty,
+          storeId: si.store_id,
+          damaged: l.condition === 'damaged',
+          day,
+          doc: number,
+        });
       }
       await this.audit.stage(ctx, c, {
         action: 'purchase.return.to_store',

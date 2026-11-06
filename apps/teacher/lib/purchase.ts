@@ -672,3 +672,28 @@ export interface IssueDetail extends IssueRow {
   }>;
   can: { acknowledge: boolean };
 }
+
+// ---- phase 2, part 9: assets in my care (docs/design/84) -----------------------------------------------
+export interface MyAssets {
+  rows: Array<{
+    id: string;
+    tag: string;
+    item: string;
+    serialNo: string | null;
+    department: string | null;
+    location: string | null;
+    statusLabel: string;
+    condition: string;
+    warrantyUntil: string | null;
+    pending: boolean;
+  }>;
+  pending: Array<{
+    movementId: string;
+    assetId: string;
+    tag: string;
+    item: string;
+    from: string | null;
+    note: string | null;
+    movedOn: string;
+  }>;
+}

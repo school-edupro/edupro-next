@@ -17,6 +17,7 @@ import {
   qty3,
 } from './purchase-stock-core';
 import { purchaseStockPdf } from './purchase-stock-pdf';
+import { assetsTransfer } from './purchase-asset-core';
 import { postStock } from './purchase-stores.service';
 import { PURCHASE, type NoteDto, type StockDocQueryDto, type TransferDto } from './purchase.dto';
 
@@ -286,11 +287,24 @@ export class PurchaseTransfersService {
             },
             it.name,
           );
-          await c.query(
-            `INSERT INTO stock_transfer_lines (school_id, transfer_id, item_id, qty, rate, value, batch_no, expiry, out_move_id)
-             SELECT app.current_school_id(), $1, $2, $3, m.rate, -m.value, $4, $5::date, m.id FROM stock_moves m WHERE m.id = $6`,
-            [id, l.itemId, p.qty, p.batch, p.expiry, moveId],
-          );
+          const lineId = (
+            await c.query<{ id: string }>(
+              `INSERT INTO stock_transfer_lines (school_id, transfer_id, item_id, qty, rate, value, batch_no, expiry, out_move_id)
+               SELECT app.current_school_id(), $1, $2, $3, m.rate, -m.value, $4, $5::date, m.id FROM stock_moves m WHERE m.id = $6
+               RETURNING id::text`,
+              [id, l.itemId, p.qty, p.batch, p.expiry, moveId],
+            )
+          ).rows[0]!.id;
+          await assetsTransfer(c, {
+            phase: 'send',
+            transferLineId: lineId,
+            fromStoreId: dto.fromStoreId,
+            toStoreId: dto.toStoreId,
+            itemId: l.itemId,
+            qty: p.qty,
+            day,
+            doc: number,
+          });
         }
       }
       await this.audit.stage(ctx, c, {
@@ -328,6 +342,16 @@ export class PurchaseTransfersService {
         l.id,
         moveId,
       ]);
+      await assetsTransfer(c, {
+        phase: back ? 'cancel' : 'receive',
+        transferLineId: l.id,
+        fromStoreId: t.from_store_id,
+        toStoreId: t.to_store_id,
+        itemId: l.item_id,
+        qty: Number(l.qty),
+        day,
+        doc: t.number,
+      });
     }
   }
 

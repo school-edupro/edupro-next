@@ -26,7 +26,9 @@ export interface ApprovalGroup {
     | 'order'
     | 'receipt'
     | 'issue_ack'
-    | 'count';
+    | 'count'
+    | 'condemnation'
+    | 'asset_ack';
   title: string;
   help: string;
   href: string;
@@ -280,6 +282,66 @@ export async function myApprovals(
           )
           .catch(() => null)
       : null,
+    // condemnations for my signature (the committee) or approval (the school admin) — doc 84, part 9
+    apiFetch<{
+      rows: Array<{
+        id: string;
+        number: string;
+        title: string;
+        status: string;
+        value: number;
+        createdAt: string;
+      }>;
+    }>(`/purchase/condemnations?mine=1`)
+      .then((r): ApprovalGroup | null =>
+        r.rows.length
+          ? {
+              key: 'condemnation',
+              title: 'Condemnations',
+              help: 'Proposals to write off assets and stock: your signature (the committee) or approval',
+              href: '/purchase/condemnations?tab=mine',
+              count: r.rows.length,
+              items: r.rows.slice(0, size).map((x) => ({
+                id: x.id,
+                title: `${x.number} · ${x.title}`,
+                detail: `₹${x.value.toLocaleString('en-IN')} · ${x.status === 'committee' ? 'to sign' : 'to approve'}`,
+                href: `/purchase/condemnations/${x.id}`,
+                since: x.createdAt,
+              })),
+            }
+          : null,
+      )
+      .catch(() => null),
+    // assets handed to me, waiting for my acknowledgement
+    apiFetch<{
+      pending: Array<{
+        movementId: string;
+        assetId: string;
+        tag: string;
+        item: string;
+        from: string | null;
+        movedOn: string;
+      }>;
+    }>(`/purchase/assets-mine`)
+      .then((r): ApprovalGroup | null =>
+        r.pending.length
+          ? {
+              key: 'asset_ack',
+              title: 'Assets handed to you',
+              help: 'Confirm you have them: they are then in your care',
+              href: `/purchase/assets/${r.pending[0]!.assetId}`,
+              count: r.pending.length,
+              items: r.pending.slice(0, size).map((x) => ({
+                id: x.movementId,
+                title: `${x.tag} · ${x.item}`,
+                detail: x.from ? `From ${x.from}` : 'To acknowledge',
+                href: `/purchase/assets/${x.assetId}`,
+                since: x.movedOn,
+              })),
+            }
+          : null,
+      )
+      .catch(() => null),
     // purchase requisitions at my level and comparative statements for the committee (docs/design/83)
     apiFetch<{ data: PurchaseRequisitionRow[]; waitingForMe: number; toSign: number }>(
       `/purchase/requisitions?view=waiting&status=submitted&size=${String(size)}`,

@@ -17,6 +17,7 @@ import {
   qty3,
 } from './purchase-stock-core';
 import { purchaseStockPdf } from './purchase-stock-pdf';
+import { assetsToVendor } from './purchase-asset-core';
 import { postStock } from './purchase-stores.service';
 import { PURCHASE, type StockDocQueryDto, type VendorReturnDto } from './purchase.dto';
 
@@ -217,6 +218,14 @@ export class PurchaseReturnsService {
           ).rows[0]!;
           rate = Number(m.rate) * Number(gl.per_unit);
           value = -Number(m.value);
+          await assetsToVendor(c, {
+            receiptLineId: gl.id,
+            storeId,
+            itemId: gl.item_id!,
+            qty: l.qty * Number(gl.per_unit),
+            day,
+            doc: number,
+          });
         } else {
           const cost = (
             await c.query<{ unit_cost: string | null }>(

@@ -1,5 +1,6 @@
 import type { PoolClient } from '@edupro/db';
 import { DomainError } from '../../common/errors/domain-error';
+import { assetsOut } from './purchase-asset-core';
 
 /**
  * Stock shared by the requisition, issue, return, transfer and count screens (docs/design/84, part 8):
@@ -302,11 +303,25 @@ export async function postIssues(
       },
       s.name,
     );
-    await c.query(
-      `INSERT INTO stock_issue_lines (school_id, issue_id, item_id, indent_line_id, qty, rate, value, batch_no, move_id, reservation_id)
-       SELECT app.current_school_id(), $1, $2, $3, $4, m.rate, -m.value, $5, m.id, $7 FROM stock_moves m WHERE m.id = $6`,
-      [doc.id, s.itemId, s.indentLineId, s.qty, s.batch, moveId, s.reservationId],
-    );
+    const line = (
+      await c.query<{ id: string }>(
+        `INSERT INTO stock_issue_lines (school_id, issue_id, item_id, indent_line_id, qty, rate, value, batch_no, move_id, reservation_id)
+         SELECT app.current_school_id(), $1, $2, $3, $4, m.rate, -m.value, $5, m.id, $7 FROM stock_moves m WHERE m.id = $6
+         RETURNING id::text`,
+        [doc.id, s.itemId, s.indentLineId, s.qty, s.batch, moveId, s.reservationId],
+      )
+    ).rows[0]!.id;
+    // registered assets of the item go with it to the department and whoever took them
+    await assetsOut(c, {
+      storeId: head.storeId,
+      itemId: s.itemId,
+      qty: s.qty,
+      issueLineId: line,
+      departmentId: s.departmentId,
+      custodianId: head.takenBy ?? s.taker,
+      day: head.day,
+      doc: doc.number,
+    });
     if (s.reservationId) {
       await c.query(
         `UPDATE stock_reservations SET issued_qty = issued_qty + $2,

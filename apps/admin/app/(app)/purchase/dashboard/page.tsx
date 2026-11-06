@@ -133,7 +133,7 @@ export default async function PurchaseDashboardPage() {
         />
         <KpiTile
           label="Below reorder level"
-          value={num(f.belowReorder, '/purchase/stock?below=1')}
+          value={num(f.belowReorder, '/purchase/reorder')}
           hint="items in a store"
         />
       </div>

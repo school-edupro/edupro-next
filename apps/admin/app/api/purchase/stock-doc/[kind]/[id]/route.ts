@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { apiFetch, apiFetchRaw } from '@/lib/api';
 
-const KINDS = ['issues', 'returns', 'transfers', 'counts'] as const;
+const KINDS = ['issues', 'returns', 'transfers', 'counts', 'condemnations'] as const;
 
 /**
  * A store's document as a PDF (docs/design/84, part 8): the issue slip, the return note, the transfer

@@ -888,7 +888,10 @@ export type PurchaseReport =
   | 'expiring'
   | 'below_reorder'
   | 'transfers'
-  | 'count_differences';
+  | 'count_differences'
+  | 'asset_register'
+  | 'fixed_assets'
+  | 'condemnations';
 
 type Filter = 'period' | 'department' | 'vendor' | 'item' | 'status';
 /** Each report: what it shows and the filters it takes (status: the choices). */
@@ -1035,6 +1038,34 @@ export const REPORTS: Record<
   count_differences: {
     help: 'Differences found by approved physical counts: book, counted, difference, value and the reason.',
     filters: ['period', 'item'],
+  },
+  asset_register: {
+    help: 'Every asset: tag, item, make, serial, cost, book value, status, where it is and who keeps it, warranty.',
+    filters: ['department', 'item', 'status'],
+    status: {
+      held: 'On the books',
+      in_store: 'In store',
+      in_use: 'In use',
+      under_repair: 'Under repair',
+      lost: 'Lost',
+      written_off: 'Written off',
+      disposed: 'Disposed of',
+    },
+  },
+  fixed_assets: {
+    help: 'The financial year of the period’s end, by category: opening book value, additions, depreciation, disposals, closing. Run the year’s depreciation first (Assets → Depreciation).',
+    filters: ['period'],
+  },
+  condemnations: {
+    help: 'Condemnation proposals in the period: their book value, status, when written off and how they were disposed of, for how much.',
+    filters: ['period', 'status'],
+    status: {
+      committee: 'With the committee',
+      approval: 'Waiting for approval',
+      written_off: 'Written off',
+      disposed: 'Disposed of',
+      rejected: 'Rejected',
+    },
   },
 };
 
@@ -1609,4 +1640,257 @@ export interface CountDetail extends CountRow {
     value: number | null;
   }>;
   can: { count: boolean; submit: boolean; decide: boolean; cancel: boolean };
+}
+
+// ---- phase 2, part 9: reorder, assets, depreciation, condemnation (docs/design/84) ------------------
+export interface ReorderRow {
+  storeId: string;
+  store: string;
+  mine: boolean;
+  itemId: string;
+  code: string;
+  name: string;
+  unit: string;
+  purchaseUnit: string;
+  perUnit: number;
+  inHand: number;
+  free: number;
+  onOrder: number;
+  reorderLevel: number;
+  reorderQty: number | null;
+  maxQty: number | null;
+  suggest: number;
+  indents: string | null;
+}
+export const ASSET_STATUS: Record<
+  string,
+  { label: string; tone: 'success' | 'warning' | 'neutral' | 'danger' | 'info' }
+> = {
+  in_store: { label: 'In store', tone: 'info' },
+  in_use: { label: 'In use', tone: 'success' },
+  in_transit: { label: 'In transit', tone: 'warning' },
+  under_repair: { label: 'Under repair', tone: 'warning' },
+  lost: { label: 'Lost', tone: 'danger' },
+  returned: { label: 'Returned to the vendor', tone: 'neutral' },
+  written_off: { label: 'Written off', tone: 'neutral' },
+  disposed: { label: 'Disposed of', tone: 'neutral' },
+};
+export const ASSET_CONDITION = {
+  good: 'Good',
+  fair: 'Fair',
+  poor: 'Poor',
+  unserviceable: 'Unserviceable',
+} as const;
+export interface AssetRow {
+  id: string;
+  tag: string;
+  itemId: string;
+  itemCode: string;
+  item: string;
+  category: string;
+  description: string | null;
+  make: string | null;
+  model: string | null;
+  serialNo: string | null;
+  receiptId: string | null;
+  receipt: string | null;
+  orderId: string | null;
+  order: string | null;
+  vendor: string | null;
+  sourceNote: string | null;
+  cost: number;
+  bookValue: number;
+  acquiredOn: string | null;
+  putToUseOn: string | null;
+  status: string;
+  statusLabel: string;
+  storeId: string | null;
+  store: string | null;
+  departmentId: string | null;
+  department: string | null;
+  location: string | null;
+  custodianId: string | null;
+  custodian: string | null;
+  custodianCode: string | null;
+  condition: keyof typeof ASSET_CONDITION;
+  warrantyUntil: string | null;
+  insurer: string | null;
+  policyNo: string | null;
+  insuredValue: number | null;
+  insuranceRenewal: string | null;
+  leftOn: string | null;
+  bookValueAtExit: number | null;
+  note: string | null;
+  pending: boolean;
+}
+export interface AssetDetail extends AssetRow {
+  movements: Array<{
+    id: string;
+    kind: string;
+    status: 'done' | 'pending' | 'cancelled';
+    movedOn: string;
+    fromStore: string | null;
+    toStore: string | null;
+    toDepartment: string | null;
+    fromLocation: string | null;
+    toLocation: string | null;
+    fromCustodian: string | null;
+    toCustodian: string | null;
+    vendor: string | null;
+    expectedBack: string | null;
+    cost: number | null;
+    doc: string | null;
+    note: string | null;
+    by: string | null;
+    acknowledgedAt: string | null;
+    acknowledgedBy: string | null;
+  }>;
+  depreciation: Array<{
+    fy: string;
+    method: 'slm' | 'wdv';
+    opening: number;
+    depreciation: number;
+    closing: number;
+    days: number;
+  }>;
+  can: { edit: boolean; move: boolean; acknowledge: boolean; acknowledgeOnPaper: boolean };
+}
+export interface AssetLists {
+  runs: Array<{ fy: string; assets: number; total: number; runAt: string; by: string | null }>;
+  currentFy: string;
+  items: Array<{ id: string; code: string; name: string }>;
+  categories: Array<{ id: string; name: string; method: string | null }>;
+  departments: Array<{ id: string; name: string }>;
+  stores: Array<{ id: string; name: string }>;
+  staff: Array<{ id: string; code: string; name: string; department: string | null }>;
+  vendors: Array<{ id: string; name: string }>;
+}
+export const CONDEMNATION_STATUS: Record<
+  string,
+  { label: string; tone: 'success' | 'warning' | 'neutral' | 'danger' | 'info' }
+> = {
+  draft: { label: 'Draft', tone: 'neutral' },
+  committee: { label: 'With the committee', tone: 'warning' },
+  approval: { label: 'Waiting for approval', tone: 'warning' },
+  written_off: { label: 'Written off: to dispose of', tone: 'info' },
+  disposed: { label: 'Disposed of', tone: 'success' },
+  rejected: { label: 'Rejected', tone: 'danger' },
+  cancelled: { label: 'Cancelled', tone: 'neutral' },
+};
+export const CONDEMNATION_REASON = {
+  unserviceable: 'Unserviceable',
+  obsolete: 'Obsolete',
+  surplus: 'Surplus',
+  expired: 'Expired',
+  damaged: 'Damaged beyond repair',
+  lost: 'Lost',
+} as const;
+export const DISPOSAL_METHOD = {
+  auction: 'Public auction',
+  tender_sale: 'Sale by tender',
+  sale: 'Sale',
+  buyback: 'Buy-back by a vendor',
+  scrap: 'Sold as scrap',
+  donation: 'Donated',
+  destruction: 'Destroyed',
+} as const;
+export interface CondemnationRow {
+  id: string;
+  number: string;
+  title: string;
+  status: string;
+  lines: number;
+  value: number;
+  createdAt: string;
+  by: string | null;
+  signed: number;
+  toSign: boolean;
+}
+export interface CondemnationDetail {
+  id: string;
+  number: string;
+  title: string;
+  status: string;
+  note: string | null;
+  createdBy: string | null;
+  createdAt: string;
+  submittedAt: string | null;
+  decidedAt: string | null;
+  decidedBy: string | null;
+  decisionNote: string | null;
+  writtenOffOn: string | null;
+  value: number;
+  auctionNeeded: boolean;
+  lineItems: Array<{
+    id: string;
+    kind: 'asset' | 'stock';
+    assetId: string | null;
+    tag: string | null;
+    item: string;
+    itemId: string | null;
+    storeId: string | null;
+    unit: string | null;
+    store: string | null;
+    batch: string | null;
+    qty: number | null;
+    reasonKind: keyof typeof CONDEMNATION_REASON;
+    reasonLabel: string;
+    reason: string | null;
+    bookValue: number;
+    cost: number | null;
+    acquiredOn: string | null;
+  }>;
+  committee: {
+    required: number;
+    members: Array<{ name: string; role: string | null; signedAt: string | null; me: boolean }>;
+  };
+  disposal: {
+    method: keyof typeof DISPOSAL_METHOD;
+    methodLabel: string;
+    disposedOn: string;
+    party: string | null;
+    amount: number;
+    reference: string | null;
+    note: string | null;
+    hasFile: boolean;
+  } | null;
+  can: {
+    edit: boolean;
+    submit: boolean;
+    sign: boolean;
+    sendBack: boolean;
+    decide: boolean;
+    dispose: boolean;
+    cancel: boolean;
+  };
+}
+export interface CondemnationCandidates {
+  assets: Array<{
+    id: string;
+    tag: string;
+    item: string;
+    status: string;
+    condition: string;
+    bookValue: number;
+    place: string | null;
+  }>;
+  stock: Array<{
+    storeId: string;
+    store: string;
+    itemId: string;
+    code: string;
+    name: string;
+    unit: string;
+    tracksBatch: boolean;
+    qty: number;
+    free: number;
+    avgRate: number;
+  }>;
+  batches: Array<{
+    storeId: string;
+    itemId: string;
+    batch: string;
+    expiry: string | null;
+    qty: number;
+  }>;
 }

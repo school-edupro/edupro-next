@@ -24,6 +24,7 @@ export const EMPLOYEE_TABS = [
   ['documents', 'Documents'],
   ['posting', 'Posting'],
   ['acr', 'ACR'],
+  ['assets', 'Assets in care'],
 ] as const;
 export type EmployeeTab = (typeof EMPLOYEE_TABS)[number][0];
 

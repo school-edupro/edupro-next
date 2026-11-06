@@ -112,13 +112,27 @@ export class ExitClearanceService {
     employeeId: string,
     auto: 'library' | 'assets' | null,
   ): Promise<ClearanceCheck | null> {
-    if (auto === 'assets')
+    if (auto === 'assets') {
+      // the assets in the employee's care on the asset register (docs/design/84, part 9)
+      const a = await c.query<{ tag: string; item: string; status: string }>(
+        `SELECT a.tag, i.name AS item, a.status FROM assets a JOIN purchase_items i ON i.id = a.item_id
+          WHERE a.custodian_employee_id = $1 AND a.status IN ('in_use', 'under_repair', 'lost') ORDER BY a.tag`,
+        [employeeId],
+      );
+      const n = a.rows.length;
+      const list = a.rows
+        .slice(0, 8)
+        .map((x) => `${x.tag} (${x.item}${x.status === 'lost' ? ', lost' : ''})`)
+        .join(', ');
       return {
         kind: 'assets',
-        due: false,
+        due: n > 0,
         amount: 0,
-        detail: 'EduPro keeps no asset register yet: note any asset not returned as dues.',
+        detail: n
+          ? `${String(n)} asset${n === 1 ? '' : 's'} in their care: ${list}${n > 8 ? '…' : ''} — take them back (Purchase → Assets) or note the dues`
+          : 'No asset in their care on the asset register',
       };
+    }
     if (auto !== 'library') return null;
     const r = await c.query<{ open: number; fines: string; charges: string }>(
       `SELECT count(*) FILTER (WHERE returned_on IS NULL)::int AS open,

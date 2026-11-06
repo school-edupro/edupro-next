@@ -34,6 +34,8 @@ export interface StaffWaiting {
   receipts?: number;
   /** what a store issued to my department, waiting for my acknowledgement */
   issues?: number;
+  /** assets in my care, and those handed to me waiting for my acknowledgement */
+  assets?: number;
 }
 export interface StaffGroup {
   id: string;
@@ -268,6 +270,12 @@ export const STAFF_MENU: StaffGroup[] = [
         label: 'Issued to my department',
         help: 'What the store issued to you or your department: confirm you received it',
         allowed: (_can, w) => (w.issues ?? 0) > 0,
+      },
+      {
+        href: '/purchase/my-assets',
+        label: 'Assets in my care',
+        help: 'The school’s assets you keep; confirm the ones handed to you',
+        allowed: (_can, w) => (w.assets ?? 0) > 0,
       },
       {
         href: '/purchase/my-stores',

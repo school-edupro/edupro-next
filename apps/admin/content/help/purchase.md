@@ -25,6 +25,9 @@ PO, the emergency purchase, the stores and receiving what was ordered.
 | **The department's inspectors** (the HOD by default) | Inspect and accept what was received for the department's POs, in the admin or the staff app         |
 | **Whoever took it, the indent's raiser or the HOD**  | Acknowledges what the store issued to the department (admin or staff app)                            |
 | **School admin** (stores)                            | Approves physical counts (never one they took part in)                                               |
+| **The condemnation committee** (named in settings)   | Signs the recommendation to write off unserviceable, obsolete or surplus assets and stock            |
+| **School admin** (condemnation)                      | Approves the write-off (never one they proposed)                                                     |
+| **Whoever keeps an asset**                           | Acknowledges an asset handed to them; sees what is in their care (staff app)                         |
 
 ## Set it up, in this order
 
@@ -375,6 +378,62 @@ count again. The statement prints with the differences.
 
 **Stock reports**: issues by department (consumption), slow-moving and dead stock, expiring soon,
 below reorder level, transfers, count differences — with stock in hand and each item's register.
+
+## Reorder
+
+Set each item's **reorder level**, **reorder quantity** and **maximum** on the store's page. **Purchase →
+Reorder** lists, per store, the items whose free stock (in hand less reserved) plus what is on order is
+at or below the level, with the quantity to ask for (the reorder quantity, or up to the maximum) and
+any indent already open for it. Tick the ones to ask for, change a quantity, and **Raise an indent**: a
+draft indent for the store's department, priced from the rate contract or the last purchase, opens for
+you to check and send.
+
+## Assets
+
+Every unit of an **asset item** (item type asset) has its own record with a **tag**
+(`AST/2026-27/0001`) and a **QR label**:
+
+- it joins the register when it is **accepted on a goods receipt** — what one unit cost (its share of
+  the PO with GST and freight), the serial number, the PO and vendor — and sits in the store;
+- it follows the store: an **issue** gives it to the department and whoever took it (one bought for an
+  indent goes straight to the indent's raiser), goods **brought back** put it back in the store (marked
+  unserviceable when damaged), a **transfer** moves it between stores, a **return to the vendor** takes
+  it off the register;
+- on its page the office records **custody** (department, room, who keeps it — a new custodian who signs
+  in acknowledges first, from My approvals or the staff app → **Assets in my care**), **repair** (sent
+  to a repairer, back with the cost), **lost** and **found**, and keeps the make, model, condition,
+  warranty and insurance;
+- **Print QR labels** for the ticked assets (24 to an A4 sheet);
+- existing assets come in from the old register by **Import from Excel** (one row per unit; the store's
+  stock is not changed);
+- an employee's assets show on their page (**Assets in care**) and on the **exit clearance**: they come
+  back before the employee leaves.
+
+**Depreciation** (Assets → Depreciation): each item category has its method on Purchase set-up → Item
+categories — **straight line** over the useful life down to the salvage % (5% if not set), or
+**written-down value** at a rate a year (a sub-category without its own takes its category's). Run
+the year at its end: **Work it out**, then **Save**. Each asset is depreciated pro rata from the day it
+was put to use (or bought); earlier years not yet run are worked out first, so each year opens at the
+last one's closing. A year can be run again until a later year is run. Reports → **Fixed-asset
+register** gives each category's opening, additions, depreciation, disposals and closing.
+
+## Condemnation and disposal
+
+Unserviceable, obsolete, surplus or expired assets and stock are **condemned** (GFR 2017 rule 217):
+
+1. **Propose condemnation** (the purchase office): the assets (unserviceable ones first) and the stock
+   quantities (a batch for a batch item), each with why. Its book value is worked out; **stock on an
+   open proposal is held** — it cannot be issued or transferred.
+2. **Send to the committee**: the **condemnation committee** (Purchase settings, with how many must
+   sign) signs it — or sends it back.
+3. The **school admin** (never the one who proposed it) **approves**: the assets are **written off** at
+   their book value and the stock leaves the store as a write-off — or rejects it (the stock is free
+   again).
+4. **Record the disposal**: how (public auction, sale by tender, sale, buy-back, scrap, donation,
+   destruction), when, to whom, for how much, the reference and a file. Above **₹2 lakh** of book value
+   it must be a public auction or a tender, with its reference.
+
+The record prints in the manner of form GFR-17. Reports → **Condemnations and disposals**.
 
 ## Hand over my approvals
 

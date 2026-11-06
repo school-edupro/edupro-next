@@ -23,6 +23,9 @@ const DICT: Record<string, string> = {
   'Open and acknowledge': 'खोलें और पुष्टि करें',
   'Acknowledge: received': 'पुष्टि करें: प्राप्त हुआ',
   'Stock in my stores': 'मेरे भंडारों का स्टॉक',
+  'Assets in my care': 'मेरी देखरेख में परिसंपत्तियाँ',
+  'Handed to you': 'आपको सौंपी गई',
+  'Acknowledge: I have it': 'पुष्टि करें: मेरे पास है',
   'Goods and services your department received: check them and accept or reject.':
     'आपके विभाग को प्राप्त माल और सेवाएँ: जाँचें और स्वीकार या अस्वीकार करें।',
   'Nothing is waiting for your inspection.': 'आपके निरीक्षण के लिए कुछ प्रतीक्षा में नहीं है।',

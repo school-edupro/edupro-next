@@ -380,3 +380,67 @@ issued" waits for part 9.
   its store).
 - **Not yet** (part 9): reorder → indent, assets and depreciation, condemnation and disposal (the
   damaged returns wait for it), the employee's assets.
+
+## As built — part 9, reorder, assets, depreciation, condemnation (6 Nov 2026)
+
+Settled while building: depreciation methods sit on the **item categories** (a sub-category without
+its own takes its category's; salvage 5% when not set); a depreciation run **catches up** earlier years
+not yet run and a year is not run again once a later one is; assets **follow the store** (receipt,
+issue, return, transfer, return to vendor) — fewer registered assets than the quantity moved (stock from
+before the register) is fine; a custody change to someone who signs in **waits for their
+acknowledgement** (the office may record a signed handover); condemnation is approved by the school
+admin through the right `purchase.condemnation.approve` (not a department's levels); stock on an open
+condemnation is **held** (it counts in the balance's reserved); the import of existing assets changes
+the register only, not the stock.
+
+- **Migration 0326**: rights `purchase.asset.manage` (admins, purchase office) and
+  `purchase.condemnation.approve` (admins); `purchase_item_categories` gains `dep_method` (slm / wdv),
+  `useful_life_years`, `salvage_pct`, `wdv_rate_pct` (also on the masters grid);
+  `purchase_settings.condemnation_signatures`; `assets` (tag — `AST/` or the old tag —, item, make,
+  model, serial unique per item, the receipt line, PO and vendor or a source note, cost, acquired and put
+  to use, status in store / in use / in transit / under repair / lost / returned / written off /
+  disposed, store or department, room, custodian, condition, warranty, insurance, the issue or transfer
+  line, the day it left the books and its book value then), `asset_movements` (received, imported,
+  issued, back to store, store transfer, custody — pending until acknowledged, one at a time —, repair
+  out / back with vendor, expected day and cost, lost, found, returned, written off, disposed),
+  `asset_depreciation` (per asset and year: method, opening, depreciation, closing, days) and
+  `asset_depreciation_runs`; `condemnation_committee_members`, `condemnations` (draft → committee →
+  approval → written off → disposed; rejected, cancelled), `condemnation_lines` (an asset, or a store's
+  item and quantity with a batch; why; book value; the write-off move), `condemnation_signoffs`,
+  `disposals` (method, day, party, amount, reference, note, file); `app.stock_reserved_refresh` now adds
+  the stock held by open condemnations.
+- **API**: `purchase-asset-core.ts` (accepted units of asset items become assets in the store before the
+  indent's issue; issue, back, transfer send / receive / cancel and return to vendor move them — oldest
+  first, picked once in a CTE, never one on an open condemnation; `BOOK_VALUE`), called from the receipt,
+  issue, return, transfer and vendor-return services; `PurchaseAssetsService` (the register with
+  filters and totals, mine and pending for me, an employee's, one asset with movements and
+  depreciation, details, custody / repair / lost / found, acknowledge — the custodian or the office on
+  paper — and cancel, the QR label sheet 3 × 8 on A4, the Excel format and import with every row
+  checked, the depreciation run with a dry run, the lists); `PurchaseCondemnationsService` (the
+  committee and its signatures, candidates, propose / change with the lines checked and valued and stock
+  held, send to the committee, sign, send back, approve — assets written off at book value, an asset in
+  a store also out of its stock, stock written off — or reject, cancel, dispose — by auction or tender
+  above ₹2 lakh, a buyer named for a sale —, the record PDF in the manner of GFR-17);
+  `PurchaseReorderService` (items whose free stock plus on order is at or below the level, with the
+  suggested quantity and open indents; a draft indent for the store's department priced from the
+  contract or the last purchase); one controller. Exit clearance: the IT / assets department's check
+  lists the assets in the employee's care.
+- **Reports**: asset register, fixed-asset register by category (opening, additions, depreciation,
+  disposals, closing for the year of the period's end), condemnations and disposals. Dashboard: below
+  reorder level now counts what is on order (as the Reorder list) and opens it.
+- **Admin**: Purchase → Reorder, Assets (filters, totals, QR labels for the ticked, Import from Excel,
+  Depreciation), an asset's page (status and facts, acknowledge / signed handover / cancel a custody
+  change, record a movement, details, depreciation, movements), Condemnation (list, waiting for me,
+  propose / change, the proposal's page with the committee, approval, disposal and the PDF); Purchase
+  settings → Condemnation committee; the employee's page → Assets in care; My approvals → condemnations
+  to sign or approve, assets handed to me. Help: Reorder, Assets (with depreciation), Condemnation and
+  disposal.
+- **Staff app**: Assets in my care (acknowledge what was handed to me).
+- **Tests**: `purchase-assets.e2e-spec.ts` (8: laptops from a receipt, one to the indent's raiser;
+  custody waiting for the custodian, repair and back, an employee's assets; assets following issue,
+  return and transfer; the Excel import checked row by row; straight-line depreciation catching up three
+  years and the fixed-asset register; reorder and its draft indent; condemnation holding stock, two
+  signatures, the admin's write-off, the disposal; labels and the reports); `employee-exits` updated for
+  the asset check.
+- **Not in scope**: barcode or QR scanning (the label carries the tag; scanning comes with the app),
+  depreciation for tax (the Income-tax block method), the debit note and payments (phase 3).

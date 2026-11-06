@@ -356,9 +356,11 @@ describe('employee exits (e2e)', () => {
       const library = x.clearances.find((r) => r.department === 'library')!;
       expect(library.check).toMatchObject({ due: true, detail: '1 book not returned' });
       expect(library.mayClear).toBe(true);
-      expect(x.clearances.find((r) => r.department === 'it_assets')!.check!.detail).toMatch(
-        /no asset register/,
-      );
+      // the asset register (docs/design/84, part 9): nothing in their care
+      expect(x.clearances.find((r) => r.department === 'it_assets')!.check).toMatchObject({
+        due: false,
+        detail: 'No asset in their care on the asset register',
+      });
     });
 
     it('each department clears it, by the people set: the librarian, the HOD, the office', async () => {

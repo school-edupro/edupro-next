@@ -35,6 +35,7 @@ import {
 import { apiFetch, getMe } from '@/lib/api';
 import { ACR_STATUS, type AcrRow } from '@/lib/acr';
 import type { EmployeeCatalogue, EmployeeProfile } from '@/lib/employee';
+import type { AssetRow } from '@/lib/purchase';
 import type { Employee, Employee360, Page, PersonDocument, Posting, School } from '@/lib/types';
 
 type Tab = EmployeeTab;
@@ -119,6 +120,13 @@ export default async function EmployeePage({
           .then((r) => r.data)
           .catch(() => [])
       : [];
+  // the assets in the employee's care (the asset register, docs/design/84 part 9)
+  const assets =
+    tab === 'assets'
+      ? await apiFetch<{ rows: AssetRow[] }>(`/purchase/assets-of-employee/${id}`)
+          .then((r) => r.rows)
+          .catch(() => null)
+      : null;
   const today = new Date(Date.now() + 330 * 60_000).toISOString().slice(0, 10);
   const rows = profile.rows;
   const list = (code: string) => catalogue.lists[code] ?? [];
@@ -1034,6 +1042,49 @@ export default async function EmployeePage({
           ) : null}
         </div>
       ) : null}
+      {tab === 'assets' ? (
+        <section className="ep-card" aria-labelledby="emp-assets">
+          <h2 id="emp-assets" className="ep-card__title">
+            Assets in care
+          </h2>
+          {assets === null ? (
+            <p className="ep-field__help">The asset register is open to HR and the stores.</p>
+          ) : assets.length ? (
+            <div className="ep-table-wrap" tabIndex={0} role="region" aria-labelledby="emp-assets">
+              <table className="ep-table">
+                <thead>
+                  <tr>
+                    <th scope="col">Asset</th>
+                    <th scope="col">Where</th>
+                    <th scope="col">Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {assets.map((a) => (
+                    <tr key={a.id}>
+                      <td>
+                        <a href={`/purchase/assets/${a.id}`}>{a.tag}</a>
+                        <span className="ep-mr-col__desc">
+                          {a.item}
+                          {a.serialNo ? ` · S/N ${a.serialNo}` : ''}
+                        </span>
+                      </td>
+                      <td>{[a.department, a.location].filter(Boolean).join(' · ') || '—'}</td>
+                      <td>{a.statusLabel}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <p className="ep-field__help">No asset is in their care.</p>
+          )}
+          <p className="ep-field__help">
+            These show on the exit clearance too: they come back before the employee leaves.
+          </p>
+        </section>
+      ) : null}
+
       {tab === 'acr' ? (
         <Card>
           <h2 className="ep-card__title">Annual confidential reports</h2>

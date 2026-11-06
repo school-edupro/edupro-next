@@ -1260,3 +1260,224 @@ export async function sendBackCount(fd: FormData) {
 export async function cancelCount(fd: FormData) {
   return countAction('/cancel', 'Count cancelled', (f) => ({ note: pick(f, 'reason') }))(fd);
 }
+
+// ---- phase 2, part 9: reorder, assets, depreciation, condemnation ---------------------------------
+export async function reorderIndent(body: Record<string, unknown>): Promise<StockActionResult> {
+  return stockCall('/purchase/reorder/indent', 'POST', body, (r) => ({ id: String(r.id) }), [
+    '/purchase/reorder',
+  ]);
+}
+
+export async function saveAsset(
+  id: string,
+  body: Record<string, unknown>,
+): Promise<StockActionResult> {
+  if (!okId(id)) return { ok: false, error: 'Unknown asset' };
+  return stockCall(`/purchase/assets/${id}`, 'PUT', body, () => ({ id }), [
+    `/purchase/assets/${id}`,
+  ]);
+}
+
+export async function moveAsset(
+  id: string,
+  body: Record<string, unknown>,
+): Promise<StockActionResult> {
+  if (!okId(id)) return { ok: false, error: 'Unknown asset' };
+  return stockCall(
+    `/purchase/assets/${id}/move`,
+    'POST',
+    body,
+    (r) => ({
+      id,
+      detail: r.pending ? 'Waiting for the new custodian’s acknowledgement' : 'Recorded',
+    }),
+    [`/purchase/assets/${id}`],
+  );
+}
+
+/** The new custodian acknowledges (or the office records the signed handover). */
+export async function acknowledgeAsset(fd: FormData) {
+  const id = pick(fd, 'movementId');
+  const asset = pick(fd, 'assetId');
+  if (!okId(id) || !okId(asset)) back('/purchase/assets', 'validation-failed', 'Unknown asset');
+  return run(
+    `/purchase/assets/${asset}`,
+    () =>
+      apiFetch(`/purchase/asset-movements/${id}/acknowledge`, {
+        method: 'POST',
+        body: JSON.stringify({
+          note: pick(fd, 'reason') || undefined,
+          onPaper: pick(fd, 'onPaper') === '1',
+        }),
+      }),
+    'Acknowledged: the custody changed',
+  );
+}
+
+export async function cancelAssetMove(fd: FormData) {
+  const id = pick(fd, 'movementId');
+  const asset = pick(fd, 'assetId');
+  if (!okId(id) || !okId(asset)) back('/purchase/assets', 'validation-failed', 'Unknown asset');
+  return run(
+    `/purchase/assets/${asset}`,
+    () => apiFetch(`/purchase/asset-movements/${id}/cancel`, { method: 'POST' }),
+    'The custody change is cancelled',
+  );
+}
+
+export type AssetImportResult =
+  | {
+      ok: true;
+      rows: Array<{ row: number; tag: string; ok: boolean; error?: string }>;
+      saved: number;
+    }
+  | { ok: false; error: string };
+export async function importAssets(file: string, dryRun: boolean): Promise<AssetImportResult> {
+  try {
+    const r = await apiFetch<{
+      rows: Array<{ row: number; tag: string; ok: boolean; error?: string }>;
+      saved: number;
+    }>('/purchase/assets-import', { method: 'POST', body: JSON.stringify({ file, dryRun }) });
+    if (!dryRun) revalidatePath('/purchase/assets');
+    return { ok: true, ...r };
+  } catch (e) {
+    if (e instanceof ApiError) return { ok: false, error: detailOf(e) };
+    throw e;
+  }
+}
+
+export type DepreciationResult =
+  | { ok: true; fy: string; assets: number; total: number; earlierYears: number; saved: boolean }
+  | { ok: false; error: string };
+export async function runDepreciation(fy: string, dryRun: boolean): Promise<DepreciationResult> {
+  try {
+    const r = await apiFetch<{
+      fy: string;
+      assets: number;
+      total: number;
+      earlierYears: number;
+      saved: boolean;
+    }>('/purchase/depreciation', { method: 'POST', body: JSON.stringify({ fy, dryRun }) });
+    if (!dryRun) revalidatePath('/purchase/assets/depreciation');
+    return { ok: true, ...r };
+  } catch (e) {
+    if (e instanceof ApiError) return { ok: false, error: detailOf(e) };
+    throw e;
+  }
+}
+
+export async function saveCondemnation(
+  id: string | null,
+  body: Record<string, unknown>,
+): Promise<StockActionResult> {
+  if (id && !okId(id)) return { ok: false, error: 'Unknown condemnation' };
+  return stockCall(
+    id ? `/purchase/condemnations/${id}` : '/purchase/condemnations',
+    id ? 'PUT' : 'POST',
+    body,
+    (r) => ({ id: id ?? String(r.id), number: r.number ? String(r.number) : undefined }),
+    ['/purchase/condemnations'],
+  );
+}
+
+const cdnAction =
+  (path: string, done: string, body?: (fd: FormData) => unknown) => async (fd: FormData) => {
+    const id = pick(fd, 'id');
+    if (!okId(id)) back('/purchase/condemnations', 'validation-failed', 'Unknown condemnation');
+    return run(
+      `/purchase/condemnations/${id}`,
+      () =>
+        apiFetch(`/purchase/condemnations/${id}${path}`, {
+          method: 'POST',
+          ...(body ? { body: JSON.stringify(body(fd)) } : {}),
+        }),
+      done,
+    );
+  };
+export async function submitCondemnation(fd: FormData) {
+  return cdnAction('/submit', 'Sent to the condemnation committee')(fd);
+}
+export async function signCondemnation(fd: FormData) {
+  return cdnAction('/sign', 'Signed')(fd);
+}
+export async function approveCondemnation(fd: FormData) {
+  return cdnAction('/decide', 'Approved: written off', (f) => ({
+    action: 'approve',
+    note: pick(f, 'reason') || undefined,
+  }))(fd);
+}
+export async function rejectCondemnation(fd: FormData) {
+  return cdnAction('/decide', 'Rejected', (f) => ({ action: 'reject', note: pick(f, 'reason') }))(
+    fd,
+  );
+}
+export async function sendBackCondemnation(fd: FormData) {
+  return cdnAction('/decide', 'Sent back to draft', (f) => ({
+    action: 'send_back',
+    note: pick(f, 'reason'),
+  }))(fd);
+}
+export async function cancelCondemnation(fd: FormData) {
+  return cdnAction('/cancel', 'Cancelled', (f) => ({ reason: pick(f, 'reason') }))(fd);
+}
+/** The disposal: how, when, to whom, for how much, the auction or tender reference, a file. */
+export async function disposeCondemnation(fd: FormData) {
+  const id = pick(fd, 'id');
+  const to = `/purchase/condemnations/${id}`;
+  if (!okId(id)) back('/purchase/condemnations', 'validation-failed', 'Unknown condemnation');
+  const file = fd.get('file');
+  try {
+    const fileId = file instanceof File && file.size ? await uploadOne(file) : undefined;
+    await apiFetch(`/purchase/condemnations/${id}/dispose`, {
+      method: 'POST',
+      body: JSON.stringify({
+        method: pick(fd, 'method'),
+        disposedOn: pick(fd, 'disposedOn'),
+        party: pick(fd, 'party') || undefined,
+        amount: pick(fd, 'amount') || 0,
+        reference: pick(fd, 'reference') || undefined,
+        note: pick(fd, 'note') || undefined,
+        ...(fileId ? { fileId } : {}),
+      }),
+    });
+  } catch (e) {
+    if (e instanceof ApiError) back(to, e.problem.type, detailOf(e));
+    throw e;
+  }
+  back(to, 'ok', 'Disposal recorded');
+}
+
+export async function addCondemnationMember(fd: FormData) {
+  const employeeId = pick(fd, 'employeeId');
+  if (!okId(employeeId)) back('/purchase/settings', 'validation-failed', 'Pick the employee');
+  return run(
+    '/purchase/settings',
+    () =>
+      apiFetch('/purchase/condemnation-committee', {
+        method: 'POST',
+        body: JSON.stringify({ employeeId, role: pick(fd, 'role') || undefined }),
+      }),
+    'Added to the condemnation committee',
+  );
+}
+export async function removeCondemnationMember(fd: FormData) {
+  const id = pick(fd, 'id');
+  if (!okId(id)) back('/purchase/settings', 'validation-failed', 'Unknown member');
+  return run(
+    '/purchase/settings',
+    () => apiFetch(`/purchase/condemnation-committee/${id}`, { method: 'DELETE' }),
+    'Removed from the condemnation committee',
+  );
+}
+export async function saveCondemnationSignatures(fd: FormData) {
+  const n = pick(fd, 'signatures');
+  return run(
+    '/purchase/settings',
+    () =>
+      apiFetch('/purchase/condemnation-committee/signatures', {
+        method: 'PUT',
+        body: JSON.stringify({ signatures: n ? Number(n) : null }),
+      }),
+    'Saved',
+  );
+}

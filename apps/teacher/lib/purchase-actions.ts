@@ -291,3 +291,18 @@ export async function acknowledgeIssue(fd: FormData) {
     'Acknowledged: received',
   );
 }
+
+// ---- phase 2, part 9: an asset handed to me -----------------------------------------------------------
+export async function acknowledgeAssetMove(fd: FormData) {
+  const id = pick(fd, 'movementId');
+  if (!okId(id)) back('/purchase/my-assets', 'validation-failed', 'Unknown asset');
+  return run(
+    '/purchase/my-assets',
+    () =>
+      apiFetch(`/purchase/asset-movements/${id}/acknowledge`, {
+        method: 'POST',
+        body: JSON.stringify({ note: pick(fd, 'note') || undefined }),
+      }),
+    'Acknowledged: it is in your care',
+  );
+}
