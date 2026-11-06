@@ -13518,6 +13518,19 @@ button.ep-subchoice__icon:hover {
   font-size: var(--fs-caption);
   color: var(--text-body);
 }
+/* the section × subject's subject teacher, under the count (6 Nov 2026) */
+.ep-statusgrid__who {
+  max-width: 9rem;
+  margin-top: var(--sp-1);
+  font-size: var(--fs-caption);
+  color: var(--text-heading);
+  text-align: center;
+  overflow-wrap: anywhere;
+}
+.ep-statusgrid__who[data-none='true'] {
+  color: var(--text-body);
+  font-style: italic;
+}
 .ep-statusgrid__tile[data-state='notStarted'],
 .ep-statusgrid__swatch[data-state='notStarted'] {
   background: var(--surface-subtle);

@@ -530,6 +530,19 @@ describe('promotion proposals and remark categories (e2e)', () => {
       });
     expect((await step(classTeacher, 'submit')).statusCode).toBe(201);
     expect((await step(admin, 'verify')).statusCode).toBe(201);
+    // the entry status names each section × subject's subject teacher (Teacher assignments)
+    const status = (await call(admin, 'GET', `/exams/${examId}/entry-status`)).json()
+      .data as Array<{
+      classSectionId: string;
+      subjectId: string;
+      teachers: string[];
+    }>;
+    const cell = (sub: string) =>
+      status.find((x) => x.classSectionId === section.A && x.subjectId === sub)!;
+    expect(cell(subject.ENG!).teachers).toEqual([expect.stringContaining('PRET')]);
+    expect(
+      status.filter((x) => x.subjectId !== subject.ENG).every((x) => x.teachers.length === 0),
+    ).toBe(true);
     const after = await proposals();
     expect(of(after.rows, 'Bhanu')).toMatchObject({ result: 'pass', proposal: 'promote' });
   });

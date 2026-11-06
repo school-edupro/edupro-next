@@ -24,6 +24,8 @@ interface Row extends EntryStatus {
   takers: number;
   entered: number;
   canVerify: boolean;
+  /** the section × subject's subject teachers (Teacher assignments) */
+  teachers?: string[];
 }
 /** where a tile stands, for its colour */
 type State = 'nobody' | 'notStarted' | 'inProgress' | 'ready' | 'submitted' | 'verified';
@@ -88,6 +90,8 @@ export default async function ExamStatusPage({
   const picked = sp.cell
     ? r.data.find((x) => `${x.classSectionId}|${x.subjectId}` === sp.cell)
     : undefined;
+  // the tile's teacher line: the subject teachers, or that nobody is mapped
+  const who = (x: Row) => (x.teachers?.length ? x.teachers.join(', ') : st('noTeacher'));
   const label: Record<State, string> = {
     nobody: st('nobody'),
     notStarted: st('notStarted'),
@@ -174,6 +178,11 @@ export default async function ExamStatusPage({
           <p style={{ marginTop: 0 }}>
             <strong>{st('enteredOf', { n: picked.entered, m: picked.takers })}</strong>{' '}
             <EntryStatusBadge s={picked} />
+          </p>
+          <p>
+            {st('teacherIs', {
+              names: picked.teachers?.length ? picked.teachers.join(', ') : st('noTeacher'),
+            })}
           </p>
           <EntryStatusActions
             examId={exam.id}
@@ -274,13 +283,13 @@ export default async function ExamStatusPage({
                                 data-state={state}
                                 aria-current={picked === x ? 'true' : undefined}
                                 href={link(x)}
-                                aria-label={st('tile', {
+                                aria-label={`${st('tile', {
                                   subject: s.name,
                                   section: code,
                                   n: x.entered,
                                   m: x.takers,
                                   state: label[state],
-                                })}
+                                })}, ${who(x)}`}
                               >
                                 {state === 'nobody' ? (
                                   '—'
@@ -292,6 +301,14 @@ export default async function ExamStatusPage({
                                     </span>
                                     <span className="ep-statusgrid__state">{label[state]}</span>
                                   </>
+                                )}
+                                {state === 'nobody' ? null : (
+                                  <span
+                                    className="ep-statusgrid__who"
+                                    data-none={x.teachers?.length ? undefined : 'true'}
+                                  >
+                                    {who(x)}
+                                  </span>
                                 )}
                               </a>
                             </td>

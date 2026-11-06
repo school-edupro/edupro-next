@@ -128,8 +128,9 @@
 
 **Marks status** (Exam → Marks → Marks status) is a grid per class: a row per section, a column per subject.
 Each tile shows the marks entered out of the students who take the subject and its colour says where it
-stands (not started, in progress, entered, submitted, verified; "—" when nobody takes it). Pick a tile to
-see who submitted or verified it and to submit, verify, send back or reopen it.
+stands (not started, in progress, entered, submitted, verified; "—" when nobody takes it). Under the
+count is the section's **subject teacher** (Academics → Teacher assignments), or "No teacher mapped".
+Pick a tile to see who submitted or verified it and to submit, verify, send back or reopen it.
 
 ## Results and report cards
 

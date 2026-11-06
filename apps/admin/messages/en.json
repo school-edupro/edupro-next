@@ -4318,6 +4318,8 @@
       "close": "Close",
       "enteredOf": "{n} of {m} entered",
       "tile": "{subject}, {section}: {n} of {m} entered, {state}",
+      "teacherIs": "Subject teacher: {names}",
+      "noTeacher": "No teacher mapped",
       "everyone": "Students who take it"
     },
     "esa": {

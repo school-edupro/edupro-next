@@ -4318,6 +4318,8 @@
       "close": "बंद करें",
       "enteredOf": "{m} में से {n} दर्ज",
       "tile": "{subject}, {section}: {m} में से {n} दर्ज, {state}",
+      "teacherIs": "विषय शिक्षक: {names}",
+      "noTeacher": "कोई शिक्षक नहीं जोड़ा गया",
       "everyone": "विषय लेने वाले विद्यार्थी"
     },
     "esa": {

@@ -157,7 +157,22 @@ export class ExamStatusService {
         [examId, classId ?? null, allowed],
       );
       const may = await this.verifiable(c, tenant, ctx, yearId);
-      const rows = r.rows.map((x) => this.shape(x, may, ctx.user.id));
+      // each section × subject's subject teachers (Academics → Teacher assignments), 6 Nov 2026
+      const shaped = r.rows.map((x) => this.shape(x, may, ctx.user.id));
+      const t = await c.query<{ section: string; subject: string; names: string[] }>(
+        `SELECT ta.class_section_id::text AS section, ta.subject_id::text AS subject,
+                array_agg(DISTINCT COALESCE(e.display_name, concat_ws(' ', e.first_name, e.last_name))) AS names
+           FROM teacher_assignments ta JOIN employees e ON e.id = ta.employee_id
+          WHERE ta.academic_year_id = $1 AND ta.class_section_id = ANY($2::bigint[]) AND ta.valid_to IS NULL
+            AND ta.kind = 'subject_teacher' AND ta.subject_id IS NOT NULL
+          GROUP BY 1, 2`,
+        [yearId, [...new Set(shaped.map((x) => x.classSectionId))]],
+      );
+      const teachers = new Map(t.rows.map((x) => [`${x.section}|${x.subject}`, x.names.sort()]));
+      const rows = shaped.map((x) => ({
+        ...x,
+        teachers: teachers.get(`${x.classSectionId}|${x.subjectId}`) ?? [],
+      }));
       const count = (s: Status) => rows.filter((x) => x.status === s).length;
       return {
         data: rows,
