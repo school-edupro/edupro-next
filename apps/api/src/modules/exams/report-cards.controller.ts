@@ -178,6 +178,16 @@ export class ReportCardsController {
     return this.cards.release(ctx, id);
   }
 
+  @Get('releases/:id/parent-message')
+  @ApiOperation({
+    summary:
+      "The families' message when the release is published (e-mail and SMS), filled for one of its pupils",
+  })
+  @RequirePermission(REPORT_CARDS.view)
+  parentMessage(@ReqCtx() ctx: RequestContext, @Param('id') id: string) {
+    return this.cards.parentMessage(ctx, id);
+  }
+
   @Patch('releases/:id')
   @ApiOperation({
     summary: 'Edit a release; status released opens it to families, withdrawn closes it',

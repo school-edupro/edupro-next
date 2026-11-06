@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
 import ExcelJS from 'exceljs';
 import type { PoolClient } from '@edupro/db';
 import {
@@ -20,6 +20,7 @@ import {
   type LrArt,
   type ReportCardData,
 } from '@edupro/db';
+import { ENV, type Env } from '../../config/env';
 import { AuditService } from '../../common/audit/audit.service';
 import { readSheet, templateSheet } from '../../common/excel/sheet';
 import { DbService } from '../../common/db/db.service';
@@ -189,6 +190,7 @@ export class ReportCardsService {
     private readonly reports: ReportsService,
     private readonly viewer: ViewerService,
     private readonly signatures: ReportCardSignaturesService,
+    @Inject(ENV) private readonly env: Env,
   ) {}
 
   // ---- templates ---------------------------------------------------------------------------------
@@ -1109,6 +1111,101 @@ export class ReportCardsService {
   }
 
   /**
+   * The words of the families' message (docs/design/81), the same for the messages and the preview: the
+   * pupil's name and class ("I-A"), the release's exams ("Periodic Test 1 and Half Yearly"), the school,
+   * the parent app's Results, and the release's name as {{term}} (the old word, kept).
+   */
+  private async messageWords(c: PoolClient, releaseId: string) {
+    const r = await c.query<{ term: string; school: string; exams: string[] }>(
+      `SELECT r.name AS term, (SELECT name FROM schools WHERE id = app.current_school_id()) AS school,
+              COALESCE((SELECT array_agg(e.name ORDER BY array_position(r.exam_ids, e.id)) FROM exams e
+                         WHERE e.id = ANY(r.exam_ids)), '{}') AS exams
+         FROM report_card_releases r WHERE r.id = $1`,
+      [releaseId],
+    );
+    const x = r.rows[0];
+    const names = x?.exams ?? [];
+    const exam =
+      names.length > 1
+        ? `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]!}`
+        : (names[0] ?? x?.term ?? '');
+    const link = `${this.env.PARENT_APP_URL.replace(/\/+$/, '')}/results`;
+    return (pupil: { name: string; class: string }): Record<string, string> => ({
+      name: pupil.name,
+      class: pupil.class,
+      exam,
+      school: x?.school ?? '',
+      link,
+      term: x?.term ?? '',
+    });
+  }
+
+  /**
+   * docs/design/81: the families' message of a release as it goes out — e-mail and SMS, each with its
+   * template's state — filled for the release's first pupil in sight who has a family to tell (held
+   * cards left out), else for sample words. A template not made yet shows the default words it is made
+   * with on the first publish.
+   */
+  async parentMessage(ctx: RequestContext, releaseId: string) {
+    return this.db.tenant(requireTenant(ctx), async (c) => {
+      const scope = await cardScopeOf(c, ctx);
+      const rel = await this.findRelease(c, releaseId, scope);
+      if (!rel) throw new DomainError('not-found', 'Release not found', { status: 404 });
+      const words = await this.messageWords(c, releaseId);
+      const pupil = await c.query<{ name: string; class: string }>(
+        `SELECT s.display_name AS name, k.code || '-' || cs.name AS class
+           FROM report_card_releases r
+           JOIN exam_classes ec ON ec.exam_id = ANY(r.exam_ids)
+           JOIN classes k ON k.id = ec.class_id
+           JOIN class_sections cs ON cs.class_id = ec.class_id AND cs.academic_year_id = r.academic_year_id AND cs.deleted_at IS NULL
+           JOIN enrolments en ON en.class_section_id = cs.id AND en.academic_year_id = r.academic_year_id AND en.status = 'active'
+           JOIN students s ON s.id = en.student_id AND s.deleted_at IS NULL
+          WHERE r.id = $1 AND ($2 OR cs.id = ANY($3::bigint[]))
+            AND EXISTS (SELECT 1 FROM student_guardians sg JOIN guardians g ON g.id = sg.guardian_id AND g.deleted_at IS NULL
+                         WHERE sg.student_id = s.id AND sg.receives_notifications)
+            AND NOT EXISTS (SELECT 1 FROM report_card_holds h WHERE h.release_id = r.id AND h.student_id = s.id)
+          ORDER BY k.display_order, cs.name, en.roll_no NULLS LAST, s.display_name
+          LIMIT 1`,
+        [releaseId, scope.all, scope.sections],
+      );
+      const sample = pupil.rows[0] ?? null;
+      const vars = words(sample ?? { name: 'Aarav Sharma', class: 'VI-A' });
+      const t = await c.query<{
+        id: string | null;
+        channel: 'email' | 'sms';
+        status: string;
+        subject: string | null;
+        body: string;
+        format: 'text' | 'html';
+        dlt: string | null;
+      }>(
+        `SELECT t.id::text, d.channel, COALESCE(t.status::text, 'active') AS status,
+                CASE WHEN t.id IS NULL THEN d.subject ELSE t.subject END AS subject,
+                COALESCE(t.body, d.body) AS body, COALESCE(t.format, d.format) AS format, t.dlt_template_id AS dlt
+           FROM app.exam_result_defaults() d
+           LEFT JOIN comms_templates t ON t.code = 'result_published' AND t.channel::text = d.channel AND t.deleted_at IS NULL
+          ORDER BY d.channel = 'email' DESC`,
+      );
+      return {
+        sample,
+        told: rel.notifiedCount,
+        channels: t.rows.map((x) => ({
+          channel: x.channel,
+          templateId: x.id,
+          state:
+            x.status !== 'active'
+              ? ('off' as const)
+              : x.channel === 'sms' && !x.dlt?.trim()
+                ? ('needs_dlt' as const)
+                : ('ready' as const),
+          format: x.format,
+          ...fillTemplate(x, vars),
+        })),
+      };
+    });
+  }
+
+  /**
    * The families of the release's classes (guardians who take notifications), but not those whose card
    * is held, get the result message by SMS and e-mail. Returns the messages queued. `only`: just these
    * students (cards shown again, docs/design/75), leaving out those the fee rule withholds today.
@@ -1120,20 +1217,20 @@ export class ReportCardsService {
     only?: { studentIds: string[]; skipFeeDue: boolean },
   ): Promise<Map<string, number>> {
     await c.query(`SELECT app.exam_seed_templates(app.current_school_id())`);
+    const words = await this.messageWords(c, releaseId);
     const r = await c.query<{
       name: string;
-      term: string;
-      school: string;
+      class: string;
       mobile: string | null;
       email: string | null;
       user_id: string | null;
       class_id: string;
     }>(
-      `SELECT DISTINCT ON (s.id, g.id) s.display_name AS name, r.name AS term, cs.class_id::text,
-              (SELECT name FROM schools WHERE id = app.current_school_id()) AS school,
+      `SELECT DISTINCT ON (s.id, g.id) s.display_name AS name, k.code || '-' || cs.name AS class, cs.class_id::text,
               g.mobile, g.email::text AS email, g.user_id::text
          FROM report_card_releases r
          JOIN exam_classes ec ON ec.exam_id = ANY(r.exam_ids)
+         JOIN classes k ON k.id = ec.class_id
          JOIN class_sections cs ON cs.class_id = ec.class_id AND cs.academic_year_id = r.academic_year_id AND cs.deleted_at IS NULL
          JOIN enrolments en ON en.class_section_id = cs.id AND en.academic_year_id = r.academic_year_id AND en.status = 'active'
          JOIN students s ON s.id = en.student_id AND s.deleted_at IS NULL
@@ -1149,7 +1246,7 @@ export class ReportCardsService {
     );
     const n = new Map<string, number>();
     for (const x of r.rows) {
-      const vars = JSON.stringify({ name: x.name, term: x.term, school: x.school });
+      const vars = JSON.stringify(words(x));
       for (const [channel, to] of [
         ['sms', /^[6-9][0-9]{9}$/.test(x.mobile ?? '') ? x.mobile : null],
         ['email', x.email],
@@ -2310,4 +2407,29 @@ export class ReportCardsService {
         );
     });
   }
+}
+
+/**
+ * A template filled as `app.send_template` fills it (docs/design/81): each word replaces its
+ * {{placeholder}} in the subject and the body (HTML-escaped in an HTML template), runs of spaces become
+ * one, and the subject is kept to 200 characters.
+ */
+export function fillTemplate(
+  t: { subject: string | null; body: string; format: 'text' | 'html' },
+  vars: Record<string, string>,
+): { subject: string | null; body: string } {
+  let subject = t.subject;
+  let body = t.body;
+  for (const [k, raw] of Object.entries(vars)) {
+    const v =
+      t.format === 'html'
+        ? raw.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;')
+        : raw;
+    body = body.replaceAll(`{{${k}}}`, v);
+    subject = subject === null ? null : subject.replaceAll(`{{${k}}}`, v);
+  }
+  return {
+    subject: subject === null ? null : subject.slice(0, 200),
+    body: body.replace(/\s{2,}/g, ' ').trim(),
+  };
 }

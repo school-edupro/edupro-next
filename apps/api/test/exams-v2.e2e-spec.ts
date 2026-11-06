@@ -709,15 +709,53 @@ describe('examinations v2 (e2e)', () => {
     const msgs = await withMigrator(
       async (c) =>
         (
-          await c.query<{ channel: string; body: string }>(
-            `SELECT m.channel::text, m.body FROM comms_messages m JOIN comms_templates t ON t.id = m.template_id
+          await c.query<{ channel: string; body: string; subject: string; format: string }>(
+            `SELECT m.channel::text, m.body, m.subject, m.format FROM comms_messages m JOIN comms_templates t ON t.id = m.template_id
             WHERE m.school_id = $1 AND t.code = 'result_published' ORDER BY m.channel`,
             [school.id],
           )
         ).rows,
     );
     expect(msgs.map((m) => m.channel)).toEqual(['email']);
-    expect(msgs[0]!.body).toContain('Term 1 result of Asha Exam');
+    // docs/design/81: a letter naming the exam and the class, with a button to the parent app's Results
+    expect(msgs[0]).toMatchObject({
+      format: 'html',
+      subject: 'Term 1 report card of Asha Exam is published',
+    });
+    expect(msgs[0]!.body).toContain(
+      'the Term 1 report card of <strong>Asha Exam</strong> (class XI-A) is now published',
+    );
+    expect(msgs[0]!.body).toMatch(/<a href="https?:\/\/[^"]+\/results"[^>]*>View report card<\/a>/);
+    // the Publish tab's preview: filled for the first pupil told, exactly as the e-mail queued
+    const preview = (await call(admin, 'GET', `${url}/parent-message`)).json() as {
+      sample: { name: string; class: string } | null;
+      told: number;
+      channels: Array<{
+        channel: string;
+        state: string;
+        templateId: string | null;
+        subject: string | null;
+        body: string;
+        format: string;
+      }>;
+    };
+    expect(preview).toMatchObject({ sample: { name: 'Asha Exam', class: 'XI-A' }, told: 1 });
+    expect(preview.channels.map((x) => `${x.channel}:${x.state}:${x.format}`)).toEqual([
+      'email:ready:html',
+      'sms:needs_dlt:text',
+    ]);
+    expect(preview.channels[0]).toMatchObject({
+      subject: msgs[0]!.subject,
+      body: msgs[0]!.body,
+      templateId: expect.any(String),
+    });
+    expect(preview.channels[1]!.body).toMatch(
+      /^Dear parent, the Term 1 report card of Asha Exam \(XI-A\) at .+ is published\. See it in the parent app\.$/,
+    );
+    expect(
+      (await call(admin, 'GET', '/exams/report-cards/releases/999999999/parent-message'))
+        .statusCode,
+    ).toBe(404);
     const mine = (await call(parent, 'GET', '/exams/mine/results')).json().children as Array<{
       student: { name: string };
       terms: Array<{ held: boolean; withheld: boolean }>;

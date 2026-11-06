@@ -267,6 +267,36 @@ describe('report card holds in bulk (e2e)', () => {
         .statusCode,
     ).toBe(200);
     expect(await told()).toBe(before + 2);
+    // docs/design/81: the message names the exam ("PT1"), not the release ("Periodic Test 1"), and the
+    // class; {{term}} stays the release's name for a school's own wording
+    const last = await withMigrator(
+      async (c) =>
+        (
+          await c.query<{ subject: string; body: string }>(
+            `SELECT m.subject, m.body FROM comms_messages m JOIN comms_templates t ON t.id = m.template_id
+              WHERE m.school_id = $1 AND t.code = 'result_published' ORDER BY m.id DESC LIMIT 1`,
+            [school.id],
+          )
+        ).rows[0]!,
+    );
+    expect(last.subject).toBe('PT1 report card of Asha Hold is published');
+    expect(last.body).toContain('the PT1 report card of <strong>Asha Hold</strong> (class XI-A)');
+    await withMigrator((c) =>
+      c.query(
+        `UPDATE comms_templates SET format = 'text', subject = 'Result: {{term}}', body = '{{term}} card of {{name}}, {{class}}'
+          WHERE school_id = $1 AND code = 'result_published' AND channel = 'email'`,
+        [school.id],
+      ),
+    );
+    const own = (await call(admin, 'GET', `${base(pt)}/parent-message`)).json() as {
+      channels: Array<{ channel: string; subject: string; body: string; format: string }>;
+    };
+    expect(own.channels[0]).toMatchObject({
+      channel: 'email',
+      format: 'text',
+      subject: 'Result: Periodic Test 1',
+      body: expect.stringMatching(/^Periodic Test 1 card of .+, XI-[AB]$/),
+    });
   });
 
   it('holds from an Excel: every row checked first, then the good rows held', async () => {

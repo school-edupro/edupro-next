@@ -112,6 +112,11 @@ export const SAMPLE_VARIABLES: Record<string, string> = {
   present_days: '23',
   absent_days: '2',
   last_exam: 'Half Yearly',
+  // the families' "report card published" message (docs/design/81)
+  name: 'Aarav Sharma',
+  exam: 'Half Yearly',
+  term: 'Term 1',
+  link: 'https://parent.example.com/results',
   last_exam_percent: '84.5%',
   last_exam_result: 'Pass',
   last_exam_grade: 'A2',
