@@ -78,12 +78,20 @@ export function teacherActions(permissions: string[]): Action[] {
   }));
 }
 
+/** Always among the default tiles of whoever may open it: any staff raises a PI (docs/design/83). */
+const ALWAYS = ['/purchase/indents'];
+
 /**
  * The tiles of the quick menu in the school's order with its labels and icons; a page the user may not
- * open is left out. No quick action set: the first eight pages of the user's menu.
+ * open is left out. No quick action set: the first eight pages of the user's menu, with Purchase
+ * Indents always among them.
  */
 export function pinnedActions(layout: Layout, all: Action[]): Action[] {
-  if (!layout.quickActions.length) return all.slice(0, 8);
+  if (!layout.quickActions.length) {
+    const always = all.filter((a) => ALWAYS.includes(a.href));
+    const first = all.filter((a) => !ALWAYS.includes(a.href)).slice(0, 8 - always.length);
+    return [...first, ...always];
+  }
   const byHref = new Map(all.map((a) => [a.href, a]));
   return layout.quickActions.flatMap((q): Action[] => {
     if (isExternal(q.href))

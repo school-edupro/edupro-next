@@ -730,3 +730,13 @@ stay as they were).
   waiting list, a second approval refused, the second approver passes the level), the admin passing the
   Principal's level with the note, a teacher refused, one rejection rejecting, nobody passing their own.
   Every suite on the engine passed (purchase, workflow, recruitment, exits, leave, gate passes: 158).
+
+## As built — Purchase Indents on every role's page (7 Nov 2026)
+
+Asked by the user ("purchase indent add every role in arrange my page"). Migration 0332 gives
+`purchase.indent.raise` to the staff roles that lacked it (built-in Gate / Security, the schools' own
+Front Office) and adds `/purchase/indents` to every saved role quick menu (`dashboard_role_defaults`,
+not the portal and support roles). The admin landing's default tiles (`pinnedActions`, a role without a
+saved quick menu) always include Purchase Indents for whoever may open it. Personal arrangements are
+left as the user made them (the admin may push the role's page). Auditor, support and portal roles stay
+without it.
