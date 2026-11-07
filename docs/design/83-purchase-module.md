@@ -601,3 +601,29 @@ Decided with them (all recommended options):
 - **Tests**: `purchase-masters.e2e-spec.ts` — the lists, a body with eleven problems answered per field,
   the PAN of an unregistered vendor, the made code and a normalised mobile, the formatted sheet and an
   import with a blank code, a bank, a city not in the master and a missing contact mobile.
+
+## As built — payment terms in Excel, filters; who approves vendors (7 Nov 2026)
+
+Asked by the user on Purchase → Payment terms (upload Excel, export Excel and PDF, filters) and "who
+approves a vendor, and where is it set up". Decided with them (all recommended options):
+
+| Question | Decision |
+| --- | --- |
+| Excel layout | **One row per term**: code, name, print text, default, status, then up to 4 instalments across (%, due on, days); a term with more stays on the screen. |
+| Same code in the file | **Updates that term** (name, print text, default, status, instalments); POs already made keep their printed `payment_text`. |
+| Filters | **Search, status, how it pays (advance / delivery / invoice), longer than 45 days**; Excel and PDF keep them. |
+| Vendor approvers | **Shown in Purchase → Settings**, still a role right (`purchase.vendor.approve`, School Admin and Group Admin by default), changed in Access → Roles. |
+
+- **API**: `GET /purchase/payment-terms` takes `q`, `status`, `kind`, `over45` (and answers `total`);
+  `GET /purchase/payment-terms/export?format=xlsx|pdf` (the shared `libraryFile`, filters in words);
+  `GET /purchase/payment-terms/template` (filled with the school's terms, drop-downs, notes, an Example
+  and a How to fill sheet); `POST /purchase/payment-terms/import` (dry run, then the good rows; a
+  savepoint per row; checks per instalment column, the 100% total, one default in the file, the default
+  term not left without one, more than four instalments refused); `saveTermIn` shared by the screen and
+  the import. `GET /purchase/vendor-approvers` (roles with the right; people holding them in the school
+  now).
+- **Admin**: the payment terms page has the filter bar, Excel / PDF buttons (`api/purchase/payment-terms-file`)
+  and `TermImport` (`api/purchase/payment-terms-format`); Purchase settings has the **Vendor approval**
+  card (who, which roles, a link to Access → Roles, a warning when nobody can approve).
+- **Tests**: `purchase-masters.e2e-spec.ts` — the four filters, both files, the filled format, an upload
+  with a new term, an update and three refused rows; the approvers (roles, people, not the purchase office).

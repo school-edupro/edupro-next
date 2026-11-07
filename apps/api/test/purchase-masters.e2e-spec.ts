@@ -602,6 +602,112 @@ describe('purchase masters (e2e)', () => {
     expect(list.filter((t: { isDefault: boolean }) => t.isDefault)).toHaveLength(1);
   });
 
+  it('filters payment terms, gives them as Excel and PDF, and loads them from Excel', async () => {
+    const codes = async (q: string) =>
+      (
+        (await call(office, 'GET', `/purchase/payment-terms?${q}`)).json().data as Array<{
+          code: string;
+        }>
+      )
+        .map((t) => t.code)
+        .sort();
+    expect(await codes('kind=advance')).toEqual(['ADV50']);
+    expect(await codes('kind=invoice')).toEqual(['NET30']);
+    expect(await codes('q=net')).toEqual(['NET30']);
+    expect(await codes('status=inactive')).toEqual([]);
+    expect(await codes('over45=1')).toEqual([]);
+    for (const format of ['xlsx', 'pdf']) {
+      const f = (
+        await call(office, 'GET', `/purchase/payment-terms/export?format=${format}&kind=advance`)
+      ).json();
+      expect(f.filename).toContain('Purchase-payment-terms');
+      expect(f.rows).toBe(1);
+    }
+    // the format comes filled with the school's terms, one row per term
+    const t = (await call(office, 'GET', '/purchase/payment-terms/template')).json();
+    const tpl = new ExcelJS.Workbook();
+    await tpl.xlsx.load(Buffer.from(t.base64 as string, 'base64') as unknown as ArrayBuffer);
+    const ws0 = tpl.worksheets[0]!;
+    const heads = (ws0.getRow(1).values as unknown[]).slice(1).map(String);
+    expect(heads).toEqual(
+      expect.arrayContaining([
+        'Code *',
+        'Payment term *',
+        'Instalment 1 % *',
+        'Instalment 1 due *',
+        'Instalment 4 days',
+      ]),
+    );
+    const adv = (ws0.getSheetValues() as unknown[][]).find((r) => r?.[1] === 'ADV50')!;
+    expect(adv.slice(1, 12)).toEqual([
+      'ADV50',
+      'Half in advance',
+      '',
+      'yes',
+      'active',
+      50,
+      'advance',
+      '',
+      50,
+      'delivery',
+      15,
+    ]);
+    // an upload: a new term, an update, three rows refused (sum, due on, an advance with days)
+    const wb = new ExcelJS.Workbook();
+    const ws = wb.addWorksheet('Payment terms');
+    ws.addRow([
+      'Code *',
+      'Payment term *',
+      'Default',
+      'Instalment 1 % *',
+      'Instalment 1 due *',
+      'Instalment 1 days',
+      'Instalment 2 %',
+      'Instalment 2 due',
+      'Instalment 2 days',
+    ]);
+    ws.addRow(['NET60', 'Within 60 days of the invoice', '', 100, 'invoice', 60]);
+    ws.addRow(['ADV50', 'Part in advance', '', 30, 'advance', '', 70, 'delivery', 20]);
+    ws.addRow(['BAD1', 'Short of 100', '', 60, 'invoice', 30, 30, 'delivery', 10]);
+    ws.addRow(['BAD2', 'Wrong due', '', 100, 'later']);
+    ws.addRow(['ADV100', 'All in advance', '', 100, 'advance', 5]);
+    const file = Buffer.from(await wb.xlsx.writeBuffer()).toString('base64');
+    const dry = (
+      await call(office, 'POST', '/purchase/payment-terms/import', { file, dryRun: true })
+    ).json();
+    expect(dry).toMatchObject({ rows: 5, good: 2, saved: 0 });
+    expect(dry.results[0]).toMatchObject({ ok: true, action: 'new' });
+    expect(dry.results[1]).toMatchObject({ ok: true, action: 'update' });
+    expect(dry.results[2].error).toContain('90%');
+    expect(dry.results[3].error).toContain('advance, delivery or invoice');
+    expect(dry.results[4].error).toContain('an advance has no days');
+    expect(await codes('')).toEqual(['ADV50', 'NET30']);
+    const done = (
+      await call(office, 'POST', '/purchase/payment-terms/import', { file, dryRun: false })
+    ).json();
+    expect(done).toMatchObject({ saved: 2 });
+    expect(await codes('over45=1')).toEqual(['NET60']);
+    const updated = (await call(office, 'GET', '/purchase/payment-terms?q=ADV50')).json().data[0];
+    expect(updated).toMatchObject({
+      name: 'Part in advance',
+      words: '30% in advance, 70% 20 days after delivery',
+      isDefault: true,
+    });
+  });
+
+  it('says who may approve a vendor: the roles with the right and their people', async () => {
+    const va = (await call(office, 'GET', '/purchase/vendor-approvers')).json();
+    expect(va.roles.map((r: { code: string }) => r.code)).toEqual(
+      expect.arrayContaining(['group_admin', 'school_admin']),
+    );
+    expect(va.roles.map((r: { code: string }) => r.code)).not.toContain('purchase_office');
+    // the admin and the checker are school admins; the purchase office is not listed
+    expect(va.people.length).toBeGreaterThanOrEqual(2);
+    expect(va.people.every((p: { roles: string }) => !p.roles.includes('Purchase Office'))).toBe(
+      true,
+    );
+  });
+
   it('keeps the settings and the purchase committee (school admin only)', async () => {
     const st = (await call(admin, 'GET', '/purchase/settings')).json();
     const body = { ...st, gstin: '27AAPFU0939F1ZA' };
@@ -801,7 +907,8 @@ describe('purchase masters (e2e)', () => {
     expect(v10).toMatchObject({
       code: 'V10',
       status: 'pending',
-      paymentTerm: 'Half in advance',
+      // the upload test before renamed ADV50
+      paymentTerm: 'Part in advance',
       city: 'Pune',
       state: 'Maharashtra',
     });

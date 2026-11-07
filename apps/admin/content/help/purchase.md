@@ -61,7 +61,13 @@ PO, the emergency purchase, the stores and receiving what was ordered.
 3. **Payment terms** — a term is one or more instalments that add up to 100%: each a share, due **in
    advance**, **after delivery** or **after the invoice**, and after how many days ("50% in advance, 50%
    15 days after delivery"). One is the school's default. A term whose longest wait is over 45 days is
-   marked: micro and small suppliers must be paid within 45 days.
+   marked: micro and small suppliers must be paid within 45 days. Filter the list by **Search**,
+   **Status**, **Pays** (has an advance / after delivery / after the invoice) and **Longer than 45
+   days**; **Excel** and **PDF** give the list with those filters. **Upload payment terms from Excel**:
+   the format comes filled with the school's terms, one row per term with up to four instalments across
+   (%, due on, days); correct or add rows, **Check**, then **Save the good rows** — a code already there
+   updates its term (purchase orders already made keep what they printed). A term with more than four
+   instalments is changed on the screen.
 4. **Vendors** — see below.
 5. **Who approves** — pick a department: up to three levels each for its **PIs**, **PRs** and **POs**
    (named employees, everyone with a designation such as Principal, or the department's HOD), with how
@@ -101,6 +107,10 @@ are; copied vendors wait for approval here.
   vendor), checks the GSTIN, PAN and bank account against the documents, and approves or rejects (with a
   reason). Whoever entered or last changed a waiting vendor cannot approve it. Until it is approved a
   vendor cannot be used on a PR, a PO or a rate contract.
+- **Who approves vendors**: anyone whose role has the right **Approve a new vendor** — School Admin and
+  Group Admin by default. **Purchase → Settings → Vendor approval** lists the roles and the people who
+  can approve now; to change it, give a role the right in **Access → Roles**, or give people that role
+  in Access → Users.
 - On an approved vendor, a new **bank account**, **GSTIN**, **PAN** or **GST status** waits for approval
   the same way (with the reason for the change); the old details stay in force until then. Everything
   else (name, address, contacts, categories, term) changes at once.

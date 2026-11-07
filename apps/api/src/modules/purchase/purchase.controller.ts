@@ -20,6 +20,7 @@ import {
   PurchaseDelegationDto,
   ReasonDto,
   PaymentTermDto,
+  TermListQueryDto,
   SettingsDto,
   UpdateVendorDto,
   VendorDocumentDto,
@@ -248,9 +249,40 @@ export class PurchaseController {
 
   // ---- payment terms ------------------------------------------------------------------------------
   @Get('payment-terms')
+  @ApiOperation({ summary: 'Payment terms (search, status, how paid, longer than 45 days)' })
   @RequirePermission(PURCHASE.masterView)
-  terms(@ReqCtx() ctx: RequestContext) {
-    return this.setup.listTerms(ctx);
+  terms(@ReqCtx() ctx: RequestContext, @Query() q: TermListQueryDto) {
+    return this.setup.listTerms(ctx, q);
+  }
+
+  @Get('payment-terms/export')
+  @ApiOperation({ summary: 'The payment terms as on screen (filters kept), as Excel or PDF' })
+  @RequirePermission(PURCHASE.masterView)
+  termsFile(@ReqCtx() ctx: RequestContext, @Query() q: TermListQueryDto) {
+    return this.setup.termsFile(ctx, q);
+  }
+
+  @Get('payment-terms/template')
+  @ApiOperation({ summary: 'The Excel format for payment terms (filled with the school’s terms)' })
+  @RequirePermission(PURCHASE.masterManage)
+  termsTemplate(@ReqCtx() ctx: RequestContext) {
+    return this.setup.termsTemplate(ctx);
+  }
+
+  @Post('payment-terms/import')
+  @ApiOperation({
+    summary: 'Payment terms from Excel (checked first; a code there updates its term)',
+  })
+  @RequirePermission(PURCHASE.masterManage)
+  importTerms(@ReqCtx() ctx: RequestContext, @Body() body: VendorImportDto) {
+    return this.setup.importTerms(ctx, body);
+  }
+
+  @Get('vendor-approvers')
+  @ApiOperation({ summary: 'Who may approve a vendor: the roles with the right and their people' })
+  @RequirePermission(PURCHASE.masterView)
+  vendorApprovers(@ReqCtx() ctx: RequestContext) {
+    return this.setup.vendorApprovers(ctx);
   }
 
   @Post('payment-terms')

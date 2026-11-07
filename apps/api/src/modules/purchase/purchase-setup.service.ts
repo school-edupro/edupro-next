@@ -3,21 +3,41 @@ import type { PoolClient, TenantContext } from '@edupro/db';
 import { AuditService } from '../../common/audit/audit.service';
 import { DbService } from '../../common/db/db.service';
 import { DomainError } from '../../common/errors/domain-error';
+import { readSheet, templateSheet } from '../../common/excel/sheet';
 import { requireTenant, type RequestContext } from '../../common/http/request-context';
+import { libraryFile } from '../library/library-file';
 import { WorkflowService } from '../workflow/workflow.service';
 import { GST_STATES, GSTIN_HELP, gstinProblem } from './gstin';
 import { syncFlow, type PurchaseDocType } from './purchase-flow';
 import { PurchaseVendorsService } from './purchase-vendors.service';
-import type {
-  CommitteeMemberDto,
-  CopyFromDto,
-  DepartmentLevelsDto,
-  DepartmentRulesDto,
-  PaymentTermDto,
-  SettingsDto,
+import {
+  PaymentTermSchema,
+  type CommitteeMemberDto,
+  type CopyFromDto,
+  type DepartmentLevelsDto,
+  type DepartmentRulesDto,
+  type PaymentTermDto,
+  type SettingsDto,
+  type TermListQueryDto,
+  type VendorImportDto,
 } from './purchase.dto';
 
 const DOCS = ['indent', 'requisition', 'order', 'inspection'] as const;
+
+/** The payment terms Excel: one row per term, up to four instalments across (docs/design/83). */
+const TERM_GROUPS = 4;
+const TERM_LINE = (n: number) =>
+  [
+    `Instalment ${String(n)} %`,
+    `Instalment ${String(n)} due`,
+    `Instalment ${String(n)} days`,
+  ] as const;
+const DUE_WORDS = {
+  advance: 'Has an advance',
+  delivery: 'After delivery',
+  invoice: 'After the invoice',
+};
+type TermRow = Awaited<ReturnType<PurchaseSetupService['terms']>>[number];
 type Doc = (typeof DOCS)[number];
 
 interface TermLine {
@@ -143,14 +163,372 @@ export class PurchaseSetupService {
     });
   }
 
-  async listTerms(ctx: RequestContext) {
+  /** The terms the filters keep: code or name, status, how a term pays, longer than 45 days. */
+  private static keep(list: TermRow[], q: TermListQueryDto) {
+    const s = q.q?.toLowerCase();
+    return list.filter(
+      (t) =>
+        (!s || t.code.toLowerCase().includes(s) || t.name.toLowerCase().includes(s)) &&
+        (!q.status || t.status === q.status) &&
+        (!q.kind || t.lines.some((l) => l.dueOn === q.kind)) &&
+        (!q.over45 || t.longestDays > 45),
+    );
+  }
+
+  /** The filters in words (the file's heading). */
+  private static filterWords(q: TermListQueryDto) {
+    return (
+      [
+        q.q ? `Search: ${q.q}` : '',
+        q.status === 'active' ? 'Active' : q.status === 'inactive' ? 'Inactive' : '',
+        q.kind ? DUE_WORDS[q.kind] : '',
+        q.over45 ? 'Longer than 45 days' : '',
+      ]
+        .filter(Boolean)
+        .join(' · ') || 'All payment terms'
+    );
+  }
+
+  async listTerms(ctx: RequestContext, q: TermListQueryDto = {}) {
     return this.db.tenant(requireTenant(ctx), async (c) => {
       await PurchaseVendorsService.seed(c);
-      return { data: await this.terms(c) };
+      const all = await this.terms(c);
+      return { data: PurchaseSetupService.keep(all, q), total: all.length };
+    });
+  }
+
+  /** The list as on screen, filters kept, as Excel or PDF. */
+  async termsFile(ctx: RequestContext, q: TermListQueryDto) {
+    return this.db.tenant(requireTenant(ctx), async (c) => {
+      await PurchaseVendorsService.seed(c);
+      const list = PurchaseSetupService.keep(await this.terms(c), q);
+      const who = (
+        await c.query<{ name: string; by: string }>(
+          `SELECT (SELECT name FROM schools WHERE id = app.current_school_id()) AS name,
+                  COALESCE((SELECT e.display_name FROM employees e WHERE e.user_id = u.id AND e.deleted_at IS NULL LIMIT 1),
+                           u.display_name) AS by
+             FROM users u WHERE u.id = app.current_user_id()`,
+        )
+      ).rows[0]!;
+      return libraryFile({
+        format: q.format ?? 'xlsx',
+        name: 'Payment terms',
+        slug: 'Purchase-payment-terms',
+        school: who.name,
+        by: who.by,
+        words: PurchaseSetupService.filterWords(q),
+        columns: [
+          { label: 'Code' },
+          { label: 'Payment term', width: 2 },
+          { label: 'Instalments', width: 3 },
+          { label: 'Instalments (no.)', type: 'number' },
+          { label: 'Longest wait (days)', type: 'number' },
+          { label: 'Default' },
+          { label: 'Status' },
+          { label: 'Vendors', type: 'number' },
+        ],
+        rows: list.map((t) => [
+          t.code,
+          t.name,
+          t.words,
+          t.lines.length,
+          t.longestDays,
+          t.isDefault ? 'Yes' : '',
+          t.status === 'active' ? 'Active' : 'Inactive',
+          t.vendors,
+        ]),
+      });
+    });
+  }
+
+  /**
+   * The Excel format: one row per term (code, name, print text, default, status, then up to four
+   * instalments: %, due on, days), filled with the school's terms so they can be corrected and loaded
+   * again; drop-downs for the choices and a How to fill sheet.
+   */
+  async termsTemplate(ctx: RequestContext) {
+    return this.db.tenant(requireTenant(ctx), async (c) => {
+      await PurchaseVendorsService.seed(c);
+      const list = (await this.terms(c)).filter((t) => t.lines.length <= TERM_GROUPS);
+      const cells = (t: TermRow) => [
+        t.code,
+        t.name,
+        t.printText ?? '',
+        t.isDefault ? 'yes' : 'no',
+        t.status,
+        ...Array.from({ length: TERM_GROUPS }, (_, i) => {
+          const l = t.lines[i];
+          return l ? [l.pct, l.dueOn, l.dueOn === 'advance' ? '' : l.days] : ['', '', ''];
+        }).flat(),
+      ];
+      const bytes = await templateSheet({
+        sheet: 'Payment terms',
+        columns: [
+          {
+            header: 'Code',
+            width: 12,
+            required: true,
+            format: 'text',
+            note: 'Capital letters and digits, up to 20; an existing code updates that term',
+          },
+          { header: 'Payment term', width: 30, required: true },
+          {
+            header: 'Print text',
+            width: 34,
+            note: 'Printed on the PO; empty: made from the instalments',
+          },
+          {
+            header: 'Default',
+            width: 9,
+            options: ['yes', 'no'],
+            note: "One term is the school's default (a vendor without its own term pays by it)",
+          },
+          { header: 'Status', width: 10, options: ['active', 'inactive'] },
+          ...Array.from({ length: TERM_GROUPS }, (_, i) => [
+            {
+              header: TERM_LINE(i + 1)[0],
+              width: 9,
+              format: 'number' as const,
+              required: i === 0,
+              note: 'The share of the PO value; the instalments add up to 100',
+            },
+            {
+              header: TERM_LINE(i + 1)[1],
+              width: 11,
+              options: ['advance', 'delivery', 'invoice'],
+              required: i === 0,
+              note: 'advance: with the order; delivery: after the goods come; invoice: after the bill',
+            },
+            {
+              header: TERM_LINE(i + 1)[2],
+              width: 9,
+              format: 'number' as const,
+              note: 'Days after the delivery or the invoice (0 to 365); empty for an advance',
+            },
+          ]).flat(),
+        ],
+        guide: [
+          'One row per payment term, with up to four instalments across; the instalments add up to 100%.',
+          'Each instalment: its %, when it is due (advance, delivery or invoice) and, after a delivery or an invoice, the days.',
+          'A code already there updates that term (name, print text, default, status, instalments); purchase orders already made keep the terms they printed.',
+          "Default: yes makes the row the school's default (only one row may say yes); empty keeps a term as it is.",
+          'Status empty: active (or as it is for a term already there).',
+          'A term with more than four instalments is changed on the screen, not here.',
+          'Check the file first: every row is checked and the problems listed; then import the good rows.',
+        ],
+        rows: list.map(cells),
+        examples: [
+          [
+            'NET30',
+            'Within 30 days of the invoice',
+            '',
+            'no',
+            'active',
+            100,
+            'invoice',
+            30,
+            '',
+            '',
+            '',
+            '',
+            '',
+            '',
+            '',
+            '',
+            '',
+          ],
+          [
+            'ADV50',
+            'Half in advance',
+            'Half with the order, half 15 days after delivery',
+            'no',
+            'active',
+            50,
+            'advance',
+            '',
+            50,
+            'delivery',
+            15,
+            '',
+            '',
+            '',
+            '',
+            '',
+            '',
+          ],
+        ],
+      });
+      return {
+        filename: 'payment-terms-format.xlsx',
+        contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        base64: bytes.toString('base64'),
+      };
+    });
+  }
+
+  /**
+   * Payment terms from Excel: every row checked first (dry run), then the good rows saved; a code
+   * already there updates its term. A row is saved whole or not at all.
+   */
+  async importTerms(ctx: RequestContext, dto: VendorImportDto) {
+    const lineHeads = Array.from({ length: TERM_GROUPS }, (_, i) => [...TERM_LINE(i + 1)]).flat();
+    const rows = await readSheet(
+      dto.file,
+      ['Code', 'Payment term', TERM_LINE(1)[0], TERM_LINE(1)[1]],
+      [
+        'Print text',
+        'Default',
+        'Status',
+        ...lineHeads.filter((h) => !h.startsWith('Instalment 1 ') || h.endsWith('days')),
+      ],
+    );
+    return this.db.tenant(requireTenant(ctx), async (c) => {
+      await PurchaseVendorsService.seed(c);
+      const existing = new Map((await this.terms(c)).map((t) => [t.code, t]));
+      const seen = new Set<string>();
+      let defaultRow: number | null = null;
+      const results: Array<{
+        row: number;
+        code: string;
+        ok: boolean;
+        action?: 'new' | 'update';
+        error?: string;
+      }> = [];
+      let saved = 0;
+      for (const { row, cells } of rows) {
+        const code = (cells['Code'] ?? '').trim().toUpperCase();
+        await c.query('SAVEPOINT term_row');
+        try {
+          const problems: string[] = [];
+          const lines: Array<{ pct: number; dueOn: string; days: number }> = [];
+          for (let n = 1; n <= TERM_GROUPS; n += 1) {
+            const [hp, hd, hy] = TERM_LINE(n);
+            const pct = (cells[hp] ?? '').trim();
+            const due = (cells[hd] ?? '').trim().toLowerCase();
+            const days = (cells[hy] ?? '').trim();
+            if (!pct && !due && !days) continue;
+            if (!pct || !Number.isFinite(Number(pct)) || Number(pct) <= 0 || Number(pct) > 100)
+              problems.push(`${hp}: a share above 0 and up to 100`);
+            if (!['advance', 'delivery', 'invoice'].includes(due))
+              problems.push(`${hd}: advance, delivery or invoice`);
+            if (days && (!/^[0-9]{1,3}$/.test(days) || Number(days) > 365))
+              problems.push(`${hy}: whole days from 0 to 365`);
+            if (due === 'advance' && days && Number(days) !== 0)
+              problems.push(`${hy}: an advance has no days`);
+            lines.push({ pct: Number(pct), dueOn: due, days: days ? Number(days) : 0 });
+          }
+          if (!lines.length) problems.push(`${TERM_LINE(1)[0]}: at least one instalment`);
+          const before = existing.get(code);
+          const flag = (cells['Default'] ?? '').trim().toLowerCase();
+          if (flag && !['yes', 'no'].includes(flag)) problems.push('Default: yes or no');
+          const isDefault = flag ? flag === 'yes' : (before?.isDefault ?? false);
+          const status =
+            (cells['Status'] ?? '').trim().toLowerCase() || (before?.status ?? 'active');
+          if (!['active', 'inactive'].includes(status)) problems.push('Status: active or inactive');
+          const parsed = PaymentTermSchema.safeParse({
+            code,
+            name: cells['Payment term'],
+            printText: cells['Print text'],
+            isDefault,
+            status,
+            lines,
+          });
+          if (!parsed.success)
+            for (const i of parsed.error.issues) {
+              const f = String(i.path[0] ?? '');
+              if (f === 'lines') continue; // said above, by column
+              problems.push(
+                `${f === 'name' ? 'Payment term' : f === 'code' ? 'Code' : f === 'printText' ? 'Print text' : f}: ${i.message}`,
+              );
+            }
+          const total = Math.round(
+            lines.reduce((a, l) => a + (Number.isFinite(l.pct) ? l.pct : 0), 0) * 100,
+          );
+          if (lines.length && total !== 10000)
+            problems.push(
+              `The instalments add up to ${String(total / 100)}%: they must add up to 100%`,
+            );
+          if (code && seen.has(code)) problems.push('Code: twice in the file');
+          if (before && before.lines.length > TERM_GROUPS)
+            problems.push(
+              `Code: ${code} has more than ${String(TERM_GROUPS)} instalments; change it on the screen`,
+            );
+          if (isDefault && flag === 'yes') {
+            if (defaultRow !== null)
+              problems.push(`Default: row ${String(defaultRow)} is the default already`);
+          }
+          if (before?.isDefault && flag === 'no' && defaultRow === null)
+            problems.push(
+              'Default: this is the default term; mark another row yes (above it) or change it on the screen',
+            );
+          if (problems.length || !parsed.success)
+            throw new Error(problems.join('; ') || 'Not a payment term');
+          seen.add(code);
+          if (isDefault && flag === 'yes') defaultRow = row;
+          if (!dto.dryRun) {
+            await this.saveTermIn(c, ctx, before?.id ?? null, parsed.data);
+            saved += 1;
+          }
+          await c.query('RELEASE SAVEPOINT term_row');
+          results.push({ row, code, ok: true, action: before ? 'update' : 'new' });
+        } catch (e) {
+          await c.query('ROLLBACK TO SAVEPOINT term_row');
+          results.push({ row, code, ok: false, error: e instanceof Error ? e.message : String(e) });
+        }
+      }
+      if (!dto.dryRun && saved)
+        await this.audit.stage(ctx, c, {
+          action: 'purchase.payment_term.import',
+          entityType: 'purchase_payment_terms',
+          after: { saved, rows: rows.length },
+        });
+      return {
+        dryRun: dto.dryRun,
+        rows: results.length,
+        good: results.filter((r) => r.ok).length,
+        saved,
+        results,
+      };
+    });
+  }
+
+  /**
+   * Who may approve a vendor (or a change of its bank account, GSTIN or PAN): the roles holding the
+   * right and the people holding those roles in this school now (Purchase → Settings shows them).
+   */
+  async vendorApprovers(ctx: RequestContext) {
+    return this.db.tenant(requireTenant(ctx), async (c) => {
+      const roles = await c.query<{ code: string; name: string }>(
+        `SELECT DISTINCT r.code, r.name FROM roles r JOIN role_permissions rp ON rp.role_id = r.id
+          WHERE rp.permission_code = 'purchase.vendor.approve'
+            AND (r.school_id IS NULL OR r.school_id = app.current_school_id())
+          ORDER BY r.name`,
+      );
+      const people = await c.query<{ name: string; roles: string }>(
+        `SELECT COALESCE((SELECT e.display_name FROM employees e WHERE e.user_id = u.id AND e.deleted_at IS NULL LIMIT 1),
+                         u.display_name) AS name,
+                string_agg(DISTINCT r.name, ', ' ORDER BY r.name) AS roles
+           FROM user_roles ur JOIN roles r ON r.id = ur.role_id JOIN users u ON u.id = ur.user_id
+           JOIN role_permissions rp ON rp.role_id = r.id AND rp.permission_code = 'purchase.vendor.approve'
+          WHERE ur.school_id = app.current_school_id() AND ur.revoked_at IS NULL AND ur.valid_from <= CURRENT_DATE
+            AND (ur.valid_to IS NULL OR ur.valid_to >= CURRENT_DATE)
+          GROUP BY u.id ORDER BY 1`,
+      );
+      return { roles: roles.rows, people: people.rows };
     });
   }
 
   async saveTerm(ctx: RequestContext, id: string | null, dto: PaymentTermDto) {
+    return this.db.tenant(requireTenant(ctx), (c) => this.saveTermIn(c, ctx, id, dto));
+  }
+
+  /** A term saved inside the caller's transaction (the screen, or a row of an Excel import). */
+  private async saveTermIn(
+    c: PoolClient,
+    ctx: RequestContext,
+    id: string | null,
+    dto: PaymentTermDto,
+  ) {
     const total = dto.lines.reduce((s, l) => s + Math.round(l.pct * 100), 0);
     if (total !== 10000)
       throw new DomainError(
@@ -158,7 +536,7 @@ export class PurchaseSetupService {
         `The instalments add up to ${String(total / 100)}%: they must add up to 100%`,
         { status: 400 },
       );
-    return this.db.tenant(requireTenant(ctx), async (c) => {
+    {
       const clash = await c.query(
         `SELECT 1 FROM purchase_payment_terms WHERE code = $1 AND ($2::bigint IS NULL OR id <> $2::bigint)`,
         [dto.code, id],
@@ -198,7 +576,7 @@ export class PurchaseSetupService {
         after: { code: dto.code, lines: dto.lines },
       });
       return (await this.terms(c, termId))[0]!;
-    });
+    }
   }
 
   // ---- settings -----------------------------------------------------------------------------------

@@ -183,6 +183,16 @@ export const PaymentTermSchema = z.object({
 });
 export class PaymentTermDto extends createZodDto(PaymentTermSchema) {}
 
+/** The payment terms list: search, status, how paid, longer than 45 days; as Excel or PDF too. */
+export const TermListQuerySchema = z.object({
+  q: z.string().trim().max(80).optional(),
+  status: z.enum(['active', 'inactive']).optional(),
+  kind: z.enum(['advance', 'delivery', 'invoice']).optional(),
+  over45: z.enum(['1']).optional(),
+  format: z.enum(['xlsx', 'pdf']).optional(),
+});
+export class TermListQueryDto extends createZodDto(TermListQuerySchema) {}
+
 // ---- settings, committee, approvals -----------------------------------------------------------------
 export const SettingsSchema = z
   .object({

@@ -27,7 +27,7 @@ export default async function PurchaseSettingsPage({
   const me = await getMe();
   if (!me.permissions.includes('purchase.master.view')) notFound();
   const can = me.permissions.includes('purchase.settings.manage');
-  const [s, a, cc] = await Promise.all([
+  const [s, a, cc, va] = await Promise.all([
     apiFetch<PurchaseSettings>('/purchase/settings'),
     apiFetch<DepartmentApprovals>('/purchase/approvals'),
     apiFetch<{
@@ -42,7 +42,12 @@ export default async function PurchaseSettingsPage({
         signsIn: boolean;
       }>;
     }>('/purchase/condemnation-committee'),
+    apiFetch<{
+      roles: Array<{ code: string; name: string }>;
+      people: Array<{ name: string; roles: string }>;
+    }>('/purchase/vendor-approvers'),
   ]);
+  const canRoles = me.permissions.includes('access.role.view');
   const inCondemnation = new Set(cc.members.map((m) => m.employeeId));
   const inCommittee = new Set(s.committee.map((m) => m.employeeId));
   return (
@@ -323,6 +328,50 @@ export default async function PurchaseSettingsPage({
           ) : null}
         </fieldset>
       </form>
+
+      <section
+        id="vendor-approval"
+        className="ep-card"
+        aria-labelledby="ps-va"
+        style={{ marginTop: 'var(--sp-5)' }}
+      >
+        <h2 id="ps-va" className="ep-card__title">
+          Vendor approval · {va.people.length}
+        </h2>
+        <p className="ep-field__help" style={{ marginTop: 0 }}>
+          A new vendor, and a change of an approved vendor’s bank account, GSTIN or PAN, waits in{' '}
+          <a href="/purchase/vendor-approvals">Vendor approvals</a> for someone with the right
+          “Approve a new vendor”. Whoever entered or last changed it never approves it. The right
+          comes with a role:{' '}
+          {va.roles.length ? va.roles.map((r) => r.name).join(', ') : 'no role has it yet'}.
+          {canRoles ? (
+            <>
+              {' '}
+              To change who approves, give a role the right in{' '}
+              <a href="/access/roles" target="_blank" rel="noopener noreferrer">
+                Access → Roles (opens a new tab)
+              </a>
+              , or give people that role in Access → Users.
+            </>
+          ) : (
+            ' The school admin changes it in Access → Roles.'
+          )}
+        </p>
+        {va.people.length ? (
+          <ul style={{ margin: 0, paddingLeft: 'var(--sp-5)' }}>
+            {va.people.map((p) => (
+              <li key={p.name} style={{ marginBottom: 'var(--sp-1)' }}>
+                <strong>{p.name}</strong> · {p.roles}
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="ep-alert ep-alert--warning" style={{ margin: 0 }}>
+            Nobody can approve a vendor now, so new vendors cannot be used. Give the right to a role
+            someone holds.
+          </p>
+        )}
+      </section>
 
       <section
         id="committee"

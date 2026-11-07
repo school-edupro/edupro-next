@@ -216,9 +216,30 @@ export type ImportResult =
       rows: number;
       good: number;
       saved: number;
-      results: Array<{ row: number; code: string; ok: boolean; error?: string }>;
+      results: Array<{
+        row: number;
+        code: string;
+        ok: boolean;
+        action?: 'new' | 'update';
+        error?: string;
+      }>;
     }
   | { ok: false; error: string };
+
+/** Payment terms from Excel (docs/design/83): checked first (dryRun), then the good rows saved. */
+export async function importTerms(file: string, dryRun: boolean): Promise<ImportResult> {
+  try {
+    const r = await apiFetch<Omit<Extract<ImportResult, { ok: true }>, 'ok'>>(
+      '/purchase/payment-terms/import',
+      { method: 'POST', body: JSON.stringify({ file, dryRun }) },
+    );
+    if (!dryRun) revalidatePath('/purchase/payment-terms');
+    return { ok: true, ...r };
+  } catch (e) {
+    if (e instanceof ApiError) return { ok: false, error: detailOf(e) };
+    throw e;
+  }
+}
 
 export async function importVendors(file: string, dryRun: boolean): Promise<ImportResult> {
   try {
