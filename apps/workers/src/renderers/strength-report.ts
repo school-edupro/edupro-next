@@ -61,7 +61,12 @@ export async function strengthToXlsx(b: BuiltStrength): Promise<Buffer> {
   const wb = new ExcelJS.Workbook();
   wb.creator = 'EduPro';
   wb.created = b.generatedAt;
-  const ws = wb.addWorksheet(t.title.slice(0, 31));
+  const ws = wb.addWorksheet(
+    t.title
+      .replace(/[\\/?*[\]:]/g, ' ')
+      .slice(0, 31)
+      .trim() || 'Report',
+  );
   const width = t.columns.length + 2;
   let r = 1;
   const line = (text: string, font: Partial<ExcelJS.Font>, height?: number) => {

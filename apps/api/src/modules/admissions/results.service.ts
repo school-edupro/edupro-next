@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { admissionWaitingFor, type PoolClient } from '@edupro/db';
 import ExcelJS from 'exceljs';
+import { sheetName } from '../../common/excel/sheet';
 import { PDFDocument } from 'pdf-lib';
 import { AuditService } from '../../common/audit/audit.service';
 import { DbService } from '../../common/db/db.service';
@@ -1428,7 +1429,7 @@ export class AdmissionResultsService {
 
   /** A list as a worksheet: the title, the subtitle, the column heads, the rows. */
   private sheetOf(wb: ExcelJS.Workbook, name: string, t: Table) {
-    const ws = wb.addWorksheet(name);
+    const ws = wb.addWorksheet(sheetName(name));
     ws.addRow([t.title]).font = { bold: true };
     ws.addRow([t.subtitle]);
     for (const line of t.lines ?? []) ws.addRow([line]).font = { bold: true };

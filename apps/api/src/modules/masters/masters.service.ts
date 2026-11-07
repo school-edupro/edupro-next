@@ -13,6 +13,7 @@ import {
   type MasterField,
 } from '@edupro/db';
 import ExcelJS from 'exceljs';
+import { sheetName } from '../../common/excel/sheet';
 import JSZip from 'jszip';
 import { AuditService } from '../../common/audit/audit.service';
 import { DbService } from '../../common/db/db.service';
@@ -196,7 +197,7 @@ export class MastersService {
     const refs = def.fields.some((f) => f.type === 'ref') ? await this.lookups(ctx, id) : {};
     const wb = new ExcelJS.Workbook();
     wb.creator = 'EduPro Next';
-    const ws = wb.addWorksheet(def.title.slice(0, 31));
+    const ws = wb.addWorksheet(sheetName(def.title));
     const fields = writableFields(def);
     const columns = [...fields.map((f) => ({ f, header: f.header, key: f.key }))];
     ws.columns = [
@@ -424,7 +425,7 @@ export class MastersService {
     }
     const wb = new ExcelJS.Workbook();
     wb.creator = 'EduPro Next';
-    const ws = wb.addWorksheet(def.title.slice(0, 31));
+    const ws = wb.addWorksheet(sheetName(def.title));
     ws.columns = cols.map((c) => ({ header: c.header, key: c.key, width: c.width ?? 18 }));
     ws.getRow(1).font = { bold: true };
     ws.views = [{ state: 'frozen', ySplit: 1 }];

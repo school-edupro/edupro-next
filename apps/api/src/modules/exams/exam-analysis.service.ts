@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import ExcelJS from 'exceljs';
+import { sheetName } from '../../common/excel/sheet';
 import type { PoolClient } from '@edupro/db';
 import { ScopePolicy } from '../../common/access/scope.policy';
 import { DbService } from '../../common/db/db.service';
@@ -771,7 +772,7 @@ export class ExamAnalysisService {
       const wb = new ExcelJS.Workbook();
       for (const [i, t] of report.tables.entries()) {
         const ws = wb.addWorksheet(
-          (t.title ?? (i === 0 ? 'Report' : `Table ${String(i + 1)}`)).slice(0, 31),
+          sheetName(t.title ?? (i === 0 ? 'Report' : `Table ${String(i + 1)}`)),
         );
         ws.addRow([report.title]).font = { bold: true, size: 13 };
         ws.addRow([report.school, ...report.subtitle]);

@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import type { ReportRow } from '@edupro/db';
 import ExcelJS from 'exceljs';
+import { sheetName } from '../../common/excel/sheet';
 import { DbService } from '../../common/db/db.service';
 import { DomainError } from '../../common/errors/domain-error';
 import { requireTenant, type RequestContext } from '../../common/http/request-context';
@@ -141,7 +142,7 @@ export class AdmissionReadyReportsService {
         return { bytes, filename: `${file}.pdf`, contentType: 'application/pdf' };
       });
     const wb = new ExcelJS.Workbook();
-    const ws = wb.addWorksheet(def.name.slice(0, 31));
+    const ws = wb.addWorksheet(sheetName(def.name));
     ws.addRow([table.title]).font = { bold: true };
     ws.addRow([subtitle]);
     ws.addRow([]);

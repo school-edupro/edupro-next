@@ -17,6 +17,21 @@ export interface TemplateColumn {
 const ROWS = 500;
 
 /**
+ * A title made safe as an Excel sheet name: Excel refuses * ? : \ / [ ], a leading or trailing
+ * apostrophe and more than 31 characters (ExcelJS throws, so a master titled "HSN / SAC codes" could not
+ * make its template). Each refused character becomes " - ", spaces are squeezed.
+ */
+export function sheetName(title: string, fallback = 'Sheet'): string {
+  const name = title
+    .replace(/(\s*[*?:\\/[\]]+)+\s*/g, ' - ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 31)
+    .replace(/^['\s-]+|['\s-]+$/g, '');
+  return name || fallback;
+}
+
+/**
  * An Excel sheet to fill and upload: a header row, drop-downs on the columns that take a value from a
  * list (kept on a second sheet, so a long list works), and a "How to fill" sheet.
  */
@@ -30,7 +45,7 @@ export async function templateSheet(t: {
   examples?: Array<Array<string | number | null>>;
 }): Promise<Buffer> {
   const wb = new ExcelJS.Workbook();
-  const ws = wb.addWorksheet(t.sheet);
+  const ws = wb.addWorksheet(sheetName(t.sheet));
   const lists = wb.addWorksheet('Lists');
   const guide = wb.addWorksheet('How to fill');
   const head = (sheet: ExcelJS.Worksheet) => {

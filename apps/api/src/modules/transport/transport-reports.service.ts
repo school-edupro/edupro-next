@@ -1,6 +1,7 @@
 /* eslint-disable no-restricted-syntax -- the interpolations in this file are constant fragments (CTEs, WHERE pieces with numbered placeholders, month columns built from validated YYYY-MM values); every value is bound */
 import { Injectable } from '@nestjs/common';
 import ExcelJS from 'exceljs';
+import { sheetName } from '../../common/excel/sheet';
 import type { PoolClient } from '@edupro/db';
 import { DbService } from '../../common/db/db.service';
 import { DomainError } from '../../common/errors/domain-error';
@@ -908,7 +909,7 @@ export class TransportReportsService {
       };
     }
     const wb = new ExcelJS.Workbook();
-    const ws = wb.addWorksheet(rep.title.slice(0, 31));
+    const ws = wb.addWorksheet(sheetName(rep.title));
     const last = rep.columns.length;
     for (const [i, line] of [rep.school, rep.title, rep.subtitle].entries()) {
       ws.addRow([line]);

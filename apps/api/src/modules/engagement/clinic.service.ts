@@ -1,6 +1,7 @@
 /* eslint-disable no-restricted-syntax -- the interpolations in this file are constant fragments (SELECTs, time zone, today, WHERE pieces with numbered placeholders); every value is bound */
 import { Injectable } from '@nestjs/common';
 import ExcelJS from 'exceljs';
+import { sheetName } from '../../common/excel/sheet';
 import type { PoolClient } from '@edupro/db';
 import { AuditService } from '../../common/audit/audit.service';
 import { DbService } from '../../common/db/db.service';
@@ -1995,7 +1996,7 @@ export class ClinicService {
     name: string,
   ) {
     const wb = new ExcelJS.Workbook();
-    const ws = wb.addWorksheet(title.slice(0, 30));
+    const ws = wb.addWorksheet(sheetName(title));
     ws.addRow(columns).font = { bold: true };
     for (const r of rows) ws.addRow(r);
     ws.columns.forEach((col, i) => {

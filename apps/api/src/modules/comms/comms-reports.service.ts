@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import ExcelJS from 'exceljs';
+import { sheetName } from '../../common/excel/sheet';
 import { datasetOrNull, type DatasetColumn } from '@edupro/db';
 import { DbService } from '../../common/db/db.service';
 import { DomainError } from '../../common/errors/domain-error';
@@ -242,7 +243,7 @@ export class CommsReportsService {
     const columns: DatasetColumn[] = d.columns;
     const wb = new ExcelJS.Workbook();
     wb.creator = 'EduPro Next';
-    const sheet = wb.addWorksheet(d.title.slice(0, 31));
+    const sheet = wb.addWorksheet(sheetName(d.title));
     const lastCol = Math.max(1, columns.length);
     sheet.addRow([school]);
     sheet.addRow([d.title]);

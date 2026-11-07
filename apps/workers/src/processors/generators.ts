@@ -26,9 +26,15 @@ export async function toXlsx(
   const workbook = new ExcelJS.Workbook();
   workbook.creator = 'EduPro Next';
   workbook.created = meta.generatedAt;
-  const sheet = workbook.addWorksheet(title.slice(0, 31) || 'Export', {
-    views: [{ state: 'frozen', ySplit: 1 }],
-  });
+  const sheet = workbook.addWorksheet(
+    title
+      .replace(/[\\/?*[\]:]/g, ' ')
+      .slice(0, 31)
+      .trim() || 'Export',
+    {
+      views: [{ state: 'frozen', ySplit: 1 }],
+    },
+  );
   sheet.columns = columns.map((c) => ({ header: c.header, key: c.key, width: c.width ?? 16 }));
   sheet.getRow(1).font = { bold: true };
   for (const row of rows) {

@@ -119,6 +119,19 @@ describe('purchase masters (e2e)', () => {
     });
   });
 
+  it('makes the HSN / SAC Excel template and export (a "/" in the title once broke the sheet name)', async () => {
+    for (const url of [
+      '/masters/purchase_hsn/template',
+      '/masters/purchase_hsn/export?format=xlsx',
+    ]) {
+      const res = await call(admin, 'GET', url);
+      expect(res.statusCode).toBe(200);
+      const wb = new ExcelJS.Workbook();
+      await wb.xlsx.load(res.rawPayload as unknown as ArrayBuffer);
+      expect(wb.worksheets[0]!.name).toBe('HSN - SAC codes');
+    }
+  });
+
   it('keeps categories two levels deep and an item under its own category', async () => {
     expect(
       (await row(admin, 'purchase_item_categories', { code: 'STAT', name: 'Stationery' }))
