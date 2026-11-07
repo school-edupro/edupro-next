@@ -627,7 +627,7 @@ export class PurchaseSetupService {
       vendors: (
         await c.query(
           `SELECT v.code, v.legal_name, v.trade_name, v.kind, v.gst_status, v.gstin, v.pan, v.state_code, v.msme_type, v.udyam_no,
-                  v.address, v.city, v.pin, v.phone, v.email, v.bank_secure, v.bank_hint, t.code AS term,
+                  v.address, v.city, v.pin, v.phone, v.email, v.bank_secure, v.bank_hint, t.code AS term, v.country, v.state,
                   (SELECT array_agg(c.code) FROM purchase_item_categories c WHERE c.id = ANY(v.category_ids)) AS categories,
                   (SELECT json_agg(json_build_object('name', x.name, 'role', x.role, 'phone', x.phone, 'email', x.email, 'is_main', x.is_main))
                      FROM vendor_contacts x WHERE x.vendor_id = v.id) AS contacts
@@ -719,11 +719,12 @@ export class PurchaseSetupService {
         for (const v of src.vendors) {
           const r = await c.query<{ id: string }>(
             `INSERT INTO vendors (school_id, code, legal_name, trade_name, kind, gst_status, gstin, pan, state_code, msme_type, udyam_no,
-                                  address, city, pin, phone, email, bank_secure, bank_hint, payment_term_id, category_ids, status, created_by)
+                                  address, city, pin, phone, email, bank_secure, bank_hint, payment_term_id, category_ids, status, created_by,
+                                  country, state)
              VALUES (app.current_school_id(), $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17,
                      (SELECT id FROM purchase_payment_terms WHERE code = $18),
                      COALESCE((SELECT array_agg(id) FROM purchase_item_categories WHERE code = ANY($19::text[])), '{}'),
-                     'pending', app.current_user_id())
+                     'pending', app.current_user_id(), $20, $21)
              ON CONFLICT (school_id, code) DO NOTHING RETURNING id::text`,
             [
               v.code,
@@ -745,6 +746,8 @@ export class PurchaseSetupService {
               v.bank_hint,
               v.term,
               v.categories ?? [],
+              v.country,
+              v.state,
             ],
           );
           if (!r.rows[0]) continue;

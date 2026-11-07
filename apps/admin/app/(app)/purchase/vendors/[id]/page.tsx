@@ -334,7 +334,7 @@ export default async function VendorPage({
 
       {lists ? (
         <section style={{ marginTop: 'var(--sp-5)' }} aria-label="Change the vendor">
-          <VendorForm vendor={v} terms={lists.terms} categories={lists.categories} />
+          <VendorForm vendor={v} lists={lists} />
         </section>
       ) : null}
     </>

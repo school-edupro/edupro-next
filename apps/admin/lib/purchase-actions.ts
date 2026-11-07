@@ -42,6 +42,8 @@ export type SaveResult =
       type: string;
       error: string;
       duplicates?: Array<{ code: string; name: string; field: string }>;
+      /** each problem under its field (the vendor form's paths: city, bank.ifsc, contacts.0.phone …) */
+      fields?: Record<string, string>;
     };
 
 /** A vendor added (it waits for approval) or changed; the form keeps what was typed on a refusal. */
@@ -57,14 +59,25 @@ export async function saveVendor(
     revalidatePath('/purchase/vendors');
     return { ok: true, id: r.id, changeWaiting: r.changeWaiting };
   } catch (e) {
-    if (e instanceof ApiError)
+    if (e instanceof ApiError) {
+      const fields: Record<string, string> = {};
+      const errs = e.problem.errors as Array<{ path?: string; message?: string }> | undefined;
+      if (Array.isArray(errs))
+        for (const x of errs)
+          if (x.path && x.message && !fields[x.path]) fields[x.path] = x.message;
+      // the GSTIN's own checks answer by their type
+      const detail = typeof e.problem.detail === 'string' ? e.problem.detail : '';
+      if (e.problem.type === 'purchase.gstin_invalid' && detail) fields.gstin = detail;
+      if (e.problem.type === 'purchase.pan_mismatch' && detail) fields.pan = detail;
       return {
         ok: false,
         type: e.problem.type,
         error: detailOf(e),
         duplicates: e.problem.duplicates as
           Array<{ code: string; name: string; field: string }> | undefined,
+        fields,
       };
+    }
     throw e;
   }
 }

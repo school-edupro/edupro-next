@@ -136,6 +136,15 @@ export class PurchaseController {
     return this.vendors.list(ctx, q);
   }
 
+  @Get('vendors/form-lists')
+  @ApiOperation({
+    summary: 'What the vendor form picks from: countries, states, cities, banks, the next code',
+  })
+  @RequirePermission(PURCHASE.masterManage)
+  vendorFormLists(@ReqCtx() ctx: RequestContext) {
+    return this.vendors.formLists(ctx);
+  }
+
   @Get('vendors/template')
   @ApiOperation({ summary: 'The Excel format for importing vendors' })
   @RequirePermission(PURCHASE.masterManage)

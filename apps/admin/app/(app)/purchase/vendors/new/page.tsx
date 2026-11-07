@@ -23,7 +23,7 @@ export default async function NewVendorPage() {
         title="Add vendor"
         description="The vendor waits for a second person’s approval before a PR or PO can use it."
       />
-      <VendorForm vendor={null} terms={lists.terms} categories={lists.categories} />
+      <VendorForm vendor={null} lists={lists} />
     </>
   );
 }

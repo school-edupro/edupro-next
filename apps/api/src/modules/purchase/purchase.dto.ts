@@ -37,29 +37,26 @@ const upper = (re: RegExp, help: string) =>
     .trim()
     .transform((v) => v.toUpperCase())
     .pipe(z.string().regex(re, help));
-const Phone = z
-  .string()
-  .trim()
-  .regex(/^[0-9+ -]{7,20}$/, 'a phone number of 7 to 20 digits');
 const Email = z.string().trim().email('an e-mail address').max(150);
 
 // ---- vendors ---------------------------------------------------------------------------------------
 export const VendorContactSchema = z.object({
-  name: z.string().trim().min(2).max(120),
+  name: z.string().trim().max(120),
   role: opt(60),
-  phone: Phone.optional().or(z.literal('').transform(() => undefined)),
+  // the mobile's rules (Indian 10 digits, or with a country code) are in vendor-rules.ts
+  phone: opt(25),
   email: Email.optional().or(z.literal('').transform(() => undefined)),
   isMain: z.boolean().default(false),
 });
 
+// the bank's rules (a bank of the Banks master, its IFSC, 9 to 18 digits typed twice) are in vendor-rules.ts
 export const BankSchema = z.object({
-  accountNo: z
-    .string()
-    .trim()
-    .regex(/^[0-9]{6,20}$/, 'an account number of 6 to 20 digits'),
-  ifsc: upper(/^[A-Z]{4}0[A-Z0-9]{6}$/, 'an IFSC like SBIN0001234'),
-  bankName: z.string().trim().min(2).max(80),
-  holder: z.string().trim().min(2).max(120),
+  accountNo: z.string().trim().max(30),
+  /** the number typed again on the form (an Excel row has it once) */
+  accountNoConfirm: z.string().trim().max(30).optional(),
+  ifsc: z.string().trim().max(15),
+  bankName: z.string().trim().max(80),
+  holder: z.string().trim().max(120),
 });
 
 const VendorBase = z.object({
@@ -92,14 +89,12 @@ const VendorBase = z.object({
     .optional()
     .transform((v) => (v ? v : undefined)),
   address: opt(500),
+  // country, state and city as named in the school's masters; PIN and mobile checked in vendor-rules.ts
+  country: opt(80),
+  state: opt(80),
   city: opt(80),
-  pin: z
-    .string()
-    .trim()
-    .regex(/^[1-9][0-9]{5}$/, 'a 6-digit PIN code')
-    .optional()
-    .or(z.literal('').transform(() => undefined)),
-  phone: Phone.optional().or(z.literal('').transform(() => undefined)),
+  pin: opt(12),
+  phone: opt(25),
   email: Email.optional().or(z.literal('').transform(() => undefined)),
   categoryIds: z.array(IdSchema).max(50).default([]),
   paymentTermId: IdSchema.optional(),
@@ -110,7 +105,19 @@ const VendorBase = z.object({
 });
 
 export const CreateVendorSchema = VendorBase.extend({
-  code: upper(/^[A-Z0-9_-]{1,20}$/, 'capital letters and digits, up to 20'),
+  /** left empty: the next V-0001 code is given when the vendor is saved */
+  code: z
+    .string()
+    .trim()
+    .max(20)
+    .nullish()
+    .transform((v) => (v ? v.toUpperCase() : undefined))
+    .pipe(
+      z
+        .string()
+        .regex(/^[A-Z0-9_-]{1,20}$/, 'capital letters, digits, hyphen or underscore, up to 20')
+        .optional(),
+    ),
 });
 export class CreateVendorDto extends createZodDto(CreateVendorSchema) {}
 

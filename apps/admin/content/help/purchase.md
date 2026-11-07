@@ -79,10 +79,24 @@ are; copied vendors wait for approval here.
 ## Vendors
 
 - **Add vendor**: code, legal and trade name, kind, payment term, the categories it supplies, the GST
-  status and **GSTIN** (checked, its last character too; the **PAN** and the state are read from it; an
-  unregistered vendor has a state and maybe a PAN), MSME (micro / small / medium and the Udyam number),
-  address, phone, the e-mail the PO goes to, contacts, the **bank account** (stored encrypted; screens show
-  only the bank, the last four digits and the IFSC).
+  status and **GSTIN** (checked, its last character too; the **PAN** and the state are read from it),
+  MSME (micro / small / medium with the Udyam number), the address, mobile, the e-mail the PO goes to,
+  contacts and the **bank account** (stored encrypted; screens show only the bank, the last four digits
+  and the IFSC).
+- **The code is filled in** (V-0001, V-0002 …): leave it and the next free one is given when you save,
+  or type the school's own.
+- **Required** (marked \*): legal name, kind, GST status, the GSTIN of a registered vendor or the PAN of
+  an unregistered one, address, country, state, city, PIN, mobile, e-mail, and the main contact's name
+  and mobile. The bank account is optional; once you start it, the bank, IFSC, account number (typed
+  twice) and holder are all needed.
+- **Picked from the masters**: country, state and city come from Masters → Countries / States / Cities
+  (India and its states are there already; a missing city is added in **Cities**, under its state — the
+  form has a link for those who may); the bank from **Banks** (Fees set-up). A registered vendor's state
+  is its GSTIN's and is picked for you; a city fills its PIN.
+- **Checked as you type**: each box says what is wrong under it when you leave it, and all of them when
+  you press **Add vendor** — PIN six digits, mobile 10 digits starting with 6–9, a valid e-mail, the
+  Udyam number like UDYAM-MH-12-1234567, the IFSC of the bank chosen (SBI's start SBIN), an account
+  number of 9 to 18 digits typed the same twice. The server checks the same again.
 - A new vendor **waits for approval**: someone with vendor approval opens **Vendor approvals** (or the
   vendor), checks the GSTIN, PAN and bank account against the documents, and approves or rejects (with a
   reason). Whoever entered or last changed a waiting vendor cannot approve it. Until it is approved a
@@ -96,9 +110,11 @@ are; copied vendors wait for approval here.
   agreement (PDF or photo, up to 5 MB) — View opens it, Download saves it.
 - **Make inactive** (not offered on new PRs and POs), **Blacklist** (with a reason: never offered),
   **Make active** again.
-- **Import from Excel**: download the format, fill one row per vendor, **Check** (every row is checked
-  and the problems listed), then **Import the good rows**. Imported vendors wait for approval; bank
-  details are not imported.
+- **Import from Excel**: download the format — required columns are marked \*, kind, GST status,
+  country, state, city, payment term and bank are drop-downs from the masters, every column has a note,
+  and a **How to fill** sheet lists the rules. Fill one row per vendor (leave **Code** empty for the next
+  one), **Check** (every row is checked with the same rules as the form; a problem names its column),
+  then **Import the good rows**. Bank details may be included; imported vendors wait for approval.
 
 ## Rate contracts
 

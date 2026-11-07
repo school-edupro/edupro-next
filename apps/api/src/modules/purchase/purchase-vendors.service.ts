@@ -6,6 +6,7 @@ import { readSheet, templateSheet } from '../../common/excel/sheet';
 import { DomainError } from '../../common/errors/domain-error';
 import { requireTenant, type RequestContext } from '../../common/http/request-context';
 import { GST_STATES, GSTIN_HELP, PAN_FORMAT, gstinProblem, panOfGstin } from './gstin';
+import { checkVendorFields, type VendorFieldsOut } from './vendor-rules';
 import {
   CreateVendorSchema,
   PURCHASE,
@@ -34,6 +35,8 @@ interface VendorDbRow {
   msme_type: string | null;
   udyam_no: string | null;
   address: string | null;
+  country: string | null;
+  state: string | null;
   city: string | null;
   pin: string | null;
   phone: string | null;
@@ -55,7 +58,7 @@ interface VendorDbRow {
 
 const SELECT = `
   SELECT v.id::text, v.code, v.legal_name, v.trade_name, v.kind, v.gst_status, v.gstin, v.pan, v.state_code,
-         v.msme_type, v.udyam_no, v.address, v.city, v.pin, v.phone, v.email, v.bank_hint, v.bank_secure,
+         v.msme_type, v.udyam_no, v.address, v.country, v.state, v.city, v.pin, v.phone, v.email, v.bank_hint, v.bank_secure,
          v.category_ids::text[] AS category_ids, v.payment_term_id::text, pt.name AS payment_term, v.status,
          v.status_reason, v.created_by::text, cu.display_name AS created_by_name, au.display_name AS approved_by_name,
          v.approved_at, v.created_at,
@@ -121,8 +124,6 @@ function gstIdentity(v: {
   return { gstin: null, pan, stateCode };
 }
 
-const UDYAM = /^UDYAM-[A-Z]{2}-[0-9]{2}-[0-9]{7}$/;
-
 /**
  * The school's common vendor master (docs/design/83, part 1). A new vendor is pending until a second
  * person with the vendor-approve right approves it; on an approved vendor a change of its bank account,
@@ -158,7 +159,8 @@ export class PurchaseVendorsService {
       gstin: r.gstin,
       pan: r.pan,
       stateCode: r.state_code,
-      state: r.state_code ? (GST_STATES[r.state_code] ?? null) : null,
+      state: r.state ?? (r.state_code ? (GST_STATES[r.state_code] ?? null) : null),
+      country: r.country,
       msmeType: r.msme_type,
       udyamNo: r.udyam_no,
       address: r.address,
@@ -316,15 +318,6 @@ export class PurchaseVendorsService {
       );
   }
 
-  private checkRest(dto: { udyamNo?: string; msmeType?: string }) {
-    if (dto.udyamNo && !UDYAM.test(dto.udyamNo))
-      throw new DomainError(
-        'validation-failed',
-        'The Udyam number looks like UDYAM-MH-12-1234567',
-        { status: 400 },
-      );
-  }
-
   private async saveContacts(
     c: PoolClient,
     vendorId: string,
@@ -343,51 +336,77 @@ export class PurchaseVendorsService {
     }
   }
 
-  async create(ctx: RequestContext, dto: CreateVendorDto) {
-    const id = gstIdentity(dto);
-    this.checkRest(dto);
-    return this.db.tenant(requireTenant(ctx), async (c) => {
+  /**
+   * A new vendor, pending (the form or a sheet row, checked): a code left empty gets the next V-0001;
+   * the bank account stored encrypted; a GSTIN, PAN or bank account another vendor has needs a reason.
+   */
+  private async insertVendor(
+    c: PoolClient,
+    dto: CreateVendorDto,
+    id: { gstin: string | null; pan: string | null; stateCode: string | null },
+    f: VendorFieldsOut,
+  ) {
+    if (dto.code) {
       const exists = await c.query(`SELECT 1 FROM vendors WHERE code = $1`, [dto.code]);
       if (exists.rowCount)
-        throw new DomainError('conflict', `Vendor code ${dto.code} is taken`, { status: 409 });
-      const found = await this.duplicates(c, null, { ...id, bank: dto.bank ?? null });
-      this.refuseDuplicates(found, dto.duplicateReason);
-      const r = await c.query<{ id: string }>(
-        `INSERT INTO vendors (school_id, code, legal_name, trade_name, kind, gst_status, gstin, pan, state_code, msme_type, udyam_no,
-                              address, city, pin, phone, email, bank_secure, bank_hint, category_ids, payment_term_id, status, created_by)
-         VALUES (app.current_school_id(), $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17,
-                 $18::bigint[], $19, 'pending', app.current_user_id())
-         RETURNING id::text`,
-        [
-          dto.code,
-          dto.legalName,
-          dto.tradeName ?? null,
-          dto.kind,
-          dto.gstStatus,
-          id.gstin,
-          id.pan,
-          id.stateCode,
-          dto.msmeType ?? null,
-          dto.udyamNo ?? null,
-          dto.address ?? null,
-          dto.city ?? null,
-          dto.pin ?? null,
-          dto.phone ?? null,
-          dto.email ?? null,
-          dto.bank ? encryptField(JSON.stringify(dto.bank)) : null,
-          dto.bank ? hintOf(dto.bank) : null,
-          dto.categoryIds,
-          dto.paymentTermId ?? null,
-        ],
-      );
-      const vendorId = r.rows[0]!.id;
-      await this.saveContacts(c, vendorId, dto.contacts);
+        throw new DomainError('conflict', `Vendor code ${dto.code} is taken`, {
+          status: 409,
+          extra: { errors: [{ path: 'code', message: `Vendor code ${dto.code} is taken` }] },
+        });
+    }
+    const found = await this.duplicates(c, null, { ...id, bank: f.bank ?? null });
+    this.refuseDuplicates(found, dto.duplicateReason);
+    const r = await c.query<{ id: string; code: string }>(
+      `INSERT INTO vendors (school_id, code, legal_name, trade_name, kind, gst_status, gstin, pan, state_code, msme_type, udyam_no,
+                            address, country, state, city, pin, phone, email, bank_secure, bank_hint, category_ids, payment_term_id,
+                            status, created_by)
+       VALUES (app.current_school_id(), $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19,
+               $20::bigint[], $21, 'pending', app.current_user_id())
+       RETURNING id::text, code`,
+      [
+        dto.code ?? null,
+        dto.legalName,
+        dto.tradeName ?? null,
+        dto.kind,
+        dto.gstStatus,
+        id.gstin,
+        id.pan,
+        id.gstin ? id.stateCode : (f.stateGst ?? id.stateCode),
+        dto.msmeType ?? null,
+        dto.udyamNo ?? null,
+        dto.address ?? null,
+        f.country,
+        f.state,
+        f.city,
+        f.pin,
+        f.phone,
+        dto.email ?? null,
+        f.bank ? encryptField(JSON.stringify(f.bank)) : null,
+        f.bank ? hintOf(f.bank) : null,
+        dto.categoryIds,
+        dto.paymentTermId ?? null,
+      ],
+    );
+    const vendorId = r.rows[0]!.id;
+    await this.saveContacts(c, vendorId, f.contacts ?? dto.contacts);
+    return { vendorId, code: r.rows[0]!.code, found };
+  }
+
+  async create(ctx: RequestContext, dto: CreateVendorDto) {
+    const id = gstIdentity(dto);
+    return this.db.tenant(requireTenant(ctx), async (c) => {
+      await PurchaseVendorsService.seed(c);
+      const f = await checkVendorFields(c, dto, {
+        creating: true,
+        gstState: id.gstin ? id.stateCode : null,
+      });
+      const { vendorId, code, found } = await this.insertVendor(c, dto, id, f);
       await this.audit.stage(ctx, c, {
         action: 'purchase.vendor.create',
         entityType: 'vendors',
         entityId: vendorId,
         after: {
-          code: dto.code,
+          code,
           legalName: dto.legalName,
           ...(found.length ? { duplicates: found, duplicateReason: dto.duplicateReason } : {}),
         },
@@ -402,17 +421,29 @@ export class PurchaseVendorsService {
    * the plain fields change at once and the bank account, GSTIN, PAN or GST status become a pending change.
    */
   async update(ctx: RequestContext, vendorId: string, dto: UpdateVendorDto) {
-    this.checkRest(dto);
     return this.db.tenant(requireTenant(ctx), async (c) => {
       const v = await this.load(c, vendorId);
-      const touchesSensitive = SENSITIVE.some((k) => dto[k] !== undefined);
       const merged = gstIdentity({
         gstStatus: dto.gstStatus ?? v.gst_status,
         gstin: dto.gstin !== undefined ? dto.gstin : v.gstin,
         pan: dto.pan !== undefined ? dto.pan : v.pan,
         stateCode: dto.stateCode ?? v.state_code,
       });
-      const bank = dto.bank ?? null;
+      const f = await checkVendorFields(
+        c,
+        { ...dto, gstStatus: dto.gstStatus ?? v.gst_status },
+        {
+          creating: false,
+          gstState: merged.gstin ? merged.stateCode : null,
+          stored: { country: v.country, state: v.state, city: v.city },
+        },
+      );
+      const placeSent = [dto.country, dto.state, dto.city].some((x) => x !== undefined);
+      // an unregistered vendor's GST state is its address state
+      if (!merged.gstin && placeSent && f.stateGst) merged.stateCode = f.stateGst;
+      const touchesSensitive =
+        SENSITIVE.some((k) => dto[k] !== undefined) || (!merged.gstin && placeSent);
+      const bank = f.bank ?? null;
       const sensitiveChanged =
         touchesSensitive &&
         (merged.gstin !== v.gstin ||
@@ -439,9 +470,11 @@ export class PurchaseVendorsService {
         ['msme_type', dto.msmeType],
         ['udyam_no', dto.udyamNo],
         ['address', dto.address],
-        ['city', dto.city],
-        ['pin', dto.pin],
-        ['phone', dto.phone],
+        ['country', placeSent ? f.country : undefined],
+        ['state', placeSent ? f.state : undefined],
+        ['city', placeSent ? f.city : undefined],
+        ['pin', dto.pin !== undefined ? f.pin : undefined],
+        ['phone', dto.phone !== undefined ? f.phone : undefined],
         ['email', dto.email],
         ['payment_term_id', dto.paymentTermId],
       ];
@@ -471,7 +504,7 @@ export class PurchaseVendorsService {
           vendorId,
           dto.categoryIds,
         ]);
-      if (dto.contacts) await this.saveContacts(c, vendorId, dto.contacts);
+      if (dto.contacts) await this.saveContacts(c, vendorId, f.contacts ?? dto.contacts);
       // the last person to enter the details of a vendor not yet approved is its maker
       if (!approved)
         await c.query(
@@ -775,6 +808,45 @@ export class PurchaseVendorsService {
   }
 
   // ---- Excel import (every row checked first; vendors arrive pending; no bank details) ----------------
+  /**
+   * What the vendor form picks from: the school's countries, states (with their GST codes) and cities
+   * (with their PIN), the banks of the Banks master (and the first four letters of their IFSCs), and
+   * the code a new vendor would get now.
+   */
+  async formLists(ctx: RequestContext) {
+    return this.db.tenant(requireTenant(ctx), async (c) => {
+      await PurchaseVendorsService.seed(c);
+      const [countries, states, cities, banks, next] = await Promise.all([
+        c.query<{ code: string; name: string }>(
+          `SELECT code, name FROM countries WHERE status = 'active' ORDER BY (code = 'IN') DESC, name`,
+        ),
+        c.query<{ code: string; name: string; gstCode: string | null; country: string }>(
+          `SELECT s.code, s.name, s.gst_code AS "gstCode", c.code AS country
+             FROM states s JOIN countries c ON c.id = s.country_id
+            WHERE s.status = 'active' ORDER BY s.name`,
+        ),
+        c.query<{ name: string; state: string; pincode: string | null }>(
+          `SELECT ci.name, s.code AS state, ci.pincode FROM cities ci JOIN states s ON s.id = ci.state_id
+            WHERE ci.status = 'active' ORDER BY ci.name`,
+        ),
+        c.query<{ name: string; prefixes: string[] }>(
+          `SELECT name, array_remove(array_agg(DISTINCT upper(left(ifsc, 4))), NULL) AS prefixes
+             FROM banks WHERE status = 'active' GROUP BY name ORDER BY name`,
+        ),
+        c.query<{ code: string }>(
+          `SELECT app.purchase_vendor_code(app.current_school_id()) AS code`,
+        ),
+      ]);
+      return {
+        countries: countries.rows,
+        states: states.rows,
+        cities: cities.rows,
+        banks: banks.rows,
+        nextCode: next.rows[0]!.code,
+      };
+    });
+  }
+
   static readonly COLUMNS = [
     'Code',
     'Legal name',
@@ -783,57 +855,165 @@ export class PurchaseVendorsService {
     'GST status',
     'GSTIN',
     'PAN',
-    'State code',
     'MSME',
     'Udyam no',
     'Address',
+    'Country',
+    'State',
     'City',
     'PIN',
-    'Phone',
+    'Mobile',
     'E-mail',
+    'Contact name',
+    'Contact mobile',
+    'Contact e-mail',
     'Payment term',
+    'Bank',
+    'IFSC',
+    'Account no',
+    'Account holder',
   ] as const;
 
+  /** The Excel column each checked field is in (a row's problems say the column). */
+  private static readonly COLUMN_OF: Record<string, string> = {
+    code: 'Code',
+    legalName: 'Legal name',
+    gstStatus: 'GST status',
+    gstin: 'GSTIN',
+    pan: 'PAN',
+    msmeType: 'MSME',
+    udyamNo: 'Udyam no',
+    address: 'Address',
+    country: 'Country',
+    state: 'State',
+    city: 'City',
+    pin: 'PIN',
+    phone: 'Mobile',
+    email: 'E-mail',
+    'contacts.0.name': 'Contact name',
+    'contacts.0.phone': 'Contact mobile',
+    'contacts.0.email': 'Contact e-mail',
+    'bank.bankName': 'Bank',
+    'bank.ifsc': 'IFSC',
+    'bank.accountNo': 'Account no',
+    'bank.holder': 'Account holder',
+  };
+
   async template(ctx: RequestContext) {
+    const lists = await this.formLists(ctx);
     return this.db.tenant(requireTenant(ctx), async (c) => {
-      await PurchaseVendorsService.seed(c);
       const terms = await c.query<{ code: string; name: string }>(
         `SELECT code, name FROM purchase_payment_terms WHERE status = 'active' ORDER BY code`,
       );
+      const stateName = new Map(lists.states.map((x) => [x.code, x.name]));
       const bytes = await templateSheet({
         sheet: 'Vendors',
         columns: [
-          { header: 'Code', width: 12, required: true, format: 'text' },
+          {
+            header: 'Code',
+            width: 12,
+            format: 'text',
+            note: `Leave empty: the next code is given (${lists.nextCode}, …). Or the school's own code.`,
+          },
           { header: 'Legal name', width: 30, required: true },
           { header: 'Trade name', width: 24 },
-          { header: 'Kind', width: 16, options: ['manufacturer', 'dealer', 'service_provider'] },
-          { header: 'GST status', width: 14, options: ['regular', 'composition', 'unregistered'] },
-          { header: 'GSTIN', width: 18, format: 'text' },
-          { header: 'PAN', width: 12, format: 'text' },
           {
-            header: 'State code',
-            width: 10,
+            header: 'Kind',
+            width: 16,
+            required: true,
+            options: ['manufacturer', 'dealer', 'service_provider'],
+          },
+          {
+            header: 'GST status',
+            width: 14,
+            required: true,
+            options: ['regular', 'composition', 'unregistered'],
+          },
+          {
+            header: 'GSTIN',
+            width: 18,
             format: 'text',
-            note: 'Only for an unregistered vendor (a GSTIN gives the state)',
+            note: 'Required for regular and composition; the PAN and the state are read from it',
+          },
+          {
+            header: 'PAN',
+            width: 12,
+            format: 'text',
+            note: 'Required for an unregistered vendor in India (ABCDE1234F)',
           },
           { header: 'MSME', width: 10, options: ['micro', 'small', 'medium'] },
-          { header: 'Udyam no', width: 22, format: 'text' },
-          { header: 'Address', width: 30 },
-          { header: 'City', width: 14 },
-          { header: 'PIN', width: 8, format: 'text' },
-          { header: 'Phone', width: 14, format: 'text' },
-          { header: 'E-mail', width: 22 },
+          {
+            header: 'Udyam no',
+            width: 22,
+            format: 'text',
+            note: 'Required with MSME: UDYAM-MH-12-1234567',
+          },
+          { header: 'Address', width: 30, required: true },
+          {
+            header: 'Country',
+            width: 14,
+            required: true,
+            options: lists.countries.map((x) => x.name),
+            note: 'From the Countries master; empty means India',
+          },
+          {
+            header: 'State',
+            width: 18,
+            required: true,
+            options: lists.states.map((x) => x.name),
+            note: "From the States master; a registered vendor's is its GSTIN's state",
+          },
+          {
+            header: 'City',
+            width: 22,
+            required: true,
+            options: lists.cities.map((x) => `${x.name} · ${stateName.get(x.state) ?? x.state}`),
+            note: "From the Cities master, a city of the row's state; a missing city is added there first",
+          },
+          { header: 'PIN', width: 8, required: true, format: 'text', note: 'Six digits in India' },
+          {
+            header: 'Mobile',
+            width: 14,
+            required: true,
+            format: 'text',
+            note: '10 digits starting with 6, 7, 8 or 9',
+          },
+          { header: 'E-mail', width: 24, required: true, note: 'The purchase order is sent here' },
+          { header: 'Contact name', width: 20, required: true },
+          {
+            header: 'Contact mobile',
+            width: 14,
+            required: true,
+            format: 'text',
+            note: '10 digits starting with 6, 7, 8 or 9',
+          },
+          { header: 'Contact e-mail', width: 24 },
           {
             header: 'Payment term',
             width: 22,
             options: terms.rows.map((t) => `${t.code} · ${t.name}`),
+            note: "Empty: the school's default",
           },
+          {
+            header: 'Bank',
+            width: 22,
+            options: lists.banks.map((x) => x.name),
+            note: 'Optional; when given, IFSC, account no and holder are needed too',
+          },
+          { header: 'IFSC', width: 13, format: 'text', note: "The bank's IFSC, e.g. SBIN0001234" },
+          { header: 'Account no', width: 20, format: 'text', note: '9 to 18 digits' },
+          { header: 'Account holder', width: 24, note: 'The name as the bank has it' },
         ],
         guide: [
-          'One row per vendor. Code and legal name are required.',
-          'A registered vendor needs its GSTIN; the PAN and the state are read from it.',
-          'Bank details are not imported: enter them on each vendor (a second person approves them).',
-          'Every imported vendor waits for approval in Purchase → Vendor approvals.',
+          'One row per vendor. The columns marked * are required; a drop-down takes only what it lists.',
+          "Code: leave empty and the next code is given (V-0001, V-0002 …), or type the school's own.",
+          'A regular or composition vendor needs its GSTIN: the PAN and the state are read from it, and the State column must be that state.',
+          'An unregistered vendor in India needs its PAN. A vendor outside India is unregistered.',
+          "Country, State and City come from the school's masters: a city not in the list is added in Masters → Cities (under its state) first.",
+          'PIN: six digits in India. Mobile and contact mobile: 10 digits starting with 6, 7, 8 or 9.',
+          'MSME: micro, small or medium, with the Udyam number (UDYAM-MH-12-1234567).',
+          "Bank (optional): a bank of the Banks master, its IFSC (it must be that bank's), the account number (9 to 18 digits) and the holder's name.",
+          "Every row is checked first (Check the file); only good rows are saved, and every vendor waits for a second person's approval.",
         ],
       });
       return {
@@ -859,81 +1039,106 @@ export class PurchaseVendorsService {
       const seenIds = new Set<string>();
       const results: Array<{ row: number; code: string; ok: boolean; error?: string }> = [];
       let saved = 0;
+      const column = (path: string) => PurchaseVendorsService.COLUMN_OF[path] ?? path;
       for (const { row, cells } of rows) {
-        const code = (cells['Code'] ?? '').toUpperCase();
+        const typed = (cells['Code'] ?? '').trim().toUpperCase();
+        // a row is saved whole or not at all
+        await c.query('SAVEPOINT vendor_row');
         try {
           const term = (cells['Payment term'] ?? '').split(' · ')[0]!.trim();
+          const bankGiven = ['Bank', 'IFSC', 'Account no', 'Account holder'].some(
+            (h) => (cells[h] ?? '').trim() !== '',
+          );
           const parsed = CreateVendorSchema.safeParse({
-            code,
+            code: typed || undefined,
             legalName: cells['Legal name'],
             tradeName: cells['Trade name'],
             kind: cells['Kind'] || undefined,
             gstStatus: cells['GST status'] || undefined,
             gstin: cells['GSTIN'],
             pan: cells['PAN'],
-            stateCode: cells['State code'] || undefined,
             msmeType: cells['MSME'] || undefined,
             udyamNo: cells['Udyam no'],
             address: cells['Address'],
+            country: cells['Country'] || 'India',
+            state: cells['State'],
             city: cells['City'],
             pin: cells['PIN'],
-            phone: cells['Phone'],
+            phone: cells['Mobile'],
             email: cells['E-mail'],
+            ...(term && terms.has(term) ? { paymentTermId: terms.get(term) } : {}),
+            contacts: [
+              {
+                name: cells['Contact name'] ?? '',
+                phone: cells['Contact mobile'],
+                email: cells['Contact e-mail'],
+                isMain: true,
+              },
+            ],
+            ...(bankGiven
+              ? {
+                  bank: {
+                    bankName: cells['Bank'] ?? '',
+                    ifsc: cells['IFSC'] ?? '',
+                    accountNo: cells['Account no'] ?? '',
+                    holder: cells['Account holder'] ?? '',
+                  },
+                }
+              : {}),
           });
           if (!parsed.success)
             throw new Error(
-              parsed.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`).join('; '),
+              parsed.error.issues
+                .map((i) => `${column(i.path.join('.'))}: ${i.message}`)
+                .join('; '),
             );
           const v = parsed.data;
+          if (term && !terms.has(term)) throw new Error(`Payment term: unknown ${term}`);
+          if (v.code && seenCodes.has(v.code)) throw new Error('Code: twice in the file');
           const id = gstIdentity(v);
-          this.checkRest(v);
-          if (term && !terms.has(term)) throw new Error(`Unknown payment term ${term}`);
-          if (seenCodes.has(v.code)) throw new Error('The code is twice in the file');
-          const taken = await c.query(`SELECT 1 FROM vendors WHERE code = $1`, [v.code]);
-          if (taken.rowCount) throw new Error(`Vendor code ${v.code} is taken`);
           const key = id.gstin ?? id.pan;
           if (key && seenIds.has(key))
             throw new Error('The same GSTIN or PAN is twice in the file');
-          const dup = await this.duplicates(c, null, { ...id, bank: null });
-          if (dup.length)
-            throw new Error(
-              `Same ${dup.map((d) => `${d.field} as ${d.code} ${d.name}`).join('; ')}`,
-            );
-          seenCodes.add(v.code);
+          const f = await checkVendorFields(c, v, {
+            creating: true,
+            gstState: id.gstin ? id.stateCode : null,
+          });
+          if (v.code) seenCodes.add(v.code);
           if (key) seenIds.add(key);
-          if (!dto.dryRun) {
-            await c.query(
-              `INSERT INTO vendors (school_id, code, legal_name, trade_name, kind, gst_status, gstin, pan, state_code, msme_type, udyam_no,
-                                    address, city, pin, phone, email, payment_term_id, status, created_by)
-               VALUES (app.current_school_id(), $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, 'pending', app.current_user_id())`,
-              [
-                v.code,
-                v.legalName,
-                v.tradeName ?? null,
-                v.kind,
-                v.gstStatus,
-                id.gstin,
-                id.pan,
-                id.stateCode,
-                v.msmeType ?? null,
-                v.udyamNo ?? null,
-                v.address ?? null,
-                v.city ?? null,
-                v.pin ?? null,
-                v.phone ?? null,
-                v.email ?? null,
-                term ? terms.get(term)! : null,
-              ],
-            );
+          let code = v.code ?? '(next code)';
+          if (dto.dryRun) {
+            // the checks the save makes too: a code taken, a GSTIN / PAN / bank another vendor has
+            if (
+              v.code &&
+              (await c.query(`SELECT 1 FROM vendors WHERE code = $1`, [v.code])).rowCount
+            )
+              throw new Error(`Code: vendor code ${v.code} is taken`);
+            const dup = await this.duplicates(c, null, { ...id, bank: f.bank ?? null });
+            if (dup.length)
+              throw new Error(
+                `Same ${dup.map((d) => `${d.field} as ${d.code} ${d.name}`).join('; ')}`,
+              );
+          } else {
+            code = (await this.insertVendor(c, v, id, f)).code;
             saved += 1;
           }
-          results.push({ row, code: v.code, ok: true });
+          await c.query('RELEASE SAVEPOINT vendor_row');
+          results.push({ row, code, ok: true });
         } catch (e) {
+          await c.query('ROLLBACK TO SAVEPOINT vendor_row');
+          const errs =
+            e instanceof DomainError
+              ? (e.extra?.errors as Array<{ path: string; message: string }> | undefined)
+              : undefined;
           results.push({
             row,
-            code,
+            code: typed,
             ok: false,
-            error: e instanceof Error ? e.message : String(e),
+            error: errs?.length
+              ? errs.map((x) => `${column(x.path)}: ${x.message}`).join('; ')
+              : e instanceof Error
+                ? e.message
+                : String(e),
           });
         }
       }

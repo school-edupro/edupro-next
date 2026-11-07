@@ -4,7 +4,8 @@ import { importVendors, type ImportResult } from '@/lib/purchase-actions';
 
 /**
  * Vendors from Excel (docs/design/83, part 1): every row is checked first and the result shown; then
- * the good rows are imported. Imported vendors wait for approval; bank details are not imported.
+ * the good rows are imported, under the same rules as the vendor form (country, state, city and bank
+ * from the masters; a blank code gets the next one). Imported vendors wait for approval.
  */
 export function VendorImport() {
   const [file, setFile] = useState<{ name: string; data: string } | null>(null);
@@ -30,8 +31,9 @@ export function VendorImport() {
       </h2>
       <p className="ep-field__help" style={{ marginTop: 0 }}>
         <a href="/api/purchase/vendors-format">Download the format</a>, fill one row per vendor and
-        upload it. Every row is checked first; imported vendors wait for approval. Bank details are
-        entered on each vendor (a second person approves them).
+        upload it. The format has drop-downs for kind, GST status, country, state, city, payment
+        term and bank, and notes on every column; leave the code empty for the next one. Every row
+        is checked first with the same rules as the form, and imported vendors wait for approval.
       </p>
       <div className="ep-grid__toolbar">
         <label className="ep-field" htmlFor="vi-file">

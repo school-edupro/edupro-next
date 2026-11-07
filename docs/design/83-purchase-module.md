@@ -566,3 +566,38 @@ a category prefix and a running number (https://apps.odoo.com/apps/modules/19.0/
   prefix dropped, no sub-category, a typed code kept and counted), an upload with blank codes and an
   update, the old "Sub-category of" header.
 
+## As built — vendor checks and lists from the masters (7 Nov 2026)
+
+Asked by the user on Purchase → Vendors → Add: every field checked, required fields marked, country,
+state, city and bank from the masters, the same checks on the Excel upload and a formatted sheet.
+Decided with them (all recommended options):
+
+| Question | Decision |
+| --- | --- |
+| Required | **Full set, bank optional**: code (filled in), legal name, kind, GST status, GSTIN (registered) or PAN (unregistered, India), address, country, state, city, PIN, mobile, e-mail, the main contact's name and mobile. The bank once started: bank, IFSC, account no. typed twice, holder. |
+| A city not in the master | **Pick from the list only**; the form links to Masters → Cities (new tab) for those with the right; a sheet row with another city is refused naming the master. |
+| Bank in Excel | **Bank columns added** (Bank, IFSC, Account no, Account holder), checked like the form; imported vendors are pending, so the approver sees the account. |
+| Vendor code | **Automatic V-0001, can be typed over**; blank in Excel gets the next one. |
+
+- **Migration 0328**: `vendors.country` / `vendors.state` (names from the masters; `state_code` stays the
+  GST code, an unregistered vendor's taken from its state); the PIN check allows a foreign postal code
+  (India's six digits are checked by the API); `app.purchase_vendor_code()` and the trigger
+  `vendors_auto_code` (blank code → next V-NNNN under an advisory lock); `app.purchase_seed_masters` also
+  gives a school India and its 36 states and union territories with GST codes where it has none (the
+  cities stay the school's own).
+- **API**: `vendor-rules.ts` (`checkVendorFields`: required fields; country → state → city from the
+  masters, a registered vendor's state = its GSTIN's; PIN; Indian mobile normalised to 10 digits;
+  MSME ↔ Udyam; the main contact; the bank from the Banks master with its IFSC prefix, 9–18 digits, the
+  confirmation, the holder) answers `validation-failed` with `errors: [{ path, message }]`; used by
+  create, change (with the stored address for what is not sent) and every Excel row (savepoint per row;
+  a problem names its column). `GET /purchase/vendors/form-lists` (countries, states with GST codes,
+  cities with PIN, banks with IFSC prefixes, the next code). The Excel format: 24 columns, required
+  marked, drop-downs from the masters (city as "Noida · Uttar Pradesh"), notes and a How to fill sheet.
+  Copying vendors between schools carries country and state.
+- **Admin**: `VendorForm.tsx` rebuilt: selects from the masters (country → state → city; GSTIN picks the
+  state; a city fills its PIN), each field's problem under it on leaving and on saving (focus to the
+  first), the server's per-field answer under the same boxes; the account number typed twice (no paste);
+  `lib/vendor-rules.ts` mirrors the API's rules. `.ep-select[aria-invalid]` gets the red border.
+- **Tests**: `purchase-masters.e2e-spec.ts` — the lists, a body with eleven problems answered per field,
+  the PAN of an unregistered vendor, the made code and a normalised mobile, the formatted sheet and an
+  import with a blank code, a bank, a city not in the master and a missing contact mobile.

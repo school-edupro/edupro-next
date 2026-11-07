@@ -20,6 +20,7 @@ export interface Vendor {
   pan: string | null;
   stateCode: string | null;
   state: string | null;
+  country: string | null;
   msmeType: 'micro' | 'small' | 'medium' | null;
   udyamNo: string | null;
   address: string | null;

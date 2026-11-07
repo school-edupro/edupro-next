@@ -1,10 +1,24 @@
 'use client';
 import { useRouter } from 'next/navigation';
-import { useState, useTransition } from 'react';
+import { useMemo, useRef, useState, useTransition } from 'react';
 import { FormActions, FormRow, FormSection } from '@edupro/ui';
 import { ChipPicker } from '@/components/ChipPicker';
 import { saveVendor } from '@/lib/purchase-actions';
-import { GST_STATES, GST_STATUS, VENDOR_KIND, type VendorDetail } from '@/lib/purchase';
+import { GST_STATUS, VENDOR_KIND, type VendorDetail } from '@/lib/purchase';
+import { vendorProblems, type VendorFormValues } from '@/lib/vendor-rules';
+
+/** What the vendor form picks from (the school's masters) and the code a new vendor gets now. */
+export interface VendorLists {
+  terms: Array<{ id: string; label: string }>;
+  categories: Array<{ value: string; label: string }>;
+  countries: Array<{ code: string; name: string }>;
+  states: Array<{ code: string; name: string; gstCode: string | null; country: string }>;
+  cities: Array<{ name: string; state: string; pincode: string | null }>;
+  banks: Array<{ name: string; prefixes: string[] }>;
+  nextCode: string;
+  /** may the user open the Cities / Banks master to add a missing one */
+  links: { cities: boolean; banks: boolean };
+}
 
 interface Contact {
   name: string;
@@ -14,36 +28,41 @@ interface Contact {
   isMain: boolean;
 }
 const blankContact = (): Contact => ({ name: '', role: '', phone: '', email: '', isMain: false });
+const blankBank = { bankName: '', ifsc: '', accountNo: '', accountNoConfirm: '', holder: '' };
+type ControlProps = {
+  id: string;
+  'aria-invalid': boolean;
+  'aria-describedby'?: string;
+  onBlur: () => void;
+};
 
 /**
- * Add or change a vendor (docs/design/83, part 1). A new vendor waits for a second person's approval.
- * On an approved vendor, a new bank account, GSTIN, PAN or GST status becomes a change waiting for
- * approval (a reason asked); everything else changes at once. A GSTIN, PAN or bank account another
- * vendor has is saved only with a reason. What was typed stays on the form when the API refuses.
+ * Add or change a vendor (docs/design/83, part 1; the checks: "As built — vendor checks"). Country,
+ * state, city and bank are picked from the school's masters; a registered vendor's state follows its
+ * GSTIN; a city fills its PIN. Every field is checked as it is left and again on saving, each problem
+ * shown under its box (the API checks the same and answers per field). A new vendor's code is filled in
+ * (left as it is, the next free one is given on saving) and it waits for a second person's approval.
+ * On an approved vendor a new bank account, GSTIN, PAN or GST status becomes a change waiting for
+ * approval (a reason asked). A GSTIN, PAN or bank account another vendor has is saved only with a reason.
  */
-export function VendorForm({
-  vendor,
-  terms,
-  categories,
-}: {
-  vendor: VendorDetail | null;
-  terms: Array<{ id: string; label: string }>;
-  categories: Array<{ value: string; label: string }>;
-}) {
+export function VendorForm({ vendor, lists }: { vendor: VendorDetail | null; lists: VendorLists }) {
   const router = useRouter();
+  const formRef = useRef<HTMLFormElement>(null);
   const approved = vendor !== null && vendor.status !== 'pending' && vendor.status !== 'rejected';
+  const indiaName = lists.countries.find((c) => c.code === 'IN')?.name ?? 'India';
   const [v, setV] = useState({
-    code: vendor?.code ?? '',
+    code: vendor?.code ?? lists.nextCode,
     legalName: vendor?.legalName ?? '',
     tradeName: vendor?.tradeName ?? '',
     kind: vendor?.kind ?? 'dealer',
     gstStatus: vendor?.gstStatus ?? 'regular',
     gstin: vendor?.gstin ?? '',
     pan: vendor?.pan ?? '',
-    stateCode: vendor?.stateCode ?? '',
     msmeType: vendor?.msmeType ?? '',
     udyamNo: vendor?.udyamNo ?? '',
     address: vendor?.address ?? '',
+    country: vendor?.country ?? indiaName,
+    state: vendor?.state ?? '',
     city: vendor?.city ?? '',
     pin: vendor?.pin ?? '',
     phone: vendor?.phone ?? '',
@@ -63,39 +82,125 @@ export function VendorForm({
       : [{ ...blankContact(), isMain: true }],
   );
   const [bankOn, setBankOn] = useState(!vendor);
-  const [bank, setBank] = useState({ accountNo: '', ifsc: '', bankName: '', holder: '' });
+  const [bank, setBank] = useState(blankBank);
   const [changeReason, setChangeReason] = useState('');
   const [dupReason, setDupReason] = useState('');
   const [dups, setDups] = useState<Array<{ code: string; name: string; field: string }> | null>(
     null,
   );
   const [error, setError] = useState<string | null>(null);
+  /** the boxes left once (their problems show), or all of them after a save was tried */
+  const [touched, setTouched] = useState<Set<string> | 'all'>(new Set());
+  const [serverErrors, setServerErrors] = useState<Record<string, string>>({});
   const [pending, start] = useTransition();
-  const set = (k: keyof typeof v) => (e: { target: { value: string } }) =>
+  const autoPin = useRef('');
+
+  // the places of the country and state picked
+  const country = lists.countries.find((c) => c.name === v.country) ?? null;
+  const india = (country?.code ?? 'IN') === 'IN';
+  const states = useMemo(
+    () => lists.states.filter((s) => s.country === (country?.code ?? 'IN')),
+    [lists.states, country],
+  );
+  const state = states.find((s) => s.name === v.state) ?? null;
+  const cities = useMemo(
+    () => (state ? lists.cities.filter((c) => c.state === state.code) : []),
+    [lists.cities, state],
+  );
+  const gstinState =
+    v.gstStatus !== 'unregistered' && /^[0-9]{2}/.test(v.gstin)
+      ? (lists.states.find((s) => s.country === 'IN' && s.gstCode === v.gstin.slice(0, 2))?.name ??
+        null)
+      : null;
+  const bankPrefixes = lists.banks.find((b) => b.name === bank.bankName)?.prefixes ?? [];
+
+  const values: VendorFormValues = { ...v, contacts, bank: bankOn ? bank : blankBank };
+  const problems = vendorProblems(values, {
+    india,
+    stateGst: state?.gstCode ?? null,
+    gstinState,
+    bankPrefixes,
+    creating: vendor === null,
+  });
+  const shown = (path: string) =>
+    serverErrors[path] ??
+    (touched === 'all' || touched.has(path) ? (problems[path] ?? null) : null);
+  const leave = (path: string) => () => setTouched((t) => (t === 'all' ? t : new Set(t).add(path)));
+  const changed = (path: string) =>
+    setServerErrors((e) => {
+      if (!(path in e)) return e;
+      const next = { ...e };
+      delete next[path];
+      return next;
+    });
+
+  const set = (k: keyof typeof v) => (e: { target: { value: string } }) => {
+    changed(k);
     setV((cur) => ({ ...cur, [k]: e.target.value }));
+  };
+  const setGstin = (raw: string) => {
+    const gstin = raw.toUpperCase().replace(/\s/g, '');
+    changed('gstin');
+    setV((cur) => {
+      // a registered vendor's state is its GSTIN's: picked when the first two digits name one
+      const st = /^[0-9]{2}/.test(gstin)
+        ? lists.states.find((s) => s.country === 'IN' && s.gstCode === gstin.slice(0, 2))
+        : undefined;
+      return st && st.name !== cur.state
+        ? { ...cur, gstin, country: indiaName, state: st.name, city: '' }
+        : { ...cur, gstin };
+    });
+  };
+  const setCity = (name: string) => {
+    changed('city');
+    const pin = cities.find((c) => c.name === name)?.pincode ?? '';
+    setV((cur) => {
+      // the city's PIN, unless one was typed by hand
+      const fill = Boolean(pin) && (cur.pin === '' || cur.pin === autoPin.current);
+      if (fill) autoPin.current = pin;
+      return { ...cur, city: name, ...(fill ? { pin } : {}) };
+    });
+  };
+
   const sensitiveChanged =
     approved &&
     (v.gstStatus !== vendor?.gstStatus ||
       (v.gstin || null) !== vendor?.gstin ||
       (v.gstStatus === 'unregistered' && (v.pan || null) !== vendor?.pan) ||
+      (v.gstStatus === 'unregistered' && v.state !== vendor?.state) ||
       (bankOn && bank.accountNo !== ''));
+
+  const focusFirstProblem = () =>
+    requestAnimationFrame(() =>
+      formRef.current?.querySelector<HTMLElement>('[aria-invalid="true"]')?.focus(),
+    );
 
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
+    setTouched('all');
+    setServerErrors({});
+    const count = Object.keys(problems).length;
+    if (count) {
+      setError(`Check the ${String(count)} field${count === 1 ? '' : 's'} marked in red.`);
+      focusFirstProblem();
+      return;
+    }
     const bankFilled = bankOn && Object.values(bank).some((x) => x.trim() !== '');
     const body: Record<string, unknown> = {
-      ...(vendor ? {} : { code: v.code }),
+      // a code left as filled in is made again on saving (someone may have taken it meanwhile)
+      ...(vendor ? {} : { code: v.code.trim() === lists.nextCode ? '' : v.code.trim() }),
       legalName: v.legalName,
       tradeName: v.tradeName,
       kind: v.kind,
       gstStatus: v.gstStatus,
       gstin: v.gstStatus === 'unregistered' ? undefined : v.gstin,
-      pan: v.pan,
-      ...(v.gstStatus === 'unregistered' && v.stateCode ? { stateCode: v.stateCode } : {}),
+      pan: v.gstStatus === 'unregistered' ? v.pan : undefined,
       ...(v.msmeType ? { msmeType: v.msmeType } : {}),
       udyamNo: v.udyamNo,
       address: v.address,
+      country: v.country,
+      state: v.state,
       city: v.city,
       pin: v.pin,
       phone: v.phone,
@@ -103,7 +208,7 @@ export function VendorForm({
       ...(v.paymentTermId ? { paymentTermId: v.paymentTermId } : {}),
       categoryIds: cats,
       contacts: contacts
-        .filter((c) => c.name.trim())
+        .filter((c, i) => c.name.trim() || c.phone.trim() || c.email.trim() || i === 0)
         .map((c) => ({ ...c, role: c.role || undefined })),
       ...(bankFilled ? { bank } : {}),
       ...(sensitiveChanged && changeReason ? { changeReason } : {}),
@@ -121,83 +226,153 @@ export function VendorForm({
         return;
       }
       if (r.duplicates?.length) setDups(r.duplicates);
-      setError(r.error);
+      if (r.fields && Object.keys(r.fields).length) {
+        setServerErrors(r.fields);
+        setError('Check the fields marked in red.');
+        focusFirstProblem();
+      } else setError(r.error);
     });
   };
 
+  /** A box with its label, required mark, help and the problem under it. */
+  const field = (
+    path: string,
+    label: string,
+    control: (a: ControlProps) => React.ReactNode,
+    opts: { required?: boolean; help?: React.ReactNode } = {},
+  ) => {
+    const id = `vf-${path.replace(/\./g, '-')}`;
+    const problem = shown(path);
+    const helpId = opts.help ? `${id}-help` : undefined;
+    const errId = problem ? `${id}-err` : undefined;
+    return (
+      <div className="ep-field" key={path}>
+        <label className="ep-field__label" htmlFor={id} data-required={opts.required || undefined}>
+          {label}
+        </label>
+        {control({
+          id,
+          'aria-invalid': Boolean(problem),
+          'aria-describedby': [helpId, errId].filter(Boolean).join(' ') || undefined,
+          onBlur: leave(path),
+        })}
+        {opts.help ? (
+          <span id={helpId} className="ep-field__help">
+            {opts.help}
+          </span>
+        ) : null}
+        {problem ? (
+          <span id={errId} className="ep-field__error">
+            {problem}
+          </span>
+        ) : null}
+      </div>
+    );
+  };
+  const addLink = (href: string, what: string) => (
+    <>
+      {' '}
+      <a href={href} target="_blank" rel="noopener noreferrer">
+        Add a {what} (opens a new tab)
+      </a>
+    </>
+  );
+  const bankStarted = Object.values(bank).some((x) => x.trim() !== '');
+  const setB =
+    (k: keyof typeof bank, upper = false) =>
+    (e: { target: { value: string } }) => {
+      changed(`bank.${k}`);
+      setBank((b) => ({ ...b, [k]: upper ? e.target.value.toUpperCase() : e.target.value }));
+    };
+  const panShown =
+    v.gstStatus === 'unregistered'
+      ? v.pan
+      : v.pan || (v.gstin.length >= 12 ? v.gstin.slice(2, 12) : '');
+
   return (
-    <form onSubmit={submit} noValidate>
+    <form ref={formRef} onSubmit={submit} noValidate>
       <FormSection title="The vendor">
         <FormRow columns={3}>
-          <label className="ep-field" htmlFor="vf-code">
-            <span className="ep-field__label" data-required="true">
-              Code
-            </span>
+          {field(
+            'code',
+            'Code',
+            (a) => (
+              <input
+                {...a}
+                className="ep-input"
+                value={v.code}
+                onChange={(e) => {
+                  changed('code');
+                  setV((c) => ({ ...c, code: e.target.value.toUpperCase() }));
+                }}
+                maxLength={20}
+                readOnly={vendor !== null}
+              />
+            ),
+            {
+              help: vendor
+                ? 'The code does not change.'
+                : `The next free code (${lists.nextCode}); type the school’s own if it has one.`,
+            },
+          )}
+          {field(
+            'legalName',
+            'Legal name',
+            (a) => (
+              <input
+                {...a}
+                className="ep-input"
+                value={v.legalName}
+                onChange={set('legalName')}
+                maxLength={150}
+                autoComplete="organization"
+              />
+            ),
+            { required: true, help: 'As on the GST certificate or PAN.' },
+          )}
+          {field('tradeName', 'Trade name', (a) => (
             <input
-              id="vf-code"
-              className="ep-input"
-              value={v.code}
-              onChange={set('code')}
-              required
-              maxLength={20}
-              readOnly={vendor !== null}
-              placeholder="V001"
-            />
-          </label>
-          <label className="ep-field" htmlFor="vf-legal">
-            <span className="ep-field__label" data-required="true">
-              Legal name
-            </span>
-            <input
-              id="vf-legal"
-              className="ep-input"
-              value={v.legalName}
-              onChange={set('legalName')}
-              required
-              maxLength={150}
-            />
-          </label>
-          <label className="ep-field" htmlFor="vf-trade">
-            <span className="ep-field__label">Trade name</span>
-            <input
-              id="vf-trade"
+              {...a}
               className="ep-input"
               value={v.tradeName}
               onChange={set('tradeName')}
               maxLength={150}
             />
-          </label>
+          ))}
         </FormRow>
         <FormRow columns={3}>
-          <label className="ep-field" htmlFor="vf-kind">
-            <span className="ep-field__label">Kind</span>
-            <select id="vf-kind" className="ep-select" value={v.kind} onChange={set('kind')}>
-              {Object.entries(VENDOR_KIND).map(([k, label]) => (
-                <option key={k} value={k}>
-                  {label}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="ep-field" htmlFor="vf-term">
-            <span className="ep-field__label">Payment term</span>
+          {field(
+            'kind',
+            'Kind',
+            (a) => (
+              <select {...a} className="ep-select" value={v.kind} onChange={set('kind')}>
+                {Object.entries(VENDOR_KIND).map(([k, label]) => (
+                  <option key={k} value={k}>
+                    {label}
+                  </option>
+                ))}
+              </select>
+            ),
+            { required: true },
+          )}
+          {field('paymentTermId', 'Payment term', (a) => (
             <select
-              id="vf-term"
+              {...a}
               className="ep-select"
               value={v.paymentTermId}
               onChange={set('paymentTermId')}
             >
               <option value="">The school’s default</option>
-              {terms.map((t) => (
+              {lists.terms.map((t) => (
                 <option key={t.id} value={t.id}>
                   {t.label}
                 </option>
               ))}
             </select>
-          </label>
+          ))}
           <ChipPicker
             label="Supplies"
-            options={categories}
+            options={lists.categories}
             value={cats}
             onChange={setCats}
             placeholder="Item categories"
@@ -215,166 +390,302 @@ export function VendorForm({
         }
       >
         <FormRow columns={3}>
-          <label className="ep-field" htmlFor="vf-gst">
-            <span className="ep-field__label">GST status</span>
-            <select
-              id="vf-gst"
-              className="ep-select"
-              value={v.gstStatus}
-              onChange={set('gstStatus')}
-            >
-              {Object.entries(GST_STATUS).map(([k, label]) => (
-                <option key={k} value={k}>
-                  {label}
-                </option>
-              ))}
-            </select>
-          </label>
-          {v.gstStatus !== 'unregistered' ? (
-            <label className="ep-field" htmlFor="vf-gstin">
-              <span className="ep-field__label" data-required="true">
-                GSTIN
-              </span>
-              <input
-                id="vf-gstin"
-                className="ep-input"
-                value={v.gstin}
-                onChange={(e) => setV((c) => ({ ...c, gstin: e.target.value.toUpperCase() }))}
-                maxLength={15}
-                placeholder="27ABCDE1234F1Z5"
-              />
-            </label>
-          ) : (
-            <label className="ep-field" htmlFor="vf-state">
-              <span className="ep-field__label">State</span>
-              <select
-                id="vf-state"
-                className="ep-select"
-                value={v.stateCode}
-                onChange={set('stateCode')}
-              >
-                <option value="">—</option>
-                {GST_STATES.map(([code, name]) => (
-                  <option key={code} value={code}>
-                    {name} ({code})
+          {field(
+            'gstStatus',
+            'GST status',
+            (a) => (
+              <select {...a} className="ep-select" value={v.gstStatus} onChange={set('gstStatus')}>
+                {Object.entries(GST_STATUS).map(([k, label]) => (
+                  <option key={k} value={k}>
+                    {label}
                   </option>
                 ))}
               </select>
-            </label>
+            ),
+            { required: true },
           )}
-          <label className="ep-field" htmlFor="vf-pan">
-            <span className="ep-field__label">PAN</span>
-            <input
-              id="vf-pan"
-              className="ep-input"
-              value={v.pan}
-              onChange={(e) => setV((c) => ({ ...c, pan: e.target.value.toUpperCase() }))}
-              maxLength={10}
-              placeholder={v.gstStatus === 'unregistered' ? 'ABCDE1234F' : 'From the GSTIN'}
-            />
-          </label>
+          {v.gstStatus !== 'unregistered'
+            ? field(
+                'gstin',
+                'GSTIN',
+                (a) => (
+                  <input
+                    {...a}
+                    className="ep-input"
+                    value={v.gstin}
+                    onChange={(e) => setGstin(e.target.value)}
+                    maxLength={15}
+                    placeholder="27ABCDE1234F1Z5"
+                    autoComplete="off"
+                  />
+                ),
+                {
+                  required: true,
+                  help: gstinState ? `A GSTIN of ${gstinState}.` : '15 characters.',
+                },
+              )
+            : null}
+          {field(
+            'pan',
+            'PAN',
+            (a) => (
+              <input
+                {...a}
+                className="ep-input"
+                value={panShown}
+                onChange={(e) => {
+                  changed('pan');
+                  setV((c) => ({ ...c, pan: e.target.value.toUpperCase() }));
+                }}
+                readOnly={v.gstStatus !== 'unregistered'}
+                maxLength={10}
+                placeholder="ABCDE1234F"
+                autoComplete="off"
+              />
+            ),
+            {
+              required: v.gstStatus === 'unregistered' && india,
+              help: v.gstStatus === 'unregistered' ? 'Needed for TDS.' : 'Read from the GSTIN.',
+            },
+          )}
         </FormRow>
         <FormRow columns={3}>
-          <label className="ep-field" htmlFor="vf-msme">
-            <span className="ep-field__label">MSME</span>
-            <select
-              id="vf-msme"
-              className="ep-select"
-              value={v.msmeType}
-              onChange={set('msmeType')}
-            >
-              <option value="">Not MSME / not known</option>
-              <option value="micro">Micro</option>
-              <option value="small">Small</option>
-              <option value="medium">Medium</option>
-            </select>
-            <span className="ep-field__help">
-              Micro and small suppliers must be paid within 45 days (the PO warns).
-            </span>
-          </label>
-          <label className="ep-field" htmlFor="vf-udyam">
-            <span className="ep-field__label">Udyam number</span>
-            <input
-              id="vf-udyam"
-              className="ep-input"
-              value={v.udyamNo}
-              onChange={(e) => setV((c) => ({ ...c, udyamNo: e.target.value.toUpperCase() }))}
-              placeholder="UDYAM-MH-12-1234567"
-            />
-          </label>
+          {field(
+            'msmeType',
+            'MSME',
+            (a) => (
+              <select {...a} className="ep-select" value={v.msmeType} onChange={set('msmeType')}>
+                <option value="">Not MSME / not known</option>
+                <option value="micro">Micro</option>
+                <option value="small">Small</option>
+                <option value="medium">Medium</option>
+              </select>
+            ),
+            { help: 'Micro and small suppliers must be paid within 45 days (the PO warns).' },
+          )}
+          {field(
+            'udyamNo',
+            'Udyam number',
+            (a) => (
+              <input
+                {...a}
+                className="ep-input"
+                value={v.udyamNo}
+                onChange={(e) => {
+                  changed('udyamNo');
+                  setV((c) => ({ ...c, udyamNo: e.target.value.toUpperCase() }));
+                }}
+                placeholder="UDYAM-MH-12-1234567"
+                autoComplete="off"
+              />
+            ),
+            { required: Boolean(v.msmeType) },
+          )}
         </FormRow>
       </FormSection>
 
-      <FormSection title="Address and contacts">
+      <FormSection
+        title="Address"
+        description="Country, state and city come from the school’s masters."
+      >
+        <FormRow columns={1}>
+          {field(
+            'address',
+            'Address',
+            (a) => (
+              <input
+                {...a}
+                className="ep-input"
+                value={v.address}
+                onChange={set('address')}
+                maxLength={500}
+                placeholder="Building, street, area"
+                autoComplete="street-address"
+              />
+            ),
+            { required: true },
+          )}
+        </FormRow>
         <FormRow columns={4}>
-          <label className="ep-field" htmlFor="vf-addr">
-            <span className="ep-field__label">Address</span>
-            <input id="vf-addr" className="ep-input" value={v.address} onChange={set('address')} />
-          </label>
-          <label className="ep-field" htmlFor="vf-city">
-            <span className="ep-field__label">City</span>
-            <input id="vf-city" className="ep-input" value={v.city} onChange={set('city')} />
-          </label>
-          <label className="ep-field" htmlFor="vf-pin">
-            <span className="ep-field__label">PIN</span>
-            <input
-              id="vf-pin"
-              className="ep-input"
-              value={v.pin}
-              onChange={set('pin')}
-              inputMode="numeric"
-              maxLength={6}
-            />
-          </label>
-          <label className="ep-field" htmlFor="vf-phone">
-            <span className="ep-field__label">Phone</span>
-            <input
-              id="vf-phone"
-              type="tel"
-              className="ep-input"
-              value={v.phone}
-              onChange={set('phone')}
-            />
-          </label>
+          {field(
+            'country',
+            'Country',
+            (a) => (
+              <select
+                {...a}
+                className="ep-select"
+                value={v.country}
+                onChange={(e) => {
+                  changed('country');
+                  setV((c) => ({ ...c, country: e.target.value, state: '', city: '' }));
+                }}
+              >
+                <option value="">—</option>
+                {lists.countries.map((c) => (
+                  <option key={c.code} value={c.name}>
+                    {c.name}
+                  </option>
+                ))}
+              </select>
+            ),
+            { required: true },
+          )}
+          {field(
+            'state',
+            'State',
+            (a) => (
+              <select
+                {...a}
+                className="ep-select"
+                value={v.state}
+                onChange={(e) => {
+                  changed('state');
+                  setV((c) => ({ ...c, state: e.target.value, city: '' }));
+                }}
+              >
+                <option value="">—</option>
+                {states.map((s) => (
+                  <option key={s.code} value={s.name}>
+                    {s.name}
+                  </option>
+                ))}
+              </select>
+            ),
+            {
+              required: true,
+              help: v.gstStatus !== 'unregistered' && india ? 'The GSTIN’s state.' : undefined,
+            },
+          )}
+          {field(
+            'city',
+            'City',
+            (a) => (
+              <select
+                {...a}
+                className="ep-select"
+                value={v.city}
+                onChange={(e) => setCity(e.target.value)}
+                disabled={!state}
+              >
+                <option value="">{state ? '—' : 'Pick the state first'}</option>
+                {cities.map((c) => (
+                  <option key={c.name} value={c.name}>
+                    {c.name}
+                  </option>
+                ))}
+                {/* a city saved before that the master no longer lists stays visible */}
+                {v.city && !cities.some((c) => c.name === v.city) ? (
+                  <option value={v.city}>{v.city}</option>
+                ) : null}
+              </select>
+            ),
+            {
+              required: true,
+              help: (
+                <>
+                  {state && !cities.length
+                    ? `No cities of ${state.name} in the Cities master yet.`
+                    : 'Not in the list? Add it in Masters → Cities first.'}
+                  {lists.links.cities ? addLink('/masters/system?tab=cities', 'city') : null}
+                </>
+              ),
+            },
+          )}
+          {field(
+            'pin',
+            india ? 'PIN' : 'Postal code',
+            (a) => (
+              <input
+                {...a}
+                className="ep-input"
+                value={v.pin}
+                onChange={set('pin')}
+                inputMode={india ? 'numeric' : 'text'}
+                maxLength={india ? 6 : 10}
+                autoComplete="postal-code"
+              />
+            ),
+            { required: true, help: india ? 'Filled from the city; six digits.' : undefined },
+          )}
         </FormRow>
         <FormRow columns={2}>
-          <label className="ep-field" htmlFor="vf-email">
-            <span className="ep-field__label">E-mail (the PO is sent here)</span>
-            <input
-              id="vf-email"
-              type="email"
-              className="ep-input"
-              value={v.email}
-              onChange={set('email')}
-            />
-          </label>
+          {field(
+            'phone',
+            'Mobile',
+            (a) => (
+              <input
+                {...a}
+                type="tel"
+                className="ep-input"
+                value={v.phone}
+                onChange={set('phone')}
+                maxLength={20}
+                placeholder={india ? '98XXXXXXXX' : '+971 …'}
+                autoComplete="tel"
+              />
+            ),
+            {
+              required: true,
+              help: india ? '10 digits starting with 6, 7, 8 or 9.' : 'With the country code.',
+            },
+          )}
+          {field(
+            'email',
+            'E-mail (the PO is sent here)',
+            (a) => (
+              <input
+                {...a}
+                type="email"
+                className="ep-input"
+                value={v.email}
+                onChange={set('email')}
+                maxLength={150}
+                autoComplete="email"
+              />
+            ),
+            { required: true },
+          )}
         </FormRow>
+      </FormSection>
+
+      <FormSection title="Contacts" description="The main contact needs a name and a mobile.">
         <div className="ep-purch-lines">
           {contacts.map((c, i) => (
-            <fieldset key={i} className="ep-purch-line" style={{ border: 0, padding: 0 }}>
+            <fieldset
+              key={i}
+              className="ep-purch-line"
+              style={{ border: 0, padding: 0, alignItems: 'start' }}
+            >
               <legend className="ep-sr-only">Contact {i + 1}</legend>
               {(
                 [
-                  ['name', 'Contact name'],
-                  ['role', 'Role'],
-                  ['phone', 'Phone'],
-                  ['email', 'E-mail'],
+                  ['name', 'Contact name', 'text', 'name'],
+                  ['role', 'Role', 'text', 'organization-title'],
+                  ['phone', 'Mobile', 'tel', 'tel'],
+                  ['email', 'E-mail', 'email', 'email'],
                 ] as const
-              ).map(([k, label]) => (
-                <label key={k} className="ep-field" htmlFor={`vf-c${String(i)}-${k}`}>
-                  <span className="ep-field__label">{label}</span>
-                  <input
-                    id={`vf-c${String(i)}-${k}`}
-                    className="ep-input"
-                    value={c[k]}
-                    onChange={(e) =>
-                      setContacts((cur) =>
-                        cur.map((x, j) => (j === i ? { ...x, [k]: e.target.value } : x)),
-                      )
-                    }
-                  />
-                </label>
-              ))}
+              ).map(([k, label, type, auto]) =>
+                field(
+                  `contacts.${String(i)}.${k}`,
+                  label,
+                  (a) => (
+                    <input
+                      {...a}
+                      type={type}
+                      className="ep-input"
+                      value={c[k]}
+                      autoComplete={auto}
+                      onChange={(e) => {
+                        changed(`contacts.${String(i)}.${k}`);
+                        setContacts((cur) =>
+                          cur.map((x, j) => (j === i ? { ...x, [k]: e.target.value } : x)),
+                        );
+                      }}
+                    />
+                  ),
+                  { required: c.isMain && (k === 'name' || k === 'phone') },
+                ),
+              )}
               <label className="ep-check" htmlFor={`vf-c${String(i)}-main`}>
                 <input
                   id={`vf-c${String(i)}-main`}
@@ -410,7 +721,7 @@ export function VendorForm({
         description={
           vendor?.bankHint
             ? `Now: ${vendor.bankHint}.${approved ? ' A new account waits for a second person’s approval.' : ''}`
-            : 'Used for payments later; stored encrypted, shown only to the approver in full.'
+            : 'Optional now; once started, every part is needed. Stored encrypted, shown in full only to the approver.'
         }
       >
         {!bankOn ? (
@@ -424,33 +735,104 @@ export function VendorForm({
             </button>
           </div>
         ) : (
-          <FormRow columns={4}>
-            {(
-              [
-                ['accountNo', 'Account number', 'numeric'],
-                ['ifsc', 'IFSC', 'text'],
-                ['bankName', 'Bank', 'text'],
-                ['holder', 'Account holder', 'text'],
-              ] as const
-            ).map(([k, label, mode]) => (
-              <label key={k} className="ep-field" htmlFor={`vf-b-${k}`}>
-                <span className="ep-field__label">{label}</span>
-                <input
-                  id={`vf-b-${k}`}
-                  className="ep-input"
-                  inputMode={mode}
-                  autoComplete="off"
-                  value={bank[k]}
-                  onChange={(e) =>
-                    setBank((b) => ({
-                      ...b,
-                      [k]: k === 'ifsc' ? e.target.value.toUpperCase() : e.target.value,
-                    }))
-                  }
-                />
-              </label>
-            ))}
-          </FormRow>
+          <>
+            <FormRow columns={3}>
+              {field(
+                'bank.bankName',
+                'Bank',
+                (a) => (
+                  <select
+                    {...a}
+                    className="ep-select"
+                    value={bank.bankName}
+                    onChange={setB('bankName')}
+                  >
+                    <option value="">—</option>
+                    {lists.banks.map((b) => (
+                      <option key={b.name} value={b.name}>
+                        {b.name}
+                      </option>
+                    ))}
+                  </select>
+                ),
+                {
+                  required: bankStarted,
+                  help: (
+                    <>
+                      From the Banks master.
+                      {lists.links.banks ? addLink('/masters/fees?tab=banks', 'bank') : null}
+                    </>
+                  ),
+                },
+              )}
+              {field(
+                'bank.ifsc',
+                'IFSC',
+                (a) => (
+                  <input
+                    {...a}
+                    className="ep-input"
+                    value={bank.ifsc}
+                    onChange={setB('ifsc', true)}
+                    maxLength={11}
+                    placeholder={bankPrefixes[0] ? `${bankPrefixes[0]}0XXXXXX` : 'SBIN0001234'}
+                    autoComplete="off"
+                  />
+                ),
+                { required: bankStarted, help: 'On the cheque leaf or passbook.' },
+              )}
+              {field(
+                'bank.holder',
+                'Account holder',
+                (a) => (
+                  <input
+                    {...a}
+                    className="ep-input"
+                    value={bank.holder}
+                    onChange={setB('holder')}
+                    maxLength={120}
+                    autoComplete="off"
+                  />
+                ),
+                { required: bankStarted, help: 'The name as the bank has it.' },
+              )}
+            </FormRow>
+            <FormRow columns={2}>
+              {field(
+                'bank.accountNo',
+                'Account number',
+                (a) => (
+                  <input
+                    {...a}
+                    className="ep-input"
+                    value={bank.accountNo}
+                    onChange={setB('accountNo')}
+                    inputMode="numeric"
+                    maxLength={20}
+                    autoComplete="off"
+                  />
+                ),
+                { required: bankStarted, help: '9 to 18 digits.' },
+              )}
+              {field(
+                'bank.accountNoConfirm',
+                'Account number again',
+                (a) => (
+                  <input
+                    {...a}
+                    className="ep-input"
+                    value={bank.accountNoConfirm}
+                    onChange={setB('accountNoConfirm')}
+                    inputMode="numeric"
+                    maxLength={20}
+                    autoComplete="off"
+                    onPaste={(e) => e.preventDefault()}
+                  />
+                ),
+                { required: bankStarted, help: 'Typed again, not pasted, to catch a slip.' },
+              )}
+            </FormRow>
+          </>
         )}
       </FormSection>
 

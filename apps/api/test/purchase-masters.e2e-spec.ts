@@ -47,11 +47,22 @@ describe('purchase masters (e2e)', () => {
     call(u, 'POST', `/masters/${master}/rows`, { ...(id ? { id } : {}), values });
   // a valid GSTIN of Maharashtra (27) and one of Karnataka (29), with their PANs
   const G1 = '27AAPFU0939F1ZV';
+  let pans = 0;
   const vendor = (code: string, extra: Record<string, unknown> = {}) => ({
     code,
     legalName: `${code} Traders`,
     gstStatus: 'unregistered',
-    stateCode: '27',
+    // an unregistered vendor's own PAN (a registered one's comes from its GSTIN)
+    ...((extra.gstStatus ?? 'unregistered') === 'unregistered' && !('pan' in extra)
+      ? { pan: `AAAPZ${String(1001 + pans++)}Q` }
+      : {}),
+    address: '12 MG Road, Camp',
+    country: 'India',
+    state: 'Maharashtra',
+    city: 'Pune',
+    pin: '411001',
+    phone: '9822012345',
+    email: `${(code || 'new').toLowerCase()}@vendors.example`,
     contacts: [{ name: 'Ravi Sales', phone: '9822012345', isMain: true }],
     ...extra,
   });
@@ -82,6 +93,19 @@ describe('purchase masters (e2e)', () => {
         [other.id, admin.id],
       );
       await c.query(`SELECT app.staff_masters_seed($1)`, [school.id]);
+      // India and its states come with the purchase masters; the cities and banks are the school's own
+      await c.query(`SELECT app.purchase_seed_masters($1)`, [school.id]);
+      await c.query(
+        `INSERT INTO cities (school_id, state_id, name, pincode)
+         SELECT $1, s.id, x.name, x.pin FROM states s
+           JOIN (VALUES ('MH', 'Pune', '411001'), ('KA', 'Bengaluru', '560001')) AS x(st, name, pin) ON x.st = s.code
+          WHERE s.school_id = $1`,
+        [school.id],
+      );
+      await c.query(
+        `INSERT INTO banks (school_id, code, name, ifsc) VALUES ($1, 'SBI', 'SBI', 'SBIN0000001'), ($1, 'HDFC', 'HDFC', 'HDFC0000001')`,
+        [school.id],
+      );
       for (const [code, name, designation, dept, user] of [
         ['HOD1', 'Hema Head', 'PGT', 'Sports', checker.id],
         ['PRN1', 'Prem Principal', 'Principal', 'Administration', admin.id],
@@ -309,6 +333,81 @@ describe('purchase masters (e2e)', () => {
       vendor('V0', { udyamNo: 'UDYAM-12' }),
     );
     expect(udyam.statusCode).toBe(400);
+  });
+
+  it('checks every field of a new vendor, naming the field, against the rules and the masters', async () => {
+    const lists = (await call(office, 'GET', '/purchase/vendors/form-lists')).json();
+    expect(lists.nextCode).toBe('V-0001');
+    expect(lists.states).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ name: 'Maharashtra', gstCode: '27', country: 'IN' }),
+      ]),
+    );
+    expect(lists.cities).toEqual(
+      expect.arrayContaining([{ name: 'Pune', state: 'MH', pincode: '411001' }]),
+    );
+    expect(lists.banks).toEqual(expect.arrayContaining([{ name: 'SBI', prefixes: ['SBIN'] }]));
+    const bad = await call(office, 'POST', '/purchase/vendors', {
+      ...vendor('V0', {
+        gstStatus: 'regular',
+        gstin: G1,
+        state: 'Karnataka',
+        city: 'Mysuru',
+        pin: '01234',
+        phone: '12345',
+        email: '',
+        msmeType: 'micro',
+        contacts: [{ name: 'Ravi', phone: '', isMain: true }],
+        bank: {
+          bankName: 'SBI',
+          ifsc: 'HDFC0000001',
+          accountNo: '1234',
+          accountNoConfirm: '12345',
+          holder: '',
+        },
+      }),
+    });
+    expect(bad.statusCode).toBe(400);
+    const paths = (bad.json().errors as Array<{ path: string }>).map((e) => e.path).sort();
+    expect(paths).toEqual(
+      [
+        'bank.accountNo',
+        'bank.accountNoConfirm',
+        'bank.holder',
+        'bank.ifsc',
+        'city',
+        'contacts.0.phone',
+        'email',
+        'phone',
+        'pin',
+        'state',
+        'udyamNo',
+      ].sort(),
+    );
+    const msg = (path: string) =>
+      (bad.json().errors as Array<{ path: string; message: string }>).find((e) => e.path === path)
+        ?.message;
+    expect(msg('city')).toContain('not in the Cities master under Karnataka');
+    expect(msg('state')).toContain('GSTIN');
+    expect(msg('bank.ifsc')).toContain('not of SBI');
+    // an unregistered vendor in India needs its PAN; the code left empty is made
+    const noPan = await call(office, 'POST', '/purchase/vendors', vendor('', { pan: undefined }));
+    expect(noPan.json().errors).toEqual([expect.objectContaining({ path: 'pan' })]);
+    const made = await call(
+      office,
+      'POST',
+      '/purchase/vendors',
+      vendor('', { legalName: 'Auto Coded Traders', phone: '+91 98220 11111' }),
+    );
+    expect(made.statusCode).toBe(201);
+    expect(made.json()).toMatchObject({
+      code: 'V-0001',
+      phone: '9822011111',
+      country: 'India',
+      state: 'Maharashtra',
+      city: 'Pune',
+      stateCode: '27',
+    });
   });
 
   it('makes a new vendor wait for a second person, never its maker', async () => {
@@ -598,9 +697,29 @@ describe('purchase masters (e2e)', () => {
   it('imports vendors from Excel: every row checked first, the good ones saved pending', async () => {
     const t = (await call(office, 'GET', '/purchase/vendors/template')).json();
     expect(t.filename).toBe('vendors-format.xlsx');
+    // the format: required columns marked, drop-downs from the masters
+    const tpl = new ExcelJS.Workbook();
+    await tpl.xlsx.load(Buffer.from(t.base64 as string, 'base64') as unknown as ArrayBuffer);
+    const heads = (tpl.worksheets[0]!.getRow(1).values as unknown[]).slice(1).map(String);
+    expect(heads).toEqual(
+      expect.arrayContaining([
+        'Code',
+        'Country *',
+        'State *',
+        'City *',
+        'Mobile *',
+        'Bank',
+        'IFSC',
+      ]),
+    );
+    const listed: string[] = [];
+    tpl
+      .getWorksheet('Lists')!
+      .eachRow((r) => r.eachCell((cell) => listed.push(String(cell.value))));
+    expect(listed).toEqual(expect.arrayContaining(['Pune · Maharashtra', 'Maharashtra', 'SBI']));
     const wb = new ExcelJS.Workbook();
     const ws = wb.addWorksheet('Vendors');
-    ws.addRow([
+    const head = [
       'Code',
       'Legal name',
       'Trade name',
@@ -608,83 +727,86 @@ describe('purchase masters (e2e)', () => {
       'GST status',
       'GSTIN',
       'PAN',
-      'State code',
       'MSME',
       'Udyam no',
       'Address',
+      'Country',
+      'State',
       'City',
       'PIN',
-      'Phone',
+      'Mobile',
       'E-mail',
+      'Contact name',
+      'Contact mobile',
+      'Contact e-mail',
       'Payment term',
-    ]);
-    ws.addRow([
-      'V10',
-      'Ten Supplies',
-      '',
-      'dealer',
-      'unregistered',
-      '',
-      '',
-      '27',
-      '',
-      '',
-      '',
-      'Pune',
-      '411001',
-      '',
-      '',
-      'ADV50 · Half in advance',
-    ]);
-    ws.addRow([
-      'V11',
-      'Eleven Co',
-      '',
-      'dealer',
-      'regular',
-      '27AAPFU0939F1ZA',
-      '',
-      '',
-      '',
-      '',
-      '',
-      '',
-      '',
-      '',
-      '',
-      '',
-    ]);
-    ws.addRow([
-      'V1',
-      'Taken code',
-      '',
-      '',
-      'unregistered',
-      '',
-      '',
-      '',
-      '',
-      '',
-      '',
-      '',
-      '',
-      '',
-      '',
-      '',
-    ]);
+      'Bank',
+      'IFSC',
+      'Account no',
+      'Account holder',
+    ];
+    ws.addRow(head.map((h, k) => (k === 1 ? `${h} *` : h)));
+    const line = (x: Record<string, string>) => head.map((h) => x[h] ?? '');
+    const good = {
+      'Legal name': 'Ten Supplies',
+      Kind: 'dealer',
+      'GST status': 'unregistered',
+      PAN: 'AAAPT1010Q',
+      Address: '4 Station Road',
+      State: 'Maharashtra',
+      City: 'Pune · Maharashtra',
+      PIN: '411001',
+      Mobile: '9822010101',
+      'E-mail': 'ten@vendors.example',
+      'Contact name': 'Tara',
+      'Contact mobile': '9822010102',
+    };
+    ws.addRow(line({ ...good, Code: 'V10', 'Payment term': 'ADV50 · Half in advance' }));
+    ws.addRow(
+      line({ ...good, Code: 'V11', 'GST status': 'regular', GSTIN: '27AAPFU0939F1ZA', PAN: '' }),
+    );
+    ws.addRow(line({ ...good, Code: 'V1', PAN: 'AAAPT1011Q' }));
+    ws.addRow(
+      line({
+        ...good,
+        PAN: 'AAAPT1012Q',
+        Bank: 'HDFC',
+        IFSC: 'HDFC0000009',
+        'Account no': '50100200300',
+        'Account holder': 'Ten Supplies',
+      }),
+    );
+    ws.addRow(
+      line({ ...good, Code: 'V12', PAN: 'AAAPT1013Q', City: 'Nagpur', 'Contact mobile': '' }),
+    );
     const file = Buffer.from(await wb.xlsx.writeBuffer()).toString('base64');
     const dry = (
       await call(office, 'POST', '/purchase/vendors/import', { file, dryRun: true })
     ).json();
-    expect(dry).toMatchObject({ rows: 3, good: 1, saved: 0 });
+    expect(dry).toMatchObject({ rows: 5, good: 2, saved: 0 });
     expect(dry.results[1].error).toContain('mistyped');
     expect(dry.results[2].error).toContain('taken');
+    expect(dry.results[3]).toMatchObject({ ok: true, code: '(next code)' });
+    // the problems say their column, like the form says its field
+    expect(dry.results[4].error).toContain(
+      'City: Nagpur is not in the Cities master under Maharashtra',
+    );
+    expect(dry.results[4].error).toContain('Contact mobile: ');
     const done = (
       await call(office, 'POST', '/purchase/vendors/import', { file, dryRun: false })
     ).json();
-    expect(done).toMatchObject({ saved: 1 });
+    expect(done).toMatchObject({ saved: 2 });
+    expect(done.results[3]).toMatchObject({ ok: true, code: 'V-0002' });
     const v10 = (await call(office, 'GET', '/purchase/vendors?q=V10')).json().data[0];
-    expect(v10).toMatchObject({ code: 'V10', status: 'pending', paymentTerm: 'Half in advance' });
+    expect(v10).toMatchObject({
+      code: 'V10',
+      status: 'pending',
+      paymentTerm: 'Half in advance',
+      city: 'Pune',
+      state: 'Maharashtra',
+    });
+    const banked = (await call(office, 'GET', '/purchase/vendors?q=V-0002')).json().data[0];
+    expect(banked).toMatchObject({ bankHint: 'HDFC ····0300 (HDFC0000009)' });
   });
 
   it('copies masters from another school of the group; vendors arrive pending', async () => {
