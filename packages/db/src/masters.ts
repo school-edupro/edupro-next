@@ -3012,7 +3012,7 @@ export const MASTERS: MasterDefinition[] = [
         },
         notSelf: true,
         width: 22,
-        help: 'Leave empty for a main category. To add a sub-category, pick its category here (e.g. ELEC for Lights and fans); two levels only',
+        help: 'Leave empty for a main category. To add a sub-category, pick its category here (e.g. ELEC for Lights and fans); two levels only. The list is the main categories of this same tab (rows with this box empty)',
       },
       // depreciation of the category's assets (docs/design/84, part 9); a sub-category without its own
       // takes its category's
