@@ -276,42 +276,49 @@ export async function savePaymentTerm(
 // ---- settings and committee -----------------------------------------------------------------------
 const num = (fd: FormData, k: string) => Number(pick(fd, k).replace(/,/g, ''));
 
-export async function savePurchaseSettings(fd: FormData) {
-  const to = '/purchase/settings';
-  const sig = pick(fd, 'committeeSignatures');
-  const alert = pick(fd, 'largePoAlert');
+/** The settings form's save: each problem comes back under its field (docs/design/83). */
+export async function savePurchaseSettingsJson(
+  body: Record<string, unknown>,
+): Promise<{ ok: true } | { ok: false; error: string; fields?: Record<string, string> }> {
+  try {
+    await apiFetch('/purchase/settings', { method: 'PUT', body: JSON.stringify(body) });
+    revalidatePath('/purchase/settings');
+    return { ok: true };
+  } catch (e) {
+    if (e instanceof ApiError) {
+      const fields: Record<string, string> = {};
+      const errs = e.problem.errors as Array<{ path?: string; message?: string }> | undefined;
+      if (Array.isArray(errs))
+        for (const x of errs)
+          if (x.path && x.message && !fields[x.path]) fields[x.path] = x.message;
+      return { ok: false, error: detailOf(e), fields };
+    }
+    throw e;
+  }
+}
+
+/** A vendor approver named in Purchase → Settings (then only the named ones approve vendors). */
+export async function addVendorApprover(fd: FormData) {
+  const employeeId = pick(fd, 'employeeId');
+  if (!okId(employeeId)) back('/purchase/settings', 'validation-failed', 'Pick the employee');
   return run(
-    to,
+    '/purchase/settings',
     () =>
-      apiFetch('/purchase/settings', {
-        method: 'PUT',
-        body: JSON.stringify({
-          gstin: pick(fd, 'gstin') || null,
-          billingAddress: pick(fd, 'billingAddress') || null,
-          deliveryAddress: pick(fd, 'deliveryAddress') || null,
-          piPrefix: pick(fd, 'piPrefix'),
-          prPrefix: pick(fd, 'prPrefix'),
-          poPrefix: pick(fd, 'poPrefix'),
-          directLimit: num(fd, 'directLimit'),
-          committeeLimit: num(fd, 'committeeLimit'),
-          committeeQuotes: num(fd, 'committeeQuotes'),
-          committeeSignatures: sig ? Number(sig) : null,
-          emergencyEnabled: fd.get('emergencyEnabled') === 'on',
-          emergencyRatifier: pick(fd, 'emergencyRatifier') || 'Principal',
-          poTerms: pick(fd, 'poTerms') || null,
-          poValidityDays: num(fd, 'poValidityDays'),
-          purchaseDepartmentId: pick(fd, 'purchaseDepartmentId') || null,
-          poSignatures: pick(fd, 'poSignatures')
-            .split(',')
-            .map((x) => x.trim())
-            .filter(Boolean),
-          largePoAlert: alert ? Number(alert.replace(/,/g, '')) : null,
-          splitWindowDays: num(fd, 'splitWindowDays'),
-          stockGstInCost: fd.get('stockGstInCost') === 'on',
-          receiptTolerancePct: num(fd, 'receiptTolerancePct') || 0,
-        }),
+      apiFetch('/purchase/vendor-approvers', {
+        method: 'POST',
+        body: JSON.stringify({ employeeId }),
       }),
-    'Purchase settings saved',
+    'Added to the vendor approvers',
+  );
+}
+
+export async function removeVendorApprover(fd: FormData) {
+  const id = pick(fd, 'id');
+  if (!okId(id)) back('/purchase/settings', 'validation-failed', 'Unknown approver');
+  return run(
+    '/purchase/settings',
+    () => apiFetch(`/purchase/vendor-approvers/${id}`, { method: 'DELETE' }),
+    'Taken off the vendor approvers',
   );
 }
 

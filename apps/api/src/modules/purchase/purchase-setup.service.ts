@@ -10,6 +10,7 @@ import { WorkflowService } from '../workflow/workflow.service';
 import { GST_STATES, GSTIN_HELP, gstinProblem } from './gstin';
 import { syncFlow, type PurchaseDocType } from './purchase-flow';
 import { PurchaseVendorsService } from './purchase-vendors.service';
+import { pinProblem, resolvePlace } from './vendor-rules';
 import {
   PaymentTermSchema,
   type CommitteeMemberDto,
@@ -514,7 +515,74 @@ export class PurchaseSetupService {
             AND (ur.valid_to IS NULL OR ur.valid_to >= CURRENT_DATE)
           GROUP BY u.id ORDER BY 1`,
       );
-      return { roles: roles.rows, people: people.rows };
+      const named = await c.query<{
+        id: string;
+        employee_id: string;
+        code: string;
+        name: string;
+        designation: string | null;
+        signs_in: boolean;
+      }>(
+        `SELECT a.id::text, a.employee_id::text, e.employee_code AS code, e.display_name AS name, e.designation,
+                (e.user_id IS NOT NULL AND e.status = 'active' AND e.deleted_at IS NULL) AS signs_in
+           FROM purchase_vendor_approvers a JOIN employees e ON e.id = a.employee_id ORDER BY e.display_name`,
+      );
+      return {
+        // named: the people below approve; role: the right decides (nobody named yet)
+        mode: named.rows.length ? ('named' as const) : ('role' as const),
+        named: named.rows.map((x) => ({
+          id: x.id,
+          employeeId: x.employee_id,
+          code: x.code,
+          name: x.name,
+          designation: x.designation,
+          signsIn: x.signs_in,
+        })),
+        roles: roles.rows,
+        people: people.rows,
+      };
+    });
+  }
+
+  /** Names an employee who signs in as a vendor approver (then only the named ones approve). */
+  async addVendorApprover(ctx: RequestContext, employeeId: string) {
+    return this.db.tenant(requireTenant(ctx), async (c) => {
+      const e = await c.query<{ user_id: string | null }>(
+        `SELECT user_id::text FROM employees WHERE id = $1 AND status = 'active' AND deleted_at IS NULL`,
+        [employeeId],
+      );
+      if (!e.rows[0])
+        throw new DomainError('validation-failed', 'Pick an active employee', { status: 400 });
+      if (!e.rows[0].user_id)
+        throw new DomainError(
+          'validation-failed',
+          'This employee does not sign in: give them a login first (Access → Users)',
+          { status: 400 },
+        );
+      await c.query(
+        `INSERT INTO purchase_vendor_approvers (school_id, employee_id, created_by)
+         VALUES (app.current_school_id(), $1, app.current_user_id()) ON CONFLICT (school_id, employee_id) DO NOTHING`,
+        [employeeId],
+      );
+      await this.audit.stage(ctx, c, {
+        action: 'purchase.vendor_approver.add',
+        entityType: 'purchase_vendor_approvers',
+        entityId: employeeId,
+      });
+      return { added: true };
+    });
+  }
+
+  async removeVendorApprover(ctx: RequestContext, id: string) {
+    return this.db.tenant(requireTenant(ctx), async (c) => {
+      const r = await c.query(`DELETE FROM purchase_vendor_approvers WHERE id = $1`, [id]);
+      if (!r.rowCount) throw new DomainError('not-found', 'Approver not found', { status: 404 });
+      await this.audit.stage(ctx, c, {
+        action: 'purchase.vendor_approver.remove',
+        entityType: 'purchase_vendor_approvers',
+        entityId: id,
+      });
+      return { removed: true };
     });
   }
 
@@ -588,6 +656,17 @@ export class PurchaseSetupService {
         state_code: string | null;
         billing_address: string | null;
         delivery_address: string | null;
+        billing_line: string | null;
+        billing_country: string | null;
+        billing_state: string | null;
+        billing_city: string | null;
+        billing_pin: string | null;
+        delivery_same: boolean;
+        delivery_line: string | null;
+        delivery_country: string | null;
+        delivery_state: string | null;
+        delivery_city: string | null;
+        delivery_pin: string | null;
         pi_prefix: string;
         pr_prefix: string;
         po_prefix: string;
@@ -625,6 +704,17 @@ export class PurchaseSetupService {
         state: x.state_code ? (GST_STATES[x.state_code] ?? null) : null,
         billingAddress: x.billing_address,
         deliveryAddress: x.delivery_address,
+        billingLine: x.billing_line,
+        billingCountry: x.billing_country,
+        billingState: x.billing_state,
+        billingCity: x.billing_city,
+        billingPin: x.billing_pin,
+        deliverySame: x.delivery_same,
+        deliveryLine: x.delivery_line,
+        deliveryCountry: x.delivery_country,
+        deliveryState: x.delivery_state,
+        deliveryCity: x.delivery_city,
+        deliveryPin: x.delivery_pin,
         piPrefix: x.pi_prefix,
         prPrefix: x.pr_prefix,
         poPrefix: x.po_prefix,
@@ -655,43 +745,137 @@ export class PurchaseSetupService {
     });
   }
 
+  /**
+   * Saves the settings, every field checked and each problem named by its field (the form shows it
+   * under the box): the GSTIN; the billing address and, unless it is the same, the delivery address
+   * (a line, country → state → city from the school's masters, the PIN), the billing state the GSTIN's;
+   * a prefix per document; the committee's signatures no more than its members; an active department.
+   * Without a GSTIN the billing state is the school's GST state (CGST + SGST or IGST on a PO).
+   */
   async saveSettings(ctx: RequestContext, dto: SettingsDto) {
     if (dto.gstin) {
       const problem = gstinProblem(dto.gstin);
-      if (problem)
-        throw new DomainError(
-          'purchase.gstin_invalid',
-          `GSTIN ${dto.gstin}: ${GSTIN_HELP[problem]}`,
-          {
-            status: 400,
-          },
-        );
+      if (problem) {
+        const message = `GSTIN ${dto.gstin}: ${GSTIN_HELP[problem]}`;
+        throw new DomainError('purchase.gstin_invalid', message, {
+          status: 400,
+          extra: { errors: [{ path: 'gstin', message }] },
+        });
+      }
     }
     return this.db.tenant(requireTenant(ctx), async (c) => {
       await PurchaseVendorsService.seed(c);
+      const errors: Array<{ path: string; message: string }> = [];
+      const fail = (path: string, message: string) => {
+        if (!errors.some((e) => e.path === path)) errors.push({ path, message });
+      };
+      const gstState = dto.gstin ? dto.gstin.slice(0, 2) : null;
+      const address = async (
+        prefix: 'billing' | 'delivery',
+        a: { line?: string; country?: string; state?: string; city?: string; pin?: string },
+      ) => {
+        if (!a.line || a.line.trim().length < 5)
+          fail(`${prefix}Line`, `The ${prefix} address is required (at least 5 characters)`);
+        if (!a.country) fail(`${prefix}Country`, 'Pick the country');
+        if (!a.state) fail(`${prefix}State`, 'Pick the state');
+        if (!a.city) fail(`${prefix}City`, 'Pick the city');
+        const place = await resolvePlace(
+          c,
+          { country: a.country ?? null, state: a.state ?? null, city: a.city ?? null },
+          fail,
+          { country: `${prefix}Country`, state: `${prefix}State`, city: `${prefix}City` },
+        );
+        const pin = a.pin ? a.pin.trim().toUpperCase() : null;
+        if (!pin) fail(`${prefix}Pin`, 'The PIN is required');
+        else {
+          const problem = pinProblem(pin, place.india);
+          if (problem) fail(`${prefix}Pin`, problem);
+        }
+        const line = a.line?.trim() ?? null;
+        return {
+          line,
+          country: place.country?.name ?? null,
+          state: place.state?.name ?? null,
+          gst: place.india ? (place.state?.gst ?? null) : null,
+          city: place.city?.name ?? null,
+          pin,
+          // the whole address as printed on the PO
+          text: [
+            line,
+            [place.city?.name, pin].filter(Boolean).join(' '),
+            place.state?.name,
+            place.country?.name,
+          ]
+            .filter(Boolean)
+            .join(', '),
+        };
+      };
+      const billing = await address('billing', {
+        line: dto.billingLine,
+        country: dto.billingCountry,
+        state: dto.billingState,
+        city: dto.billingCity,
+        pin: dto.billingPin,
+      });
+      if (gstState && billing.gst && billing.gst !== gstState)
+        fail(
+          'billingState',
+          `The school's GSTIN is of ${GST_STATES[gstState] ?? gstState}: the billing address is in that state`,
+        );
+      const delivery = dto.deliverySame
+        ? billing
+        : await address('delivery', {
+            line: dto.deliveryLine,
+            country: dto.deliveryCountry,
+            state: dto.deliveryState,
+            city: dto.deliveryCity,
+            pin: dto.deliveryPin,
+          });
+      const prefixes: Array<[string, string]> = [
+        ['piPrefix', dto.piPrefix],
+        ['prPrefix', dto.prPrefix],
+        ['poPrefix', dto.poPrefix],
+      ];
+      prefixes.forEach(([k, v], i) => {
+        if (prefixes.slice(0, i).some(([, w]) => w === v))
+          fail(k, 'Each document needs its own prefix');
+      });
       if (dto.committeeSignatures !== null) {
         const n = await c.query<{ n: number }>(
           `SELECT count(*)::int AS n FROM purchase_committee_members`,
         );
         if (dto.committeeSignatures > n.rows[0]!.n)
-          throw new DomainError(
-            'validation-failed',
+          fail(
+            'committeeSignatures',
             `The committee has ${String(n.rows[0]!.n)} members: it cannot need ${String(dto.committeeSignatures)} signatures`,
-            { status: 400 },
           );
       }
+      if (dto.purchaseDepartmentId) {
+        const d = await c.query(`SELECT 1 FROM departments WHERE id = $1 AND status = 'active'`, [
+          dto.purchaseDepartmentId,
+        ]);
+        if (!d.rowCount) fail('purchaseDepartmentId', 'Pick an active department');
+      }
+      if (errors.length)
+        throw new DomainError('validation-failed', errors.map((e) => e.message).join('; '), {
+          status: 400,
+          extra: { errors },
+        });
       await c.query(
         `UPDATE purchase_settings SET gstin = $1, state_code = $2, billing_address = $3, delivery_address = $4,
                 pi_prefix = $5, pr_prefix = $6, po_prefix = $7, direct_limit = $8, committee_limit = $9,
                 committee_quotes = $10, committee_signatures = $11, emergency_enabled = $12, po_terms = $13,
                 po_validity_days = $14, purchase_department_id = $15, po_signatures = $16::text[], large_po_alert = $17,
                 split_window_days = $18, emergency_ratifier = $19, stock_gst_in_cost = $20,
-                receipt_tolerance_pct = $21, updated_at = now(), updated_by = app.current_user_id()`,
+                receipt_tolerance_pct = $21, billing_line = $22, billing_country = $23, billing_state = $24,
+                billing_city = $25, billing_pin = $26, delivery_same = $27, delivery_line = $28,
+                delivery_country = $29, delivery_state = $30, delivery_city = $31, delivery_pin = $32,
+                updated_at = now(), updated_by = app.current_user_id()`,
         [
           dto.gstin,
-          dto.gstin ? dto.gstin.slice(0, 2) : null,
-          dto.billingAddress ?? null,
-          dto.deliveryAddress ?? null,
+          gstState ?? billing.gst,
+          billing.text || null,
+          delivery.text || null,
           dto.piPrefix,
           dto.prPrefix,
           dto.poPrefix,
@@ -709,6 +893,17 @@ export class PurchaseSetupService {
           dto.emergencyRatifier,
           dto.stockGstInCost,
           dto.receiptTolerancePct,
+          billing.line,
+          billing.country,
+          billing.state,
+          billing.city,
+          billing.pin,
+          dto.deliverySame,
+          dto.deliverySame ? null : delivery.line,
+          dto.deliverySame ? null : delivery.country,
+          dto.deliverySame ? null : delivery.state,
+          dto.deliverySame ? null : delivery.city,
+          dto.deliverySame ? null : delivery.pin,
         ],
       );
       await this.audit.stage(ctx, c, {

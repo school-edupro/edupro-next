@@ -202,8 +202,19 @@ export const SettingsSchema = z
       .transform((v) => v.toUpperCase())
       .optional()
       .transform((v) => (v ? v : null)),
-    billingAddress: opt(500),
-    deliveryAddress: opt(500),
+    // the addresses in parts: country, state and city as named in the school's masters
+    billingLine: opt(300),
+    billingCountry: opt(80),
+    billingState: opt(80),
+    billingCity: opt(80),
+    billingPin: opt(12),
+    /** the goods come to the billing address (the delivery parts are ignored) */
+    deliverySame: z.boolean().default(true),
+    deliveryLine: opt(300),
+    deliveryCountry: opt(80),
+    deliveryState: opt(80),
+    deliveryCity: opt(80),
+    deliveryPin: opt(12),
     piPrefix: upper(/^[A-Z0-9-]{1,10}$/, 'up to 10 capital letters, digits or hyphens'),
     prPrefix: upper(/^[A-Z0-9-]{1,10}$/, 'up to 10 capital letters, digits or hyphens'),
     poPrefix: upper(/^[A-Z0-9-]{1,10}$/, 'up to 10 capital letters, digits or hyphens'),
@@ -230,6 +241,10 @@ export const SettingsSchema = z
     path: ['committeeLimit'],
   });
 export class SettingsDto extends createZodDto(SettingsSchema) {}
+
+/** A vendor approver named in Purchase → Settings (an employee who signs in). */
+export const VendorApproverSchema = z.object({ employeeId: IdSchema });
+export class VendorApproverDto extends createZodDto(VendorApproverSchema) {}
 
 export const CommitteeMemberSchema = z.object({
   employeeId: IdSchema,

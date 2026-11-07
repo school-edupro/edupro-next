@@ -85,6 +85,8 @@ export interface VendorDetail extends Vendor {
   }>;
   pendingChange: VendorChange | null;
   enteredByMe: boolean;
+  /** may the caller approve vendors (the named approvers, else the right) */
+  canApprove?: boolean;
 }
 
 export interface PaymentTerm {
@@ -123,6 +125,17 @@ export interface PurchaseSettings {
   state: string | null;
   billingAddress: string | null;
   deliveryAddress: string | null;
+  billingLine: string | null;
+  billingCountry: string | null;
+  billingState: string | null;
+  billingCity: string | null;
+  billingPin: string | null;
+  deliverySame: boolean;
+  deliveryLine: string | null;
+  deliveryCountry: string | null;
+  deliveryState: string | null;
+  deliveryCity: string | null;
+  deliveryPin: string | null;
   piPrefix: string;
   prPrefix: string;
   poPrefix: string;

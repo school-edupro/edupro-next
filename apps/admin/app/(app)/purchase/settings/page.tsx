@@ -1,22 +1,25 @@
-import { Breadcrumbs, Button, FormActions, FormRow, FormSection, PageHeader } from '@edupro/ui';
+import { Breadcrumbs, Button, PageHeader } from '@edupro/ui';
 import { notFound } from 'next/navigation';
 import { Notice } from '@/components/Notice';
+import { PurchaseSettingsForm, type PlaceLists } from '@/components/purchase/PurchaseSettingsForm';
 import { apiFetch, getMe } from '@/lib/api';
 import type { DepartmentApprovals, PurchaseSettings } from '@/lib/purchase';
 import {
   addCommitteeMember,
   addCondemnationMember,
+  addVendorApprover,
   removeCommitteeMember,
   removeCondemnationMember,
+  removeVendorApprover,
   saveCondemnationSignatures,
-  savePurchaseSettings,
 } from '@/lib/purchase-actions';
 
 /**
  * Purchase settings (docs/design/83, part 1): the school's GSTIN and addresses, numbering, the sourcing
  * tiers (GFR 2017 limits by default), emergency purchase, the PO's validity, terms and signatures, the
- * department that approves combined PRs, the large-PO alert and the split window; and the purchase
- * committee that signs comparative statements.
+ * department that approves combined PRs, the large-PO alert and the split window (every field checked,
+ * the addresses from the school's masters); who approves vendors; and the purchase committee that
+ * signs comparative statements.
  */
 export default async function PurchaseSettingsPage({
   searchParams,
@@ -27,7 +30,7 @@ export default async function PurchaseSettingsPage({
   const me = await getMe();
   if (!me.permissions.includes('purchase.master.view')) notFound();
   const can = me.permissions.includes('purchase.settings.manage');
-  const [s, a, cc, va] = await Promise.all([
+  const [s, a, cc, va, places] = await Promise.all([
     apiFetch<PurchaseSettings>('/purchase/settings'),
     apiFetch<DepartmentApprovals>('/purchase/approvals'),
     apiFetch<{
@@ -43,10 +46,21 @@ export default async function PurchaseSettingsPage({
       }>;
     }>('/purchase/condemnation-committee'),
     apiFetch<{
+      mode: 'named' | 'role';
+      named: Array<{
+        id: string;
+        employeeId: string;
+        code: string;
+        name: string;
+        designation: string | null;
+        signsIn: boolean;
+      }>;
       roles: Array<{ code: string; name: string }>;
       people: Array<{ name: string; roles: string }>;
     }>('/purchase/vendor-approvers'),
+    apiFetch<PlaceLists>('/purchase/vendors/form-lists'),
   ]);
+  const approverIds = new Set(va.named.map((m) => m.employeeId));
   const canRoles = me.permissions.includes('access.role.view');
   const inCondemnation = new Set(cc.members.map((m) => m.employeeId));
   const inCommittee = new Set(s.committee.map((m) => m.employeeId));
@@ -59,275 +73,13 @@ export default async function PurchaseSettingsPage({
         description="Kept by the school admin. The sourcing limits start at the GFR 2017 figures; a private school may set its own."
       />
       <Notice params={sp} />
-      <form action={savePurchaseSettings}>
-        <fieldset disabled={!can} style={{ border: 0, padding: 0, margin: 0 }}>
-          <FormSection
-            title="The school"
-            description={
-              s.state
-                ? `GST state: ${s.state}. A vendor in this state is charged CGST + SGST; one in another state IGST.`
-                : 'The GSTIN gives the school’s state, which decides CGST + SGST or IGST on a PO.'
-            }
-          >
-            <FormRow columns={3}>
-              <label className="ep-field" htmlFor="ps-gstin">
-                <span className="ep-field__label">The school’s GSTIN</span>
-                <input
-                  id="ps-gstin"
-                  name="gstin"
-                  className="ep-input"
-                  defaultValue={s.gstin ?? ''}
-                  maxLength={15}
-                />
-              </label>
-              <label className="ep-field" htmlFor="ps-bill">
-                <span className="ep-field__label">Billing address (on the PO)</span>
-                <input
-                  id="ps-bill"
-                  name="billingAddress"
-                  className="ep-input"
-                  defaultValue={s.billingAddress ?? ''}
-                />
-              </label>
-              <label className="ep-field" htmlFor="ps-del">
-                <span className="ep-field__label">Delivery address</span>
-                <input
-                  id="ps-del"
-                  name="deliveryAddress"
-                  className="ep-input"
-                  defaultValue={s.deliveryAddress ?? ''}
-                />
-              </label>
-            </FormRow>
-          </FormSection>
-          <FormSection
-            title="Numbering"
-            description="The number of each document, restarting every financial year: PO/2026-27/0001."
-          >
-            <FormRow columns={3}>
-              {(
-                [
-                  ['piPrefix', 'Purchase Indent', s.piPrefix],
-                  ['prPrefix', 'Purchase Requisition', s.prPrefix],
-                  ['poPrefix', 'Purchase Order', s.poPrefix],
-                ] as const
-              ).map(([k, label, v]) => (
-                <label key={k} className="ep-field" htmlFor={`ps-${k}`}>
-                  <span className="ep-field__label">{label} prefix</span>
-                  <input
-                    id={`ps-${k}`}
-                    name={k}
-                    className="ep-input"
-                    defaultValue={v}
-                    maxLength={10}
-                    required
-                  />
-                </label>
-              ))}
-            </FormRow>
-          </FormSection>
-          <FormSection
-            title="Sourcing by value"
-            description="Up to the direct limit one quote and a reasonable-price certificate are enough; up to the committee limit the PR needs the quotes and the committee’s signed comparative statement; above it, a tender reference."
-          >
-            <FormRow columns={4}>
-              <label className="ep-field" htmlFor="ps-direct">
-                <span className="ep-field__label">Direct purchase up to (₹)</span>
-                <input
-                  id="ps-direct"
-                  name="directLimit"
-                  className="ep-input"
-                  inputMode="decimal"
-                  defaultValue={String(s.directLimit)}
-                  required
-                />
-              </label>
-              <label className="ep-field" htmlFor="ps-comm">
-                <span className="ep-field__label">Committee up to (₹)</span>
-                <input
-                  id="ps-comm"
-                  name="committeeLimit"
-                  className="ep-input"
-                  inputMode="decimal"
-                  defaultValue={String(s.committeeLimit)}
-                  required
-                />
-              </label>
-              <label className="ep-field" htmlFor="ps-quotes">
-                <span className="ep-field__label">Quotes needed</span>
-                <input
-                  id="ps-quotes"
-                  name="committeeQuotes"
-                  className="ep-input"
-                  inputMode="numeric"
-                  defaultValue={String(s.committeeQuotes)}
-                  required
-                />
-              </label>
-              <label className="ep-field" htmlFor="ps-sign">
-                <span className="ep-field__label">Committee signatures needed</span>
-                <input
-                  id="ps-sign"
-                  name="committeeSignatures"
-                  className="ep-input"
-                  inputMode="numeric"
-                  defaultValue={s.committeeSignatures === null ? '' : String(s.committeeSignatures)}
-                  placeholder="Empty: every member"
-                />
-              </label>
-            </FormRow>
-            <label className="ep-check" htmlFor="ps-emerg">
-              <input
-                id="ps-emerg"
-                name="emergencyEnabled"
-                className="ep-check__input"
-                type="checkbox"
-                defaultChecked={s.emergencyEnabled}
-              />
-              <span className="ep-check__box" />
-              Allow emergency purchases (recorded after the fact, with the vendor’s bill; ratified
-              afterwards)
-            </label>
-            <FormRow columns={3}>
-              <label className="ep-field" htmlFor="ps-ratifier">
-                <span className="ep-field__label">Who ratifies them (designation)</span>
-                <input
-                  id="ps-ratifier"
-                  name="emergencyRatifier"
-                  className="ep-input"
-                  maxLength={80}
-                  defaultValue={s.emergencyRatifier}
-                  required
-                />
-                <span className="ep-field__help">
-                  Everyone with this designation; the school admin when nobody holds it.
-                </span>
-              </label>
-            </FormRow>
-          </FormSection>
-          <FormSection title="Purchase order">
-            <FormRow columns={3}>
-              <label className="ep-field" htmlFor="ps-valid">
-                <span className="ep-field__label">Valid for (days)</span>
-                <input
-                  id="ps-valid"
-                  name="poValidityDays"
-                  className="ep-input"
-                  inputMode="numeric"
-                  defaultValue={String(s.poValidityDays)}
-                  required
-                />
-              </label>
-              <label className="ep-field" htmlFor="ps-sigs">
-                <span className="ep-field__label">Signatures (comma separated)</span>
-                <input
-                  id="ps-sigs"
-                  name="poSignatures"
-                  className="ep-input"
-                  defaultValue={s.poSignatures.join(', ')}
-                  required
-                />
-              </label>
-              <label className="ep-field" htmlFor="ps-dep">
-                <span className="ep-field__label">Approves a PR combining departments</span>
-                <select
-                  id="ps-dep"
-                  name="purchaseDepartmentId"
-                  className="ep-select"
-                  defaultValue={s.purchaseDepartmentId ?? ''}
-                >
-                  <option value="">—</option>
-                  {a.departments.map((d) => (
-                    <option key={d.id} value={d.id}>
-                      {d.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            </FormRow>
-            <label className="ep-field" htmlFor="ps-terms">
-              <span className="ep-field__label">Terms and conditions (printed on the PO)</span>
-              <textarea
-                id="ps-terms"
-                name="poTerms"
-                className="ep-input"
-                rows={4}
-                defaultValue={s.poTerms ?? ''}
-                maxLength={4000}
-              />
-            </label>
-          </FormSection>
-          <FormSection title="Checks">
-            <FormRow columns={2}>
-              <label className="ep-field" htmlFor="ps-alert">
-                <span className="ep-field__label">List POs above (₹) on the dashboard</span>
-                <input
-                  id="ps-alert"
-                  name="largePoAlert"
-                  className="ep-input"
-                  inputMode="decimal"
-                  defaultValue={s.largePoAlert === null ? '' : String(s.largePoAlert)}
-                  placeholder="Empty: no list"
-                />
-                <span className="ep-field__help">
-                  Information only: no approver is added by amount.
-                </span>
-              </label>
-              <label className="ep-field" htmlFor="ps-split">
-                <span className="ep-field__label">Split window (days)</span>
-                <input
-                  id="ps-split"
-                  name="splitWindowDays"
-                  className="ep-input"
-                  inputMode="numeric"
-                  defaultValue={String(s.splitWindowDays)}
-                  required
-                />
-                <span className="ep-field__help">
-                  A department’s small PIs of one category within these days are added together
-                  before a PI skips the PR.
-                </span>
-              </label>
-            </FormRow>
-          </FormSection>
-          <FormSection
-            title="Goods received"
-            description="How the store takes in what comes against a PO."
-          >
-            <FormRow columns={2}>
-              <label className="ep-field" htmlFor="ps-tol">
-                <span className="ep-field__label">More than ordered allowed (%)</span>
-                <input
-                  id="ps-tol"
-                  name="receiptTolerancePct"
-                  className="ep-input"
-                  inputMode="decimal"
-                  defaultValue={String(s.receiptTolerancePct)}
-                />
-                <span className="ep-field__help">
-                  Per PO line; 0 refuses anything beyond the order. Most schools keep 0.
-                </span>
-              </label>
-            </FormRow>
-            <label className="ep-check" htmlFor="ps-gstcost">
-              <input
-                id="ps-gstcost"
-                name="stockGstInCost"
-                className="ep-check__input"
-                type="checkbox"
-                defaultChecked={s.stockGstInCost}
-              />
-              <span className="ep-check__box" />
-              GST paid is part of the stock cost (leave on unless the school takes input tax credit)
-            </label>
-          </FormSection>
-          {can ? (
-            <FormActions>
-              <Button type="submit">Save the settings</Button>
-            </FormActions>
-          ) : null}
-        </fieldset>
-      </form>
+      <PurchaseSettingsForm
+        s={s}
+        departments={a.departments.map((d) => ({ id: d.id, name: d.name }))}
+        places={places}
+        can={can}
+        committeeSize={s.committee.length}
+      />
 
       <section
         id="vendor-approval"
@@ -336,41 +88,99 @@ export default async function PurchaseSettingsPage({
         style={{ marginTop: 'var(--sp-5)' }}
       >
         <h2 id="ps-va" className="ep-card__title">
-          Vendor approval · {va.people.length}
+          Vendor approval · {va.mode === 'named' ? va.named.length : va.people.length}
         </h2>
         <p className="ep-field__help" style={{ marginTop: 0 }}>
           A new vendor, and a change of an approved vendor’s bank account, GSTIN or PAN, waits in{' '}
-          <a href="/purchase/vendor-approvals">Vendor approvals</a> for someone with the right
-          “Approve a new vendor”. Whoever entered or last changed it never approves it. The right
-          comes with a role:{' '}
-          {va.roles.length ? va.roles.map((r) => r.name).join(', ') : 'no role has it yet'}.
-          {canRoles ? (
-            <>
-              {' '}
-              To change who approves, give a role the right in{' '}
-              <a href="/access/roles" target="_blank" rel="noopener noreferrer">
-                Access → Roles (opens a new tab)
-              </a>
-              , or give people that role in Access → Users.
-            </>
-          ) : (
-            ' The school admin changes it in Access → Roles.'
-          )}
+          <a href="/purchase/vendor-approvals">Vendor approvals</a>. Whoever entered or last changed
+          it never approves it.{' '}
+          {va.mode === 'named'
+            ? 'Only the people named here approve vendors.'
+            : `Nobody is named here, so whoever has the right “Approve a new vendor” approves (the roles ${va.roles.map((r) => r.name).join(', ') || 'none'}). Name people below and only they approve.`}
         </p>
-        {va.people.length ? (
+        {va.mode === 'named' ? (
           <ul style={{ margin: 0, paddingLeft: 'var(--sp-5)' }}>
-            {va.people.map((p) => (
-              <li key={p.name} style={{ marginBottom: 'var(--sp-1)' }}>
-                <strong>{p.name}</strong> · {p.roles}
+            {va.named.map((m) => (
+              <li key={m.id} style={{ marginBottom: 'var(--sp-2)' }}>
+                <strong>{m.name}</strong> ({m.code}){m.designation ? ` · ${m.designation}` : ''}
+                {!m.signsIn ? (
+                  <span className="ep-field__error"> · cannot sign in now</span>
+                ) : null}{' '}
+                {can ? (
+                  <form action={removeVendorApprover} style={{ display: 'inline' }}>
+                    <input type="hidden" name="id" value={m.id} />
+                    <Button type="submit" variant="ghost" size="sm">
+                      Remove
+                    </Button>
+                  </form>
+                ) : null}
               </li>
             ))}
           </ul>
+        ) : va.people.length ? (
+          <>
+            <p className="ep-field__help" style={{ margin: 0 }}>
+              Who can approve now, by the right:
+            </p>
+            <ul style={{ margin: 0, paddingLeft: 'var(--sp-5)' }}>
+              {va.people.map((x) => (
+                <li key={x.name} style={{ marginBottom: 'var(--sp-1)' }}>
+                  <strong>{x.name}</strong> · {x.roles}
+                </li>
+              ))}
+            </ul>
+          </>
         ) : (
           <p className="ep-alert ep-alert--warning" style={{ margin: 0 }}>
-            Nobody can approve a vendor now, so new vendors cannot be used. Give the right to a role
-            someone holds.
+            Nobody can approve a vendor now, so new vendors cannot be used. Name an approver below.
           </p>
         )}
+        {va.mode === 'named' && !va.named.some((m) => m.signsIn) ? (
+          <p className="ep-alert ep-alert--warning" style={{ margin: 'var(--sp-2) 0 0' }}>
+            None of the people named can sign in, so nobody can approve a vendor now.
+          </p>
+        ) : null}
+        {can ? (
+          <form
+            action={addVendorApprover}
+            className="ep-grid__toolbar"
+            style={{ marginTop: 'var(--sp-3)' }}
+          >
+            <label className="ep-field" htmlFor="ps-va-emp">
+              <span className="ep-field__label">Employee</span>
+              <select
+                id="ps-va-emp"
+                name="employeeId"
+                className="ep-select"
+                required
+                defaultValue=""
+              >
+                <option value="" disabled>
+                  Pick an employee who signs in
+                </option>
+                {a.staff
+                  .filter((x) => x.signsIn && !approverIds.has(x.id))
+                  .map((x) => (
+                    <option key={x.id} value={x.id}>
+                      {x.name} ({x.code}){x.designation ? ` · ${x.designation}` : ''}
+                    </option>
+                  ))}
+              </select>
+            </label>
+            <Button type="submit" variant="secondary" size="sm">
+              Add as vendor approver
+            </Button>
+          </form>
+        ) : null}
+        {canRoles && va.mode === 'role' ? (
+          <p className="ep-field__help" style={{ marginBottom: 0 }}>
+            The right itself is given to roles in{' '}
+            <a href="/access/roles" target="_blank" rel="noopener noreferrer">
+              Access → Roles (opens a new tab)
+            </a>
+            .
+          </p>
+        ) : null}
       </section>
 
       <section

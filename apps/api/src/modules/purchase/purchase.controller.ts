@@ -21,6 +21,7 @@ import {
   ReasonDto,
   PaymentTermDto,
   TermListQueryDto,
+  VendorApproverDto,
   SettingsDto,
   UpdateVendorDto,
   VendorDocumentDto,
@@ -141,7 +142,7 @@ export class PurchaseController {
   @ApiOperation({
     summary: 'What the vendor form picks from: countries, states, cities, banks, the next code',
   })
-  @RequirePermission(PURCHASE.masterManage)
+  @RequirePermission(PURCHASE.masterView)
   vendorFormLists(@ReqCtx() ctx: RequestContext) {
     return this.vendors.formLists(ctx);
   }
@@ -170,7 +171,8 @@ export class PurchaseController {
   }
 
   @Post('vendor-changes/:id/decide')
-  @RequirePermission(PURCHASE.vendorApprove)
+  // the named vendor approvers, else the right (checked in the service)
+  @RequirePermission(PURCHASE.masterView)
   decideChange(@ReqCtx() ctx: RequestContext, @Param('id') id: string, @Body() body: DecisionDto) {
     return this.vendors.decideChange(ctx, id, body);
   }
@@ -209,7 +211,8 @@ export class PurchaseController {
 
   @Post('vendors/:id/decide')
   @ApiOperation({ summary: 'Approve or reject a new vendor (never one you entered)' })
-  @RequirePermission(PURCHASE.vendorApprove)
+  // the named vendor approvers, else the right (checked in the service)
+  @RequirePermission(PURCHASE.masterView)
   decideVendor(@ReqCtx() ctx: RequestContext, @Param('id') id: string, @Body() body: DecisionDto) {
     return this.vendors.decideVendor(ctx, id, body);
   }
@@ -283,6 +286,20 @@ export class PurchaseController {
   @RequirePermission(PURCHASE.masterView)
   vendorApprovers(@ReqCtx() ctx: RequestContext) {
     return this.setup.vendorApprovers(ctx);
+  }
+
+  @Post('vendor-approvers')
+  @ApiOperation({ summary: 'Name an employee as a vendor approver' })
+  @RequirePermission(PURCHASE.settingsManage)
+  addVendorApprover(@ReqCtx() ctx: RequestContext, @Body() body: VendorApproverDto) {
+    return this.setup.addVendorApprover(ctx, body.employeeId);
+  }
+
+  @Delete('vendor-approvers/:id')
+  @ApiOperation({ summary: 'Take an employee off the vendor approvers' })
+  @RequirePermission(PURCHASE.settingsManage)
+  removeVendorApprover(@ReqCtx() ctx: RequestContext, @Param('id') id: string) {
+    return this.setup.removeVendorApprover(ctx, id);
   }
 
   @Post('payment-terms')

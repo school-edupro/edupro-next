@@ -68,6 +68,27 @@ const SELECT = `
     LEFT JOIN users cu ON cu.id = v.created_by
     LEFT JOIN users au ON au.id = v.approved_by`;
 
+/**
+ * May the caller approve vendors (and bank / GSTIN / PAN changes)? The people named in Purchase →
+ * Settings → Vendor approval when any is named; else whoever holds the right (School Admin, Group Admin
+ * by default).
+ */
+export async function mayApproveVendors(c: PoolClient, ctx: RequestContext): Promise<boolean> {
+  const r = await c.query<{ named: number; me: boolean | null }>(
+    `SELECT count(*)::int AS named, bool_or(e.user_id = app.current_user_id()) AS me
+       FROM purchase_vendor_approvers a
+       JOIN employees e ON e.id = a.employee_id AND e.deleted_at IS NULL AND e.status = 'active'`,
+  );
+  const x = r.rows[0]!;
+  return x.named > 0 ? x.me === true : (ctx.permissions?.has(PURCHASE.vendorApprove) ?? false);
+}
+const notApprover = () =>
+  new DomainError(
+    'purchase.not_vendor_approver',
+    'Only the vendor approvers (Purchase → Settings → Vendor approval) approve vendors',
+    { status: 403 },
+  );
+
 /** The sensitive fields: on an approved vendor a change of any of them waits for a second person. */
 const SENSITIVE = ['gstStatus', 'gstin', 'pan', 'stateCode', 'bank'] as const;
 
@@ -246,9 +267,10 @@ export class PurchaseVendorsService {
         [id],
       );
       const change = v.pending_change_id ? await this.changeOf(c, v.pending_change_id) : null;
-      const approver = ctx.permissions?.has(PURCHASE.vendorApprove) ?? false;
+      const approver = await mayApproveVendors(c, ctx);
       return {
         ...this.shape(v, approver),
+        canApprove: approver,
         contacts: contacts.rows.map((x) => ({
           id: x.id,
           name: x.name,
@@ -569,6 +591,7 @@ export class PurchaseVendorsService {
   /** A new vendor approved or rejected by a second person. */
   async decideVendor(ctx: RequestContext, vendorId: string, dto: DecisionDto) {
     return this.db.tenant(requireTenant(ctx), async (c) => {
+      if (!(await mayApproveVendors(c, ctx))) throw notApprover();
       const v = await this.load(c, vendorId);
       if (v.status !== 'pending')
         throw new DomainError('purchase.not_pending', 'This vendor is not waiting for approval', {
@@ -637,6 +660,7 @@ export class PurchaseVendorsService {
   /** A change of an approved vendor's bank, GSTIN or PAN approved (applied) or rejected. */
   async decideChange(ctx: RequestContext, changeId: string, dto: DecisionDto) {
     return this.db.tenant(requireTenant(ctx), async (c) => {
+      if (!(await mayApproveVendors(c, ctx))) throw notApprover();
       const x = await this.changeOf(c, changeId);
       if (x.status !== 'pending')
         throw new DomainError('purchase.not_pending', 'This change is not waiting for approval', {
@@ -714,7 +738,7 @@ export class PurchaseVendorsService {
       const changes = await c.query<{ id: string }>(
         `SELECT id::text FROM vendor_changes WHERE status = 'pending' ORDER BY requested_at`,
       );
-      const full = ctx.permissions?.has(PURCHASE.vendorApprove) ?? false;
+      const full = await mayApproveVendors(c, ctx);
       const list = [];
       for (const ch of changes.rows) {
         const x = await this.changeOf(c, ch.id);
@@ -728,6 +752,7 @@ export class PurchaseVendorsService {
       return {
         vendors: vendors.rows.map((v) => ({ ...this.shape(v, full), mine: v.created_by === me })),
         changes: list,
+        canApprove: full,
       };
     });
   }

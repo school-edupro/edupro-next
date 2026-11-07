@@ -49,11 +49,12 @@ export default async function VendorPage({
   const me = await getMe();
   if (!me.permissions.includes('purchase.master.view')) notFound();
   const canManage = me.permissions.includes('purchase.master.manage');
-  const canApprove = me.permissions.includes('purchase.vendor.approve');
   const v = await apiFetch<VendorDetail>(`/purchase/vendors/${id}`).catch((e: unknown) => {
     if (e instanceof ApiError && e.status === 404) notFound();
     throw e;
   });
+  // the vendor approvers named in Purchase → Settings, else the right (the API says)
+  const canApprove = v.canApprove === true;
   const lists = canManage ? await vendorFormLists() : null;
   const st = VENDOR_STATUS[v.status];
   const ch = v.pendingChange;

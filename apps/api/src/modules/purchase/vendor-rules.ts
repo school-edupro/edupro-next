@@ -30,6 +30,75 @@ export function indianMobile(raw: string): string | null {
 /** A number outside India: + and 7 to 15 digits (spaces and hyphens allowed). */
 const foreignPhone = (raw: string) => /^\+?[0-9][0-9 -]{6,18}$/.test(raw.trim());
 
+/**
+ * Country → state → city named as in the school's masters (a country by its name or code, a state of
+ * that country by its name, code or GST code, a city of that state by its name — an Excel list cell
+ * "Noida · Uttar Pradesh" read as Noida). Each one not found is a problem at its path.
+ */
+export async function resolvePlace(
+  c: PoolClient,
+  names: { country: string | null; state: string | null; city: string | null },
+  fail: (path: string, message: string) => void,
+  paths: { country: string; state: string; city: string },
+) {
+  let country: { id: string; code: string; name: string } | null = null;
+  let state: { id: string; name: string; gst: string | null } | null = null;
+  let city: { name: string; pincode: string | null } | null = null;
+  if (names.country) {
+    country =
+      (
+        await c.query<{ id: string; code: string; name: string }>(
+          `SELECT id::text, code, name FROM countries
+            WHERE status = 'active' AND (lower(name) = lower($1) OR upper(code) = upper($1)) ORDER BY id LIMIT 1`,
+          [names.country.trim()],
+        )
+      ).rows[0] ?? null;
+    if (!country)
+      fail(paths.country, `${names.country} is not in the Countries master: pick from the list`);
+  }
+  if (country && names.state) {
+    state =
+      (
+        await c.query<{ id: string; name: string; gst: string | null }>(
+          `SELECT id::text, name, gst_code AS gst FROM states
+            WHERE status = 'active' AND country_id = $1
+              AND (lower(name) = lower($2) OR upper(code) = upper($2) OR gst_code = $2) ORDER BY id LIMIT 1`,
+          [country.id, names.state.trim()],
+        )
+      ).rows[0] ?? null;
+    if (!state)
+      fail(paths.state, `${names.state} is not a state of ${country.name} in the States master`);
+  }
+  if (state && names.city) {
+    const wanted = names.city.split(' · ')[0]!.trim();
+    city =
+      (
+        await c.query<{ name: string; pincode: string | null }>(
+          `SELECT name, pincode FROM cities
+            WHERE status = 'active' AND state_id = $1 AND lower(name) = lower($2) ORDER BY id LIMIT 1`,
+          [state.id, wanted],
+        )
+      ).rows[0] ?? null;
+    if (!city)
+      fail(
+        paths.city,
+        `${wanted} is not in the Cities master under ${state.name}: add it there first (Masters → Cities)`,
+      );
+  }
+  return { country, state, city, india: (country?.code ?? 'IN').toUpperCase() === 'IN' };
+}
+
+/** A PIN in India (six digits, not from 0) or a postal code elsewhere; the problem, or null. */
+export function pinProblem(pin: string, india: boolean): string | null {
+  return india
+    ? PIN_IN.test(pin)
+      ? null
+      : 'A PIN is six digits, not starting with 0'
+    : POSTAL.test(pin)
+      ? null
+      : 'A postal code of 3 to 10 letters or digits';
+}
+
 export interface VendorFieldsIn {
   gstStatus?: string;
   pan?: string | null;
@@ -108,51 +177,12 @@ export async function checkVendorFields(
   const countryName = v.country ?? opts.stored?.country ?? null;
   const stateName = v.state ?? opts.stored?.state ?? null;
   const cityName = v.city ?? opts.stored?.city ?? null;
-  let country: { id: string; code: string; name: string } | null = null;
-  let state: { id: string; name: string; gst: string | null } | null = null;
-  let city: { name: string; pincode: string | null } | null = null;
-  if (countryName) {
-    country =
-      (
-        await c.query<{ id: string; code: string; name: string }>(
-          `SELECT id::text, code, name FROM countries
-            WHERE status = 'active' AND (lower(name) = lower($1) OR upper(code) = upper($1)) ORDER BY id LIMIT 1`,
-          [countryName.trim()],
-        )
-      ).rows[0] ?? null;
-    if (!country)
-      fail('country', `${countryName} is not in the Countries master: pick from the list`);
-  }
-  if (country && stateName) {
-    state =
-      (
-        await c.query<{ id: string; name: string; gst: string | null }>(
-          `SELECT id::text, name, gst_code AS gst FROM states
-            WHERE status = 'active' AND country_id = $1
-              AND (lower(name) = lower($2) OR upper(code) = upper($2) OR gst_code = $2) ORDER BY id LIMIT 1`,
-          [country.id, stateName.trim()],
-        )
-      ).rows[0] ?? null;
-    if (!state)
-      fail('state', `${stateName} is not a state of ${country.name} in the States master`);
-  }
-  if (state && cityName) {
-    city =
-      (
-        await c.query<{ name: string; pincode: string | null }>(
-          `SELECT name, pincode FROM cities
-            WHERE status = 'active' AND state_id = $1 AND lower(name) = lower($2) ORDER BY id LIMIT 1`,
-          // a cell from the Excel list reads "Noida · Uttar Pradesh": the city is the first part
-          [state.id, cityName.split(' · ')[0]!.trim()],
-        )
-      ).rows[0] ?? null;
-    if (!city)
-      fail(
-        'city',
-        `${cityName.split(' · ')[0]!.trim()} is not in the Cities master under ${state.name}: add it there first (Masters → Cities)`,
-      );
-  }
-  const india = (country?.code ?? 'IN').toUpperCase() === 'IN';
+  const { country, state, city, india } = await resolvePlace(
+    c,
+    { country: countryName, state: stateName, city: cityName },
+    fail,
+    { country: 'country', state: 'state', city: 'city' },
+  );
   if (
     state &&
     india &&

@@ -710,8 +710,26 @@ describe('purchase masters (e2e)', () => {
 
   it('keeps the settings and the purchase committee (school admin only)', async () => {
     const st = (await call(admin, 'GET', '/purchase/settings')).json();
-    const body = { ...st, gstin: '27AAPFU0939F1ZA' };
-    for (const k of ['state', 'stateCode', 'updatedAt', 'committee']) delete body[k];
+    const body = {
+      ...st,
+      gstin: '27AAPFU0939F1ZA',
+      // the billing address in parts, from the school's masters
+      billingLine: '1 School Road, Camp',
+      billingCountry: 'India',
+      billingState: 'Maharashtra',
+      billingCity: 'Pune',
+      billingPin: '411001',
+      deliverySame: true,
+    };
+    for (const k of [
+      'state',
+      'stateCode',
+      'updatedAt',
+      'committee',
+      'billingAddress',
+      'deliveryAddress',
+    ])
+      delete body[k];
     expect((await call(office, 'PUT', '/purchase/settings', body)).statusCode).toBe(403);
     expect((await call(admin, 'PUT', '/purchase/settings', body)).json().type).toBe(
       'purchase.gstin_invalid',
@@ -745,6 +763,9 @@ describe('purchase masters (e2e)', () => {
       gstin: G1,
       state: 'Maharashtra',
       committeeSignatures: 2,
+      billingAddress: '1 School Road, Camp, Pune 411001, Maharashtra, India',
+      deliverySame: true,
+      deliveryAddress: '1 School Road, Camp, Pune 411001, Maharashtra, India',
       committee: [
         expect.objectContaining({ name: expect.stringContaining('Hema') }),
         expect.anything(),
@@ -754,6 +775,69 @@ describe('purchase masters (e2e)', () => {
       gstinSet: true,
       committee: 2,
     });
+  });
+
+  it('checks every settings field, naming the field; the addresses from the masters', async () => {
+    const st = (await call(admin, 'GET', '/purchase/settings')).json();
+    const base = { ...st };
+    for (const k of [
+      'state',
+      'stateCode',
+      'updatedAt',
+      'committee',
+      'billingAddress',
+      'deliveryAddress',
+    ])
+      delete base[k];
+    const bad = await call(admin, 'PUT', '/purchase/settings', {
+      ...base,
+      gstin: G1,
+      billingLine: 'x',
+      billingState: 'Karnataka',
+      billingCity: 'Mysuru',
+      billingPin: '0123',
+      deliverySame: false,
+      deliveryLine: '2 Store Lane',
+      deliveryCountry: 'India',
+      deliveryState: 'Karnataka',
+      deliveryCity: 'Bengaluru',
+      deliveryPin: '',
+      prPrefix: base.piPrefix,
+      purchaseDepartmentId: '999999999',
+    });
+    expect(bad.statusCode).toBe(400);
+    const paths = (bad.json().errors as Array<{ path: string }>).map((e) => e.path).sort();
+    expect(paths).toEqual(
+      [
+        'billingCity',
+        'billingLine',
+        'billingPin',
+        'billingState',
+        'deliveryPin',
+        'prPrefix',
+        'purchaseDepartmentId',
+      ].sort(),
+    );
+    // a delivery address of its own, in another state: kept in parts and printed whole
+    const ok = await call(admin, 'PUT', '/purchase/settings', {
+      ...base,
+      deliverySame: false,
+      deliveryLine: '2 Store Lane',
+      deliveryCountry: 'India',
+      deliveryState: 'Karnataka',
+      deliveryCity: 'Bengaluru',
+      deliveryPin: '560001',
+    });
+    expect(ok.statusCode).toBe(200);
+    expect((await call(admin, 'GET', '/purchase/settings')).json()).toMatchObject({
+      deliverySame: false,
+      deliveryCity: 'Bengaluru',
+      deliveryAddress: '2 Store Lane, Bengaluru 560001, Karnataka, India',
+      billingAddress: '1 School Road, Camp, Pune 411001, Maharashtra, India',
+    });
+    expect(
+      (await call(admin, 'PUT', '/purchase/settings', { ...base, deliverySame: true })).statusCode,
+    ).toBe(200);
   });
 
   it('keeps who approves each department’s PIs, PRs and POs, and its bypass rules', async () => {
@@ -951,5 +1035,46 @@ describe('purchase masters (e2e)', () => {
     expect(w1).toMatchObject({ code: 'W1', status: 'pending' });
     const desk = (await call(admin, 'GET', '/masters/purchase_items/rows?q=DESK-2')).json().data[0];
     expect(desk).toMatchObject({ code: 'DESK-2', category_id: expect.stringContaining('FURN') });
+  });
+
+  it('lets the school name its vendor approvers; then only they approve', async () => {
+    expect(
+      (await call(office, 'POST', '/purchase/vendor-approvers', { employeeId: emp.HOD1 }))
+        .statusCode,
+    ).toBe(403);
+    const noLogin = await call(admin, 'POST', '/purchase/vendor-approvers', {
+      employeeId: emp.CLK1,
+    });
+    expect(noLogin.statusCode).toBe(400);
+    expect(noLogin.json().detail).toContain('does not sign in');
+    expect(
+      (await call(admin, 'POST', '/purchase/vendor-approvers', { employeeId: emp.HOD1 }))
+        .statusCode,
+    ).toBe(201);
+    const va = (await call(admin, 'GET', '/purchase/vendor-approvers')).json();
+    expect(va).toMatchObject({
+      mode: 'named',
+      named: [expect.objectContaining({ name: 'Hema Head E2E', signsIn: true })],
+    });
+    // the admin holds the right but is not named now; the checker (Hema) is
+    const v10 = (await call(office, 'GET', '/purchase/vendors?q=V10')).json().data[0];
+    expect((await call(admin, 'GET', '/purchase/vendor-approvals')).json().canApprove).toBe(false);
+    expect((await call(checker, 'GET', '/purchase/vendor-approvals')).json().canApprove).toBe(true);
+    const refused = await call(admin, 'POST', `/purchase/vendors/${v10.id}/decide`, {
+      approve: true,
+    });
+    expect(refused.statusCode).toBe(403);
+    expect(refused.json().type).toBe('purchase.not_vendor_approver');
+    const done = await call(checker, 'POST', `/purchase/vendors/${v10.id}/decide`, {
+      approve: true,
+    });
+    expect(done.json()).toMatchObject({ status: 'active' });
+    // nobody named again: the right decides
+    expect(
+      (await call(admin, 'DELETE', `/purchase/vendor-approvers/${va.named[0].id as string}`))
+        .statusCode,
+    ).toBe(200);
+    expect((await call(admin, 'GET', '/purchase/vendor-approvers')).json().mode).toBe('role');
+    expect((await call(admin, 'GET', '/purchase/vendor-approvals')).json().canApprove).toBe(true);
   });
 });

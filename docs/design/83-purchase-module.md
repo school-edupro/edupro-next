@@ -627,3 +627,35 @@ approves a vendor, and where is it set up". Decided with them (all recommended o
   card (who, which roles, a link to Access → Roles, a warning when nobody can approve).
 - **Tests**: `purchase-masters.e2e-spec.ts` — the four filters, both files, the filled format, an upload
   with a new term, an update and three refused rows; the approvers (roles, people, not the purchase office).
+
+## As built — purchase settings checks, addresses from the masters, named vendor approvers (7 Nov 2026)
+
+Asked by the user on Purchase → Settings: every field checked; the billing and delivery addresses with
+country, state and city from the masters; vendor approval configured on the page. Decided with them
+(recommended options): **pick the approvers here** (employees who sign in; while none is named, the
+role right decides as before) and **"Same as billing" tick** for the delivery address (on by default).
+
+- **Migration 0329**: `purchase_settings.billing_line / _country / _state / _city / _pin`,
+  `delivery_same`, `delivery_line / … / _pin` (what was typed before became the line);
+  `billing_address` / `delivery_address` stay the whole address as printed, made from the parts on
+  saving ("1 School Road, Pune 411001, Maharashtra, India"), so the PO and its PDF are unchanged.
+  `purchase_vendor_approvers` (school, employee; tenant RLS).
+- **API**: `saveSettings` checks per field (`errors: [{ path, message }]`): the GSTIN (its own type,
+  with the path), each address (line ≥ 5, country → state → city by `resolvePlace` — shared with the
+  vendor rules — and the PIN by `pinProblem`), the billing state = the GSTIN's, a prefix per document,
+  the committee's signatures ≤ its members, an active department; without a GSTIN the school's GST
+  state is the billing state's. `GET/POST/DELETE /purchase/vendor-approvers` (the named ones, the roles
+  with the right and their people; `mode` named | role); `mayApproveVendors()` (named → only them,
+  else the right) used by the vendor detail, the approvals queue (`canApprove` in both answers) and
+  both decisions (`purchase.not_vendor_approver`, 403); the decide routes need only the purchase view
+  right, the service decides. `vendors/form-lists` is open to the purchase view right.
+- **Admin**: `PurchaseSettingsForm.tsx` (client): the sections as before plus Billing address and
+  Delivery address (the tick), each field's problem under it, the server's under the same box, focus
+  to the first; a GSTIN picks the billing state, a city fills its PIN. The Vendor approval card: the
+  named approvers (Remove, "cannot sign in now"), else who approves by the right, Add as vendor
+  approver (employees who sign in), a warning when nobody can approve. The vendor pages take
+  `canApprove` from the API.
+- **Tests**: `purchase-masters.e2e-spec.ts` — the settings with the address parts (printed whole), a body
+  with seven problems answered per field, a delivery address of its own, the named approvers (only
+  employees who sign in; only the settings right; then the admin is refused and the named one
+  approves; removed, the right decides again).

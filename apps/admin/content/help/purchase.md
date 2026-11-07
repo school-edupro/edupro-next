@@ -33,14 +33,21 @@ PO, the emergency purchase, the stores and receiving what was ordered.
 
 **Purchase → Purchase set-up** lists the steps with what is done:
 
-1. **Purchase settings** — the school's **GSTIN** (it gives the school's state: a vendor in the same
-   state is charged CGST + SGST, one in another state IGST), the billing and delivery addresses, the
+1. **Purchase settings** — the school's **GSTIN** (optional; it gives the school's state: a vendor in
+   the same state is charged CGST + SGST, one in another state IGST — without a GSTIN the billing
+   address's state decides), the **billing address** (printed on the PO: the line, then country, state
+   and city from Masters → Countries / States / Cities, and the PIN, filled from the city; it must be in
+   the GSTIN's state) and the **delivery address** (the same as the billing one unless you untick it and
+   enter its own), the
    numbering (PI / PR / PO prefixes, restarting each financial year), the **sourcing limits** (direct
    purchase up to ₹50,000 with one quote and a reasonable-price certificate; up to ₹2.5 lakh at least 3
    quotes and the purchase committee's signed comparative statement; above that a tender reference —
    the GFR 2017 figures, change them if your school follows its own), **emergency purchase** on or off,
    the PO's validity, terms and signatures, the department whose levels approve a PR combining
-   departments, the large-PO list and the split window.
+   departments, the large-PO list and the split window. Every box is checked as you leave it and when
+   you press **Save the settings**, the problem shown under it (a prefix per document, the committee
+   limit at least the direct one, the committee's signatures no more than its members, days from 1 to
+   365 …). The **Vendor approval** card names who approves vendors (see Vendors).
 2. **Items, units and HSN** (Purchase → Items, units and HSN, the tabs **Units**, **HSN / SAC codes**,
    **Item categories**, **Items**, **Rate contracts**): every tab has Add, Edit, Excel upload with a check
    before saving, Excel and PDF of the list. The HSN list starts short on purpose (school stationery,
@@ -107,10 +114,10 @@ are; copied vendors wait for approval here.
   vendor), checks the GSTIN, PAN and bank account against the documents, and approves or rejects (with a
   reason). Whoever entered or last changed a waiting vendor cannot approve it. Until it is approved a
   vendor cannot be used on a PR, a PO or a rate contract.
-- **Who approves vendors**: anyone whose role has the right **Approve a new vendor** — School Admin and
-  Group Admin by default. **Purchase → Settings → Vendor approval** lists the roles and the people who
-  can approve now; to change it, give a role the right in **Access → Roles**, or give people that role
-  in Access → Users.
+- **Who approves vendors**: **Purchase → Settings → Vendor approval**. Add the employees (who sign
+  in) who approve new vendors and bank / GSTIN / PAN changes: then only they approve. While nobody is
+  named there, anyone whose role has the right **Approve a new vendor** approves (School Admin and Group
+  Admin by default; roles are changed in **Access → Roles**). The card lists who can approve now.
 - On an approved vendor, a new **bank account**, **GSTIN**, **PAN** or **GST status** waits for approval
   the same way (with the reason for the change); the old details stay in force until then. Everything
   else (name, address, contacts, categories, term) changes at once.

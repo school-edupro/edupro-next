@@ -11,6 +11,8 @@ type Approvals = {
   changes: Array<
     VendorChange & { vendor: { id: string; code: string; legalName: string }; mine: boolean }
   >;
+  /** the vendor approvers named in Purchase → Settings, else the right */
+  canApprove: boolean;
 };
 
 const when = (iso: string) =>
@@ -34,8 +36,8 @@ export default async function VendorApprovalsPage({
   const sp = await searchParams;
   const me = await getMe();
   if (!me.permissions.includes('purchase.master.view')) notFound();
-  const canApprove = me.permissions.includes('purchase.vendor.approve');
   const q = await apiFetch<Approvals>('/purchase/vendor-approvals');
+  const canApprove = q.canApprove;
   const back = '/purchase/vendor-approvals';
   return (
     <>
@@ -50,7 +52,8 @@ export default async function VendorApprovalsPage({
       <Notice params={sp} />
       {!canApprove ? (
         <p className="ep-alert ep-alert--info" role="status">
-          You can see what waits; someone with the vendor-approve right approves it.
+          You can see what waits; a vendor approver (Purchase → Settings → Vendor approval)
+          approves it.
         </p>
       ) : null}
       <section className="ep-card" aria-labelledby="va-new">
