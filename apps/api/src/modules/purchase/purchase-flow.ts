@@ -10,6 +10,8 @@ interface SetupLevel {
   employeeIds: string[];
   designation: string | null;
   slaHours: number | null;
+  /** several people at the level: any one decides (the default), or all of them approve */
+  need?: 'any' | 'all';
 }
 
 const resolverOf = (l: SetupLevel): Resolver => ({
@@ -68,6 +70,8 @@ export async function syncFlow(
         name: l.name,
         resolver: resolverOf(l),
         ...(l.slaHours ? { slaHours: l.slaHours } : {}),
+        // the HOD is one person: only named employees or a designation need all of them
+        ...(l.need === 'all' && l.by !== 'hod' ? { need: 'all' as const } : {}),
         escalateTo:
           i + 1 < setup.length
             ? resolverOf(setup[i + 1]!)

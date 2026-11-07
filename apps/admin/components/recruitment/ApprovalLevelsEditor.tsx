@@ -35,6 +35,7 @@ export function ApprovalLevelsEditor({
   allowRole = false,
   idPrefix = 'ra',
   maxLevels = 6,
+  allowAll = false,
 }: {
   setup: ApprovalSetup;
   /** Saves the levels (vacancy approval by default). */
@@ -51,6 +52,8 @@ export function ApprovalLevelsEditor({
   idPrefix?: string;
   /** How many levels may be set (purchase: 3). */
   maxLevels?: number;
+  /** Offer "all of them must approve" for a level of several people (purchase). */
+  allowAll?: boolean;
 }) {
   const canEdit = setup.can.manage;
   const choices: Array<[ApprovalBy, string]> = [
@@ -218,6 +221,26 @@ export function ApprovalLevelsEditor({
                 ) : null}
               </div>
               <div className="ep-ra-level__who">
+                {allowAll && (r.by === 'employees' || r.by === 'designation') ? (
+                  <label className="ep-field" htmlFor={`${idPrefix}-need-${r.key}`}>
+                    <span className="ep-field__label">Level {n}: when several hold it</span>
+                    <select
+                      id={`${idPrefix}-need-${r.key}`}
+                      className="ep-select"
+                      value={r.need ?? 'any'}
+                      disabled={!canEdit}
+                      onChange={(e) => set(r.key, { need: e.target.value as 'any' | 'all' })}
+                    >
+                      <option value="any">Any one of them approves</option>
+                      <option value="all">All of them must approve</option>
+                    </select>
+                    <span className="ep-field__help">
+                      {(r.need ?? 'any') === 'all'
+                        ? 'The level passes when every one has approved (the one who raised it is left out); one rejection rejects.'
+                        : 'The first of them to act decides the level.'}
+                    </span>
+                  </label>
+                ) : null}
                 {r.by === 'employees' ? (
                   canEdit ? (
                     <ChipPicker
@@ -225,7 +248,7 @@ export function ApprovalLevelsEditor({
                       options={staffOptions}
                       value={r.employeeIds}
                       onChange={(next) => set(r.key, { employeeIds: next })}
-                      help="Any one of them may approve. Employees without a sign-in cannot approve."
+                      help={`${(r.need ?? 'any') === 'all' ? 'All of them must approve.' : 'Any one of them may approve.'} Employees without a sign-in cannot approve.`}
                     />
                   ) : (
                     <p className="ep-field__help">
@@ -254,7 +277,7 @@ export function ApprovalLevelsEditor({
                     {r.designation ? (
                       <span className="ep-field__help">
                         {holders
-                          ? `Any of the ${String(holders)} holding it may approve.`
+                          ? `${(r.need ?? 'any') === 'all' ? 'All' : 'Any'} of the ${String(holders)} holding it ${(r.need ?? 'any') === 'all' ? 'must approve' : 'may approve'}.`
                           : 'Nobody who can sign in holds it yet.'}
                       </span>
                     ) : null}

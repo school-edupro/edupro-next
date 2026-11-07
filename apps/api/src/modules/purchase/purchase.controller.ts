@@ -340,6 +340,15 @@ export class PurchaseController {
     return this.setup.saveTerm(ctx, id, body);
   }
 
+  @Post('steps/:id/pass')
+  @ApiOperation({
+    summary: 'Pass the level a purchase document waits at for its approvers (with the reason)',
+  })
+  @RequirePermission(PURCHASE.approvalOverride)
+  passStep(@ReqCtx() ctx: RequestContext, @Param('id') id: string, @Body() body: ReasonDto) {
+    return this.setup.passStep(ctx, id, body.reason);
+  }
+
   // ---- settings, committee, approvals -------------------------------------------------------------
   @Get('settings')
   @RequirePermission(PURCHASE.masterView)

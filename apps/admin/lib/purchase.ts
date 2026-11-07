@@ -189,6 +189,7 @@ export interface DepartmentApprovals {
         employeeIds: string[];
         designation: string | null;
         slaHours: number | null;
+        need?: 'any' | 'all';
       }>
     >;
   }>;
@@ -346,6 +347,10 @@ export interface IndentStep {
   note: string | null;
   dueAt: string | null;
   overdue: boolean;
+  /** any one of its people decides, or all of them must approve */
+  need?: 'any' | 'all';
+  /** who has approved so far (a level that needs all) */
+  approvedBy?: Array<{ id: string; name: string }>;
 }
 
 export interface IndentDetail extends IndentRow {

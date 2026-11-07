@@ -44,6 +44,7 @@ export default async function PurchaseApprovalsPage({
       designation: l.designation,
       roleCode: null,
       slaHours: l.slaHours,
+      need: l.need ?? 'any',
     })),
     staff: a.staff,
     designations: a.designations,
@@ -200,6 +201,7 @@ export default async function PurchaseApprovalsPage({
                 waitingNoun={['document', 'documents']}
                 idPrefix={`pa-${doc}`}
                 maxLevels={3}
+                allowAll
               />
             </div>
           ))}

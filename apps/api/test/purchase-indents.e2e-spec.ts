@@ -358,4 +358,85 @@ describe('purchase indents (e2e)', () => {
     expect((await call(admin, 'GET', '/purchase/indents')).json().total).toBeGreaterThanOrEqual(8);
     expect((await call(outsider, 'GET', '/purchase/indents')).json().total).toBe(0);
   });
+  it('a level of several people may need all of them; the admin passes a stuck level', async () => {
+    // Science: Hari and Dev must both approve, then the Principal
+    expect(
+      (
+        await call(admin, 'PUT', `/purchase/approvals/${ids.science!}/indent`, {
+          levels: [
+            {
+              name: 'Senior teachers',
+              by: 'employees',
+              employeeIds: [ids.H1, ids.D1],
+              need: 'all',
+            },
+            { name: 'Principal', by: 'designation', designation: 'Principal' },
+          ],
+        })
+      ).statusCode,
+    ).toBe(200);
+    const waiting = async (u: SeededUser) =>
+      (await call(u, 'GET', '/purchase/indents?view=waiting'))
+        .json()
+        .data.map((x: { id: string }) => x.id) as string[];
+    const id = await raise(teacher, [{ itemId: ids.PAPER, quantity: 4, estRate: 300 }]);
+    await call(teacher, 'POST', `/purchase/indents/${id}/submit`);
+    expect(await waiting(hod)).toContain(id);
+    expect(await waiting(deputy)).toContain(id);
+    // one of them approves: the level waits for the other, and the first is not asked again
+    expect((await decide(hod, id, 'approve')).statusCode).toBe(201);
+    let pi = await get(teacher, id);
+    expect(pi.status).toBe('submitted');
+    expect(pi.steps[0]).toMatchObject({
+      status: 'pending',
+      need: 'all',
+      approvedBy: [expect.objectContaining({ name: expect.stringContaining('') })],
+    });
+    expect(await waiting(hod)).not.toContain(id);
+    expect(await waiting(deputy)).toContain(id);
+    const twice = await decide(hod, id, 'approve');
+    expect(twice.statusCode).toBe(403);
+    // the second: the level passes; the Principal's turn
+    expect((await decide(deputy, id, 'approve')).statusCode).toBe(201);
+    pi = await get(teacher, id);
+    expect(pi.steps[0].status).toBe('approved');
+    expect(pi.waitingWith).toContain('Prem Principal');
+    // the Principal is away: the admin passes the level, with the reason; others may not
+    const step = pi.steps.find((x: { status: string }) => x.status === 'pending');
+    expect(
+      (await call(teacher, 'POST', `/purchase/steps/${step.id as string}/pass`, { reason: 'Away' }))
+        .statusCode,
+    ).toBe(403);
+    const passed = await call(admin, 'POST', `/purchase/steps/${step.id as string}/pass`, {
+      reason: 'The Principal is on leave',
+    });
+    expect(passed.statusCode).toBe(201);
+    pi = await get(teacher, id);
+    expect(pi.status).toBe('approved');
+    expect(pi.steps[1].note).toBe('Passed for Prem Principal E2E: The Principal is on leave');
+    // one rejection at a level that needs all rejects
+    const second = await raise(teacher, [{ itemId: ids.PAPER, quantity: 5, estRate: 300 }]);
+    await call(teacher, 'POST', `/purchase/indents/${second}/submit`);
+    expect((await decide(hod, second, 'approve')).statusCode).toBe(201);
+    expect((await decide(deputy, second, 'reject', 'Too many reams this term')).statusCode).toBe(
+      201,
+    );
+    expect((await get(teacher, second)).status).toBe('rejected');
+    // nobody passes what they raised
+    const own = await call(admin, 'POST', '/purchase/indents', {
+      purpose: 'Science room paper',
+      departmentId: ids.science,
+      lines: [{ itemId: ids.PAPER, quantity: 1, estRate: 300 }],
+    });
+    const ownId = own.json().id as string;
+    await call(admin, 'POST', `/purchase/indents/${ownId}/submit`);
+    const ownStep = (await get(admin, ownId)).steps.find(
+      (x: { status: string }) => x.status === 'pending',
+    );
+    const self = await call(admin, 'POST', `/purchase/steps/${ownStep.id as string}/pass`, {
+      reason: 'In a hurry',
+    });
+    expect(self.statusCode).toBe(403);
+    expect(self.json().type).toBe('workflow.self_approval');
+  });
 });

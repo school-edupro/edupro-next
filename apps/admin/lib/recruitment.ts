@@ -88,6 +88,8 @@ export interface ApprovalLevel {
   designation: string | null;
   roleCode: string | null;
   slaHours: number | null;
+  /** several people at the level: any one of them decides (the default), or all of them approve */
+  need?: 'any' | 'all';
 }
 export interface ApprovalSetup {
   levels: ApprovalLevel[];

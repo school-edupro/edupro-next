@@ -27,6 +27,12 @@ export interface Level {
   autoSkip?: boolean;
   /** The requester never approves: their level passes on, the last one to the school admin (purchase). */
   noSelfApproval?: boolean;
+  /**
+   * When the level has several people: 'any' (the default) is decided by the first who acts; 'all' passes
+   * when every one of them has approved (the requester left out where noSelfApproval), one rejection
+   * rejects. Someone who approved an earlier level of the request counts as having approved it.
+   */
+  need?: 'any' | 'all';
 }
 
 /** Why a step was decided without anybody acting on it (replan). */
@@ -76,6 +82,10 @@ export interface StepRow {
   overdue: boolean;
   remindedAt: string | null;
   escalatedAt: string | null;
+  /** any one of the people, or all of them */
+  need: 'any' | 'all';
+  /** who has approved so far (a level that needs all) */
+  approvedBy: Array<{ id: string; name: string }>;
 }
 
 export interface InstanceRow {
@@ -566,10 +576,16 @@ export class WorkflowService {
       due_at: Date | null;
       reminded_at: Date | null;
       escalated_at: Date | null;
+      need: string | null;
+      approved_by: Array<{ id: string; name: string }>;
     }>(
       `SELECT s.id::text, s.instance_id::text, s.level, s.name, s.resolver, s.status::text, ub.display_name AS acted_by, s.acted_at, s.note,
               s.due_at, s.reminded_at, s.escalated_at,
-              COALESCE((SELECT jsonb_agg(jsonb_build_object('id', u.id::text, 'name', u.display_name)) FROM users u WHERE u.id = ANY(s.assignee_user_ids)), '[]'::jsonb) AS assignees
+              COALESCE((SELECT jsonb_agg(jsonb_build_object('id', u.id::text, 'name', u.display_name)) FROM users u WHERE u.id = ANY(s.assignee_user_ids)), '[]'::jsonb) AS assignees,
+              COALESCE((SELECT jsonb_agg(jsonb_build_object('id', u.id::text, 'name', u.display_name)) FROM users u WHERE u.id = ANY(s.approved_by)), '[]'::jsonb) AS approved_by,
+              (SELECT l.value->>'need' FROM workflow_instances wi JOIN workflow_definitions d ON d.id = wi.definition_id
+                 CROSS JOIN LATERAL jsonb_array_elements(d.levels) AS l(value)
+                WHERE wi.id = s.instance_id AND (l.value->>'level')::int = s.level LIMIT 1) AS need
          FROM workflow_steps s LEFT JOIN users ub ON ub.id = s.acted_by WHERE s.instance_id = $1 ORDER BY s.level`,
       [instanceId],
     );
@@ -588,6 +604,8 @@ export class WorkflowService {
       overdue: x.status === 'pending' && x.due_at !== null && x.due_at.getTime() < Date.now(),
       remindedAt: x.reminded_at ? x.reminded_at.toISOString() : null,
       escalatedAt: x.escalated_at ? x.escalated_at.toISOString() : null,
+      need: x.need === 'all' ? ('all' as const) : ('any' as const),
+      approvedBy: x.approved_by,
     }));
   }
 
@@ -797,14 +815,21 @@ export class WorkflowService {
         acted_at: Date | null;
         note: string | null;
         assignees: string[];
+        approved_by: string[];
         due_at: Date | null;
       }>(
-        `SELECT level, name, status::text, resolver, acted_by::text, acted_at, note, assignee_user_ids::text[] AS assignees, due_at
+        `SELECT level, name, status::text, resolver, acted_by::text, acted_at, note, assignee_user_ids::text[] AS assignees,
+                approved_by::text[] AS approved_by, due_at
            FROM workflow_steps WHERE instance_id = $1 ORDER BY level`,
         [instanceId],
       )
     ).rows;
     const approvals = steps.filter((s) => s.status === 'approved' && s.acted_by);
+    // everyone who has approved the request so far (a level that needs all counts them)
+    const everApproved = new Set<string>([
+      ...approvals.map((a) => a.acted_by!),
+      ...steps.flatMap((x) => x.approved_by),
+    ]);
     const requester = inst.requested_by;
     const scope = {
       sectionId: typeof inst.payload.sectionId === 'string' ? inst.payload.sectionId : null,
@@ -818,6 +843,7 @@ export class WorkflowService {
       actedBy: string | null;
       actedAt: Date | null;
       note: string | null;
+      approvedBy: string[];
     }
     const plan: Plan[] = [];
     let current: Plan | null = null;
@@ -828,7 +854,14 @@ export class WorkflowService {
       const selfOut = !!level.noSelfApproval && !!requester && held.includes(requester);
       const assignees = selfOut ? held.filter((a) => a !== requester) : held;
       if (assignees.length) anybody = true;
-      const base = { level, assignees, actedBy: null, actedAt: null, note: null };
+      const base = {
+        level,
+        assignees,
+        actedBy: null,
+        actedAt: null,
+        note: null,
+        approvedBy: [] as string[],
+      };
       const own = steps.find((s) => s.level === level.level);
       const kept =
         own?.status === 'approved' &&
@@ -837,7 +870,13 @@ export class WorkflowService {
           JSON.stringify(own.resolver) === JSON.stringify(level.resolver))
           ? own
           : null;
-      const earlier = approvals.find((a) => assignees.includes(a.acted_by!));
+      // a level that needs all is not approved by one earlier approver: they are counted below
+      const earlier =
+        level.need === 'all' ? undefined : approvals.find((a) => assignees.includes(a.acted_by!));
+      const have =
+        level.need === 'all'
+          ? assignees.filter((a) => (own?.approved_by ?? []).includes(a) || everApproved.has(a))
+          : [];
       let p: Plan;
       if (current)
         p = assignees.length
@@ -850,6 +889,7 @@ export class WorkflowService {
           actedBy: kept.acted_by,
           actedAt: kept.acted_at,
           note: kept.note,
+          approvedBy: kept.approved_by,
         };
       else if (earlier)
         p = {
@@ -869,8 +909,18 @@ export class WorkflowService {
         };
       else if (!assignees.length)
         p = { ...base, status: 'skipped', note: selfOut ? PASSED : NOBODY };
+      else if (level.need === 'all' && have.length === assignees.length)
+        // every one of its people has approved (here or at an earlier level)
+        p = {
+          ...base,
+          status: 'approved',
+          actedBy: own?.acted_by ?? have[have.length - 1]!,
+          actedAt: own?.acted_at ?? new Date(),
+          note: own?.note ?? EARLIER,
+          approvedBy: have,
+        };
       else {
-        p = { ...base, status: 'pending' };
+        p = { ...base, status: 'pending', approvedBy: have };
         current = p;
       }
       plan.push(p);
@@ -912,15 +962,17 @@ export class WorkflowService {
         own.acted_by === p.actedBy &&
         own.note === p.note &&
         sameSet(own.assignees, p.assignees) &&
+        sameSet(own.approved_by, p.approvedBy) &&
         JSON.stringify(own.resolver) === JSON.stringify(p.level.resolver) &&
         (isCurrent ? keepDue : own.due_at === null);
       if (!unchanged)
         await c.query(
-          `INSERT INTO workflow_steps (school_id, instance_id, level, name, resolver, assignee_user_ids, status, acted_by, acted_at, note, due_at)
-         VALUES (app.current_school_id(), $1, $2, $3, $4::jsonb, $5::bigint[], $6::step_status, $7, $8, $9, $10)
+          `INSERT INTO workflow_steps (school_id, instance_id, level, name, resolver, assignee_user_ids, status, acted_by, acted_at, note, due_at,
+                                      approved_by)
+         VALUES (app.current_school_id(), $1, $2, $3, $4::jsonb, $5::bigint[], $6::step_status, $7, $8, $9, $10, $11::bigint[])
          ON CONFLICT (instance_id, level) DO UPDATE SET name = EXCLUDED.name, resolver = EXCLUDED.resolver,
            assignee_user_ids = EXCLUDED.assignee_user_ids, status = EXCLUDED.status, acted_by = EXCLUDED.acted_by,
-           acted_at = EXCLUDED.acted_at, note = EXCLUDED.note, due_at = EXCLUDED.due_at`,
+           acted_at = EXCLUDED.acted_at, note = EXCLUDED.note, due_at = EXCLUDED.due_at, approved_by = EXCLUDED.approved_by`,
           [
             instanceId,
             p.level.level,
@@ -932,6 +984,7 @@ export class WorkflowService {
             p.actedAt,
             p.note,
             due,
+            p.approvedBy,
           ],
         );
       // a level decided by the plan (not by a person acting on it) goes in the history
@@ -1026,10 +1079,11 @@ export class WorkflowService {
   }
 
   /** Steps the user may act on: assigned, or delegated to them by an assignee (active delegation). */
-  static readonly MAY_ACT = `(app.current_user_id() = ANY(s.assignee_user_ids)
+  static readonly MAY_ACT = `((app.current_user_id() = ANY(s.assignee_user_ids)
        OR EXISTS (SELECT 1 FROM delegations d WHERE d.to_user_id = app.current_user_id() AND d.from_user_id = ANY(s.assignee_user_ids)
                      AND d.revoked_at IS NULL AND now() BETWEEN d.starts_at AND d.ends_at
-                     AND (d.scope = 'all' OR EXISTS (SELECT 1 FROM workflow_instances wi WHERE wi.id = s.instance_id AND wi.entity_type LIKE 'purchase%'))))`;
+                     AND (d.scope = 'all' OR EXISTS (SELECT 1 FROM workflow_instances wi WHERE wi.id = s.instance_id AND wi.entity_type LIKE 'purchase%'))))
+       AND NOT (app.current_user_id() = ANY(s.approved_by)))`;
 
   async inbox(ctx: RequestContext): Promise<InboxItem[]> {
     return this.db.tenant(requireTenant(ctx), async (c) => {
@@ -1112,11 +1166,21 @@ export class WorkflowService {
     return row;
   }
 
+  /**
+   * Passes the level a request waits at for its approvers (an approver away), with the reason: the
+   * module checks who may (purchase: the right to pass a level). Nobody passes what they raised. The
+   * request moves on as when the level is approved; the history says it was passed and for whom.
+   */
+  async passLevel(ctx: RequestContext, stepId: string, reason: string): Promise<InstanceRow> {
+    return this.act(ctx, stepId, 'approved', { note: reason }, { pass: true });
+  }
+
   async act(
     ctx: RequestContext,
     stepId: string,
     outcome: 'approved' | 'rejected',
     dto: ActDto,
+    opts: { pass?: boolean } = {},
   ): Promise<InstanceRow> {
     const tenant: TenantContext = requireTenant(ctx);
     return this.db.tenant(tenant, async (c) => {
@@ -1137,7 +1201,7 @@ export class WorkflowService {
           status: 409,
         });
       let delegatedFrom: string | null = null;
-      if (!step.assignees.includes(ctx.user.id)) {
+      if (!opts.pass && !step.assignees.includes(ctx.user.id)) {
         const d = await c.query<{ from_user_id: string }>(
           `SELECT d.from_user_id::text FROM delegations d WHERE d.to_user_id = app.current_user_id() AND d.from_user_id = ANY($1::bigint[])
              AND d.revoked_at IS NULL AND now() BETWEEN d.starts_at AND d.ends_at
@@ -1161,11 +1225,9 @@ export class WorkflowService {
            JOIN workflow_definitions d ON d.id = i.definition_id WHERE i.id = $1 FOR UPDATE OF i`,
         [step.instance_id],
       );
-      // nobody approves their own (purchase): not as an approver, not as someone's delegate
-      if (
-        inst.rows[0]!.requested_by === ctx.user.id &&
-        inst.rows[0]!.levels.find((l) => l.level === step.level)?.noSelfApproval
-      )
+      // nobody approves their own (purchase): not as an approver, not as someone's delegate, nor passes it
+      const levelDef = inst.rows[0]!.levels.find((l) => l.level === step.level);
+      if (inst.rows[0]!.requested_by === ctx.user.id && (levelDef?.noSelfApproval || opts.pass))
         throw new DomainError(
           'workflow.self_approval',
           'You raised this request: another approver decides it',
@@ -1175,9 +1237,62 @@ export class WorkflowService {
         throw new DomainError('workflow.not_current', 'The instance is not waiting on this step', {
           status: 409,
         });
+      // a level that needs all its people: this approval is counted; the level waits for the others
+      if (!opts.pass && outcome === 'approved' && levelDef?.need === 'all') {
+        const who = delegatedFrom ?? ctx.user.id;
+        const had = (
+          await c.query<{ approved: string[] }>(
+            `SELECT approved_by::text[] AS approved FROM workflow_steps WHERE id = $1`,
+            [stepId],
+          )
+        ).rows[0]!.approved;
+        if (had.includes(who))
+          throw new DomainError(
+            'workflow.already_approved',
+            'You have approved this level: it waits for the others',
+            { status: 409 },
+          );
+        const requester = inst.rows[0]!.requested_by;
+        const needed = step.assignees.filter((a) => !(levelDef.noSelfApproval && a === requester));
+        const after = [...had, who];
+        await c.query(`UPDATE workflow_steps SET approved_by = $2::bigint[] WHERE id = $1`, [
+          stepId,
+          after,
+        ]);
+        if (!needed.every((a) => after.includes(a))) {
+          await this.event(c, step.instance_id, stepId, 'approved', ctx.user.id, dto.note ?? null, {
+            level: step.level,
+            partial: true,
+            approved: needed.filter((a) => after.includes(a)).length,
+            of: needed.length,
+            ...(delegatedFrom ? { delegatedFrom } : {}),
+          });
+          await this.audit.stage(ctx, c, {
+            action: 'workflow.step.approved',
+            entityType: 'workflow_instances',
+            entityId: step.instance_id,
+            after: { step: step.level, outcome, partial: true, note: dto.note ?? null },
+          });
+          return (await this.instanceWith(c, step.instance_id))!;
+        }
+      }
+      const forWhom = opts.pass
+        ? (
+            await c.query<{ names: string | null }>(
+              `SELECT string_agg(x.name, ', ' ORDER BY x.name) AS names
+                 FROM (SELECT COALESCE((SELECT e.display_name FROM employees e WHERE e.user_id = u.id AND e.deleted_at IS NULL LIMIT 1),
+                                       u.display_name) AS name
+                         FROM users u WHERE u.id = ANY($1::bigint[])) x`,
+              [step.assignees],
+            )
+          ).rows[0]!.names
+        : null;
+      const note = opts.pass
+        ? `Passed for ${forWhom ?? 'nobody'}: ${dto.note ?? ''}`
+        : (dto.note ?? null);
       await c.query(
         `UPDATE workflow_steps SET status = $2::step_status, acted_by = app.current_user_id(), acted_at = now(), note = $3 WHERE id = $1`,
-        [stepId, outcome, dto.note ?? null],
+        [stepId, outcome, note],
       );
       let completed: 'approved' | 'rejected' | null = null;
       let replan = false;
@@ -1221,10 +1336,19 @@ export class WorkflowService {
           completed = 'approved';
         }
       }
-      await this.event(c, step.instance_id, stepId, outcome, ctx.user.id, dto.note ?? null, {
-        level: step.level,
-        ...(delegatedFrom ? { delegatedFrom } : {}),
-      });
+      await this.event(
+        c,
+        step.instance_id,
+        stepId,
+        opts.pass ? 'passed' : outcome,
+        ctx.user.id,
+        note,
+        {
+          level: step.level,
+          ...(delegatedFrom ? { delegatedFrom } : {}),
+          ...(opts.pass ? { for: step.assignees } : {}),
+        },
+      );
       if (delegatedFrom)
         await this.event(c, step.instance_id, stepId, 'delegated', ctx.user.id, null, {
           from: delegatedFrom,
@@ -1233,7 +1357,7 @@ export class WorkflowService {
         completed = 'approved';
       const instance = (await this.instanceWith(c, step.instance_id))!;
       await this.audit.stage(ctx, c, {
-        action: `workflow.step.${outcome}`,
+        action: opts.pass ? 'workflow.step.passed' : `workflow.step.${outcome}`,
         entityType: 'workflow_instances',
         entityId: step.instance_id,
         after: {

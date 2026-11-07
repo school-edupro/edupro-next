@@ -4,7 +4,9 @@ import { ConfirmAction } from '@/components/ConfirmAction';
 import { FileLinks } from '@/components/FileLinks';
 import { Notice } from '@/components/Notice';
 import { InspectionForm } from '@/components/purchase/InspectionForm';
-import { ApiError, apiFetch } from '@/lib/api';
+import { ApiError, apiFetch, getMe } from '@/lib/api';
+import { PassLevel } from '@/components/purchase/PassLevel';
+import { StepApprovers } from '@/components/purchase/StepApprovers';
 import { RECEIPT_KIND, RECEIPT_STATUS, type IndentStep, type ReceiptDetail } from '@/lib/purchase';
 import { cancelReceipt } from '@/lib/purchase-actions';
 
@@ -47,6 +49,8 @@ export default async function ReceiptPage({
   searchParams: Promise<Record<string, string | undefined>>;
 }) {
   const { id } = await params;
+  // the admin may pass the level a document waits at for its approvers (docs/design/83)
+  const canPass = (await getMe()).permissions.includes('purchase.approval.override');
   const sp = await searchParams;
   if (!/^\d{1,18}$/.test(id)) notFound();
   const g = await apiFetch<ReceiptDetail>(`/purchase/receipts/${id}`).catch((e: unknown) => {
@@ -361,7 +365,9 @@ export default async function ReceiptPage({
                       <td>
                         {s.level}. {s.name}
                       </td>
-                      <td>{s.assignees.map((a) => a.name).join(', ') || '—'}</td>
+                      <td>
+                        <StepApprovers s={s} />
+                      </td>
                       <td>
                         <Badge tone={x.tone}>{x.label}</Badge>
                         {s.actedAt ? (
@@ -375,6 +381,12 @@ export default async function ReceiptPage({
               </tbody>
             </table>
           </div>
+          {canPass ? (
+            <PassLevel
+              step={g.steps.find((s) => s.level === nowLevel && s.status === 'pending')}
+              back={`/purchase/receipts/${g.id}`}
+            />
+          ) : null}
         </section>
       ) : null}
     </>

@@ -22,6 +22,7 @@ export const PURCHASE = {
   countApprove: 'purchase.count.approve',
   assetManage: 'purchase.asset.manage',
   condemnationApprove: 'purchase.condemnation.approve',
+  approvalOverride: 'purchase.approval.override',
 } as const;
 
 const opt = (max: number) =>
@@ -259,6 +260,8 @@ export const LevelSchema = z
     employeeIds: z.array(IdSchema).max(30).default([]),
     designation: z.string().trim().max(80).optional(),
     slaHours: z.coerce.number().int().min(1).max(720).nullable().default(null),
+    /** several people at the level: the first decides (any), or every one of them approves (all) */
+    need: z.enum(['any', 'all']).default('any'),
   })
   .refine((l) => l.by !== 'employees' || l.employeeIds.length > 0, {
     message: 'Pick at least one employee for this level',

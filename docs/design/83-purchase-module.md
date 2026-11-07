@@ -702,3 +702,31 @@ listed sub-categories too): a drop-down narrowed by a parent that the same form 
 (`RefDatalist` `follow`; masters `RowForm` finds the sibling field), a pick not under the newly chosen
 category is cleared, and the item code follows (ELEC-0001). Tests in `purchase-masters.e2e-spec.ts`
 (next-key, made and typed codes, a main category refused, the upload).
+
+## As built — any one or all at a level; the admin passes a level (7 Nov 2026)
+
+Asked by the user on Purchase → Approvals. Decided with them (recommended options): **per level, any
+one or all** of its people, and the **admin may pass a level on someone's behalf** (the PR skip rules
+stay as they were).
+
+- **Workflow engine** (any module may use it): `Level.need` 'any' (default) | 'all';
+  `workflow_steps.approved_by` (migration 0331) keeps who approved a level that needs all. `act()`
+  counts an approval (a delegate's for the one they stand in for), refuses a second
+  (`workflow.already_approved`), passes the level when everyone needed has approved (the requester left
+  out where `noSelfApproval`); one rejection rejects. `replan()` counts the level's people who approved
+  it or an earlier level (no single earlier approver passes an 'all' level). `MAY_ACT` leaves out who
+  already approved, so the inbox and the purchase "waiting for me" lists drop them. `passLevel(ctx, step,
+  reason)` = `act(…, { pass: true })`: no assignee check, never on one's own request
+  (`workflow.self_approval`), the note "Passed for <names>: <reason>", event kind `passed`, audit
+  `workflow.step.passed`. Steps carry `need` and `approvedBy` (names).
+- **Purchase**: the levels' `need` saved with each department level (an HOD level is always any one)
+  and passed to the engine by `syncFlow`; right `purchase.approval.override` (school and group admin);
+  `POST /purchase/steps/:id/pass` (only purchase approval steps).
+- **Admin**: `ApprovalLevelsEditor` `allowAll` (purchase only): "Level N: when several hold it" — Any
+  one of them approves / All of them must approve; the PI, PR, PO and receipt pages show each approver
+  of an 'all' level with ✓ and "n of m have" (`StepApprovers`) and, for the admin, **Pass level N for
+  them** with the reason (`PassLevel`).
+- **Tests**: `purchase-indents.e2e-spec.ts` — an 'all' level (the first approver drops out of the
+  waiting list, a second approval refused, the second approver passes the level), the admin passing the
+  Principal's level with the note, a teacher refused, one rejection rejecting, nobody passing their own.
+  Every suite on the engine passed (purchase, workflow, recruitment, exits, leave, gate passes: 158).

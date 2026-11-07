@@ -647,6 +647,25 @@ export class PurchaseSetupService {
     }
   }
 
+  /**
+   * Passes the level a purchase document waits at for its approvers (an approver away), with the
+   * reason: the right to pass a level; only purchase approvals; never on what the caller raised (the
+   * engine refuses). The document moves on as when the level is approved.
+   */
+  async passStep(ctx: RequestContext, stepId: string, reason: string) {
+    const ok = await this.db.tenant(requireTenant(ctx), async (c) => {
+      const r = await c.query(
+        `SELECT 1 FROM workflow_steps s JOIN workflow_instances i ON i.id = s.instance_id
+          WHERE s.id = $1 AND i.entity_type LIKE 'purchase%'`,
+        [stepId],
+      );
+      return (r.rowCount ?? 0) > 0;
+    });
+    if (!ok)
+      throw new DomainError('not-found', 'No purchase approval step like that', { status: 404 });
+    return this.workflow.passLevel(ctx, stepId, reason);
+  }
+
   // ---- settings -----------------------------------------------------------------------------------
   async settings(ctx: RequestContext) {
     return this.db.tenant(requireTenant(ctx), async (c) => {
@@ -1083,6 +1102,7 @@ export class PurchaseSetupService {
         employeeIds: l.by === 'employees' ? l.employeeIds : [],
         designation: l.by === 'designation' ? l.designation : null,
         slaHours: l.slaHours,
+        need: l.by === 'hod' ? 'any' : l.need,
       }));
       await c.query(
         `INSERT INTO purchase_department_approvals (school_id, department_id, doc_type, levels, updated_by)

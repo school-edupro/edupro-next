@@ -276,6 +276,22 @@ export async function savePaymentTerm(
 // ---- settings and committee -----------------------------------------------------------------------
 const num = (fd: FormData, k: string) => Number(pick(fd, k).replace(/,/g, ''));
 
+/** The admin passes a purchase approval level for its approvers, with the reason (docs/design/83). */
+export async function passPurchaseStep(fd: FormData) {
+  const stepId = pick(fd, 'stepId');
+  const to = pick(fd, 'back') || '/purchase';
+  if (!okId(stepId)) back(to, 'validation-failed', 'Unknown step');
+  return run(
+    to,
+    () =>
+      apiFetch(`/purchase/steps/${stepId}/pass`, {
+        method: 'POST',
+        body: JSON.stringify({ reason: pick(fd, 'reason') }),
+      }),
+    'The level was passed: the document moved on',
+  );
+}
+
 /** The settings form's save: each problem comes back under its field (docs/design/83). */
 export async function savePurchaseSettingsJson(
   body: Record<string, unknown>,
@@ -364,6 +380,7 @@ export async function saveDepartmentLevels(
           employeeIds: l.by === 'employees' ? l.employeeIds : [],
           ...(l.by === 'designation' && l.designation ? { designation: l.designation } : {}),
           slaHours: l.slaHours,
+          need: l.by === 'hod' ? 'any' : (l.need ?? 'any'),
         })),
       }),
     });

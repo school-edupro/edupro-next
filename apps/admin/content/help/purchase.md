@@ -85,6 +85,15 @@ PO, the emergency purchase, the stores and receiving what was ordered.
    which levels would be skipped (no HOD set, nobody who can sign in). **When a PI skips the PR**: under
    an amount, or when every line is on a rate contract (the PR is then made and approved by the system,
    with the rule written on it).
+   **When several hold a level** (named employees, or a designation more than one person holds): **Any
+   one of them approves** (the first to act decides, as before) or **All of them must approve** (the
+   level passes when every one has approved — the one who raised it left out; one rejection rejects;
+   whoever approved an earlier level counts as having approved). The document shows each approver,
+   ticked once they have, and how many have; someone who approved is not asked again.
+   **The admin passes a stuck level**: on a PI, PR, PO or receipt waiting at a level whose approvers
+   cannot act (away, on leave), the school admin presses **Pass level N for them** and gives the reason;
+   the document moves on as if they had approved, and the level says "Passed for … : reason". Nobody
+   passes what they raised.
 6. **The purchase committee** (Purchase settings, at the end) — the members who sign comparative
    statements, and how many must sign.
 

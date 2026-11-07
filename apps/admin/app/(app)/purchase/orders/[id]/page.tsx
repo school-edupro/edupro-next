@@ -3,7 +3,9 @@ import { notFound } from 'next/navigation';
 import { ConfirmAction } from '@/components/ConfirmAction';
 import { FileLinks } from '@/components/FileLinks';
 import { Notice } from '@/components/Notice';
-import { ApiError, apiFetch } from '@/lib/api';
+import { ApiError, apiFetch, getMe } from '@/lib/api';
+import { PassLevel } from '@/components/purchase/PassLevel';
+import { StepApprovers } from '@/components/purchase/StepApprovers';
 import {
   EMERGENCY_STATUS,
   ORDER_STATUS,
@@ -77,6 +79,8 @@ export default async function OrderPage({
   searchParams: Promise<Record<string, string | undefined>>;
 }) {
   const { id } = await params;
+  // the admin may pass the level a document waits at for its approvers (docs/design/83)
+  const canPass = (await getMe()).permissions.includes('purchase.approval.override');
   const sp = await searchParams;
   if (!/^\d{1,18}$/.test(id)) notFound();
   const po = await apiFetch<OrderDetail>(`/purchase/orders/${id}`).catch((e: unknown) => {
@@ -739,8 +743,7 @@ export default async function OrderPage({
                       {s.level}. {s.name}
                     </td>
                     <td>
-                      {s.actedBy ??
-                        (s.assignees.length ? s.assignees.map((a) => a.name).join(', ') : 'Nobody')}
+                      <StepApprovers s={s} />
                     </td>
                     <td>
                       <Badge tone={stepOf(s).tone}>{stepOf(s).label}</Badge>
@@ -758,6 +761,12 @@ export default async function OrderPage({
               </tbody>
             </table>
           </div>
+          {canPass ? (
+            <PassLevel
+              step={po.steps.find((s) => s.level === nowLevel && s.status === 'pending')}
+              back={`/purchase/orders/${po.id}`}
+            />
+          ) : null}
         </section>
       ) : null}
 
