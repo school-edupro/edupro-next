@@ -127,8 +127,14 @@ are; copied vendors wait for approval here.
   else (name, address, contacts, categories, term) changes at once.
 - **Same GSTIN, PAN or bank account as another vendor**: the form names the other vendor and asks why;
   it is saved only with a reason.
+- **The vendor's page** shows its **Details** (names, code and kind, GST, PAN, MSME, the address,
+  mobile and e-mail, payment term, what it supplies, the bank account — in full only to a vendor
+  approver — and the contacts), then its **Documents**, then **Change the vendor** (folded; open it to
+  edit).
 - **Documents**: upload the GST certificate, PAN card, cancelled cheque, Udyam certificate or an
-  agreement (PDF or photo, up to 5 MB) — View opens it, Download saves it.
+  agreement (PDF or photo, up to 5 MB) — View opens it in the browser, Download saves it. Anyone who
+  can see the vendor (the purchase office, a vendor approver) can open them, without a separate file
+  right; each opening is recorded. The card says which of the usual papers are not attached yet.
 - **Make inactive** (not offered on new PRs and POs), **Blacklist** (with a reason: never offered),
   **Make active** again.
 - **Import from Excel**: download the format — required columns are marked \*, kind, GST status,

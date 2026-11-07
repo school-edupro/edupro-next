@@ -1,5 +1,6 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, Put, Query } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Post, Put, Query, Res } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import type { FastifyReply } from 'fastify';
 import { RequirePermission } from '../../common/access/require-permission.decorator';
 import { AuthenticatedOnly } from '../../common/auth/decorators';
 import { ReqCtx, type RequestContext } from '../../common/http/request-context';
@@ -241,6 +242,28 @@ export class PurchaseController {
     @Body() body: VendorDocumentDto,
   ) {
     return this.vendors.addDocument(ctx, id, body);
+  }
+
+  @Get('vendors/:id/documents/:docId/file')
+  @ApiOperation({ summary: 'A document kept with a vendor (inline; ?save=1 to save a copy)' })
+  // the purchase view right or a vendor approver (checked in the service)
+  @AuthenticatedOnly()
+  async vendorDocument(
+    @ReqCtx() ctx: RequestContext,
+    @Param('id') id: string,
+    @Param('docId') docId: string,
+    @Query('save') save: string | undefined,
+    @Res() reply: FastifyReply,
+  ) {
+    const f = await this.vendors.documentFile(ctx, id, docId);
+    void reply
+      .header('content-type', f.contentType)
+      .header(
+        'content-disposition',
+        `${save === '1' ? 'attachment' : 'inline'}; filename="${f.filename.replace(/[^\w.\- ]+/g, '_')}"`,
+      )
+      .header('cache-control', 'private, no-store')
+      .send(f.bytes);
   }
 
   @Delete('vendors/:id/documents/:docId')

@@ -671,3 +671,19 @@ vendor page and both decisions are `@AuthenticatedOnly` with the check in the se
 purchase view right or a vendor approver), so a named approver without a purchase role can open what
 waits; the admin pages show 404 on the API's 403. Tests in `purchase-masters.e2e-spec.ts` (what the
 admin, the office and the named approver each see).
+
+## As built — the vendor's page: details and documents (7 Nov 2026)
+
+Asked by the user on a vendor's page: show the vendor with its attached documents, which users can
+view. The page now reads: Status, **Details** (`ep-facts`: legal / trade name, code and kind, GST with
+the state code, PAN, MSME and Udyam, the address in one line, mobile and e-mail as links, payment term,
+the categories it supplies by name, the bank account — in full for a vendor approver, else its hint —
+and a contacts table), the change waiting, **Documents** (kind, PDF / photo, when added, View and
+Download icons, what is not attached yet: GST certificate for a registered vendor, PAN card, cancelled
+cheque when a bank account is given, Udyam certificate for MSME), then **Change the vendor** folded in
+a `<details>`. A document opens through `GET /purchase/vendors/:id/documents/:docId/file` (inline;
+`?save=1` saves), checked like the vendor page (the purchase view right or a vendor approver — no
+`platform.files.view` needed), each opening audited (`purchase.vendor.document_view`); admin route
+`api/purchase/vendors/[id]/documents/[doc]`. The vendor detail answer adds `categories` (id, name).
+Test in `purchase-masters.e2e-spec.ts` (upload, inline / save, a teacher refused, another vendor's
+number not found).

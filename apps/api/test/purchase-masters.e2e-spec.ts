@@ -1037,6 +1037,68 @@ describe('purchase masters (e2e)', () => {
     expect(desk).toMatchObject({ code: 'DESK-2', category_id: expect.stringContaining('FURN') });
   });
 
+  it('shows a vendor with its details and documents; anyone who sees the vendor opens them', async () => {
+    const v1 = (await call(office, 'GET', '/purchase/vendors?q=V1'))
+      .json()
+      .data.find((x: { code: string }) => x.code === 'V1');
+    const png = Buffer.from(
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==',
+      'base64',
+    );
+    const slot = await call(office, 'POST', '/platform/files', {
+      fileName: 'pan.png',
+      contentType: 'image/png',
+      sizeBytes: png.length,
+    });
+    expect(slot.statusCode).toBe(201);
+    expect(
+      (
+        await inject({
+          method: 'PUT',
+          url: slot.json().upload.url,
+          headers: {},
+          raw: { body: png, contentType: 'image/png' },
+        } as never)
+      ).statusCode,
+    ).toBe(200);
+    const added = await call(office, 'POST', `/purchase/vendors/${v1.id as string}/documents`, {
+      kind: 'pan_card',
+      fileId: slot.json().file.id,
+    });
+    expect(added.statusCode).toBe(201);
+    const detail = (await call(checker, 'GET', `/purchase/vendors/${v1.id as string}`)).json();
+    expect(detail.documents).toEqual([expect.objectContaining({ kind: 'pan_card' })]);
+    expect(Array.isArray(detail.categories)).toBe(true);
+    const docId = detail.documents[0].id as string;
+    // it opens in the browser, or saves a copy
+    const view = await call(
+      checker,
+      'GET',
+      `/purchase/vendors/${v1.id as string}/documents/${docId}/file`,
+    );
+    expect(view.statusCode).toBe(200);
+    expect(view.headers['content-type']).toContain('image/png');
+    expect(String(view.headers['content-disposition'])).toMatch(/^inline/);
+    const save = await call(
+      checker,
+      'GET',
+      `/purchase/vendors/${v1.id as string}/documents/${docId}/file?save=1`,
+    );
+    expect(String(save.headers['content-disposition'])).toMatch(/^attachment/);
+    // someone with no purchase right (and no vendor approver) does not
+    const t = await withMigrator((c) => seedUser(c, school, `${s}-teach`, 'teacher'));
+    expect(
+      (await call(t, 'GET', `/purchase/vendors/${v1.id as string}/documents/${docId}/file`))
+        .statusCode,
+    ).toBe(403);
+    // another vendor's document number is not found
+    const v2 = (await call(office, 'GET', '/purchase/vendors?q=V2')).json().data[0];
+    expect(
+      (await call(checker, 'GET', `/purchase/vendors/${v2.id as string}/documents/${docId}/file`))
+        .statusCode,
+    ).toBe(404);
+  });
+
   it('lets the school name its vendor approvers; then only they approve', async () => {
     // the header's approvals: what each one may decide (never what they entered)
     const mine = async (u: SeededUser) =>

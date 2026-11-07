@@ -87,6 +87,8 @@ export interface VendorDetail extends Vendor {
   enteredByMe: boolean;
   /** may the caller approve vendors (the named approvers, else the right) */
   canApprove?: boolean;
+  /** the item categories it supplies, by name */
+  categories?: Array<{ id: string; name: string }>;
 }
 
 export interface PaymentTerm {

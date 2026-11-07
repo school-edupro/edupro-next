@@ -59,6 +59,14 @@ export default async function VendorPage({
   const st = VENDOR_STATUS[v.status];
   const ch = v.pendingChange;
   const back = `/purchase/vendors/${v.id}`;
+  const kinds = new Set(v.documents.map((d) => d.kind));
+  const missing = [
+    v.gstStatus !== 'unregistered' && !kinds.has('gst_certificate') ? 'GST certificate' : null,
+    !kinds.has('pan_card') ? 'PAN card' : null,
+    v.bankHint && !kinds.has('cancelled_cheque') ? 'cancelled cheque' : null,
+    v.msmeType && !kinds.has('udyam_certificate') ? 'Udyam certificate' : null,
+  ].filter((x): x is string => x !== null);
+  const editOpen = sp.edit === '1';
   return (
     <>
       <Breadcrumbs
@@ -88,7 +96,8 @@ export default async function VendorPage({
         {v.status === 'pending' ? (
           v.enteredByMe ? (
             <p className="ep-alert ep-alert--info" role="status">
-              You entered this vendor: another person with the vendor-approve right approves it.
+              You entered this vendor: another vendor approver approves it (Purchase → Settings →
+              Vendor approval).
             </p>
           ) : canApprove ? (
             <div style={{ display: 'flex', gap: 'var(--sp-2)', flexWrap: 'wrap' }}>
@@ -116,7 +125,9 @@ export default async function VendorPage({
               </ConfirmAction>
             </div>
           ) : (
-            <p className="ep-field__help">Waiting for someone with the vendor-approve right.</p>
+            <p className="ep-field__help">
+              Waiting for a vendor approver (Purchase → Settings → Vendor approval).
+            </p>
           )
         ) : null}
         {canManage &&
@@ -165,6 +176,114 @@ export default async function VendorPage({
                 It is never offered on a PR or PO, and its rate contracts stop being used.
               </ConfirmAction>
             ) : null}
+          </div>
+        ) : null}
+      </section>
+
+      <section className="ep-card" aria-labelledby="vd-det" style={{ marginTop: 'var(--sp-4)' }}>
+        <h2 id="vd-det" className="ep-card__title">
+          Details
+        </h2>
+        <dl className="ep-facts">
+          <div>
+            <dt>Legal name</dt>
+            <dd>
+              {v.legalName}
+              {v.tradeName ? ` · trading as ${v.tradeName}` : ''}
+            </dd>
+          </div>
+          <div>
+            <dt>Code · kind</dt>
+            <dd>
+              {v.code} · {VENDOR_KIND[v.kind]}
+            </dd>
+          </div>
+          <div>
+            <dt>GST</dt>
+            <dd>
+              {GST_STATUS[v.gstStatus]}
+              {v.gstin ? ` · GSTIN ${v.gstin}` : ''}
+              {v.stateCode ? ` · state code ${v.stateCode}` : ''}
+            </dd>
+          </div>
+          <div>
+            <dt>PAN</dt>
+            <dd>{v.pan ?? '—'}</dd>
+          </div>
+          <div>
+            <dt>MSME</dt>
+            <dd>
+              {v.msmeType
+                ? `${v.msmeType[0]!.toUpperCase()}${v.msmeType.slice(1)}${v.udyamNo ? ` · ${v.udyamNo}` : ''}`
+                : 'Not MSME / not known'}
+            </dd>
+          </div>
+          <div>
+            <dt>Address</dt>
+            <dd>
+              {[v.address, [v.city, v.pin].filter(Boolean).join(' '), v.state, v.country]
+                .filter(Boolean)
+                .join(', ') || '—'}
+            </dd>
+          </div>
+          <div>
+            <dt>Mobile · e-mail</dt>
+            <dd>
+              {v.phone ? <a href={`tel:${v.phone}`}>{v.phone}</a> : '—'}
+              {' · '}
+              {v.email ? <a href={`mailto:${v.email}`}>{v.email}</a> : '—'}
+            </dd>
+          </div>
+          <div>
+            <dt>Payment term</dt>
+            <dd>{v.paymentTerm ?? 'The school’s default'}</dd>
+          </div>
+          <div>
+            <dt>Supplies</dt>
+            <dd>
+              {v.categories?.length ? v.categories.map((c) => c.name).join(', ') : 'Any category'}
+            </dd>
+          </div>
+          <div>
+            <dt>Bank account</dt>
+            <dd>
+              {v.bank
+                ? `${v.bank.bankName} · A/c ${v.bank.accountNo} · ${v.bank.ifsc} · ${v.bank.holder}`
+                : (v.bankHint ?? 'Not given yet')}
+            </dd>
+          </div>
+        </dl>
+        {v.contacts.length ? (
+          <div
+            className="ep-table-wrap"
+            tabIndex={0}
+            role="region"
+            aria-label="Contacts"
+            style={{ marginTop: 'var(--sp-3)' }}
+          >
+            <table className="ep-table" data-density="dense">
+              <caption className="ep-sr-only">Contacts</caption>
+              <thead>
+                <tr>
+                  <th scope="col">Contact</th>
+                  <th scope="col">Role</th>
+                  <th scope="col">Mobile</th>
+                  <th scope="col">E-mail</th>
+                </tr>
+              </thead>
+              <tbody>
+                {v.contacts.map((c) => (
+                  <tr key={c.id}>
+                    <td>
+                      {c.name} {c.isMain ? <Badge tone="info">Main</Badge> : null}
+                    </td>
+                    <td>{c.role ?? '—'}</td>
+                    <td>{c.phone ? <a href={`tel:${c.phone}`}>{c.phone}</a> : '—'}</td>
+                    <td>{c.email ? <a href={`mailto:${c.email}`}>{c.email}</a> : '—'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         ) : null}
       </section>
@@ -260,8 +379,13 @@ export default async function VendorPage({
 
       <section className="ep-card" aria-labelledby="vd-docs" style={{ marginTop: 'var(--sp-4)' }}>
         <h2 id="vd-docs" className="ep-card__title">
-          Documents
+          Documents · {v.documents.length}
         </h2>
+        <p className="ep-field__help" style={{ marginTop: 0 }}>
+          View opens a document in the browser; Download saves a copy. Anyone who sees the vendor
+          may open them (each opening is recorded).
+          {missing.length ? ` Not attached yet: ${missing.join(', ')}.` : ''}
+        </p>
         {v.documents.length ? (
           <ul className="ep-purch-lines" style={{ listStyle: 'none', padding: 0, margin: 0 }}>
             {v.documents.map((d) => (
@@ -275,10 +399,13 @@ export default async function VendorPage({
                 }}
               >
                 <strong>{DOC_KIND[d.kind as keyof typeof DOC_KIND] ?? d.kind}</strong>
-                <span className="ep-field__help">{when(d.uploadedAt)}</span>
+                <span className="ep-field__help">
+                  {d.contentType === 'application/pdf' ? 'PDF' : 'Photo'} · added{' '}
+                  {when(d.uploadedAt)}
+                </span>
                 <FileLinks
-                  href={`/api/files/${d.fileId}/download`}
-                  label={DOC_KIND[d.kind as keyof typeof DOC_KIND] ?? d.kind}
+                  href={`/api/purchase/vendors/${v.id}/documents/${d.id}`}
+                  label={`${DOC_KIND[d.kind as keyof typeof DOC_KIND] ?? d.kind} of ${v.legalName}`}
                 />
                 {canManage ? (
                   <form action={removeVendorDocument}>
@@ -293,9 +420,9 @@ export default async function VendorPage({
             ))}
           </ul>
         ) : (
-          <p className="ep-field__help" style={{ marginTop: 0 }}>
-            No documents yet: the GST certificate, a cancelled cheque and the Udyam certificate help
-            the approver.
+          <p className="ep-field__help" style={{ margin: 0 }}>
+            No documents yet: the GST certificate, the PAN card, a cancelled cheque and the Udyam
+            certificate help the approver check the vendor.
           </p>
         )}
         {canManage ? (
@@ -334,9 +461,14 @@ export default async function VendorPage({
       </section>
 
       {lists ? (
-        <section style={{ marginTop: 'var(--sp-5)' }} aria-label="Change the vendor">
-          <VendorForm vendor={v} lists={lists} />
-        </section>
+        <details className="ep-card" style={{ marginTop: 'var(--sp-5)' }} open={editOpen}>
+          <summary className="ep-card__title" style={{ cursor: 'pointer' }}>
+            Change the vendor
+          </summary>
+          <div style={{ marginTop: 'var(--sp-3)' }}>
+            <VendorForm vendor={v} lists={lists} />
+          </div>
+        </details>
       ) : null}
     </>
   );

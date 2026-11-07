@@ -1,10 +1,12 @@
-import { Injectable } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
 import { decryptField, encryptField, type PoolClient } from '@edupro/db';
+import type { StorageDriver } from '@edupro/storage';
 import { AuditService } from '../../common/audit/audit.service';
 import { DbService } from '../../common/db/db.service';
 import { readSheet, templateSheet } from '../../common/excel/sheet';
 import { DomainError } from '../../common/errors/domain-error';
 import { requireTenant, type RequestContext } from '../../common/http/request-context';
+import { STORAGE_DRIVER } from '../files/storage';
 import { GST_STATES, GSTIN_HELP, PAN_FORMAT, gstinProblem, panOfGstin } from './gstin';
 import { checkVendorFields, type VendorFieldsOut } from './vendor-rules';
 import {
@@ -170,6 +172,7 @@ export class PurchaseVendorsService {
   constructor(
     private readonly db: DbService,
     private readonly audit: AuditService,
+    @Inject(STORAGE_DRIVER) private readonly storage: StorageDriver,
   ) {}
 
   private me(ctx: RequestContext): string {
@@ -292,6 +295,12 @@ export class PurchaseVendorsService {
           email: x.email,
           isMain: x.is_main,
         })),
+        categories: (
+          await c.query<{ id: string; name: string }>(
+            `SELECT id::text, name FROM purchase_item_categories WHERE id = ANY($1::bigint[]) ORDER BY name`,
+            [v.category_ids],
+          )
+        ).rows,
         documents: docs.rows.map((d) => ({
           id: d.id,
           kind: d.kind,
@@ -745,6 +754,42 @@ export class PurchaseVendorsService {
    * What waits for this user (the header's approvals and My approvals): new vendors and bank / GSTIN /
    * PAN changes they may decide — a vendor approver, never on what they entered or asked for.
    */
+  /**
+   * A document kept with a vendor (GST certificate, PAN card, cancelled cheque …), for anyone who sees
+   * the vendor — the purchase view right or a vendor approver — without the general file right. Each
+   * opening is in the audit log (they are identity and bank papers).
+   */
+  async documentFile(ctx: RequestContext, vendorId: string, docId: string) {
+    return this.db.tenant(requireTenant(ctx), async (c) => {
+      await mayView(c, ctx);
+      const f = (
+        await c.query<{
+          object_key: string;
+          content_type: string;
+          original_name: string | null;
+          kind: string;
+        }>(
+          `SELECT f.object_key, f.content_type, f.original_name, d.kind
+             FROM vendor_documents d JOIN files f ON f.id = d.file_id AND f.deleted_at IS NULL
+            WHERE d.id = $1 AND d.vendor_id = $2`,
+          [docId, vendorId],
+        )
+      ).rows[0];
+      if (!f) throw new DomainError('not-found', 'Document not found', { status: 404 });
+      await this.audit.stage(ctx, c, {
+        action: 'purchase.vendor.document_view',
+        entityType: 'vendor_documents',
+        entityId: docId,
+        after: { vendorId, kind: f.kind },
+      });
+      return {
+        bytes: await this.storage.read(f.object_key),
+        contentType: f.content_type,
+        filename: f.original_name ?? `${f.kind}`,
+      };
+    });
+  }
+
   async approvalsMine(ctx: RequestContext) {
     return this.db.tenant(requireTenant(ctx), async (c) => {
       if (!(await mayApproveVendors(c, ctx))) return { rows: [], canApprove: false };
