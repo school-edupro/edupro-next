@@ -28,7 +28,8 @@ export interface ApprovalGroup {
     | 'issue_ack'
     | 'count'
     | 'condemnation'
-    | 'asset_ack';
+    | 'asset_ack'
+    | 'vendor';
   title: string;
   help: string;
   href: string;
@@ -307,6 +308,38 @@ export async function myApprovals(
                 detail: `₹${x.value.toLocaleString('en-IN')} · ${x.status === 'committee' ? 'to sign' : 'to approve'}`,
                 href: `/purchase/condemnations/${x.id}`,
                 since: x.createdAt,
+              })),
+            }
+          : null,
+      )
+      .catch(() => null),
+    // new vendors and bank / GSTIN / PAN changes I may decide (the vendor approvers, docs/design/83):
+    // anyone may be named an approver, so it is asked for every user (an empty answer adds nothing)
+    apiFetch<{
+      canApprove: boolean;
+      rows: Array<{
+        kind: 'vendor' | 'change';
+        id: string;
+        vendorId: string;
+        title: string;
+        detail: string;
+        since: string;
+      }>;
+    }>(`/purchase/vendor-approvals?mine=1`)
+      .then((r): ApprovalGroup | null =>
+        r.rows.length
+          ? {
+              key: 'vendor',
+              title: 'Vendors to approve',
+              help: 'New vendors and changes of a vendor’s bank account, GSTIN or PAN',
+              href: '/purchase/vendor-approvals',
+              count: r.rows.length,
+              items: r.rows.slice(0, size).map((x) => ({
+                id: `${x.kind}-${x.id}`,
+                title: x.title,
+                detail: x.detail,
+                href: `/purchase/vendors/${x.vendorId}`,
+                since: x.since,
               })),
             }
           : null,

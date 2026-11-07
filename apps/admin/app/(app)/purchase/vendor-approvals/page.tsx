@@ -2,7 +2,7 @@ import { Badge, Breadcrumbs, PageHeader } from '@edupro/ui';
 import { notFound } from 'next/navigation';
 import { ConfirmAction } from '@/components/ConfirmAction';
 import { Notice } from '@/components/Notice';
-import { apiFetch, getMe } from '@/lib/api';
+import { ApiError, apiFetch } from '@/lib/api';
 import { GST_STATUS, type Vendor, type VendorChange } from '@/lib/purchase';
 import { decideVendor, decideVendorChange } from '@/lib/purchase-actions';
 
@@ -34,9 +34,11 @@ export default async function VendorApprovalsPage({
   searchParams: Promise<Record<string, string | undefined>>;
 }) {
   const sp = await searchParams;
-  const me = await getMe();
-  if (!me.permissions.includes('purchase.master.view')) notFound();
-  const q = await apiFetch<Approvals>('/purchase/vendor-approvals');
+  // the purchase view right, or a vendor approver named in the settings: the API decides
+  const q = await apiFetch<Approvals>('/purchase/vendor-approvals').catch((e: unknown) => {
+    if (e instanceof ApiError && (e.status === 403 || e.status === 404)) notFound();
+    throw e;
+  });
   const canApprove = q.canApprove;
   const back = '/purchase/vendor-approvals';
   return (
@@ -52,8 +54,8 @@ export default async function VendorApprovalsPage({
       <Notice params={sp} />
       {!canApprove ? (
         <p className="ep-alert ep-alert--info" role="status">
-          You can see what waits; a vendor approver (Purchase → Settings → Vendor approval)
-          approves it.
+          You can see what waits; a vendor approver (Purchase → Settings → Vendor approval) approves
+          it.
         </p>
       ) : null}
       <section className="ep-card" aria-labelledby="va-new">

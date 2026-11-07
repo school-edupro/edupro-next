@@ -118,6 +118,10 @@ are; copied vendors wait for approval here.
   in) who approve new vendors and bank / GSTIN / PAN changes: then only they approve. While nobody is
   named there, anyone whose role has the right **Approve a new vendor** approves (School Admin and Group
   Admin by default; roles are changed in **Access → Roles**). The card lists who can approve now.
+- **The header's Approvals icon** counts the new vendors and bank / GSTIN / PAN changes waiting for
+  you (**Vendors to approve** in My approvals) — only when you are a vendor approver, never what you
+  entered yourself. A named approver opens Vendor approvals and the vendor from there even without a
+  purchase role.
 - On an approved vendor, a new **bank account**, **GSTIN**, **PAN** or **GST status** waits for approval
   the same way (with the reason for the change); the old details stay in force until then. Everything
   else (name, address, contacts, categories, term) changes at once.

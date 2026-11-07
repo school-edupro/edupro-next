@@ -82,6 +82,18 @@ export async function mayApproveVendors(c: PoolClient, ctx: RequestContext): Pro
   const x = r.rows[0]!;
   return x.named > 0 ? x.me === true : (ctx.permissions?.has(PURCHASE.vendorApprove) ?? false);
 }
+/** The purchase view right, or a vendor approver (named ones may hold no purchase role at all). */
+async function mayView(c: PoolClient, ctx: RequestContext) {
+  if (ctx.permissions?.has(PURCHASE.masterView)) return true;
+  if (await mayApproveVendors(c, ctx)) return true;
+  throw new DomainError(
+    'permission-denied',
+    'Needs the purchase view right or to be a vendor approver',
+    {
+      status: 403,
+    },
+  );
+}
 const notApprover = () =>
   new DomainError(
     'purchase.not_vendor_approver',
@@ -242,6 +254,7 @@ export class PurchaseVendorsService {
 
   async get(ctx: RequestContext, id: string) {
     return this.db.tenant(requireTenant(ctx), async (c) => {
+      await mayView(c, ctx);
       const v = await this.load(c, id);
       const contacts = await c.query<{
         id: string;
@@ -728,8 +741,54 @@ export class PurchaseVendorsService {
   }
 
   /** What waits for a second person: new vendors and changes (the approver sees the bank in full). */
+  /**
+   * What waits for this user (the header's approvals and My approvals): new vendors and bank / GSTIN /
+   * PAN changes they may decide — a vendor approver, never on what they entered or asked for.
+   */
+  async approvalsMine(ctx: RequestContext) {
+    return this.db.tenant(requireTenant(ctx), async (c) => {
+      if (!(await mayApproveVendors(c, ctx))) return { rows: [], canApprove: false };
+      const r = await c.query<{
+        kind: 'vendor' | 'change';
+        id: string;
+        vendor_id: string;
+        code: string;
+        name: string;
+        what: string | null;
+        since: Date;
+      }>(
+        `SELECT 'vendor' AS kind, v.id::text, v.id::text AS vendor_id, v.code, v.legal_name AS name, NULL AS what,
+                v.created_at AS since
+           FROM vendors v
+          WHERE v.status = 'pending' AND v.created_by IS DISTINCT FROM app.current_user_id()
+         UNION ALL
+         SELECT 'change', ch.id::text, v.id::text, v.code, v.legal_name,
+                concat_ws(', ', CASE WHEN ch.changes ? 'bankHint' THEN 'bank account' END,
+                                CASE WHEN ch.changes->>'gstin' IS DISTINCT FROM ch.before->>'gstin' THEN 'GSTIN' END,
+                                CASE WHEN ch.changes->>'pan' IS DISTINCT FROM ch.before->>'pan' THEN 'PAN' END,
+                                CASE WHEN ch.changes->>'gstStatus' IS DISTINCT FROM ch.before->>'gstStatus' THEN 'GST status' END),
+                ch.requested_at
+           FROM vendor_changes ch JOIN vendors v ON v.id = ch.vendor_id
+          WHERE ch.status = 'pending' AND ch.requested_by IS DISTINCT FROM app.current_user_id()
+          ORDER BY since`,
+      );
+      return {
+        canApprove: true,
+        rows: r.rows.map((x) => ({
+          kind: x.kind,
+          id: x.id,
+          vendorId: x.vendor_id,
+          title: `${x.code} · ${x.name}`,
+          detail: x.kind === 'vendor' ? 'New vendor' : `Change of ${x.what || 'its details'}`,
+          since: x.since.toISOString(),
+        })),
+      };
+    });
+  }
+
   async approvals(ctx: RequestContext) {
     return this.db.tenant(requireTenant(ctx), async (c) => {
+      await mayView(c, ctx);
       const me = this.me(ctx);
       const vendors = await c.query<VendorDbRow>(
         // eslint-disable-next-line no-restricted-syntax -- SELECT is a fixed fragment

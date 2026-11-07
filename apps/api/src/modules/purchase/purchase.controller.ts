@@ -163,16 +163,18 @@ export class PurchaseController {
 
   @Get('vendor-approvals')
   @ApiOperation({
-    summary: 'New vendors and bank / GSTIN / PAN changes waiting for a second person',
+    summary:
+      'New vendors and bank / GSTIN / PAN changes waiting for a second person (mine=1: only what I may decide)',
   })
-  @RequirePermission(PURCHASE.masterView)
-  vendorApprovals(@ReqCtx() ctx: RequestContext) {
-    return this.vendors.approvals(ctx);
+  // the purchase view right, or a vendor approver named in the settings (checked in the service)
+  @AuthenticatedOnly()
+  vendorApprovals(@ReqCtx() ctx: RequestContext, @Query('mine') mine?: string) {
+    return mine === '1' ? this.vendors.approvalsMine(ctx) : this.vendors.approvals(ctx);
   }
 
   @Post('vendor-changes/:id/decide')
   // the named vendor approvers, else the right (checked in the service)
-  @RequirePermission(PURCHASE.masterView)
+  @AuthenticatedOnly()
   decideChange(@ReqCtx() ctx: RequestContext, @Param('id') id: string, @Body() body: DecisionDto) {
     return this.vendors.decideChange(ctx, id, body);
   }
@@ -184,7 +186,8 @@ export class PurchaseController {
   }
 
   @Get('vendors/:id')
-  @RequirePermission(PURCHASE.masterView)
+  // the purchase view right, or a vendor approver (checked in the service)
+  @AuthenticatedOnly()
   vendor(@ReqCtx() ctx: RequestContext, @Param('id') id: string) {
     return this.vendors.get(ctx, id);
   }
@@ -212,7 +215,7 @@ export class PurchaseController {
   @Post('vendors/:id/decide')
   @ApiOperation({ summary: 'Approve or reject a new vendor (never one you entered)' })
   // the named vendor approvers, else the right (checked in the service)
-  @RequirePermission(PURCHASE.masterView)
+  @AuthenticatedOnly()
   decideVendor(@ReqCtx() ctx: RequestContext, @Param('id') id: string, @Body() body: DecisionDto) {
     return this.vendors.decideVendor(ctx, id, body);
   }

@@ -659,3 +659,15 @@ role right decides as before) and **"Same as billing" tick** for the delivery ad
   with seven problems answered per field, a delivery address of its own, the named approvers (only
   employees who sign in; only the settings right; then the admin is refused and the named one
   approves; removed, the right decides again).
+
+## As built — vendor approvals in the header (7 Nov 2026)
+
+The header's Approvals count and My approvals have a **Vendors to approve** group: the new vendors and
+bank / GSTIN / PAN changes the signed-in user may decide (a named vendor approver, or the right while
+nobody is named), never one they entered or asked for; each opens the vendor.
+`GET /purchase/vendor-approvals?mine=1` (`approvalsMine`: rows of kind vendor | change with what
+changes) is asked for every user like the other "anyone may be named" sources. The approvals queue, the
+vendor page and both decisions are `@AuthenticatedOnly` with the check in the service (`mayView`: the
+purchase view right or a vendor approver), so a named approver without a purchase role can open what
+waits; the admin pages show 404 on the API's 403. Tests in `purchase-masters.e2e-spec.ts` (what the
+admin, the office and the named approver each see).

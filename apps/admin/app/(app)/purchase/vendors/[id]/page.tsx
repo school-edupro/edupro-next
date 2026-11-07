@@ -47,10 +47,10 @@ export default async function VendorPage({
   const sp = await searchParams;
   if (!/^\d{1,18}$/.test(id)) notFound();
   const me = await getMe();
-  if (!me.permissions.includes('purchase.master.view')) notFound();
+  // the purchase view right, or a vendor approver named in the settings: the API decides
   const canManage = me.permissions.includes('purchase.master.manage');
   const v = await apiFetch<VendorDetail>(`/purchase/vendors/${id}`).catch((e: unknown) => {
-    if (e instanceof ApiError && e.status === 404) notFound();
+    if (e instanceof ApiError && (e.status === 404 || e.status === 403)) notFound();
     throw e;
   });
   // the vendor approvers named in Purchase → Settings, else the right (the API says)

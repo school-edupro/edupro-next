@@ -1038,6 +1038,24 @@ describe('purchase masters (e2e)', () => {
   });
 
   it('lets the school name its vendor approvers; then only they approve', async () => {
+    // the header's approvals: what each one may decide (never what they entered)
+    const mine = async (u: SeededUser) =>
+      (await call(u, 'GET', '/purchase/vendor-approvals?mine=1')).json() as {
+        canApprove: boolean;
+        rows: Array<{ title: string; detail: string; kind: string }>;
+      };
+    const before = await mine(admin);
+    expect(before.canApprove).toBe(true);
+    expect(before.rows.map((r) => r.title)).toEqual(
+      expect.arrayContaining([expect.stringContaining('V10')]),
+    );
+    expect(before.rows.find((r) => r.title.startsWith('V10'))).toMatchObject({
+      kind: 'vendor',
+      detail: 'New vendor',
+    });
+    // W1 was copied in by the admin: not theirs to decide
+    expect(before.rows.some((r) => r.title.startsWith('W1'))).toBe(false);
+    expect(await mine(office)).toEqual({ rows: [], canApprove: false });
     expect(
       (await call(office, 'POST', '/purchase/vendor-approvers', { employeeId: emp.HOD1 }))
         .statusCode,
@@ -1060,6 +1078,10 @@ describe('purchase masters (e2e)', () => {
     const v10 = (await call(office, 'GET', '/purchase/vendors?q=V10')).json().data[0];
     expect((await call(admin, 'GET', '/purchase/vendor-approvals')).json().canApprove).toBe(false);
     expect((await call(checker, 'GET', '/purchase/vendor-approvals')).json().canApprove).toBe(true);
+    expect(await mine(admin)).toEqual({ rows: [], canApprove: false });
+    expect((await mine(checker)).rows.map((r) => r.title)).toEqual(
+      expect.arrayContaining([expect.stringContaining('V10'), expect.stringContaining('W1')]),
+    );
     const refused = await call(admin, 'POST', `/purchase/vendors/${v10.id}/decide`, {
       approve: true,
     });
