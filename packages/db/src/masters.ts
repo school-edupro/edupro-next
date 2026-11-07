@@ -145,7 +145,13 @@ export interface MasterDefinition {
    * fields in `from`. `fn(school, ...from ids)` returns the next value, which the Add form fills in
    * (and the user may type over); an upload row with the key blank gets one as well.
    */
-  autoKey?: { field: string; fn: string; from: string[] };
+  autoKey?: {
+    field: string;
+    fn: string;
+    from: string[];
+    /** the key may be blank only when one of `from` is given: the problem when neither is */
+    whenEmpty?: string;
+  };
   /**
    * Not listed on its setup page because a dedicated screen owns the data (communication templates:
    * the Template master); the grid stays reachable from that screen for Excel import and export.
@@ -2986,7 +2992,12 @@ export const MASTERS: MasterDefinition[] = [
     naturalKey: ['code'],
     conflict: '(school_id, code)',
     fields: [
-      tcode(),
+      {
+        ...tcode(),
+        // a sub-category's code is made from its category's (autoKey below)
+        required: false,
+        help: 'A main category: a short code you type (STAT, IT). A sub-category: filled in from its category (AV-01, AV-02 …); you may type your own',
+      },
       aname('Category', 80),
       {
         key: 'parent_id',
@@ -3052,7 +3063,13 @@ export const MASTERS: MasterDefinition[] = [
     search: ['t.code', 't.name'],
     orderBy: 'COALESCE(r3.code, t.code), t.parent_id NULLS FIRST, t.code',
     uploadHelp:
-      'Categories (Stationery, Furniture, IT, Lab, Sports) and their sub-categories (Pens, Paper under Stationery).',
+      'Categories (Stationery, Furniture, IT, Lab, Sports) and their sub-categories (Pens, Paper under Stationery). A sub-category with the code left empty gets the next one of its category (STAT-01); a main category needs its code.',
+    autoKey: {
+      field: 'code',
+      fn: 'app.purchase_category_code',
+      from: ['parent_id'],
+      whenEmpty: "Type the code of a main category (a sub-category's is made from its category)",
+    },
   }),
   master({
     id: 'purchase_items',

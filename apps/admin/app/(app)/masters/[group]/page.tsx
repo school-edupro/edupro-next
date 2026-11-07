@@ -735,6 +735,21 @@ function RowForm({
   t: Awaited<ReturnType<typeof getTranslations<'masters'>>>;
 }) {
   const fields = master.fields.filter((f) => !f.readOnly);
+  // a drop-down narrowed by a parent that the same form picks (an item's Category → its Sub-category)
+  // follows that box instead of showing a second one
+  const followOf = (f: MasterField) => {
+    const p = f.lookup?.parent;
+    const g = p
+      ? fields.find(
+          (x) =>
+            x.key !== f.key &&
+            x.type === 'ref' &&
+            x.lookup?.table === p.table &&
+            x.lookup.column === p.valueColumn,
+        )
+      : undefined;
+    return g ? { name: `f:${g.key}`, label: g.header } : undefined;
+  };
   return (
     <section
       className="ep-master__panel"
@@ -769,6 +784,7 @@ function RowForm({
                 <FieldInput
                   key={f.key}
                   f={f}
+                  follow={followOf(f)}
                   lookups={lookups}
                   value={
                     typed && f.key in typed ? (typed[f.key] ?? '') : row ? (row[f.key] ?? '') : ''
@@ -866,9 +882,12 @@ function FieldInput({
   no,
   lookups,
   lng,
+  follow,
 }: {
   lookups: Record<string, MasterLookupOption[]>;
   f: MasterField;
+  /** the form box this drop-down follows (its parent), when the form has one */
+  follow?: { name: string; label: string };
   value: string;
   /** the longitude that goes with a latitude shown on the map */
   lng: string;
@@ -949,8 +968,9 @@ function FieldInput({
           label: o.label,
           parent: o.parent,
         }))}
+        follow={follow}
         parent={
-          f.lookup.parent && parentOptions
+          !follow && f.lookup.parent && parentOptions
             ? {
                 label: f.lookup.parent.label,
                 options: parentOptions.map((o) => ({ value: o.value, label: o.label })),

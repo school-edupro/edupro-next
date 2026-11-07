@@ -241,6 +241,37 @@ describe('purchase masters (e2e)', () => {
     expect(done.json()).toMatchObject({ status: 'committed', insertedRows: 1 });
   });
 
+  it('makes a sub-category code from its category; a main category keeps a typed one', async () => {
+    const cat = async (values: Record<string, unknown>) =>
+      call(admin, 'POST', '/masters/purchase_item_categories/rows', { values });
+    expect(
+      (await call(admin, 'GET', '/masters/purchase_item_categories/next-key?parent_id=IT')).json(),
+    ).toEqual({ value: 'IT-01' });
+    expect((await cat({ name: 'Mouse pads', parent_id: 'IT' })).json().code).toBe('IT-01');
+    expect((await cat({ name: 'Cables', parent_id: 'IT · IT' })).json().code).toBe('IT-02');
+    // a typed code is kept and counted
+    expect((await cat({ code: 'IT-10', name: 'Printers', parent_id: 'IT' })).json().code).toBe(
+      'IT-10',
+    );
+    expect((await cat({ name: 'Scanners', parent_id: 'IT' })).json().code).toBe('IT-11');
+    const main = await cat({ name: 'No code' });
+    expect(main.statusCode).toBe(400);
+    expect(main.json().detail).toContain('Type the code of a main category');
+    // an upload: a blank code under a category is made; a main category without one is refused
+    const up = await call(admin, 'POST', '/masters/purchase_item_categories/imports/validate', {
+      fileName: 'cats.csv',
+      csv: 'Code,Category,Sub-category of (category)\n,Speakers,IT\n,Nothing,\n',
+    });
+    expect(up.json()).toMatchObject({ status: 'failed', okRows: 1 });
+    expect(up.json().report).toEqual([
+      expect.objectContaining({
+        row: 3,
+        column: 'Code',
+        message: expect.stringContaining('main category'),
+      }),
+    ]);
+  });
+
   it('makes an item code from the category and sub-category when it is left blank', async () => {
     const save = async (values: Record<string, unknown>) => {
       const r = await row(admin, 'purchase_items', {

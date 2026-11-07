@@ -687,3 +687,18 @@ a `<details>`. A document opens through `GET /purchase/vendors/:id/documents/:do
 `api/purchase/vendors/[id]/documents/[doc]`. The vendor detail answer adds `categories` (id, name).
 Test in `purchase-masters.e2e-spec.ts` (upload, inline / save, a teacher refused, another vendor's
 number not found).
+
+## As built — sub-category codes; the item's sub-category follows its category (7 Nov 2026)
+
+Asked by the user on the two Add forms. **Item categories**: a sub-category's code is filled in from its
+category as "Sub-category of" is picked — the category code, a hyphen and a 2-digit number (AV-01,
+AV-02; typed codes counted; may be typed over); a main category keeps the short code typed (STAT, IT).
+Migration 0330: `app.purchase_category_code(school, parent)` and the trigger
+`purchase_item_categories_auto_code` (blank code under a category → the next one under an advisory lock;
+blank code with no category → `purchase.category_code`). The registry's `autoKey` gains `whenEmpty`
+(the problem when the key and its `from` fields are all blank), checked at the upload check and on the
+form's save. **Items**: the Sub-category picker no longer shows its own "Category" narrowing box (which
+listed sub-categories too): a drop-down narrowed by a parent that the same form picks follows that box
+(`RefDatalist` `follow`; masters `RowForm` finds the sibling field), a pick not under the newly chosen
+category is cleared, and the item code follows (ELEC-0001). Tests in `purchase-masters.e2e-spec.ts`
+(next-key, made and typed codes, a main category refused, the upload).

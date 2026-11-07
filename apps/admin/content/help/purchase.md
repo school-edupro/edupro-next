@@ -55,11 +55,14 @@ PO, the emergency purchase, the stores and receiving what was ordered.
    charge** where the school pays the GST itself (e.g. an advocate's legal services) or **Exempt for the
    school**. Confirm every rate with the school's CA. Categories have two levels: a category and its
    sub-categories. A sub-category is a row of **Item categories** with **Sub-category of (category)**
-   filled (e.g. ELEC-LIGHT "Lights and fans" under ELEC); leave it empty for a main category. An item
+   filled (e.g. ELEC-LIGHT "Lights and fans" under ELEC); leave it empty for a main category. A main
+   category's **code** is the short one you type (STAT, IT); a sub-category's is filled in from its
+   category as you pick it — AV-01, AV-02 … (type over it if you prefer, e.g. AV-DISPLAY). Item codes
+   start with these codes. An item
    has a code, a type (consumable, asset, service), its category (and sub-category), its unit and its
    HSN / SAC (its GST rate comes from there unless the item has its own).
    **Item codes are made for you**: on **+ Add**, picking the category fills the next code, and the
-   sub-category narrows it — ELEC-0001, then ELEC-LIGHT-0001 (numbered per sub-category; a sub-category
+   sub-category (its list shows only the sub-categories of the category picked) narrows it — ELEC-0001, then ELEC-LIGHT-0001 (numbered per sub-category; a sub-category
    code that already starts with its category's is not repeated, so PENS under STAT gives
    STAT-PENS-0001). Type over it to keep the school's own code. A code left as filled is given again
    when you save, so two people adding at once never get the same one. In an Excel upload, leave

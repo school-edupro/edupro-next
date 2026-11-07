@@ -1,5 +1,5 @@
 'use client';
-import { useId, useMemo, useState } from 'react';
+import { useEffect, useId, useMemo, useRef, useState } from 'react';
 
 export interface DatalistOption {
   value: string;
@@ -12,7 +12,9 @@ export interface DatalistOption {
 /**
  * A typeahead input backed by a datalist. When `parent` is given, a second (non-submitted) input
  * narrows the options to those whose `parent` matches what was typed there: country → state,
- * state → city. The submitted value is the option's value (a code), which the API resolves to an id.
+ * state → city. When `follow` is given instead, the options follow another box of the same form (an
+ * item's Category narrows its Sub-category): no second box, and a pick not under the new parent is
+ * cleared. The submitted value is the option's value (a code), which the API resolves to an id.
  */
 export function RefDatalist({
   id,
@@ -25,6 +27,7 @@ export function RefDatalist({
   pattern,
   maxLength,
   parent,
+  follow,
   onValue,
 }: {
   id: string;
@@ -37,6 +40,8 @@ export function RefDatalist({
   pattern?: string;
   maxLength?: number;
   parent?: { label: string; options: DatalistOption[]; defaultValue?: string };
+  /** the form box (its name) whose code narrows the options, and its label */
+  follow?: { name: string; label: string };
   onValue?: (value: string) => void;
 }) {
   const listId = useId();
@@ -46,11 +51,44 @@ export function RefDatalist({
     (defaultValue ? (options.find((o) => o.value === defaultValue)?.parent ?? '') : '');
   const [parentValue, setParentValue] = useState(initialParent ?? '');
   const [value, setValue] = useState(defaultValue ?? '');
+  const inputRef = useRef<HTMLInputElement>(null);
+  const valueRef = useRef(value);
+  valueRef.current = value;
+  const followName = follow?.name;
+  useEffect(() => {
+    if (!followName) return;
+    const el = inputRef.current
+      ?.closest('form')
+      ?.querySelector<HTMLInputElement>(`[name="${followName}"]`);
+    if (!el) return;
+    // the box shows "AV · Audio-visual": its code narrows the list
+    const codeOf = (x: string) => x.split(' · ')[0]!.trim();
+    let first = true;
+    const read = () => {
+      const p = codeOf(el.value);
+      setParentValue(p);
+      const cur = valueRef.current;
+      if (!first && cur && !options.some((o) => o.value === cur && o.parent === p)) {
+        setValue('');
+        onValue?.('');
+      }
+      first = false;
+    };
+    read();
+    el.addEventListener('input', read);
+    el.addEventListener('change', read);
+    return () => {
+      el.removeEventListener('input', read);
+      el.removeEventListener('change', read);
+    };
+    // the options and callback are fixed for the form's life: only the followed box matters
+  }, [followName]);
+  const narrows = Boolean(parent ?? follow);
   const visible = useMemo(
-    () => (parent && parentValue ? options.filter((o) => o.parent === parentValue) : options),
-    [options, parent, parentValue],
+    () => (narrows && parentValue ? options.filter((o) => o.parent === parentValue) : options),
+    [options, narrows, parentValue],
   );
-  const filtered = parent && parentValue && !options.some((o) => o.parent === parentValue);
+  const filtered = narrows && parentValue && !options.some((o) => o.parent === parentValue);
   return (
     <>
       {parent ? (
@@ -84,6 +122,7 @@ export function RefDatalist({
           {required ? <span aria-hidden="true"> *</span> : null}
         </span>
         <input
+          ref={inputRef}
           id={id}
           name={name}
           className="ep-input"
@@ -107,7 +146,9 @@ export function RefDatalist({
         </datalist>
         {help || filtered ? (
           <span className="ep-field__help">
-            {filtered ? 'No entries under that parent yet.' : help}
+            {filtered
+              ? `No entries under that ${follow ? follow.label.toLowerCase() : 'parent'} yet.`
+              : help}
           </span>
         ) : null}
       </label>

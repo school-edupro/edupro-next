@@ -492,6 +492,11 @@ export class MastersService {
           rejects.push({ row: rowNo, ...e });
           ok = false;
         }
+        const keyLack = autoKeyLack(def, out);
+        if (keyLack) {
+          rejects.push({ row: rowNo, ...keyLack });
+          ok = false;
+        }
         // a key the database makes (left blank) means a new row: never a duplicate of another
         const madeKey = def.autoKey !== undefined && out[def.autoKey.field] === undefined;
         const key = madeKey
@@ -696,6 +701,8 @@ export class MastersService {
           }
         }
         errors.push(...crossChecks(fields, out, lookups).map((e) => `${e.column}: ${e.message}`));
+        const keyLack = dto.id ? null : autoKeyLack(def, out);
+        if (keyLack) errors.push(`${keyLack.column}: ${keyLack.message}`);
         if (errors.length)
           throw new DomainError('validation-failed', errors.join('; '), { status: 400 });
         const openKeys = editableKeys(def);
@@ -1166,6 +1173,20 @@ function listSources(
     };
   }
   return out;
+}
+
+/** A key the database makes, left blank with nothing to make it from (a main category's code). */
+function autoKeyLack(
+  def: MasterDefinition,
+  out: Record<string, unknown>,
+): { column: string; message: string } | null {
+  const a = def.autoKey;
+  if (!a?.whenEmpty || out[a.field] !== undefined) return null;
+  if (a.from.some((k) => out[k] !== undefined && out[k] !== null)) return null;
+  return {
+    column: def.fields.find((f) => f.key === a.field)?.header ?? a.field,
+    message: a.whenEmpty,
+  };
 }
 
 function crossChecks(
