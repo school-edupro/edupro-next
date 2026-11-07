@@ -177,8 +177,44 @@ describe('purchase masters (e2e)', () => {
       sub_category_id: 'PENS',
       uom_id: 'NOS',
     });
-    expect(wrong.statusCode).toBeGreaterThanOrEqual(400);
-    expect(JSON.stringify(wrong.json())).toContain('does not belong');
+    expect(wrong.statusCode).toBe(400);
+    expect(wrong.json().detail).toContain('Sub-category: Belongs to category STAT');
+  });
+
+  it('checks an uploaded item’s sub-category against its category before saving anything', async () => {
+    // the template's drop-down says which category each sub-category is under
+    const tpl = await call(admin, 'GET', '/masters/purchase_items/template');
+    const wb = new ExcelJS.Workbook();
+    await wb.xlsx.load(tpl.rawPayload as unknown as ArrayBuffer);
+    const lists = wb.getWorksheet('Lists')!;
+    const subs: string[] = [];
+    lists.eachRow((r) => r.eachCell((cell) => subs.push(String(cell.value))));
+    expect(subs).toContain('PENS · Pens (Category STAT)');
+    const head = 'Item code,Item,Type,Category,Sub-category,Unit\n';
+    const bad = await call(admin, 'POST', '/masters/purchase_items/imports/validate', {
+      fileName: 'items.csv',
+      csv: `${head}NB-1,Notebook,consumable,STAT,PENS · Pens (Category STAT),NOS\nFAN-1,Fan,asset,IT,PENS,NOS\n`,
+    });
+    expect(bad.json().status).toBe('failed');
+    expect(bad.json().report).toEqual([
+      {
+        row: 3,
+        column: 'Sub-category',
+        message: "Belongs to category STAT, not to this row's category",
+      },
+    ]);
+    const good = await call(admin, 'POST', '/masters/purchase_items/imports/validate', {
+      fileName: 'items.csv',
+      csv: `${head}NB-1,Notebook,consumable,STAT,PENS · Pens (Category STAT),NOS\n`,
+    });
+    expect(good.json().status).toBe('validated');
+    const done = await call(
+      admin,
+      'POST',
+      `/masters/purchase_items/imports/${good.json().id}/commit`,
+    );
+    expect(done.statusCode).toBe(201);
+    expect(done.json()).toMatchObject({ status: 'committed', insertedRows: 1 });
   });
 
   it('checks a vendor’s GSTIN, PAN and Udyam number', async () => {

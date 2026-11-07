@@ -56,6 +56,9 @@ type Reject = { row: number; column: string; message: string };
 const IMPORT_COLUMNS = `id::text, master, file_name, status::text, total_rows, ok_rows, rejected_rows, inserted_rows, updated_rows, report,
   requested_by::text, created_at, committed_at`;
 
+/** Where resolveLookups keeps, for a parent-narrowed lookup, each chosen row's parent ("id\0code"). */
+const PARENT_OF = (key: string) => `${key}#parent`;
+
 const norm = (s: string) =>
   s
     .trim()
@@ -261,7 +264,7 @@ export class MastersService {
           f.lookup!.nameFirst && o.label
             ? `${o.label} (${o.value})`
             : f.lookup!.showLabel && o.label
-              ? `${o.value} · ${o.label}`
+              ? `${o.value} · ${o.label}${f.lookup!.parent && o.parent ? ` (${f.lookup!.parent.label} ${o.parent})` : ''}`
               : o.value,
         );
         if (!options.length || options.length > 1500) return;
@@ -551,7 +554,26 @@ export class MastersService {
         let inserted = 0;
         let updated = 0;
         for (const values of row.payload) {
-          const res = await this.upsert(c, def, tenant, values);
+          let res: { id: string; inserted: boolean };
+          try {
+            res = await this.upsert(c, def, tenant, values);
+          } catch (error) {
+            // a rule kept in the database (a trigger): say which row, and nothing of the file is saved
+            const e = error as { code?: string; message?: string; detail?: string };
+            const key = def.naturalKey
+              .map((k) => {
+                const f = def.fields.find((x) => x.key === k);
+                return `${f?.header ?? k} ${String(values[k] ?? '')}`;
+              })
+              .join(', ');
+            if (error instanceof DomainError || e.code === 'P0001')
+              throw new DomainError(
+                'validation-failed',
+                `${key}: ${e.detail ?? e.message ?? 'refused'}. Nothing from the file was saved; correct the row and upload again.`,
+                { status: 400 },
+              );
+            throw error;
+          }
           if (res.inserted) inserted += 1;
           else updated += 1;
         }
@@ -982,9 +1004,25 @@ export class MastersService {
         const asked = new Set<string>();
         for (const w of wanted) for (const k of refReadings(w)) asked.add(k);
         const label = f.lookup.labelColumn ?? 'name';
-        const r = await c.query<{ id: string; v: string; label: string | null }>(
+        const parent = f.lookup.parent;
+        const parentCols = parent
+          ? `p.id::text AS parent_id, p.${parent.valueColumn}::text AS parent_code`
+          : 'NULL AS parent_id, NULL AS parent_code';
+        const parentJoin = parent
+          ? // eslint-disable-next-line no-restricted-syntax -- the parent table and column come from the registry
+            `LEFT JOIN ${parent.table} p ON p.id = t.${parent.column}`
+          : '';
+        const r = await c.query<{
+          id: string;
+          v: string;
+          label: string | null;
+          parent_id: string | null;
+          parent_code: string | null;
+        }>(
           // eslint-disable-next-line no-restricted-syntax -- table, columns and the fixed filter come from the registry; values bound
-          `SELECT t.id::text, t.${f.lookup.column}::text AS v, to_jsonb(t) ->> '${label}' AS label FROM ${f.lookup.table} t
+          `SELECT t.id::text, t.${f.lookup.column}::text AS v, to_jsonb(t) ->> '${label}' AS label,
+                  ${parentCols}
+             FROM ${f.lookup.table} t ${parentJoin}
             WHERE (t.${f.lookup.column}::text = ANY($1::text[]) OR lower(to_jsonb(t) ->> '${label}') = ANY($2::text[]))
               ${hasSoftDelete(f.lookup.table) ? 'AND t.deleted_at IS NULL' : ''}
               ${f.lookup.yearScoped ? 'AND t.academic_year_id = $3' : ''}
@@ -994,12 +1032,15 @@ export class MastersService {
             : [[...asked], [...asked].map((x) => x.toLowerCase())],
         );
         const byLabel = new Map<string, string[]>();
+        const parents = new Map<string, string>();
         for (const x of r.rows) {
           map.set(norm(x.v), x.id);
+          if (x.parent_id) parents.set(x.id, `${x.parent_id}\u0000${x.parent_code ?? ''}`);
           if (x.label) byLabel.set(norm(x.label), [...(byLabel.get(norm(x.label)) ?? []), x.id]);
         }
         // a name stands for the row only when one row carries it
         for (const [k, ids] of byLabel) if (ids.length === 1 && !map.has(k)) map.set(k, ids[0]!);
+        if (parent) out[PARENT_OF(f.key)] = parents;
       }
       out[f.key] = map;
     }
@@ -1088,6 +1129,26 @@ function crossChecks(
         errors.push({
           column: f.header,
           message: `Must be after ${fields.find((x) => x.key === f.after)?.header ?? f.after}`,
+        });
+    }
+    // a pick narrowed by a parent (a sub-category under its category) must sit under the parent the
+    // same row picks in another column; the form's cascade makes sure of it, an upload is checked here
+    const parent = f.lookup?.parent;
+    const sibling = parent
+      ? fields.find(
+          (g) =>
+            g.type === 'ref' &&
+            g.lookup?.table === parent.table &&
+            g.lookup.column === parent.valueColumn,
+        )
+      : undefined;
+    if (sibling && typeof out[f.key] === 'string' && typeof out[sibling.key] === 'string') {
+      const under = lookups[PARENT_OF(f.key)]?.get(out[f.key] as string);
+      const [parentId, parentCode] = under?.split('\u0000') ?? [];
+      if (parentId && parentId !== out[sibling.key])
+        errors.push({
+          column: f.header,
+          message: `Belongs to ${sibling.header.toLowerCase()} ${parentCode || '(another)'}, not to this row's ${sibling.header.toLowerCase()}`,
         });
     }
     if (f.notSelf && f.lookup && out[f.key] !== undefined && out[f.key] !== null) {
