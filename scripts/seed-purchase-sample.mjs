@@ -11,9 +11,14 @@
  * only codes whose GST rates are settled; the school adds the rest after its CA confirms the rates), so
  * most items have none until then. No GST rate is invented here.
  *
- * Everything goes through the API as dev-admin, so every rule applies as on screen and each row is in
- * the audit log. It only adds: a code that is there already is left as it is, so it can be run again.
- * Nothing is deleted, no purchase document is made and no message is sent.
+ * Then 7 sample vendors (fictional firms: valid GSTINs, a PAN of their own, a city of the school's
+ * Cities master, a bank of its Banks master, e-mails at .example that never receive mail), entered by
+ * one person and approved by another (dev-principal, then dev-admin; SAMPLE_MAKER / SAMPLE_APPROVER to
+ * change), and 31 rate contracts with them for 2026-27, one of them with last year's contract before it.
+ *
+ * Everything goes through the API as the demo users, so every rule applies as on screen and each row is
+ * in the audit log. It only adds: a code, a vendor's PAN or a contract that is there already is left as
+ * it is, so it can be run again. Nothing is deleted, no purchase document is made and no message is sent.
  *
  * Needs the API on :4000. From the repository root:
  *   node scripts/seed-purchase-sample.mjs           (lists what it would add)
@@ -31,12 +36,12 @@ if (!/^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?\//.test(API)) {
   process.exit(1);
 }
 
-async function api(method, path, body) {
+async function api(method, path, body, user = USER) {
   for (let i = 0; ; i += 1) {
     const res = await fetch(`${API}${path}`, {
       method,
       headers: {
-        authorization: `Bearer dev:${USER}`,
+        authorization: `Bearer dev:${user}`,
         'x-school-id': SCHOOL,
         ...(body === undefined ? {} : { 'content-type': 'application/json' }),
       },
@@ -420,13 +425,358 @@ if (!WRITE) {
   for (const c of newCats) console.log(`  category ${c.code.padEnd(12)} ${c.name}`);
   for (const i of newItems)
     console.log(`  item     ${i.code.padEnd(16)} ${i.item_type.padEnd(10)} ${i.name}`);
+} else {
+  // categories first (a sub-category needs its category), then the items
+  for (const c of newCats.filter((x) => !x.parent_id))
+    await api('POST', '/masters/purchase_item_categories/rows', { values: c });
+  for (const c of newCats.filter((x) => x.parent_id))
+    await api('POST', '/masters/purchase_item_categories/rows', { values: c });
+  for (const i of newItems) await api('POST', '/masters/purchase_items/rows', { values: i });
+  console.log(`Added ${String(newCats.length)} categories and ${String(newItems.length)} items.`);
+}
+
+// ---- sample vendors: entered by one person, approved by another ---------------------------------------
+const MAKER = process.env.SAMPLE_MAKER ?? 'dev-principal';
+const APPROVER = process.env.SAMPLE_APPROVER ?? USER;
+const ALPHABET = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+/** a GSTIN: the state code, the PAN, entity 1, Z and the Luhn mod 36 check character (as gstin.ts) */
+function gstinOf(state, pan) {
+  const first = `${state}${pan}1Z`;
+  const values = [...`${first}0`].reverse().map((ch) => ALPHABET.indexOf(ch));
+  let sum = 0;
+  values.forEach((v, i) => {
+    if (i % 2 === 0) sum += v;
+    else {
+      const d = v * 2;
+      sum += Math.floor(d / 36) + (d % 36);
+    }
+  });
+  return `${first}${ALPHABET[(36 - (sum % 36)) % 36]}`;
+}
+/** fictional firms; the PAN finds a vendor added on an earlier run */
+const VENDORS = [
+  {
+    key: 'BRIGHT',
+    legalName: 'Bright Office Supplies',
+    tradeName: 'Bright Office',
+    kind: 'dealer',
+    gst: 'regular',
+    state: '07',
+    city: 'New Delhi',
+    pin: '110002',
+    pan: 'AAKFB4521M',
+    address: '14 Asaf Ali Road, Daryaganj',
+    phone: '9810011201',
+    email: 'sales@brightoffice.example',
+    contact: ['Rohit Verma', 'Sales manager', '9810011202'],
+    bank: ['HDFC Bank', 'HDFC0001102', '50200011223344'],
+    supplies: ['STAT', 'TEACH'],
+  },
+  {
+    key: 'PIXEL',
+    legalName: 'Pixel Point Computers Private Limited',
+    tradeName: 'Pixel Point',
+    kind: 'dealer',
+    gst: 'regular',
+    state: '09',
+    city: 'Noida',
+    pin: '201301',
+    pan: 'AAJCP7310K',
+    address: 'B-41, Sector 2',
+    phone: '9810022301',
+    email: 'orders@pixelpoint.example',
+    contact: ['Neha Arora', 'Accounts', '9810022302'],
+    bank: ['ICICI Bank', 'ICIC0000456', '012305004567'],
+    supplies: ['IT', 'AV'],
+  },
+  {
+    key: 'STURDY',
+    legalName: 'Sturdy Wood Furniture Works',
+    kind: 'manufacturer',
+    gst: 'regular',
+    state: '06',
+    city: 'Faridabad',
+    pin: '121003',
+    pan: 'AADFS6642L',
+    address: 'Plot 77, Sector 24 Industrial Area',
+    phone: '9810033401',
+    email: 'works@sturdywood.example',
+    contact: ['Mohan Lal', 'Proprietor', '9810033402'],
+    bank: ['State Bank of India', 'SBIN0003310', '38912345678'],
+    supplies: ['FURN'],
+    msme: ['small', 'UDYAM-HR-05-0034567'],
+  },
+  {
+    key: 'CLEAN',
+    legalName: 'Clean Sweep Hygiene Supplies',
+    kind: 'dealer',
+    gst: 'composition',
+    state: '09',
+    city: 'Ghaziabad',
+    pin: '201001',
+    pan: 'ABCFC1187N',
+    address: '9 Navyug Market',
+    phone: '9810044501',
+    email: 'cleansweep@vendors.example',
+    contact: ['Imran Khan', 'Partner', '9810044502'],
+    bank: ['State Bank of India', 'SBIN0001875', '39098765432'],
+    supplies: ['CLEAN'],
+    msme: ['micro', 'UDYAM-UP-29-0012890'],
+  },
+  {
+    key: 'LABTECH',
+    legalName: 'LabTech Scientific Traders',
+    kind: 'dealer',
+    gst: 'regular',
+    state: '27',
+    city: 'Pune',
+    pin: '411002',
+    pan: 'AAHFL5093Q',
+    address: '201 Laxmi Road, Budhwar Peth',
+    phone: '9822055601',
+    email: 'sales@labtech.example',
+    contact: ['Sneha Kulkarni', 'Sales', '9822055602'],
+    bank: ['HDFC Bank', 'HDFC0000789', '50100077889900'],
+    supplies: ['LAB', 'MED'],
+  },
+  {
+    key: 'SPORTS',
+    legalName: 'Sportsline Traders',
+    kind: 'dealer',
+    gst: 'unregistered',
+    state: '06',
+    city: 'Gurugram',
+    pin: '122001',
+    pan: 'BQRPS2468D',
+    address: 'Shop 12, Sadar Bazar',
+    phone: '9810066701',
+    email: 'sportsline@vendors.example',
+    contact: ['Vikram Singh', 'Owner', '9810066702'],
+    bank: ['ICICI Bank', 'ICIC0001290', '129001234567'],
+    supplies: ['SPORT'],
+    msme: ['micro', 'UDYAM-HR-06-0056789'],
+  },
+  {
+    key: 'COOLAIR',
+    legalName: 'CoolAir Electricals and Services',
+    tradeName: 'CoolAir',
+    kind: 'service_provider',
+    gst: 'regular',
+    state: '09',
+    city: 'Greater Noida',
+    pin: '201310',
+    pan: 'AAGFC8810R',
+    address: 'C-5, Alpha 1 Commercial Belt',
+    phone: '9810077801',
+    email: 'service@coolair.example',
+    contact: ['Deepak Yadav', 'Service head', '9810077802'],
+    bank: ['State Bank of India', 'SBIN0004501', '40011223344'],
+    supplies: ['ELEC', 'SERV'],
+    msme: ['small', 'UDYAM-UP-28-0078901'],
+  },
+];
+
+const places = await api('GET', '/purchase/vendors/form-lists');
+const catIds = new Map();
+for (let page = 1; ; page += 1) {
+  const r = await api(
+    'GET',
+    `/masters/purchase_item_categories/rows?size=500&page=${String(page)}`,
+  );
+  for (const row of r.data) catIds.set(String(row.code), String(row.id));
+  if (page * r.page.size >= r.page.total) break;
+}
+const terms = (await api('GET', '/purchase/payment-terms')).data;
+const net30 = terms.find((t) => t.code === 'NET30' && t.status === 'active');
+/** the vendors there now, by PAN (all of them) */
+async function vendorByPan(pan) {
+  const r = await api('GET', `/purchase/vendors?q=${encodeURIComponent(pan)}&size=50`);
+  return r.data.find((x) => x.pan === pan) ?? null;
+}
+const vendorCode = {};
+const toAdd = [];
+const toApprove = [];
+for (const v of VENDORS) {
+  const there = await vendorByPan(v.pan);
+  if (there) {
+    vendorCode[v.key] = there.code;
+    if (there.status === 'pending') toApprove.push({ v, id: there.id, code: there.code });
+    continue;
+  }
+  const state = places.states.find((x) => x.country === 'IN' && x.gstCode === v.state);
+  const city = state && places.cities.find((x) => x.state === state.code && x.name === v.city);
+  if (!state || !city) {
+    console.log(`  skipped vendor ${v.legalName}: ${v.city} is not in the school's Cities master`);
+    continue;
+  }
+  const bank = places.banks.find(
+    (b) =>
+      b.name === v.bank[0] && (!b.prefixes.length || b.prefixes.includes(v.bank[1].slice(0, 4))),
+  );
+  toAdd.push({
+    v,
+    body: {
+      legalName: v.legalName,
+      ...(v.tradeName ? { tradeName: v.tradeName } : {}),
+      kind: v.kind,
+      gstStatus: v.gst,
+      ...(v.gst === 'unregistered' ? { pan: v.pan } : { gstin: gstinOf(v.state, v.pan) }),
+      ...(v.msme ? { msmeType: v.msme[0], udyamNo: v.msme[1] } : {}),
+      address: v.address,
+      country: 'India',
+      state: state.name,
+      city: city.name,
+      pin: v.pin,
+      phone: v.phone,
+      email: v.email,
+      ...(net30 ? { paymentTermId: net30.id } : {}),
+      categoryIds: v.supplies.map((c) => catIds.get(c)).filter(Boolean),
+      contacts: [{ name: v.contact[0], role: v.contact[1], phone: v.contact[2], isMain: true }],
+      ...(bank
+        ? {
+            bank: {
+              bankName: bank.name,
+              ifsc: v.bank[1],
+              accountNo: v.bank[2],
+              accountNoConfirm: v.bank[2],
+              holder: v.legalName,
+            },
+          }
+        : {}),
+    },
+  });
+}
+console.log(
+  `Vendors: ${String(VENDORS.length - toAdd.length)} of ${String(VENDORS.length)} sample vendors there; to add ${String(toAdd.length)}, to approve ${String(toApprove.length)}.`,
+);
+if (!WRITE)
+  for (const x of toAdd) console.log(`  vendor   ${x.v.legalName} (${x.body.gstin ?? x.v.pan})`);
+else {
+  for (const x of toAdd) {
+    const made = await api('POST', '/purchase/vendors', x.body, MAKER);
+    vendorCode[x.v.key] = made.code;
+    toApprove.push({ v: x.v, id: made.id, code: made.code });
+  }
+  for (const x of toApprove)
+    try {
+      await api(
+        'POST',
+        `/purchase/vendors/${x.id}/decide`,
+        { approve: true, note: 'Sample vendor' },
+        APPROVER,
+      );
+    } catch (e) {
+      // the school named its vendor approvers (Purchase → Settings): only they approve
+      const named = (await api('GET', '/purchase/vendor-approvers')).named ?? [];
+      console.error(
+        `Approving as ${APPROVER} was refused. ${named.length ? `The vendor approvers named in Purchase → Settings: ${named.map((n) => n.name).join(', ')}. Run again with SAMPLE_APPROVER=<one of their logins> (not ${MAKER}, who entered them).` : ''}`,
+      );
+      throw e;
+    }
+  console.log(
+    `Added ${String(toAdd.length)} vendors (by ${MAKER}), approved ${String(toApprove.length)} (by ${APPROVER}).`,
+  );
+}
+
+// ---- rate contracts for 2026-27 (one with last year's before it) --------------------------------------
+const FY = { from: '2026-04-01', to: '2027-03-31', ref: 'RC/2026-27' };
+/** [item, vendor, rate in ₹ a purchase unit, GST included] */
+const CONTRACTS = [
+  ['STA-A4-REAM', 'BRIGHT', 265, false],
+  ['STA-NB-172', 'BRIGHT', 38, false],
+  ['STA-NB-GRAPH', 'BRIGHT', 24, false],
+  ['STA-REG-200', 'BRIGHT', 95, false],
+  ['STA-PEN-BLUE', 'BRIGHT', 55, false],
+  ['STA-PEN-RED', 'BRIGHT', 55, false],
+  ['STA-PENCIL-HB', 'BRIGHT', 45, false],
+  ['STA-CHALK-W', 'BRIGHT', 35, false],
+  ['STA-MARKER-WB', 'BRIGHT', 180, false],
+  ['STA-BOX-FILE', 'BRIGHT', 65, false],
+  ['TCH-MAP-INDIA', 'BRIGHT', 210, false],
+  ['CLN-FLOOR-5L', 'CLEAN', 420, false],
+  ['CLN-PHENYL-5L', 'CLEAN', 260, false],
+  ['CLN-HANDWASH-5L', 'CLEAN', 540, false],
+  ['CLN-TISSUE', 'CLEAN', 230, false],
+  ['CLN-GARBAGE-BAG', 'CLEAN', 120, false],
+  ['SRV-PEST', 'CLEAN', 3500, false],
+  ['IT-TONER', 'PIXEL', 2450, false],
+  ['IT-MOUSE', 'PIXEL', 320, false],
+  ['IT-KEYBOARD', 'PIXEL', 480, false],
+  ['IT-CABLE-CAT6', 'PIXEL', 7800, false],
+  ['LAB-BEAKER-250', 'LABTECH', 85, false],
+  ['LAB-TEST-TUBE', 'LABTECH', 96, false],
+  ['LAB-HCL-500', 'LABTECH', 140, false],
+  ['LAB-LITMUS', 'LABTECH', 60, false],
+  ['FUR-CHAIR-STU', 'STURDY', 1850, false],
+  ['FUR-DESK-DUAL', 'STURDY', 6200, false],
+  ['SPT-FOOTBALL', 'SPORTS', 650, false],
+  ['SPT-SHUTTLE', 'SPORTS', 420, false],
+  ['ELE-LED-TUBE', 'COOLAIR', 310, false],
+  ['SRV-AMC-AC', 'COOLAIR', 2800, false],
+];
+/** last year's contract of an item, so the list shows a contract followed by the next */
+const HISTORY = [
+  ['STA-A4-REAM', 'BRIGHT', 248, false, '2025-04-01', '2026-03-31', 'RC/2025-26/BRIGHT'],
+];
+
+const haveContracts = new Set();
+for (let page = 1; ; page += 1) {
+  const r = await api('GET', `/masters/purchase_rate_contracts/rows?size=500&page=${String(page)}`);
+  for (const row of r.data)
+    haveContracts.add(
+      `${String(row.item_id).split(' · ')[0]}|${String(row.valid_from).slice(0, 10)}`,
+    );
+  if (page * r.page.size >= r.page.total) break;
+}
+const items = await codes('purchase_items');
+const wanted = [
+  ...HISTORY.map(([item, vendor, rate, gst, from, to, ref]) => ({
+    item,
+    vendor,
+    rate,
+    gst,
+    from,
+    to,
+    ref,
+  })),
+  ...CONTRACTS.map(([item, vendor, rate, gst]) => ({
+    item,
+    vendor,
+    rate,
+    gst,
+    from: FY.from,
+    to: FY.to,
+    ref: `${FY.ref}/${vendor}`,
+  })),
+].filter((x) => items.has(x.item) && !haveContracts.has(`${x.item}|${x.from}`));
+console.log(
+  `Rate contracts: ${String(haveContracts.size)} there; to add ${String(wanted.length)}.`,
+);
+if (!WRITE) {
+  for (const x of wanted)
+    console.log(
+      `  contract ${x.item.padEnd(16)} ${x.vendor.padEnd(8)} ₹${String(x.rate)} ${x.from} to ${x.to}`,
+    );
   console.log('Nothing written. Run with --yes to add them.');
   process.exit(0);
 }
-// categories first (a sub-category needs its category), then the items
-for (const c of newCats.filter((x) => !x.parent_id))
-  await api('POST', '/masters/purchase_item_categories/rows', { values: c });
-for (const c of newCats.filter((x) => x.parent_id))
-  await api('POST', '/masters/purchase_item_categories/rows', { values: c });
-for (const i of newItems) await api('POST', '/masters/purchase_items/rows', { values: i });
-console.log(`Added ${String(newCats.length)} categories and ${String(newItems.length)} items.`);
+let added = 0;
+for (const x of wanted) {
+  if (!vendorCode[x.vendor]) {
+    console.log(`  skipped ${x.item}: vendor ${x.vendor} was not added`);
+    continue;
+  }
+  await api('POST', '/masters/purchase_rate_contracts/rows', {
+    values: {
+      item_id: x.item,
+      vendor_id: vendorCode[x.vendor],
+      rate: x.rate,
+      gst_inclusive: x.gst,
+      valid_from: x.from,
+      valid_to: x.to,
+      reference: x.ref,
+    },
+  });
+  added += 1;
+}
+console.log(`Added ${String(added)} rate contracts.`);
