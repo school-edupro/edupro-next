@@ -56,6 +56,20 @@ export class MastersController {
     return this.masters.lookups(ctx, master, merge === '1');
   }
 
+  @Get(':master/next-key')
+  @AuthenticatedOnly()
+  @ApiOperation({
+    summary: 'The key the database would give a new row now (the Add form fills it in)',
+  })
+  nextKey(
+    @ReqCtx() ctx: RequestContext,
+    @Param('master') master: string,
+    // the keys differ by master (category_id, sub_category_id): the service reads only its own fields
+    @Query() q: Record<string, string>,
+  ) {
+    return this.masters.nextKey(ctx, master, q);
+  }
+
   @Get(':master/template')
   @AuthenticatedOnly()
   @ApiOperation({ summary: 'Excel upload template (headers, a sample row, the rules)' })

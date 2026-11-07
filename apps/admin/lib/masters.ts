@@ -68,6 +68,8 @@ export interface MasterMeta {
   merge?: { note: string } | null;
   /** where each drop-down that points at another master gets its list */
   sources?: Record<string, MasterSource>;
+  /** a key the database makes when left blank (an item code from its category): the Add form fills it */
+  autoKey?: { field: string; from: string[] } | null;
 }
 
 /** The setup page and tab a drop-down's list is kept on. */

@@ -71,6 +71,8 @@ export interface MasterField {
   /** `text` stored as TEXT[]: files and the grid show a comma-separated list. */
   array?: boolean;
   help?: string;
+  /** Other column headers an upload accepts for this field (a header renamed later keeps old files working). */
+  aliases?: string[];
 }
 
 export type MasterGroup =
@@ -138,6 +140,12 @@ export interface MasterDefinition {
    * pointed at the duplicate and removes it; `note` tells the user what moves.
    */
   merge?: { fn: string; note: string };
+  /**
+   * The natural key `field` may be left blank: the database gives it on insert (a trigger), from the
+   * fields in `from`. `fn(school, ...from ids)` returns the next value, which the Add form fills in
+   * (and the user may type over); an upload row with the key blank gets one as well.
+   */
+  autoKey?: { field: string; fn: string; from: string[] };
   /**
    * Not listed on its setup page because a dedicated screen owns the data (communication templates:
    * the Template master); the grid stays reachable from that screen for Excel import and export.
@@ -2982,7 +2990,8 @@ export const MASTERS: MasterDefinition[] = [
       aname('Category', 80),
       {
         key: 'parent_id',
-        header: 'Sub-category of',
+        header: 'Sub-category of (category)',
+        aliases: ['Sub-category of'],
         type: 'ref',
         lookup: {
           table: 'purchase_item_categories',
@@ -2992,7 +3001,7 @@ export const MASTERS: MasterDefinition[] = [
         },
         notSelf: true,
         width: 22,
-        help: 'Empty for a category; the category for a sub-category (two levels only)',
+        help: 'Leave empty for a main category. To add a sub-category, pick its category here (e.g. ELEC for Lights and fans); two levels only',
       },
       // depreciation of the category's assets (docs/design/84, part 9); a sub-category without its own
       // takes its category's
@@ -3057,10 +3066,13 @@ export const MASTERS: MasterDefinition[] = [
     fields: [
       {
         ...code('Item code'),
+        // made from the category and sub-category when left blank (autoKey below)
+        required: false,
         maxLength: 30,
         pattern: '^[A-Z0-9][A-Z0-9_./-]*$',
         patternHelp:
           'capital letters and digits (dot, slash, hyphen or underscore allowed), without spaces',
+        help: 'Filled in from the category and sub-category (STAT-PAPER-0001, numbered per sub-category); you may type your own. Left empty, the next one is given on saving',
       },
       aname('Item', 150),
       {
@@ -3104,7 +3116,7 @@ export const MASTERS: MasterDefinition[] = [
           },
         },
         width: 18,
-        help: 'A sub-category of the item’s category',
+        help: 'A sub-category of the item’s category. Sub-categories are added on the Item categories tab (a row with “Sub-category of” filled)',
       },
       {
         key: 'uom_id',
@@ -3194,7 +3206,12 @@ export const MASTERS: MasterDefinition[] = [
     search: ['t.code', 't.name', 't.brand', 't.specification'],
     orderBy: 't.code',
     uploadHelp:
-      'One row per item the school buys: code, name, type, category (and sub-category), unit and HSN / SAC.',
+      'One row per item the school buys: code, name, type, category (and sub-category), unit and HSN / SAC. Leave the item code empty for a new item: it is made from the category and sub-category (STAT-PAPER-0001); a row with an existing code updates that item.',
+    autoKey: {
+      field: 'code',
+      fn: 'app.purchase_item_code',
+      from: ['category_id', 'sub_category_id'],
+    },
   }),
   master({
     id: 'purchase_rate_contracts',

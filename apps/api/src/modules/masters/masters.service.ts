@@ -151,6 +151,7 @@ export class MastersService {
       detail: m.detail ?? null,
       dataset: `master_${m.id}`,
       merge: m.merge ? { note: m.merge.note } : null,
+      autoKey: m.autoKey ? { field: m.autoKey.field, from: m.autoKey.from } : null,
       sources: listSources(m, held),
     }));
   }
@@ -491,7 +492,11 @@ export class MastersService {
           rejects.push({ row: rowNo, ...e });
           ok = false;
         }
-        const key = def.naturalKey.map((k) => String(out[k] ?? '')).join('\u0000');
+        // a key the database makes (left blank) means a new row: never a duplicate of another
+        const madeKey = def.autoKey !== undefined && out[def.autoKey.field] === undefined;
+        const key = madeKey
+          ? `\u0001${String(rowNo)}`
+          : def.naturalKey.map((k) => String(out[k] ?? '')).join('\u0000');
         if (ok && seen.has(key)) {
           rejects.push({
             row: rowNo,
@@ -563,7 +568,7 @@ export class MastersService {
             const key = def.naturalKey
               .map((k) => {
                 const f = def.fields.find((x) => x.key === k);
-                return `${f?.header ?? k} ${String(values[k] ?? '')}`;
+                return `${f?.header ?? k} ${values[k] === undefined || values[k] === null ? '(new, left blank)' : String(values[k] as string | number)}`;
               })
               .join(', ');
             if (error instanceof DomainError || e.code === 'P0001')
@@ -590,6 +595,45 @@ export class MastersService {
         return (await this.getImport(c, importId))!;
       }),
     );
+  }
+
+  /**
+   * The key the database would give a new row now, from the fields it is made of (the Add form fills it
+   * in as they are picked). Nothing is reserved: a code left as filled is made again on saving.
+   */
+  async nextKey(
+    ctx: RequestContext,
+    id: string,
+    query: Record<string, string>,
+  ): Promise<{ value: string | null }> {
+    const def = this.def(id);
+    this.assertPermission(ctx, def, true);
+    const auto = def.autoKey;
+    if (!auto)
+      throw new DomainError('not-found', `${def.title} has no automatic key`, { status: 404 });
+    const fields = auto.from.map((k) => def.fields.find((f) => f.key === k)!);
+    const cells = auto.from.map((k) => {
+      const v = typeof query[k] === 'string' ? query[k].trim().slice(0, 200) : '';
+      return v || null;
+    });
+    const tenant = requireTenant(ctx);
+    return this.db.tenant(tenant, async (c) => {
+      const columnIndex = Object.fromEntries(auto.from.map((k, i) => [k, i]));
+      const lookups = await this.resolveLookups(c, tenant, fields, [cells], columnIndex);
+      const ids: Array<string | null> = [];
+      for (const [i, f] of fields.entries()) {
+        const { value, error } = coerce({ ...f, required: false }, cells[i] ?? null, lookups);
+        if (error) return { value: null };
+        ids.push(typeof value === 'string' ? value : null);
+      }
+      if (!ids[0]) return { value: null };
+      const r = await c.query<{ v: string | null }>(
+        // eslint-disable-next-line no-restricted-syntax -- the function name comes from the registry; the values are bound
+        `SELECT ${auto.fn}(app.current_school_id(), ${ids.map((_, i) => `$${String(i + 1)}::bigint`).join(', ')}) AS v`,
+        ids,
+      );
+      return { value: r.rows[0]?.v ?? null };
+    });
   }
 
   async imports(ctx: RequestContext, id: string): Promise<MasterImportRow[]> {
@@ -715,6 +759,15 @@ export class MastersService {
           for (const k of def.naturalKey) out[k] = cur.rows[0][k];
         }
         const res = await this.upsert(c, def, tenant, out);
+        if (def.autoKey && out[def.autoKey.field] === undefined) {
+          // the key the database gave (the next item code)
+          const made = await c.query<Record<string, unknown>>(
+            // eslint-disable-next-line no-restricted-syntax -- table and column come from the registry; the id is bound
+            `SELECT ${def.autoKey.field}::text AS v FROM ${def.table} WHERE id = $1`,
+            [res.id],
+          );
+          out[def.autoKey.field] = made.rows[0]?.v ?? null;
+        }
         await this.audit.stage(ctx, c, {
           action: dto.id ? 'masters.row.update' : 'masters.row.create',
           entityType: def.table,
@@ -1196,7 +1249,10 @@ function mapHeader(header: string[], fields: MasterField[]): Record<string, numb
   header.forEach((h, i) => {
     const n = norm(String(h ?? ''));
     if (!n) return;
-    const f = fields.find((x) => norm(x.header) === n || norm(x.key) === n);
+    const f = fields.find(
+      (x) =>
+        norm(x.header) === n || norm(x.key) === n || (x.aliases ?? []).some((a) => norm(a) === n),
+    );
     if (f && out[f.key] === undefined) out[f.key] = i;
   });
   return out;

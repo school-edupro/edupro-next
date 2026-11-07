@@ -16,6 +16,7 @@ import { FeeSetupNav } from '@/components/fees/FeeSetupNav';
 import { ExportWatcher } from '@/components/ExportWatcher';
 import { Notice } from '@/components/Notice';
 import { MapPicker } from '@/components/MapPicker';
+import { AutoKey } from '@/components/AutoKey';
 import { RefDatalist } from '@/components/RefDatalist';
 import { Icon } from '@/components/nav-icons';
 import {
@@ -751,6 +752,9 @@ function RowForm({
         {fields.map((f) => (
           <input key={f.key} type="hidden" name="fields" value={f.key} />
         ))}
+        {!row && master.autoKey ? (
+          <AutoKey master={master.id} field={master.autoKey.field} from={master.autoKey.from} />
+        ) : null}
         <FormRow columns={3}>
           {fields
             // the map picker of the latitude field carries the longitude too

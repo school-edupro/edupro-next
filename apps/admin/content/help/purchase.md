@@ -47,8 +47,17 @@ PO, the emergency purchase, the stores and receiving what was ordered.
    books, maps, computers): add the codes of what the school buys, with the GST rate, and tick **Reverse
    charge** where the school pays the GST itself (e.g. an advocate's legal services) or **Exempt for the
    school**. Confirm every rate with the school's CA. Categories have two levels: a category and its
-   sub-categories. An item has a code, a type (consumable, asset, service), its category (and
-   sub-category), its unit and its HSN / SAC (its GST rate comes from there unless the item has its own).
+   sub-categories. A sub-category is a row of **Item categories** with **Sub-category of (category)**
+   filled (e.g. ELEC-LIGHT "Lights and fans" under ELEC); leave it empty for a main category. An item
+   has a code, a type (consumable, asset, service), its category (and sub-category), its unit and its
+   HSN / SAC (its GST rate comes from there unless the item has its own).
+   **Item codes are made for you**: on **+ Add**, picking the category fills the next code, and the
+   sub-category narrows it — ELEC-0001, then ELEC-LIGHT-0001 (numbered per sub-category; a sub-category
+   code that already starts with its category's is not repeated, so PENS under STAT gives
+   STAT-PENS-0001). Type over it to keep the school's own code. A code left as filled is given again
+   when you save, so two people adding at once never get the same one. In an Excel upload, leave
+   **Item code** empty for a new item; a row with an existing code updates that item. A code never
+   changes afterwards, even if the item moves to another category.
 3. **Payment terms** — a term is one or more instalments that add up to 100%: each a share, due **in
    advance**, **after delivery** or **after the invoice**, and after how many days ("50% in advance, 50%
    15 days after delivery"). One is the school's default. A term whose longest wait is over 45 days is

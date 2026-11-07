@@ -3162,6 +3162,11 @@ export async function masterSave(fd: FormData) {
     const v = fd.get(`f:${key}`);
     values[key] = v === null || String(v).trim() === '' ? null : String(v);
   }
+  // a key the form filled in (the next item code) and the user left as it is: sent blank, so the
+  // server gives the next free one now (someone may have taken this number since the form filled it)
+  const autoField = opt(fd, 'autokey_field');
+  const autoFilled = opt(fd, 'autokey');
+  if (!id && autoField && autoFilled && values[autoField] === autoFilled) values[autoField] = null;
   const path = masterBack(fd);
   try {
     await apiFetch(`/masters/${master}/rows`, {

@@ -531,3 +531,38 @@ confirmed with the school's CA before go-live; the settings keep them editable.
   register's six orders, the five override kinds, vendor spend, MSME, the GST summary with charges
   apart, the tracker, the dashboard's figures equal to To order) and every report as Excel and PDF; the
   right refused to a teacher; an unknown report 404.
+
+## As built — item codes from the category (7 Nov 2026)
+
+Asked by the user on the Items Add form; decided with them (all four recommended options):
+
+| Question | Decision |
+| --- | --- |
+| Format | **Category code + sub-category code + 4-digit number per sub-category**: STAT-PAPER-0001; no sub-category: STAT-0001. A sub-category code that already starts with its category's (STAT-PAPER under STAT) is not repeated; PENS under STAT gives STAT-PENS-0001. A pair longer than 25 characters keeps the sub-category's code alone (codes are at most 30). |
+| Editable | **Filled in, can be typed over** on Add; fixed after saving, as before. A code left as filled is sent blank and made again at saving (someone may have taken the number meanwhile). |
+| Excel upload | A blank **Item code** gets the next code; a row with a code updates that item (blank rows are never duplicates of each other). |
+| Sub-categories | Stay rows of **Item categories**; the column is now **Sub-category of (category)** (the old header still uploads) with plain help on both tabs. |
+
+Benchmark: ERPNext has no built-in item-group prefix; its forum's usual answers are a short code per
+item group fed into a naming series, given only when the item is first made
+(https://discuss.frappe.io/t/item-code-generation/16988,
+https://discuss.frappe.io/t/item-code-auto-generation/101519); Odoo add-ons build a product code from
+a category prefix and a running number (https://apps.odoo.com/apps/modules/19.0/cst_auto_generate_product_code).
+
+- **Migration 0327**: `app.purchase_item_code_prefix(category, sub)`, `app.purchase_item_code(school,
+  category, sub)` (the highest number used for the prefix + 1, typed codes counted; 4 digits, more past
+  9999) and the trigger `purchase_items_auto_code` (BEFORE INSERT, only when the code is blank; an
+  advisory lock per school and prefix so two saves never get the same number — the masters' save is an
+  upsert and would otherwise update the other item).
+- **Masters framework** (any master can use it): `autoKey: { field, fn, from }` on a definition — the key
+  may be blank (`required: false`), the upload check treats blank keys as new rows, `save` returns the
+  key the database gave, and `GET /masters/:master/next-key?category_id=…&sub_category_id=…` returns the
+  next value without reserving it. `aliases` on a field: other headers an upload accepts.
+- **Admin**: `components/AutoKey.tsx` on the Add form fills the code as the category / sub-category
+  are picked (the sub-category's narrowing box too), leaves a code typed by hand alone, fills again when
+  the box is emptied; `masterSave` sends a code left as filled blank. Route
+  `app/api/masters/[master]/next-key`.
+- **Tests**: `purchase-masters.e2e-spec.ts` — the preview, codes on save (per sub-category, the repeated
+  prefix dropped, no sub-category, a typed code kept and counted), an upload with blank codes and an
+  update, the old "Sub-category of" header.
+

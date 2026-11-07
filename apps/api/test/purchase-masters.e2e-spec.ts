@@ -217,6 +217,74 @@ describe('purchase masters (e2e)', () => {
     expect(done.json()).toMatchObject({ status: 'committed', insertedRows: 1 });
   });
 
+  it('makes an item code from the category and sub-category when it is left blank', async () => {
+    const save = async (values: Record<string, unknown>) => {
+      const r = await row(admin, 'purchase_items', {
+        item_type: 'consumable',
+        uom_id: 'NOS',
+        ...values,
+      });
+      expect(r.statusCode).toBe(201);
+      return String(r.json().code);
+    };
+    // the preview the Add form fills in (nothing reserved), then the code given on saving
+    const next = await call(
+      admin,
+      'GET',
+      '/masters/purchase_items/next-key?category_id=STAT%20%C2%B7%20Stationery&sub_category_id=PENS',
+    );
+    expect(next.json()).toEqual({ value: 'STAT-PENS-0001' });
+    expect(
+      await save({ name: 'Gel pen black', category_id: 'STAT', sub_category_id: 'PENS' }),
+    ).toBe('STAT-PENS-0001');
+    expect(await save({ name: 'Gel pen blue', category_id: 'STAT', sub_category_id: 'PENS' })).toBe(
+      'STAT-PENS-0002',
+    );
+    // a sub-category whose code already starts with its category's is not repeated
+    expect(
+      (
+        await row(admin, 'purchase_item_categories', {
+          code: 'STAT-PAPER',
+          name: 'Paper',
+          parent_id: 'STAT',
+        })
+      ).statusCode,
+    ).toBe(201);
+    expect(
+      await save({ name: 'A4 paper', category_id: 'STAT', sub_category_id: 'STAT-PAPER' }),
+    ).toBe('STAT-PAPER-0001');
+    // no sub-category: the category and a number; a code typed by hand is kept and counted
+    expect(await save({ code: 'IT-0007', name: 'Mouse', category_id: 'IT' })).toBe('IT-0007');
+    expect(await save({ name: 'Keyboard', category_id: 'IT' })).toBe('IT-0008');
+    // an upload: blank codes are new items (never duplicates of each other), a code updates its item
+    const up = await call(admin, 'POST', '/masters/purchase_items/imports/validate', {
+      fileName: 'items.csv',
+      csv: 'Item code,Item,Type,Category,Sub-category,Unit\n,Pen red,consumable,STAT,PENS,NOS\n,Pen green,consumable,STAT,PENS,NOS\nIT-0008,Keyboard USB,consumable,IT,,NOS\n',
+    });
+    expect(up.json()).toMatchObject({ status: 'validated', okRows: 3 });
+    const done = await call(
+      admin,
+      'POST',
+      `/masters/purchase_items/imports/${up.json().id}/commit`,
+    );
+    expect(done.json()).toMatchObject({ status: 'committed', insertedRows: 2, updatedRows: 1 });
+    const pens = (
+      await call(admin, 'GET', '/masters/purchase_items/rows?q=STAT-PENS&size=50')
+    ).json();
+    expect(pens.data.map((x: { code: string }) => x.code).sort()).toEqual([
+      'STAT-PENS-0001',
+      'STAT-PENS-0002',
+      'STAT-PENS-0003',
+      'STAT-PENS-0004',
+    ]);
+    // the old "Sub-category of" header of Item categories still uploads
+    const cats = await call(admin, 'POST', '/masters/purchase_item_categories/imports/validate', {
+      fileName: 'cats.csv',
+      csv: 'Code,Category,Sub-category of\nMARK,Markers,STAT\n',
+    });
+    expect(cats.json()).toMatchObject({ status: 'validated', okRows: 1 });
+  });
+
   it('checks a vendor’s GSTIN, PAN and Udyam number', async () => {
     const bad = await call(
       office,
