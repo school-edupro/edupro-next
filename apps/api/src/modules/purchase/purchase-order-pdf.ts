@@ -1,7 +1,8 @@
 import { degrees, PDFDocument, StandardFonts, rgb, type PDFFont, type PDFPage } from 'pdf-lib';
+import { drawLetterhead, embedLogo } from '../../common/pdf/letterhead';
 
 /**
- * The Purchase Order as a PDF (docs/design/83, part 4): A4, the school's band with its GSTIN, the
+ * The Purchase Order as a PDF (docs/design/83, part 4): A4, the school's letterhead with its GSTIN, the
  * vendor and the order's details, the lines with their HSN / SAC and GST, other charges, the totals
  * with the amount in words, reverse-charge GST payable by the school, the GST summary by HSN and rate,
  * the payment instalments, delivery, terms and conditions, and the signatures. "DRAFT" across a PO
@@ -39,6 +40,8 @@ export interface OrderPdfData {
     state: string | null;
   };
   logo: { contentType: string; bytes: Buffer } | null;
+  /** 07-11-2026 06:15 PM, India */
+  generatedOn: string;
   title: string;
   watermark: string | null;
   number: string;
@@ -136,16 +139,7 @@ export async function purchaseOrderPdf(d: OrderPdfData): Promise<Buffer> {
   pdf.setAuthor(latin(d.school.name));
   const font = await pdf.embedFont(StandardFonts.Helvetica);
   const bold = await pdf.embedFont(StandardFonts.HelveticaBold);
-  let logo: Awaited<ReturnType<PDFDocument['embedPng']>> | null = null;
-  if (d.logo)
-    try {
-      logo =
-        d.logo.contentType === 'image/png'
-          ? await pdf.embedPng(new Uint8Array(d.logo.bytes))
-          : await pdf.embedJpg(new Uint8Array(d.logo.bytes));
-    } catch {
-      logo = null;
-    }
+  const logo = await embedLogo(pdf, d.logo);
 
   let page: PDFPage = pdf.addPage(A4);
   let y = 0;
@@ -169,25 +163,25 @@ export async function purchaseOrderPdf(d: OrderPdfData): Promise<Buffer> {
       color: LINE,
     });
 
+  // the letterhead, as the school's registers print it: logo left; name, address, GSTIN, title, details
   const head = () => {
-    const top = A4[1];
-    page.drawRectangle({ x: 0, y: top - 78, width: A4[0], height: 78, color: NAVY });
-    let x = M;
-    if (logo) {
-      const s = Math.min(46 / logo.width, 46 / logo.height);
-      page.drawImage(logo, { x: M, y: top - 62, width: logo.width * s, height: logo.height * s });
-      x = M + 56;
-    }
-    text(d.school.name, x, top - 32, { size: 15, f: bold, color: rgb(1, 1, 1) });
-    const sub = [d.school.address, d.school.contact].filter(Boolean).join(' · ');
-    if (sub) text(sub.slice(0, 120), x, top - 46, { size: 8, color: rgb(0.86, 0.9, 0.96) });
-    const tax = [
+    const extra = [
       d.school.gstin ? `GSTIN ${d.school.gstin}` : null,
       d.school.state ? `State ${d.school.state}` : null,
+      d.school.contact,
     ]
       .filter(Boolean)
       .join(' · ');
-    if (tax) text(tax, x, top - 58, { size: 8, color: rgb(0.86, 0.9, 0.96) });
+    y = drawLetterhead(page, { regular: font, bold }, logo, {
+      school: d.school.name,
+      address: d.school.address,
+      extra: extra || null,
+      title: d.title,
+      details: `No. ${d.number} · Date: ${d.date} · Generated on: ${d.generatedOn}`,
+      margin: 30,
+    });
+    hr(y + 4);
+    y -= 10;
     if (d.watermark) {
       page.drawText(latin(d.watermark), {
         x: 150,
@@ -199,7 +193,6 @@ export async function purchaseOrderPdf(d: OrderPdfData): Promise<Buffer> {
         rotate: degrees(35),
       });
     }
-    y = top - 100;
   };
   const newPage = () => {
     page = pdf.addPage(A4);
@@ -213,10 +206,6 @@ export async function purchaseOrderPdf(d: OrderPdfData): Promise<Buffer> {
   };
 
   head();
-  // title and the order's details
-  text(d.title, M, y, { size: 14, f: bold, color: NAVY });
-  text(`No. ${d.number}`, 0, y, { size: 11, f: bold, right: M + W });
-  y -= 16;
   if (d.emergency) {
     text('Recorded after the purchase; for ratification', M, y, { size: 8.5, color: RED });
     y -= 12;

@@ -8,14 +8,16 @@ import { requireTenant, type RequestContext } from '../../common/http/request-co
 import { STORAGE_DRIVER } from '../files/storage';
 import { WorkflowService, type InstanceRow } from '../workflow/workflow.service';
 import { syncFlow } from './purchase-flow';
+import { purchaseHead } from './purchase-head';
 import { purchaseIndentPdf } from './purchase-indent-pdf';
+import { checkListSize, LIST_LIMIT, purchaseListFile } from './purchase-list-file';
 import { draftOrdersFor } from './purchase-order-core';
-import { pdfSchool } from './purchase-stock-core';
 import { PurchaseVendorsService } from './purchase-vendors.service';
 import {
   PURCHASE,
   type IndentDecisionDto,
   type IndentDto,
+  type IndentExportQueryDto,
   type IndentListQueryDto,
   type PurchaseDelegationDto,
   type ReasonDto,
@@ -24,6 +26,21 @@ import {
 const rupees = (n: number) =>
   `₹${n.toLocaleString('en-IN', { maximumFractionDigits: 2, minimumFractionDigits: 0 })}`;
 const qtyWords = (n: number) => n.toLocaleString('en-IN', { maximumFractionDigits: 3 });
+const INDENT_STATUS_WORDS: Record<string, string> = {
+  draft: 'Draft',
+  submitted: 'Waiting for approval',
+  approved: 'Approved',
+  rejected: 'Rejected',
+  sent_back: 'Sent back for changes',
+  cancelled: 'Withdrawn',
+};
+const INDENT_ROUTE_WORDS: Record<string, string> = {
+  to_requisition: 'Waiting for the PR',
+  to_order: 'PR skipped: for the PO',
+  in_requisition: 'On a PR',
+  ordered: 'Ordered',
+  closed: 'Closed',
+};
 const dmy = (iso: string) => {
   const [y, m, d] = iso.slice(0, 10).split('-');
   return `${d!}-${m!}-${y!}`;
@@ -201,12 +218,16 @@ export class PurchaseIndentsService implements OnModuleInit {
       WHERE i.id = pi.workflow_instance_id AND i.status = 'pending' AND s.level = i.current_level AND s.status = 'pending'
         AND ${WorkflowService.MAY_ACT})`;
 
-  async list(ctx: RequestContext, q: IndentListQueryDto) {
-    return this.db.tenant(requireTenant(ctx), async (c) => {
-      const deps = (await this.myDepartments(c)).map((d) => d.id);
-      const all = this.seeAll(ctx);
-      // eslint-disable-next-line no-restricted-syntax -- MINE, WAITING and PARTICIPANT are fixed fragments; values are bound
-      const where = `WHERE ($1::text IS NULL OR pi.status = $1)
+  /** The list's filters as SQL ($1-$9), the same for the screen and its file. */
+  private async filterOf(
+    c: PoolClient,
+    ctx: RequestContext,
+    q: IndentExportQueryDto | IndentListQueryDto,
+  ) {
+    const deps = (await this.myDepartments(c)).map((d) => d.id);
+    const all = this.seeAll(ctx);
+    // eslint-disable-next-line no-restricted-syntax -- MINE, WAITING and PARTICIPANT are fixed fragments; values are bound
+    const where = `WHERE ($1::text IS NULL OR pi.status = $1)
           AND ($2::text IS NULL OR pi.route = $2)
           AND ($3::bigint IS NULL OR pi.department_id = $3::bigint)
           AND ($4::text IS NULL OR pi.number ILIKE $4 OR pi.purpose ILIKE $4)
@@ -214,16 +235,26 @@ export class PurchaseIndentsService implements OnModuleInit {
                 WHEN 'mine' THEN ${PurchaseIndentsService.MINE}
                 WHEN 'waiting' THEN ${PurchaseIndentsService.WAITING}
                 ELSE ($6 OR ${PurchaseIndentsService.MINE} OR (pi.department_id = ANY($7::bigint[]) AND pi.status <> 'draft')
-                      OR ${PurchaseIndentsService.PARTICIPANT}) END`;
-      const args = [
-        q.status ?? null,
-        q.route ?? null,
-        q.departmentId ?? null,
-        q.q ? `%${q.q}%` : null,
-        q.view,
-        all,
-        deps,
-      ];
+                      OR ${PurchaseIndentsService.PARTICIPANT}) END
+          AND ($8::date IS NULL OR (COALESCE(pi.submitted_at, pi.created_at) AT TIME ZONE 'Asia/Kolkata')::date >= $8::date)
+          AND ($9::date IS NULL OR (COALESCE(pi.submitted_at, pi.created_at) AT TIME ZONE 'Asia/Kolkata')::date <= $9::date)`;
+    const args = [
+      q.status ?? null,
+      q.route ?? null,
+      q.departmentId ?? null,
+      q.q ? `%${q.q}%` : null,
+      q.view,
+      all,
+      deps,
+      q.from ?? null,
+      q.to ?? null,
+    ];
+    return { where, args };
+  }
+
+  async list(ctx: RequestContext, q: IndentListQueryDto) {
+    return this.db.tenant(requireTenant(ctx), async (c) => {
+      const { where, args } = await this.filterOf(c, ctx, q);
       const total = await c.query<{ n: number }>(
         // eslint-disable-next-line no-restricted-syntax -- fixed fragments; values are bound
         `SELECT count(*)::int AS n FROM purchase_indents pi ${where}`,
@@ -231,7 +262,7 @@ export class PurchaseIndentsService implements OnModuleInit {
       );
       const rows = await c.query<IndentDbRow>(
         // eslint-disable-next-line no-restricted-syntax -- fixed fragments; values are bound
-        `${SELECT} ${where} ORDER BY pi.priority = 'urgent' DESC, COALESCE(pi.submitted_at, pi.created_at) DESC LIMIT $8 OFFSET $9`,
+        `${SELECT} ${where} ORDER BY pi.priority = 'urgent' DESC, COALESCE(pi.submitted_at, pi.created_at) DESC LIMIT $10 OFFSET $11`,
         [...args, q.size, (q.page - 1) * q.size],
       );
       const waiting = await c.query<{ n: number }>(
@@ -245,6 +276,200 @@ export class PurchaseIndentsService implements OnModuleInit {
         size: q.size,
         waitingForMe: waiting.rows[0]!.n,
       };
+    });
+  }
+
+  /**
+   * The list as on screen (its filters, every page) as Excel or PDF, with the letterhead: estimates only
+   * for those who see rates; the Excel adds a sheet of the item lines (docs/design/83).
+   */
+  async exportList(ctx: RequestContext, q: IndentExportQueryDto) {
+    return this.db.tenant(requireTenant(ctx), async (c) => {
+      const { where, args } = await this.filterOf(c, ctx, q);
+      const rows = (
+        await c.query<IndentDbRow>(
+          // eslint-disable-next-line no-restricted-syntax -- fixed fragments; values are bound
+          `${SELECT} ${where} ORDER BY COALESCE(pi.submitted_at, pi.created_at) DESC LIMIT $10`,
+          [...args, LIST_LIMIT],
+        )
+      ).rows;
+      checkListSize(rows.length, 'indents');
+      const office = this.officeRates(ctx);
+      const day = (t: Date) =>
+        new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' }).format(t);
+      const where_ = (r: IndentDbRow) =>
+        r.status === 'submitted' && r.waiting_with
+          ? `With ${r.waiting_with}`
+          : r.status === 'approved' && r.route
+            ? (INDENT_ROUTE_WORDS[r.route] ?? r.route)
+            : (r.decision_note ?? '');
+      const list = {
+        columns: [
+          { label: 'Indent', width: 2.2 },
+          { label: 'Date', type: 'date' as const },
+          { label: 'Department', width: 2 },
+          { label: 'Raised by', width: 2.2 },
+          { label: 'Purpose', width: 3.4 },
+          { label: 'Priority', width: 1.2 },
+          { label: 'Needed by', type: 'date' as const },
+          { label: 'Lines', type: 'number' as const, width: 0.9 },
+          ...(office ? [{ label: 'Estimate (₹)', type: 'money' as const }] : []),
+          { label: 'Status', width: 1.8 },
+          { label: 'Where it is', width: 2.6 },
+        ],
+        rows: rows.map((r) => [
+          r.number ?? 'Draft',
+          day(r.submitted_at ?? r.created_at),
+          r.department,
+          `${r.raised_by_name}${r.on_behalf ? ` for ${r.on_behalf}` : ''}`,
+          r.purpose,
+          r.priority === 'urgent' ? 'Urgent' : 'Normal',
+          r.required_by,
+          r.lines,
+          ...(office ? [Number(r.estimate)] : []),
+          INDENT_STATUS_WORDS[r.status] ?? r.status,
+          where_(r),
+        ]),
+      };
+      let lines;
+      if (q.format === 'xlsx' && rows.length) {
+        const byId = new Map(rows.map((r) => [r.id, r]));
+        const l = await c.query<{
+          indent_id: string;
+          seq: number;
+          code: string | null;
+          item: string;
+          quantity: string;
+          uom: string;
+          est_rate: string;
+          stock_free: string | null;
+          stock_uom: string | null;
+          note: string | null;
+          stock_reason: string | null;
+        }>(
+          `SELECT l.indent_id::text, l.seq, i.code, COALESCE(i.name, l.free_text) AS item, l.quantity::text, u.code AS uom,
+                  l.est_rate::text, l.stock_free::text, su.code AS stock_uom, l.note, l.stock_reason
+             FROM purchase_indent_lines l
+             LEFT JOIN purchase_items i ON i.id = l.item_id
+             LEFT JOIN purchase_uoms su ON su.id = COALESCE(i.stock_uom_id, i.uom_id)
+             JOIN purchase_uoms u ON u.id = l.uom_id
+            WHERE l.indent_id = ANY($1::bigint[]) ORDER BY l.indent_id DESC, l.seq`,
+          [rows.map((r) => r.id)],
+        );
+        lines = {
+          columns: [
+            { label: 'Indent', width: 2.2 },
+            { label: 'Department', width: 2 },
+            { label: '#', type: 'number' as const, width: 0.6 },
+            { label: 'Item code', width: 2 },
+            { label: 'Item', width: 3.4 },
+            { label: 'Quantity', type: 'number' as const },
+            { label: 'Unit', width: 1 },
+            { label: 'In store when raised', width: 2 },
+            ...(office
+              ? [
+                  { label: 'Rate (₹)', type: 'money' as const },
+                  { label: 'Amount (₹)', type: 'money' as const },
+                ]
+              : []),
+            { label: 'Note', width: 2.6 },
+            { label: 'Why bought though the store has it', width: 3 },
+          ],
+          rows: l.rows.map((x) => {
+            const pi = byId.get(x.indent_id)!;
+            return [
+              pi.number ?? 'Draft',
+              pi.department,
+              x.seq,
+              x.code,
+              x.item,
+              Number(x.quantity),
+              x.uom,
+              x.stock_free === null
+                ? ''
+                : `${Number(x.stock_free).toLocaleString('en-IN')} ${x.stock_uom ?? ''}`.trim(),
+              ...(office
+                ? [
+                    Number(x.est_rate),
+                    Math.round(Number(x.quantity) * Number(x.est_rate) * 100) / 100,
+                  ]
+                : []),
+              x.note,
+              x.stock_reason,
+            ];
+          }),
+        };
+      }
+      return purchaseListFile({
+        format: q.format,
+        head: await purchaseHead(c, this.storage),
+        title: 'Purchase Indents',
+        slug: 'Purchase-Indents',
+        words: await this.filterWords(c, q),
+        list,
+        ...(office ? { sum: [8] } : {}),
+        ...(lines ? { lines } : {}),
+      });
+    });
+  }
+
+  /** The filters in words, for the file's details line. */
+  private async filterWords(c: PoolClient, q: IndentExportQueryDto) {
+    const dmy = (s: string) => `${s.slice(8, 10)}-${s.slice(5, 7)}-${s.slice(0, 4)}`;
+    const dept = q.departmentId
+      ? (
+          await c.query<{ name: string }>(`SELECT name FROM departments WHERE id = $1`, [
+            q.departmentId,
+          ])
+        ).rows[0]?.name
+      : undefined;
+    return (
+      [
+        q.view === 'mine' ? 'Mine' : q.view === 'waiting' ? 'Waiting for me' : null,
+        dept ? `Department: ${dept}` : null,
+        q.from && q.to
+          ? `${dmy(q.from)} to ${dmy(q.to)}`
+          : q.from
+            ? `From ${dmy(q.from)}`
+            : q.to
+              ? `Up to ${dmy(q.to)}`
+              : null,
+        q.status ? `Status: ${INDENT_STATUS_WORDS[q.status] ?? q.status}` : null,
+        q.route ? (INDENT_ROUTE_WORDS[q.route] ?? q.route) : null,
+        q.q ? `Search: ${q.q}` : null,
+      ]
+        .filter(Boolean)
+        .join(' · ') || 'All indents'
+    );
+  }
+
+  /**
+   * What the purchase lists filter by: the departments one may see (every one for the purchase office,
+   * the admins and the approvers of any department; else one's own) and, for those who see rates, the
+   * vendors.
+   */
+  async listFilters(ctx: RequestContext) {
+    return this.db.tenant(requireTenant(ctx), async (c) => {
+      const p = ctx.permissions;
+      const wide =
+        this.seeAll(ctx) ||
+        this.officeRates(ctx) ||
+        (p?.has(PURCHASE.indentAnyDepartment) ?? false);
+      const departments = wide
+        ? (
+            await c.query<{ id: string; name: string }>(
+              `SELECT id::text, name FROM departments WHERE status = 'active' ORDER BY sort_order, name`,
+            )
+          ).rows
+        : await this.myDepartments(c);
+      const vendors = this.officeRates(ctx)
+        ? (
+            await c.query<{ id: string; code: string; name: string }>(
+              `SELECT id::text, code, legal_name AS name FROM vendors ORDER BY legal_name LIMIT 3000`,
+            )
+          ).rows
+        : [];
+      return { departments, vendors };
     });
   }
 
@@ -1131,7 +1356,7 @@ export class PurchaseIndentsService implements OnModuleInit {
         skipped: 'Passed on',
         cancelled: 'Closed',
       };
-      const { school, logo } = await pdfSchool(c, (k) => this.storage.read(k));
+      const head = await purchaseHead(c, this.storage);
       const STATUS: Record<IndentDbRow['status'], string> = {
         draft: 'Draft',
         submitted: `Waiting for approval${pi.waiting_with ? `: ${pi.waiting_with}` : ''}`,
@@ -1141,8 +1366,9 @@ export class PurchaseIndentsService implements OnModuleInit {
         cancelled: `Withdrawn${pi.decision_note ? `: ${pi.decision_note}` : ''}`,
       };
       const bytes = await purchaseIndentPdf({
-        school,
-        logo,
+        school: { name: head.school, address: head.address || null },
+        logo: head.logo,
+        generatedOn: head.generatedOn,
         watermark:
           pi.status === 'approved'
             ? null

@@ -8,6 +8,7 @@
  * quantity, and the printed PI.
  */
 import type { NestFastifyApplication } from '@nestjs/platform-fastify';
+import ExcelJS from 'exceljs';
 import {
   createApp,
   headersFor,
@@ -598,5 +599,64 @@ describe('purchase indents (e2e)', () => {
     const done = (await decide(principal, words, 'approve')).json();
     expect(done).toMatchObject({ route: 'to_requisition', bypassRule: null, estimate: 0 });
     expect(done.bypassNote).toContain('no rate yet');
+  });
+  it('the list filters by department and dates; its file keeps the filters; estimates only for those who see rates', async () => {
+    const book = async (b64: string) => {
+      const wb = new ExcelJS.Workbook();
+      await wb.xlsx.load(Buffer.from(b64, 'base64') as unknown as ExcelJS.Buffer);
+      return wb;
+    };
+    // the letterhead's four lines, a blank row, then the column heads
+    const heads = (ws: ExcelJS.Worksheet) =>
+      (ws.getRow(6).values as unknown[]).filter((v) => typeof v === 'string') as string[];
+    const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' }).format(new Date());
+    expect((await call(admin, 'GET', '/purchase/indents?from=2099-01-01')).json().total).toBe(0);
+    const sci = (
+      await call(
+        admin,
+        'GET',
+        `/purchase/indents?departmentId=${ids.science!}&from=${today}&to=${today}`,
+      )
+    ).json();
+    expect(sci.total).toBeGreaterThan(0);
+    expect(new Set(sci.data.map((x: { department: string }) => x.department))).toEqual(
+      new Set(['Science']),
+    );
+    // the purchase office's file: the letterhead with the filters, the estimate, a sheet of lines
+    const office = await call(
+      admin,
+      'GET',
+      `/purchase/indents/export?format=xlsx&departmentId=${ids.science!}`,
+    );
+    expect(office.statusCode).toBe(200);
+    expect(office.json().filename).toMatch(/^Purchase-Indents-\d{4}-\d{2}-\d{2}\.xlsx$/);
+    const wb = await book(office.json().base64 as string);
+    expect(wb.worksheets.map((w) => w.name)).toEqual(['Purchase Indents', 'Lines']);
+    expect(String(wb.worksheets[0]!.getRow(4).getCell(1).value)).toContain('Department: Science');
+    expect(heads(wb.worksheets[0]!)).toContain('Estimate (₹)');
+    expect(heads(wb.worksheets[1]!)).toEqual(
+      expect.arrayContaining(['Item', 'Rate (₹)', 'In store when raised']),
+    );
+    // the raiser's file: no estimate, no rates
+    const mine = await book(
+      (await call(teacher, 'GET', '/purchase/indents/export?format=xlsx&view=mine')).json()
+        .base64 as string,
+    );
+    expect(heads(mine.worksheets[0]!)).not.toContain('Estimate (₹)');
+    expect(heads(mine.worksheets[1]!)).not.toContain('Rate (₹)');
+    const pdf = (await call(teacher, 'GET', '/purchase/indents/export?format=pdf')).json();
+    expect(
+      Buffer.from(pdf.base64 as string, 'base64')
+        .subarray(0, 5)
+        .toString(),
+    ).toBe('%PDF-');
+    // what the filters offer: the raiser their department, no vendors; the office every department and the vendors
+    expect((await call(teacher, 'GET', '/purchase/list-filters')).json()).toEqual({
+      departments: [{ id: ids.science, name: 'Science' }],
+      vendors: [],
+    });
+    const wide = (await call(admin, 'GET', '/purchase/list-filters')).json();
+    expect(wide.departments.length).toBeGreaterThan(1);
+    expect(wide.vendors.map((v: { code: string }) => v.code)).toContain('V1');
   });
 });

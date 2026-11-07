@@ -349,10 +349,21 @@ export const IndentListQuerySchema = z.object({
   route: z.enum(['to_requisition', 'to_order', 'in_requisition', 'ordered', 'closed']).optional(),
   departmentId: IdSchema.optional(),
   q: z.string().trim().max(80).optional(),
+  /** sent (else started) on or after / on or before, in India */
+  from: Day.optional(),
+  to: Day.optional(),
   page: z.coerce.number().int().min(1).default(1),
   size: z.coerce.number().int().min(1).max(200).default(50),
 });
 export class IndentListQueryDto extends createZodDto(IndentListQuerySchema) {}
+/** The list as on screen (its filters), as a file. */
+export const IndentExportQuerySchema = IndentListQuerySchema.omit({
+  page: true,
+  size: true,
+}).extend({
+  format: z.enum(['xlsx', 'pdf']).default('xlsx'),
+});
+export class IndentExportQueryDto extends createZodDto(IndentExportQuerySchema) {}
 
 export const IndentDecisionSchema = z.object({
   action: z.enum(['approve', 'reject', 'send_back']),
@@ -443,10 +454,24 @@ export const RequisitionListQuerySchema = z.object({
     ])
     .optional(),
   q: z.string().trim().max(80).optional(),
+  /** its own department, or (combined) a department one of its indents came from */
+  departmentId: IdSchema.optional(),
+  /** made on or after / on or before, in India */
+  from: Day.optional(),
+  to: Day.optional(),
+  /** a Purchase Indent's number (or part of it) that went into it */
+  indent: z.string().trim().max(40).optional(),
+  /** a vendor chosen on one of its lines */
+  vendorId: IdSchema.optional(),
   page: z.coerce.number().int().min(1).default(1),
   size: z.coerce.number().int().min(1).max(200).default(50),
 });
 export class RequisitionListQueryDto extends createZodDto(RequisitionListQuerySchema) {}
+export const RequisitionExportQuerySchema = RequisitionListQuerySchema.omit({
+  page: true,
+  size: true,
+}).extend({ format: z.enum(['xlsx', 'pdf']).default('xlsx') });
+export class RequisitionExportQueryDto extends createZodDto(RequisitionExportQuerySchema) {}
 
 export const QuoteSchema = z
   .object({
@@ -577,10 +602,22 @@ export const OrderListQuerySchema = z.object({
     .optional()
     .transform((v) => (v === undefined ? undefined : v === '1')),
   q: z.string().trim().max(80).optional(),
+  /** its department, or a department one of its indents came from */
+  departmentId: IdSchema.optional(),
+  /** the PO date on or after / on or before */
+  from: Day.optional(),
+  to: Day.optional(),
+  /** a Purchase Indent's number (or part of it) one of its lines came from */
+  indent: z.string().trim().max(40).optional(),
+  vendorId: IdSchema.optional(),
   page: z.coerce.number().int().min(1).default(1),
   size: z.coerce.number().int().min(1).max(200).default(50),
 });
 export class OrderListQueryDto extends createZodDto(OrderListQuerySchema) {}
+export const OrderExportQuerySchema = OrderListQuerySchema.omit({ page: true, size: true }).extend({
+  format: z.enum(['xlsx', 'pdf']).default('xlsx'),
+});
+export class OrderExportQueryDto extends createZodDto(OrderExportQuerySchema) {}
 
 export const SendOrderSchema = z.object({
   to: z.string().trim().email('an e-mail address').max(150),

@@ -121,15 +121,32 @@ export default async function RequisitionPage({
         title={pr.number}
         description={pr.purpose ?? undefined}
         actions={
-          pr.can.edit ? (
-            <a
-              className="ep-btn ep-btn--secondary ep-btn--sm"
-              href={`/purchase/requisitions/${pr.id}/edit`}
-              style={{ whiteSpace: 'nowrap' }}
-            >
-              Change the lines
-            </a>
-          ) : null
+          <div
+            style={{
+              display: 'flex',
+              gap: 'var(--sp-2)',
+              flexWrap: 'wrap',
+              alignItems: 'center',
+            }}
+          >
+            {/* the printed PR, with the comparative statement (docs/design/83) */}
+            <span style={{ display: 'inline-flex', gap: 'var(--sp-1)', alignItems: 'center' }}>
+              Print{' '}
+              <FileLinks
+                href={`/api/purchase/requisitions/${pr.id}/pdf`}
+                label={`${pr.number} as a PDF`}
+              />
+            </span>
+            {pr.can.edit ? (
+              <a
+                className="ep-btn ep-btn--secondary ep-btn--sm"
+                href={`/purchase/requisitions/${pr.id}/edit`}
+                style={{ whiteSpace: 'nowrap' }}
+              >
+                Change the lines
+              </a>
+            ) : null}
+          </div>
         }
       />
       <Notice params={sp} />

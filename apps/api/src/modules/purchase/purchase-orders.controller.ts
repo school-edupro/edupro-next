@@ -9,6 +9,7 @@ import {
   CreateOrderDto,
   EmergencyDto,
   IndentDecisionDto,
+  OrderExportQueryDto,
   OrderListQueryDto,
   PURCHASE,
   ReasonDto,
@@ -25,6 +26,13 @@ import {
 @Controller('purchase')
 export class PurchaseOrdersController {
   constructor(private readonly orders: PurchaseOrdersService) {}
+
+  @Get('orders/export')
+  @ApiOperation({ summary: 'The orders list as on screen (its filters), as Excel or PDF' })
+  @AuthenticatedOnly()
+  exportList(@ReqCtx() ctx: RequestContext, @Query() q: OrderExportQueryDto) {
+    return this.orders.exportList(ctx, q);
+  }
 
   @Get('orders')
   @ApiOperation({ summary: 'Purchase orders: all (purchase office), or waiting for my approval' })

@@ -19,6 +19,9 @@ import {
   recomputeOrder,
   refreshOrdered,
 } from './purchase-order-core';
+import { registerGeneratedOn } from '../exams/register-head';
+import { purchaseHead } from './purchase-head';
+import { checkListSize, LIST_LIMIT, purchaseListFile } from './purchase-list-file';
 import { purchaseOrderPdf, type OrderPdfData } from './purchase-order-pdf';
 import { PurchaseVendorsService } from './purchase-vendors.service';
 import {
@@ -26,6 +29,7 @@ import {
   type CreateOrderDto,
   type EmergencyDto,
   type IndentDecisionDto,
+  type OrderExportQueryDto,
   type OrderListQueryDto,
   type ReasonDto,
   type SendOrderDto,
@@ -55,6 +59,17 @@ const esc = (s: string) =>
     .replaceAll('>', '&gt;')
     .replaceAll('"', '&quot;');
 /** "PO/2026-27/0001", or "PO/2026-27/0001-R1" for an amendment. */
+const PO_STATUS_WORDS: Record<string, string> = {
+  draft: 'Draft',
+  submitted: 'Waiting for approval',
+  approved: 'Approved',
+  sent: 'Sent to the vendor',
+  closed: 'Closed',
+  rejected: 'Rejected',
+  sent_back: 'Sent back for changes',
+  cancelled: 'Cancelled',
+  superseded: 'Replaced by an amendment',
+};
 const label = (number: string, revision: number) =>
   revision ? `${number}-R${String(revision)}` : number;
 const EDITABLE = ['draft', 'sent_back'];
@@ -239,20 +254,42 @@ export class PurchaseOrdersService implements OnModuleInit {
   }
 
   // ---- lists -------------------------------------------------------------------------------------
-  async list(ctx: RequestContext, q: OrderListQueryDto) {
-    return this.db.tenant(requireTenant(ctx), async (c) => {
-      // eslint-disable-next-line no-restricted-syntax -- fixed fragments; values are bound
-      const where = `WHERE ($1::text IS NULL OR po.status = $1)
+  /** The list's filters as SQL ($1-$10), the same for the screen and its file. */
+  private filterOf(ctx: RequestContext, q: OrderExportQueryDto | OrderListQueryDto) {
+    // eslint-disable-next-line no-restricted-syntax -- fixed fragments; values are bound
+    const where = `WHERE ($1::text IS NULL OR po.status = $1)
           AND ($2::boolean IS NULL OR po.emergency = $2)
           AND ($3::text IS NULL OR po.number ILIKE $3 OR v.legal_name ILIKE $3)
-          AND CASE $4 WHEN 'waiting' THEN ${WAITING} ELSE ($5 OR ${PARTICIPANT}) END`;
-      const args = [
-        q.status ?? null,
-        q.emergency ?? null,
-        q.q ? `%${q.q}%` : null,
-        q.view,
-        this.seesAll(ctx),
-      ];
+          AND CASE $4 WHEN 'waiting' THEN ${WAITING} ELSE ($5 OR ${PARTICIPANT}) END
+          AND ($6::bigint IS NULL OR po.department_id = $6::bigint OR EXISTS (
+                SELECT 1 FROM purchase_order_lines pol JOIN purchase_requisition_sources src ON src.requisition_line_id = pol.requisition_line_id
+                  JOIN purchase_indent_lines il ON il.id = src.indent_line_id JOIN purchase_indents pi ON pi.id = il.indent_id
+                 WHERE pol.order_id = po.id AND pi.department_id = $6::bigint))
+          AND ($7::date IS NULL OR po.po_date >= $7::date)
+          AND ($8::date IS NULL OR po.po_date <= $8::date)
+          AND ($9::text IS NULL OR EXISTS (
+                SELECT 1 FROM purchase_order_lines pol JOIN purchase_requisition_sources src ON src.requisition_line_id = pol.requisition_line_id
+                  JOIN purchase_indent_lines il ON il.id = src.indent_line_id JOIN purchase_indents pi ON pi.id = il.indent_id
+                 WHERE pol.order_id = po.id AND pi.number ILIKE $9))
+          AND ($10::bigint IS NULL OR po.vendor_id = $10::bigint)`;
+    const args = [
+      q.status ?? null,
+      q.emergency ?? null,
+      q.q ? `%${q.q}%` : null,
+      q.view,
+      this.seesAll(ctx),
+      q.departmentId ?? null,
+      q.from ?? null,
+      q.to ?? null,
+      q.indent ? `%${q.indent}%` : null,
+      q.vendorId ?? null,
+    ];
+    return { where, args };
+  }
+
+  async list(ctx: RequestContext, q: OrderListQueryDto) {
+    return this.db.tenant(requireTenant(ctx), async (c) => {
+      const { where, args } = this.filterOf(ctx, q);
       const total = await c.query<{ n: number }>(
         // eslint-disable-next-line no-restricted-syntax -- fixed fragments; values are bound
         `SELECT count(*)::int AS n FROM purchase_orders po JOIN vendors v ON v.id = po.vendor_id ${where}`,
@@ -260,7 +297,7 @@ export class PurchaseOrdersService implements OnModuleInit {
       );
       const rows = await c.query<PoRow>(
         // eslint-disable-next-line no-restricted-syntax -- fixed fragments; values are bound
-        `${SELECT} ${where} ORDER BY po.created_at DESC, po.revision DESC LIMIT $6 OFFSET $7`,
+        `${SELECT} ${where} ORDER BY po.created_at DESC, po.revision DESC LIMIT $11 OFFSET $12`,
         [...args, q.size, (q.page - 1) * q.size],
       );
       const counts = (
@@ -284,6 +321,161 @@ export class PurchaseOrdersService implements OnModuleInit {
         toSend: all ? counts.to_send : 0,
         toOrder: all ? counts.to_order : 0,
       };
+    });
+  }
+
+  /**
+   * The list as on screen (its filters, every page) as Excel or PDF, with the letterhead; the Excel adds
+   * a sheet of the order lines (HSN, rate, discount, GST, totals) (docs/design/83).
+   */
+  async exportList(ctx: RequestContext, q: OrderExportQueryDto) {
+    return this.db.tenant(requireTenant(ctx), async (c) => {
+      const { where, args } = this.filterOf(ctx, q);
+      const rows = (
+        await c.query<PoRow>(
+          // eslint-disable-next-line no-restricted-syntax -- fixed fragments; values are bound
+          `${SELECT} ${where} ORDER BY po.po_date DESC, po.created_at DESC LIMIT $11`,
+          [...args, LIST_LIMIT],
+        )
+      ).rows;
+      checkListSize(rows.length, 'orders');
+      const ids = rows.map((r) => r.id);
+      const gst = (r: PoRow) =>
+        Math.round((Number(r.cgst) + Number(r.sgst) + Number(r.igst)) * 100) / 100;
+      const list = {
+        columns: [
+          { label: 'Order', width: 2.4 },
+          { label: 'Date', type: 'date' as const },
+          { label: 'Vendor', width: 3 },
+          { label: 'Department', width: 2 },
+          { label: 'Requisition', width: 2.2 },
+          { label: 'Lines', type: 'number' as const, width: 0.9 },
+          { label: 'Taxable (₹)', type: 'money' as const },
+          { label: 'GST (₹)', type: 'money' as const },
+          { label: 'Total (₹)', type: 'money' as const },
+          { label: 'Status', width: 1.8 },
+          { label: 'Received', width: 1.4 },
+        ],
+        rows: rows.map((r) => [
+          `${label(r.number, r.revision)}${r.emergency ? ' (emergency)' : ''}`,
+          r.po_date,
+          `${r.vendor} (${r.vendor_code})`,
+          r.department,
+          r.requisition,
+          r.lines,
+          Number(r.taxable),
+          gst(r),
+          Number(r.total),
+          r.status === 'submitted' && r.waiting_with
+            ? `With ${r.waiting_with}`
+            : (PO_STATUS_WORDS[r.status] ?? r.status),
+          r.receipt_status === 'received'
+            ? 'All received'
+            : r.receipt_status === 'part'
+              ? 'Part received'
+              : '',
+        ]),
+      };
+      let lines;
+      if (q.format === 'xlsx' && ids.length) {
+        const byId = new Map(rows.map((r) => [r.id, r]));
+        const l = await c.query<{
+          order_id: string;
+          seq: number;
+          description: string;
+          hsn_code: string | null;
+          quantity: string;
+          uom: string;
+          rate: string;
+          discount_pct: string | null;
+          gst_rate: string;
+          taxable: string;
+          total: string;
+          contract: boolean;
+        }>(
+          `SELECT l.order_id::text, l.seq, l.description, l.hsn_code, l.quantity::text, u.code AS uom, l.rate::text,
+                  l.discount_pct::text, l.gst_rate::text, l.taxable::text, l.total::text, l.contract_id IS NOT NULL AS contract
+             FROM purchase_order_lines l JOIN purchase_uoms u ON u.id = l.uom_id
+            WHERE l.order_id = ANY($1::bigint[]) ORDER BY l.order_id DESC, l.seq`,
+          [ids],
+        );
+        lines = {
+          columns: [
+            { label: 'Order', width: 2.4 },
+            { label: 'Vendor', width: 3 },
+            { label: '#', type: 'number' as const, width: 0.6 },
+            { label: 'Item', width: 3.4 },
+            { label: 'HSN / SAC', width: 1.4 },
+            { label: 'Quantity', type: 'number' as const },
+            { label: 'Unit', width: 1 },
+            { label: 'Rate (₹)', type: 'money' as const },
+            { label: 'Discount %', type: 'number' as const, width: 1.2 },
+            { label: 'GST %', type: 'number' as const, width: 1 },
+            { label: 'Taxable (₹)', type: 'money' as const },
+            { label: 'Total (₹)', type: 'money' as const },
+            { label: 'On rate contract', width: 1.4 },
+          ],
+          rows: l.rows.map((x) => {
+            const po = byId.get(x.order_id)!;
+            return [
+              label(po.number, po.revision),
+              po.vendor,
+              x.seq,
+              x.description,
+              x.hsn_code,
+              Number(x.quantity),
+              x.uom,
+              Number(x.rate),
+              x.discount_pct === null ? null : Number(x.discount_pct),
+              Number(x.gst_rate),
+              Number(x.taxable),
+              Number(x.total),
+              x.contract ? 'Yes' : '',
+            ];
+          }),
+        };
+      }
+      const dmy = (s: string) => `${s.slice(8, 10)}-${s.slice(5, 7)}-${s.slice(0, 4)}`;
+      const named = async (sql: string, id?: string) =>
+        id ? (await c.query<{ name: string }>(sql, [id])).rows[0]?.name : undefined;
+      const dept = await named(`SELECT name FROM departments WHERE id = $1`, q.departmentId);
+      const vendor = await named(
+        `SELECT legal_name AS name FROM vendors WHERE id = $1`,
+        q.vendorId,
+      );
+      const words =
+        [
+          q.view === 'waiting' ? 'Waiting for me' : null,
+          dept ? `Department: ${dept}` : null,
+          q.from && q.to
+            ? `${dmy(q.from)} to ${dmy(q.to)}`
+            : q.from
+              ? `From ${dmy(q.from)}`
+              : q.to
+                ? `Up to ${dmy(q.to)}`
+                : null,
+          q.status ? `Status: ${PO_STATUS_WORDS[q.status] ?? q.status}` : null,
+          q.emergency === true
+            ? 'Emergency purchases'
+            : q.emergency === false
+              ? 'Not emergency'
+              : null,
+          q.indent ? `Indent: ${q.indent}` : null,
+          vendor ? `Vendor: ${vendor}` : null,
+          q.q ? `Search: ${q.q}` : null,
+        ]
+          .filter(Boolean)
+          .join(' · ') || 'All orders';
+      return purchaseListFile({
+        format: q.format,
+        head: await purchaseHead(c, this.storage),
+        title: 'Purchase Orders',
+        slug: 'Purchase-Orders',
+        words,
+        list,
+        sum: [6, 7, 8],
+        ...(lines ? { lines } : {}),
+      });
     });
   }
 
@@ -1287,7 +1479,8 @@ export class PurchaseOrdersService implements OnModuleInit {
         state: s.state_code ? `${GST_STATES[s.state_code] ?? ''} (${s.state_code})` : null,
       },
       logo,
-      title: po.emergency ? 'EMERGENCY PURCHASE' : 'PURCHASE ORDER',
+      title: po.emergency ? 'Emergency Purchase' : 'Purchase Order',
+      generatedOn: registerGeneratedOn(),
       watermark: placed
         ? null
         : po.status === 'cancelled' || po.status === 'superseded' || po.status === 'rejected'

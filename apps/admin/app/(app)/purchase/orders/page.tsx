@@ -1,5 +1,10 @@
 import { Badge, Breadcrumbs, PageHeader } from '@edupro/ui';
 import { Notice } from '@/components/Notice';
+import {
+  ExportButtons,
+  ListFilterFields,
+  readListFilters,
+} from '@/components/purchase/ListFilters';
 import { apiFetch, getMe } from '@/lib/api';
 import {
   EMERGENCY_STATUS,
@@ -46,14 +51,36 @@ export default async function OrdersPage({
   if (tab === 'to-send') qs.set('status', 'approved');
   if (tab === 'emergency') qs.set('emergency', '1');
   if (sp.q) qs.set('q', sp.q.slice(0, 80));
-  const data = await apiFetch<{
-    data: OrderRow[];
-    total: number;
-    waitingForMe: number;
-    drafts: number;
-    toSend: number;
-    toOrder: number;
-  }>(`/purchase/orders?${qs.toString()}`);
+  // status (on All), department, dates, the indent it came from, the vendor (docs/design/83)
+  const status =
+    tab === 'all' && sp.status && sp.status in ORDER_STATUS
+      ? (sp.status as keyof typeof ORDER_STATUS)
+      : undefined;
+  if (status) qs.set('status', status);
+  const f = readListFilters(sp, true);
+  for (const [k, v] of Object.entries(f)) if (v) qs.set(k, v);
+  const [data, choices] = await Promise.all([
+    apiFetch<{
+      data: OrderRow[];
+      total: number;
+      waitingForMe: number;
+      drafts: number;
+      toSend: number;
+      toOrder: number;
+    }>(`/purchase/orders?${qs.toString()}`),
+    apiFetch<{
+      departments: Array<{ id: string; name: string }>;
+      vendors: Array<{ id: string; code: string; name: string }>;
+    }>('/purchase/list-filters'),
+  ]);
+  // the file follows the tab and the filters
+  const fileParams: Record<string, string | undefined> = {
+    view: tab === 'waiting' ? 'waiting' : undefined,
+    status: tab === 'drafts' ? 'draft' : tab === 'to-send' ? 'approved' : status,
+    emergency: tab === 'emergency' ? '1' : undefined,
+    q: sp.q?.slice(0, 80),
+    ...f,
+  };
   const count: Partial<Record<Tab, number>> = {
     waiting: data.waitingForMe,
     drafts: data.drafts,
@@ -61,7 +88,7 @@ export default async function OrdersPage({
   };
   const link = (p: Record<string, string | undefined>) => {
     const u = new URLSearchParams();
-    for (const [k, v] of Object.entries({ tab, q: sp.q, ...p })) if (v) u.set(k, v);
+    for (const [k, v] of Object.entries({ tab, status, q: sp.q, ...f, ...p })) if (v) u.set(k, v);
     return `/purchase/orders?${u.toString()}`;
   };
   return (
@@ -74,28 +101,27 @@ export default async function OrdersPage({
         title="Purchase Orders"
         description="Approving a requisition drafts one PO per chosen vendor. Check the draft — rates, discount, freight, delivery, payment term — send it for approval, then e-mail it to the vendor."
         actions={
-          manage || emergencyRight ? (
-            <div style={{ display: 'flex', gap: 'var(--sp-2)', flexWrap: 'wrap' }}>
-              {manage ? (
-                <a
-                  className="ep-btn ep-btn--primary ep-btn--sm"
-                  href="/purchase/to-order"
-                  style={{ whiteSpace: 'nowrap' }}
-                >
-                  To order ({data.toOrder})
-                </a>
-              ) : null}
-              {emergencyRight ? (
-                <a
-                  className="ep-btn ep-btn--secondary ep-btn--sm"
-                  href="/purchase/emergency"
-                  style={{ whiteSpace: 'nowrap' }}
-                >
-                  Record an emergency purchase
-                </a>
-              ) : null}
-            </div>
-          ) : null
+          <div style={{ display: 'flex', gap: 'var(--sp-2)', flexWrap: 'wrap' }}>
+            <ExportButtons doc="orders" params={fileParams} />
+            {manage ? (
+              <a
+                className="ep-btn ep-btn--primary ep-btn--sm"
+                href="/purchase/to-order"
+                style={{ whiteSpace: 'nowrap' }}
+              >
+                To order ({data.toOrder})
+              </a>
+            ) : null}
+            {emergencyRight ? (
+              <a
+                className="ep-btn ep-btn--secondary ep-btn--sm"
+                href="/purchase/emergency"
+                style={{ whiteSpace: 'nowrap' }}
+              >
+                Record an emergency purchase
+              </a>
+            ) : null}
+          </div>
         }
       />
       <Notice params={sp} />
@@ -118,6 +144,26 @@ export default async function OrdersPage({
       </nav>
       <form method="get" action="/purchase/orders" className="ep-grid__toolbar">
         <input type="hidden" name="tab" value={tab} />
+        {tab === 'all' ? (
+          <label className="ep-field" htmlFor="po-status">
+            <span className="ep-field__label">Status</span>
+            <select id="po-status" name="status" className="ep-select" defaultValue={status ?? ''}>
+              <option value="">Any</option>
+              {(Object.keys(ORDER_STATUS) as Array<keyof typeof ORDER_STATUS>).map((s) => (
+                <option key={s} value={s}>
+                  {ORDER_STATUS[s].label}
+                </option>
+              ))}
+            </select>
+          </label>
+        ) : null}
+        <ListFilterFields
+          prefix="po"
+          values={f}
+          departments={choices.departments}
+          vendors={choices.vendors}
+          withIndent
+        />
         <label className="ep-field" htmlFor="po-q">
           <span className="ep-field__label">Search</span>
           <input

@@ -8,6 +8,7 @@
  * ratified by the Principal; the indent's rate-contract bypass drafts its PO at once.
  */
 import type { NestFastifyApplication } from '@nestjs/platform-fastify';
+import ExcelJS from 'exceljs';
 import { gstinCheckChar } from '../src/modules/purchase/gstin';
 import {
   createApp,
@@ -617,5 +618,30 @@ describe('purchase orders (e2e)', () => {
         expect([name, format, f.statusCode]).toEqual([name, format, 200]);
         expect(f.json().filename).toMatch(new RegExp(`\\.${format}$`));
       }
+  });
+  it('the orders list filters by vendor, department and dates; its file (Excel with the lines, PDF)', async () => {
+    const list = async (qs: string) =>
+      (await call(office, 'GET', `/purchase/orders?${qs}`)).json().data as Array<{
+        vendorId: string;
+      }>;
+    const v1 = await list(`vendorId=${ids.V1!}`);
+    expect(v1.length).toBeGreaterThan(0);
+    expect(v1.every((x) => x.vendorId === ids.V1)).toBe(true);
+    expect(await list('from=2099-01-01')).toEqual([]);
+    const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' }).format(new Date());
+    expect((await list(`from=${today}&to=${today}`)).length).toBeGreaterThan(0);
+    const x = await call(office, 'GET', `/purchase/orders/export?format=xlsx&vendorId=${ids.V1!}`);
+    expect(x.statusCode).toBe(200);
+    const wb = new ExcelJS.Workbook();
+    await wb.xlsx.load(
+      Buffer.from(x.json().base64 as string, 'base64') as unknown as ExcelJS.Buffer,
+    );
+    expect(wb.worksheets.map((w) => w.name)).toEqual(['Purchase Orders', 'Lines']);
+    const pdf = (await call(office, 'GET', '/purchase/orders/export?format=pdf')).json();
+    expect(
+      Buffer.from(pdf.base64 as string, 'base64')
+        .subarray(0, 5)
+        .toString(),
+    ).toBe('%PDF-');
   });
 });

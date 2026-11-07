@@ -1,6 +1,11 @@
 import { Badge, Breadcrumbs, PageHeader } from '@edupro/ui';
 import { notFound } from 'next/navigation';
 import { Notice } from '@/components/Notice';
+import {
+  ExportButtons,
+  ListFilterFields,
+  readListFilters,
+} from '@/components/purchase/ListFilters';
 import { apiFetch, getMe } from '@/lib/api';
 import {
   inr,
@@ -40,17 +45,26 @@ export default async function RequisitionsPage({
   const qs = new URLSearchParams({ view, page: String(page), size: '50' });
   if (status) qs.set('status', status);
   if (sp.q) qs.set('q', sp.q.slice(0, 80));
-  const data = await apiFetch<{
-    data: RequisitionRow[];
-    total: number;
-    waitingForMe: number;
-    toSign: number;
-    toRequisition: number;
-  }>(`/purchase/requisitions?${qs.toString()}`);
+  // department, dates, the indent it came from, the vendor (docs/design/83, list filters)
+  const f = readListFilters(sp, true);
+  for (const [k, v] of Object.entries(f)) if (v) qs.set(k, v);
+  const [data, choices] = await Promise.all([
+    apiFetch<{
+      data: RequisitionRow[];
+      total: number;
+      waitingForMe: number;
+      toSign: number;
+      toRequisition: number;
+    }>(`/purchase/requisitions?${qs.toString()}`),
+    apiFetch<{
+      departments: Array<{ id: string; name: string }>;
+      vendors: Array<{ id: string; code: string; name: string }>;
+    }>('/purchase/list-filters'),
+  ]);
   if (!manage && !data.total && !data.waitingForMe && !data.toSign && view === 'all') notFound();
   const link = (p: Record<string, string | undefined>) => {
     const u = new URLSearchParams();
-    for (const [k, v] of Object.entries({ view, status, q: sp.q, ...p })) if (v) u.set(k, v);
+    for (const [k, v] of Object.entries({ view, status, q: sp.q, ...f, ...p })) if (v) u.set(k, v);
     return `/purchase/requisitions?${u.toString()}`;
   };
   return (
@@ -63,24 +77,30 @@ export default async function RequisitionsPage({
         title="Purchase Requisitions"
         description="The purchase office turns approved indents into requisitions, sources each by its value — direct purchase, the purchase committee’s quotes, or a tender — and sends it to the department’s approvers."
         actions={
-          manage ? (
-            <div style={{ display: 'flex', gap: 'var(--sp-2)', flexWrap: 'wrap' }}>
-              <a
-                className="ep-btn ep-btn--primary ep-btn--sm"
-                href="/purchase/to-requisition"
-                style={{ whiteSpace: 'nowrap' }}
-              >
-                From indents ({data.toRequisition})
-              </a>
-              <a
-                className="ep-btn ep-btn--secondary ep-btn--sm"
-                href="/purchase/requisitions/new"
-                style={{ whiteSpace: 'nowrap' }}
-              >
-                Direct requisition
-              </a>
-            </div>
-          ) : null
+          <div style={{ display: 'flex', gap: 'var(--sp-2)', flexWrap: 'wrap' }}>
+            <ExportButtons
+              doc="requisitions"
+              params={{ view, status, q: sp.q?.slice(0, 80), ...f }}
+            />
+            {manage ? (
+              <>
+                <a
+                  className="ep-btn ep-btn--primary ep-btn--sm"
+                  href="/purchase/to-requisition"
+                  style={{ whiteSpace: 'nowrap' }}
+                >
+                  From indents ({data.toRequisition})
+                </a>
+                <a
+                  className="ep-btn ep-btn--secondary ep-btn--sm"
+                  href="/purchase/requisitions/new"
+                  style={{ whiteSpace: 'nowrap' }}
+                >
+                  Direct requisition
+                </a>
+              </>
+            ) : null}
+          </div>
         }
       />
       <Notice params={sp} />
@@ -117,6 +137,13 @@ export default async function RequisitionsPage({
               ))}
             </select>
           </label>
+          <ListFilterFields
+            prefix="pr"
+            values={f}
+            departments={choices.departments}
+            vendors={choices.vendors}
+            withIndent
+          />
           <label className="ep-field" htmlFor="pr-q">
             <span className="ep-field__label">Search</span>
             <input

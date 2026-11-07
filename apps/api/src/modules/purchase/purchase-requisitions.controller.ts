@@ -1,5 +1,6 @@
-import { Body, Controller, Delete, Get, Param, Post, Put, Query } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Post, Put, Query, Res } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import type { FastifyReply } from 'fastify';
 import { RequirePermission } from '../../common/access/require-permission.decorator';
 import { AuthenticatedOnly } from '../../common/auth/decorators';
 import { ReqCtx, type RequestContext } from '../../common/http/request-context';
@@ -13,6 +14,7 @@ import {
   QuoteDto,
   ReasonDto,
   RequisitionFileDto,
+  RequisitionExportQueryDto,
   RequisitionListQueryDto,
   SignDto,
   TenderDto,
@@ -51,6 +53,33 @@ export class PurchaseRequisitionsController {
   @RequirePermission(PURCHASE.requisitionManage)
   form(@ReqCtx() ctx: RequestContext) {
     return this.prs.formLists(ctx);
+  }
+
+  @Get('requisitions/export')
+  @ApiOperation({ summary: 'The requisitions list as on screen (its filters), as Excel or PDF' })
+  @AuthenticatedOnly()
+  exportList(@ReqCtx() ctx: RequestContext, @Query() q: RequisitionExportQueryDto) {
+    return this.prs.exportList(ctx, q);
+  }
+
+  @Get('requisitions/:id/pdf')
+  @ApiOperation({ summary: 'The printed Purchase Requisition (with the comparative statement)' })
+  @AuthenticatedOnly()
+  async pdf(
+    @ReqCtx() ctx: RequestContext,
+    @Param('id') id: string,
+    @Query('save') save: string | undefined,
+    @Res() reply: FastifyReply,
+  ) {
+    const f = await this.prs.pdf(ctx, id);
+    void reply
+      .header('content-type', 'application/pdf')
+      .header(
+        'content-disposition',
+        `${save === '1' ? 'attachment' : 'inline'}; filename="${f.filename.replace(/[^\w.\- ]+/g, '_')}"`,
+      )
+      .header('cache-control', 'private, no-store')
+      .send(f.bytes);
   }
 
   @Get('requisitions/:id')

@@ -1,6 +1,7 @@
 import { Badge, Card, PageHeader } from '@edupro/ui';
 import { ApiError } from '@edupro/bff';
 import { notFound, redirect } from 'next/navigation';
+import { FileLinks } from '@/components/FileLinks';
 import { bff } from '@/lib/bff';
 import { currentLang, t } from '@/lib/i18n';
 import { inr, REQUISITION_STATUS, TIER, type RequisitionDetail } from '@/lib/purchase';
@@ -80,6 +81,14 @@ export default async function StaffRequisitionPage({
           </p>
           {pr.status === 'submitted' && pr.waitingWith ? <p>With {pr.waitingWith}.</p> : null}
           <p className="ep-field__help">{TIER[pr.tier ?? 'none'].help}</p>
+          <p style={{ display: 'flex', gap: 'var(--sp-1)', alignItems: 'center' }}>
+            {t(lang, 'Print')}{' '}
+            <FileLinks
+              url={`/api/purchase-requisition/${pr.id}`}
+              saveUrl={`/api/purchase-requisition/${pr.id}?save=1`}
+              label={`${pr.number} as a PDF`}
+            />
+          </p>
         </Card>
 
         {pr.can.decide ? (

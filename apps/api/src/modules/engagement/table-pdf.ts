@@ -1,4 +1,5 @@
 import { PDFDocument, StandardFonts, rgb, type PDFFont } from 'pdf-lib';
+import { drawLetterhead, embedLogo, type LetterheadLogo } from '../../common/pdf/letterhead';
 
 export interface TablePdf {
   school: string;
@@ -43,6 +44,11 @@ export interface TablePdf {
   footnote?: string;
   /** A4 upright instead of the default landscape. */
   portrait?: boolean;
+  /**
+   * The school's letterhead (logo left; name, address, title and the details line centred) instead of
+   * the band: the purchase lists (docs/design/83).
+   */
+  letterhead?: { logo: LetterheadLogo | null; details?: string };
 }
 
 const LONG = 841.89; // A4
@@ -116,6 +122,7 @@ export async function tablePdf(t: TablePdf): Promise<Buffer> {
   pdf.setTitle(t.title);
   const regular = await pdf.embedFont(StandardFonts.Helvetica);
   const bold = await pdf.embedFont(StandardFonts.HelveticaBold);
+  const logo = t.letterhead ? await embedLogo(pdf, t.letterhead.logo) : null;
   const total = t.columns.reduce((n, c) => n + c.width, 0) || 1;
   const widths = t.columns.map((c) => ((W - 2 * M) * c.width) / total);
   const FS = t.fontSize ?? 8.5;
@@ -151,6 +158,28 @@ export async function tablePdf(t: TablePdf): Promise<Buffer> {
   };
   const head = () => {
     pages.push(page);
+    if (t.letterhead) {
+      y = drawLetterhead(page, { regular, bold }, logo, {
+        school: t.school,
+        address: t.address ?? null,
+        title: t.title,
+        details: t.letterhead.details ?? null,
+        margin: 28,
+      });
+    } else band();
+    for (const line of [t.subtitle ?? []].flat()) {
+      page.drawText(fit(regular, line, 9, W - 2 * M), {
+        x: M,
+        y,
+        size: 9,
+        font: regular,
+        color: MUTED,
+      });
+      y -= 13;
+    }
+    columnHeads();
+  };
+  const band = () => {
     const BAND = t.address ? 58 : 46;
     page.drawRectangle({ x: 0, y: H - BAND, width: W, height: BAND, color: NAVY });
     page.drawText(fit(bold, t.school, 13, W / 2), {
@@ -176,16 +205,8 @@ export async function tablePdf(t: TablePdf): Promise<Buffer> {
       color: rgb(1, 1, 1),
     });
     y = H - BAND - 16;
-    for (const line of [t.subtitle ?? []].flat()) {
-      page.drawText(fit(regular, line, 9, W - 2 * M), {
-        x: M,
-        y,
-        size: 9,
-        font: regular,
-        color: MUTED,
-      });
-      y -= 13;
-    }
+  };
+  const columnHeads = () => {
     y -= 3;
     if (t.columns.some((c) => c.group)) {
       // the headings over grouped columns: one label centred over each run of the same group

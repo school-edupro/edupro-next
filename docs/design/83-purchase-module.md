@@ -827,3 +827,45 @@ contract lines need no quotes and stay out of the band; dearer than the contract
 - Test in `purchase-requisitions.e2e-spec.ts`: the line filled from the contract, the band without
   it, dearer refused then given a reason, cheaper with none, back on the contract (asked, or its vendor
   named), no contract refused, a contract-only PR sent with tier `none`.
+
+## As built — list filters and exports; the letterhead; the printed PR (7 Nov 2026)
+
+Asked by the user ("PI, PR and PO lists need filters — department, Purchase Indent, date from–to, status
+— and export to Excel and PDF; the indent, PO and PR PDF header the same as the shared screenshot" — the
+Term Mark Register's letterhead). Decided with the user: PI number and vendor filters on PRs and POs;
+the file is the list plus a sheet of item lines; the letterhead on the PI, PR and PO prints and the list
+files (other purchase PDFs keep their band for now); a full PR print.
+
+- **Filters** (the list DTOs, all `z.object`): Purchase Indents `from`/`to` (sent, else started, in
+  India) beside `departmentId`, `status`, `route`, `q`; Requisitions `departmentId` (its own, or for a
+  combined PR a department one of its indents came from), `from`/`to` (made), `indent` (a PI number, or
+  part of it, that went into it), `vendorId` (chosen on a line); Orders the same with the PO date and its
+  vendor. Each service builds the WHERE once (`filterOf`) for the screen and the file.
+  `GET /purchase/list-filters`: the departments one may see (every one for the purchase office, admins
+  and any-department raisers; else one's own) and, for those who see rates, the vendors.
+- **Files**: `GET /purchase/{indents,requisitions,orders}/export?format=xlsx|pdf` with the same filters,
+  every row (at most 5,000: narrow the filters), base64 like the other exports; the admin route
+  `/api/purchase/list-file?doc=…`. `purchase-list-file.ts`: the Excel has the letterhead rows (logo,
+  school, address, the list's name, the filters and "Generated on"), frozen and filtered column heads,
+  totals, and a **Lines** sheet (one row per item line: indent lines with the stock when raised; PR lines
+  with vendor, rate, GST, on rate contract, the indents; PO lines with HSN, discount, GST, totals); the PDF
+  is `tablePdf` with the new `letterhead` option (A4 landscape). A raiser's indent file has no estimate
+  or rates.
+- **The letterhead** (`common/pdf/letterhead.ts`, `drawLetterhead`): the logo on the left; centred the
+  school's name, its full address (line 1, line 2, city, state, PIN — `registerLetterhead`), an optional
+  line (the PO's GSTIN, State, telephone, e-mail; a long line breaks at its separators), the paper's
+  title and a details line ("No. … · Department: … · Generated on: 07-11-2026 06:15 PM"). Used by the
+  printed PI, PO and PR and the list files; `purchaseHead(c, storage)` loads it.
+- **The printed PR** (`GET /purchase/requisitions/:id/pdf`, anyone who may open the PR;
+  `purchase-requisition-pdf.ts`): its details (made on, department, purpose, needed by, the indents,
+  sourcing, status, made by), the lines (vendor, rate, GST %, amount; on rate contract, above the contract
+  or not L1 with the reason; from the store), the value before GST, the comparative statement when there
+  are quotes (landed rates, L1 marked, the quotes' references), the certificate, the tender reference,
+  the approvals, and boxes to sign for the purchase officer, the committee members (committee tier) and
+  each approval level; "NOT APPROVED" / "REJECTED" / "CANCELLED" across. **Print** on the PR page (admin)
+  and its status card (staff app).
+- Tests: `purchase-indents` (dates and department; the office's file with the letterhead line, the
+  estimate and the Lines sheet; the raiser's without; the PDF; list-filters for both),
+  `purchase-requisitions` (indent, vendor, department, dates; the file's "Indent:" line and "On rate
+  contract"; the printed PR for the indent's raiser, refused to someone else), `purchase-orders`
+  (vendor, dates; the file's two sheets; the PDF).

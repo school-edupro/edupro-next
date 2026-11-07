@@ -16,6 +16,7 @@ import {
   DepartmentRulesDto,
   IndentDecisionDto,
   IndentDto,
+  IndentExportQueryDto,
   IndentListQueryDto,
   PURCHASE,
   PurchaseDelegationDto,
@@ -50,6 +51,20 @@ export class PurchaseController {
   @AuthenticatedOnly()
   listIndents(@ReqCtx() ctx: RequestContext, @Query() q: IndentListQueryDto) {
     return this.indents.list(ctx, q);
+  }
+
+  @Get('indents/export')
+  @ApiOperation({ summary: 'The indents list as on screen (its filters), as Excel or PDF' })
+  @AuthenticatedOnly()
+  exportIndents(@ReqCtx() ctx: RequestContext, @Query() q: IndentExportQueryDto) {
+    return this.indents.exportList(ctx, q);
+  }
+
+  @Get('list-filters')
+  @ApiOperation({ summary: 'What the purchase lists filter by: departments, and vendors (office)' })
+  @AuthenticatedOnly()
+  listFilters(@ReqCtx() ctx: RequestContext) {
+    return this.indents.listFilters(ctx);
   }
 
   @Get('indent-form')

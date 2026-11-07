@@ -8,6 +8,7 @@
  * a rate contract filling a line in (no quote needed, left out of the band; dearer needs a reason).
  */
 import type { NestFastifyApplication } from '@nestjs/platform-fastify';
+import ExcelJS from 'exceljs';
 import {
   createApp,
   headersFor,
@@ -579,6 +580,7 @@ describe('purchase requisitions (e2e)', () => {
     const made = await call(office, 'POST', '/purchase/requisitions', { indentIds: [ids.G] });
     expect(made.statusCode).toBe(201);
     const id = made.json().id as string;
+    ids.prG = id;
     let pr = await get(office, id);
     const pen = () => pr.lineItems.find((l: { itemId: string }) => l.itemId === ids.PEN);
     // the pens start on the contract: its vendor, rate and the GST a regular vendor charges
@@ -644,5 +646,54 @@ describe('purchase requisitions (e2e)', () => {
     const sent = await call(office, 'POST', `/purchase/requisitions/${only}/submit`);
     expect(sent.statusCode).toBe(201);
     expect((await get(hod, only)).lineItems[0]).toMatchObject({ fromContract: true, rate: 8.5 });
+  });
+  it('the list filters by indent, vendor, department and dates; its file; the printed PR', async () => {
+    const book = async (b64: string) => {
+      const wb = new ExcelJS.Workbook();
+      await wb.xlsx.load(Buffer.from(b64, 'base64') as unknown as ExcelJS.Buffer);
+      return wb;
+    };
+    // the letterhead's four lines, a blank row, then the column heads
+    const heads = (ws: ExcelJS.Worksheet) =>
+      (ws.getRow(6).values as unknown[]).filter((v) => typeof v === 'string') as string[];
+    const pi = (
+      await withMigrator((c) =>
+        c.query<{ number: string }>(`SELECT number FROM purchase_indents WHERE id = $1`, [ids.G]),
+      )
+    ).rows[0]!.number;
+    const list = async (qs: string) =>
+      (await call(office, 'GET', `/purchase/requisitions?${qs}`))
+        .json()
+        .data.map((x: { id: string }) => x.id) as string[];
+    expect(await list(`indent=${encodeURIComponent(pi)}`)).toEqual([ids.prG]);
+    expect(await list(`vendorId=${ids.V1!}`)).toContain(ids.prG);
+    expect(await list(`departmentId=${ids.Science!}`)).toContain(ids.prG);
+    expect(await list(`departmentId=${ids.Sports!}`)).not.toContain(ids.prG);
+    expect(await list('from=2099-01-01')).toEqual([]);
+    const f = await call(
+      office,
+      'GET',
+      `/purchase/requisitions/export?format=xlsx&indent=${encodeURIComponent(pi)}`,
+    );
+    expect(f.statusCode).toBe(200);
+    const wb = await book(f.json().base64 as string);
+    expect(wb.worksheets.map((w) => w.name)).toEqual(['Purchase Requisitions', 'Lines']);
+    expect(String(wb.worksheets[0]!.getRow(4).getCell(1).value)).toContain(`Indent: ${pi}`);
+    const lines = wb.worksheets[1]!;
+    const col = heads(lines).indexOf('On rate contract') + 1;
+    const flags: string[] = [];
+    lines.eachRow((r, n) => {
+      if (n > 6) flags.push(String(r.getCell(col).value ?? ''));
+    });
+    expect(flags).toContain('Yes');
+    expect(
+      (await call(office, 'GET', '/purchase/requisitions/export?format=pdf')).json().filename,
+    ).toMatch(/\.pdf$/);
+    // the printed PR: those who may see it (the indent's raiser too); not someone else
+    const pdf = await call(teacher, 'GET', `/purchase/requisitions/${ids.prG!}/pdf`);
+    expect(pdf.statusCode).toBe(200);
+    expect(pdf.headers['content-type']).toBe('application/pdf');
+    expect(pdf.rawPayload.subarray(0, 5).toString()).toBe('%PDF-');
+    expect((await call(c3, 'GET', `/purchase/requisitions/${ids.prG!}/pdf`)).statusCode).toBe(404);
   });
 });

@@ -1,11 +1,16 @@
-import { Injectable, type OnModuleInit } from '@nestjs/common';
+import { Inject, Injectable, type OnModuleInit } from '@nestjs/common';
 import type { PoolClient } from '@edupro/db';
+import type { StorageDriver } from '@edupro/storage';
 import { AuditService } from '../../common/audit/audit.service';
 import { DbService } from '../../common/db/db.service';
 import { DomainError } from '../../common/errors/domain-error';
 import { requireTenant, type RequestContext } from '../../common/http/request-context';
+import { STORAGE_DRIVER } from '../files/storage';
 import { WorkflowService, type InstanceRow } from '../workflow/workflow.service';
 import { syncFlow } from './purchase-flow';
+import { purchaseHead } from './purchase-head';
+import { checkListSize, LIST_LIMIT, purchaseListFile } from './purchase-list-file';
+import { purchaseRequisitionPdf, type RequisitionPdfData } from './purchase-requisition-pdf';
 import {
   issuedAgainst,
   releaseRequisition,
@@ -23,6 +28,7 @@ import {
   type QuoteDto,
   type ReasonDto,
   type RequisitionFileDto,
+  type RequisitionExportQueryDto,
   type RequisitionListQueryDto,
   type SignDto,
   type TenderDto,
@@ -34,6 +40,27 @@ const rupees = (n: number) =>
 const round2 = (n: number) => Math.round(n * 100) / 100;
 /** A rate with its GST: what the school pays per unit (the comparative statement ranks on it). */
 const landed = (rate: number, gst: number) => round2(rate * (1 + gst / 100));
+const PR_STATUS_WORDS: Record<string, string> = {
+  draft: 'Draft',
+  sourcing: 'Sourcing',
+  submitted: 'Waiting for approval',
+  approved: 'Approved',
+  rejected: 'Rejected',
+  sent_back: 'Sent back for changes',
+  cancelled: 'Cancelled',
+  part_ordered: 'Partly ordered',
+  ordered: 'Ordered',
+};
+const TIER_WORDS: Record<string, string> = {
+  none: 'No sourcing needed',
+  direct: 'Direct purchase',
+  committee: 'Purchase committee',
+  tender: 'Tender',
+};
+const PR_RULE_WORDS: Record<string, string> = {
+  rate_contract: 'rate contract',
+  under_limit: 'under the limit',
+};
 const OPEN = ['draft', 'sourcing', 'sent_back'] as const;
 type Tier = 'none' | 'direct' | 'committee' | 'tender';
 
@@ -184,6 +211,7 @@ export class PurchaseRequisitionsService implements OnModuleInit {
     private readonly db: DbService,
     private readonly audit: AuditService,
     private readonly workflow: WorkflowService,
+    @Inject(STORAGE_DRIVER) private readonly storage: StorageDriver,
   ) {}
 
   onModuleInit() {
@@ -401,15 +429,42 @@ export class PurchaseRequisitionsService implements OnModuleInit {
   }
 
   // ---- lists -------------------------------------------------------------------------------------
-  async list(ctx: RequestContext, q: RequisitionListQueryDto) {
-    return this.db.tenant(requireTenant(ctx), async (c) => {
-      // eslint-disable-next-line no-restricted-syntax -- fixed fragments; values are bound
-      const where = `WHERE ($1::text IS NULL OR r.status = $1)
+  /** The list's filters as SQL ($1-$9), the same for the screen and its file. */
+  private filterOf(ctx: RequestContext, q: RequisitionExportQueryDto | RequisitionListQueryDto) {
+    // eslint-disable-next-line no-restricted-syntax -- fixed fragments; values are bound
+    const where = `WHERE ($1::text IS NULL OR r.status = $1)
           AND ($2::text IS NULL OR r.number ILIKE $2 OR r.purpose ILIKE $2)
           AND CASE $3 WHEN 'waiting' THEN ${WAITING}
                       WHEN 'sign' THEN ${TO_SIGN}
-                      ELSE ($4 OR ${PARTICIPANT} OR ${RAISER} OR (r.tier = 'committee' AND ${ON_COMMITTEE})) END`;
-      const args = [q.status ?? null, q.q ? `%${q.q}%` : null, q.view, this.seesAll(ctx)];
+                      ELSE ($4 OR ${PARTICIPANT} OR ${RAISER} OR (r.tier = 'committee' AND ${ON_COMMITTEE})) END
+          AND ($5::bigint IS NULL OR r.department_id = $5::bigint OR EXISTS (
+                SELECT 1 FROM purchase_requisition_lines rl JOIN purchase_requisition_sources src ON src.requisition_line_id = rl.id
+                  JOIN purchase_indent_lines il ON il.id = src.indent_line_id JOIN purchase_indents pi ON pi.id = il.indent_id
+                 WHERE rl.requisition_id = r.id AND pi.department_id = $5::bigint))
+          AND ($6::date IS NULL OR (r.created_at AT TIME ZONE 'Asia/Kolkata')::date >= $6::date)
+          AND ($7::date IS NULL OR (r.created_at AT TIME ZONE 'Asia/Kolkata')::date <= $7::date)
+          AND ($8::text IS NULL OR EXISTS (
+                SELECT 1 FROM purchase_requisition_lines rl JOIN purchase_requisition_sources src ON src.requisition_line_id = rl.id
+                  JOIN purchase_indent_lines il ON il.id = src.indent_line_id JOIN purchase_indents pi ON pi.id = il.indent_id
+                 WHERE rl.requisition_id = r.id AND pi.number ILIKE $8))
+          AND ($9::bigint IS NULL OR EXISTS (SELECT 1 FROM purchase_requisition_lines rl WHERE rl.requisition_id = r.id AND rl.vendor_id = $9::bigint))`;
+    const args = [
+      q.status ?? null,
+      q.q ? `%${q.q}%` : null,
+      q.view,
+      this.seesAll(ctx),
+      q.departmentId ?? null,
+      q.from ?? null,
+      q.to ?? null,
+      q.indent ? `%${q.indent}%` : null,
+      q.vendorId ?? null,
+    ];
+    return { where, args };
+  }
+
+  async list(ctx: RequestContext, q: RequisitionListQueryDto) {
+    return this.db.tenant(requireTenant(ctx), async (c) => {
+      const { where, args } = this.filterOf(ctx, q);
       const total = await c.query<{ n: number }>(
         // eslint-disable-next-line no-restricted-syntax -- fixed fragments; values are bound
         `SELECT count(*)::int AS n FROM purchase_requisitions r ${where}`,
@@ -417,7 +472,7 @@ export class PurchaseRequisitionsService implements OnModuleInit {
       );
       const rows = await c.query<PrRow>(
         // eslint-disable-next-line no-restricted-syntax -- fixed fragments; values are bound
-        `${SELECT} ${where} ORDER BY COALESCE(r.submitted_at, r.created_at) DESC LIMIT $5 OFFSET $6`,
+        `${SELECT} ${where} ORDER BY COALESCE(r.submitted_at, r.created_at) DESC LIMIT $10 OFFSET $11`,
         [...args, q.size, (q.page - 1) * q.size],
       );
       const counts = (
@@ -436,6 +491,379 @@ export class PurchaseRequisitionsService implements OnModuleInit {
         waitingForMe: counts.waiting,
         toSign: counts.sign,
         toRequisition: this.seesAll(ctx) ? counts.to_requisition : 0,
+      };
+    });
+  }
+
+  /**
+   * The list as on screen (its filters, every page) as Excel or PDF, with the letterhead; the Excel adds
+   * a sheet of the item lines (vendor, rate, GST, on rate contract, the indents) (docs/design/83).
+   */
+  async exportList(ctx: RequestContext, q: RequisitionExportQueryDto) {
+    return this.db.tenant(requireTenant(ctx), async (c) => {
+      const { where, args } = this.filterOf(ctx, q);
+      const rows = (
+        await c.query<PrRow>(
+          // eslint-disable-next-line no-restricted-syntax -- fixed fragments; values are bound
+          `${SELECT} ${where} ORDER BY r.created_at DESC LIMIT $10`,
+          [...args, LIST_LIMIT],
+        )
+      ).rows;
+      checkListSize(rows.length, 'requisitions');
+      const ids = rows.map((r) => r.id);
+      const extra = new Map(
+        (
+          await c.query<{ id: string; indents: string | null; vendors: string | null }>(
+            `SELECT r.id::text,
+                    (SELECT string_agg(DISTINCT pi.number, ', ') FROM purchase_requisition_lines rl
+                       JOIN purchase_requisition_sources src ON src.requisition_line_id = rl.id
+                       JOIN purchase_indent_lines il ON il.id = src.indent_line_id JOIN purchase_indents pi ON pi.id = il.indent_id
+                      WHERE rl.requisition_id = r.id) AS indents,
+                    (SELECT string_agg(DISTINCT v.legal_name, ', ') FROM purchase_requisition_lines rl JOIN vendors v ON v.id = rl.vendor_id
+                      WHERE rl.requisition_id = r.id) AS vendors
+               FROM purchase_requisitions r WHERE r.id = ANY($1::bigint[])`,
+            [ids],
+          )
+        ).rows.map((x) => [x.id, x]),
+      );
+      const day = (t: Date) =>
+        new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' }).format(t);
+      const list = {
+        columns: [
+          { label: 'Requisition', width: 2.2 },
+          { label: 'Date', type: 'date' as const },
+          { label: 'Department', width: 2.2 },
+          { label: 'Purpose', width: 3.2 },
+          { label: 'From indents', width: 2.4 },
+          { label: 'Sourcing', width: 2 },
+          { label: 'Lines', type: 'number' as const, width: 0.9 },
+          { label: 'Vendors chosen', width: 3 },
+          { label: 'Value (₹)', type: 'money' as const },
+          { label: 'Status', width: 1.8 },
+          { label: 'Where it is', width: 2.6 },
+        ],
+        rows: rows.map((r) => [
+          r.number,
+          day(r.created_at),
+          `${r.department ?? ''}${r.combined ? ' (combined)' : ''}`,
+          r.purpose,
+          extra.get(r.id)?.indents ?? '',
+          r.auto_rule
+            ? `By the system: ${PR_RULE_WORDS[r.auto_rule] ?? r.auto_rule}`
+            : r.tier
+              ? (TIER_WORDS[r.tier] ?? r.tier)
+              : '',
+          r.lines,
+          extra.get(r.id)?.vendors ?? '',
+          Number(r.estimate),
+          PR_STATUS_WORDS[r.status] ?? r.status,
+          r.status === 'submitted' && r.waiting_with
+            ? `With ${r.waiting_with}`
+            : r.approved_at
+              ? `Approved ${day(r.approved_at).split('-').reverse().join('-')}`
+              : (r.decision_note ?? ''),
+        ]),
+      };
+      let lines;
+      if (q.format === 'xlsx' && ids.length) {
+        const byId = new Map(rows.map((r) => [r.id, r]));
+        const l = await c.query<{
+          requisition_id: string;
+          seq: number;
+          code: string | null;
+          item: string;
+          quantity: string;
+          uom: string;
+          fulfil: 'buy' | 'store';
+          store: string | null;
+          vendor: string | null;
+          rate: string | null;
+          est_rate: string;
+          gst_rate: string | null;
+          contract: boolean;
+          indents: string | null;
+        }>(
+          `SELECT l.requisition_id::text, l.seq, i.code, COALESCE(i.name, l.free_text) AS item, l.quantity::text, u.code AS uom,
+                  l.fulfil, st.name AS store, v.legal_name AS vendor, l.rate::text, l.est_rate::text, l.gst_rate::text,
+                  l.contract_id IS NOT NULL AS contract,
+                  (SELECT string_agg(DISTINCT pi.number, ', ') FROM purchase_requisition_sources src
+                     JOIN purchase_indent_lines il ON il.id = src.indent_line_id JOIN purchase_indents pi ON pi.id = il.indent_id
+                    WHERE src.requisition_line_id = l.id) AS indents
+             FROM purchase_requisition_lines l
+             LEFT JOIN purchase_items i ON i.id = l.item_id
+             JOIN purchase_uoms u ON u.id = l.uom_id
+             LEFT JOIN vendors v ON v.id = l.vendor_id
+             LEFT JOIN stores st ON st.id = l.store_id
+            WHERE l.requisition_id = ANY($1::bigint[]) ORDER BY l.requisition_id DESC, l.seq`,
+          [ids],
+        );
+        lines = {
+          columns: [
+            { label: 'Requisition', width: 2.2 },
+            { label: '#', type: 'number' as const, width: 0.6 },
+            { label: 'Item code', width: 2 },
+            { label: 'Item', width: 3.4 },
+            { label: 'Quantity', type: 'number' as const },
+            { label: 'Unit', width: 1 },
+            { label: 'Buy or from the store', width: 2.2 },
+            { label: 'Vendor', width: 3 },
+            { label: 'Rate (₹)', type: 'money' as const },
+            { label: 'GST %', type: 'number' as const, width: 1 },
+            { label: 'Amount before GST (₹)', type: 'money' as const },
+            { label: 'On rate contract', width: 1.4 },
+            { label: 'From indents', width: 2.4 },
+          ],
+          rows: l.rows.map((x) => {
+            const rate = x.fulfil === 'store' ? null : Number(x.rate ?? x.est_rate);
+            return [
+              byId.get(x.requisition_id)!.number,
+              x.seq,
+              x.code,
+              x.item,
+              Number(x.quantity),
+              x.uom,
+              x.fulfil === 'store' ? `From the store${x.store ? `: ${x.store}` : ''}` : 'Buy',
+              x.vendor,
+              rate,
+              x.gst_rate === null ? null : Number(x.gst_rate),
+              rate === null ? null : Math.round(Number(x.quantity) * rate * 100) / 100,
+              x.contract ? 'Yes' : '',
+              x.indents,
+            ];
+          }),
+        };
+      }
+      const dmy = (s: string) => `${s.slice(8, 10)}-${s.slice(5, 7)}-${s.slice(0, 4)}`;
+      const named = async (sql: string, id?: string) =>
+        id ? (await c.query<{ name: string }>(sql, [id])).rows[0]?.name : undefined;
+      const dept = await named(`SELECT name FROM departments WHERE id = $1`, q.departmentId);
+      const vendor = await named(
+        `SELECT legal_name AS name FROM vendors WHERE id = $1`,
+        q.vendorId,
+      );
+      const words =
+        [
+          q.view === 'waiting' ? 'Waiting for me' : q.view === 'sign' ? 'To sign' : null,
+          dept ? `Department: ${dept}` : null,
+          q.from && q.to
+            ? `${dmy(q.from)} to ${dmy(q.to)}`
+            : q.from
+              ? `From ${dmy(q.from)}`
+              : q.to
+                ? `Up to ${dmy(q.to)}`
+                : null,
+          q.status ? `Status: ${PR_STATUS_WORDS[q.status] ?? q.status}` : null,
+          q.indent ? `Indent: ${q.indent}` : null,
+          vendor ? `Vendor: ${vendor}` : null,
+          q.q ? `Search: ${q.q}` : null,
+        ]
+          .filter(Boolean)
+          .join(' · ') || 'All requisitions';
+      return purchaseListFile({
+        format: q.format,
+        head: await purchaseHead(c, this.storage),
+        title: 'Purchase Requisitions',
+        slug: 'Purchase-Requisitions',
+        words,
+        list,
+        sum: [8],
+        ...(lines ? { lines } : {}),
+      });
+    });
+  }
+
+  /**
+   * The printed PR (docs/design/83): its details, the lines with the vendor chosen (on rate contract,
+   * dearer with the reason), the comparative statement, the certificate or tender, the approvals and
+   * boxes to sign for the purchase officer, the committee and each approval level.
+   */
+  async pdf(ctx: RequestContext, id: string) {
+    return this.db.tenant(requireTenant(ctx), async (c) => {
+      const pr = await this.load(c, ctx, id);
+      const lines = await this.linesOf(c, id);
+      const quotes = await this.quotesOf(c, id);
+      const low = this.lowest(quotes);
+      const contracts = await this.contractsFor(c, [
+        ...new Set(lines.map((l) => l.item_id).filter((x): x is string => !!x)),
+      ]);
+      const committee = pr.tier === 'committee' ? await this.committeeOf(c, id) : [];
+      const indents = (
+        await c.query<{ number: string }>(
+          `SELECT DISTINCT pi.number FROM purchase_requisition_lines rl
+             JOIN purchase_requisition_sources src ON src.requisition_line_id = rl.id
+             JOIN purchase_indent_lines il ON il.id = src.indent_line_id JOIN purchase_indents pi ON pi.id = il.indent_id
+            WHERE rl.requisition_id = $1 ORDER BY pi.number`,
+          [id],
+        )
+      ).rows.map((x) => x.number);
+      const steps = pr.workflow_instance_id
+        ? (
+            await c.query<{
+              name: string;
+              status: string;
+              who: string | null;
+              waiting: string | null;
+              at: string | null;
+              note: string | null;
+            }>(
+              // eslint-disable-next-line no-restricted-syntax -- PERSON is a fixed fragment
+              `SELECT s.name, s.status::text, ${PERSON('u')} AS who,
+                      (SELECT string_agg(${PERSON('au')}, ', ' ORDER BY ${PERSON('au')}) FROM users au WHERE au.id = ANY(s.assignee_user_ids)) AS waiting,
+                      (s.acted_at AT TIME ZONE 'Asia/Kolkata')::date::text AS at, s.note
+                 FROM workflow_steps s LEFT JOIN users u ON u.id = s.acted_by
+                WHERE s.instance_id = $1 ORDER BY s.level`,
+              [pr.workflow_instance_id],
+            )
+          ).rows
+        : [];
+      const dmy = (s: string) => `${s.slice(8, 10)}-${s.slice(5, 7)}-${s.slice(0, 4)}`;
+      const day = (t: Date) =>
+        dmy(new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' }).format(t));
+      const STEP: Record<string, string> = {
+        pending: 'Waiting',
+        approved: 'Approved',
+        rejected: 'Rejected',
+        skipped: 'Passed on',
+        cancelled: 'Closed',
+      };
+      const head = await purchaseHead(c, this.storage);
+      const buy = lines.filter((l) => l.fulfil === 'buy');
+      const data: RequisitionPdfData = {
+        school: { name: head.school, address: head.address || null },
+        logo: head.logo,
+        generatedOn: head.generatedOn,
+        watermark: ['approved', 'part_ordered', 'ordered'].includes(pr.status)
+          ? null
+          : pr.status === 'rejected'
+            ? 'REJECTED'
+            : pr.status === 'cancelled'
+              ? 'CANCELLED'
+              : 'NOT APPROVED',
+        number: `${pr.number}${pr.revision > 1 ? ` (revision ${String(pr.revision)})` : ''}`,
+        facts: [
+          ['Made on', day(pr.created_at)],
+          ['Department', `${pr.department ?? ''}${pr.combined ? ' (combined)' : ''}`],
+          ['Purpose', pr.purpose ?? ''],
+          ['Needed by', pr.required_by ? dmy(pr.required_by) : 'Not given'],
+          ...(indents.length
+            ? ([['From indents', indents.join(', ')]] as Array<[string, string]>)
+            : []),
+          [
+            'Sourcing',
+            pr.auto_rule
+              ? `Made and approved by the system (${PR_RULE_WORDS[pr.auto_rule] ?? pr.auto_rule})`
+              : pr.tier
+                ? (TIER_WORDS[pr.tier] ?? pr.tier)
+                : '',
+          ],
+          [
+            'Status',
+            `${PR_STATUS_WORDS[pr.status] ?? pr.status}${
+              pr.status === 'submitted' && pr.waiting_with
+                ? `: ${pr.waiting_with}`
+                : pr.approved_at
+                  ? ` on ${day(pr.approved_at)}`
+                  : pr.decision_note
+                    ? `: ${pr.decision_note}`
+                    : ''
+            }`,
+          ],
+          ['Made by', pr.created_by_name ?? ''],
+        ],
+        lines: lines.map((l) => {
+          const k = l.item_id ? contracts.get(l.item_id) : undefined;
+          const lo = low.get(l.id);
+          const rate = l.rate === null ? null : Number(l.rate);
+          const gst = l.gst_rate === null ? null : Number(l.gst_rate);
+          const cost = rate === null ? null : landed(rate, gst ?? 0);
+          const above = !!k && !l.contract_id && cost !== null && cost > k.landed + 0.004;
+          const dearer =
+            !!lo &&
+            !!l.vendor_id &&
+            !lo.vendorIds.includes(l.vendor_id) &&
+            cost !== null &&
+            cost > lo.landed + 0.004;
+          const store = l.fulfil === 'store';
+          return {
+            seq: l.seq,
+            description: `${l.item ?? l.free_text ?? ''}${l.item_code ? ` (${l.item_code})` : ''}`,
+            notes: [
+              store
+                ? `From the store${l.store ? `: ${l.store}` : ''}${l.store_note ? ` · ${l.store_note}` : ''}`
+                : null,
+              l.contract_id ? 'On rate contract' : null,
+              above
+                ? `Above the rate contract (Rs ${k.landed.toFixed(2)} with GST): ${l.choice_reason ?? ''}`
+                : null,
+              !above && dearer ? `Not the lowest: ${l.choice_reason ?? ''}` : null,
+              l.note,
+            ].filter((x): x is string => !!x),
+            quantity: Number(l.quantity),
+            uom: l.uom,
+            vendor: store ? 'From the store' : (l.vendor ?? 'Not chosen'),
+            rate: store ? null : (rate ?? Number(l.est_rate)),
+            gstRate: store ? null : gst,
+            amount: store ? null : round2(Number(l.quantity) * (rate ?? Number(l.est_rate))),
+          };
+        }),
+        value: Number(pr.estimate),
+        statement: quotes.length
+          ? {
+              vendors: quotes.map((q) => ({
+                code: q.vendor_code,
+                name: q.vendor,
+                ref: [
+                  q.quote_ref,
+                  q.quote_date ? dmy(q.quote_date) : null,
+                  q.valid_until ? `valid until ${dmy(q.valid_until)}` : null,
+                ]
+                  .filter(Boolean)
+                  .join(', '),
+              })),
+              rows: buy.map((l) => ({
+                line: `${String(l.seq)}. ${l.item ?? l.free_text ?? ''} (${String(Number(l.quantity))} ${l.uom})`,
+                cells: quotes.map((q) => {
+                  const x = q.lines.find((ql) => ql.lineId === l.id);
+                  return {
+                    landed: x ? x.landed : null,
+                    l1: !!x && !!low.get(l.id)?.vendorIds.includes(q.vendor_id),
+                  };
+                }),
+                chosen: l.contract_id
+                  ? `Rate contract: ${l.vendor ?? ''}`
+                  : (l.vendor ?? 'Not chosen'),
+              })),
+            }
+          : null,
+        certificate: pr.price_certificate
+          ? {
+              text: pr.price_certificate,
+              by: pr.certified_by ?? '',
+              at: pr.certified_at ? day(pr.certified_at) : '',
+            }
+          : null,
+        tender: pr.tender_ref
+          ? `Reference ${pr.tender_ref}${pr.tender_note ? ` · ${pr.tender_note}` : ''}`
+          : null,
+        approvals: steps.map((s) => ({
+          level: s.name,
+          status: STEP[s.status] ?? s.status,
+          who: s.who ?? (s.status === 'pending' ? (s.waiting ?? 'Nobody') : '-'),
+          at: s.at ? dmy(s.at) : '',
+          note: s.note,
+        })),
+        signatures: [
+          { as: 'Purchase officer', name: pr.created_by_name ?? '' },
+          ...committee.map((m) => ({
+            as: m.role ? `Committee: ${m.role}` : 'Committee member',
+            name: m.name,
+          })),
+          ...steps.map((s) => ({ as: s.name, name: s.status === 'approved' ? (s.who ?? '') : '' })),
+        ],
+      };
+      return {
+        bytes: await purchaseRequisitionPdf(data),
+        filename: `${pr.number.replaceAll('/', '-')}.pdf`,
       };
     });
   }

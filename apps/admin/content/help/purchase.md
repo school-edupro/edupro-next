@@ -171,6 +171,14 @@ page**; the school admin can also push a role's page to its users (System → La
 
 **Purchase → Purchase Indents** (in the staff app: **Office → Purchase indents**).
 
+**Filters and files** (Purchase Indents, Purchase Requisitions and Purchase Orders alike): **Department**,
+**From** and **To** (an indent's sent date, a requisition's made date, an order's PO date), **Status**
+and **Search**; on requisitions and orders also **Purchase Indent** (type a PI number, or part of it, to
+find the PR or PO it went into) and **Vendor**. A combined PR or PO shows under every department it buys
+for. **Excel** and **PDF** (top right) give the list exactly as filtered — every page, not just the one on
+screen — under the school's letterhead with the filters and when it was made. The Excel adds a
+**Lines** sheet: one row per item. Estimates and rates appear only for those who see rates.
+
 - **Raise an indent**: the department (your own, from your employee record; the purchase office picks
   any), **for a colleague** if you raise it for someone, **needed by**, the **purpose** and the
   **priority** (urgent ones are listed first). Each line is an item from the list, picked by category,
@@ -188,7 +196,8 @@ page**; the school admin can also push a role's page to its users (System → La
   is never auto-approved by the limit.
 - **Save as draft** keeps it to finish later; **Save and send for approval** gives it its number
   (PI/2026-27/0001, restarting each financial year) and sends it to the department's first level.
-- **Print**: once sent, the indent's page has **Print** (view or download the PDF): the indent, each line
+- **Print**: once sent, the indent's page has **Print** (view or download the PDF, under the school's
+  letterhead — logo, name, address, the number, department and when it was printed): the indent, each line
   with what the stores held when it was raised (and the reason for buying anyway), the approvals as
   recorded, and boxes to sign for the raiser, the head of department, the Principal and the store
   keeper. Rates print only for those who see them. Until it is approved it says NOT APPROVED across.
@@ -219,6 +228,12 @@ PI you will not buy (issued from stock, no longer needed) with the reason; its r
 **Direct requisition** (Purchase → Purchase Requisitions) is for a need that did not come through a PI.
 
 On the PR:
+
+- **Print** (top right; also in the staff app) gives the PR under the school's letterhead: its details,
+  each line with the vendor, rate, GST and amount (on rate contract, or the reason for a dearer choice),
+  the **comparative statement** with L1 marked when there are quotes, the reasonable-price certificate or
+  tender reference, the approvals, and boxes to sign for the purchase officer, the committee members and
+  each approval level.
 
 - **Change the lines**: match a line asked for in words to an item from the list, change a quantity,
   or mark a line **From the store** (no vendor needed): an item kept in stock names the **store** it
@@ -265,6 +280,9 @@ On the PR:
 are all on rate contracts drafts its PO at once. **Purchase → To order** lists what is left to order —
 lines of a cancelled or rejected PO, or of a requisition the system approved under a department's limit
 (no vendor chosen yet): tick the lines, pick the vendor, **Draft the PO**.
+
+The printed PO carries the same letterhead: logo, the school's name and address, its GSTIN, State and
+contact, the number and date.
 
 On a draft PO:
 

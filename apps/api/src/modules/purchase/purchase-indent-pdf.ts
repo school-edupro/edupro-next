@@ -1,7 +1,8 @@
 import { degrees, PDFDocument, StandardFonts, rgb, type PDFFont, type PDFPage } from 'pdf-lib';
+import { drawLetterhead, embedLogo } from '../../common/pdf/letterhead';
 
 /**
- * The printed Purchase Indent (docs/design/83, "As built — the printed PI"): A4, the school's band, the
+ * The printed Purchase Indent (docs/design/83, "As built — the printed PI"): A4, the school's letterhead, the
  * PI's details (number, date, department, who raised it and for whom, purpose, priority, needed by),
  * per line the item, quantity and unit, what the main store and the department's stores held free when
  * it was raised (and the raiser's reason for buying anyway), the rates and the estimate only for those
@@ -34,6 +35,8 @@ const qty = (n: number) => n.toLocaleString('en-IN', { maximumFractionDigits: 3 
 export interface IndentPdfData {
   school: { name: string; address: string | null };
   logo: { contentType: string; bytes: Buffer } | null;
+  /** 07-11-2026 06:15 PM, India */
+  generatedOn: string;
   watermark: string | null;
   number: string;
   sentOn: string;
@@ -93,16 +96,7 @@ export async function purchaseIndentPdf(d: IndentPdfData): Promise<Buffer> {
   pdf.setAuthor(latin(d.school.name));
   const font = await pdf.embedFont(StandardFonts.Helvetica);
   const bold = await pdf.embedFont(StandardFonts.HelveticaBold);
-  let logo: Awaited<ReturnType<PDFDocument['embedPng']>> | null = null;
-  if (d.logo)
-    try {
-      logo =
-        d.logo.contentType === 'image/png'
-          ? await pdf.embedPng(new Uint8Array(d.logo.bytes))
-          : await pdf.embedJpg(new Uint8Array(d.logo.bytes));
-    } catch {
-      logo = null;
-    }
+  const logo = await embedLogo(pdf, d.logo);
 
   let page: PDFPage = pdf.addPage(A4);
   let y = 0;
@@ -118,21 +112,22 @@ export async function purchaseIndentPdf(d: IndentPdfData): Promise<Buffer> {
     const xx = o.right !== undefined ? o.right - f.widthOfTextAtSize(t, size) : x;
     page.drawText(t, { x: xx, y: yy, size, font: f, color: o.color ?? INK });
   };
+  // the letterhead, as the school's registers print it: logo left; name, address, title, details centred
   const head = () => {
-    const top = A4[1];
-    page.drawRectangle({ x: 0, y: top - 70, width: A4[0], height: 70, color: NAVY });
-    let x = M;
-    if (logo) {
-      const s = Math.min(42 / logo.width, 42 / logo.height);
-      page.drawImage(logo, { x: M, y: top - 56, width: logo.width * s, height: logo.height * s });
-      x = M + 52;
-    }
-    text(d.school.name, x, top - 32, { size: 15, f: bold, color: rgb(1, 1, 1) });
-    if (d.school.address)
-      text(d.school.address.slice(0, 120), x, top - 47, {
-        size: 8,
-        color: rgb(0.86, 0.9, 0.96),
-      });
+    y = drawLetterhead(page, { regular: font, bold }, logo, {
+      school: d.school.name,
+      address: d.school.address,
+      title: 'Purchase Indent',
+      details: `No. ${d.number} · Department: ${d.department} · Generated on: ${d.generatedOn}`,
+      margin: 30,
+    });
+    page.drawLine({
+      start: { x: M, y: y + 4 },
+      end: { x: M + W, y: y + 4 },
+      thickness: 0.8,
+      color: LINE,
+    });
+    y -= 10;
     if (d.watermark)
       page.drawText(latin(d.watermark), {
         x: 110,
@@ -143,7 +138,6 @@ export async function purchaseIndentPdf(d: IndentPdfData): Promise<Buffer> {
         opacity: 0.12,
         rotate: degrees(35),
       });
-    y = top - 92;
   };
   const need = (h: number, again?: () => void) => {
     if (y - h < M + 30) {
@@ -154,9 +148,6 @@ export async function purchaseIndentPdf(d: IndentPdfData): Promise<Buffer> {
   };
 
   head();
-  text('Purchase Indent', M, y, { size: 14, f: bold, color: NAVY });
-  text(`No. ${d.number}`, 0, y, { size: 11, f: bold, right: M + W });
-  y -= 20;
   const facts: Array<[string, string]> = [
     ['Sent on', d.sentOn],
     ['Department', d.department],

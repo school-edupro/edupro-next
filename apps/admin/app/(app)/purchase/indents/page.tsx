@@ -1,6 +1,11 @@
 import { Badge, Breadcrumbs, PageHeader } from '@edupro/ui';
 import { notFound } from 'next/navigation';
 import { Notice } from '@/components/Notice';
+import {
+  ExportButtons,
+  ListFilterFields,
+  readListFilters,
+} from '@/components/purchase/ListFilters';
 import { apiFetch, getMe } from '@/lib/api';
 import {
   INDENT_ROUTE,
@@ -51,14 +56,23 @@ export default async function IndentsPage({
   if (status) qs.set('status', status);
   if (route) qs.set('route', route);
   if (sp.q) qs.set('q', sp.q.slice(0, 80));
-  const data = await apiFetch<{ data: IndentRow[]; total: number; waitingForMe: number }>(
-    `/purchase/indents?${qs.toString()}`,
-  );
+  // department and dates (docs/design/83, list filters)
+  const f = readListFilters(sp, false);
+  for (const [k, v] of Object.entries(f)) if (v) qs.set(k, v);
+  const [data, choices] = await Promise.all([
+    apiFetch<{ data: IndentRow[]; total: number; waitingForMe: number }>(
+      `/purchase/indents?${qs.toString()}`,
+    ),
+    apiFetch<{
+      departments: Array<{ id: string; name: string }>;
+      vendors: Array<{ id: string; code: string; name: string }>;
+    }>('/purchase/list-filters'),
+  ]);
   // the estimate shows to those who see rates (not to a raiser without purchase rights)
   const rates = data.data.some((x) => x.estimate !== null);
   const link = (p: Record<string, string | undefined>) => {
     const u = new URLSearchParams();
-    for (const [k, v] of Object.entries({ view, status, route, q: sp.q, ...p }))
+    for (const [k, v] of Object.entries({ view, status, route, q: sp.q, ...f, ...p }))
       if (v && !(k === 'view' && v === 'all')) u.set(k, v);
     const s = u.toString();
     return `/purchase/indents${s ? `?${s}` : ''}`;
@@ -78,15 +92,21 @@ export default async function IndentsPage({
         title="Purchase Indents"
         description="Ask for what your department needs. The department’s approvers decide in turn — nobody approves their own — and an approved indent goes to the purchase office’s requisition, or straight to the order when a rule allows it."
         actions={
-          canRaise ? (
-            <a
-              className="ep-btn ep-btn--primary ep-btn--sm"
-              href="/purchase/indents/new"
-              style={{ whiteSpace: 'nowrap' }}
-            >
-              Raise an indent
-            </a>
-          ) : null
+          <div style={{ display: 'flex', gap: 'var(--sp-2)', flexWrap: 'wrap' }}>
+            <ExportButtons
+              doc="indents"
+              params={{ view, status, route, q: sp.q?.slice(0, 80), ...f }}
+            />
+            {canRaise ? (
+              <a
+                className="ep-btn ep-btn--primary ep-btn--sm"
+                href="/purchase/indents/new"
+                style={{ whiteSpace: 'nowrap' }}
+              >
+                Raise an indent
+              </a>
+            ) : null}
+          </div>
         }
       />
       <Notice params={sp} />
@@ -126,6 +146,13 @@ export default async function IndentsPage({
       <form method="get" action="/purchase/indents" className="ep-grid__toolbar">
         {view !== 'all' ? <input type="hidden" name="view" value={view} /> : null}
         {route ? <input type="hidden" name="route" value={route} /> : null}
+        <ListFilterFields
+          prefix="pi"
+          values={f}
+          departments={choices.departments}
+          vendors={[]}
+          withIndent={false}
+        />
         <label className="ep-field" htmlFor="pi-status">
           <span className="ep-field__label">Status</span>
           <select id="pi-status" name="status" className="ep-select" defaultValue={status ?? ''}>
