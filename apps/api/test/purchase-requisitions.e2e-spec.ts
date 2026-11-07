@@ -4,7 +4,8 @@
  * approves a combined PR), sourcing by tier (direct with the certificate; the committee's three quotes,
  * L1 and a reason for a dearer choice, the members' signatures cleared when the statement changes; a
  * tender's reference and documents), a line issued from the store closing its indent, rejecting and
- * cancelling giving the indents back, closing an indent, reopening an approved PR, and who sees what.
+ * cancelling giving the indents back, closing an indent, reopening an approved PR, and who sees what;
+ * a rate contract filling a line in (no quote needed, left out of the band; dearer needs a reason).
  */
 import type { NestFastifyApplication } from '@nestjs/platform-fastify';
 import {
@@ -562,5 +563,86 @@ describe('purchase requisitions (e2e)', () => {
         })
       ).statusCode,
     ).toBe(403);
+  });
+  it('a rate contract: the line starts on it, needs no quote and stays out of the band; dearer needs a reason', async () => {
+    await withMigrator((c) =>
+      c.query(
+        `INSERT INTO purchase_rate_contracts (school_id, vendor_id, item_id, rate, valid_from, valid_to)
+         VALUES ($1, $2, $3, 8.50, CURRENT_DATE - 30, CURRENT_DATE + 300)`,
+        [school.id, ids.V1, ids.PEN],
+      ),
+    );
+    ids.G = await indent('Science', teacher, [
+      [ids.PEN!, null, 100, 9],
+      [ids.PAPER!, null, 5, 300],
+    ]);
+    const made = await call(office, 'POST', '/purchase/requisitions', { indentIds: [ids.G] });
+    expect(made.statusCode).toBe(201);
+    const id = made.json().id as string;
+    let pr = await get(office, id);
+    const pen = () => pr.lineItems.find((l: { itemId: string }) => l.itemId === ids.PEN);
+    // the pens start on the contract: its vendor, rate and the GST a regular vendor charges
+    expect(pen()).toMatchObject({
+      vendorId: ids.V1,
+      rate: 8.5,
+      gstRate: 18,
+      fromContract: true,
+      contractInForce: true,
+      contract: { vendorId: ids.V1, rate: 8.5, landed: 10.03 },
+    });
+    // only the paper (5 x 300) sets the band
+    expect(pr).toMatchObject({ tier: 'direct', value: 1500, contractValue: 850 });
+    const line = pen().id as string;
+    const choose = (x: Record<string, unknown>) =>
+      call(office, 'PUT', `/purchase/requisitions/${id}/choices`, {
+        lines: [{ lineId: line, ...x }],
+      });
+    // another vendor dearer than the contract (with GST): the reason
+    const dear = await choose({ vendorId: ids.V2, rate: 11 });
+    expect(dear.statusCode).toBe(400);
+    expect(dear.json().type).toBe('purchase.choice_reason');
+    expect(
+      (await choose({ vendorId: ids.V2, rate: 11, reason: 'The contract vendor is out of stock' }))
+        .statusCode,
+    ).toBe(200);
+    pr = await get(office, id);
+    expect(pen()).toMatchObject({
+      vendorId: ids.V2,
+      fromContract: false,
+      aboveContract: true,
+      choiceReason: 'The contract vendor is out of stock',
+    });
+    // off the contract the line joins the band
+    expect(pr.value).toBe(2600);
+    // cheaper than the contract: no reason
+    expect((await choose({ vendorId: ids.V2, rate: 9 })).statusCode).toBe(200);
+    pr = await get(office, id);
+    expect(pen()).toMatchObject({ aboveContract: false, choiceReason: null });
+    // back on the contract: picked, or its vendor named without a rate
+    expect((await choose({ useContract: true })).statusCode).toBe(200);
+    pr = await get(office, id);
+    expect(pen()).toMatchObject({ vendorId: ids.V1, rate: 8.5, fromContract: true });
+    await choose({ vendorId: ids.V2, rate: 9 });
+    expect((await choose({ vendorId: ids.V1 })).statusCode).toBe(200);
+    pr = await get(office, id);
+    expect(pen()).toMatchObject({ fromContract: true, rate: 8.5 });
+    // no contract for the paper: asking for one is refused
+    const paper = pr.lineItems.find((l: { itemId: string }) => l.itemId === ids.PAPER).id as string;
+    expect(
+      (
+        await call(office, 'PUT', `/purchase/requisitions/${id}/choices`, {
+          lines: [{ lineId: paper, useContract: true }],
+        })
+      ).statusCode,
+    ).toBe(400);
+    // a PR of contract lines only: nothing to source, sent without a certificate or quotes
+    ids.H = await indent('Science', teacher, [[ids.PEN!, null, 40, 9]]);
+    const only = (
+      await call(office, 'POST', '/purchase/requisitions', { indentIds: [ids.H] })
+    ).json().id as string;
+    expect((await get(office, only)).tier).toBe('none');
+    const sent = await call(office, 'POST', `/purchase/requisitions/${only}/submit`);
+    expect(sent.statusCode).toBe(201);
+    expect((await get(hod, only)).lineItems[0]).toMatchObject({ fromContract: true, rate: 8.5 });
   });
 });

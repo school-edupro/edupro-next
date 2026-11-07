@@ -476,9 +476,11 @@ export const ChoicesSchema = z.object({
       z.object({
         lineId: IdSchema,
         vendorId: IdSchema.nullish(),
+        /** buy it on the item's rate contract: its vendor and rate (vendorId and rate are then ignored) */
+        useContract: z.boolean().optional(),
         rate: Money.optional(),
         gstRate: Gst.optional(),
-        /** why a vendor dearer than the lowest quote */
+        /** why a vendor dearer than the lowest quote, or than the item's rate contract */
         reason: opt(300),
       }),
     )

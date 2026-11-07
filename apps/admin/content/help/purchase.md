@@ -224,8 +224,17 @@ On the PR:
   or mark a line **From the store** (no vendor needed): an item kept in stock names the **store** it
   comes from — the list shows what each store has free (in hand less reserved); an item not kept in
   stock says what the store issues. A line that came from a PI stays on the PR.
+- **Rate contracts**: a line whose item has a rate contract in force starts **on the contract** — its
+  vendor and rate are filled in, and the line shows "Rate contract: vendor, ₹rate, till date". Keep
+  it, or pick another vendor in the comparative statement (a quote, or the agreed rate typed in);
+  **Rate contract** is the first choice in the vendor list to go back to it. Another vendor **dearer
+  than the contract** (with GST) needs the reason, which the approvers see ("Above the rate contract");
+  a cheaper one needs none. A line on its contract needs **no quote** and is **left out of the value**
+  below (the contract was already won competitively). A PR whose lines are all on contracts or from
+  the store needs no sourcing at all: no quotes, certificate or tender.
 - **Sourcing** follows the PR's **value before GST** (the larger of the estimate and the chosen
-  rates), with the limits from Purchase settings (GFR 2017 by default):
+  rates, leaving out the lines on rate contracts), with the limits from Purchase settings (GFR 2017
+  by default):
   - **direct purchase** (up to ₹50,000): a vendor and rate per line — **Add a quote**, or pick a vendor
     and type the agreed rate in the comparative statement — and **Record the certificate** ("I am
     personally satisfied that the goods … at a reasonable price") in the purchase officer's name;

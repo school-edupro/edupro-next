@@ -183,7 +183,17 @@ export default async function StaffRequisitionPage({
                       {l.fulfil === 'store'
                         ? `From the store: ${l.storeNote ?? ''}`
                         : (l.vendor ?? 'Not chosen')}
-                      {l.dearer ? (
+                      {l.fromContract ? (
+                        <span className="ep-field__help" style={{ display: 'block' }}>
+                          On rate contract
+                        </span>
+                      ) : null}
+                      {l.aboveContract && l.contract ? (
+                        <span className="ep-field__help" style={{ display: 'block' }}>
+                          Above the rate contract ({inr(l.contract.landed)} with GST):{' '}
+                          {l.choiceReason}
+                        </span>
+                      ) : l.dearer ? (
                         <span className="ep-field__help" style={{ display: 'block' }}>
                           Not the lowest: {l.choiceReason}
                         </span>

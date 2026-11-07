@@ -468,8 +468,8 @@ export const REQUISITION_STATUS: Record<
 
 export const TIER: Record<Tier, { label: string; help: string }> = {
   none: {
-    label: 'From the store',
-    help: 'Nothing is bought: every line is issued from the store.',
+    label: 'No sourcing needed',
+    help: 'Every line is issued from the store or bought on its rate contract: no quotes, certificate or tender.',
   },
   direct: {
     label: 'Direct purchase',
@@ -542,7 +542,23 @@ export interface RequisitionLine {
   gstRate: number | null;
   amount: number;
   choiceReason: string | null;
+  /** bought on the item's rate contract */
   fromContract: boolean;
+  /** the item's rate contract in force: offered first, filled in when nothing is chosen */
+  contract: {
+    id: string;
+    vendorId: string;
+    vendor: string;
+    vendorCode: string;
+    rate: number;
+    gstRate: number;
+    landed: number;
+    validTo: string;
+  } | null;
+  /** the contract the line is bought on is still in force (true when on none) */
+  contractInForce: boolean;
+  /** another vendor chosen, dearer (with GST) than the item's rate contract: choiceReason says why */
+  aboveContract: boolean;
   itemGst: number | null;
   l1: { landed: number; vendorIds: string[] } | null;
   dearer: boolean;
@@ -582,7 +598,10 @@ export interface Quote {
 
 export interface RequisitionDetail extends Omit<RequisitionRow, 'quotes'> {
   limits: { direct: number; committee: number; quotes: number };
+  /** the band's value: the lines bought, not on a rate contract */
   value: number;
+  /** what the lines bought on rate contracts come to (left out of the band) */
+  contractValue: number;
   certificate: { text: string; by: string | null; at: string | null } | null;
   certificateText: string;
   tender: { ref: string | null; note: string | null };

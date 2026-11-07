@@ -791,3 +791,39 @@ slip; the free stock shows by store; when the stores cover the quantity the rais
   them), the free stock by store (another department's store left out), the reason refused then given,
   no amount in the approval's title, the approver's rates and reason, the PDF (draft 409, raiser and
   approver 200, outsider 404), the bypass note without amounts, and a line in words not auto-approved.
+
+## As built — the purchase officer's dev login; rate contracts on the PR (7 Nov 2026)
+
+Asked by the user ("create a purchase officer role dev so this role converts to PR and PR to PO, and how
+to show contract item price so in PR the purchase officer selects the contract price or enters a
+price"). Decided with the user: a new dev login in Alpha; the contract filled in and changeable;
+contract lines need no quotes and stay out of the band; dearer than the contract needs a reason.
+
+- **dev-purchase** (Pooja Purchase): the built-in `purchase_office` role in Alpha, linked to employee
+  **PO01** (Purchase Officer, Administration) — its own code, so the school's own employees (E021 and
+  on) are never touched by a rerun. In `seed-demo.ts` (DEMO_USERS and the employee) and on the admin
+  sign-in list (`demo-roles.ts`); created in the dev database once by hand (same rows).
+- **Rate contracts on the PR** (`purchase-requisitions.service.ts`): `contractsFor(items)` gives each
+  item's contract in force (active vendor; the lowest rate if several), with the GST the vendor charges
+  (a regular vendor the item's rate, others none) and the landed cost. `fillContracts` puts the lines
+  bought with no vendor yet on their contract (vendor, rate, GST, `contract_id`) when the PR is made
+  and when its lines change; a line matched to another item, or marked from the store, loses its
+  choice (and contract). Choices: `useContract: true`, or the contract's vendor named without a quote
+  at its rate (or with none), puts the line on the contract; another vendor whose landed cost is above
+  the contract's needs `reason` (`purchase.choice_reason`), kept in `choice_reason`. The PR's lines
+  carry `contract` (the item's contract in force), `contractInForce` and `aboveContract`; the PR
+  carries `contractValue`.
+- **The band leaves out contract lines**: the tier is set by the larger of the estimated and chosen
+  totals of the lines bought not on a contract; a PR of only contract and store lines is `none` (now
+  labelled "No sourcing needed" — no quotes, certificate or tender). In the committee tier a contract
+  line needs no quote and no L1 reason. A readiness check: the contracts the lines are on are still in
+  force.
+- The comparative statement shows the contract on each line and offers **Rate contract: vendor:
+  ₹landed** first in the vendor list; the lines table and the staff app's PR show "On rate contract"
+  and "Above the rate contract (₹…): reason". The PO already carries the contract and asks a reason to
+  change its rate (part 4).
+- Fixed on the way: "Not the lowest" was shown for any vendor other than L1's, even a cheaper agreed
+  rate (with an empty reason); it now means dearer than L1 with GST.
+- Test in `purchase-requisitions.e2e-spec.ts`: the line filled from the contract, the band without
+  it, dearer refused then given a reason, cheaper with none, back on the contract (asked, or its vendor
+  named), no contract refused, a contract-only PR sent with tier `none`.

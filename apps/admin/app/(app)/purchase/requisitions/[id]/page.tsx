@@ -284,8 +284,12 @@ export default async function RequisitionPage({
           </h2>
           <p style={{ marginTop: 0 }}>
             Value <strong>{inr(pr.value)}</strong> before GST (the larger of the estimate and the
-            chosen rates). Direct purchase up to {inr(pr.limits.direct)}; the purchase committee up
-            to {inr(pr.limits.committee)}; a tender above. {TIER[tier].help}
+            chosen rates
+            {pr.contractValue
+              ? `; the lines on rate contracts, ${inr(pr.contractValue)}, are left out: they need no quotes`
+              : ''}
+            ). Direct purchase up to {inr(pr.limits.direct)}; the purchase committee up to{' '}
+            {inr(pr.limits.committee)}; a tender above. {TIER[tier].help}
           </p>
           {pr.requirements.length ? (
             <ul className="ep-purch-checks">
@@ -374,9 +378,21 @@ export default async function RequisitionPage({
                       <>
                         {l.vendor ?? 'Not chosen'}
                         {l.fromContract ? (
-                          <span className="ep-mr-col__desc">Rate contract</span>
+                          <span className="ep-mr-col__desc">
+                            On rate contract
+                            {l.contractInForce ? '' : ' (no longer in force: choose again)'}
+                          </span>
+                        ) : l.contract ? (
+                          <span className="ep-mr-col__desc">
+                            Rate contract: {l.contract.vendor} {inr(l.contract.rate)}
+                          </span>
                         ) : null}
-                        {l.dearer ? (
+                        {l.aboveContract && l.contract ? (
+                          <span className="ep-mr-col__desc">
+                            Above the rate contract ({inr(l.contract.landed)} with GST):{' '}
+                            {l.choiceReason}
+                          </span>
+                        ) : l.dearer ? (
                           <span className="ep-mr-col__desc">Not the lowest: {l.choiceReason}</span>
                         ) : null}
                       </>
@@ -543,6 +559,14 @@ export default async function RequisitionPage({
                         <span className="ep-mr-col__desc">
                           {l.quantity} {l.uom}
                         </span>
+                        {l.contract ? (
+                          <span className="ep-mr-col__desc">
+                            Rate contract: {l.contract.vendor} ({l.contract.vendorCode}){' '}
+                            {inr(l.contract.rate)}
+                            {l.contract.gstRate ? ` + ${String(l.contract.gstRate)}% GST` : ''} ·
+                            till {when(l.contract.validTo)}
+                          </span>
+                        ) : null}
                       </th>
                       {pr.quotes.map((q) => {
                         const x = quoted(l.id, q.vendorId);
@@ -573,9 +597,14 @@ export default async function RequisitionPage({
                               name={`vendor_${l.id}`}
                               className="ep-select"
                               aria-label={`Vendor for ${l.item}`}
-                              defaultValue={l.vendorId ?? ''}
+                              defaultValue={l.fromContract ? 'contract' : (l.vendorId ?? '')}
                             >
                               <option value="">Not chosen</option>
+                              {l.contract ? (
+                                <option value="contract">
+                                  Rate contract: {l.contract.vendor}: {inr(l.contract.landed)}
+                                </option>
+                              ) : null}
                               {pr.quotes
                                 .filter((q) => quoted(l.id, q.vendorId))
                                 .map((q) => (
@@ -602,7 +631,10 @@ export default async function RequisitionPage({
                                 aria-label={`Agreed rate for ${l.item} (a vendor without a quote)`}
                                 placeholder="Agreed rate (no quote)"
                                 defaultValue={
-                                  l.vendorId && !quoted(l.id, l.vendorId) && l.rate !== null
+                                  !l.fromContract &&
+                                  l.vendorId &&
+                                  !quoted(l.id, l.vendorId) &&
+                                  l.rate !== null
                                     ? l.rate
                                     : ''
                                 }
@@ -613,7 +645,7 @@ export default async function RequisitionPage({
                               className="ep-input"
                               maxLength={300}
                               aria-label={`Reason for a vendor dearer than L1 for ${l.item}`}
-                              placeholder="Reason, if not the lowest"
+                              placeholder="Reason, if dearer than L1 or the rate contract"
                               defaultValue={l.choiceReason ?? ''}
                             />
                           </div>
@@ -638,8 +670,10 @@ export default async function RequisitionPage({
                 </button>{' '}
                 <span className="ep-field__help">
                   {tier === 'committee'
-                    ? 'The committee chooses from the quotes. Saving clears its signatures.'
-                    : 'A vendor without a quote needs the agreed rate.'}
+                    ? 'The committee chooses from the quotes (a line on its rate contract needs none). Saving clears its signatures.'
+                    : 'A vendor without a quote needs the agreed rate.'}{' '}
+                  A line whose item has a rate contract starts on it; another vendor dearer than the
+                  contract needs a reason.
                 </span>
               </p>
             ) : null}

@@ -39,7 +39,7 @@ const words: Record<string, string> = {
   in_requisition: 'On a PR',
   rate_contract: 'Rate contract',
   under_limit: 'Under the limit',
-  none: 'From the store',
+  none: 'No sourcing needed',
   direct: 'Direct purchase',
   committee: 'Purchase committee',
   tender: 'Tender',

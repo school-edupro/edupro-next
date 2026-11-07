@@ -13,6 +13,10 @@ export const DEMO_ROLES: Array<{ sub: string; label: string }> = [
   { sub: 'dev-gate', label: 'Gate / Security (visitor check-in)' },
   { sub: 'dev-transport', label: 'Transport In-charge (requests, routes, fleet)' },
   { sub: 'dev-accounts', label: 'Accountant (fees; last approval of transport requests)' },
+  {
+    sub: 'dev-purchase',
+    label: 'Purchase Officer (indents to PRs, rate contracts and quotes, PRs to POs, stores)',
+  },
   { sub: 'dev-hostel', label: 'Hostel Clerk (set-up, beds, registers, hostel withdrawals)' },
   { sub: 'dev-warden', label: 'Warden (head warden of a hostel; roll-call in the staff app)' },
   {

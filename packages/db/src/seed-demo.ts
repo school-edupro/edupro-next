@@ -103,6 +103,16 @@ const DEMO_USERS: DemoUser[] = [
       'Librarian: library set-up, books and copies, import, labels, periodicals, circulation and fines, stock checks',
   },
   {
+    sub: 'dev-purchase',
+    name: 'Pooja Purchase',
+    mobile: '9999999921',
+    email: 'purchase@alpha.example.test',
+    personType: 'employee',
+    roles: { ALPHA: ['purchase_office'] },
+    description:
+      'Purchase Officer (employee PO01): approved indents to PRs, quotes and rate contracts, PRs to POs, vendors, masters, stores, reports',
+  },
+  {
     sub: 'dev-group',
     name: 'Gita Group Admin',
     mobile: '9999999901',
@@ -628,6 +638,16 @@ async function main(): Promise<void> {
         );
         employeeIds[code] = e.rows[0]!.id;
       }
+      // the purchase officer's login (dev-purchase) as an employee of Alpha, under a code of its own so
+      // the school's own employees (E021 and on) are never touched by a rerun
+      if (schoolCode === 'ALPHA')
+        await c.query(
+          `INSERT INTO employees (school_id, employee_code, first_name, last_name, dob, gender, employee_type, designation, department, joined_on, mobile, email, user_id, legacy_ref)
+           VALUES ($1, 'PO01', 'Pooja', 'Purchase', '1988-05-14', 'female', 'non_teaching', 'Purchase Officer', 'Administration', '2019-06-01',
+                   '9999999921', 'purchase@alpha.example.test', $2, 'PO01')
+           ON CONFLICT (school_id, employee_code) DO UPDATE SET user_id = COALESCE(employees.user_id, EXCLUDED.user_id)`,
+          [school.id, userIds['dev-purchase']],
+        );
       for (const [i, [code, designation, department]] of empList.entries()) {
         const reportsTo =
           code === 'E001'

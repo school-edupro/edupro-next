@@ -153,6 +153,20 @@ interface LineRow {
   choice_reason: string | null;
   contract_id: string | null;
   item_gst: string | null;
+  /** the rate contract the line is bought on is still in force (true when on none) */
+  contract_ok: boolean;
+}
+
+/** An item's rate contract in force: its vendor (active), rate, the GST the vendor charges, landed cost. */
+export interface ContractInForce {
+  id: string;
+  vendorId: string;
+  vendor: string;
+  vendorCode: string;
+  rate: number;
+  gstRate: number;
+  landed: number;
+  validTo: string;
 }
 
 /**
@@ -220,26 +234,99 @@ export class PurchaseRequisitionsService implements OnModuleInit {
 
   /**
    * The PR's figures again after a change: the estimate (what it will cost: the chosen rate, else the
-   * estimate, of the lines bought) and the tier of the larger of that and the estimated total.
+   * estimate, of the lines bought) and the tier of the larger of the band's estimated and chosen totals.
+   * A line bought on its rate contract is left out of the band (the contract was already won
+   * competitively: it needs no quotes); a PR of only such lines (and lines from the store) is 'none'.
    */
   private async refresh(c: PoolClient, id: string) {
     const s = await this.settings(c);
     const f = (
-      await c.query<{ est: string; chosen: string; buy: number }>(
-        `SELECT COALESCE(sum(quantity * est_rate) FILTER (WHERE fulfil = 'buy'), 0)::text AS est,
+      await c.query<{ est: string; band_chosen: string; chosen: string; buy: number }>(
+        `SELECT COALESCE(sum(quantity * est_rate) FILTER (WHERE fulfil = 'buy' AND contract_id IS NULL), 0)::text AS est,
+                COALESCE(sum(quantity * COALESCE(rate, est_rate)) FILTER (WHERE fulfil = 'buy' AND contract_id IS NULL), 0)::text AS band_chosen,
                 COALESCE(sum(quantity * COALESCE(rate, est_rate)) FILTER (WHERE fulfil = 'buy'), 0)::text AS chosen,
-                (count(*) FILTER (WHERE fulfil = 'buy'))::int AS buy
+                (count(*) FILTER (WHERE fulfil = 'buy' AND contract_id IS NULL))::int AS buy
            FROM purchase_requisition_lines WHERE requisition_id = $1`,
         [id],
       )
     ).rows[0]!;
     const chosen = round2(Number(f.chosen));
-    const tier = this.tierOf(Math.max(Number(f.est), chosen), f.buy, s);
+    const value = Math.max(Number(f.est), Number(f.band_chosen));
+    const tier = this.tierOf(value, f.buy, s);
     await c.query(
       `UPDATE purchase_requisitions SET estimate = $2, tier = $3, updated_at = now() WHERE id = $1`,
       [id, chosen, tier],
     );
-    return { estimate: chosen, value: Math.max(Number(f.est), chosen), tier };
+    return { estimate: chosen, value: round2(value), tier };
+  }
+
+  /**
+   * The rate contracts in force for these items: the active vendor's, the lowest rate if several; the
+   * GST the vendor charges (a regular vendor: the item's rate; others none), and the landed cost.
+   */
+  private async contractsFor(c: PoolClient, itemIds: string[]) {
+    const out = new Map<string, ContractInForce>();
+    if (!itemIds.length) return out;
+    const r = await c.query<{
+      item_id: string;
+      id: string;
+      vendor_id: string;
+      vendor: string;
+      vendor_code: string;
+      gst_status: string;
+      rate: string;
+      valid_to: string;
+      item_gst: string | null;
+    }>(
+      `SELECT DISTINCT ON (rc.item_id) rc.item_id::text, rc.id::text, rc.vendor_id::text, v.legal_name AS vendor, v.code AS vendor_code,
+              v.gst_status, rc.rate::text, rc.valid_to::text, COALESCE(i.gst_rate, h.gst_rate)::text AS item_gst
+         FROM purchase_rate_contracts rc
+         JOIN vendors v ON v.id = rc.vendor_id AND v.status = 'active'
+         JOIN purchase_items i ON i.id = rc.item_id
+         LEFT JOIN purchase_hsn h ON h.id = i.hsn_id
+        WHERE rc.item_id = ANY($1::bigint[]) AND rc.status = 'active'
+          AND (now() AT TIME ZONE 'Asia/Kolkata')::date BETWEEN rc.valid_from AND rc.valid_to
+        ORDER BY rc.item_id, rc.rate, rc.valid_to DESC`,
+      [itemIds],
+    );
+    for (const x of r.rows) {
+      const gst = x.gst_status === 'regular' ? Number(x.item_gst ?? 0) : 0;
+      out.set(x.item_id, {
+        id: x.id,
+        vendorId: x.vendor_id,
+        vendor: x.vendor,
+        vendorCode: x.vendor_code,
+        rate: Number(x.rate),
+        gstRate: gst,
+        landed: landed(Number(x.rate), gst),
+        validTo: x.valid_to,
+      });
+    }
+    return out;
+  }
+
+  /**
+   * The lines bought with no vendor chosen yet start on their item's rate contract (its vendor and
+   * rate); the purchase officer may change it (another vendor dearer than the contract needs a reason).
+   */
+  private async fillContracts(c: PoolClient, prId: string) {
+    const open = (
+      await c.query<{ id: string; item_id: string }>(
+        `SELECT id::text, item_id::text FROM purchase_requisition_lines
+          WHERE requisition_id = $1 AND fulfil = 'buy' AND item_id IS NOT NULL AND vendor_id IS NULL`,
+        [prId],
+      )
+    ).rows;
+    const contracts = await this.contractsFor(c, [...new Set(open.map((l) => l.item_id))]);
+    for (const l of open) {
+      const k = contracts.get(l.item_id);
+      if (!k) continue;
+      await c.query(
+        `UPDATE purchase_requisition_lines SET vendor_id = $2, rate = $3, gst_rate = $4, contract_id = $5, choice_reason = NULL
+          WHERE id = $1 AND vendor_id IS NULL`,
+        [l.id, k.vendorId, k.rate, k.gstRate, k.id],
+      );
+    }
   }
 
   /** The comparative statement changed: the committee's signatures no longer hold. */
@@ -429,7 +516,9 @@ export class PurchaseRequisitionsService implements OnModuleInit {
                 COALESCE((SELECT sum(r.issued_qty) FROM stock_reservations r WHERE r.requisition_line_id = l.id), 0)::text AS issued,
                 l.vendor_id::text, v.legal_name AS vendor, v.status AS vendor_status, l.rate::text, l.gst_rate::text,
                 l.choice_reason, l.contract_id::text,
-                COALESCE(i.gst_rate, h.gst_rate)::text AS item_gst
+                COALESCE(i.gst_rate, h.gst_rate)::text AS item_gst,
+                (l.contract_id IS NULL OR EXISTS (SELECT 1 FROM purchase_rate_contracts rc WHERE rc.id = l.contract_id AND rc.status = 'active'
+                   AND (now() AT TIME ZONE 'Asia/Kolkata')::date BETWEEN rc.valid_from AND rc.valid_to)) AS contract_ok
            FROM purchase_requisition_lines l
            LEFT JOIN purchase_items i ON i.id = l.item_id
            LEFT JOIN purchase_hsn h ON h.id = i.hsn_id
@@ -581,6 +670,12 @@ export class PurchaseRequisitionsService implements OnModuleInit {
         'Every chosen vendor approved and active',
         buy.every((l) => !l.vendor_id || l.vendor_status === 'active'),
       );
+      if (buy.some((l) => l.contract_id))
+        add(
+          'contracts',
+          'The rate contracts the lines are bought on still in force',
+          buy.every((l) => l.contract_ok),
+        );
     }
     const tier = pr.tier ?? 'none';
     if (tier === 'direct')
@@ -592,15 +687,23 @@ export class PurchaseRequisitionsService implements OnModuleInit {
         `At least ${String(s.committee_quotes)} quotes (${String(quoting)} entered)`,
         quoting >= s.committee_quotes,
       );
+      // a line on its rate contract needs no quote
       const fromQuote = buy.every(
         (l) =>
           !l.vendor_id ||
+          !!l.contract_id ||
           quotes.some((q) => q.vendor_id === l.vendor_id && q.lines.some((x) => x.lineId === l.id)),
       );
-      add('from_quote', 'Every chosen vendor from its quote', fromQuote);
+      add('from_quote', 'Every chosen vendor from its quote (or the rate contract)', fromQuote);
       const dearer = buy.filter((l) => {
         const lo = low.get(l.id);
-        return l.vendor_id && lo && !lo.vendorIds.includes(l.vendor_id) && !l.choice_reason;
+        return (
+          l.vendor_id &&
+          !l.contract_id &&
+          lo &&
+          !lo.vendorIds.includes(l.vendor_id) &&
+          !l.choice_reason
+        );
       });
       add('reasons', 'A reason for every choice dearer than the lowest (L1)', !dearer.length);
       const chosenQuotes = quotes.filter((q) => buy.some((l) => l.vendor_id === q.vendor_id));
@@ -706,6 +809,11 @@ export class PurchaseRequisitionsService implements OnModuleInit {
       const allChosen = lines.every(
         (l) => l.fulfil === 'store' || (l.vendor_id && l.rate !== null),
       );
+      const contracts = await this.contractsFor(c, [
+        ...new Set(lines.map((l) => l.item_id).filter((x): x is string => !!x)),
+      ]);
+      // the band: the lines bought, not on a rate contract
+      const band = lines.filter((l) => l.fulfil === 'buy' && !l.contract_id);
       return {
         ...this.shape(pr),
         limits: {
@@ -715,11 +823,15 @@ export class PurchaseRequisitionsService implements OnModuleInit {
         },
         value: round2(
           Math.max(
-            lines
-              .filter((l) => l.fulfil === 'buy')
-              .reduce((a, l) => a + Number(l.quantity) * Number(l.est_rate), 0),
-            Number(pr.estimate),
+            band.reduce((a, l) => a + Number(l.quantity) * Number(l.est_rate), 0),
+            band.reduce((a, l) => a + Number(l.quantity) * Number(l.rate ?? l.est_rate), 0),
           ),
+        ),
+        /** what the lines bought on rate contracts come to (left out of the band) */
+        contractValue: round2(
+          lines
+            .filter((l) => l.fulfil === 'buy' && l.contract_id)
+            .reduce((a, l) => a + Number(l.quantity) * Number(l.rate ?? l.est_rate), 0),
         ),
         certificate: pr.price_certificate
           ? {
@@ -774,6 +886,20 @@ export class PurchaseRequisitionsService implements OnModuleInit {
             amount: round2(Number(l.quantity) * Number(l.rate ?? l.est_rate)),
             choiceReason: l.choice_reason,
             fromContract: l.contract_id !== null,
+            /** the item's rate contract in force: offered first, filled in when nothing is chosen */
+            contract: (l.item_id ? contracts.get(l.item_id) : undefined) ?? null,
+            contractInForce: l.contract_ok,
+            /** another vendor chosen, dearer (with GST) than the item's rate contract: its reason shows */
+            aboveContract: (() => {
+              const k = l.item_id ? contracts.get(l.item_id) : undefined;
+              return (
+                !!k &&
+                l.contract_id === null &&
+                l.vendor_id !== null &&
+                l.rate !== null &&
+                landed(Number(l.rate), Number(l.gst_rate ?? 0)) > k.landed + 0.004
+              );
+            })(),
             itemGst: l.item_gst === null ? null : Number(l.item_gst),
             l1:
               lo === undefined
@@ -782,7 +908,13 @@ export class PurchaseRequisitionsService implements OnModuleInit {
                     landed: lo.landed,
                     vendorIds: lo.vendorIds,
                   },
-            dearer: lo !== undefined && l.vendor_id !== null && !lo.vendorIds.includes(l.vendor_id),
+            // not the lowest quote's vendor and dearer than it (a cheaper agreed rate is not flagged)
+            dearer:
+              lo !== undefined &&
+              l.vendor_id !== null &&
+              !lo.vendorIds.includes(l.vendor_id) &&
+              l.rate !== null &&
+              landed(Number(l.rate), Number(l.gst_rate ?? 0)) > lo.landed + 0.004,
             sources: sources.rows
               .filter((x) => x.line_id === l.id)
               .map((x) => ({
@@ -1023,6 +1155,7 @@ export class PurchaseRequisitionsService implements OnModuleInit {
         seq += 1;
         await this.insertLine(c, pr, seq, l);
       }
+      await this.fillContracts(c, pr);
       await this.refresh(c, pr);
       await this.audit.stage(ctx, c, {
         action: 'purchase.requisition.create',
@@ -1134,10 +1267,12 @@ export class PurchaseRequisitionsService implements OnModuleInit {
                     quantity = $5, uom_id = COALESCE($6::bigint, uom_id), est_rate = COALESCE($7::numeric, est_rate), fulfil = $8::text,
                     store_note = CASE WHEN $8::text = 'store' THEN $9::text END, note = $10::text,
                     store_id = CASE WHEN $8::text = 'store' THEN $11::bigint END,
-                    vendor_id = CASE WHEN $8::text = 'store' THEN NULL ELSE vendor_id END,
-                    rate = CASE WHEN $8::text = 'store' THEN NULL ELSE rate END,
-                    gst_rate = CASE WHEN $8::text = 'store' THEN NULL ELSE gst_rate END,
-                    choice_reason = CASE WHEN $8::text = 'store' THEN NULL ELSE choice_reason END
+                    -- issued from the store, or matched to another item: the vendor chosen no longer holds
+                    vendor_id = CASE WHEN $8::text = 'store' OR ($3::bigint IS NOT NULL AND item_id IS DISTINCT FROM $3::bigint) THEN NULL ELSE vendor_id END,
+                    rate = CASE WHEN $8::text = 'store' OR ($3::bigint IS NOT NULL AND item_id IS DISTINCT FROM $3::bigint) THEN NULL ELSE rate END,
+                    gst_rate = CASE WHEN $8::text = 'store' OR ($3::bigint IS NOT NULL AND item_id IS DISTINCT FROM $3::bigint) THEN NULL ELSE gst_rate END,
+                    choice_reason = CASE WHEN $8::text = 'store' OR ($3::bigint IS NOT NULL AND item_id IS DISTINCT FROM $3::bigint) THEN NULL ELSE choice_reason END,
+                    contract_id = CASE WHEN $8::text = 'store' OR ($3::bigint IS NOT NULL AND item_id IS DISTINCT FROM $3::bigint) THEN NULL ELSE contract_id END
               WHERE id = $1`,
             [
               l.id,
@@ -1155,6 +1290,7 @@ export class PurchaseRequisitionsService implements OnModuleInit {
           );
         } else await this.insertLine(c, id, seq, l);
       }
+      await this.fillContracts(c, id);
       await this.clearSignatures(c, ctx, id, 'lines changed');
       const f = await this.refresh(c, id);
       await this.audit.stage(ctx, c, {
@@ -1352,6 +1488,9 @@ export class PurchaseRequisitionsService implements OnModuleInit {
       const lines = await this.linesOf(c, prId);
       const quotes = await this.quotesOf(c, prId);
       const low = this.lowest(quotes);
+      const contracts = await this.contractsFor(c, [
+        ...new Set(lines.map((l) => l.item_id).filter((x): x is string => !!x)),
+      ]);
       for (const ch of dto.lines) {
         const line = lines.find((x) => x.id === ch.lineId);
         if (!line) throw new DomainError('not-found', 'A line was not found', { status: 404 });
@@ -1360,6 +1499,30 @@ export class PurchaseRequisitionsService implements OnModuleInit {
           throw new DomainError('validation-failed', `${name} is issued from the store`, {
             status: 400,
           });
+        const k = line.item_id ? contracts.get(line.item_id) : undefined;
+        const quoted = ch.vendorId
+          ? quotes.find((q) => q.vendor_id === ch.vendorId)?.lines.find((l) => l.lineId === line.id)
+          : undefined;
+        // the rate contract: asked for, or its vendor named at its rate (or with no rate) without a quote
+        const onContract =
+          ch.useContract === true ||
+          (!!k &&
+            ch.vendorId === k.vendorId &&
+            !quoted &&
+            (ch.rate === undefined || Math.abs(ch.rate - k.rate) < 0.005));
+        if (onContract) {
+          if (!k)
+            throw new DomainError(
+              'validation-failed',
+              `${name}: no rate contract in force for it — pick a vendor and enter the rate`,
+              { status: 400 },
+            );
+          await c.query(
+            `UPDATE purchase_requisition_lines SET vendor_id = $2, rate = $3, gst_rate = $4, choice_reason = NULL, contract_id = $5 WHERE id = $1`,
+            [line.id, k.vendorId, k.rate, k.gstRate, k.id],
+          );
+          continue;
+        }
         if (!ch.vendorId) {
           await c.query(
             `UPDATE purchase_requisition_lines SET vendor_id = NULL, rate = NULL, gst_rate = NULL, choice_reason = NULL, contract_id = NULL WHERE id = $1`,
@@ -1368,9 +1531,6 @@ export class PurchaseRequisitionsService implements OnModuleInit {
           continue;
         }
         const v = await this.activeVendor(c, ch.vendorId);
-        const quoted = quotes
-          .find((q) => q.vendor_id === ch.vendorId)
-          ?.lines.find((l) => l.lineId === line.id);
         let rate: number;
         let gst: number;
         if (quoted) {
@@ -1394,9 +1554,17 @@ export class PurchaseRequisitionsService implements OnModuleInit {
             `${name}: ${v.legal_name} is dearer than the lowest quote (${rupees(lo.landed)} with GST) — give the reason`,
             { status: 400 },
           );
+        // dearer than the item's rate contract: the reason too (the approvers see it)
+        const aboveContract = !!k && landed(rate, gst) > k.landed + 0.004;
+        if (aboveContract && !ch.reason)
+          throw new DomainError(
+            'purchase.choice_reason',
+            `${name}: ${v.legal_name} at ${rupees(landed(rate, gst))} with GST is dearer than the rate contract (${rupees(k.landed)} with ${k.vendor}) — give the reason`,
+            { status: 400 },
+          );
         await c.query(
           `UPDATE purchase_requisition_lines SET vendor_id = $2, rate = $3, gst_rate = $4, choice_reason = $5, contract_id = NULL WHERE id = $1`,
-          [line.id, ch.vendorId, rate, gst, dearer ? ch.reason : null],
+          [line.id, ch.vendorId, rate, gst, dearer || aboveContract ? ch.reason : null],
         );
       }
       await this.clearSignatures(c, ctx, prId, 'the vendors chosen changed');

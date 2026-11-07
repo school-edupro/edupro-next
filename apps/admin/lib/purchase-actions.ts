@@ -775,7 +775,10 @@ export async function removeQuote(fd: FormData) {
   );
 }
 
-/** The vendor per line: one that quoted it takes its quoted rate; another needs the agreed rate. */
+/**
+ * The vendor per line: the item's rate contract (its vendor and rate), a vendor that quoted it (its
+ * quoted rate), or another vendor at the agreed rate; dearer than L1 or the contract needs a reason.
+ */
 export async function saveChoices(fd: FormData) {
   const id = pick(fd, 'id');
   if (!okId(id)) back('/purchase/requisitions', 'validation-failed', 'Unknown requisition');
@@ -787,6 +790,7 @@ export async function saveChoices(fd: FormData) {
       const vendorId = pick(fd, `vendor_${lineId}`);
       const rate = pick(fd, `rate_${lineId}`);
       const reason = pick(fd, `reason_${lineId}`);
+      if (vendorId === 'contract') return { lineId, useContract: true };
       return {
         lineId,
         vendorId: vendorId || null,
