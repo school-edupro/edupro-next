@@ -7,7 +7,8 @@ import type { RequisitionFormLists } from '@/lib/purchase';
 /** A direct requisition: the purchase office's own need, without an indent (docs/design/83, part 3). */
 export default async function NewRequisitionPage() {
   const me = await getMe();
-  if (!me.permissions.includes('purchase.requisition.manage')) notFound();
+  // a direct requisition is the purchase office's own right (docs/design/83)
+  if (!me.permissions.includes('purchase.requisition.direct')) notFound();
   const lists = await apiFetch<RequisitionFormLists>('/purchase/requisition-form');
   return (
     <>

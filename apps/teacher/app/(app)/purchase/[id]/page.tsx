@@ -242,6 +242,19 @@ export default async function StaffIndentPage({
                           Bought though the store has it: {l.stockReason}
                         </span>
                       ) : null}
+                      {l.fileId ? (
+                        <span
+                          className="ep-field__help"
+                          style={{ display: 'flex', gap: 'var(--sp-1)', alignItems: 'center' }}
+                        >
+                          {t(lang, 'Document')}{' '}
+                          <FileLinks
+                            url={`/api/purchase-indent-file/${pi.id}/${l.id}`}
+                            saveUrl={`/api/purchase-indent-file/${pi.id}/${l.id}?save=1`}
+                            label={`the document of line ${String(l.seq)}`}
+                          />
+                        </span>
+                      ) : null}
                     </td>
                     <td style={{ textAlign: 'right' }}>
                       {l.quantity} {l.uom}

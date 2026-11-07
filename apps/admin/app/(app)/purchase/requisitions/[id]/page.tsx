@@ -162,6 +162,13 @@ export default async function RequisitionPage({
           ) : null}
         </h2>
         {pr.autoRule ? <p style={{ marginTop: 0 }}>Approved by the system: {pr.autoNote}</p> : null}
+        {pr.noApprovalNote ? <p style={{ marginTop: 0 }}>{pr.noApprovalNote}.</p> : null}
+        {pr.noApproval.applies ? (
+          <p className="ep-field__help" style={{ marginTop: 0 }}>
+            A direct requisition within {inr(pr.noApproval.limit)}: sending it approves it by the
+            system (no approval levels) and drafts its purchase orders.
+          </p>
+        ) : null}
         {pr.status === 'submitted' && pr.waitingWith ? (
           <p style={{ marginTop: 0 }}>Waiting with {pr.waitingWith}.</p>
         ) : null}
@@ -226,8 +233,12 @@ export default async function RequisitionPage({
             <ConfirmAction
               action={submitRequisition}
               fields={{ id: pr.id }}
-              label="Send for approval"
-              title={`Send ${pr.number} for approval?`}
+              label={pr.noApproval.applies ? 'Send (approved by the system)' : 'Send for approval'}
+              title={
+                pr.noApproval.applies
+                  ? `Send ${pr.number}? It is approved at once`
+                  : `Send ${pr.number} for approval?`
+              }
               confirmLabel="Send"
               variant="primary"
               blocked={
@@ -236,7 +247,9 @@ export default async function RequisitionPage({
                   : undefined
               }
             >
-              {`It goes to ${pr.department ?? 'the department'}’s requisition levels; the lines and vendors cannot change while they decide.`}
+              {pr.noApproval.applies
+                ? `Within ${inr(pr.noApproval.limit)}, a direct requisition by the purchase office is approved by the system: its purchase orders are drafted at once (they still need their approval). Several small ones of the same category in the split window that go over the limit need approval.`
+                : `It goes to ${pr.department ?? 'the department'}’s requisition levels; the lines and vendors cannot change while they decide.`}
             </ConfirmAction>
           ) : null}
           {pr.can.sign ? (
@@ -361,6 +374,15 @@ export default async function RequisitionPage({
                             {i ? ', ' : ''}
                             <a href={`/purchase/indents/${s.indentId}`}>{s.number}</a> (
                             {s.department}, {s.quantity})
+                            {s.hasDocument ? (
+                              <>
+                                {' '}
+                                <FileLinks
+                                  href={`/api/purchase/requisitions/${pr.id}/documents/${s.indentLineId}`}
+                                  label={`the document of ${s.number}’s line`}
+                                />
+                              </>
+                            ) : null}
                           </span>
                         ))}
                       </span>

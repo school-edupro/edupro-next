@@ -659,4 +659,84 @@ describe('purchase indents (e2e)', () => {
     expect(wide.departments.length).toBeGreaterThan(1);
     expect(wide.vendors.map((v: { code: string }) => v.code)).toContain('V1');
   });
+  it('the item sheet fills the form (nothing is saved); a line carries a document those on the indent may open', async () => {
+    const t = (await call(teacher, 'GET', '/purchase/indent-sheet')).json();
+    expect(t.filename).toBe('indent-items.xlsx');
+    const wb = new ExcelJS.Workbook();
+    await wb.xlsx.load(Buffer.from(t.base64 as string, 'base64') as unknown as ExcelJS.Buffer);
+    const ws = wb.worksheets[0]!;
+    const put = (row: number, cells: Array<string | number | null>) =>
+      cells.forEach((v, i) => {
+        ws.getRow(row).getCell(i + 1).value = v;
+      });
+    put(2, ['Ball pen (PEN)', 12, 'Blue']);
+    put(3, ['PAPER', 0]);
+    put(4, ['Nonsense (ZZZ)', 1]);
+    put(5, [null, 3, null, 'Bunsen burner', 'NOS']);
+    put(6, [null, 1, null, 'x', 'NOS']);
+    put(7, ['A4 paper ream', 4]);
+    const file = Buffer.from(await wb.xlsx.writeBuffer()).toString('base64');
+    const before = (await call(teacher, 'GET', '/purchase/indents?view=mine')).json().total;
+    const read = (await call(teacher, 'POST', '/purchase/indent-sheet', { file })).json();
+    const nos = (await call(teacher, 'GET', '/purchase/indent-form'))
+      .json()
+      .uoms.find((u: { code: string }) => u.code === 'NOS').id as string;
+    expect(read.lines).toEqual([
+      { itemId: ids.PEN, quantity: 12, note: 'Blue' },
+      { freeText: 'Bunsen burner', uomId: nos, quantity: 3 },
+      { itemId: ids.PAPER, quantity: 4 },
+    ]);
+    expect(read.errors.map((e: { row: number }) => e.row)).toEqual([3, 4, 6]);
+    // reading saves nothing
+    expect((await call(teacher, 'GET', '/purchase/indents?view=mine')).json().total).toBe(before);
+    // a line's document: a PDF or a photo as the body, by a raiser without file rights
+    const upload = (u: SeededUser, body: Buffer, type = 'application/pdf') =>
+      inject({
+        method: 'POST',
+        url: '/purchase/indent-files?name=spec.pdf',
+        headers: headersFor(u.sub, school.id),
+        raw: { contentType: type, body },
+      });
+    const pdf = Buffer.from('%PDF-1.4\n% a spec sheet\n');
+    const up = await upload(teacher, pdf);
+    expect(up.statusCode).toBe(201);
+    const fileId = up.json().id as string;
+    expect((await upload(teacher, Buffer.from('not a pdf'))).statusCode).toBe(400);
+    expect((await upload(teacher, pdf, 'text/plain')).statusCode).toBe(400);
+    const id = await raise(teacher, [{ itemId: ids.PAPER, quantity: 1, fileId }]);
+    const pi = await get(teacher, id);
+    expect(pi.lineItems[0]).toMatchObject({ fileId, fileName: 'spec.pdf' });
+    const view = await call(
+      teacher,
+      'GET',
+      `/purchase/indents/${id}/lines/${pi.lineItems[0].id as string}/file`,
+    );
+    expect(view.statusCode).toBe(200);
+    expect(view.headers['content-type']).toBe('application/pdf');
+    expect(view.rawPayload.subarray(0, 4).toString()).toBe('%PDF');
+    expect(
+      (
+        await call(
+          outsider,
+          'GET',
+          `/purchase/indents/${id}/lines/${pi.lineItems[0].id as string}/file`,
+        )
+      ).statusCode,
+    ).toBe(404);
+    // saving again keeps the document; someone else's file is refused
+    const again = await call(teacher, 'PUT', `/purchase/indents/${id}`, {
+      purpose: 'For the lab',
+      lines: [{ itemId: ids.PAPER, quantity: 2, fileId }],
+    });
+    expect(again.statusCode).toBe(200);
+    const theirs = (await upload(hod, pdf)).json().id as string;
+    expect(
+      (
+        await call(teacher, 'PUT', `/purchase/indents/${id}`, {
+          purpose: 'For the lab',
+          lines: [{ itemId: ids.PAPER, quantity: 2, fileId: theirs }],
+        })
+      ).statusCode,
+    ).toBe(400);
+  });
 });

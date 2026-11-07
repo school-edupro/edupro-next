@@ -5,6 +5,8 @@ import { AuditService } from '../../common/audit/audit.service';
 import { DbService } from '../../common/db/db.service';
 import { DomainError } from '../../common/errors/domain-error';
 import { requireTenant, type RequestContext } from '../../common/http/request-context';
+import { readSheet, templateSheet } from '../../common/excel/sheet';
+import { FilesService } from '../files/files.service';
 import { STORAGE_DRIVER } from '../files/storage';
 import { WorkflowService, type InstanceRow } from '../workflow/workflow.service';
 import { syncFlow } from './purchase-flow';
@@ -19,6 +21,7 @@ import {
   type IndentDto,
   type IndentExportQueryDto,
   type IndentListQueryDto,
+  type IndentSheetDto,
   type PurchaseDelegationDto,
   type ReasonDto,
 } from './purchase.dto';
@@ -148,6 +151,7 @@ export class PurchaseIndentsService implements OnModuleInit {
     private readonly audit: AuditService,
     private readonly workflow: WorkflowService,
     @Inject(STORAGE_DRIVER) private readonly storage: StorageDriver,
+    private readonly files: FilesService,
   ) {}
 
   onModuleInit() {
@@ -507,10 +511,13 @@ export class PurchaseIndentsService implements OnModuleInit {
         stock_stores: Array<{ store: string; free: number }>;
         stock_reason: string | null;
         stock_uom: string | null;
+        file_id: string | null;
+        file_name: string | null;
       }>(
         `SELECT l.id::text, l.seq, l.item_id::text, i.code AS item_code, i.name AS item, l.free_text, l.quantity::text,
                 u.code AS uom, l.uom_id::text, l.est_rate::text, l.rate_source, l.contract_id::text, v.legal_name AS contract_vendor, l.note,
-                l.stock_free::text, l.stock_stores, l.stock_reason, su.code AS stock_uom
+                l.stock_free::text, l.stock_stores, l.stock_reason, su.code AS stock_uom,
+                l.file_id::text, (SELECT f.original_name FROM files f WHERE f.id = l.file_id AND f.deleted_at IS NULL) AS file_name
            FROM purchase_indent_lines l
            LEFT JOIN purchase_items i ON i.id = l.item_id
            LEFT JOIN purchase_uoms su ON su.id = COALESCE(i.stock_uom_id, i.uom_id)
@@ -598,6 +605,9 @@ export class PurchaseIndentsService implements OnModuleInit {
           stockUom: l.stock_uom,
           stockStores: l.stock_stores,
           stockReason: l.stock_reason,
+          // the line's document (view and download through the indent)
+          fileId: l.file_id,
+          fileName: l.file_name,
         })),
         departmentSpendThisYear: sees ? Number(spend.rows[0]!.total) : null,
         requisitions: pr.rows.map((r) => ({
@@ -790,6 +800,7 @@ export class PurchaseIndentsService implements OnModuleInit {
       contractId: string | null;
       note: string | null;
       stockReason: string | null;
+      fileId: string | null;
     }> = [];
     for (const l of lines) {
       const typed = sees ? l.estRate : undefined;
@@ -834,6 +845,7 @@ export class PurchaseIndentsService implements OnModuleInit {
           contractId: x.contract_id,
           note: l.note ?? null,
           stockReason: l.stockReason ?? null,
+          fileId: l.fileId ?? null,
         });
       } else {
         out.push({
@@ -846,6 +858,7 @@ export class PurchaseIndentsService implements OnModuleInit {
           contractId: null,
           note: l.note ?? null,
           stockReason: null,
+          fileId: l.fileId ?? null,
         });
       }
     }
@@ -860,12 +873,31 @@ export class PurchaseIndentsService implements OnModuleInit {
     lines: IndentDto['lines'],
   ) {
     const priced = await this.priceLines(c, lines, this.officeRates(ctx));
+    // a line's document: one the signed-in user uploaded, or already on this indent
+    for (const fid of [...new Set(priced.map((l) => l.fileId).filter((x): x is string => !!x))]) {
+      const ok = await c.query(
+        `SELECT 1 FROM files f WHERE f.id = $1 AND f.deleted_at IS NULL AND f.status = 'ready'
+            AND f.content_type IN ('application/pdf', 'image/png', 'image/jpeg')
+            AND (f.created_by = app.current_user_id()
+                 OR EXISTS (SELECT 1 FROM purchase_indent_lines l WHERE l.indent_id = $2 AND l.file_id = f.id))`,
+        [fid, indentId],
+      );
+      if (!ok.rowCount)
+        throw new DomainError(
+          'validation-failed',
+          'A line’s document was not found: attach it again',
+          {
+            status: 400,
+          },
+        );
+    }
     await c.query(`DELETE FROM purchase_indent_lines WHERE indent_id = $1`, [indentId]);
     let estimate = 0;
     for (const [i, l] of priced.entries()) {
       await c.query(
-        `INSERT INTO purchase_indent_lines (school_id, indent_id, seq, item_id, free_text, quantity, uom_id, est_rate, rate_source, contract_id, note, stock_reason)
-         VALUES (app.current_school_id(), $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
+        `INSERT INTO purchase_indent_lines (school_id, indent_id, seq, item_id, free_text, quantity, uom_id, est_rate, rate_source, contract_id, note, stock_reason,
+                                            file_id)
+         VALUES (app.current_school_id(), $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
         [
           indentId,
           i + 1,
@@ -878,6 +910,7 @@ export class PurchaseIndentsService implements OnModuleInit {
           l.contractId,
           l.note,
           l.stockReason,
+          l.fileId,
         ],
       );
       estimate += Math.round(l.quantity * l.estRate * 100) / 100;
@@ -1313,6 +1346,199 @@ export class PurchaseIndentsService implements OnModuleInit {
     });
   }
 
+  // ---- the item sheet and the line documents -------------------------------------------------------
+  /** The indent's item sheet: the item list as a drop-down, the quantity, a note; an item in words. */
+  async itemSheet(ctx: RequestContext) {
+    return this.db.tenant(requireTenant(ctx), async (c) => {
+      const items = await c.query<{ label: string }>(
+        `SELECT i.name || ' (' || i.code || ')' AS label FROM purchase_items i
+          WHERE i.status = 'active' ORDER BY i.name LIMIT 5000`,
+      );
+      const uoms = await c.query<{ code: string }>(
+        `SELECT code FROM purchase_uoms WHERE status = 'active' ORDER BY code`,
+      );
+      const bytes = await templateSheet({
+        sheet: 'Indent items',
+        columns: [
+          {
+            header: 'Item',
+            width: 46,
+            options: items.rows.map((x) => x.label),
+            note: 'Pick from the list (the code in brackets is read). Leave it empty for an item not in the list',
+          },
+          { header: 'Quantity', width: 11, required: true, format: 'number' },
+          { header: 'Note', width: 32, note: 'Size, make, colour… (optional)' },
+          { header: 'Description', width: 36, note: 'Only for an item not in the list' },
+          {
+            header: 'Unit',
+            width: 10,
+            options: uoms.rows.map((x) => x.code),
+            note: 'Only for an item not in the list',
+          },
+        ],
+        guide: [
+          'One row per item. Pick the item from the drop-down (or type its code), then the quantity.',
+          'An item not in the list: leave Item empty, describe it in Description and pick its Unit.',
+          'Items counted in whole units take whole numbers. Up to 200 rows.',
+          'Upload the sheet on the indent: the rows fill its Items, to check before saving. Nothing is saved by the upload.',
+        ],
+        examples: [
+          [items.rows[0]?.label ?? 'Ball pen (PEN)', 10, 'Blue ink', null, null],
+          [null, 2, null, 'Bunsen burner', uoms.rows[0]?.code ?? 'NOS'],
+        ],
+      });
+      return {
+        filename: 'indent-items.xlsx',
+        contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        base64: bytes.toString('base64'),
+      };
+    });
+  }
+
+  /**
+   * The filled item sheet read into indent lines (nothing is saved): each row an item from the list
+   * (by the code in brackets, the code, or the exact name) or one in words with its unit; the rows that
+   * cannot be read come back with their row number and why.
+   */
+  async readItemSheet(ctx: RequestContext, dto: IndentSheetDto) {
+    const rows = await readSheet(dto.file, ['Item', 'Quantity'], ['Note', 'Description', 'Unit']);
+    return this.db.tenant(requireTenant(ctx), async (c) => {
+      const items = (
+        await c.query<{ id: string; code: string; name: string; decimals: boolean }>(
+          `SELECT i.id::text, i.code, i.name, u.decimals FROM purchase_items i JOIN purchase_uoms u ON u.id = i.uom_id
+            WHERE i.status = 'active'`,
+        )
+      ).rows;
+      const byCode = new Map(items.map((i) => [i.code.toUpperCase(), i]));
+      const names = new Map<string, typeof items>();
+      for (const i of items)
+        names.set(i.name.toLowerCase(), [...(names.get(i.name.toLowerCase()) ?? []), i]);
+      const uoms = new Map(
+        (
+          await c.query<{ id: string; code: string }>(
+            `SELECT id::text, code FROM purchase_uoms WHERE status = 'active'`,
+          )
+        ).rows.map((u) => [u.code.toUpperCase(), u.id]),
+      );
+      const lines: Array<{
+        itemId?: string;
+        freeText?: string;
+        uomId?: string;
+        quantity: number;
+        note?: string;
+      }> = [];
+      const errors: Array<{ row: number; message: string }> = [];
+      for (const r of rows) {
+        const cell = r.cells;
+        const said = (cell.Item ?? '').trim();
+        const qty = Number((cell.Quantity ?? '').replace(/,/g, ''));
+        const note = (cell.Note ?? '').trim();
+        if (!said && !(cell.Description ?? '').trim() && !cell.Quantity) continue;
+        if (!Number.isFinite(qty) || qty <= 0 || qty > 999999) {
+          errors.push({ row: r.row, message: 'Quantity: a number more than 0' });
+          continue;
+        }
+        if (note.length > 300) {
+          errors.push({ row: r.row, message: 'Note: at most 300 letters' });
+          continue;
+        }
+        if (said) {
+          const code = /\(([^()]+)\)\s*$/.exec(said)?.[1]?.trim().toUpperCase();
+          const byName = names.get(said.toLowerCase());
+          const it =
+            (code ? byCode.get(code) : undefined) ??
+            byCode.get(said.toUpperCase()) ??
+            (byName?.length === 1 ? byName[0] : undefined);
+          if (!it) {
+            errors.push({
+              row: r.row,
+              message: `“${said}” is not in the item list: pick it from the drop-down, or leave Item empty and fill Description and Unit`,
+            });
+            continue;
+          }
+          if (!it.decimals && !Number.isInteger(qty)) {
+            errors.push({ row: r.row, message: `${it.name}: a whole number` });
+            continue;
+          }
+          lines.push({ itemId: it.id, quantity: qty, ...(note ? { note } : {}) });
+        } else {
+          const words = (cell.Description ?? '').trim();
+          const uomId = uoms.get((cell.Unit ?? '').trim().toUpperCase());
+          if (words.length < 2 || words.length > 300) {
+            errors.push({ row: r.row, message: 'Pick an item, or describe one not in the list' });
+            continue;
+          }
+          if (!uomId) {
+            errors.push({
+              row: r.row,
+              message: 'Unit: pick the unit of an item described in words',
+            });
+            continue;
+          }
+          lines.push({ freeText: words, uomId, quantity: qty, ...(note ? { note } : {}) });
+        }
+      }
+      if (lines.length > 200)
+        throw new DomainError('validation-failed', 'At most 200 lines on an indent', {
+          status: 400,
+        });
+      return { lines, errors };
+    });
+  }
+
+  /** A line's document, sent as the request body: a PDF or a photo up to 5 MB (any raiser may attach). */
+  async uploadLineFile(ctx: RequestContext, bytes: unknown, contentType: string, name: string) {
+    if (!Buffer.isBuffer(bytes) || !bytes.length)
+      throw new DomainError('validation-failed', 'Send the file as the request body', {
+        status: 400,
+      });
+    const type = contentType.split(';')[0]!.trim().toLowerCase();
+    const magic =
+      type === 'application/pdf'
+        ? bytes.subarray(0, 4).toString('latin1') === '%PDF'
+        : type === 'image/png'
+          ? bytes.subarray(0, 4).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47]))
+          : type === 'image/jpeg'
+            ? bytes[0] === 0xff && bytes[1] === 0xd8
+            : false;
+    if (!magic)
+      throw new DomainError('validation-failed', 'A PDF or a photo (JPEG, PNG)', { status: 400 });
+    if (bytes.length > 5_242_880)
+      throw new DomainError('file.too_large', 'Up to 5 MB', { status: 413 });
+    const clean =
+      name
+        .replace(/[\u0000-\u001f/\\]+/g, ' ')
+        .trim()
+        .slice(0, 200) || 'document';
+    return this.files.storeBytes(ctx, {
+      bytes,
+      contentType: type,
+      fileName: clean,
+      ownerEntityType: 'purchase_indent_line',
+    });
+  }
+
+  /** A line's document, for anyone who may see the indent. */
+  async lineFile(ctx: RequestContext, id: string, lineId: string) {
+    return this.db.tenant(requireTenant(ctx), async (c) => {
+      await this.load(c, ctx, id);
+      const f = (
+        await c.query<{ object_key: string; content_type: string; original_name: string }>(
+          `SELECT f.object_key, f.content_type, f.original_name FROM purchase_indent_lines l
+             JOIN files f ON f.id = l.file_id AND f.deleted_at IS NULL
+            WHERE l.id = $1 AND l.indent_id = $2`,
+          [lineId, id],
+        )
+      ).rows[0];
+      if (!f) throw new DomainError('not-found', 'No document on this line', { status: 404 });
+      return {
+        bytes: await this.storage.read(f.object_key),
+        contentType: f.content_type,
+        filename: f.original_name,
+      };
+    });
+  }
+
   // ---- the printed PI ------------------------------------------------------------------------------
   /**
    * The PI as a PDF, once sent (docs/design/83, "As built — the printed PI"): its lines with the stock
@@ -1396,6 +1622,7 @@ export class PurchaseIndentsService implements OnModuleInit {
           stockUom: l.stock_uom,
           stockStores: l.stock_stores,
           stockReason: l.stock_reason,
+          document: l.file_id !== null,
           rate: sees ? Number(l.est_rate) : null,
           amount: sees ? Math.round(Number(l.quantity) * Number(l.est_rate) * 100) / 100 : null,
         })),

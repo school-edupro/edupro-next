@@ -97,6 +97,9 @@ export interface IndentDetail extends IndentRow {
     stockStores: Array<{ store: string; free: number }>;
     /** why it is bought though the stores had enough */
     stockReason: string | null;
+    /** the line's document */
+    fileId: string | null;
+    fileName: string | null;
   }>;
   departmentSpendThisYear: number | null;
   requisitions: Array<{ id: string; number: string; autoRule: string | null; status: string }>;
@@ -276,6 +279,9 @@ export interface RequisitionLine {
     department: string;
     raisedBy: string;
     quantity: number;
+    /** the indent line's document, viewed through the PR */
+    indentLineId: string;
+    hasDocument: boolean;
   }>;
 }
 

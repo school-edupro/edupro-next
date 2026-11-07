@@ -38,6 +38,8 @@ export default async function RequisitionsPage({
   const sp = await searchParams;
   const me = await getMe();
   const manage = me.permissions.includes('purchase.requisition.manage');
+  // a direct requisition (not from indents) is the purchase office's (docs/design/83)
+  const direct = me.permissions.includes('purchase.requisition.direct');
   const view: View = sp.view && sp.view in VIEWS ? (sp.view as View) : manage ? 'all' : 'waiting';
   const status =
     sp.status && sp.status in REQUISITION_STATUS ? (sp.status as RequisitionStatus) : undefined;
@@ -91,13 +93,15 @@ export default async function RequisitionsPage({
                 >
                   From indents ({data.toRequisition})
                 </a>
-                <a
-                  className="ep-btn ep-btn--secondary ep-btn--sm"
-                  href="/purchase/requisitions/new"
-                  style={{ whiteSpace: 'nowrap' }}
-                >
-                  Direct requisition
-                </a>
+                {direct ? (
+                  <a
+                    className="ep-btn ep-btn--secondary ep-btn--sm"
+                    href="/purchase/requisitions/new"
+                    style={{ whiteSpace: 'nowrap' }}
+                  >
+                    Direct requisition
+                  </a>
+                ) : null}
               </>
             ) : null}
           </div>

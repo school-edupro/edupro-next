@@ -12,6 +12,8 @@ export const PURCHASE = {
   indentView: 'purchase.indent.view',
   indentAnyDepartment: 'purchase.indent.any_department',
   requisitionManage: 'purchase.requisition.manage',
+  /** a direct requisition (not from indents); within the limit it needs no approval */
+  requisitionDirect: 'purchase.requisition.direct',
   orderManage: 'purchase.order.manage',
   orderCancel: 'purchase.order.cancel',
   emergencyRecord: 'purchase.emergency.record',
@@ -236,6 +238,8 @@ export const SettingsSchema = z
     poSignatures: z.array(z.string().trim().min(2).max(40)).min(1).max(5),
     largePoAlert: z.coerce.number().gt(0).max(1e12).nullable().default(null),
     splitWindowDays: z.coerce.number().int().min(1).max(365),
+    /** a direct PR up to this (before GST) is approved by the system when sent; 0: never */
+    directPrLimit: z.coerce.number().min(0).max(1e12).default(50000),
   })
   .refine((v) => v.committeeLimit >= v.directLimit, {
     message: 'The committee limit must be at least the direct-purchase limit',
@@ -311,6 +315,8 @@ export const IndentLineSchema = z
      */
     estRate: z.coerce.number().min(0).max(1e10).optional(),
     note: z.string().trim().max(300).optional(),
+    /** a document for the line (a spec sheet, a photo, a quotation), uploaded first: optional */
+    fileId: IdSchema.optional(),
     /** why it is bought when the store has enough free stock for the quantity (asked on sending) */
     stockReason: z
       .string()
@@ -328,6 +334,10 @@ export const IndentLineSchema = z
     message: 'Pick the unit of an item described in words',
     path: ['uomId'],
   });
+
+/** The indent's item sheet, filled and uploaded: read into the form's lines (nothing is saved). */
+export const IndentSheetSchema = z.object({ file: z.string().min(10).max(1_000_000) });
+export class IndentSheetDto extends createZodDto(IndentSheetSchema) {}
 
 export const IndentSchema = z.object({
   /** the raiser's own department unless they may raise for any */

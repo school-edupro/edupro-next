@@ -703,6 +703,7 @@ export class PurchaseSetupService {
         po_signatures: string[];
         large_po_alert: string | null;
         split_window_days: number;
+        direct_pr_limit: string;
         updated_at: Date;
       }>(`SELECT *, purchase_department_id::text FROM purchase_settings`);
       const x = s.rows[0]!;
@@ -751,6 +752,7 @@ export class PurchaseSetupService {
         poSignatures: x.po_signatures,
         largePoAlert: x.large_po_alert === null ? null : Number(x.large_po_alert),
         splitWindowDays: x.split_window_days,
+        directPrLimit: Number(x.direct_pr_limit),
         updatedAt: x.updated_at.toISOString(),
         committee: committee.rows.map((m) => ({
           id: m.id,
@@ -889,7 +891,7 @@ export class PurchaseSetupService {
                 receipt_tolerance_pct = $21, billing_line = $22, billing_country = $23, billing_state = $24,
                 billing_city = $25, billing_pin = $26, delivery_same = $27, delivery_line = $28,
                 delivery_country = $29, delivery_state = $30, delivery_city = $31, delivery_pin = $32,
-                updated_at = now(), updated_by = app.current_user_id()`,
+                direct_pr_limit = $33, updated_at = now(), updated_by = app.current_user_id()`,
         [
           dto.gstin,
           gstState ?? billing.gst,
@@ -923,6 +925,7 @@ export class PurchaseSetupService {
           dto.deliverySame ? null : delivery.state,
           dto.deliverySame ? null : delivery.city,
           dto.deliverySame ? null : delivery.pin,
+          dto.directPrLimit,
         ],
       );
       await this.audit.stage(ctx, c, {

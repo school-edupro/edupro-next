@@ -153,6 +153,8 @@ export interface PurchaseSettings {
   poSignatures: string[];
   largePoAlert: number | null;
   splitWindowDays: number;
+  /** a direct PR up to this (before GST) is approved by the system when sent; 0: never */
+  directPrLimit: number;
   stockGstInCost: boolean;
   receiptTolerancePct: number;
   updatedAt: string;
@@ -378,6 +380,9 @@ export interface IndentDetail extends IndentRow {
     stockStores: Array<{ store: string; free: number }>;
     /** why it is bought though the stores had enough */
     stockReason: string | null;
+    /** the line's document */
+    fileId: string | null;
+    fileName: string | null;
   }>;
   departmentSpendThisYear: number | null;
   requisitions: Array<{ id: string; number: string; autoRule: string | null; status: string }>;
@@ -497,6 +502,8 @@ export interface RequisitionRow {
   tier: Tier | null;
   autoRule: string | null;
   autoNote: string | null;
+  /** a direct PR approved by the system within the limit */
+  noApprovalNote: string | null;
   estimate: number;
   submittedAt: string | null;
   decidedAt: string | null;
@@ -568,6 +575,9 @@ export interface RequisitionLine {
     department: string;
     raisedBy: string;
     quantity: number;
+    /** the indent line's document, viewed through the PR */
+    indentLineId: string;
+    hasDocument: boolean;
   }>;
 }
 
@@ -600,6 +610,10 @@ export interface RequisitionDetail extends Omit<RequisitionRow, 'quotes'> {
   limits: { direct: number; committee: number; quotes: number };
   /** the band's value: the lines bought, not on a rate contract */
   value: number;
+  /** a direct PR (no line from an indent) */
+  direct: boolean;
+  /** within the limit, sending a direct PR approves it by the system */
+  noApproval: { limit: number; applies: boolean };
   /** what the lines bought on rate contracts come to (left out of the band) */
   contractValue: number;
   certificate: { text: string; by: string | null; at: string | null } | null;

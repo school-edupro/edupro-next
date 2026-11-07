@@ -97,6 +97,7 @@ interface PrRow {
   approved_at: Date | null;
   decision_note: string | null;
   revision: number;
+  no_approval_note: string | null;
   created_by: string | null;
   created_by_name: string | null;
   created_at: Date;
@@ -111,7 +112,7 @@ const SELECT = `
          r.status, r.tier, r.auto_rule, r.auto_note, r.estimate::text, r.price_certificate,
          (SELECT ${PERSON('cu')} FROM users cu WHERE cu.id = r.certified_by) AS certified_by, r.certified_at,
          r.tender_ref, r.tender_note, r.workflow_instance_id::text, r.submitted_at, r.decided_at, r.approved_at,
-         r.decision_note, r.revision, r.created_by::text,
+         r.decision_note, r.revision, r.no_approval_note, r.created_by::text,
          (SELECT ${PERSON('u')} FROM users u WHERE u.id = r.created_by) AS created_by_name, r.created_at,
          (SELECT st.name || ' (' || COALESCE((SELECT string_agg(${PERSON('au')}, ', ' ORDER BY ${PERSON('au')}) FROM users au WHERE au.id = ANY(st.assignee_user_ids)), 'nobody') || ')'
             FROM workflow_instances i JOIN workflow_steps st ON st.instance_id = i.id AND st.level = i.current_level AND st.status = 'pending'
@@ -242,8 +243,11 @@ export class PurchaseRequisitionsService implements OnModuleInit {
         committee_quotes: number;
         committee_signatures: number | null;
         purchase_department_id: string | null;
+        direct_pr_limit: string;
+        split_window_days: number;
       }>(
-        `SELECT direct_limit::text, committee_limit::text, committee_quotes, committee_signatures, purchase_department_id::text
+        `SELECT direct_limit::text, committee_limit::text, committee_quotes, committee_signatures, purchase_department_id::text,
+                direct_pr_limit::text, split_window_days
            FROM purchase_settings WHERE school_id = app.current_school_id()`,
       )
     ).rows[0]!;
@@ -413,6 +417,8 @@ export class PurchaseRequisitionsService implements OnModuleInit {
       tier: r.tier,
       autoRule: r.auto_rule,
       autoNote: r.auto_note,
+      /** a direct PR approved by the system within the limit (Purchase settings) */
+      noApprovalNote: r.no_approval_note,
       estimate: Number(r.estimate),
       workflowInstanceId: r.workflow_instance_id,
       submittedAt: r.submitted_at?.toISOString() ?? null,
@@ -868,6 +874,30 @@ export class PurchaseRequisitionsService implements OnModuleInit {
     });
   }
 
+  /** The document of an indent line the PR came from, for anyone who may see the PR. */
+  async indentDocument(ctx: RequestContext, id: string, indentLineId: string) {
+    return this.db.tenant(requireTenant(ctx), async (c) => {
+      await this.load(c, ctx, id);
+      const f = (
+        await c.query<{ object_key: string; content_type: string; original_name: string }>(
+          `SELECT f.object_key, f.content_type, f.original_name
+             FROM purchase_requisition_lines rl
+             JOIN purchase_requisition_sources src ON src.requisition_line_id = rl.id
+             JOIN purchase_indent_lines il ON il.id = src.indent_line_id
+             JOIN files f ON f.id = il.file_id AND f.deleted_at IS NULL
+            WHERE rl.requisition_id = $1 AND il.id = $2 LIMIT 1`,
+          [id, indentLineId],
+        )
+      ).rows[0];
+      if (!f) throw new DomainError('not-found', 'No document on that line', { status: 404 });
+      return {
+        bytes: await this.storage.read(f.object_key),
+        contentType: f.content_type,
+        filename: f.original_name,
+      };
+    });
+  }
+
   /** The approved indents waiting for a PR, with their lines (Make a requisition). */
   async candidates(ctx: RequestContext) {
     this.mustManage(ctx);
@@ -1170,10 +1200,12 @@ export class PurchaseRequisitionsService implements OnModuleInit {
         department: string;
         quantity: string;
         raised_by: string;
+        indent_line_id: string;
+        has_file: boolean;
       }>(
         // eslint-disable-next-line no-restricted-syntax -- PERSON is a fixed fragment
         `SELECT src.requisition_line_id::text AS line_id, pi.id::text AS indent_id, pi.number, d.name AS department, src.quantity::text,
-                ${PERSON('u')} AS raised_by
+                ${PERSON('u')} AS raised_by, il.id::text AS indent_line_id, il.file_id IS NOT NULL AS has_file
            FROM purchase_requisition_sources src
            JOIN purchase_requisition_lines rl ON rl.id = src.requisition_line_id
            JOIN purchase_indent_lines il ON il.id = src.indent_line_id
@@ -1351,6 +1383,9 @@ export class PurchaseRequisitionsService implements OnModuleInit {
                 department: x.department,
                 raisedBy: x.raised_by,
                 quantity: Number(x.quantity),
+                // the indent line's document (viewed through the PR)
+                indentLineId: x.indent_line_id,
+                hasDocument: x.has_file,
               })),
           };
         }),
@@ -1407,6 +1442,17 @@ export class PurchaseRequisitionsService implements OnModuleInit {
           note: h.note,
           at: h.at.toISOString(),
         })),
+        /** a direct PR (no line from an indent): within the limit, sending approves it by the system */
+        direct: sources.rows.length === 0,
+        noApproval: {
+          limit: Number(s.direct_pr_limit),
+          applies:
+            sources.rows.length === 0 &&
+            open &&
+            (ctx.permissions?.has(PURCHASE.requisitionDirect) ?? false) &&
+            Number(s.direct_pr_limit) > 0 &&
+            Number(pr.estimate) <= Number(s.direct_pr_limit) + 0.004,
+        },
         can: {
           edit: manage && open,
           submit: manage && open,
@@ -1452,6 +1498,12 @@ export class PurchaseRequisitionsService implements OnModuleInit {
 
   async create(ctx: RequestContext, dto: CreateRequisitionDto) {
     this.mustManage(ctx);
+    if (!dto.indentIds.length && !(ctx.permissions?.has(PURCHASE.requisitionDirect) ?? false))
+      throw new DomainError(
+        'permission-denied',
+        'A direct requisition (not from indents) is made by the purchase office',
+        { status: 403 },
+      );
     return this.db.tenant(requireTenant(ctx), async (c) => {
       const s = await this.settings(c);
       const pis = dto.indentIds.length
@@ -2152,6 +2204,31 @@ export class PurchaseRequisitionsService implements OnModuleInit {
           `Not ready for approval: ${missing.map((m) => m.label).join('; ')}`,
           { status: 409, extra: { missing } },
         );
+      // a direct requisition within the limit (Purchase settings) sent by the purchase office: approved
+      // by the system, its draft POs made at once (docs/design/83)
+      const direct = await this.directApproval(c, ctx, prId, f.estimate);
+      if (direct.approve) {
+        await reserveRequisition(c, prId);
+        await c.query(
+          `UPDATE purchase_requisitions SET status = 'approved', submitted_at = now(), decided_at = now(), approved_at = now(),
+                  decision_note = NULL, no_approval_note = $2, updated_at = now() WHERE id = $1`,
+          [prId, direct.note],
+        );
+        await this.audit.stage(ctx, c, {
+          action: 'purchase.requisition.approved_direct',
+          entityType: 'purchase_requisitions',
+          entityId: prId,
+          after: { number: pr.number, estimate: f.estimate, note: direct.note },
+        });
+        await this.approvedEffects(c, ctx, prId, pr.number);
+        return {
+          id: prId,
+          number: pr.number,
+          tier: f.tier,
+          approvedBySystem: true,
+          note: direct.note,
+        };
+      }
       if (!pr.department_id)
         throw new DomainError('purchase.no_approvers', 'The requisition has no department', {
           status: 409,
@@ -2189,8 +2266,57 @@ export class PurchaseRequisitionsService implements OnModuleInit {
         entityId: prId,
         after: { number: pr.number, tier: f.tier, estimate: f.estimate, instance: instance.id },
       });
-      return { id: prId, number: pr.number, tier: f.tier };
+      return {
+        id: prId,
+        number: pr.number,
+        tier: f.tier,
+        approvedBySystem: false,
+        note: direct.note,
+      };
     });
+  }
+
+  /**
+   * Whether a requisition is approved by the system when sent: a direct one (no line from an indent),
+   * sent by someone with the direct right, worth (before GST) up to the limit in Purchase settings, and
+   * — the split check (GFR 2017 rule 157) — not over it together with the direct requisitions approved
+   * this way in the split window that share an item category with it. The note says why either way.
+   */
+  private async directApproval(c: PoolClient, ctx: RequestContext, prId: string, estimate: number) {
+    const no = (note: string | null) => ({ approve: false, note });
+    if (!(ctx.permissions?.has(PURCHASE.requisitionDirect) ?? false)) return no(null);
+    const sourced = await c.query(
+      `SELECT 1 FROM purchase_requisition_lines rl JOIN purchase_requisition_sources src ON src.requisition_line_id = rl.id
+        WHERE rl.requisition_id = $1 LIMIT 1`,
+      [prId],
+    );
+    if (sourced.rowCount) return no(null);
+    const s = await this.settings(c);
+    const limit = Number(s.direct_pr_limit);
+    if (!(limit > 0)) return no(null);
+    if (estimate > limit + 0.004)
+      return no(
+        `Sent for approval: ${rupees(estimate)} is over the limit of ${rupees(limit)} for a direct requisition without approval`,
+      );
+    const earlier = await c.query<{ number: string; estimate: string }>(
+      `SELECT r.number, r.estimate::text FROM purchase_requisitions r
+        WHERE r.id <> $1 AND r.no_approval_note IS NOT NULL AND r.status IN ('approved', 'part_ordered', 'ordered')
+          AND r.approved_at >= now() - make_interval(days => $2::int)
+          AND EXISTS (SELECT 1 FROM purchase_requisition_lines a JOIN purchase_items ia ON ia.id = a.item_id
+                        JOIN purchase_requisition_lines b ON b.requisition_id = $1 JOIN purchase_items ib ON ib.id = b.item_id
+                       WHERE a.requisition_id = r.id AND ia.category_id = ib.category_id)
+        ORDER BY r.approved_at`,
+      [prId, s.split_window_days],
+    );
+    const together = earlier.rows.reduce((a, r) => a + Number(r.estimate), estimate);
+    if (earlier.rows.length && together > limit + 0.004)
+      return no(
+        `Sent for approval: with ${earlier.rows.map((r) => r.number).join(', ')} of the last ${String(s.split_window_days)} days, the direct purchases of these categories come to ${rupees(together)}, over the limit of ${rupees(limit)}`,
+      );
+    return {
+      approve: true,
+      note: `Approved by the system: a direct requisition by the purchase office, ${rupees(estimate)} within the limit of ${rupees(limit)}`,
+    };
   }
 
   async decide(ctx: RequestContext, prId: string, dto: IndentDecisionDto) {
@@ -2294,6 +2420,15 @@ export class PurchaseRequisitionsService implements OnModuleInit {
       `UPDATE purchase_requisitions SET status = 'approved', decided_at = now(), approved_at = now(), updated_at = now() WHERE id = $1`,
       [id],
     );
+    await this.approvedEffects(c, ctx, id, pr.number);
+  }
+
+  /**
+   * What an approved requisition sets going (its levels' last approval, or the system for a direct one
+   * within the limit): its indents all from the store closed, one draft PO per chosen vendor.
+   */
+  private async approvedEffects(c: PoolClient, ctx: RequestContext, id: string, number: string) {
+    const pr = { number };
     // an indent all of whose lines are issued from the store (on approved requisitions) is closed
     await c.query(
       `UPDATE purchase_indents pi SET route = 'closed', bypass_note = $2, updated_at = now()
@@ -2409,7 +2544,7 @@ export class PurchaseRequisitionsService implements OnModuleInit {
       );
       await c.query(
         `UPDATE purchase_requisitions SET status = 'draft', revision = revision + 1, decision_note = $2, approved_at = NULL,
-                updated_at = now() WHERE id = $1`,
+                no_approval_note = NULL, updated_at = now() WHERE id = $1`,
         [prId, `Reopened: ${dto.reason}`],
       );
       // the indents closed as issued from the store wait on it again

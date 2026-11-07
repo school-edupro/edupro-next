@@ -320,6 +320,18 @@ export default async function IndentPage({
                         Bought though the store has it: {l.stockReason}
                       </span>
                     ) : null}
+                    {l.fileId ? (
+                      <span
+                        className="ep-mr-col__desc"
+                        style={{ display: 'inline-flex', gap: 'var(--sp-1)', alignItems: 'center' }}
+                      >
+                        Document{' '}
+                        <FileLinks
+                          href={`/api/purchase/indents/${pi.id}/lines/${l.id}/file`}
+                          label={`the document of line ${String(l.seq)}`}
+                        />
+                      </span>
+                    ) : null}
                   </td>
                   <td style={{ textAlign: 'right' }}>
                     {l.quantity} {l.uom}

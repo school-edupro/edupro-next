@@ -62,6 +62,7 @@ export function PurchaseSettingsForm({
     prPrefix: s.prPrefix,
     poPrefix: s.poPrefix,
     directLimit: String(s.directLimit),
+    directPrLimit: String(s.directPrLimit),
     committeeLimit: String(s.committeeLimit),
     committeeQuotes: String(s.committeeQuotes),
     committeeSignatures: s.committeeSignatures === null ? '' : String(s.committeeSignatures),
@@ -131,6 +132,7 @@ export function PurchaseSettingsForm({
       seen.push(x);
     }
     if (!amount(v.directLimit)) fail('directLimit', 'An amount in rupees (0 or more)');
+    if (!amount(v.directPrLimit)) fail('directPrLimit', 'An amount in rupees (0 turns it off)');
     if (!amount(v.committeeLimit)) fail('committeeLimit', 'An amount in rupees');
     else if (
       amount(v.directLimit) &&
@@ -409,6 +411,7 @@ export function PurchaseSettingsForm({
         prPrefix: v.prPrefix,
         poPrefix: v.poPrefix,
         directLimit: num(v.directLimit),
+        directPrLimit: num(v.directPrLimit),
         committeeLimit: num(v.committeeLimit),
         committeeQuotes: num(v.committeeQuotes),
         committeeSignatures: v.committeeSignatures.trim() ? num(v.committeeSignatures) : null,
@@ -545,6 +548,17 @@ export function PurchaseSettingsForm({
                 placeholder: 'Empty: every member',
               }),
               { help: `The committee has ${String(committeeSize)} members.` },
+            )}
+          </FormRow>
+          <FormRow columns={2}>
+            {field(
+              'directPrLimit',
+              'Direct requisition without approval up to (₹)',
+              text('directPrLimit', { inputMode: 'decimal' }),
+              {
+                required: true,
+                help: 'A direct requisition by the purchase office worth up to this (before GST) is approved by the system when sent, with the reasonable-price certificate; its POs still need their approval. Several small ones of the same category in the split window that go over it need approval. 0 turns it off.',
+              },
             )}
           </FormRow>
           {check(

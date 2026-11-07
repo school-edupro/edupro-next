@@ -187,6 +187,22 @@ export default async function StaffRequisitionPage({
                           ? ` · from ${l.sources.map((s) => s.number).join(', ')}`
                           : ''}
                       </span>
+                      {l.sources
+                        .filter((s) => s.hasDocument)
+                        .map((s) => (
+                          <span
+                            key={s.indentLineId}
+                            className="ep-field__help"
+                            style={{ display: 'flex', gap: 'var(--sp-1)', alignItems: 'center' }}
+                          >
+                            {t(lang, 'Document')} ({s.number}){' '}
+                            <FileLinks
+                              url={`/api/purchase-requisition-document/${pr.id}/${s.indentLineId}`}
+                              saveUrl={`/api/purchase-requisition-document/${pr.id}/${s.indentLineId}?save=1`}
+                              label={`the document of ${s.number}’s line`}
+                            />
+                          </span>
+                        ))}
                     </td>
                     <td>
                       {l.fulfil === 'store'

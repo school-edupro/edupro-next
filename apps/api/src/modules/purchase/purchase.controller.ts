@@ -1,6 +1,18 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, Put, Query, Res } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  Patch,
+  Post,
+  Put,
+  Query,
+  Req,
+  Res,
+} from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
-import type { FastifyReply } from 'fastify';
+import type { FastifyReply, FastifyRequest } from 'fastify';
 import { RequirePermission } from '../../common/access/require-permission.decorator';
 import { AuthenticatedOnly } from '../../common/auth/decorators';
 import { ReqCtx, type RequestContext } from '../../common/http/request-context';
@@ -18,6 +30,7 @@ import {
   IndentDto,
   IndentExportQueryDto,
   IndentListQueryDto,
+  IndentSheetDto,
   PURCHASE,
   PurchaseDelegationDto,
   ReasonDto,
@@ -65,6 +78,60 @@ export class PurchaseController {
   @AuthenticatedOnly()
   listFilters(@ReqCtx() ctx: RequestContext) {
     return this.indents.listFilters(ctx);
+  }
+
+  @Get('indent-sheet')
+  @ApiOperation({ summary: 'The indent item sheet to fill (items as a drop-down)' })
+  @RequirePermission(PURCHASE.indentRaise)
+  indentSheet(@ReqCtx() ctx: RequestContext) {
+    return this.indents.itemSheet(ctx);
+  }
+
+  @Post('indent-sheet')
+  @ApiOperation({ summary: 'Read a filled item sheet into indent lines (nothing is saved)' })
+  @RequirePermission(PURCHASE.indentRaise)
+  readIndentSheet(@ReqCtx() ctx: RequestContext, @Body() body: IndentSheetDto) {
+    return this.indents.readItemSheet(ctx, body);
+  }
+
+  @Post('indent-files')
+  @ApiOperation({
+    summary: 'A document for an indent line: the PDF or photo as the request body (?name=)',
+  })
+  @RequirePermission(PURCHASE.indentRaise)
+  uploadIndentFile(
+    @ReqCtx() ctx: RequestContext,
+    @Req() req: FastifyRequest,
+    @Query('name') name: string | undefined,
+  ) {
+    return this.indents.uploadLineFile(
+      ctx,
+      req.body,
+      String(req.headers['content-type'] ?? ''),
+      name ?? 'document',
+    );
+  }
+
+  @Get('indents/:id/lines/:lineId/file')
+  @ApiOperation({ summary: 'An indent line’s document' })
+  @AuthenticatedOnly()
+  async indentLineFile(
+    @ReqCtx() ctx: RequestContext,
+    @Param('id') id: string,
+    @Param('lineId') lineId: string,
+    @Query('save') save: string | undefined,
+    @Res() reply: FastifyReply,
+  ) {
+    const f = await this.indents.lineFile(ctx, id, lineId);
+    void reply
+      .header('content-type', f.contentType)
+      .header(
+        'content-disposition',
+        `${save === '1' ? 'attachment' : 'inline'}; filename="${f.filename.replace(/[^\w.\- ]+/g, '_')}"`,
+      )
+      .header('cache-control', 'private, no-store')
+      .header('x-content-type-options', 'nosniff')
+      .send(f.bytes);
   }
 
   @Get('indent-form')

@@ -44,7 +44,8 @@ PO, the emergency purchase, the stores and receiving what was ordered.
    quotes and the purchase committee's signed comparative statement; above that a tender reference —
    the GFR 2017 figures, change them if your school follows its own), **emergency purchase** on or off,
    the PO's validity, terms and signatures, the department whose levels approve a PR combining
-   departments, the large-PO list and the split window. Every box is checked as you leave it and when
+   departments, the large-PO list, the split window, and **Direct requisition without approval up to ₹**
+   (default ₹50,000; 0 turns it off). Every box is checked as you leave it and when
    you press **Save the settings**, the problem shown under it (a prefix per document, the committee
    limit at least the direct one, the committee's signatures no more than its members, days from 1 to
    365 …). The **Vendor approval** card names who approves vendors (see Vendors).
@@ -184,6 +185,15 @@ screen — under the school's letterhead with the filters and when it was made. 
   **priority** (urgent ones are listed first). Each line is an item from the list, picked by category,
   or **Not in the list: describe it** with its unit (the purchase office matches it on the PR). Items
   counted in whole units take whole numbers.
+- **Many items at once**: **Download item sheet** gives an Excel with the item list as a drop-down (pick
+  the item — its code in brackets is read — the quantity and a note; an item not in the list goes in
+  **Description** with its **Unit**). **Upload the filled sheet** adds its rows to the lines, to check
+  before saving; the rows it could not read are listed by row number (an unknown item, a quantity
+  missing, a whole number needed). Nothing is saved until you save the indent.
+- **A document per line** (optional): a spec sheet, a photo or a quotation — a PDF, JPEG or PNG up to
+  5 MB. Anyone raising an indent can attach one. The approvers and the purchase office open it from the
+  indent (View or Download); it follows the line onto the PR, and the printed indent marks the line
+  "Document attached".
 - **What the stores hold** shows under each item you pick: the free stock (in hand, less what is held
   for other requests) in the main store and your department's stores, store by store. When they hold
   enough for the quantity, the form asks **why you still buy it** (another size or make, say) — the
@@ -225,7 +235,15 @@ buy together and **Make a requisition**: the same item's lines are added up into
 stays linked to it. PIs of several departments make a **combined** PR, approved by the department set
 on Purchase settings ("the department whose levels approve a PR combining departments"). **Close** a
 PI you will not buy (issued from stock, no longer needed) with the reason; its raiser sees it.
-**Direct requisition** (Purchase → Purchase Requisitions) is for a need that did not come through a PI.
+**Direct requisition** (Purchase → Purchase Requisitions) is for a need that did not come through a PI,
+and only the purchase office makes one (the right "Make a direct requisition", held by the Purchase office
+role; the admin may give it to another role). **Up to the limit in Purchase settings** (₹50,000 unless
+changed) a direct requisition **needs no approval**: once its vendors, rates and the reasonable-price
+certificate are in, **Send (approved by the system)** approves it at once — the PR says "Approved by the
+system: a direct requisition by the purchase office" — and its draft purchase orders are made (they
+still go through their approval). Above the limit, or when it and the direct requisitions approved this
+way in the split window for the same item categories together go over it (no splitting a purchase),
+it goes to the department's requisition levels as usual. **Reopen** brings it back to draft.
 
 On the PR:
 

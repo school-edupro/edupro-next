@@ -869,3 +869,51 @@ files (other purchase PDFs keep their band for now); a full PR print.
   `purchase-requisitions` (indent, vendor, department, dates; the file's "Indent:" line and "On rate
   contract"; the printed PR for the indent's raiser, refused to someone else), `purchase-orders`
   (vendor, dates; the file's two sheets; the PDF).
+
+## As built — indent items from Excel, line documents; direct PR without approval (8 Nov 2026)
+
+Asked by the user ("on the new PI page the user uploads items by Excel and a document per line,
+optional; a direct requisition is the purchaser's only and needs no approval"). Benchmarked on GFR 2017
+(rule 154: a purchase under the limit without quotes on the competent authority's certificate; rule 157:
+no splitting a demand). Decided with the user: the sheet fills the form (nothing saved); one optional
+document per line; no approval up to a limit in Purchase settings with the split check; a new right held
+by the Purchase office role.
+
+- **The item sheet**: `GET /purchase/indent-sheet` (raise right; `templateSheet`: Item as a drop-down of
+  "Name (CODE)", Quantity*, Note, Description and Unit for an item in words, a guide and examples);
+  `POST /purchase/indent-sheet` `{file}` reads it (`readSheet`) into `{lines, errors}` — the item by the
+  code in brackets, the code or the exact name; quantity > 0, whole for whole units; an item in words
+  needs its description and a unit from the master; at most 200 lines; errors carry the row number.
+  Nothing is saved. Both forms: **Download item sheet** (admin `/api/purchase/indent-sheet`, staff
+  `/api/purchase-indent-sheet`) and **Upload the filled sheet** (server action `readIndentSheet`); the
+  rows join the lines already filled (rates for those who see them), the bad rows listed.
+- **Line documents**: `purchase_indent_lines.file_id` (there since 0317). `POST /purchase/indent-files?name=`
+  takes the PDF/JPEG/PNG as the request body (the raise right — a raiser without `platform.files.upload`
+  can attach; the API's JSON limit is 1 MB, raw bodies 25 MB), checks the type by its first bytes, up to
+  5 MB, and stores it with the new `FilesService.storeBytes` (storage + the scanner + a `files` row,
+  owner `purchase_indent_line`, ready). A line takes a file the signed-in user uploaded or one already on
+  the indent. `GET /purchase/indents/:id/lines/:lineId/file` for anyone who may see the PI; the PR shows
+  each source line's document (`sources[].indentLineId/hasDocument`) through
+  `GET /purchase/requisitions/:id/documents/:indentLineId` for anyone who may see the PR. The printed PI
+  marks "Document attached". Forms: a file box per line (server action `uploadIndentFile`, the bytes as
+  the body), the name with **Remove**; PI and PR pages: View and Download icons.
+- **Direct PR without approval** (migration 0334): right `purchase.requisition.direct` (Purchase office
+  role); `purchase_settings.direct_pr_limit` (default 50,000; 0 off; the settings form);
+  `purchase_requisitions.no_approval_note`. Making a direct PR (no indents) needs the right (403
+  otherwise; the admin list shows **Direct requisition** and `/purchase/requisitions/new` only with it).
+  On sending (`submit`), after the usual readiness checks (vendors, rates, the certificate for the direct
+  tier, quotes for the committee), `directApproval`: a PR with no indent line, sent by someone with the
+  right, worth (before GST) up to the limit, and not over it together with the direct PRs approved this
+  way in the split window sharing an item category (rule 157) — is approved at once: status approved, no
+  workflow, the note "Approved by the system: a direct requisition by the purchase office, ₹… within the
+  limit of ₹…", store lines reserved, `approvedEffects` (indents from the store closed, draft POs per
+  vendor). Otherwise it goes to the levels and the response says why ("over the limit", "with PR/… of the
+  last 30 days …"). Reopening clears the note. The PR carries `direct`, `noApproval {limit, applies}`
+  (the page says "Send (approved by the system)") and `noApprovalNote`. A PR from indents is never
+  approved this way; POs keep their approval.
+- Tests: `purchase-indents` (the sheet read: three good rows, three refused by row, nothing saved; a
+  document uploaded by a raiser without file rights, a fake PDF and a wrong type refused, viewed by the
+  raiser, refused to an outsider, kept on a re-save, someone else's file refused), `purchase-requisitions`
+  (a school admin without the right refused; within the limit approved by the system with a draft PO and
+  no steps; the split check at a 5,000 limit; over a 1,000 limit), `purchase-orders` sets the limit to 0
+  (its direct PR follows the levels).

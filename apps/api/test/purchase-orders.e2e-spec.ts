@@ -85,6 +85,10 @@ describe('purchase orders (e2e)', () => {
       }
       await c.query(`SELECT app.staff_masters_seed($1)`, [school.id]);
       await c.query(`SELECT app.purchase_seed_masters($1)`, [school.id]);
+      // these tests follow a direct PR through its approval levels: no approval by the system
+      await c.query(`UPDATE purchase_settings SET direct_pr_limit = 0 WHERE school_id = $1`, [
+        school.id,
+      ]);
       for (const d of ['Science', 'Administration'])
         ids[d] = (
           await c.query<{ id: string }>(

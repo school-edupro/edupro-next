@@ -119,6 +119,58 @@ export class FilesService {
     return { file: toRow(created), upload };
   }
 
+  /**
+   * Bytes the API received itself (a purchase indent line's document, sent as the request body — any
+   * raiser may attach one without the file rights): kept in storage, scanned like an upload, recorded
+   * as ready under the signed-in user; an infected file is refused (docs/design/83).
+   */
+  async storeBytes(
+    ctx: RequestContext,
+    f: { bytes: Buffer; contentType: string; fileName: string; ownerEntityType: string },
+  ): Promise<{ id: string; name: string }> {
+    const tenant = requireTenant(ctx);
+    const ext = ALLOWED_CONTENT_TYPES[f.contentType];
+    if (!ext)
+      throw new DomainError('validation-failed', 'This kind of file is not accepted', {
+        status: 400,
+      });
+    const now = new Date();
+    const objectKey = LocalStorage.joinKey(
+      `school-${tenant.schoolId}`,
+      String(now.getUTCFullYear()),
+      String(now.getUTCMonth() + 1).padStart(2, '0'),
+      `${randomUUID()}.${ext}`,
+    );
+    await this.storage.write(objectKey, f.bytes, f.contentType);
+    const scan = await this.scanner.scan({ objectKey, bytes: f.bytes });
+    if (scan === 'infected')
+      throw new DomainError('file.infected', 'The file did not pass the virus check', {
+        status: 422,
+      });
+    const id = await this.db.tenant(tenant, async (c) => {
+      const r = await c.query<{ id: string }>(
+        `INSERT INTO files (school_id, bucket, object_key, content_type, size_bytes, sha256, original_name, owner_entity_type,
+                            classification, storage_driver, status, scanned_at, scan_result, created_by, updated_by)
+         VALUES (app.current_school_id(), $1, $2, $3, $4, $5, $6, $7, 'internal', $8, 'ready', now(), $9,
+                 app.current_user_id(), app.current_user_id())
+         RETURNING id::text`,
+        [
+          this.storage.bucket,
+          objectKey,
+          f.contentType,
+          f.bytes.length,
+          createHash('sha256').update(f.bytes).digest('hex'),
+          f.fileName.slice(0, 200),
+          f.ownerEntityType,
+          this.storage.name,
+          scan,
+        ],
+      );
+      return r.rows[0]!.id;
+    });
+    return { id, name: f.fileName.slice(0, 200) };
+  }
+
   async get(ctx: RequestContext, id: string): Promise<FileRow> {
     const row = await this.find(requireTenant(ctx), id);
     return toRow(row);

@@ -58,6 +58,8 @@ export interface IndentPdfData {
     stockUom: string | null;
     stockStores: Array<{ store: string; free: number }>;
     stockReason: string | null;
+    /** a document is attached to the line (viewed on the indent) */
+    document?: boolean;
     rate: number | null;
     amount: number | null;
   }>;
@@ -210,6 +212,7 @@ export async function purchaseIndentPdf(d: IndentPdfData): Promise<Buffer> {
       ...(l.stockReason
         ? wrap(`Bought though the store has it: ${l.stockReason}`, font, 7, cols[1]!.w - 4)
         : []),
+      ...(l.document ? ['Document attached'] : []),
     ];
     const stock: string[] =
       l.stockFree === null

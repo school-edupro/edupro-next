@@ -696,4 +696,64 @@ describe('purchase requisitions (e2e)', () => {
     expect(pdf.rawPayload.subarray(0, 5).toString()).toBe('%PDF-');
     expect((await call(c3, 'GET', `/purchase/requisitions/${ids.prG!}/pdf`)).statusCode).toBe(404);
   });
+  it('a direct requisition by the purchase office within the limit is approved by the system; over it or split it needs approval', async () => {
+    // only the direct right makes a direct requisition (a school admin without it is refused)
+    const admin2 = await withMigrator((c) => seedUser(c, school, `${s}-adm2`, 'school_admin'));
+    const make = (u: SeededUser, qty: number) =>
+      call(u, 'POST', '/purchase/requisitions', {
+        departmentId: ids.Science,
+        purpose: 'Office paper',
+        lines: [{ itemId: ids.PAPER, quantity: qty, estRate: 300 }],
+      });
+    expect((await make(admin2, 1)).statusCode).toBe(403);
+    const ready = async (qty: number) => {
+      const id = (await make(office, qty)).json().id as string;
+      const pr = await get(office, id);
+      await call(office, 'PUT', `/purchase/requisitions/${id}/choices`, {
+        lines: [{ lineId: pr.lineItems[0].id, vendorId: ids.V2, rate: 290 }],
+      });
+      await call(office, 'PUT', `/purchase/requisitions/${id}/certificate`, {
+        text: pr.certificateText,
+      });
+      return id;
+    };
+    // within the limit (default 50,000): sending approves it by the system; the draft PO at once
+    const small = await ready(10);
+    expect((await get(office, small)).noApproval).toEqual({ limit: 50000, applies: true });
+    const sent = await call(office, 'POST', `/purchase/requisitions/${small}/submit`);
+    expect(sent.statusCode).toBe(201);
+    expect(sent.json()).toMatchObject({ approvedBySystem: true });
+    const done = await get(office, small);
+    expect(done).toMatchObject({ status: 'approved', direct: true, steps: [] });
+    expect(done.noApprovalNote).toContain('within the limit of ₹50,000');
+    expect(done.orders).toHaveLength(1);
+    // the split check: with it, a second of the same category goes over a 5,000 limit
+    await withMigrator((c) =>
+      c.query(`UPDATE purchase_settings SET direct_pr_limit = 5000 WHERE school_id = $1`, [
+        school.id,
+      ]),
+    );
+    const split = await ready(10);
+    const second = (await call(office, 'POST', `/purchase/requisitions/${split}/submit`)).json();
+    expect(second.approvedBySystem).toBe(false);
+    expect(second.note).toContain('Sent for approval: with');
+    expect((await get(office, split)).status).toBe('submitted');
+    // over the limit
+    await withMigrator((c) =>
+      c.query(`UPDATE purchase_settings SET direct_pr_limit = 1000 WHERE school_id = $1`, [
+        school.id,
+      ]),
+    );
+    const big = await ready(10);
+    const third = (await call(office, 'POST', `/purchase/requisitions/${big}/submit`)).json();
+    expect(third).toMatchObject({ approvedBySystem: false });
+    expect(third.note).toContain('over the limit');
+    // a PR from indents is never approved this way
+    expect(((await get(office, ids.prG!)) as { direct: boolean }).direct).toBe(false);
+    await withMigrator((c) =>
+      c.query(`UPDATE purchase_settings SET direct_pr_limit = 50000 WHERE school_id = $1`, [
+        school.id,
+      ]),
+    );
+  });
 });

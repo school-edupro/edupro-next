@@ -62,6 +62,28 @@ export class PurchaseRequisitionsController {
     return this.prs.exportList(ctx, q);
   }
 
+  @Get('requisitions/:id/documents/:indentLineId')
+  @ApiOperation({ summary: 'The document of an indent line the PR came from' })
+  @AuthenticatedOnly()
+  async indentDocument(
+    @ReqCtx() ctx: RequestContext,
+    @Param('id') id: string,
+    @Param('indentLineId') indentLineId: string,
+    @Query('save') save: string | undefined,
+    @Res() reply: FastifyReply,
+  ) {
+    const f = await this.prs.indentDocument(ctx, id, indentLineId);
+    void reply
+      .header('content-type', f.contentType)
+      .header(
+        'content-disposition',
+        `${save === '1' ? 'attachment' : 'inline'}; filename="${f.filename.replace(/[^\w.\- ]+/g, '_')}"`,
+      )
+      .header('cache-control', 'private, no-store')
+      .header('x-content-type-options', 'nosniff')
+      .send(f.bytes);
+  }
+
   @Get('requisitions/:id/pdf')
   @ApiOperation({ summary: 'The printed Purchase Requisition (with the comparative statement)' })
   @AuthenticatedOnly()

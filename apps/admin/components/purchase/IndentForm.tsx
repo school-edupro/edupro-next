@@ -2,10 +2,12 @@
 import { useRouter } from 'next/navigation';
 import { useMemo, useState, useTransition } from 'react';
 import { FormActions, FormRow, FormSection } from '@edupro/ui';
-import { saveIndent } from '@/lib/purchase-actions';
+import { readIndentSheet, saveIndent, uploadIndentFile } from '@/lib/purchase-actions';
 import { inr, RATE_SOURCE, type IndentDetail, type IndentFormLists } from '@/lib/purchase';
 
 const FREE = 'free';
+/** the item sheet to fill (download) */
+const SHEET = '/api/purchase/indent-sheet';
 
 interface Line {
   itemId: string;
@@ -18,6 +20,9 @@ interface Line {
   note: string;
   /** why it is bought though the stores have enough */
   stockReason: string;
+  /** the line's document (uploaded at once; saved with the indent) */
+  fileId: string;
+  fileName: string;
 }
 const blank = (): Line => ({
   itemId: '',
@@ -28,6 +33,8 @@ const blank = (): Line => ({
   typed: false,
   note: '',
   stockReason: '',
+  fileId: '',
+  fileName: '',
 });
 const qtyWords = (n: number) => n.toLocaleString('en-IN', { maximumFractionDigits: 3 });
 
@@ -73,6 +80,8 @@ export function IndentForm({
           typed: l.rateSource === 'typed',
           note: l.note ?? '',
           stockReason: l.stockReason ?? '',
+          fileId: l.fileId ?? '',
+          fileName: l.fileName ?? '',
         }))
       : [blank()],
   );
@@ -81,6 +90,15 @@ export function IndentForm({
   const [tried, setTried] = useState(false);
   const [pending, start] = useTransition();
   const showRates = lists.showRates;
+  // the item sheet: reading it fills the lines; the rows it could not read
+  const [sheet, setSheet] = useState<{
+    busy: boolean;
+    said: string | null;
+    errors: Array<{ row: number; message: string }>;
+  }>({ busy: false, said: null, errors: [] });
+  // a line's document being uploaded, and a refused one's reason by line
+  const [uploading, setUploading] = useState<number | null>(null);
+  const [fileErrors, setFileErrors] = useState<Record<number, string>>({});
   const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' }).format(new Date());
 
   const setLine = (i: number, patch: Partial<Line>) =>
@@ -94,6 +112,52 @@ export function IndentForm({
       estRate: rate === null ? '' : String(rate),
       typed: !it || rate === null,
       freeText: itemId === FREE ? lines[i]!.freeText : '',
+    });
+  };
+  const readSheet = (file: File) => {
+    const fd = new FormData();
+    fd.set('file', file);
+    setSheet({ busy: true, said: null, errors: [] });
+    void readIndentSheet(fd).then((r) => {
+      if (!r.ok) {
+        setSheet({ busy: false, said: null, errors: [{ row: 0, message: r.error }] });
+        return;
+      }
+      const fresh = r.lines.map((x): Line => {
+        const it = x.itemId ? items.get(x.itemId) : undefined;
+        const rate = it ? (it.contractRate ?? it.lastRate) : null;
+        return {
+          ...blank(),
+          itemId: it ? it.id : FREE,
+          freeText: it ? '' : (x.freeText ?? ''),
+          uomId: it ? it.uomId : (x.uomId ?? ''),
+          quantity: String(x.quantity),
+          note: x.note ?? '',
+          estRate: rate === null ? '' : String(rate),
+          typed: !it || rate === null,
+        };
+      });
+      setLines((cur) => {
+        const kept = cur.filter((l) => l.itemId || l.freeText.trim() || l.quantity);
+        const all = [...kept, ...fresh].slice(0, 200);
+        return all.length ? all : [blank()];
+      });
+      setSheet({
+        busy: false,
+        said: `${String(fresh.length)} ${fresh.length === 1 ? 'line' : 'lines'} added from the sheet: check them before saving.`,
+        errors: r.errors,
+      });
+    });
+  };
+  const attach = (i: number, file: File) => {
+    const fd = new FormData();
+    fd.set('file', file);
+    setUploading(i);
+    setFileErrors((e) => ({ ...e, [i]: '' }));
+    void uploadIndentFile(fd).then((r) => {
+      setUploading(null);
+      if (r.ok) setLine(i, { fileId: r.id, fileName: r.name });
+      else setFileErrors((e) => ({ ...e, [i]: r.error }));
     });
   };
   const amountOf = (l: Line) => {
@@ -149,6 +213,7 @@ export function IndentForm({
                 quantity: l.quantity,
                 ...(showRates && l.typed && l.estRate !== '' ? { estRate: l.estRate } : {}),
                 ...(l.note.trim() ? { note: l.note } : {}),
+                ...(l.fileId ? { fileId: l.fileId } : {}),
                 ...(stockOf(l)?.covers && l.stockReason.trim()
                   ? { stockReason: l.stockReason.trim() }
                   : {}),
@@ -159,6 +224,7 @@ export function IndentForm({
                 ...(l.uomId ? { uomId: l.uomId } : {}),
                 ...(showRates && l.estRate !== '' ? { estRate: l.estRate } : {}),
                 ...(l.note.trim() ? { note: l.note } : {}),
+                ...(l.fileId ? { fileId: l.fileId } : {}),
               },
         ),
     };
@@ -295,6 +361,62 @@ export function IndentForm({
             : 'Pick from the item list; what the stores hold free shows under it. Not in the list? Pick “Not in the list” and describe it: the purchase office matches it on the PR and prices the indent.'
         }
       >
+        <div
+          style={{
+            display: 'flex',
+            gap: 'var(--sp-3)',
+            flexWrap: 'wrap',
+            alignItems: 'flex-end',
+            marginBottom: 'var(--sp-3)',
+          }}
+        >
+          <a className="ep-btn ep-btn--secondary ep-btn--sm" href={SHEET} download>
+            Download item sheet
+          </a>
+          <label className="ep-field" htmlFor="if-sheet">
+            <span className="ep-field__label">Upload the filled sheet (Excel)</span>
+            <input
+              id="if-sheet"
+              type="file"
+              className="ep-input"
+              accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+              disabled={sheet.busy}
+              onChange={(e) => {
+                const f = e.target.files?.[0];
+                if (f) readSheet(f);
+                e.target.value = '';
+              }}
+            />
+            <span className="ep-field__help">
+              Its rows are added to the lines below, to check before saving.
+            </span>
+          </label>
+        </div>
+        {sheet.busy ? (
+          <p className="ep-field__help" role="status">
+            Reading the sheet…
+          </p>
+        ) : null}
+        {sheet.said ? (
+          <p className="ep-field__help" role="status">
+            {sheet.said}
+          </p>
+        ) : null}
+        {sheet.errors.length ? (
+          <div className="ep-alert ep-alert--warning" role="alert">
+            <p style={{ margin: 0 }}>
+              {sheet.errors.some((e) => e.row) ? 'Rows not added:' : 'The sheet was not read:'}
+            </p>
+            <ul style={{ margin: 0 }}>
+              {sheet.errors.map((e, k) => (
+                <li key={k}>
+                  {e.row ? `Row ${String(e.row)}: ` : ''}
+                  {e.message}
+                </li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
         <div className="ep-purch-lines">
           {lines.map((l, i) => {
             const it = items.get(l.itemId);
@@ -425,6 +547,50 @@ export function IndentForm({
                     onChange={(e) => setLine(i, { note: e.target.value })}
                   />
                 </label>
+                <div className="ep-field">
+                  {l.fileId ? (
+                    <>
+                      <span className="ep-field__label">Document</span>
+                      <span>
+                        {l.fileName || 'Attached'}{' '}
+                        <button
+                          type="button"
+                          className="ep-btn ep-btn--ghost ep-btn--sm"
+                          onClick={() => setLine(i, { fileId: '', fileName: '' })}
+                        >
+                          Remove the document of line {n}
+                        </button>
+                      </span>
+                    </>
+                  ) : (
+                    <label className="ep-field" htmlFor={`if-l${n}-doc`} style={{ margin: 0 }}>
+                      <span className="ep-field__label">Document (optional)</span>
+                      <input
+                        id={`if-l${n}-doc`}
+                        type="file"
+                        className="ep-input"
+                        accept="application/pdf,image/png,image/jpeg"
+                        style={{ maxWidth: '100%', minWidth: 0 }}
+                        disabled={uploading === i}
+                        onChange={(e) => {
+                          const f = e.target.files?.[0];
+                          if (f) attach(i, f);
+                          e.target.value = '';
+                        }}
+                      />
+                      <span className="ep-field__help">
+                        {uploading === i
+                          ? 'Uploading…'
+                          : 'A spec sheet, photo or quotation: PDF, JPEG or PNG up to 5 MB'}
+                      </span>
+                    </label>
+                  )}
+                  {fileErrors[i] ? (
+                    <span className="ep-field__error" role="alert">
+                      {fileErrors[i]}
+                    </span>
+                  ) : null}
+                </div>
                 {stock?.covers ? (
                   <label className="ep-field" htmlFor={`if-l${n}-why`}>
                     <span className="ep-field__label" data-required="true">

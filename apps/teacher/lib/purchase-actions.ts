@@ -41,6 +41,64 @@ export type IndentSaveResult =
   /** id: a new PI saved as a draft although sending it failed */
   | { ok: false; error: string; id?: string };
 
+/** A line's document for an indent: a PDF or a photo up to 5 MB (any raiser may attach one). */
+export async function uploadIndentFile(
+  fd: FormData,
+): Promise<{ ok: true; id: string; name: string } | { ok: false; error: string }> {
+  const f = fd.get('file');
+  if (!(f instanceof File) || !f.size) return { ok: false, error: 'Pick a file' };
+  if (!/^(application\/pdf|image\/(png|jpeg))$/.test(f.type))
+    return { ok: false, error: 'A PDF or a photo (JPEG, PNG)' };
+  if (f.size > 5_242_880) return { ok: false, error: 'Up to 5 MB' };
+  try {
+    const r = await apiFetch<{ id: string; name: string }>(
+      `/purchase/indent-files?name=${encodeURIComponent(f.name.slice(0, 200))}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': f.type },
+        body: new Uint8Array(await f.arrayBuffer()),
+      },
+    );
+    return { ok: true, id: r.id, name: r.name };
+  } catch (e) {
+    if (e instanceof ApiError) return { ok: false, error: detailOf(e) };
+    throw e;
+  }
+}
+
+export interface SheetLine {
+  itemId?: string;
+  freeText?: string;
+  uomId?: string;
+  quantity: number;
+  note?: string;
+}
+/** The filled item sheet read into the indent's lines (nothing is saved). */
+export async function readIndentSheet(
+  fd: FormData,
+): Promise<
+  | { ok: true; lines: SheetLine[]; errors: Array<{ row: number; message: string }> }
+  | { ok: false; error: string }
+> {
+  const f = fd.get('file');
+  if (!(f instanceof File) || !f.size) return { ok: false, error: 'Pick the filled sheet' };
+  if (!/\.xlsx$/i.test(f.name)) return { ok: false, error: 'An Excel (.xlsx) file' };
+  if (f.size > 700_000) return { ok: false, error: 'The sheet is too large (up to 200 lines)' };
+  try {
+    const r = await apiFetch<{
+      lines: SheetLine[];
+      errors: Array<{ row: number; message: string }>;
+    }>('/purchase/indent-sheet', {
+      method: 'POST',
+      body: JSON.stringify({ file: Buffer.from(await f.arrayBuffer()).toString('base64') }),
+    });
+    return { ok: true, ...r };
+  } catch (e) {
+    if (e instanceof ApiError) return { ok: false, error: detailOf(e) };
+    throw e;
+  }
+}
+
 /** A PI saved as a draft (or changed), and sent for approval when asked; the form keeps what was typed. */
 export async function saveIndent(
   id: string | null,
