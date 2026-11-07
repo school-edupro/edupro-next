@@ -740,3 +740,9 @@ not the portal and support roles). The admin landing's default tiles (`pinnedAct
 saved quick menu) always include Purchase Indents for whoever may open it. Personal arrangements are
 left as the user made them (the admin may push the role's page). Auditor, support and portal roles stay
 without it.
+
+Later the same day (E013 could sign in but held no role, so no right at all): decided with the user,
+**every active employee who signs in may raise a PI**, role or not. `AccessService.EMPLOYEE_BASELINE`
+(`purchase.indent.raise`) joins the effective permissions of any user with an active `employees` row in
+the school; everything else still comes from roles. A user who is not an employee gets nothing from it.
+Test in `purchase-indents.e2e-spec.ts` (a no-role employee's /me and their draft PI; an outsider empty).

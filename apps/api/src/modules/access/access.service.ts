@@ -7,6 +7,11 @@ import { DbService } from '../../common/db/db.service';
 export type ScopeType = 'class_section' | 'subject' | 'department' | 'route' | 'campus';
 
 const PERM_TTL_SECONDS = 300;
+/**
+ * What every active employee who signs in may do, whatever their roles (none at all included): raise a
+ * Purchase Indent for their own department (docs/design/83: any staff raises a PI). Roles add the rest.
+ */
+export const EMPLOYEE_BASELINE = ['purchase.indent.raise'];
 const permKey = (schoolId: string, userId: string) => `perm:${schoolId}:${userId}`;
 
 /**
@@ -99,8 +104,13 @@ export class AccessService implements OnApplicationBootstrap {
          JOIN role_permissions rp ON rp.role_id = d.role_id
         WHERE d.to_user_id = $1
           AND d.revoked_at IS NULL
-          AND now() BETWEEN d.starts_at AND d.ends_at`,
-      [userId],
+          AND now() BETWEEN d.starts_at AND d.ends_at
+       UNION
+       SELECT unnest($2::text[])
+        WHERE EXISTS (SELECT 1 FROM employees e
+                       WHERE e.user_id = $1 AND e.school_id = app.current_school_id()
+                         AND e.status = 'active' AND e.deleted_at IS NULL)`,
+      [userId, EMPLOYEE_BASELINE],
     );
     return r.rows.map((x) => x.code);
   }

@@ -439,4 +439,28 @@ describe('purchase indents (e2e)', () => {
     expect(self.statusCode).toBe(403);
     expect(self.json().type).toBe('workflow.self_approval');
   });
+  it('any employee who signs in raises a PI for their own department, even with no role', async () => {
+    const plain = await withMigrator(async (c) => {
+      const u = await seedUser(c, school, `${s}-plain`);
+      await c.query(
+        `INSERT INTO employees (school_id, employee_code, first_name, last_name, designation, department, user_id)
+         VALUES ($1, $2, 'Nina', 'E2E', 'Counsellor', 'Science', $3)`,
+        [school.id, `${s}N1`, u.id],
+      );
+      return u;
+    });
+    const me = (await call(plain, 'GET', '/me')).json();
+    expect(me.permissions).toEqual(['purchase.indent.raise']);
+    const r = await call(plain, 'POST', '/purchase/indents', {
+      purpose: 'Counselling room charts',
+      lines: [{ itemId: ids.PAPER, quantity: 1, estRate: 300 }],
+    });
+    expect(r.statusCode).toBe(201);
+    expect(await get(plain, r.json().id as string)).toMatchObject({
+      department: 'Science',
+      status: 'draft',
+    });
+    // someone who is not an employee still has nothing
+    expect((await call(outsider, 'GET', '/me')).json().permissions).toEqual([]);
+  });
 });

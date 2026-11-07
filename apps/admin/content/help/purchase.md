@@ -163,7 +163,8 @@ PR (when the department allows it) and the PO takes the contract rate.
 
 ## Purchase Indents
 
-Every staff role can raise a PI for its own department (Gate / Security and Front Office too), and
+Every employee who signs in can raise a PI for their own department — even one with no role yet (the
+department is the one on their employee record) — and
 **Purchase Indents** is always among the home page's quick tiles of a role whose quick menu the school
 has not set (a set one has it added). Someone who arranged their own page adds it in **Arrange my
 page**; the school admin can also push a role's page to its users (System → Landing pages).
