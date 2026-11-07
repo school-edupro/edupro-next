@@ -173,15 +173,28 @@ page**; the school admin can also push a role's page to its users (System → La
 
 - **Raise an indent**: the department (your own, from your employee record; the purchase office picks
   any), **for a colleague** if you raise it for someone, **needed by**, the **purpose** and the
-  **priority** (urgent ones are listed first). Each line is an item from the list, picked by category
-  (its rate comes from its **rate contract**, else its **last purchase**; type your own estimate if you
-  know better — **Use ₹…** goes back to the list rate) or **Not in the list: describe it** with its unit
-  (the purchase office matches it on the PR). Items counted in whole units take whole numbers. The
-  estimate adds up as you type.
+  **priority** (urgent ones are listed first). Each line is an item from the list, picked by category,
+  or **Not in the list: describe it** with its unit (the purchase office matches it on the PR). Items
+  counted in whole units take whole numbers.
+- **What the stores hold** shows under each item you pick: the free stock (in hand, less what is held
+  for other requests) in the main store and your department's stores, store by store. When they hold
+  enough for the quantity, the form asks **why you still buy it** (another size or make, say) — the
+  approvers see your reason — or lower the quantity, or ask the store to issue it.
+- **Rates and amounts** show only to the purchase office, the admins and the indent's approvers. Whoever
+  raises an indent without purchase rights sees no rates: the system still prices each line (its
+  **rate contract**, else its **last purchase**) for the department's limit. The purchase office sees
+  where each rate came from and may type its own estimate (**Use ₹…** goes back to the list rate). A
+  line described in words has no rate until the purchase office prices it on the PR — such an indent
+  is never auto-approved by the limit.
 - **Save as draft** keeps it to finish later; **Save and send for approval** gives it its number
   (PI/2026-27/0001, restarting each financial year) and sends it to the department's first level.
+- **Print**: once sent, the indent's page has **Print** (view or download the PDF): the indent, each line
+  with what the stores held when it was raised (and the reason for buying anyway), the approvals as
+  recorded, and boxes to sign for the raiser, the head of department, the Principal and the store
+  keeper. Rates print only for those who see them. Until it is approved it says NOT APPROVED across.
 - **Approvers** see it under **Waiting for me** (and in My approvals): the amount, the lines with
-  where each rate came from, and the department's approved indents this year. **Approve** sends it to
+  where each rate came from and what the stores held when it was raised, and the department's
+  approved indents this year. **Approve** sends it to
   the next level; **Send back** (say what to change) returns it to the raiser, who changes it and sends
   it again through every level; **Reject** (with the reason) closes it.
 - **Nobody approves their own**: a level held by the raiser **passes on** to the next level; when the

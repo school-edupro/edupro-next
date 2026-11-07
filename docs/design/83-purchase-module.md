@@ -746,3 +746,48 @@ Later the same day (E013 could sign in but held no role, so no right at all): de
 (`purchase.indent.raise`) joins the effective permissions of any user with an active `employees` row in
 the school; everything else still comes from roles. A user who is not an employee gets nothing from it.
 Test in `purchase-indents.e2e-spec.ts` (a no-role employee's /me and their draft PI; an outsider empty).
+
+## As built — rates hidden from the raiser; the stock when raised; the printed PI (7 Nov 2026)
+
+Asked by the user ("item rate not show to creator, user can print PI, at the time PI is created show the
+selected item's stock if available in store"); benchmarked on education ERPs and institutional indent
+slips (ERPNext's Material Request shows the actual and projected quantity per warehouse; NIT / AIIMS
+indent slips carry an "items in stock" column and HOD, Principal and store-keeper signatures). Decided
+with the user: rates go to the approvers and the purchase office; the PI prints once sent as a full
+slip; the free stock shows by store; when the stores cover the quantity the raiser gives a reason.
+
+- **Who sees rates** (`RATE_RIGHTS` in `purchase-indents.service.ts`): the purchase office and the
+  admins (any of `purchase.indent.view`, `.requisition.manage`, `.order.manage`, `.report.view`,
+  `.settings.manage`), and the PI's approvers on the PIs they approve (a step's assignee, the one who
+  acted, or their delegate — never the raiser; the `approver` column of the PI select). Everyone else,
+  the raiser included, gets `estimate`, `estRate`, `amount`, `rateSource`, `contractVendor` and
+  `departmentSpendThisYear` as `null`, `showRates: false`, and the bypass note without its amounts
+  ("Auto-approved: within Science's limit"). The indent form's lists carry no rates for them
+  (`showRates`). A raiser's typed rate is ignored: the line is priced from the rate contract, else the
+  last purchase rate, else 0 (a line in words is 0 until the purchase office prices it on the PR).
+  The approval's title no longer carries the amount (the raiser can open the approval); the purchase
+  approvals list still shows it to the approvers.
+- **No auto-approval while a line has no rate**: under the department's limit the PR is still made by
+  the purchase office when any line is priced 0 ("Not skipped: some lines have no rate yet …").
+- **The stock when raised** (migration 0333): `purchase_indent_lines.stock_free` (the free stock — in
+  hand less reserved — of the item in the main store and the PI department's stores, in the store unit),
+  `stock_stores` (store by store) and `stock_reason`. Noted on every save and again on sending. The form
+  shows it under the item ("In the stores: 55 NOS free (Main store 45 · Science lab store 10)") from the
+  form lists (`stockTracked`, `stockUom`, `perUnit`, `stock` per item: the main store and the stores of
+  the departments the raiser may raise for). Other departments' stores are not shown.
+- **A reason when the stores cover it**: on sending, a line whose quantity (in the store unit:
+  quantity × the item's store units per unit) is within that free stock needs `stockReason` (3–300
+  characters); otherwise `400 validation-failed` with `errors[{path: lines.N.stockReason}]`. The form asks
+  for it as soon as the quantity is covered ("Why buy it? The store has enough"). The approvers, the PI
+  page and the printed PI show it. The purchase office may still issue it from the store at the PR.
+- **The printed PI**: `GET /purchase/indents/:id/pdf` (`?save=1` to download), anyone who may see the PI,
+  once it has its number (a draft: 409 `purchase.indent_draft`). `purchase-indent-pdf.ts`: the school's
+  band, the PI's details, per line the item, quantity, unit and the stock when raised (with the reason),
+  rates and the estimate only for those who see rates, the approval trail as recorded, and boxes to sign
+  for the raiser, head of department, Principal and store keeper; "NOT APPROVED" / "REJECTED" /
+  "WITHDRAWN" across one not approved. Admin: **Print** (View and Download) on the PI page
+  (`/api/purchase/indents/[id]/pdf`); staff app: on the PI's status card (`/api/purchase-indent/[id]`).
+- Tests in `purchase-indents.e2e-spec.ts`: the raiser's form and PI without rates (the office's with
+  them), the free stock by store (another department's store left out), the reason refused then given,
+  no amount in the approval's title, the approver's rates and reason, the PDF (draft 409, raiser and
+  approver 200, outsider 404), the bypass note without amounts, and a line in words not auto-approved.

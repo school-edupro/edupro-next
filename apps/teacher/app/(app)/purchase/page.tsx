@@ -106,7 +106,12 @@ export default async function StaffPurchasePage({
             <p style={{ marginTop: 0 }}>
               <Badge tone={INDENT_STATUS[x.status].tone}>{INDENT_STATUS[x.status].label}</Badge>{' '}
               {x.priority === 'urgent' ? <Badge tone="danger">Urgent</Badge> : null}{' '}
-              <strong>{inr(x.estimate)}</strong> · {x.lines} {x.lines === 1 ? 'line' : 'lines'}
+              {x.estimate !== null ? (
+                <>
+                  <strong>{inr(x.estimate)}</strong> ·{' '}
+                </>
+              ) : null}
+              {x.lines} {x.lines === 1 ? 'line' : 'lines'}
             </p>
             <p>{x.purpose}</p>
             <p className="ep-field__help">

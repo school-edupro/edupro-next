@@ -3,7 +3,9 @@
  * levels (HOD, then everyone with the Principal designation), nobody approving their own (their level
  * passes on; the last to the school admin), send back and resubmit, reject with a reason, a purchase-only
  * delegation, withdrawing, no approvers set, and the bypass rules: every line on a rate contract, under
- * the department's limit, and the split-indent guard.
+ * the department's limit, and the split-indent guard; rates hidden from the raiser (approvers and the
+ * purchase office see them), the stores' free stock when raised, a reason when they can cover the
+ * quantity, and the printed PI.
  */
 import type { NestFastifyApplication } from '@nestjs/platform-fastify';
 import {
@@ -123,6 +125,9 @@ describe('purchase indents (e2e)', () => {
          VALUES ($1, $2, $3, 8.50, CURRENT_DATE - 30, CURRENT_DATE + 300)`,
         [school.id, ids.vendor, ids.PEN],
       );
+      await c.query(`UPDATE purchase_items SET last_purchase_rate = 300 WHERE id = $1`, [
+        ids.PAPER,
+      ]);
     });
     app = await createApp();
     inject = injector(app);
@@ -146,10 +151,18 @@ describe('purchase indents (e2e)', () => {
     if (app) await app.close();
   });
 
-  it('raises a draft for the raiser’s own department, priced from the contract or as typed', async () => {
+  it('raises a draft for the raiser’s own department, priced from the contract; the raiser sees no rates', async () => {
     const form = (await call(teacher, 'GET', '/purchase/indent-form')).json();
     expect(form.departments).toEqual([{ id: ids.science, name: 'Science' }]);
+    expect(form.showRates).toBe(false);
     expect(form.items.find((x: { code: string }) => x.code === 'PEN')).toMatchObject({
+      contractRate: null,
+      contractVendor: null,
+      lastRate: null,
+    });
+    const office = (await call(admin, 'GET', '/purchase/indent-form')).json();
+    expect(office.showRates).toBe(true);
+    expect(office.items.find((x: { code: string }) => x.code === 'PEN')).toMatchObject({
       contractRate: 8.5,
       contractVendor: 'Pen House',
     });
@@ -174,25 +187,32 @@ describe('purchase indents (e2e)', () => {
     expect(pi).toMatchObject({
       status: 'draft',
       number: null,
-      estimate: 385,
+      estimate: null,
+      showRates: false,
+      departmentSpendThisYear: null,
       department: 'Science',
     });
-    expect(pi.lineItems[0]).toMatchObject({
+    expect(pi.lineItems[0]).toMatchObject({ estRate: null, amount: null, rateSource: null });
+    // the purchase office sees the estimate: the contract's rate; the raiser's typed rate is ignored
+    const seen = await get(admin, id);
+    expect(seen).toMatchObject({ estimate: 85, showRates: true });
+    expect(seen.lineItems[0]).toMatchObject({
       rateSource: 'contract',
       estRate: 8.5,
       amount: 85,
       contractVendor: 'Pen House',
     });
-    expect(pi.lineItems[1]).toMatchObject({
+    expect(seen.lineItems[1]).toMatchObject({
       inCatalogue: false,
       item: 'Bunsen burner',
       rateSource: 'typed',
+      estRate: 0,
     });
     ids.draft = id;
   });
 
   it('goes up the levels: HOD, then the Principal; under the limit it skips the PR (a PR approved by the system)', async () => {
-    const id = await raise(teacher, [{ itemId: ids.PAPER, quantity: 2, estRate: 300 }]);
+    const id = await raise(teacher, [{ itemId: ids.PAPER, quantity: 2 }]);
     const sub = (await call(teacher, 'POST', `/purchase/indents/${id}/submit`)).json();
     expect(sub.number).toMatch(/^PI\/\d{4}-\d{2}\/\d{4}$/);
     expect((await get(teacher, id)).waitingWith).toContain('Hari Head');
@@ -220,7 +240,7 @@ describe('purchase indents (e2e)', () => {
   });
 
   it('the split-indent guard: a second small PI of the same category in the window goes to the PR', async () => {
-    const id = await raise(teacher, [{ itemId: ids.PAPER, quantity: 2, estRate: 300 }]);
+    const id = await raise(teacher, [{ itemId: ids.PAPER, quantity: 2 }]);
     await call(teacher, 'POST', `/purchase/indents/${id}/submit`);
     await decide(hod, id, 'approve');
     const done = (await decide(principal, id, 'approve')).json();
@@ -254,7 +274,7 @@ describe('purchase indents (e2e)', () => {
   });
 
   it('nobody approves their own: the HOD’s level passes on; the Principal’s last level goes to the school admin', async () => {
-    const byHod = await raise(hod, [{ itemId: ids.PAPER, quantity: 10, estRate: 300 }]);
+    const byHod = await raise(hod, [{ itemId: ids.PAPER, quantity: 10 }]);
     await call(hod, 'POST', `/purchase/indents/${byHod}/submit`);
     let pi = await get(hod, byHod);
     expect(pi.steps[0]).toMatchObject({
@@ -266,7 +286,7 @@ describe('purchase indents (e2e)', () => {
       status: 'approved',
       route: 'to_requisition',
     });
-    const byPrincipal = await raise(principal, [{ itemId: ids.PAPER, quantity: 10, estRate: 300 }]);
+    const byPrincipal = await raise(principal, [{ itemId: ids.PAPER, quantity: 10 }]);
     await call(principal, 'POST', `/purchase/indents/${byPrincipal}/submit`);
     await decide(hod, byPrincipal, 'approve');
     pi = await get(principal, byPrincipal);
@@ -278,7 +298,7 @@ describe('purchase indents (e2e)', () => {
   });
 
   it('sends back for changes and resubmits; rejects only with a reason', async () => {
-    const id = await raise(teacher, [{ itemId: ids.PAPER, quantity: 50, estRate: 300 }]);
+    const id = await raise(teacher, [{ itemId: ids.PAPER, quantity: 50 }]);
     await call(teacher, 'POST', `/purchase/indents/${id}/submit`);
     expect((await decide(hod, id, 'send_back')).statusCode).toBe(400);
     expect((await decide(hod, id, 'send_back', 'Order 30 only')).json()).toMatchObject({
@@ -287,11 +307,11 @@ describe('purchase indents (e2e)', () => {
     });
     const edit = await call(teacher, 'PUT', `/purchase/indents/${id}`, {
       purpose: 'For the lab',
-      lines: [{ itemId: ids.PAPER, quantity: 30, estRate: 300 }],
+      lines: [{ itemId: ids.PAPER, quantity: 30 }],
     });
     expect(edit.statusCode).toBe(200);
     await call(teacher, 'POST', `/purchase/indents/${id}/submit`);
-    const again = await get(teacher, id);
+    const again = await get(hod, id);
     expect(again).toMatchObject({ status: 'submitted', estimate: 9000 });
     expect(again.history.map((h: { kind: string }) => h.kind)).toEqual(
       expect.arrayContaining(['cancelled', 'started']),
@@ -304,7 +324,7 @@ describe('purchase indents (e2e)', () => {
   });
 
   it('a purchase-only delegation: the deputy approves on the HOD’s behalf for those days', async () => {
-    const id = await raise(teacher, [{ itemId: ids.PAPER, quantity: 40, estRate: 300 }]);
+    const id = await raise(teacher, [{ itemId: ids.PAPER, quantity: 40 }]);
     await call(teacher, 'POST', `/purchase/indents/${id}/submit`);
     const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' }).format(new Date());
     const d = await call(hod, 'POST', '/purchase/delegations', {
@@ -339,7 +359,7 @@ describe('purchase indents (e2e)', () => {
   });
 
   it('withdraws before anyone approves; a department without levels cannot submit', async () => {
-    const id = await raise(teacher, [{ itemId: ids.PAPER, quantity: 3, estRate: 300 }]);
+    const id = await raise(teacher, [{ itemId: ids.PAPER, quantity: 3 }]);
     await call(teacher, 'POST', `/purchase/indents/${id}/submit`);
     expect(
       (await call(teacher, 'POST', `/purchase/indents/${id}/cancel`, { reason: 'Not needed now' }))
@@ -349,7 +369,7 @@ describe('purchase indents (e2e)', () => {
     const other = await call(admin, 'POST', '/purchase/indents', {
       purpose: 'Office paper',
       departmentId: ids.admin_dept,
-      lines: [{ itemId: ids.PAPER, quantity: 1, estRate: 300 }],
+      lines: [{ itemId: ids.PAPER, quantity: 1 }],
     });
     const r = await call(admin, 'POST', `/purchase/indents/${other.json().id as string}/submit`);
     expect(r.statusCode).toBe(409);
@@ -379,7 +399,7 @@ describe('purchase indents (e2e)', () => {
       (await call(u, 'GET', '/purchase/indents?view=waiting'))
         .json()
         .data.map((x: { id: string }) => x.id) as string[];
-    const id = await raise(teacher, [{ itemId: ids.PAPER, quantity: 4, estRate: 300 }]);
+    const id = await raise(teacher, [{ itemId: ids.PAPER, quantity: 4 }]);
     await call(teacher, 'POST', `/purchase/indents/${id}/submit`);
     expect(await waiting(hod)).toContain(id);
     expect(await waiting(deputy)).toContain(id);
@@ -415,7 +435,7 @@ describe('purchase indents (e2e)', () => {
     expect(pi.status).toBe('approved');
     expect(pi.steps[1].note).toBe('Passed for Prem Principal E2E: The Principal is on leave');
     // one rejection at a level that needs all rejects
-    const second = await raise(teacher, [{ itemId: ids.PAPER, quantity: 5, estRate: 300 }]);
+    const second = await raise(teacher, [{ itemId: ids.PAPER, quantity: 5 }]);
     await call(teacher, 'POST', `/purchase/indents/${second}/submit`);
     expect((await decide(hod, second, 'approve')).statusCode).toBe(201);
     expect((await decide(deputy, second, 'reject', 'Too many reams this term')).statusCode).toBe(
@@ -426,7 +446,7 @@ describe('purchase indents (e2e)', () => {
     const own = await call(admin, 'POST', '/purchase/indents', {
       purpose: 'Science room paper',
       departmentId: ids.science,
-      lines: [{ itemId: ids.PAPER, quantity: 1, estRate: 300 }],
+      lines: [{ itemId: ids.PAPER, quantity: 1 }],
     });
     const ownId = own.json().id as string;
     await call(admin, 'POST', `/purchase/indents/${ownId}/submit`);
@@ -453,7 +473,7 @@ describe('purchase indents (e2e)', () => {
     expect(me.permissions).toEqual(['purchase.indent.raise']);
     const r = await call(plain, 'POST', '/purchase/indents', {
       purpose: 'Counselling room charts',
-      lines: [{ itemId: ids.PAPER, quantity: 1, estRate: 300 }],
+      lines: [{ itemId: ids.PAPER, quantity: 1 }],
     });
     expect(r.statusCode).toBe(201);
     expect(await get(plain, r.json().id as string)).toMatchObject({
@@ -462,5 +482,121 @@ describe('purchase indents (e2e)', () => {
     });
     // someone who is not an employee still has nothing
     expect((await call(outsider, 'GET', '/me')).json().permissions).toEqual([]);
+  });
+
+  it('the stores’ free stock when raised; a reason when they cover it; the printed PI; a line without a rate', async () => {
+    await call(admin, 'PUT', `/purchase/approvals/${ids.science!}/indent`, {
+      levels: [
+        { name: 'HOD', by: 'hod' },
+        { name: 'Principal', by: 'designation', designation: 'Principal' },
+      ],
+    });
+    // pens: 45 free in the main store (5 held), 10 in Science's store, 99 in the office's (not Science's)
+    const mainName = await withMigrator(async (c) => {
+      await c.query(
+        `INSERT INTO stores (school_id, code, name, kind) VALUES ($1, 'MAIN', 'Main store', 'main') ON CONFLICT DO NOTHING`,
+        [school.id],
+      );
+      const main = (
+        await c.query<{ id: string; name: string }>(
+          `SELECT id::text, name FROM stores WHERE school_id = $1 AND kind = 'main'`,
+          [school.id],
+        )
+      ).rows[0]!;
+      const sub = async (code: string, name: string, dept: string) =>
+        (
+          await c.query<{ id: string }>(
+            `INSERT INTO stores (school_id, code, name, kind, parent_id, department_id) VALUES ($1, $2, $3, 'sub', $4, $5) RETURNING id::text`,
+            [school.id, code, name, main.id, dept],
+          )
+        ).rows[0]!.id;
+      const lab = await sub('SCI', 'Science lab store', ids.science!);
+      const office = await sub('ADM', 'Office store', ids.admin_dept!);
+      for (const [store, qty, held] of [
+        [main.id, 50, 5],
+        [lab, 10, 0],
+        [office, 99, 0],
+      ] as const)
+        await c.query(
+          `INSERT INTO stock_balances (school_id, store_id, item_id, qty, reserved) VALUES ($1, $2, $3, $4, $5)`,
+          [school.id, store, ids.PEN, qty, held],
+        );
+      return main.name;
+    });
+    const form = (await call(teacher, 'GET', '/purchase/indent-form')).json();
+    const pen = form.items.find((x: { code: string }) => x.code === 'PEN');
+    expect(pen).toMatchObject({ stockTracked: true, stockUom: 'NOS', perUnit: 1 });
+    expect(pen.stock.map((x: { store: string; free: number }) => [x.store, x.free])).toEqual([
+      [mainName, 45],
+      ['Science lab store', 10],
+    ]);
+    const id = await raise(teacher, [{ itemId: ids.PEN, quantity: 40, estRate: 1 }]);
+    const draft = await get(teacher, id);
+    expect(draft.lineItems[0]).toMatchObject({ stockFree: 55, stockUom: 'NOS', estRate: null });
+    expect(draft.lineItems[0].stockStores).toEqual([
+      { store: mainName, free: 45 },
+      { store: 'Science lab store', free: 10 },
+    ]);
+    expect(draft.can.print).toBe(false);
+    expect((await call(teacher, 'GET', `/purchase/indents/${id}/pdf`)).statusCode).toBe(409);
+    // 55 free covers 40: sending asks why it is bought
+    const refused = await call(teacher, 'POST', `/purchase/indents/${id}/submit`);
+    expect(refused.statusCode).toBe(400);
+    expect(refused.json().errors).toEqual([
+      expect.objectContaining({ path: 'lines.0.stockReason' }),
+    ]);
+    expect(
+      (
+        await call(teacher, 'PUT', `/purchase/indents/${id}`, {
+          purpose: 'For the lab',
+          lines: [{ itemId: ids.PEN, quantity: 40, stockReason: 'Blue ink; the store has black' }],
+        })
+      ).statusCode,
+    ).toBe(200);
+    expect((await call(teacher, 'POST', `/purchase/indents/${id}/submit`)).statusCode).toBe(201);
+    const sent = await get(teacher, id);
+    // the approval's title carries no amount (the raiser opens it too)
+    const subject = await withMigrator(
+      async (c) =>
+        (
+          await c.query<{ subject: string }>(
+            `SELECT subject FROM workflow_instances WHERE id = $1`,
+            [sent.workflowInstanceId],
+          )
+        ).rows[0]!.subject,
+    );
+    expect(subject).not.toContain('₹');
+    // the HOD (an approver) sees the rates and the reason
+    const forHod = await get(hod, id);
+    expect(forHod).toMatchObject({ showRates: true, estimate: 340 });
+    expect(forHod.lineItems[0]).toMatchObject({
+      estRate: 8.5,
+      stockFree: 55,
+      stockReason: 'Blue ink; the store has black',
+    });
+    // printed once sent: the raiser, the approver; nobody else
+    expect(sent.can.print).toBe(true);
+    const pdf = await call(teacher, 'GET', `/purchase/indents/${id}/pdf`);
+    expect(pdf.statusCode).toBe(200);
+    expect(pdf.headers['content-type']).toBe('application/pdf');
+    expect(pdf.rawPayload.subarray(0, 5).toString()).toBe('%PDF-');
+    const saved = await call(hod, 'GET', `/purchase/indents/${id}/pdf?save=1`);
+    expect(saved.headers['content-disposition']).toContain('attachment');
+    expect((await call(outsider, 'GET', `/purchase/indents/${id}/pdf`)).statusCode).toBe(404);
+    // the raiser reads an auto-approval without its amounts; the approver with them
+    expect((await get(teacher, ids.firstUnder!)).bypassNote).toBe(
+      "Auto-approved: within Science's limit",
+    );
+    expect((await get(principal, ids.firstUnder!)).bypassNote).toContain('₹600');
+    // a line in words has no rate: under the limit it still goes to the PR
+    const nos = form.uoms.find((u: { code: string }) => u.code === 'NOS').id as string;
+    const words = await raise(teacher, [
+      { freeText: 'Magnifying glass', quantity: 1, uomId: nos, estRate: 50 },
+    ]);
+    await call(teacher, 'POST', `/purchase/indents/${words}/submit`);
+    await decide(hod, words, 'approve');
+    const done = (await decide(principal, words, 'approve')).json();
+    expect(done).toMatchObject({ route: 'to_requisition', bypassRule: null, estimate: 0 });
+    expect(done.bypassNote).toContain('no rate yet');
   });
 });

@@ -1,6 +1,7 @@
 import { Alert, Badge, Breadcrumbs, PageHeader } from '@edupro/ui';
 import { notFound } from 'next/navigation';
 import { ConfirmAction } from '@/components/ConfirmAction';
+import { FileLinks } from '@/components/FileLinks';
 import { Notice } from '@/components/Notice';
 import { ApiError, apiFetch, getMe } from '@/lib/api';
 import { PassLevel } from '@/components/purchase/PassLevel';
@@ -15,6 +16,7 @@ import {
 } from '@/lib/purchase';
 import { cancelIndent, decideIndent, submitIndent } from '@/lib/purchase-actions';
 
+const qty = (n: number) => n.toLocaleString('en-IN', { maximumFractionDigits: 3 });
 const when = (iso: string | null, time = false) =>
   iso
     ? new Intl.DateTimeFormat('en-IN', {
@@ -50,9 +52,11 @@ const EVENT: Record<string, string> = {
 };
 
 /**
- * One Purchase Indent (docs/design/83, part 2): what is asked and why, its lines with where each rate
- * came from, the department's approved indents this year, the approval levels and who acted, where it
- * went once approved (the PR, or a PR made by the system under a bypass rule), and its history. The
+ * One Purchase Indent (docs/design/83, part 2): what is asked and why, its lines with what the stores
+ * held free when it was raised (and the raiser's reason for buying anyway), the rates, the estimate and
+ * the department's approved indents this year for those who see rates (the purchase office, the
+ * admins, its approvers — not a raiser), the approval levels and who acted, where it went once approved
+ * (the PR, or a PR made by the system under a bypass rule), and its history. Printed once sent. The
  * raiser changes, sends or withdraws it; the current level's approver approves, sends back or rejects.
  */
 export default async function IndentPage({
@@ -96,13 +100,26 @@ export default async function IndentPage({
         title={name}
         description={pi.purpose}
         actions={
-          pi.can.edit ? (
-            <a
-              className="ep-btn ep-btn--secondary ep-btn--sm"
-              href={`/purchase/indents/${pi.id}/edit`}
-            >
-              Change
-            </a>
+          pi.can.edit || pi.can.print ? (
+            <>
+              {pi.can.print ? (
+                <span style={{ display: 'inline-flex', gap: 'var(--sp-1)', alignItems: 'center' }}>
+                  Print{' '}
+                  <FileLinks
+                    href={`/api/purchase/indents/${pi.id}/pdf`}
+                    label={`${name} as a PDF`}
+                  />
+                </span>
+              ) : null}
+              {pi.can.edit ? (
+                <a
+                  className="ep-btn ep-btn--secondary ep-btn--sm"
+                  href={`/purchase/indents/${pi.id}/edit`}
+                >
+                  Change
+                </a>
+              ) : null}
+            </>
           ) : null
         }
       />
@@ -167,7 +184,7 @@ export default async function IndentPage({
                 confirmLabel="Approve"
                 variant="primary"
               >
-                {`${inr(pi.estimate)} for ${pi.department}. It moves to the next level, or, at the last, to the purchase office.`}
+                {`${pi.estimate !== null ? `${inr(pi.estimate)} for ` : 'For '}${pi.department}. It moves to the next level, or, at the last, to the purchase office.`}
               </ConfirmAction>
               <ConfirmAction
                 action={decideIndent}
@@ -243,16 +260,20 @@ export default async function IndentPage({
             <dt>Needed by</dt>
             <dd>{pi.requiredBy ? when(`${pi.requiredBy}T00:00:00+05:30`) : 'Not given'}</dd>
           </div>
-          <div>
-            <dt>Estimate</dt>
-            <dd>
-              <strong>{inr(pi.estimate)}</strong>
-            </dd>
-          </div>
-          <div>
-            <dt>{pi.department}’s approved indents this year</dt>
-            <dd>{inr(pi.departmentSpendThisYear)}</dd>
-          </div>
+          {pi.estimate !== null ? (
+            <div>
+              <dt>Estimate</dt>
+              <dd>
+                <strong>{inr(pi.estimate)}</strong>
+              </dd>
+            </div>
+          ) : null}
+          {pi.departmentSpendThisYear !== null ? (
+            <div>
+              <dt>{pi.department}’s approved indents this year</dt>
+              <dd>{inr(pi.departmentSpendThisYear)}</dd>
+            </div>
+          ) : null}
         </dl>
       </section>
 
@@ -269,13 +290,18 @@ export default async function IndentPage({
                 <th scope="col" style={{ textAlign: 'right' }}>
                   Quantity
                 </th>
-                <th scope="col" style={{ textAlign: 'right' }}>
-                  Rate
-                </th>
-                <th scope="col" style={{ textAlign: 'right' }}>
-                  Amount
-                </th>
-                <th scope="col">Rate from</th>
+                <th scope="col">In store when raised</th>
+                {pi.showRates ? (
+                  <>
+                    <th scope="col" style={{ textAlign: 'right' }}>
+                      Rate
+                    </th>
+                    <th scope="col" style={{ textAlign: 'right' }}>
+                      Amount
+                    </th>
+                    <th scope="col">Rate from</th>
+                  </>
+                ) : null}
               </tr>
             </thead>
             <tbody>
@@ -289,32 +315,57 @@ export default async function IndentPage({
                       <span className="ep-mr-col__desc">Not in the item list</span>
                     ) : null}
                     {l.note ? <span className="ep-mr-col__desc">{l.note}</span> : null}
+                    {l.stockReason ? (
+                      <span className="ep-mr-col__desc">
+                        Bought though the store has it: {l.stockReason}
+                      </span>
+                    ) : null}
                   </td>
                   <td style={{ textAlign: 'right' }}>
                     {l.quantity} {l.uom}
                   </td>
-                  <td style={{ textAlign: 'right' }}>{inr(l.estRate)}</td>
-                  <td style={{ textAlign: 'right' }}>{inr(l.amount)}</td>
                   <td>
-                    {RATE_SOURCE[l.rateSource]}
-                    {l.contractVendor && l.rateSource === 'contract' ? (
-                      <span className="ep-mr-col__desc">{l.contractVendor}</span>
-                    ) : null}
+                    {l.stockFree === null ? (
+                      '—'
+                    ) : l.stockFree > 0 ? (
+                      <>
+                        {qty(l.stockFree)} {l.stockUom} free
+                        <span className="ep-mr-col__desc">
+                          {l.stockStores.map((x) => `${x.store} ${qty(x.free)}`).join(' · ')}
+                        </span>
+                      </>
+                    ) : (
+                      'None free'
+                    )}
                   </td>
+                  {pi.showRates ? (
+                    <>
+                      <td style={{ textAlign: 'right' }}>{inr(l.estRate ?? 0)}</td>
+                      <td style={{ textAlign: 'right' }}>{inr(l.amount ?? 0)}</td>
+                      <td>
+                        {l.rateSource ? RATE_SOURCE[l.rateSource] : null}
+                        {l.contractVendor && l.rateSource === 'contract' ? (
+                          <span className="ep-mr-col__desc">{l.contractVendor}</span>
+                        ) : null}
+                      </td>
+                    </>
+                  ) : null}
                 </tr>
               ))}
             </tbody>
-            <tfoot>
-              <tr>
-                <th scope="row" colSpan={4} style={{ textAlign: 'right' }}>
-                  Estimate
-                </th>
-                <td style={{ textAlign: 'right' }}>
-                  <strong>{inr(pi.estimate)}</strong>
-                </td>
-                <td />
-              </tr>
-            </tfoot>
+            {pi.estimate !== null ? (
+              <tfoot>
+                <tr>
+                  <th scope="row" colSpan={5} style={{ textAlign: 'right' }}>
+                    Estimate
+                  </th>
+                  <td style={{ textAlign: 'right' }}>
+                    <strong>{inr(pi.estimate)}</strong>
+                  </td>
+                  <td />
+                </tr>
+              </tfoot>
+            ) : null}
           </table>
         </div>
       </section>

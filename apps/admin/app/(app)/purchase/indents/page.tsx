@@ -54,6 +54,8 @@ export default async function IndentsPage({
   const data = await apiFetch<{ data: IndentRow[]; total: number; waitingForMe: number }>(
     `/purchase/indents?${qs.toString()}`,
   );
+  // the estimate shows to those who see rates (not to a raiser without purchase rights)
+  const rates = data.data.some((x) => x.estimate !== null);
   const link = (p: Record<string, string | undefined>) => {
     const u = new URLSearchParams();
     for (const [k, v] of Object.entries({ view, status, route, q: sp.q, ...p }))
@@ -158,9 +160,11 @@ export default async function IndentsPage({
               <th scope="col">Department</th>
               <th scope="col">Raised by</th>
               <th scope="col">Needed by</th>
-              <th scope="col" style={{ textAlign: 'right' }}>
-                Estimate
-              </th>
+              {rates ? (
+                <th scope="col" style={{ textAlign: 'right' }}>
+                  Estimate
+                </th>
+              ) : null}
               <th scope="col">Status</th>
             </tr>
           </thead>
@@ -187,7 +191,11 @@ export default async function IndentsPage({
                     {x.onBehalf ? <span className="ep-mr-col__desc">for {x.onBehalf}</span> : null}
                   </td>
                   <td>{x.requiredBy ? when(`${x.requiredBy}T00:00:00+05:30`) : '—'}</td>
-                  <td style={{ textAlign: 'right' }}>{inr(x.estimate)}</td>
+                  {rates ? (
+                    <td style={{ textAlign: 'right' }}>
+                      {x.estimate === null ? '—' : inr(x.estimate)}
+                    </td>
+                  ) : null}
                   <td>
                     <Badge tone={INDENT_STATUS[x.status].tone}>
                       {INDENT_STATUS[x.status].label}
@@ -208,7 +216,7 @@ export default async function IndentsPage({
               ))
             ) : (
               <tr>
-                <td colSpan={6}>
+                <td colSpan={rates ? 6 : 5}>
                   {view === 'waiting'
                     ? 'Nothing is waiting for your approval.'
                     : 'No indents here yet.'}

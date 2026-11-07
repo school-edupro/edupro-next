@@ -326,7 +326,10 @@ export interface IndentRow {
   route: IndentRoute | null;
   bypassRule: 'rate_contract' | 'under_limit' | null;
   bypassNote: string | null;
-  estimate: number;
+  /** null for someone who does not see rates (a raiser without purchase rights) */
+  estimate: number | null;
+  /** the signed-in user sees rates and amounts: the purchase office, the admins, the PI's approvers */
+  showRates: boolean;
   submittedAt: string | null;
   decidedAt: string | null;
   decisionNote: string | null;
@@ -364,13 +367,19 @@ export interface IndentDetail extends IndentRow {
     quantity: number;
     uom: string;
     uomId: string;
-    estRate: number;
-    amount: number;
-    rateSource: 'contract' | 'last' | 'typed';
+    estRate: number | null;
+    amount: number | null;
+    rateSource: 'contract' | 'last' | 'typed' | null;
     contractVendor: string | null;
     note: string | null;
+    /** the free stock in the main store and the department's stores when raised, in the store unit */
+    stockFree: number | null;
+    stockUom: string | null;
+    stockStores: Array<{ store: string; free: number }>;
+    /** why it is bought though the stores had enough */
+    stockReason: string | null;
   }>;
-  departmentSpendThisYear: number;
+  departmentSpendThisYear: number | null;
   requisitions: Array<{ id: string; number: string; autoRule: string | null; status: string }>;
   steps: IndentStep[];
   history: Array<{
@@ -380,13 +389,15 @@ export interface IndentDetail extends IndentRow {
     detail: Record<string, unknown>;
     at: string;
   }>;
-  can: { edit: boolean; submit: boolean; cancel: boolean; decide: boolean };
+  can: { edit: boolean; submit: boolean; cancel: boolean; decide: boolean; print: boolean };
 }
 
 export interface IndentFormLists {
   departments: Array<{ id: string; name: string }>;
   myDepartmentIds: string[];
   anyDepartment: boolean;
+  /** the signed-in user sees and types rates (the purchase office); a raiser does not */
+  showRates: boolean;
   items: Array<{
     id: string;
     code: string;
@@ -398,6 +409,18 @@ export interface IndentFormLists {
     lastRate: number | null;
     contractRate: number | null;
     contractVendor: string | null;
+    stockTracked: boolean;
+    /** the unit the store counts in, and how many of it make one of the item's unit */
+    stockUom: string;
+    perUnit: number;
+    /** free stock (in hand less reserved) in the main store and the departments' stores */
+    stock: Array<{
+      storeId: string;
+      store: string;
+      main: boolean;
+      departmentId: string | null;
+      free: number;
+    }>;
   }>;
   uoms: Array<{ id: string; code: string; name: string; decimals: boolean }>;
   staff: Array<{ id: string; code: string; name: string }>;

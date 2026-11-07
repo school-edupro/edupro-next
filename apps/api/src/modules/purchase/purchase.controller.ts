@@ -64,6 +64,28 @@ export class PurchaseController {
     return this.indents.get(ctx, id);
   }
 
+  @Get('indents/:id/pdf')
+  @ApiOperation({
+    summary: 'The printed Purchase Indent, once sent (rates only for those who see them)',
+  })
+  @AuthenticatedOnly()
+  async indentPdf(
+    @ReqCtx() ctx: RequestContext,
+    @Param('id') id: string,
+    @Query('save') save: string | undefined,
+    @Res() reply: FastifyReply,
+  ) {
+    const f = await this.indents.pdf(ctx, id);
+    void reply
+      .header('content-type', 'application/pdf')
+      .header(
+        'content-disposition',
+        `${save === '1' ? 'attachment' : 'inline'}; filename="${f.filename.replace(/[^\w.\- ]+/g, '_')}"`,
+      )
+      .header('cache-control', 'private, no-store')
+      .send(f.bytes);
+  }
+
   @Post('indents')
   @ApiOperation({ summary: 'Raise a Purchase Indent (a draft until submitted)' })
   @RequirePermission(PURCHASE.indentRaise)

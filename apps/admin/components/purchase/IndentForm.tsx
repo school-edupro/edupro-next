@@ -16,6 +16,8 @@ interface Line {
   /** the rate was typed (not the contract's or the last purchase's) */
   typed: boolean;
   note: string;
+  /** why it is bought though the stores have enough */
+  stockReason: string;
 }
 const blank = (): Line => ({
   itemId: '',
@@ -25,13 +27,18 @@ const blank = (): Line => ({
   estRate: '',
   typed: false,
   note: '',
+  stockReason: '',
 });
+const qtyWords = (n: number) => n.toLocaleString('en-IN', { maximumFractionDigits: 3 });
 
 /**
  * Raise or change a Purchase Indent (docs/design/83, part 2): the department (the raiser's own unless
  * they may raise for any), whom it is for, the purpose, when it is needed, and the lines — a catalogue
- * item (priced from its rate contract, else its last purchase, unless typed) or one described in words.
- * Saved as a draft, or saved and sent to the department's approvers. What was typed stays on a refusal.
+ * item or one described in words. Under each item, what the main store and the department's stores
+ * hold free; when they hold enough for the quantity, the raiser says why it is bought anyway. Rates
+ * and amounts show only to those who see them (the purchase office): a raiser sees none, and the
+ * estimate is worked out from the rate contract, else the last purchase. Saved as a draft, or saved
+ * and sent to the department's approvers. What was typed stays on a refusal.
  */
 export function IndentForm({
   indent,
@@ -62,14 +69,18 @@ export function IndentForm({
           freeText: l.itemId ? '' : l.item,
           quantity: String(l.quantity),
           uomId: l.uomId,
-          estRate: String(l.estRate),
+          estRate: l.estRate === null ? '' : String(l.estRate),
           typed: l.rateSource === 'typed',
           note: l.note ?? '',
+          stockReason: l.stockReason ?? '',
         }))
       : [blank()],
   );
   const [error, setError] = useState<string | null>(null);
+  // a send was tried: the reasons still missing show their error
+  const [tried, setTried] = useState(false);
   const [pending, start] = useTransition();
+  const showRates = lists.showRates;
   const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' }).format(new Date());
 
   const setLine = (i: number, patch: Partial<Line>) =>
@@ -91,6 +102,21 @@ export function IndentForm({
     return Number.isFinite(q) && Number.isFinite(r) ? Math.round(q * r * 100) / 100 : 0;
   };
   const total = lines.reduce((s, l) => s + amountOf(l), 0);
+  /**
+   * What the main store and the chosen department's stores hold free of the line's item, and whether
+   * that covers the quantity (in the store unit).
+   */
+  const stockOf = (l: Line) => {
+    const it = items.get(l.itemId);
+    if (!it || !it.stockTracked) return null;
+    const stores = it.stock.filter(
+      (s) => s.main || (head.departmentId !== '' && s.departmentId === head.departmentId),
+    );
+    const free = Math.round(stores.reduce((t, s) => t + s.free, 0) * 1000) / 1000;
+    const q = Number(l.quantity);
+    const need = Number.isFinite(q) && q > 0 ? q * it.perUnit : 0;
+    return { stores, free, unit: it.stockUom, need, covers: need > 0 && free >= need };
+  };
   const sourceOf = (l: Line) => {
     const it = items.get(l.itemId);
     if (!it || l.typed) return RATE_SOURCE.typed;
@@ -101,6 +127,13 @@ export function IndentForm({
 
   const send = (submit: boolean) => {
     setError(null);
+    if (submit && lines.some((l) => stockOf(l)?.covers && l.stockReason.trim().length < 3)) {
+      setTried(true);
+      setError(
+        'The store already has enough of an item: say why it is bought (marked below), or lower the quantity.',
+      );
+      return;
+    }
     const body = {
       ...(head.departmentId ? { departmentId: head.departmentId } : {}),
       ...(head.onBehalfEmployeeId ? { onBehalfEmployeeId: head.onBehalfEmployeeId } : {}),
@@ -114,14 +147,17 @@ export function IndentForm({
             ? {
                 itemId: l.itemId,
                 quantity: l.quantity,
-                ...(l.typed && l.estRate !== '' ? { estRate: l.estRate } : {}),
+                ...(showRates && l.typed && l.estRate !== '' ? { estRate: l.estRate } : {}),
                 ...(l.note.trim() ? { note: l.note } : {}),
+                ...(stockOf(l)?.covers && l.stockReason.trim()
+                  ? { stockReason: l.stockReason.trim() }
+                  : {}),
               }
             : {
                 freeText: l.freeText,
                 quantity: l.quantity,
                 ...(l.uomId ? { uomId: l.uomId } : {}),
-                ...(l.estRate !== '' ? { estRate: l.estRate } : {}),
+                ...(showRates && l.estRate !== '' ? { estRate: l.estRate } : {}),
                 ...(l.note.trim() ? { note: l.note } : {}),
               },
         ),
@@ -253,13 +289,19 @@ export function IndentForm({
 
       <FormSection
         title="Items"
-        description="Pick from the item list (its rate comes from the rate contract, else the last purchase; you may type your own estimate). Not in the list? Pick “Not in the list” and describe it: the purchase office matches it on the PR."
+        description={
+          showRates
+            ? 'Pick from the item list (its rate comes from the rate contract, else the last purchase; you may type your own estimate); what the stores hold free shows under it. Not in the list? Pick “Not in the list” and describe it: the purchase office matches it on the PR.'
+            : 'Pick from the item list; what the stores hold free shows under it. Not in the list? Pick “Not in the list” and describe it: the purchase office matches it on the PR and prices the indent.'
+        }
       >
         <div className="ep-purch-lines">
           {lines.map((l, i) => {
             const it = items.get(l.itemId);
             const free = l.itemId === FREE;
             const n = String(i + 1);
+            const stock = stockOf(l);
+            const whyMissing = tried && !!stock?.covers && l.stockReason.trim().length < 3;
             return (
               <fieldset key={i} className="ep-purch-line ep-purch-line--wide">
                 <legend className="ep-sr-only">Line {n}</legend>
@@ -271,6 +313,7 @@ export function IndentForm({
                     id={`if-l${n}-item`}
                     className="ep-select"
                     value={l.itemId}
+                    aria-describedby={stock ? `if-l${n}-stock` : undefined}
                     onChange={(e) => pickItem(i, e.target.value)}
                   >
                     <option value="">Pick the item</option>
@@ -285,6 +328,15 @@ export function IndentForm({
                     ))}
                     <option value={FREE}>Not in the list: describe it</option>
                   </select>
+                  {stock ? (
+                    <span id={`if-l${n}-stock`} className="ep-field__help">
+                      {stock.stores.length
+                        ? `In the stores: ${qtyWords(stock.free)} ${stock.unit} free (${stock.stores
+                            .map((s) => `${s.store} ${qtyWords(s.free)}`)
+                            .join(' · ')})`
+                        : 'In the stores: none free'}
+                    </span>
+                  ) : null}
                 </label>
                 {free ? (
                   <label className="ep-field" htmlFor={`if-l${n}-text`}>
@@ -335,31 +387,33 @@ export function IndentForm({
                     </select>
                   </label>
                 ) : null}
-                <label className="ep-field" htmlFor={`if-l${n}-rate`}>
-                  <span className="ep-field__label">Estimated rate (₹)</span>
-                  <input
-                    id={`if-l${n}-rate`}
-                    className="ep-input"
-                    inputMode="decimal"
-                    value={l.estRate}
-                    onChange={(e) => setLine(i, { estRate: e.target.value, typed: true })}
-                  />
-                  <span className="ep-field__help">
-                    {l.itemId ? sourceOf(l) : null}
-                    {it && l.typed && (it.contractRate ?? it.lastRate) !== null ? (
-                      <>
-                        {' · '}
-                        <button
-                          type="button"
-                          className="ep-btn ep-btn--ghost ep-btn--sm"
-                          onClick={() => pickItem(i, l.itemId)}
-                        >
-                          Use {inr((it.contractRate ?? it.lastRate)!)}
-                        </button>
-                      </>
-                    ) : null}
-                  </span>
-                </label>
+                {showRates ? (
+                  <label className="ep-field" htmlFor={`if-l${n}-rate`}>
+                    <span className="ep-field__label">Estimated rate (₹)</span>
+                    <input
+                      id={`if-l${n}-rate`}
+                      className="ep-input"
+                      inputMode="decimal"
+                      value={l.estRate}
+                      onChange={(e) => setLine(i, { estRate: e.target.value, typed: true })}
+                    />
+                    <span className="ep-field__help">
+                      {l.itemId ? sourceOf(l) : null}
+                      {it && l.typed && (it.contractRate ?? it.lastRate) !== null ? (
+                        <>
+                          {' · '}
+                          <button
+                            type="button"
+                            className="ep-btn ep-btn--ghost ep-btn--sm"
+                            onClick={() => pickItem(i, l.itemId)}
+                          >
+                            Use {inr((it.contractRate ?? it.lastRate)!)}
+                          </button>
+                        </>
+                      ) : null}
+                    </span>
+                  </label>
+                ) : null}
                 <label className="ep-field" htmlFor={`if-l${n}-note`}>
                   <span className="ep-field__label">Note</span>
                   <input
@@ -371,11 +425,40 @@ export function IndentForm({
                     onChange={(e) => setLine(i, { note: e.target.value })}
                   />
                 </label>
+                {stock?.covers ? (
+                  <label className="ep-field" htmlFor={`if-l${n}-why`}>
+                    <span className="ep-field__label" data-required="true">
+                      Why buy it? The store has enough
+                    </span>
+                    <input
+                      id={`if-l${n}-why`}
+                      className="ep-input"
+                      maxLength={300}
+                      value={l.stockReason}
+                      placeholder="e.g. another size or make is needed"
+                      aria-invalid={whyMissing || undefined}
+                      aria-describedby={`if-l${n}-why-help${whyMissing ? ` if-l${n}-why-err` : ''}`}
+                      onChange={(e) => setLine(i, { stockReason: e.target.value })}
+                    />
+                    <span id={`if-l${n}-why-help`} className="ep-field__help">
+                      {`The stores have ${qtyWords(stock.free)} ${stock.unit} free, enough for this. Send it with the reason (the approvers see it), lower the quantity, or ask the store to issue it.`}
+                    </span>
+                    {whyMissing ? (
+                      <span id={`if-l${n}-why-err`} className="ep-field__error" role="alert">
+                        Say in a few words why it is bought
+                      </span>
+                    ) : null}
+                  </label>
+                ) : null}
                 <div className="ep-field">
-                  <span className="ep-field__label">Amount</span>
-                  <output className="ep-purch-amount" htmlFor={`if-l${n}-qty if-l${n}-rate`}>
-                    {inr(amountOf(l))}
-                  </output>
+                  {showRates ? (
+                    <>
+                      <span className="ep-field__label">Amount</span>
+                      <output className="ep-purch-amount" htmlFor={`if-l${n}-qty if-l${n}-rate`}>
+                        {inr(amountOf(l))}
+                      </output>
+                    </>
+                  ) : null}
                   {lines.length > 1 ? (
                     <button
                       type="button"
@@ -408,9 +491,11 @@ export function IndentForm({
             ) : (
               <span />
             )}
-            <p className="ep-purch-total" aria-live="polite">
-              Estimate: <strong>{inr(total)}</strong>
-            </p>
+            {showRates ? (
+              <p className="ep-purch-total" aria-live="polite">
+                Estimate: <strong>{inr(total)}</strong>
+              </p>
+            ) : null}
           </div>
         </div>
       </FormSection>

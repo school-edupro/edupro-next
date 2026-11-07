@@ -1,6 +1,7 @@
 import { Badge, Card, PageHeader } from '@edupro/ui';
 import { ApiError } from '@edupro/bff';
 import { notFound, redirect } from 'next/navigation';
+import { FileLinks } from '@/components/FileLinks';
 import { bff } from '@/lib/bff';
 import { currentLang, t } from '@/lib/i18n';
 import { INDENT_ROUTE, INDENT_STATUS, inr, RATE_SOURCE, type IndentDetail } from '@/lib/purchase';
@@ -12,6 +13,7 @@ import {
   submitIndent,
 } from '@/lib/purchase-actions';
 
+const qty = (n: number) => n.toLocaleString('en-IN', { maximumFractionDigits: 3 });
 const when = (iso: string, time = false) =>
   new Intl.DateTimeFormat('en-IN', {
     timeZone: 'Asia/Kolkata',
@@ -84,7 +86,7 @@ export default async function StaffIndentPage({
           <p style={{ marginTop: 0 }}>
             <Badge tone={st.tone}>{st.label}</Badge>{' '}
             {pi.priority === 'urgent' ? <Badge tone="danger">Urgent</Badge> : null}{' '}
-            <strong>{inr(pi.estimate)}</strong>
+            {pi.estimate !== null ? <strong>{inr(pi.estimate)}</strong> : null}
           </p>
           <p>
             {pi.raisedBy}
@@ -103,9 +105,21 @@ export default async function StaffIndentPage({
               {pi.bypassNote ? <span className="ep-field__help"> {pi.bypassNote}</span> : null}
             </p>
           ) : null}
-          <p className="ep-field__help">
-            {pi.department}’s approved indents this year: {inr(pi.departmentSpendThisYear)}
-          </p>
+          {pi.departmentSpendThisYear !== null ? (
+            <p className="ep-field__help">
+              {pi.department}’s approved indents this year: {inr(pi.departmentSpendThisYear)}
+            </p>
+          ) : null}
+          {pi.can.print ? (
+            <p style={{ display: 'flex', gap: 'var(--sp-1)', alignItems: 'center' }}>
+              {t(lang, 'Print')}{' '}
+              <FileLinks
+                url={`/api/purchase-indent/${pi.id}`}
+                saveUrl={`/api/purchase-indent/${pi.id}?save=1`}
+                label={`${name} as a PDF`}
+              />
+            </p>
+          ) : null}
         </Card>
 
         {pi.can.decide ? (
@@ -198,9 +212,12 @@ export default async function StaffIndentPage({
                   <th scope="col" style={{ textAlign: 'right' }}>
                     Qty
                   </th>
-                  <th scope="col" style={{ textAlign: 'right' }}>
-                    Amount
-                  </th>
+                  <th scope="col">In store when raised</th>
+                  {pi.showRates ? (
+                    <th scope="col" style={{ textAlign: 'right' }}>
+                      Amount
+                    </th>
+                  ) : null}
                 </tr>
               </thead>
               <tbody>
@@ -208,15 +225,44 @@ export default async function StaffIndentPage({
                   <tr key={l.id}>
                     <td>
                       {l.item}
-                      <span className="ep-field__help" style={{ display: 'block' }}>
-                        {inr(l.estRate)} · {RATE_SOURCE[l.rateSource]}
-                        {l.note ? ` · ${l.note}` : ''}
-                      </span>
+                      {pi.showRates || l.note ? (
+                        <span className="ep-field__help" style={{ display: 'block' }}>
+                          {[
+                            pi.showRates && l.estRate !== null
+                              ? `${inr(l.estRate)} · ${l.rateSource ? RATE_SOURCE[l.rateSource] : ''}`
+                              : null,
+                            l.note,
+                          ]
+                            .filter(Boolean)
+                            .join(' · ')}
+                        </span>
+                      ) : null}
+                      {l.stockReason ? (
+                        <span className="ep-field__help" style={{ display: 'block' }}>
+                          Bought though the store has it: {l.stockReason}
+                        </span>
+                      ) : null}
                     </td>
                     <td style={{ textAlign: 'right' }}>
                       {l.quantity} {l.uom}
                     </td>
-                    <td style={{ textAlign: 'right' }}>{inr(l.amount)}</td>
+                    <td>
+                      {l.stockFree === null ? (
+                        '—'
+                      ) : l.stockFree > 0 ? (
+                        <>
+                          {qty(l.stockFree)} {l.stockUom} free
+                          <span className="ep-field__help" style={{ display: 'block' }}>
+                            {l.stockStores.map((x) => `${x.store} ${qty(x.free)}`).join(' · ')}
+                          </span>
+                        </>
+                      ) : (
+                        'None free'
+                      )}
+                    </td>
+                    {pi.showRates ? (
+                      <td style={{ textAlign: 'right' }}>{inr(l.amount ?? 0)}</td>
+                    ) : null}
                   </tr>
                 ))}
               </tbody>

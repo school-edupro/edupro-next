@@ -305,9 +305,20 @@ export const IndentLineSchema = z
     quantity: z.coerce.number().gt(0).max(999999),
     /** the item's own unit unless given; required for a line in words */
     uomId: IdSchema.optional(),
-    /** the estimate per unit: the rate contract's, else the last purchase rate, unless typed */
+    /**
+     * the estimate per unit: the rate contract's, else the last purchase rate, unless typed — typed only
+     * by someone who sees rates (the purchase office); a raiser's is ignored (docs/design/83)
+     */
     estRate: z.coerce.number().min(0).max(1e10).optional(),
     note: z.string().trim().max(300).optional(),
+    /** why it is bought when the store has enough free stock for the quantity (asked on sending) */
+    stockReason: z
+      .string()
+      .trim()
+      .max(300)
+      .optional()
+      .transform((v) => (v ? v : undefined))
+      .refine((v) => v === undefined || v.length >= 3, 'Say in a few words why'),
   })
   .refine((l) => !!l.itemId !== !!l.freeText, {
     message: 'Pick an item, or describe one not in the list',

@@ -1,12 +1,16 @@
-import { Injectable, type OnModuleInit } from '@nestjs/common';
+import { Inject, Injectable, type OnModuleInit } from '@nestjs/common';
 import type { PoolClient } from '@edupro/db';
+import type { StorageDriver } from '@edupro/storage';
 import { AuditService } from '../../common/audit/audit.service';
 import { DbService } from '../../common/db/db.service';
 import { DomainError } from '../../common/errors/domain-error';
 import { requireTenant, type RequestContext } from '../../common/http/request-context';
+import { STORAGE_DRIVER } from '../files/storage';
 import { WorkflowService, type InstanceRow } from '../workflow/workflow.service';
 import { syncFlow } from './purchase-flow';
+import { purchaseIndentPdf } from './purchase-indent-pdf';
 import { draftOrdersFor } from './purchase-order-core';
+import { pdfSchool } from './purchase-stock-core';
 import { PurchaseVendorsService } from './purchase-vendors.service';
 import {
   PURCHASE,
@@ -19,6 +23,40 @@ import {
 
 const rupees = (n: number) =>
   `₹${n.toLocaleString('en-IN', { maximumFractionDigits: 2, minimumFractionDigits: 0 })}`;
+const qtyWords = (n: number) => n.toLocaleString('en-IN', { maximumFractionDigits: 3 });
+const dmy = (iso: string) => {
+  const [y, m, d] = iso.slice(0, 10).split('-');
+  return `${d!}-${m!}-${y!}`;
+};
+/** A moment's day in India, as dd-mm-yyyy. */
+const istDay = (t: Date) =>
+  dmy(new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' }).format(t));
+
+/**
+ * Who sees a PI's rates and amounts (docs/design/83, "As built — rates hidden from the raiser"): the
+ * purchase office and the admins (any of these rights), and the PI's approvers on the PIs they approve.
+ * A raiser without them never does: the estimate is still worked out (the rate contract's rate, else
+ * the last purchase rate) for the department's limit, but not shown to them.
+ */
+const RATE_RIGHTS = [
+  PURCHASE.indentView,
+  PURCHASE.requisitionManage,
+  PURCHASE.orderManage,
+  PURCHASE.reportView,
+  PURCHASE.settingsManage,
+] as const;
+
+/** A bypass note without its amounts, for someone who does not see rates. */
+const withoutMoney = (note: string | null) => {
+  if (!note || !note.includes('₹')) return note;
+  const t = note
+    .replace(
+      /^Auto-approved: ₹[\d,.]+ is within (.+)'s limit of ₹[\d,.]+$/,
+      "Auto-approved: within $1's limit",
+    )
+    .replace(/ come to ₹[\d,.]+, over (.+)'s limit of ₹[\d,.]+$/, " go over $1's limit");
+  return t.includes('₹') ? null : t;
+};
 
 interface IndentDbRow {
   id: string;
@@ -44,6 +82,8 @@ interface IndentDbRow {
   created_at: Date;
   waiting_with: string | null;
   lines: number;
+  /** the signed-in user approves (or approved) it, not having raised it: they see its rates */
+  approver: boolean;
 }
 
 /** A user's name as staff know it: their employee record's, else the account's. */
@@ -60,7 +100,11 @@ const SELECT = `
          (SELECT st.name || ' (' || COALESCE((SELECT string_agg(${PERSON('au')}, ', ' ORDER BY ${PERSON('au')}) FROM users au WHERE au.id = ANY(st.assignee_user_ids)), 'nobody') || ')'
             FROM workflow_instances i JOIN workflow_steps st ON st.instance_id = i.id AND st.level = i.current_level AND st.status = 'pending'
            WHERE i.id = pi.workflow_instance_id AND i.status = 'pending') AS waiting_with,
-         (SELECT count(*)::int FROM purchase_indent_lines l WHERE l.indent_id = pi.id) AS lines
+         (SELECT count(*)::int FROM purchase_indent_lines l WHERE l.indent_id = pi.id) AS lines,
+         (pi.raised_by <> app.current_user_id() AND EXISTS (SELECT 1 FROM workflow_steps s WHERE s.instance_id = pi.workflow_instance_id
+            AND (app.current_user_id() = ANY(s.assignee_user_ids) OR s.acted_by = app.current_user_id()
+                 OR EXISTS (SELECT 1 FROM delegations dg WHERE dg.to_user_id = app.current_user_id() AND dg.from_user_id = ANY(s.assignee_user_ids)
+                              AND dg.revoked_at IS NULL)))) AS approver
     FROM purchase_indents pi
     JOIN departments d ON d.id = pi.department_id
     JOIN users ru ON ru.id = pi.raised_by
@@ -86,6 +130,7 @@ export class PurchaseIndentsService implements OnModuleInit {
     private readonly db: DbService,
     private readonly audit: AuditService,
     private readonly workflow: WorkflowService,
+    @Inject(STORAGE_DRIVER) private readonly storage: StorageDriver,
   ) {}
 
   onModuleInit() {
@@ -104,7 +149,14 @@ export class PurchaseIndentsService implements OnModuleInit {
     return r.rows;
   }
 
-  private shape(r: IndentDbRow) {
+  /** The purchase office and the admins see every PI's rates (RATE_RIGHTS). */
+  private officeRates(ctx: RequestContext) {
+    const p = ctx.permissions;
+    return !!p && RATE_RIGHTS.some((x) => p.has(x));
+  }
+
+  private shape(r: IndentDbRow, office: boolean) {
+    const sees = office || r.approver;
     return {
       id: r.id,
       number: r.number,
@@ -120,8 +172,10 @@ export class PurchaseIndentsService implements OnModuleInit {
       status: r.status,
       route: r.route,
       bypassRule: r.bypass_rule,
-      bypassNote: r.bypass_note,
-      estimate: Number(r.estimate),
+      bypassNote: sees ? r.bypass_note : withoutMoney(r.bypass_note),
+      /** NULL for someone who does not see rates */
+      estimate: sees ? Number(r.estimate) : null,
+      showRates: sees,
       workflowInstanceId: r.workflow_instance_id,
       submittedAt: r.submitted_at?.toISOString() ?? null,
       decidedAt: r.decided_at?.toISOString() ?? null,
@@ -185,7 +239,7 @@ export class PurchaseIndentsService implements OnModuleInit {
         `SELECT count(*)::int AS n FROM purchase_indents pi WHERE pi.status = 'submitted' AND ${PurchaseIndentsService.WAITING}`,
       );
       return {
-        data: rows.rows.map((r) => this.shape(r)),
+        data: rows.rows.map((r) => this.shape(r, this.officeRates(ctx))),
         total: total.rows[0]!.n,
         page: q.page,
         size: q.size,
@@ -206,10 +260,10 @@ export class PurchaseIndentsService implements OnModuleInit {
     return r.rows[0];
   }
 
-  async get(ctx: RequestContext, id: string) {
-    return this.db.tenant(requireTenant(ctx), async (c) => {
-      const pi = await this.load(c, ctx, id);
-      const lines = await c.query<{
+  /** The PI's lines, with what the stores held free when it was raised. */
+  private async linesOf(c: PoolClient, id: string) {
+    return (
+      await c.query<{
         id: string;
         seq: number;
         item_id: string | null;
@@ -220,21 +274,35 @@ export class PurchaseIndentsService implements OnModuleInit {
         uom: string;
         uom_id: string;
         est_rate: string;
-        rate_source: string;
+        rate_source: 'contract' | 'last' | 'typed';
         contract_id: string | null;
         contract_vendor: string | null;
         note: string | null;
+        stock_free: string | null;
+        stock_stores: Array<{ store: string; free: number }>;
+        stock_reason: string | null;
+        stock_uom: string | null;
       }>(
         `SELECT l.id::text, l.seq, l.item_id::text, i.code AS item_code, i.name AS item, l.free_text, l.quantity::text,
-                u.code AS uom, l.uom_id::text, l.est_rate::text, l.rate_source, l.contract_id::text, v.legal_name AS contract_vendor, l.note
+                u.code AS uom, l.uom_id::text, l.est_rate::text, l.rate_source, l.contract_id::text, v.legal_name AS contract_vendor, l.note,
+                l.stock_free::text, l.stock_stores, l.stock_reason, su.code AS stock_uom
            FROM purchase_indent_lines l
            LEFT JOIN purchase_items i ON i.id = l.item_id
+           LEFT JOIN purchase_uoms su ON su.id = COALESCE(i.stock_uom_id, i.uom_id)
            JOIN purchase_uoms u ON u.id = l.uom_id
            LEFT JOIN purchase_rate_contracts rc ON rc.id = l.contract_id
            LEFT JOIN vendors v ON v.id = rc.vendor_id
           WHERE l.indent_id = $1 ORDER BY l.seq`,
         [id],
-      );
+      )
+    ).rows;
+  }
+
+  async get(ctx: RequestContext, id: string) {
+    return this.db.tenant(requireTenant(ctx), async (c) => {
+      const pi = await this.load(c, ctx, id);
+      const sees = this.officeRates(ctx) || pi.approver;
+      const lines = { rows: await this.linesOf(c, id) };
       const spend = await c.query<{ total: string }>(
         `SELECT COALESCE(sum(estimate), 0)::text AS total FROM purchase_indents
           WHERE department_id = $1 AND status = 'approved'
@@ -283,7 +351,7 @@ export class PurchaseIndentsService implements OnModuleInit {
         (pi.status === 'draft' || pi.status === 'sent_back') && (isRaiser || anyDept);
       const approvedYet = instance?.steps.some((s) => s.status === 'approved') ?? false;
       return {
-        ...this.shape(pi),
+        ...this.shape(pi, this.officeRates(ctx)),
         lineItems: lines.rows.map((l) => ({
           id: l.id,
           seq: l.seq,
@@ -294,13 +362,19 @@ export class PurchaseIndentsService implements OnModuleInit {
           quantity: Number(l.quantity),
           uom: l.uom,
           uomId: l.uom_id,
-          estRate: Number(l.est_rate),
-          amount: Math.round(Number(l.quantity) * Number(l.est_rate) * 100) / 100,
-          rateSource: l.rate_source,
-          contractVendor: l.contract_vendor,
+          // rates and amounts only for those who see them
+          estRate: sees ? Number(l.est_rate) : null,
+          amount: sees ? Math.round(Number(l.quantity) * Number(l.est_rate) * 100) / 100 : null,
+          rateSource: sees ? l.rate_source : null,
+          contractVendor: sees ? l.contract_vendor : null,
           note: l.note,
+          // the free stock in the main store and the department's stores when it was raised
+          stockFree: l.stock_free === null ? null : Number(l.stock_free),
+          stockUom: l.stock_uom,
+          stockStores: l.stock_stores,
+          stockReason: l.stock_reason,
         })),
-        departmentSpendThisYear: Number(spend.rows[0]!.total),
+        departmentSpendThisYear: sees ? Number(spend.rows[0]!.total) : null,
         requisitions: pr.rows.map((r) => ({
           id: r.id,
           number: r.number,
@@ -324,12 +398,17 @@ export class PurchaseIndentsService implements OnModuleInit {
               pi.status === 'sent_back' ||
               (pi.status === 'submitted' && !approvedYet)),
           decide: mine.rows.length > 0 && pi.raised_by !== String(ctx.user.id),
+          // printed once it is sent (it has its number)
+          print: pi.number !== null,
         },
       };
     });
   }
 
-  /** What the indent form picks from: the departments, the catalogue (with its rates), units, staff. */
+  /**
+   * What the indent form picks from: the departments, the catalogue (with its rates for those who see
+   * them, and its free stock in the main store and the departments' stores), units, staff.
+   */
   async formLists(ctx: RequestContext) {
     return this.db.tenant(requireTenant(ctx), async (c) => {
       await PurchaseVendorsService.seed(c);
@@ -353,10 +432,15 @@ export class PurchaseIndentsService implements OnModuleInit {
         last: string | null;
         contract_rate: string | null;
         contract_vendor: string | null;
+        stock_tracked: boolean;
+        stock_uom: string;
+        per_unit: string;
       }>(
         `SELECT i.id::text, i.code, i.name, c.name AS category, u.id::text AS uom_id, u.code AS uom, u.decimals,
-                i.last_purchase_rate::text AS last, rc.rate::text AS contract_rate, rc.vendor AS contract_vendor
+                i.last_purchase_rate::text AS last, rc.rate::text AS contract_rate, rc.vendor AS contract_vendor,
+                i.stock_tracked, COALESCE(su.code, u.code) AS stock_uom, i.stock_per_unit::text AS per_unit
            FROM purchase_items i JOIN purchase_item_categories c ON c.id = i.category_id JOIN purchase_uoms u ON u.id = i.uom_id
+           LEFT JOIN purchase_uoms su ON su.id = i.stock_uom_id
            LEFT JOIN LATERAL (SELECT rc.rate, v.legal_name AS vendor FROM purchase_rate_contracts rc JOIN vendors v ON v.id = rc.vendor_id AND v.status = 'active'
                                WHERE rc.item_id = i.id AND rc.status = 'active'
                                  AND (now() AT TIME ZONE 'Asia/Kolkata')::date BETWEEN rc.valid_from AND rc.valid_to LIMIT 1) rc ON true
@@ -369,10 +453,51 @@ export class PurchaseIndentsService implements OnModuleInit {
         `SELECT id::text, employee_code AS code, display_name AS name FROM employees
           WHERE deleted_at IS NULL AND status = 'active' ORDER BY display_name LIMIT 3000`,
       );
+      // the free stock (in hand less reserved) in the main store and the stores of the departments
+      // the raiser may raise for
+      const stock = await c.query<{
+        item_id: string;
+        store_id: string;
+        store: string;
+        main: boolean;
+        department_id: string | null;
+        free: string;
+      }>(
+        `SELECT sb.item_id::text, s.id::text AS store_id, s.name AS store, s.kind = 'main' AS main, s.department_id::text,
+                (sb.qty - sb.reserved)::text AS free
+           FROM stock_balances sb JOIN stores s ON s.id = sb.store_id AND s.status = 'active'
+          WHERE sb.qty - sb.reserved > 0 AND (s.kind = 'main' OR s.department_id = ANY($1::bigint[]))
+          ORDER BY s.kind = 'main' DESC, s.name`,
+        [deps.map((d) => d.id)],
+      );
+      const held = new Map<
+        string,
+        Array<{
+          storeId: string;
+          store: string;
+          main: boolean;
+          departmentId: string | null;
+          free: number;
+        }>
+      >();
+      for (const r of stock.rows)
+        held.set(r.item_id, [
+          ...(held.get(r.item_id) ?? []),
+          {
+            storeId: r.store_id,
+            store: r.store,
+            main: r.main,
+            departmentId: r.department_id,
+            free: Number(r.free),
+          },
+        ]);
+      const showRates = this.officeRates(ctx);
       return {
         departments: deps,
         myDepartmentIds: mine.map((d) => d.id),
         anyDepartment: any,
+        /** the raiser sees rates and types them (the purchase office); otherwise they are left out */
+        showRates,
         items: items.rows.map((x) => ({
           id: x.id,
           code: x.code,
@@ -381,9 +506,14 @@ export class PurchaseIndentsService implements OnModuleInit {
           uomId: x.uom_id,
           uom: x.uom,
           decimals: x.decimals,
-          lastRate: x.last === null ? null : Number(x.last),
-          contractRate: x.contract_rate === null ? null : Number(x.contract_rate),
-          contractVendor: x.contract_vendor,
+          lastRate: showRates && x.last !== null ? Number(x.last) : null,
+          contractRate: showRates && x.contract_rate !== null ? Number(x.contract_rate) : null,
+          contractVendor: showRates ? x.contract_vendor : null,
+          stockTracked: x.stock_tracked,
+          /** the unit the store counts in, and how many of it make one of the item's unit */
+          stockUom: x.stock_uom,
+          perUnit: Number(x.per_unit),
+          stock: x.stock_tracked ? (held.get(x.id) ?? []) : [],
         })),
         uoms: uoms.rows,
         staff: staff.rows,
@@ -419,8 +549,12 @@ export class PurchaseIndentsService implements OnModuleInit {
     );
   }
 
-  /** The lines checked and priced: the rate contract's rate, else the last purchase rate, unless typed. */
-  private async priceLines(c: PoolClient, lines: IndentDto['lines']) {
+  /**
+   * The lines checked and priced: the rate contract's rate, else the last purchase rate, unless typed
+   * by someone who sees rates (a raiser's typed rate is ignored; a line in words is then priced 0 and
+   * the purchase office prices it on the PR).
+   */
+  private async priceLines(c: PoolClient, lines: IndentDto['lines'], sees: boolean) {
     const out: Array<{
       itemId: string | null;
       freeText: string | null;
@@ -430,8 +564,10 @@ export class PurchaseIndentsService implements OnModuleInit {
       rateSource: 'contract' | 'last' | 'typed';
       contractId: string | null;
       note: string | null;
+      stockReason: string | null;
     }> = [];
     for (const l of lines) {
+      const typed = sees ? l.estRate : undefined;
       if (l.itemId) {
         const it = await c.query<{
           uom_id: string;
@@ -462,22 +598,17 @@ export class PurchaseIndentsService implements OnModuleInit {
         if (!x.decimals && !Number.isInteger(l.quantity))
           throw new DomainError('validation-failed', `${x.name}: a whole number`, { status: 400 });
         const source =
-          l.estRate !== undefined
-            ? 'typed'
-            : x.contract_rate
-              ? 'contract'
-              : x.last
-                ? 'last'
-                : 'typed';
+          typed !== undefined ? 'typed' : x.contract_rate ? 'contract' : x.last ? 'last' : 'typed';
         out.push({
           itemId: l.itemId,
           freeText: null,
           quantity: l.quantity,
           uomId: l.uomId ?? x.uom_id,
-          estRate: l.estRate ?? Number(x.contract_rate ?? x.last ?? 0),
+          estRate: typed ?? Number(x.contract_rate ?? x.last ?? 0),
           rateSource: source,
           contractId: x.contract_id,
           note: l.note ?? null,
+          stockReason: l.stockReason ?? null,
         });
       } else {
         out.push({
@@ -485,24 +616,31 @@ export class PurchaseIndentsService implements OnModuleInit {
           freeText: l.freeText!,
           quantity: l.quantity,
           uomId: l.uomId!,
-          estRate: l.estRate ?? 0,
+          estRate: typed ?? 0,
           rateSource: 'typed',
           contractId: null,
           note: l.note ?? null,
+          stockReason: null,
         });
       }
     }
     return out;
   }
 
-  private async writeLines(c: PoolClient, indentId: string, lines: IndentDto['lines']) {
-    const priced = await this.priceLines(c, lines);
+  private async writeLines(
+    c: PoolClient,
+    ctx: RequestContext,
+    indentId: string,
+    departmentId: string,
+    lines: IndentDto['lines'],
+  ) {
+    const priced = await this.priceLines(c, lines, this.officeRates(ctx));
     await c.query(`DELETE FROM purchase_indent_lines WHERE indent_id = $1`, [indentId]);
     let estimate = 0;
     for (const [i, l] of priced.entries()) {
       await c.query(
-        `INSERT INTO purchase_indent_lines (school_id, indent_id, seq, item_id, free_text, quantity, uom_id, est_rate, rate_source, contract_id, note)
-         VALUES (app.current_school_id(), $1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+        `INSERT INTO purchase_indent_lines (school_id, indent_id, seq, item_id, free_text, quantity, uom_id, est_rate, rate_source, contract_id, note, stock_reason)
+         VALUES (app.current_school_id(), $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
         [
           indentId,
           i + 1,
@@ -514,6 +652,7 @@ export class PurchaseIndentsService implements OnModuleInit {
           l.rateSource,
           l.contractId,
           l.note,
+          l.stockReason,
         ],
       );
       estimate += Math.round(l.quantity * l.estRate * 100) / 100;
@@ -522,6 +661,64 @@ export class PurchaseIndentsService implements OnModuleInit {
       indentId,
       Math.round(estimate * 100) / 100,
     ]);
+    await this.noteStock(c, indentId, departmentId);
+  }
+
+  /**
+   * Keeps on each line what the main store and the department's stores hold free of its item now (in
+   * the store unit), store by store: on saving and again on sending (docs/design/83).
+   */
+  private async noteStock(c: PoolClient, indentId: string, departmentId: string) {
+    await c.query(
+      `UPDATE purchase_indent_lines l SET stock_free = x.free, stock_stores = x.stores
+         FROM (SELECT l2.id,
+                      CASE WHEN i.stock_tracked THEN COALESCE(sum(GREATEST(sb.qty - sb.reserved, 0)), 0) END AS free,
+                      CASE WHEN i.stock_tracked THEN
+                        COALESCE(jsonb_agg(jsonb_build_object('store', s.name, 'free', sb.qty - sb.reserved) ORDER BY s.kind = 'main' DESC, s.name)
+                                   FILTER (WHERE sb.qty - sb.reserved > 0), '[]'::jsonb)
+                      ELSE '[]'::jsonb END AS stores
+                 FROM purchase_indent_lines l2
+                 JOIN purchase_items i ON i.id = l2.item_id
+                 LEFT JOIN stores s ON s.status = 'active' AND (s.kind = 'main' OR s.department_id = $2::bigint)
+                 LEFT JOIN stock_balances sb ON sb.store_id = s.id AND sb.item_id = l2.item_id
+                WHERE l2.indent_id = $1
+                GROUP BY l2.id, i.stock_tracked) x
+        WHERE l.id = x.id`,
+      [indentId, departmentId],
+    );
+  }
+
+  /**
+   * On sending: a line the stores can already cover (their free stock at least the quantity, in the
+   * store unit) needs the raiser's reason for buying it anyway; the approvers see it.
+   */
+  private async stockCheck(c: PoolClient, indentId: string) {
+    const r = await c.query<{
+      seq: number;
+      name: string;
+      free: string;
+      need: string | null;
+      unit: string;
+    }>(
+      `SELECT l.seq, i.name, l.stock_free::text AS free, COALESCE(su.code, u.code) AS unit,
+              (CASE WHEN l.uom_id = i.uom_id THEN l.quantity * i.stock_per_unit
+                    WHEN l.uom_id = i.stock_uom_id THEN l.quantity END)::text AS need
+         FROM purchase_indent_lines l JOIN purchase_items i ON i.id = l.item_id
+         JOIN purchase_uoms u ON u.id = i.uom_id LEFT JOIN purchase_uoms su ON su.id = i.stock_uom_id
+        WHERE l.indent_id = $1 AND l.stock_free > 0 AND l.stock_reason IS NULL ORDER BY l.seq`,
+      [indentId],
+    );
+    const errors = r.rows
+      .filter((l) => l.need !== null && Number(l.need) <= Number(l.free) + 1e-9)
+      .map((l) => ({
+        path: `lines.${String(l.seq - 1)}.stockReason`,
+        message: `${l.name}: the store has ${qtyWords(Number(l.free))} ${l.unit} free, enough for this. Say why it is bought, or ask the store to issue it`,
+      }));
+    if (errors.length)
+      throw new DomainError('validation-failed', errors.map((e) => e.message).join('; '), {
+        status: 400,
+        extra: { errors },
+      });
   }
 
   private checkDate(day?: string) {
@@ -544,7 +741,7 @@ export class PurchaseIndentsService implements OnModuleInit {
         [dep.id, dto.onBehalfEmployeeId ?? null, dto.purpose, dto.requiredBy ?? null, dto.priority],
       );
       const id = r.rows[0]!.id;
-      await this.writeLines(c, id, dto.lines);
+      await this.writeLines(c, ctx, id, dep.id, dto.lines);
       await this.audit.stage(ctx, c, {
         action: 'purchase.indent.create',
         entityType: 'purchase_indents',
@@ -588,7 +785,7 @@ export class PurchaseIndentsService implements OnModuleInit {
           dto.priority,
         ],
       );
-      await this.writeLines(c, id, dto.lines);
+      await this.writeLines(c, ctx, id, dep.id, dto.lines);
       await this.audit.stage(ctx, c, {
         action: 'purchase.indent.update',
         entityType: 'purchase_indents',
@@ -610,6 +807,9 @@ export class PurchaseIndentsService implements OnModuleInit {
           `Who approves ${flow.department}'s Purchase Indents is not set: ask the school admin (Purchase → Who approves)`,
           { status: 409 },
         );
+      // what the stores hold now; a line they can cover needs the raiser's reason
+      await this.noteStock(c, id, pi.department_id);
+      await this.stockCheck(c, id);
       let number = pi.number;
       if (!number)
         number = (await c.query<{ n: string }>(`SELECT app.purchase_next_number('indent') AS n`))
@@ -618,7 +818,8 @@ export class PurchaseIndentsService implements OnModuleInit {
         definitionCode: flow.code,
         entityType: 'purchase_indent',
         entityId: id,
-        subject: `${number} · ${flow.department} · ${rupees(Number(pi.estimate))}${pi.priority === 'urgent' ? ' · urgent' : ''}`,
+        // no amount here: the raiser opens the approval too, and does not see rates
+        subject: `${number} · ${flow.department}${pi.priority === 'urgent' ? ' · urgent' : ''}`,
         payload: {
           department: flow.department,
           departmentId: pi.department_id,
@@ -811,6 +1012,9 @@ export class PurchaseIndentsService implements OnModuleInit {
     if (pi.rate_contract_bypass && lines.length && lines.every((l) => l.contract_id)) {
       rule = 'rate_contract';
       note = 'Auto-approved: every line is on a rate contract';
+    } else if (limit > 0 && estimate <= limit && lines.some((l) => Number(l.est_rate) <= 0)) {
+      // a line without a rate (one in words, or an item never bought) leaves the estimate short
+      note = 'Not skipped: some lines have no rate yet (the purchase office prices them on the PR)';
     } else if (limit > 0 && estimate <= limit) {
       // the split-indent guard: this PI with the department's PIs that skipped the PR by the limit in
       // the window and share an item category with it
@@ -881,6 +1085,105 @@ export class PurchaseIndentsService implements OnModuleInit {
       entityType: 'purchase_requisitions',
       entityId: pr.rows[0]!.id,
       after: { indent: pi.number, rule, note },
+    });
+  }
+
+  // ---- the printed PI ------------------------------------------------------------------------------
+  /**
+   * The PI as a PDF, once sent (docs/design/83, "As built — the printed PI"): its lines with the stock
+   * when raised, the rates for those who see them, the approval trail and boxes to sign.
+   */
+  async pdf(ctx: RequestContext, id: string) {
+    return this.db.tenant(requireTenant(ctx), async (c) => {
+      const pi = await this.load(c, ctx, id);
+      if (!pi.number)
+        throw new DomainError(
+          'purchase.indent_draft',
+          'A draft is printed once it is sent for approval',
+          { status: 409 },
+        );
+      const sees = this.officeRates(ctx) || pi.approver;
+      const lines = await this.linesOf(c, id);
+      const steps = pi.workflow_instance_id
+        ? (
+            await c.query<{
+              name: string;
+              status: string;
+              who: string | null;
+              waiting: string | null;
+              at: string | null;
+              note: string | null;
+            }>(
+              // eslint-disable-next-line no-restricted-syntax -- PERSON is a fixed fragment
+              `SELECT s.name, s.status::text, ${PERSON('u')} AS who,
+                      (SELECT string_agg(${PERSON('au')}, ', ' ORDER BY ${PERSON('au')}) FROM users au WHERE au.id = ANY(s.assignee_user_ids)) AS waiting,
+                      (s.acted_at AT TIME ZONE 'Asia/Kolkata')::date::text AS at, s.note
+                 FROM workflow_steps s LEFT JOIN users u ON u.id = s.acted_by
+                WHERE s.instance_id = $1 ORDER BY s.level`,
+              [pi.workflow_instance_id],
+            )
+          ).rows
+        : [];
+      const STEP: Record<string, string> = {
+        pending: 'Waiting',
+        approved: 'Approved',
+        rejected: 'Rejected',
+        skipped: 'Passed on',
+        cancelled: 'Closed',
+      };
+      const { school, logo } = await pdfSchool(c, (k) => this.storage.read(k));
+      const STATUS: Record<IndentDbRow['status'], string> = {
+        draft: 'Draft',
+        submitted: `Waiting for approval${pi.waiting_with ? `: ${pi.waiting_with}` : ''}`,
+        approved: `Approved${pi.decided_at ? ` on ${istDay(pi.decided_at)}` : ''}`,
+        rejected: `Rejected${pi.decision_note ? `: ${pi.decision_note}` : ''}`,
+        sent_back: `Sent back for changes${pi.decision_note ? `: ${pi.decision_note}` : ''}`,
+        cancelled: `Withdrawn${pi.decision_note ? `: ${pi.decision_note}` : ''}`,
+      };
+      const bytes = await purchaseIndentPdf({
+        school,
+        logo,
+        watermark:
+          pi.status === 'approved'
+            ? null
+            : pi.status === 'rejected'
+              ? 'REJECTED'
+              : pi.status === 'cancelled'
+                ? 'WITHDRAWN'
+                : 'NOT APPROVED',
+        number: pi.number,
+        sentOn: pi.submitted_at ? istDay(pi.submitted_at) : '-',
+        department: pi.department,
+        raisedBy: `${pi.raised_by_name}${pi.on_behalf ? ` for ${pi.on_behalf}` : ''}`,
+        purpose: pi.purpose,
+        priority: pi.priority,
+        requiredBy: pi.required_by ? dmy(pi.required_by) : null,
+        status: STATUS[pi.status],
+        showRates: sees,
+        lines: lines.map((l) => ({
+          seq: l.seq,
+          description: `${l.item ?? l.free_text ?? ''}${l.item_code ? ` (${l.item_code})` : ''}${l.item_id ? '' : ' - not in the item list'}`,
+          note: l.note,
+          quantity: Number(l.quantity),
+          uom: l.uom,
+          stockFree: l.stock_free === null ? null : Number(l.stock_free),
+          stockUom: l.stock_uom,
+          stockStores: l.stock_stores,
+          stockReason: l.stock_reason,
+          rate: sees ? Number(l.est_rate) : null,
+          amount: sees ? Math.round(Number(l.quantity) * Number(l.est_rate) * 100) / 100 : null,
+        })),
+        estimate: sees ? Number(pi.estimate) : null,
+        approvals: steps.map((s) => ({
+          level: s.name,
+          status: STEP[s.status] ?? s.status,
+          who: s.who ?? (s.status === 'pending' ? (s.waiting ?? 'Nobody') : '-'),
+          at: s.at ? dmy(s.at) : '',
+          note: s.note,
+        })),
+        printedOn: istDay(new Date()),
+      });
+      return { bytes, filename: `${pi.number.replaceAll('/', '-')}.pdf` };
     });
   }
 

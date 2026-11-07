@@ -77,6 +77,7 @@ const DICT: Record<string, string> = {
   'Open and decide': 'खोलें और निर्णय लें',
   'Pick the colleague': 'सहकर्मी चुनें',
   'Purchase indents': 'क्रय इंडेंट',
+  Print: 'प्रिंट',
   'Raise an indent': 'इंडेंट बनाएँ',
   'Raised by me': 'मेरे द्वारा बनाए गए',
   'Remark (needed to send back or reject; the raiser sees it)':
