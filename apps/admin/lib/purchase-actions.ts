@@ -506,6 +506,36 @@ export async function readIndentSheet(
   }
 }
 
+/** A row of the requisition's item sheet: the estimated rate besides (docs/design/83). */
+export interface RequisitionSheetLine extends SheetLine {
+  estRate?: number;
+}
+/** The filled requisition item sheet read into lines (nothing is saved; an item twice is one line). */
+export async function readRequisitionSheet(
+  fd: FormData,
+): Promise<
+  | { ok: true; lines: RequisitionSheetLine[]; errors: Array<{ row: number; message: string }> }
+  | { ok: false; error: string }
+> {
+  const f = fd.get('file');
+  if (!(f instanceof File) || !f.size) return { ok: false, error: 'Pick the filled sheet' };
+  if (!/\.xlsx$/i.test(f.name)) return { ok: false, error: 'An Excel (.xlsx) file' };
+  if (f.size > 700_000) return { ok: false, error: 'The sheet is too large (up to 200 lines)' };
+  try {
+    const r = await apiFetch<{
+      lines: RequisitionSheetLine[];
+      errors: Array<{ row: number; message: string }>;
+    }>('/purchase/requisition-sheet', {
+      method: 'POST',
+      body: JSON.stringify({ file: Buffer.from(await f.arrayBuffer()).toString('base64') }),
+    });
+    return { ok: true, ...r };
+  } catch (e) {
+    if (e instanceof ApiError) return { ok: false, error: detailOf(e) };
+    throw e;
+  }
+}
+
 /** A PI saved as a draft (or changed), and sent for approval when asked; the form keeps what was typed. */
 export async function saveIndent(
   id: string | null,

@@ -1127,3 +1127,29 @@ the line's exempt / reverse-charge flags still came from the item, not the code.
   whatever was typed; the pen without an HSN takes 9403 and keeps it when the PO later carries another
   code; a reverse-charge SAC sets reverse charge. `purchase-masters` — 16% refused (the slab list), 18%
   exempt refused, 0% exempt and 18% saved, nothing to fix on a clean school.
+
+## As built — direct requisition items from Excel (8 Nov 2026)
+
+Asked by the user ("Direct requisition: upload items by bulk Excel"). Decided with the user:
+
+| Question | Decision |
+| --- | --- |
+| Columns | **Item (drop-down or code), Quantity, Est. rate (₹), Note**; an item not in the list by Description + Unit. Vendors and quotes stay on the PR's sourcing page. |
+| Upload | **Fills the form to check**, like the indent's sheet: nothing saved; bad rows by row number; the same item twice is one line (quantities added). |
+| Where | **New direct PR and a draft / sent-back PR** (rows added; lines from indents stay). |
+
+- `purchase-item-sheet.ts` (new): `itemSheetBytes` and `readItemRows` with a `SheetKind` (tab, file, the
+  rate column, merging) — the indent's sheet now uses it unchanged (no rate, no merge). The
+  requisition's: tab "Requisition items", `requisition-items.xlsx`, **Est. rate (₹)** (a number ≥ 0,
+  empty = the item's list rate on the form), merging the same item (quantities added, notes joined;
+  another rate for it refused: "… is also on row N at another rate: one rate per item").
+- `GET` / `POST /purchase/requisition-sheet` (`purchase.requisition.manage`); admin
+  `/api/purchase/requisition-sheet` and `readRequisitionSheet`. `RequisitionForm`: Download item sheet,
+  Upload the filled sheet; a sheet item already on a PR line of its own (not from an indent) adds to its
+  quantity (its rate replaced when the sheet gives one); "N lines added …; M lines already on the
+  requisition got the quantity added: check them before saving". The indent form's "Rows not added" box
+  laid out as one block (it sat side by side).
+- Test: `purchase-requisitions` — a teacher cannot download it; the header row; two pen rows at one rate
+  plus one with no rate merge (15, notes "Blue; Red"); a second rate refused by row; a negative rate
+  refused; an unknown item listed; nothing saved. Browser: Direct requisition fills 2 lines from a
+  sheet (the pen 3 + 2 at ₹55, a Bunsen burner in words), the bad row listed; axe clean.

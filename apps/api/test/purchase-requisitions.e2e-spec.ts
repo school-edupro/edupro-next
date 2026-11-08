@@ -756,4 +756,52 @@ describe('purchase requisitions (e2e)', () => {
       ]),
     );
   });
+
+  it('the direct requisition’s item sheet: est. rate, an item twice is one line, bad rows by number; nothing saved', async () => {
+    expect((await call(teacher, 'GET', '/purchase/requisition-sheet')).statusCode).toBe(403);
+    const t = (await call(office, 'GET', '/purchase/requisition-sheet')).json();
+    expect(t.filename).toBe('requisition-items.xlsx');
+    const wb = new ExcelJS.Workbook();
+    await wb.xlsx.load(Buffer.from(t.base64 as string, 'base64') as unknown as ExcelJS.Buffer);
+    const ws = wb.worksheets[0]!;
+    expect(ws.name).toBe('Requisition items');
+    expect([1, 2, 3, 4, 5, 6].map((i) => String(ws.getRow(1).getCell(i).value ?? ''))).toEqual([
+      'Item',
+      'Quantity *',
+      'Est. rate (₹)',
+      'Note',
+      'Description',
+      'Unit',
+    ]);
+    const put = (row: number, cells: Array<string | number | null>) =>
+      cells.forEach((v, i) => {
+        ws.getRow(row).getCell(i + 1).value = v;
+      });
+    put(2, ['Ball pen (PEN)', 10, 8.5, 'Blue']);
+    put(3, ['A4 paper ream', 4]);
+    put(4, ['PEN', 5, null, 'Red']);
+    put(5, ['Ball pen (PEN)', 1, 9]);
+    put(6, [null, 2, 450, null, 'Bunsen burner', 'NOS']);
+    put(7, ['Student chair (CHAIR)', 3, -1]);
+    put(8, ['Nonsense (ZZZ)', 1]);
+    const file = Buffer.from(await wb.xlsx.writeBuffer()).toString('base64');
+    const before = (await call(office, 'GET', '/purchase/requisitions')).json().total;
+    const read = await call(office, 'POST', '/purchase/requisition-sheet', { file });
+    expect(read.statusCode).toBe(201);
+    const nos = (await call(office, 'GET', '/purchase/requisition-form'))
+      .json()
+      .uoms.find((u: { code: string }) => u.code === 'NOS').id as string;
+    expect(read.json().lines).toEqual([
+      { itemId: ids.PEN, quantity: 15, estRate: 8.5, note: 'Blue; Red' },
+      { itemId: ids.PAPER, quantity: 4 },
+      { freeText: 'Bunsen burner', uomId: nos, quantity: 2, estRate: 450 },
+    ]);
+    expect(read.json().errors).toEqual([
+      { row: 5, message: 'Ball pen is also on row 2 at another rate: one rate per item' },
+      { row: 7, message: 'Est. rate: a number in rupees, 0 or more' },
+      expect.objectContaining({ row: 8 }),
+    ]);
+    // reading saves nothing
+    expect((await call(office, 'GET', '/purchase/requisitions')).json().total).toBe(before);
+  });
 });

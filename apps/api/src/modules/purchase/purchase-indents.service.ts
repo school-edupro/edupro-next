@@ -5,13 +5,13 @@ import { AuditService } from '../../common/audit/audit.service';
 import { DbService } from '../../common/db/db.service';
 import { DomainError } from '../../common/errors/domain-error';
 import { requireTenant, type RequestContext } from '../../common/http/request-context';
-import { readSheet, templateSheet } from '../../common/excel/sheet';
 import { FilesService } from '../files/files.service';
 import { STORAGE_DRIVER } from '../files/storage';
 import { WorkflowService, type InstanceRow } from '../workflow/workflow.service';
 import { syncFlow } from './purchase-flow';
 import { purchaseHead } from './purchase-head';
 import { purchaseIndentPdf } from './purchase-indent-pdf';
+import { itemSheetBytes, readItemRows, type SheetKind } from './purchase-item-sheet';
 import { checkListSize, LIST_LIMIT, purchaseListFile } from './purchase-list-file';
 import {
   CLOSED_PLACED,
@@ -155,6 +155,14 @@ const MY_STEP = `SELECT s.id::text FROM workflow_steps s JOIN workflow_instances
  * the purchase office's PR (part 3). A purchase approver may hand their approvals to a colleague for
  * some days (a purchase-only delegation).
  */
+const INDENT_SHEET: SheetKind = {
+  sheet: 'Indent items',
+  file: 'indent-items.xlsx',
+  on: 'the indent',
+  rate: false,
+  merge: false,
+};
+
 @Injectable()
 export class PurchaseIndentsService implements OnModuleInit {
   constructor(
@@ -1383,141 +1391,12 @@ export class PurchaseIndentsService implements OnModuleInit {
   // ---- the item sheet and the line documents -------------------------------------------------------
   /** The indent's item sheet: the item list as a drop-down, the quantity, a note; an item in words. */
   async itemSheet(ctx: RequestContext) {
-    return this.db.tenant(requireTenant(ctx), async (c) => {
-      const items = await c.query<{ label: string }>(
-        `SELECT i.name || ' (' || i.code || ')' AS label FROM purchase_items i
-          WHERE i.status = 'active' ORDER BY i.name LIMIT 5000`,
-      );
-      const uoms = await c.query<{ code: string }>(
-        `SELECT code FROM purchase_uoms WHERE status = 'active' ORDER BY code`,
-      );
-      const bytes = await templateSheet({
-        sheet: 'Indent items',
-        columns: [
-          {
-            header: 'Item',
-            width: 46,
-            options: items.rows.map((x) => x.label),
-            note: 'Pick from the list (the code in brackets is read). Leave it empty for an item not in the list',
-          },
-          { header: 'Quantity', width: 11, required: true, format: 'number' },
-          { header: 'Note', width: 32, note: 'Size, make, colour… (optional)' },
-          { header: 'Description', width: 36, note: 'Only for an item not in the list' },
-          {
-            header: 'Unit',
-            width: 10,
-            options: uoms.rows.map((x) => x.code),
-            note: 'Only for an item not in the list',
-          },
-        ],
-        guide: [
-          'One row per item. Pick the item from the drop-down (or type its code), then the quantity.',
-          'An item not in the list: leave Item empty, describe it in Description and pick its Unit.',
-          'Items counted in whole units take whole numbers. Up to 200 rows.',
-          'Upload the sheet on the indent: the rows fill its Items, to check before saving. Nothing is saved by the upload.',
-        ],
-        examples: [
-          [items.rows[0]?.label ?? 'Ball pen (PEN)', 10, 'Blue ink', null, null],
-          [null, 2, null, 'Bunsen burner', uoms.rows[0]?.code ?? 'NOS'],
-        ],
-      });
-      return {
-        filename: 'indent-items.xlsx',
-        contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-        base64: bytes.toString('base64'),
-      };
-    });
+    return this.db.tenant(requireTenant(ctx), (c) => itemSheetBytes(c, INDENT_SHEET));
   }
 
-  /**
-   * The filled item sheet read into indent lines (nothing is saved): each row an item from the list
-   * (by the code in brackets, the code, or the exact name) or one in words with its unit; the rows that
-   * cannot be read come back with their row number and why.
-   */
+  /** The filled item sheet read into indent lines (nothing is saved); bad rows by row number. */
   async readItemSheet(ctx: RequestContext, dto: IndentSheetDto) {
-    const rows = await readSheet(dto.file, ['Item', 'Quantity'], ['Note', 'Description', 'Unit']);
-    return this.db.tenant(requireTenant(ctx), async (c) => {
-      const items = (
-        await c.query<{ id: string; code: string; name: string; decimals: boolean }>(
-          `SELECT i.id::text, i.code, i.name, u.decimals FROM purchase_items i JOIN purchase_uoms u ON u.id = i.uom_id
-            WHERE i.status = 'active'`,
-        )
-      ).rows;
-      const byCode = new Map(items.map((i) => [i.code.toUpperCase(), i]));
-      const names = new Map<string, typeof items>();
-      for (const i of items)
-        names.set(i.name.toLowerCase(), [...(names.get(i.name.toLowerCase()) ?? []), i]);
-      const uoms = new Map(
-        (
-          await c.query<{ id: string; code: string }>(
-            `SELECT id::text, code FROM purchase_uoms WHERE status = 'active'`,
-          )
-        ).rows.map((u) => [u.code.toUpperCase(), u.id]),
-      );
-      const lines: Array<{
-        itemId?: string;
-        freeText?: string;
-        uomId?: string;
-        quantity: number;
-        note?: string;
-      }> = [];
-      const errors: Array<{ row: number; message: string }> = [];
-      for (const r of rows) {
-        const cell = r.cells;
-        const said = (cell.Item ?? '').trim();
-        const qty = Number((cell.Quantity ?? '').replace(/,/g, ''));
-        const note = (cell.Note ?? '').trim();
-        if (!said && !(cell.Description ?? '').trim() && !cell.Quantity) continue;
-        if (!Number.isFinite(qty) || qty <= 0 || qty > 999999) {
-          errors.push({ row: r.row, message: 'Quantity: a number more than 0' });
-          continue;
-        }
-        if (note.length > 300) {
-          errors.push({ row: r.row, message: 'Note: at most 300 letters' });
-          continue;
-        }
-        if (said) {
-          const code = /\(([^()]+)\)\s*$/.exec(said)?.[1]?.trim().toUpperCase();
-          const byName = names.get(said.toLowerCase());
-          const it =
-            (code ? byCode.get(code) : undefined) ??
-            byCode.get(said.toUpperCase()) ??
-            (byName?.length === 1 ? byName[0] : undefined);
-          if (!it) {
-            errors.push({
-              row: r.row,
-              message: `“${said}” is not in the item list: pick it from the drop-down, or leave Item empty and fill Description and Unit`,
-            });
-            continue;
-          }
-          if (!it.decimals && !Number.isInteger(qty)) {
-            errors.push({ row: r.row, message: `${it.name}: a whole number` });
-            continue;
-          }
-          lines.push({ itemId: it.id, quantity: qty, ...(note ? { note } : {}) });
-        } else {
-          const words = (cell.Description ?? '').trim();
-          const uomId = uoms.get((cell.Unit ?? '').trim().toUpperCase());
-          if (words.length < 2 || words.length > 300) {
-            errors.push({ row: r.row, message: 'Pick an item, or describe one not in the list' });
-            continue;
-          }
-          if (!uomId) {
-            errors.push({
-              row: r.row,
-              message: 'Unit: pick the unit of an item described in words',
-            });
-            continue;
-          }
-          lines.push({ freeText: words, uomId, quantity: qty, ...(note ? { note } : {}) });
-        }
-      }
-      if (lines.length > 200)
-        throw new DomainError('validation-failed', 'At most 200 lines on an indent', {
-          status: 400,
-        });
-      return { lines, errors };
-    });
+    return this.db.tenant(requireTenant(ctx), (c) => readItemRows(c, dto.file, INDENT_SHEET));
   }
 
   /** A line's document, sent as the request body: a PDF or a photo up to 5 MB (any raiser may attach). */

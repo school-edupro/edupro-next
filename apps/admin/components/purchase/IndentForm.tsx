@@ -404,17 +404,19 @@ export function IndentForm({
         ) : null}
         {sheet.errors.length ? (
           <div className="ep-alert ep-alert--warning" role="alert">
-            <p style={{ margin: 0 }}>
-              {sheet.errors.some((e) => e.row) ? 'Rows not added:' : 'The sheet was not read:'}
-            </p>
-            <ul style={{ margin: 0 }}>
-              {sheet.errors.map((e, k) => (
-                <li key={k}>
-                  {e.row ? `Row ${String(e.row)}: ` : ''}
-                  {e.message}
-                </li>
-              ))}
-            </ul>
+            <div>
+              <p style={{ margin: 0 }}>
+                {sheet.errors.some((e) => e.row) ? 'Rows not added:' : 'The sheet was not read:'}
+              </p>
+              <ul style={{ margin: 0 }}>
+                {sheet.errors.map((e, k) => (
+                  <li key={k}>
+                    {e.row ? `Row ${String(e.row)}: ` : ''}
+                    {e.message}
+                  </li>
+                ))}
+              </ul>
+            </div>
           </div>
         ) : null}
         <div className="ep-purch-lines">

@@ -17,6 +17,7 @@ import {
   reserveRequisition,
   storeProblems,
 } from './purchase-stock-core';
+import { itemSheetBytes, readItemRows, type SheetKind } from './purchase-item-sheet';
 import {
   draftOrdersFor,
   LINE_ORDERING,
@@ -29,6 +30,7 @@ import {
   type CertificateDto,
   type ChoicesDto,
   type CreateRequisitionDto,
+  type RequisitionSheetDto,
   type IndentDecisionDto,
   type QuoteDto,
   type ReasonDto,
@@ -211,6 +213,14 @@ export interface ContractInForce {
  * then the department's PR levels approve it (the purchase office's department for a combined PR).
  * Purchase orders from approved PRs are part 4.
  */
+const REQUISITION_SHEET: SheetKind = {
+  sheet: 'Requisition items',
+  file: 'requisition-items.xlsx',
+  on: 'the requisition',
+  rate: true,
+  merge: true,
+};
+
 @Injectable()
 export class PurchaseRequisitionsService implements OnModuleInit {
   constructor(
@@ -1191,6 +1201,19 @@ export class PurchaseRequisitionsService implements OnModuleInit {
       add('tender_files', 'The tender documents attached', pr.files > 0);
     }
     return out;
+  }
+
+  /** The direct requisition's item sheet: items as a drop-down, quantity, est. rate, note. */
+  async itemSheet(ctx: RequestContext) {
+    return this.db.tenant(requireTenant(ctx), (c) => itemSheetBytes(c, REQUISITION_SHEET));
+  }
+
+  /**
+   * The filled sheet read into requisition lines (nothing is saved): the same item twice becomes one
+   * line, the quantities added; bad rows by row number.
+   */
+  async readItemSheet(ctx: RequestContext, dto: RequisitionSheetDto) {
+    return this.db.tenant(requireTenant(ctx), (c) => readItemRows(c, dto.file, REQUISITION_SHEET));
   }
 
   async get(ctx: RequestContext, id: string) {

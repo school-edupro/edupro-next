@@ -251,6 +251,16 @@ still go through their approval). Above the limit, or when it and the direct req
 way in the split window for the same item categories together go over it (no splitting a purchase),
 it goes to the department's requisition levels as usual. **Reopen** brings it back to draft.
 
+**Many items at once (Excel):** on Direct requisition, and when changing a draft or sent-back PR,
+**Download item sheet**, fill one row per item — **Item** from the drop-down (or its code),
+**Quantity**, **Est. rate (₹)** (before GST; empty takes the item's list rate: the rate contract, else
+the last purchase), **Note**; an item not in the list by **Description** and **Unit** — then **Upload
+the filled sheet**. Its rows are added to the lines to check before saving; nothing is saved by the
+upload. The same item on two rows becomes one line with the quantities added (two different rates for
+it are refused), and an item already on one of the PR's own lines gets the quantity added there (a
+line from an indent stays as it is). Rows that cannot be read are listed by row number with why. The
+vendor and the quotes are chosen on the next page, as for any PR.
+
 On the PR:
 
 - **Print** (top right; also in the staff app) gives the PR under the school's letterhead: its details,

@@ -19,6 +19,7 @@ import {
   SignDto,
   TenderDto,
   UpdateRequisitionDto,
+  RequisitionSheetDto,
 } from './purchase.dto';
 
 /**
@@ -47,6 +48,20 @@ export class PurchaseRequisitionsController {
   @RequirePermission(PURCHASE.requisitionManage)
   candidates(@ReqCtx() ctx: RequestContext) {
     return this.prs.candidates(ctx);
+  }
+
+  @Get('requisition-sheet')
+  @ApiOperation({ summary: 'The requisition item sheet to fill (items as a drop-down, est. rate)' })
+  @RequirePermission(PURCHASE.requisitionManage)
+  sheet(@ReqCtx() ctx: RequestContext) {
+    return this.prs.itemSheet(ctx);
+  }
+
+  @Post('requisition-sheet')
+  @ApiOperation({ summary: 'Read a filled requisition item sheet into lines (nothing is saved)' })
+  @RequirePermission(PURCHASE.requisitionManage)
+  readSheet(@ReqCtx() ctx: RequestContext, @Body() body: RequisitionSheetDto) {
+    return this.prs.readItemSheet(ctx, body);
   }
 
   @Get('requisition-form')

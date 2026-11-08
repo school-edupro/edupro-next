@@ -351,6 +351,8 @@ export const IndentLineSchema = z
 /** The indent's item sheet, filled and uploaded: read into the form's lines (nothing is saved). */
 export const IndentSheetSchema = z.object({ file: z.string().min(10).max(1_000_000) });
 export class IndentSheetDto extends createZodDto(IndentSheetSchema) {}
+/** The requisition's item sheet (with the estimated rate), filled and uploaded: read, nothing saved. */
+export class RequisitionSheetDto extends createZodDto(IndentSheetSchema) {}
 
 export const IndentSchema = z.object({
   /** the raiser's own department unless they may raise for any */

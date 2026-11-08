@@ -2,10 +2,12 @@
 import { useRouter } from 'next/navigation';
 import { useMemo, useState, useTransition } from 'react';
 import { FormActions, FormRow, FormSection } from '@edupro/ui';
-import { saveRequisition } from '@/lib/purchase-actions';
+import { readRequisitionSheet, saveRequisition } from '@/lib/purchase-actions';
 import { inr, type RequisitionDetail, type RequisitionFormLists } from '@/lib/purchase';
 
 const FREE = 'free';
+/** the item sheet to fill (download) */
+const SHEET = '/api/purchase/requisition-sheet';
 
 interface Line {
   /** a line already on the PR */
@@ -40,7 +42,9 @@ const blank = (): Line => ({
  * A direct Purchase Requisition, or a PR's header and lines changed (docs/design/83, part 3): each line
  * a catalogue item (a line asked for in words can be matched to one here) or one in words with its
  * unit, the quantity, the estimated rate, and whether it is bought or issued from the store (with what
- * is issued). A line that came from an indent stays. What was typed stays on a refusal.
+ * is issued). A line that came from an indent stays. What was typed stays on a refusal. The item sheet
+ * (Excel) fills lines to check before saving: an item already on a line of the PR's own (not from an
+ * indent) gets the quantity added (docs/design/83, "As built — direct requisition items from Excel").
  */
 export function RequisitionForm({
   pr,
@@ -80,6 +84,12 @@ export function RequisitionForm({
   );
   const [error, setError] = useState<string | null>(null);
   const [pending, start] = useTransition();
+  // the item sheet: reading it fills the lines; the rows it could not read
+  const [sheet, setSheet] = useState<{
+    busy: boolean;
+    said: string | null;
+    errors: Array<{ row: number; message: string }>;
+  }>({ busy: false, said: null, errors: [] });
   const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' }).format(new Date());
 
   const setLine = (i: number, patch: Partial<Line>) =>
@@ -91,6 +101,59 @@ export function RequisitionForm({
       uomId: it ? it.uomId : lines[i]!.uomId,
       // a new line takes the item's list rate; a line from an indent keeps its estimate
       estRate: !lines[i]!.id && it && it.rate !== null ? String(it.rate) : lines[i]!.estRate,
+    });
+  };
+  const readSheet = (file: File) => {
+    const fd = new FormData();
+    fd.set('file', file);
+    setSheet({ busy: true, said: null, errors: [] });
+    void readRequisitionSheet(fd).then((r) => {
+      if (!r.ok) {
+        setSheet({ busy: false, said: null, errors: [{ row: 0, message: r.error }] });
+        return;
+      }
+      const next = lines.filter((l) => l.id || l.itemId || l.freeText.trim() || l.quantity);
+      let added = 0;
+      let merged = 0;
+      for (const x of r.lines) {
+        const it = x.itemId ? items.get(x.itemId) : undefined;
+        // the same item on a line of the PR's own: its quantity grows (a line from an indent stays)
+        const k = it ? next.findIndex((l) => l.itemId === it.id && !l.from) : -1;
+        if (it && k >= 0) {
+          const was = next[k]!;
+          next[k] = {
+            ...was,
+            quantity: String(Math.round((Number(was.quantity || 0) + x.quantity) * 1000) / 1000),
+            ...(x.estRate !== undefined ? { estRate: String(x.estRate) } : {}),
+            note: [was.note.trim(), x.note ?? ''].filter(Boolean).join('; ').slice(0, 300),
+          };
+          merged += 1;
+          continue;
+        }
+        next.push({
+          ...blank(),
+          itemId: it ? it.id : FREE,
+          freeText: it ? '' : (x.freeText ?? ''),
+          uomId: it ? it.uomId : (x.uomId ?? ''),
+          quantity: String(x.quantity),
+          // the rate given, else the item's list rate
+          estRate:
+            x.estRate !== undefined
+              ? String(x.estRate)
+              : it && it.rate !== null
+                ? String(it.rate)
+                : '',
+          note: x.note ?? '',
+        });
+        added += 1;
+      }
+      setLines(next.length ? next.slice(0, 200) : [blank()]);
+      const words = (n: number) => `${String(n)} ${n === 1 ? 'line' : 'lines'}`;
+      setSheet({
+        busy: false,
+        said: `${words(added)} added from the sheet${merged ? `; ${words(merged)} already on the requisition got the quantity added` : ''}: check them before saving.`,
+        errors: r.errors,
+      });
     });
   };
   const amountOf = (l: Line) => {
@@ -215,6 +278,65 @@ export function RequisitionForm({
         title="Lines"
         description="Buy a line, or issue it from the store (say what is issued). A line asked for in words can be matched to an item from the list here."
       >
+        <div
+          style={{
+            display: 'flex',
+            gap: 'var(--sp-3)',
+            flexWrap: 'wrap',
+            alignItems: 'flex-end',
+            marginBottom: 'var(--sp-3)',
+          }}
+        >
+          <a className="ep-btn ep-btn--secondary ep-btn--sm" href={SHEET} download>
+            Download item sheet
+          </a>
+          <label className="ep-field" htmlFor="rf-sheet">
+            <span className="ep-field__label">Upload the filled sheet (Excel)</span>
+            <input
+              id="rf-sheet"
+              type="file"
+              className="ep-input"
+              accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+              disabled={sheet.busy}
+              onChange={(e) => {
+                const f = e.target.files?.[0];
+                if (f) readSheet(f);
+                e.target.value = '';
+              }}
+            />
+            <span className="ep-field__help">
+              Item, quantity, est. rate (empty: the item’s list rate) and note per row; its rows are
+              added to the lines below, to check before saving.
+            </span>
+          </label>
+        </div>
+        {sheet.busy ? (
+          <p className="ep-field__help" role="status">
+            Reading the sheet…
+          </p>
+        ) : null}
+        {sheet.said ? (
+          <p className="ep-field__help" role="status">
+            {sheet.said}
+          </p>
+        ) : null}
+        {sheet.errors.length ? (
+          <div className="ep-alert ep-alert--warning" role="alert">
+            <div>
+              <p style={{ margin: 0 }}>
+                {sheet.errors.some((e) => e.row) ? 'Rows not added:' : 'The sheet was not read:'}
+              </p>
+              <ul style={{ margin: 0 }}>
+                {sheet.errors.map((e, k) => (
+                  <li key={k}>
+                    {e.row ? `Row ${String(e.row)}: ` : ''}
+                    {e.message}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </div>
+        ) : null}
         <div className="ep-purch-lines">
           {lines.map((l, i) => {
             const it = items.get(l.itemId);
