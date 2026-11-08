@@ -143,8 +143,20 @@ export interface OrderPdfData {
   /** the general instructions: the PO's terms */
   terms: string | null;
   emergency: { reason: string; billRef: string | null } | null;
-  /** the boxes to sign, in order: the first is who prepared it, the last who approved it */
-  signers: Array<{ as: string; name: string | null; signature: Image }>;
+  /**
+   * the boxes to sign, in order: the first who prepared it, the middle ones the earlier levels'
+   * approvers, the last the final approver — each with the employee ID, designation, when and the
+   * signature on the employee record
+   */
+  signers: Array<{
+    as: string;
+    name: string | null;
+    code: string | null;
+    designation: string | null;
+    /** Prepared on 08-11-2026 10:15 AM · Approved on … */
+    when: string | null;
+    signature: Image;
+  }>;
   /** legal name || registered office || GSTIN */
   footer: string;
 }
@@ -543,37 +555,51 @@ export async function purchaseOrderPdf(d: OrderPdfData): Promise<Buffer> {
 
   // ---- who prepared and approved it ----
   const bw = W / Math.max(1, d.signers.length);
-  need(90);
+  need(110);
   d.signers.forEach((s, i) => {
     const x = M + i * bw;
     page.drawRectangle({
       x,
-      y: y - 62,
+      y: y - 88,
       width: bw,
-      height: 72,
+      height: 98,
       borderColor: LINE,
       borderWidth: 0.6,
     });
     page.drawLine({
-      start: { x, y: y - 48 },
-      end: { x: x + bw, y: y - 48 },
+      start: { x, y: y - 74 },
+      end: { x: x + bw, y: y - 74 },
       thickness: 0.6,
       color: LINE,
     });
-    text(wrap(s.name ?? '', font, 8.5, bw - 8)[0] ?? '', x + 4, y, { size: 8.5 });
+    // the signature on the employee record, then who, their ID and designation, and when
     const img = signatures[i];
     if (img) {
-      const sc = Math.min(30 / img.height, (bw - 12) / img.width, 1);
+      const sc = Math.min(28 / img.height, (bw - 12) / img.width, 1);
       page.drawImage(img, {
         x: x + 4,
-        y: y - 44,
+        y: y - 26,
         width: img.width * sc,
         height: img.height * sc,
       });
     }
-    text(s.as, x + 4, y - 58, { size: 8.5 });
+    let ly = y - 36;
+    for (const [t, f, size, color] of [
+      [s.name ?? '', bold, 8.5, INK],
+      [
+        [s.code ? `Emp. ID ${s.code}` : null, s.designation].filter(Boolean).join(' · '),
+        font,
+        7.5,
+        INK,
+      ],
+      [s.when ?? '', font, 7.5, MUTED],
+    ] as Array<[string, PDFFont, number, ReturnType<typeof rgb>]>) {
+      if (t) text(wrap(t, f, size, bw - 8)[0] ?? '', x + 4, ly, { size, f, color });
+      ly -= size + 3;
+    }
+    text(s.as, x + 4, y - 84, { size: 8.5, f: bold });
   });
-  y -= 76;
+  y -= 102;
   const sys = '* This is a system generated document. Signature is not required *';
   text(sys, A4[0] / 2 - font.widthOfTextAtSize(sys, 8.5) / 2, y, { size: 8.5 });
 

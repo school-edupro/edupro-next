@@ -162,6 +162,8 @@ export interface PurchaseSettings {
   shipToName: string | null;
   shipContactName: string | null;
   shipContactPhone: string | null;
+  /** where vendors write back: the PO e-mail's reply-to */
+  officeEmail: string | null;
   stockGstInCost: boolean;
   receiptTolerancePct: number;
   updatedAt: string;

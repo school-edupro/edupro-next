@@ -100,7 +100,6 @@ export function OrderForm({
       deliveryAddress: head.deliveryAddress || undefined,
       paymentTermId: head.paymentTermId || null,
       validityDays: head.validityDays,
-      terms: head.terms || undefined,
       freightTerms: head.freightTerms || undefined,
       vendorNote: head.vendorNote || undefined,
       lines: lines.map((l) => ({
@@ -255,17 +254,20 @@ export function OrderForm({
             />
           </label>
         </FormRow>
-        <label className="ep-field" htmlFor="of-terms">
-          <span className="ep-field__label">General instructions (terms and conditions)</span>
-          <textarea
-            id="of-terms"
-            className="ep-input"
-            rows={3}
-            maxLength={4000}
-            value={head.terms}
-            onChange={(e) => setHead((h) => ({ ...h, terms: e.target.value }))}
-          />
-        </label>
+        <div className="ep-field">
+          <span className="ep-field__label">General instructions</span>
+          <p
+            className="ep-field__help"
+            style={{ whiteSpace: 'pre-line', margin: 0, color: 'inherit' }}
+          >
+            {head.terms || 'None set yet.'}
+          </p>
+          <span className="ep-field__help">
+            From <a href="/purchase/settings">Purchase settings</a> (Terms and conditions), the same
+            on every PO and fixed when this one is approved. Anything for this PO only goes in Note
+            to the vendor.
+          </span>
+        </div>
       </FormSection>
 
       <FormSection

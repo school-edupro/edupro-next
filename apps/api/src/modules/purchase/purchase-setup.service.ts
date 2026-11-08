@@ -710,6 +710,7 @@ export class PurchaseSetupService {
         ship_to_name: string | null;
         ship_contact_name: string | null;
         ship_contact_phone: string | null;
+        office_email: string | null;
         updated_at: Date;
       }>(`SELECT *, purchase_department_id::text FROM purchase_settings`);
       const x = s.rows[0]!;
@@ -765,6 +766,7 @@ export class PurchaseSetupService {
         shipToName: x.ship_to_name,
         shipContactName: x.ship_contact_name,
         shipContactPhone: x.ship_contact_phone,
+        officeEmail: x.office_email,
         updatedAt: x.updated_at.toISOString(),
         committee: committee.rows.map((m) => ({
           id: m.id,
@@ -904,7 +906,7 @@ export class PurchaseSetupService {
                 billing_city = $25, billing_pin = $26, delivery_same = $27, delivery_line = $28,
                 delivery_country = $29, delivery_state = $30, delivery_city = $31, delivery_pin = $32,
                 direct_pr_limit = $33, bill_to_name = $34, bill_contact_name = $35, bill_contact_phone = $36,
-                ship_to_name = $37, ship_contact_name = $38, ship_contact_phone = $39,
+                ship_to_name = $37, ship_contact_name = $38, ship_contact_phone = $39, office_email = $40,
                 updated_at = now(), updated_by = app.current_user_id()`,
         [
           dto.gstin,
@@ -946,6 +948,7 @@ export class PurchaseSetupService {
           dto.shipToName ?? null,
           dto.shipContactName ?? null,
           dto.shipContactPhone ?? null,
+          dto.officeEmail ?? null,
         ],
       );
       await this.audit.stage(ctx, c, {

@@ -69,6 +69,7 @@ export function PurchaseSettingsForm({
     shipToName: s.shipToName ?? '',
     shipContactName: s.shipContactName ?? '',
     shipContactPhone: s.shipContactPhone ?? '',
+    officeEmail: s.officeEmail ?? '',
     committeeLimit: String(s.committeeLimit),
     committeeQuotes: String(s.committeeQuotes),
     committeeSignatures: s.committeeSignatures === null ? '' : String(s.committeeSignatures),
@@ -171,6 +172,8 @@ export function PurchaseSettingsForm({
     else if (sigs.some((x) => x.length < 2 || x.length > 40))
       fail('poSignatures', 'Each name 2 to 40 characters');
     if (v.poTerms.length > 4000) fail('poTerms', 'At most 4,000 characters');
+    if (v.officeEmail.trim() && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(v.officeEmail.trim()))
+      fail('officeEmail', 'An e-mail address');
     if (
       v.largePoAlert.trim() &&
       (!amount(v.largePoAlert) || Number(v.largePoAlert.replace(/,/g, '')) <= 0)
@@ -424,6 +427,7 @@ export function PurchaseSettingsForm({
         shipToName: v.shipToName.trim() || undefined,
         shipContactName: v.shipContactName.trim() || undefined,
         shipContactPhone: v.shipContactPhone.trim() || undefined,
+        officeEmail: v.officeEmail.trim() || undefined,
         committeeLimit: num(v.committeeLimit),
         committeeQuotes: num(v.committeeQuotes),
         committeeSignatures: v.committeeSignatures.trim() ? num(v.committeeSignatures) : null,
@@ -661,14 +665,30 @@ export function PurchaseSettingsForm({
               <textarea
                 {...a}
                 className="ep-input"
-                rows={4}
+                rows={6}
                 value={v.poTerms}
                 maxLength={4000}
                 onChange={(e) => put('poTerms', e.target.value)}
               />
             ),
-            { help: `${String(v.poTerms.length)} of 4,000 characters.` },
+            {
+              help: `Printed as the General instructions on every PO; a PO not yet approved always shows this text, and an approved one keeps the text it was approved with. ${String(v.poTerms.length)} of 4,000 characters.`,
+            },
           )}
+          <FormRow columns={2}>
+            {field(
+              'officeEmail',
+              'Purchase office e-mail',
+              text('officeEmail', {
+                maxLength: 150,
+                inputMode: 'email',
+                placeholder: 'e.g. purchase@yourschool.in',
+              }),
+              {
+                help: 'Vendors reply here to the PO e-mail, and it is named in it. Empty: the school’s e-mail.',
+              },
+            )}
+          </FormRow>
         </FormSection>
         <FormSection title="Checks">
           <FormRow columns={2}>

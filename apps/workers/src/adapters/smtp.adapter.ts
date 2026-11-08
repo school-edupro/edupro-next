@@ -59,7 +59,7 @@ export class SmtpAdapter implements ChannelAdapter {
       subject: message.subject ?? '',
       text: message.body,
       ...(message.html ? { html: message.html } : {}),
-      ...(this.replyTo ? { replyTo: this.replyTo } : {}),
+      ...((message.replyTo ?? this.replyTo) ? { replyTo: message.replyTo ?? this.replyTo } : {}),
       attachments: (message.attachments ?? [])
         .filter((a) => a.bytes)
         .map((a) => ({

@@ -955,3 +955,37 @@ plus HSN and make / model; its totals with our GST summary kept; names and signa
   contact under Delivery address.
 - Test: `purchase-orders` saves freight terms, the note, make and model and reads them back; the PDF
   test prints the new layout.
+
+## As built — the PO e-mail; signatures with ID and time; instructions from settings (8 Nov 2026)
+
+Asked by the user ("send the PO e-mail formatted; the PO PDF needs the approved date-time and employee ID
+with the employee signature; General Instructions come from Purchase settings' Terms and conditions").
+Decided with the user: a designed e-mail with the order box and items; replies to a purchase office
+e-mail; every box with signature, name, ID and date-time (middle boxes = earlier levels); instructions
+from settings, fixed on approval.
+
+- **Migration 0336**: `purchase_settings.office_email`; `comms_messages.reply_to` (a message's own
+  reply-to; the workers' SMTP adapter uses it before the provider's — `OutboundMessage.replyTo`, unit
+  test in `comms-adapters.test.ts`; restart the workers once); the template "Purchase: order to the
+  vendor" reworded (a school still on the first wording gets it; an edited one is kept) with
+  `{{vendor_contact}}`, `{{bill_to}}`, `{{signatory_designation}}`, `{{order_summary}}`, `{{items}}`.
+- **The e-mail** (`purchase-order-email.ts`): `emailLayout` gains options — the logo inline (the school
+  logo attached as `school-logo.png|jpg`, shown by `cid:`), the address under the name, its own footer
+  ("Questions about this order? Write to … or reply to this e-mail"); the template's paragraphs with the
+  variables filled in (escaped); `{{order_summary}}` a box (PO number, date, deliver by, deliver to with
+  contact, bill to with GSTIN, your quotation, payment, freight, total with GST); `{{items}}` a table (#,
+  item with code/make/model, qty, unit, rate with discount, amount; the first 25 lines, then "… and N
+  more lines in the attached PO"; before GST, GST, charges, total). A template without the two boxes gets
+  them after its first paragraph. Reply-to: the purchase office e-mail, else the school's.
+- **Signatures**: `signer()` — the box's person (the PO's maker for the first, with "Prepared on" its
+  sending for approval; the approved workflow steps in level order for the rest, "Approved on" the
+  step's time; the last box the final approver once approved; the middle boxes the earlier levels) with
+  the employee code and designation, the date-time in India and the signature image from
+  `employees.signature_file_id`. The PDF box: signature, bold name, "Emp. ID … · designation", the time,
+  the box's label.
+- **Instructions**: the PO form no longer edits them (shown read-only with a link to settings); the update
+  stops writing `terms`; approval sets `terms` from `purchase_settings.po_terms`; the detail and the PDF
+  show the settings' text until the PO is approved (or superseded, cancelled), then its own. The settings
+  field says so.
+- Test: `purchase-orders` — the e-mail's reply-to, its order box and items, no `{{` left; the approved PO
+  keeps the instructions it was approved with while a draft follows a change of the settings.

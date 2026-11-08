@@ -394,6 +394,12 @@ describe('purchase orders (e2e)', () => {
         })
       ).statusCode,
     ).toBe(409);
+    await withMigrator((c) =>
+      c.query(
+        `UPDATE purchase_settings SET office_email = 'purchase@school.example.test' WHERE school_id = $1`,
+        [school.id],
+      ),
+    );
     const r = await call(office, 'POST', `/purchase/orders/${orders.V1!}/send`, {
       to: 'V1@vendor.example.test',
     });
@@ -417,6 +423,39 @@ describe('purchase orders (e2e)', () => {
     expect(msg.rows[0]!.attachments).toEqual([
       expect.objectContaining({ contentType: 'application/pdf' }),
     ]);
+    // the designed e-mail: the order's box, its items, replies to the purchase office
+    const mail = (
+      await withMigrator((c) =>
+        c.query<{ body: string; reply_to: string | null }>(
+          `SELECT body, reply_to FROM comms_messages WHERE id = $1`,
+          [r.json().messageId],
+        ),
+      )
+    ).rows[0]!;
+    expect(mail.reply_to).toBe('purchase@school.example.test');
+    expect(mail.body).toContain('Deliver to');
+    expect(mail.body).toContain('Student chair, steel frame');
+    expect(mail.body).toContain('Total (with GST)');
+    expect(mail.body).toContain('Questions about this order? Write to');
+    expect(mail.body).not.toContain('{{');
+    // the general instructions: fixed on the approved PO, the settings' text on a draft
+    const settingsTerms = (
+      await withMigrator((c) =>
+        c.query<{ po_terms: string | null }>(
+          `SELECT po_terms FROM purchase_settings WHERE school_id = $1`,
+          [school.id],
+        ),
+      )
+    ).rows[0]!.po_terms;
+    expect(po.terms).toBe(settingsTerms);
+    await withMigrator((c) =>
+      c.query(
+        `UPDATE purchase_settings SET po_terms = 'Changed instructions' WHERE school_id = $1`,
+        [school.id],
+      ),
+    );
+    expect((await get(office, orders.V1!)).terms).toBe(settingsTerms);
+    expect((await get(office, orders.V3!)).terms).toBe('Changed instructions');
   });
 
   it('amends an approved PO: R1 is approved again and R0 superseded; cancelling needs its right; closing', async () => {

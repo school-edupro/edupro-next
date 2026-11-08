@@ -334,9 +334,21 @@ On a draft PO:
   last with the approver, each with the signature on their employee record — "a system generated
   document"; and a footer line with the legal name, registered office and GSTIN.
 - **Approved**: **View / Download** the PDF (PENDING is printed across it until approved), then **E-mail the
-  PO with the PDF** to the vendor (the address is the vendor's, change it if needed). The words are the
-  template "Purchase: order to the vendor" on Communication → Templates; every e-mail is listed on the PO
-  with its delivery status. The items' last purchase rate is updated.
+  PO with the PDF** to the vendor (the address is the vendor's, change it if needed). The e-mail carries
+  the school's logo and name, a box of the order (number, date, deliver by and to, bill to with GSTIN,
+  your quotation, payment, freight, the total with GST) and a table of its items (the first 25; the rest
+  in the attached PO), signed with your name and designation. Its words are the template "Purchase: order
+  to the vendor" on Communication → Templates — `{{order_summary}}` and `{{items}}` are where the box and
+  the table go. The vendor's reply goes to the **Purchase office e-mail** (Purchase settings), named in
+  the e-mail too. Every e-mail is listed on the PO with its delivery status. The items' last purchase
+  rate is updated.
+- **General instructions** come from Purchase settings → **Terms and conditions (printed on the PO)**: a
+  PO not yet approved shows that text (the PO form shows it, read-only), and on approval it is fixed on
+  the PO, so a reprint never changes. Something for one PO only goes in its **Note to the vendor**.
+- **Signatures on the PO**: each box of Purchase settings → PO signatures shows the signature on the
+  person's employee record (People → Employees → Add signature), their name, employee ID and designation,
+  and when — "Prepared on …" for whoever sent it for approval, "Approved on …" (date and time) for each
+  approval level: the middle boxes take the earlier levels in order, the last box the final approver.
 - **Close** when the goods have come; **Amend** to change an approved PO — the next revision (R1, R2…)
   opens as a draft and is approved again; the old one stays in force until then and is then marked
   replaced; **Cancel** an approved PO needs the cancel right (the school admin) and a reason — tell the

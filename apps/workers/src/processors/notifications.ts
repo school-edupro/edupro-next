@@ -33,6 +33,8 @@ interface MessageDbRow {
   params: string[] | null;
   attachments: Array<{ fileId: string; name: string | null; contentType: string }>;
   link: string | null;
+  /** an e-mail's own reply-to (a purchase order: the purchase office) */
+  reply_to: string | null;
   dlt_template_id: string | null;
   dlt_entity_id: string | null;
   sender_id: string | null;
@@ -154,6 +156,7 @@ export function notificationProcessor(
     const row = await db.withTenant(tenant, async (c) => {
       const r = await c.query<MessageDbRow>(
         `SELECT m.id::text, m.channel, m.recipient_address, m.subject, m.body, m.status, m.attempts, m.format, m.params, m.attachments, m.variables->>'link' AS link,
+                m.reply_to,
                 COALESCE(m.expires_at < now(), false) AS expired,
                 (SELECT s.status::text FROM schools s WHERE s.id = m.school_id) AS school_status,
                 t.dlt_template_id, t.dlt_entity_id, t.sender_id, t.wa_template_name, t.wa_language, t.wa_header, t.wa_params,
@@ -256,6 +259,7 @@ export function notificationProcessor(
         subject: row.subject,
         body: row.format === 'html' ? htmlToText(row.body) : row.body,
         html: row.format === 'html' ? row.body : null,
+        replyTo: row.reply_to,
         dlt: {
           templateId: row.dlt_template_id,
           entityId: row.dlt_entity_id,

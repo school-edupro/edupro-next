@@ -248,6 +248,11 @@ export const SettingsSchema = z
     shipToName: opt(160),
     shipContactName: opt(80),
     shipContactPhone: opt(30),
+    /** where vendors write back: the PO e-mail's reply-to */
+    officeEmail: z
+      .union([Email, z.literal('')])
+      .nullish()
+      .transform((v) => (v ? v : undefined)),
   })
   .refine((v) => v.committeeLimit >= v.directLimit, {
     message: 'The committee limit must be at least the direct-purchase limit',

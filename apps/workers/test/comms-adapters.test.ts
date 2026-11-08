@@ -284,3 +284,34 @@ describe('SMTP adapter', () => {
     for (const tr of [a, u]) tr.close();
   });
 });
+
+describe('SMTP reply-to', () => {
+  it("a message's own reply-to wins over the provider's (a PO e-mail: the purchase office)", async () => {
+    const sent: Array<Record<string, unknown>> = [];
+    const adapter = new SmtpAdapter(
+      'smtp://localhost:1025',
+      'office@example.invalid',
+      'school@example.invalid',
+    );
+    (adapter as unknown as { transport: unknown }).transport = {
+      sendMail: async (o: Record<string, unknown>) => {
+        sent.push(o);
+        return { messageId: 'm1' };
+      },
+    };
+    const base = {
+      id: '1',
+      channel: 'email' as const,
+      to: 'vendor@example.invalid',
+      subject: 'PO',
+      body: 'text',
+      dlt: { templateId: null, entityId: null, senderId: null },
+    };
+    await adapter.send({ ...base, replyTo: 'purchase@example.invalid' });
+    await adapter.send(base);
+    expect(sent.map((o) => o.replyTo)).toEqual([
+      'purchase@example.invalid',
+      'school@example.invalid',
+    ]);
+  });
+});

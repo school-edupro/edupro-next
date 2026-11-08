@@ -6,7 +6,6 @@ import { AuditService } from '../../common/audit/audit.service';
 import { DbService } from '../../common/db/db.service';
 import { DomainError } from '../../common/errors/domain-error';
 import { requireTenant, type RequestContext } from '../../common/http/request-context';
-import { emailLayout } from '../comms/email-html';
 import { STORAGE_DRIVER } from '../files/storage';
 import { WorkflowService, type InstanceRow, type Level } from '../workflow/workflow.service';
 import { GST_STATES } from './gstin';
@@ -21,6 +20,7 @@ import {
 } from './purchase-order-core';
 import { registerGeneratedOn } from '../exams/register-head';
 import { purchaseHead } from './purchase-head';
+import { orderEmailHtml } from './purchase-order-email';
 import { checkListSize, LIST_LIMIT, purchaseListFile } from './purchase-list-file';
 import { purchaseOrderPdf, type OrderPdfData } from './purchase-order-pdf';
 import { PurchaseVendorsService } from './purchase-vendors.service';
@@ -52,12 +52,6 @@ const addDays = (iso: string, days: number) => {
   d.setUTCDate(d.getUTCDate() + days);
   return d.toISOString().slice(0, 10);
 };
-const esc = (s: string) =>
-  s
-    .replaceAll('&', '&amp;')
-    .replaceAll('<', '&lt;')
-    .replaceAll('>', '&gt;')
-    .replaceAll('"', '&quot;');
 /** "PO/2026-27/0001", or "PO/2026-27/0001-R1" for an amendment. */
 const PO_STATUS_WORDS: Record<string, string> = {
   draft: 'Draft',
@@ -841,7 +835,14 @@ export class PurchaseOrdersService implements OnModuleInit {
         paymentText: po.payment_text,
         validityDays: po.validity_days,
         validUntil: addDays(po.po_date, po.validity_days),
-        terms: po.terms,
+        // a PO not yet approved follows Purchase settings; the text is fixed on approval
+        terms: ['approved', 'sent', 'closed', 'superseded', 'cancelled'].includes(po.status)
+          ? po.terms
+          : ((
+              await c.query<{ po_terms: string | null }>(
+                `SELECT po_terms FROM purchase_settings WHERE school_id = app.current_school_id()`,
+              )
+            ).rows[0]?.po_terms ?? null),
         freightTerms: po.freight_terms,
         vendorNote: po.vendor_note,
         totals: {
@@ -1047,7 +1048,7 @@ export class PurchaseOrdersService implements OnModuleInit {
       }
       await c.query(
         `UPDATE purchase_orders SET quote_ref = $2, po_date = COALESCE($3::date, po_date), delivery_date = $4, delivery_address = $5,
-                payment_term_id = $6, validity_days = $7, terms = $8, freight_terms = $9, vendor_note = $10,
+                payment_term_id = $6, validity_days = $7, freight_terms = $8, vendor_note = $9,
                 updated_at = now() WHERE id = $1`,
         [
           id,
@@ -1057,7 +1058,6 @@ export class PurchaseOrdersService implements OnModuleInit {
           dto.deliveryAddress ?? null,
           dto.paymentTermId ?? null,
           dto.validityDays,
-          dto.terms ?? null,
           dto.freightTerms ?? null,
           dto.vendorNote ?? null,
         ],
@@ -1247,7 +1247,10 @@ export class PurchaseOrdersService implements OnModuleInit {
       return;
     }
     await c.query(
-      `UPDATE purchase_orders SET status = 'approved', decided_at = now(), approved_at = now(), updated_at = now() WHERE id = $1`,
+      // the general instructions are fixed as Purchase settings has them now: a reprint never changes
+      `UPDATE purchase_orders SET status = 'approved', decided_at = now(), approved_at = now(), updated_at = now(),
+              terms = (SELECT ps.po_terms FROM purchase_settings ps WHERE ps.school_id = purchase_orders.school_id)
+        WHERE id = $1`,
       [id],
     );
     // an amendment replaces the revision before it
@@ -1420,6 +1423,7 @@ export class PurchaseOrdersService implements OnModuleInit {
         ship_to_name: string | null;
         ship_contact_name: string | null;
         ship_contact_phone: string | null;
+        po_terms: string | null;
       }>(
         `SELECT sc.name,
                 NULLIF(concat_ws(', ', NULLIF(btrim(sc.address->>'line1'), ''), NULLIF(btrim(sc.address->>'line2'), ''),
@@ -1427,7 +1431,8 @@ export class PurchaseOrdersService implements OnModuleInit {
                        NULLIF(btrim(COALESCE(sc.address->>'pincode', sc.address->>'pin')), '')), '') AS address,
                 NULLIF(concat_ws(' · ', 'Phone ' || NULLIF(btrim(sc.contact->>'phone'), ''), NULLIF(btrim(sc.contact->>'email'), '')), '') AS contact,
                 NULLIF(sc.branding->>'logoFileId', '') AS logo, ps.gstin, ps.state_code, ps.billing_address, ps.po_signatures,
-                ps.bill_to_name, ps.bill_contact_name, ps.bill_contact_phone, ps.ship_to_name, ps.ship_contact_name, ps.ship_contact_phone
+                ps.bill_to_name, ps.bill_contact_name, ps.bill_contact_phone, ps.ship_to_name, ps.ship_contact_name, ps.ship_contact_phone,
+                ps.po_terms
            FROM schools sc JOIN purchase_settings ps ON ps.school_id = sc.id WHERE sc.id = app.current_school_id()`,
       )
     ).rows[0]!;
@@ -1468,16 +1473,17 @@ export class PurchaseOrdersService implements OnModuleInit {
         [po.vendor_id],
       )
     ).rows[0]!;
-    const approval = po.workflow_instance_id
-      ? ((
-          await c.query<{ uid: string | null; by: string | null }>(
+    const approvals = po.workflow_instance_id
+      ? (
+          await c.query<{ uid: string | null; by: string | null; at: Date | null }>(
             // eslint-disable-next-line no-restricted-syntax -- PERSON is a fixed fragment
-            `SELECT st.acted_by::text AS uid, (SELECT ${PERSON('u')} FROM users u WHERE u.id = st.acted_by) AS by FROM workflow_steps st
-              WHERE st.instance_id = $1 AND st.status = 'approved' ORDER BY st.level DESC LIMIT 1`,
+            `SELECT st.acted_by::text AS uid, (SELECT ${PERSON('u')} FROM users u WHERE u.id = st.acted_by) AS by, st.acted_at AS at
+               FROM workflow_steps st
+              WHERE st.instance_id = $1 AND st.status = 'approved' ORDER BY st.level`,
             [po.workflow_instance_id],
           )
-        ).rows[0] ?? null)
-      : null;
+        ).rows
+      : [];
     // the vendor's bank: its name, the IFSC and the account number masked but for the last 4 digits
     let bank: OrderPdfData['vendor']['bank'] = null;
     try {
@@ -1616,25 +1622,47 @@ export class PurchaseOrdersService implements OnModuleInit {
       ]),
       paymentText: po.payment_text,
       msmeWarning: po.msme_warning,
-      terms: po.terms,
+      terms: placed ? po.terms : s.po_terms,
       freightTerms: po.freight_terms,
       vendorNote: po.vendor_note,
       emergency: po.emergency ? { reason: po.emergency_reason ?? '', billRef: po.bill_ref } : null,
-      // the boxes of Purchase settings: the first who prepared it, the last who approved it (once
-      // approved), with the signature on their employee record; any between are signed by hand
-      signers: await Promise.all(
-        s.po_signatures.map(async (as, i, all) =>
-          i === 0
-            ? {
+      // the boxes of Purchase settings: the first who prepared it (when sent for approval), the
+      // middle ones the earlier levels' approvers in order, the last the final approver once approved
+      // — each with the employee ID, designation, when and the signature on the employee record
+      signers: await (async () => {
+        const all = s.po_signatures;
+        const final = placed ? approvals[approvals.length - 1] : undefined;
+        const middle = placed ? approvals.slice(0, -1) : approvals;
+        const out: OrderPdfData['signers'] = [];
+        for (const [i, as] of all.entries()) {
+          if (i === 0)
+            out.push(
+              await this.signer(
+                c,
                 as,
-                name: po.created_by_name,
-                signature: await this.signatureOf(c, po.created_by),
-              }
-            : i === all.length - 1 && placed && approval
-              ? { as, name: approval.by, signature: await this.signatureOf(c, approval.uid) }
-              : { as, name: null, signature: null },
-        ),
-      ),
+                po.created_by,
+                po.created_by_name,
+                po.submitted_at ?? po.created_at,
+                'Prepared on',
+              ),
+            );
+          else if (i === all.length - 1)
+            out.push(
+              final
+                ? await this.signer(c, as, final.uid, final.by, final.at, 'Approved on')
+                : { as, name: null, code: null, designation: null, when: null, signature: null },
+            );
+          else {
+            const m = middle[i - 1];
+            out.push(
+              m
+                ? await this.signer(c, as, m.uid, m.by, m.at, 'Approved on')
+                : { as, name: null, code: null, designation: null, when: null, signature: null },
+            );
+          }
+        }
+        return out;
+      })(),
       footer: [
         s.bill_to_name ?? s.name,
         `Registered Office: ${s.billing_address ?? s.address ?? ''}`,
@@ -1645,23 +1673,64 @@ export class PurchaseOrdersService implements OnModuleInit {
     };
   }
 
-  /** The signature image on a user's employee record (PNG or JPEG), for a printed document. */
-  private async signatureOf(c: PoolClient, userId: string | null): Promise<OrderPdfData['logo']> {
-    if (!userId) return null;
-    const f = (
-      await c.query<{ object_key: string; content_type: string }>(
-        `SELECT f.object_key, f.content_type FROM employees e
-           JOIN files f ON f.id = e.signature_file_id AND f.deleted_at IS NULL
-          WHERE e.user_id = $1 AND e.deleted_at IS NULL AND f.content_type IN ('image/png', 'image/jpeg') LIMIT 1`,
-        [userId],
-      )
-    ).rows[0];
-    if (!f) return null;
-    try {
-      return { contentType: f.content_type, bytes: await this.storage.read(f.object_key) };
-    } catch {
-      return null;
-    }
+  /**
+   * A signature box: the person's name, employee ID and designation, when ("Approved on 08-11-2026
+   * 11:40 AM", India) and the signature image on their employee record (PNG or JPEG), if any.
+   */
+  private async signer(
+    c: PoolClient,
+    as: string,
+    userId: string | null,
+    name: string | null,
+    at: Date | null,
+    verb: string,
+  ): Promise<OrderPdfData['signers'][number]> {
+    const e = userId
+      ? (
+          await c.query<{
+            code: string;
+            designation: string | null;
+            object_key: string | null;
+            content_type: string | null;
+          }>(
+            `SELECT e.employee_code AS code, e.designation, f.object_key, f.content_type FROM employees e
+               LEFT JOIN files f ON f.id = e.signature_file_id AND f.deleted_at IS NULL
+                                AND f.content_type IN ('image/png', 'image/jpeg')
+              WHERE e.user_id = $1 AND e.deleted_at IS NULL LIMIT 1`,
+            [userId],
+          )
+        ).rows[0]
+      : undefined;
+    let signature: OrderPdfData['logo'] = null;
+    if (e?.object_key && e.content_type)
+      try {
+        signature = { contentType: e.content_type, bytes: await this.storage.read(e.object_key) };
+      } catch {
+        signature = null;
+      }
+    const when = at
+      ? `${verb} ${at
+          .toLocaleString('en-GB', {
+            timeZone: 'Asia/Kolkata',
+            day: '2-digit',
+            month: '2-digit',
+            year: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit',
+            hour12: true,
+          })
+          .replace(/\//g, '-')
+          .replace(',', '')
+          .toUpperCase()}`
+      : null;
+    return {
+      as,
+      name,
+      code: e?.code ?? null,
+      designation: e?.designation ?? null,
+      when,
+      signature,
+    };
   }
 
   async pdf(ctx: RequestContext, id: string) {
@@ -1730,47 +1799,73 @@ export class PurchaseOrdersService implements OnModuleInit {
           { status: 409 },
         );
       const me = (
-        await c.query<{ name: string; email: string | null }>(
+        await c.query<{
+          name: string;
+          designation: string | null;
+          email: string | null;
+          office: string | null;
+          logo: string | null;
+        }>(
           // eslint-disable-next-line no-restricted-syntax -- PERSON is a fixed fragment
-          `SELECT ${PERSON('u')} AS name, (SELECT NULLIF(btrim(contact->>'email'), '') FROM schools WHERE id = app.current_school_id()) AS email
+          `SELECT ${PERSON('u')} AS name,
+                  (SELECT e.designation FROM employees e WHERE e.user_id = u.id AND e.deleted_at IS NULL LIMIT 1) AS designation,
+                  (SELECT NULLIF(btrim(contact->>'email'), '') FROM schools WHERE id = app.current_school_id()) AS email,
+                  (SELECT office_email FROM purchase_settings WHERE school_id = app.current_school_id()) AS office,
+                  (SELECT NULLIF(branding->>'logoFileId', '') FROM schools WHERE id = app.current_school_id()) AS logo
              FROM users u WHERE u.id = app.current_user_id()`,
         )
       ).rows[0]!;
+      // replies go to the purchase office (Purchase settings), else the school's e-mail
+      const replyTo = me.office ?? me.email;
       const vars: Record<string, string> = {
         vendor: po.vendor,
+        vendor_contact: d.vendor.contactName ?? po.vendor,
         number: d.number,
         date: d.date,
         amount: rupees(Number(po.total)),
         delivery: d.deliveryDate ?? 'the date agreed',
         address: d.shipTo.address ?? 'the school',
-        contact: me.email ?? 'the school office',
+        bill_to: `${d.billTo.name}${d.billTo.gstin ? ` (GSTIN ${d.billTo.gstin})` : ''}`,
+        contact: replyTo ?? 'the school office',
         signatory: me.name,
+        signatory_designation: me.designation ?? '',
         school: d.school.name,
       };
+      // the school's logo travels inline with the e-mail
+      const logo =
+        me.logo && /^\d{1,18}$/.test(me.logo)
+          ? (
+              await c.query<{ id: string; content_type: string }>(
+                `SELECT id::text, content_type FROM files
+                  WHERE id = $1 AND deleted_at IS NULL AND content_type IN ('image/png', 'image/jpeg')`,
+                [me.logo],
+              )
+            ).rows[0]
+          : undefined;
+      const logoName = logo
+        ? `school-logo.${logo.content_type === 'image/png' ? 'png' : 'jpg'}`
+        : null;
       let subject = t.subject ?? `Purchase Order ${d.number}`;
-      let body = t.body;
-      for (const [k, v] of Object.entries(vars)) {
-        subject = subject.replaceAll(`{{${k}}}`, v);
-        body = body.replaceAll(`{{${k}}}`, v);
-      }
-      const html = emailLayout(
-        esc(d.school.name),
-        body
-          .split(/\n{2,}|(?<=\.) (?=Regards,)/)
-          .map((p) => `<p style="margin:0 0 12px">${esc(p.trim())}</p>`)
-          .join(''),
-      );
+      for (const [k, v] of Object.entries(vars)) subject = subject.replaceAll(`{{${k}}}`, v);
+      const html = orderEmailHtml({ body: t.body, vars, d, logoCid: logoName, replyTo });
       const msg = (
         await c.query<{ id: string }>(
-          `INSERT INTO comms_messages (school_id, template_id, channel, recipient_address, subject, body, format, status, variables, attachments)
-           VALUES (app.current_school_id(), $1, 'email', $2, $3, $4, 'html', 'queued', $5::jsonb, $6::jsonb) RETURNING id::text`,
+          `INSERT INTO comms_messages (school_id, template_id, channel, recipient_address, subject, body, format, status, variables, attachments,
+                                       reply_to)
+           VALUES (app.current_school_id(), $1, 'email', $2, $3, $4, 'html', 'queued', $5::jsonb, $6::jsonb, $7) RETURNING id::text`,
           [
             t.id,
             dto.to.toLowerCase(),
             subject.slice(0, 200),
             html,
             JSON.stringify(vars),
-            JSON.stringify([{ fileId, name: filename, contentType: 'application/pdf' }]),
+            JSON.stringify([
+              { fileId, name: filename, contentType: 'application/pdf' },
+              ...(logo && logoName
+                ? [{ fileId: logo.id, name: logoName, contentType: logo.content_type }]
+                : []),
+            ]),
+            replyTo,
           ],
         )
       ).rows[0]!.id;
