@@ -323,6 +323,16 @@ On a draft PO:
   within 45 days).
 - **Send for approval**: the department's PO levels (Purchase → Who approves); nobody approves their own
   PO — their level passes on.
+- **Why this vendor** (on the PO, admin and staff app): what the approver needs to decide — the
+  requisition's sourcing (direct, committee, tender, or made by the system), the quotes of the vendors
+  who quoted this PO's lines (with their documents to view), the comparative statement for these lines
+  (what the school pays per unit with GST, the lowest marked L1, this PO's vendor marked), the rate
+  contract or the reason when the choice is not L1, the reasonable-price certificate or the committee's
+  signatures.
+- **An amendment** (R1, R2 …) shows **What changed from** the PO it replaces — the reason, then the total,
+  delivery, payment, freight, the note and each line's quantity, rate, discount and GST, lines added or
+  taken off — with a link to the old PO and its PDF. Whoever is on the approval of any revision can open
+  every revision of that PO.
 - **The printed PO** follows the school's own format: the logo, PURCHASE ORDER and "Regular PO No" and
   date; **Supplier** (with its contact person, phone, e-mail and bank — the account number masked but
   for its last 4 digits), **Ship to** and **Bill to** (the legal name, e.g. the society, with its GSTIN

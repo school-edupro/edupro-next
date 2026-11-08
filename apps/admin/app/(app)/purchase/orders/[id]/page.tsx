@@ -3,6 +3,7 @@ import { notFound } from 'next/navigation';
 import { ConfirmAction } from '@/components/ConfirmAction';
 import { FileLinks } from '@/components/FileLinks';
 import { Notice } from '@/components/Notice';
+import { OrderAmendmentCard, OrderSourcingCard } from '@/components/purchase/OrderSourcing';
 import { ApiError, apiFetch, getMe } from '@/lib/api';
 import { PassLevel } from '@/components/purchase/PassLevel';
 import { StepApprovers } from '@/components/purchase/StepApprovers';
@@ -327,6 +328,8 @@ export default async function OrderPage({
         </section>
       ) : null}
 
+      {po.amendment ? <OrderAmendmentCard a={po.amendment} label={po.label} /> : null}
+
       <section className="ep-card" aria-labelledby="po-facts">
         <h2 id="po-facts" className="ep-card__title">
           Vendor and terms
@@ -369,7 +372,12 @@ export default async function OrderPage({
             <div>
               <dt>Requisition</dt>
               <dd>
-                <a href={`/purchase/requisitions/${po.requisitionId ?? ''}`}>{po.requisition}</a>
+                <a
+                  style={{ textDecoration: 'underline' }}
+                  href={`/purchase/requisitions/${po.requisitionId ?? ''}`}
+                >
+                  {po.requisition}
+                </a>
                 {po.quoteRef ? ` · quotation ${po.quoteRef}` : ''}
               </dd>
             </div>
@@ -605,6 +613,8 @@ export default async function OrderPage({
           </div>
         ) : null}
       </section>
+
+      {po.sourcing ? <OrderSourcingCard poId={po.id} s={po.sourcing} /> : null}
 
       {po.receiptList.length || ['approved', 'sent'].includes(po.status) ? (
         <section className="ep-card" aria-labelledby="po-del">

@@ -158,6 +158,14 @@ const PARTICIPANT = `EXISTS (SELECT 1 FROM workflow_steps s JOIN workflow_instan
       AND (app.current_user_id() = ANY(s.assignee_user_ids) OR s.acted_by = app.current_user_id()
            OR EXISTS (SELECT 1 FROM delegations dl WHERE dl.to_user_id = app.current_user_id() AND dl.from_user_id = ANY(s.assignee_user_ids)
                         AND dl.revoked_at IS NULL)))`;
+/**
+ * I take part in any revision of the PO: an amendment's approver opens the PO it replaces (and its
+ * PDF), and whoever approved an earlier one follows the later ones.
+ */
+const ANY_REVISION = PARTICIPANT.replace(
+  'wi.entity_id = po.id',
+  'wi.entity_id IN (SELECT o2.id FROM purchase_orders o2 WHERE o2.number = po.number)',
+);
 // eslint-disable-next-line no-restricted-syntax -- MAY_ACT is the engine's fixed fragment
 const WAITING = `EXISTS (SELECT 1 FROM workflow_steps s JOIN workflow_instances i ON i.id = s.instance_id
     WHERE i.id = po.workflow_instance_id AND i.status = 'pending' AND s.level = i.current_level AND s.status = 'pending'
@@ -207,7 +215,7 @@ export class PurchaseOrdersService implements OnModuleInit {
   private async load(c: PoolClient, ctx: RequestContext, id: string): Promise<PoRow> {
     const r = await c.query<PoRow>(
       // eslint-disable-next-line no-restricted-syntax -- fixed fragments; values are bound
-      `${SELECT} WHERE po.id = $1 AND ($2 OR ${PARTICIPANT})`,
+      `${SELECT} WHERE po.id = $1 AND ($2 OR ${ANY_REVISION})`,
       [id, this.seesAll(ctx)],
     );
     if (!r.rows[0]) throw new DomainError('not-found', 'Purchase order not found', { status: 404 });
@@ -722,6 +730,282 @@ export class PurchaseOrdersService implements OnModuleInit {
     );
   }
 
+  /**
+   * Why this vendor (docs/design/83, "As built — the PO's sourcing and amendments"): the requisition's
+   * sourcing (its tier, the price certificate or the committee's signatures, a tender reference), the
+   * quotes of the vendors who quoted this PO's lines, and per line each quote's rate, GST and landed
+   * cost with L1 marked, the vendor chosen, the rate contract or the reason for a choice not L1.
+   */
+  private async sourcingOf(
+    c: PoolClient,
+    prId: string,
+    lines: Awaited<ReturnType<PurchaseOrdersService['linesOf']>>,
+    vendorId: string,
+  ) {
+    const ids = lines.map((l) => l.requisition_line_id).filter((x): x is string => !!x);
+    const pr = (
+      await c.query<{
+        number: string;
+        tier: string | null;
+        auto_rule: string | null;
+        price_certificate: string | null;
+        certified_by: string | null;
+        certified_at: Date | null;
+        tender_ref: string | null;
+      }>(
+        // eslint-disable-next-line no-restricted-syntax -- PERSON is a fixed fragment
+        `SELECT r.number, r.tier, r.auto_rule, r.price_certificate,
+                (SELECT ${PERSON('u')} FROM users u WHERE u.id = r.certified_by) AS certified_by, r.certified_at, r.tender_ref
+           FROM purchase_requisitions r WHERE r.id = $1`,
+        [prId],
+      )
+    ).rows[0];
+    if (!pr) return null;
+    const quotes = (
+      await c.query<{
+        id: string;
+        vendor_id: string;
+        vendor: string;
+        vendor_code: string;
+        gst_status: string;
+        msme_type: string | null;
+        quote_ref: string | null;
+        quote_date: string | null;
+        valid_until: string | null;
+        delivery_days: number | null;
+        file_id: string | null;
+      }>(
+        `SELECT q.id::text, q.vendor_id::text, v.legal_name AS vendor, v.code AS vendor_code, v.gst_status, v.msme_type, q.quote_ref,
+                q.quote_date::text, q.valid_until::text, q.delivery_days, q.file_id::text
+           FROM purchase_quotes q JOIN vendors v ON v.id = q.vendor_id
+          WHERE q.requisition_id = $1
+            AND EXISTS (SELECT 1 FROM purchase_quote_lines ql WHERE ql.quote_id = q.id AND ql.requisition_line_id = ANY($2::bigint[]))
+          ORDER BY q.created_at, q.id`,
+        [prId, ids],
+      )
+    ).rows;
+    const quoted = (
+      await c.query<{ quote_id: string; line_id: string; rate: string; gst_rate: string }>(
+        `SELECT ql.quote_id::text, ql.requisition_line_id::text AS line_id, ql.rate::text, ql.gst_rate::text
+           FROM purchase_quote_lines ql WHERE ql.requisition_line_id = ANY($1::bigint[])`,
+        [ids],
+      )
+    ).rows;
+    const chosen = new Map(
+      (
+        await c.query<{
+          id: string;
+          vendor: string | null;
+          rate: string | null;
+          gst_rate: string | null;
+          choice_reason: string | null;
+          contract_vendor: string | null;
+          contract_rate: string | null;
+        }>(
+          `SELECT rl.id::text, v.legal_name AS vendor, rl.rate::text, rl.gst_rate::text, rl.choice_reason,
+                  cv.legal_name AS contract_vendor, rc.rate::text AS contract_rate
+             FROM purchase_requisition_lines rl
+             LEFT JOIN vendors v ON v.id = rl.vendor_id
+             LEFT JOIN purchase_rate_contracts rc ON rc.id = rl.contract_id
+             LEFT JOIN vendors cv ON cv.id = rc.vendor_id
+            WHERE rl.id = ANY($1::bigint[])`,
+          [ids],
+        )
+      ).rows.map((x) => [x.id, x]),
+    );
+    const committee =
+      pr.tier === 'committee'
+        ? (
+            await c.query<{ name: string; role: string | null; signed_at: Date | null }>(
+              `SELECT e.display_name AS name, m.role, so.signed_at
+                 FROM purchase_committee_members m JOIN employees e ON e.id = m.employee_id
+                 LEFT JOIN purchase_cs_signoffs so ON so.requisition_id = $1 AND so.employee_id = e.id
+                WHERE e.deleted_at IS NULL ORDER BY m.created_at, e.display_name`,
+              [prId],
+            )
+          ).rows
+        : [];
+    const landed = (rate: number, gst: number) => Math.round(rate * (1 + gst / 100) * 100) / 100;
+    const rows = lines.map((l) => {
+      const cells = quotes.map((q) => {
+        const x = quoted.find((y) => y.quote_id === q.id && y.line_id === l.requisition_line_id);
+        return x
+          ? {
+              rate: Number(x.rate),
+              gstRate: Number(x.gst_rate),
+              landed: landed(Number(x.rate), Number(x.gst_rate)),
+              l1: false,
+            }
+          : null;
+      });
+      const low = Math.min(...cells.filter((x) => x !== null).map((x) => x.landed));
+      for (const x of cells) if (x && Math.abs(x.landed - low) <= 0.004) x.l1 = true;
+      const ch = l.requisition_line_id ? chosen.get(l.requisition_line_id) : undefined;
+      const mine = landed(Number(l.rate), Number(l.gst_rate));
+      return {
+        poLineId: l.id,
+        seq: l.seq,
+        description: l.description,
+        quantity: Number(l.quantity),
+        uom: l.uom,
+        cells,
+        chosen: {
+          vendor: ch?.vendor ?? null,
+          rate: Number(l.rate),
+          gstRate: Number(l.gst_rate),
+          landed: mine,
+        },
+        contract:
+          ch?.contract_vendor && ch.contract_rate
+            ? { vendor: ch.contract_vendor, rate: Number(ch.contract_rate) }
+            : null,
+        reason: ch?.choice_reason ?? null,
+        /** dearer (with GST) than the lowest quote */
+        notL1: Number.isFinite(low) && mine > low + 0.004,
+      };
+    });
+    return {
+      requisitionId: prId,
+      requisition: pr.number,
+      tier: pr.tier,
+      autoRule: pr.auto_rule,
+      certificate: pr.price_certificate
+        ? {
+            text: pr.price_certificate,
+            by: pr.certified_by,
+            at: pr.certified_at?.toISOString() ?? null,
+          }
+        : null,
+      tenderRef: pr.tender_ref,
+      committee: committee.map((m) => ({
+        name: m.name,
+        role: m.role,
+        signedAt: m.signed_at?.toISOString() ?? null,
+      })),
+      quotes: quotes.map((q, i) => ({
+        id: q.id,
+        vendorId: q.vendor_id,
+        vendor: q.vendor,
+        vendorCode: q.vendor_code,
+        gstStatus: q.gst_status,
+        msme: q.msme_type,
+        ref: q.quote_ref,
+        date: q.quote_date,
+        validUntil: q.valid_until,
+        deliveryDays: q.delivery_days,
+        hasFile: q.file_id !== null,
+        thisPo: q.vendor_id === vendorId,
+        /** what the school pays with GST for the lines of this PO it quoted */
+        total:
+          Math.round(
+            rows.reduce((a, r) => a + (r.cells[i] ? r.cells[i].landed * r.quantity : 0), 0) * 100,
+          ) / 100,
+      })),
+      lines: rows,
+    };
+  }
+
+  /**
+   * An amendment: what changed from the revision it replaces — the reason, the total, the delivery and
+   * payment, and line by line (matched by the requisition line, else the words) the quantity, rate,
+   * discount and GST, lines added and lines taken off.
+   */
+  private async changesFrom(
+    c: PoolClient,
+    po: PoRow,
+    lines: Awaited<ReturnType<PurchaseOrdersService['linesOf']>>,
+    charges: Awaited<ReturnType<PurchaseOrdersService['chargesOf']>>,
+  ) {
+    const prev = (
+      await c.query<PoRow>(
+        // eslint-disable-next-line no-restricted-syntax -- SELECT is a fixed fragment; values are bound
+        `${SELECT} WHERE po.id = $1`,
+        [po.supersedes_id],
+      )
+    ).rows[0];
+    if (!prev) return null;
+    const before = await this.linesOf(c, prev.id);
+    const beforeCharges = await this.chargesOf(c, prev.id);
+    const out: Array<{ what: string; from: string; to: string }> = [];
+    const rs = (n: number) =>
+      `₹${n.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    const q = (n: number) => n.toLocaleString('en-IN', { maximumFractionDigits: 3 });
+    const was = (what: string, from: string | null, to: string | null) => {
+      if ((from ?? '') !== (to ?? '')) out.push({ what, from: from ?? '—', to: to ?? '—' });
+    };
+    was('Total (with GST)', rs(Number(prev.total)), rs(Number(po.total)));
+    was('Deliver by', prev.delivery_date, po.delivery_date);
+    was('Deliver to', prev.delivery_address, po.delivery_address);
+    was('Payment', prev.payment_text, po.payment_text);
+    was('Valid for (days)', String(prev.validity_days), String(po.validity_days));
+    was('Your quotation', prev.quote_ref, po.quote_ref);
+    was('Freight terms', prev.freight_terms, po.freight_terms);
+    was('Note to the vendor', prev.vendor_note, po.vendor_note);
+    const key = (l: (typeof lines)[number]) => l.requisition_line_id ?? `words:${l.description}`;
+    const old = new Map(before.map((l) => [key(l), l]));
+    for (const l of lines) {
+      const o = old.get(key(l));
+      const name = l.description;
+      if (!o) {
+        out.push({
+          what: `${name}: added`,
+          from: '—',
+          to: `${q(Number(l.quantity))} ${l.uom} at ${rs(Number(l.rate))}`,
+        });
+        continue;
+      }
+      old.delete(key(l));
+      was(
+        `${name}: quantity`,
+        `${q(Number(o.quantity))} ${o.uom}`,
+        `${q(Number(l.quantity))} ${l.uom}`,
+      );
+      was(`${name}: rate`, rs(Number(o.rate)), rs(Number(l.rate)));
+      was(`${name}: discount %`, String(Number(o.discount_pct)), String(Number(l.discount_pct)));
+      was(`${name}: GST %`, String(Number(o.gst_rate)), String(Number(l.gst_rate)));
+      was(`${name}: words`, o.description, l.description);
+    }
+    for (const o of old.values())
+      out.push({
+        what: `${o.description}: taken off`,
+        from: `${q(Number(o.quantity))} ${o.uom} at ${rs(Number(o.rate))}`,
+        to: '—',
+      });
+    was(
+      'Other charges',
+      rs(beforeCharges.reduce((a, x) => a + Number(x.total), 0)),
+      rs(charges.reduce((a, x) => a + Number(x.total), 0)),
+    );
+    return {
+      previousId: prev.id,
+      previousLabel: label(prev.number, prev.revision),
+      previousStatus: prev.status,
+      reason: po.amend_reason,
+      changes: out,
+    };
+  }
+
+  /** A quote document of the PO's requisition, for anyone who may see the PO (its approvers). */
+  async quoteFile(ctx: RequestContext, id: string, quoteId: string) {
+    return this.db.tenant(requireTenant(ctx), async (c) => {
+      const po = await this.load(c, ctx, id);
+      const f = (
+        await c.query<{ object_key: string; content_type: string; original_name: string }>(
+          `SELECT f.object_key, f.content_type, f.original_name FROM purchase_quotes q
+             JOIN files f ON f.id = q.file_id AND f.deleted_at IS NULL
+            WHERE q.id = $1 AND q.requisition_id = $2`,
+          [quoteId, po.requisition_id],
+        )
+      ).rows[0];
+      if (!f) throw new DomainError('not-found', 'No document with that quote', { status: 404 });
+      return {
+        bytes: await this.storage.read(f.object_key),
+        contentType: f.content_type,
+        filename: f.original_name,
+      };
+    });
+  }
+
   async get(ctx: RequestContext, id: string) {
     return this.db.tenant(requireTenant(ctx), async (c) => {
       const po = await this.load(c, ctx, id);
@@ -917,6 +1201,12 @@ export class PurchaseOrdersService implements OnModuleInit {
             },
           })),
         ]),
+        // why this vendor: the requisition's quotes and comparative statement for this PO's lines
+        sourcing: po.requisition_id
+          ? await this.sourcingOf(c, po.requisition_id, lines, po.vendor_id)
+          : null,
+        // an amendment: what changed from the revision it replaces
+        amendment: po.supersedes_id ? await this.changesFrom(c, po, lines, charges) : null,
         revisions: revisions.rows.map((x) => ({
           id: x.id,
           revision: x.revision,

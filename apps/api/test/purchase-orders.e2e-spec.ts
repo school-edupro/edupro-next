@@ -475,6 +475,27 @@ describe('purchase orders (e2e)', () => {
     expect((await get(office, ids.r1!)).revisions.map((x: { status: string }) => x.status)).toEqual(
       ['superseded', 'approved'],
     );
+    // the amendment shows what it replaces and why this vendor
+    const r1done = await get(office, ids.r1!);
+    expect(r1done.amendment).toMatchObject({
+      previousId: orders.V1,
+      reason: 'Two more chairs',
+      changes: expect.any(Array),
+    });
+    expect(r1done.sourcing).toMatchObject({ requisitionId: expect.any(String) });
+    expect(r1done.sourcing.lines).toHaveLength(r1done.lineItems.length);
+    // someone on R1's approval opens R0 and its PDF; someone on neither does not
+    const watcher = await withMigrator((c) => seedUser(c, school, `${s}-w`, 'subject_teacher'));
+    expect((await call(watcher, 'GET', `/purchase/orders/${orders.V1!}`)).statusCode).toBe(404);
+    await withMigrator((c) =>
+      c.query(
+        `UPDATE workflow_steps SET assignee_user_ids = assignee_user_ids || $2::bigint
+          WHERE instance_id = (SELECT workflow_instance_id FROM purchase_orders WHERE id = $1)`,
+        [ids.r1, watcher.id],
+      ),
+    );
+    expect((await call(watcher, 'GET', `/purchase/orders/${orders.V1!}`)).statusCode).toBe(200);
+    expect((await call(watcher, 'GET', `/purchase/orders/${orders.V1!}/pdf`)).statusCode).toBe(200);
     // the purchase office cannot cancel an approved PO; the school admin can
     expect(
       (

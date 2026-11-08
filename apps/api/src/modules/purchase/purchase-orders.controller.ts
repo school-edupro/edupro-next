@@ -75,6 +75,28 @@ export class PurchaseOrdersController {
     return this.orders.get(ctx, id);
   }
 
+  @Get('orders/:id/quotes/:quoteId/file')
+  @ApiOperation({ summary: 'A quote document of the PO’s requisition (for its approvers)' })
+  @AuthenticatedOnly()
+  async quoteFile(
+    @ReqCtx() ctx: RequestContext,
+    @Param('id') id: string,
+    @Param('quoteId') quoteId: string,
+    @Query('save') save: string | undefined,
+    @Res() reply: FastifyReply,
+  ) {
+    const f = await this.orders.quoteFile(ctx, id, quoteId);
+    void reply
+      .header('content-type', f.contentType)
+      .header(
+        'content-disposition',
+        `${save === '1' ? 'attachment' : 'inline'}; filename="${f.filename.replace(/[^\w.\- ]+/g, '_')}"`,
+      )
+      .header('cache-control', 'private, no-store')
+      .header('x-content-type-options', 'nosniff')
+      .send(f.bytes);
+  }
+
   @Get('orders/:id/pdf')
   @ApiOperation({ summary: 'The PO as a PDF (DRAFT across it until approved)' })
   @AuthenticatedOnly()

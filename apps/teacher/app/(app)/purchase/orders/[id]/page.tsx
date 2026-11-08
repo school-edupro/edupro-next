@@ -2,6 +2,7 @@ import { Badge, Card, PageHeader } from '@edupro/ui';
 import { ApiError } from '@edupro/bff';
 import { notFound, redirect } from 'next/navigation';
 import { FileLinks } from '@/components/FileLinks';
+import { OrderAmendmentCard, OrderSourcingCard } from '@/components/OrderSourcing';
 import { bff } from '@/lib/bff';
 import { currentLang, t } from '@/lib/i18n';
 import { EMERGENCY_STATUS, ORDER_STATUS, type OrderDetail } from '@/lib/purchase';
@@ -124,6 +125,8 @@ export default async function StaffOrderPage({
           </Card>
         ) : null}
 
+        {po.amendment ? <OrderAmendmentCard a={po.amendment} label={po.label} /> : null}
+
         <Card title={t(lang, 'Lines')}>
           <div className="ep-table-wrap" tabIndex={0} role="region" aria-label={t(lang, 'Lines')}>
             <table className="ep-table">
@@ -175,6 +178,8 @@ export default async function StaffOrderPage({
           </div>
           <p className="ep-field__help">Rupees {po.words} only.</p>
         </Card>
+
+        {po.sourcing ? <OrderSourcingCard poId={po.id} s={po.sourcing} /> : null}
       </div>
     </main>
   );

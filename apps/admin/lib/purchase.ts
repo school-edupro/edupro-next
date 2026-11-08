@@ -817,7 +817,55 @@ export interface OrderLine {
   returned: number;
 }
 
+/** Why this vendor: the requisition's quotes and comparative statement for the PO's lines */
+export interface OrderSourcing {
+  requisitionId: string;
+  requisition: string;
+  tier: 'none' | 'direct' | 'committee' | 'tender' | null;
+  autoRule: string | null;
+  certificate: { text: string; by: string | null; at: string | null } | null;
+  tenderRef: string | null;
+  committee: Array<{ name: string; role: string | null; signedAt: string | null }>;
+  quotes: Array<{
+    id: string;
+    vendorId: string;
+    vendor: string;
+    vendorCode: string;
+    gstStatus: string;
+    msme: string | null;
+    ref: string | null;
+    date: string | null;
+    validUntil: string | null;
+    deliveryDays: number | null;
+    hasFile: boolean;
+    thisPo: boolean;
+    total: number;
+  }>;
+  lines: Array<{
+    poLineId: string;
+    seq: number;
+    description: string;
+    quantity: number;
+    uom: string;
+    cells: Array<{ rate: number; gstRate: number; landed: number; l1: boolean } | null>;
+    chosen: { vendor: string | null; rate: number; gstRate: number; landed: number };
+    contract: { vendor: string; rate: number } | null;
+    reason: string | null;
+    notL1: boolean;
+  }>;
+}
+/** An amendment: what changed from the revision it replaces */
+export interface OrderAmendment {
+  previousId: string;
+  previousLabel: string;
+  previousStatus: string;
+  reason: string | null;
+  changes: Array<{ what: string; from: string; to: string }>;
+}
+
 export interface OrderDetail extends OrderRow {
+  sourcing: OrderSourcing | null;
+  amendment: OrderAmendment | null;
   emergencyReason: string | null;
   billFileId: string | null;
   billRef: string | null;

@@ -989,3 +989,28 @@ from settings, fixed on approval.
   field says so.
 - Test: `purchase-orders` — the e-mail's reply-to, its order box and items, no `{{` left; the approved PO
   keeps the instructions it was approved with while a draft follows a change of the settings.
+
+## As built — the PO's sourcing and amendments for its approvers (8 Nov 2026)
+
+Asked by the user (a screenshot of the PR's quotes and comparative statement: "on the PO page approval
+needs to show this data; and in the amendment case the old PO can be viewed"). Decided with the user:
+this PO's lines; the admin and staff app PO pages.
+
+- **`sourcing`** on `GET /purchase/orders/:id` (`sourcingOf`): the PO's requisition (number, tier, auto
+  rule, the price certificate with who and when, the tender reference, the committee with who signed);
+  the quotes of the vendors who quoted any of this PO's lines (vendor, GST status, MSME, reference, date,
+  validity, delivery, a document, `thisPo`, and what these lines come to with GST); per PO line each
+  quote's rate, GST and landed cost with L1, the vendor chosen and its landed cost, the rate contract,
+  the choice's reason and `notL1`. **Why this vendor** card (admin `components/purchase/OrderSourcing.tsx`,
+  staff app `components/OrderSourcing.tsx`); quote documents through `GET
+  /purchase/orders/:id/quotes/:quoteId/file` (admin `/api/purchase/orders/[id]/quotes/[quoteId]`, staff
+  `/api/purchase-order-quote/[id]/[quoteId]`) — an approver who cannot open the PR still sees them.
+- **`amendment`** (`changesFrom`): the PO it replaces (id, label, status), the reason, and what changed —
+  the total, deliver by / to, payment, validity, quotation, freight terms, the note, other charges, and
+  line by line (matched by the requisition line, else the words) quantity, rate, discount %, GST %,
+  words, lines added and taken off. **What changed from …** card with the link to the old PO and its PDF.
+- **Every revision visible to those on any revision's approval** (`ANY_REVISION` replaces `PARTICIPANT`
+  in `load()`: the PO and its PDF), so an amendment's approver opens the PO it replaces.
+- In-text links on the PO page are underlined (the requisition in the facts; axe link-in-text-block).
+- Test: `purchase-orders` — R1 carries the amendment (R0, the reason, the changes) and its sourcing
+  lines; a user put on R1's approval opens R0 and its PDF (404 before).
