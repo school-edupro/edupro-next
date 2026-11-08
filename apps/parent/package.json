@@ -15,7 +15,7 @@
     "@edupro/bff": "workspace:*",
     "@edupro/ui": "workspace:*",
     "firebase": "12.19.0",
-    "next": "^15.5.0",
+    "next": "^15.5.29",
     "react": "^19.0.0",
     "react-dom": "^19.0.0"
   },

@@ -57,6 +57,11 @@ describe('exam entry, fee reports and the assistant everywhere (e2e, Sprint 15)'
           [school.id, code, u.id],
         );
       }
+      // no weekly off: the assistant cases mark today's attendance, on Sundays too
+      await c.query(
+        `INSERT INTO school_settings (school_id, key, value) VALUES ($1, 'attendance.weekly_off', '[]'::jsonb)`,
+        [school.id],
+      );
     });
     app = await createApp();
     inject = injector(app);

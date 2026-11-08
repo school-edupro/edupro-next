@@ -69,6 +69,8 @@ jobs:
   deploy:
     name: Migrate and roll out to staging
     needs: images
+    # waits for Azure: runs once the repository has the AZURE_RESOURCE_GROUP variable (and the secrets)
+    if: vars.AZURE_RESOURCE_GROUP != ''
     runs-on: ubuntu-latest
     environment: staging
     steps:

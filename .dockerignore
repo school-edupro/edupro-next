@@ -2,9 +2,16 @@ node_modules
 **/node_modules
 **/dist
 **/.next
+**/.turbo
 **/storybook-static
 **/playwright-report
 **/test-results
+**/*.log
 .data
 .git
 backups
+# local secrets and real school data never go into an image
+.env
+.env.*
+!.env.example
+new folder

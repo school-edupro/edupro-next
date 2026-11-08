@@ -24,7 +24,7 @@
     "@edupro/config": "workspace:*",
     "@types/node": "^22.7.4",
     "eslint": "^9.12.0",
-    "next": "^15.5.0",
+    "next": "^15.5.29",
     "typescript": "^5.6.2"
   }
 }

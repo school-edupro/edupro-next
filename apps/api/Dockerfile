@@ -1,25 +1,20 @@
 # syntax=docker/dockerfile:1.7
 # API image (S5-05). Built from the monorepo root: docker build -f apps/api/Dockerfile .
+# The packages are fetched from the lockfile alone (a layer kept while it does not change), then the
+# whole workspace is copied, so a new workspace package of the API needs no change here.
 FROM node:22-alpine AS base
-RUN corepack enable && corepack prepare pnpm@9 --activate
+ENV PNPM_HOME=/pnpm PATH=/pnpm:$PATH COREPACK_ENABLE_DOWNLOAD_PROMPT=0
+# the same pnpm as packageManager in package.json
+RUN corepack enable && corepack prepare pnpm@9.12.0 --activate
 WORKDIR /repo
 
-FROM base AS deps
+FROM base AS build
 COPY pnpm-lock.yaml pnpm-workspace.yaml package.json ./
-COPY packages/config/package.json packages/config/
-COPY packages/db/package.json packages/db/
-COPY packages/storage/package.json packages/storage/
-COPY packages/api-client/package.json packages/api-client/
-COPY apps/api/package.json apps/api/
-RUN pnpm install --frozen-lockfile --filter @edupro/api... --prod=false
-
-FROM deps AS build
-COPY packages/config packages/config
-COPY packages/db packages/db
-COPY packages/storage packages/storage
-COPY apps/api apps/api
-RUN pnpm --filter @edupro/storage --filter @edupro/db --filter @edupro/api build \
- && pnpm --filter @edupro/api... deploy --prod /out
+RUN pnpm fetch
+COPY . .
+RUN pnpm install --offline --frozen-lockfile --filter "@edupro/api..." \
+ && pnpm --filter "@edupro/api..." build \
+ && pnpm --filter @edupro/api deploy --prod /out
 
 FROM node:22-alpine AS runtime
 ENV NODE_ENV=production

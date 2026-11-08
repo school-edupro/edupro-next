@@ -16,8 +16,8 @@
     }
   },
   "scripts": {
-    "build": "tsc -p tsconfig.json",
-    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "build": "prisma generate && tsc -p tsconfig.json",
+    "typecheck": "prisma generate && tsc -p tsconfig.json --noEmit",
     "lint": "eslint src test",
     "migrate": "tsx src/migrate.ts",
     "local:setup": "tsx src/local-setup.ts",
@@ -45,6 +45,6 @@
     "prisma": "^5.20.0",
     "tsx": "^4.19.1",
     "typescript": "^5.6.2",
-    "vitest": "^2.1.2"
+    "vitest": "^4.1.12"
   }
 }

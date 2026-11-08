@@ -127,6 +127,11 @@ describe('assistant red team (e2e, Sprint 16)', () => {
         `UPDATE guardians SET user_id = $1 WHERE mobile = '9876500077' AND school_id = $2`,
         [parent.id, school.id],
       );
+      // no weekly off: the suite marks today's attendance, and CI runs on Sundays too
+      await c.query(
+        `INSERT INTO school_settings (school_id, key, value) VALUES ($1, 'attendance.weekly_off', '[]'::jsonb)`,
+        [school.id],
+      );
     });
     const emps = (
       await inject({ method: 'GET', url: '/people/employees?size=5', headers: h() })

@@ -19,7 +19,7 @@
     },
     "test": {
       "dependsOn": ["^build"],
-      "env": ["DATABASE_URL", "REDIS_URL"]
+      "env": ["DATABASE_URL", "DATABASE_MIGRATOR_URL", "REDIS_URL"]
     }
   }
 }

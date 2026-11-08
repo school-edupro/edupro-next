@@ -7,6 +7,8 @@ module.exports = {
   moduleFileExtensions: ['ts', 'js', 'json'],
   testTimeout: 60000,
   maxWorkers: 1,
+  // the suites' database pools and Redis connections outlive the run: without this a CI step never ends
+  forceExit: true,
   setupFiles: ['<rootDir>/test/setup-env.ts'],
   globalSetup: '<rootDir>/test/global-setup.cjs',
   globalTeardown: '<rootDir>/test/global-teardown.cjs',

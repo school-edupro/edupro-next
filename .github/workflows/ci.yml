@@ -11,7 +11,6 @@ concurrency:
 
 env:
   NODE_VERSION: 22
-  PNPM_VERSION: 9
 
 jobs:
   secrets-scan:
@@ -54,9 +53,8 @@ jobs:
       ONEAUTH_JWKS_URL: https://oneauth.example.test/.well-known/jwks.json
     steps:
       - uses: actions/checkout@v4
+      # the pnpm version comes from packageManager in package.json (one place only)
       - uses: pnpm/action-setup@v4
-        with:
-          version: ${{ env.PNPM_VERSION }}
       - uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
@@ -128,9 +126,8 @@ jobs:
       EXPORT_PDF_ENGINE: none
     steps:
       - uses: actions/checkout@v4
+      # the pnpm version comes from packageManager in package.json (one place only)
       - uses: pnpm/action-setup@v4
-        with:
-          version: ${{ env.PNPM_VERSION }}
       - uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
@@ -142,7 +139,7 @@ jobs:
       - run: pnpm --filter @edupro/admin exec playwright install --with-deps chromium
       - name: Build and start the API and the admin app
         run: |
-          pnpm --filter @edupro/storage --filter @edupro/db --filter @edupro/ui --filter @edupro/api build
+          pnpm --filter "@edupro/api..." --filter @edupro/ui build
           (cd apps/api && node dist/main.js > /tmp/api.log 2>&1 &)
           pnpm --filter @edupro/admin build
           (cd apps/admin && pnpm start > /tmp/admin.log 2>&1 &)
