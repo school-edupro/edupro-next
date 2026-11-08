@@ -1066,6 +1066,11 @@ export const StockDocQuerySchema = z.object({
     .enum(['1', '0'])
     .optional()
     .transform((v) => v === '1'),
+  /** issues: issued to me or my department, whatever their status (the staff app's Received earlier) */
+  received: z
+    .enum(['1', '0'])
+    .optional()
+    .transform((v) => v === '1'),
   q: z.string().trim().max(80).optional(),
   page: z.coerce.number().int().min(1).max(10000).default(1),
 });

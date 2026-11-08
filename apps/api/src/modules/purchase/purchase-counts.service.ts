@@ -16,6 +16,7 @@ import {
   PERSON_OF,
   qty3,
 } from './purchase-stock-core';
+import { blankBox, signerOf } from './purchase-doc-sign';
 import { purchaseStockPdf } from './purchase-stock-pdf';
 import { postStock } from './purchase-stores.service';
 import {
@@ -35,7 +36,7 @@ const SELECT = `
   SELECT k.id::text, k.number, k.status, k.store_id::text, st.name AS store, k.category_id::text, cat.name AS category,
          k.counted_on::text, k.counted_by, k.note, k.submitted_at, k.decided_at, k.decision_note, k.created_by::text,
          k.submitted_by::text, (SELECT ${PERSON_OF('u')} FROM users u WHERE u.id = k.created_by) AS started_by,
-         (SELECT ${PERSON_OF('u')} FROM users u WHERE u.id = k.decided_by) AS decided_by,
+         (SELECT ${PERSON_OF('u')} FROM users u WHERE u.id = k.decided_by) AS decided_by, k.decided_by::text AS decided_by_id,
          (SELECT count(*)::int FROM stock_count_lines l WHERE l.count_id = k.id) AS lines,
          (SELECT count(*)::int FROM stock_count_lines l WHERE l.count_id = k.id AND l.counted_qty IS NOT NULL) AS counted,
          (SELECT count(*)::int FROM stock_count_lines l WHERE l.count_id = k.id AND l.counted_qty IS NOT NULL AND l.counted_qty <> l.book_qty) AS differences,
@@ -60,6 +61,7 @@ interface CountRow {
   submitted_by: string | null;
   started_by: string | null;
   decided_by: string | null;
+  decided_by_id: string | null;
   lines: number;
   counted: number;
   differences: number;
@@ -657,7 +659,8 @@ export class PurchaseCountsService {
     return this.db.tenant(requireTenant(ctx), async (c) => {
       const k = await this.load(c, id);
       const lines = await this.linesOf(c, id);
-      const head = await pdfSchool(c, (key) => this.storage.read(key));
+      const read = (key: string) => this.storage.read(key);
+      const head = await pdfSchool(c, read);
       const blind = k.status === 'counting';
       const value = lines.reduce(
         (a, l) =>
@@ -747,10 +750,27 @@ export class PurchaseCountsService {
               };
         }),
         ...(blind ? {} : { total: { label: 'Net difference (Rs)', value: money2(value) } }),
+        // as on the GRN: signature, name, Emp. ID · designation and when (docs/design/83)
         signatures: [
-          { label: 'Counted by', name: k.counted_by ?? k.started_by },
-          { label: 'Store keeper', name: null },
-          { label: 'Approved by', name: k.decided_by },
+          k.submitted_at
+            ? await signerOf(c, read, {
+                as: 'Counted by',
+                name: k.counted_by ?? k.started_by,
+                userId: k.submitted_by ?? k.created_by,
+                at: k.submitted_at,
+                verb: 'Counted on',
+              })
+            : blankBox('Counted by'),
+          blankBox('Store keeper'),
+          k.decided_at && k.decided_by_id
+            ? await signerOf(c, read, {
+                as: 'Approved by',
+                name: k.decided_by,
+                userId: k.decided_by_id,
+                at: k.decided_at,
+                verb: 'Approved on',
+              })
+            : blankBox('Approved by'),
         ],
         foot: 'Physical verification of stores (GFR 2017 rule 213): the differences post as adjustments only once approved.',
       });

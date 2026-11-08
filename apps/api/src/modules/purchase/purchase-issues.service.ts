@@ -6,6 +6,7 @@ import { DbService } from '../../common/db/db.service';
 import { DomainError } from '../../common/errors/domain-error';
 import { requireTenant, type RequestContext } from '../../common/http/request-context';
 import { STORAGE_DRIVER } from '../files/storage';
+import { blankBox, signerOf } from './purchase-doc-sign';
 import {
   dmy,
   freeStock,
@@ -51,6 +52,7 @@ const SELECT = `
          si.taken_by_employee_id::text AS taker_id, tk.display_name AS taker, si.purpose, si.issued_on::text, si.ack_on_paper,
          si.acknowledged_at, si.ack_note, (SELECT ${PERSON_OF('u')} FROM users u WHERE u.id = si.acknowledged_by) AS acknowledged_by,
          (SELECT ${PERSON_OF('u')} FROM users u WHERE u.id = si.created_by) AS issued_by, si.created_at,
+         si.created_by::text AS issued_by_id, si.acknowledged_by::text AS acknowledged_by_id,
          (SELECT count(*)::int FROM stock_issue_lines l WHERE l.issue_id = si.id) AS lines,
          COALESCE((SELECT sum(l.value) FROM stock_issue_lines l WHERE l.issue_id = si.id), 0)::text AS value,
          ${RECEIVER} AS receiver
@@ -87,6 +89,8 @@ interface IssueRow {
   acknowledged_by: string | null;
   issued_by: string | null;
   created_at: Date;
+  issued_by_id: string | null;
+  acknowledged_by_id: string | null;
   lines: number;
   value: string;
   receiver: boolean;
@@ -162,7 +166,7 @@ export class PurchaseIssuesService {
           AND ($3::bigint IS NULL OR si.store_id = $3) AND (NOT $4 OR (si.status = 'issued' AND ${RECEIVER}))
           AND ($5::text IS NULL OR si.number ILIKE '%' || $5 || '%' OR d.name ILIKE '%' || $5 || '%' OR pi.number ILIKE '%' || $5 || '%'
                OR tk.display_name ILIKE '%' || $5 || '%')
-          AND ($6 OR ${RECEIVER})`;
+          AND ($6 OR ${RECEIVER}) AND (NOT $7 OR ${RECEIVER})`;
       const args = [
         q.status ?? null,
         q.kind ?? null,
@@ -170,6 +174,7 @@ export class PurchaseIssuesService {
         q.mine,
         q.q ?? null,
         this.has(ctx, PURCHASE.storeView),
+        q.received ?? false,
       ];
       const total = await c.query<{ n: number }>(
         // eslint-disable-next-line no-restricted-syntax -- fixed fragments; values are bound
@@ -179,7 +184,7 @@ export class PurchaseIssuesService {
       );
       const r = await c.query<IssueRow>(
         // eslint-disable-next-line no-restricted-syntax -- fixed fragments; values are bound
-        `${SELECT} ${where} ORDER BY si.issued_on DESC, si.id DESC LIMIT 50 OFFSET $7`,
+        `${SELECT} ${where} ORDER BY si.issued_on DESC, si.id DESC LIMIT 50 OFFSET $8`,
         [...args, (q.page - 1) * 50],
       );
       const mine = await c.query<{ n: number }>(
@@ -953,7 +958,8 @@ export class PurchaseIssuesService {
     return this.db.tenant(requireTenant(ctx), async (c) => {
       const si = await this.load(c, ctx, id);
       const lines = await this.linesOf(c, id);
-      const head = await pdfSchool(c, (k) => this.storage.read(k));
+      const read = (k: string) => this.storage.read(k);
+      const head = await pdfSchool(c, read);
       const total = lines.reduce((a, l) => a + Number(l.value), 0);
       const bytes = await purchaseStockPdf({
         ...head,
@@ -1003,14 +1009,33 @@ export class PurchaseIssuesService {
             .join(' · '),
         })),
         total: { label: 'Value issued (Rs)', value: money2(total) },
+        // as on the GRN: signature, name, Emp. ID · designation and when (docs/design/83)
         signatures: [
-          { label: 'Issued by', name: si.issued_by },
-          { label: 'Received by', name: si.taker },
-          {
-            label: 'Acknowledged by',
-            name: si.acknowledged_by,
-            at: si.acknowledged_at ? dmy(si.acknowledged_at.toISOString().slice(0, 10)) : null,
-          },
+          await signerOf(c, read, {
+            as: 'Issued by',
+            name: si.issued_by,
+            userId: si.issued_by_id,
+            at: si.created_at,
+            verb: 'Issued on',
+          }),
+          si.taker_id
+            ? await signerOf(c, read, {
+                as: 'Received by',
+                name: si.taker,
+                employeeId: si.taker_id,
+                at: si.created_at,
+                verb: 'Received on',
+              })
+            : blankBox('Received by'),
+          si.acknowledged_at
+            ? await signerOf(c, read, {
+                as: si.ack_on_paper ? 'Signed slip recorded by' : 'Acknowledged by',
+                name: si.acknowledged_by,
+                userId: si.acknowledged_by_id,
+                at: si.acknowledged_at,
+                verb: si.ack_on_paper ? 'Recorded on' : 'Acknowledged on',
+              })
+            : blankBox('Acknowledged by'),
         ],
         foot: 'Goods go out at the store’s average cost; batches with the earliest expiry first unless one is named.',
       });

@@ -16,6 +16,7 @@ import {
   PERSON_OF,
   qty3,
 } from './purchase-stock-core';
+import { blankBox, signerOf } from './purchase-doc-sign';
 import { purchaseStockPdf } from './purchase-stock-pdf';
 import { assetsToVendor } from './purchase-asset-core';
 import { postStock } from './purchase-stores.service';
@@ -337,9 +338,12 @@ export class PurchaseReturnsService {
         dispatch: string | null;
         note: string | null;
         by: string | null;
+        by_id: string | null;
+        created_at: Date;
       }>(
         // eslint-disable-next-line no-restricted-syntax -- PERSON_OF is a fixed fragment
         `SELECT r.id::text, r.number, r.kind, st.name AS store, r.store_id::text, r.returned_on::text, d.name AS department,
+                r.created_by::text AS by_id, r.created_at,
                 v.legal_name AS vendor, si.number AS issue, r.issue_id::text,
                 po.number || CASE WHEN po.revision > 0 THEN '-R' || po.revision ELSE '' END AS order_label, r.order_id::text,
                 r.dispatch, r.note, (SELECT ${PERSON_OF('u')} FROM users u WHERE u.id = r.created_by) AS by
@@ -426,8 +430,17 @@ export class PurchaseReturnsService {
     this.mustSee(ctx);
     return this.db.tenant(requireTenant(ctx), async (c) => {
       const { r, lines } = await this.one(c, id);
-      const head = await pdfSchool(c, (k) => this.storage.read(k));
+      const read = (k: string) => this.storage.read(k);
+      const head = await pdfSchool(c, read);
       const vendor = r.kind === 'to_vendor';
+      // as on the GRN: signature, name, Emp. ID · designation and when (docs/design/83)
+      const by = await signerOf(c, read, {
+        as: vendor ? 'Sent by (store)' : 'Received into the store by',
+        name: r.by,
+        userId: r.by_id,
+        at: r.created_at,
+        verb: vendor ? 'Sent on' : 'Received on',
+      });
       const bytes = await purchaseStockPdf({
         ...head,
         title: vendor ? 'Return Note (to the vendor)' : 'Return to Store Note',
@@ -486,14 +499,8 @@ export class PurchaseReturnsService {
           value: money2(lines.reduce((a, l) => a + Number(l.value), 0)),
         },
         signatures: vendor
-          ? [
-              { label: 'Sent by (store)', name: r.by },
-              { label: 'Received by (vendor)', name: null },
-            ]
-          : [
-              { label: 'Received into the store by', name: r.by },
-              { label: 'Returned by (department)', name: null },
-            ],
+          ? [by, blankBox('Received by (vendor)')]
+          : [by, blankBox('Returned by (department)')],
         foot: vendor
           ? 'Goods returned against the purchase order. Where a replacement is wanted the order waits for it; the vendor’s credit (debit note) follows with the bill.'
           : 'Unused goods go back into stock at the rate they were issued at; damaged goods are recorded for condemnation.',

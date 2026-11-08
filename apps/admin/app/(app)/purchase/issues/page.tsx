@@ -1,5 +1,6 @@
 import { Badge, Breadcrumbs, PageHeader } from '@edupro/ui';
 import { ConfirmAction } from '@/components/ConfirmAction';
+import { FileLinks } from '@/components/FileLinks';
 import { Notice } from '@/components/Notice';
 import { apiFetch, getMe } from '@/lib/api';
 import {
@@ -193,6 +194,7 @@ export default async function IssuesPage({
                     Value
                   </th>
                   <th scope="col">Status</th>
+                  <th scope="col">Slip</th>
                 </tr>
               </thead>
               <tbody>
@@ -220,11 +222,17 @@ export default async function IssuesPage({
                             : 'Waiting for acknowledgement'}
                         </Badge>
                       </td>
+                      <td>
+                        <FileLinks
+                          href={`/api/purchase/stock-doc/issues/${x.id}`}
+                          label={`${x.number} slip as a PDF`}
+                        />
+                      </td>
                     </tr>
                   ))
                 ) : (
                   <tr>
-                    <td colSpan={5}>
+                    <td colSpan={6}>
                       {tab === 'mine'
                         ? 'Nothing is waiting for your acknowledgement.'
                         : 'No issues here.'}

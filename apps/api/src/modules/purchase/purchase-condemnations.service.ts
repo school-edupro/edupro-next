@@ -17,6 +17,7 @@ import {
   qty3,
   refreshReserved,
 } from './purchase-stock-core';
+import { blankBox, signerOf, type SignBox } from './purchase-doc-sign';
 import { purchaseStockPdf } from './purchase-stock-pdf';
 import { postStock } from './purchase-stores.service';
 import {
@@ -338,12 +339,14 @@ export class PurchaseCondemnationsService {
         submitted_at: Date | null;
         decided_at: Date | null;
         decided_by: string | null;
+        decided_by_id: string | null;
         decision_note: string | null;
         written_off_on: string | null;
       }>(
         // eslint-disable-next-line no-restricted-syntax -- PERSON_OF and the lock are fixed fragments
         `SELECT k.id::text, k.number, k.title, k.status, k.note, k.created_by::text, (SELECT ${PERSON_OF('u')} FROM users u WHERE u.id = k.created_by) AS by,
                 k.created_at, k.submitted_at, k.decided_at, (SELECT ${PERSON_OF('u')} FROM users u WHERE u.id = k.decided_by) AS decided_by,
+                k.decided_by::text AS decided_by_id,
                 k.decision_note, k.written_off_on::text
            FROM condemnations k WHERE k.id = $1${lock ? ' FOR UPDATE' : ''}`,
         [id],
@@ -1007,8 +1010,32 @@ export class PurchaseCondemnationsService {
           [id],
         )
       ).rows[0];
-      const head = await pdfSchool(c, (key) => this.storage.read(key));
+      const read = (key: string) => this.storage.read(key);
+      const head = await pdfSchool(c, read);
       const value = lines.reduce((a, l) => a + Number(l.book_value), 0);
+      // as on the GRN: signature, name, Emp. ID · designation and when (docs/design/83)
+      const signers: SignBox[] = [];
+      for (const m of committee.filter((x) => x.signed_at).slice(0, 3))
+        signers.push(
+          await signerOf(c, read, {
+            as: m.role ?? 'Committee member',
+            name: m.name,
+            userId: m.user_id,
+            at: m.signed_at,
+            verb: 'Signed on',
+          }),
+        );
+      signers.push(
+        k.decided_at && k.decided_by_id
+          ? await signerOf(c, read, {
+              as: 'Approved by',
+              name: k.decided_by,
+              userId: k.decided_by_id,
+              at: k.decided_at,
+              verb: 'Approved on',
+            })
+          : blankBox('Approved by'),
+      );
       const bytes = await purchaseStockPdf({
         ...head,
         title: 'Condemnation and Disposal Record',
@@ -1064,21 +1091,7 @@ export class PurchaseCondemnationsService {
             .join(' · '),
         })),
         total: { label: 'Book value (Rs)', value: money2(value) },
-        signatures: [
-          ...committee
-            .filter((m) => m.signed_at)
-            .slice(0, 3)
-            .map((m) => ({
-              label: m.role ?? 'Committee member',
-              name: m.name,
-              at: dmy(m.signed_at!.toISOString().slice(0, 10)),
-            })),
-          {
-            label: 'Approved by',
-            name: k.decided_by,
-            at: k.written_off_on ? dmy(k.written_off_on) : null,
-          },
-        ],
+        signatures: signers,
         foot: 'GFR 2017 rule 217: unserviceable, obsolete or surplus goods declared by a committee, written off on approval and disposed of — by tender or public auction where the residual value is above Rs 2 lakh.',
       });
       return { bytes, filename: `${k.number.replaceAll('/', '-')}.pdf` };

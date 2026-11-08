@@ -67,6 +67,9 @@ const DICT: Record<string, string> = {
   'Quotes · L1': 'कोटेशन · L1',
   Revision: 'संशोधन',
   'Why this vendor': 'यही विक्रेता क्यों',
+  'Received earlier': 'पहले प्राप्त',
+  'What the store issued to you or your department: confirm you received it. Each issue has its slip.':
+    'भंडार ने आपको या आपके विभाग को जो जारी किया: प्राप्ति की पुष्टि करें। हर निर्गम की पर्ची साथ है।',
   'Vendor and terms': 'विक्रेता और शर्तें',
   'Comparative statement': 'तुलनात्मक विवरण',
   'What the school pays per unit, with GST; the lowest is L1.':

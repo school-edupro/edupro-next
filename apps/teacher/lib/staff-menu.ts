@@ -268,8 +268,10 @@ export const STAFF_MENU: StaffGroup[] = [
       {
         href: '/purchase/issues',
         label: 'Issued to my department',
-        help: 'What the store issued to you or your department: confirm you received it',
-        allowed: (_can, w) => (w.issues ?? 0) > 0,
+        help: 'What the store issued to you or your department: confirm you received it; the slips',
+        // there for whoever may raise an indent (docs/design/83): what was received earlier keeps its
+        // slips; anyone else while something waits for them
+        allowed: (can, w) => can('purchase.indent.raise') || (w.issues ?? 0) > 0,
       },
       {
         href: '/purchase/my-assets',

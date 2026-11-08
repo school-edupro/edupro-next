@@ -325,6 +325,40 @@ export default async function IndentPage({
                         <strong>{l.ordered}</strong>
                       </span>
                     ) : null}
+                    {l.issues.length ? (
+                      <span
+                        className="ep-mr-col__desc"
+                        style={{
+                          display: 'flex',
+                          gap: 'var(--sp-2)',
+                          flexWrap: 'wrap',
+                          alignItems: 'center',
+                        }}
+                      >
+                        Issue slips:
+                        {l.issues.map((x) => (
+                          <span
+                            key={x.id}
+                            style={{
+                              display: 'inline-flex',
+                              gap: 'var(--sp-1)',
+                              alignItems: 'center',
+                            }}
+                          >
+                            <a
+                              style={{ textDecoration: 'underline' }}
+                              href={`/purchase/issues/${x.id}`}
+                            >
+                              {x.number}
+                            </a>
+                            <FileLinks
+                              href={`/api/purchase/stock-doc/issues/${x.id}`}
+                              label={`${x.number} slip as a PDF`}
+                            />
+                          </span>
+                        ))}
+                      </span>
+                    ) : null}
                     {l.fileId ? (
                       <span
                         className="ep-mr-col__desc"

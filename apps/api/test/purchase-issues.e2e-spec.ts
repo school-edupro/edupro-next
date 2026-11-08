@@ -679,6 +679,25 @@ describe('purchase issues, returns, transfers and counts (e2e)', () => {
       (await call(teacher, 'GET', `/purchase/indents/${pi.id as string}`)).json().lineItems[0]
         .ordered,
     ).toMatch(/ · acknowledged$/);
+    // the PI's line lists its issue (with the slip); the raiser's "received earlier" has it too
+    const after = (await call(teacher, 'GET', `/purchase/indents/${pi.id as string}`)).json();
+    // (one issue per store the pens were held in)
+    expect(after.lineItems[0].issues.length).toBeGreaterThanOrEqual(1);
+    for (const x of after.lineItems[0].issues as Array<{ number: string; status: string }>)
+      expect(x).toMatchObject({ number: expect.stringMatching(/^ISS\//), status: 'acknowledged' });
+    const earlier = (
+      await call(teacher, 'GET', '/purchase/issues?received=1&status=acknowledged')
+    ).json();
+    expect(earlier.rows.map((x: { id: string }) => x.id)).toContain(
+      after.lineItems[0].issues[0].id,
+    );
+    const slip = await call(
+      teacher,
+      'GET',
+      `/purchase/issues/${after.lineItems[0].issues[0].id as string}/pdf`,
+    );
+    expect(slip.statusCode).toBe(200);
+    expect(slip.rawPayload.subarray(0, 5).toString()).toBe('%PDF-');
     // the copper sulphate is not there after all: the keeper lets it go, the whole line goes to purchase
     const chemHold = groups
       .flatMap((g: { lines: Array<{ itemId: string; reservationId: string }> }) => g.lines)

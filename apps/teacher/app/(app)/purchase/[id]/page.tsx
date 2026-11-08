@@ -247,6 +247,41 @@ export default async function StaffIndentPage({
                           <strong>{l.ordered}</strong>
                         </span>
                       ) : null}
+                      {l.issues.length ? (
+                        <span
+                          className="ep-field__help"
+                          style={{
+                            display: 'flex',
+                            gap: 'var(--sp-2)',
+                            flexWrap: 'wrap',
+                            alignItems: 'center',
+                          }}
+                        >
+                          Issue slips:
+                          {l.issues.map((x) => (
+                            <span
+                              key={x.id}
+                              style={{
+                                display: 'inline-flex',
+                                gap: 'var(--sp-1)',
+                                alignItems: 'center',
+                              }}
+                            >
+                              <a
+                                style={{ textDecoration: 'underline' }}
+                                href={`/purchase/issues/${x.id}`}
+                              >
+                                {x.number}
+                              </a>
+                              <FileLinks
+                                url={`/api/purchase-issue/${x.id}`}
+                                saveUrl={`/api/purchase-issue/${x.id}?save=1`}
+                                label={`${x.number} slip`}
+                              />
+                            </span>
+                          ))}
+                        </span>
+                      ) : null}
                       {l.fileId ? (
                         <span
                           className="ep-field__help"

@@ -16,6 +16,7 @@ import {
   PERSON_OF,
   qty3,
 } from './purchase-stock-core';
+import { blankBox, signerOf } from './purchase-doc-sign';
 import { purchaseStockPdf } from './purchase-stock-pdf';
 import { assetsTransfer } from './purchase-asset-core';
 import { postStock } from './purchase-stores.service';
@@ -31,6 +32,7 @@ const SELECT = `
          t.sent_on::text, t.received_on::text, t.note, t.receive_note,
          (SELECT ${PERSON_OF('u')} FROM users u WHERE u.id = t.created_by) AS sent_by,
          (SELECT ${PERSON_OF('u')} FROM users u WHERE u.id = t.received_by) AS received_by,
+         t.created_by::text AS sent_by_id, t.created_at, t.received_by::text AS received_by_id,
          (SELECT count(*)::int FROM stock_transfer_lines l WHERE l.transfer_id = t.id) AS lines,
          COALESCE((SELECT sum(l.value) FROM stock_transfer_lines l WHERE l.transfer_id = t.id), 0)::text AS value,
          ${RECEIVES} AS receiver
@@ -50,6 +52,9 @@ interface TransferRow {
   receive_note: string | null;
   sent_by: string | null;
   received_by: string | null;
+  sent_by_id: string | null;
+  created_at: Date;
+  received_by_id: string | null;
   lines: number;
   value: string;
   receiver: boolean;
@@ -410,7 +415,25 @@ export class PurchaseTransfersService {
     return this.db.tenant(requireTenant(ctx), async (c) => {
       const t = await this.load(c, id);
       const lines = await this.linesOf(c, id);
-      const head = await pdfSchool(c, (k) => this.storage.read(k));
+      const read = (k: string) => this.storage.read(k);
+      const head = await pdfSchool(c, read);
+      // as on the GRN: signature, name, Emp. ID · designation and when (docs/design/83)
+      const sent = await signerOf(c, read, {
+        as: 'Sent by',
+        name: t.sent_by,
+        userId: t.sent_by_id,
+        at: t.created_at,
+        verb: 'Sent on',
+      });
+      const received = t.received_by_id
+        ? await signerOf(c, read, {
+            as: 'Received by',
+            name: t.received_by,
+            userId: t.received_by_id,
+            day: t.received_on,
+            verb: 'Received on',
+          })
+        : blankBox('Received by');
       const bytes = await purchaseStockPdf({
         ...head,
         title: 'Stock Transfer Note',
@@ -455,10 +478,7 @@ export class PurchaseTransfersService {
           label: 'Value (Rs)',
           value: money2(lines.reduce((a, l) => a + Number(l.value), 0)),
         },
-        signatures: [
-          { label: 'Sent by', name: t.sent_by },
-          { label: 'Received by', name: t.received_by },
-        ],
+        signatures: [sent, received],
       });
       return { bytes, filename: `${t.number.replaceAll('/', '-')}.pdf` };
     });

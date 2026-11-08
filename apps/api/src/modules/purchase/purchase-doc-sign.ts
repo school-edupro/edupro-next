@@ -72,6 +72,8 @@ export async function signerOf(
     userId?: string | null;
     employeeId?: string | null;
     at?: Date | null;
+    /** a date without a time (YYYY-MM-DD), when only the day is known */
+    day?: string | null;
     verb?: string;
   },
 ): Promise<SignBox> {
@@ -105,7 +107,11 @@ export async function signerOf(
     name: x.name,
     code: e?.code ?? null,
     designation: e?.designation ?? null,
-    when: whenOf(x.verb ?? 'On', x.at ?? null),
+    when:
+      whenOf(x.verb ?? 'On', x.at ?? null) ??
+      (x.day
+        ? `${x.verb ?? 'On'} ${x.day.slice(8, 10)}-${x.day.slice(5, 7)}-${x.day.slice(0, 4)}`
+        : null),
     signature,
   };
 }

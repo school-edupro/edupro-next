@@ -1279,3 +1279,31 @@ covered had to give a reason to send the PI. Decided with the user:
   "to acknowledge", acknowledged by the raiser; a teacher cannot release (403), the keeper's release sends
   the whole line back to To requisition; a PI of only pens is **From the store** and not on To
   requisition. `purchase-indents` — sending without the reason now goes through.
+
+## As built — sample signatures; store slips signed like the GRN; finding the slips (8 Nov 2026)
+
+Asked by the user ("seed a sample signature for all employees; the issue slip's issued by, received by,
+acknowledged by with date-time, name and signature image; where is the issue slip, and how does the
+keeper issue"). Decided with the user: **Alpha only, missing ones only**; **all store slips**; slips
+found from the **lists, the PI page and the staff app**.
+
+- `scripts/seed-sample-signatures.mjs` (dev only, local API, dev-admin; `--yes` to write): each active
+  employee without a signature gets a handwriting-style PNG of their name (drawn in the admin app's
+  Playwright Chromium), uploaded through `/platform/files` and set by `POST /people/employees/:id/signature`.
+  Run on Alpha: 22 signatures (E001, E002, PO01 kept the user's).
+- Store slips (`purchase-stock-pdf` via `signerOf`, `blankBox`): **issue slip** — Issued by (the maker,
+  "Issued on" its time), Received by (who took it, by employee, at the issue's time), Acknowledged by (or
+  "Signed slip recorded by" for a paper acknowledgement, "Acknowledged on"); **return note** — the
+  store's side filled ("Sent on" / "Received on"), the vendor's or department's empty; **transfer note** —
+  Sent by (time), Received by (the day it was received); **count sheet** — Counted by (when submitted),
+  Store keeper empty, Approved by; **condemnation** — the committee members who signed ("Signed on"),
+  Approved by. `signerOf` gains `day` (a date without a time).
+- Finding slips: Purchase → Issues has a **Slip** column (View/Download) on every tab; the PI's lines
+  carry `issues` (id, number, status) and show "Issue slips: ISS/…" with View/Download (admin and staff
+  app); `GET /purchase/issues?received=1` (issued to me or my department, any status); the staff app's
+  **Issued to my department** lists what waits, then **Received earlier** with slips, and stays in the
+  menu for whoever may raise an indent (or has something waiting).
+- Tests: `purchase-issues` — the PI line lists its issues (one per store the stock came from), all
+  acknowledged; `received=1` returns them; the raiser opens the slip PDF. Checked: Alpha's GRN prints the
+  inspector's new signature; a sample issue slip with Alpha's SK01 and E003 signatures; the admin Slip
+  column and the staff page with axe.

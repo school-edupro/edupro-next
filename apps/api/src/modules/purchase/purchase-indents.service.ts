@@ -597,6 +597,7 @@ export class PurchaseIndentsService implements OnModuleInit {
             issued: string;
             issues: string | null;
             acked: boolean;
+            issue_list: Array<{ id: string; number: string; status: string }> | null;
           }>(
             `SELECT l.id::text AS line_id, COALESCE(su.code, u.code) AS unit,
                     COALESCE((SELECT sum(r.qty) FROM stock_reservations r WHERE r.indent_line_id = l.id AND r.status <> 'released'), 0)::text AS held,
@@ -606,7 +607,10 @@ export class PurchaseIndentsService implements OnModuleInit {
                     (SELECT string_agg(DISTINCT si.number, ', ') FROM stock_issue_lines sil JOIN stock_issues si ON si.id = sil.issue_id
                       WHERE sil.indent_line_id = l.id) AS issues,
                     COALESCE((SELECT bool_and(si.status = 'acknowledged') FROM stock_issue_lines sil JOIN stock_issues si ON si.id = sil.issue_id
-                               WHERE sil.indent_line_id = l.id), false) AS acked
+                               WHERE sil.indent_line_id = l.id), false) AS acked,
+                    (SELECT json_agg(DISTINCT jsonb_build_object('id', si.id::text, 'number', si.number, 'status', si.status))
+                       FROM stock_issue_lines sil JOIN stock_issues si ON si.id = sil.issue_id
+                      WHERE sil.indent_line_id = l.id) AS issue_list
                FROM purchase_indent_lines l LEFT JOIN purchase_items i ON i.id = l.item_id
                JOIN purchase_uoms u ON u.id = l.uom_id LEFT JOIN purchase_uoms su ON su.id = i.stock_uom_id
               WHERE l.indent_id = $1`,
@@ -683,6 +687,8 @@ export class PurchaseIndentsService implements OnModuleInit {
           // the line's document (view and download through the indent)
           fileId: l.file_id,
           fileName: l.file_name,
+          // its issues from the store (each with its slip)
+          issues: stock.get(l.id)?.issue_list ?? [],
           // what became of it (quantities only): the stores' part, then what was bought
           ordered:
             [

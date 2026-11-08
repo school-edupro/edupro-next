@@ -567,10 +567,19 @@ are accepted on a goods receipt.
 **Counter issue** is the quick way for a need that has no indent: the store, the department, who took
 it, the purpose and the items. Only **free** stock goes out — what requisitions reserved stays.
 
-Every issue goes out at the store's **average cost**, and prints as an **issue slip** with _Received
-by_. The department **acknowledges** it: whoever took it, the indent's raiser or the HOD presses
+Every issue goes out at the store's **average cost**, and prints as an **issue slip**. Its boxes are
+filled as on the GRN — **Issued by** (the keeper), **Received by** (who took it) and **Acknowledged by**:
+the signature on the employee record, the name, Emp. ID · designation and the date and time; a box is
+left to sign by hand until it happens. The return, transfer and count notes and the condemnation print
+the same way. The department **acknowledges** it: whoever took it, the indent's raiser or the HOD presses
 **Acknowledge: received** (admin, My approvals, or the staff app → **Issued to my department**). For a
 department without a sign-in the keeper presses **Record the signed slip** and says who signed it.
+
+**Where the slip is**: on the issue's page, in the **Slip** column of Purchase → Issues (every tab), on
+the PI under each line ("Issue slips: ISS/… " with View and Download), and in the staff app's **Issued to
+my department** — what waits for you, then **Received earlier** — always in the menu for whoever raises
+indents. The keeper issues from **Purchase → Issues → To issue** (**Issue** on an indent or a
+requisition) or **Counter issue**; the issue opens with its slip.
 
 **Goods brought back** (on the issue): unused goods go back into stock at the rate they went out at;
 damaged goods are recorded with what is wrong and stay out of stock (for condemnation later).

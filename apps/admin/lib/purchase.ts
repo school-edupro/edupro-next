@@ -400,6 +400,8 @@ export interface IndentDetail extends IndentRow {
     fileName: string | null;
     /** what became of it once approved: "Ordered 1 of 2 BOX on PO/… · the rest closed: …" */
     ordered: string | null;
+    /** its issues from the store, each with its slip */
+    issues: Array<{ id: string; number: string; status: 'issued' | 'acknowledged' }>;
   }>;
   departmentSpendThisYear: number | null;
   requisitions: Array<{ id: string; number: string; autoRule: string | null; status: string }>;
