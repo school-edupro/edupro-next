@@ -7,6 +7,14 @@ import { l1Count, OrderAmendmentCard, OrderSourcingCard } from '@/components/Ord
 import { bff } from '@/lib/bff';
 import { currentLang, t } from '@/lib/i18n';
 import { EMERGENCY_STATUS, ORDER_STATUS, TIER, type OrderDetail } from '@/lib/purchase';
+
+const SHORT_REASON: Record<string, string> = {
+  vendor_stock: 'Vendor short of stock',
+  pack_size: 'Sold in packs',
+  budget: 'Over budget',
+  not_needed: 'No longer needed',
+  other: 'Other',
+};
 import { approveOrder, rejectOrder, sendBackOrder } from '@/lib/purchase-actions';
 
 const money = (n: number) =>
@@ -233,6 +241,14 @@ export default async function StaffOrderPage({
                         {l.discountPct ? ` less ${String(l.discountPct)}%` : ''} · GST {l.gstRate}%
                         {l.rcm ? ' (reverse charge: the school pays)' : ''}
                       </span>
+                      {l.shortReason ? (
+                        <span className="ep-field__help" style={{ display: 'block' }}>
+                          Less than the requisition needs:{' '}
+                          {SHORT_REASON[l.shortReason] ?? l.shortReason}
+                          {l.shortNote ? `: ${l.shortNote}` : ''} · the rest{' '}
+                          {l.closeRest ? 'closed (not to be ordered)' : 'to order later'}
+                        </span>
+                      ) : null}
                     </td>
                     <td style={{ textAlign: 'right' }}>{money(l.taxable)}</td>
                     <td style={{ textAlign: 'right' }}>{money(l.total)}</td>

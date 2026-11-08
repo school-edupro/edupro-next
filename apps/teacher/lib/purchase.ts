@@ -59,6 +59,8 @@ export interface IndentRow {
   createdAt: string;
   waitingWith: string | null;
   lines: number;
+  /** a line was ordered for less and the rest closed */
+  partClosed: boolean;
 }
 
 export interface IndentStep {
@@ -100,6 +102,8 @@ export interface IndentDetail extends IndentRow {
     /** the line's document */
     fileId: string | null;
     fileName: string | null;
+    /** what became of it once approved: "Ordered 1 of 2 BOX on PO/… · the rest closed: …" */
+    ordered: string | null;
   }>;
   departmentSpendThisYear: number | null;
   requisitions: Array<{ id: string; number: string; autoRule: string | null; status: string }>;
@@ -467,6 +471,10 @@ export interface OrderLine {
   hsnCode: string | null;
   quantity: number;
   maxQuantity: number | null;
+  /** less than the requisition needs: why, a note, and whether the rest is closed */
+  shortReason: string | null;
+  shortNote: string | null;
+  closeRest: boolean;
   uomId: string;
   uom: string;
   rate: number;

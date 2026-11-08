@@ -17,7 +17,12 @@ import {
   reserveRequisition,
   storeProblems,
 } from './purchase-stock-core';
-import { draftOrdersFor } from './purchase-order-core';
+import {
+  draftOrdersFor,
+  LINE_ORDERING,
+  orderingWords,
+  type LineOrderingRow,
+} from './purchase-order-core';
 import { PurchaseVendorsService } from './purchase-vendors.service';
 import {
   PURCHASE,
@@ -1193,6 +1198,18 @@ export class PurchaseRequisitionsService implements OnModuleInit {
       const pr = await this.load(c, ctx, id);
       const s = await this.settings(c);
       const lines = await this.linesOf(c, id);
+      // what became of each line once approved: ordered, part ordered with the rest closed or waiting
+      const ordering = new Map(
+        (
+          await c.query<LineOrderingRow & { line_id: string }>(
+            // eslint-disable-next-line no-restricted-syntax -- LINE_ORDERING is a fixed fragment
+            `SELECT rl.id::text AS line_id, ${LINE_ORDERING} FROM purchase_requisition_lines rl
+              WHERE rl.requisition_id = $1
+                AND EXISTS (SELECT 1 FROM purchase_requisitions r WHERE r.id = $1 AND r.status IN ('approved', 'part_ordered', 'ordered'))`,
+            [id],
+          )
+        ).rows.map((o) => [o.line_id, o]),
+      );
       const sources = await c.query<{
         line_id: string;
         indent_id: string;
@@ -1361,6 +1378,7 @@ export class PurchaseRequisitionsService implements OnModuleInit {
               );
             })(),
             itemGst: l.item_gst === null ? null : Number(l.item_gst),
+            ordered: ordering.has(l.id) ? orderingWords(ordering.get(l.id)!, l.uom) : null,
             l1:
               lo === undefined
                 ? null

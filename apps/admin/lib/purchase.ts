@@ -347,6 +347,8 @@ export interface IndentRow {
   createdAt: string;
   waitingWith: string | null;
   lines: number;
+  /** a line was ordered for less and the rest closed */
+  partClosed: boolean;
 }
 
 export interface IndentStep {
@@ -392,6 +394,8 @@ export interface IndentDetail extends IndentRow {
     /** the line's document */
     fileId: string | null;
     fileName: string | null;
+    /** what became of it once approved: "Ordered 1 of 2 BOX on PO/… · the rest closed: …" */
+    ordered: string | null;
   }>;
   departmentSpendThisYear: number | null;
   requisitions: Array<{ id: string; number: string; autoRule: string | null; status: string }>;
@@ -576,6 +580,8 @@ export interface RequisitionLine {
   /** another vendor chosen, dearer (with GST) than the item's rate contract: choiceReason says why */
   aboveContract: boolean;
   itemGst: number | null;
+  /** what became of it once approved (ordered, the rest closed or to order later) */
+  ordered: string | null;
   l1: { landed: number; vendorIds: string[] } | null;
   dearer: boolean;
   sources: Array<{
@@ -737,6 +743,18 @@ export const EMERGENCY_STATUS: Partial<Record<OrderStatus, string>> = {
   rejected: 'Not ratified',
 };
 
+/** Why a PO line is for less than the requisition needs, or why a line is closed on To order. */
+export const SHORT_REASON = {
+  vendor_stock: 'Vendor short of stock',
+  pack_size: 'Sold in packs',
+  budget: 'Over budget',
+  not_needed: 'No longer needed',
+  other: 'Other (write why)',
+} as const;
+/** A shortfall's reason in words: "Vendor short of stock: more in 3 weeks". */
+export const shortText = (reason: string, note: string | null) =>
+  `${reason === 'other' ? 'Other' : (SHORT_REASON[reason as keyof typeof SHORT_REASON] ?? reason)}${note ? `: ${note}` : ''}`;
+
 export const CHARGE_KIND = {
   freight: 'Freight',
   installation: 'Installation',
@@ -793,6 +811,10 @@ export interface OrderLine {
   hsnCode: string | null;
   quantity: number;
   maxQuantity: number | null;
+  /** less than the requisition needs: why (SHORT_REASON), a note, and whether the rest is closed */
+  shortReason: keyof typeof SHORT_REASON | null;
+  shortNote: string | null;
+  closeRest: boolean;
   uomId: string;
   uom: string;
   rate: number;
@@ -981,6 +1003,10 @@ export interface ToOrderGroup {
     quantity: number;
     uom: string;
     rate: number;
+    /** the requisition's quantity for the line */
+    needed: number;
+    /** why it waits here: a PO took less ("1 on PO/…: Vendor short of stock") */
+    short: string | null;
   }>;
 }
 

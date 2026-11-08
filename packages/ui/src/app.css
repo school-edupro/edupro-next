@@ -14600,3 +14600,24 @@ button.ep-subchoice__icon:hover {
     display: none;
   }
 }
+/* a PO line for less than the requisition needs: why, and what happens to the rest */
+.ep-purch-short {
+  grid-column: 1 / -1;
+  display: grid;
+  gap: var(--sp-2);
+  padding: var(--sp-3);
+  border: 1px solid var(--status-warning);
+  border-radius: var(--radius-md);
+  background: var(--status-warning-bg);
+}
+.ep-purch-short__title {
+  margin: 0;
+  font-weight: var(--fw-semibold);
+}
+.ep-purch-short__rest {
+  border: 0;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  gap: var(--sp-1);
+}

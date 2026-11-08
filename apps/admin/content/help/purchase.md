@@ -227,6 +227,10 @@ screen — under the school's letterhead with the filters and when it was made. 
     together go over the limit: then it says so ("Not skipped: …") and waits for the PR — this stops a
     large purchase being split into small ones;
   - **otherwise** it waits for the purchase office's PR (**Waiting for the PR**).
+- **What became of each line** shows on the PI once its PO is approved — quantities only, never rates:
+  "Ordered 2 BOX on PO/…", or when the vendor could supply less, "Ordered 1 of 2 BOX on PO/… · the rest
+  closed: Vendor short of stock" (or "· the rest to order later: …"). The PI list says **Ordered · part
+  closed** when a line's rest was closed.
 
 ## Purchase Requisitions
 
@@ -297,7 +301,11 @@ On the PR:
 **Purchase → Purchase Orders.** Approving a requisition drafts one PO per chosen vendor; a PI whose lines
 are all on rate contracts drafts its PO at once. **Purchase → To order** lists what is left to order —
 lines of a cancelled or rejected PO, or of a requisition the system approved under a department's limit
-(no vendor chosen yet): tick the lines, pick the vendor, **Draft the PO**.
+(no vendor chosen yet), and the rest of a line a PO took less of (it says why, e.g. "1 on PO/…: Vendor
+short of stock"): tick the lines, pick the vendor, **Draft the PO**. **Close lines not to be ordered**
+takes lines off To order for good: tick them, pick why (vendor short of stock, sold in packs, over
+budget, no longer needed, other with a note); the requisition then counts them as done and the indent
+shows they were closed.
 
 The printed PO carries the same letterhead: logo, the school's name and address, its GSTIN, State and
 contact, the number and date.
@@ -314,6 +322,12 @@ On a draft PO:
   with their GST. A rate-contract line keeps the contract rate unless you give the reason.
   **Remove line N from this PO** takes a line off this draft without cancelling anything: it waits on
   **Purchase → To order**, to be ordered later or from another vendor.
+- **Less than the requisition needs** (e.g. 2 needed, the vendor has 1): type the lower quantity; a box
+  asks **Why less** (Vendor short of stock, Sold in packs, Over budget, No longer needed, Other — write
+  why) and what happens to **the rest**: **Order later** (it waits on To order, from this or another
+  vendor) or **Not to be ordered — close it**. The PO page shows it under the line, an amendment's
+  **What changed** gives the reason, and the indent shows it once the PO is approved. More than the
+  requisition needs is not allowed: buying more needs a new indent.
 - **GST** is worked out from the vendor and the school's state (Purchase settings): **CGST + SGST** for a
   registered vendor in the same state, **IGST** for one in another state, **none** for an unregistered
   or composition vendor. A **reverse-charge** service (e.g. an advocate's legal services) shows the GST

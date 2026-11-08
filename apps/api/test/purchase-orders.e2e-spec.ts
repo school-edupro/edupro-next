@@ -719,4 +719,166 @@ describe('purchase orders (e2e)', () => {
         .toString(),
     ).toBe('%PDF-');
   });
+
+  it('a PO line for less: why, the rest to order later or closed; the PR, To order and the indent show it', async () => {
+    const pr = (
+      await call(office, 'POST', '/purchase/requisitions', {
+        departmentId: ids.Science,
+        purpose: 'Library furniture',
+        lines: [
+          { itemId: ids.CHAIR, quantity: 4, estRate: 1000 },
+          { itemId: ids.TABLE, quantity: 2, estRate: 5000 },
+        ],
+      })
+    ).json();
+    const detail = (await call(office, 'GET', `/purchase/requisitions/${pr.id as string}`)).json();
+    await call(office, 'PUT', `/purchase/requisitions/${pr.id as string}/choices`, {
+      lines: detail.lineItems.map((l: { id: string }, i: number) => ({
+        lineId: l.id,
+        vendorId: ids.V1,
+        rate: [1000, 5000][i],
+      })),
+    });
+    await call(office, 'PUT', `/purchase/requisitions/${pr.id as string}/certificate`, {
+      text: detail.certificateText,
+    });
+    await call(office, 'POST', `/purchase/requisitions/${pr.id as string}/submit`);
+    await call(hod, 'POST', `/purchase/requisitions/${pr.id as string}/decide`, {
+      action: 'approve',
+    });
+    const draft = (await call(office, 'GET', '/purchase/orders?status=draft'))
+      .json()
+      .data.find((x: { requisitionId: string | null }) => x.requisitionId === pr.id);
+    const po = await get(office, draft.id);
+    const [chair, table] = po.lineItems as Array<{ id: string; requisitionLineId: string }>;
+    const save = (a: Record<string, unknown>, b: Record<string, unknown>) =>
+      call(office, 'PUT', `/purchase/orders/${draft.id as string}`, {
+        validityDays: 30,
+        lines: [
+          { id: chair!.id, description: 'Chair', quantity: 3, rate: 1000, gstRate: 18, ...a },
+          { id: table!.id, description: 'Table', quantity: 1, rate: 5000, gstRate: 18, ...b },
+        ],
+      });
+    // less than the requisition needs: the reason and what happens to the rest are required
+    const bare = await save({}, {});
+    expect(bare.statusCode).toBe(400);
+    expect(bare.json().type).toBe('purchase.short_reason');
+    expect(
+      (
+        await save(
+          { shortReason: 'vendor_stock', shortAction: 'later' },
+          { shortReason: 'other', shortAction: 'close' },
+        )
+      ).statusCode,
+    ).toBe(400);
+    expect(
+      (
+        await save(
+          { shortReason: 'vendor_stock', shortNote: 'more in 3 weeks', shortAction: 'later' },
+          { shortReason: 'not_needed', shortAction: 'close' },
+        )
+      ).statusCode,
+    ).toBe(200);
+    const saved = await get(office, draft.id);
+    expect(saved.lineItems[0]).toMatchObject({ shortReason: 'vendor_stock', closeRest: false });
+    expect(saved.lineItems[1]).toMatchObject({ shortReason: 'not_needed', closeRest: true });
+    // To order: the chair's rest waits, with why; the table's rest is closed
+    const waiting = (await call(office, 'GET', '/purchase/to-order'))
+      .json()
+      .data.filter((g: { requisitionId: string }) => g.requisitionId === pr.id);
+    expect(waiting).toHaveLength(1);
+    expect(waiting[0].lines).toEqual([
+      expect.objectContaining({
+        id: chair!.requisitionLineId,
+        quantity: 1,
+        needed: 4,
+        short: expect.stringContaining('Vendor short of stock: more in 3 weeks'),
+      }),
+    ]);
+    // placed: the PR is partly ordered; each line says what became of it
+    expect(
+      (await call(office, 'POST', `/purchase/orders/${draft.id as string}/submit`)).statusCode,
+    ).toBe(201);
+    await approve(draft.id, hod, principal);
+    const after = (await call(office, 'GET', `/purchase/requisitions/${pr.id as string}`)).json();
+    expect(after.status).toBe('part_ordered');
+    expect(after.lineItems[0].ordered).toMatch(
+      /^Ordered 3 of 4 .+ · the rest to order later: Vendor short of stock: more in 3 weeks$/,
+    );
+    expect(after.lineItems[1].ordered).toMatch(
+      /^Ordered 1 of 2 .+ · the rest closed: No longer needed$/,
+    );
+    // the chair's rest closed on To order (only by the purchase office; Other needs a note)
+    const close = (u: SeededUser, body: Record<string, unknown>) =>
+      call(u, 'POST', '/purchase/to-order/close', { lineIds: [chair!.requisitionLineId], ...body });
+    expect((await close(teacher, { reason: 'budget' })).statusCode).toBe(403);
+    expect((await close(office, { reason: 'other' })).statusCode).toBe(400);
+    const done = await close(office, { reason: 'budget', note: 'Bought next term' });
+    expect(done.statusCode).toBe(201);
+    expect(done.json()).toEqual({ closed: 1 });
+    expect((await close(office, { reason: 'budget' })).statusCode).toBe(409);
+    const closed = (await call(office, 'GET', `/purchase/requisitions/${pr.id as string}`)).json();
+    expect(closed.status).toBe('ordered');
+    expect(closed.lineItems[0].ordered).toMatch(
+      / · the rest closed: Over budget: Bought next term$/,
+    );
+    expect(
+      (await call(office, 'GET', '/purchase/to-order'))
+        .json()
+        .data.some((g: { requisitionId: string }) => g.requisitionId === pr.id),
+    ).toBe(false);
+  });
+
+  it('the indent shows a line ordered for less and its rest closed (no rates)', async () => {
+    const pi = (
+      await call(teacher, 'POST', '/purchase/indents', {
+        purpose: 'Pens for the test week',
+        lines: [{ itemId: ids.PEN, quantity: 10 }],
+      })
+    ).json();
+    await call(teacher, 'POST', `/purchase/indents/${pi.id as string}/submit`);
+    await call(hod, 'POST', `/purchase/indents/${pi.id as string}/decide`, { action: 'approve' });
+    const drafts = (await call(office, 'GET', '/purchase/orders?status=draft')).json()
+      .data as Array<{
+      id: string;
+      vendorCode: string;
+      requisitionId: string | null;
+    }>;
+    let po: { id: string; lineItems: Array<{ id: string; quantity: number }> } | null = null;
+    for (const d of drafts.filter((x) => x.vendorCode === 'V1' && x.requisitionId)) {
+      const x = await get(office, d.id);
+      if (x.lineItems[0].quantity === 10) po = x;
+    }
+    expect(po).not.toBeNull();
+    expect(
+      (
+        await call(office, 'PUT', `/purchase/orders/${po!.id}`, {
+          validityDays: 30,
+          lines: [
+            {
+              id: po!.lineItems[0]!.id,
+              description: 'Ball pen',
+              quantity: 6,
+              rate: 8.5,
+              gstRate: 0,
+              shortReason: 'vendor_stock',
+              shortAction: 'close',
+            },
+          ],
+        })
+      ).statusCode,
+    ).toBe(200);
+    expect((await call(office, 'POST', `/purchase/orders/${po!.id}/submit`)).statusCode).toBe(201);
+    await approve(po!.id, hod, principal);
+    const mine = (await call(teacher, 'GET', `/purchase/indents/${pi.id as string}`)).json();
+    expect(mine.route).toBe('ordered');
+    expect(mine.lineItems[0].ordered).toMatch(
+      /^Ordered 6 of 10 .+ on PO\/.+ · the rest closed: Vendor short of stock$/,
+    );
+    expect(mine.lineItems[0].ordered).not.toMatch(/₹|8\.5/);
+    const row = (await call(teacher, 'GET', '/purchase/indents?view=mine'))
+      .json()
+      .data.find((x: { id: string }) => x.id === pi.id);
+    expect(row.partClosed).toBe(true);
+  });
 });

@@ -231,7 +231,7 @@ export default async function IndentsPage({
                       {x.status === 'submitted' && x.waitingWith
                         ? `With ${x.waitingWith}`
                         : x.status === 'approved' && x.route
-                          ? INDENT_ROUTE[x.route]
+                          ? `${INDENT_ROUTE[x.route]}${x.partClosed ? ' · part closed' : ''}`
                           : x.decidedAt
                             ? when(x.decidedAt)
                             : x.submittedAt

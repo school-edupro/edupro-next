@@ -13,7 +13,13 @@ import { syncFlow } from './purchase-flow';
 import { purchaseHead } from './purchase-head';
 import { purchaseIndentPdf } from './purchase-indent-pdf';
 import { checkListSize, LIST_LIMIT, purchaseListFile } from './purchase-list-file';
-import { draftOrdersFor } from './purchase-order-core';
+import {
+  CLOSED_PLACED,
+  draftOrdersFor,
+  LINE_ORDERING,
+  orderingWords,
+  type LineOrderingRow,
+} from './purchase-order-core';
 import { PurchaseVendorsService } from './purchase-vendors.service';
 import {
   PURCHASE,
@@ -104,6 +110,8 @@ interface IndentDbRow {
   lines: number;
   /** the signed-in user approves (or approved) it, not having raised it: they see its rates */
   approver: boolean;
+  /** a line of it was ordered for less and the rest closed */
+  part_closed: boolean;
 }
 
 /** A user's name as staff know it: their employee record's, else the account's. */
@@ -111,7 +119,7 @@ const PERSON = (u: 'au' | 'ru' | 'fu' | 'tu' | 'u') =>
   // eslint-disable-next-line no-restricted-syntax -- u is one of the fixed table aliases above
   `COALESCE((SELECT e.display_name FROM employees e WHERE e.user_id = ${u}.id AND e.deleted_at IS NULL LIMIT 1), ${u}.display_name)`;
 
-// eslint-disable-next-line no-restricted-syntax -- PERSON is a fixed fragment
+// eslint-disable-next-line no-restricted-syntax -- PERSON and CLOSED_PLACED are fixed fragments
 const SELECT = `
   SELECT pi.id::text, pi.number, pi.department_id::text, d.name AS department, pi.raised_by::text, ${PERSON('ru')} AS raised_by_name,
          pi.on_behalf_employee_id::text, ob.display_name AS on_behalf, pi.purpose, pi.required_by::text, pi.priority, pi.status,
@@ -121,6 +129,9 @@ const SELECT = `
             FROM workflow_instances i JOIN workflow_steps st ON st.instance_id = i.id AND st.level = i.current_level AND st.status = 'pending'
            WHERE i.id = pi.workflow_instance_id AND i.status = 'pending') AS waiting_with,
          (SELECT count(*)::int FROM purchase_indent_lines l WHERE l.indent_id = pi.id) AS lines,
+         EXISTS (SELECT 1 FROM purchase_indent_lines il JOIN purchase_requisition_sources src ON src.indent_line_id = il.id
+                   JOIN purchase_requisition_lines rl ON rl.id = src.requisition_line_id
+                  WHERE il.indent_id = pi.id AND rl.fulfil = 'buy' AND ${CLOSED_PLACED}) AS part_closed,
          (pi.raised_by <> app.current_user_id() AND EXISTS (SELECT 1 FROM workflow_steps s WHERE s.instance_id = pi.workflow_instance_id
             AND (app.current_user_id() = ANY(s.assignee_user_ids) OR s.acted_by = app.current_user_id()
                  OR EXISTS (SELECT 1 FROM delegations dg WHERE dg.to_user_id = app.current_user_id() AND dg.from_user_id = ANY(s.assignee_user_ids)
@@ -204,6 +215,7 @@ export class PurchaseIndentsService implements OnModuleInit {
       createdAt: r.created_at.toISOString(),
       waitingWith: r.waiting_with,
       lines: r.lines,
+      partClosed: r.part_closed,
     };
   }
 
@@ -305,7 +317,7 @@ export class PurchaseIndentsService implements OnModuleInit {
         r.status === 'submitted' && r.waiting_with
           ? `With ${r.waiting_with}`
           : r.status === 'approved' && r.route
-            ? (INDENT_ROUTE_WORDS[r.route] ?? r.route)
+            ? `${INDENT_ROUTE_WORDS[r.route] ?? r.route}${r.part_closed ? ' · part closed' : ''}`
             : (r.decision_note ?? '');
       const list = {
         columns: [
@@ -553,6 +565,18 @@ export class PurchaseIndentsService implements OnModuleInit {
            JOIN purchase_indent_lines il ON il.id = src.indent_line_id WHERE il.indent_id = $1`,
         [id],
       );
+      // what became of each line: ordered, part ordered with the rest closed or to order later
+      const ordering = await c.query<LineOrderingRow & { line_id: string; shared: boolean }>(
+        // eslint-disable-next-line no-restricted-syntax -- LINE_ORDERING is a fixed fragment
+        `SELECT src.indent_line_id::text AS line_id, ${LINE_ORDERING},
+                (SELECT count(*) FROM purchase_requisition_sources s2 WHERE s2.requisition_line_id = rl.id) > 1 AS shared
+           FROM purchase_requisition_sources src
+           JOIN purchase_requisition_lines rl ON rl.id = src.requisition_line_id
+           JOIN purchase_requisitions r ON r.id = rl.requisition_id
+          WHERE src.indent_line_id IN (SELECT id FROM purchase_indent_lines WHERE indent_id = $1)
+            AND r.status IN ('approved', 'part_ordered', 'ordered')`,
+        [id],
+      );
       const instance = pi.workflow_instance_id
         ? await this.workflow.instanceWith(c, pi.workflow_instance_id)
         : null;
@@ -608,6 +632,16 @@ export class PurchaseIndentsService implements OnModuleInit {
           // the line's document (view and download through the indent)
           fileId: l.file_id,
           fileName: l.file_name,
+          // what became of it (quantities only)
+          ordered:
+            ordering.rows
+              .filter((o) => o.line_id === l.id)
+              .map((o) => {
+                const w = orderingWords(o, l.uom);
+                return w && o.shared ? `${w} (the requisition line also covers other indents)` : w;
+              })
+              .filter(Boolean)
+              .join('; ') || null,
         })),
         departmentSpendThisYear: sees ? Number(spend.rows[0]!.total) : null,
         requisitions: pr.rows.map((r) => ({

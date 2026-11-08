@@ -3,7 +3,7 @@ import { useRouter } from 'next/navigation';
 import { useState, useTransition } from 'react';
 import { FormActions, FormRow, FormSection } from '@edupro/ui';
 import { saveOrder } from '@/lib/purchase-actions';
-import { CHARGE_KIND, inr, type OrderDetail } from '@/lib/purchase';
+import { CHARGE_KIND, inr, SHORT_REASON, type OrderDetail } from '@/lib/purchase';
 
 interface Line {
   id: string;
@@ -19,6 +19,10 @@ interface Line {
   rateChangeReason: string;
   make: string;
   model: string;
+  /** less than the requisition needs: why, and what happens to the rest */
+  shortReason: string;
+  shortAction: '' | 'later' | 'close';
+  shortNote: string;
 }
 interface Charge {
   kind: keyof typeof CHARGE_KIND;
@@ -31,7 +35,9 @@ interface Charge {
  * A draft Purchase Order changed (docs/design/83, part 4): the quotation reference, dates, delivery,
  * payment term, validity and terms; each line's words, HSN / SAC, quantity (up to what the requisition
  * still needs), rate, discount and GST rate (a rate-contract line's rate changed only with a reason);
- * other charges with their GST. The API works out the GST by the vendor's state and the totals.
+ * other charges with their GST. The API works out the GST by the vendor's state and the totals. A
+ * quantity below what the requisition needs asks why and whether the rest is ordered later (it waits
+ * on To order) or closed (docs/design/83, "As built — a PO line for less").
  */
 export function OrderForm({
   po,
@@ -68,6 +74,9 @@ export function OrderForm({
       rateChangeReason: l.rateChangeReason ?? '',
       make: l.make ?? '',
       model: l.model ?? '',
+      shortReason: l.shortReason ?? '',
+      shortAction: l.shortReason ? (l.closeRest ? 'close' : 'later') : '',
+      shortNote: l.shortNote ?? '',
     })),
   );
   const [charges, setCharges] = useState<Charge[]>(
@@ -90,9 +99,27 @@ export function OrderForm({
   };
   const rateChanged = (l: Line) =>
     l.contractRate !== null && Math.abs(Number(l.rate) - l.contractRate) > 0.004;
+  /** what the line is short of the requisition (0: not short) */
+  const shortBy = (l: Line) => {
+    const q = Number(l.quantity);
+    if (l.maxQuantity === null || !Number.isFinite(q) || q <= 0) return 0;
+    const d = Math.round((l.maxQuantity - q) * 1000) / 1000;
+    return d > 0.0005 ? d : 0;
+  };
 
   const send = () => {
     setError(null);
+    const missing = lines.findIndex(
+      (l) =>
+        shortBy(l) > 0 &&
+        (!l.shortReason || !l.shortAction || (l.shortReason === 'other' && !l.shortNote.trim())),
+    );
+    if (missing >= 0) {
+      setError(
+        `Line ${String(missing + 1)} is less than the requisition needs: pick why, write it for Other, and say whether the rest is ordered later or closed.`,
+      );
+      return;
+    }
     const body = {
       quoteRef: head.quoteRef || undefined,
       poDate: head.poDate || undefined,
@@ -113,6 +140,13 @@ export function OrderForm({
         ...(rateChanged(l) && l.rateChangeReason ? { rateChangeReason: l.rateChangeReason } : {}),
         ...(l.make.trim() ? { make: l.make.trim() } : {}),
         ...(l.model.trim() ? { model: l.model.trim() } : {}),
+        ...(shortBy(l) > 0
+          ? {
+              shortReason: l.shortReason,
+              shortAction: l.shortAction,
+              ...(l.shortNote.trim() ? { shortNote: l.shortNote.trim() } : {}),
+            }
+          : {}),
       })),
       charges: charges
         .filter((x) => x.amount !== '')
@@ -381,6 +415,79 @@ export function OrderForm({
                     onChange={(e) => setLine(i, { gstRate: e.target.value })}
                   />
                 </label>
+                {shortBy(l) > 0 ? (
+                  <div className="ep-purch-short" role="group" aria-labelledby={`of-l${n}-short`}>
+                    <p id={`of-l${n}-short`} className="ep-purch-short__title">
+                      {l.quantity} of {l.maxQuantity} {l.uom}: {shortBy(l)} {l.uom} less than the
+                      requisition needs
+                    </p>
+                    <div className="ep-fit-row">
+                      <label className="ep-field" htmlFor={`of-l${n}-sr`}>
+                        <span className="ep-field__label" data-required="true">
+                          Why less
+                        </span>
+                        <select
+                          id={`of-l${n}-sr`}
+                          className="ep-select"
+                          value={l.shortReason}
+                          onChange={(e) => setLine(i, { shortReason: e.target.value })}
+                        >
+                          <option value="">Pick why</option>
+                          {Object.entries(SHORT_REASON).map(([k, v]) => (
+                            <option key={k} value={k}>
+                              {v}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                      <label className="ep-field" htmlFor={`of-l${n}-sn`}>
+                        <span
+                          className="ep-field__label"
+                          data-required={l.shortReason === 'other' ? 'true' : undefined}
+                        >
+                          {l.shortReason === 'other' ? 'Write why' : 'Note (optional)'}
+                        </span>
+                        <input
+                          id={`of-l${n}-sn`}
+                          className="ep-input"
+                          maxLength={300}
+                          value={l.shortNote}
+                          placeholder="e.g. the vendor has 1 now, more in 3 weeks"
+                          onChange={(e) => setLine(i, { shortNote: e.target.value })}
+                        />
+                      </label>
+                    </div>
+                    <fieldset className="ep-field ep-purch-short__rest">
+                      <legend className="ep-field__label" data-required="true">
+                        The other {shortBy(l)} {l.uom}
+                      </legend>
+                      {(
+                        [
+                          [
+                            'later',
+                            'Order later — it waits on Purchase → To order (from this or another vendor)',
+                          ],
+                          [
+                            'close',
+                            'Not to be ordered — close it (the indent shows it was closed, and why)',
+                          ],
+                        ] as const
+                      ).map(([v, text]) => (
+                        <label key={v} className="ep-radio">
+                          <input
+                            type="radio"
+                            className="ep-radio__input"
+                            name={`of-l${n}-rest`}
+                            checked={l.shortAction === v}
+                            onChange={() => setLine(i, { shortAction: v })}
+                          />
+                          <span className="ep-radio__dot" aria-hidden="true" />
+                          <span className="ep-check__text">{text}</span>
+                        </label>
+                      ))}
+                    </fieldset>
+                  </div>
+                ) : null}
                 {rateChanged(l) ? (
                   <label className="ep-field" htmlFor={`of-l${n}-why`}>
                     <span className="ep-field__label" data-required="true">

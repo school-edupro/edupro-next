@@ -4,7 +4,7 @@ import { DbService } from '../../common/db/db.service';
 import { DomainError } from '../../common/errors/domain-error';
 import { requireTenant, type RequestContext } from '../../common/http/request-context';
 import { libraryFile, type FileCell, type FileColumn } from '../library/library-file';
-import { LIVE_PO, ON_ORDER, PLACED } from './purchase-order-core';
+import { LIVE_PO, PLACED, TO_ORDER } from './purchase-order-core';
 import { PurchaseVendorsService } from './purchase-vendors.service';
 import { type PurchaseReport, type ReportQueryDto } from './purchase.dto';
 
@@ -1614,7 +1614,7 @@ export class PurchaseReportsService {
                     + (SELECT count(*)::int FROM purchase_orders WHERE status = 'submitted') AS pending,
                   (SELECT count(*)::int FROM purchase_indents WHERE status = 'approved' AND route = 'to_requisition') AS to_requisition,
                   (SELECT count(*)::int FROM purchase_requisition_lines rl JOIN purchase_requisitions r ON r.id = rl.requisition_id
-                    WHERE r.status IN ('approved', 'part_ordered') AND rl.fulfil = 'buy' AND rl.quantity > ${ON_ORDER}) AS to_order,
+                    WHERE r.status IN ('approved', 'part_ordered') AND ${TO_ORDER}) AS to_order,
                   (SELECT count(*)::int FROM purchase_orders po WHERE ${PLACED} AND po.po_date >= $1::date) AS po_month,
                   (SELECT COALESCE(sum(po.total), 0) FROM purchase_orders po WHERE ${PLACED} AND po.po_date >= $1::date)::text AS po_month_value,
                   (SELECT COALESCE(sum(po.total), 0) FROM purchase_orders po WHERE ${PLACED} AND po.po_date >= $2::date)::text AS po_year_value,

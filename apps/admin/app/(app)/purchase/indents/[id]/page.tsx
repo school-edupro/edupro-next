@@ -320,6 +320,11 @@ export default async function IndentPage({
                         Bought though the store has it: {l.stockReason}
                       </span>
                     ) : null}
+                    {l.ordered ? (
+                      <span className="ep-mr-col__desc">
+                        <strong>{l.ordered}</strong>
+                      </span>
+                    ) : null}
                     {l.fileId ? (
                       <span
                         className="ep-mr-col__desc"

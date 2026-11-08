@@ -906,6 +906,29 @@ export async function draftOrder(fd: FormData) {
   back(poPage(made.id), 'ok', `${made.number} drafted: check it and send it for approval`);
 }
 
+/** Lines waiting on To order closed: not to be ordered, with the reason (docs/design/83). */
+export async function closeToOrder(fd: FormData) {
+  const lineIds = fd.getAll('lineId').map(String).filter(okId);
+  const reason = pick(fd, 'closeReason');
+  const note = pick(fd, 'reason').trim();
+  if (!lineIds.length || !reason)
+    back('/purchase/to-order', 'validation-failed', 'Tick the lines and pick why');
+  try {
+    await apiFetch('/purchase/to-order/close', {
+      method: 'POST',
+      body: JSON.stringify({ lineIds, reason, ...(note ? { note } : {}) }),
+    });
+  } catch (e) {
+    if (e instanceof ApiError) back('/purchase/to-order', e.problem.type, detailOf(e));
+    throw e;
+  }
+  back(
+    '/purchase/to-order',
+    'ok',
+    `${String(lineIds.length)} line${lineIds.length === 1 ? '' : 's'} closed: not to be ordered`,
+  );
+}
+
 export type OrderSaveResult = { ok: true; id: string } | { ok: false; error: string };
 
 /** A draft PO's header, lines and charges saved (the GST and totals are worked out by the API). */

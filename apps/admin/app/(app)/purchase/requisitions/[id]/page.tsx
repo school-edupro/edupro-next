@@ -388,6 +388,11 @@ export default async function RequisitionPage({
                       </span>
                     ) : null}
                     {l.note ? <span className="ep-mr-col__desc">{l.note}</span> : null}
+                    {l.ordered ? (
+                      <span className="ep-mr-col__desc">
+                        <strong>{l.ordered}</strong>
+                      </span>
+                    ) : null}
                   </td>
                   <td style={{ textAlign: 'right' }}>
                     {l.quantity} {l.uom}

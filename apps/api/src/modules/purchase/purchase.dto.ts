@@ -564,6 +564,22 @@ export const CreateOrderSchema = z.object({
 });
 export class CreateOrderDto extends createZodDto(CreateOrderSchema) {}
 
+/** Why a PO line is for less than the requisition needs, or why a line is closed on To order. */
+const ShortReason = z.enum(['vendor_stock', 'pack_size', 'budget', 'not_needed', 'other']);
+
+/** Lines waiting on To order that are not to be ordered (docs/design/83, "As built — a PO line for less"). */
+export const CloseToOrderSchema = z
+  .object({
+    lineIds: z.array(IdSchema).min(1, 'Tick the lines').max(200),
+    reason: ShortReason,
+    note: opt(300),
+  })
+  .refine((x) => x.reason !== 'other' || !!x.note, {
+    message: 'Write why',
+    path: ['note'],
+  });
+export class CloseToOrderDto extends createZodDto(CloseToOrderSchema) {}
+
 const OrderCharge = z.object({
   kind: z.enum(['freight', 'installation', 'packing', 'other']),
   label: opt(80),
@@ -602,6 +618,13 @@ export const UpdateOrderSchema = z.object({
         rateChangeReason: opt(300),
         make: opt(80),
         model: opt(80),
+        /** less than the requisition needs: why, and whether the rest waits on To order or is closed */
+        shortReason: ShortReason.nullish().or(z.literal('').transform(() => null)),
+        shortNote: opt(300),
+        shortAction: z
+          .enum(['later', 'close'])
+          .nullish()
+          .or(z.literal('').transform(() => null)),
       }),
     )
     .min(1, 'Keep at least one line')

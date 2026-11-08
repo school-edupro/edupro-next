@@ -1,9 +1,10 @@
 import { Breadcrumbs, PageHeader } from '@edupro/ui';
 import { notFound } from 'next/navigation';
+import { ConfirmAction } from '@/components/ConfirmAction';
 import { Notice } from '@/components/Notice';
 import { apiFetch, getMe } from '@/lib/api';
-import { inr, type ToOrderGroup } from '@/lib/purchase';
-import { draftOrder } from '@/lib/purchase-actions';
+import { inr, SHORT_REASON, type ToOrderGroup } from '@/lib/purchase';
+import { closeToOrder, draftOrder } from '@/lib/purchase-actions';
 
 const when = (iso: string) =>
   new Intl.DateTimeFormat('en-IN', {
@@ -16,7 +17,9 @@ const when = (iso: string) =>
 /**
  * To order (docs/design/83, part 4): the lines of approved requisitions not yet on a purchase order —
  * those left after the drafts made on approval, a cancelled or rejected PO's, and a requisition the
- * system approved under the limit (no vendor yet). Tick the lines, pick the vendor, draft the PO.
+ * system approved under the limit (no vendor yet), and the rest of a line a PO took less of (with
+ * why). Tick the lines, pick the vendor, draft the PO; or close lines not to be ordered, with the
+ * reason (docs/design/83, "As built — a PO line for less").
  */
 export default async function ToOrderPage({
   searchParams,
@@ -52,7 +55,12 @@ export default async function ToOrderPage({
                 aria-labelledby={`to-${n}`}
               >
                 <h2 id={`to-${n}`} className="ep-card__title">
-                  <a href={`/purchase/requisitions/${g.requisitionId}`}>{g.number}</a>
+                  <a
+                    style={{ textDecoration: 'underline' }}
+                    href={`/purchase/requisitions/${g.requisitionId}`}
+                  >
+                    {g.number}
+                  </a>
                   {g.department ? ` · ${g.department}` : ''}
                   {g.vendor ? ` · ${g.vendor}` : ' · no vendor chosen'}
                 </h2>
@@ -79,7 +87,13 @@ export default async function ToOrderPage({
                           />
                           <span className="ep-check__box" />
                           {l.seq}. {l.item} × {l.quantity} {l.uom} at {inr(l.rate)}
+                          {l.quantity < l.needed ? ` (of ${String(l.needed)} ${l.uom})` : ''}
                         </label>
+                        {l.short ? (
+                          <span className="ep-field__help" style={{ display: 'block' }}>
+                            Less was ordered — {l.short}; the rest waits here.
+                          </span>
+                        ) : null}
                       </li>
                     ))}
                   </ul>
@@ -106,6 +120,40 @@ export default async function ToOrderPage({
                     </button>
                   </div>
                 </form>
+                <div style={{ marginTop: 'var(--sp-3)' }}>
+                  <ConfirmAction
+                    action={closeToOrder}
+                    fields={{}}
+                    label="Close lines not to be ordered"
+                    title={`Close lines of ${g.number}?`}
+                    confirmLabel="Close them"
+                    variant="ghost"
+                    choices={{
+                      name: 'lineId',
+                      legend: 'Lines not to be ordered',
+                      items: g.lines.map((l) => ({
+                        value: l.id,
+                        label: `${String(l.seq)}. ${l.item} × ${String(l.quantity)} ${l.uom}`,
+                      })),
+                    }}
+                    select={{
+                      name: 'closeReason',
+                      label: 'Why',
+                      options: Object.entries(SHORT_REASON).map(([value, label]) => ({
+                        value,
+                        label,
+                      })),
+                    }}
+                    reason={{
+                      label: 'Note (needed for Other)',
+                      optional: true,
+                      placeholder: 'e.g. the department bought it locally',
+                    }}
+                  >
+                    They leave To order for good: the requisition counts them as done and the indent
+                    shows they were closed, and why.
+                  </ConfirmAction>
+                </div>
               </section>
             );
           })}

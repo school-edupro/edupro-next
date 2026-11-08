@@ -13,10 +13,14 @@ import { syncFlow } from './purchase-flow';
 import { gstSummary, type Tax } from './purchase-gst';
 import {
   addRequisitionLines,
+  LIVE_PO,
   newOrder,
   ON_ORDER,
   recomputeOrder,
   refreshOrdered,
+  SHORT_REASONS,
+  shortWords,
+  TO_ORDER,
 } from './purchase-order-core';
 import { registerGeneratedOn } from '../exams/register-head';
 import { purchaseHead } from './purchase-head';
@@ -26,6 +30,7 @@ import { purchaseOrderPdf, type OrderPdfData } from './purchase-order-pdf';
 import { PurchaseVendorsService } from './purchase-vendors.service';
 import {
   PURCHASE,
+  type CloseToOrderDto,
   type CreateOrderDto,
   type EmergencyDto,
   type IndentDecisionDto,
@@ -311,7 +316,7 @@ export class PurchaseOrdersService implements OnModuleInit {
                   (SELECT count(*)::int FROM purchase_orders po WHERE po.status IN ('draft', 'sent_back')) AS drafts,
                   (SELECT count(*)::int FROM purchase_orders po WHERE po.status = 'approved' AND NOT po.emergency) AS to_send,
                   (SELECT count(*)::int FROM purchase_requisition_lines rl JOIN purchase_requisitions r ON r.id = rl.requisition_id
-                    WHERE r.status IN ('approved', 'part_ordered') AND rl.fulfil = 'buy' AND rl.quantity > ${ON_ORDER}) AS to_order`,
+                    WHERE r.status IN ('approved', 'part_ordered') AND ${TO_ORDER}) AS to_order`,
         )
       ).rows[0]!;
       const all = this.seesAll(ctx);
@@ -502,10 +507,25 @@ export class PurchaseOrdersService implements OnModuleInit {
         vendor_id: string | null;
         vendor: string | null;
         vendor_status: string | null;
+        needed: string;
+        short: {
+          number: string;
+          revision: number;
+          qty: string;
+          reason: string;
+          note: string | null;
+        } | null;
       }>(
-        // eslint-disable-next-line no-restricted-syntax -- ON_ORDER is a fixed fragment
+        // eslint-disable-next-line no-restricted-syntax -- ON_ORDER, LIVE_PO and TO_ORDER are fixed fragments
         `SELECT r.id::text AS requisition_id, r.number, d.name AS department, r.auto_rule, r.required_by::text,
                 rl.id::text AS line_id, rl.seq, COALESCE(i.name, rl.free_text) AS item, (rl.quantity - ${ON_ORDER})::text AS remaining,
+                rl.quantity::text AS needed,
+                -- the PO that took less, and why (the rest waits here)
+                (SELECT json_build_object('number', po.number, 'revision', po.revision, 'qty', pol.quantity::text,
+                                          'reason', pol.short_reason, 'note', pol.short_note)
+                   FROM purchase_order_lines pol JOIN purchase_orders po ON po.id = pol.order_id
+                  WHERE pol.requisition_line_id = rl.id AND pol.short_reason IS NOT NULL AND ${LIVE_PO}
+                  ORDER BY po.created_at DESC LIMIT 1) AS short,
                 u.code AS uom, COALESCE(rl.rate, rl.est_rate)::text AS rate, rl.vendor_id::text, v.legal_name AS vendor, v.status AS vendor_status
            FROM purchase_requisitions r
            JOIN purchase_requisition_lines rl ON rl.requisition_id = r.id
@@ -513,7 +533,7 @@ export class PurchaseOrdersService implements OnModuleInit {
            LEFT JOIN purchase_items i ON i.id = rl.item_id
            JOIN purchase_uoms u ON u.id = rl.uom_id
            LEFT JOIN vendors v ON v.id = rl.vendor_id
-          WHERE r.status IN ('approved', 'part_ordered') AND rl.fulfil = 'buy' AND rl.quantity > ${ON_ORDER}
+          WHERE r.status IN ('approved', 'part_ordered') AND ${TO_ORDER}
           ORDER BY r.required_by NULLS LAST, r.number, rl.seq`,
       );
       const vendors = await c.query<{ id: string; code: string; name: string }>(
@@ -537,6 +557,10 @@ export class PurchaseOrdersService implements OnModuleInit {
             quantity: number;
             uom: string;
             rate: number;
+            /** the requisition's quantity for the line */
+            needed: number;
+            /** why the rest waits here: a PO took less */
+            short: string | null;
           }>;
         }
       >();
@@ -560,10 +584,52 @@ export class PurchaseOrdersService implements OnModuleInit {
           quantity: Number(x.remaining),
           uom: x.uom,
           rate: Number(x.rate),
+          needed: Number(x.needed),
+          short: x.short
+            ? `${Number(x.short.qty).toLocaleString('en-IN', { maximumFractionDigits: 3 })} on ${label(x.short.number, x.short.revision)}: ${shortWords(x.short.reason, x.short.note)}`
+            : null,
         });
         groups.set(key, g);
       }
       return { data: [...groups.values()], vendors: vendors.rows };
+    });
+  }
+
+  /**
+   * Lines waiting on To order that are not to be ordered (docs/design/83, "As built — a PO line for
+   * less"): each closed with the reason; the requisition (and its indents) are ordered once nothing else
+   * waits.
+   */
+  async closeToOrder(ctx: RequestContext, dto: CloseToOrderDto) {
+    this.mustManage(ctx);
+    return this.db.tenant(requireTenant(ctx), async (c) => {
+      const ok = await c.query<{ id: string; requisition_id: string }>(
+        // eslint-disable-next-line no-restricted-syntax -- TO_ORDER is a fixed fragment
+        `SELECT rl.id::text, rl.requisition_id::text FROM purchase_requisition_lines rl
+           JOIN purchase_requisitions r ON r.id = rl.requisition_id
+          WHERE rl.id = ANY($1::bigint[]) AND r.status IN ('approved', 'part_ordered') AND ${TO_ORDER}
+          FOR UPDATE OF rl`,
+        [dto.lineIds],
+      );
+      if (ok.rows.length !== new Set(dto.lineIds).size)
+        throw new DomainError(
+          'validation-failed',
+          'A line no longer waits on To order (it is on a PO or already closed)',
+          { status: 409 },
+        );
+      await c.query(
+        `UPDATE purchase_requisition_lines SET closed_reason = $2, closed_note = $3, closed_by = $4, closed_at = now()
+          WHERE id = ANY($1::bigint[])`,
+        [dto.lineIds, dto.reason, dto.note ?? null, ctx.user.id],
+      );
+      for (const r of new Set(ok.rows.map((x) => x.requisition_id))) await refreshOrdered(c, r);
+      await this.audit.stage(ctx, c, {
+        action: 'purchase.to_order.close',
+        entityType: 'purchase_requisition_lines',
+        entityId: dto.lineIds[0]!,
+        after: { lines: dto.lineIds, reason: SHORT_REASONS[dto.reason], note: dto.note ?? null },
+      });
+      return { closed: ok.rows.length };
     });
   }
 
@@ -590,9 +656,9 @@ export class PurchaseOrdersService implements OnModuleInit {
         );
       await this.activeVendor(c, dto.vendorId);
       const ok = await c.query<{ id: string }>(
-        // eslint-disable-next-line no-restricted-syntax -- ON_ORDER is a fixed fragment
+        // eslint-disable-next-line no-restricted-syntax -- TO_ORDER is a fixed fragment
         `SELECT rl.id::text FROM purchase_requisition_lines rl
-          WHERE rl.requisition_id = $1 AND rl.id = ANY($2::bigint[]) AND rl.fulfil = 'buy' AND rl.quantity > ${ON_ORDER}`,
+          WHERE rl.requisition_id = $1 AND rl.id = ANY($2::bigint[]) AND ${TO_ORDER}`,
         [dto.requisitionId, dto.lineIds],
       );
       if (ok.rows.length !== new Set(dto.lineIds).size)
@@ -672,6 +738,9 @@ export class PurchaseOrdersService implements OnModuleInit {
         rate_change_reason: string | null;
         make: string | null;
         model: string | null;
+        short_reason: string | null;
+        short_note: string | null;
+        close_rest: boolean;
         max_qty: string | null;
         received_qty: string;
         accepted_qty: string;
@@ -681,7 +750,7 @@ export class PurchaseOrdersService implements OnModuleInit {
         `SELECT l.id::text, l.seq, l.received_qty::text, l.accepted_qty::text, l.rejected_qty::text, l.returned_qty::text, l.requisition_line_id::text, l.item_id::text, i.code AS item_code, l.description, l.hsn_code,
                 l.quantity::text, l.uom_id::text, u.code AS uom, l.rate::text, l.discount_pct::text, l.gst_rate::text, l.reverse_charge,
                 l.exempt, l.taxable::text, l.cgst::text, l.sgst::text, l.igst::text, l.rcm_gst::text, l.total::text, l.contract_id::text,
-                rc.rate::text AS contract_rate, l.rate_change_reason, l.make, l.model,
+                rc.rate::text AS contract_rate, l.rate_change_reason, l.make, l.model, l.short_reason, l.short_note, l.close_rest,
                 (SELECT rl.quantity - COALESCE((SELECT sum(ol.quantity) FROM purchase_order_lines ol JOIN purchase_orders po ON po.id = ol.order_id
                                                  WHERE ol.requisition_line_id = rl.id AND ol.order_id <> l.order_id
                                                    AND po.status NOT IN ('rejected', 'cancelled', 'superseded')
@@ -958,7 +1027,11 @@ export class PurchaseOrdersService implements OnModuleInit {
       was(
         `${name}: quantity`,
         `${q(Number(o.quantity))} ${o.uom}`,
-        `${q(Number(l.quantity))} ${l.uom}`,
+        `${q(Number(l.quantity))} ${l.uom}${
+          l.short_reason && Number(l.quantity) < Number(o.quantity)
+            ? ` (${shortWords(l.short_reason, l.short_note)}; the rest ${l.close_rest ? 'closed' : 'to order later'})`
+            : ''
+        }`,
       );
       was(`${name}: rate`, rs(Number(o.rate)), rs(Number(l.rate)));
       was(`${name}: discount %`, String(Number(o.discount_pct)), String(Number(l.discount_pct)));
@@ -1152,6 +1225,10 @@ export class PurchaseOrdersService implements OnModuleInit {
           hsnCode: l.hsn_code,
           quantity: Number(l.quantity),
           maxQuantity: l.max_qty === null ? null : Number(l.max_qty),
+          // less than the requisition needs: why, and whether the rest is closed or waits on To order
+          shortReason: l.short_reason,
+          shortNote: l.short_note,
+          closeRest: l.close_rest,
           uomId: l.uom_id,
           uom: l.uom,
           rate: Number(l.rate),
@@ -1286,6 +1363,21 @@ export class PurchaseOrdersService implements OnModuleInit {
             `${have.description}: at most ${have.max_qty} on this PO (the requisition's quantity less other orders)`,
             { status: 400 },
           );
+        // less than the requisition needs: why, and what happens to the rest
+        if (have.max_qty !== null && l.quantity < Number(have.max_qty) - 0.0005) {
+          if (!l.shortReason || !l.shortAction)
+            throw new DomainError(
+              'purchase.short_reason',
+              `${have.description}: ${String(l.quantity)} of ${have.max_qty} — say why it is less and whether the rest is ordered later or closed`,
+              { status: 400 },
+            );
+          if (l.shortReason === 'other' && !l.shortNote)
+            throw new DomainError(
+              'purchase.short_reason',
+              `${have.description}: write why it is less`,
+              { status: 400 },
+            );
+        }
         if (
           have.contract_rate !== null &&
           Math.abs(l.rate - Number(have.contract_rate)) > 0.004 &&
@@ -1303,9 +1395,10 @@ export class PurchaseOrdersService implements OnModuleInit {
           await c.query(`DELETE FROM purchase_order_lines WHERE id = $1`, [l.id]);
       for (const l of dto.lines) {
         const have = lines.find((x) => x.id === l.id)!;
+        const short = have.max_qty !== null && l.quantity < Number(have.max_qty) - 0.0005;
         await c.query(
           `UPDATE purchase_order_lines SET description = $2, hsn_code = $3, quantity = $4, rate = $5, discount_pct = $6, gst_rate = $7,
-                  rate_change_reason = $8, make = $9, model = $10 WHERE id = $1`,
+                  rate_change_reason = $8, make = $9, model = $10, short_reason = $11, short_note = $12, close_rest = $13 WHERE id = $1`,
           [
             l.id,
             l.description,
@@ -1319,6 +1412,9 @@ export class PurchaseOrdersService implements OnModuleInit {
               : null,
             l.make ?? null,
             l.model ?? null,
+            short ? l.shortReason : null,
+            short ? (l.shortNote ?? null) : null,
+            short && l.shortAction === 'close',
           ],
         );
       }
@@ -1670,9 +1766,10 @@ export class PurchaseOrdersService implements OnModuleInit {
       ).rows[0]!.id;
       await c.query(
         `INSERT INTO purchase_order_lines (school_id, order_id, seq, requisition_line_id, item_id, description, hsn_code, quantity, uom_id, rate,
-                                           discount_pct, gst_rate, reverse_charge, exempt, contract_id, rate_change_reason)
+                                           discount_pct, gst_rate, reverse_charge, exempt, contract_id, rate_change_reason, make, model,
+                                           short_reason, short_note, close_rest)
          SELECT school_id, $2, seq, requisition_line_id, item_id, description, hsn_code, quantity, uom_id, rate, discount_pct, gst_rate,
-                reverse_charge, exempt, contract_id, rate_change_reason
+                reverse_charge, exempt, contract_id, rate_change_reason, make, model, short_reason, short_note, close_rest
            FROM purchase_order_lines WHERE order_id = $1`,
         [id, n],
       );

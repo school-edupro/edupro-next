@@ -6,6 +6,7 @@ import { AuthenticatedOnly } from '../../common/auth/decorators';
 import { ReqCtx, type RequestContext } from '../../common/http/request-context';
 import { PurchaseOrdersService } from './purchase-orders.service';
 import {
+  CloseToOrderDto,
   CreateOrderDto,
   EmergencyDto,
   IndentDecisionDto,
@@ -48,6 +49,15 @@ export class PurchaseOrdersController {
   @RequirePermission(PURCHASE.orderManage)
   toOrder(@ReqCtx() ctx: RequestContext) {
     return this.orders.toOrder(ctx);
+  }
+
+  @Post('to-order/close')
+  @ApiOperation({
+    summary: 'Close lines waiting on To order: not to be ordered (with the reason)',
+  })
+  @RequirePermission(PURCHASE.orderManage)
+  closeToOrder(@ReqCtx() ctx: RequestContext, @Body() body: CloseToOrderDto) {
+    return this.orders.closeToOrder(ctx, body);
   }
 
   @Get('order-form')

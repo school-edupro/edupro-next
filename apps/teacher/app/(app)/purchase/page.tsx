@@ -119,7 +119,7 @@ export default async function StaffPurchasePage({
               {x.status === 'submitted' && x.waitingWith
                 ? `With ${x.waitingWith}`
                 : x.status === 'approved' && x.route
-                  ? INDENT_ROUTE[x.route]
+                  ? `${INDENT_ROUTE[x.route]}${x.partClosed ? ' · part closed' : ''}`
                   : `Started ${dmy(x.createdAt)}`}
             </p>
             <a className="ep-btn ep-btn--secondary ep-btn--sm" href={`/purchase/${x.id}`}>

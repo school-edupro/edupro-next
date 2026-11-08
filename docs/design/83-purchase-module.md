@@ -1042,3 +1042,47 @@ in the staff app.
   header reads vendor · date.
 - Checked in a browser (dev-purchase admin, dev-principal staff; 1440 and 375 wide): axe clean with the
   cards folded and opened; the hints on PO 381 as above.
+
+## As built — a PO line for less than the requisition needs (8 Nov 2026)
+
+Asked by the user (PO 345 edit: "required quantity 2 but not in stock, so the purchaser changes the
+quantity — how is it managed?"). Before: the quantity could already go down to any amount (capped at
+what the requisition still needs), but silently — no reason, the rest drifted to To order with nothing
+saying why, it could never be closed, the PR stayed "Partly ordered" and the indent's raiser was not
+told. Decided with the user:
+
+| Question | Decision |
+| --- | --- |
+| The rest | **The purchaser picks per line** on saving: **order later** (waits on To order) or **close it** (not to be ordered). |
+| Reason | **Required, from a list**: vendor short of stock, sold in packs, over budget, no longer needed, other (with a note). |
+| More than the requisition | **No**: the cap stays; buying more needs a new indent. |
+| Who sees it | **On the PI in the app** (page and list), quantities only; no SMS / e-mail. |
+
+- Migration **0337**: `purchase_order_lines.short_reason` / `short_note` / `close_rest` (a close needs a
+  reason; Other needs a note); `purchase_requisition_lines.closed_reason` / `closed_note` / `closed_by`
+  / `closed_at` (closed on To order).
+- `purchase-order-core.ts`: `CLOSED_REST` (closed on To order, or by a **live** PO line with
+  `close_rest` — so a cancelled or rejected PO gives the whole line back to To order, and an amendment
+  copies the choice), `TO_ORDER` (bought, not all on live POs, rest not closed) used by To order, its
+  count, drafting from it, the dashboard and the drafts made on approval; `CLOSED_PLACED` (closed on
+  To order or by a **placed** PO line) makes `refreshOrdered` count the line as done for the PR's
+  **Ordered** status and the indent's route. `LINE_ORDERING` + `orderingWords`: "Ordered 3 of 4 NOS on
+  PO/… · the rest closed: No longer needed" / "· the rest to order later: …" / "· the rest still to
+  order" — on the PI's lines (`ordered`; "(the requisition line also covers other indents)" when
+  consolidated) and the PR's lines. The PI list row's `partClosed` ("Ordered · part closed").
+- `PUT /purchase/orders/:id`: a line below `max_qty` needs `shortReason` + `shortAction` (`later` |
+  `close`), Other a `shortNote` (`purchase.short_reason`, 400); a line back at full clears them. The
+  amendment's copy now also keeps make and model (it dropped them before). **What changed** adds the
+  reason and the rest's fate to a lowered quantity.
+- `POST /purchase/to-order/close` {lineIds, reason, note} (purchase.order.manage): lines still to order
+  closed with the reason (409 when one no longer waits); the PR / indents refreshed; audited
+  `purchase.to_order.close`. To order lines carry `needed` and `short` (which PO took less, and why).
+- Admin: the PO form's amber box under a lowered line (why, note, the rest: order later / close);
+  the PO page's line note; To order shows "(of N)" and why, and **Close lines not to be ordered**
+  (`ConfirmAction` gains `select` and an optional reason); the PR and PI pages show each line's
+  ordering; the PI list "· part closed". Staff app: the PO page's line note, the PI page's line
+  ordering, the PI list "· part closed". The To order card title's PR link is underlined (axe).
+- Tests: `purchase-orders` — refused without a reason and for Other without a note; later vs close
+  on To order; the PR part ordered with each line's words; closing on To order (403 for a teacher,
+  400 Other without a note, 409 twice) makes the PR ordered; a rate-contract indent's line ordered 6 of
+  10 with the rest closed shows on the teacher's PI (no rates) and the list's `partClosed`.

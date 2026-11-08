@@ -242,6 +242,11 @@ export default async function StaffIndentPage({
                           Bought though the store has it: {l.stockReason}
                         </span>
                       ) : null}
+                      {l.ordered ? (
+                        <span className="ep-field__help" style={{ display: 'block' }}>
+                          <strong>{l.ordered}</strong>
+                        </span>
+                      ) : null}
                       {l.fileId ? (
                         <span
                           className="ep-field__help"

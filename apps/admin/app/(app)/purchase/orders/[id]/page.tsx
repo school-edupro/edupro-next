@@ -18,6 +18,7 @@ import {
   RECEIPT_KIND,
   RECEIPT_STATUS,
   RECEIPT_STATUS_OF_ORDER,
+  shortText,
   TIER,
   type IndentStep,
   type OrderDetail,
@@ -447,6 +448,12 @@ export default async function OrderPage({
                           {[l.make ? `Make: ${l.make}` : null, l.model ? `Model: ${l.model}` : null]
                             .filter(Boolean)
                             .join(' · ')}
+                        </span>
+                      ) : null}
+                      {l.shortReason ? (
+                        <span className="ep-mr-col__desc">
+                          Less than the requisition needs: {shortText(l.shortReason, l.shortNote)} ·
+                          the rest {l.closeRest ? 'closed (not to be ordered)' : 'to order later'}
                         </span>
                       ) : null}
                       {l.contractRate !== null ? (

@@ -18,6 +18,7 @@ export function ConfirmAction({
   confirmVariant = 'primary',
   reason,
   choices,
+  select,
   blocked,
 }: {
   action: (fd: FormData) => void | Promise<void>;
@@ -28,8 +29,13 @@ export function ConfirmAction({
   confirmLabel: string;
   variant?: ButtonVariant;
   confirmVariant?: 'primary' | 'accent' | 'danger';
-  /** When set, a reason of at least 3 characters is required and posted as `reason`. */
-  reason?: { label: string; placeholder?: string };
+  /**
+   * When set, a reason of at least 3 characters is required and posted as `reason`; `optional` makes
+   * it a free note.
+   */
+  reason?: { label: string; placeholder?: string; optional?: boolean };
+  /** A pick in the dialog (required), posted as `name` (docs/design/83, "As built — a PO line for less"). */
+  select?: { name: string; label: string; options: Array<{ value: string; label: string }> };
   /**
    * Ticks in the dialog (docs/design/82), each ticked one posted as `name` = its value; at least one
    * must be ticked. A disabled tick shows why in its label.
@@ -47,6 +53,7 @@ export function ConfirmAction({
   const [text, setText] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [chosen, setChosen] = useState('');
   const [picked, setPicked] = useState<string[]>(
     choices?.items.filter((i) => i.checked && !i.disabled).map((i) => i.value) ?? [],
   );
@@ -57,6 +64,7 @@ export function ConfirmAction({
         <input key={k} type="hidden" name={k} value={v} />
       ))}
       {reason ? <input type="hidden" name="reason" value={text} /> : null}
+      {select ? <input type="hidden" name={select.name} value={chosen} /> : null}
       {choices
         ? picked.map((v) => <input key={v} type="hidden" name={choices.name} value={v} />)
         : null}
@@ -84,7 +92,11 @@ export function ConfirmAction({
                       setError('Tick at least one.');
                       return;
                     }
-                    if (reason && text.trim().length < 3) {
+                    if (select && !chosen) {
+                      setError(`Pick: ${select.label.toLowerCase()}.`);
+                      return;
+                    }
+                    if (reason && !reason.optional && text.trim().length < 3) {
                       setError('Give a reason of at least 3 characters.');
                       return;
                     }
@@ -136,11 +148,44 @@ export function ConfirmAction({
               ) : null}
             </fieldset>
           ) : null}
+          {select ? (
+            <label
+              className="ep-field"
+              htmlFor={`${reasonId}-pick`}
+              style={{ marginTop: 'var(--sp-3)' }}
+            >
+              <span className="ep-field__label">
+                {select.label}
+                <span aria-hidden="true"> *</span>
+              </span>
+              <select
+                id={`${reasonId}-pick`}
+                className="ep-select"
+                value={chosen}
+                onChange={(e) => {
+                  setChosen(e.target.value);
+                  setError(null);
+                }}
+              >
+                <option value="">Pick one</option>
+                {select.options.map((o) => (
+                  <option key={o.value} value={o.value}>
+                    {o.label}
+                  </option>
+                ))}
+              </select>
+              {error && !reason && !choices ? (
+                <span className="ep-field__error" role="alert">
+                  {error}
+                </span>
+              ) : null}
+            </label>
+          ) : null}
           {reason ? (
             <label className="ep-field" htmlFor={reasonId} style={{ marginTop: 'var(--sp-3)' }}>
               <span className="ep-field__label">
                 {reason.label}
-                <span aria-hidden="true"> *</span>
+                {reason.optional ? null : <span aria-hidden="true"> *</span>}
               </span>
               <textarea
                 id={reasonId}

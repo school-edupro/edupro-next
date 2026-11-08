@@ -20,6 +20,36 @@ export const PLACED = `po.status IN ('approved', 'sent', 'closed')`;
 export const ON_ORDER = `COALESCE((SELECT sum(pol.quantity) FROM purchase_order_lines pol JOIN purchase_orders po ON po.id = pol.order_id
     WHERE pol.requisition_line_id = rl.id AND ${LIVE_PO}), 0)`;
 
+/**
+ * A requisition line whose rest is not to be ordered (docs/design/83, "As built — a PO line for less"):
+ * closed on To order, or by a live PO line that took less with "close the rest".
+ */
+// eslint-disable-next-line no-restricted-syntax -- LIVE_PO is a fixed fragment
+export const CLOSED_REST = `(rl.closed_at IS NOT NULL OR EXISTS (SELECT 1 FROM purchase_order_lines pcl JOIN purchase_orders po ON po.id = pcl.order_id
+    WHERE pcl.requisition_line_id = rl.id AND pcl.close_rest AND ${LIVE_PO}))`;
+
+/** A requisition line still to order: bought, not all on live POs, and its rest not closed. */
+export const TO_ORDER = `rl.fulfil = 'buy' AND rl.quantity > ${ON_ORDER} AND NOT ${CLOSED_REST}`;
+
+/** Done with: closed on To order, or closed by a placed PO line. */
+// eslint-disable-next-line no-restricted-syntax -- PLACED is a fixed fragment
+export const CLOSED_PLACED = `(rl.closed_at IS NOT NULL OR EXISTS (SELECT 1 FROM purchase_order_lines pcl JOIN purchase_orders po ON po.id = pcl.order_id
+    WHERE pcl.requisition_line_id = rl.id AND pcl.close_rest AND ${PLACED}))`;
+
+/** Why a PO line is for less than the requisition needs (and why a line is closed on To order). */
+export const SHORT_REASONS = {
+  vendor_stock: 'Vendor short of stock',
+  pack_size: 'Sold in packs',
+  budget: 'Over budget',
+  not_needed: 'No longer needed',
+  other: 'Other',
+} as const;
+export type ShortReason = keyof typeof SHORT_REASONS;
+export const shortWords = (reason: string | null, note: string | null) =>
+  reason
+    ? `${SHORT_REASONS[reason as ShortReason] ?? reason}${note ? `: ${note}` : ''}`
+    : (note ?? '');
+
 const stateName = (code: string | null) =>
   code ? (GST_STATES[code as keyof typeof GST_STATES] ?? code) : null;
 
@@ -202,14 +232,15 @@ export async function addRequisitionLines(c: PoolClient, orderId: string, lineId
     exempt: boolean;
     contract_id: string | null;
     make: string | null;
+    closed: boolean;
   }>(
-    // eslint-disable-next-line no-restricted-syntax -- ON_ORDER is a fixed fragment
+    // eslint-disable-next-line no-restricted-syntax -- ON_ORDER and CLOSED_REST are fixed fragments
     `SELECT rl.id::text, rl.item_id::text, COALESCE(i.name, rl.free_text) AS description, h.code AS hsn,
             (rl.quantity - ${ON_ORDER})::text AS remaining, rl.uom_id::text, COALESCE(rl.rate, rl.est_rate)::text AS rate,
             -- a reverse-charge line takes the SAC's rate (the school pays it whoever the vendor is)
             (CASE WHEN COALESCE(h.reverse_charge, false) THEN COALESCE(i.gst_rate, h.gst_rate, 0)
                   ELSE COALESCE(rl.gst_rate, i.gst_rate, h.gst_rate, 0) END)::text AS gst, COALESCE(h.reverse_charge, false) AS reverse_charge,
-            COALESCE(h.exempt, false) AS exempt, rl.contract_id::text, i.brand AS make
+            COALESCE(h.exempt, false) AS exempt, rl.contract_id::text, i.brand AS make, ${CLOSED_REST} AS closed
        FROM purchase_requisition_lines rl
        LEFT JOIN purchase_items i ON i.id = rl.item_id
        LEFT JOIN purchase_hsn h ON h.id = i.hsn_id
@@ -225,7 +256,7 @@ export async function addRequisitionLines(c: PoolClient, orderId: string, lineId
   ).rows[0]!.n;
   let n = seq;
   for (const l of rows.rows) {
-    if (Number(l.remaining) <= 0) continue;
+    if (Number(l.remaining) <= 0 || l.closed) continue;
     n += 1;
     await c.query(
       `INSERT INTO purchase_order_lines (school_id, order_id, seq, requisition_line_id, item_id, description, hsn_code, quantity, uom_id,
@@ -272,7 +303,7 @@ export async function draftOrdersFor(
     `SELECT rl.id::text, rl.vendor_id::text,
             (SELECT q.quote_ref FROM purchase_quotes q WHERE q.requisition_id = rl.requisition_id AND q.vendor_id = rl.vendor_id) AS quote_ref
        FROM purchase_requisition_lines rl JOIN vendors v ON v.id = rl.vendor_id AND v.status = 'active'
-      WHERE rl.requisition_id = $1 AND rl.fulfil = 'buy' AND rl.quantity > ${ON_ORDER}
+      WHERE rl.requisition_id = $1 AND ${TO_ORDER}
       ORDER BY rl.seq`,
     [requisitionId],
   );
@@ -309,10 +340,11 @@ export async function refreshOrdered(c: PoolClient, requisitionId: string) {
     await c.query<{ buy: number; full: number; some: number }>(
       // eslint-disable-next-line no-restricted-syntax -- PLACED is a fixed fragment
       `SELECT count(*)::int AS buy,
-              (count(*) FILTER (WHERE placed >= quantity))::int AS full,
+              (count(*) FILTER (WHERE placed >= quantity OR closed))::int AS full,
               (count(*) FILTER (WHERE placed > 0))::int AS some
          FROM (SELECT rl.quantity, COALESCE((SELECT sum(pol.quantity) FROM purchase_order_lines pol JOIN purchase_orders po ON po.id = pol.order_id
-                                              WHERE pol.requisition_line_id = rl.id AND ${PLACED}), 0) AS placed
+                                              WHERE pol.requisition_line_id = rl.id AND ${PLACED}), 0) AS placed,
+                      ${CLOSED_PLACED} AS closed
                  FROM purchase_requisition_lines rl WHERE rl.requisition_id = $1 AND rl.fulfil = 'buy') x`,
       [requisitionId],
     )
@@ -329,7 +361,7 @@ export async function refreshOrdered(c: PoolClient, requisitionId: string) {
     `UPDATE purchase_indents pi SET route = CASE WHEN ok THEN 'ordered' WHEN pi.bypass_rule IS NOT NULL THEN 'to_order' ELSE 'in_requisition' END,
             updated_at = now()
        FROM (SELECT il.indent_id,
-                    bool_and(rl.fulfil = 'store' OR COALESCE((SELECT sum(pol.quantity) FROM purchase_order_lines pol JOIN purchase_orders po ON po.id = pol.order_id
+                    bool_and(rl.fulfil = 'store' OR ${CLOSED_PLACED} OR COALESCE((SELECT sum(pol.quantity) FROM purchase_order_lines pol JOIN purchase_orders po ON po.id = pol.order_id
                                                                WHERE pol.requisition_line_id = rl.id AND ${PLACED}), 0) >= rl.quantity) AS ok
                FROM purchase_indent_lines il
                JOIN purchase_requisition_sources src ON src.indent_line_id = il.id
@@ -342,4 +374,52 @@ export async function refreshOrdered(c: PoolClient, requisitionId: string) {
     [requisitionId],
   );
   return status;
+}
+
+/**
+ * What became of a requisition line, for the indents behind it (docs/design/83, "As built — a PO line
+ * for less"): quantities only, never rates. Placed POs count; a draft PO does not yet.
+ */
+// eslint-disable-next-line no-restricted-syntax -- PLACED is a fixed fragment
+export const LINE_ORDERING = `rl.fulfil, rl.quantity::text AS needed,
+    COALESCE((SELECT sum(pol.quantity) FROM purchase_order_lines pol JOIN purchase_orders po ON po.id = pol.order_id
+               WHERE pol.requisition_line_id = rl.id AND ${PLACED}), 0)::text AS placed,
+    (SELECT string_agg(CASE WHEN po.revision > 0 THEN po.number || '-R' || po.revision ELSE po.number END, ', ' ORDER BY po.number)
+       FROM purchase_order_lines pol JOIN purchase_orders po ON po.id = pol.order_id
+      WHERE pol.requisition_line_id = rl.id AND ${PLACED}) AS orders,
+    rl.closed_reason, rl.closed_note,
+    (SELECT json_build_object('reason', pol.short_reason, 'note', pol.short_note, 'close', pol.close_rest)
+       FROM purchase_order_lines pol JOIN purchase_orders po ON po.id = pol.order_id
+      WHERE pol.requisition_line_id = rl.id AND pol.short_reason IS NOT NULL AND ${PLACED}
+      ORDER BY pol.close_rest DESC, po.approved_at DESC NULLS LAST LIMIT 1) AS short`;
+
+export interface LineOrderingRow {
+  fulfil: string;
+  needed: string;
+  placed: string;
+  orders: string | null;
+  closed_reason: string | null;
+  closed_note: string | null;
+  short: { reason: string; note: string | null; close: boolean } | null;
+}
+
+/** The line's ordering in words: "Ordered 1 of 2 on PO/… · the rest closed: Vendor short of stock". */
+export function orderingWords(r: LineOrderingRow, uom: string): string | null {
+  if (r.fulfil !== 'buy') return null;
+  const q = (n: number) => n.toLocaleString('en-IN', { maximumFractionDigits: 3 });
+  const needed = Number(r.needed);
+  const placed = Number(r.placed);
+  const on = r.orders ? ` on ${r.orders}` : '';
+  if (placed >= needed - 0.0005) return `Ordered ${q(needed)} ${uom}${on}`;
+  const closed = r.closed_reason
+    ? shortWords(r.closed_reason, r.closed_note)
+    : r.short?.close
+      ? shortWords(r.short.reason, r.short.note)
+      : null;
+  const head = placed > 0 ? `Ordered ${q(placed)} of ${q(needed)} ${uom}${on}` : 'Not ordered';
+  if (closed)
+    return placed > 0 ? `${head} · the rest closed: ${closed}` : `${head}: closed — ${closed}`;
+  if (r.short && !r.short.close)
+    return `${head} · the rest to order later: ${shortWords(r.short.reason, r.short.note)}`;
+  return placed > 0 ? `${head} · the rest still to order` : 'Not ordered yet';
 }
