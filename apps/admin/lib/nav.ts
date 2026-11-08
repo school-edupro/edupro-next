@@ -587,22 +587,11 @@ export const NAV: Array<{
         permission: 'purchase.indent.raise',
       },
       {
-        href: '/purchase/to-requisition',
-        label: 'toRequisition',
-        permission: 'purchase.requisition.manage',
-      },
-      {
         href: '/purchase/requisitions',
         label: 'purchaseRequisitions',
         permission: 'purchase.requisition.manage',
       },
-      { href: '/purchase/to-order', label: 'toOrder', permission: 'purchase.order.manage' },
       { href: '/purchase/orders', label: 'purchaseOrders', permission: 'purchase.order.manage' },
-      {
-        href: '/purchase/emergency',
-        label: 'emergencyPurchase',
-        permission: 'purchase.emergency.record',
-      },
       { href: '/purchase/reports', label: 'purchaseReports', permission: 'purchase.report.view' },
       { href: '/purchase/stores', label: 'purchaseStores', permission: 'purchase.store.view' },
       { href: '/purchase/stock', label: 'stockInHand', permission: 'purchase.store.view' },
@@ -615,6 +604,7 @@ export const NAV: Array<{
       { href: '/purchase/reorder', label: 'reorder', permission: 'purchase.store.view' },
       { href: '/purchase/assets', label: 'assetRegister', permission: 'purchase.store.view' },
       { href: '/purchase/condemnations', label: 'condemnation', permission: 'purchase.store.view' },
+      // To requisition, To order and Emergency purchase open from their lists (buttons at the top);
       // the set-up's screens (vendors, vendor approvals, items / units / HSN, payment terms, who
       // approves, settings) open from Purchase set-up, not the menu (docs/design/83)
       { href: '/purchase', label: 'purchaseHome', permission: 'purchase.master.view' },

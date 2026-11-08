@@ -1199,3 +1199,8 @@ the menu; **section cards with links**.
   of the notices underlined.
 - Checked in a browser (dev-purchase): none of the six in the menu, Purchase set-up there once; the three
   sections; Vendors, Items / HSN and Settings highlight Purchase set-up and lead back to it; axe clean.
+- Later the same day ("Emergency purchase, To requisition, To order: not in the side menu"): those three
+  left the menu too. They open from their lists' buttons — Purchase Requisitions → **To requisition (N)**
+  (was "From indents"), Purchase Orders → **To order (N)** and **Record an emergency purchase** — and the
+  shell's `ALSO` lights up Purchase Requisitions / Purchase Orders on them; their breadcrumbs already led
+  back.

@@ -240,7 +240,7 @@ screen — under the school's letterhead with the filters and when it was made. 
 
 ## Purchase Requisitions
 
-**Purchase → To requisition** lists the approved PIs waiting for the purchase office. Tick the ones to
+**Purchase Requisitions → To requisition** (the button at the top) lists the approved PIs waiting for the purchase office. Tick the ones to
 buy together and **Make a requisition**: the same item's lines are added up into one line and each PI
 stays linked to it. PIs of several departments make a **combined** PR, approved by the department set
 on Purchase settings ("the department whose levels approve a PR combining departments"). **Close** a
@@ -315,7 +315,7 @@ On the PR:
 ## Purchase Orders
 
 **Purchase → Purchase Orders.** Approving a requisition drafts one PO per chosen vendor; a PI whose lines
-are all on rate contracts drafts its PO at once. **Purchase → To order** lists what is left to order —
+are all on rate contracts drafts its PO at once. **Purchase Orders → To order** (the button at the top) lists what is left to order —
 lines of a cancelled or rejected PO, or of a requisition the system approved under a department's limit
 (no vendor chosen yet), and the rest of a line a PO took less of (it says why, e.g. "1 on PO/…: Vendor
 short of stock"): tick the lines, pick the vendor, **Draft the PO**. **Close lines not to be ordered**
@@ -339,7 +339,7 @@ On a draft PO:
   not typed), exempt ("Exempt (HSN / SAC …)", 0%) and reverse charge; an item with its own GST % keeps it
   for its own code. A code not in the master: type the GST % yourself, and add the code to the master. A rate-contract line keeps the contract rate unless you give the reason.
   **Remove line N from this PO** takes a line off this draft without cancelling anything: it waits on
-  **Purchase → To order**, to be ordered later or from another vendor.
+  **Purchase Orders → To order**, to be ordered later or from another vendor.
 - **Less than the requisition needs** (e.g. 2 needed, the vendor has 1): type the lower quantity; a box
   asks **Why less** (Vendor short of stock, Sold in packs, Over budget, No longer needed, Other — write
   why) and what happens to **the rest**: **Order later** (it waits on To order, from this or another
@@ -409,7 +409,7 @@ On a draft PO:
 ## Emergency purchase
 
 When something could not wait (a burst pipe, a broken generator), the purchase office records it after
-the fact: **Purchase Orders → Record an emergency purchase** — the vendor, what was bought (item or in
+the fact: **Purchase Orders → Record an emergency purchase** (the button at the top) — the vendor, what was bought (item or in
 words, quantity, rate, GST), the vendor's **bill** (PDF or photo) and **why it could not wait**. Each
 line needs the item (or words and a unit), the quantity and the rate paid before GST; **Add a line** for
 more (up to 50). If something is missing the form says which line and what ("Line 1: the rate is

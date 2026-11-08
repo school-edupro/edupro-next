@@ -91,7 +91,7 @@ export default async function RequisitionsPage({
                   href="/purchase/to-requisition"
                   style={{ whiteSpace: 'nowrap' }}
                 >
-                  From indents ({data.toRequisition})
+                  To requisition ({data.toRequisition})
                 </a>
                 {direct ? (
                   <a

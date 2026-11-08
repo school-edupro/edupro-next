@@ -59,6 +59,9 @@ export async function Shell({
     ],
     // Purchase set-up stands for its screens that left the menu (items, units and HSN are masters)
     '/purchase': ['/masters/purchase'],
+    // the purchase work lists' own pages, opened from their buttons (not the menu)
+    '/purchase/requisitions': ['/purchase/to-requisition'],
+    '/purchase/orders': ['/purchase/to-order', '/purchase/emergency'],
     '/exams/masters': [
       '/exams/indicators',
       '/exams/indicator-areas',
