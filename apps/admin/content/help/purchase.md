@@ -485,7 +485,7 @@ stock found different later is put right by a physical count.
 free stock — in stock less reserved — falls to it, the item is listed for reordering), the **reorder
 quantity** and the **maximum**.
 
-**Stock in hand** (Purchase → Stock in hand): every store's items with quantity, reserved, average
+**Stock in hand** (Purchase → Stores → **Stock in hand**, the button at the top): every store's items with quantity, reserved, average
 rate, value, the reorder level and the earliest expiry; filter by store, category, a search or **below
 the reorder level**; Excel or PDF. Open an item for its **stock register**: every move in and out with
 the balance and value after it, the batches in hand, and the balance in each store.
@@ -495,7 +495,7 @@ issues go out at the average. The register is never changed: a mistake is put ri
 
 ## Receiving goods and services
 
-**Purchase → To receive** lists the approved and sent POs the vendor still owes something on, the
+**Purchase → Goods receipts → To receive** (the button at the top) lists the approved and sent POs the vendor still owes something on, the
 earliest delivery date first and the late ones marked. When the delivery comes, the **store keeper**
 (or the purchase office — never the person who made the PO) presses **Receive goods**:
 
@@ -536,8 +536,12 @@ accepted. Each receipt shows that **deemed acceptance** date; past it the receip
 dashboard counts them. The acceptance date (or the deemed date) starts the vendor's 45-day payment
 clock.
 
-The **PDF** on each receipt is the goods received and inspection note (or the completion certificate)
-with who received and who inspected it. **Reports**: the **Goods receipt register** and **Pending
+The **PDF** on each receipt is the goods received and inspection note (or the completion certificate),
+printed like the indent: the school's letterhead (logo, name, address, the title, its number and when it
+was made), the details, the lines and the value accepted, then boxes as on the PO — **Received by** and
+**Inspected by** (or each committee member) filled in: signature (from the employee record), name, Emp.
+ID · designation and when — and **Head of department** and **Principal** to sign by hand. The issue slip,
+return note, transfer note, count sheet and condemnation print with the same letterhead and boxes. **Reports**: the **Goods receipt register** and **Pending
 deliveries** (late only, if you like).
 
 ## Issues, returns and transfers

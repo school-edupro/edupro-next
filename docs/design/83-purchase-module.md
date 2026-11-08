@@ -1204,3 +1204,31 @@ the menu; **section cards with links**.
   (was "From indents"), Purchase Orders → **To order (N)** and **Record an emergency purchase** — and the
   shell's `ALSO` lights up Purchase Requisitions / Purchase Orders on them; their breadcrumbs already led
   back.
+
+## As built — store menu, store documents like the indent's, the store keeper's dev login (8 Nov 2026)
+
+Asked by the user: "To receive, Stock in hand not in the side menu; the GRN PDF like the indent's; a store
+keeper dev login". Decided with the user: **GRN and all store slips**; GRN boxes **like the PO's**;
+**dev-store, keeper of the Main store**.
+
+- Menu: To receive and Stock in hand left it; Goods receipts → **To receive** (renamed from "Receive
+  against a PO") and Stores → **Stock in hand** open them; the shell's `ALSO` lights up Goods receipts /
+  Stores on them (`/purchase/stock/…` too).
+- `purchase-doc-sign.ts` (new): `SignBox`, `signerOf` (by user or employee: Emp. ID, designation, the
+  signature on the employee record, "Received on 08-11-2026 04:11 PM"), `blankBox`, `whenOf`,
+  `drawSignBoxes` (rows of up to four, as on the PO; a long designation goes under the ID). The PO's own
+  signer now uses `signerOf`.
+- GRN / completion certificate PDF: `drawLetterhead` as the indent (title, "No. … · Generated on: …"),
+  the details, lines and value as before, then boxes: **Received by** (the receipt's maker, when made),
+  **Inspected by** per decided step ("Accepted on" / "Rejected on") or each committee member who signed
+  ("Signed on"), an empty Inspected by while none has, then **Head of department** and **Principal**
+  empty; "Printed …" and the page number at the foot. Data from `purchaseHead` (the register letterhead).
+- Store slips (`purchase-stock-pdf.ts`: issue slip, return note, transfer note, count sheet,
+  condemnation): the same letterhead and boxes; `pdfSchool` now gives the register letterhead and
+  `generatedOn`. Their boxes carry the names and dates the slips knew (no Emp. ID / signature lookup yet).
+- **dev-store** "Sunil Store": demo seed user + employee **SK01** (Store Keeper, Administration), the
+  built-in **Store keeper** role in Alpha, keeper of the **Main store** (MAIN) when it exists; in the admin
+  and staff sign-in lists; applied to Alpha now.
+- Checked: purchase suites 89/89 (then receipts, issues, stores, assets, orders 42/42 after a slip fix);
+  Alpha's GRN/2026-27/0001 and a sample issue slip rendered and looked at; dev-store signs in, its menu
+  has neither entry, the buttons open them with the parent lit; axe clean.

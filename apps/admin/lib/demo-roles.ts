@@ -17,6 +17,10 @@ export const DEMO_ROLES: Array<{ sub: string; label: string }> = [
     sub: 'dev-purchase',
     label: 'Purchase Officer (indents to PRs, rate contracts and quotes, PRs to POs, stores)',
   },
+  {
+    sub: 'dev-store',
+    label: 'Store Keeper (Main store: goods receipts, issues, returns, transfers, counts)',
+  },
   { sub: 'dev-hostel', label: 'Hostel Clerk (set-up, beds, registers, hostel withdrawals)' },
   { sub: 'dev-warden', label: 'Warden (head warden of a hostel; roll-call in the staff app)' },
   {

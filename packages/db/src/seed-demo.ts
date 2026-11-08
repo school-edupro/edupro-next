@@ -113,6 +113,16 @@ const DEMO_USERS: DemoUser[] = [
       'Purchase Officer (employee PO01): approved indents to PRs, quotes and rate contracts, PRs to POs, vendors, masters, stores, reports',
   },
   {
+    sub: 'dev-store',
+    name: 'Sunil Store',
+    mobile: '9999999922',
+    email: 'store@alpha.example.test',
+    personType: 'employee',
+    roles: { ALPHA: ['store_keeper'] },
+    description:
+      'Store keeper (employee SK01), keeper of the Main store: receives goods (GRN), issues, returns, transfers, counts',
+  },
+  {
     sub: 'dev-group',
     name: 'Gita Group Admin',
     mobile: '9999999901',
@@ -648,6 +658,24 @@ async function main(): Promise<void> {
            ON CONFLICT (school_id, employee_code) DO UPDATE SET user_id = COALESCE(employees.user_id, EXCLUDED.user_id)`,
           [school.id, userIds['dev-purchase']],
         );
+      // the store keeper's login (dev-store) as an employee of Alpha (SK01), the keeper of its main store
+      // when the store exists (Purchase → Stores makes it)
+      if (schoolCode === 'ALPHA') {
+        await c.query(
+          `INSERT INTO employees (school_id, employee_code, first_name, last_name, dob, gender, employee_type, designation, department, joined_on, mobile, email, user_id, legacy_ref)
+           VALUES ($1, 'SK01', 'Sunil', 'Store', '1985-09-21', 'male', 'non_teaching', 'Store Keeper', 'Administration', '2018-04-01',
+                   '9999999922', 'store@alpha.example.test', $2, 'SK01')
+           ON CONFLICT (school_id, employee_code) DO UPDATE SET user_id = COALESCE(employees.user_id, EXCLUDED.user_id)`,
+          [school.id, userIds['dev-store']],
+        );
+        await c.query(
+          `INSERT INTO store_keepers (school_id, store_id, employee_id)
+           SELECT $1, s.id, e.id FROM stores s JOIN employees e ON e.school_id = s.school_id AND e.employee_code = 'SK01'
+            WHERE s.school_id = $1 AND s.code = 'MAIN'
+           ON CONFLICT DO NOTHING`,
+          [school.id],
+        );
+      }
       for (const [i, [code, designation, department]] of empList.entries()) {
         const reportsTo =
           code === 'E001'

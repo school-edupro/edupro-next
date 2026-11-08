@@ -64,8 +64,12 @@ export default async function ReceiptsPage({
         description="What came against purchase orders and the services' completion certificates. The keeper records what came; the department inspects and accepts it (the purchase committee above its limit); only what is accepted enters the store, and what was bought for an indent goes straight to that department."
         actions={
           receives ? (
-            <a className="ep-btn ep-btn--primary ep-btn--sm" href="/purchase/to-receive">
-              Receive against a PO
+            <a
+              className="ep-btn ep-btn--primary ep-btn--sm"
+              href="/purchase/to-receive"
+              style={{ whiteSpace: 'nowrap' }}
+            >
+              To receive
             </a>
           ) : null
         }

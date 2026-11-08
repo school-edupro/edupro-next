@@ -62,6 +62,8 @@ export async function Shell({
     // the purchase work lists' own pages, opened from their buttons (not the menu)
     '/purchase/requisitions': ['/purchase/to-requisition'],
     '/purchase/orders': ['/purchase/to-order', '/purchase/emergency'],
+    '/purchase/receipts': ['/purchase/to-receive'],
+    '/purchase/stores': ['/purchase/stock'],
     '/exams/masters': [
       '/exams/indicators',
       '/exams/indicator-areas',

@@ -8,6 +8,8 @@ import { requireTenant, type RequestContext } from '../../common/http/request-co
 import { STORAGE_DRIVER } from '../files/storage';
 import { WorkflowService, type InstanceRow } from '../workflow/workflow.service';
 import { syncFlow } from './purchase-flow';
+import { blankBox, signerOf, type SignBox } from './purchase-doc-sign';
+import { purchaseHead } from './purchase-head';
 import { purchaseReceiptPdf, type ReceiptPdfData } from './purchase-receipt-pdf';
 import { assetsFromReceipt } from './purchase-asset-core';
 import { postIssues, shareAmongIndents, type IssueShare } from './purchase-stock-core';
@@ -1386,36 +1388,18 @@ export class PurchaseReceiptsService implements OnModuleInit {
     return this.db.tenant(requireTenant(ctx), async (c) => {
       const g = await this.load(c, ctx, id);
       const lines = await this.receiptLines(c, id);
-      const school = (
-        await c.query<{ name: string; address: string | null; logo: string | null }>(
-          `SELECT sc.name,
-                  NULLIF(concat_ws(', ', NULLIF(btrim(sc.address->>'line1'), ''), NULLIF(btrim(sc.address->>'city'), ''),
-                         NULLIF(btrim(sc.address->>'state'), '')), '') AS address,
-                  NULLIF(sc.branding->>'logoFileId', '') AS logo
-             FROM schools sc WHERE sc.id = app.current_school_id()`,
-        )
-      ).rows[0]!;
-      let logo: ReceiptPdfData['logo'] = null;
-      if (school.logo && /^\d{1,18}$/.test(school.logo)) {
-        const f = await c.query<{ object_key: string; content_type: string }>(
-          `SELECT object_key, content_type FROM files WHERE id = $1 AND deleted_at IS NULL`,
-          [school.logo],
-        );
-        if (f.rows[0])
-          try {
-            logo = {
-              contentType: f.rows[0].content_type,
-              bytes: await this.storage.read(f.rows[0].object_key),
-            };
-          } catch {
-            logo = null;
-          }
-      }
+      const head = await purchaseHead(c, this.storage);
       const acted = g.workflow_instance_id
         ? (
-            await c.query<{ level: string; who: string; at: string }>(
+            await c.query<{
+              level: string;
+              who: string;
+              at: Date;
+              user_id: string;
+              status: string;
+            }>(
               // eslint-disable-next-line no-restricted-syntax -- PERSON is a fixed fragment
-              `SELECT s.name AS level, ${PERSON('u')} AS who, (s.acted_at AT TIME ZONE 'Asia/Kolkata')::date::text AS at
+              `SELECT s.name AS level, ${PERSON('u')} AS who, s.acted_at AS at, s.acted_by::text AS user_id, s.status
                  FROM workflow_steps s JOIN users u ON u.id = s.acted_by
                 WHERE s.instance_id = $1 AND s.status IN ('approved', 'rejected') ORDER BY s.level`,
               [g.workflow_instance_id],
@@ -1424,19 +1408,47 @@ export class PurchaseReceiptsService implements OnModuleInit {
         : [];
       const committee =
         g.inspection === 'committee' ? await this.committee(c, g.created_by, id) : [];
-      const inspectedBy =
-        g.inspection === 'committee'
-          ? committee
-              .filter((m) => m.signed_at)
-              .map((m) => ({
-                name: m.name,
-                role: m.role ?? m.designation ?? 'Committee member',
-                at: dmy(m.signed_at!.toISOString().slice(0, 10)),
-              }))
-          : acted.map((a) => ({ name: a.who, role: a.level, at: dmy(a.at) }));
+      // the boxes, as on the PO: who received it and who inspected it, filled from the system, then the
+      // head of department and the Principal to sign by hand
+      const read = (k: string) => this.storage.read(k);
+      const goods = g.kind === 'goods';
+      const signers: SignBox[] = [
+        await signerOf(c, read, {
+          as: goods ? 'Received by' : 'Reported by',
+          name: g.created_by_name,
+          userId: g.created_by,
+          at: g.created_at,
+          verb: goods ? 'Received on' : 'Reported on',
+        }),
+      ];
+      if (g.inspection === 'committee')
+        for (const m of committee.filter((x) => x.signed_at))
+          signers.push(
+            await signerOf(c, read, {
+              as: m.role ?? 'Committee member',
+              name: m.name,
+              userId: m.user_id,
+              at: m.signed_at,
+              verb: 'Signed on',
+            }),
+          );
+      else
+        for (const a of acted)
+          signers.push(
+            await signerOf(c, read, {
+              as: goods ? 'Inspected by' : 'Certified by',
+              name: a.who,
+              userId: a.user_id,
+              at: a.at,
+              verb: a.status === 'approved' ? 'Accepted on' : 'Rejected on',
+            }),
+          );
+      if (signers.length === 1) signers.push(blankBox(goods ? 'Inspected by' : 'Certified by'));
+      signers.push(blankBox('Head of department'), blankBox('Principal'));
       const data: ReceiptPdfData = {
-        school: { name: school.name, address: school.address },
-        logo,
+        school: { name: head.school, address: head.address || null },
+        logo: head.logo,
+        generatedOn: head.generatedOn,
         title: g.kind === 'goods' ? 'Goods Received and Inspection Note' : 'Completion Certificate',
         watermark:
           g.status === 'inspecting'
@@ -1494,8 +1506,7 @@ export class PurchaseReceiptsService implements OnModuleInit {
               ? null
               : Math.round(Number(l.unit_cost) * Number(l.accepted_qty) * 100) / 100,
         })),
-        receivedBy: g.created_by_name ?? '',
-        inspectedBy,
+        signers,
       };
       return {
         bytes: await purchaseReceiptPdf(data),

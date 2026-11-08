@@ -91,6 +91,7 @@ export default async function LoginPage({
                   { sub: 'dev-coordinator', label: 'Academic Coordinator' },
                   { sub: 'dev-principal', label: 'Principal' },
                   { sub: 'dev-warden', label: 'Warden (head warden, Girls Hostel)' },
+                  { sub: 'dev-store', label: 'Store Keeper (Main store)' },
                   { sub: 'dev-beta-teacher', label: 'Beta: Class Teacher III-A' },
                   { sub: 'dev-beta-subject', label: 'Beta: Maths Teacher I-A, II-A' },
                   { sub: 'dev-beta-coordinator', label: 'Beta: Academic Coordinator' },

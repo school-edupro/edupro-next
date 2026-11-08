@@ -1,17 +1,21 @@
 import { degrees, PDFDocument, StandardFonts, rgb, type PDFFont, type PDFPage } from 'pdf-lib';
+import { drawLetterhead, embedLogo } from '../../common/pdf/letterhead';
+import { drawSignBoxes, type SignBox } from './purchase-doc-sign';
 
 /**
  * The goods received and inspection note, or a service's completion certificate, as a PDF
- * (docs/design/84, part 7): A4, the school's band, the receipt's details (PO, vendor, department,
- * store, challan / invoice), per line ordered, received, refused, accepted and rejected with batch,
- * serial numbers, work done and reasons, the accepted value, and who received and who inspected it.
- * "NOT INSPECTED" across one still waiting; "CANCELLED" across a cancelled one.
+ * (docs/design/84, part 7; the look: docs/design/83, "As built — store documents like the indent's"):
+ * A4, the school's letterhead as the indent prints it (logo; name, address, title, number and when it was
+ * made), the receipt's details (PO, vendor, department, store, challan / invoice, status), per line
+ * ordered, received, refused, accepted and rejected with batch, serial numbers, work done and reasons, the
+ * accepted value, and the signature boxes as on the PO — who received it and who inspected it (signature,
+ * name, Emp. ID · designation, when), then the head of department and the Principal to sign. "NOT
+ * INSPECTED" across one still waiting; "CANCELLED" across a cancelled one.
  */
 
 const A4: [number, number] = [595.28, 841.89];
 const M = 36;
 const W = A4[0] - 2 * M;
-const NAVY = rgb(0, 0.149, 0.365);
 const INK = rgb(0.043, 0.122, 0.227);
 const MUTED = rgb(0.357, 0.4, 0.463);
 const LINE = rgb(0.851, 0.878, 0.918);
@@ -36,6 +40,8 @@ export interface ReceiptPdfData {
   title: string;
   watermark: string | null;
   number: string;
+  /** 08-11-2026 06:15 PM, India */
+  generatedOn: string;
   receivedOn: string;
   order: string;
   vendor: string;
@@ -57,8 +63,8 @@ export interface ReceiptPdfData {
     detail: string;
     value: number | null;
   }>;
-  receivedBy: string;
-  inspectedBy: Array<{ name: string; role: string; at: string }>;
+  /** received by, inspected by (each inspector or committee member), then boxes to sign by hand */
+  signers: SignBox[];
 }
 
 function wrap(text: string, font: PDFFont, size: number, width: number): string[] {
@@ -91,16 +97,7 @@ export async function purchaseReceiptPdf(d: ReceiptPdfData): Promise<Buffer> {
   pdf.setAuthor(latin(d.school.name));
   const font = await pdf.embedFont(StandardFonts.Helvetica);
   const bold = await pdf.embedFont(StandardFonts.HelveticaBold);
-  let logo: Awaited<ReturnType<PDFDocument['embedPng']>> | null = null;
-  if (d.logo)
-    try {
-      logo =
-        d.logo.contentType === 'image/png'
-          ? await pdf.embedPng(new Uint8Array(d.logo.bytes))
-          : await pdf.embedJpg(new Uint8Array(d.logo.bytes));
-    } catch {
-      logo = null;
-    }
+  const logo = await embedLogo(pdf, d.logo);
 
   let page: PDFPage = pdf.addPage(A4);
   let y = 0;
@@ -116,21 +113,22 @@ export async function purchaseReceiptPdf(d: ReceiptPdfData): Promise<Buffer> {
     const xx = o.right !== undefined ? o.right - f.widthOfTextAtSize(t, size) : x;
     page.drawText(t, { x: xx, y: yy, size, font: f, color: o.color ?? INK });
   };
+  // the letterhead, as the indent prints it: logo left; name, address, title, details centred
   const head = () => {
-    const top = A4[1];
-    page.drawRectangle({ x: 0, y: top - 70, width: A4[0], height: 70, color: NAVY });
-    let x = M;
-    if (logo) {
-      const s = Math.min(42 / logo.width, 42 / logo.height);
-      page.drawImage(logo, { x: M, y: top - 56, width: logo.width * s, height: logo.height * s });
-      x = M + 52;
-    }
-    text(d.school.name, x, top - 32, { size: 15, f: bold, color: rgb(1, 1, 1) });
-    if (d.school.address)
-      text(d.school.address.slice(0, 120), x, top - 47, {
-        size: 8,
-        color: rgb(0.86, 0.9, 0.96),
-      });
+    y = drawLetterhead(page, { regular: font, bold }, logo, {
+      school: d.school.name,
+      address: d.school.address,
+      title: d.title,
+      details: `No. ${d.number} · Generated on: ${d.generatedOn}`,
+      margin: 30,
+    });
+    page.drawLine({
+      start: { x: M, y: y + 4 },
+      end: { x: M + W, y: y + 4 },
+      thickness: 0.8,
+      color: LINE,
+    });
+    y -= 10;
     if (d.watermark)
       page.drawText(latin(d.watermark), {
         x: 110,
@@ -141,7 +139,6 @@ export async function purchaseReceiptPdf(d: ReceiptPdfData): Promise<Buffer> {
         opacity: 0.12,
         rotate: degrees(35),
       });
-    y = top - 92;
   };
   const need = (h: number, again?: () => void) => {
     if (y - h < M + 30) {
@@ -152,9 +149,6 @@ export async function purchaseReceiptPdf(d: ReceiptPdfData): Promise<Buffer> {
   };
 
   head();
-  text(d.title, M, y, { size: 14, f: bold, color: NAVY });
-  text(`No. ${d.number}`, 0, y, { size: 11, f: bold, right: M + W });
-  y -= 20;
   const facts: Array<[string, string]> = [
     [d.kind === 'goods' ? 'Received on' : 'Work reported on', d.receivedOn],
     ['Purchase order', d.order],
@@ -255,39 +249,10 @@ export async function purchaseReceiptPdf(d: ReceiptPdfData): Promise<Buffer> {
   text(money(total), 0, y, { f: bold, right: M + W - 3 });
   y -= 30;
 
-  // who received and who inspected
-  need(90);
-  text(d.kind === 'goods' ? 'Received by' : 'Reported by', M, y, {
-    size: 7.5,
-    f: bold,
-    color: MUTED,
-  });
-  text(d.kind === 'goods' ? 'Inspected and accepted by' : 'Certified by', M + W / 2, y, {
-    size: 7.5,
-    f: bold,
-    color: MUTED,
-  });
-  y -= 30;
-  page.drawLine({
-    start: { x: M, y: y + 8 },
-    end: { x: M + 160, y: y + 8 },
-    thickness: 0.6,
-    color: INK,
-  });
-  text(d.receivedBy, M, y - 2);
-  let iy = y;
-  page.drawLine({
-    start: { x: M + W / 2, y: iy + 8 },
-    end: { x: M + W / 2 + 160, y: iy + 8 },
-    thickness: 0.6,
-    color: INK,
-  });
-  if (!d.inspectedBy.length) text('Not inspected yet', M + W / 2, iy - 2, { color: MUTED });
-  for (const p of d.inspectedBy) {
-    text(`${p.name} · ${p.role}${p.at ? ` · ${p.at}` : ''}`, M + W / 2, iy - 2);
-    iy -= 12;
-  }
-  y = Math.min(y, iy) - 24;
+  // the boxes to sign, as on the PO
+  need(110 * Math.ceil(d.signers.length / 4));
+  y = await drawSignBoxes(pdf, page, { regular: font, bold }, d.signers, { x: M, y, width: W });
+  y -= 6;
   need(30);
   for (const l of wrap(
     d.kind === 'goods'
@@ -305,6 +270,7 @@ export async function purchaseReceiptPdf(d: ReceiptPdfData): Promise<Buffer> {
   const pages = pdf.getPages();
   pages.forEach((p, i) => {
     page = p;
+    text(`Printed ${d.generatedOn}`, M, 20, { size: 7, color: MUTED });
     text(`${d.number} · page ${String(i + 1)} of ${String(pages.length)}`, 0, 20, {
       size: 7,
       color: MUTED,

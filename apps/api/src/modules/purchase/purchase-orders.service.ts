@@ -23,6 +23,7 @@ import {
   TO_ORDER,
 } from './purchase-order-core';
 import { registerGeneratedOn } from '../exams/register-head';
+import { signerOf } from './purchase-doc-sign';
 import { purchaseHead } from './purchase-head';
 import { orderEmailHtml } from './purchase-order-email';
 import { checkListSize, LIST_LIMIT, purchaseListFile } from './purchase-list-file';
@@ -2123,6 +2124,7 @@ export class PurchaseOrdersService implements OnModuleInit {
    * A signature box: the person's name, employee ID and designation, when ("Approved on 08-11-2026
    * 11:40 AM", India) and the signature image on their employee record (PNG or JPEG), if any.
    */
+  /** A box of the PO's signatures: the shared lookup (purchase-doc-sign.ts). */
   private async signer(
     c: PoolClient,
     as: string,
@@ -2131,52 +2133,7 @@ export class PurchaseOrdersService implements OnModuleInit {
     at: Date | null,
     verb: string,
   ): Promise<OrderPdfData['signers'][number]> {
-    const e = userId
-      ? (
-          await c.query<{
-            code: string;
-            designation: string | null;
-            object_key: string | null;
-            content_type: string | null;
-          }>(
-            `SELECT e.employee_code AS code, e.designation, f.object_key, f.content_type FROM employees e
-               LEFT JOIN files f ON f.id = e.signature_file_id AND f.deleted_at IS NULL
-                                AND f.content_type IN ('image/png', 'image/jpeg')
-              WHERE e.user_id = $1 AND e.deleted_at IS NULL LIMIT 1`,
-            [userId],
-          )
-        ).rows[0]
-      : undefined;
-    let signature: OrderPdfData['logo'] = null;
-    if (e?.object_key && e.content_type)
-      try {
-        signature = { contentType: e.content_type, bytes: await this.storage.read(e.object_key) };
-      } catch {
-        signature = null;
-      }
-    const when = at
-      ? `${verb} ${at
-          .toLocaleString('en-GB', {
-            timeZone: 'Asia/Kolkata',
-            day: '2-digit',
-            month: '2-digit',
-            year: 'numeric',
-            hour: '2-digit',
-            minute: '2-digit',
-            hour12: true,
-          })
-          .replace(/\//g, '-')
-          .replace(',', '')
-          .toUpperCase()}`
-      : null;
-    return {
-      as,
-      name,
-      code: e?.code ?? null,
-      designation: e?.designation ?? null,
-      when,
-      signature,
-    };
+    return signerOf(c, (k) => this.storage.read(k), { as, name, userId, at, verb });
   }
 
   async pdf(ctx: RequestContext, id: string) {

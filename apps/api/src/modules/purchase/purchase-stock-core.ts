@@ -1,5 +1,6 @@
 import type { PoolClient } from '@edupro/db';
 import { DomainError } from '../../common/errors/domain-error';
+import { registerGeneratedOn, registerLetterhead } from '../exams/register-head';
 import { assetsOut } from './purchase-asset-core';
 
 /**
@@ -165,37 +166,31 @@ export async function mustOperateStore(
   return x;
 }
 
-/** The school's name, address and logo for a PDF's band. */
+/**
+ * The school's name, address and logo for a store document's letterhead (as the indent prints it), and
+ * when the paper was made.
+ */
 export async function pdfSchool(
   c: PoolClient,
   read: (key: string) => Promise<Buffer>,
 ): Promise<{
   school: { name: string; address: string | null };
   logo: { contentType: string; bytes: Buffer } | null;
+  generatedOn: string;
 }> {
-  const s = (
-    await c.query<{ name: string; address: string | null; logo: string | null }>(
-      `SELECT sc.name,
-              NULLIF(concat_ws(', ', NULLIF(btrim(sc.address->>'line1'), ''), NULLIF(btrim(sc.address->>'city'), ''),
-                     NULLIF(btrim(sc.address->>'state'), '')), '') AS address,
-              NULLIF(sc.branding->>'logoFileId', '') AS logo
-         FROM schools sc WHERE sc.id = app.current_school_id()`,
-    )
-  ).rows[0]!;
+  const h = await registerLetterhead(c);
   let logo: { contentType: string; bytes: Buffer } | null = null;
-  if (s.logo && /^\d{1,18}$/.test(s.logo)) {
-    const f = await c.query<{ object_key: string; content_type: string }>(
-      `SELECT object_key, content_type FROM files WHERE id = $1 AND deleted_at IS NULL`,
-      [s.logo],
-    );
-    if (f.rows[0])
-      try {
-        logo = { contentType: f.rows[0].content_type, bytes: await read(f.rows[0].object_key) };
-      } catch {
-        logo = null;
-      }
-  }
-  return { school: { name: s.name, address: s.address }, logo };
+  if (h.file)
+    try {
+      logo = { contentType: h.file.content_type, bytes: await read(h.file.object_key) };
+    } catch {
+      logo = null;
+    }
+  return {
+    school: { name: h.school, address: h.address || null },
+    logo,
+    generatedOn: registerGeneratedOn(),
+  };
 }
 
 /** A user's name as staff know it (their employee record's), for documents. */
