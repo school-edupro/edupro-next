@@ -704,6 +704,12 @@ export class PurchaseSetupService {
         large_po_alert: string | null;
         split_window_days: number;
         direct_pr_limit: string;
+        bill_to_name: string | null;
+        bill_contact_name: string | null;
+        bill_contact_phone: string | null;
+        ship_to_name: string | null;
+        ship_contact_name: string | null;
+        ship_contact_phone: string | null;
         updated_at: Date;
       }>(`SELECT *, purchase_department_id::text FROM purchase_settings`);
       const x = s.rows[0]!;
@@ -753,6 +759,12 @@ export class PurchaseSetupService {
         largePoAlert: x.large_po_alert === null ? null : Number(x.large_po_alert),
         splitWindowDays: x.split_window_days,
         directPrLimit: Number(x.direct_pr_limit),
+        billToName: x.bill_to_name,
+        billContactName: x.bill_contact_name,
+        billContactPhone: x.bill_contact_phone,
+        shipToName: x.ship_to_name,
+        shipContactName: x.ship_contact_name,
+        shipContactPhone: x.ship_contact_phone,
         updatedAt: x.updated_at.toISOString(),
         committee: committee.rows.map((m) => ({
           id: m.id,
@@ -891,7 +903,9 @@ export class PurchaseSetupService {
                 receipt_tolerance_pct = $21, billing_line = $22, billing_country = $23, billing_state = $24,
                 billing_city = $25, billing_pin = $26, delivery_same = $27, delivery_line = $28,
                 delivery_country = $29, delivery_state = $30, delivery_city = $31, delivery_pin = $32,
-                direct_pr_limit = $33, updated_at = now(), updated_by = app.current_user_id()`,
+                direct_pr_limit = $33, bill_to_name = $34, bill_contact_name = $35, bill_contact_phone = $36,
+                ship_to_name = $37, ship_contact_name = $38, ship_contact_phone = $39,
+                updated_at = now(), updated_by = app.current_user_id()`,
         [
           dto.gstin,
           gstState ?? billing.gst,
@@ -926,6 +940,12 @@ export class PurchaseSetupService {
           dto.deliverySame ? null : delivery.city,
           dto.deliverySame ? null : delivery.pin,
           dto.directPrLimit,
+          dto.billToName ?? null,
+          dto.billContactName ?? null,
+          dto.billContactPhone ?? null,
+          dto.shipToName ?? null,
+          dto.shipContactName ?? null,
+          dto.shipContactPhone ?? null,
         ],
       );
       await this.audit.stage(ctx, c, {

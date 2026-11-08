@@ -917,3 +917,41 @@ by the Purchase office role.
   (a school admin without the right refused; within the limit approved by the system with a draft PO and
   no steps; the split check at a 5,000 limit; over a 1,000 limit), `purchase-orders` sets the limit to 0
   (its direct PR follows the levels).
+
+## As built — the PO format; clearer PO edit page (8 Nov 2026)
+
+Asked by the user with a school's own printed PO ("Vendor's quotation, HSN not shown, or 'Take line 2 off
+(back to To order)' — what do these mean; change the PO format as shared"). The shared PO's structure and
+wording only were used (no names or data from it). Decided with the user: the shared layout; its columns
+plus HSN and make / model; its totals with our GST summary kept; names and signature images.
+
+- **Edit page**: "Vendor's quotation no. (optional)" with help (the vendor's own quotation number,
+  printed as "Your quotation"); HSN / SAC with a pick-list of the HSN master (a `datalist`) and, when
+  empty, "Not set on the item: type or pick the code (set it on the item in Masters → Items for next
+  time)" — a PO line copies the item's HSN; in Alpha only 19 of 85 items have one; Make and Model per
+  line; Freight terms and Note to the vendor; "Remove line N from this PO (it waits on To order)" with a
+  tooltip (the line leaves the draft, nothing is cancelled; it can be ordered later or from another
+  vendor). The PO page shows make/model, freight terms and the note.
+- **Migration 0335**: `purchase_settings.bill_to_name`, `bill_contact_name/phone`, `ship_to_name`,
+  `ship_contact_name/phone` (empty: the school); `purchase_orders.freight_terms`, `vendor_note`;
+  `purchase_order_lines.make`, `model` (a drafted line takes its item's `brand` as the make; existing
+  lines filled once).
+- **The PDF** (`purchase-order-pdf.ts`, rewritten): a frame; logo left, PURCHASE ORDER (or EMERGENCY
+  PURCHASE) centred, "Regular / Emergency PO No" and PO Date right; three blocks — Supplier (name and
+  code, address, GSTIN or its GST status, State, contact person = the main vendor contact, phone,
+  e-mail, MSME, bank name, the account number masked to its last 4 digits, IFSC — decrypted from
+  `bank_secure`), Ship To (place, the PO's delivery address, contact), Bill To (legal name, billing
+  address, GSTIN, State, contact); a line of the quotation, validity, requisition, department and supply;
+  the table Sr.No, Item (code, "Desc:", "HSN/SAC:"), Item Make / Model, Quantity, UOM, Unit Cost, Disc %,
+  GST%, Amount (before GST) and the other charges as rows; Sub-Total, Discount, Price After Discount,
+  Tax, Price After Tax, Freight and Other Charges With Tax, Round Off, Grand Total; "Amount In Words:-
+  Rupees … Only"; the reverse-charge note; the GST summary by HSN and rate; General Instructions (the
+  PO's terms), Payment Terms, Freight Terms, Expected Delivery Date, MSME, Note; the signature boxes of
+  `po_signatures` — the first with the preparer, the last with the last approver once approved, each with
+  `employees.signature_file_id`'s image; "* This is a system generated document. Signature is not
+  required *"; on every page the footer "legal name || Registered Office: … || GSTIN No: …" and "1 of
+  n". PENDING across a PO not yet approved (was DRAFT).
+- Settings form: Bill to (legal name), contact person and no. under Billing address; Ship to (place) and
+  contact under Delivery address.
+- Test: `purchase-orders` saves freight terms, the note, make and model and reads them back; the PDF
+  test prints the new layout.

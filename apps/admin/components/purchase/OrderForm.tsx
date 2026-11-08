@@ -17,6 +17,8 @@ interface Line {
   gstRate: string;
   contractRate: number | null;
   rateChangeReason: string;
+  make: string;
+  model: string;
 }
 interface Charge {
   kind: keyof typeof CHARGE_KIND;
@@ -31,7 +33,14 @@ interface Charge {
  * still needs), rate, discount and GST rate (a rate-contract line's rate changed only with a reason);
  * other charges with their GST. The API works out the GST by the vendor's state and the totals.
  */
-export function OrderForm({ po }: { po: OrderDetail }) {
+export function OrderForm({
+  po,
+  hsn,
+}: {
+  po: OrderDetail;
+  /** the HSN / SAC master, offered as the line's code is typed */
+  hsn: Array<{ code: string; description: string; gstRate: number }>;
+}) {
   const router = useRouter();
   const [head, setHead] = useState({
     quoteRef: po.quoteRef ?? '',
@@ -41,6 +50,8 @@ export function OrderForm({ po }: { po: OrderDetail }) {
     paymentTermId: po.paymentTermId ?? '',
     validityDays: String(po.validityDays),
     terms: po.terms ?? '',
+    freightTerms: po.freightTerms ?? '',
+    vendorNote: po.vendorNote ?? '',
   });
   const [lines, setLines] = useState<Line[]>(
     po.lineItems.map((l) => ({
@@ -55,6 +66,8 @@ export function OrderForm({ po }: { po: OrderDetail }) {
       gstRate: String(l.gstRate),
       contractRate: l.contractRate,
       rateChangeReason: l.rateChangeReason ?? '',
+      make: l.make ?? '',
+      model: l.model ?? '',
     })),
   );
   const [charges, setCharges] = useState<Charge[]>(
@@ -88,6 +101,8 @@ export function OrderForm({ po }: { po: OrderDetail }) {
       paymentTermId: head.paymentTermId || null,
       validityDays: head.validityDays,
       terms: head.terms || undefined,
+      freightTerms: head.freightTerms || undefined,
+      vendorNote: head.vendorNote || undefined,
       lines: lines.map((l) => ({
         id: l.id,
         description: l.description,
@@ -97,6 +112,8 @@ export function OrderForm({ po }: { po: OrderDetail }) {
         discountPct: l.discountPct || 0,
         gstRate: l.gstRate || 0,
         ...(rateChanged(l) && l.rateChangeReason ? { rateChangeReason: l.rateChangeReason } : {}),
+        ...(l.make.trim() ? { make: l.make.trim() } : {}),
+        ...(l.model.trim() ? { model: l.model.trim() } : {}),
       })),
       charges: charges
         .filter((x) => x.amount !== '')
@@ -125,17 +142,30 @@ export function OrderForm({ po }: { po: OrderDetail }) {
       }}
       noValidate
     >
+      <datalist id="of-hsn-list">
+        {hsn.map((h) => (
+          <option key={h.code} value={h.code}>
+            {`${h.description} (${String(h.gstRate)}%)`}
+          </option>
+        ))}
+      </datalist>
       <FormSection title="The order">
         <FormRow columns={3}>
           <label className="ep-field" htmlFor="of-ref">
-            <span className="ep-field__label">Vendor’s quotation</span>
+            <span className="ep-field__label">Vendor’s quotation no. (optional)</span>
             <input
               id="of-ref"
               className="ep-input"
               maxLength={60}
               value={head.quoteRef}
+              placeholder="e.g. Q-1123 of 02-11-2026"
+              aria-describedby="of-ref-help"
               onChange={(e) => setHead((h) => ({ ...h, quoteRef: e.target.value }))}
             />
+            <span id="of-ref-help" className="ep-field__help">
+              The vendor’s own quotation number this PO accepts; printed on the PO as “Your
+              quotation”.
+            </span>
           </label>
           <label className="ep-field" htmlFor="of-date">
             <span className="ep-field__label">PO date</span>
@@ -201,8 +231,32 @@ export function OrderForm({ po }: { po: OrderDetail }) {
             ) : null}
           </label>
         </FormRow>
+        <FormRow columns={2}>
+          <label className="ep-field" htmlFor="of-freight">
+            <span className="ep-field__label">Freight terms</span>
+            <input
+              id="of-freight"
+              className="ep-input"
+              maxLength={300}
+              value={head.freightTerms}
+              placeholder="e.g. Free delivery at the school; or freight extra at actuals"
+              onChange={(e) => setHead((h) => ({ ...h, freightTerms: e.target.value }))}
+            />
+          </label>
+          <label className="ep-field" htmlFor="of-note">
+            <span className="ep-field__label">Note to the vendor</span>
+            <input
+              id="of-note"
+              className="ep-input"
+              maxLength={1000}
+              value={head.vendorNote}
+              placeholder="Printed on the PO"
+              onChange={(e) => setHead((h) => ({ ...h, vendorNote: e.target.value }))}
+            />
+          </label>
+        </FormRow>
         <label className="ep-field" htmlFor="of-terms">
-          <span className="ep-field__label">Terms and conditions</span>
+          <span className="ep-field__label">General instructions (terms and conditions)</span>
           <textarea
             id="of-terms"
             className="ep-input"
@@ -243,8 +297,36 @@ export function OrderForm({ po }: { po: OrderDetail }) {
                     className="ep-input"
                     inputMode="numeric"
                     maxLength={8}
+                    list="of-hsn-list"
                     value={l.hsnCode}
+                    aria-describedby={`of-l${n}-h-help`}
                     onChange={(e) => setLine(i, { hsnCode: e.target.value })}
+                  />
+                  <span id={`of-l${n}-h-help`} className="ep-field__help">
+                    {l.hsnCode
+                      ? (hsn.find((h) => h.code === l.hsnCode)?.description ??
+                        'Not in the HSN list')
+                      : 'Not set on the item: type or pick the code (set it on the item in Masters → Items for next time)'}
+                  </span>
+                </label>
+                <label className="ep-field" htmlFor={`of-l${n}-make`}>
+                  <span className="ep-field__label">Make</span>
+                  <input
+                    id={`of-l${n}-make`}
+                    className="ep-input"
+                    maxLength={80}
+                    value={l.make}
+                    onChange={(e) => setLine(i, { make: e.target.value })}
+                  />
+                </label>
+                <label className="ep-field" htmlFor={`of-l${n}-model`}>
+                  <span className="ep-field__label">Model</span>
+                  <input
+                    id={`of-l${n}-model`}
+                    className="ep-input"
+                    maxLength={80}
+                    value={l.model}
+                    onChange={(e) => setLine(i, { model: e.target.value })}
                   />
                 </label>
                 <label className="ep-field" htmlFor={`of-l${n}-q`}>
@@ -320,9 +402,10 @@ export function OrderForm({ po }: { po: OrderDetail }) {
                     <button
                       type="button"
                       className="ep-btn ep-btn--ghost ep-btn--sm"
+                      title="The line leaves this PO (nothing is cancelled): it waits on Purchase → To order, to be ordered later or from another vendor"
                       onClick={() => setLines((cur) => cur.filter((_, j) => j !== i))}
                     >
-                      Take line {n} off (back to To order)
+                      Remove line {n} from this PO (it waits on To order)
                     </button>
                   ) : null}
                 </div>

@@ -240,6 +240,14 @@ export const SettingsSchema = z
     splitWindowDays: z.coerce.number().int().min(1).max(365),
     /** a direct PR up to this (before GST) is approved by the system when sent; 0: never */
     directPrLimit: z.coerce.number().min(0).max(1e12).default(50000),
+    /** the PO's Bill to: the legal entity (a society, a trust) and its contact; empty: the school */
+    billToName: opt(160),
+    billContactName: opt(80),
+    billContactPhone: opt(30),
+    /** the PO's Ship to: the place goods go and its contact; empty: the school */
+    shipToName: opt(160),
+    shipContactName: opt(80),
+    shipContactPhone: opt(30),
   })
   .refine((v) => v.committeeLimit >= v.directLimit, {
     message: 'The committee limit must be at least the direct-purchase limit',
@@ -566,6 +574,9 @@ export const UpdateOrderSchema = z.object({
   paymentTermId: IdSchema.nullish(),
   validityDays: z.coerce.number().int().min(1).max(365),
   terms: opt(4000),
+  freightTerms: opt(300),
+  /** printed on the PO for the vendor */
+  vendorNote: opt(1000),
   /** the lines kept (a line left out goes back to To order) */
   lines: z
     .array(
@@ -584,6 +595,8 @@ export const UpdateOrderSchema = z.object({
         gstRate: Gst,
         /** a rate-contract line whose rate changes: why */
         rateChangeReason: opt(300),
+        make: opt(80),
+        model: opt(80),
       }),
     )
     .min(1, 'Keep at least one line')

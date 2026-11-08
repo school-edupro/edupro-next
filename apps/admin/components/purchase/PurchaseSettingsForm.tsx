@@ -63,6 +63,12 @@ export function PurchaseSettingsForm({
     poPrefix: s.poPrefix,
     directLimit: String(s.directLimit),
     directPrLimit: String(s.directPrLimit),
+    billToName: s.billToName ?? '',
+    billContactName: s.billContactName ?? '',
+    billContactPhone: s.billContactPhone ?? '',
+    shipToName: s.shipToName ?? '',
+    shipContactName: s.shipContactName ?? '',
+    shipContactPhone: s.shipContactPhone ?? '',
     committeeLimit: String(s.committeeLimit),
     committeeQuotes: String(s.committeeQuotes),
     committeeSignatures: s.committeeSignatures === null ? '' : String(s.committeeSignatures),
@@ -412,6 +418,12 @@ export function PurchaseSettingsForm({
         poPrefix: v.poPrefix,
         directLimit: num(v.directLimit),
         directPrLimit: num(v.directPrLimit),
+        billToName: v.billToName.trim() || undefined,
+        billContactName: v.billContactName.trim() || undefined,
+        billContactPhone: v.billContactPhone.trim() || undefined,
+        shipToName: v.shipToName.trim() || undefined,
+        shipContactName: v.shipContactName.trim() || undefined,
+        shipContactPhone: v.shipContactPhone.trim() || undefined,
         committeeLimit: num(v.committeeLimit),
         committeeQuotes: num(v.committeeQuotes),
         committeeSignatures: v.committeeSignatures.trim() ? num(v.committeeSignatures) : null,
@@ -490,13 +502,48 @@ export function PurchaseSettingsForm({
             )}
           </FormRow>
         </FormSection>
-        <FormSection title="Billing address" description="Printed on every purchase order.">
+        <FormSection
+          title="Billing address"
+          description="The PO's Bill to: whom the vendor's invoices are made out to. Printed on every purchase order, and in its footer line."
+        >
+          <FormRow columns={3}>
+            {field(
+              'billToName',
+              'Bill to (legal name)',
+              text('billToName', {
+                maxLength: 160,
+                placeholder: 'e.g. the society or trust; empty: the school',
+              }),
+            )}
+            {field('billContactName', 'Contact person', text('billContactName', { maxLength: 80 }))}
+            {field(
+              'billContactPhone',
+              'Contact no.',
+              text('billContactPhone', { maxLength: 30, inputMode: 'tel' }),
+            )}
+          </FormRow>
           {address('billing', billing)}
         </FormSection>
         <FormSection
           title="Delivery address"
-          description="Copied onto every new PO, where it can be changed."
+          description="The PO's Ship to. Copied onto every new PO, where it can be changed."
         >
+          <FormRow columns={3}>
+            {field(
+              'shipToName',
+              'Ship to (place)',
+              text('shipToName', {
+                maxLength: 160,
+                placeholder: 'e.g. a campus or block; empty: the school',
+              }),
+            )}
+            {field('shipContactName', 'Contact person', text('shipContactName', { maxLength: 80 }))}
+            {field(
+              'shipContactPhone',
+              'Contact no.',
+              text('shipContactPhone', { maxLength: 30, inputMode: 'tel' }),
+            )}
+          </FormRow>
           {check('deliverySame', 'The same as the billing address')}
           {!v.deliverySame ? address('delivery', delivery) : null}
         </FormSection>

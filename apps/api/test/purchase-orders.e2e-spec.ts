@@ -307,6 +307,8 @@ describe('purchase orders (e2e)', () => {
       paymentTermId: po.paymentTermId,
       validityDays: 30,
       terms: po.terms,
+      freightTerms: 'Free delivery at the school',
+      vendorNote: 'Deliver before the exams',
       lines: [
         {
           id: po.lineItems[0].id,
@@ -316,6 +318,8 @@ describe('purchase orders (e2e)', () => {
           rate: 1000,
           discountPct: 10,
           gstRate: 18,
+          make: 'Steelcase',
+          model: 'CH-12',
           ...over,
         },
       ],
@@ -328,6 +332,13 @@ describe('purchase orders (e2e)', () => {
     const r = await call(office, 'PUT', `/purchase/orders/${orders.V1!}`, body());
     expect(r.statusCode).toBe(200);
     expect(r.json()).toMatchObject({ taxable: 4100, cgst: 369, sgst: 369, total: 4838 });
+    // printed on the PO: the freight terms, the note, the make and model
+    const saved = await get(office, orders.V1!);
+    expect(saved).toMatchObject({
+      freightTerms: 'Free delivery at the school',
+      vendorNote: 'Deliver before the exams',
+    });
+    expect(saved.lineItems[0]).toMatchObject({ make: 'Steelcase', model: 'CH-12' });
     expect((await call(teacher, 'PUT', `/purchase/orders/${orders.V1!}`, body())).statusCode).toBe(
       403,
     );

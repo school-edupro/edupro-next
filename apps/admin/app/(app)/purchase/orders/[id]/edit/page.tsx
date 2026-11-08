@@ -15,6 +15,20 @@ export default async function EditOrderPage({ params }: { params: Promise<{ id: 
     throw e;
   });
   if (!po.can.edit) notFound();
+  // the HSN / SAC master, offered as a line's code is typed (an item without one shows empty)
+  const hsn = await apiFetch<{
+    data: Array<{ code: string; description: string | null; gst_rate: string; status: string }>;
+  }>('/masters/purchase_hsn/rows?size=500')
+    .then((r) =>
+      r.data
+        .filter((h) => h.status === 'active')
+        .map((h) => ({
+          code: h.code,
+          description: h.description ?? '',
+          gstRate: Number(h.gst_rate),
+        })),
+    )
+    .catch(() => []);
   return (
     <>
       <Breadcrumbs
@@ -33,7 +47,7 @@ export default async function EditOrderPage({ params }: { params: Promise<{ id: 
             : 'The vendor stays; to order from another vendor, cancel this draft and draft a new PO on To order.'
         }
       />
-      <OrderForm po={po} />
+      <OrderForm po={po} hsn={hsn} />
     </>
   );
 }

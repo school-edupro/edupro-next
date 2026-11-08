@@ -201,6 +201,7 @@ export async function addRequisitionLines(c: PoolClient, orderId: string, lineId
     reverse_charge: boolean;
     exempt: boolean;
     contract_id: string | null;
+    make: string | null;
   }>(
     // eslint-disable-next-line no-restricted-syntax -- ON_ORDER is a fixed fragment
     `SELECT rl.id::text, rl.item_id::text, COALESCE(i.name, rl.free_text) AS description, h.code AS hsn,
@@ -208,7 +209,7 @@ export async function addRequisitionLines(c: PoolClient, orderId: string, lineId
             -- a reverse-charge line takes the SAC's rate (the school pays it whoever the vendor is)
             (CASE WHEN COALESCE(h.reverse_charge, false) THEN COALESCE(i.gst_rate, h.gst_rate, 0)
                   ELSE COALESCE(rl.gst_rate, i.gst_rate, h.gst_rate, 0) END)::text AS gst, COALESCE(h.reverse_charge, false) AS reverse_charge,
-            COALESCE(h.exempt, false) AS exempt, rl.contract_id::text
+            COALESCE(h.exempt, false) AS exempt, rl.contract_id::text, i.brand AS make
        FROM purchase_requisition_lines rl
        LEFT JOIN purchase_items i ON i.id = rl.item_id
        LEFT JOIN purchase_hsn h ON h.id = i.hsn_id
@@ -228,8 +229,8 @@ export async function addRequisitionLines(c: PoolClient, orderId: string, lineId
     n += 1;
     await c.query(
       `INSERT INTO purchase_order_lines (school_id, order_id, seq, requisition_line_id, item_id, description, hsn_code, quantity, uom_id,
-                                         rate, gst_rate, reverse_charge, exempt, contract_id)
-       VALUES (app.current_school_id(), $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
+                                         rate, gst_rate, reverse_charge, exempt, contract_id, make)
+       VALUES (app.current_school_id(), $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)`,
       [
         orderId,
         n,
@@ -244,6 +245,7 @@ export async function addRequisitionLines(c: PoolClient, orderId: string, lineId
         l.reverse_charge,
         l.exempt,
         l.contract_id,
+        l.make,
       ],
     );
   }

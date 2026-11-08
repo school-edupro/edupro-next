@@ -304,11 +304,16 @@ contact, the number and date.
 
 On a draft PO:
 
-- **Change**: the vendor's quotation reference, PO date, validity, delivery date and address, the payment
-  term (the vendor's, else the school's default), terms and conditions; each line's words, HSN / SAC,
-  quantity (no more than the requisition still needs), rate, discount % and GST %; other charges
-  (freight, installation, packing) with their GST. A rate-contract line keeps the contract rate unless
-  you give the reason. Taking a line off sends it back to To order.
+- **Change**: the **vendor's quotation no.** (the vendor's own quotation number this PO accepts —
+  printed as "Your quotation"), PO date, validity, delivery date and address, the payment term (the
+  vendor's, else the school's default), **freight terms**, a **note to the vendor**, the general
+  instructions (terms and conditions); each line's words, **HSN / SAC** (copied from the item; when the
+  item has none the box is empty — type or pick the code, and set it on the item in Masters → Items for
+  next time), **make** (filled from the item's brand) and **model**, quantity (no more than the
+  requisition still needs), rate, discount % and GST %; other charges (freight, installation, packing)
+  with their GST. A rate-contract line keeps the contract rate unless you give the reason.
+  **Remove line N from this PO** takes a line off this draft without cancelling anything: it waits on
+  **Purchase → To order**, to be ordered later or from another vendor.
 - **GST** is worked out from the vendor and the school's state (Purchase settings): **CGST + SGST** for a
   registered vendor in the same state, **IGST** for one in another state, **none** for an unregistered
   or composition vendor. A **reverse-charge** service (e.g. an advocate's legal services) shows the GST
@@ -318,7 +323,17 @@ On a draft PO:
   within 45 days).
 - **Send for approval**: the department's PO levels (Purchase → Who approves); nobody approves their own
   PO — their level passes on.
-- **Approved**: **View / Download** the PDF (DRAFT is printed across it until approved), then **E-mail the
+- **The printed PO** follows the school's own format: the logo, PURCHASE ORDER and "Regular PO No" and
+  date; **Supplier** (with its contact person, phone, e-mail and bank — the account number masked but
+  for its last 4 digits), **Ship to** and **Bill to** (the legal name, e.g. the society, with its GSTIN
+  and contact — set them in Purchase settings, Billing and Delivery address); the lines with item code,
+  description, HSN / SAC, make / model, quantity, unit, unit cost, discount, GST % and amount, the
+  other charges; sub-total, discount, after discount, tax, after tax, charges with tax and the grand
+  total in words; the GST summary; general instructions, payment and freight terms, the delivery date
+  and the note; the boxes of Purchase settings → PO signatures — the first with whoever prepared it, the
+  last with the approver, each with the signature on their employee record — "a system generated
+  document"; and a footer line with the legal name, registered office and GSTIN.
+- **Approved**: **View / Download** the PDF (PENDING is printed across it until approved), then **E-mail the
   PO with the PDF** to the vendor (the address is the vendor's, change it if needed). The words are the
   template "Purchase: order to the vendor" on Communication → Templates; every e-mail is listed on the PO
   with its delivery status. The items' last purchase rate is updated.

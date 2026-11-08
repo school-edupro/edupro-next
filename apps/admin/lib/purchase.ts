@@ -155,6 +155,13 @@ export interface PurchaseSettings {
   splitWindowDays: number;
   /** a direct PR up to this (before GST) is approved by the system when sent; 0: never */
   directPrLimit: number;
+  /** the PO's Bill to (the legal entity) and Ship to, with their contacts; empty: the school */
+  billToName: string | null;
+  billContactName: string | null;
+  billContactPhone: string | null;
+  shipToName: string | null;
+  shipContactName: string | null;
+  shipContactPhone: string | null;
   stockGstInCost: boolean;
   receiptTolerancePct: number;
   updatedAt: string;
@@ -799,6 +806,9 @@ export interface OrderLine {
   total: number;
   contractRate: number | null;
   rateChangeReason: string | null;
+  /** printed on the PO: the make (from the item's brand) and the model */
+  make: string | null;
+  model: string | null;
   received: number;
   accepted: number;
   rejected: number;
@@ -828,6 +838,9 @@ export interface OrderDetail extends OrderRow {
   validityDays: number;
   validUntil: string;
   terms: string | null;
+  freightTerms: string | null;
+  /** printed on the PO for the vendor */
+  vendorNote: string | null;
   totals: {
     taxable: number;
     cgst: number;

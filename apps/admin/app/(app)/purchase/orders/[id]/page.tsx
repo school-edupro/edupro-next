@@ -385,9 +385,21 @@ export default async function OrderPage({
             <dt>Payment</dt>
             <dd>{po.paymentText ?? 'No payment term'}</dd>
           </div>
+          {po.freightTerms ? (
+            <div>
+              <dt>Freight terms</dt>
+              <dd>{po.freightTerms}</dd>
+            </div>
+          ) : null}
+          {po.vendorNote ? (
+            <div>
+              <dt>Note to the vendor</dt>
+              <dd style={{ whiteSpace: 'pre-line' }}>{po.vendorNote}</dd>
+            </div>
+          ) : null}
           {po.terms ? (
             <div>
-              <dt>Terms and conditions</dt>
+              <dt>General instructions</dt>
               <dd style={{ whiteSpace: 'pre-line' }}>{po.terms}</dd>
             </div>
           ) : null}
@@ -443,6 +455,13 @@ export default async function OrderPage({
                   <td>{l.seq}</td>
                   <td>
                     {l.description}
+                    {l.make || l.model ? (
+                      <span className="ep-mr-col__desc">
+                        {[l.make ? `Make: ${l.make}` : null, l.model ? `Model: ${l.model}` : null]
+                          .filter(Boolean)
+                          .join(' · ')}
+                      </span>
+                    ) : null}
                     {l.contractRate !== null ? (
                       <span className="ep-mr-col__desc">
                         Rate contract {money(l.contractRate)}

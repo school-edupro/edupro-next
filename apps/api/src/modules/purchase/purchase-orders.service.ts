@@ -1,6 +1,6 @@
 import { createHash, randomBytes } from 'node:crypto';
 import { Inject, Injectable, type OnModuleInit } from '@nestjs/common';
-import { amountInWords, type PoolClient } from '@edupro/db';
+import { amountInWords, decryptField, type PoolClient } from '@edupro/db';
 import { objectKeyFor, type StorageDriver } from '@edupro/storage';
 import { AuditService } from '../../common/audit/audit.service';
 import { DbService } from '../../common/db/db.service';
@@ -107,6 +107,8 @@ interface PoRow {
   payment_text: string | null;
   validity_days: number;
   terms: string | null;
+  freight_terms: string | null;
+  vendor_note: string | null;
   msme_warning: string | null;
   taxable: string;
   cgst: string;
@@ -139,7 +141,7 @@ const SELECT = `
          po.bill_file_id::text, po.bill_ref, po.requisition_id::text, r.number AS requisition, po.department_id::text, d.name AS department,
          po.vendor_id::text, v.legal_name AS vendor, v.code AS vendor_code, v.status AS vendor_status, v.email AS vendor_email,
          po.vendor_gst_status, po.supply, po.quote_ref, po.po_date::text, po.delivery_date::text, po.delivery_address,
-         po.payment_term_id::text, po.payment_text, po.validity_days, po.terms, po.msme_warning, po.taxable::text, po.cgst::text,
+         po.payment_term_id::text, po.payment_text, po.validity_days, po.terms, po.freight_terms, po.vendor_note, po.msme_warning, po.taxable::text, po.cgst::text,
          po.sgst::text, po.igst::text, po.rcm_gst::text, po.round_off::text, po.total::text, po.workflow_instance_id::text,
          po.submitted_at, po.decided_at, po.approved_at, po.decision_note, po.sent_at, po.closed_at, po.closed_note,
          po.created_by::text, (SELECT ${PERSON('u')} FROM users u WHERE u.id = po.created_by) AS created_by_name, po.created_at,
@@ -666,6 +668,8 @@ export class PurchaseOrdersService implements OnModuleInit {
         contract_id: string | null;
         contract_rate: string | null;
         rate_change_reason: string | null;
+        make: string | null;
+        model: string | null;
         max_qty: string | null;
         received_qty: string;
         accepted_qty: string;
@@ -675,7 +679,7 @@ export class PurchaseOrdersService implements OnModuleInit {
         `SELECT l.id::text, l.seq, l.received_qty::text, l.accepted_qty::text, l.rejected_qty::text, l.returned_qty::text, l.requisition_line_id::text, l.item_id::text, i.code AS item_code, l.description, l.hsn_code,
                 l.quantity::text, l.uom_id::text, u.code AS uom, l.rate::text, l.discount_pct::text, l.gst_rate::text, l.reverse_charge,
                 l.exempt, l.taxable::text, l.cgst::text, l.sgst::text, l.igst::text, l.rcm_gst::text, l.total::text, l.contract_id::text,
-                rc.rate::text AS contract_rate, l.rate_change_reason,
+                rc.rate::text AS contract_rate, l.rate_change_reason, l.make, l.model,
                 (SELECT rl.quantity - COALESCE((SELECT sum(ol.quantity) FROM purchase_order_lines ol JOIN purchase_orders po ON po.id = ol.order_id
                                                  WHERE ol.requisition_line_id = rl.id AND ol.order_id <> l.order_id
                                                    AND po.status NOT IN ('rejected', 'cancelled', 'superseded')
@@ -838,6 +842,8 @@ export class PurchaseOrdersService implements OnModuleInit {
         validityDays: po.validity_days,
         validUntil: addDays(po.po_date, po.validity_days),
         terms: po.terms,
+        freightTerms: po.freight_terms,
+        vendorNote: po.vendor_note,
         totals: {
           taxable: Number(po.taxable),
           cgst: Number(po.cgst),
@@ -871,6 +877,8 @@ export class PurchaseOrdersService implements OnModuleInit {
           ...lineTax(l),
           contractRate: l.contract_rate === null ? null : Number(l.contract_rate),
           rateChangeReason: l.rate_change_reason,
+          make: l.make,
+          model: l.model,
           received: Number(l.received_qty),
           accepted: Number(l.accepted_qty),
           rejected: Number(l.rejected_qty),
@@ -1006,7 +1014,7 @@ export class PurchaseOrdersService implements OnModuleInit {
         const have = lines.find((x) => x.id === l.id)!;
         await c.query(
           `UPDATE purchase_order_lines SET description = $2, hsn_code = $3, quantity = $4, rate = $5, discount_pct = $6, gst_rate = $7,
-                  rate_change_reason = $8 WHERE id = $1`,
+                  rate_change_reason = $8, make = $9, model = $10 WHERE id = $1`,
           [
             l.id,
             l.description,
@@ -1018,6 +1026,8 @@ export class PurchaseOrdersService implements OnModuleInit {
             have.contract_rate !== null && Math.abs(l.rate - Number(have.contract_rate)) > 0.004
               ? (l.rateChangeReason ?? null)
               : null,
+            l.make ?? null,
+            l.model ?? null,
           ],
         );
       }
@@ -1037,7 +1047,8 @@ export class PurchaseOrdersService implements OnModuleInit {
       }
       await c.query(
         `UPDATE purchase_orders SET quote_ref = $2, po_date = COALESCE($3::date, po_date), delivery_date = $4, delivery_address = $5,
-                payment_term_id = $6, validity_days = $7, terms = $8, updated_at = now() WHERE id = $1`,
+                payment_term_id = $6, validity_days = $7, terms = $8, freight_terms = $9, vendor_note = $10,
+                updated_at = now() WHERE id = $1`,
         [
           id,
           dto.quoteRef ?? null,
@@ -1047,6 +1058,8 @@ export class PurchaseOrdersService implements OnModuleInit {
           dto.paymentTermId ?? null,
           dto.validityDays,
           dto.terms ?? null,
+          dto.freightTerms ?? null,
+          dto.vendorNote ?? null,
         ],
       );
       const t = await recomputeOrder(c, id);
@@ -1401,13 +1414,20 @@ export class PurchaseOrdersService implements OnModuleInit {
         state_code: string | null;
         billing_address: string | null;
         po_signatures: string[];
+        bill_to_name: string | null;
+        bill_contact_name: string | null;
+        bill_contact_phone: string | null;
+        ship_to_name: string | null;
+        ship_contact_name: string | null;
+        ship_contact_phone: string | null;
       }>(
         `SELECT sc.name,
                 NULLIF(concat_ws(', ', NULLIF(btrim(sc.address->>'line1'), ''), NULLIF(btrim(sc.address->>'line2'), ''),
                        NULLIF(btrim(sc.address->>'city'), ''), NULLIF(btrim(sc.address->>'state'), ''),
                        NULLIF(btrim(COALESCE(sc.address->>'pincode', sc.address->>'pin')), '')), '') AS address,
                 NULLIF(concat_ws(' · ', 'Phone ' || NULLIF(btrim(sc.contact->>'phone'), ''), NULLIF(btrim(sc.contact->>'email'), '')), '') AS contact,
-                NULLIF(sc.branding->>'logoFileId', '') AS logo, ps.gstin, ps.state_code, ps.billing_address, ps.po_signatures
+                NULLIF(sc.branding->>'logoFileId', '') AS logo, ps.gstin, ps.state_code, ps.billing_address, ps.po_signatures,
+                ps.bill_to_name, ps.bill_contact_name, ps.bill_contact_phone, ps.ship_to_name, ps.ship_contact_name, ps.ship_contact_phone
            FROM schools sc JOIN purchase_settings ps ON ps.school_id = sc.id WHERE sc.id = app.current_school_id()`,
       )
     ).rows[0]!;
@@ -1439,21 +1459,39 @@ export class PurchaseOrdersService implements OnModuleInit {
         phone: string | null;
         email: string | null;
         udyam_no: string | null;
+        bank_secure: string | null;
+        contact_name: string | null;
       }>(
-        `SELECT gstin, pan, address, city, pin, state_code, msme_type, phone, email, udyam_no FROM vendors WHERE id = $1`,
+        `SELECT v.gstin, v.pan, v.address, v.city, v.pin, v.state_code, v.msme_type, v.phone, v.email, v.udyam_no, v.bank_secure,
+                (SELECT vc.name FROM vendor_contacts vc WHERE vc.vendor_id = v.id ORDER BY vc.is_main DESC, vc.id LIMIT 1) AS contact_name
+           FROM vendors v WHERE v.id = $1`,
         [po.vendor_id],
       )
     ).rows[0]!;
-    const approver = po.workflow_instance_id
+    const approval = po.workflow_instance_id
       ? ((
-          await c.query<{ by: string | null }>(
+          await c.query<{ uid: string | null; by: string | null }>(
             // eslint-disable-next-line no-restricted-syntax -- PERSON is a fixed fragment
-            `SELECT (SELECT ${PERSON('u')} FROM users u WHERE u.id = st.acted_by) AS by FROM workflow_steps st
+            `SELECT st.acted_by::text AS uid, (SELECT ${PERSON('u')} FROM users u WHERE u.id = st.acted_by) AS by FROM workflow_steps st
               WHERE st.instance_id = $1 AND st.status = 'approved' ORDER BY st.level DESC LIMIT 1`,
             [po.workflow_instance_id],
           )
-        ).rows[0]?.by ?? null)
+        ).rows[0] ?? null)
       : null;
+    // the vendor's bank: its name, the IFSC and the account number masked but for the last 4 digits
+    let bank: OrderPdfData['vendor']['bank'] = null;
+    try {
+      const b = v.bank_secure
+        ? (JSON.parse(decryptField(v.bank_secure) ?? 'null') as {
+            bankName: string;
+            accountNo: string;
+            ifsc: string;
+          } | null)
+        : null;
+      if (b) bank = { name: b.bankName, account: `····${b.accountNo.slice(-4)}`, ifsc: b.ifsc };
+    } catch {
+      bank = null;
+    }
     const tax = (l: {
       taxable: string;
       cgst: string;
@@ -1485,7 +1523,20 @@ export class PurchaseOrdersService implements OnModuleInit {
         ? null
         : po.status === 'cancelled' || po.status === 'superseded' || po.status === 'rejected'
           ? po.status.toUpperCase()
-          : 'DRAFT',
+          : 'PENDING',
+      billTo: {
+        name: s.bill_to_name ?? s.name,
+        address: s.billing_address ?? s.address,
+        gstin: s.gstin,
+        contactName: s.bill_contact_name,
+        contactPhone: s.bill_contact_phone,
+      },
+      shipTo: {
+        name: s.ship_to_name ?? s.name,
+        address: po.delivery_address ?? s.address,
+        contactName: s.ship_contact_name,
+        contactPhone: s.ship_contact_phone,
+      },
       number: label(po.number, po.revision),
       date: dmy(po.po_date),
       validUntil: dmy(addDays(po.po_date, po.validity_days)),
@@ -1493,8 +1544,6 @@ export class PurchaseOrdersService implements OnModuleInit {
       deliveryDate: po.delivery_date ? dmy(po.delivery_date) : null,
       department: po.department,
       requisition: po.requisition,
-      billingAddress: s.billing_address,
-      deliveryAddress: po.delivery_address,
       vendor: {
         name: po.vendor,
         code: po.vendor_code,
@@ -1504,13 +1553,19 @@ export class PurchaseOrdersService implements OnModuleInit {
         state: v.state_code ? `${GST_STATES[v.state_code] ?? ''} (${v.state_code})` : null,
         gstStatus: po.vendor_gst_status,
         msme: v.msme_type ? `${v.msme_type}${v.udyam_no ? ` · ${v.udyam_no}` : ''}` : null,
-        contact: [v.phone, v.email].filter(Boolean).join(' · ') || null,
+        contactName: v.contact_name,
+        phone: v.phone,
+        email: v.email,
+        bank,
       },
       supply: po.supply,
       lines: lines.map((l) => ({
         seq: l.seq,
+        code: l.item_code,
         description: l.description,
         hsn: l.hsn_code,
+        make: l.make,
+        model: l.model,
         quantity: Number(l.quantity),
         uom: l.uom,
         rate: Number(l.rate),
@@ -1562,12 +1617,51 @@ export class PurchaseOrdersService implements OnModuleInit {
       paymentText: po.payment_text,
       msmeWarning: po.msme_warning,
       terms: po.terms,
+      freightTerms: po.freight_terms,
+      vendorNote: po.vendor_note,
       emergency: po.emergency ? { reason: po.emergency_reason ?? '', billRef: po.bill_ref } : null,
-      signatures: s.po_signatures,
-      approved: placed
-        ? { by: approver, at: po.approved_at ? dmy(po.approved_at.toISOString()) : null }
-        : null,
+      // the boxes of Purchase settings: the first who prepared it, the last who approved it (once
+      // approved), with the signature on their employee record; any between are signed by hand
+      signers: await Promise.all(
+        s.po_signatures.map(async (as, i, all) =>
+          i === 0
+            ? {
+                as,
+                name: po.created_by_name,
+                signature: await this.signatureOf(c, po.created_by),
+              }
+            : i === all.length - 1 && placed && approval
+              ? { as, name: approval.by, signature: await this.signatureOf(c, approval.uid) }
+              : { as, name: null, signature: null },
+        ),
+      ),
+      footer: [
+        s.bill_to_name ?? s.name,
+        `Registered Office: ${s.billing_address ?? s.address ?? ''}`,
+        s.gstin ? `GSTIN No: ${s.gstin}` : null,
+      ]
+        .filter(Boolean)
+        .join(' || '),
     };
+  }
+
+  /** The signature image on a user's employee record (PNG or JPEG), for a printed document. */
+  private async signatureOf(c: PoolClient, userId: string | null): Promise<OrderPdfData['logo']> {
+    if (!userId) return null;
+    const f = (
+      await c.query<{ object_key: string; content_type: string }>(
+        `SELECT f.object_key, f.content_type FROM employees e
+           JOIN files f ON f.id = e.signature_file_id AND f.deleted_at IS NULL
+          WHERE e.user_id = $1 AND e.deleted_at IS NULL AND f.content_type IN ('image/png', 'image/jpeg') LIMIT 1`,
+        [userId],
+      )
+    ).rows[0];
+    if (!f) return null;
+    try {
+      return { contentType: f.content_type, bytes: await this.storage.read(f.object_key) };
+    } catch {
+      return null;
+    }
   }
 
   async pdf(ctx: RequestContext, id: string) {
@@ -1648,7 +1742,7 @@ export class PurchaseOrdersService implements OnModuleInit {
         date: d.date,
         amount: rupees(Number(po.total)),
         delivery: d.deliveryDate ?? 'the date agreed',
-        address: d.deliveryAddress ?? 'the school',
+        address: d.shipTo.address ?? 'the school',
         contact: me.email ?? 'the school office',
         signatory: me.name,
         school: d.school.name,
