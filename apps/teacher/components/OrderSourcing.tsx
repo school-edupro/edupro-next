@@ -1,5 +1,6 @@
-import { Badge, Card } from '@edupro/ui';
+import { Badge } from '@edupro/ui';
 import { FileLinks } from '@/components/FileLinks';
+import { FoldCard } from '@/components/FoldCard';
 import { inr, TIER, type OrderAmendment, type OrderSourcing } from '@/lib/purchase';
 
 const day = (iso: string | null) =>
@@ -11,6 +12,41 @@ const day = (iso: string | null) =>
         year: 'numeric',
       }).format(new Date(iso.length === 10 ? `${iso}T00:00:00+05:30` : iso))
     : '—';
+
+/** The lines that had quotes, and how many of them went to the lowest (L1). */
+export function l1Count(s: OrderSourcing) {
+  const quoted = s.lines.filter((l) => l.cells.some((c) => c !== null));
+  return { quoted: quoted.length, l1: quoted.filter((l) => !l.notL1).length };
+}
+
+/** One line on the folded card: how the vendor was found, the quotes, L1, the certificate. */
+export function sourcingHint(s: OrderSourcing) {
+  const { quoted, l1 } = l1Count(s);
+  const signed = s.committee.filter((m) => m.signedAt).length;
+  return [
+    s.autoRule
+      ? s.autoRule === 'rate_contract'
+        ? 'Rate contract'
+        : 'Under the limit'
+      : s.tier
+        ? TIER[s.tier].label
+        : null,
+    s.quotes.length
+      ? `${String(s.quotes.length)} quote${s.quotes.length === 1 ? '' : 's'}`
+      : 'No quotes',
+    quoted
+      ? l1 === quoted
+        ? `L1 on ${quoted === 1 ? 'the line' : `all ${String(quoted)} lines`}`
+        : `L1 on ${String(l1)} of ${String(quoted)} lines (reasons given)`
+      : null,
+    s.certificate ? 'price certificate signed' : null,
+    s.committee.length
+      ? `committee ${String(signed)} of ${String(s.committee.length)} signed`
+      : null,
+  ]
+    .filter(Boolean)
+    .join(' · ');
+}
 
 /**
  * Why this vendor, for those who approve a PO (docs/design/83, "As built — the PO's sourcing and
@@ -25,7 +61,7 @@ export function OrderSourcingCard({ poId, s }: { poId: string; s: OrderSourcing 
       ? TIER[s.tier].label
       : '';
   return (
-    <Card title="Why this vendor">
+    <FoldCard id="po-why" title="Why this vendor" hint={sourcingHint(s)}>
       <p style={{ marginTop: 0 }}>
         From {s.requisition}
         {tier ? ` · ${tier}` : ''}
@@ -185,14 +221,28 @@ export function OrderSourcingCard({ poId, s }: { poId: string; s: OrderSourcing 
           </ul>
         </>
       ) : null}
-    </Card>
+    </FoldCard>
   );
+}
+
+/** One line on the folded card: how many things changed, the first few, the reason. */
+export function amendmentHint(a: OrderAmendment) {
+  const n = a.changes.length;
+  const names = a.changes.slice(0, 3).map((c) => c.what);
+  return [
+    n
+      ? `${String(n)} change${n === 1 ? '' : 's'}: ${names.join(', ')}${n > 3 ? '…' : ''}`
+      : 'Nothing printed on the PO changed',
+    a.reason ? `why: ${a.reason}` : null,
+  ]
+    .filter(Boolean)
+    .join(' · ');
 }
 
 /** An amendment: the reason, the PO it replaces (to open and print) and what changed. */
 export function OrderAmendmentCard({ a, label }: { a: OrderAmendment; label: string }) {
   return (
-    <Card title={`What changed from ${a.previousLabel}`}>
+    <FoldCard id="po-amend" title={`What changed from ${a.previousLabel}`} hint={amendmentHint(a)}>
       <p
         style={{
           marginTop: 0,
@@ -242,6 +292,6 @@ export function OrderAmendmentCard({ a, label }: { a: OrderAmendment; label: str
       ) : (
         <p className="ep-field__help">Nothing printed on the PO changed.</p>
       )}
-    </Card>
+    </FoldCard>
   );
 }

@@ -1014,3 +1014,31 @@ this PO's lines; the admin and staff app PO pages.
 - In-text links on the PO page are underlined (the requisition in the facts; axe link-in-text-block).
 - Test: `purchase-orders` — R1 carries the amendment (R0, the reason, the changes) and its sourcing
   lines; a user put on R1's approval opens R0 and its PDF (404 before).
+
+## As built — the PO page: figures and folding cards (8 Nov 2026)
+
+Asked by the user ("rebuild the UI of the PO page; What changed from PO / Why this vendor hidden until the
+user clicks"). Decided with the user: **summary + folding**, **all but the essentials folded**, the same
+in the staff app.
+
+- **Figures first** (`ep-doc-kpis`: 2 / 3 / 6 across, `KpiTile`): total with GST (before GST as the hint),
+  lines (other charges), deliver by (the receipt status while receiving, else the PO's validity),
+  payment (the GST mode and freight), quotes · L1 (from `sourcing`: quotes, L1 on every line or on n of
+  m quoted lines, else the tier), revision (R n and the PO it replaces). Then **Status and actions** (the
+  waiting-with line, notes, MSME warning, an open amendment as an info alert, who made / approved /
+  sent / closed it, the buttons), then **Send to the vendor** when it can be sent.
+- **Folding cards** (`FoldCard` in admin `components/FoldCard.tsx` and staff `components/FoldCard.tsx`:
+  `<details class="ep-card ep-fold">`, the `<summary>` bar holds the card's `h2` and a one-line hint, a
+  chevron that turns; CSS `.ep-fold*` in `packages/ui/src/app.css`). Open: **Lines** (always a card),
+  **Approvals** while `submitted`, **Deliveries** while `approved` / `sent`. Folded with a hint: **What
+  changed from …** (n changes, the first three, the reason — `amendmentHint`), **Why this vendor** (tier,
+  quotes, L1, certificate, committee signed — `sourcingHint`, `l1Count`), **Vendor and terms**, **GST
+  summary** (now its own card, out of Lines), **E-mails sent**, **Revisions**, **History**.
+- Admin order: figures, status and actions, send, what changed, why this vendor, lines, deliveries,
+  vendor and terms, GST summary, e-mails, revisions, approvals, history — in `ep-doc-stack` (the cards
+  spaced). Staff app: figures, status, your decision, what changed, why this vendor, lines, approvals
+  (new on the staff page: each level, who, when, the note).
+- The figures carry the revision and the payment, so the status card no longer repeats them; the page
+  header reads vendor · date.
+- Checked in a browser (dev-purchase admin, dev-principal staff; 1440 and 375 wide): axe clean with the
+  cards folded and opened; the hints on PO 381 as above.

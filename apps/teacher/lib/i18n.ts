@@ -61,6 +61,13 @@ const DICT: Record<string, string> = {
   'You have signed it.': 'आपने हस्ताक्षर कर दिए हैं।',
   'Withdraw my signature': 'मेरे हस्ताक्षर वापस लें',
   Lines: 'पंक्तियाँ',
+  'The order at a glance': 'आदेश एक नज़र में',
+  'Total with GST': 'जीएसटी सहित कुल',
+  'Deliver by': 'डिलीवरी तिथि',
+  'Quotes · L1': 'कोटेशन · L1',
+  Revision: 'संशोधन',
+  'Why this vendor': 'यही विक्रेता क्यों',
+  'Vendor and terms': 'विक्रेता और शर्तें',
   'Comparative statement': 'तुलनात्मक विवरण',
   'What the school pays per unit, with GST; the lowest is L1.':
     'जीएसटी सहित प्रति इकाई विद्यालय का भुगतान; सबसे कम L1 है।',

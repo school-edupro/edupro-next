@@ -323,6 +323,13 @@ On a draft PO:
   within 45 days).
 - **Send for approval**: the department's PO levels (Purchase → Who approves); nobody approves their own
   PO — their level passes on.
+- **The PO's page** (admin and staff app) starts with its figures — total with GST, lines, deliver by,
+  payment, quotes and L1, revision — then the status and the buttons, then cards. **Lines** is always
+  open; **Approvals** is open while the PO waits for a decision and **Deliveries** while goods are
+  expected. The others — **What changed from**, **Why this vendor**, **Vendor and terms**, **GST
+  summary**, **E-mails sent**, **Revisions** and **History** — are folded: each bar shows one line of what
+  is inside (e.g. "Direct purchase · 3 quotes · L1 on all 2 lines"); click the bar to open it, again to
+  close it.
 - **Why this vendor** (on the PO, admin and staff app): what the approver needs to decide — the
   requisition's sourcing (direct, committee, tender, or made by the system), the quotes of the vendors
   who quoted this PO's lines (with their documents to view), the comparative statement for these lines

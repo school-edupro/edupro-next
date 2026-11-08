@@ -14517,3 +14517,86 @@ button.ep-subchoice__icon:hover {
   gap: var(--sp-3);
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr));
 }
+/* a card that folds (docs/design/83, "As built — the PO page"): the title and a one-line hint show;
+   a click on the bar opens the rest */
+.ep-fold {
+  padding: 0;
+}
+.ep-fold__summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  padding: var(--sp-4) var(--sp-5);
+  cursor: pointer;
+  list-style: none;
+  border-radius: var(--radius-md);
+}
+.ep-fold__summary::-webkit-details-marker {
+  display: none;
+}
+.ep-fold__summary:hover {
+  background: var(--surface-subtle);
+}
+.ep-fold__head {
+  display: grid;
+  gap: var(--sp-1);
+  min-width: 0;
+}
+.ep-fold__title {
+  font-size: var(--fs-h4);
+  font-weight: var(--fw-semibold);
+  margin: 0;
+}
+.ep-fold__hint {
+  color: var(--text-muted);
+  font-size: var(--fs-small);
+  overflow-wrap: anywhere;
+}
+.ep-fold__chevron {
+  display: inline-flex;
+  flex: none;
+  color: var(--text-muted);
+  transition: transform var(--dur-fast) var(--ease-out);
+}
+.ep-fold[open] > .ep-fold__summary .ep-fold__chevron {
+  transform: rotate(180deg);
+}
+.ep-fold[open] > .ep-fold__summary {
+  border-bottom: 1px solid var(--border-default);
+  border-radius: var(--radius-md) var(--radius-md) 0 0;
+}
+.ep-fold__body {
+  padding: var(--sp-4) var(--sp-5) var(--sp-5);
+}
+/* a document page's cards, spaced */
+.ep-doc-stack {
+  display: grid;
+  gap: var(--sp-3);
+  min-width: 0;
+}
+/* the figures above a document page: an even row (2 / 3 / 6 across) */
+.ep-doc-kpis {
+  display: grid;
+  gap: var(--sp-3);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+@media (min-width: 40rem) {
+  .ep-doc-kpis {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+@media (min-width: 90rem) {
+  .ep-doc-kpis {
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+  }
+}
+.ep-doc-kpis .ep-kpi__value {
+  font-size: var(--fs-h4);
+  overflow-wrap: anywhere;
+}
+@media print {
+  .ep-fold__chevron {
+    display: none;
+  }
+}
