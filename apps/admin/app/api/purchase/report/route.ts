@@ -10,6 +10,7 @@ const KEYS: Record<string, (v: string) => boolean> = {
   departmentId: (v) => ID.test(v),
   vendorId: (v) => ID.test(v),
   itemId: (v) => ID.test(v),
+  storeId: (v) => ID.test(v),
   status: (v) => /^[a-z_]{2,20}$/.test(v),
 };
 

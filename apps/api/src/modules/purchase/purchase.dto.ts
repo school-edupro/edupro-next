@@ -735,6 +735,9 @@ export const PURCHASE_REPORTS = [
   'asset_register',
   'fixed_assets',
   'condemnations',
+  'issue_register',
+  'return_register',
+  'unacknowledged',
 ] as const;
 export type PurchaseReport = (typeof PURCHASE_REPORTS)[number];
 
@@ -745,6 +748,7 @@ export const ReportQuerySchema = z
     departmentId: IdSchema.optional(),
     vendorId: IdSchema.optional(),
     itemId: IdSchema.optional(),
+    storeId: IdSchema.optional(),
     status: z
       .string()
       .trim()
@@ -1074,9 +1078,21 @@ export const StockDocQuerySchema = z.object({
     .optional()
     .transform((v) => v === '1'),
   q: z.string().trim().max(80).optional(),
+  /** issues and returns: the period (issued / returned on), a department, an item on a line */
+  from: Day.optional(),
+  to: Day.optional(),
+  departmentId: IdSchema.optional(),
+  itemId: IdSchema.optional(),
   page: z.coerce.number().int().min(1).max(10000).default(1),
 });
 export class StockDocQueryDto extends createZodDto(StockDocQuerySchema) {}
+
+/** What a new return can start from: POs with goods to send back, or issues with goods to take back. */
+export const ReturnSourceQuerySchema = z.object({
+  kind: z.enum(['to_vendor', 'to_store']),
+  q: z.string().trim().max(80).optional(),
+});
+export class ReturnSourceQueryDto extends createZodDto(ReturnSourceQuerySchema) {}
 
 // ---- phase 2, part 9: reorder, assets, depreciation, condemnation (docs/design/84) ------------------
 export const ReorderIndentSchema = z.object({

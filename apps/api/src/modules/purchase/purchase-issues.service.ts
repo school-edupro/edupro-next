@@ -166,7 +166,11 @@ export class PurchaseIssuesService {
           AND ($3::bigint IS NULL OR si.store_id = $3) AND (NOT $4 OR (si.status = 'issued' AND ${RECEIVER}))
           AND ($5::text IS NULL OR si.number ILIKE '%' || $5 || '%' OR d.name ILIKE '%' || $5 || '%' OR pi.number ILIKE '%' || $5 || '%'
                OR tk.display_name ILIKE '%' || $5 || '%')
-          AND ($6 OR ${RECEIVER}) AND (NOT $7 OR ${RECEIVER})`;
+          AND ($6 OR ${RECEIVER}) AND (NOT $7 OR ${RECEIVER})
+          AND ($8::date IS NULL OR si.issued_on >= $8) AND ($9::date IS NULL OR si.issued_on <= $9)
+          AND ($10::bigint IS NULL OR si.department_id = $10)
+          AND ($11::bigint IS NULL OR EXISTS (SELECT 1 FROM stock_issue_lines l WHERE l.issue_id = si.id AND l.item_id = $11))`;
+      const [from, to] = q.from && q.to && q.from > q.to ? [q.to, q.from] : [q.from, q.to];
       const args = [
         q.status ?? null,
         q.kind ?? null,
@@ -175,6 +179,10 @@ export class PurchaseIssuesService {
         q.q ?? null,
         this.has(ctx, PURCHASE.storeView),
         q.received ?? false,
+        from ?? null,
+        to ?? null,
+        q.departmentId ?? null,
+        q.itemId ?? null,
       ];
       const total = await c.query<{ n: number }>(
         // eslint-disable-next-line no-restricted-syntax -- fixed fragments; values are bound
@@ -184,18 +192,37 @@ export class PurchaseIssuesService {
       );
       const r = await c.query<IssueRow>(
         // eslint-disable-next-line no-restricted-syntax -- fixed fragments; values are bound
-        `${SELECT} ${where} ORDER BY si.issued_on DESC, si.id DESC LIMIT 50 OFFSET $8`,
+        `${SELECT} ${where} ORDER BY si.issued_on DESC, si.id DESC LIMIT 50 OFFSET $12`,
         [...args, (q.page - 1) * 50],
       );
       const mine = await c.query<{ n: number }>(
         // eslint-disable-next-line no-restricted-syntax -- RECEIVER is a fixed fragment
         `SELECT count(*)::int AS n FROM stock_issues si WHERE si.status = 'issued' AND ${RECEIVER}`,
       );
+      // the figures over the same filters, whatever the status (the tab)
+      const f = (
+        await c.query<{ n: number; value: string; waiting: number; oldest: number | null }>(
+          // eslint-disable-next-line no-restricted-syntax -- fixed fragments; values are bound
+          `SELECT count(*)::int AS n,
+                  COALESCE(sum((SELECT sum(l.value) FROM stock_issue_lines l WHERE l.issue_id = si.id)), 0)::text AS value,
+                  (count(*) FILTER (WHERE si.status = 'issued'))::int AS waiting,
+                  max(CURRENT_DATE - si.issued_on) FILTER (WHERE si.status = 'issued') AS oldest
+             FROM stock_issues si JOIN departments d ON d.id = si.department_id
+             LEFT JOIN purchase_indents pi ON pi.id = si.indent_id LEFT JOIN employees tk ON tk.id = si.taken_by_employee_id ${where}`,
+          [null, ...args.slice(1)],
+        )
+      ).rows[0]!;
       return {
         rows: r.rows.map((x) => this.shape(x)),
         total: total.rows[0]!.n,
         page: q.page,
         toAcknowledge: mine.rows[0]!.n,
+        figures: {
+          issues: f.n,
+          value: Number(f.value),
+          waiting: f.waiting,
+          oldestWaitingDays: f.oldest,
+        },
       };
     });
   }
@@ -255,6 +282,7 @@ export class PurchaseIssuesService {
           requisition: string;
           storeId: string;
           store: string;
+          departmentId: string | null;
           department: string | null;
           purpose: string | null;
           indents: string | null;
@@ -282,6 +310,7 @@ export class PurchaseIssuesService {
             requisition: x.requisition,
             storeId: x.store_id,
             store: x.store,
+            departmentId: x.department_id,
             department: x.department,
             purpose: x.purpose,
             indents: x.indents,
@@ -319,6 +348,7 @@ export class PurchaseIssuesService {
         in_hand: string;
         indent_id: string;
         indent: string;
+        department_id: string;
         department: string;
         purpose: string;
         raised_by: string;
@@ -327,7 +357,7 @@ export class PurchaseIssuesService {
         // eslint-disable-next-line no-restricted-syntax -- PERSON_OF is a fixed fragment
         `SELECT r.id::text AS reservation_id, r.store_id::text, st.name AS store, r.item_id::text, i.code AS item_code, i.name AS item,
                 COALESCE(su.code, u.code) AS unit, i.tracks_batch, r.qty::text, r.issued_qty::text AS issued,
-                COALESCE(b.qty, 0)::text AS in_hand, pi.id::text AS indent_id, pi.number AS indent, d.name AS department,
+                COALESCE(b.qty, 0)::text AS in_hand, pi.id::text AS indent_id, pi.number AS indent, pi.department_id::text, d.name AS department,
                 pi.purpose, ${PERSON_OF('ru')} AS raised_by, pi.decided_at AS approved_at
            FROM stock_reservations r
            JOIN purchase_indent_lines il ON il.id = r.indent_line_id
@@ -352,6 +382,7 @@ export class PurchaseIssuesService {
           indent: string;
           storeId: string;
           store: string;
+          departmentId: string;
           department: string;
           purpose: string;
           raisedBy: string;
@@ -379,6 +410,7 @@ export class PurchaseIssuesService {
             indent: x.indent,
             storeId: x.store_id,
             store: x.store,
+            departmentId: x.department_id,
             department: x.department,
             purpose: x.purpose,
             raisedBy: x.raised_by,

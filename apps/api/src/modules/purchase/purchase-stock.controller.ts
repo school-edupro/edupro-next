@@ -19,6 +19,7 @@ import {
   NoteDto,
   PURCHASE,
   ReturnToStoreDto,
+  ReturnSourceQueryDto,
   StockDocQueryDto,
   TransferDto,
   VendorReturnDto,
@@ -142,6 +143,16 @@ export class PurchaseStockController {
   @RequirePermission(PURCHASE.storeView)
   listReturns(@ReqCtx() ctx: RequestContext, @Query() q: StockDocQueryDto) {
     return this.returns.list(ctx, q);
+  }
+
+  @Get('return-sources')
+  @ApiOperation({
+    summary:
+      'Where a new return starts: POs with goods to send back, or issues with goods to take back',
+  })
+  @RequirePermission(PURCHASE.storeView)
+  returnSources(@ReqCtx() ctx: RequestContext, @Query() q: ReturnSourceQueryDto) {
+    return this.returns.sources(ctx, q);
   }
 
   @Get('returnable/:orderId')

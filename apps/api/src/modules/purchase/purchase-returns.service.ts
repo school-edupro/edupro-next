@@ -20,7 +20,12 @@ import { blankBox, signerOf } from './purchase-doc-sign';
 import { purchaseStockPdf } from './purchase-stock-pdf';
 import { assetsToVendor } from './purchase-asset-core';
 import { postStock } from './purchase-stores.service';
-import { PURCHASE, type StockDocQueryDto, type VendorReturnDto } from './purchase.dto';
+import {
+  PURCHASE,
+  type ReturnSourceQueryDto,
+  type StockDocQueryDto,
+  type VendorReturnDto,
+} from './purchase.dto';
 
 const label = (number: string, revision: number) =>
   revision ? `${number}-R${String(revision)}` : number;
@@ -270,6 +275,25 @@ export class PurchaseReturnsService {
   // ---- lists ---------------------------------------------------------------------------------------
   async list(ctx: RequestContext, q: StockDocQueryDto) {
     this.mustSee(ctx);
+    const [from, to] = q.from && q.to && q.from > q.to ? [q.to, q.from] : [q.from, q.to];
+    const FROM = `FROM stock_returns r JOIN stores st ON st.id = r.store_id
+           LEFT JOIN departments d ON d.id = r.department_id LEFT JOIN vendors v ON v.id = r.vendor_id
+           LEFT JOIN stock_issues si ON si.id = r.issue_id LEFT JOIN purchase_orders po ON po.id = r.order_id`;
+    const where = `WHERE ($1::text IS NULL OR r.kind = $1) AND ($2::bigint IS NULL OR r.store_id = $2)
+            AND ($3::text IS NULL OR r.number ILIKE '%' || $3 || '%' OR v.legal_name ILIKE '%' || $3 || '%' OR d.name ILIKE '%' || $3 || '%'
+                 OR si.number ILIKE '%' || $3 || '%' OR po.number ILIKE '%' || $3 || '%')
+            AND ($4::date IS NULL OR r.returned_on >= $4) AND ($5::date IS NULL OR r.returned_on <= $5)
+            AND ($6::bigint IS NULL OR r.department_id = $6)
+            AND ($7::bigint IS NULL OR EXISTS (SELECT 1 FROM stock_return_lines l WHERE l.return_id = r.id AND l.item_id = $7))`;
+    const args = [
+      q.kind ?? null,
+      q.storeId ?? null,
+      q.q ?? null,
+      from ?? null,
+      to ?? null,
+      q.departmentId ?? null,
+      q.itemId ?? null,
+    ];
     return this.db.tenant(requireTenant(ctx), async (c) => {
       const r = await c.query<{
         id: string;
@@ -284,23 +308,47 @@ export class PurchaseReturnsService {
         lines: number;
         value: string;
         by: string | null;
+        reason: string | null;
       }>(
-        // eslint-disable-next-line no-restricted-syntax -- PERSON_OF is a fixed fragment
+        // eslint-disable-next-line no-restricted-syntax -- PERSON_OF and WHERE are fixed fragments
         `SELECT r.id::text, r.number, r.kind, st.name AS store, r.returned_on::text, d.name AS department, v.legal_name AS vendor,
                 COALESCE(si.number, po.number || CASE WHEN po.revision > 0 THEN '-R' || po.revision ELSE '' END) AS doc,
                 COALESCE(r.issue_id, r.order_id)::text AS doc_id,
                 (SELECT count(*)::int FROM stock_return_lines l WHERE l.return_id = r.id) AS lines,
                 COALESCE((SELECT sum(l.value) FROM stock_return_lines l WHERE l.return_id = r.id), 0)::text AS value,
-                (SELECT ${PERSON_OF('u')} FROM users u WHERE u.id = r.created_by) AS by
-           FROM stock_returns r JOIN stores st ON st.id = r.store_id
-           LEFT JOIN departments d ON d.id = r.department_id LEFT JOIN vendors v ON v.id = r.vendor_id
-           LEFT JOIN stock_issues si ON si.id = r.issue_id LEFT JOIN purchase_orders po ON po.id = r.order_id
-          WHERE ($1::text IS NULL OR r.kind = $1) AND ($2::bigint IS NULL OR r.store_id = $2)
-            AND ($3::text IS NULL OR r.number ILIKE '%' || $3 || '%' OR v.legal_name ILIKE '%' || $3 || '%' OR d.name ILIKE '%' || $3 || '%')
-          ORDER BY r.returned_on DESC, r.id DESC LIMIT 50 OFFSET $4`,
-        [q.kind ?? null, q.storeId ?? null, q.q ?? null, (q.page - 1) * 50],
+                (SELECT ${PERSON_OF('u')} FROM users u WHERE u.id = r.created_by) AS by,
+                COALESCE((SELECT string_agg(DISTINCT l.reason, '; ') FROM stock_return_lines l WHERE l.return_id = r.id), r.note) AS reason
+           ${FROM} ${where}
+          ORDER BY r.returned_on DESC, r.id DESC LIMIT 50 OFFSET $8`,
+        [...args, (q.page - 1) * 50],
       );
+      const f = (
+        await c.query<{ n: number; vendor: string; store: string; total: string }>(
+          // eslint-disable-next-line no-restricted-syntax -- FROM and WHERE are fixed fragments
+          `SELECT count(*)::int AS n,
+                  COALESCE(sum(rv.value) FILTER (WHERE r.kind = 'to_vendor'), 0)::text AS vendor,
+                  COALESCE(sum(rv.value) FILTER (WHERE r.kind = 'to_store'), 0)::text AS store,
+                  COALESCE(sum(rv.value), 0)::text AS total
+             ${FROM} CROSS JOIN LATERAL (SELECT COALESCE(sum(l.value), 0) AS value FROM stock_return_lines l WHERE l.return_id = r.id) rv
+             ${where}`,
+          [null, ...args.slice(1)],
+        )
+      ).rows[0]!;
+      const total = (
+        await c.query<{ n: number }>(
+          // eslint-disable-next-line no-restricted-syntax -- FROM and WHERE are fixed fragments
+          `SELECT count(*)::int AS n ${FROM} ${where}`,
+          args,
+        )
+      ).rows[0]!.n;
       return {
+        total,
+        figures: {
+          returns: f.n,
+          toVendors: Number(f.vendor),
+          intoStore: Number(f.store),
+          value: Number(f.total),
+        },
         rows: r.rows.map((x) => ({
           id: x.id,
           number: x.number,
@@ -314,8 +362,101 @@ export class PurchaseReturnsService {
           lines: x.lines,
           value: Number(x.value),
           by: x.by,
+          reason: x.reason,
         })),
         page: q.page,
+      };
+    });
+  }
+
+  /**
+   * Where a new return starts: to a vendor, the POs with goods received that can still go back (rejected
+   * goods not returned, or accepted stock goods); from a department, the issues with goods not yet back.
+   * The newest first, at most 50; the return's own form checks the quantities.
+   */
+  async sources(ctx: RequestContext, q: ReturnSourceQueryDto) {
+    this.mustSee(ctx);
+    return this.db.tenant(requireTenant(ctx), async (c) => {
+      if (q.kind === 'to_vendor') {
+        const r = await c.query<{
+          id: string;
+          number: string;
+          revision: number;
+          vendor: string;
+          received: string;
+          receipts: string;
+          rejected: number;
+          in_stock: number;
+        }>(
+          `SELECT po.id::text, po.number, po.revision, v.legal_name AS vendor, max(g.received_on)::text AS received,
+                  string_agg(DISTINCT g.number, ', ') AS receipts,
+                  (count(*) FILTER (WHERE COALESCE(gl.rejected_qty, 0) > COALESCE((SELECT sum(rl.qty) FROM stock_return_lines rl
+                     WHERE rl.receipt_line_id = gl.id AND rl.source = 'rejected'), 0)))::int AS rejected,
+                  (count(*) FILTER (WHERE COALESCE(i.stock_tracked, false) AND COALESCE(gl.accepted_qty, 0) > COALESCE((SELECT sum(rl.qty)
+                     FROM stock_return_lines rl WHERE rl.receipt_line_id = gl.id AND rl.source = 'stock'), 0)))::int AS in_stock
+             FROM goods_receipt_lines gl
+             JOIN goods_receipts g ON g.id = gl.receipt_id AND g.kind = 'goods' AND g.status IN ('accepted', 'rejected')
+             JOIN purchase_orders po ON po.id = g.order_id JOIN vendors v ON v.id = po.vendor_id
+             JOIN purchase_order_lines ol ON ol.id = gl.order_line_id
+             LEFT JOIN purchase_items i ON i.id = ol.item_id
+            WHERE ($1::text IS NULL OR po.number ILIKE '%' || $1 || '%' OR v.legal_name ILIKE '%' || $1 || '%' OR g.number ILIKE '%' || $1 || '%')
+              AND ($2 OR EXISTS (SELECT 1 FROM store_keepers k JOIN employees e ON e.id = k.employee_id
+                              WHERE k.store_id = g.store_id AND e.user_id = app.current_user_id()))
+            GROUP BY po.id, po.number, po.revision, v.legal_name
+           HAVING count(*) FILTER (WHERE COALESCE(gl.rejected_qty, 0) > 0 OR COALESCE(gl.accepted_qty, 0) > 0) > 0
+            ORDER BY max(g.received_on) DESC, po.id DESC LIMIT 50`,
+          [q.q ?? null, this.has(ctx, PURCHASE.storeManage)],
+        );
+        return {
+          kind: q.kind,
+          rows: r.rows
+            .filter((x) => x.rejected + x.in_stock > 0)
+            .map((x) => ({
+              id: x.id,
+              number: label(x.number, x.revision),
+              party: x.vendor,
+              on: x.received,
+              detail: x.receipts,
+              rejectedLines: x.rejected,
+              stockLines: x.in_stock,
+              href: `/purchase/returns/new?order=${x.id}`,
+            })),
+        };
+      }
+      const r = await c.query<{
+        id: string;
+        number: string;
+        department: string;
+        store: string;
+        issued: string;
+        doc: string | null;
+        lines: number;
+      }>(
+        `SELECT si.id::text, si.number, d.name AS department, st.name AS store, si.issued_on::text AS issued,
+                COALESCE(pi.number, pr.number) AS doc,
+                (SELECT count(*)::int FROM stock_issue_lines l WHERE l.issue_id = si.id AND l.qty > l.returned_qty) AS lines
+           FROM stock_issues si JOIN departments d ON d.id = si.department_id JOIN stores st ON st.id = si.store_id
+           LEFT JOIN purchase_indents pi ON pi.id = si.indent_id
+           LEFT JOIN purchase_requisitions pr ON pr.id = si.requisition_id
+          WHERE EXISTS (SELECT 1 FROM stock_issue_lines l WHERE l.issue_id = si.id AND l.qty > l.returned_qty)
+            AND ($1::text IS NULL OR si.number ILIKE '%' || $1 || '%' OR d.name ILIKE '%' || $1 || '%'
+                 OR pi.number ILIKE '%' || $1 || '%' OR pr.number ILIKE '%' || $1 || '%')
+            AND ($2 OR EXISTS (SELECT 1 FROM store_keepers k JOIN employees e ON e.id = k.employee_id
+                              WHERE k.store_id = si.store_id AND e.user_id = app.current_user_id()))
+          ORDER BY si.issued_on DESC, si.id DESC LIMIT 50`,
+        [q.q ?? null, this.has(ctx, PURCHASE.storeManage)],
+      );
+      return {
+        kind: q.kind,
+        rows: r.rows.map((x) => ({
+          id: x.id,
+          number: x.number,
+          party: x.department,
+          on: x.issued,
+          detail: [x.store, x.doc].filter(Boolean).join(' · '),
+          openLines: x.lines,
+          href: `/purchase/issues/${x.id}#return`,
+        })),
       };
     });
   }

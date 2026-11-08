@@ -6,7 +6,7 @@ import { requireTenant, type RequestContext } from '../../common/http/request-co
 import { libraryFile, type FileCell, type FileColumn } from '../library/library-file';
 import { LIVE_PO, PLACED, TO_ORDER } from './purchase-order-core';
 import { PurchaseVendorsService } from './purchase-vendors.service';
-import { type PurchaseReport, type ReportQueryDto } from './purchase.dto';
+import { PURCHASE, type PurchaseReport, type ReportQueryDto } from './purchase.dto';
 
 /** A user's name as staff know it: their employee record's, else the account's. */
 const PERSON = (u: 'u' | 'au' | 'cu') =>
@@ -71,6 +71,10 @@ const words: Record<string, string> = {
   n180: 'No issue in 180 days',
   n365: 'No issue in a year',
   service: 'Completion certificate',
+  issued: 'Waiting for acknowledgement',
+  acknowledged: 'Acknowledged',
+  to_vendor: 'To the vendor',
+  to_store: 'Into the store',
 };
 const w = (v: string | null | undefined) => (v ? (words[v] ?? v) : '');
 
@@ -98,6 +102,38 @@ export const REPORT_NAMES: Record<PurchaseReport, string> = {
   asset_register: 'Asset register',
   fixed_assets: 'Fixed-asset register (by category)',
   condemnations: 'Condemnations and disposals',
+  issue_register: 'Issue register',
+  return_register: 'Return register',
+  unacknowledged: 'Issues not yet acknowledged',
+};
+
+/**
+ * The store registers: also open to those who see the stores without the purchase reports (the store
+ * keeper prints the issues, returns and stock of the stores without seeing spend or vendors' figures).
+ */
+export const STORE_REPORTS: readonly PurchaseReport[] = [
+  'grn_register',
+  'issue_register',
+  'return_register',
+  'unacknowledged',
+  'consumption',
+  'transfers',
+  'count_differences',
+  'below_reorder',
+  'slow_moving',
+  'expiring',
+];
+/** Reports of a moment, not of a period: their words say "as on" the day. */
+const AS_ON: readonly PurchaseReport[] = ['unacknowledged'];
+const ISSUE_KIND: Record<string, string> = {
+  receipt: 'On receipt',
+  indent: 'Held for indent / PR',
+  counter: 'Counter',
+};
+const RETURN_WHAT: Record<string, string> = {
+  rejected: 'Rejected at inspection',
+  stock: 'From stock (defective)',
+  issue: 'Brought back',
 };
 
 export interface ReportResult {
@@ -119,6 +155,7 @@ interface Scope {
   dept: string | null;
   vendor: string | null;
   item: string | null;
+  store: string | null;
   status: string | null;
 }
 
@@ -143,12 +180,18 @@ export class PurchaseReportsService {
       dept: q.departmentId ?? null,
       vendor: q.vendorId ?? null,
       item: q.itemId ?? null,
+      store: q.storeId ?? null,
       status: q.status ?? null,
     };
   }
 
-  private async filterWords(c: PoolClient, s: Scope) {
-    const parts = [`${dmy(s.from)} to ${dmy(s.to)}`];
+  private async filterWords(c: PoolClient, s: Scope, asOn = false) {
+    const parts = [asOn ? `As on ${dmy(ist())}` : `${dmy(s.from)} to ${dmy(s.to)}`];
+    if (s.store)
+      parts.push(
+        (await c.query<{ name: string }>(`SELECT name FROM stores WHERE id = $1`, [s.store]))
+          .rows[0]?.name ?? 'a store',
+      );
     if (s.dept)
       parts.push(
         (await c.query<{ name: string }>(`SELECT name FROM departments WHERE id = $1`, [s.dept]))
@@ -1327,6 +1370,223 @@ export class PurchaseReportsService {
           sum: [1, 2, 3, 4, 5, 6],
         };
       }
+      case 'issue_register': {
+        const r = await c.query<{
+          id: string;
+          day: string;
+          number: string;
+          kind: string;
+          store: string;
+          dept: string;
+          taker: string | null;
+          doc: string | null;
+          item: string;
+          code: string;
+          unit: string;
+          qty: string;
+          rate: string;
+          value: string;
+          returned: string;
+          status: string;
+          on_paper: boolean;
+          ack_by: string | null;
+          ack_at: string | null;
+        }>(
+          // eslint-disable-next-line no-restricted-syntax -- PERSON is a fixed fragment
+          `SELECT si.id::text, si.issued_on::text AS day, si.number, si.kind, st.name AS store, d.name AS dept,
+                  tk.display_name AS taker, COALESCE(pi.number, pr.number) AS doc, i.name AS item, i.code,
+                  COALESCE(su.code, u.code) AS unit, l.qty::text, l.rate::text, l.value::text, l.returned_qty::text AS returned,
+                  si.status, si.ack_on_paper AS on_paper,
+                  (SELECT ${PERSON('u')} FROM users u WHERE u.id = si.acknowledged_by) AS ack_by,
+                  to_char(si.acknowledged_at AT TIME ZONE 'Asia/Kolkata', 'DD-MM-YYYY HH12:MI AM') AS ack_at
+             FROM stock_issue_lines l JOIN stock_issues si ON si.id = l.issue_id
+             JOIN stores st ON st.id = si.store_id JOIN departments d ON d.id = si.department_id
+             JOIN purchase_items i ON i.id = l.item_id JOIN purchase_uoms u ON u.id = i.uom_id
+             LEFT JOIN purchase_uoms su ON su.id = i.stock_uom_id
+             LEFT JOIN employees tk ON tk.id = si.taken_by_employee_id
+             LEFT JOIN purchase_indents pi ON pi.id = si.indent_id
+             LEFT JOIN purchase_requisitions pr ON pr.id = si.requisition_id
+            WHERE si.issued_on BETWEEN $1::date AND $2::date AND ($3::bigint IS NULL OR si.department_id = $3)
+              AND ($4::bigint IS NULL OR l.item_id = $4) AND ($5::bigint IS NULL OR si.store_id = $5)
+              AND ($6::text IS NULL OR si.status = $6)
+            ORDER BY si.issued_on, si.number, l.id LIMIT $7`,
+          [s.from, s.to, s.dept, s.item, s.store, s.status, limit + 1],
+        );
+        return {
+          columns: [
+            { label: 'Date', type: 'date' },
+            { label: 'Issue', width: 2 },
+            { label: 'Kind', width: 1.5 },
+            { label: 'Store', width: 1.5 },
+            { label: 'Department', width: 1.8 },
+            { label: 'Taken by', width: 1.7 },
+            { label: 'Indent / PR', width: 1.8 },
+            { label: 'Item', width: 2.8 },
+            { label: 'Unit', width: 0.9 },
+            { label: 'Quantity', type: 'number', width: 1.1 },
+            { label: 'Rate (₹)', type: 'money', width: 1.2 },
+            { label: 'Value (₹)', type: 'money' },
+            { label: 'Returned', type: 'number', width: 1.1 },
+            { label: 'Acknowledged', width: 2.4 },
+          ] as FileColumn[],
+          rows: r.rows.map((x) => [
+            x.day,
+            x.number,
+            ISSUE_KIND[x.kind] ?? x.kind,
+            x.store,
+            x.dept,
+            x.taker,
+            x.doc,
+            `${x.item} (${x.code})`,
+            x.unit,
+            Number(x.qty),
+            Number(x.rate),
+            Number(x.value),
+            Number(x.returned) || null,
+            x.status === 'acknowledged'
+              ? [x.ack_by, x.on_paper ? 'slip signed on paper' : null, x.ack_at]
+                  .filter(Boolean)
+                  .join(' · ')
+              : 'Waiting',
+          ]),
+          links: r.rows.map((x) => `/purchase/issues/${x.id}`),
+          sum: [11],
+        };
+      }
+      case 'return_register': {
+        const r = await c.query<{
+          id: string;
+          day: string;
+          number: string;
+          kind: string;
+          store: string;
+          doc: string | null;
+          party: string | null;
+          item: string;
+          unit: string | null;
+          qty: string;
+          value: string;
+          source: string;
+          condition: string | null;
+          reason: string | null;
+          replacement: boolean | null;
+        }>(
+          `SELECT r.id::text, r.returned_on::text AS day, r.number, r.kind, st.name AS store,
+                  COALESCE(si.number, po.number || CASE WHEN po.revision > 0 THEN '-R' || po.revision ELSE '' END) AS doc,
+                  COALESCE(v.legal_name, d.name) AS party,
+                  COALESCE(i.name || ' (' || i.code || ')', ol.description, '—') AS item,
+                  CASE WHEN r.kind = 'to_vendor' THEN COALESCE(ou.code, su.code, u.code) ELSE COALESCE(su.code, u.code) END AS unit,
+                  l.qty::text, l.value::text, l.source, l.condition, COALESCE(l.reason, r.note) AS reason, l.replacement
+             FROM stock_return_lines l JOIN stock_returns r ON r.id = l.return_id JOIN stores st ON st.id = r.store_id
+             LEFT JOIN stock_issues si ON si.id = r.issue_id LEFT JOIN purchase_orders po ON po.id = r.order_id
+             LEFT JOIN vendors v ON v.id = r.vendor_id LEFT JOIN departments d ON d.id = r.department_id
+             LEFT JOIN purchase_items i ON i.id = l.item_id LEFT JOIN purchase_uoms u ON u.id = i.uom_id
+             LEFT JOIN purchase_uoms su ON su.id = i.stock_uom_id
+             LEFT JOIN goods_receipt_lines gl ON gl.id = l.receipt_line_id
+             LEFT JOIN purchase_order_lines ol ON ol.id = gl.order_line_id LEFT JOIN purchase_uoms ou ON ou.id = ol.uom_id
+            WHERE r.returned_on BETWEEN $1::date AND $2::date AND ($3::bigint IS NULL OR r.department_id = $3)
+              AND ($4::bigint IS NULL OR r.vendor_id = $4) AND ($5::bigint IS NULL OR l.item_id = $5)
+              AND ($6::bigint IS NULL OR r.store_id = $6) AND ($7::text IS NULL OR r.kind = $7)
+            ORDER BY r.returned_on, r.number, l.id LIMIT $8`,
+          [s.from, s.to, s.dept, s.vendor, s.item, s.store, s.status, limit + 1],
+        );
+        return {
+          columns: [
+            { label: 'Date', type: 'date' },
+            { label: 'Return', width: 2 },
+            { label: 'Kind', width: 1.5 },
+            { label: 'Store', width: 1.5 },
+            { label: 'Against', width: 1.8 },
+            { label: 'Vendor / department', width: 2.4 },
+            { label: 'Item', width: 2.8 },
+            { label: 'Unit', width: 0.9 },
+            { label: 'Quantity', type: 'number', width: 1.1 },
+            { label: 'Value (₹)', type: 'money' },
+            { label: 'What', width: 2 },
+            { label: 'Reason', width: 2.6 },
+          ] as FileColumn[],
+          rows: r.rows.map((x) => [
+            x.day,
+            x.number,
+            w(x.kind),
+            x.store,
+            x.doc,
+            x.party,
+            x.item,
+            x.unit,
+            Number(x.qty),
+            Number(x.value),
+            [
+              RETURN_WHAT[x.source] ?? x.source,
+              x.condition,
+              x.replacement ? 'replacement wanted' : null,
+            ]
+              .filter(Boolean)
+              .join(', '),
+            x.reason,
+          ]),
+          links: r.rows.map((x) => `/purchase/returns/${x.id}`),
+          sum: [9],
+        };
+      }
+      case 'unacknowledged': {
+        const r = await c.query<{
+          id: string;
+          number: string;
+          day: string;
+          days: number;
+          store: string;
+          dept: string;
+          taker: string | null;
+          hod: string | null;
+          doc: string | null;
+          lines: number;
+          value: string;
+        }>(
+          `SELECT si.id::text, si.number, si.issued_on::text AS day, (CURRENT_DATE - si.issued_on)::int AS days,
+                  st.name AS store, d.name AS dept, tk.display_name AS taker,
+                  (SELECT h.display_name FROM employees h WHERE h.id = d.hod_employee_id) AS hod,
+                  COALESCE(pi.number, pr.number) AS doc,
+                  (SELECT count(*)::int FROM stock_issue_lines l WHERE l.issue_id = si.id) AS lines,
+                  COALESCE((SELECT sum(l.value) FROM stock_issue_lines l WHERE l.issue_id = si.id), 0)::text AS value
+             FROM stock_issues si JOIN stores st ON st.id = si.store_id JOIN departments d ON d.id = si.department_id
+             LEFT JOIN employees tk ON tk.id = si.taken_by_employee_id
+             LEFT JOIN purchase_indents pi ON pi.id = si.indent_id
+             LEFT JOIN purchase_requisitions pr ON pr.id = si.requisition_id
+            WHERE si.status = 'issued' AND ($1::bigint IS NULL OR si.department_id = $1)
+              AND ($2::bigint IS NULL OR si.store_id = $2)
+            ORDER BY si.issued_on, si.number LIMIT $3`,
+          [s.dept, s.store, limit + 1],
+        );
+        return {
+          columns: [
+            { label: 'Issue', width: 2 },
+            { label: 'Issued on', type: 'date' },
+            { label: 'Days waiting', type: 'number', width: 1.1 },
+            { label: 'Store', width: 1.5 },
+            { label: 'Department', width: 1.8 },
+            { label: 'Taken by', width: 1.8 },
+            { label: 'HOD', width: 1.8 },
+            { label: 'Indent / PR', width: 1.8 },
+            { label: 'Lines', type: 'number', width: 0.9 },
+            { label: 'Value (₹)', type: 'money' },
+          ] as FileColumn[],
+          rows: r.rows.map((x) => [
+            x.number,
+            x.day,
+            x.days,
+            x.store,
+            x.dept,
+            x.taker,
+            x.hod,
+            x.doc,
+            x.lines,
+            Number(x.value),
+          ]),
+          links: r.rows.map((x) => `/purchase/issues/${x.id}`),
+          sum: [9],
+        };
+      }
       case 'condemnations': {
         const r = await c.query<{
           id: string;
@@ -1512,6 +1772,8 @@ export class PurchaseReportsService {
   async report(ctx: RequestContext, report: PurchaseReport, q: ReportQueryDto) {
     if (!(report in REPORT_NAMES))
       throw new DomainError('not-found', 'No such report', { status: 404 });
+    if (!PurchaseReportsService.mayOpen(ctx, report))
+      throw new DomainError('permission-denied', 'You cannot open this report', { status: 403 });
     return this.db.tenant(requireTenant(ctx), async (c) => {
       const s = this.scope(q);
       const limit = q.format ? 20000 : 500;
@@ -1528,7 +1790,7 @@ export class PurchaseReportsService {
                 : '',
           )
         : undefined;
-      const fw = await this.filterWords(c, s);
+      const fw = await this.filterWords(c, s, AS_ON.includes(report));
       if (q.format) {
         const school = (
           await c.query<{ name: string; by: string }>(
@@ -1564,9 +1826,23 @@ export class PurchaseReportsService {
     });
   }
 
-  /** What the reports filter by: departments, vendors (any status), items. */
+  /** All the reports with the purchase reports right; the store registers with the stores' view. */
+  static mayOpen(ctx: RequestContext, report: PurchaseReport) {
+    const has = (p: string) => ctx.permissions?.has(p) ?? false;
+    return has(PURCHASE.reportView) || (has(PURCHASE.storeView) && STORE_REPORTS.includes(report));
+  }
+
+  /** What the reports filter by: departments, vendors (any status), items, stores; the reports I may open. */
   async filters(ctx: RequestContext) {
+    const all = ctx.permissions?.has(PURCHASE.reportView) ?? false;
+    if (!all && !(ctx.permissions?.has(PURCHASE.storeView) ?? false))
+      throw new DomainError('permission-denied', 'You cannot open the purchase reports', {
+        status: 403,
+      });
     return this.db.tenant(requireTenant(ctx), async (c) => {
+      const st = await c.query<{ id: string; code: string; name: string }>(
+        `SELECT id::text, code, name FROM stores ORDER BY status, name`,
+      );
       const d = await c.query<{ id: string; name: string }>(
         `SELECT id::text, name FROM departments WHERE status = 'active' ORDER BY sort_order, name`,
       );
@@ -1576,7 +1852,10 @@ export class PurchaseReportsService {
       const i = await c.query<{ id: string; code: string; name: string }>(
         `SELECT id::text, code, name FROM purchase_items ORDER BY name LIMIT 5000`,
       );
-      return { departments: d.rows, vendors: v.rows, items: i.rows, reports: REPORT_NAMES };
+      const reports = all
+        ? REPORT_NAMES
+        : Object.fromEntries(STORE_REPORTS.map((r) => [r, REPORT_NAMES[r]]));
+      return { departments: d.rows, vendors: v.rows, items: i.rows, stores: st.rows, reports };
     });
   }
 

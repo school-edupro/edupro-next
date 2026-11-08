@@ -735,4 +735,146 @@ describe('purchase issues, returns, transfers and counts (e2e)', () => {
         .data.some((x: { id: string }) => x.id === all.id),
     ).toBe(false);
   });
+  it('the issue and return lists filter and count; the registers; the store keeper opens the store registers only', async () => {
+    const db = (sql: string, args: unknown[] = []) =>
+      withMigrator(async (c) => (await c.query<{ n: number }>(sql, args)).rows[0]!.n);
+    // issues: the figures over the filters, whatever the tab; the period, department, item, kind
+    const all = (await call(keeper, 'GET', `/purchase/issues?from=${today}&to=${today}`)).json();
+    const issued = await db(
+      `SELECT count(*)::int AS n FROM stock_issues WHERE school_id = $1 AND issued_on = $2::date`,
+      [school.id, today],
+    );
+    expect(all.figures.issues).toBe(issued);
+    expect(all.total).toBe(issued);
+    expect(all.figures.waiting).toBe(
+      await db(
+        `SELECT count(*)::int AS n FROM stock_issues WHERE school_id = $1 AND status = 'issued'`,
+        [school.id],
+      ),
+    );
+    const waiting = (await call(keeper, 'GET', `/purchase/issues?status=issued`)).json();
+    expect(waiting.figures.issues).toBe(all.figures.issues);
+    expect(waiting.total).toBe(all.figures.waiting);
+    const sci = (await call(keeper, 'GET', `/purchase/issues?departmentId=${ids.Science!}`)).json();
+    expect(sci.rows.length).toBeGreaterThan(0);
+    expect(new Set(sci.rows.map((x: { department: string }) => x.department))).toEqual(
+      new Set(['Science']),
+    );
+    expect((await call(keeper, 'GET', `/purchase/issues?itemId=${ids.CHEM!}`)).json().total).toBe(
+      await db(
+        `SELECT count(DISTINCT issue_id)::int AS n FROM stock_issue_lines WHERE school_id = $1 AND item_id = $2`,
+        [school.id, ids.CHEM],
+      ),
+    );
+    expect(
+      (await call(keeper, 'GET', `/purchase/issues?kind=counter`))
+        .json()
+        .rows.every((x: { kind: string }) => x.kind === 'counter'),
+    ).toBe(true);
+    expect((await call(keeper, 'GET', '/purchase/issues?from=2099-01-01')).json().figures).toEqual({
+      issues: 0,
+      value: 0,
+      waiting: 0,
+      oldestWaitingDays: null,
+    });
+    // the to-issue queue names each group's department for the filter
+    const queue = (await call(keeper, 'GET', '/purchase/to-issue')).json();
+    for (const g of [...queue.groups, ...queue.indents])
+      expect(g.departmentId === null || /^\d+$/.test(g.departmentId as string)).toBe(true);
+
+    // returns: figures by kind, the reason, the period and department
+    const rets = (await call(keeper, 'GET', `/purchase/returns?from=${today}`)).json();
+    expect(rets.total).toBe(
+      await db(`SELECT count(*)::int AS n FROM stock_returns WHERE school_id = $1`, [school.id]),
+    );
+    expect(rets.figures.toVendors).toBeGreaterThan(0);
+    expect(rets.figures.intoStore).toBeGreaterThan(0);
+    expect(rets.figures.value).toBeCloseTo(rets.figures.toVendors + rets.figures.intoStore, 2);
+    const toVendor = (await call(keeper, 'GET', `/purchase/returns?kind=to_vendor`)).json();
+    expect(toVendor.rows.every((x: { kind: string }) => x.kind === 'to_vendor')).toBe(true);
+    expect(toVendor.figures.intoStore).toBe(rets.figures.intoStore);
+    expect(
+      (await call(keeper, 'GET', `/purchase/returns?departmentId=${ids.Science!}&kind=to_store`))
+        .json()
+        .rows.every((x: { department: string }) => x.department === 'Science'),
+    ).toBe(true);
+    expect((await call(keeper, 'GET', '/purchase/returns?to=2000-01-01')).json().total).toBe(0);
+
+    // the registers: a row per line, the filters in words, the value summed
+    const reg = (
+      await call(admin, 'GET', `/purchase/reports/issue_register?from=${today}&to=${today}`)
+    ).json();
+    expect(reg.rows).toHaveLength(
+      await db(
+        `SELECT count(*)::int AS n FROM stock_issue_lines l JOIN stock_issues si ON si.id = l.issue_id
+          WHERE si.school_id = $1 AND si.issued_on = $2::date`,
+        [school.id, today],
+      ),
+    );
+    expect(reg.totals[11]).toBeCloseTo(
+      reg.rows.reduce((a: number, r: unknown[]) => a + Number(r[11]), 0),
+      2,
+    );
+    const lab = (
+      await call(admin, 'GET', `/purchase/reports/issue_register?storeId=${ids.lab!}`)
+    ).json();
+    expect(lab.words).toContain('Chemistry lab store');
+    expect(lab.rows.every((r: unknown[]) => r[3] === 'Chemistry lab store')).toBe(true);
+    const back = (
+      await call(admin, 'GET', `/purchase/reports/return_register?status=to_vendor`)
+    ).json();
+    expect(back.rows.length).toBeGreaterThan(0);
+    expect(back.rows.every((r: unknown[]) => r[2] === 'To the vendor')).toBe(true);
+    const unack = (await call(admin, 'GET', '/purchase/reports/unacknowledged')).json();
+    expect(unack.rows).toHaveLength(all.figures.waiting);
+    expect(unack.words).toMatch(/^As on /);
+    const file = (await call(admin, 'GET', `/purchase/reports/return_register?format=xlsx`)).json();
+    expect(file.filename).toMatch(/return-register/i);
+
+    // the store keeper: the store registers, not the purchase ones; the lists of the filters
+    expect((await call(keeper, 'GET', '/purchase/reports/issue_register')).statusCode).toBe(200);
+    expect((await call(keeper, 'GET', '/purchase/reports/po_register')).statusCode).toBe(403);
+    const kf = (await call(keeper, 'GET', '/purchase/report-filters')).json();
+    expect(Object.keys(kf.reports)).toContain('return_register');
+    expect(Object.keys(kf.reports)).not.toContain('vendor_purchases');
+    expect(kf.stores.map((x: { id: string }) => x.id)).toEqual(
+      expect.arrayContaining([ids.main, ids.lab]),
+    );
+    expect(
+      Object.keys((await call(admin, 'GET', '/purchase/report-filters')).json().reports),
+    ).toContain('po_register');
+    // a teacher sees neither
+    expect((await call(teacher, 'GET', '/purchase/report-filters')).statusCode).toBe(403);
+    expect((await call(teacher, 'GET', '/purchase/reports/issue_register')).statusCode).toBe(403);
+
+    // where a new return starts: issues with goods not yet back (the lab keeper: the lab's only)
+    const fromDept = (await call(keeper, 'GET', '/purchase/return-sources?kind=to_store')).json();
+    expect(fromDept.rows.length).toBeGreaterThan(0);
+    for (const x of fromDept.rows as Array<{ href: string; openLines: number }>) {
+      expect(x.href).toMatch(/^\/purchase\/issues\/\d+#return$/);
+      expect(x.openLines).toBeGreaterThan(0);
+    }
+    const labOnly = (await call(labKeeper, 'GET', '/purchase/return-sources?kind=to_store')).json();
+    const labIssues = await withMigrator(async (c) =>
+      (
+        await c.query<{ id: string }>(
+          `SELECT id::text FROM stock_issues WHERE school_id = $1 AND store_id = $2`,
+          [school.id, ids.lab],
+        )
+      ).rows.map((x) => x.id),
+    );
+    expect(labOnly.rows.every((x: { id: string }) => labIssues.includes(x.id))).toBe(true);
+    const toVend = (await call(admin, 'GET', '/purchase/return-sources?kind=to_vendor')).json();
+    for (const x of toVend.rows as Array<{
+      href: string;
+      rejectedLines: number;
+      stockLines: number;
+    }>) {
+      expect(x.href).toMatch(/^\/purchase\/returns\/new\?order=\d+$/);
+      expect(x.rejectedLines + x.stockLines).toBeGreaterThan(0);
+    }
+    expect((await call(teacher, 'GET', '/purchase/return-sources?kind=to_vendor')).statusCode).toBe(
+      403,
+    );
+  });
 });

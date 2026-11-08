@@ -1066,9 +1066,12 @@ export type PurchaseReport =
   | 'count_differences'
   | 'asset_register'
   | 'fixed_assets'
-  | 'condemnations';
+  | 'condemnations'
+  | 'issue_register'
+  | 'return_register'
+  | 'unacknowledged';
 
-type Filter = 'period' | 'department' | 'vendor' | 'item' | 'status';
+type Filter = 'period' | 'store' | 'department' | 'vendor' | 'item' | 'status';
 /** Each report: what it shows and the filters it takes (status: the choices). */
 export const REPORTS: Record<
   PurchaseReport,
@@ -1242,6 +1245,20 @@ export const REPORTS: Record<
       rejected: 'Rejected',
     },
   },
+  issue_register: {
+    help: 'Every line issued in the period: the slip, store, department, who took it, the indent or PR, item, quantity, rate, value, what came back, and who acknowledged it when.',
+    filters: ['period', 'store', 'department', 'item', 'status'],
+    status: { issued: 'Waiting for acknowledgement', acknowledged: 'Acknowledged' },
+  },
+  return_register: {
+    help: 'Every line returned in the period: to a vendor (rejected at inspection or defective from stock) or brought back into the store by a department, with the document it was against, the value and the reason.',
+    filters: ['period', 'store', 'department', 'vendor', 'item', 'status'],
+    status: { to_vendor: 'To the vendor', to_store: 'Into the store' },
+  },
+  unacknowledged: {
+    help: 'Issues the department has not yet acknowledged, the oldest first: days waiting, who took them, the HOD, the value.',
+    filters: ['store', 'department'],
+  },
 };
 
 export interface ReportColumn {
@@ -1265,7 +1282,9 @@ export interface ReportFilters {
   departments: Array<{ id: string; name: string }>;
   vendors: Array<{ id: string; code: string; name: string }>;
   items: Array<{ id: string; code: string; name: string }>;
-  reports: Record<PurchaseReport, string>;
+  stores: Array<{ id: string; code: string; name: string }>;
+  /** the reports I may open (the store registers only, with the stores' view alone) */
+  reports: Partial<Record<PurchaseReport, string>>;
 }
 
 export interface PurchaseDashboard {
@@ -1624,6 +1643,7 @@ export interface ToIssueGroup {
   raisedBy?: string | null;
   storeId: string;
   store: string;
+  departmentId: string | null;
   department: string | null;
   purpose: string | null;
   indents: string | null;
@@ -1649,6 +1669,7 @@ export interface ToIssueResponse {
     indent: string;
     storeId: string;
     store: string;
+    departmentId: string;
     department: string;
     purpose: string;
     raisedBy: string;
@@ -1665,6 +1686,7 @@ export const toIssueGroups = (r: ToIssueResponse): ToIssueGroup[] => [
     raisedBy: g.raisedBy,
     storeId: g.storeId,
     store: g.store,
+    departmentId: g.departmentId,
     department: g.department,
     purpose: g.purpose,
     indents: null,
@@ -1710,6 +1732,40 @@ export interface ReturnRow {
   lines: number;
   value: number;
   by: string | null;
+  /** the lines' reasons (or the return's note) */
+  reason: string | null;
+}
+export interface ReturnList {
+  rows: ReturnRow[];
+  total: number;
+  page: number;
+  /** over the filters, whatever the tab */
+  figures: { returns: number; toVendors: number; intoStore: number; value: number };
+}
+export interface IssueList {
+  rows: IssueRow[];
+  total: number;
+  page: number;
+  toAcknowledge: number;
+  /** over the filters, whatever the status (the tab) */
+  figures: { issues: number; value: number; waiting: number; oldestWaitingDays: number | null };
+}
+/** Where a new return starts (GET /purchase/return-sources). */
+export interface ReturnSources {
+  kind: 'to_vendor' | 'to_store';
+  rows: Array<{
+    id: string;
+    number: string;
+    /** the vendor, or the department */
+    party: string;
+    /** received on (a PO's last receipt), or issued on */
+    on: string;
+    detail: string;
+    rejectedLines?: number;
+    stockLines?: number;
+    openLines?: number;
+    href: string;
+  }>;
 }
 export interface ReturnDetail {
   id: string;

@@ -206,7 +206,7 @@ export default async function IssuePage({
       ) : null}
 
       {is.can.returnToStore ? (
-        <section className="ep-card" aria-labelledby="is-back">
+        <section id="return" className="ep-card" aria-labelledby="is-back">
           <h2 id="is-back" className="ep-card__title">
             Goods brought back
           </h2>

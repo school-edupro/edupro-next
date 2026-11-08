@@ -14569,6 +14569,25 @@ button.ep-subchoice__icon:hover {
 .ep-fold__body {
   padding: var(--sp-4) var(--sp-5) var(--sp-5);
 }
+/* a table cell that folds open its lines (Purchase → Issues, To issue): the count shows, a click lists
+   the lines */
+.ep-cell-fold > summary {
+  cursor: pointer;
+  color: var(--text-link);
+  font-weight: var(--fw-medium);
+}
+.ep-cell-fold > summary:hover {
+  color: var(--text-link-hover);
+}
+.ep-cell-fold[open] > summary {
+  margin-bottom: var(--sp-2);
+}
+.ep-cell-fold__lines {
+  display: grid;
+  gap: var(--sp-2);
+  margin: 0;
+  padding-left: var(--sp-4);
+}
 /* a document page's cards, spaced */
 .ep-doc-stack {
   display: grid;

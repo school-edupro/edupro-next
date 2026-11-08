@@ -24,9 +24,10 @@ const show = (c: ReportColumn, v: string | number | null) =>
           : String(v);
 
 /**
- * Purchase reports (docs/design/83, part 5): pick a report, filter it (the period, a department, a
- * vendor, an item, a status), read it here (the first 500 rows) and save it as Excel or PDF (all rows,
- * with the filters in words).
+ * Purchase reports (docs/design/83, part 5): pick a report, filter it (the period, a store, a
+ * department, a vendor, an item, a status), read it here (the first 500 rows) and save it as Excel or
+ * PDF (all rows, with the filters in words). Those who see the stores without the purchase reports get
+ * the store registers (issues, returns, receipts, stock).
  */
 export default async function PurchaseReportsPage({
   searchParams,
@@ -35,15 +36,23 @@ export default async function PurchaseReportsPage({
 }) {
   const sp = await searchParams;
   const me = await getMe();
-  if (!me.permissions.includes('purchase.report.view')) notFound();
+  const all = me.permissions.includes('purchase.report.view');
+  if (!all && !me.permissions.includes('purchase.store.view')) notFound();
+  const lists = await apiFetch<ReportFilters>('/purchase/report-filters');
+  const mine = (Object.keys(REPORTS) as PurchaseReport[]).filter((r) => r in lists.reports);
   const report: PurchaseReport =
-    sp.report && sp.report in REPORTS ? (sp.report as PurchaseReport) : 'po_register';
+    sp.report && mine.includes(sp.report as PurchaseReport)
+      ? (sp.report as PurchaseReport)
+      : all
+        ? 'po_register'
+        : 'issue_register';
   const def = REPORTS[report];
   const f: Record<string, string> = {};
   if (def.filters.includes('period')) {
     if (sp.from && DAY.test(sp.from)) f.from = sp.from;
     if (sp.to && DAY.test(sp.to)) f.to = sp.to;
   }
+  if (def.filters.includes('store') && sp.storeId && ID.test(sp.storeId)) f.storeId = sp.storeId;
   if (def.filters.includes('department') && sp.departmentId && ID.test(sp.departmentId))
     f.departmentId = sp.departmentId;
   if (def.filters.includes('vendor') && sp.vendorId && ID.test(sp.vendorId))
@@ -51,29 +60,34 @@ export default async function PurchaseReportsPage({
   if (def.filters.includes('item') && sp.itemId && ID.test(sp.itemId)) f.itemId = sp.itemId;
   if (def.filters.includes('status') && sp.status && def.status && sp.status in def.status)
     f.status = sp.status;
-  const [lists, data] = await Promise.all([
-    apiFetch<ReportFilters>('/purchase/report-filters'),
-    apiFetch<ReportResult>(
-      `/purchase/reports/${report}?${new URLSearchParams(f).toString()}`,
-    ).catch((e: unknown) => {
-      if (e instanceof ApiError) return null;
-      throw e;
-    }),
-  ]);
+  const data = await apiFetch<ReportResult>(
+    `/purchase/reports/${report}?${new URLSearchParams(f).toString()}`,
+  ).catch((e: unknown) => {
+    if (e instanceof ApiError) return null;
+    throw e;
+  });
+  /** the column that opens the row's document: its number (the registers open with the date) */
+  const linkCol = ['overrides', 'issue_register', 'return_register'].includes(report) ? 1 : 0;
   const file = (format: 'xlsx' | 'pdf') =>
     `/api/purchase/report?${new URLSearchParams({ report, ...f, format }).toString()}`;
   return (
     <>
       <Breadcrumbs
         items={[
-          { label: 'Purchase dashboard', href: '/purchase/dashboard' },
+          all
+            ? { label: 'Purchase dashboard', href: '/purchase/dashboard' }
+            : { label: 'Stores', href: '/purchase/stores' },
           { label: 'Purchase reports' },
         ]}
       />
       <PageHeader
         kicker="Purchase"
         title="Purchase reports"
-        description="Registers, the tracker from indent to order, pending approvals, overrides, spend, GST and MSME vendors. Each as Excel or PDF."
+        description={
+          all
+            ? 'Registers, the tracker from indent to order, pending approvals, overrides, spend, GST and MSME vendors, and the store registers. Each as Excel or PDF.'
+            : 'The store registers: issues, returns, goods receipts, transfers, counts and stock. Each as Excel or PDF.'
+        }
         actions={
           <>
             <a className="ep-btn ep-btn--secondary ep-btn--sm" href={file('xlsx')}>
@@ -89,7 +103,7 @@ export default async function PurchaseReportsPage({
         <label className="ep-field" htmlFor="rp-r">
           <span className="ep-field__label">Report</span>
           <select id="rp-r" name="report" className="ep-select" defaultValue={report}>
-            {(Object.keys(REPORTS) as PurchaseReport[]).map((r) => (
+            {mine.map((r) => (
               <option key={r} value={r}>
                 {lists.reports[r]}
               </option>
@@ -119,6 +133,19 @@ export default async function PurchaseReportsPage({
               />
             </label>
           </>
+        ) : null}
+        {def.filters.includes('store') ? (
+          <label className="ep-field" htmlFor="rp-st">
+            <span className="ep-field__label">Store</span>
+            <select id="rp-st" name="storeId" className="ep-select" defaultValue={f.storeId ?? ''}>
+              <option value="">All</option>
+              {lists.stores.map((x) => (
+                <option key={x.id} value={x.id}>
+                  {x.name} ({x.code})
+                </option>
+              ))}
+            </select>
+          </label>
         ) : null}
         {def.filters.includes('department') ? (
           <label className="ep-field" htmlFor="rp-d">
@@ -184,7 +211,7 @@ export default async function PurchaseReportsPage({
 
       <section className="ep-card" aria-labelledby="rp-title">
         <h2 id="rp-title" className="ep-card__title">
-          {lists.reports[report]}
+          {lists.reports[report] ?? report}
         </h2>
         <p style={{ marginTop: 0 }}>{def.help}</p>
         {data ? (
@@ -218,9 +245,8 @@ export default async function PurchaseReportsPage({
                       <tr key={i}>
                         {data.columns.map((c, j) => {
                           const v = show(c, r[j] ?? null);
-                          const href =
-                            j === 0 || (report === 'overrides' && j === 1) ? data.links?.[i] : null;
-                          const linkHere = report === 'overrides' ? j === 1 : j === 0;
+                          const linkHere = j === linkCol;
+                          const href = linkHere ? data.links?.[i] : null;
                           return (
                             <td
                               key={j}

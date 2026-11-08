@@ -438,8 +438,10 @@ Spend counts **orders placed** with vendors (approved, sent or closed) by their 
 year (April to March).
 
 **Purchase → Purchase reports**: pick a report, set the filters (the period — this financial year to
-today unless changed —, a department, a vendor, an item, a status), **Show**; **Excel** or **PDF** saves
-it with every row and the filters in words.
+today unless changed —, a store, a department, a vendor, an item, a status), **Show**; **Excel** or
+**PDF** saves it with every row and the filters in words. The store keeper, who sees the stores but not
+the purchase figures, gets the **store registers** only (issues, returns, unacknowledged issues, goods
+receipts, consumption, transfers, counts and stock) — from the **Report** button on Issues and Returns.
 
 | Report                    | What it shows                                                                                                                         |
 | ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
@@ -556,9 +558,14 @@ deliveries** (late only, if you like).
 
 ## Issues, returns and transfers
 
-**Purchase → Issues.** **To issue** lists, per approved indent (served from stock, marked **Indent, from
-stock**) and per approved requisition, and store, what is **held** for it and still to go out. On an
-indent's line **Cannot give it** (with the reason) lets the hold go and sends that much to purchase. **Issue** gives it out: how much now (a part is fine — the rest stays reserved),
+**Purchase → Issues → To issue** is the keeper's work queue. The figures first: documents to issue,
+lines, how many are **short of stock** and the oldest wait. Then one row per approved indent (served
+from stock) or requisition and store, the oldest approval first: the number (it opens the indent or
+PR), the department and who raised it, the store, the items (press "3 items" to see each line — to
+issue, already issued, in hand), the days waiting and **Ready** or **Short** (the store has less in hand
+than is to issue). Filter by store, department, indents or requisitions, short only, or search a number,
+item or name. On an indent's line **Cannot give it** (with the reason) lets the hold go and sends that
+much to purchase. **Issue** gives it out: how much now (a part is fine — the rest stays reserved),
 the batch if you want a particular one (otherwise the **earliest expiry goes first**), and who took it
 (otherwise the indent's raiser). The quantity is shared among the indents the line came from — each
 indent gets its own issue (`ISS/2026-27/0001`). Goods bought for an indent are issued the moment they
@@ -575,6 +582,14 @@ the same way. The department **acknowledges** it: whoever took it, the indent's 
 **Acknowledge: received** (admin, My approvals, or the staff app → **Issued to my department**). For a
 department without a sign-in the keeper presses **Record the signed slip** and says who signed it.
 
+**The lists** (Waiting for acknowledgement, To acknowledge, All) show the figures for the filters —
+issues, value issued, waiting for acknowledgement and the oldest of those — then filter by **period**
+(All shows this month unless you change From; empty it for no limit), **store**, **department**,
+**kind** (for an indent or requisition, on receipt, counter), **status** (All), **item** (the issues
+carrying it) and a search. Each row has the items, value, who acknowledged it and when, and the slip.
+**Report** opens the **issue register** with the same filters (from Waiting: the **unacknowledged
+issues**, the oldest first, with the days waiting and the HOD).
+
 **Where the slip is**: on the issue's page, in the **Slip** column of Purchase → Issues (every tab), on
 the PI under each line ("Issue slips: ISS/… " with View and Download), and in the staff app's **Issued to
 my department** — what waits for you, then **Received earlier** — always in the menu for whoever raises
@@ -584,7 +599,16 @@ requisition) or **Counter issue**; the issue opens with its slip.
 **Goods brought back** (on the issue): unused goods go back into stock at the rate they went out at;
 damaged goods are recorded with what is wrong and stay out of stock (for condemnation later).
 
-**Return to the vendor** (the PO's Deliveries, or a goods receipt with rejected lines): goods
+**Purchase → Returns** shows the figures (returns, value, to vendors, into the store), the tabs **All /
+To vendors / Into the store**, and filters by period (this month unless changed), store, department,
+item and a search (return, PO, issue, vendor, department). Each return shows what it was against (it
+opens the PO or the issue), the items, value, **reason** and the return note (View / Download).
+**Report** opens the **return register** with the same filters. **New return** (the keeper) asks what
+goes back: **To a vendor** lists the POs of your stores with rejected goods not yet sent back or goods
+accepted into stock; **From a department** lists the issues with goods not yet back; **Return** opens
+the right form.
+
+**Return to the vendor** (the PO's Deliveries, a goods receipt with rejected lines, or New return): goods
 **rejected at inspection** (they never entered stock) and goods **found defective** later (they come
 out of stock at the average). Tick **A replacement is wanted** and the order waits for it — an order
 that had closed by itself opens again; otherwise close the order short. The return note
@@ -611,7 +635,10 @@ The **school admin** (not someone who counted) sees book, counted, the differenc
 **approves** — each difference posts as an **adjustment** at the average rate — or **sends it back** to
 count again. The statement prints with the differences.
 
-**Stock reports**: issues by department (consumption), slow-moving and dead stock, expiring soon,
+**Stock reports**: the **issue register** (every line issued: slip, store, department, who took it, the
+indent or PR, quantity, rate, value, what came back, who acknowledged and when), the **return register**
+(every line returned: to a vendor or into the store, against what, the value and the reason), **issues
+not yet acknowledged**, issues by department (consumption), slow-moving and dead stock, expiring soon,
 below reorder level, transfers, count differences — with stock in hand and each item's register.
 
 ## Reorder

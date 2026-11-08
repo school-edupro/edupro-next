@@ -1,4 +1,4 @@
-import { Badge, Breadcrumbs, PageHeader } from '@edupro/ui';
+import { Badge, Breadcrumbs, KpiTile, PageHeader } from '@edupro/ui';
 import { ConfirmAction } from '@/components/ConfirmAction';
 import { FileLinks } from '@/components/FileLinks';
 import { Notice } from '@/components/Notice';
@@ -6,7 +6,8 @@ import { apiFetch, getMe } from '@/lib/api';
 import {
   inr,
   toIssueGroups,
-  type IssueRow,
+  type IssueList,
+  type ReportFilters,
   type ToIssueGroup,
   type ToIssueResponse,
 } from '@/lib/purchase';
@@ -19,6 +20,16 @@ const TABS = [
   ['all', 'All'],
 ] as const;
 type Tab = (typeof TABS)[number][0];
+const KINDS = [
+  ['indent', 'For an indent or a requisition'],
+  ['receipt', 'On receipt, for the indent'],
+  ['counter', 'Counter issue'],
+] as const;
+const DAY = /^\d{4}-\d{2}-\d{2}$/;
+const ID = /^\d{1,18}$/;
+const DAY_MS = 86_400_000;
+const today = () =>
+  new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' }).format(new Date());
 const when = (iso: string) =>
   new Intl.DateTimeFormat('en-IN', {
     timeZone: 'Asia/Kolkata',
@@ -26,11 +37,18 @@ const when = (iso: string) =>
     month: 'short',
     year: 'numeric',
   }).format(new Date(iso.length === 10 ? `${iso}T00:00:00+05:30` : iso));
+const qty = (n: number) => n.toLocaleString('en-IN', { maximumFractionDigits: 3 });
+/** Whole days since an approval (the queue's wait). */
+const daysSince = (iso: string | null) =>
+  iso ? Math.max(0, Math.floor((Date.now() - new Date(iso).getTime()) / DAY_MS)) : null;
+const short = (g: ToIssueGroup) => g.lines.some((l) => l.inHand < l.toIssue);
 
 /**
- * Issues (docs/design/84, part 8): what approved requisitions reserved, still to issue; the issues
- * waiting for the department's acknowledgement; what I am to acknowledge; all issues. A counter issue
- * for a quick need.
+ * Issues (docs/design/84, part 8; "As built — issues and returns rebuilt", 8 Nov 2026). To issue: the
+ * store's work queue — what approved indents hold and approved requisitions reserved, one row per
+ * document and store, oldest first, whether the store has it all, the lines folded under the row. The
+ * lists: figures, then filters (period, store, department, kind, status, item, search), the issues and
+ * their slips. Report opens the issue register (or the unacknowledged issues) with the same filters.
  */
 export default async function IssuesPage({
   searchParams,
@@ -49,38 +67,133 @@ export default async function IssuesPage({
       ? 'to-issue'
       : 'mine';
   const page = Math.max(1, Number(sp.page) || 1);
+
+  // the filters: the period is this month on All unless chosen (an empty box: no limit)
+  const from = sp.from === undefined ? (tab === 'all' ? `${today().slice(0, 8)}01` : '') : sp.from;
+  const f = {
+    from: DAY.test(from) ? from : '',
+    to: sp.to && DAY.test(sp.to) ? sp.to : '',
+    storeId: sp.storeId && ID.test(sp.storeId) ? sp.storeId : '',
+    departmentId: sp.departmentId && ID.test(sp.departmentId) ? sp.departmentId : '',
+    itemId: sp.itemId && ID.test(sp.itemId) ? sp.itemId : '',
+    kind: KINDS.some(([k]) => k === sp.kind) ? (sp.kind as string) : '',
+    status: sp.status === 'issued' || sp.status === 'acknowledged' ? sp.status : '',
+    source: sp.source === 'indent' || sp.source === 'requisition' ? sp.source : '',
+    short: sp.short === '1' ? '1' : '',
+    q: (sp.q ?? '').trim().slice(0, 80),
+  };
+
   const qs = new URLSearchParams({ page: String(page) });
   if (tab === 'waiting') qs.set('status', 'issued');
   if (tab === 'mine') qs.set('mine', '1');
-  if (sp.q) qs.set('q', sp.q.slice(0, 80));
-  const [list, toIssue] = await Promise.all([
-    apiFetch<{ rows: IssueRow[]; total: number; toAcknowledge: number }>(
-      `/purchase/issues?${qs.toString()}`,
-    ),
+  if (tab === 'all' && f.status) qs.set('status', f.status);
+  for (const k of ['from', 'to', 'storeId', 'departmentId', 'itemId', 'kind', 'q'] as const)
+    if (f[k]) qs.set(k, f[k]);
+  const [list, queue, lists] = await Promise.all([
+    apiFetch<IssueList>(`/purchase/issues?${qs.toString()}`),
     keeper && tab === 'to-issue'
-      ? apiFetch<ToIssueResponse>('/purchase/to-issue').then((r) => ({
-          groups: toIssueGroups(r),
-        }))
-      : Promise.resolve({ groups: [] as ToIssueGroup[] }),
+      ? apiFetch<ToIssueResponse>('/purchase/to-issue').then(toIssueGroups)
+      : Promise.resolve([] as ToIssueGroup[]),
+    sees && tab !== 'to-issue'
+      ? apiFetch<ReportFilters>('/purchase/report-filters')
+      : Promise.resolve(null),
   ]);
-  const link = (p: Record<string, string | undefined>) => {
-    const u = new URLSearchParams();
-    for (const [k, v] of Object.entries({ tab, q: sp.q, ...p })) if (v) u.set(k, v);
+
+  // the queue, oldest approval first, then filtered here (it is one store keeper's work)
+  const all = [...queue].sort((a, b) => (a.approvedAt ?? '9').localeCompare(b.approvedAt ?? '9'));
+  const q = f.q.toLowerCase();
+  const shown = all.filter(
+    (g) =>
+      (!f.storeId || g.storeId === f.storeId) &&
+      (!f.departmentId || g.departmentId === f.departmentId) &&
+      (!f.source || (f.source === 'indent') === Boolean(g.indentId)) &&
+      (!f.short || short(g)) &&
+      (!q ||
+        [g.requisition, g.department, g.raisedBy, g.purpose, g.indents, g.store]
+          .concat(g.lines.flatMap((l) => [l.item, l.itemCode]))
+          .some((v) => v?.toLowerCase().includes(q))),
+  );
+  const pick = <T,>(xs: T[], key: (x: T) => string, name: (x: T) => string) =>
+    [...new Map(xs.map((x) => [key(x), name(x)])).entries()].sort((a, b) =>
+      a[1].localeCompare(b[1]),
+    );
+  const queueStores = pick(
+    all,
+    (g) => g.storeId,
+    (g) => g.store,
+  );
+  const queueDepts = pick(
+    all.filter((g) => g.departmentId),
+    (g) => g.departmentId!,
+    (g) => g.department ?? '',
+  );
+  const oldest = all.reduce<number | null>((m, g) => {
+    const d = daysSince(g.approvedAt);
+    return d === null ? m : Math.max(m ?? 0, d);
+  }, null);
+
+  /** this page with the same filters (an emptied From on All stays empty: no limit) */
+  const link = (p: Record<string, string>) => {
+    const u = new URLSearchParams({ tab });
+    for (const [k, v] of Object.entries(f)) if (v) u.set(k, v);
+    if (tab === 'all' && !f.from) u.set('from', '');
+    for (const [k, v] of Object.entries(p)) u.set(k, v);
     return `/purchase/issues?${u.toString()}`;
   };
+  const report =
+    tab === 'waiting' || tab === 'mine'
+      ? `/purchase/reports?${new URLSearchParams(
+          Object.entries({
+            report: 'unacknowledged',
+            storeId: f.storeId,
+            departmentId: f.departmentId,
+          }).filter(([, v]) => v),
+        ).toString()}`
+      : `/purchase/reports?${new URLSearchParams(
+          Object.entries({
+            report: 'issue_register',
+            from: f.from,
+            to: f.to,
+            storeId: f.storeId,
+            departmentId: f.departmentId,
+            itemId: f.itemId,
+            status: tab === 'all' ? f.status : '',
+          }).filter(([, v]) => v),
+        ).toString()}`;
+  const filtered =
+    tab === 'to-issue'
+      ? Boolean(f.storeId || f.departmentId || f.source || f.short || f.q)
+      : Boolean(
+          (tab === 'all' ? sp.from !== undefined : f.from) ||
+          f.to ||
+          f.storeId ||
+          f.departmentId ||
+          f.itemId ||
+          f.kind ||
+          f.status ||
+          f.q,
+        );
+
   return (
     <>
       <Breadcrumbs items={[{ label: 'Purchase', href: '/purchase' }, { label: 'Issues' }]} />
       <PageHeader
         kicker="Purchase"
         title="Issues"
-        description="What the stores give out: against what approved requisitions reserved, what came on a goods receipt for an indent, or at the counter. The department acknowledges what it received."
+        description="What the stores give out — for an approved indent or requisition, on a goods receipt, or at the counter — and the department’s acknowledgement of it."
         actions={
-          keeper ? (
-            <a className="ep-btn ep-btn--primary ep-btn--sm" href="/purchase/issues/new">
-              Counter issue
-            </a>
-          ) : null
+          <>
+            {keeper ? (
+              <a className="ep-btn ep-btn--primary ep-btn--sm" href="/purchase/issues/new">
+                Counter issue
+              </a>
+            ) : null}
+            {sees && tab !== 'to-issue' ? (
+              <a className="ep-btn ep-btn--secondary ep-btn--sm" href={report}>
+                Report
+              </a>
+            ) : null}
+          </>
         }
       />
       <Notice params={sp} />
@@ -91,7 +204,7 @@ export default async function IssuesPage({
               <a
                 key={k}
                 className="ep-tabs__tab"
-                href={link({ tab: k, page: undefined })}
+                href={`/purchase/issues?tab=${k}`}
                 aria-current={tab === k ? 'page' : undefined}
               >
                 {l}
@@ -101,87 +214,343 @@ export default async function IssuesPage({
           )}
         </div>
       </nav>
+
       {tab === 'to-issue' ? (
-        toIssue.groups.length ? (
-          <div style={{ display: 'grid', gap: 'var(--sp-3)' }}>
-            {toIssue.groups.map((g) => (
-              <section
-                key={`${g.indentId ?? g.requisitionId}-${g.storeId}`}
-                className="ep-card"
-                aria-labelledby={`ti-${g.indentId ?? g.requisitionId}-${g.storeId}`}
-              >
-                <h2
-                  id={`ti-${g.indentId ?? g.requisitionId}-${g.storeId}`}
-                  className="ep-card__title"
-                >
-                  {g.requisition} · {g.department ?? '—'}{' '}
-                  {g.indentId ? <Badge tone="info">Indent, from stock</Badge> : null}
-                </h2>
-                <p style={{ marginTop: 0 }}>
-                  From {g.store}
-                  {g.indentId ? ` · raised by ${g.raisedBy ?? '—'}` : ''}
-                  {g.indents ? ` · for ${g.indents}` : ''}
-                  {g.purpose ? ` · ${g.purpose}` : ''}
-                </p>
-                <ul className="ep-purch-checks">
-                  {g.lines.map((l) => (
-                    <li key={l.reservationId}>
-                      {l.item} ({l.itemCode}): {l.toIssue.toLocaleString('en-IN')} {l.unit} to issue
-                      {l.issued ? ` (${l.issued.toLocaleString('en-IN')} issued)` : ''}{' '}
-                      {g.indentId ? (
-                        <ConfirmAction
-                          action={releaseHold}
-                          fields={{ reservationId: l.reservationId }}
-                          label="Cannot give it"
-                          title={`Send ${l.item} on ${g.requisition} to purchase?`}
-                          confirmLabel="Send to purchase"
-                          variant="ghost"
-                          reason={{ label: 'Why the store cannot give it' }}
-                        >
-                          {`The ${l.toIssue.toLocaleString('en-IN')} ${l.unit} held are let go; the indent waits for a requisition for them (Purchase Requisitions → To requisition).`}
-                        </ConfirmAction>
-                      ) : null}
-                    </li>
-                  ))}
-                </ul>
-                <a
-                  className="ep-btn ep-btn--secondary ep-btn--sm"
-                  href={
-                    g.indentId
-                      ? `/purchase/issues/new?indent=${g.indentId}&store=${g.storeId}`
-                      : `/purchase/issues/new?requisition=${g.requisitionId}&store=${g.storeId}`
-                  }
-                  aria-label={`Issue ${g.requisition} from ${g.store}`}
-                >
-                  Issue
-                </a>
-              </section>
-            ))}
+        <>
+          <div className="ep-dash-kpis ep-dash-kpis--4">
+            <KpiTile label="Documents to issue" value={String(all.length)} />
+            <KpiTile
+              label="Lines to issue"
+              value={String(all.reduce((n, g) => n + g.lines.length, 0))}
+            />
+            <KpiTile
+              label="Short of stock"
+              value={String(all.filter(short).length)}
+              hint="the store has less than is to issue"
+            />
+            <KpiTile
+              label="Oldest waiting"
+              value={oldest === null ? '—' : `${String(oldest)} day${oldest === 1 ? '' : 's'}`}
+              hint="since its approval"
+            />
           </div>
-        ) : (
+          {all.length ? (
+            <form method="get" action="/purchase/issues" className="ep-grid__toolbar">
+              <input type="hidden" name="tab" value="to-issue" />
+              <label className="ep-field" htmlFor="ti-store">
+                <span className="ep-field__label">Store</span>
+                <select id="ti-store" name="storeId" className="ep-select" defaultValue={f.storeId}>
+                  <option value="">All</option>
+                  {queueStores.map(([id, name]) => (
+                    <option key={id} value={id}>
+                      {name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="ep-field" htmlFor="ti-dept">
+                <span className="ep-field__label">Department</span>
+                <select
+                  id="ti-dept"
+                  name="departmentId"
+                  className="ep-select"
+                  defaultValue={f.departmentId}
+                >
+                  <option value="">All</option>
+                  {queueDepts.map(([id, name]) => (
+                    <option key={id} value={id}>
+                      {name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="ep-field" htmlFor="ti-src">
+                <span className="ep-field__label">For</span>
+                <select id="ti-src" name="source" className="ep-select" defaultValue={f.source}>
+                  <option value="">Indents and requisitions</option>
+                  <option value="indent">Indents (held from stock)</option>
+                  <option value="requisition">Requisitions (reserved)</option>
+                </select>
+              </label>
+              <label className="ep-field" htmlFor="ti-q">
+                <span className="ep-field__label">Search</span>
+                <input
+                  id="ti-q"
+                  name="q"
+                  className="ep-input"
+                  defaultValue={f.q}
+                  placeholder="Number, item, department or who raised it"
+                />
+              </label>
+              <label className="ep-check" htmlFor="ti-short" style={{ alignSelf: 'center' }}>
+                <input
+                  id="ti-short"
+                  className="ep-check__input"
+                  type="checkbox"
+                  name="short"
+                  value="1"
+                  defaultChecked={Boolean(f.short)}
+                />
+                <span className="ep-check__box" />
+                Short of stock only
+              </label>
+              <button type="submit" className="ep-btn ep-btn--secondary ep-btn--sm">
+                Show
+              </button>
+              {filtered ? (
+                <a className="ep-btn ep-btn--ghost ep-btn--sm" href="/purchase/issues?tab=to-issue">
+                  Clear
+                </a>
+              ) : null}
+            </form>
+          ) : null}
+          <div className="ep-table-wrap" tabIndex={0} role="region" aria-label="To issue">
+            <table className="ep-table">
+              <caption className="ep-sr-only">
+                Indents and requisitions waiting to be issued, oldest first
+              </caption>
+              <thead>
+                <tr>
+                  <th scope="col">Document</th>
+                  <th scope="col">Department</th>
+                  <th scope="col">Store</th>
+                  <th scope="col">Items</th>
+                  <th scope="col">Waiting</th>
+                  <th scope="col">Stock</th>
+                  <th scope="col">
+                    <span className="ep-sr-only">Issue</span>
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {shown.length ? (
+                  shown.map((g) => {
+                    const days = daysSince(g.approvedAt);
+                    const isShort = short(g);
+                    return (
+                      <tr key={`${g.indentId ?? g.requisitionId}-${g.storeId}`}>
+                        <td>
+                          <a
+                            href={
+                              g.indentId
+                                ? `/purchase/indents/${g.indentId}`
+                                : `/purchase/requisitions/${g.requisitionId}`
+                            }
+                          >
+                            {g.requisition}
+                          </a>{' '}
+                          <Badge tone={g.indentId ? 'info' : 'neutral'}>
+                            {g.indentId ? 'Indent' : 'Requisition'}
+                          </Badge>
+                          <span className="ep-mr-col__desc">
+                            {[g.indents ? `for ${g.indents}` : null, g.purpose]
+                              .filter(Boolean)
+                              .join(' · ')}
+                          </span>
+                        </td>
+                        <td>
+                          {g.department ?? '—'}
+                          {g.raisedBy ? (
+                            <span className="ep-mr-col__desc">raised by {g.raisedBy}</span>
+                          ) : null}
+                        </td>
+                        <td>{g.store}</td>
+                        <td>
+                          <details className="ep-cell-fold">
+                            <summary>
+                              {g.lines.length} item{g.lines.length === 1 ? '' : 's'}
+                            </summary>
+                            <ul className="ep-cell-fold__lines">
+                              {g.lines.map((l) => (
+                                <li key={l.reservationId}>
+                                  {l.item} ({l.itemCode}): <strong>{qty(l.toIssue)}</strong>{' '}
+                                  {l.unit} to issue
+                                  {l.issued ? ` (${qty(l.issued)} issued)` : ''} · {qty(l.inHand)}{' '}
+                                  in hand{' '}
+                                  {l.inHand < l.toIssue ? <Badge tone="danger">Short</Badge> : null}{' '}
+                                  {g.indentId ? (
+                                    <ConfirmAction
+                                      action={releaseHold}
+                                      fields={{ reservationId: l.reservationId }}
+                                      label="Cannot give it"
+                                      title={`Send ${l.item} on ${g.requisition} to purchase?`}
+                                      confirmLabel="Send to purchase"
+                                      variant="ghost"
+                                      reason={{ label: 'Why the store cannot give it' }}
+                                    >
+                                      {`The ${qty(l.toIssue)} ${l.unit} held are let go; the indent waits for a requisition for them (Purchase Requisitions → To requisition).`}
+                                    </ConfirmAction>
+                                  ) : null}
+                                </li>
+                              ))}
+                            </ul>
+                          </details>
+                        </td>
+                        <td style={{ whiteSpace: 'nowrap' }}>
+                          {days === null ? '—' : `${String(days)} day${days === 1 ? '' : 's'}`}
+                          {g.approvedAt ? (
+                            <span className="ep-mr-col__desc">since {when(g.approvedAt)}</span>
+                          ) : null}
+                        </td>
+                        <td>
+                          <Badge tone={isShort ? 'danger' : 'success'}>
+                            {isShort ? 'Short' : 'Ready'}
+                          </Badge>
+                        </td>
+                        <td>
+                          <a
+                            className="ep-btn ep-btn--secondary ep-btn--sm"
+                            href={
+                              g.indentId
+                                ? `/purchase/issues/new?indent=${g.indentId}&store=${g.storeId}`
+                                : `/purchase/issues/new?requisition=${g.requisitionId}&store=${g.storeId}`
+                            }
+                            aria-label={`Issue ${g.requisition} from ${g.store}`}
+                          >
+                            Issue
+                          </a>
+                        </td>
+                      </tr>
+                    );
+                  })
+                ) : (
+                  <tr>
+                    <td colSpan={7}>
+                      {all.length
+                        ? 'Nothing waiting matches these filters.'
+                        : 'Nothing held for an indent or reserved on a requisition waits to be issued from your stores.'}
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
           <p className="ep-field__help">
-            Nothing held for an indent or reserved on a requisition waits to be issued from your
-            stores.
+            Short: the store has less in hand than is to issue — issue what there is, or (for an
+            indent) press Cannot give it on the line to send the rest to purchase.
           </p>
-        )
+        </>
       ) : (
         <>
+          <div className="ep-dash-kpis ep-dash-kpis--4">
+            <KpiTile label="Issues" value={String(list.figures.issues)} hint="in these filters" />
+            <KpiTile label="Value issued" value={inr(list.figures.value)} />
+            <KpiTile label="Waiting for acknowledgement" value={String(list.figures.waiting)} />
+            <KpiTile
+              label="Oldest unacknowledged"
+              value={
+                list.figures.oldestWaitingDays === null
+                  ? '—'
+                  : `${String(list.figures.oldestWaitingDays)} day${list.figures.oldestWaitingDays === 1 ? '' : 's'}`
+              }
+            />
+          </div>
           <form method="get" action="/purchase/issues" className="ep-grid__toolbar">
             <input type="hidden" name="tab" value={tab} />
+            <label className="ep-field" htmlFor="is-from">
+              <span className="ep-field__label">From</span>
+              <input
+                id="is-from"
+                name="from"
+                type="date"
+                className="ep-input"
+                defaultValue={f.from}
+              />
+            </label>
+            <label className="ep-field" htmlFor="is-to">
+              <span className="ep-field__label">To</span>
+              <input id="is-to" name="to" type="date" className="ep-input" defaultValue={f.to} />
+            </label>
+            {lists ? (
+              <>
+                <label className="ep-field" htmlFor="is-store">
+                  <span className="ep-field__label">Store</span>
+                  <select
+                    id="is-store"
+                    name="storeId"
+                    className="ep-select"
+                    defaultValue={f.storeId}
+                  >
+                    <option value="">All</option>
+                    {lists.stores.map((x) => (
+                      <option key={x.id} value={x.id}>
+                        {x.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="ep-field" htmlFor="is-dept">
+                  <span className="ep-field__label">Department</span>
+                  <select
+                    id="is-dept"
+                    name="departmentId"
+                    className="ep-select"
+                    defaultValue={f.departmentId}
+                  >
+                    <option value="">All</option>
+                    {lists.departments.map((x) => (
+                      <option key={x.id} value={x.id}>
+                        {x.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="ep-field" htmlFor="is-item">
+                  <span className="ep-field__label">Item</span>
+                  <select id="is-item" name="itemId" className="ep-select" defaultValue={f.itemId}>
+                    <option value="">All</option>
+                    {lists.items.map((x) => (
+                      <option key={x.id} value={x.id}>
+                        {x.name} ({x.code})
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </>
+            ) : null}
+            <label className="ep-field" htmlFor="is-kind">
+              <span className="ep-field__label">Kind</span>
+              <select id="is-kind" name="kind" className="ep-select" defaultValue={f.kind}>
+                <option value="">All</option>
+                {KINDS.map(([k, l]) => (
+                  <option key={k} value={k}>
+                    {l}
+                  </option>
+                ))}
+              </select>
+            </label>
+            {tab === 'all' ? (
+              <label className="ep-field" htmlFor="is-status">
+                <span className="ep-field__label">Status</span>
+                <select id="is-status" name="status" className="ep-select" defaultValue={f.status}>
+                  <option value="">All</option>
+                  <option value="issued">Waiting for acknowledgement</option>
+                  <option value="acknowledged">Acknowledged</option>
+                </select>
+              </label>
+            ) : null}
             <label className="ep-field" htmlFor="is-q">
               <span className="ep-field__label">Search</span>
               <input
                 id="is-q"
                 name="q"
                 className="ep-input"
-                defaultValue={sp.q ?? ''}
+                defaultValue={f.q}
                 placeholder="Issue, department, indent or who took it"
               />
             </label>
             <button type="submit" className="ep-btn ep-btn--secondary ep-btn--sm">
               Show
             </button>
+            {filtered ? (
+              <a className="ep-btn ep-btn--ghost ep-btn--sm" href={`/purchase/issues?tab=${tab}`}>
+                Clear
+              </a>
+            ) : null}
           </form>
+          {tab === 'all' && sp.from === undefined ? (
+            <p className="ep-field__help">This month’s issues; change From for earlier ones.</p>
+          ) : null}
           <div className="ep-table-wrap" tabIndex={0} role="region" aria-label="Issues">
             <table className="ep-table">
               <caption className="ep-sr-only">Issues</caption>
@@ -190,6 +559,9 @@ export default async function IssuesPage({
                   <th scope="col">Issue</th>
                   <th scope="col">To</th>
                   <th scope="col">From</th>
+                  <th scope="col" style={{ textAlign: 'right' }}>
+                    Items
+                  </th>
                   <th scope="col" style={{ textAlign: 'right' }}>
                     Value
                   </th>
@@ -210,10 +582,11 @@ export default async function IssuesPage({
                       <td>
                         {x.department}
                         <span className="ep-mr-col__desc">
-                          {[x.takenBy, x.indent].filter(Boolean).join(' · ')}
+                          {[x.takenBy, x.indent ?? x.requisition].filter(Boolean).join(' · ')}
                         </span>
                       </td>
                       <td>{x.store}</td>
+                      <td style={{ textAlign: 'right' }}>{x.lines}</td>
                       <td style={{ textAlign: 'right' }}>{inr(x.value)}</td>
                       <td>
                         <Badge tone={x.status === 'acknowledged' ? 'success' : 'warning'}>
@@ -221,6 +594,17 @@ export default async function IssuesPage({
                             ? 'Acknowledged'
                             : 'Waiting for acknowledgement'}
                         </Badge>
+                        {x.status === 'acknowledged' && x.acknowledgedAt ? (
+                          <span className="ep-mr-col__desc">
+                            {[
+                              x.acknowledgedBy,
+                              x.ackOnPaper ? 'on paper' : null,
+                              when(x.acknowledgedAt),
+                            ]
+                              .filter(Boolean)
+                              .join(' · ')}
+                          </span>
+                        ) : null}
                       </td>
                       <td>
                         <FileLinks
@@ -232,10 +616,10 @@ export default async function IssuesPage({
                   ))
                 ) : (
                   <tr>
-                    <td colSpan={6}>
-                      {tab === 'mine'
+                    <td colSpan={7}>
+                      {tab === 'mine' && !filtered
                         ? 'Nothing is waiting for your acknowledgement.'
-                        : 'No issues here.'}
+                        : 'No issues match these filters.'}
                     </td>
                   </tr>
                 )}
@@ -244,7 +628,7 @@ export default async function IssuesPage({
           </div>
           {list.total > 50 ? (
             <p className="ep-field__help">
-              Page {page} of {Math.ceil(list.total / 50)} ·{' '}
+              {list.total} issues · page {page} of {Math.ceil(list.total / 50)} ·{' '}
               {page > 1 ? <a href={link({ page: String(page - 1) })}>Previous</a> : null}{' '}
               {page * 50 < list.total ? <a href={link({ page: String(page + 1) })}>Next</a> : null}
             </p>

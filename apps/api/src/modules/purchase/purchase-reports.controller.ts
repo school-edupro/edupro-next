@@ -1,6 +1,7 @@
 import { Controller, Get, Param, Query } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { RequirePermission } from '../../common/access/require-permission.decorator';
+import { AuthenticatedOnly } from '../../common/auth/decorators';
 import { ReqCtx, type RequestContext } from '../../common/http/request-context';
 import { PurchaseReportsService } from './purchase-reports.service';
 import { PURCHASE, ReportQueryDto, type PurchaseReport } from './purchase.dto';
@@ -20,7 +21,10 @@ export class PurchaseReportsController {
   }
 
   @Get('report-filters')
-  @RequirePermission(PURCHASE.reportView)
+  @ApiOperation({
+    summary: 'Report filters; the store registers also for those who see the stores',
+  })
+  @AuthenticatedOnly()
   filters(@ReqCtx() ctx: RequestContext) {
     return this.reports.filters(ctx);
   }
@@ -29,7 +33,8 @@ export class PurchaseReportsController {
   @ApiOperation({
     summary: 'A purchase report as filtered: on screen, or with ?format=xlsx|pdf a file',
   })
-  @RequirePermission(PURCHASE.reportView)
+  // the purchase reports right, or the stores' view for the store registers (checked in the service)
+  @AuthenticatedOnly()
   report(
     @ReqCtx() ctx: RequestContext,
     @Param('report') report: string,

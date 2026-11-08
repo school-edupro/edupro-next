@@ -444,3 +444,47 @@ the register only, not the stock.
   the asset check.
 - **Not in scope**: barcode or QR scanning (the label carries the tag; scanning comes with the app),
   depreciation for tax (the Income-tax block method), the debit note and payments (phase 3).
+
+## As built — issues and returns rebuilt; their registers (8 Nov 2026)
+
+Asked: Purchase → Issues (To issue) and Returns were hard to work with and had no filters, and there was
+no issue or return report. Benchmarked on school ERPs that keep issue and return slips and separate
+"Items issue" / "Items return" reports by date, department and item (Entab CampusCare, Smart School,
+Sunbeam, a university stores SOP). The user's choices: the To-issue queue as a table; period, store and
+department, kind and status, and item filters; an issue register, a return register and the
+unacknowledged issues, with a Report button on each page; New return with the slip and the reason.
+
+- **To issue** (admin `purchase/issues?tab=to-issue`): figures (documents, lines, short of stock, oldest
+  wait); filters (store, department, indents / requisitions, short only, search — over the keeper's
+  queue, in the page); one row per document and store, oldest approval first: number (opens the PI /
+  PR), Indent or Requisition, for which indents, purpose, department, raised by, store, the lines folded
+  (`.ep-cell-fold`: to issue, issued, in hand, Short, Cannot give it), days waiting, Ready / Short,
+  Issue. `GET /purchase/to-issue` groups carry `departmentId`.
+- **Issue lists**: figures over the filters whatever the tab (`figures`: issues, value, waiting, oldest
+  waiting days); filters period (All: this month unless From is set; an emptied From means no limit),
+  store, department, item (an issue carrying it), kind, status (All), search; Items and acknowledged
+  by / when columns; paging with the filters. `StockDocQuerySchema` gained `from`, `to`,
+  `departmentId`, `itemId` (issues and returns).
+- **Returns**: figures (returns, value, to vendors, into the store), tabs, filters (period — this month
+  unless set —, store, department, item, search incl. PO and issue numbers), Against links to the PO or
+  issue, Items, Reason (the lines' reasons, else the note), Slip, paging (`total`). **New return**
+  (`purchase/returns/new` without `?order`): To a vendor / From a department, searched, newest 50, from
+  `GET /purchase/return-sources?kind=to_vendor|to_store` (POs with rejected goods not yet sent back or
+  stock-tracked accepted goods not yet returned; issues with lines not fully back; the stores I keep
+  unless I manage the stores); Return opens the PO's return form or the issue's Goods brought back
+  (`#return`).
+- **Reports**: `issue_register` (a row per issued line, the value summed; filters period, store,
+  department, item, status issued / acknowledged), `return_register` (a row per returned line: kind,
+  against, vendor or department, unit — the PO's for vendor returns —, quantity, value, what — rejected
+  at inspection / from stock / brought back, unused or damaged, replacement wanted — and the reason;
+  filters period, store, department, vendor, item, kind), `unacknowledged` (issues still waiting, oldest
+  first, days waiting, taken by, HOD; filters store and department; "As on" words). A `store` filter
+  (`storeId`) for the reports that take it. **Access**: `STORE_REPORTS` (the three, GRN register,
+  consumption, transfers, count differences, below reorder, slow-moving, expiring) open with
+  `purchase.store.view`; the rest still need `purchase.report.view` (the routes are
+  `@AuthenticatedOnly`, checked in the service; `report-filters` lists only the reports one may open and
+  now the stores). The reports page opens to store viewers with those reports.
+- **Tests**: `purchase-issues.e2e-spec.ts` (+1: the issue and return figures and filters against the
+  database, the to-issue department ids, the three registers with the store filter and words, a file,
+  the store keeper's reports and refusals, a teacher refused, the return sources and the lab keeper's
+  own stores only); throwaway browser and axe checks of the pages.
