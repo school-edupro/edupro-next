@@ -1093,3 +1093,37 @@ told. Decided with the user:
   on To order; the PR part ordered with each line's words; closing on To order (403 for a teacher,
   400 Other without a note, 409 twice) makes the PR ordered; a rate-contract indent's line ordered 6 of
   10 with the rest closed shows on the teacher's PI (no rates) and the list's `partClosed`.
+
+## As built — GST follows the HSN master (8 Nov 2026)
+
+Asked by the user (PO/2026-27/0003: "the purchaser applied an HSN code but GST is not applied — why?").
+Found: the item "Ball pen, red" had no HSN and no GST, so the PR and the PO line came at 0%; on the PO
+form the HSN / SAC box and the GST % box were independent (the code only showed its description); the
+code typed, 1234, was itself "16%, exempt" in the HSN master (16% is no slab; exempt means no GST); and
+the line's exempt / reverse-charge flags still came from the item, not the code. Decided with the user:
+
+| Question | Decision |
+| --- | --- |
+| GST from HSN | **Follows the HSN master**: a code in the master sets the line's GST %, exempt and reverse charge (GST % fixed); a code not in it keeps the GST % typed. |
+| The item's HSN | **Filled from the PO when the item has none**; an item's HSN is never replaced from a PO. |
+| HSN master | **Exempt = 0%, GST slabs only** (0, 0.25, 1.5, 3, 5, 12, 18, 28, 40); old wrong rows listed, not changed. |
+
+- `PUT /purchase/orders/:id`: per line, the active HSN row of `hsnCode` gives `gst_rate` (0 when exempt;
+  the item's own `gst_rate` when the code is the item's own HSN), `exempt` and `reverse_charge`; no row:
+  the typed GST %, not exempt, no reverse charge. An item with `hsn_id IS NULL` takes the code's row
+  (audited `purchase.item.hsn_from_po`). Lines carry `itemHsn` and `itemOwnGst`.
+- PO form: the GST % follows the code as it is typed or picked (shaded, read-only, "From HSN / SAC …",
+  "Exempt (HSN / SAC …)", "· reverse charge: the school pays it"), and shows the master's rate when the
+  page opens; a code not in the master says to type the GST % and add the code; "saved on the item too"
+  when the item has none.
+- HSN master: `GST_SLABS` (packages/db `masters.ts`); the masters engine gains `allowed` (a number one of
+  a list) and `zeroWhen` (0 when a yes/no field is yes; a cross-check), used by the HSN / SAC codes'
+  GST %. Migration **0338**: `purchase_hsn_gst_slab` and `purchase_hsn_exempt_no_rate`, both `NOT VALID`
+  (old rows stay until changed). `GET /purchase/overview` `hsnToFix`, shown on Purchase set-up as
+  **HSN / SAC codes to fix** (Alpha: 1234 16% exempt, 9609 18% exempt — left for the school to correct).
+- PO/2026-27/0003 itself was already sent for approval: its line stays at 0% unless sent back and saved
+  again (where HSN 1234, being exempt, still gives 0% until the code is corrected).
+- Tests: `purchase-orders` — a code not in the master keeps the typed GST; 9403 gives 18% (CGST + SGST)
+  whatever was typed; the pen without an HSN takes 9403 and keeps it when the PO later carries another
+  code; a reverse-charge SAC sets reverse charge. `purchase-masters` — 16% refused (the slab list), 18%
+  exempt refused, 0% exempt and 18% saved, nothing to fix on a clean school.

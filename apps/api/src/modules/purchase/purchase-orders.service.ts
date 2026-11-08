@@ -741,6 +741,8 @@ export class PurchaseOrdersService implements OnModuleInit {
         short_reason: string | null;
         short_note: string | null;
         close_rest: boolean;
+        item_hsn: string | null;
+        item_own_gst: string | null;
         max_qty: string | null;
         received_qty: string;
         accepted_qty: string;
@@ -751,6 +753,7 @@ export class PurchaseOrdersService implements OnModuleInit {
                 l.quantity::text, l.uom_id::text, u.code AS uom, l.rate::text, l.discount_pct::text, l.gst_rate::text, l.reverse_charge,
                 l.exempt, l.taxable::text, l.cgst::text, l.sgst::text, l.igst::text, l.rcm_gst::text, l.total::text, l.contract_id::text,
                 rc.rate::text AS contract_rate, l.rate_change_reason, l.make, l.model, l.short_reason, l.short_note, l.close_rest,
+                ih.code AS item_hsn, i.gst_rate::text AS item_own_gst,
                 (SELECT rl.quantity - COALESCE((SELECT sum(ol.quantity) FROM purchase_order_lines ol JOIN purchase_orders po ON po.id = ol.order_id
                                                  WHERE ol.requisition_line_id = rl.id AND ol.order_id <> l.order_id
                                                    AND po.status NOT IN ('rejected', 'cancelled', 'superseded')
@@ -759,6 +762,7 @@ export class PurchaseOrdersService implements OnModuleInit {
            FROM purchase_order_lines l
            JOIN purchase_uoms u ON u.id = l.uom_id
            LEFT JOIN purchase_items i ON i.id = l.item_id
+           LEFT JOIN purchase_hsn ih ON ih.id = i.hsn_id
            LEFT JOIN purchase_rate_contracts rc ON rc.id = l.contract_id
           WHERE l.order_id = $1 ORDER BY l.seq`,
         [id],
@@ -1229,6 +1233,9 @@ export class PurchaseOrdersService implements OnModuleInit {
           shortReason: l.short_reason,
           shortNote: l.short_note,
           closeRest: l.close_rest,
+          // the item's HSN / SAC and its own GST % (when it differs from its HSN's)
+          itemHsn: l.item_hsn,
+          itemOwnGst: l.item_own_gst === null ? null : Number(l.item_own_gst),
           uomId: l.uom_id,
           uom: l.uom,
           rate: Number(l.rate),
@@ -1397,12 +1404,43 @@ export class PurchaseOrdersService implements OnModuleInit {
       for (const l of lines)
         if (!keep.has(l.id))
           await c.query(`DELETE FROM purchase_order_lines WHERE id = $1`, [l.id]);
+      // GST follows the HSN master (docs/design/83, "As built — GST follows the HSN master"): a code in
+      // the master sets the line's GST %, exempt and reverse charge; the item's own GST % stays for the
+      // item's own code; a code not in the master keeps the GST % typed
+      const codes = [...new Set(dto.lines.map((l) => l.hsnCode).filter((x): x is string => !!x))];
+      const master = new Map(
+        (
+          await c.query<{
+            id: string;
+            code: string;
+            gst_rate: string;
+            exempt: boolean;
+            reverse_charge: boolean;
+          }>(
+            `SELECT id::text, code, gst_rate::text, exempt, reverse_charge FROM purchase_hsn
+              WHERE status = 'active' AND code = ANY($1::text[])`,
+            [codes],
+          )
+        ).rows.map((h) => [h.code, h]),
+      );
+      const taxOf = (l: (typeof dto.lines)[number], have: (typeof lines)[number]) => {
+        const h = l.hsnCode ? master.get(l.hsnCode) : undefined;
+        if (!h) return { gst: l.gstRate, exempt: false, rc: false };
+        const own = have.item_own_gst !== null && have.item_hsn === h.code;
+        return {
+          gst: h.exempt ? 0 : own ? Number(have.item_own_gst) : Number(h.gst_rate),
+          exempt: h.exempt,
+          rc: h.reverse_charge,
+        };
+      };
       for (const l of dto.lines) {
         const have = lines.find((x) => x.id === l.id)!;
         const short = have.max_qty !== null && l.quantity < Number(have.max_qty) - 0.0005;
+        const tax = taxOf(l, have);
         await c.query(
           `UPDATE purchase_order_lines SET description = $2, hsn_code = $3, quantity = $4, rate = $5, discount_pct = $6, gst_rate = $7,
-                  rate_change_reason = $8, make = $9, model = $10, short_reason = $11, short_note = $12, close_rest = $13 WHERE id = $1`,
+                  rate_change_reason = $8, make = $9, model = $10, short_reason = $11, short_note = $12, close_rest = $13,
+                  exempt = $14, reverse_charge = $15 WHERE id = $1`,
           [
             l.id,
             l.description,
@@ -1410,7 +1448,7 @@ export class PurchaseOrdersService implements OnModuleInit {
             l.quantity,
             l.rate,
             l.discountPct,
-            l.gstRate,
+            tax.gst,
             have.contract_rate !== null && Math.abs(l.rate - Number(have.contract_rate)) > 0.004
               ? (l.rateChangeReason ?? null)
               : null,
@@ -1419,8 +1457,25 @@ export class PurchaseOrdersService implements OnModuleInit {
             short ? l.shortReason : null,
             short ? (l.shortNote ?? null) : null,
             short && l.shortAction === 'close',
+            tax.exempt,
+            tax.rc,
           ],
         );
+        // an item without an HSN / SAC takes the one the PO gives it (from the master), for next time
+        const h = l.hsnCode ? master.get(l.hsnCode) : undefined;
+        if (h && have.item_id && have.item_hsn === null) {
+          const set = await c.query(
+            `UPDATE purchase_items SET hsn_id = $2, updated_at = now() WHERE id = $1 AND hsn_id IS NULL`,
+            [have.item_id, h.id],
+          );
+          if (set.rowCount)
+            await this.audit.stage(ctx, c, {
+              action: 'purchase.item.hsn_from_po',
+              entityType: 'purchase_items',
+              entityId: have.item_id,
+              after: { hsn: h.code, order: id },
+            });
+        }
       }
       await c.query(`DELETE FROM purchase_order_charges WHERE order_id = $1`, [id]);
       for (const ch of dto.charges)

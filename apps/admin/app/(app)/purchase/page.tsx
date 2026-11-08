@@ -108,6 +108,26 @@ export default async function PurchaseHomePage({
           <a href="/purchase/vendor-approvals">Open Vendor approvals</a>
         </p>
       ) : null}
+      {o.hsnToFix.length ? (
+        <div className="ep-alert ep-alert--warning" role="status">
+          <div>
+            <strong>HSN / SAC codes to fix</strong> — a GST rate must be a slab (0, 0.25, 1.5, 3, 5,
+            12, 18, 28 or 40) and an exempt code has 0%. A PO line takes its GST from these, so
+            correct them in{' '}
+            <a style={{ textDecoration: 'underline' }} href="/masters/purchase?tab=purchase_hsn">
+              HSN / SAC codes
+            </a>
+            :
+            <ul style={{ margin: 'var(--sp-2) 0 0' }}>
+              {o.hsnToFix.map((h) => (
+                <li key={h.code}>
+                  {h.code} {h.description} — {h.gstRate}%{h.exempt ? ', marked exempt' : ''}
+                </li>
+              ))}
+            </ul>
+          </div>
+        </div>
+      ) : null}
       <section className="ep-card" aria-labelledby="pu-steps" style={{ marginTop: 'var(--sp-4)' }}>
         <h2 id="pu-steps" className="ep-card__title">
           Set-up, in order

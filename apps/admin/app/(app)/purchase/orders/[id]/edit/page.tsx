@@ -17,7 +17,14 @@ export default async function EditOrderPage({ params }: { params: Promise<{ id: 
   if (!po.can.edit) notFound();
   // the HSN / SAC master, offered as a line's code is typed (an item without one shows empty)
   const hsn = await apiFetch<{
-    data: Array<{ code: string; description: string | null; gst_rate: string; status: string }>;
+    data: Array<{
+      code: string;
+      description: string | null;
+      gst_rate: string;
+      exempt: string | boolean;
+      reverse_charge: string | boolean;
+      status: string;
+    }>;
   }>('/masters/purchase_hsn/rows?size=500')
     .then((r) =>
       r.data
@@ -26,6 +33,8 @@ export default async function EditOrderPage({ params }: { params: Promise<{ id: 
           code: h.code,
           description: h.description ?? '',
           gstRate: Number(h.gst_rate),
+          exempt: String(h.exempt) === 'true',
+          reverseCharge: String(h.reverse_charge) === 'true',
         })),
     )
     .catch(() => []);

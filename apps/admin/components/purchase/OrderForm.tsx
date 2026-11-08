@@ -17,6 +17,9 @@ interface Line {
   gstRate: string;
   contractRate: number | null;
   rateChangeReason: string;
+  /** the item's HSN / SAC and its own GST % (it keeps it for its own code) */
+  itemHsn: string | null;
+  itemOwnGst: number | null;
   make: string;
   model: string;
   /** less than the requisition needs: why, and what happens to the rest */
@@ -45,9 +48,26 @@ export function OrderForm({
 }: {
   po: OrderDetail;
   /** the HSN / SAC master, offered as the line's code is typed */
-  hsn: Array<{ code: string; description: string; gstRate: number }>;
+  hsn: Array<{
+    code: string;
+    description: string;
+    gstRate: number;
+    exempt: boolean;
+    reverseCharge: boolean;
+  }>;
 }) {
   const router = useRouter();
+  /**
+   * GST follows the HSN master (docs/design/83, "As built — GST follows the HSN master"): a code in the
+   * master fixes the line's GST % (0 when exempt; the item's own rate for the item's own code).
+   */
+  const masterOf = (code: string) => hsn.find((h) => h.code === code.trim());
+  const gstFrom = (l: Pick<Line, 'itemHsn' | 'itemOwnGst'>, code: string) => {
+    const h = masterOf(code);
+    if (!h) return null;
+    if (h.exempt) return 0;
+    return l.itemOwnGst !== null && l.itemHsn === h.code ? l.itemOwnGst : h.gstRate;
+  };
   const [head, setHead] = useState({
     quoteRef: po.quoteRef ?? '',
     poDate: po.poDate,
@@ -69,9 +89,12 @@ export function OrderForm({
       uom: l.uom,
       rate: String(l.rate),
       discountPct: String(l.discountPct),
-      gstRate: String(l.gstRate),
+      // a code in the HSN master shows its rate (saving applies it)
+      gstRate: String(gstFrom(l, l.hsnCode ?? '') ?? l.gstRate),
       contractRate: l.contractRate,
       rateChangeReason: l.rateChangeReason ?? '',
+      itemHsn: l.itemHsn,
+      itemOwnGst: l.itemOwnGst,
       make: l.make ?? '',
       model: l.model ?? '',
       shortReason: l.shortReason ?? '',
@@ -100,6 +123,14 @@ export function OrderForm({
   const rateChanged = (l: Line) =>
     l.contractRate !== null && Math.abs(Number(l.rate) - l.contractRate) > 0.004;
   const qty = (x: number) => x.toLocaleString('en-IN', { maximumFractionDigits: 3 });
+  const setHsn = (i: number, code: string) =>
+    setLines((cur) =>
+      cur.map((l, j) => {
+        if (j !== i) return l;
+        const g = gstFrom(l, code);
+        return { ...l, hsnCode: code, ...(g === null ? {} : { gstRate: String(g) }) };
+      }),
+    );
   const pr = po.requisition ?? 'the requisition';
   /** what the line is over what the requisition leaves for this PO (0: not over) */
   const overBy = (l: Line) => {
@@ -353,13 +384,16 @@ export function OrderForm({
                     list="of-hsn-list"
                     value={l.hsnCode}
                     aria-describedby={`of-l${n}-h-help`}
-                    onChange={(e) => setLine(i, { hsnCode: e.target.value })}
+                    onChange={(e) => setHsn(i, e.target.value)}
                   />
                   <span id={`of-l${n}-h-help`} className="ep-field__help">
                     {l.hsnCode
-                      ? (hsn.find((h) => h.code === l.hsnCode)?.description ??
-                        'Not in the HSN list')
-                      : 'Not set on the item: type or pick the code (set it on the item in Masters → Items for next time)'}
+                      ? (masterOf(l.hsnCode)?.description ??
+                        'Not in the HSN / SAC master: type the GST %, and add the code in Masters → HSN / SAC codes')
+                      : 'Not set on the item: type or pick the code'}
+                    {l.hsnCode && masterOf(l.hsnCode) && !l.itemHsn
+                      ? ' · saved on the item too, for next time'
+                      : ''}
                   </span>
                 </label>
                 <label className="ep-field" htmlFor={`of-l${n}-make`}>
@@ -447,8 +481,21 @@ export function OrderForm({
                     className="ep-input"
                     inputMode="decimal"
                     value={l.gstRate}
+                    readOnly={!!masterOf(l.hsnCode)}
+                    aria-describedby={masterOf(l.hsnCode) ? `of-l${n}-g-help` : undefined}
                     onChange={(e) => setLine(i, { gstRate: e.target.value })}
                   />
+                  {masterOf(l.hsnCode) ? (
+                    <span id={`of-l${n}-g-help`} className="ep-field__help">
+                      {masterOf(l.hsnCode)!.exempt
+                        ? `Exempt (HSN / SAC ${l.hsnCode.trim()})`
+                        : `From HSN / SAC ${l.hsnCode.trim()}${
+                            l.itemOwnGst !== null && l.itemHsn === l.hsnCode.trim()
+                              ? ' (the item’s own rate)'
+                              : ''
+                          }${masterOf(l.hsnCode)!.reverseCharge ? ' · reverse charge: the school pays it' : ''}`}
+                    </span>
+                  ) : null}
                 </label>
                 {shortBy(l) > 0 ? (
                   <div className="ep-purch-short" role="group" aria-labelledby={`of-l${n}-short`}>

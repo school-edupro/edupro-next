@@ -119,6 +119,8 @@ export interface PurchaseOverview {
   departmentsSet: number;
   committee: number;
   gstinSet: boolean;
+  /** HSN / SAC codes saved before the GST-slab check: a rate not a slab, or exempt with a rate */
+  hsnToFix: Array<{ code: string; description: string; gstRate: number; exempt: boolean }>;
 }
 
 export interface PurchaseSettings {
@@ -815,6 +817,9 @@ export interface OrderLine {
   shortReason: keyof typeof SHORT_REASON | null;
   shortNote: string | null;
   closeRest: boolean;
+  /** the item's HSN / SAC (none: the PO's code is saved on the item) and its own GST % */
+  itemHsn: string | null;
+  itemOwnGst: number | null;
   uomId: string;
   uom: string;
   rate: number;

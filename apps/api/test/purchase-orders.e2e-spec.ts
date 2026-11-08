@@ -884,4 +884,64 @@ describe('purchase orders (e2e)', () => {
       .data.find((x: { id: string }) => x.id === pi.id);
     expect(row.partClosed).toBe(true);
   });
+
+  it('GST follows the HSN master on a PO line; an item without an HSN takes the one given', async () => {
+    const pi = (
+      await call(teacher, 'POST', '/purchase/indents', {
+        purpose: 'Pens for the sports day',
+        lines: [{ itemId: ids.PEN, quantity: 12 }],
+      })
+    ).json();
+    await call(teacher, 'POST', `/purchase/indents/${pi.id as string}/submit`);
+    await call(hod, 'POST', `/purchase/indents/${pi.id as string}/decide`, { action: 'approve' });
+    const drafts = (await call(office, 'GET', '/purchase/orders?status=draft')).json()
+      .data as Array<{
+      id: string;
+      vendorCode: string;
+      requisitionId: string | null;
+    }>;
+    let po: {
+      id: string;
+      lineItems: Array<{ id: string; quantity: number; itemHsn: string | null }>;
+    } | null = null;
+    for (const d of drafts.filter((x) => x.vendorCode === 'V1' && x.requisitionId)) {
+      const x = await get(office, d.id);
+      if (x.lineItems[0].quantity === 12) po = x;
+    }
+    expect(po!.lineItems[0]).toMatchObject({ itemHsn: null, gstRate: 0 });
+    const save = (hsnCode: string, gstRate: number) =>
+      call(office, 'PUT', `/purchase/orders/${po!.id}`, {
+        validityDays: 30,
+        lines: [
+          {
+            id: po!.lineItems[0]!.id,
+            description: 'Ball pen',
+            quantity: 12,
+            rate: 8.5,
+            gstRate,
+            hsnCode,
+          },
+        ],
+      });
+    // a code not in the master keeps the GST % typed
+    expect((await save('96089999', 12)).statusCode).toBe(200);
+    expect((await get(office, po!.id)).lineItems[0]).toMatchObject({
+      hsnCode: '96089999',
+      gstRate: 12,
+    });
+    // a code in the master: its rate, whatever was typed; V1 is in the school's state: CGST + SGST
+    expect((await save('9403', 0)).statusCode).toBe(200);
+    const after = await get(office, po!.id);
+    expect(after.lineItems[0]).toMatchObject({ hsnCode: '9403', gstRate: 18, exempt: false });
+    expect(after.totals).toMatchObject({ taxable: 102, cgst: 9.18, sgst: 9.18 });
+    // the pen had no HSN: it has the one the PO gave it (another PO's code never replaces it)
+    expect((await get(office, po!.id)).lineItems[0].itemHsn).toBe('9403');
+    // the reverse-charge SAC: exempt from the vendor's bill, the school pays it
+    expect((await save('998211', 0)).statusCode).toBe(200);
+    expect((await get(office, po!.id)).lineItems[0]).toMatchObject({
+      gstRate: 18,
+      reverseCharge: true,
+    });
+    expect((await get(office, po!.id)).lineItems[0].itemHsn).toBe('9403');
+  });
 });

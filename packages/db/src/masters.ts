@@ -13,6 +13,9 @@ import { PROFILE_LIST_DEFAULTS } from './student-fields';
 import { EMPLOYEE_LIST_DEFAULTS } from './employee-fields';
 import type { DatasetColumn, DatasetDefinition, DatasetQuery } from './datasets';
 
+/** The GST rates in per cent an HSN / SAC code may carry (docs/design/83, "GST follows the HSN master"). */
+export const GST_SLABS = [0, 0.25, 1.5, 3, 5, 12, 18, 28, 40] as const;
+
 export type MasterFieldType = 'text' | 'number' | 'date' | 'boolean' | 'select' | 'ref';
 
 export interface MasterField {
@@ -51,6 +54,10 @@ export interface MasterField {
   scale?: number;
   min?: number;
   max?: number;
+  /** For `number`: the only values allowed (the GST slabs of an HSN / SAC code). */
+  allowed?: readonly number[];
+  /** For `number`: must be 0 when this boolean field of the row is yes (an exempt code has no rate). */
+  zeroWhen?: string;
   maxLength?: number;
   /** Regular expression (anchored) a `text` value must match; `patternHelp` explains it. */
   pattern?: string;
@@ -2955,10 +2962,12 @@ export const MASTERS: MasterDefinition[] = [
         scale: 2,
         min: 0,
         max: 40,
+        allowed: GST_SLABS,
+        zeroWhen: 'exempt',
         required: true,
         width: 8,
         bulk: true,
-        help: 'The GST rate in per cent (0, 5, 18, 40…); confirm with the school’s CA',
+        help: 'A GST slab: 0, 0.25, 1.5, 3, 5, 12, 18, 28 or 40 (0 for an exempt code); confirm with the school’s CA',
       },
       {
         key: 'reverse_charge',

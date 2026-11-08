@@ -14621,3 +14621,8 @@ button.ep-subchoice__icon:hover {
   display: grid;
   gap: var(--sp-1);
 }
+/* a PO line's GST % set by its HSN / SAC code: shown, not typed */
+.ep-purch-line .ep-input[readonly] {
+  background: var(--surface-subtle);
+  cursor: default;
+}

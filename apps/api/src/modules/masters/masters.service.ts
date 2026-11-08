@@ -1231,6 +1231,16 @@ function crossChecks(
       if (typeof own === 'string' && lookups[f.key]?.get(norm(own)) === out[f.key])
         errors.push({ column: f.header, message: 'Cannot be the row itself' });
     }
+    if (
+      f.zeroWhen &&
+      out[f.zeroWhen] === true &&
+      typeof out[f.key] === 'number' &&
+      out[f.key] !== 0
+    )
+      errors.push({
+        column: f.header,
+        message: `Must be 0 when ${fields.find((x) => x.key === f.zeroWhen)?.header ?? f.zeroWhen} is yes`,
+      });
     if (!f.notBefore) continue;
     const a = out[f.notBefore];
     const b = out[f.key];
@@ -1249,7 +1259,9 @@ function ruleFor(f: MasterField): string {
   if (f.options?.length) parts.push(`one of ${f.options.join(' | ')}`);
   if (f.type === 'number')
     parts.push(
-      `${f.scale === 0 || f.scale === undefined ? 'whole number' : `number with up to ${f.scale} decimals`}${f.min !== undefined ? `, at least ${f.min}` : ''}${f.max !== undefined ? `, at most ${f.max}` : ''}`,
+      f.allowed
+        ? `one of ${f.allowed.join(', ')}${f.zeroWhen ? ` (0 when ${f.zeroWhen.replace(/_/g, ' ')} is yes)` : ''}`
+        : `${f.scale === 0 || f.scale === undefined ? 'whole number' : `number with up to ${f.scale} decimals`}${f.min !== undefined ? `, at least ${f.min}` : ''}${f.max !== undefined ? `, at most ${f.max}` : ''}`,
     );
   if (f.type === 'date') parts.push('YYYY-MM-DD or an Excel date');
   if (f.type === 'boolean') parts.push('yes / no');
@@ -1326,6 +1338,8 @@ function coerce(
       if ((f.scale ?? 0) === 0 && !Number.isInteger(n)) return { error: 'Must be a whole number' };
       if (f.min !== undefined && n < f.min) return { error: `Below ${f.min}` };
       if (f.max !== undefined && n > f.max) return { error: `Above ${f.max}` };
+      if (f.allowed && !f.allowed.includes(n))
+        return { error: `Must be one of ${f.allowed.join(', ')}` };
       return { value: f.scale ? Number(n.toFixed(f.scale)) : n };
     }
     case 'date': {

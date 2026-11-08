@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import type { PoolClient, TenantContext } from '@edupro/db';
+import { GST_SLABS, type PoolClient, type TenantContext } from '@edupro/db';
 import { AuditService } from '../../common/audit/audit.service';
 import { DbService } from '../../common/db/db.service';
 import { DomainError } from '../../common/errors/domain-error';
@@ -104,9 +104,27 @@ export class PurchaseSetupService {
            (SELECT (gstin IS NOT NULL)::int FROM purchase_settings) AS gstin_set`,
       );
       const x = n.rows[0]!;
+      // codes saved before the GST-slab check (0338): a rate that is not a slab, or exempt with a rate
+      const toFix = await c.query<{
+        code: string;
+        description: string;
+        gst_rate: string;
+        exempt: boolean;
+      }>(
+        `SELECT code, description, gst_rate::text, exempt FROM purchase_hsn
+          WHERE status = 'active' AND (gst_rate <> ALL($1::numeric[]) OR (exempt AND gst_rate <> 0))
+          ORDER BY code LIMIT 50`,
+        [GST_SLABS],
+      );
       return {
         uoms: x.uoms,
         hsn: x.hsn,
+        hsnToFix: toFix.rows.map((h) => ({
+          code: h.code,
+          description: h.description,
+          gstRate: Number(h.gst_rate),
+          exempt: h.exempt,
+        })),
         categories: x.categories,
         items: x.items,
         paymentTerms: x.payment_terms,

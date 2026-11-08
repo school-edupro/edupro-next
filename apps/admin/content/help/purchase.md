@@ -54,7 +54,9 @@ PO, the emergency purchase, the stores and receiving what was ordered.
    before saving, Excel and PDF of the list. The HSN list starts short on purpose (school stationery,
    books, maps, computers): add the codes of what the school buys, with the GST rate, and tick **Reverse
    charge** where the school pays the GST itself (e.g. an advocate's legal services) or **Exempt for the
-   school**. Confirm every rate with the school's CA. Categories have two levels: a category and its
+   school**. The GST % must be a GST slab (0, 0.25, 1.5, 3, 5, 12, 18, 28 or 40), and 0 for an exempt
+   code; codes saved before this check are listed on Purchase set-up as **HSN / SAC codes to fix**.
+   Confirm every rate with the school's CA. Categories have two levels: a category and its
    sub-categories. A sub-category is a row of **Item categories** with **Sub-category of (category)**
    filled (e.g. ELEC-LIGHT "Lights and fans" under ELEC); leave it empty for a main category. A main
    category's **code** is the short one you type (STAT, IT); a sub-category's is filled in from its
@@ -316,10 +318,12 @@ On a draft PO:
   printed as "Your quotation"), PO date, validity, delivery date and address, the payment term (the
   vendor's, else the school's default), **freight terms**, a **note to the vendor**, the general
   instructions (terms and conditions); each line's words, **HSN / SAC** (copied from the item; when the
-  item has none the box is empty — type or pick the code, and set it on the item in Masters → Items for
-  next time), **make** (filled from the item's brand) and **model**, quantity (no more than the
-  requisition still needs), rate, discount % and GST %; other charges (freight, installation, packing)
-  with their GST. A rate-contract line keeps the contract rate unless you give the reason.
+  item has none the box is empty — type or pick the code, and the item keeps it for next time), **make**
+  (filled from the item's brand) and **model**, quantity (no more than the requisition still needs),
+  rate, discount % and GST %; other charges (freight, installation, packing) with their GST.
+- **The GST % follows the HSN / SAC code**: a code in the HSN / SAC master sets the line's GST % (shaded,
+  not typed), exempt ("Exempt (HSN / SAC …)", 0%) and reverse charge; an item with its own GST % keeps it
+  for its own code. A code not in the master: type the GST % yourself, and add the code to the master. A rate-contract line keeps the contract rate unless you give the reason.
   **Remove line N from this PO** takes a line off this draft without cancelling anything: it waits on
   **Purchase → To order**, to be ordered later or from another vendor.
 - **Less than the requisition needs** (e.g. 2 needed, the vendor has 1): type the lower quantity; a box

@@ -1192,4 +1192,21 @@ describe('purchase masters (e2e)', () => {
     expect((await call(admin, 'GET', '/purchase/vendor-approvers')).json().mode).toBe('role');
     expect((await call(admin, 'GET', '/purchase/vendor-approvals')).json().canApprove).toBe(true);
   });
+
+  it('an HSN / SAC code carries a GST slab, and 0% when exempt (old rows are listed to fix)', async () => {
+    const hsn = (values: Record<string, unknown>) => row(admin, 'purchase_hsn', values);
+    const base = { kind: 'HSN', description: 'Test code' };
+    const odd = await hsn({ ...base, code: '96081091', gst_rate: 16 });
+    expect(odd.statusCode).toBe(400);
+    expect(odd.json().detail).toContain('Must be one of 0, 0.25, 1.5, 3, 5, 12, 18, 28, 40');
+    const exempt = await hsn({ ...base, code: '96081092', gst_rate: 18, exempt: 'yes' });
+    expect(exempt.statusCode).toBe(400);
+    expect(exempt.json().detail).toContain('Must be 0 when Exempt for the school is yes');
+    expect((await hsn({ ...base, code: '96081093', gst_rate: 0, exempt: 'yes' })).statusCode).toBe(
+      201,
+    );
+    expect((await hsn({ ...base, code: '96081094', gst_rate: 18 })).statusCode).toBe(201);
+    // nothing to fix when every code is a slab (rows saved before the check would be listed here)
+    expect((await call(admin, 'GET', '/purchase/overview')).json().hsnToFix).toEqual([]);
+  });
 });
