@@ -326,8 +326,11 @@ On a draft PO:
   asks **Why less** (Vendor short of stock, Sold in packs, Over budget, No longer needed, Other — write
   why) and what happens to **the rest**: **Order later** (it waits on To order, from this or another
   vendor) or **Not to be ordered — close it**. The PO page shows it under the line, an amendment's
-  **What changed** gives the reason, and the indent shows it once the PO is approved. More than the
-  requisition needs is not allowed: buying more needs a new indent.
+  **What changed** gives the reason, and the indent shows it once the PO is approved.
+- **More than the requisition** is not allowed: a PO orders only what was indented and approved. Under
+  the quantity the form says how much the requisition leaves for this PO ("Up to 1 BOX: what PR/…
+  leaves for this PO"); type more and it says by how much, and Save stops with the reason. To buy the
+  extra, raise a new indent (the link is in the message); it goes through its own approval.
 - **GST** is worked out from the vendor and the school's state (Purchase settings): **CGST + SGST** for a
   registered vendor in the same state, **IGST** for one in another state, **none** for an unregistered
   or composition vendor. A **reverse-charge** service (e.g. an advocate's legal services) shows the GST

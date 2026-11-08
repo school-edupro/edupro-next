@@ -99,6 +99,15 @@ export function OrderForm({
   };
   const rateChanged = (l: Line) =>
     l.contractRate !== null && Math.abs(Number(l.rate) - l.contractRate) > 0.004;
+  const qty = (x: number) => x.toLocaleString('en-IN', { maximumFractionDigits: 3 });
+  const pr = po.requisition ?? 'the requisition';
+  /** what the line is over what the requisition leaves for this PO (0: not over) */
+  const overBy = (l: Line) => {
+    const q = Number(l.quantity);
+    if (l.maxQuantity === null || !Number.isFinite(q)) return 0;
+    const d = Math.round((q - l.maxQuantity) * 1000) / 1000;
+    return d > 0.0005 ? d : 0;
+  };
   /** what the line is short of the requisition (0: not short) */
   const shortBy = (l: Line) => {
     const q = Number(l.quantity);
@@ -109,6 +118,14 @@ export function OrderForm({
 
   const send = () => {
     setError(null);
+    const over = lines.findIndex((l) => overBy(l) > 0);
+    if (over >= 0) {
+      const l = lines[over]!;
+      setError(
+        `Line ${String(over + 1)}: ${l.quantity} ${l.uom} is more than ${pr} leaves for this PO (${qty(l.maxQuantity ?? 0)} ${l.uom}). A PO orders only what was indented and approved; to buy the extra ${qty(overBy(l))} ${l.uom}, raise a new indent.`,
+      );
+      return;
+    }
     const missing = lines.findIndex(
       (l) =>
         shortBy(l) > 0 &&
@@ -374,10 +391,28 @@ export function OrderForm({
                     className="ep-input"
                     inputMode="decimal"
                     value={l.quantity}
+                    aria-invalid={overBy(l) > 0 ? true : undefined}
+                    aria-describedby={
+                      l.maxQuantity !== null
+                        ? `of-l${n}-qh${overBy(l) > 0 ? ` of-l${n}-qe` : ''}`
+                        : undefined
+                    }
                     onChange={(e) => setLine(i, { quantity: e.target.value })}
                   />
                   {l.maxQuantity !== null ? (
-                    <span className="ep-field__help">Up to {l.maxQuantity}</span>
+                    <span id={`of-l${n}-qh`} className="ep-field__help">
+                      Up to {qty(l.maxQuantity)} {l.uom}: what {pr} leaves for this PO
+                    </span>
+                  ) : null}
+                  {overBy(l) > 0 ? (
+                    <span id={`of-l${n}-qe`} className="ep-field__error" role="alert">
+                      {qty(overBy(l))} {l.uom} more than the approved requisition. A PO cannot order
+                      more; for the extra, raise a{' '}
+                      <a style={{ textDecoration: 'underline' }} href="/purchase/indents/new">
+                        new indent
+                      </a>
+                      .
+                    </span>
                   ) : null}
                 </label>
                 <label className="ep-field" htmlFor={`of-l${n}-r`}>

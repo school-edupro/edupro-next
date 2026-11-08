@@ -1357,12 +1357,16 @@ export class PurchaseOrdersService implements OnModuleInit {
       for (const l of dto.lines) {
         const have = lines.find((x) => x.id === l.id);
         if (!have) throw new DomainError('not-found', 'A line was not found', { status: 404 });
-        if (have.max_qty !== null && l.quantity > Number(have.max_qty) + 0.0005)
+        if (have.max_qty !== null && l.quantity > Number(have.max_qty) + 0.0005) {
+          // a PO orders no more than the approved requisition leaves for it; more needs a new indent
+          const n = (x: number) => x.toLocaleString('en-IN', { maximumFractionDigits: 3 });
+          const left = Number(have.max_qty);
           throw new DomainError(
-            'validation-failed',
-            `${have.description}: at most ${have.max_qty} on this PO (the requisition's quantity less other orders)`,
+            'purchase.over_requisition',
+            `${have.description}: ${n(l.quantity)} ${have.uom} is more than ${po.requisition ?? 'the requisition'} leaves for this PO (${n(left)} ${have.uom}${left > 0 ? '' : ' — the rest is on other POs'}). A PO orders only what was indented and approved; to buy the extra ${n(Math.round((l.quantity - left) * 1000) / 1000)} ${have.uom}, raise a new indent.`,
             { status: 400 },
           );
+        }
         // less than the requisition needs: why, and what happens to the rest
         if (have.max_qty !== null && l.quantity < Number(have.max_qty) - 0.0005) {
           if (!l.shortReason || !l.shortAction)

@@ -1082,6 +1082,13 @@ told. Decided with the user:
   (`ConfirmAction` gains `select` and an optional reason); the PR and PI pages show each line's
   ordering; the PI list "· part closed". Staff app: the PO page's line note, the PI page's line
   ordering, the PI list "· part closed". The To order card title's PR link is underlined (axe).
+- **More than the requisition** (asked the same day: "show the error's why and explain"): the API's
+  refusal is `purchase.over_requisition` — "Ball pen, red: 5 BOX is more than PR/… leaves for this PO (1
+  BOX). A PO orders only what was indented and approved; to buy the extra 4 BOX, raise a new indent."
+  (quantities without trailing zeros; "the rest is on other POs" when nothing is left). The PO form
+  says it as you type: the help "Up to 1 BOX: what PR/… leaves for this PO", the quantity marked
+  invalid with "4 BOX more than the approved requisition … raise a new indent" (linked), and Save
+  stopped with the full sentence before anything is sent.
 - Tests: `purchase-orders` — refused without a reason and for Other without a note; later vs close
   on To order; the PR part ordered with each line's words; closing on To order (403 for a teacher,
   400 Other without a note, 409 twice) makes the PR ordered; a rate-contract indent's line ordered 6 of

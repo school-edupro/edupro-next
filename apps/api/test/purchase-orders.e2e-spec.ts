@@ -325,10 +325,13 @@ describe('purchase orders (e2e)', () => {
       ],
       charges: [{ kind: 'freight', amount: 500, gstRate: 18 }],
     });
-    expect(
-      (await call(office, 'PUT', `/purchase/orders/${orders.V1!}`, body({ quantity: 5 })))
-        .statusCode,
-    ).toBe(400);
+    // more than the requisition: refused, saying why and what to do
+    const over = await call(office, 'PUT', `/purchase/orders/${orders.V1!}`, body({ quantity: 5 }));
+    expect(over.statusCode).toBe(400);
+    expect(over.json().type).toBe('purchase.over_requisition');
+    expect(over.json().detail).toMatch(
+      /^Student chair: 5 \S+ is more than PR\/.+ leaves for this PO \(4 \S+\)\. .+raise a new indent\.$/,
+    );
     const r = await call(office, 'PUT', `/purchase/orders/${orders.V1!}`, body());
     expect(r.statusCode).toBe(200);
     expect(r.json()).toMatchObject({ taxable: 4100, cgst: 369, sgst: 369, total: 4838 });
