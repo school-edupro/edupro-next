@@ -1,5 +1,6 @@
 import { createZodDto } from 'nestjs-zod';
 import { z } from 'zod';
+import { patchOf } from '../../common/validation/patch-of';
 import { IdSchema } from '../academics/classes/classes.dto';
 
 const DateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'must be YYYY-MM-DD');
@@ -61,10 +62,9 @@ export const CreateHeadSchema = z.object({
 });
 export class CreateHeadDto extends createZodDto(CreateHeadSchema) {}
 
-export const UpdateHeadSchema = CreateHeadSchema.omit({ code: true })
-  .extend({ status: z.enum(['active', 'inactive']) })
-  .partial()
-  .refine((v) => Object.keys(v).length > 0, { message: 'at least one field is required' });
+export const UpdateHeadSchema = patchOf(
+  CreateHeadSchema.omit({ code: true }).extend({ status: z.enum(['active', 'inactive']) }),
+).refine((v) => Object.keys(v).length > 0, { message: 'at least one field is required' });
 export class UpdateHeadDto extends createZodDto(UpdateHeadSchema) {}
 
 export const GeneratePeriodsSchema = z.object({

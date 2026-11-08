@@ -65,7 +65,8 @@ export class ProblemDetailsFilter implements ExceptionFilter {
 
   private toProblem(exception: unknown): ProblemDetails {
     if (exception instanceof ZodValidationException) {
-      // nestjs-zod v5 types this as unknown because it supports zod 3 and 4; this project uses zod 3.
+      // nestjs-zod v5 types this as unknown because it supports zod 3 and 4; this project uses zod 4.
+      // The messages keep zod 3's wording (common/validation/zod-messages.ts, loaded by AppModule).
       const zodError = exception.getZodError() as ZodError;
       return {
         type: 'validation-failed',

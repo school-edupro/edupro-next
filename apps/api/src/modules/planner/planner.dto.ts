@@ -1,5 +1,6 @@
 import { createZodDto } from 'nestjs-zod';
 import { z } from 'zod';
+import { patchOf } from '../../common/validation/patch-of';
 import { IdSchema } from '../academics/classes/classes.dto';
 
 export const PLANNER = {
@@ -31,11 +32,13 @@ export const CreateLessonPlanSchema = z.object({
   submit: z.boolean().default(false),
 });
 export class CreateLessonPlanDto extends createZodDto(CreateLessonPlanSchema) {}
-export const UpdateLessonPlanSchema = CreateLessonPlanSchema.omit({
-  classSectionId: true,
-  subjectId: true,
-  weekStart: true,
-}).partial();
+export const UpdateLessonPlanSchema = patchOf(
+  CreateLessonPlanSchema.omit({
+    classSectionId: true,
+    subjectId: true,
+    weekStart: true,
+  }),
+);
 export class UpdateLessonPlanDto extends createZodDto(UpdateLessonPlanSchema) {}
 export const ListLessonPlansSchema = z.object({
   status: z.enum(['draft', 'submitted', 'approved', 'rejected', 'returned']).optional(),

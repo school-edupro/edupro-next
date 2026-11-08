@@ -1,5 +1,6 @@
 import { createZodDto } from 'nestjs-zod';
 import { z } from 'zod';
+import { patchOf } from '../../common/validation/patch-of';
 
 export const IdSchema = z.string().regex(/^[0-9]{1,18}$/, 'must be a numeric id');
 const DateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'YYYY-MM-DD');
@@ -84,8 +85,8 @@ export const CreateStudentSchema = StudentCore.extend({
 });
 export class CreateStudentDto extends createZodDto(CreateStudentSchema) {}
 
-export const UpdateStudentSchema = StudentCore.omit({ admissionNo: true })
-  .extend({
+export const UpdateStudentSchema = patchOf(
+  StudentCore.omit({ admissionNo: true }).extend({
     // optional text fields can be cleared: the edit form sends null for an emptied box
     lastName: z.string().trim().max(80).nullable(),
     category: z.string().trim().max(40).nullable(),
@@ -96,9 +97,8 @@ export const UpdateStudentSchema = StudentCore.omit({ admissionNo: true })
     statusReason: z.string().trim().max(200),
     leftOn: DateSchema.nullable(),
     photoFileId: IdSchema.nullable(),
-  })
-  .partial()
-  .refine((v) => Object.keys(v).length > 0, { message: 'at least one field is required' });
+  }),
+).refine((v) => Object.keys(v).length > 0, { message: 'at least one field is required' });
 export class UpdateStudentDto extends createZodDto(UpdateStudentSchema) {}
 
 export const ListStudentsQuerySchema = z.object({
@@ -270,16 +270,15 @@ export const CreateEmployeeSchema = EmployeeCore.extend({
 });
 export class CreateEmployeeDto extends createZodDto(CreateEmployeeSchema) {}
 
-export const UpdateEmployeeSchema = EmployeeCore.omit({ employeeCode: true })
-  .extend({
+export const UpdateEmployeeSchema = patchOf(
+  EmployeeCore.omit({ employeeCode: true }).extend({
     status: z.enum(['active', 'inactive']),
     /** Recorded in student_status_history when the status changes (S6-06). */
     statusReason: z.string().trim().max(200),
     leftOn: DateSchema.nullable(),
     photoFileId: IdSchema.nullable(),
-  })
-  .partial()
-  .refine((v) => Object.keys(v).length > 0, { message: 'at least one field is required' });
+  }),
+).refine((v) => Object.keys(v).length > 0, { message: 'at least one field is required' });
 export class UpdateEmployeeDto extends createZodDto(UpdateEmployeeSchema) {}
 
 export const ListEmployeesQuerySchema = z.object({

@@ -1,5 +1,6 @@
 import { createZodDto } from 'nestjs-zod';
 import { z } from 'zod';
+import { patchOf } from '../../common/validation/patch-of';
 
 export const IdSchema = z.string().regex(/^[0-9]{1,18}$/, 'must be a numeric id');
 export const ChannelSchema = z.enum(['sms', 'whatsapp', 'email', 'push']);
@@ -50,10 +51,11 @@ export const CreateTemplateSchema = TemplateBase.refine(
 });
 export class CreateTemplateDto extends createZodDto(CreateTemplateSchema) {}
 
-export const UpdateTemplateSchema = TemplateBase.omit({ code: true, channel: true })
-  .extend({ status: z.enum(['active', 'inactive']) })
-  .partial()
-  .refine((v) => Object.keys(v).length > 0, { message: 'at least one field is required' });
+export const UpdateTemplateSchema = patchOf(
+  TemplateBase.omit({ code: true, channel: true }).extend({
+    status: z.enum(['active', 'inactive']),
+  }),
+).refine((v) => Object.keys(v).length > 0, { message: 'at least one field is required' });
 export const PreviewTemplateSchema = z.object({
   channel: ChannelSchema,
   subject: z.string().max(200).optional(),

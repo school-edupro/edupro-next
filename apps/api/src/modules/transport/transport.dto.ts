@@ -1,5 +1,6 @@
 import { createZodDto } from 'nestjs-zod';
 import { z } from 'zod';
+import { patchOf } from '../../common/validation/patch-of';
 import { IdSchema } from '../academics/classes/classes.dto';
 
 export const TRANSPORT = {
@@ -37,8 +38,8 @@ export const CreateRouteSchema = z.object({
     .optional(),
 });
 export class CreateRouteDto extends createZodDto(CreateRouteSchema) {}
-export const UpdateRouteSchema = CreateRouteSchema.omit({ code: true })
-  .extend({
+export const UpdateRouteSchema = patchOf(
+  CreateRouteSchema.omit({ code: true }).extend({
     status: z.enum(['active', 'inactive']),
     alertBoarding: z.boolean(),
     alertAlighting: z.boolean(),
@@ -51,8 +52,8 @@ export const UpdateRouteSchema = CreateRouteSchema.omit({ code: true })
     driverId: IdSchema.nullable(),
     conductorName: z.string().trim().max(80).nullable(),
     conductorMobile: Mobile.nullable(),
-  })
-  .partial();
+  }),
+);
 export class UpdateRouteDto extends createZodDto(UpdateRouteSchema) {}
 
 export const AssignStudentsSchema = z.object({
@@ -92,14 +93,14 @@ export const UpsertVehicleSchema = z.object({
   gpsDeviceId: z.string().trim().max(60).optional(),
 });
 export class UpsertVehicleDto extends createZodDto(UpsertVehicleSchema) {}
-export const UpdateVehicleSchema = UpsertVehicleSchema.omit({ regNo: true })
-  .extend({
+export const UpdateVehicleSchema = patchOf(
+  UpsertVehicleSchema.omit({ regNo: true }).extend({
     insuranceExpiry: DateSchema.nullable(),
     fitnessExpiry: DateSchema.nullable(),
     permitExpiry: DateSchema.nullable(),
     status: z.enum(['active', 'inactive']),
-  })
-  .partial();
+  }),
+);
 export class UpdateVehicleDto extends createZodDto(UpdateVehicleSchema) {}
 
 export const UpsertDriverSchema = z.object({
@@ -110,9 +111,12 @@ export const UpsertDriverSchema = z.object({
   employeeId: IdSchema.optional(),
 });
 export class UpsertDriverDto extends createZodDto(UpsertDriverSchema) {}
-export const UpdateDriverSchema = UpsertDriverSchema.omit({ employeeId: true })
-  .extend({ licenceExpiry: DateSchema.nullable(), status: z.enum(['active', 'inactive']) })
-  .partial();
+export const UpdateDriverSchema = patchOf(
+  UpsertDriverSchema.omit({ employeeId: true }).extend({
+    licenceExpiry: DateSchema.nullable(),
+    status: z.enum(['active', 'inactive']),
+  }),
+);
 export class UpdateDriverDto extends createZodDto(UpdateDriverSchema) {}
 
 export const SetStopsSchema = z.object({

@@ -1,5 +1,6 @@
 import { createZodDto } from 'nestjs-zod';
 import { z } from 'zod';
+import { patchOf } from '../../common/validation/patch-of';
 import { IdSchema } from '../academics/classes/classes.dto';
 
 export const EXAMS = {
@@ -55,9 +56,9 @@ export const UpsertExamTypeSchema = z.object({
   areas: AreasSchema.optional(),
 });
 export class UpsertExamTypeDto extends createZodDto(UpsertExamTypeSchema) {}
-export const UpdateExamTypeSchema = UpsertExamTypeSchema.omit({ code: true })
-  .extend({ status: z.enum(['active', 'inactive']) })
-  .partial();
+export const UpdateExamTypeSchema = patchOf(
+  UpsertExamTypeSchema.omit({ code: true }).extend({ status: z.enum(['active', 'inactive']) }),
+);
 export class UpdateExamTypeDto extends createZodDto(UpdateExamTypeSchema) {}
 
 export const BandSchema = z.object({
@@ -91,16 +92,16 @@ export const CreateExamSchema = z.object({
     .max(30),
 });
 export class CreateExamDto extends createZodDto(CreateExamSchema) {}
-export const UpdateExamSchema = CreateExamSchema.omit({ code: true, examTypeId: true })
-  .extend({
+export const UpdateExamSchema = patchOf(
+  CreateExamSchema.omit({ code: true, examTypeId: true }).extend({
     startsOn: DateSchema.nullable(),
     endsOn: DateSchema.nullable(),
     status: z.enum(['active', 'inactive']),
     marksLocked: z.boolean(),
     /** printed under the date sheet (reporting time, what to bring); docs/design/66 */
     dateSheetNote: z.string().trim().max(1000).nullable(),
-  })
-  .partial();
+  }),
+);
 export class UpdateExamDto extends createZodDto(UpdateExamSchema) {}
 
 /** docs/design/66: a new exam made from an earlier one (its classes, subjects, parts and sets). */

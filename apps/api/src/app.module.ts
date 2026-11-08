@@ -1,6 +1,8 @@
 import { Module } from '@nestjs/common';
 import { APP_FILTER, APP_GUARD, APP_INTERCEPTOR, APP_PIPE, DiscoveryModule } from '@nestjs/core';
 import { ZodValidationPipe } from 'nestjs-zod';
+// zod 3's wording for validation messages, set once for the whole API (see the file)
+import './common/validation/zod-messages';
 import { PermissionGuard } from './common/access/permission.guard';
 import { AuditInterceptor } from './common/audit/audit.interceptor';
 import { AuditService } from './common/audit/audit.service';

@@ -1,5 +1,6 @@
 import { createZodDto } from 'nestjs-zod';
 import { z } from 'zod';
+import { patchOf } from '../../common/validation/patch-of';
 
 export const IdSchema = z.string().regex(/^[0-9]{1,18}$/, 'must be a numeric id');
 const DateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'YYYY-MM-DD');
@@ -19,15 +20,14 @@ export const CreateRoleSchema = z.object({
 });
 export class CreateRoleDto extends createZodDto(CreateRoleSchema) {}
 
-export const UpdateRoleSchema = z
-  .object({
+export const UpdateRoleSchema = patchOf(
+  z.object({
     name: z.string().trim().min(2).max(80),
     description: z.string().trim().max(500),
     permissions: z.array(PermissionCode).max(500),
     status: z.enum(['active', 'inactive']),
-  })
-  .partial()
-  .refine((v) => Object.keys(v).length > 0, { message: 'at least one field is required' });
+  }),
+).refine((v) => Object.keys(v).length > 0, { message: 'at least one field is required' });
 export class UpdateRoleDto extends createZodDto(UpdateRoleSchema) {}
 
 // ---- assignments ---------------------------------------------------------------------------------

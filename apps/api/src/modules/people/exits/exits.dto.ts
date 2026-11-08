@@ -33,7 +33,7 @@ export const ExitSetupSchema = z.object({
     )
     .min(1)
     .max(20),
-  noticeDays: z.record(z.enum(EMPLOYEE_TYPES), z.number().int().min(0).max(365)),
+  noticeDays: z.partialRecord(z.enum(EMPLOYEE_TYPES), z.number().int().min(0).max(365)),
   departments: z
     .array(
       z.object({
@@ -102,7 +102,9 @@ export const ExitDecisionSchema = z.object({
 export class ExitDecisionDto extends createZodDto(ExitDecisionSchema) {}
 
 export const ExitListSchema = z.object({
-  status: z.enum(['pending', 'sent_back', 'approved', 'rejected', 'withdrawn', 'closed']).optional(),
+  status: z
+    .enum(['pending', 'sent_back', 'approved', 'rejected', 'withdrawn', 'closed'])
+    .optional(),
   q: z.string().trim().max(80).optional(),
 });
 export class ExitListDto extends createZodDto(ExitListSchema) {}

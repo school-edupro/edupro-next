@@ -1,5 +1,6 @@
 import { createZodDto } from 'nestjs-zod';
 import { z } from 'zod';
+import { patchOf } from '../../../common/validation/patch-of';
 import { IdSchema, RowStatusSchema } from '../classes/classes.dto';
 
 export const SubjectKindSchema = z.enum(['scholastic', 'co_scholastic', 'language', 'vocational']);
@@ -25,9 +26,9 @@ export const CreateSubjectSchema = z.object({
 });
 export class CreateSubjectDto extends createZodDto(CreateSubjectSchema) {}
 
-export const UpdateSubjectSchema = CreateSubjectSchema.extend({ status: RowStatusSchema })
-  .partial()
-  .refine((v) => Object.keys(v).length > 0, { message: 'at least one field is required' });
+export const UpdateSubjectSchema = patchOf(
+  CreateSubjectSchema.extend({ status: RowStatusSchema }),
+).refine((v) => Object.keys(v).length > 0, { message: 'at least one field is required' });
 export class UpdateSubjectDto extends createZodDto(UpdateSubjectSchema) {}
 
 export const ListSubjectsQuerySchema = z.object({

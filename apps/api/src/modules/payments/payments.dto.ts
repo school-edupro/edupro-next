@@ -152,7 +152,7 @@ export class RazorpayReturnDto extends createZodDto(RazorpayReturnSchema) {}
 export const RazorpayWebhookSchema = z
   .object({
     event: z.string().min(1).max(80),
-    payload: z.record(z.unknown()).optional(),
+    payload: z.record(z.string(), z.unknown()).optional(),
   })
   .passthrough();
 export class RazorpayWebhookDto extends createZodDto(RazorpayWebhookSchema) {}

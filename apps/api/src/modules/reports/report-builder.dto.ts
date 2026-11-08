@@ -51,7 +51,7 @@ export const ReportSpecSchema = z.object({
       includeInactive: z.boolean().default(false),
       search: z.string().trim().max(80).nullable().optional(),
     })
-    .default({}),
+    .prefault({}), // an absent block is parsed as {} so the field defaults apply
   layout: z.enum(['table', 'detailed']).default('table'),
   groupLabels: z.record(z.string().regex(/^\d{1,2}$/), z.string().trim().max(80)).optional(),
 });

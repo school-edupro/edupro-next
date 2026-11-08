@@ -1,5 +1,6 @@
 import { createZodDto } from 'nestjs-zod';
 import { z } from 'zod';
+import { patchOf } from '../../common/validation/patch-of';
 import { IdSchema } from '../academics/classes/classes.dto';
 
 const DateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'must be YYYY-MM-DD');
@@ -83,8 +84,8 @@ export const CreateCycleSchema = z
   });
 export class CreateCycleDto extends createZodDto(CreateCycleSchema) {}
 
-export const UpdateCycleSchema = z
-  .object({
+export const UpdateCycleSchema = patchOf(
+  z.object({
     name: z.string().trim().min(1).max(120),
     nameHi: z.string().trim().max(120).nullable(),
     instructions: z.string().trim().max(5000).nullable(),
@@ -98,9 +99,8 @@ export const UpdateCycleSchema = z
     status: z.enum(['draft', 'open', 'closed']),
     /** open although a fee category cannot be decided by the session's forms (docs/design/43, part 5) */
     confirmCategoryGaps: z.boolean(),
-  })
-  .partial()
-  .refine((v) => Object.keys(v).length > 0, { message: 'at least one field is required' });
+  }),
+).refine((v) => Object.keys(v).length > 0, { message: 'at least one field is required' });
 export class UpdateCycleDto extends createZodDto(UpdateCycleSchema) {}
 
 export const ApplicationStatusSchema = z.enum([
@@ -191,14 +191,13 @@ export const CreateApplicationSchema = z.object({
 });
 export class CreateApplicationDto extends createZodDto(CreateApplicationSchema) {}
 
-export const UpdateApplicationSchema = z
-  .object({
+export const UpdateApplicationSchema = patchOf(
+  z.object({
     childFirstName: z.string().trim().min(1).max(80),
     childLastName: z.string().trim().max(80).nullable(),
     childDob: DateSchema,
     childGender: z.enum(['male', 'female', 'other', 'unspecified']),
     data: z.record(z.string(), z.unknown()),
-  })
-  .partial()
-  .refine((v) => Object.keys(v).length > 0, { message: 'at least one field is required' });
+  }),
+).refine((v) => Object.keys(v).length > 0, { message: 'at least one field is required' });
 export class UpdateApplicationDto extends createZodDto(UpdateApplicationSchema) {}

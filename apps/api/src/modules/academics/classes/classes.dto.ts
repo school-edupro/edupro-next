@@ -1,5 +1,6 @@
 import { createZodDto } from 'nestjs-zod';
 import { z } from 'zod';
+import { patchOf } from '../../../common/validation/patch-of';
 
 /** Ids travel as numeric strings to avoid JavaScript precision loss on BIGINT (design section 10). */
 export const IdSchema = z.string().regex(/^[0-9]{1,18}$/, 'must be a numeric id');
@@ -24,15 +25,14 @@ export const CreateClassSchema = z.object({
 });
 export class CreateClassDto extends createZodDto(CreateClassSchema) {}
 
-export const UpdateClassSchema = z
-  .object({
+export const UpdateClassSchema = patchOf(
+  z.object({
     code: z.string().trim().min(1).max(20),
     name: z.string().trim().min(1).max(100),
     displayOrder: z.number().int().min(0).max(10_000),
     status: RowStatusSchema,
-  })
-  .partial()
-  .refine((v) => Object.keys(v).length > 0, { message: 'at least one field is required' });
+  }),
+).refine((v) => Object.keys(v).length > 0, { message: 'at least one field is required' });
 export class UpdateClassDto extends createZodDto(UpdateClassSchema) {}
 
 export const ListClassesQuerySchema = z.object({

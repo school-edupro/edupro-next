@@ -1,5 +1,6 @@
 import { createZodDto } from 'nestjs-zod';
 import { z } from 'zod';
+import { patchOf } from '../../common/validation/patch-of';
 import { IdSchema } from '../academics/classes/classes.dto';
 
 const DateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'must be YYYY-MM-DD');
@@ -68,7 +69,7 @@ export const RoomSchema = z.object({
 });
 export class RoomDto extends createZodDto(RoomSchema) {}
 
-export const RoomUpdateSchema = RoomSchema.omit({ beds: true }).partial();
+export const RoomUpdateSchema = patchOf(RoomSchema.omit({ beds: true }));
 export class RoomUpdateDto extends createZodDto(RoomUpdateSchema) {}
 
 export const BedSchema = z.object({

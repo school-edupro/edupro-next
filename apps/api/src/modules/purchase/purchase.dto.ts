@@ -1,5 +1,6 @@
 import { createZodDto } from 'nestjs-zod';
 import { z } from 'zod';
+import { patchOf } from '../../common/validation/patch-of';
 import { IdSchema } from '../academics/classes/classes.dto';
 
 /** Rights of the purchase module (docs/design/83). */
@@ -33,7 +34,8 @@ const opt = (max: number) =>
     .trim()
     .max(max)
     .nullish()
-    .transform((v) => (v ? v : undefined));
+    .transform((v) => (v ? v : undefined))
+    .optional(); // keeps the key optional in the DTO type
 const upper = (re: RegExp, help: string) =>
   z
     .string()
@@ -124,7 +126,7 @@ export const CreateVendorSchema = VendorBase.extend({
 });
 export class CreateVendorDto extends createZodDto(CreateVendorSchema) {}
 
-export const UpdateVendorSchema = VendorBase.partial().extend({
+export const UpdateVendorSchema = patchOf(VendorBase).extend({
   /** why the bank / GSTIN / PAN changes (asked when the vendor is already approved) */
   changeReason: z.string().trim().min(3).max(500).optional(),
 });

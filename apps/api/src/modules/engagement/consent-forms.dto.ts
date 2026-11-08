@@ -115,8 +115,9 @@ export const ConsentFormSchema = z
     description: z.string().trim().max(5000).optional(),
     respondents: z.enum(['family', 'staff', 'both']).default('family'),
     fields: z.array(FieldSchema).min(1).max(80),
-    audience: ConsentAudienceSchema.default({}),
-    settings: ConsentSettingsSchema.default({}),
+    // prefault: an absent block is parsed as {} so its own field defaults apply (zod 3 .default)
+    audience: ConsentAudienceSchema.prefault({}),
+    settings: ConsentSettingsSchema.prefault({}),
   })
   .refine(
     (v) => !v.settings.opensAt || !v.settings.closesAt || v.settings.opensAt < v.settings.closesAt,

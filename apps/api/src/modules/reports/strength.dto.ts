@@ -27,13 +27,15 @@ const Base = z.object({
     .regex(/^\d{1,18}$/)
     .optional(),
 });
-const needs = <T extends z.ZodTypeAny>(s: T) =>
+type BaseOut = z.infer<typeof Base>;
+// zod 4 types a refine on a generic schema as output<T>; the schemas passed in all extend Base
+const needs = <T extends z.ZodType<BaseOut>>(s: T) =>
   s
-    .refine((d: z.infer<typeof Base>) => d.report !== 'age' || Boolean(d.asOn), {
+    .refine((d) => (d as BaseOut).report !== 'age' || Boolean((d as BaseOut).asOn), {
       message: 'Enter the as-on date for the age report',
       path: ['asOn'],
     })
-    .refine((d: z.infer<typeof Base>) => d.report !== 'discount' || Boolean(d.discountId), {
+    .refine((d) => (d as BaseOut).report !== 'discount' || Boolean((d as BaseOut).discountId), {
       message: 'Choose the discount',
       path: ['discountId'],
     });

@@ -28,7 +28,7 @@
     "pg": "^8.13.0",
     "pino": "^9.4.0",
     "playwright": "^1.63.0",
-    "zod": "^3.25.0"
+    "zod": "^4.6.7"
   },
   "devDependencies": {
     "@edupro/config": "workspace:*",

@@ -1,5 +1,6 @@
 import { createZodDto } from 'nestjs-zod';
 import { z } from 'zod';
+import { patchOf } from '../../common/validation/patch-of';
 import { IdSchema } from '../academics/classes/classes.dto';
 
 export const WORKFLOW = {
@@ -100,10 +101,11 @@ export const CreateDefinitionSchema = z.object({
 });
 export class CreateDefinitionDto extends createZodDto(CreateDefinitionSchema) {}
 
-export const UpdateDefinitionSchema = CreateDefinitionSchema.omit({ code: true, entityType: true })
-  .extend({ status: z.enum(['active', 'inactive']) })
-  .partial()
-  .refine((v) => Object.keys(v).length > 0, { message: 'at least one field is required' });
+export const UpdateDefinitionSchema = patchOf(
+  CreateDefinitionSchema.omit({ code: true, entityType: true }).extend({
+    status: z.enum(['active', 'inactive']),
+  }),
+).refine((v) => Object.keys(v).length > 0, { message: 'at least one field is required' });
 export class UpdateDefinitionDto extends createZodDto(UpdateDefinitionSchema) {}
 
 export const ActSchema = z.object({ note: z.string().trim().max(500).optional() });

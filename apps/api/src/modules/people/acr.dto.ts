@@ -123,7 +123,7 @@ export const AcrAssessorsSaveSchema = z.object({
     .array(
       z.object({
         employee: z.string().trim().min(1).max(40),
-        assessors: z.record(z.enum(ASSESSOR_KINDS), z.string().trim().max(40).nullable()),
+        assessors: z.partialRecord(z.enum(ASSESSOR_KINDS), z.string().trim().max(40).nullable()),
       }),
     )
     .min(1)

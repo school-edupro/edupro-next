@@ -1,5 +1,6 @@
 import { createZodDto } from 'nestjs-zod';
 import { z } from 'zod';
+import { patchOf } from '../../../common/validation/patch-of';
 import { IdSchema } from '../classes/classes.dto';
 import { CANDIDATE_NOTICE_STATUSES } from './notice-candidates';
 
@@ -52,8 +53,8 @@ export const CreateDailyWorkSchema = z
   });
 export class CreateDailyWorkDto extends createZodDto(CreateDailyWorkSchema) {}
 
-export const UpdateDailyWorkSchema = z
-  .object({
+export const UpdateDailyWorkSchema = patchOf(
+  z.object({
     subjectId: IdSchema.nullable(),
     title: z.string().trim().min(1).max(160),
     body: z.string().trim().max(8000),
@@ -62,9 +63,8 @@ export const UpdateDailyWorkSchema = z
     fileIds: z.array(IdSchema).max(10),
     publishAt: PublishAtSchema,
     ackRequired: z.boolean(),
-  })
-  .partial()
-  .refine((v) => Object.keys(v).length > 0, { message: 'at least one field is required' });
+  }),
+).refine((v) => Object.keys(v).length > 0, { message: 'at least one field is required' });
 export class UpdateDailyWorkDto extends createZodDto(UpdateDailyWorkSchema) {}
 
 export const ListDailyWorkQuerySchema = z.object({
@@ -182,8 +182,8 @@ export const CreateNoticeSchema = z
   });
 export class CreateNoticeDto extends createZodDto(CreateNoticeSchema) {}
 
-export const UpdateNoticeSchema = z
-  .object({
+export const UpdateNoticeSchema = patchOf(
+  z.object({
     kind: NoticeKindSchema,
     title: z.string().trim().min(1).max(200),
     body: z.string().trim().min(1).max(20000),
@@ -198,9 +198,8 @@ export const UpdateNoticeSchema = z
     publishAt: PublishAtSchema.nullable(),
     alsoEmail: z.boolean(),
     candidateStatuses: CandidateStatusesSchema,
-  })
-  .partial()
-  .refine((v) => Object.keys(v).length > 0, { message: 'at least one field is required' });
+  }),
+).refine((v) => Object.keys(v).length > 0, { message: 'at least one field is required' });
 export class UpdateNoticeDto extends createZodDto(UpdateNoticeSchema) {}
 
 export const ListNoticesQuerySchema = z.object({

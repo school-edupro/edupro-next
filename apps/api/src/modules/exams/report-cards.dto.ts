@@ -1,5 +1,6 @@
 import { createZodDto } from 'nestjs-zod';
 import { z } from 'zod';
+import { patchOf } from '../../common/validation/patch-of';
 import { IdSchema } from '../academics/classes/classes.dto';
 
 export const REPORT_CARDS = {
@@ -124,10 +125,9 @@ export const CreateTemplateSchema = z.object({
 });
 export class CreateTemplateDto extends createZodDto(CreateTemplateSchema) {}
 
-export const UpdateTemplateSchema = CreateTemplateSchema.omit({ code: true })
-  .extend({ status: z.enum(['active', 'inactive']) })
-  .partial()
-  .refine((v) => Object.keys(v).length > 0, { message: 'at least one field is required' });
+export const UpdateTemplateSchema = patchOf(
+  CreateTemplateSchema.omit({ code: true }).extend({ status: z.enum(['active', 'inactive']) }),
+).refine((v) => Object.keys(v).length > 0, { message: 'at least one field is required' });
 export class UpdateTemplateDto extends createZodDto(UpdateTemplateSchema) {}
 
 export const PreviewSchema = z.object({
@@ -164,14 +164,13 @@ export const CreateReleaseSchema = z.object({
 });
 export class CreateReleaseDto extends createZodDto(CreateReleaseSchema) {}
 
-export const UpdateReleaseSchema = CreateReleaseSchema.omit({ termCode: true, kind: true })
-  .extend({
+export const UpdateReleaseSchema = patchOf(
+  CreateReleaseSchema.omit({ termCode: true, kind: true }).extend({
     status: z.enum(['draft', 'submitted', 'released', 'withdrawn']),
     /** withdrawing published results needs a reason (docs/design/65) */
     reason: z.string().trim().max(500),
-  })
-  .partial()
-  .refine((v) => Object.keys(v).length > 0, { message: 'at least one field is required' });
+  }),
+).refine((v) => Object.keys(v).length > 0, { message: 'at least one field is required' });
 export class UpdateReleaseDto extends createZodDto(UpdateReleaseSchema) {}
 
 /**

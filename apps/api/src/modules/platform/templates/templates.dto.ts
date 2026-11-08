@@ -1,6 +1,7 @@
 import { DOCUMENT_ENTITIES } from '@edupro/db';
 import { createZodDto } from 'nestjs-zod';
 import { z } from 'zod';
+import { patchOf } from '../../../common/validation/patch-of';
 import { IdSchema } from '../../academics/classes/classes.dto';
 
 export const TemplateKindSchema = z.enum([
@@ -29,10 +30,9 @@ export const CreateTemplateSchema = z.object({
 });
 export class CreateTemplateDto extends createZodDto(CreateTemplateSchema) {}
 
-export const UpdateTemplateSchema = CreateTemplateSchema.omit({ code: true })
-  .extend({ status: z.enum(['active', 'inactive']) })
-  .partial()
-  .refine((v) => Object.keys(v).length > 0, { message: 'at least one field is required' });
+export const UpdateTemplateSchema = patchOf(
+  CreateTemplateSchema.omit({ code: true }).extend({ status: z.enum(['active', 'inactive']) }),
+).refine((v) => Object.keys(v).length > 0, { message: 'at least one field is required' });
 export class UpdateTemplateDto extends createZodDto(UpdateTemplateSchema) {}
 
 export const PreviewTemplateSchema = z.object({

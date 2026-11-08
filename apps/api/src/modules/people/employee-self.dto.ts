@@ -21,7 +21,7 @@ export const EmployeePolicySchema = z.object({
   proofs: z.record(z.string().max(60), Id),
   /** 0187: the row lists; approvers for a list go under approval.sections['list:<kind>'] */
   lists: z
-    .record(ListKind, z.object({ level: Level, proof: Id.nullable().optional() }))
+    .partialRecord(ListKind, z.object({ level: Level, proof: Id.nullable().optional() }))
     .default({}),
   window: z.object({
     mode: z.enum(['open', 'closed', 'period']),

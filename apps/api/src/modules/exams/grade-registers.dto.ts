@@ -1,5 +1,6 @@
 import { createZodDto } from 'nestjs-zod';
 import { z } from 'zod';
+import { patchOf } from '../../common/validation/patch-of';
 import { IdSchema } from '../academics/classes/classes.dto';
 
 /** Grade registers (docs/design/69): the register's definition as the builder saves it. */
@@ -44,7 +45,7 @@ export const CreateGradeRegisterSchema = z.object({
   def: GradeDefSchema,
 });
 export class CreateGradeRegisterDto extends createZodDto(CreateGradeRegisterSchema) {}
-export const UpdateGradeRegisterSchema = CreateGradeRegisterSchema.partial();
+export const UpdateGradeRegisterSchema = patchOf(CreateGradeRegisterSchema);
 export class UpdateGradeRegisterDto extends createZodDto(UpdateGradeRegisterSchema) {}
 
 export const CopyGradeRegisterSchema = z.object({

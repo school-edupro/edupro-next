@@ -1,5 +1,6 @@
 import { createZodDto } from 'nestjs-zod';
 import { z } from 'zod';
+import { patchOf } from '../../common/validation/patch-of';
 import { SETTING_KEYS } from './settings.catalogue';
 
 const DateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'YYYY-MM-DD');
@@ -7,7 +8,7 @@ export const IdSchema = z.string().regex(/^[0-9]{1,18}$/, 'must be a numeric id'
 
 // ---- settings ------------------------------------------------------------------------------------
 export const SetSettingSchema = z.object({
-  value: z.unknown(),
+  value: z.unknown().optional(), // each key's own schema decides (it may have a default)
   validFrom: DateSchema.optional(),
 });
 export class SetSettingDto extends createZodDto(SetSettingSchema) {}
@@ -61,8 +62,8 @@ export const CloseYearSchema = z.object({ reason: z.string().trim().min(3).max(5
 export class CloseYearDto extends createZodDto(CloseYearSchema) {}
 
 // ---- school and campuses -------------------------------------------------------------------------
-export const UpdateSchoolSchema = z
-  .object({
+export const UpdateSchoolSchema = patchOf(
+  z.object({
     name: z.string().trim().min(2).max(160),
     shortName: z.string().trim().min(1).max(40).nullable(),
     affiliationNo: z.string().trim().max(40).nullable(),
@@ -72,9 +73,8 @@ export const UpdateSchoolSchema = z
     address: z.record(z.string(), z.unknown()),
     contact: z.record(z.string(), z.unknown()),
     branding: z.record(z.string(), z.unknown()),
-  })
-  .partial()
-  .refine((v) => Object.keys(v).length > 0, { message: 'at least one field is required' });
+  }),
+).refine((v) => Object.keys(v).length > 0, { message: 'at least one field is required' });
 export class UpdateSchoolDto extends createZodDto(UpdateSchoolSchema) {}
 
 export const CampusSchema = z.object({
@@ -91,7 +91,7 @@ export const CampusSchema = z.object({
 });
 export class CreateCampusDto extends createZodDto(CampusSchema) {}
 
-export const UpdateCampusSchema = CampusSchema.partial().extend({
+export const UpdateCampusSchema = patchOf(CampusSchema).extend({
   status: z.enum(['active', 'inactive']).optional(),
 });
 export class UpdateCampusDto extends createZodDto(UpdateCampusSchema) {}

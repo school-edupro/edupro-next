@@ -1,5 +1,6 @@
 import { createZodDto } from 'nestjs-zod';
 import { z } from 'zod';
+import { patchOf } from '../../common/validation/patch-of';
 import { IdSchema } from '../academics/classes/classes.dto';
 
 /** Mark schemes (docs/design/65, part 3): the definition the engine in packages/db works out. */
@@ -212,15 +213,15 @@ export const CreateSchemeSchema = z
   });
 export class CreateSchemeDto extends createZodDto(CreateSchemeSchema) {}
 
-export const UpdateSchemeSchema = z
-  .object({
+export const UpdateSchemeSchema = patchOf(
+  z.object({
     name: z.string().trim().min(2).max(120),
     termCode: TermCode.nullable(),
     classIds: z.array(IdSchema).min(1).max(30),
     def: z.union([RegisterDefSchema, SchemeDefSchema]),
     purpose: z.enum(['result', 'register']),
-  })
-  .partial();
+  }),
+);
 export class UpdateSchemeDto extends createZodDto(UpdateSchemeSchema) {}
 
 const Flag = z
