@@ -539,6 +539,18 @@ describe('purchase orders (e2e)', () => {
     expect((await call(teacher, 'POST', '/purchase/emergency-purchases', body)).statusCode).toBe(
       403,
     );
+    // no lines, or a reason too short: said in words
+    const said = async (over: Record<string, unknown>) =>
+      (
+        (await call(office, 'POST', '/purchase/emergency-purchases', { ...body, ...over })).json()
+          .errors as Array<{ message: string }>
+      ).map((e) => e.message);
+    expect(await said({ lines: [] })).toEqual([
+      'Add what was bought: at least one line with the item, quantity and rate',
+    ]);
+    expect(await said({ reason: 'urgent' })).toEqual([
+      'Say why it could not wait (at least 10 letters)',
+    ]);
     // a file the user did not upload is not the bill
     const noBill = await call(office, 'POST', '/purchase/emergency-purchases', {
       ...body,

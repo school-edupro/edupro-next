@@ -406,7 +406,10 @@ On a draft PO:
 
 When something could not wait (a burst pipe, a broken generator), the purchase office records it after
 the fact: **Purchase Orders → Record an emergency purchase** — the vendor, what was bought (item or in
-words, quantity, rate, GST), the vendor's **bill** (PDF or photo) and **why it could not wait**. Then
+words, quantity, rate, GST), the vendor's **bill** (PDF or photo) and **why it could not wait**. Each
+line needs the item (or words and a unit), the quantity and the rate paid before GST; **Add a line** for
+more (up to 50). If something is missing the form says which line and what ("Line 1: the rate is
+missing") and keeps everything typed, the bill included. Then
 **Send for ratification**: everyone with the designation set on Purchase settings (the Principal by
 default) ratifies it or not, in the admin or the staff app. It is marked **Emergency** on screen and on
 the PDF. Purchase settings can switch emergency purchases off.

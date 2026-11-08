@@ -1153,3 +1153,27 @@ Asked by the user ("Direct requisition: upload items by bulk Excel"). Decided wi
   plus one with no rate merge (15, notes "Blue; Red"); a second rate refused by row; a negative rate
   refused; an unknown item listed; nothing saved. Browser: Direct requisition fills 2 lines from a
   sheet (the pen 3 + 2 at ₹55, a Bunsen burner in words), the bad row listed; axe clean.
+
+## As built — the emergency purchase form (8 Nov 2026)
+
+Reported by the user (a screenshot: "lines: Array must contain at least 1 element(s)" on Record an
+emergency purchase, the form empty). Cause: the page was a plain server form of six fixed table rows;
+its action dropped any row without item-or-words, quantity **and** rate (the Rate and GST % columns sat
+off to the right of a wide table), so the API got no lines; the refusal was zod's own words; and the
+redirect back emptied the form, the chosen bill too.
+
+- `components/purchase/EmergencyForm.tsx` (client): the purchase's fields, the bill kept in the form
+  ("Attached: bill.pdf"), lines as cards (item, or "Not in the list" with words and unit; quantity with
+  the item's unit; rate before GST; GST % with the item's rate as the placeholder; the amount), **Add a
+  line** / **Remove line N** (up to 50), the total before GST. Checked before sending, by name: "Pick the
+  vendor.", "Say why it could not wait (at least 10 letters).", "Attach the vendor's bill…", "Add what
+  was bought…", "Line 1: the rate (₹, before GST) is missing.", "Line 2: pick the unit." …
+- `recordEmergency` returns a result (the bill uploaded, then the purchase) instead of redirecting, so a
+  refusal keeps everything typed; on success the PO page opens with "… recorded: send it for
+  ratification".
+- `EmergencySchema` says it in words: "Add what was bought: at least one line with the item, quantity
+  and rate", "Say why it could not wait (at least 10 letters)". The switched-off notice's settings link
+  is underlined.
+- Test: `purchase-orders` — no lines and a short reason refused with those words. Browser (nothing
+  recorded): a line without its rate and a line in words without its unit are each named; the reason and
+  the bill stay; axe clean.

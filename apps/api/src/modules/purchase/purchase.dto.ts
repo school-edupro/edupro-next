@@ -681,7 +681,7 @@ export class SendOrderDto extends createZodDto(SendOrderSchema) {}
 export const EmergencySchema = z.object({
   vendorId: IdSchema,
   departmentId: IdSchema.optional(),
-  reason: z.string().trim().min(10).max(1000),
+  reason: z.string().trim().min(10, 'Say why it could not wait (at least 10 letters)').max(1000),
   billFileId: IdSchema,
   billRef: opt(60),
   poDate: Day.optional(),
@@ -701,8 +701,8 @@ export const EmergencySchema = z.object({
           path: ['itemId'],
         }),
     )
-    .min(1)
-    .max(50),
+    .min(1, 'Add what was bought: at least one line with the item, quantity and rate')
+    .max(50, 'At most 50 lines'),
 });
 export class EmergencyDto extends createZodDto(EmergencySchema) {}
 

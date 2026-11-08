@@ -1038,49 +1038,34 @@ export async function amendOrder(fd: FormData) {
 }
 
 /** An emergency purchase: the vendor, the lines, the vendor's bill (uploaded here) and the reason. */
-export async function recordEmergency(fd: FormData) {
-  const to = '/purchase/emergency';
+/**
+ * An emergency purchase recorded (docs/design/83, part 4): the vendor's bill uploaded, then the purchase
+ * sent to the API; the form keeps what was typed when it is refused.
+ */
+export async function recordEmergency(
+  fd: FormData,
+): Promise<{ ok: true; id: string; number: string } | { ok: false; error: string }> {
   const bill = fd.get('bill');
   if (!(bill instanceof File) || !bill.size)
-    back(to, 'validation-failed', "Attach the vendor's bill");
-  const lines = [0, 1, 2, 3, 4, 5]
-    .map((i) => ({
-      item: pick(fd, `item_${String(i)}`),
-      description: pick(fd, `desc_${String(i)}`),
-      quantity: pick(fd, `qty_${String(i)}`),
-      uomId: pick(fd, `uom_${String(i)}`),
-      rate: pick(fd, `rate_${String(i)}`),
-      gstRate: pick(fd, `gst_${String(i)}`),
-    }))
-    .filter((l) => (l.item || l.description) && l.quantity && l.rate)
-    .map((l) => ({
-      ...(l.item
-        ? { itemId: l.item }
-        : { description: l.description, uomId: l.uomId || undefined }),
-      quantity: l.quantity,
-      rate: l.rate,
-      ...(l.gstRate !== '' ? { gstRate: l.gstRate } : {}),
-    }));
-  let made: { id: string; number: string } | null = null;
+    return { ok: false, error: 'Attach the vendor’s bill (PDF or photo)' };
+  let body: Record<string, unknown>;
+  try {
+    body = JSON.parse(String(fd.get('body') ?? '')) as Record<string, unknown>;
+  } catch {
+    return { ok: false, error: 'The form could not be read: try again' };
+  }
   try {
     const billFileId = await uploadOne(bill);
-    made = await apiFetch<{ id: string; number: string }>('/purchase/emergency-purchases', {
+    const made = await apiFetch<{ id: string; number: string }>('/purchase/emergency-purchases', {
       method: 'POST',
-      body: JSON.stringify({
-        vendorId: pick(fd, 'vendorId'),
-        departmentId: pick(fd, 'departmentId') || undefined,
-        reason: pick(fd, 'reason'),
-        billRef: pick(fd, 'billRef') || undefined,
-        poDate: pick(fd, 'poDate') || undefined,
-        billFileId,
-        lines,
-      }),
+      body: JSON.stringify({ ...body, billFileId }),
     });
+    revalidatePath('/purchase/orders');
+    return { ok: true, id: made.id, number: made.number };
   } catch (e) {
-    if (e instanceof ApiError) back(to, e.problem.type, detailOf(e));
+    if (e instanceof ApiError) return { ok: false, error: detailOf(e) };
     throw e;
   }
-  back(poPage(made.id), 'ok', `${made.number} recorded: send it for ratification`);
 }
 
 // ---- phase 2, part 6: stores and stock ------------------------------------------------------------
