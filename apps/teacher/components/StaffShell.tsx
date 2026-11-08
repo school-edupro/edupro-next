@@ -2,7 +2,7 @@ import type { ReactNode } from 'react';
 import type { Me } from '@edupro/bff';
 import { t, type Lang } from '@/lib/i18n';
 import { staffMenu, staffTabs, type StaffWaiting } from '@/lib/staff-menu';
-import { Icon } from './nav-icons';
+import { Icon, type IconName } from './nav-icons';
 import { SidebarToggle } from './SidebarToggle';
 
 /**
@@ -64,7 +64,7 @@ export function StaffShell({
                   data-active={active ? 'true' : undefined}
                   title={label}
                 >
-                  <Icon name={g.icon} />
+                  <Icon name={g.icon as IconName} />
                   <span className="ep-nav__text">{label}</span>
                   <span className="ep-nav__chevron" aria-hidden="true">
                     <Icon name="chevron" size={16} />

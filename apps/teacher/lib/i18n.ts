@@ -68,6 +68,13 @@ const DICT: Record<string, string> = {
   Revision: 'संशोधन',
   'Why this vendor': 'यही विक्रेता क्यों',
   'Received earlier': 'पहले प्राप्त',
+  'Quick Actions': 'त्वरित कार्य',
+  'Search pages': 'पेज खोजें',
+  'Staff app': 'स्टाफ ऐप',
+  'Admin app': 'एडमिन ऐप',
+  'Open the admin app': 'एडमिन ऐप खोलें',
+  'No page for your role yet.': 'आपकी भूमिका के लिए अभी कोई पेज नहीं।',
+  'No page matches': 'कोई पेज मेल नहीं खाता',
   'What the store issued to you or your department: confirm you received it. Each issue has its slip.':
     'भंडार ने आपको या आपके विभाग को जो जारी किया: प्राप्ति की पुष्टि करें। हर निर्गम की पर्ची साथ है।',
   'Vendor and terms': 'विक्रेता और शर्तें',

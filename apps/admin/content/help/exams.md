@@ -159,9 +159,12 @@ Pick a tile to see who submitted or verified it and to submit, verify, send back
   parent app once the exam is shown on the parent portal; teachers see their classes' date sheets in
   the teacher app (**Exam date sheet**).
 - Every page of an exam is in English and Hindi (the language switch at the top).
-- **Teacher app pages from the admin app**: the home page's **Quick actions** has a **Teacher app**
-  tab with **Marks entry**, **Indicators and progress card**, **Remarks** and **Exam date sheet** (each
-  only for people who may use it). A tile opens that page of the teacher app in a new tab.
+- **Teacher app pages from the admin app**: the home page's **Quick actions** (always first, for
+  every user) has a **Teacher app** tab with every staff-app screen your role opens — marks entry,
+  indicators, remarks, the exam date sheet, attendance, daily work and the rest — each with its icon. A
+  tile opens that page of the staff app in a new tab. The staff app's own home has the same **Quick
+  Actions**: a search and only your role's screens (and an **Admin app** tab for whoever also uses the
+  admin app).
 
 1. **Exams → open exam → Results → Compute**: totals, percentages, grades, ranks per section and class.
 2. **Exams → Report cards → Templates**: the layout per band (HPC for primary, CCE for middle,

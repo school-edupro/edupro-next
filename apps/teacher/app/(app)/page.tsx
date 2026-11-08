@@ -1,7 +1,9 @@
 import { PageHeader } from '@edupro/ui';
+import { Icon } from '@/components/nav-icons';
+import { QuickActions, type QuickTile } from '@/components/QuickActions';
 import { bff } from '@/lib/bff';
 import { currentLang, t } from '@/lib/i18n';
-import { staffMenu } from '@/lib/staff-menu';
+import { screenIcon, staffMenu } from '@/lib/staff-menu';
 
 interface MeCard {
   roles: string[];
@@ -49,47 +51,75 @@ export default async function HomePage() {
   const can = (p: string) => me.permissions.includes(p);
   const school = me.memberships.find((m) => m.schoolId === me.school?.id) ?? me.memberships[0];
   const quiet = <T,>(p: Promise<T>, fallback: T) => p.catch(() => fallback);
-  const [card, unread, approvals, leaves, passes, hostel, library, toEnter] = await Promise.all([
-    quiet(bff.api.fetch<MeCard>('/me/card'), { roles: [], designation: null }),
-    quiet(
-      bff.api.fetch<{ unread: number }>('/comms/inbox/unread').then((r) => r.unread),
-      0,
-    ),
-    quiet(
-      bff.api
-        .fetch<{ data: unknown[] }>('/engagement/mine/consent-approvals')
-        .then((r) => r.data.length),
-      0,
-    ),
-    can('attendance.leave.decide')
-      ? quiet(
-          bff.api.fetch<{ inbox: number }>('/attendance/leaves?tab=inbox').then((r) => r.inbox),
-          0,
-        )
-      : Promise.resolve(null),
-    quiet(
-      bff.api.fetch<{ data: unknown[] }>('/gate-passes/inbox').then((r) => r.data.length),
-      0,
-    ),
-    can('hostel.rollcall.mark') || can('hostel.leave.view')
-      ? quiet(bff.api.fetch<HostelToday>('/hostel/today'), null)
-      : Promise.resolve(null),
-    // my library books (docs/design/36-library.md, "Library round 3", part 4)
-    quiet(
-      bff.api
-        .fetch<{ people: LibraryToday[] }>('/library/portal/summary')
-        .then((r) => r.people.find((p) => p.kind === 'employee') ?? null),
-      null,
-    ),
-    // what is mine to enter in the open exams (docs/design/71)
-    can('exams.marks.view')
-      ? quiet(
-          bff.api.fetch<{ data: ToEnter[] }>('/exams/my-entry').then((r) => r.data),
-          [] as ToEnter[],
-        )
-      : Promise.resolve([] as ToEnter[]),
-  ]);
+  const [card, unread, approvals, leaves, passes, hostel, library, toEnter, landing] =
+    await Promise.all([
+      quiet(bff.api.fetch<MeCard>('/me/card'), { roles: [], designation: null }),
+      quiet(
+        bff.api.fetch<{ unread: number }>('/comms/inbox/unread').then((r) => r.unread),
+        0,
+      ),
+      quiet(
+        bff.api
+          .fetch<{ data: unknown[] }>('/engagement/mine/consent-approvals')
+          .then((r) => r.data.length),
+        0,
+      ),
+      can('attendance.leave.decide')
+        ? quiet(
+            bff.api.fetch<{ inbox: number }>('/attendance/leaves?tab=inbox').then((r) => r.inbox),
+            0,
+          )
+        : Promise.resolve(null),
+      quiet(
+        bff.api.fetch<{ data: unknown[] }>('/gate-passes/inbox').then((r) => r.data.length),
+        0,
+      ),
+      can('hostel.rollcall.mark') || can('hostel.leave.view')
+        ? quiet(bff.api.fetch<HostelToday>('/hostel/today'), null)
+        : Promise.resolve(null),
+      // my library books (docs/design/36-library.md, "Library round 3", part 4)
+      quiet(
+        bff.api
+          .fetch<{ people: LibraryToday[] }>('/library/portal/summary')
+          .then((r) => r.people.find((p) => p.kind === 'employee') ?? null),
+        null,
+      ),
+      // what is mine to enter in the open exams (docs/design/71)
+      can('exams.marks.view')
+        ? quiet(
+            bff.api.fetch<{ data: ToEnter[] }>('/exams/my-entry').then((r) => r.data),
+            [] as ToEnter[],
+          )
+        : Promise.resolve([] as ToEnter[]),
+      // a role that lands on the admin app (its Quick Actions offer it)
+      quiet(
+        bff.api.fetch<{ roleName: string | null }>('/dashboard').then((r) => r.roleName ?? null),
+        null,
+      ),
+    ]);
   const groups = staffMenu(me, { approvals });
+  // Quick Actions (docs/design/83, "As built — Quick Actions for every user"): the screens this role
+  // opens, each with its icon
+  const tiles: QuickTile[] = groups.flatMap((g) =>
+    g.items.map((i) => ({
+      href: i.href,
+      label: `${t(lang, i.label)}${i.href === '/consent-approvals' && approvals ? ` (${String(approvals)})` : ''}`,
+      section: t(lang, g.label),
+      icon: screenIcon(i.href, g.icon),
+    })),
+  );
+  const adminUrl = (process.env.ADMIN_APP_URL ?? 'http://localhost:3000').replace(/\/+$/, '');
+  const adminTiles: QuickTile[] = landing
+    ? [
+        {
+          href: `${adminUrl}/`,
+          label: t(lang, 'Open the admin app'),
+          section: landing,
+          icon: 'grid',
+          external: true,
+        },
+      ]
+    : [];
 
   // today's figures, only for what this person does
   const today: Array<{ label: string; value: string; href: string; hint?: string }> = [];
@@ -228,24 +258,27 @@ export default async function HomePage() {
           ) : null}
         </section>
       ) : null}
-      {groups.map((g) => (
-        <section key={g.id} aria-labelledby={`g-${g.id}`} style={{ marginBottom: 'var(--sp-5)' }}>
-          <h2 id={`g-${g.id}`} className="ep-card__title">
-            {t(lang, g.label)}
-          </h2>
-          <div className="ep-staff-tiles">
-            {g.items.map((i) => (
-              <a key={i.href} href={i.href} className="ep-card ep-card--elevated ep-staff-tile">
-                <span className="ep-staff-tile__title">
-                  {t(lang, i.label)}
-                  {i.href === '/consent-approvals' && approvals ? ` (${String(approvals)})` : ''}
-                </span>
-                <span className="ep-field__help">{t(lang, i.help)}</span>
-              </a>
-            ))}
-          </div>
-        </section>
-      ))}
+      <section className="ep-card" aria-labelledby="qa-h" style={{ marginBottom: 'var(--sp-5)' }}>
+        <h2
+          id="qa-h"
+          className="ep-card__title"
+          style={{ display: 'flex', gap: 'var(--sp-2)', alignItems: 'center' }}
+        >
+          <Icon name="grid" size={20} />
+          {t(lang, 'Quick Actions')}
+        </h2>
+        <QuickActions
+          tiles={tiles}
+          admin={adminTiles}
+          words={{
+            search: t(lang, 'Search pages'),
+            staff: t(lang, 'Staff app'),
+            admin: t(lang, 'Admin app'),
+            none: t(lang, 'No page for your role yet.'),
+            noMatch: t(lang, 'No page matches'),
+          }}
+        />
+      </section>
     </main>
   );
 }

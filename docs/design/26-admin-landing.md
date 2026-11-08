@@ -57,3 +57,28 @@ MyClassboard — a "today" strip, work queues first, everything one click from t
   navy-50 band is navy 700 (cyan 700 fails 4.5:1 there).
 - Tests: `apps/api/test/dashboard.e2e-spec.ts` (12), axe on `/`, `/system/landing`, the preview;
   cases and the browser run in `docs/testing/landing-page-test-cases.md`.
+
+## As built — Quick Actions for every user, in both apps (8 Nov 2026)
+
+Asked by the user (a screenshot of Quick Actions: "every user sees this on login, in the admin and the
+staff app; in the teacher app only the icons of the role"). Decided with the user: on the staff home
+**Quick Actions replaces the grouped list**; the admin's **Teacher app tab shows every staff-app screen of
+the role**; Quick Actions **always, first** on the admin home.
+
+- The staff app's screens and their rules moved to `packages/bff/src/staff-menu.ts` (export
+  `@edupro/bff/staff-menu`; no server-only imports): `STAFF_MENU`, `staffScreens(permissions, waiting)`,
+  `screenIcon(href, groupIcon)` (a drawing both apps have: calendar, check, book, clipboard, key, bus,
+  bed, heart, cart, message, inbox, user, userPlus, file, wallet…), `staffTiles(permissions)`. The staff
+  app's `lib/staff-menu.ts` re-exports it and keeps `staffMenu(me)` and the phone tab bar; the staff app
+  gains the `cart`, `calendar` and `bed` drawings and `isIconName`.
+- Staff home: Today, To enter, then **Quick Actions** (`components/QuickActions.tsx`, the admin's
+  `.db-qa` styles): search ("Search pages…") over icon tiles of the screens the role opens (label and
+  group, Hindi too); an **Admin app** tab with "Open the admin app" for a person whose roles land on the
+  admin app (`GET /dashboard` gives a role name).
+- Admin home: `teacherActions` = `staffTiles(permissions)` (screens shown only while something waits are
+  left out here), opening the staff app in a new tab; Quick Actions is rendered first whatever the
+  layout says (added when missing) and is no longer offered in Arrange my page.
+- Checked in a browser: the admin home of dev-store (12 staff-app tiles) and dev-principal (34) with Quick
+  Actions first; the staff home of dev-teacher (33 tiles: timetable, attendance, marks…) and dev-store
+  (12: gate passes, purchase indents, issued to my department, stock in my stores…); the search; axe
+  clean.

@@ -60,8 +60,9 @@ export default async function DashboardPage({
           <span className="db-muted">Page set by the school</span>
         ) : (
           <ArrangePanel
-            shown={layout.widgets}
-            available={layout.available}
+            // Quick Actions is always shown first: not one of the widgets to arrange
+            shown={layout.widgets.filter((w) => w.key !== 'quick_actions')}
+            available={layout.available.filter((w) => w.key !== 'quick_actions')}
             actions={[
               ...layout.links.map((l) => ({
                 href: l.href,

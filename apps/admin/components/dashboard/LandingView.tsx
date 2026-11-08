@@ -2,7 +2,8 @@ import type { ReactNode } from 'react';
 import { getTranslations } from 'next-intl/server';
 import { QuickActions, type Action } from '@/components/dashboard/QuickActions';
 import { Widget, renderWidget } from '@/components/dashboard/Widgets';
-import { SECTION_ICON, isIconName, type IconName } from '@/components/nav-icons';
+import { staffTiles } from '@edupro/bff/staff-menu';
+import { SECTION_ICON, isIconName } from '@/components/nav-icons';
 import { isExternal, type Layout, type WidgetData } from '@/lib/dashboard';
 import { NAV_ITEMS } from '@/lib/nav';
 
@@ -29,51 +30,20 @@ export async function menuActions(permissions: string[]): Promise<Action[]> {
 }
 
 /**
- * Pages of the teacher app on the Quick actions' Teacher app tab (1 Nov 2026): each one only when the
- * person may use it there (the teacher app menu's rules, apps/teacher/lib/staff-menu.ts); a tile opens
- * the teacher app in a new tab, which signs the person in with the same One Auth account.
+ * The teacher (staff) app's screens on the Quick actions' Teacher app tab (docs/design/83, "As built —
+ * Quick Actions for every user"): every screen this person's role opens there — the staff app's own menu
+ * rules (packages/bff/src/staff-menu.ts), each with its icon; a tile opens the staff app in a new tab,
+ * which signs the person in with the same One Auth account. Screens shown only while something waits
+ * (an inspection, an acknowledgement) are left out here.
  */
-const TEACHER_PAGES: Array<{
-  path: string;
-  label: string;
-  icon: IconName;
-  allowed: (has: (p: string) => boolean) => boolean;
-}> = [
-  {
-    path: '/marks',
-    label: 'Marks entry',
-    icon: 'clipboard',
-    allowed: (has) => has('exams.marks.enter'),
-  },
-  {
-    path: '/indicators',
-    label: 'Indicators and progress card',
-    icon: 'chart',
-    allowed: (has) => has('exams.indicator.enter'),
-  },
-  {
-    path: '/remarks',
-    label: 'Remarks',
-    icon: 'message',
-    allowed: (has) => has('exams.remark.enter') || has('exams.marks.enter'),
-  },
-  {
-    path: '/date-sheet',
-    label: 'Exam date sheet',
-    icon: 'calendar',
-    allowed: (has) => has('exams.marks.view'),
-  },
-];
-
 export function teacherActions(permissions: string[]): Action[] {
   const base = (process.env.TEACHER_APP_URL ?? 'http://localhost:3002').replace(/\/+$/, '');
-  const allowed = new Set(permissions);
-  return TEACHER_PAGES.filter((x) => x.allowed((p) => allowed.has(p))).map((x) => ({
-    href: `${base}${x.path}`,
+  return staffTiles(permissions).map((x) => ({
+    href: `${base}${x.href}`,
     label: x.label,
     section: 'teacher',
-    sectionLabel: 'Teacher app',
-    icon: x.icon,
+    sectionLabel: x.group,
+    icon: isIconName(x.icon) ? x.icon : 'grid',
     external: true,
   }));
 }
@@ -152,7 +122,15 @@ export function LandingView({
       </section>
       {notice}
       <div className="db-grid">
-        {layout.widgets.map((w) => {
+        {[
+          // Quick Actions for every user, first (docs/design/83): even when the layout left it out
+          layout.widgets.find((w) => w.key === 'quick_actions') ?? {
+            key: 'quick_actions',
+            title: 'Quick Actions',
+            wide: true,
+          },
+          ...layout.widgets.filter((w) => w.key !== 'quick_actions'),
+        ].map((w) => {
           const cls = w.wide ? 'db-cell db-cell--wide' : 'db-cell';
           if (w.key === 'profile')
             return (
