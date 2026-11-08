@@ -35,7 +35,9 @@ export default async function VendorsPage({
     `/purchase/vendors?${new URLSearchParams({ ...(s ? { status: s } : {}), ...(sp.q ? { q: sp.q } : {}) }).toString()}`;
   return (
     <>
-      <Breadcrumbs items={[{ label: 'Purchase', href: '/purchase' }, { label: 'Vendors' }]} />
+      <Breadcrumbs
+        items={[{ label: 'Purchase set-up', href: '/purchase' }, { label: 'Vendors' }]}
+      />
       <PageHeader
         kicker="Purchase"
         title="Vendors"

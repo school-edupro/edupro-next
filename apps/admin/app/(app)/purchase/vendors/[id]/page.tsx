@@ -71,7 +71,7 @@ export default async function VendorPage({
     <>
       <Breadcrumbs
         items={[
-          { label: 'Purchase', href: '/purchase' },
+          { label: 'Purchase set-up', href: '/purchase' },
           { label: 'Vendors', href: '/purchase/vendors' },
           { label: v.code },
         ]}

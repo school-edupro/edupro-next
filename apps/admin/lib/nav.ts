@@ -615,25 +615,9 @@ export const NAV: Array<{
       { href: '/purchase/reorder', label: 'reorder', permission: 'purchase.store.view' },
       { href: '/purchase/assets', label: 'assetRegister', permission: 'purchase.store.view' },
       { href: '/purchase/condemnations', label: 'condemnation', permission: 'purchase.store.view' },
+      // the set-up's screens (vendors, vendor approvals, items / units / HSN, payment terms, who
+      // approves, settings) open from Purchase set-up, not the menu (docs/design/83)
       { href: '/purchase', label: 'purchaseHome', permission: 'purchase.master.view' },
-      { href: '/purchase/vendors', label: 'vendors', permission: 'purchase.master.view' },
-      {
-        href: '/purchase/vendor-approvals',
-        label: 'vendorApprovals',
-        permission: 'purchase.master.view',
-      },
-      { href: '/masters/purchase', label: 'purchaseSetup', permission: 'purchase.master.view' },
-      {
-        href: '/purchase/payment-terms',
-        label: 'paymentTerms',
-        permission: 'purchase.master.view',
-      },
-      {
-        href: '/purchase/approvals',
-        label: 'purchaseApprovals',
-        permission: 'purchase.master.view',
-      },
-      { href: '/purchase/settings', label: 'purchaseSettings', permission: 'purchase.master.view' },
     ],
   },
   {

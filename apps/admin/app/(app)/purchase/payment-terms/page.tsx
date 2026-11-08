@@ -40,7 +40,9 @@ export default async function PaymentTermsPage({
   const filtered = qs.toString() !== '';
   return (
     <>
-      <Breadcrumbs items={[{ label: 'Purchase', href: '/purchase' }, { label: 'Payment terms' }]} />
+      <Breadcrumbs
+        items={[{ label: 'Purchase set-up', href: '/purchase' }, { label: 'Payment terms' }]}
+      />
       <PageHeader
         kicker="Purchase"
         title="Payment terms"

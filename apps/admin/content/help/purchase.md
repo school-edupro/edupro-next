@@ -31,7 +31,11 @@ PO, the emergency purchase, the stores and receiving what was ordered.
 
 ## Set it up, in this order
 
-**Purchase → Purchase set-up** lists the steps with what is done:
+**Purchase → Purchase set-up** is the one menu entry for the set-up: its screens (settings, who approves,
+units, HSN / SAC codes, categories, items, rate contracts, payment terms, vendors, vendor approvals) open
+from its three sections — **1. Rules and approvals**, **2. Items and GST**, **3. Vendors** — each link
+showing **Done** / **To do** and what it holds, with what waits for approval and the HSN codes to fix on
+top. Each of those screens leads back through **Purchase set-up** at its top. Fill them in this order:
 
 1. **Purchase settings** — the school's **GSTIN** (optional; it gives the school's state: a vendor in
    the same state is charged CGST + SGST, one in another state IGST — without a GSTIN the billing
@@ -49,7 +53,7 @@ PO, the emergency purchase, the stores and receiving what was ordered.
    you press **Save the settings**, the problem shown under it (a prefix per document, the committee
    limit at least the direct one, the committee's signatures no more than its members, days from 1 to
    365 …). The **Vendor approval** card names who approves vendors (see Vendors).
-2. **Items, units and HSN** (Purchase → Items, units and HSN, the tabs **Units**, **HSN / SAC codes**,
+2. **Items, units and HSN** (Purchase set-up → Items and GST, the tabs **Units**, **HSN / SAC codes**,
    **Item categories**, **Items**, **Rate contracts**): every tab has Add, Edit, Excel upload with a check
    before saving, Excel and PDF of the list. The HSN list starts short on purpose (school stationery,
    books, maps, computers): add the codes of what the school buys, with the GST rate, and tick **Reverse
@@ -129,7 +133,7 @@ are; copied vendors wait for approval here.
   vendor), checks the GSTIN, PAN and bank account against the documents, and approves or rejects (with a
   reason). Whoever entered or last changed a waiting vendor cannot approve it. Until it is approved a
   vendor cannot be used on a PR, a PO or a rate contract.
-- **Who approves vendors**: **Purchase → Settings → Vendor approval**. Add the employees (who sign
+- **Who approves vendors**: **Purchase set-up → Purchase settings → Vendor approval**. Add the employees (who sign
   in) who approve new vendors and bank / GSTIN / PAN changes: then only they approve. While nobody is
   named there, anyone whose role has the right **Approve a new vendor** approves (School Admin and Group
   Admin by default; roles are changed in **Access → Roles**). The card lists who can approve now.
@@ -299,7 +303,7 @@ On the PR:
 - **Send for approval** says what is still missing (the Sourcing card lists it too) — including **not
   enough free stock** for a line from the store. Sending **reserves** that stock for the PR; sending
   it back, rejecting, cancelling or reopening it lets the reservation go. The PR goes to its
-  department's PR levels (Purchase → Who approves); nobody approves their own.
+  department's PR levels (Purchase set-up → Who approves); nobody approves their own.
 - **Approved**: one draft **purchase order per chosen vendor** is made at once (Purchase Orders →
   Drafts); a PI all of whose lines come from the store closes ("From the store on PR/…") and the store
   keeper finds the lines under **Issues → To issue**. **Rejected** or **cancelled**: its PIs go
@@ -352,7 +356,7 @@ On a draft PO:
   words; the GST summary is by HSN / SAC and rate.
 - **MSME**: a micro or small vendor on a payment term longer than 45 days is warned (they must be paid
   within 45 days).
-- **Send for approval**: the department's PO levels (Purchase → Who approves); nobody approves their own
+- **Send for approval**: the department's PO levels (Purchase set-up → Who approves); nobody approves their own
   PO — their level passes on.
 - **The PO's page** (admin and staff app) starts with its figures — total with GST, lines, deliver by,
   payment, quotes and L1, revision — then the status and the buttons, then cards. **Lines** is always
@@ -666,7 +670,7 @@ hand over anyone's.
 - **Why can't I approve my own indent?** Nobody approves their own: your level passes to the next one
   (the school admin when you are the last level).
 - **"Who approves Science's Purchase Indents is not set".** The school admin sets the department's levels
-  on Purchase → Who approves.
+  on Purchase set-up → Who approves.
 - **My PI was approved but no PR came.** It waits in Waiting for the PR unless every line is on a rate
   contract or it is within the department's limit; the indent says which rule applied, or why not.
 - **Why can't I send the PR for approval?** The dialog lists what its tier still needs: a vendor on

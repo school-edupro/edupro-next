@@ -1177,3 +1177,25 @@ redirect back emptied the form, the chosen bill too.
 - Test: `purchase-orders` — no lines and a short reason refused with those words. Browser (nothing
   recorded): a line without its rate and a line in words without its unit are each named; the reason and
   the bill stay; axe clean.
+
+## As built — set-up in sections, out of the menu (8 Nov 2026)
+
+Asked by the user ("on /purchase use sections; Items / HSN, Vendors, Purchase settings, Who approves not
+in the side menu: their links move to Purchase set-up"). Decided with the user: **all set-up links** leave
+the menu; **section cards with links**.
+
+- Menu (`apps/admin/lib/nav.ts`): Purchase keeps **Purchase set-up** (`/purchase`) only; Vendors, Vendor
+  approvals, Items units and HSN, Payment terms, Who approves and Purchase settings are gone from it (their
+  pages and rights unchanged; Vendor approvals is also in the Approvals inbox). The shell's `ALSO` makes
+  `/masters/purchase` light up Purchase set-up; the other set-up pages already do (the longest `/purchase`
+  prefix).
+- `/purchase`: the figures, the waiting and HSN-to-fix notices, then `.ep-setup-sections` (auto-fit cards):
+  **1. Rules and approvals** (Purchase settings, Who approves, Purchase committee), **2. Items and GST**
+  (Units, HSN / SAC codes — "N to fix" when any, Item categories, Items, Rate contracts — optional, no
+  badge, Payment terms), **3. Vendors** (Vendors with the blacklisted count, Vendor approvals — "N waiting"
+  when any); each link Done / To do and what it holds. Then Copy from another school.
+- Breadcrumbs start at **Purchase set-up** on Vendors (list, new, one vendor), Vendor approvals, Payment
+  terms, Who approves, Purchase settings, and on `/masters/purchase` (Items, units and HSN). In-text links
+  of the notices underlined.
+- Checked in a browser (dev-purchase): none of the six in the menu, Purchase set-up there once; the three
+  sections; Vendors, Items / HSN and Settings highlight Purchase set-up and lead back to it; axe clean.

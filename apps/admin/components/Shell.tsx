@@ -57,6 +57,8 @@ export async function Shell({
       '/fees/discounts',
       '/fees/approval',
     ],
+    // Purchase set-up stands for its screens that left the menu (items, units and HSN are masters)
+    '/purchase': ['/masters/purchase'],
     '/exams/masters': [
       '/exams/indicators',
       '/exams/indicator-areas',

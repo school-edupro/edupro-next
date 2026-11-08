@@ -44,7 +44,7 @@ export default async function VendorApprovalsPage({
   return (
     <>
       <Breadcrumbs
-        items={[{ label: 'Purchase', href: '/purchase' }, { label: 'Vendor approvals' }]}
+        items={[{ label: 'Purchase set-up', href: '/purchase' }, { label: 'Vendor approvals' }]}
       />
       <PageHeader
         kicker="Purchase"

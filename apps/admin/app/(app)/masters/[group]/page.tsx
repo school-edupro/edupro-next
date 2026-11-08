@@ -1,5 +1,6 @@
 import {
   Badge,
+  Breadcrumbs,
   Button,
   Card,
   Checkbox,
@@ -181,6 +182,15 @@ export default async function MasterGroupPage({
 
   return (
     <>
+      {group === 'purchase' ? (
+        // items, units and HSN open from Purchase set-up (not the menu): the way back
+        <Breadcrumbs
+          items={[
+            { label: 'Purchase set-up', href: '/purchase' },
+            { label: 'Items, units and HSN' },
+          ]}
+        />
+      ) : null}
       <PageHeader
         kicker={t(`kicker.${groupKey}`)}
         title={master.editVia ? master.title : t(`title.${groupKey}`)}

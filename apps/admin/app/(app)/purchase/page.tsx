@@ -6,8 +6,10 @@ import type { PurchaseOverview } from '@/lib/purchase';
 import { copyFromSchool } from '@/lib/purchase-actions';
 
 /**
- * Purchase (docs/design/83, part 1): what the set-up has, in the order a school fills it, what waits for
- * a second person's approval, and copying the masters from another school of the group.
+ * Purchase set-up (docs/design/83, part 1; "As built — set-up in sections"): the figures, what waits for
+ * a second person's approval and the HSN codes to fix, then three sections — rules and approvals, items
+ * and GST, vendors — each opening its screens (they are not in the menu), and copying the masters from
+ * another school of the group.
  */
 export default async function PurchaseHomePage({
   searchParams,
@@ -28,56 +30,102 @@ export default async function PurchaseHomePage({
       : Promise.resolve([] as Array<{ id: string; code: string; name: string }>),
   ]);
   const waiting = o.vendorsPending + o.changesPending;
-  const steps: Array<{ done: boolean; title: string; text: string; href: string }> = [
+  const toFix = o.hsnToFix.length;
+  /** a link of a section: Done / To do (null: optional, no badge), what it holds, where it goes */
+  type Link = { done: boolean | null; title: string; text: string; href: string; flag?: string };
+  const sections: Array<{ id: string; title: string; text: string; links: Link[] }> = [
     {
-      done: o.gstinSet,
-      title: 'Settings',
-      text: 'The school’s GSTIN, numbering, sourcing limits, PO terms',
-      href: '/purchase/settings',
+      id: 'pu-rules',
+      title: '1. Rules and approvals',
+      text: 'How the school buys, and who approves indents, requisitions and orders.',
+      links: [
+        {
+          done: o.gstinSet,
+          title: 'Purchase settings',
+          text: 'GSTIN, numbering, sourcing limits, emergency purchase, PO terms',
+          href: '/purchase/settings',
+        },
+        {
+          done: o.departmentsSet > 0,
+          title: 'Who approves',
+          text: `Set for ${String(o.departmentsSet)} of ${String(o.departments)} departments`,
+          href: '/purchase/approvals',
+        },
+        {
+          done: o.committee > 0,
+          title: 'Purchase committee',
+          text: o.committee
+            ? `${String(o.committee)} members`
+            : 'Signs comparative statements above the direct-purchase limit',
+          href: '/purchase/settings#committee',
+        },
+      ],
     },
     {
-      done: o.uoms > 0 && o.hsn > 0,
-      title: 'Units and HSN / SAC codes',
-      text: `${String(o.uoms)} units, ${String(o.hsn)} GST codes (add what the school buys; confirm rates with the CA)`,
-      href: '/masters/purchase?tab=purchase_hsn',
+      id: 'pu-items',
+      title: '2. Items and GST',
+      text: 'What can be bought: units, GST codes, categories, items, rate contracts and payment terms.',
+      links: [
+        {
+          done: o.uoms > 0,
+          title: 'Units',
+          text: `${String(o.uoms)} units`,
+          href: '/masters/purchase?tab=purchase_uoms',
+        },
+        {
+          done: o.hsn > 0 && !toFix,
+          title: 'HSN / SAC codes',
+          text: `${String(o.hsn)} GST codes (confirm rates with the CA)`,
+          href: '/masters/purchase?tab=purchase_hsn',
+          ...(toFix ? { flag: `${String(toFix)} to fix` } : {}),
+        },
+        {
+          done: o.categories > 0,
+          title: 'Item categories',
+          text: `${String(o.categories)} categories`,
+          href: '/masters/purchase?tab=purchase_item_categories',
+        },
+        {
+          done: o.items > 0,
+          title: 'Items',
+          text: `${String(o.items)} items`,
+          href: '/masters/purchase?tab=purchase_items',
+        },
+        {
+          done: null,
+          title: 'Rate contracts',
+          text: `${String(o.rateContracts)} in force (optional: an agreed vendor and rate per item)`,
+          href: '/masters/purchase?tab=purchase_rate_contracts',
+        },
+        {
+          done: o.paymentTerms > 0,
+          title: 'Payment terms',
+          text: `${String(o.paymentTerms)} terms`,
+          href: '/purchase/payment-terms',
+        },
+      ],
     },
     {
-      done: o.categories > 0,
-      title: 'Item categories',
-      text: `${String(o.categories)} categories`,
-      href: '/masters/purchase?tab=purchase_item_categories',
-    },
-    {
-      done: o.items > 0,
-      title: 'Items',
-      text: `${String(o.items)} items`,
-      href: '/masters/purchase?tab=purchase_items',
-    },
-    {
-      done: o.paymentTerms > 0,
-      title: 'Payment terms',
-      text: `${String(o.paymentTerms)} terms`,
-      href: '/purchase/payment-terms',
-    },
-    {
-      done: o.vendors > 0,
-      title: 'Vendors',
-      text: `${String(o.vendors)} active${o.vendorsPending ? `, ${String(o.vendorsPending)} waiting for approval` : ''}`,
-      href: '/purchase/vendors',
-    },
-    {
-      done: o.departmentsSet > 0,
-      title: 'Who approves',
-      text: `Set for ${String(o.departmentsSet)} of ${String(o.departments)} departments`,
-      href: '/purchase/approvals',
-    },
-    {
-      done: o.committee > 0,
-      title: 'Purchase committee',
-      text: o.committee
-        ? `${String(o.committee)} members`
-        : 'Signs comparative statements above the direct-purchase limit',
-      href: '/purchase/settings#committee',
+      id: 'pu-vendors',
+      title: '3. Vendors',
+      text: 'Who the school buys from. A new vendor, or a change of its bank, GSTIN or PAN, waits for a second person’s approval.',
+      links: [
+        {
+          done: o.vendors > 0,
+          title: 'Vendors',
+          text: `${String(o.vendors)} active${o.blacklisted ? `, ${String(o.blacklisted)} blacklisted` : ''}`,
+          href: '/purchase/vendors',
+        },
+        {
+          done: null,
+          title: 'Vendor approvals',
+          text: waiting
+            ? 'New vendors and bank / GSTIN / PAN changes to approve'
+            : 'Nothing waits for approval',
+          href: '/purchase/vendor-approvals',
+          ...(waiting ? { flag: `${String(waiting)} waiting` } : {}),
+        },
+      ],
     },
   ];
   return (
@@ -86,7 +134,7 @@ export default async function PurchaseHomePage({
       <PageHeader
         kicker="Purchase"
         title="Purchase set-up"
-        description="The masters a Purchase Indent, Requisition and Order pick from. Fill them in this order; a new vendor, or a change of a vendor’s bank, GSTIN or PAN, waits for a second person’s approval."
+        description="Everything a Purchase Indent, Requisition and Order pick from, in three sections. Fill them in order: the rules, then items and GST, then vendors."
       />
       <Notice params={sp} />
       <div className="ep-dash-kpis ep-dash-kpis--4">
@@ -105,7 +153,9 @@ export default async function PurchaseHomePage({
             ? `${String(o.changesPending)} bank / GSTIN / PAN change${o.changesPending > 1 ? 's' : ''}`
             : ''}{' '}
           wait for a second person’s approval.{' '}
-          <a href="/purchase/vendor-approvals">Open Vendor approvals</a>
+          <a style={{ textDecoration: 'underline' }} href="/purchase/vendor-approvals">
+            Open Vendor approvals
+          </a>
         </p>
       ) : null}
       {o.hsnToFix.length ? (
@@ -128,31 +178,40 @@ export default async function PurchaseHomePage({
           </div>
         </div>
       ) : null}
-      <section className="ep-card" aria-labelledby="pu-steps" style={{ marginTop: 'var(--sp-4)' }}>
-        <h2 id="pu-steps" className="ep-card__title">
-          Set-up, in order
-        </h2>
-        <ol className="ep-purch-steps">
-          {steps.map((x) => (
-            <li key={x.title}>
-              <span>
-                <a href={x.href}>
-                  <strong>{x.title}</strong>
-                </a>{' '}
-                <Badge tone={x.done ? 'success' : 'neutral'}>{x.done ? 'Done' : 'To do'}</Badge>
-                <span className="ep-field__help" style={{ display: 'block', margin: 0 }}>
-                  {x.text}
-                </span>
-              </span>
-            </li>
-          ))}
-        </ol>
-        {!canSettings ? (
-          <p className="ep-field__help">
-            The settings, the committee and who approves are kept by the school admin.
-          </p>
-        ) : null}
-      </section>
+      <div className="ep-setup-sections">
+        {sections.map((x) => (
+          <section key={x.id} className="ep-card" aria-labelledby={x.id}>
+            <h2 id={x.id} className="ep-card__title">
+              {x.title}
+            </h2>
+            <p className="ep-field__help" style={{ marginTop: 0 }}>
+              {x.text}
+            </p>
+            <ul className="ep-setup-links">
+              {x.links.map((l) => (
+                <li key={l.title}>
+                  <a href={l.href}>
+                    <strong>{l.title}</strong>
+                  </a>{' '}
+                  {l.flag ? (
+                    <Badge tone="warning">{l.flag}</Badge>
+                  ) : l.done === null ? null : (
+                    <Badge tone={l.done ? 'success' : 'neutral'}>{l.done ? 'Done' : 'To do'}</Badge>
+                  )}
+                  <span className="ep-field__help" style={{ display: 'block', margin: 0 }}>
+                    {l.text}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </section>
+        ))}
+      </div>
+      {!canSettings ? (
+        <p className="ep-field__help">
+          The settings, the committee and who approves are kept by the school admin.
+        </p>
+      ) : null}
       {canManage && sources.length ? (
         <section className="ep-card" aria-labelledby="pu-copy" style={{ marginTop: 'var(--sp-4)' }}>
           <h2 id="pu-copy" className="ep-card__title">

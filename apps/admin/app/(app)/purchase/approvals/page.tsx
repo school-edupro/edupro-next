@@ -64,7 +64,9 @@ export default async function PurchaseApprovalsPage({
   });
   return (
     <>
-      <Breadcrumbs items={[{ label: 'Purchase', href: '/purchase' }, { label: 'Who approves' }]} />
+      <Breadcrumbs
+        items={[{ label: 'Purchase set-up', href: '/purchase' }, { label: 'Who approves' }]}
+      />
       <PageHeader
         kicker="Purchase"
         title="Who approves"

@@ -66,7 +66,9 @@ export default async function PurchaseSettingsPage({
   const inCommittee = new Set(s.committee.map((m) => m.employeeId));
   return (
     <>
-      <Breadcrumbs items={[{ label: 'Purchase', href: '/purchase' }, { label: 'Settings' }]} />
+      <Breadcrumbs
+        items={[{ label: 'Purchase set-up', href: '/purchase' }, { label: 'Settings' }]}
+      />
       <PageHeader
         kicker="Purchase"
         title="Purchase settings"
