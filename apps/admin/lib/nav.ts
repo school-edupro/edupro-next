@@ -598,12 +598,12 @@ export const NAV: Array<{
       { href: '/purchase/issues', label: 'stockIssues', permission: 'purchase.store.view' },
       { href: '/purchase/returns', label: 'stockReturns', permission: 'purchase.store.view' },
       { href: '/purchase/transfers', label: 'stockTransfers', permission: 'purchase.store.view' },
-      { href: '/purchase/counts', label: 'stockCounts', permission: 'purchase.store.view' },
       { href: '/purchase/reorder', label: 'reorder', permission: 'purchase.store.view' },
       { href: '/purchase/assets', label: 'assetRegister', permission: 'purchase.store.view' },
       { href: '/purchase/condemnations', label: 'condemnation', permission: 'purchase.store.view' },
-      // To requisition, To order, Emergency purchase, To receive and Stock in hand open from their
-      // lists (buttons at the top of Purchase Requisitions, Purchase Orders, Goods receipts, Stores);
+      // To requisition, To order, Emergency purchase, To receive, Stock in hand and Physical counts
+      // open from their lists (buttons at the top of Purchase Requisitions, Purchase Orders, Goods
+      // receipts, Stores);
       // the set-up's screens (vendors, vendor approvals, items / units / HSN, payment terms, who
       // approves, settings) open from Purchase set-up, not the menu (docs/design/83)
       { href: '/purchase', label: 'purchaseHome', permission: 'purchase.master.view' },

@@ -30,6 +30,13 @@ export default async function StoresPage({
             <a className="ep-btn ep-btn--secondary ep-btn--sm" href="/purchase/stock">
               Stock in hand
             </a>
+            <a
+              className="ep-btn ep-btn--secondary ep-btn--sm"
+              href="/purchase/counts"
+              style={{ whiteSpace: 'nowrap' }}
+            >
+              Physical counts
+            </a>
             {data.canManage ? (
               <a
                 className="ep-btn ep-btn--primary ep-btn--sm"

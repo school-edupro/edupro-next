@@ -40,7 +40,7 @@ export default async function CountsPage({
   return (
     <>
       <Breadcrumbs
-        items={[{ label: 'Purchase', href: '/purchase' }, { label: 'Physical counts' }]}
+        items={[{ label: 'Stores', href: '/purchase/stores' }, { label: 'Physical counts' }]}
       />
       <PageHeader
         kicker="Purchase"

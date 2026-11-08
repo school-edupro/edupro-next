@@ -201,9 +201,10 @@ screen — under the school's letterhead with the filters and when it was made. 
   indent (View or Download); it follows the line onto the PR, and the printed indent marks the line
   "Document attached".
 - **What the stores hold** shows under each item you pick: the free stock (in hand, less what is held
-  for other requests) in the main store and your department's stores, store by store. When they hold
-  enough for the quantity, the form asks **why you still buy it** (another size or make, say) — the
-  approvers see your reason — or lower the quantity, or ask the store to issue it.
+  for other requests) in the main store and your department's stores, store by store. What they hold is
+  **issued from the store** once the indent is approved (see below); only the rest is bought. To have it
+  bought new anyway (another size or make, say), fill **Buy new instead?** with the reason — the
+  approvers see it.
 - **Rates and amounts** show only to the purchase office, the admins and the indent's approvers. Whoever
   raises an indent without purchase rights sees no rates: the system still prices each line (its
   **rate contract**, else its **last purchase**) for the department's limit. The purchase office sees
@@ -225,7 +226,16 @@ screen — under the school's letterhead with the filters and when it was made. 
 - **Nobody approves their own**: a level held by the raiser **passes on** to the next level; when the
   last level is the raiser's, the school admin decides. A level nobody holds is skipped.
 - **Withdraw**: the raiser withdraws a draft, one sent back, or one nobody has approved yet.
-- **Where an approved PI goes** (the department's rules on Who approves):
+- **The stores first**: when a PI is approved, what the stores hold free for each line is **held** for it
+  — your department's own store first, then the main store; all of it when they have enough, else whole
+  units (a box is bought whole) — and goes to the store keeper's **Issues → To issue**. The keeper issues
+  it to you; you (or your HOD) **acknowledge** it under **Issues → To acknowledge** (also in the staff
+  app's _Issued to my department_, and on your waiting list at the top). The PI shows per line "From the
+  store: 6 NOS issued on ISS/… · to acknowledge". A PI the stores give in full is **From the store** and
+  never goes to purchase. If the keeper cannot give what was held (spoilt, missing), **Cannot give it**
+  with the reason lets it go and the PI waits for a requisition for it.
+- **Where an approved PI goes** for what the stores did not hold (the department's rules on Who
+  approves):
   - **every line on a rate contract** (when allowed) — a PR is made and approved by the system with the
     contract vendor and rate on each line; the PI waits for the PO (**PR skipped: for the PO**);
   - **within the department's limit** — the same, unless the department's earlier PIs that skipped the PR
@@ -546,8 +556,9 @@ deliveries** (late only, if you like).
 
 ## Issues, returns and transfers
 
-**Purchase → Issues.** **To issue** lists, per approved requisition and store, what it **reserved** and
-is still to go out. **Issue** gives it out: how much now (a part is fine — the rest stays reserved),
+**Purchase → Issues.** **To issue** lists, per approved indent (served from stock, marked **Indent, from
+stock**) and per approved requisition, and store, what is **held** for it and still to go out. On an
+indent's line **Cannot give it** (with the reason) lets the hold go and sends that much to purchase. **Issue** gives it out: how much now (a part is fine — the rest stays reserved),
 the batch if you want a particular one (otherwise the **earliest expiry goes first**), and who took it
 (otherwise the indent's raiser). The quantity is shared among the indents the line came from — each
 indent gets its own issue (`ISS/2026-27/0001`). Goods bought for an indent are issued the moment they
@@ -577,7 +588,8 @@ transit: the items go back.
 
 ## Physical count
 
-Every store is counted **at least once a year** (GFR 2017 rule 213); **Purchase → Physical counts**
+Every store is counted **at least once a year** (GFR 2017 rule 213); **Purchase → Stores → Physical
+counts** (the button at the top)
 shows when each was last counted. **Start a count** (the keeper): the whole store or one category. The
 book quantity of every item (each batch for batch items) is taken then; the sheet is **blind** — it
 shows the book quantity only once a line is counted.

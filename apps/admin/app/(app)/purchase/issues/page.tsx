@@ -1,7 +1,15 @@
 import { Badge, Breadcrumbs, PageHeader } from '@edupro/ui';
+import { ConfirmAction } from '@/components/ConfirmAction';
 import { Notice } from '@/components/Notice';
 import { apiFetch, getMe } from '@/lib/api';
-import { inr, type IssueRow, type ToIssueGroup } from '@/lib/purchase';
+import {
+  inr,
+  toIssueGroups,
+  type IssueRow,
+  type ToIssueGroup,
+  type ToIssueResponse,
+} from '@/lib/purchase';
+import { releaseHold } from '@/lib/purchase-actions';
 
 const TABS = [
   ['to-issue', 'To issue'],
@@ -49,7 +57,9 @@ export default async function IssuesPage({
       `/purchase/issues?${qs.toString()}`,
     ),
     keeper && tab === 'to-issue'
-      ? apiFetch<{ groups: ToIssueGroup[] }>('/purchase/to-issue')
+      ? apiFetch<ToIssueResponse>('/purchase/to-issue').then((r) => ({
+          groups: toIssueGroups(r),
+        }))
       : Promise.resolve({ groups: [] as ToIssueGroup[] }),
   ]);
   const link = (p: Record<string, string | undefined>) => {
@@ -95,15 +105,20 @@ export default async function IssuesPage({
           <div style={{ display: 'grid', gap: 'var(--sp-3)' }}>
             {toIssue.groups.map((g) => (
               <section
-                key={`${g.requisitionId}-${g.storeId}`}
+                key={`${g.indentId ?? g.requisitionId}-${g.storeId}`}
                 className="ep-card"
-                aria-labelledby={`ti-${g.requisitionId}-${g.storeId}`}
+                aria-labelledby={`ti-${g.indentId ?? g.requisitionId}-${g.storeId}`}
               >
-                <h2 id={`ti-${g.requisitionId}-${g.storeId}`} className="ep-card__title">
-                  {g.requisition} · {g.department ?? '—'}
+                <h2
+                  id={`ti-${g.indentId ?? g.requisitionId}-${g.storeId}`}
+                  className="ep-card__title"
+                >
+                  {g.requisition} · {g.department ?? '—'}{' '}
+                  {g.indentId ? <Badge tone="info">Indent, from stock</Badge> : null}
                 </h2>
                 <p style={{ marginTop: 0 }}>
                   From {g.store}
+                  {g.indentId ? ` · raised by ${g.raisedBy ?? '—'}` : ''}
                   {g.indents ? ` · for ${g.indents}` : ''}
                   {g.purpose ? ` · ${g.purpose}` : ''}
                 </p>
@@ -111,13 +126,30 @@ export default async function IssuesPage({
                   {g.lines.map((l) => (
                     <li key={l.reservationId}>
                       {l.item} ({l.itemCode}): {l.toIssue.toLocaleString('en-IN')} {l.unit} to issue
-                      {l.issued ? ` (${l.issued.toLocaleString('en-IN')} issued)` : ''}
+                      {l.issued ? ` (${l.issued.toLocaleString('en-IN')} issued)` : ''}{' '}
+                      {g.indentId ? (
+                        <ConfirmAction
+                          action={releaseHold}
+                          fields={{ reservationId: l.reservationId }}
+                          label="Cannot give it"
+                          title={`Send ${l.item} on ${g.requisition} to purchase?`}
+                          confirmLabel="Send to purchase"
+                          variant="ghost"
+                          reason={{ label: 'Why the store cannot give it' }}
+                        >
+                          {`The ${l.toIssue.toLocaleString('en-IN')} ${l.unit} held are let go; the indent waits for a requisition for them (Purchase Requisitions → To requisition).`}
+                        </ConfirmAction>
+                      ) : null}
                     </li>
                   ))}
                 </ul>
                 <a
                   className="ep-btn ep-btn--secondary ep-btn--sm"
-                  href={`/purchase/issues/new?requisition=${g.requisitionId}&store=${g.storeId}`}
+                  href={
+                    g.indentId
+                      ? `/purchase/issues/new?indent=${g.indentId}&store=${g.storeId}`
+                      : `/purchase/issues/new?requisition=${g.requisitionId}&store=${g.storeId}`
+                  }
                   aria-label={`Issue ${g.requisition} from ${g.store}`}
                 >
                   Issue
@@ -127,7 +159,8 @@ export default async function IssuesPage({
           </div>
         ) : (
           <p className="ep-field__help">
-            Nothing reserved is waiting to be issued from your stores.
+            Nothing held for an indent or reserved on a requisition waits to be issued from your
+            stores.
           </p>
         )
       ) : (

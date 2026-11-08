@@ -63,7 +63,7 @@ export async function Shell({
     '/purchase/requisitions': ['/purchase/to-requisition'],
     '/purchase/orders': ['/purchase/to-order', '/purchase/emergency'],
     '/purchase/receipts': ['/purchase/to-receive'],
-    '/purchase/stores': ['/purchase/stock'],
+    '/purchase/stores': ['/purchase/stock', '/purchase/counts'],
     '/exams/masters': [
       '/exams/indicators',
       '/exams/indicator-areas',

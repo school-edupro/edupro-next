@@ -295,7 +295,8 @@ export const inr = (n: number) => `₹${n.toLocaleString('en-IN', { maximumFract
 // ---- part 2: the Purchase Indent ------------------------------------------------------------------
 export type IndentStatus =
   'draft' | 'submitted' | 'approved' | 'rejected' | 'sent_back' | 'cancelled';
-export type IndentRoute = 'to_requisition' | 'to_order' | 'in_requisition' | 'ordered' | 'closed';
+export type IndentRoute =
+  'to_requisition' | 'to_order' | 'in_requisition' | 'ordered' | 'closed' | 'from_store';
 
 export const INDENT_STATUS: Record<
   IndentStatus,
@@ -315,6 +316,7 @@ export const INDENT_ROUTE: Record<IndentRoute, string> = {
   in_requisition: 'On a PR',
   ordered: 'Ordered',
   closed: 'Closed',
+  from_store: 'From the store',
 };
 
 export const RATE_SOURCE: Record<string, string> = {
@@ -1611,8 +1613,13 @@ export interface IssueDetail extends IssueRow {
   can: { acknowledge: boolean; acknowledgeOnPaper: boolean; returnToStore: boolean };
 }
 export interface ToIssueGroup {
+  /** a requisition's reservations; for an indent served from stock, '' and `indentId` set */
   requisitionId: string;
+  /** the requisition's number, or the indent's */
   requisition: string;
+  /** an approved indent's lines held at approval (docs/design/83, "served from stock") */
+  indentId?: string | null;
+  raisedBy?: string | null;
   storeId: string;
   store: string;
   department: string | null;
@@ -1632,6 +1639,39 @@ export interface ToIssueGroup {
     inHand: number;
   }>;
 }
+/** The API's To issue: requisitions' reservations, and indents' holds (made into groups by `toIssueGroups`). */
+export interface ToIssueResponse {
+  groups: ToIssueGroup[];
+  indents: Array<{
+    indentId: string;
+    indent: string;
+    storeId: string;
+    store: string;
+    department: string;
+    purpose: string;
+    raisedBy: string;
+    approvedAt: string | null;
+    lines: ToIssueGroup['lines'];
+  }>;
+}
+/** The indents served from stock first (the oldest approval first), then the requisitions. */
+export const toIssueGroups = (r: ToIssueResponse): ToIssueGroup[] => [
+  ...r.indents.map((g) => ({
+    requisitionId: '',
+    requisition: g.indent,
+    indentId: g.indentId,
+    raisedBy: g.raisedBy,
+    storeId: g.storeId,
+    store: g.store,
+    department: g.department,
+    purpose: g.purpose,
+    indents: null,
+    approvedAt: g.approvedAt,
+    lines: g.lines,
+  })),
+  ...r.groups,
+];
+
 export interface IssueFormLists {
   stores: Array<{ id: string; code: string; name: string }>;
   stock: Array<{

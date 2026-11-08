@@ -371,7 +371,9 @@ export const IndentListQuerySchema = z.object({
   status: z
     .enum(['draft', 'submitted', 'approved', 'rejected', 'sent_back', 'cancelled'])
     .optional(),
-  route: z.enum(['to_requisition', 'to_order', 'in_requisition', 'ordered', 'closed']).optional(),
+  route: z
+    .enum(['to_requisition', 'to_order', 'in_requisition', 'ordered', 'closed', 'from_store'])
+    .optional(),
   departmentId: IdSchema.optional(),
   q: z.string().trim().max(80).optional(),
   /** sent (else started) on or after / on or before, in India */
@@ -908,6 +910,8 @@ export const IssueSchema = z
     kind: z.enum(['indent', 'counter']),
     storeId: IdSchema,
     requisitionId: IdSchema.optional(),
+    /** an approved indent's lines held in this store at approval (docs/design/83, "served from stock") */
+    indentId: IdSchema.optional(),
     departmentId: IdSchema.optional(),
     takenByEmployeeId: IdSchema.nullish(),
     purpose: opt(300),
@@ -924,8 +928,8 @@ export const IssueSchema = z
       .min(1)
       .max(200),
   })
-  .refine((d) => d.kind !== 'indent' || !!d.requisitionId, {
-    message: 'Pick the requisition',
+  .refine((d) => d.kind !== 'indent' || !!d.requisitionId !== !!d.indentId, {
+    message: 'Pick the requisition or the indent',
     path: ['requisitionId'],
   })
   .refine(
@@ -936,6 +940,10 @@ export const IssueSchema = z
     },
   );
 export class IssueDto extends createZodDto(IssueSchema) {}
+
+/** What is held for an indent line cannot be given (not in the store after all): it goes to purchase. */
+export const ReleaseHoldSchema = z.object({ reason: z.string().trim().min(3).max(300) });
+export class ReleaseHoldDto extends createZodDto(ReleaseHoldSchema) {}
 
 export const AcknowledgeSchema = z.object({
   note: opt(300),

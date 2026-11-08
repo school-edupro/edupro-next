@@ -15,6 +15,7 @@ import {
   CountImportDto,
   CountLinesDto,
   IssueDto,
+  ReleaseHoldDto,
   NoteDto,
   PURCHASE,
   ReturnToStoreDto,
@@ -59,6 +60,19 @@ export class PurchaseStockController {
   @AuthenticatedOnly()
   listIssues(@ReqCtx() ctx: RequestContext, @Query() q: StockDocQueryDto) {
     return this.issues.list(ctx, q);
+  }
+
+  @Post('to-issue/:reservationId/release')
+  @ApiOperation({
+    summary: 'Let go what is held for an indent line (not in the store): the rest goes to purchase',
+  })
+  @RequirePermission(PURCHASE.storeOperate)
+  releaseHold(
+    @ReqCtx() ctx: RequestContext,
+    @Param('reservationId') reservationId: string,
+    @Body() body: ReleaseHoldDto,
+  ) {
+    return this.issues.releaseHold(ctx, reservationId, body);
   }
 
   @Get('to-issue')

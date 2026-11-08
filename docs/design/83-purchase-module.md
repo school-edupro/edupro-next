@@ -1232,3 +1232,50 @@ keeper dev login". Decided with the user: **GRN and all store slips**; GRN boxes
 - Checked: purchase suites 89/89 (then receipts, issues, stores, assets, orders 42/42 after a slip fix);
   Alpha's GRN/2026-27/0001 and a sample issue slip rendered and looked at; dev-store signs in, its menu
   has neither entry, the buttons open them with the parent lit; axe clean.
+
+## As built — indents served from stock; Physical counts out of the menu (8 Nov 2026)
+
+Asked by the user ("issues driven by the PI: if the item is in stock the store keeper issues it against
+the PI and the PI's raiser acknowledges; Physical counts and Stock in hand not in the side menu").
+Before: an approved PI always went to purchase; stock was used only if the purchase officer set a PR line
+"from the store" (reserved when the PR was approved, then To issue); a raiser whose item the stores
+covered had to give a reason to send the PI. Decided with the user:
+
+| Question | Decision |
+| --- | --- |
+| Stock vs buy | **Automatic at approval**: free stock is held for the PI line and goes to the keeper's To issue; only the rest goes to purchase. |
+| Which store | **The department's own store, then the main store.** |
+| Part in stock | **Issue what is there, buy the rest** (whole units of the line when the rest is bought). |
+| Telling the raiser | **In-app**: the issue waits on the raiser's To acknowledge (the header's waiting count, Approvals, the staff app's Issued to my department); the PI's lines say what the store did. |
+
+- Migration **0339**: `stock_reservations.indent_line_id` (a hold for an indent line; exactly one of it and
+  `requisition_line_id`), `purchase_indent_lines.stock_qty` (held, in the line's unit), route
+  **`from_store`**.
+- `holdIndentFromStock` (purchase-stock-core, on approval before routing): per kept-in-stock catalogue line
+  without a "buy new" reason, free stock of the department's stores then the main store (`freeStock`);
+  all of the need when there is enough, else whole purchase units (`stock_per_unit`; a decimal unit takes
+  what is there); reservations on the indent line; `stock_qty`; audited `purchase.indent.from_stock`.
+  `route()` then routes only `quantity − stock_qty` (the estimate for the department's limit and the
+  rate-contract check on that part); nothing left → route `from_store`.
+- PRs from indents and To requisition take `quantity − stock_qty − already on PRs` (a line can come back
+  after a hold is let go).
+- To issue (`GET /purchase/to-issue`) also returns `indents` (holds by PI and store: raiser, department,
+  purpose); issuing (`POST /purchase/issues` kind `indent` with `indentId`) checks each hold is the PI's
+  in that store and issues to the PI (its raiser, or the colleague it was raised for) — the existing
+  acknowledgement applies. `POST /purchase/to-issue/:reservationId/release` {reason} (the store's keeper
+  or store manager): `releaseIndentHold` lets the unissued part go, lowers `stock_qty`, the PI back to
+  To requisition ("The store could not give it all …").
+- The PI's lines (`ordered`) start with the store's part: "From the store: 10 NOS held in Main store, to
+  issue" / "… issued on ISS/… · to acknowledge" / "· acknowledged" / "N of M … ; the rest to issue".
+- The indent forms (admin and staff app): no longer refuse sending when the stores cover a line; the
+  reason box is **Buy new instead? (optional)**, explaining the store issues it once approved; a line with
+  a reason is bought, not held. (The 7 Nov rule — a reason required — is replaced.)
+- Admin: To issue shows indent groups first ("Indent, from stock", raised by), **Issue** opens the form
+  for the PI's holds, **Cannot give it** (reason) releases; INDENT_ROUTE `from_store` "From the store"
+  (both apps). Physical counts left the menu: Stores → **Physical counts**; Stores lit up on
+  `/purchase/counts`; its breadcrumbs start at Stores.
+- Tests: `purchase-issues` — a box of pens in stock and copper sulphate 2 more than the stores: held 10
+  NOS and all the free copper sulphate, To requisition only 2; To issue lists the holds; issued to the PI,
+  "to acknowledge", acknowledged by the raiser; a teacher cannot release (403), the keeper's release sends
+  the whole line back to To requisition; a PI of only pens is **From the store** and not on To
+  requisition. `purchase-indents` — sending without the reason now goes through.

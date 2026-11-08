@@ -944,9 +944,16 @@ export class PurchaseRequisitionsService implements OnModuleInit {
         uom: string;
         in_catalogue: boolean;
       }>(
-        `SELECT l.indent_id::text, COALESCE(i.name, l.free_text) AS item, l.quantity::text, u.code AS uom, l.item_id IS NOT NULL AS in_catalogue
+        // what is still to buy (the stores' part and what PRs already have left out)
+        `SELECT l.indent_id::text, COALESCE(i.name, l.free_text) AS item,
+                (l.quantity - l.stock_qty - COALESCE((SELECT sum(src.quantity) FROM purchase_requisition_sources src
+                                                       WHERE src.indent_line_id = l.id), 0))::text AS quantity,
+                u.code AS uom, l.item_id IS NOT NULL AS in_catalogue
            FROM purchase_indent_lines l LEFT JOIN purchase_items i ON i.id = l.item_id JOIN purchase_uoms u ON u.id = l.uom_id
-          WHERE l.indent_id = ANY($1::bigint[]) ORDER BY l.indent_id, l.seq`,
+          WHERE l.indent_id = ANY($1::bigint[])
+            AND l.quantity - l.stock_qty - COALESCE((SELECT sum(src.quantity) FROM purchase_requisition_sources src
+                                                      WHERE src.indent_line_id = l.id), 0) > 0
+          ORDER BY l.indent_id, l.seq`,
         [pis.rows.map((p) => p.id)],
       );
       const s = await this.settings(c);
@@ -1626,11 +1633,16 @@ export class PurchaseRequisitionsService implements OnModuleInit {
           contract_id: string | null;
           note: string | null;
         }>(
-          `SELECT l.id::text, l.item_id::text, l.free_text, l.quantity::text, l.uom_id::text, l.est_rate::text, l.contract_id::text, l.note
-             FROM purchase_indent_lines l JOIN purchase_indents pi ON pi.id = l.indent_id
-            WHERE l.indent_id = ANY($1::bigint[])
-              AND NOT EXISTS (SELECT 1 FROM purchase_requisition_sources src WHERE src.indent_line_id = l.id)
-            ORDER BY pi.number, l.seq`,
+          // what is still to buy: the line less what the stores hold for it less what PRs already have
+          `SELECT * FROM (
+             SELECT l.id::text, l.item_id::text, l.free_text,
+                    (l.quantity - l.stock_qty - COALESCE((SELECT sum(src.quantity) FROM purchase_requisition_sources src
+                                                           WHERE src.indent_line_id = l.id), 0))::text AS quantity,
+                    l.uom_id::text, l.est_rate::text, l.contract_id::text, l.note, pi.number, l.seq
+               FROM purchase_indent_lines l JOIN purchase_indents pi ON pi.id = l.indent_id
+              WHERE l.indent_id = ANY($1::bigint[])) x
+            WHERE x.quantity::numeric > 0
+            ORDER BY x.number, x.seq`,
           [pis.map((p) => p.id)],
         );
         const groups = new Map<string, typeof il.rows>();

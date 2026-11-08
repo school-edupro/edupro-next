@@ -48,7 +48,7 @@ export default async function CountPage({
     <>
       <Breadcrumbs
         items={[
-          { label: 'Purchase', href: '/purchase' },
+          { label: 'Stores', href: '/purchase/stores' },
           { label: 'Physical counts', href: '/purchase/counts' },
           { label: k.number },
         ]}

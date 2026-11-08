@@ -136,6 +136,124 @@ export async function issuedAgainst(c: PoolClient, prId: string) {
   return (r.rowCount ?? 0) > 0;
 }
 
+/**
+ * An approved indent takes from the stores first (docs/design/83, "As built — indents served from
+ * stock"): for each line of a kept-in-stock item, what the department's own store, then the main store,
+ * holds free is held for the line (a reservation on the indent line) — all of it when the stores have
+ * enough, else whole units of the line (the rest is bought). The line's `stock_qty` (its unit) is what
+ * was held. Returns what each line took.
+ */
+export async function holdIndentFromStock(c: PoolClient, indentId: string) {
+  const lines = (
+    await c.query<{
+      id: string;
+      item_id: string;
+      quantity: string;
+      per_unit: string;
+      decimals: boolean;
+      department_id: string;
+    }>(
+      `SELECT l.id::text, l.item_id::text, l.quantity::text, COALESCE(i.stock_per_unit, 1)::text AS per_unit,
+              u.decimals, pi.department_id::text
+         FROM purchase_indent_lines l JOIN purchase_indents pi ON pi.id = l.indent_id
+         JOIN purchase_items i ON i.id = l.item_id AND COALESCE(i.stock_tracked, false)
+         JOIN purchase_uoms u ON u.id = l.uom_id
+        -- a line the raiser asked to have bought new (with the reason) is not served from stock
+        WHERE l.indent_id = $1 AND l.stock_qty = 0 AND l.stock_reason IS NULL
+          AND NOT EXISTS (SELECT 1 FROM stock_reservations r WHERE r.indent_line_id = l.id)
+        ORDER BY l.seq`,
+      [indentId],
+    )
+  ).rows;
+  const out: Array<{ lineId: string; held: number; quantity: number }> = [];
+  for (const l of lines) {
+    // the department's own stores first, then the main store
+    const stores = (
+      await c.query<{ id: string }>(
+        `SELECT s.id::text FROM stores s
+          WHERE s.status = 'active' AND (s.department_id = $1 OR s.kind = 'main')
+          ORDER BY (s.department_id = $1) DESC, (s.kind = 'main'), s.id`,
+        [l.department_id],
+      )
+    ).rows;
+    const per = Number(l.per_unit) || 1;
+    const need = Math.round(Number(l.quantity) * per * 1000) / 1000;
+    const takes: Array<{ storeId: string; qty: number }> = [];
+    let left = need;
+    for (const st of stores) {
+      if (left <= 0) break;
+      const f = await freeStock(c, st.id, l.item_id);
+      const take = Math.round(Math.min(left, f.free) * 1000) / 1000;
+      if (take <= 0) continue;
+      takes.push({ storeId: st.id, qty: take });
+      left = Math.round((left - take) * 1000) / 1000;
+    }
+    let total = takes.reduce((a, t) => a + t.qty, 0);
+    if (total < need) {
+      // the rest is bought: hold whole units of the line (a box is bought whole)
+      const units = l.decimals ? total / per : Math.floor(total / per + 1e-9);
+      let keep = Math.round(units * per * 1000) / 1000;
+      for (const t of takes) {
+        t.qty = Math.min(t.qty, keep);
+        keep = Math.round((keep - t.qty) * 1000) / 1000;
+      }
+      total = takes.reduce((a, t) => a + t.qty, 0);
+    }
+    if (total <= 0) continue;
+    for (const t of takes.filter((x) => x.qty > 0)) {
+      await c.query(
+        `INSERT INTO stock_reservations (school_id, store_id, item_id, indent_line_id, qty)
+         VALUES (app.current_school_id(), $1, $2, $3, $4)`,
+        [t.storeId, l.item_id, l.id, t.qty],
+      );
+      await refreshReserved(c, t.storeId, l.item_id);
+    }
+    const held = Math.round((total / per) * 1000) / 1000;
+    await c.query(`UPDATE purchase_indent_lines SET stock_qty = $2 WHERE id = $1`, [l.id, held]);
+    out.push({ lineId: l.id, held, quantity: Number(l.quantity) });
+  }
+  return out;
+}
+
+/**
+ * The keeper cannot give what is held for an indent line (it is not there after all): the unissued part
+ * is let go and goes on to purchase — the line's `stock_qty` drops by it and the indent waits for a PR.
+ * Returns the indent's id.
+ */
+export async function releaseIndentHold(c: PoolClient, reservationId: string, why: string) {
+  const r = (
+    await c.query<{
+      store_id: string;
+      item_id: string;
+      left: string;
+      per_unit: string;
+      indent_line_id: string;
+      indent_id: string;
+    }>(
+      `UPDATE stock_reservations r
+          SET status = CASE WHEN r.issued_qty > 0 THEN 'done' ELSE 'released' END, released_note = $2, closed_at = now()
+         FROM purchase_indent_lines l, purchase_items i
+        WHERE r.id = $1 AND r.status = 'open' AND l.id = r.indent_line_id AND i.id = r.item_id
+        RETURNING r.store_id::text, r.item_id::text, (r.qty - r.issued_qty)::text AS left,
+                  COALESCE(i.stock_per_unit, 1)::text AS per_unit, l.id::text AS indent_line_id, l.indent_id::text`,
+      [reservationId, why.slice(0, 300)],
+    )
+  ).rows[0];
+  if (!r) throw new DomainError('not-found', 'Nothing is held there to let go', { status: 404 });
+  await refreshReserved(c, r.store_id, r.item_id);
+  const back = Math.round((Number(r.left) / (Number(r.per_unit) || 1)) * 1000) / 1000;
+  await c.query(
+    `UPDATE purchase_indent_lines SET stock_qty = GREATEST(0, stock_qty - $2) WHERE id = $1`,
+    [r.indent_line_id, back],
+  );
+  await c.query(
+    `UPDATE purchase_indents SET route = 'to_requisition', bypass_note = $2, updated_at = now()
+      WHERE id = $1 AND status = 'approved'`,
+    [r.indent_id, `The store could not give it all (${why.slice(0, 200)}): the rest is to buy`],
+  );
+  return r.indent_id;
+}
+
 /** The store's details, and whether the caller may work it: the manage right, or operate and keep it. */
 export async function mustOperateStore(
   c: PoolClient,

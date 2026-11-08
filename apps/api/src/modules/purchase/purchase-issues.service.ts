@@ -16,6 +16,7 @@ import {
   PERSON_OF,
   postIssues,
   qty3,
+  releaseIndentHold,
   shareAmongIndents,
   type IssueShare,
 } from './purchase-stock-core';
@@ -26,13 +27,14 @@ import {
   PURCHASE,
   type AcknowledgeDto,
   type IssueDto,
+  type ReleaseHoldDto,
   type ReturnToStoreDto,
   type StockDocQueryDto,
 } from './purchase.dto';
 
 const KIND: Record<string, string> = {
   receipt: 'On receipt, for the indent',
-  indent: 'Reserved on a requisition',
+  indent: 'Held for an indent or a requisition',
   counter: 'Counter issue',
 };
 
@@ -297,7 +299,129 @@ export class PurchaseIssuesService {
           inHand: Number(x.in_hand),
         });
       }
-      return { groups: [...groups.values()] };
+      // approved indents served from the stores: what was held at approval, still to issue
+      const held = await c.query<{
+        reservation_id: string;
+        store_id: string;
+        store: string;
+        item_id: string;
+        item_code: string;
+        item: string;
+        unit: string;
+        tracks_batch: boolean;
+        qty: string;
+        issued: string;
+        in_hand: string;
+        indent_id: string;
+        indent: string;
+        department: string;
+        purpose: string;
+        raised_by: string;
+        approved_at: Date | null;
+      }>(
+        // eslint-disable-next-line no-restricted-syntax -- PERSON_OF is a fixed fragment
+        `SELECT r.id::text AS reservation_id, r.store_id::text, st.name AS store, r.item_id::text, i.code AS item_code, i.name AS item,
+                COALESCE(su.code, u.code) AS unit, i.tracks_batch, r.qty::text, r.issued_qty::text AS issued,
+                COALESCE(b.qty, 0)::text AS in_hand, pi.id::text AS indent_id, pi.number AS indent, d.name AS department,
+                pi.purpose, ${PERSON_OF('ru')} AS raised_by, pi.decided_at AS approved_at
+           FROM stock_reservations r
+           JOIN purchase_indent_lines il ON il.id = r.indent_line_id
+           JOIN purchase_indents pi ON pi.id = il.indent_id AND pi.status = 'approved'
+           JOIN departments d ON d.id = pi.department_id
+           JOIN users ru ON ru.id = pi.raised_by
+           JOIN stores st ON st.id = r.store_id
+           JOIN purchase_items i ON i.id = r.item_id
+           JOIN purchase_uoms u ON u.id = i.uom_id
+           LEFT JOIN purchase_uoms su ON su.id = i.stock_uom_id
+           LEFT JOIN stock_balances b ON b.store_id = r.store_id AND b.item_id = r.item_id
+          WHERE r.status = 'open'
+            AND ($1 OR EXISTS (SELECT 1 FROM store_keepers k JOIN employees e ON e.id = k.employee_id
+                                WHERE k.store_id = r.store_id AND e.user_id = app.current_user_id()))
+          ORDER BY pi.decided_at NULLS LAST, pi.id, st.name, il.seq`,
+        [this.has(ctx, PURCHASE.storeManage)],
+      );
+      const indents = new Map<
+        string,
+        {
+          indentId: string;
+          indent: string;
+          storeId: string;
+          store: string;
+          department: string;
+          purpose: string;
+          raisedBy: string;
+          approvedAt: string | null;
+          lines: Array<{
+            reservationId: string;
+            itemId: string;
+            itemCode: string;
+            item: string;
+            unit: string;
+            tracksBatch: boolean;
+            reserved: number;
+            issued: number;
+            toIssue: number;
+            inHand: number;
+          }>;
+        }
+      >();
+      for (const x of held.rows) {
+        const key = `${x.indent_id}:${x.store_id}`;
+        let g = indents.get(key);
+        if (!g) {
+          g = {
+            indentId: x.indent_id,
+            indent: x.indent,
+            storeId: x.store_id,
+            store: x.store,
+            department: x.department,
+            purpose: x.purpose,
+            raisedBy: x.raised_by,
+            approvedAt: x.approved_at?.toISOString() ?? null,
+            lines: [],
+          };
+          indents.set(key, g);
+        }
+        g.lines.push({
+          reservationId: x.reservation_id,
+          itemId: x.item_id,
+          itemCode: x.item_code,
+          item: x.item,
+          unit: x.unit,
+          tracksBatch: x.tracks_batch,
+          reserved: Number(x.qty),
+          issued: Number(x.issued),
+          toIssue: Math.round((Number(x.qty) - Number(x.issued)) * 1000) / 1000,
+          inHand: Number(x.in_hand),
+        });
+      }
+      return { groups: [...groups.values()], indents: [...indents.values()] };
+    });
+  }
+
+  /**
+   * What is held for an approved indent's line cannot be given (it is not in the store after all): the
+   * keeper lets it go with the reason, and the rest goes on to purchase (the indent waits for a PR).
+   */
+  async releaseHold(ctx: RequestContext, reservationId: string, dto: ReleaseHoldDto) {
+    return this.db.tenant(requireTenant(ctx), async (c) => {
+      const r = (
+        await c.query<{ store_id: string; indent_line_id: string | null }>(
+          `SELECT store_id::text, indent_line_id::text FROM stock_reservations WHERE id = $1 AND status = 'open'`,
+          [reservationId],
+        )
+      ).rows[0];
+      if (!r?.indent_line_id)
+        throw new DomainError('not-found', 'Nothing is held for an indent there', { status: 404 });
+      await mustOperateStore(c, ctx.permissions, r.store_id, 'let go stock of');
+      const indentId = await releaseIndentHold(c, reservationId, dto.reason);
+      await this.audit.stage(ctx, c, {
+        action: 'purchase.indent.stock_released',
+        entityType: 'purchase_indents',
+        entityId: indentId,
+        after: { reservation: reservationId, reason: dto.reason },
+      });
+      return { released: true, indentId };
     });
   }
 
@@ -395,7 +519,78 @@ export class PurchaseIssuesService {
         if (!e.rowCount) throw new DomainError('validation-failed', 'Who took it was not found');
       }
       const shares: IssueShare[] = [];
-      if (dto.kind === 'indent') {
+      if (dto.kind === 'indent' && dto.indentId) {
+        // an approved indent's lines held in this store at approval: to the indent's raiser
+        const pi = (
+          await c.query<{
+            number: string;
+            status: string;
+            department_id: string;
+            purpose: string;
+            taker: string | null;
+          }>(
+            `SELECT pi.number, pi.status, pi.department_id::text, pi.purpose,
+                    COALESCE(pi.on_behalf_employee_id,
+                             (SELECT e.id FROM employees e WHERE e.user_id = pi.raised_by AND e.deleted_at IS NULL LIMIT 1))::text AS taker
+               FROM purchase_indents pi WHERE pi.id = $1`,
+            [dto.indentId],
+          )
+        ).rows[0];
+        if (!pi) throw new DomainError('not-found', 'Indent not found', { status: 404 });
+        if (pi.status !== 'approved')
+          throw new DomainError(
+            'purchase.not_approved',
+            `${pi.number} is not approved: nothing is issued against it`,
+            { status: 409 },
+          );
+        for (const l of dto.lines) {
+          if (!l.reservationId)
+            throw new DomainError('validation-failed', 'A line without what is held for it');
+          const r = (
+            await c.query<{
+              item_id: string;
+              name: string;
+              store_id: string;
+              qty: string;
+              issued_qty: string;
+              status: string;
+              indent_line_id: string;
+              indent_id: string;
+            }>(
+              `SELECT r.item_id::text, i.name, r.store_id::text, r.qty::text, r.issued_qty::text, r.status,
+                      r.indent_line_id::text, il.indent_id::text
+                 FROM stock_reservations r JOIN purchase_items i ON i.id = r.item_id
+                 JOIN purchase_indent_lines il ON il.id = r.indent_line_id
+                WHERE r.id = $1 FOR UPDATE OF r`,
+              [l.reservationId],
+            )
+          ).rows[0];
+          if (!r || r.indent_id !== dto.indentId || r.store_id !== dto.storeId)
+            throw new DomainError(
+              'validation-failed',
+              'A line not held for this indent in this store',
+            );
+          const left = Math.round((Number(r.qty) - Number(r.issued_qty)) * 1000) / 1000;
+          if (r.status !== 'open' || l.qty > left + 1e-9)
+            throw new DomainError(
+              'validation-failed',
+              `${r.name}: ${qty3(Math.max(0, left))} is left to issue on ${pi.number}`,
+              { status: 400 },
+            );
+          shares.push({
+            indentId: dto.indentId,
+            indentLineId: r.indent_line_id,
+            departmentId: pi.department_id,
+            itemId: r.item_id,
+            name: r.name,
+            qty: l.qty,
+            batch: l.batch ?? null,
+            reservationId: l.reservationId,
+            taker: pi.taker,
+            purpose: pi.purpose,
+          });
+        }
+      } else if (dto.kind === 'indent') {
         const pr = (
           await c.query<{ number: string; status: string; department_id: string | null }>(
             `SELECT number, status, department_id::text FROM purchase_requisitions WHERE id = $1`,

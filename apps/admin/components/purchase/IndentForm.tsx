@@ -86,8 +86,6 @@ export function IndentForm({
       : [blank()],
   );
   const [error, setError] = useState<string | null>(null);
-  // a send was tried: the reasons still missing show their error
-  const [tried, setTried] = useState(false);
   const [pending, start] = useTransition();
   const showRates = lists.showRates;
   // the item sheet: reading it fills the lines; the rows it could not read
@@ -191,13 +189,6 @@ export function IndentForm({
 
   const send = (submit: boolean) => {
     setError(null);
-    if (submit && lines.some((l) => stockOf(l)?.covers && l.stockReason.trim().length < 3)) {
-      setTried(true);
-      setError(
-        'The store already has enough of an item: say why it is bought (marked below), or lower the quantity.',
-      );
-      return;
-    }
     const body = {
       ...(head.departmentId ? { departmentId: head.departmentId } : {}),
       ...(head.onBehalfEmployeeId ? { onBehalfEmployeeId: head.onBehalfEmployeeId } : {}),
@@ -214,7 +205,7 @@ export function IndentForm({
                 ...(showRates && l.typed && l.estRate !== '' ? { estRate: l.estRate } : {}),
                 ...(l.note.trim() ? { note: l.note } : {}),
                 ...(l.fileId ? { fileId: l.fileId } : {}),
-                ...(stockOf(l)?.covers && l.stockReason.trim()
+                ...((stockOf(l)?.free ?? 0) > 0 && l.stockReason.trim()
                   ? { stockReason: l.stockReason.trim() }
                   : {}),
               }
@@ -425,7 +416,6 @@ export function IndentForm({
             const free = l.itemId === FREE;
             const n = String(i + 1);
             const stock = stockOf(l);
-            const whyMissing = tried && !!stock?.covers && l.stockReason.trim().length < 3;
             return (
               <fieldset key={i} className="ep-purch-line ep-purch-line--wide">
                 <legend className="ep-sr-only">Line {n}</legend>
@@ -593,29 +583,25 @@ export function IndentForm({
                     </span>
                   ) : null}
                 </div>
-                {stock?.covers ? (
+                {stock && stock.free > 0 ? (
+                  // the stores give what they hold once the indent is approved (docs/design/83,
+                  // "As built — indents served from stock"); a reason here has it bought new instead
                   <label className="ep-field" htmlFor={`if-l${n}-why`}>
-                    <span className="ep-field__label" data-required="true">
-                      Why buy it? The store has enough
-                    </span>
+                    <span className="ep-field__label">Buy new instead? (optional)</span>
                     <input
                       id={`if-l${n}-why`}
                       className="ep-input"
                       maxLength={300}
                       value={l.stockReason}
                       placeholder="e.g. another size or make is needed"
-                      aria-invalid={whyMissing || undefined}
-                      aria-describedby={`if-l${n}-why-help${whyMissing ? ` if-l${n}-why-err` : ''}`}
+                      aria-describedby={`if-l${n}-why-help`}
                       onChange={(e) => setLine(i, { stockReason: e.target.value })}
                     />
                     <span id={`if-l${n}-why-help`} className="ep-field__help">
-                      {`The stores have ${qtyWords(stock.free)} ${stock.unit} free, enough for this. Send it with the reason (the approvers see it), lower the quantity, or ask the store to issue it.`}
+                      {stock.covers
+                        ? `The stores have ${qtyWords(stock.free)} ${stock.unit} free: once the indent is approved the store issues it to you. To have it bought new instead, say why (the approvers see it).`
+                        : `The stores have ${qtyWords(stock.free)} ${stock.unit} free: once the indent is approved the store issues that much and the rest is bought. To have all of it bought new, say why.`}
                     </span>
-                    {whyMissing ? (
-                      <span id={`if-l${n}-why-err`} className="ep-field__error" role="alert">
-                        Say in a few words why it is bought
-                      </span>
-                    ) : null}
                   </label>
                 ) : null}
                 <div className="ep-field">

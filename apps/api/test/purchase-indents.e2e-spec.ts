@@ -485,7 +485,7 @@ describe('purchase indents (e2e)', () => {
     expect((await call(outsider, 'GET', '/me')).json().permissions).toEqual([]);
   });
 
-  it('the stores’ free stock when raised; a reason when they cover it; the printed PI; a line without a rate', async () => {
+  it('the stores’ free stock when raised; a reason to buy new instead (optional); the printed PI; a line without a rate', async () => {
     await call(admin, 'PUT', `/purchase/approvals/${ids.science!}/indent`, {
       levels: [
         { name: 'HOD', by: 'hod' },
@@ -540,12 +540,8 @@ describe('purchase indents (e2e)', () => {
     ]);
     expect(draft.can.print).toBe(false);
     expect((await call(teacher, 'GET', `/purchase/indents/${id}/pdf`)).statusCode).toBe(409);
-    // 55 free covers 40: sending asks why it is bought
-    const refused = await call(teacher, 'POST', `/purchase/indents/${id}/submit`);
-    expect(refused.statusCode).toBe(400);
-    expect(refused.json().errors).toEqual([
-      expect.objectContaining({ path: 'lines.0.stockReason' }),
-    ]);
+    // 55 free covers 40: the store issues it once approved (docs/design/83, "served from stock"); a
+    // reason, optional, has it bought new instead — this raiser gives one
     expect(
       (
         await call(teacher, 'PUT', `/purchase/indents/${id}`, {

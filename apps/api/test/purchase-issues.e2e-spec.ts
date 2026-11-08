@@ -587,4 +587,133 @@ describe('purchase issues, returns, transfers and counts (e2e)', () => {
       'Chemistry lab store',
     ]);
   });
+
+  it('an approved indent takes from the stores first: held for the keeper, only the rest bought; issued, acknowledged', async () => {
+    await call(admin, 'PUT', `/purchase/approvals/${ids.Science!}/indent`, {
+      levels: [{ name: 'HOD', by: 'hod' }],
+    });
+    const free = async (item: string) => {
+      let n = 0;
+      for (const st of [ids.main!, ids.lab!]) {
+        const b = await bal(st, item);
+        n += Number(b.qty) - Number(b.reserved);
+      }
+      return n;
+    };
+    const penFree = await free(ids.PEN!); // NOS; a box is 10
+    const chemFree = Math.floor(await free(ids.CHEM!));
+    expect(penFree).toBeGreaterThanOrEqual(10);
+    const raise = async (lines: Array<{ itemId: string; quantity: number }>) => {
+      const pi = (
+        await call(teacher, 'POST', '/purchase/indents', {
+          departmentId: ids.Science,
+          purpose: 'Practical class',
+          lines,
+        })
+      ).json();
+      expect(
+        (await call(teacher, 'POST', `/purchase/indents/${pi.id as string}/submit`)).statusCode,
+      ).toBe(201);
+      expect(
+        (
+          await call(hod, 'POST', `/purchase/indents/${pi.id as string}/decide`, {
+            action: 'approve',
+          })
+        ).statusCode,
+      ).toBe(201);
+      return (await call(teacher, 'GET', `/purchase/indents/${pi.id as string}`)).json();
+    };
+    // a box of pens in stock, copper sulphate 2 more than the stores have
+    const pi = await raise([
+      { itemId: ids.PEN!, quantity: 1 },
+      { itemId: ids.CHEM!, quantity: chemFree + 2 },
+    ]);
+    expect(pi.route).toBe('to_requisition');
+    expect(pi.lineItems[0].ordered).toMatch(/^From the store: 10 NOS held in .+, to issue$/);
+    expect(pi.lineItems[1].ordered).toMatch(
+      new RegExp(`^From the store: ${String(chemFree)} NOS held in .+, to issue$`),
+    );
+    // only the rest waits for the PR
+    const cand = (await call(office, 'GET', '/purchase/requisition-candidates')).json();
+    const mine = cand.data.find((x: { id: string }) => x.id === pi.id);
+    expect(mine.lines).toEqual([expect.objectContaining({ quantity: 2, uom: 'NOS' })]);
+    // the keepers' To issue: the indent's holds, by store
+    const toIssue = (await call(admin, 'GET', '/purchase/to-issue')).json();
+    const groups = toIssue.indents.filter((g: { indentId: string }) => g.indentId === pi.id);
+    const held = (item: string) =>
+      groups
+        .flatMap((g: { lines: Array<{ itemId: string; toIssue: number }> }) => g.lines)
+        .filter((l: { itemId: string }) => l.itemId === item)
+        .reduce((a: number, l: { toIssue: number }) => a + l.toIssue, 0);
+    expect(held(ids.PEN!)).toBe(10);
+    expect(held(ids.CHEM!)).toBe(chemFree);
+    // the pens issued against the indent (to its raiser), then acknowledged by the raiser
+    const penHold = groups
+      .flatMap(
+        (g: {
+          storeId: string;
+          lines: Array<{ itemId: string; reservationId: string; toIssue: number }>;
+        }) => g.lines.map((l) => ({ ...l, storeId: g.storeId })),
+      )
+      .filter((l: { itemId: string }) => l.itemId === ids.PEN);
+    for (const h of penHold) {
+      const r = await call(admin, 'POST', '/purchase/issues', {
+        kind: 'indent',
+        storeId: h.storeId,
+        indentId: pi.id,
+        lines: [{ reservationId: h.reservationId, qty: h.toIssue }],
+      });
+      expect(r.statusCode).toBe(201);
+    }
+    const issued = (await call(teacher, 'GET', `/purchase/indents/${pi.id as string}`)).json();
+    expect(issued.lineItems[0].ordered).toMatch(
+      /^From the store: 10 NOS issued on ISS\/.+ · to acknowledge$/,
+    );
+    const waiting = (await call(teacher, 'GET', '/purchase/issues?mine=1')).json();
+    expect(waiting.toAcknowledge).toBeGreaterThanOrEqual(1);
+    for (const x of waiting.rows.filter(
+      (r: { indent: string | null; status: string }) => r.status === 'issued',
+    ))
+      await call(teacher, 'POST', `/purchase/issues/${x.id as string}/acknowledge`, {});
+    expect(
+      (await call(teacher, 'GET', `/purchase/indents/${pi.id as string}`)).json().lineItems[0]
+        .ordered,
+    ).toMatch(/ · acknowledged$/);
+    // the copper sulphate is not there after all: the keeper lets it go, the whole line goes to purchase
+    const chemHold = groups
+      .flatMap((g: { lines: Array<{ itemId: string; reservationId: string }> }) => g.lines)
+      .filter((l: { itemId: string }) => l.itemId === ids.CHEM);
+    expect(
+      (
+        await call(
+          teacher,
+          'POST',
+          `/purchase/to-issue/${chemHold[0].reservationId as string}/release`,
+          {
+            reason: 'Spoilt',
+          },
+        )
+      ).statusCode,
+    ).toBe(403);
+    for (const h of chemHold)
+      expect(
+        (
+          await call(admin, 'POST', `/purchase/to-issue/${h.reservationId as string}/release`, {
+            reason: 'Spoilt in the store',
+          })
+        ).statusCode,
+      ).toBe(201);
+    const back = (await call(office, 'GET', '/purchase/requisition-candidates')).json();
+    expect(back.data.find((x: { id: string }) => x.id === pi.id).lines).toEqual([
+      expect.objectContaining({ quantity: chemFree + 2 }),
+    ]);
+    // an indent the stores give in full: "From the store", nothing for purchase
+    const all = await raise([{ itemId: ids.PEN!, quantity: 1 }]);
+    expect(all.route).toBe('from_store');
+    expect(
+      (await call(office, 'GET', '/purchase/requisition-candidates'))
+        .json()
+        .data.some((x: { id: string }) => x.id === all.id),
+    ).toBe(false);
+  });
 });

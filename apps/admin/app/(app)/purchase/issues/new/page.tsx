@@ -2,9 +2,17 @@ import { Breadcrumbs, PageHeader } from '@edupro/ui';
 import { notFound } from 'next/navigation';
 import { IssueForm } from '@/components/purchase/IssueForm';
 import { apiFetch, ApiError } from '@/lib/api';
-import type { IssueFormLists, ToIssueGroup } from '@/lib/purchase';
+import {
+  toIssueGroups,
+  type IssueFormLists,
+  type ToIssueGroup,
+  type ToIssueResponse,
+} from '@/lib/purchase';
 
-/** An issue against a requisition's reservations (?requisition=&store=), or at the counter. */
+/**
+ * An issue against a requisition's reservations (?requisition=&store=), an approved indent's holds
+ * (?indent=&store=; docs/design/83, "served from stock"), or at the counter.
+ */
 export default async function NewIssuePage({
   searchParams,
 }: {
@@ -20,10 +28,14 @@ export default async function NewIssuePage({
     throw e;
   }
   let group: ToIssueGroup | null = null;
-  if (ok(sp.requisition) && ok(sp.store)) {
-    const to = await apiFetch<{ groups: ToIssueGroup[] }>('/purchase/to-issue');
+  if ((ok(sp.requisition) || ok(sp.indent)) && ok(sp.store)) {
+    const to = toIssueGroups(await apiFetch<ToIssueResponse>('/purchase/to-issue'));
     group =
-      to.groups.find((g) => g.requisitionId === sp.requisition && g.storeId === sp.store) ?? null;
+      to.find(
+        (g) =>
+          g.storeId === sp.store &&
+          (sp.indent ? g.indentId === sp.indent : g.requisitionId === sp.requisition),
+      ) ?? null;
     if (!group) notFound();
   }
   const title = group ? `Issue ${group.requisition}` : 'Counter issue';
@@ -41,7 +53,9 @@ export default async function NewIssuePage({
         title={title}
         description={
           group
-            ? `What ${group.requisition} reserved in ${group.store}${group.indents ? ` for ${group.indents}` : ''}. Each indent gets its own issue; whoever took it (or the indent's raiser) acknowledges it.`
+            ? group.indentId
+              ? `What ${group.store} holds for ${group.requisition} (raised by ${group.raisedBy ?? '—'}), held when it was approved. The raiser (or whoever took it) acknowledges the issue.`
+              : `What ${group.requisition} reserved in ${group.store}${group.indents ? ` for ${group.indents}` : ''}. Each indent gets its own issue; whoever took it (or the indent's raiser) acknowledges it.`
             : 'A quick issue to a department: who took it and why. Only free stock (in hand less what requisitions reserved) can go out.'
         }
       />

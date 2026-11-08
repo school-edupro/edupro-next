@@ -13,6 +13,7 @@ import { purchaseHead } from './purchase-head';
 import { purchaseIndentPdf } from './purchase-indent-pdf';
 import { itemSheetBytes, readItemRows, type SheetKind } from './purchase-item-sheet';
 import { checkListSize, LIST_LIMIT, purchaseListFile } from './purchase-list-file';
+import { holdIndentFromStock } from './purchase-stock-core';
 import {
   CLOSED_PLACED,
   draftOrdersFor,
@@ -34,7 +35,6 @@ import {
 
 const rupees = (n: number) =>
   `₹${n.toLocaleString('en-IN', { maximumFractionDigits: 2, minimumFractionDigits: 0 })}`;
-const qtyWords = (n: number) => n.toLocaleString('en-IN', { maximumFractionDigits: 3 });
 const INDENT_STATUS_WORDS: Record<string, string> = {
   draft: 'Draft',
   submitted: 'Waiting for approval',
@@ -45,6 +45,7 @@ const INDENT_STATUS_WORDS: Record<string, string> = {
 };
 const INDENT_ROUTE_WORDS: Record<string, string> = {
   to_requisition: 'Waiting for the PR',
+  from_store: 'From the store',
   to_order: 'PR skipped: for the PO',
   in_requisition: 'On a PR',
   ordered: 'Ordered',
@@ -585,6 +586,48 @@ export class PurchaseIndentsService implements OnModuleInit {
             AND r.status IN ('approved', 'part_ordered', 'ordered')`,
         [id],
       );
+      // what the stores gave or hold for each line (docs/design/83, "As built — indents served from stock")
+      const stock = new Map(
+        (
+          await c.query<{
+            line_id: string;
+            unit: string;
+            held: string;
+            stores: string | null;
+            issued: string;
+            issues: string | null;
+            acked: boolean;
+          }>(
+            `SELECT l.id::text AS line_id, COALESCE(su.code, u.code) AS unit,
+                    COALESCE((SELECT sum(r.qty) FROM stock_reservations r WHERE r.indent_line_id = l.id AND r.status <> 'released'), 0)::text AS held,
+                    (SELECT string_agg(DISTINCT st.name, ', ') FROM stock_reservations r JOIN stores st ON st.id = r.store_id
+                      WHERE r.indent_line_id = l.id AND r.status <> 'released') AS stores,
+                    COALESCE((SELECT sum(sil.qty) FROM stock_issue_lines sil WHERE sil.indent_line_id = l.id), 0)::text AS issued,
+                    (SELECT string_agg(DISTINCT si.number, ', ') FROM stock_issue_lines sil JOIN stock_issues si ON si.id = sil.issue_id
+                      WHERE sil.indent_line_id = l.id) AS issues,
+                    COALESCE((SELECT bool_and(si.status = 'acknowledged') FROM stock_issue_lines sil JOIN stock_issues si ON si.id = sil.issue_id
+                               WHERE sil.indent_line_id = l.id), false) AS acked
+               FROM purchase_indent_lines l LEFT JOIN purchase_items i ON i.id = l.item_id
+               JOIN purchase_uoms u ON u.id = l.uom_id LEFT JOIN purchase_uoms su ON su.id = i.stock_uom_id
+              WHERE l.indent_id = $1`,
+            [id],
+          )
+        ).rows.map((x) => [x.line_id, x]),
+      );
+      const fromStore = (lineId: string) => {
+        const x = stock.get(lineId);
+        if (!x) return null;
+        const held = Number(x.held);
+        const issued = Number(x.issued);
+        if (held <= 0 && issued <= 0) return null;
+        const q = (n: number) => n.toLocaleString('en-IN', { maximumFractionDigits: 3 });
+        const ack = x.acked ? ' · acknowledged' : ' · to acknowledge';
+        if (issued <= 0)
+          return `From the store: ${q(held)} ${x.unit} held in ${x.stores ?? 'the store'}, to issue`;
+        if (issued < held - 0.0005)
+          return `From the store: ${q(issued)} of ${q(held)} ${x.unit} issued on ${x.issues ?? ''}${ack}; the rest to issue`;
+        return `From the store: ${q(issued)} ${x.unit} issued on ${x.issues ?? ''}${ack}`;
+      };
       const instance = pi.workflow_instance_id
         ? await this.workflow.instanceWith(c, pi.workflow_instance_id)
         : null;
@@ -640,14 +683,19 @@ export class PurchaseIndentsService implements OnModuleInit {
           // the line's document (view and download through the indent)
           fileId: l.file_id,
           fileName: l.file_name,
-          // what became of it (quantities only)
+          // what became of it (quantities only): the stores' part, then what was bought
           ordered:
-            ordering.rows
-              .filter((o) => o.line_id === l.id)
-              .map((o) => {
-                const w = orderingWords(o, l.uom);
-                return w && o.shared ? `${w} (the requisition line also covers other indents)` : w;
-              })
+            [
+              fromStore(l.id),
+              ...ordering.rows
+                .filter((o) => o.line_id === l.id)
+                .map((o) => {
+                  const w = orderingWords(o, l.uom);
+                  return w && o.shared
+                    ? `${w} (the requisition line also covers other indents)`
+                    : w;
+                }),
+            ]
               .filter(Boolean)
               .join('; ') || null,
         })),
@@ -988,39 +1036,6 @@ export class PurchaseIndentsService implements OnModuleInit {
     );
   }
 
-  /**
-   * On sending: a line the stores can already cover (their free stock at least the quantity, in the
-   * store unit) needs the raiser's reason for buying it anyway; the approvers see it.
-   */
-  private async stockCheck(c: PoolClient, indentId: string) {
-    const r = await c.query<{
-      seq: number;
-      name: string;
-      free: string;
-      need: string | null;
-      unit: string;
-    }>(
-      `SELECT l.seq, i.name, l.stock_free::text AS free, COALESCE(su.code, u.code) AS unit,
-              (CASE WHEN l.uom_id = i.uom_id THEN l.quantity * i.stock_per_unit
-                    WHEN l.uom_id = i.stock_uom_id THEN l.quantity END)::text AS need
-         FROM purchase_indent_lines l JOIN purchase_items i ON i.id = l.item_id
-         JOIN purchase_uoms u ON u.id = i.uom_id LEFT JOIN purchase_uoms su ON su.id = i.stock_uom_id
-        WHERE l.indent_id = $1 AND l.stock_free > 0 AND l.stock_reason IS NULL ORDER BY l.seq`,
-      [indentId],
-    );
-    const errors = r.rows
-      .filter((l) => l.need !== null && Number(l.need) <= Number(l.free) + 1e-9)
-      .map((l) => ({
-        path: `lines.${String(l.seq - 1)}.stockReason`,
-        message: `${l.name}: the store has ${qtyWords(Number(l.free))} ${l.unit} free, enough for this. Say why it is bought, or ask the store to issue it`,
-      }));
-    if (errors.length)
-      throw new DomainError('validation-failed', errors.map((e) => e.message).join('; '), {
-        status: 400,
-        extra: { errors },
-      });
-  }
-
   private checkDate(day?: string) {
     if (!day) return;
     const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' }).format(new Date());
@@ -1109,7 +1124,6 @@ export class PurchaseIndentsService implements OnModuleInit {
         );
       // what the stores hold now; a line they can cover needs the raiser's reason
       await this.noteStock(c, id, pi.department_id);
-      await this.stockCheck(c, id);
       let number = pi.number;
       if (!number)
         number = (await c.query<{ n: string }>(`SELECT app.purchase_next_number('indent') AS n`))
@@ -1251,6 +1265,15 @@ export class PurchaseIndentsService implements OnModuleInit {
       `UPDATE purchase_indents SET status = 'approved', decided_at = now(), updated_at = now() WHERE id = $1`,
       [id],
     );
+    // the stores first: what they hold free goes to the keepers' To issue; only the rest is bought
+    const held = await holdIndentFromStock(c, id);
+    if (held.length)
+      await this.audit.stage(ctx, c, {
+        action: 'purchase.indent.from_stock',
+        entityType: 'purchase_indents',
+        entityId: id,
+        after: { lines: held },
+      });
     await this.route(c, ctx, id);
   }
 
@@ -1259,7 +1282,9 @@ export class PurchaseIndentsService implements OnModuleInit {
    * allowing it) — a PR approved by the system with the contract vendors and rates, the PI to "To order";
    * (b) the estimate within the department's limit, also with its approved-by-rule PIs of the same item
    * categories in the split window — a PR approved by the system, the PI to "To order"; (c) otherwise
-   * "To requisition" (the reason the limit did not apply is kept).
+   * "To requisition" (the reason the limit did not apply is kept). Only what the stores did not hold is
+   * routed (docs/design/83, "As built — indents served from stock"); an indent the stores give in full
+   * is "From the store".
    */
   private async route(c: PoolClient, ctx: RequestContext, id: string) {
     const pi = (
@@ -1295,17 +1320,27 @@ export class PurchaseIndentsService implements OnModuleInit {
         vendor_id: string | null;
         rate: string | null;
       }>(
-        `SELECT l.id::text, l.item_id::text, l.free_text, l.quantity::text, l.uom_id::text, l.est_rate::text, i.category_id::text,
-                rc.id::text AS contract_id, rc.vendor_id::text, rc.rate::text
+        `SELECT l.id::text, l.item_id::text, l.free_text, (l.quantity - l.stock_qty)::text AS quantity, l.uom_id::text,
+                l.est_rate::text, i.category_id::text, rc.id::text AS contract_id, rc.vendor_id::text, rc.rate::text
            FROM purchase_indent_lines l LEFT JOIN purchase_items i ON i.id = l.item_id
            LEFT JOIN LATERAL (SELECT rc.id, rc.vendor_id, rc.rate FROM purchase_rate_contracts rc JOIN vendors v ON v.id = rc.vendor_id AND v.status = 'active'
                                WHERE rc.item_id = l.item_id AND rc.status = 'active'
                                  AND (now() AT TIME ZONE 'Asia/Kolkata')::date BETWEEN rc.valid_from AND rc.valid_to LIMIT 1) rc ON true
-          WHERE l.indent_id = $1 ORDER BY l.seq`,
+          WHERE l.indent_id = $1 AND l.quantity - l.stock_qty > 0 ORDER BY l.seq`,
         [id],
       )
     ).rows;
-    const estimate = Number(pi.estimate);
+    if (!lines.length) {
+      await c.query(
+        `UPDATE purchase_indents SET route = 'from_store', bypass_note = $2 WHERE id = $1`,
+        [id, 'Everything is in the stores: the store keepers issue it'],
+      );
+      return;
+    }
+    // what is to be bought (the stores' part is not bought)
+    const estimate =
+      Math.round(lines.reduce((a, l) => a + Number(l.quantity) * Number(l.est_rate), 0) * 100) /
+      100;
     const limit = Number(pi.bypass_limit ?? 0);
     let rule: 'rate_contract' | 'under_limit' | null = null;
     let note: string | null = null;

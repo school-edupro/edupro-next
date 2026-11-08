@@ -54,7 +54,9 @@ export function IssueForm({
       ? {
           kind: 'indent',
           storeId: group.storeId,
-          requisitionId: group.requisitionId,
+          ...(group.indentId
+            ? { indentId: group.indentId }
+            : { requisitionId: group.requisitionId }),
           takenByEmployeeId: takenBy || null,
           lines: group.lines
             .map((l) => ({ l, v: reserved[l.reservationId]! }))

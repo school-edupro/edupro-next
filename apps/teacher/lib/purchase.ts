@@ -5,7 +5,8 @@ export const inr = (n: number) => `₹${n.toLocaleString('en-IN', { maximumFract
 // ---- part 2: the Purchase Indent ------------------------------------------------------------------
 export type IndentStatus =
   'draft' | 'submitted' | 'approved' | 'rejected' | 'sent_back' | 'cancelled';
-export type IndentRoute = 'to_requisition' | 'to_order' | 'in_requisition' | 'ordered' | 'closed';
+export type IndentRoute =
+  'to_requisition' | 'to_order' | 'in_requisition' | 'ordered' | 'closed' | 'from_store';
 
 export const INDENT_STATUS: Record<
   IndentStatus,
@@ -25,6 +26,7 @@ export const INDENT_ROUTE: Record<IndentRoute, string> = {
   in_requisition: 'On a PR',
   ordered: 'Ordered',
   closed: 'Closed',
+  from_store: 'From the store',
 };
 
 export const RATE_SOURCE: Record<string, string> = {

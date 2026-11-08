@@ -1285,6 +1285,22 @@ export async function makeIssue(body: Record<string, unknown>): Promise<StockAct
   );
 }
 
+/** What is held for an indent cannot be given: let go, the rest goes to purchase (docs/design/83). */
+export async function releaseHold(fd: FormData) {
+  const id = pick(fd, 'reservationId');
+  if (!okId(id)) back('/purchase/issues?tab=to-issue', 'validation-failed', 'Unknown line');
+  try {
+    await apiFetch(`/purchase/to-issue/${id}/release`, {
+      method: 'POST',
+      body: JSON.stringify({ reason: pick(fd, 'reason') }),
+    });
+  } catch (e) {
+    if (e instanceof ApiError) back('/purchase/issues?tab=to-issue', e.problem.type, detailOf(e));
+    throw e;
+  }
+  back('/purchase/issues?tab=to-issue', 'ok', 'Let go: the indent waits for a requisition for it');
+}
+
 export async function acknowledgeIssue(fd: FormData) {
   const id = pick(fd, 'id');
   if (!okId(id)) back('/purchase/issues', 'validation-failed', 'Unknown issue');
