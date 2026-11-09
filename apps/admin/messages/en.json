@@ -273,7 +273,8 @@
     "purchaseSetup": "Items, units and HSN",
     "paymentTerms": "Payment terms",
     "purchaseApprovals": "Who approves",
-    "purchaseSettings": "Purchase settings"
+    "purchaseSettings": "Purchase settings",
+    "leaveSetup": "Leave & attendance set-up"
   },
   "shell": {
     "primaryNavigation": "Primary",
@@ -2964,7 +2965,8 @@
       "system": "System",
       "library": "Library",
       "staff": "People",
-      "purchase": "Purchase"
+      "purchase": "Purchase",
+      "leave": "Leave & attendance"
     },
     "title": {
       "fees": "Fees setup",
@@ -2976,7 +2978,8 @@
       "system": "System setup",
       "library": "Library setup",
       "staff": "Staff setup",
-      "purchase": "Purchase setup"
+      "purchase": "Purchase setup",
+      "leave": "Leave & attendance setup"
     },
     "description": "Masters of this school. Add or edit a row, upload an Excel sheet to add or update many at once, export the list as Excel or PDF, and update one column on ticked rows in bulk.",
     "perPage": "Records per page",

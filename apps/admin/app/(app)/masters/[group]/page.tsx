@@ -191,6 +191,15 @@ export default async function MasterGroupPage({
           ]}
         />
       ) : null}
+      {group === 'leave' ? (
+        // leave types, policies, weekly offs and shifts open from Leave & attendance set-up: the way back
+        <Breadcrumbs
+          items={[
+            { label: 'Leave & attendance set-up', href: '/leave/setup' },
+            { label: master.title },
+          ]}
+        />
+      ) : null}
       <PageHeader
         kicker={t(`kicker.${groupKey}`)}
         title={master.editVia ? master.title : t(`title.${groupKey}`)}

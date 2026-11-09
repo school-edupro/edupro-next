@@ -62,6 +62,8 @@ export const NAV: Array<{
         permission: 'people.staff_transfer.manage',
       },
       { href: '/staff/activity', label: 'activityLog', permission: 'staff.activity.fill' },
+      // leave types, policies, weekly offs, shifts, who approves and the settings open from here
+      { href: '/leave/setup', label: 'leaveSetup', permission: 'leave.setup.view' },
       {
         href: '/people/staff-profile-approvals',
         label: 'staffProfileApprovals',
