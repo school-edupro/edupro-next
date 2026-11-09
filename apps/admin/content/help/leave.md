@@ -14,9 +14,23 @@ covers the set-up, applying, approving, the balances, staff attendance, and the 
 | **Approvers** (HOD, reporting manager, named staff …) | Decide the leave and attendance corrections of the staff a rule sends to them            |
 | **Every employee**                                    | Applies for leave, sees their attendance and asks for a day to be corrected              |
 | **Principal, vice principal, HR**                     | Open the dashboard and every report                                                      |
-| **Staff given a report** (an HOD …)                   | Open that report (My leave → Reports; staff app → Leave & attendance reports)            |
+| **Staff given a report** (an HOD …)                   | Open that report (Leave & attendance reports, in the menu of both apps)                  |
 
-## The set-up (Employee management → Leave & attendance set-up)
+## Where to find it
+
+Every screen is in the side menu's **Employee leave & attendance** (the staff app: **Leave &
+attendance**); each shows only to those it is for:
+
+- **Everyone**: My leave, My attendance.
+- **When something waits for you, or staff report to you**: Leave to approve, Attendance corrections
+  to approve, My team's attendance (the entry goes once nothing waits).
+- **The leave office**: Leave register, Leave balances, Attendance register, Late marks and missing
+  punches, Staff punches.
+- **Those with the reports**: Leave dashboard, Leave & attendance reports.
+- **Who keeps the set-up**: Leave & attendance set-up — leave types, policies, weekly offs, shifts, who
+  approves, the settings and the move from the old module open from its section cards.
+
+## The set-up (Employee leave & attendance → Leave & attendance set-up)
 
 The page shows six figures, a **To look at** list (what is missing or would misbehave — no policy for
 a leave type, staff without an approver, a type ordered after loss of pay …), four sections and the
@@ -94,7 +108,7 @@ Every grid (types, policies, weekly offs, shifts, postings, Not required) downlo
 upload; a wrong value is refused with the reason (a loss-of-pay type marked paid, a quarterly policy
 with two credit months, a day shift that ends before it starts).
 
-## Applying (Employee management → My leave; staff app → My leave)
+## Applying (Employee leave & attendance → My leave; staff app → My leave)
 
 The page shows what is left of each leave type this month (days held by leave raised this month already
 taken off), the form, your leave and **Waiting for me** (leave you approve). Pick the type and the dates
@@ -153,7 +167,7 @@ past months, opens this month and credits it (the system does it every night).
 day of joining); nothing lapses month to month; in the session-end month (the month before the policy's
 session start) the balance is kept up to the carry-forward cap, the rest lapses.
 
-## Staff attendance (Employee management → Attendance register)
+## Staff attendance (Employee leave & attendance → Attendance register)
 
 **Punches come in three ways**: the biometric devices send them (each registered as a biometric device
 under Attendance → RFID readers), the system reads the school's central device database every 15 minutes
@@ -214,15 +228,15 @@ missing-punch deductions.
 punches no longer change them) and **punches** the device could not send (employee code, date, time).
 Download the sheet, fill it, **Check**, then **Save** the good rows.
 
-**My attendance** (My leave → My attendance; staff app → My attendance): your month — the figures,
+**My attendance** (Employee leave & attendance → My attendance; staff app → My attendance): your month — the figures,
 each day with IN, OUT, hours, late or early — and the corrections you asked, with where each waits.
 
-**My team's attendance** (My leave → My team's attendance; staff app → My team's attendance): a reporting
+**My team's attendance** (Employee leave & attendance → My team's attendance; staff app → My team's attendance): a reporting
 manager sees the month of each person who reports to them (the reporting manager on this year's posting)
 and opens their days. When leave comes off a past day (cancelled, shortened), the day is worked out again
 from its punches, or becomes a weekly off, a holiday or absent — never left blank.
 
-## The dashboard and the reports (Employee management → Leave dashboard, Leave & attendance reports)
+## The dashboard and the reports (Employee leave & attendance → Leave dashboard, Leave & attendance reports)
 
 **The dashboard**: twelve figures — staff, in today, on leave today, not in yet (no punch, no leave, a
 working day), late today, weekly off or holiday, the month's attendance %, late marks, missing punches and
@@ -322,8 +336,8 @@ read it through a read-only connection IT sets on the server (`LEGACY_LEAVE_DB_U
 12. **The correction button is missing.** The day is today or later, the month is locked, or a correction
     for the day already waits or was approved.
 13. **The HOD should see the daily report of the staff.** Set-up → Who may open the reports → Daily
-    attendance → add the HOD. They find it under My leave → Reports (staff app: Leave & attendance
-    reports).
+    attendance → add the HOD. They find it under Employee leave & attendance → Leave & attendance
+    reports (staff app: Leave & attendance → Leave & attendance reports).
 14. **The director should not be in the reports.** Set-up → Not required in the reports → add them.
 15. **The monthly summary shows "not marked" days.** The nightly run has not worked those days out (the
     workers stopped, or the first month): Attendance register → Run now → work days out again.

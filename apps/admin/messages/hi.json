@@ -6,6 +6,7 @@
     "classes": "कक्षाएँ और अनुभाग",
     "people": "लोग",
     "employeeManagement": "कर्मचारी प्रबंधन",
+    "employeeLeave": "कर्मचारी अवकाश और उपस्थिति",
     "students": "विद्यार्थी",
     "employees": "कर्मचारी",
     "peopleSearch": "व्यक्ति खोजें",
@@ -279,7 +280,13 @@
     "leaveSetup": "अवकाश और उपस्थिति सेटअप",
     "myLeave": "मेरा अवकाश",
     "leaveRegister": "अवकाश रजिस्टर",
-    "staffAttendanceRegister": "उपस्थिति रजिस्टर"
+    "staffAttendanceRegister": "उपस्थिति रजिस्टर",
+    "myAttendance": "मेरी उपस्थिति",
+    "leaveApprovals": "स्वीकृति हेतु अवकाश",
+    "attendanceCorrections": "स्वीकृति हेतु उपस्थिति सुधार",
+    "teamAttendance": "मेरी टीम की उपस्थिति",
+    "leaveBalances": "अवकाश शेष",
+    "attendanceExceptions": "देर से आना और छूटे पंच"
   },
   "shell": {
     "primaryNavigation": "मुख्य",

@@ -6,6 +6,7 @@
     "classes": "Classes and sections",
     "people": "People",
     "employeeManagement": "Employee management",
+    "employeeLeave": "Employee leave & attendance",
     "students": "Students",
     "employees": "Employees",
     "peopleSearch": "Find a person",
@@ -279,7 +280,13 @@
     "leaveSetup": "Leave & attendance set-up",
     "myLeave": "My leave",
     "leaveRegister": "Leave register",
-    "staffAttendanceRegister": "Attendance register"
+    "staffAttendanceRegister": "Attendance register",
+    "myAttendance": "My attendance",
+    "leaveApprovals": "Leave to approve",
+    "attendanceCorrections": "Attendance corrections to approve",
+    "teamAttendance": "My team’s attendance",
+    "leaveBalances": "Leave balances",
+    "attendanceExceptions": "Late marks and missing punches"
   },
   "shell": {
     "primaryNavigation": "Primary",

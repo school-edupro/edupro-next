@@ -3,7 +3,9 @@ import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { RequirePermission } from '../../common/access/require-permission.decorator';
 import { AuthenticatedOnly } from '../../common/auth/decorators';
 import { ReqCtx, type RequestContext } from '../../common/http/request-context';
+import { AttendanceService } from './attendance.service';
 import { LeaveOfficeService } from './leave-office.service';
+import { LeaveReportsService } from './leave-reports.service';
 import { LeaveService } from './leave.service';
 import {
   AdjustDto,
@@ -30,7 +32,25 @@ export class LeaveController {
   constructor(
     private readonly leave: LeaveService,
     private readonly office: LeaveOfficeService,
+    private readonly att: AttendanceService,
+    private readonly reports: LeaveReportsService,
   ) {}
+
+  @Get('menu')
+  @ApiOperation({
+    summary:
+      'What the side menu shows me: leave and corrections waiting at my level, the staff reporting to me, my reports',
+  })
+  @AuthenticatedOnly()
+  async menu(@ReqCtx() ctx: RequestContext) {
+    const [leave, corrections, team, reports] = await Promise.all([
+      this.leave.approvals(ctx, 'waiting').then((r) => r.rows.length),
+      this.att.regApprovals(ctx, 'waiting').then((r) => r.rows.length),
+      this.att.teamSize(ctx),
+      this.reports.count(ctx).then((r) => r.reports),
+    ]);
+    return { leave, corrections, team, reports };
+  }
 
   @Get('mine')
   @ApiOperation({ summary: 'My balances, the types I may apply for, my leave, what waits for me' })

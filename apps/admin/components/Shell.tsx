@@ -10,7 +10,7 @@ import { Tour } from './Tour';
 import { AccountMenu, ContextMenu, LanguageMenu } from './HeaderMenus';
 import { HeaderKeys } from './HeaderKeys';
 import { SidebarToggle } from './SidebarToggle';
-import { APPROVALS_MENU, NAV } from '@/lib/nav';
+import { APPROVALS_MENU, LEAVE_MENU, NAV } from '@/lib/nav';
 
 export async function Shell({
   me,
@@ -41,6 +41,18 @@ export async function Shell({
     () => ({ show: false }),
   );
   if (approvalsMenu.show) allowed.add(APPROVALS_MENU);
+  // Employee leave & attendance: what waits at my level, the staff reporting to me, the reports given to
+  // me (docs/design/85) — an entry shows only when there is something; best effort
+  const leaveMenu = await apiFetch<{
+    leave: number;
+    corrections: number;
+    team: number;
+    reports: number;
+  }>('/leave/menu').catch(() => null);
+  if (leaveMenu?.leave) allowed.add(LEAVE_MENU.approvals);
+  if (leaveMenu?.corrections) allowed.add(LEAVE_MENU.corrections);
+  if (leaveMenu?.team) allowed.add(LEAVE_MENU.team);
+  if (leaveMenu?.reports || allowed.has('leave.report.view')) allowed.add(LEAVE_MENU.reports);
   // a menu entry that opens a sub-page (the notices report) still stands for its whole section
   const SECTION_OF: Record<string, string> = { '/academics/notices/report': '/academics/notices' };
   const ALSO: Record<string, string[]> = {
@@ -64,6 +76,8 @@ export async function Shell({
     '/purchase/orders': ['/purchase/to-order', '/purchase/emergency'],
     '/purchase/receipts': ['/purchase/to-receive'],
     '/purchase/stores': ['/purchase/stock', '/purchase/counts'],
+    // Leave & attendance set-up stands for its master screens (leave types, policies, shifts…)
+    '/leave/setup': ['/masters/leave'],
     '/exams/masters': [
       '/exams/indicators',
       '/exams/indicator-areas',
@@ -205,7 +219,8 @@ export async function Shell({
           !features ||
           features.has(g.section) ||
           // staff screens ride on the people module switch
-          (g.section === 'employeeManagement' && features.has('people')) ||
+          ((g.section === 'employeeManagement' || g.section === 'employeeLeave') &&
+            features.has('people')) ||
           // appointments ride on the engagement module switch
           ((g.section === 'appointments' || g.section === 'clinic') &&
             features.has('engagement')) ||

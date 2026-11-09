@@ -413,6 +413,27 @@ absence into loss of pay; the session-end cap; my team's attendance; the payroll
 encashment; the files; the late roll-back; a day filled when leave comes off it. `staff-reports.e2e-spec.ts`
 gained the annual attendance % and the dashboard's figures.
 
+## As built — its own menu (9 Nov 2026)
+
+Asked: "employee leave menu in side menu bar and all employee leave and attendance links in this menu".
+Decided with the user: **both apps**, and **one set-up entry** (its section cards keep the set-up screens).
+
+- **Admin**: a new side-menu group **Employee leave & attendance** (calendar icon, on the people module
+  switch like Employee management): Leave dashboard, My leave, My attendance, Leave to approve,
+  Attendance corrections to approve, My team's attendance, Leave register, Leave balances, Attendance
+  register, Late marks and missing punches, Staff punches (moved from the students' Attendance), Leave &
+  attendance reports, Leave & attendance set-up. The leave entries left Employee management. Leave to
+  approve, Attendance corrections to approve and My team's attendance show only when something waits or
+  staff report to me; the reports when I may open one. A set-up master screen (`/masters/leave`) lights up
+  Leave & attendance set-up.
+- **Staff app**: the six leave entries left Office for their own group **Leave & attendance**.
+- **API**: `GET /leave/menu` → `{ leave, corrections, team, reports }` (what waits at my level, the staff
+  reporting to me, the reports I may open), one call for both shells; the staff app's four calls (one of
+  them a whole month's team register) became this one.
+- Tests: `leave-gaps.e2e-spec.ts` — the counts equal the lists they open, a reportee's are all 0, and they
+  drop once decided. Checked in a browser (dev-admin, dev-principal, dev-teacher; staff app dev-teacher):
+  every entry opens, is the current one in its open group, and passes axe at 1280 and 375.
+
 ## The module is complete
 
 Phases A–E are built. What is left is the school's: the old database connection on the server, the read, the

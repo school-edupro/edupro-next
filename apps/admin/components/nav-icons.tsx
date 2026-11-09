@@ -66,6 +66,7 @@ export const SECTION_ICON: Record<string, IconName> = {
   overview: 'home',
   people: 'users',
   employeeManagement: 'userPlus',
+  employeeLeave: 'calendar',
   admissions: 'userPlus',
   fees: 'wallet',
   attendance: 'check',

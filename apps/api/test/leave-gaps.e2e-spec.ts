@@ -675,6 +675,39 @@ describe('the leave module against its plan (e2e)', () => {
     expect((await call(t3, 'GET', '/staff-attendance/team?size=25')).json().team).toBe(0);
   });
 
+  it('the side menu counts what waits at my level, the staff reporting to me and my reports', async () => {
+    const leave = (await apply(t3, { leaveTypeId: ids.CL, from: W(5, 0), to: W(5, 0) })).json();
+    expect(leave).toMatchObject({ status: 'pending' });
+    const fix = (
+      await call(t3, 'POST', '/staff-attendance/regularisations', {
+        day: PAST[4],
+        in: '08:00',
+        reason: 'Forgot',
+      })
+    ).json();
+    const menu = async (u: SeededUser) => (await call(u, 'GET', '/leave/menu')).json();
+    const m = await menu(hod);
+    // the same numbers as the lists the entries open
+    expect(m).toEqual({
+      leave: (await call(hod, 'GET', '/leave/approvals')).json().rows.length,
+      corrections: (await call(hod, 'GET', '/staff-attendance/regularisations/approvals')).json()
+        .rows.length,
+      team: expect.any(Number),
+      reports: expect.any(Number),
+    });
+    expect(m.leave).toBeGreaterThan(0);
+    expect(m.corrections).toBeGreaterThan(0);
+    expect(await menu(t2)).toMatchObject({ team: 1 });
+    expect(await menu(t3)).toEqual({ leave: 0, corrections: 0, team: 0, reports: 0 });
+    expect((await menu(office)).reports).toBeGreaterThan(0);
+    // decided: nothing waits any more
+    await decide(hod, leave.id, 'approved');
+    await call(hod, 'POST', `/staff-attendance/regularisations/${String(fix.id)}/decide`, {
+      outcome: 'approved',
+    });
+    expect(await menu(hod)).toMatchObject({ leave: m.leave - 1, corrections: m.corrections - 1 });
+  });
+
   it('the payroll feed shows part pay and encashment; the balances, attendance lists and register have files', async () => {
     await q(`UPDATE staff_leave_types SET pay_percent = 50 WHERE id = $1`, [ids.HPL]);
     await q(

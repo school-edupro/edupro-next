@@ -1,5 +1,12 @@
 /** Not a permission: Shell grants it when the API says Approvals has something for this person. */
 export const APPROVALS_MENU = 'menu:admission-approvals';
+/** Not permissions: Shell grants them from GET /leave/menu (what waits at my level, my team, my reports). */
+export const LEAVE_MENU = {
+  approvals: 'menu:leave-approvals',
+  corrections: 'menu:attendance-corrections',
+  team: 'menu:leave-team',
+  reports: 'menu:leave-reports',
+} as const;
 
 /** Navigation is projected from permissions (ADR-004 point 10). Labels come from the message catalogue (S4-01). */
 export const NAV: Array<{
@@ -62,18 +69,6 @@ export const NAV: Array<{
         permission: 'people.staff_transfer.manage',
       },
       { href: '/staff/activity', label: 'activityLog', permission: 'staff.activity.fill' },
-      // leave types, policies, weekly offs, shifts, who approves and the settings open from here
-      // what waits for my approval and the balances open from My leave and the register
-      { href: '/leave', label: 'myLeave', permission: 'leave.own.apply' },
-      { href: '/leave/register', label: 'leaveRegister', permission: 'leave.office.manage' },
-      {
-        href: '/leave/attendance',
-        label: 'staffAttendanceRegister',
-        permission: 'leave.office.manage',
-      },
-      { href: '/leave/dashboard', label: 'leaveDashboard', permission: 'leave.report.view' },
-      { href: '/leave/reports', label: 'leaveReports', permission: 'leave.report.view' },
-      { href: '/leave/setup', label: 'leaveSetup', permission: 'leave.setup.view' },
       {
         href: '/people/staff-profile-approvals',
         label: 'staffProfileApprovals',
@@ -101,6 +96,39 @@ export const NAV: Array<{
       { href: '/people/exits/clearance', label: 'exitClearance', permission: 'people.exit.view' },
       { href: '/people/exits/register', label: 'exitRegister', permission: 'people.exit.view' },
       { href: '/people/exits/setup', label: 'exitSetup', permission: 'people.exit.view' },
+    ],
+  },
+  {
+    // every staff leave and attendance screen (docs/design/85): mine, what waits on me, the office's,
+    // the reports; leave types, policies, weekly offs, shifts, who approves and the settings open
+    // from the one set-up entry
+    section: 'employeeLeave',
+    items: [
+      { href: '/leave/dashboard', label: 'leaveDashboard', permission: 'leave.report.view' },
+      { href: '/leave', label: 'myLeave', permission: 'leave.own.apply' },
+      { href: '/leave/attendance/mine', label: 'myAttendance', permission: 'leave.own.apply' },
+      { href: '/leave/approvals', label: 'leaveApprovals', permission: LEAVE_MENU.approvals },
+      {
+        href: '/leave/attendance/approvals',
+        label: 'attendanceCorrections',
+        permission: LEAVE_MENU.corrections,
+      },
+      { href: '/leave/attendance/team', label: 'teamAttendance', permission: LEAVE_MENU.team },
+      { href: '/leave/register', label: 'leaveRegister', permission: 'leave.office.manage' },
+      { href: '/leave/balances', label: 'leaveBalances', permission: 'leave.office.manage' },
+      {
+        href: '/leave/attendance',
+        label: 'staffAttendanceRegister',
+        permission: 'leave.office.manage',
+      },
+      {
+        href: '/leave/attendance/exceptions',
+        label: 'attendanceExceptions',
+        permission: 'leave.office.manage',
+      },
+      { href: '/attendance/punches', label: 'punches', permission: 'attendance.punch.view' },
+      { href: '/leave/reports', label: 'leaveReports', permission: LEAVE_MENU.reports },
+      { href: '/leave/setup', label: 'leaveSetup', permission: 'leave.setup.view' },
     ],
   },
   {
@@ -249,7 +277,6 @@ export const NAV: Array<{
         permission: 'attendance.rfid.manage',
       },
       { href: '/attendance/bus', label: 'busAttendance', permission: 'attendance.bus.view' },
-      { href: '/attendance/punches', label: 'punches', permission: 'attendance.punch.view' },
       { href: '/attendance/rules', label: 'attendanceRules', permission: 'attendance.rule.manage' },
       { href: '/masters/attendance', label: 'leaveTypes', permission: 'attendance.setup.manage' },
     ],

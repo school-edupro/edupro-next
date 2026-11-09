@@ -32,10 +32,7 @@ export default async function StaffLayout({ children }: { children: ReactNode })
     receipts,
     issues,
     assets,
-    staffLeave,
-    staffRegularisations,
-    leaveReports,
-    team,
+    leaveMenu,
   ] = await Promise.all([
     bff.api
       .fetch<{ unread: number }>('/comms/inbox/unread')
@@ -94,26 +91,11 @@ export default async function StaffLayout({ children }: { children: ReactNode })
       .fetch<{ rows: unknown[]; pending: unknown[] }>('/purchase/assets-mine')
       .then((r) => r.rows.length + r.pending.length)
       .catch(() => 0),
-    // colleagues' leave and cancellations at my level (docs/design/85)
+    // Leave & attendance (docs/design/85): colleagues' leave and attendance corrections at my level,
+    // the staff who report to me, the reports given to me — one call
     bff.api
-      .fetch<{ rows: unknown[] }>('/leave/approvals')
-      .then((r) => r.rows.length)
-      .catch(() => 0),
-    // colleagues' attendance corrections at my level (docs/design/85, phase C)
-    bff.api
-      .fetch<{ rows: unknown[] }>('/staff-attendance/regularisations/approvals')
-      .then((r) => r.rows.length)
-      .catch(() => 0),
-    // leave & attendance reports given to me (docs/design/85, phase D)
-    bff.api
-      .fetch<{ reports: number }>('/leave-reports/mine')
-      .then((r) => r.reports)
-      .catch(() => 0),
-    // the staff who report to me (docs/design/85)
-    bff.api
-      .fetch<{ team?: number }>('/staff-attendance/team?size=25')
-      .then((r) => r.team ?? 0)
-      .catch(() => 0),
+      .fetch<{ leave: number; corrections: number; team: number; reports: number }>('/leave/menu')
+      .catch(() => ({ leave: 0, corrections: 0, team: 0, reports: 0 })),
   ]);
   return (
     <StaffShell
@@ -133,10 +115,10 @@ export default async function StaffLayout({ children }: { children: ReactNode })
         receipts,
         issues,
         assets,
-        staffLeave,
-        staffRegularisations,
-        leaveReports,
-        team,
+        staffLeave: leaveMenu.leave,
+        staffRegularisations: leaveMenu.corrections,
+        leaveReports: leaveMenu.reports,
+        team: leaveMenu.team,
       }}
     >
       {children}

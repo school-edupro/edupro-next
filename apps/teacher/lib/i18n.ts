@@ -423,6 +423,7 @@ const DICT: Record<string, string> = {
   Resolution: 'समाधान',
   // Home
   'My classes': 'मेरी कक्षाएँ',
+  'Leave & attendance': 'अवकाश और उपस्थिति',
   'Your sections, subjects and this week’s timetable':
     'आपके अनुभाग, विषय और इस सप्ताह की समय-सारणी',
   Attendance: 'उपस्थिति',

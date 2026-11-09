@@ -247,6 +247,11 @@ export class AttendanceService implements OnModuleInit {
     ).rows.map((x) => x.id);
   }
 
+  /** How many staff report to me (the side menu's My team's attendance), without their register. */
+  async teamSize(ctx: RequestContext) {
+    return this.db.tenant(requireTenant(ctx), async (c) => (await this.reportees(c)).length);
+  }
+
   /** My team's attendance (docs/design/85, "my reportees' attendance"): the register of those reporting to me. */
   async team(ctx: RequestContext, q: RegisterMonthDto) {
     return this.db.tenant(requireTenant(ctx), async (c) => {

@@ -196,40 +196,11 @@ export const STAFF_MENU: StaffGroup[] = [
     ],
   },
   {
-    id: 'office',
-    label: 'Office',
-    icon: 'file',
+    // every staff leave and attendance screen together (docs/design/85)
+    id: 'leave',
+    label: 'Leave & attendance',
+    icon: 'calendar',
     items: [
-      {
-        href: '/messages',
-        label: 'Messages',
-        help: 'SMS, WhatsApp and email the school sent you',
-        allowed: always,
-      },
-      {
-        href: '/consents',
-        label: 'Forms and declarations',
-        help: 'Consent forms, surveys and declarations to answer',
-        allowed: always,
-      },
-      {
-        href: '/office-orders',
-        label: 'Office orders',
-        help: 'Orders and circulars the school issued for staff',
-        allowed: (can) => can('academics.notice.view'),
-      },
-      {
-        href: '/profile',
-        label: 'My profile',
-        help: 'My details as the school has them; update them, download as PDF',
-        allowed: always,
-      },
-      {
-        href: '/profile/approvals',
-        label: 'Profile changes to approve',
-        help: 'Changes colleagues asked for on their profile, routed to you',
-        allowed: (_can, w) => (w.profileChanges ?? 0) > 0,
-      },
       {
         href: '/my-leave',
         label: 'My leave',
@@ -265,6 +236,43 @@ export const STAFF_MENU: StaffGroup[] = [
         label: 'Leave & attendance reports',
         help: 'The leave and attendance reports the leave office gave you, as Excel or PDF',
         allowed: (_can, w) => (w.leaveReports ?? 0) > 0,
+      },
+    ],
+  },
+  {
+    id: 'office',
+    label: 'Office',
+    icon: 'file',
+    items: [
+      {
+        href: '/messages',
+        label: 'Messages',
+        help: 'SMS, WhatsApp and email the school sent you',
+        allowed: always,
+      },
+      {
+        href: '/consents',
+        label: 'Forms and declarations',
+        help: 'Consent forms, surveys and declarations to answer',
+        allowed: always,
+      },
+      {
+        href: '/office-orders',
+        label: 'Office orders',
+        help: 'Orders and circulars the school issued for staff',
+        allowed: (can) => can('academics.notice.view'),
+      },
+      {
+        href: '/profile',
+        label: 'My profile',
+        help: 'My details as the school has them; update them, download as PDF',
+        allowed: always,
+      },
+      {
+        href: '/profile/approvals',
+        label: 'Profile changes to approve',
+        help: 'Changes colleagues asked for on their profile, routed to you',
+        allowed: (_can, w) => (w.profileChanges ?? 0) > 0,
       },
       {
         href: '/resignation',
