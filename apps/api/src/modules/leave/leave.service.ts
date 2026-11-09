@@ -738,6 +738,12 @@ export class LeaveService implements OnModuleInit {
         WHERE request_id IN (SELECT id FROM staff_leave_requests WHERE id = $1 OR linked_request_id = $1)`,
       [id],
     );
+    // the attendance register shows the leave (the loss-of-pay part last, as payroll reads it)
+    await c.query(
+      `SELECT app.staff_attendance_apply_leave(x.id) FROM staff_leave_requests x
+        WHERE x.id = $1 OR x.linked_request_id = $1 ORDER BY (x.linked_request_id IS NOT NULL), x.id`,
+      [id],
+    );
     // the daily activity log knows the day of leave (full or half)
     await c.query(
       `INSERT INTO activity_logs (school_id, employee_id, on_date, state, submitted_at, leave_kind, leave_type, leave_reason, leave_by)
@@ -800,7 +806,13 @@ export class LeaveService implements OnModuleInit {
         `${r.number} ${status}`,
         today,
       );
-    if (wasApproved) await this.clearActivity(c, r.employee_id, days);
+    if (wasApproved) {
+      await this.clearActivity(c, r.employee_id, days);
+      await c.query(`SELECT app.staff_attendance_remove_leave($1, $2::date[])`, [
+        r.employee_id,
+        days,
+      ]);
+    }
   }
 
   /** The workflow's last word on a leave. */
@@ -1235,6 +1247,10 @@ export class LeaveService implements OnModuleInit {
         r.employee_id,
         removed.map((d) => d.day),
       );
+      await c.query(`SELECT app.staff_attendance_remove_leave($1, $2::date[])`, [
+        r.employee_id,
+        removed.map((d) => d.day),
+      ]);
       const fin = await this.load(c, id);
       await this.notify(c, ctx, 'leave_changed', [r.employee_user_id], {
         ...this.vars(fin),

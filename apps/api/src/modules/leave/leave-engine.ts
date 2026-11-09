@@ -274,7 +274,7 @@ export async function release(
  */
 export async function leaveFlow(
   c: PoolClient,
-  entity: 'staff_leave' | 'staff_leave_cancel',
+  entity: 'staff_leave' | 'staff_leave_cancel' | 'staff_regularisation',
   ruleId: string,
   ruleName: string,
   band: number,
@@ -287,7 +287,7 @@ export async function leaveFlow(
     autoSkip: true,
     noSelfApproval: true,
   }));
-  const name = `${entity === 'staff_leave' ? 'Leave' : 'Leave cancellation'} · ${ruleName}`;
+  const name = `${{ staff_leave: 'Leave', staff_leave_cancel: 'Leave cancellation', staff_regularisation: 'Attendance correction' }[entity]} · ${ruleName}`;
   const upd = await c.query(
     `UPDATE workflow_definitions SET name = $2, levels = $3::jsonb, creator_roles = '{}', status = 'active', updated_at = now(),
             updated_by = app.current_user_id()

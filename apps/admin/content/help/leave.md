@@ -3,8 +3,8 @@
 Staff apply for leave; their approvers decide it level by level; balances are credited by policy and
 held while a leave waits. Staff attendance is worked out from the biometric punches: late marks and
 missing punches turn into leave, and an absent day nobody explains becomes loss of pay. This page
-covers the set-up, applying, approving and the balances; the attendance register and the reports follow
-in the next releases.
+covers the set-up, applying, approving, the balances and staff attendance; the reports follow in the next
+release.
 
 ## Who does what
 
@@ -12,8 +12,8 @@ in the next releases.
 | ----------------------------------------------------- | ---------------------------------------------------------------------------------------- |
 | **Leave & attendance office** (its own role)          | Keeps the set-up: leave types, policies, weekly offs, shifts, who approves, the settings |
 | **School admin**                                      | The same as the leave office                                                             |
-| **Approvers** (HOD, reporting manager, named staff …) | Decide the leave of the staff a rule sends to them (next release)                        |
-| **Every employee**                                    | Applies for leave and asks for attendance corrections (next release)                     |
+| **Approvers** (HOD, reporting manager, named staff …) | Decide the leave and attendance corrections of the staff a rule sends to them            |
+| **Every employee**                                    | Applies for leave, sees their attendance and asks for a day to be corrected              |
 
 ## The set-up (Employee management → Leave & attendance set-up)
 
@@ -38,8 +38,10 @@ leave types at a glance. Fill the sections in order.
   months of the session — April + half-yearly = April and October; type them to choose others. Days a
   credit (empty: the days a year shared evenly), pro rata on joining, carry forward and cap (the lower
   of the policy's and the type's), the fewest and most days an application, the **sandwich** (a weekly
-  off, a declared holiday or an optional holiday between two leave days is charged too), and
-  encashment (information for payroll).
+  off, a declared holiday or an optional holiday between two leave days is charged too), **credit by
+  attendance** (the credit shrinks with the days lost in its period: an absent day, loss of pay or a
+  salary hold counts 0, a half day half; a day not worked out counts in full), and encashment
+  (information for payroll).
 - **Who approves** — a rule is for all staff or those picked, and for one leave type or any type. A leave
   goes to the first rule by priority that takes the employee in (a rule for its type before one for any
   type) and to the levels of its length: **up to 7 days, more than 7 up to 30, more than 30**. Each band
@@ -67,6 +69,9 @@ leave types at a glance. Fill the sections in order.
   duty (06:30–16:30).
 - **Shift postings** — which shift an employee works from a day (to a day). A later start wins an
   overlap; a posting of one day changes that day only. Staff without a posting work the default shift.
+- **Department and special timings** — hours over the shift: a department's every day, or one
+  employee's for some dates (a duty, a late bus), with their own grace, present and half-day hours and
+  late / early rule. A special timing wins over the department's, which wins over the shift.
 
 **4. Settings** — late marks for one day of leave (3), missing punches for one day of leave (4), loss of
 pay after so many days of absence with no application (7), the date to count late marks from (a fresh
@@ -134,7 +139,63 @@ past months, opens this month and credits it (the system does it every night).
 day of joining); nothing lapses month to month; in the session-end month (the month before the policy's
 session start) the balance is kept up to the carry-forward cap, the rest lapses.
 
-## Common questions
+## Staff attendance (Employee management → Attendance register)
+
+**Punches come in three ways**: the biometric devices send them (each registered as a biometric device
+under Attendance → RFID readers), the system reads the school's central device database every 15 minutes
+(read only, only the device serials in the settings), and the office loads punches from Excel. A punch is
+matched to an employee by their biometric id, else their employee code; punches of an unknown code wait
+until someone has it.
+
+**How a day is worked out**: the day's shift (a special timing, else the department's, else the shift
+posting, else the default shift; a night shift takes the next morning's OUT), first IN and last OUT (two
+punches closer than the settings' minutes are one), the hours (less the late minutes when the settings
+say so), then present, half day or absent by the hours; one punch only is what the shift says. Late after
+the grace makes a **late mark**; the shift's late or early rule can make the day a half day or absent, or
+charge half a day of a leave type (once). A worked weekly off or holiday keeps its punches. Leave, a
+correction and a day set by hand are never changed by the punches. Every night the system marks weekly
+offs and holidays, absent days (no punch, no leave, no correction asked), late marks and missing punches
+(an e-mail to the employee), works the last few days out again, and turns absence past the settings' days
+into loss of pay.
+
+**The register**: a month of every employee — each day's code (P present, HD half day, A absent, WO, H,
+the leave's code, ½ for half a day, LOP loss of pay, HOLD salary hold, · not marked) with L late, M punch
+missing, ✎ set by hand — and the totals and **payable days** (the month less absent days, half of each
+half day, loss of pay and holds; "not marked" says how many past days the system has not worked out).
+Filters: month, department, search, 25 / 50 / 100 a page. **Payroll feed (Excel)** gives each employee's
+figures for payroll.
+
+**A day** (click it): how it was worked out in a sentence, the punches with where they came from, the
+late mark or missing punch, the leave, the corrections asked and the history (every change, why and by
+whom). The office **corrects the day** — IN, OUT, or what the day was — with a reason; a correction
+clears the late mark or missing punch it settles. Leave on the day is changed from the leave, not here.
+
+**Late marks and missing punches** (from the register): each month's, by status — counting, charged as
+leave, waived, lapsed — with **Waive** / **Clear** (with a reason) for one still counting. At the month's
+end every 3 late marks (4 missing punches — the settings) become a day of leave by the deduction order
+(CL, then EL … loss of pay last), dated on the first of them; what is left lapses.
+
+**Corrections (regularisation)**: an employee opens a day (My attendance) and asks for it to be
+corrected — the IN, the OUT or what the day was, with the reason. It goes through the **attendance
+corrections** rule of Who approves, like leave; the approver sees it in Waiting for me / My approvals,
+opens the day with its punches and approves (the day is set, its late mark or missing punch cleared) or
+says why not. One correction a day; a locked month takes none.
+
+**The payroll lock**: once a month is over, **Lock** it when payroll is final — the absent days nobody
+explained become loss of pay first, then nothing in the month changes (leave, corrections, punches,
+corrections by the office). **Unlock** with a reason.
+
+**Run now**: read the new punches; the nightly run; **work days out again** for a range up to yesterday
+(after a timing or a shift changes, or for the first month: it also marks weekly offs, holidays, absence
+and late marks; missing punches stay with the nightly run's last week); a month's late-mark and
+missing-punch deductions.
+
+**From Excel**: **days set by hand** (employee code, date, what the day was or IN / OUT, a remark — the
+punches no longer change them) and **punches** the device could not send (employee code, date, time).
+Download the sheet, fill it, **Check**, then **Save** the good rows.
+
+**My attendance** (My leave → My attendance; staff app → My attendance): your month — the figures,
+each day with IN, OUT, hours, late or early — and the corrections you asked, with where each waits.
 
 1. **A teacher gets no CL.** Leave types at a glance shows how many staff are in no policy of the type:
    add a policy for them, or widen one.
@@ -148,3 +209,12 @@ session start) the balance is kept up to the carry-forward cap, the rest lapses.
    only; check Balances (the trail says what came and went) or load the opening balances.
 7. **The HOD applied for leave: who approves it?** Their own level passes on; the last level goes to the
    school admin.
+8. **The register is all dots.** Nothing is worked out yet: check the device serials in the settings and
+   that the workers run, or **Run now → work days out again** for the dates.
+9. **A teacher's punch is not on the register.** Their biometric id (or employee code) must match the
+   device's; the punch waits until it does, then **Run now → read the new punches**.
+10. **The exam duty came late by bus: no late mark, please.** Add a special timing for those dates, then
+    work the days out again — or waive the late marks.
+11. **Payroll wants the days.** Lock the month, then **Payroll feed (Excel)**.
+12. **The correction button is missing.** The day is today or later, the month is locked, or a correction
+    for the day already waits or was approved.

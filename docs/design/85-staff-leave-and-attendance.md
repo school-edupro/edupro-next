@@ -172,12 +172,71 @@ back once; the cancellation request through its chain; the office's trim, decisi
 entry replacing a leave; the register's figures, filters and Excel; balances, opening balances from Excel
 twice, a past month closed and this month reopened at its closing, the credit pro rata from joining).
 
-## Phase C — staff attendance (next)
+## As built — phase C, staff attendance (9 Nov 2026)
 
-Punch intake (the device push, the read-only pull from the central device database by the school's device
-serials, Excel), the day from the punches (shift and timing, first in / last out, the double tap, worked
-hours, P / HD / A, one punch, the late and early rule, the trace and history), the attendance register
-(month grid, legend, day correction, bulk upload), regularisation (its chain), late marks and missing
-punches (with the monthly deduction through the deduction order), absent with no application → loss of pay,
-re-check and recompute, the payroll month lock and unlock, department and special timings, credits weighted
-by attendance.
+**Data** (0348–0352): `staff_punches` (every source in one queue: the device push — copied from the
+recorded `punch_logs` by a trigger — the central device database, Excel, by hand; matched to an employee by
+biometric id, else employee code; unknown codes wait; `read` once worked into the day);
+`staff_attendance_days` (one row an employee a day: P / HD / A / WO / H / LV / HOLD, the leave type and
+portion, the shift, IN / OUT, hours, overtime, late and early minutes, set by hand, the source, the trace
+the sentence is made from, a remark) and `staff_attendance_history` (every change with before, after,
+reason, by); `staff_late_marks` and `staff_missing_punches` (pending / used — the leave request — / waived
+or retired / lapsed; missing punches mailed once); `staff_regularisations` (IN, OUT or the day's type, the
+reason, its workflow, one live a day); `staff_attendance_runs` (each month's late and missing deductions
+once); `staff_leave_settings.punch_watermark` (the central database's read mark);
+`staff_leave_policies.by_attendance`.
+
+**The engine** (SQL, 0349–0352): `app.staff_timing` (special timing → department timing → posting →
+default shift, with the bus and posting-day sources); `app.staff_day_compute` (the night window 13:00 to
+13:00, the punch gap, first IN / last OUT, the grace forgiven, P / HD / A by hours, one punch by the shift,
+a worked weekly off or holiday keeps its punches, the late / early rule — charged once whenever it fires —
+and the late mark; leave, holds and days set by hand are protected; a locked month is never written);
+`app.staff_day_write` (history on change); `app.staff_leave_auto_deduct` (by the deduction order, through
+an approved request, a hold when nothing is left); `app.staff_attendance_apply_leave` / `_remove_leave`
+(approved leave onto the days, keeping the punches; off again when withdrawn, cancelled or shortened);
+`app.staff_attendance_sync` / `_recompute`; the nightly `app.staff_attendance_nightly` (sync, recheck,
+weekly offs and holidays from the month start or the absent look-back, absent marking, late marks, missing
+punches over the last week, loss of pay past the settings' days, last month's deductions);
+`app.staff_month_deduct` (every N marks a day of leave on the first of them, the rest lapse);
+`app.staff_lop_sweep` (unexplained absence → loss of pay, also run by the lock); `app.staff_leave_credit`
+weighted by attendance when the policy says so (an absent day, loss of pay or a hold 0, a half day half, a
+day not worked out in full — the earlier system counted it 0, which took a whole credit from a school not yet
+using attendance).
+
+**API** (`/staff-attendance`): the register (and `format=xlsx`, the payroll feed: each kind of day, each
+leave type, hold, late marks, missing punches, not marked, payable days), a day (office, self, or an
+approver of a correction asked for it — who may decide it there), the office's correction, my month,
+corrections (ask, approvals waiting / decided, decide, withdraw), exceptions (late / missing /
+corrections by status), waive and clear, lock and unlock (with a reason), run now (sync, nightly, work out
+again up to yesterday — punches, weekly offs, holidays, absence and late marks — and a month's
+deductions), timings (list, add, edit, retire), Excel sheets for days and punches (format, check, save).
+Payable days = the month − absent − half of each half day − loss of pay − holds.
+
+**Workers**: `staff.punch_sync` every 15 minutes (the read-only pull from the central device database —
+connection from `STAFF_PUNCH_DB_URL` and the table / column names, only this school's device serials,
+from the watermark — then sync); `staff.attendance_nightly` at 02:00 IST.
+
+**Screens**: admin — Attendance register (`/leave/attendance`: month grid with the marks, totals,
+payable and not marked, the lock, run now, days and punches from Excel, the payroll feed), a day
+(`/leave/attendance/day`: figures, the sentence, punches, marks, decide a correction, correct the day, ask
+for a correction, leave, corrections, history), Late marks and missing punches
+(`/leave/attendance/exceptions`: three lists, four figures each, waive / clear), My attendance
+(`/leave/attendance/mine`), Attendance corrections waiting for me (`/leave/attendance/approvals`),
+Department and special timings (`/leave/setup/timings`, linked from the set-up); attendance corrections in
+My approvals; the policy grid's Credit by attendance. **Staff app**: My attendance (`/my-attendance`), a
+day (`/my-attendance/:day`: ask, withdraw; an approver opens a colleague's with `?emp=` and decides),
+Attendance corrections to approve (`/attendance-corrections`, shown when something waits).
+
+Tests: `staff-attendance.e2e-spec.ts` (a day from its punches — on time, late after the grace, half a day,
+one punch, a double tap; the nightly run's weekly offs, holidays, absence, late marks and missing punches;
+leave on the register and off again; a correction through its approver — who may open the day, a colleague
+may not — the day set and the missing punch retired; the office's correction, the lock with loss of pay and
+the unlock; a month's late marks into leave with the rest lapsing; the shift's late rule charged once; a
+night shift and a department timing; punches from Excel, the register's payable days, work out again
+stopping at yesterday, the payroll feed; credit by attendance taking two and a half days off);
+`apps/workers/test/staff-punches.test.ts` (the central source from the environment and its queries).
+
+## Phase D — reports (next)
+
+The 16 MIS reports of the earlier system, then phase E, the cut-over (staff, balances and history from the
+earlier system).

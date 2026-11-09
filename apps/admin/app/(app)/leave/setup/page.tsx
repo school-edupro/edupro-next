@@ -101,7 +101,10 @@ export default async function LeaveSetupPage({
         {
           done: null,
           title: 'Department and special timings',
-          text: 'Come with staff attendance (the next phase)',
+          text: c.timings
+            ? `${String(c.timings)} timings over the shift (a department's hours, or one employee's for some dates)`
+            : "Optional: a department's hours, or one employee's for some dates, over the shift",
+          href: '/leave/setup/timings',
         },
       ],
     },

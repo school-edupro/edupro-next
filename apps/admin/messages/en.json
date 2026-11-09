@@ -276,7 +276,8 @@
     "purchaseSettings": "Purchase settings",
     "leaveSetup": "Leave & attendance set-up",
     "myLeave": "My leave",
-    "leaveRegister": "Leave register"
+    "leaveRegister": "Leave register",
+    "attendanceRegister": "Attendance register"
   },
   "shell": {
     "primaryNavigation": "Primary",

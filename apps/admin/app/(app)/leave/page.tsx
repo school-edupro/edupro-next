@@ -43,9 +43,20 @@ export default async function MyLeavePage({
             <a className="ep-btn ep-btn--secondary ep-btn--sm" href="/leave/approvals">
               Waiting for me{d.waiting ? ` (${String(d.waiting)})` : ''}
             </a>
+            <a className="ep-btn ep-btn--secondary ep-btn--sm" href="/leave/attendance/approvals">
+              Attendance corrections waiting
+            </a>
+            <a className="ep-btn ep-btn--secondary ep-btn--sm" href="/leave/attendance/mine">
+              My attendance
+            </a>
             {office ? (
               <a className="ep-btn ep-btn--secondary ep-btn--sm" href="/leave/register">
                 Leave register
+              </a>
+            ) : null}
+            {office ? (
+              <a className="ep-btn ep-btn--secondary ep-btn--sm" href="/leave/attendance">
+                Attendance register
               </a>
             ) : null}
           </div>

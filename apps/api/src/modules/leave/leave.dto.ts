@@ -224,3 +224,103 @@ export const BalanceImportSchema = z.object({
   dryRun: z.boolean().default(true),
 });
 export class BalanceImportDto extends createZodDto(BalanceImportSchema) {}
+
+// ---- phase C: staff attendance ---------------------------------------------------------------------------
+const Month = z.string().regex(/^\d{4}-\d{2}$/);
+const Time = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, 'a 24-hour time like 08:05');
+
+export const RegisterMonthSchema = z.object({
+  month: Month.optional(),
+  department: z.string().trim().max(100).optional(),
+  employeeId: Id.optional(),
+  q: z.string().trim().max(80).optional(),
+  format: z.enum(['xlsx']).optional(),
+  ...Page,
+});
+export class RegisterMonthDto extends createZodDto(RegisterMonthSchema) {}
+
+export const DayCorrectSchema = z.object({
+  employeeId: Id,
+  day: Day,
+  /** empty: worked out from the times */
+  dayType: z.enum(['P', 'HD', 'A', 'WO', 'H', 'HOLD']).nullable().optional(),
+  in: Time.nullable().optional(),
+  out: Time.nullable().optional(),
+  reason: z.string().trim().min(3).max(300),
+});
+export class DayCorrectDto extends createZodDto(DayCorrectSchema) {}
+
+export const RegulariseSchema = z
+  .object({
+    day: Day,
+    in: Time.nullable().optional(),
+    out: Time.nullable().optional(),
+    dayType: z.enum(['P', 'HD', 'A', 'WO', 'H']).nullable().optional(),
+    reason: z.string().trim().min(3).max(500),
+    documentFileId: Id.nullable().optional(),
+  })
+  .refine((r) => r.in || r.out || r.dayType, {
+    message: 'Give the IN or OUT time (or what the day was)',
+    path: ['in'],
+  });
+export class RegulariseDto extends createZodDto(RegulariseSchema) {}
+
+export const MyMonthSchema = z.object({ month: Month.optional() });
+export class MyMonthDto extends createZodDto(MyMonthSchema) {}
+
+export const ExceptionsSchema = z.object({
+  month: Month.optional(),
+  kind: z.enum(['late', 'missing', 'regularisation']).default('late'),
+  status: z.string().trim().max(20).optional(),
+  employeeId: Id.optional(),
+  department: z.string().trim().max(100).optional(),
+  ...Page,
+});
+export class ExceptionsDto extends createZodDto(ExceptionsSchema) {}
+
+export const LockSchema = z.object({
+  month: Month,
+  reason: z.string().trim().max(300).default(''),
+});
+export class LockDto extends createZodDto(LockSchema) {}
+
+export const RunSchema = z.object({
+  what: z.enum(['sync', 'nightly', 'recompute', 'deduct']),
+  from: Day.optional(),
+  to: Day.optional(),
+  month: Month.optional(),
+});
+export class RunDto extends createZodDto(RunSchema) {}
+
+export const TimingSchema = z
+  .object({
+    kind: z.enum(['department', 'special']),
+    department: z.string().trim().max(100).nullable().optional(),
+    employeeId: Id.nullable().optional(),
+    from: Day.nullable().optional(),
+    to: Day.nullable().optional(),
+    startsAt: Time,
+    endsAt: Time,
+    grace: z.number().int().min(0).max(240),
+    presentHours: z.number().min(0).max(24),
+    halfDayHours: z.number().min(0).max(24),
+    lateOver: z.number().int().min(1).max(720).nullable().optional(),
+    lateAction: z.enum(['none', 'HD', 'A', 'leave']).default('none'),
+    lateTypeId: Id.nullable().optional(),
+    earlyOver: z.number().int().min(1).max(720).nullable().optional(),
+    earlyAction: z.enum(['none', 'HD', 'A', 'leave']).default('none'),
+    earlyTypeId: Id.nullable().optional(),
+    note: z.string().trim().max(200).nullable().optional(),
+  })
+  .refine((t) => (t.kind === 'department' ? !!t.department : !!(t.employeeId && t.from && t.to)), {
+    message:
+      'A department timing names the department; a special timing the employee and the dates',
+    path: ['kind'],
+  });
+export class TimingDto extends createZodDto(TimingSchema) {}
+
+export const SheetSchema = z.object({
+  file: z.string().min(10).max(4_000_000),
+  dryRun: z.boolean().default(true),
+});
+export class SheetDto extends createZodDto(SheetSchema) {}

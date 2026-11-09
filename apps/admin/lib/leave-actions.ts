@@ -371,3 +371,206 @@ export async function importBalances(file: string, dryRun: boolean): Promise<Bal
     throw e;
   }
 }
+
+// ---- phase C: staff attendance -------------------------------------------------------------------------
+const attBack = (path: string) =>
+  path.startsWith('/leave/attendance') || path.startsWith('/leave/setup/timings')
+    ? path
+    : '/leave/attendance';
+async function attCall(back_: string, path: string, method: string, body: unknown, ok: string) {
+  const safe = attBack(back_);
+  try {
+    await apiFetch(path, { method, body: JSON.stringify(body) });
+  } catch (e) {
+    if (e instanceof ApiError) back(safe, e);
+    throw e;
+  }
+  revalidatePath('/leave/attendance');
+  redirect(`${safe}${safe.includes('?') ? '&' : '?'}ok=1&detail=${encodeURIComponent(ok)}`);
+}
+const t = (fd: FormData, k: string) => {
+  const v = String(fd.get(k) ?? '').trim();
+  return /^([01]\d|2[0-3]):[0-5]\d$/.test(v) ? v : null;
+};
+
+export async function correctDay(fd: FormData) {
+  const type = String(fd.get('dayType') ?? '');
+  await attCall(
+    String(fd.get('back') ?? ''),
+    '/staff-attendance/days',
+    'POST',
+    {
+      employeeId: String(fd.get('employeeId') ?? ''),
+      day: String(fd.get('day') ?? ''),
+      dayType: ['P', 'HD', 'A', 'WO', 'H', 'HOLD'].includes(type) ? type : null,
+      in: t(fd, 'in'),
+      out: t(fd, 'out'),
+      reason: String(fd.get('reason') ?? '').trim(),
+    },
+    'The day is corrected.',
+  );
+}
+
+export async function askRegularisation(fd: FormData) {
+  const type = String(fd.get('dayType') ?? '');
+  await attCall(
+    String(fd.get('back') ?? ''),
+    '/staff-attendance/regularisations',
+    'POST',
+    {
+      day: String(fd.get('day') ?? ''),
+      in: t(fd, 'in'),
+      out: t(fd, 'out'),
+      dayType: ['P', 'HD', 'A', 'WO', 'H'].includes(type) ? type : null,
+      reason: String(fd.get('reason') ?? '').trim(),
+    },
+    'The correction is sent to your approver.',
+  );
+}
+
+export async function decideRegularisation(id: string, fd: FormData) {
+  if (!okId(id)) return;
+  const outcome = fd.get('outcome') === 'rejected' ? 'rejected' : 'approved';
+  await attCall(
+    String(fd.get('back') ?? ''),
+    `/staff-attendance/regularisations/${id}/decide`,
+    'POST',
+    {
+      outcome,
+      note: String(fd.get('note') ?? '').trim(),
+    },
+    outcome === 'approved' ? 'Approved: the day is set.' : 'Not approved.',
+  );
+}
+
+export async function withdrawRegularisation(id: string, fd: FormData) {
+  if (!okId(id)) return;
+  await attCall(
+    String(fd.get('back') ?? ''),
+    `/staff-attendance/regularisations/${id}/withdraw`,
+    'POST',
+    { reason: '' },
+    'Withdrawn.',
+  );
+}
+
+export async function clearAttendanceMark(kind: 'late' | 'missing', id: string, fd: FormData) {
+  if (!okId(id)) return;
+  await attCall(
+    String(fd.get('back') ?? ''),
+    kind === 'late'
+      ? `/staff-attendance/late-marks/${id}/waive`
+      : `/staff-attendance/missing-punches/${id}/retire`,
+    'POST',
+    { reason: String(fd.get('reason') ?? '').trim() },
+    kind === 'late' ? 'The late mark is waived.' : 'The missing punch is retired.',
+  );
+}
+
+export async function lockMonth(lock: boolean, fd: FormData) {
+  await attCall(
+    String(fd.get('back') ?? ''),
+    lock ? '/staff-attendance/lock' : '/staff-attendance/unlock',
+    'POST',
+    {
+      month: String(fd.get('month') ?? ''),
+      reason: String(fd.get('reason') ?? '').trim(),
+    },
+    lock ? 'Locked for payroll.' : 'Unlocked.',
+  );
+}
+
+export async function runAttendance(fd: FormData) {
+  const what = String(fd.get('what') ?? 'sync');
+  const day = (k: string) => {
+    const v = String(fd.get(k) ?? '');
+    return /^\d{4}-\d{2}-\d{2}$/.test(v) ? v : undefined;
+  };
+  const month = String(fd.get('month') ?? '');
+  await attCall(
+    String(fd.get('back') ?? ''),
+    '/staff-attendance/run',
+    'POST',
+    {
+      what,
+      ...(day('from') ? { from: day('from') } : {}),
+      ...(day('to') ? { to: day('to') } : {}),
+      ...(/^\d{4}-\d{2}$/.test(month) ? { month } : {}),
+    },
+    'Done.',
+  );
+}
+
+export async function saveTiming(id: string | null, fd: FormData) {
+  const num = (k: string) => (String(fd.get(k) ?? '').trim() === '' ? null : Number(fd.get(k)));
+  const kind = fd.get('kind') === 'special' ? 'special' : 'department';
+  const action = (k: string) => {
+    const v = String(fd.get(k) ?? 'none');
+    return ['none', 'HD', 'A', 'leave'].includes(v) ? v : 'none';
+  };
+  const typeId = (k: string) => (okId(String(fd.get(k) ?? '')) ? String(fd.get(k)) : null);
+  await attCall(
+    '/leave/setup/timings',
+    id ? `/staff-attendance/timings/${id}` : '/staff-attendance/timings',
+    id ? 'PUT' : 'POST',
+    {
+      kind,
+      department: kind === 'department' ? String(fd.get('department') ?? '') : null,
+      employeeId: kind === 'special' ? String(fd.get('employeeId') ?? '') : null,
+      from: kind === 'special' ? String(fd.get('from') ?? '') : null,
+      to: kind === 'special' ? String(fd.get('to') ?? '') : null,
+      startsAt: String(fd.get('startsAt') ?? ''),
+      endsAt: String(fd.get('endsAt') ?? ''),
+      grace: num('grace') ?? 0,
+      presentHours: num('presentHours') ?? 0,
+      halfDayHours: num('halfDayHours') ?? 0,
+      lateOver: num('lateOver'),
+      lateAction: action('lateAction'),
+      lateTypeId: typeId('lateTypeId'),
+      earlyOver: num('earlyOver'),
+      earlyAction: action('earlyAction'),
+      earlyTypeId: typeId('earlyTypeId'),
+      note: String(fd.get('note') ?? '').trim() || null,
+    },
+    'Saved: run "Work days out again" to apply it to past days.',
+  );
+}
+
+export async function retireTiming(id: string) {
+  if (!okId(id)) return;
+  await attCall(
+    '/leave/setup/timings',
+    `/staff-attendance/timings/${id}/retire`,
+    'POST',
+    {},
+    'Retired.',
+  );
+}
+
+export type SheetResult =
+  | {
+      ok: true;
+      rows: Array<{ row: number; employee: string; day: string; ok: boolean; error?: string }>;
+      saved: number;
+    }
+  | { ok: false; error: string };
+export async function importAttendanceSheet(
+  what: 'days' | 'punches',
+  file: string,
+  dryRun: boolean,
+): Promise<SheetResult> {
+  try {
+    const r = await apiFetch<Omit<Extract<SheetResult, { ok: true }>, 'ok'>>(
+      `/staff-attendance/sheets/${what}/import`,
+      {
+        method: 'POST',
+        body: JSON.stringify({ file, dryRun }),
+      },
+    );
+    if (!dryRun) revalidatePath('/leave/attendance');
+    return { ok: true, ...r };
+  } catch (e) {
+    if (e instanceof ApiError) return { ok: false, error: detailOf(e) };
+    throw e;
+  }
+}

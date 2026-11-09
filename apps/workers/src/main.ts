@@ -189,6 +189,17 @@ async function main(): Promise<void> {
     { pattern: '0 19 * * *' },
     { name: 'leave.month_end', data: SYSTEM_ENVELOPE('leave.month_end') },
   );
+  // staff attendance: punches read every fifteen minutes; the nightly marking at 02:00 IST (20:30 UTC)
+  await maintenance.upsertJobScheduler(
+    'staff.punch_sync',
+    { every: 15 * 60 * 1000 },
+    { name: 'staff.punch_sync', data: SYSTEM_ENVELOPE('staff.punch_sync') },
+  );
+  await maintenance.upsertJobScheduler(
+    'staff.attendance_nightly',
+    { pattern: '30 20 * * *' },
+    { name: 'staff.attendance_nightly', data: SYSTEM_ENVELOPE('staff.attendance_nightly') },
+  );
   await maintenance.upsertJobScheduler(
     'leave.digest',
     { pattern: '0 3 * * *' },

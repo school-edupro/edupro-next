@@ -113,6 +113,7 @@ export class LeaveSetupService {
           weekoffs: number;
           shifts: number;
           postings: number;
+          timings: number;
           leave_rules: number;
           reg_rules: number;
           staff: number;
@@ -124,6 +125,7 @@ export class LeaveSetupService {
                   (SELECT count(*)::int FROM staff_weekoff_rules WHERE status = 'active') AS weekoffs,
                   (SELECT count(*)::int FROM staff_shifts WHERE status = 'active') AS shifts,
                   (SELECT count(*)::int FROM staff_shift_postings WHERE status = 'active') AS postings,
+                  (SELECT count(*)::int FROM staff_timings WHERE status = 'active') AS timings,
                   (SELECT count(*)::int FROM staff_leave_approval_rules WHERE status = 'active' AND kind = 'leave') AS leave_rules,
                   (SELECT count(*)::int FROM staff_leave_approval_rules WHERE status = 'active' AND kind = 'regularisation') AS reg_rules,
                   (SELECT count(*)::int FROM employees WHERE deleted_at IS NULL AND status = 'active') AS staff,
@@ -199,6 +201,7 @@ export class LeaveSetupService {
           weekoffs: n.weekoffs,
           shifts: n.shifts,
           postings: n.postings,
+          timings: n.timings,
           leaveRules: n.leave_rules,
           regRules: n.reg_rules,
           staff: n.staff,

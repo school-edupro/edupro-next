@@ -17,6 +17,7 @@ export interface LeaveOverview {
     weekoffs: number;
     shifts: number;
     postings: number;
+    timings: number;
     leaveRules: number;
     regRules: number;
     staff: number;
@@ -298,3 +299,169 @@ export const leaveDates = (r: {
   session: string | null;
 }) =>
   `${dmy(r.from)}${r.to !== r.from ? ` to ${dmy(r.to)}` : ''}${r.halfDay ? ` (${r.session === 'first' ? 'first' : 'second'} half)` : ''}`;
+
+// ---- phase C: staff attendance -------------------------------------------------------------------------
+export interface AttendanceRegister {
+  month: string;
+  monthWords: string;
+  dates: string[];
+  types: string[];
+  rows: Array<{
+    employee: { id: string; name: string; code: string; department: string | null };
+    cells: Array<{
+      day: string;
+      code: string;
+      late?: boolean;
+      missing?: boolean;
+      manual?: boolean;
+      title: string;
+    }>;
+    totals: Record<string, number>;
+    payable: number;
+    /** past days not worked out yet */
+    unmarked: number;
+  }>;
+  total: number;
+  page: number;
+  size: number;
+  lock: { locked: boolean; at: string; by: string | null; unlockReason: string | null } | null;
+  mayLock: boolean;
+  departments: string[];
+}
+
+export interface AttendanceDay {
+  employee: { id: string; name: string; code: string; department: string | null };
+  day: string;
+  row: {
+    dayType: string;
+    words: string;
+    leave: string | null;
+    in: string | null;
+    out: string | null;
+    worked: number | null;
+    overtime: number;
+    late: number;
+    early: number;
+    manual: boolean;
+    source: string;
+    remark: string | null;
+    how: string;
+  } | null;
+  punches: Array<{ at: string; time: string | null; date: string; source: string; device: string }>;
+  history: Array<{ from: string; to: string; reason: string | null; by: string; at: string }>;
+  marks: Array<{ kind: string; status: string; detail: string; reason: string | null }>;
+  leave: Array<{ id: string; number: string; code: string; portion: number; status: string }>;
+  regularisations: Array<{
+    id: string;
+    status: string;
+    in_time: string | null;
+    out_time: string | null;
+    day_type: string | null;
+    reason: string;
+  }>;
+  locked: boolean;
+  can: { mine: boolean; decide: string | null; correct: boolean; regularise: boolean };
+}
+
+export interface MyAttendance {
+  employee: { id: string; name: string; code: string } | null;
+  month: string;
+  monthWords?: string;
+  locked?: boolean;
+  days: Array<{
+    day: string;
+    dayType: string;
+    code: string;
+    words: string;
+    in: string | null;
+    out: string | null;
+    worked: number | null;
+    late: number;
+    early: number;
+    manual: boolean;
+    remark: string | null;
+  }>;
+  regularisations: Array<{
+    id: string;
+    day: string;
+    status: string;
+    in_time: string | null;
+    out_time: string | null;
+    day_type: string | null;
+    reason: string;
+    waiting: string | null;
+  }>;
+}
+
+export interface RegApproval {
+  id: string;
+  day: string;
+  status: string;
+  in_time: string | null;
+  out_time: string | null;
+  day_type: string | null;
+  reason: string;
+  employee: string;
+  code: string;
+  employee_id: string;
+  since: string;
+  mayDecide: boolean;
+}
+
+export interface AttendanceExceptions {
+  month: string;
+  monthWords: string;
+  kind: 'late' | 'missing' | 'regularisation';
+  counts: Record<string, number>;
+  rows: Array<{
+    id: string;
+    day: string;
+    employee: string;
+    code: string;
+    employee_id: string;
+    status: string;
+    detail: string;
+    note: string | null;
+    leave: string | null;
+  }>;
+  total: number;
+  page: number;
+  size: number;
+}
+
+export interface Timings {
+  rows: Array<{
+    id: string;
+    kind: 'department' | 'special';
+    department: string | null;
+    employee: string | null;
+    employee_id: string | null;
+    from_date: string | null;
+    to_date: string | null;
+    starts_at: string;
+    ends_at: string;
+    grace_minutes: number;
+    present_hours: string;
+    half_day_hours: string;
+    late_over_minutes: number | null;
+    late_action: string;
+    late_type_id: string | null;
+    early_over_minutes: number | null;
+    early_action: string;
+    early_type_id: string | null;
+    note: string | null;
+  }>;
+  departments: string[];
+  employees: Array<{ id: string; name: string }>;
+  types: Array<{ id: string; name: string }>;
+  can: { manage: boolean };
+}
+
+export const DAY_CODE_TONE: Record<string, string> = {
+  P: 'present',
+  HD: 'half',
+  A: 'absent',
+  WO: 'off',
+  H: 'holiday',
+  HOLD: 'absent',
+};

@@ -16,6 +16,7 @@ export interface ApprovalGroup {
     | 'transport'
     | 'leave'
     | 'staff_leave'
+    | 'staff_regularisation'
     | 'fee'
     | 'file'
     | 'acr'
@@ -136,7 +137,8 @@ export async function myApprovals(
               (x) =>
                 x.instance.entityType !== 'vacancy' &&
                 !x.instance.entityType?.startsWith('purchase') &&
-                !x.instance.entityType?.startsWith('staff_leave'),
+                !x.instance.entityType?.startsWith('staff_leave') &&
+                x.instance.entityType !== 'staff_regularisation',
             ),
           )
           .then((data): ApprovalGroup => ({
@@ -831,6 +833,45 @@ export async function myApprovals(
                 detail: `${l.what === 'cancellation' ? 'Cancel ' : ''}${l.leaveType.code} · ${l.from}${l.to !== l.from ? ` to ${l.to}` : ''} · ${String(l.days)} day${l.days === 1 ? '' : 's'}`,
                 href: `/leave/requests/${l.id}`,
                 since: l.since,
+              })),
+            }
+          : null,
+      )
+      .catch(() => null),
+    // attendance corrections (regularisation) at a level of this user (docs/design/85, phase C)
+    apiFetch<{
+      rows: Array<{
+        id: string;
+        day: string;
+        since: string;
+        employee: string;
+        code: string;
+        employee_id: string;
+        in_time: string | null;
+        out_time: string | null;
+        day_type: string | null;
+      }>;
+    }>('/staff-attendance/regularisations/approvals')
+      .then((r): ApprovalGroup | null =>
+        r.rows.length
+          ? {
+              key: 'staff_regularisation',
+              title: 'Attendance corrections',
+              help: 'Days staff say are wrong (a forgotten punch, a device that missed them), at your level',
+              href: '/leave/attendance/approvals',
+              count: r.rows.length,
+              items: r.rows.slice(0, size).map((g) => ({
+                id: g.id,
+                title: `${g.employee} (${g.code}) · ${g.day}`,
+                detail: [
+                  g.in_time ? `IN ${g.in_time}` : null,
+                  g.out_time ? `OUT ${g.out_time}` : null,
+                  g.day_type,
+                ]
+                  .filter(Boolean)
+                  .join(' · '),
+                href: `/leave/attendance/day?emp=${g.employee_id}&day=${g.day}`,
+                since: g.since,
               })),
             }
           : null,

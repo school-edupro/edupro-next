@@ -276,7 +276,8 @@
     "purchaseSettings": "क्रय सेटिंग्स",
     "leaveSetup": "अवकाश और उपस्थिति सेटअप",
     "myLeave": "मेरा अवकाश",
-    "leaveRegister": "अवकाश रजिस्टर"
+    "leaveRegister": "अवकाश रजिस्टर",
+    "attendanceRegister": "उपस्थिति रजिस्टर"
   },
   "shell": {
     "primaryNavigation": "मुख्य",

@@ -2151,6 +2151,13 @@ export const MASTERS: MasterDefinition[] = [
         help: 'A new joiner gets the part of the credit after joining.',
       },
       {
+        key: 'by_attendance',
+        header: 'Credit by attendance',
+        type: 'boolean',
+        width: 9,
+        help: 'The credit shrinks with the days lost in its period: an absent day, loss of pay or a salary hold counts 0, a half day half (present, weekly offs, holidays and leave count in full).',
+      },
+      {
         key: 'carry_forward',
         header: 'Carry forward',
         type: 'boolean',

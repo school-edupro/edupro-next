@@ -427,6 +427,9 @@ importers:
       ioredis:
         specifier: ^5.4.1
         version: 5.11.1
+      mysql2:
+        specifier: ^3.11.3
+        version: 3.24.4(@types/node@22.20.4)
       nodemailer:
         specifier: ^10.0.10
         version: 10.0.10

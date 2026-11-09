@@ -138,3 +138,83 @@ export const leaveDates = (r: {
   session: string | null;
 }) =>
   `${dmy(r.from)}${r.to !== r.from ? ` to ${dmy(r.to)}` : ''}${r.halfDay ? ` (${r.session === 'first' ? 'first' : 'second'} half)` : ''}`;
+
+// ---- phase C: attendance --------------------------------------------------------------------------------
+export interface AttendanceDay {
+  employee: { id: string; name: string; code: string; department: string | null };
+  day: string;
+  row: {
+    dayType: string;
+    words: string;
+    leave: string | null;
+    in: string | null;
+    out: string | null;
+    worked: number | null;
+    overtime: number;
+    late: number;
+    early: number;
+    manual: boolean;
+    source: string;
+    remark: string | null;
+    how: string;
+  } | null;
+  punches: Array<{ at: string; time: string | null; date: string; source: string; device: string }>;
+  history: Array<{ from: string; to: string; reason: string | null; by: string; at: string }>;
+  marks: Array<{ kind: string; status: string; detail: string; reason: string | null }>;
+  leave: Array<{ id: string; number: string; code: string; portion: number; status: string }>;
+  regularisations: Array<{
+    id: string;
+    status: string;
+    in_time: string | null;
+    out_time: string | null;
+    day_type: string | null;
+    reason: string;
+  }>;
+  locked: boolean;
+  can: { mine: boolean; decide: string | null; correct: boolean; regularise: boolean };
+}
+
+export interface MyAttendance {
+  employee: { id: string; name: string; code: string } | null;
+  month: string;
+  monthWords?: string;
+  locked?: boolean;
+  days: Array<{
+    day: string;
+    dayType: string;
+    code: string;
+    words: string;
+    in: string | null;
+    out: string | null;
+    worked: number | null;
+    late: number;
+    early: number;
+    manual: boolean;
+    remark: string | null;
+  }>;
+  regularisations: Array<{
+    id: string;
+    day: string;
+    status: string;
+    in_time: string | null;
+    out_time: string | null;
+    day_type: string | null;
+    reason: string;
+    waiting: string | null;
+  }>;
+}
+
+export interface RegApproval {
+  id: string;
+  day: string;
+  status: string;
+  in_time: string | null;
+  out_time: string | null;
+  day_type: string | null;
+  reason: string;
+  employee: string;
+  code: string;
+  employee_id: string;
+  since: string;
+  mayDecide: boolean;
+}

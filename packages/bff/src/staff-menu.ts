@@ -36,6 +36,8 @@ export interface StaffWaiting {
   assets?: number;
   /** colleagues' leave and cancellations at my approval level (docs/design/85) */
   staffLeave?: number;
+  /** colleagues' attendance corrections at my approval level (docs/design/85, phase C) */
+  staffRegularisations?: number;
 }
 export interface StaffGroup {
   id: string;
@@ -237,6 +239,18 @@ export const STAFF_MENU: StaffGroup[] = [
         allowed: (_can, w) => (w.staffLeave ?? 0) > 0,
       },
       {
+        href: '/my-attendance',
+        label: 'My attendance',
+        help: 'My days from the biometric punches; ask for a day to be corrected',
+        allowed: (can) => can('leave.own.apply'),
+      },
+      {
+        href: '/attendance-corrections',
+        label: 'Attendance corrections to approve',
+        help: 'Days colleagues say are wrong (a forgotten punch, a device that missed them), at your level',
+        allowed: (_can, w) => (w.staffRegularisations ?? 0) > 0,
+      },
+      {
         href: '/resignation',
         label: 'My resignation',
         help: 'Ask for resignation, see where it is, withdraw it until it is accepted',
@@ -395,6 +409,8 @@ const SCREEN_ICON: Array<[string, string]> = [
   ['/profile', 'user'],
   ['/my-leave', 'calendar'],
   ['/leave-approvals', 'check'],
+  ['/my-attendance', 'clock'],
+  ['/attendance-corrections', 'check'],
   ['/resignation', 'userPlus'],
   ['/acr', 'file'],
   ['/office-orders', 'file'],

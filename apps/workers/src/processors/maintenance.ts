@@ -11,6 +11,7 @@ import {
 import type { StorageDriver } from '@edupro/storage';
 import type { Logger } from '../logger';
 import { deliverConsentWebhooks } from './consent-webhooks';
+import { centralSourceFromEnv, pullCentralPunches } from './staff-punches';
 import type { JobLike } from './notifications';
 
 export interface MaintenanceDeps {
@@ -535,6 +536,41 @@ export function maintenanceProcessor({ db, storage, log, migratorUrl }: Maintena
         sent += r.rows[0]?.n ?? 0;
       }
       if (sent) log.info({ sent }, 'admission level digest');
+      return;
+    }
+    if (kind === 'staff.punch_sync') {
+      // Staff attendance (0349, docs/design/85): the central device database's new punches (when the server
+      // names it), then every employee-day with punches not yet read worked out
+      const central = centralSourceFromEnv();
+      const schools = { rows: await schoolsFor(db, job) };
+      let done = 0;
+      for (const s of schools.rows) {
+        if (central)
+          await pullCentralPunches(db, s.id, central, log).catch((e: unknown) =>
+            log.warn({ schoolId: s.id, error: (e as Error).message }, 'central punch pull failed'),
+          );
+        const r = await db.withTenant(
+          { schoolId: s.id, userId: null, allowedSchoolIds: [s.id] },
+          (c) => c.query<{ n: number }>('SELECT app.staff_attendance_sync(5000) AS n'),
+        );
+        done += r.rows[0]?.n ?? 0;
+      }
+      if (done) log.info({ done }, 'staff punches worked out');
+      return;
+    }
+    if (kind === 'staff.attendance_nightly') {
+      // Staff attendance (0349): weekly offs and holidays, absences, late marks, missing punches (e-mailed),
+      // loss of pay for unexplained absence, and once a month last month's deductions
+      const schools = { rows: await schoolsFor(db, job) };
+      let done = 0;
+      for (const s of schools.rows) {
+        const r = await db.withTenant(
+          { schoolId: s.id, userId: null, allowedSchoolIds: [s.id] },
+          (c) => c.query<{ n: number }>('SELECT app.staff_attendance_nightly() AS n'),
+        );
+        done += r.rows[0]?.n ?? 0;
+      }
+      if (done) log.info({ done }, 'staff attendance nightly');
       return;
     }
     if (kind === 'leave.month_end') {

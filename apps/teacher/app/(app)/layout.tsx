@@ -33,6 +33,7 @@ export default async function StaffLayout({ children }: { children: ReactNode })
     issues,
     assets,
     staffLeave,
+    staffRegularisations,
   ] = await Promise.all([
     bff.api
       .fetch<{ unread: number }>('/comms/inbox/unread')
@@ -96,6 +97,11 @@ export default async function StaffLayout({ children }: { children: ReactNode })
       .fetch<{ rows: unknown[] }>('/leave/approvals')
       .then((r) => r.rows.length)
       .catch(() => 0),
+    // colleagues' attendance corrections at my level (docs/design/85, phase C)
+    bff.api
+      .fetch<{ rows: unknown[] }>('/staff-attendance/regularisations/approvals')
+      .then((r) => r.rows.length)
+      .catch(() => 0),
   ]);
   return (
     <StaffShell
@@ -116,6 +122,7 @@ export default async function StaffLayout({ children }: { children: ReactNode })
         issues,
         assets,
         staffLeave,
+        staffRegularisations,
       }}
     >
       {children}
