@@ -58,6 +58,13 @@ export class AttendanceController {
     return this.att.correct(ctx, body);
   }
 
+  @Get('team')
+  @ApiOperation({ summary: 'My team’s attendance: the register of the staff reporting to me' })
+  @AuthenticatedOnly()
+  team(@ReqCtx() ctx: RequestContext, @Query() q: RegisterMonthDto) {
+    return this.att.team(ctx, q);
+  }
+
   @Get('mine')
   @AuthenticatedOnly()
   mine(@ReqCtx() ctx: RequestContext, @Query() q: MyMonthDto) {

@@ -47,6 +47,12 @@ const PAGES = [
   // docs/design/50: dev-teacher is named in level 1 of the sample registrations' Document check
   '/admission-approvals',
   '/admission-approvals?tab=decided',
+  // staff leave & attendance (docs/design/85)
+  '/my-leave',
+  '/my-attendance',
+  '/leave-approvals',
+  '/attendance-corrections',
+  '/my-team',
 ];
 
 for (const sub of ['dev-teacher']) {

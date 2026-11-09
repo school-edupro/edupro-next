@@ -74,6 +74,22 @@ export default async function LeaveBalancesPage({
         kicker="Leave & attendance"
         title={`Leave balances · ${d.monthWords}`}
         description="What each employee has of each leave type this month: the opening (carried from last month), what was credited, held by leave raised this month, corrections, and what is left. Nothing lapses month to month: at the session end the balance is kept up to the carry-forward cap."
+        actions={
+          <div style={{ display: 'flex', gap: 'var(--sp-2)' }}>
+            <a
+              className="ep-btn ep-btn--secondary ep-btn--sm"
+              href={`/api/leave/list-file?list=balances&format=xlsx&${keep.toString()}`}
+            >
+              Excel
+            </a>
+            <a
+              className="ep-btn ep-btn--secondary ep-btn--sm"
+              href={`/api/leave/list-file?list=balances&format=pdf&${keep.toString()}`}
+            >
+              PDF
+            </a>
+          </div>
+        }
       />
       <Notice params={sp} />
       <form

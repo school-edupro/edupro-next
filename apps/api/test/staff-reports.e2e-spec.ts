@@ -257,6 +257,16 @@ describe('staff leave reports (e2e)', () => {
     expect(v('Working days')).toBe(days - SUNDAYS.length);
     // (1 + 0.5 + the worked half of the half CL + 0.5 paid leave) ÷ working days
     expect(v('Attendance %')).toBe(Math.round((2.5 / (days - SUNDAYS.length)) * 1000) / 10);
+    // the annual report over the same days counts the same way (the earlier module's % went over 100)
+    const ann = (
+      await call(office, 'GET', `/leave-reports/reports/annual?from=${prevMonth}&to=${prevEnd}`)
+    ).json();
+    const acols: string[] = ann.columns.map((c: { label: string }) => c.label);
+    const ae1 = rowOf(ann, `${s}E1`)!;
+    expect(ae1[acols.indexOf('Attendance %')]).toBe(v('Attendance %'));
+    expect(ae1[acols.indexOf('Paid leave')]).toBe(0.5);
+    // the day of loss of pay the system charged for late marks
+    expect(ae1[acols.indexOf('Deducted by the system')]).toBe(1);
     // the "Not required" employee is left out, unless picked
     expect(rowOf(r, `${s}E3`)).toBeUndefined();
     const picked = (
@@ -363,5 +373,26 @@ describe('staff leave reports (e2e)', () => {
     const dash = (await call(office, 'GET', '/leave-reports/dashboard')).json();
     // E1 and E2; E3 is not required
     expect(dash.figures.staff).toBe(2);
+    // today by department adds up; the figures are numbers; this year's leave by type has last month's
+    expect(dash.departments.reduce((n: number, d: { staff: number }) => n + d.staff, 0)).toBe(2);
+    for (const k of [
+      'punched',
+      'onLeave',
+      'notIn',
+      'late',
+      'off',
+      'waiting',
+      'corrections',
+      'lateMarks',
+      'missing',
+    ])
+      expect([k, typeof dash.figures[k]]).toEqual([k, 'number']);
+    if (prevMonth >= `${today.slice(0, 4)}-04-01` || Number(today.slice(5, 7)) < 4)
+      expect(dash.byType).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ code: 'CL', days: 0.5 }),
+          expect.objectContaining({ code: 'LOP', days: 1 }),
+        ]),
+      );
   });
 });

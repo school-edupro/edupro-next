@@ -80,7 +80,10 @@ start), the default shift, punches closer than so many minutes are one (10), how
 re-check and absent marking look, whether late minutes lower the day's hours, whether the office may
 change punch times and apply leave for an employee, how far back leave may be applied, this school's
 device serials (for punches read from the central device database), who else gets the missing-punch
-e-mails, and the message channels (e-mail, WhatsApp, app; SMS once its templates are approved).
+e-mails (each address gets a copy), and the message channels (e-mail, WhatsApp, app; SMS once its
+templates are approved). Under the settings, **Message templates** shows each leave and correction message
+and the channels it can go on: WhatsApp goes only once the name Meta approved is put on its template
+(Communication → Templates, search "leave\_").
 
 **5. Reports** — **Who may open the reports** (the principal, the leave office, the school admin and HR
 open every one; give a report to other staff here) and **Not required in the reports** (staff left out of
@@ -113,10 +116,14 @@ it is not approved, withdrawn or cancelled. Loss of pay is never applied for on 
 ## Approving
 
 A leave goes through the levels of **Who approves** for its length; each approver sees it under Waiting
-for me (admin and staff app) and in My approvals, and gets an e-mail and app message; every morning each
-approver gets a list of what waits (3 days or more in red). Approve, or say why not (needed). Nobody
-approves their own leave — their level passes to the next, the last to the school admin; the same person
-at two levels approves once. A month locked for payroll cannot be approved into.
+for me (admin and staff app) and in My approvals, and gets a message (e-mail, app, WhatsApp — the school's
+channels); every morning each approver gets a list of the leave and corrections that wait (3 days or more
+in red), worded from its template. Approve, or say why not (needed): the approver gets a confirmation of
+what they did and where the leave is now, the next level is told, and so is the employee at the end.
+Nobody approves their own leave — their level passes to the next, the last to the school admin; the same
+person at two levels approves once. A month locked for payroll cannot be approved into, whichever way the
+approval comes. Leave and corrections are decided on their own pages (the general approval steps send you
+there). A leave withdrawn by the employee tells the approvers it was withdrawn.
 
 ## After applying
 
@@ -133,11 +140,12 @@ Approved leave fills the daily activity log's leave days; cancelled or cut days 
 
 **Leave register**: eight figures for the financial year (waiting at the first level, at level 2, at level
 3, approved, not approved, cancelled, withdrawn, loss of pay — click to see them), filters (type,
-employee, department, dates, applied by, search), 25 / 50 / 100 a page, Excel and PDF.
+employee, department, dates, applied by, search), 25 / 50 / 100 a page, Excel and PDF (the Excel with each
+leave's levels: who approved, when, or who it waits with).
 
 **Balances** (from the register): each employee and leave type this month — opening (carried from last
 month), credited, held, corrections, what is left; past months closed with what lapsed — with each
-row's trail. **Correct** a balance this month with a reason; load the **opening balances** from Excel
+row's trail; Excel and PDF of the month. **Correct** a balance this month with a reason; load the **opening balances** from Excel
 (the figure you type becomes the balance; running the same sheet again changes nothing); **Run now** closes
 past months, opens this month and credits it (the system does it every night).
 
@@ -169,7 +177,9 @@ the leave's code, ½ for half a day, LOP loss of pay, HOLD salary hold, · not m
 missing, ✎ set by hand — and the totals and **payable days** (the month less absent days, half of each
 half day, loss of pay and holds; "not marked" says how many past days the system has not worked out).
 Filters: month, department, search, 25 / 50 / 100 a page. **Payroll feed (Excel)** gives each employee's
-figures for payroll.
+figures for payroll, with **pay-equivalent days** (a half-pay leave such as HPL counted at its pay %) and
+a second sheet, **Encashment (information)**: the leave each employee may encash under their policy and the
+balance it is paid from (the school's encashment is not run here).
 
 **A day** (click it): how it was worked out in a sentence, the punches with where they came from, the
 late mark or missing punch, the leave, the corrections asked and the history (every change, why and by
@@ -179,13 +189,17 @@ clears the late mark or missing punch it settles. Leave on the day is changed fr
 **Late marks and missing punches** (from the register): each month's, by status — counting, charged as
 leave, waived, lapsed — with **Waive** / **Clear** (with a reason) for one still counting. At the month's
 end every 3 late marks (4 missing punches — the settings) become a day of leave by the deduction order
-(CL, then EL … loss of pay last), dated on the first of them; what is left lapses.
+(CL, then EL … loss of pay last), dated on the first of them; what is left lapses. A day corrected later
+takes back what it caused: if its late mark (or missing punch) was already turned into leave, that leave is
+cancelled (days and balance back), its other marks count again and a past month is deducted afresh. Each
+list downloads as **Excel** or **PDF**.
 
 **Corrections (regularisation)**: an employee opens a day (My attendance) and asks for it to be
 corrected — the IN, the OUT or what the day was, with the reason. It goes through the **attendance
 corrections** rule of Who approves, like leave; the approver sees it in Waiting for me / My approvals,
 opens the day with its punches and approves (the day is set, its late mark or missing punch cleared) or
-says why not. One correction a day; a locked month takes none.
+says why not. The approver is told when a correction is asked and the employee when it is decided. One
+correction a day; a locked month takes none.
 
 **The payroll lock**: once a month is over, **Lock** it when payroll is final — the absent days nobody
 explained become loss of pay first, then nothing in the month changes (leave, corrections, punches,
@@ -202,6 +216,11 @@ Download the sheet, fill it, **Check**, then **Save** the good rows.
 
 **My attendance** (My leave → My attendance; staff app → My attendance): your month — the figures,
 each day with IN, OUT, hours, late or early — and the corrections you asked, with where each waits.
+
+**My team's attendance** (My leave → My team's attendance; staff app → My team's attendance): a reporting
+manager sees the month of each person who reports to them (the reporting manager on this year's posting)
+and opens their days. When leave comes off a past day (cancelled, shortened), the day is worked out again
+from its punches, or becomes a weekly off, a holiday or absent — never left blank.
 
 ## The dashboard and the reports (Employee management → Leave dashboard, Leave & attendance reports)
 

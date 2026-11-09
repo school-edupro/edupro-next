@@ -1,5 +1,5 @@
 /* eslint-disable no-restricted-syntax -- the interpolations in this file are fixed fragments; values are bound */
-import { Inject, Injectable, type OnModuleInit } from '@nestjs/common';
+import { Inject, Injectable, Logger, type OnModuleInit } from '@nestjs/common';
 import type { PoolClient } from '@edupro/db';
 import type { StorageDriver } from '@edupro/storage';
 import ExcelJS from 'exceljs';
@@ -8,11 +8,15 @@ import { DbService } from '../../common/db/db.service';
 import { DomainError } from '../../common/errors/domain-error';
 import { readSheet, templateSheet } from '../../common/excel/sheet';
 import { requireTenant, type RequestContext } from '../../common/http/request-context';
+import { MessagesService } from '../comms/messages.service';
 import { STORAGE_DRIVER } from '../files/storage';
 import { purchaseHead } from '../purchase/purchase-head';
+import { checkListSize, LIST_LIMIT, purchaseListFile } from '../purchase/purchase-list-file';
 import { istToday } from '../purchase/purchase-stock-core';
 import { WorkflowService, type InstanceRow } from '../workflow/workflow.service';
 import { chainFor } from './leave-chain';
+import { notifyLeave } from './leave-notify';
+import { LeaveService } from './leave.service';
 import { addDays, dmy, fail, leaveFlow, monthStart, monthWords } from './leave-engine';
 import {
   LEAVE_OFFICE,
@@ -114,12 +118,77 @@ export function traceWords(t: Record<string, unknown>): string {
  */
 @Injectable()
 export class AttendanceService implements OnModuleInit {
+  private readonly log = new Logger(AttendanceService.name);
   constructor(
     private readonly db: DbService,
     private readonly audit: AuditService,
     private readonly workflow: WorkflowService,
+    private readonly messages: MessagesService,
+    private readonly leave: LeaveService,
     @Inject(STORAGE_DRIVER) private readonly storage: StorageDriver,
   ) {}
+
+  // ---- messages of a correction ----------------------------------------------------------------------
+  /** A correction's words for the messages: who, the day, what was asked, why. */
+  private async regVars(c: PoolClient, id: string) {
+    const g = (
+      await c.query<{
+        employee: string;
+        user_id: string | null;
+        day: string;
+        in_time: string | null;
+        out_time: string | null;
+        day_type: string | null;
+        reason: string;
+        note: string | null;
+        wf: string | null;
+      }>(
+        `SELECT e.display_name AS employee, e.user_id::text, g.day::text, to_char(g.in_time, 'HH24:MI') AS in_time,
+                to_char(g.out_time, 'HH24:MI') AS out_time, g.day_type, g.reason, g.decision_note AS note,
+                g.workflow_instance_id::text AS wf
+           FROM staff_regularisations g JOIN employees e ON e.id = g.employee_id WHERE g.id = $1`,
+        [id],
+      )
+    ).rows[0]!;
+    return {
+      g,
+      vars: {
+        employee: g.employee,
+        day: dmy(g.day),
+        asked:
+          [
+            g.in_time ? `IN ${g.in_time}` : null,
+            g.out_time ? `OUT ${g.out_time}` : null,
+            g.day_type,
+          ]
+            .filter(Boolean)
+            .join(' · ') || 'the day',
+        reason: g.reason.slice(0, 300),
+      },
+    };
+  }
+  private async waitingWith(c: PoolClient, instanceId: string | null) {
+    if (!instanceId) return [];
+    const r = await c.query<{ u: string }>(
+      `SELECT unnest(s.assignee_user_ids)::text AS u FROM workflow_steps s JOIN workflow_instances i ON i.id = s.instance_id
+        WHERE i.id = $1 AND i.status = 'pending' AND s.level = i.current_level AND s.status = 'pending'`,
+      [instanceId],
+    );
+    return r.rows.map((x) => x.u);
+  }
+  /** The approvers at the level a correction waits at are told. */
+  private async tellApprovers(c: PoolClient, ctx: RequestContext, id: string) {
+    const { g, vars } = await this.regVars(c, id);
+    await notifyLeave(
+      this.messages,
+      this.log,
+      c,
+      ctx,
+      'leave_correction_waiting',
+      await this.waitingWith(c, g.wf),
+      vars,
+    );
+  }
 
   onModuleInit() {
     this.workflow.onComplete('staff_regularisation', (c, ctx, inst, outcome) =>
@@ -161,146 +230,174 @@ export class AttendanceService implements OnModuleInit {
    */
   async register(ctx: RequestContext, q: RegisterMonthDto) {
     this.mustOffice(ctx);
+    return this.db.tenant(requireTenant(ctx), (c) => this.registerIn(c, q, null));
+  }
+
+  /** The staff whose reporting manager I am (this year's postings). */
+  private async reportees(c: PoolClient) {
+    const me = await this.meIn(c);
+    if (!me) return [];
+    return (
+      await c.query<{ id: string }>(
+        `SELECT DISTINCT p.employee_id::text AS id FROM postings p JOIN employees e ON e.id = p.employee_id
+          WHERE p.reports_to_employee_id = $1 AND p.academic_year_id = app.current_academic_year_id()
+            AND e.status = 'active' AND e.deleted_at IS NULL`,
+        [me],
+      )
+    ).rows.map((x) => x.id);
+  }
+
+  /** My team's attendance (docs/design/85, "my reportees' attendance"): the register of those reporting to me. */
+  async team(ctx: RequestContext, q: RegisterMonthDto) {
     return this.db.tenant(requireTenant(ctx), async (c) => {
-      const month = this.monthOf(q.month);
-      const end = addDays(monthStart(addDays(month, 32)), -1);
-      const where = `WHERE e.deleted_at IS NULL AND e.status = 'active'
+      const ids = await this.reportees(c);
+      return { ...(await this.registerIn(c, q, ids)), team: ids.length };
+    });
+  }
+
+  private async registerIn(c: PoolClient, q: RegisterMonthDto, only: string[] | null) {
+    const month = this.monthOf(q.month);
+    const end = addDays(monthStart(addDays(month, 32)), -1);
+    const where = `WHERE e.deleted_at IS NULL AND e.status = 'active'
           AND ($1::bigint IS NULL OR e.id = $1) AND ($2::text IS NULL OR lower(e.department) = lower($2))
-          AND ($3::text IS NULL OR e.display_name ILIKE '%' || $3 || '%' OR e.employee_code ILIKE '%' || $3 || '%')`;
-      const args = [q.employeeId ?? null, q.department ?? null, q.q ?? null];
-      const total = (
-        await c.query<{ n: number }>(`SELECT count(*)::int AS n FROM employees e ${where}`, args)
-      ).rows[0]!.n;
-      const emps = (
-        await c.query<{ id: string; name: string; code: string; department: string | null }>(
-          `SELECT e.id::text, e.display_name AS name, e.employee_code AS code, e.department FROM employees e ${where}
+          AND ($3::text IS NULL OR e.display_name ILIKE '%' || $3 || '%' OR e.employee_code ILIKE '%' || $3 || '%')
+          AND ($6::bigint[] IS NULL OR e.id = ANY($6::bigint[]))`;
+    const args = [q.employeeId ?? null, q.department ?? null, q.q ?? null];
+    const total = (
+      await c.query<{ n: number }>(
+        `SELECT count(*)::int AS n FROM employees e ${where.replace(/\$6/g, () => '$4')}`,
+        [...args, only],
+      )
+    ).rows[0]!.n;
+    const emps = (
+      await c.query<{ id: string; name: string; code: string; department: string | null }>(
+        `SELECT e.id::text, e.display_name AS name, e.employee_code AS code, e.department FROM employees e ${where}
             ORDER BY e.display_name, e.employee_code LIMIT $4 OFFSET $5`,
-          [...args, q.size, (q.page - 1) * q.size],
-        )
-      ).rows;
-      const ids = emps.map((e) => e.id);
-      const days = ids.length
-        ? (
-            await c.query<DayRow>(
-              `SELECT a.id::text, a.employee_id::text, a.day::text, a.day_type, a.leave_type_id::text, t.code AS leave_code,
+        [...args, q.size, (q.page - 1) * q.size, only],
+      )
+    ).rows;
+    const ids = emps.map((e) => e.id);
+    const days = ids.length
+      ? (
+          await c.query<DayRow>(
+            `SELECT a.id::text, a.employee_id::text, a.day::text, a.day_type, a.leave_type_id::text, t.code AS leave_code,
                       a.leave_portion::text, t.loss_of_pay, a.in_at, a.out_at, a.worked_hours::text, a.ot_hours::text,
                       a.late_minutes, a.early_minutes, a.manual, a.source, a.trace, a.remark
                  FROM staff_attendance_days a LEFT JOIN staff_leave_types t ON t.id = a.leave_type_id
                 WHERE a.employee_id = ANY($1::bigint[]) AND a.day BETWEEN $2::date AND $3::date`,
-              [ids, month, end],
-            )
-          ).rows
-        : [];
-      const missing = ids.length
-        ? (
-            await c.query<{ employee_id: string; day: string }>(
-              `SELECT employee_id::text, day::text FROM staff_missing_punches
-                WHERE employee_id = ANY($1::bigint[]) AND day BETWEEN $2::date AND $3::date AND status IN ('pending', 'used')`,
-              [ids, month, end],
-            )
-          ).rows
-        : [];
-      const miss = new Set(missing.map((m) => `${m.employee_id}|${m.day}`));
-      const types = (
-        await c.query<{ code: string; lop: boolean }>(
-          `SELECT code, loss_of_pay AS lop FROM staff_leave_types WHERE status = 'active' ORDER BY loss_of_pay, sort_order, code`,
-        )
-      ).rows;
-      const lock = (
-        await c.query<{
-          locked: boolean;
-          locked_at: Date;
-          by: string | null;
-          unlock_reason: string | null;
-        }>(
-          `SELECT locked, locked_at, (SELECT display_name FROM users u WHERE u.id = l.locked_by) AS by, unlock_reason
-             FROM staff_month_locks l WHERE month = $1::date`,
-          [month],
-        )
-      ).rows[0];
-      const dates: string[] = [];
-      for (let d = month; d <= end; d = addDays(d, 1)) dates.push(d);
-      const today = istToday();
-      const byEmp = new Map<string, DayRow[]>();
-      for (const d of days) byEmp.set(d.employee_id, [...(byEmp.get(d.employee_id) ?? []), d]);
-      const rows = emps.map((e) => {
-        const mine = new Map((byEmp.get(e.id) ?? []).map((d) => [d.day, d]));
-        const totals: Record<string, number> = {
-          P: 0,
-          HD: 0,
-          A: 0,
-          WO: 0,
-          H: 0,
-          HOLD: 0,
-          late: 0,
-          missing: 0,
-        };
-        for (const t of types) totals[t.code] = 0;
-        const cells = dates.map((day) => {
-          const d = mine.get(day);
-          if (!d)
-            return { day, code: day < today ? '·' : '', title: day < today ? 'Not marked' : '' };
-          const half = d.leave_portion !== null && Number(d.leave_portion) < 1;
-          if (d.day_type === 'LV') {
-            const code = d.leave_code ?? 'LV';
-            totals[code] = (totals[code] ?? 0) + (half ? 0.5 : 1);
-            if (half) totals.P! += 0.5;
-          } else if (d.day_type in totals) totals[d.day_type]! += 1;
-          if (d.late_minutes > 0) totals.late! += 1;
-          const isMiss = miss.has(`${e.id}|${day}`);
-          if (isMiss) totals.missing! += 1;
-          return {
-            day,
-            code:
-              d.day_type === 'LV'
-                ? `${d.loss_of_pay ? 'LOP' : (d.leave_code ?? 'LV')}${half ? '½' : ''}`
-                : d.day_type,
-            late: d.late_minutes > 0,
-            missing: isMiss,
-            manual: d.manual && d.source !== 'import',
-            title: [
-              TYPE_WORDS[d.day_type],
-              d.in_at ? `IN ${hm(d.in_at)}` : null,
-              d.out_at ? `OUT ${hm(d.out_at)}` : null,
-              d.worked_hours ? `${d.worked_hours} h` : null,
-              d.remark,
-            ]
-              .filter(Boolean)
-              .join(' · '),
-          };
-        });
-        const lop = types.filter((t) => t.lop).reduce((s, t) => s + (totals[t.code] ?? 0), 0);
-        // a half day pays half; an absent day, loss of pay and a salary hold pay nothing this month
-        const payable = dates.length - totals.A! - totals.HD! / 2 - totals.HOLD! - lop;
-        // past days nothing worked out (the nightly run has not reached them): payable until marked
-        const unmarked = cells.filter((x) => x.code === '·').length;
-        return { employee: e, cells, totals, payable, unmarked };
-      });
-      return {
-        month,
-        monthWords: monthWords(month),
-        dates,
-        types: types.map((t) => t.code),
-        rows,
-        total,
-        page: q.page,
-        size: q.size,
-        lock: lock
-          ? {
-              locked: lock.locked,
-              at: lock.locked_at.toISOString(),
-              by: lock.by,
-              unlockReason: lock.unlock_reason,
-            }
-          : null,
-        mayLock: month < monthStart(today),
-        departments: (
-          await c.query<{ d: string }>(
-            `SELECT DISTINCT department AS d FROM employees WHERE deleted_at IS NULL AND COALESCE(department, '') <> '' ORDER BY 1`,
+            [ids, month, end],
           )
-        ).rows.map((x) => x.d),
+        ).rows
+      : [];
+    const missing = ids.length
+      ? (
+          await c.query<{ employee_id: string; day: string }>(
+            `SELECT employee_id::text, day::text FROM staff_missing_punches
+                WHERE employee_id = ANY($1::bigint[]) AND day BETWEEN $2::date AND $3::date AND status IN ('pending', 'used')`,
+            [ids, month, end],
+          )
+        ).rows
+      : [];
+    const miss = new Set(missing.map((m) => `${m.employee_id}|${m.day}`));
+    const types = (
+      await c.query<{ code: string; lop: boolean }>(
+        `SELECT code, loss_of_pay AS lop FROM staff_leave_types WHERE status = 'active' ORDER BY loss_of_pay, sort_order, code`,
+      )
+    ).rows;
+    const lock = (
+      await c.query<{
+        locked: boolean;
+        locked_at: Date;
+        by: string | null;
+        unlock_reason: string | null;
+      }>(
+        `SELECT locked, locked_at, (SELECT display_name FROM users u WHERE u.id = l.locked_by) AS by, unlock_reason
+             FROM staff_month_locks l WHERE month = $1::date`,
+        [month],
+      )
+    ).rows[0];
+    const dates: string[] = [];
+    for (let d = month; d <= end; d = addDays(d, 1)) dates.push(d);
+    const today = istToday();
+    const byEmp = new Map<string, DayRow[]>();
+    for (const d of days) byEmp.set(d.employee_id, [...(byEmp.get(d.employee_id) ?? []), d]);
+    const rows = emps.map((e) => {
+      const mine = new Map((byEmp.get(e.id) ?? []).map((d) => [d.day, d]));
+      const totals: Record<string, number> = {
+        P: 0,
+        HD: 0,
+        A: 0,
+        WO: 0,
+        H: 0,
+        HOLD: 0,
+        late: 0,
+        missing: 0,
       };
+      for (const t of types) totals[t.code] = 0;
+      const cells = dates.map((day) => {
+        const d = mine.get(day);
+        if (!d)
+          return { day, code: day < today ? '·' : '', title: day < today ? 'Not marked' : '' };
+        const half = d.leave_portion !== null && Number(d.leave_portion) < 1;
+        if (d.day_type === 'LV') {
+          const code = d.leave_code ?? 'LV';
+          totals[code] = (totals[code] ?? 0) + (half ? 0.5 : 1);
+          if (half) totals.P! += 0.5;
+        } else if (d.day_type in totals) totals[d.day_type]! += 1;
+        if (d.late_minutes > 0) totals.late! += 1;
+        const isMiss = miss.has(`${e.id}|${day}`);
+        if (isMiss) totals.missing! += 1;
+        return {
+          day,
+          code:
+            d.day_type === 'LV'
+              ? `${d.loss_of_pay ? 'LOP' : (d.leave_code ?? 'LV')}${half ? '½' : ''}`
+              : d.day_type,
+          late: d.late_minutes > 0,
+          missing: isMiss,
+          manual: d.manual && d.source !== 'import',
+          title: [
+            TYPE_WORDS[d.day_type],
+            d.in_at ? `IN ${hm(d.in_at)}` : null,
+            d.out_at ? `OUT ${hm(d.out_at)}` : null,
+            d.worked_hours ? `${d.worked_hours} h` : null,
+            d.remark,
+          ]
+            .filter(Boolean)
+            .join(' · '),
+        };
+      });
+      const lop = types.filter((t) => t.lop).reduce((s, t) => s + (totals[t.code] ?? 0), 0);
+      // a half day pays half; an absent day, loss of pay and a salary hold pay nothing this month
+      const payable = dates.length - totals.A! - totals.HD! / 2 - totals.HOLD! - lop;
+      // past days nothing worked out (the nightly run has not reached them): payable until marked
+      const unmarked = cells.filter((x) => x.code === '·').length;
+      return { employee: e, cells, totals, payable, unmarked };
     });
+    return {
+      month,
+      monthWords: monthWords(month),
+      dates,
+      types: types.map((t) => t.code),
+      rows,
+      total,
+      page: q.page,
+      size: q.size,
+      lock: lock
+        ? {
+            locked: lock.locked,
+            at: lock.locked_at.toISOString(),
+            by: lock.by,
+            unlockReason: lock.unlock_reason,
+          }
+        : null,
+      mayLock: month < monthStart(today),
+      departments: (
+        await c.query<{ d: string }>(
+          `SELECT DISTINCT department AS d FROM employees WHERE deleted_at IS NULL AND COALESCE(department, '') <> '' ORDER BY 1`,
+        )
+      ).rows.map((x) => x.d),
+    };
   }
 
   /** The payroll feed of a month: per employee the days of each kind and the payable days (Excel). */
@@ -320,7 +417,18 @@ export class AttendanceService implements OnModuleInit {
         bold: true,
       };
       ws.addRow([`Generated on ${head.generatedOn}`]);
-      ws.addRow([]);
+      // leave at part pay (half-pay leave): information for payroll, as the plan's decision says
+      const part = (
+        await c.query<{ code: string; pct: string }>(
+          `SELECT code, pay_percent::text AS pct FROM staff_leave_types
+            WHERE status = 'active' AND paid AND NOT loss_of_pay AND pay_percent IS NOT NULL AND pay_percent < 100`,
+        )
+      ).rows.map((x) => ({ code: x.code, pct: Number(x.pct) }));
+      if (part.length)
+        ws.addRow([
+          `Part-pay leave: ${part.map((x) => `${x.code} at ${String(x.pct)}% pay`).join(', ')} — "Pay-equivalent days" counts them at that share.`,
+        ]);
+      else ws.addRow([]);
       const cols = [
         'Emp. code',
         'Employee',
@@ -337,6 +445,7 @@ export class AttendanceService implements OnModuleInit {
         'Missing punches',
         'Not marked',
         'Payable days',
+        'Pay-equivalent days',
       ];
       const h = ws.addRow(cols);
       h.font = { bold: true };
@@ -357,10 +466,68 @@ export class AttendanceService implements OnModuleInit {
           r.totals.missing,
           r.unmarked,
           r.payable,
+          Math.round(
+            (r.payable -
+              part.reduce((n, x) => n + (r.totals[x.code] ?? 0) * (1 - x.pct / 100), 0)) *
+              100,
+          ) / 100,
         ]);
       ws.getColumn(2).width = 28;
       ws.getColumn(3).width = 20;
       ws.views = [{ state: 'frozen', ySplit: 5, xSplit: 2 }];
+      // encashment: information for payroll — each employee's policy for each type that may be encashed and
+      // the balance it would be paid from (the school's encashment is not run here)
+      const enc = await c.query<{
+        code: string;
+        name: string;
+        type: string;
+        policy: string;
+        balance: string | null;
+        min_days: string | null;
+        yearly: boolean;
+        yearly_days: string | null;
+        on_exit: boolean;
+        exit_days: string | null;
+      }>(
+        `SELECT e.employee_code AS code, e.display_name AS name, t.code AS type, p.name AS policy,
+                (SELECT CASE WHEN b.closed THEN b.closing ELSE app.staff_leave_effective_closing(b) END FROM staff_leave_balances b
+                  WHERE b.employee_id = e.id AND b.leave_type_id = t.id AND b.month <= $1::date ORDER BY b.month DESC LIMIT 1)::text AS balance,
+                p.encash_min_days::text AS min_days, p.encash_yearly AS yearly, p.encash_yearly_days::text AS yearly_days,
+                p.encash_on_exit AS on_exit, p.encash_on_exit_days::text AS exit_days
+           FROM employees e CROSS JOIN staff_leave_types t
+           JOIN LATERAL (SELECT x.* FROM staff_leave_policies x WHERE x.leave_type_id = t.id AND x.status = 'active'
+                           AND app.staff_in_scope(x.scope, x.scope_values, e.id) ORDER BY x.priority, x.id LIMIT 1) p ON true
+          WHERE e.deleted_at IS NULL AND e.status = 'active' AND t.status = 'active' AND p.encash AND e.id = ANY($2::bigint[])
+          ORDER BY e.display_name, t.sort_order, t.code`,
+        [data.month, all.map((r) => r.employee.id)],
+      );
+      const es = wb.addWorksheet('Encashment (information)');
+      es.addRow([
+        'For payroll: the leave each employee may encash under their policy and the balance it is paid from.',
+      ]).font = { italic: true };
+      es.addRow([
+        'Emp. code',
+        'Employee',
+        'Leave type',
+        'Policy',
+        'Balance',
+        'Keep at least',
+        'Each year (days)',
+        'On leaving (days)',
+      ]).font = { bold: true };
+      for (const x of enc.rows)
+        es.addRow([
+          x.code,
+          x.name,
+          x.type,
+          x.policy,
+          x.balance === null ? null : Number(x.balance),
+          x.min_days === null ? null : Number(x.min_days),
+          x.yearly ? (x.yearly_days === null ? 'Yes' : Number(x.yearly_days)) : 'No',
+          x.on_exit ? (x.exit_days === null ? 'Yes' : Number(x.exit_days)) : 'No',
+        ]);
+      es.getColumn(2).width = 28;
+      es.getColumn(4).width = 24;
       return {
         filename: `payroll-feed-${data.month.slice(0, 7)}.xlsx`,
         contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
@@ -385,7 +552,11 @@ export class AttendanceService implements OnModuleInit {
           GROUP BY g.id`,
         [employeeId, day],
       );
-      if (!office && me !== employeeId && !steps.rowCount)
+      const manager =
+        !office && me !== employeeId && !steps.rowCount
+          ? (await this.reportees(c)).includes(employeeId)
+          : false;
+      if (!office && me !== employeeId && !steps.rowCount && !manager)
         throw new DomainError('not-found', 'Not found', { status: 404 });
       const e = (
         await c.query<{ name: string; code: string; department: string | null }>(
@@ -501,6 +672,8 @@ export class AttendanceService implements OnModuleInit {
         locked: isLocked,
         can: {
           mine: me === employeeId,
+          /** a reporting manager's view of their reportee's day */
+          team: manager,
           /** the correction waiting at my level, to decide here */
           decide: steps.rows.find((x) => x.may)?.id ?? null,
           correct: office && !isLocked,
@@ -564,12 +737,71 @@ export class AttendanceService implements OnModuleInit {
                OR a.day_type IN ('WO', 'H', 'HOLD'))`,
       [employeeId, day, x.reason],
     );
+    await this.rollBack(c, employeeId, day, x.reason);
     await c.query(
       `UPDATE staff_attendance_days SET late_minutes = 0 WHERE employee_id = $1 AND day = $2::date
           AND EXISTS (SELECT 1 FROM staff_late_marks m WHERE m.employee_id = $1 AND m.day = $2::date AND m.status = 'waived')`,
       [employeeId, day],
     );
     return r.rows[0]!.res;
+  }
+
+  /**
+   * The late roll-back (the earlier module's job, done in full here): a late mark or missing punch already
+   * turned into leave, corrected away — the mark cleared, that leave cancelled (its days and balance back),
+   * its other marks and the month's lapsed ones counting again, and a month already over deducted afresh.
+   */
+  private async rollBack(c: PoolClient, emp: string, day: string, reason: string) {
+    const month = monthStart(day);
+    const end = addDays(monthStart(addDays(month, 32)), -1);
+    for (const kind of ['late', 'missing'] as const) {
+      const done =
+        kind === 'late'
+          ? await c.query<{ req: string | null }>(
+              `UPDATE staff_late_marks m SET status = 'waived', reason = 'Corrected: ' || left($3, 200)
+                 FROM staff_attendance_days a, app.staff_timing($1, $2::date) t
+                WHERE a.employee_id = m.employee_id AND a.day = m.day AND m.employee_id = $1 AND m.day = $2::date AND m.status = 'used'
+                  AND (a.in_at IS NULL OR a.in_at <= ($2::date + t.starts_at) AT TIME ZONE 'Asia/Kolkata' + make_interval(mins => t.grace)
+                       OR a.day_type IN ('WO', 'H', 'HOLD'))
+               RETURNING m.request_id::text AS req`,
+              [emp, day, reason],
+            )
+          : await c.query<{ req: string | null }>(
+              `UPDATE staff_missing_punches m SET status = 'retired', reason = 'Corrected: ' || left($3, 200)
+                 FROM staff_attendance_days a WHERE a.employee_id = m.employee_id AND a.day = m.day AND m.employee_id = $1
+                  AND m.day = $2::date AND m.status = 'used'
+                  AND (a.in_at IS NOT NULL AND a.out_at IS NOT NULL OR a.day_type IN ('A', 'WO', 'H', 'HOLD'))
+               RETURNING m.request_id::text AS req`,
+              [emp, day, reason],
+            );
+      const reqs = [...new Set(done.rows.map((x) => x.req).filter((x): x is string => !!x))];
+      if (!done.rowCount) continue;
+      const table = kind === 'late' ? 'staff_late_marks' : 'staff_missing_punches';
+      for (const req of reqs) {
+        await this.leave.cancelSystem(
+          c,
+          req,
+          `${kind === 'late' ? 'A late mark' : 'A missing punch'} of ${dmy(day)} corrected`,
+        );
+
+        await c.query(
+          `UPDATE ${table} SET status = 'pending', request_id = NULL WHERE request_id = $1 AND status = 'used'`,
+          [req],
+        );
+      }
+
+      await c.query(
+        `UPDATE ${table} SET status = 'pending' WHERE employee_id = $1 AND status = 'lapsed' AND day BETWEEN $2::date AND $3::date`,
+        [emp, month, end],
+      );
+      if (month < monthStart(istToday())) {
+        await c.query(`DELETE FROM staff_attendance_runs WHERE kind = $1 AND month = $2::date`, [
+          kind,
+          month,
+        ]);
+        await c.query(`SELECT app.staff_month_deduct($1, $2::date)`, [kind, month]);
+      }
+    }
   }
 
   /** The office corrects a day (not one on leave: cancel or shorten the leave first). */
@@ -744,6 +976,7 @@ export class AttendanceService implements OnModuleInit {
         inst.id,
       ]);
       if (inst.status === 'approved') await this.applyReg(c, id);
+      else await this.tellApprovers(c, ctx, id);
       return { id, status: inst.status === 'approved' ? 'approved' : 'pending' };
     });
   }
@@ -847,7 +1080,7 @@ export class AttendanceService implements OnModuleInit {
 
   private async onRegDecided(
     c: PoolClient,
-    _ctx: RequestContext,
+    ctx: RequestContext,
     inst: InstanceRow,
     outcome: 'approved' | 'rejected',
   ) {
@@ -868,6 +1101,16 @@ export class AttendanceService implements OnModuleInit {
         `UPDATE staff_regularisations SET status = 'rejected', decided_at = now(), decided_by = app.current_user_id(), decision_note = $2 WHERE id = $1`,
         [inst.entityId, last?.note ?? null],
       );
+    const { g: x, vars } = await this.regVars(c, inst.entityId);
+    await notifyLeave(
+      this.messages,
+      this.log,
+      c,
+      ctx,
+      outcome === 'approved' ? 'leave_correction_approved' : 'leave_correction_rejected',
+      [x.user_id],
+      { ...vars, by: last?.actedBy ?? 'the approver', note: x.note ?? '' },
+    );
   }
 
   async decideReg(ctx: RequestContext, id: string, dto: DecideDto) {
@@ -887,15 +1130,17 @@ export class AttendanceService implements OnModuleInit {
       return s.rows[0]!.id;
     });
     await this.workflow.act(ctx, step, dto.outcome, { note: dto.note || undefined });
-    return this.db.tenant(requireTenant(ctx), async (c) => ({
-      id,
-      status: (
+    return this.db.tenant(requireTenant(ctx), async (c) => {
+      const status = (
         await c.query<{ status: string }>(
           `SELECT status FROM staff_regularisations WHERE id = $1`,
           [id],
         )
-      ).rows[0]!.status,
-    }));
+      ).rows[0]!.status;
+      // approved at a level with one to come: the next level is told
+      if (status === 'pending') await this.tellApprovers(c, ctx, id);
+      return { id, status };
+    });
   }
 
   async withdrawReg(ctx: RequestContext, id: string, dto: WithdrawDto) {
@@ -1003,8 +1248,56 @@ export class AttendanceService implements OnModuleInit {
                 ${detail} AS detail, ${extra} AS note, ${req} AS leave
            FROM ${table} x JOIN employees e ON e.id = x.employee_id ${where}
           ORDER BY x.day DESC, e.display_name LIMIT $6 OFFSET $7`,
-        [...args, q.size, (q.page - 1) * q.size],
+        q.format ? [...args, LIST_LIMIT, 0] : [...args, q.size, (q.page - 1) * q.size],
       );
+      if (q.format) {
+        checkListSize(rows.rows.length, 'rows');
+        const title = {
+          late: 'Late marks',
+          missing: 'Missing punches',
+          regularisation: 'Attendance corrections',
+        }[q.kind];
+        const status: Record<string, string> = {
+          pending: q.kind === 'regularisation' ? 'Waiting' : 'Counting',
+          used: 'Charged as leave',
+          waived: 'Waived',
+          retired: 'Cleared',
+          lapsed: 'Lapsed',
+          approved: 'Approved',
+          rejected: 'Not approved',
+          withdrawn: 'Withdrawn',
+          cancelled: 'Cancelled',
+        };
+        return purchaseListFile({
+          format: q.format,
+          head: await purchaseHead(c, this.storage),
+          title: `${title} · ${monthWords(month)}`,
+          slug: `Attendance-${q.kind}`,
+          words: [monthWords(month), q.status ? `Only: ${status[q.status] ?? q.status}` : null]
+            .filter(Boolean)
+            .join(' · '),
+          list: {
+            columns: [
+              { label: 'Date', type: 'date' },
+              { label: 'Emp. code', width: 1.4 },
+              { label: 'Employee', width: 3 },
+              { label: 'What', width: 4 },
+              { label: 'Status', width: 1.6 },
+              { label: 'As leave', width: 1.8 },
+              { label: 'Note', width: 3 },
+            ],
+            rows: rows.rows.map((x) => [
+              x.day,
+              x.code,
+              x.employee,
+              x.detail,
+              status[x.status] ?? x.status,
+              x.leave,
+              x.note,
+            ]),
+          },
+        });
+      }
       return {
         month,
         monthWords: monthWords(month),

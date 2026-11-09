@@ -68,31 +68,40 @@ export default async function AttendanceDayPage({
     <>
       <Breadcrumbs
         items={
-          !office && !d.can.mine
+          !office && d.can.team
             ? [
                 { label: 'My leave', href: '/leave' },
                 {
-                  label: 'Attendance corrections waiting for me',
-                  href: '/leave/attendance/approvals',
+                  label: 'My team’s attendance',
+                  href: `/leave/attendance/team?month=${day.slice(0, 7)}`,
                 },
                 { label: dmy(day) },
               ]
-            : office
+            : !office && !d.can.mine
               ? [
-                  { label: 'Employee management', href: '/people/employees' },
+                  { label: 'My leave', href: '/leave' },
                   {
-                    label: 'Attendance register',
-                    href: `/leave/attendance?month=${day.slice(0, 7)}`,
+                    label: 'Attendance corrections waiting for me',
+                    href: '/leave/attendance/approvals',
                   },
                   { label: dmy(day) },
                 ]
-              : [
-                  {
-                    label: 'My attendance',
-                    href: `/leave/attendance/mine?month=${day.slice(0, 7)}`,
-                  },
-                  { label: dmy(day) },
-                ]
+              : office
+                ? [
+                    { label: 'Employee management', href: '/people/employees' },
+                    {
+                      label: 'Attendance register',
+                      href: `/leave/attendance?month=${day.slice(0, 7)}`,
+                    },
+                    { label: dmy(day) },
+                  ]
+                : [
+                    {
+                      label: 'My attendance',
+                      href: `/leave/attendance/mine?month=${day.slice(0, 7)}`,
+                    },
+                    { label: dmy(day) },
+                  ]
         }
       />
       <PageHeader

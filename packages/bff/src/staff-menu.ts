@@ -40,6 +40,8 @@ export interface StaffWaiting {
   staffRegularisations?: number;
   /** leave & attendance reports the leave office gave me (docs/design/85, phase D) */
   leaveReports?: number;
+  /** the staff who report to me (docs/design/85, "my reportees' attendance") */
+  team?: number;
 }
 export interface StaffGroup {
   id: string;
@@ -253,6 +255,12 @@ export const STAFF_MENU: StaffGroup[] = [
         allowed: (_can, w) => (w.staffRegularisations ?? 0) > 0,
       },
       {
+        href: '/my-team',
+        label: 'My team’s attendance',
+        help: 'The days of the staff who report to you',
+        allowed: (_can, w) => (w.team ?? 0) > 0,
+      },
+      {
         href: '/leave-reports',
         label: 'Leave & attendance reports',
         help: 'The leave and attendance reports the leave office gave you, as Excel or PDF',
@@ -420,6 +428,7 @@ const SCREEN_ICON: Array<[string, string]> = [
   ['/my-attendance', 'clock'],
   ['/attendance-corrections', 'check'],
   ['/leave-reports', 'file'],
+  ['/my-team', 'users'],
   ['/resignation', 'userPlus'],
   ['/acr', 'file'],
   ['/office-orders', 'file'],

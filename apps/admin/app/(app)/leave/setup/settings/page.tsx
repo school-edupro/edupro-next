@@ -1,3 +1,4 @@
+import { MessageTemplates } from '@/components/MessageTemplates';
 import { Breadcrumbs, PageHeader } from '@edupro/ui';
 import { notFound } from 'next/navigation';
 import { Notice } from '@/components/Notice';
@@ -247,6 +248,9 @@ export default async function LeaveSettingsPage({
           </div>
         )}
       </form>
+      <div style={{ marginTop: 'var(--sp-4)' }}>
+        <MessageTemplates templates={d.templates} search="leave_" />
+      </div>
     </>
   );
 }

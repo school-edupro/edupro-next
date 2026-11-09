@@ -1175,6 +1175,28 @@ export class WorkflowService {
     return this.act(ctx, stepId, 'approved', { note: reason }, { pass: true });
   }
 
+  /**
+   * Requests decided on their own page (staff leave, its cancellation, an attendance correction: docs/design/85),
+   * where the payroll lock is checked and the next level and the employee are told — never from the general
+   * approval step routes.
+   */
+  static readonly OWN_PAGE: Record<string, string> = {
+    staff_leave: 'Decide this leave on its own page (Leave waiting for me)',
+    staff_leave_cancel: 'Decide this cancellation on the leave’s own page (Leave waiting for me)',
+    staff_regularisation:
+      'Decide this attendance correction on its own page (Attendance corrections waiting)',
+  };
+  async mustBeGeneral(ctx: RequestContext, stepId: string) {
+    const t = await this.db.tenant(requireTenant(ctx), (c) =>
+      c.query<{ type: string }>(
+        `SELECT i.entity_type AS type FROM workflow_steps s JOIN workflow_instances i ON i.id = s.instance_id WHERE s.id = $1`,
+        [stepId],
+      ),
+    );
+    const own = WorkflowService.OWN_PAGE[t.rows[0]?.type ?? ''];
+    if (own) throw new DomainError('conflict', own, { status: 409 });
+  }
+
   async act(
     ctx: RequestContext,
     stepId: string,

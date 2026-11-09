@@ -87,6 +87,22 @@ export default async function AttendanceExceptionsPage({
         kicker="Leave & attendance"
         title={`Late marks and missing punches · ${d.monthWords}`}
         description="Late marks and missing punches count through the month; at the month's end every set of them (as the leave settings say) becomes a day of leave, and what is left lapses. Waive one the employee had a reason for; it then stops counting."
+        actions={
+          <div style={{ display: 'flex', gap: 'var(--sp-2)' }}>
+            <a
+              className="ep-btn ep-btn--secondary ep-btn--sm"
+              href={`/api/leave/list-file?list=exceptions&format=xlsx&${keep.toString()}`}
+            >
+              Excel
+            </a>
+            <a
+              className="ep-btn ep-btn--secondary ep-btn--sm"
+              href={`/api/leave/list-file?list=exceptions&format=pdf&${keep.toString()}`}
+            >
+              PDF
+            </a>
+          </div>
+        }
       />
       <Notice params={sp} />
       <nav className="ep-tabs" aria-label="Which list">

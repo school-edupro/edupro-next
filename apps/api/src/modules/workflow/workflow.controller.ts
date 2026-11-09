@@ -67,13 +67,15 @@ export class WorkflowController {
 
   @Post('steps/:id/approve')
   @RequirePermission(WORKFLOW.inboxAct)
-  approve(@ReqCtx() ctx: RequestContext, @Param('id') id: string, @Body() body: ActDto) {
+  async approve(@ReqCtx() ctx: RequestContext, @Param('id') id: string, @Body() body: ActDto) {
+    await this.workflow.mustBeGeneral(ctx, id);
     return this.workflow.act(ctx, id, 'approved', body);
   }
 
   @Post('steps/:id/reject')
   @RequirePermission(WORKFLOW.inboxAct)
-  reject(@ReqCtx() ctx: RequestContext, @Param('id') id: string, @Body() body: ActDto) {
+  async reject(@ReqCtx() ctx: RequestContext, @Param('id') id: string, @Body() body: ActDto) {
+    await this.workflow.mustBeGeneral(ctx, id);
     return this.workflow.act(ctx, id, 'rejected', body);
   }
 

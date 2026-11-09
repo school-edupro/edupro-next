@@ -364,6 +364,55 @@ doubling; the comparison; the switch starting the waiting leave and correction a
 the cut-over); `apps/workers/test/legacy-leave.test.ts` (the connection from the environment, the tables and
 their filters).
 
+## As built — the plan checked (9 Nov 2026)
+
+The user asked for every phase to be checked against the plan and every rule tested. An independent review
+read the plan (`LEAVE_MODULE_PLAN.md`) item by item against the code; each finding was checked in the code
+before it was fixed. The user chose: fix all, with tests; WhatsApp through the school's provider.
+
+**Fixed** (0355 and the API):
+
+- Messages, on the school's channels (e-mail, app, WhatsApp — WhatsApp only once the template has the name
+  Meta approved, as every template message; `leave-notify.ts`): attendance corrections asked (to the
+  approver at the level), approved and not approved (to the employee), the next level of a correction;
+  the approver's confirmation of their decision (`leave_acted`); a withdrawn leave tells the approvers it was
+  withdrawn (`leave_withdrawn`, not the cancellation wording). Templates for e-mail, app and WhatsApp
+  (`wa_params` in order) seeded for every school; the leave settings page shows the Message templates block.
+- The daily digest worded from its editable `leave_digest` template, with the corrections that wait, and on
+  WhatsApp when the template is approved.
+- The missing-punch e-mail's copy list: each address gets a copy.
+- The payroll lock on every route: approving a leave or its cancellation refuses a locked month in the
+  workflow's completion as well; the general approval step routes refuse staff leave, its cancellation and
+  corrections ("decide it on its own page": `WorkflowService.OWN_PAGE`, `mustBeGeneral`).
+- The payroll feed: **pay-equivalent days** (part-pay leave at its pay %) and an **Encashment
+  (information)** sheet — decision 2's "information for payroll".
+- **My team's attendance**: `GET /staff-attendance/team` (the reporting manager on this year's postings),
+  a manager opens a reportee's day; admin `/leave/attendance/team`, staff app `/my-team` and
+  `/my-team/:emp`, links from My leave and the staff menu.
+- The late roll-back in full: a day corrected whose late mark or missing punch was already turned into leave
+  cancels that leave (`LeaveService.cancelSystem`), re-counts its other marks and the month's lapsed ones,
+  and deducts a past month afresh.
+- A day left blank when leave comes off it (`app.staff_day_refill`, from `app.staff_attendance_remove_leave`):
+  worked out from its punches, else a weekly off, a holiday or absent.
+- Files: the balances (Excel / PDF), the late-mark, missing-punch and correction lists (Excel / PDF), the
+  leave register's Excel with each leave's levels (L1–L3: who, how, when).
+- The leave pages in the standing accessibility checks (`admin/e2e/a11y.spec.ts`, `teacher-a11y.spec.ts`).
+
+**Not applicable**: the old module's "log clean-up" job deleted its own log files; this system's audit and
+logs have their own retention.
+
+**Tests** — `leave-gaps.e2e-spec.ts`: every message (waiting with WhatsApp once approved, the approver's
+confirmation, approved, rejected, withdrawn, the next level, a cancellation asked and decided, dates
+changed, corrections asked / approved / not approved, the digest with corrections, the missing-punch copy);
+the payroll lock (approve refused, reject allowed, the general route sending to the own page); the same
+person at two levels once; designation and role approvers; the apply checks (at most a day count an
+application, the most a month, next to other leave, days ahead, how far back, the document's type and size);
+optional holidays (a working day; free when the policy says off); 2nd / 4th Saturday and dated weekly offs;
+special and bus-duty timings; the device push into the day; the days sheet; missing punches into leave;
+absence into loss of pay; the session-end cap; my team's attendance; the payroll feed's part pay and
+encashment; the files; the late roll-back; a day filled when leave comes off it. `staff-reports.e2e-spec.ts`
+gained the annual attendance % and the dashboard's figures.
+
 ## The module is complete
 
 Phases A–E are built. What is left is the school's: the old database connection on the server, the read, the

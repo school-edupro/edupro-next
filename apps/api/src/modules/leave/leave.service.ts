@@ -6,10 +6,10 @@ import { DbService } from '../../common/db/db.service';
 import { DomainError } from '../../common/errors/domain-error';
 import { requireTenant, type RequestContext } from '../../common/http/request-context';
 import { MessagesService } from '../comms/messages.service';
-import type { SendMessageDto } from '../comms/comms.dto';
 import { istToday } from '../purchase/purchase-stock-core';
 import { WorkflowService, type InstanceRow } from '../workflow/workflow.service';
 import { chainFor } from './leave-chain';
+import { notifyLeave } from './leave-notify';
 import {
   addDays,
   available,
@@ -214,7 +214,7 @@ export class LeaveService implements OnModuleInit {
   }
 
   // ---- messages ------------------------------------------------------------------------------------
-  /** E-mail and app messages by the school's channels; a message that cannot go never stops the leave. */
+  /** A message on the school's channels (e-mail, app, WhatsApp); one that cannot go never stops the leave. */
   private async notify(
     c: PoolClient,
     ctx: RequestContext,
@@ -222,29 +222,7 @@ export class LeaveService implements OnModuleInit {
     userIds: Array<string | null>,
     vars: Record<string, string | number>,
   ) {
-    const s = (
-      await c.query<{ send_email: boolean; send_app: boolean }>(
-        `SELECT send_email, send_app FROM staff_leave_settings`,
-      )
-    ).rows[0];
-    if (!s) return;
-    const channels = [...(s.send_email ? ['email'] : []), ...(s.send_app ? ['push'] : [])];
-    for (const user of [...new Set(userIds.filter((u): u is string => !!u))])
-      for (const channel of channels) {
-        await c.query('SAVEPOINT leave_msg');
-        try {
-          await this.messages.sendWith(c, ctx, {
-            templateCode: code,
-            channel,
-            recipientUserId: user,
-            variables: vars,
-          } as SendMessageDto);
-          await c.query('RELEASE SAVEPOINT leave_msg');
-        } catch (e) {
-          await c.query('ROLLBACK TO SAVEPOINT leave_msg');
-          this.log.debug({ code, channel, error: (e as Error).message }, 'leave message not sent');
-        }
-      }
+    await notifyLeave(this.messages, this.log, c, ctx, code, userIds, vars);
   }
 
   private async assigneesOf(c: PoolClient, instanceId: string | null) {
@@ -838,6 +816,17 @@ export class LeaveService implements OnModuleInit {
   }
 
   /** Closed without being taken (rejected, withdrawn, cancelled): the days, the balance back, the log. */
+  /**
+   * The system's own leave taken back (docs/design/85, the late roll-back): a deduction for late marks or
+   * missing punches whose mark was corrected away — cancelled, its days and balance given back.
+   */
+  async cancelSystem(c: PoolClient, id: string, why: string) {
+    const r = await this.load(c, id, true);
+    if (r.status !== 'approved' && r.status !== 'pending') return false;
+    await this.close(c, r, 'cancelled', why, istToday());
+    return true;
+  }
+
   private async close(
     c: PoolClient,
     r: ReqRow,
@@ -893,6 +882,8 @@ export class LeaveService implements OnModuleInit {
     const last = [...inst.steps].reverse().find((s) => s.actedAt);
     const by = last?.actedBy ?? 'the approver';
     if (outcome === 'approved') {
+      // whichever way the last level approved, a month locked for payroll takes no leave
+      await mustBeOpen(c, [r.from_date, r.to_date], 'approve it');
       await this.finishApproved(c, ctx, r.id, null, last?.note ?? null);
       const fin = await this.load(c, r.id);
       await this.notify(c, ctx, 'leave_approved', [r.employee_user_id], {
@@ -921,6 +912,7 @@ export class LeaveService implements OnModuleInit {
     if (r.cancel_status !== 'pending') return;
     const last = [...inst.steps].reverse().find((s) => s.actedAt);
     if (outcome === 'approved') {
+      if (r.status === 'approved') await mustBeOpen(c, [r.from_date, r.to_date], 'cancel it');
       if (r.status === 'approved') await this.close(c, r, 'cancelled', r.cancel_reason, istToday());
       await c.query(`UPDATE staff_leave_requests SET cancel_status = 'approved' WHERE id = $1`, [
         r.id,
@@ -1036,6 +1028,19 @@ export class LeaveService implements OnModuleInit {
           await this.assigneesOf(c, step.instance),
           this.vars(r),
         );
+      // the approver's own confirmation of what they did and where the leave is now
+      const me = (await c.query<{ id: string }>(`SELECT app.current_user_id()::text AS id`)).rows[0]
+        ?.id;
+      await this.notify(c, ctx, 'leave_acted', [me ?? null], {
+        ...this.vars(r),
+        action: dto.outcome === 'approved' ? 'approved' : 'did not approve',
+        next:
+          r.status === 'pending'
+            ? `It now waits with ${r.waiting_with ?? 'the next level'}.`
+            : r.status === 'approved'
+              ? 'The leave is approved.'
+              : 'The employee is told.',
+      });
       return { id, status: r.status, waitingWith: r.waiting_with };
     });
   }
@@ -1061,13 +1066,13 @@ export class LeaveService implements OnModuleInit {
       const waiting = await this.assigneesOf(c, r.workflow_instance_id);
       if (r.workflow_instance_id) await this.workflow.cancelIn(c, ctx, r.workflow_instance_id, why);
       await this.close(c, r, status, why, istToday());
-      await this.notify(
-        c,
-        ctx,
-        'leave_cancelled',
-        own ? waiting : [r.employee_user_id, ...waiting],
-        { ...this.vars(r), by: own ? r.employee : 'the leave office', note: why },
-      );
+      if (own) await this.notify(c, ctx, 'leave_withdrawn', waiting, this.vars(r));
+      else
+        await this.notify(c, ctx, 'leave_cancelled', [r.employee_user_id, ...waiting], {
+          ...this.vars(r),
+          by: 'the leave office',
+          note: why,
+        });
       await this.audit.stage(ctx, c, {
         action: `leave.request.${status}`,
         entityType: 'staff_leave_requests',

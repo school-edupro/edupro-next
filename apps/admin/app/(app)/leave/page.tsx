@@ -34,6 +34,10 @@ export default async function MyLeavePage({
     : await apiFetch<{ reports: number }>('/leave-reports/mine')
         .then((r) => r.reports)
         .catch(() => 0);
+  // the staff who report to me (docs/design/85, "my reportees' attendance")
+  const team = await apiFetch<{ team?: number }>('/staff-attendance/team?size=25')
+    .then((r) => r.team ?? 0)
+    .catch(() => 0);
   const link = (p: number) => `/leave?size=${size}${p > 1 ? `&page=${String(p)}` : ''}`;
   return (
     <>
@@ -55,6 +59,11 @@ export default async function MyLeavePage({
             <a className="ep-btn ep-btn--secondary ep-btn--sm" href="/leave/attendance/mine">
               My attendance
             </a>
+            {team ? (
+              <a className="ep-btn ep-btn--secondary ep-btn--sm" href="/leave/attendance/team">
+                My team’s attendance
+              </a>
+            ) : null}
             {reports ? (
               <a className="ep-btn ep-btn--secondary ep-btn--sm" href="/leave/reports">
                 Reports

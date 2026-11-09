@@ -682,6 +682,22 @@ export class LeaveSetupService {
           updatedAt: s.updated_at.toISOString(),
         },
         shifts: shifts.rows,
+        // the module's messages and which channels can carry them (Communication → Templates)
+        templates: (
+          await c.query<{
+            code: string;
+            channel: string;
+            name: string;
+            active: boolean;
+            ready: boolean;
+          }>(
+            `SELECT code, channel::text, name, status = 'active' AS active,
+                    status = 'active' AND (channel IN ('email', 'push')
+                      OR (channel = 'sms' AND COALESCE(btrim(dlt_template_id), '') <> '')
+                      OR (channel = 'whatsapp' AND COALESCE(btrim(wa_template_name), '') <> '')) AS ready
+               FROM comms_templates WHERE code LIKE 'leave\_%' AND deleted_at IS NULL ORDER BY code, channel`,
+          )
+        ).rows,
         can: { manage: this.has(ctx, LEAVE.setupManage) },
       };
     });

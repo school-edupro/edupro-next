@@ -203,6 +203,7 @@ export const BalanceQuerySchema = z.object({
     .regex(/^\d{4}-\d{2}$/)
     .optional(),
   q: z.string().trim().max(80).optional(),
+  format: z.enum(['xlsx', 'pdf']).optional(),
   ...Page,
 });
 export class BalanceQueryDto extends createZodDto(BalanceQuerySchema) {}
@@ -274,6 +275,7 @@ export const ExceptionsSchema = z.object({
   status: z.string().trim().max(20).optional(),
   employeeId: Id.optional(),
   department: z.string().trim().max(100).optional(),
+  format: z.enum(['xlsx', 'pdf']).optional(),
   ...Page,
 });
 export class ExceptionsDto extends createZodDto(ExceptionsSchema) {}

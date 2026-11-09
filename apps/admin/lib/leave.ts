@@ -114,6 +114,13 @@ export interface LeaveSettings {
     updatedAt: string;
   };
   shifts: Array<{ id: string; code: string; name: string }>;
+  templates: Array<{
+    code: string;
+    channel: string;
+    name: string;
+    active: boolean;
+    ready: boolean;
+  }>;
   can: { manage: boolean };
 }
 
@@ -329,6 +336,8 @@ export interface AttendanceRegister {
   lock: { locked: boolean; at: string; by: string | null; unlockReason: string | null } | null;
   mayLock: boolean;
   departments: string[];
+  /** the team view: how many report to me */
+  team?: number;
 }
 
 export interface AttendanceDay {
@@ -362,7 +371,13 @@ export interface AttendanceDay {
     reason: string;
   }>;
   locked: boolean;
-  can: { mine: boolean; decide: string | null; correct: boolean; regularise: boolean };
+  can: {
+    mine: boolean;
+    team?: boolean;
+    decide: string | null;
+    correct: boolean;
+    regularise: boolean;
+  };
 }
 
 export interface MyAttendance {

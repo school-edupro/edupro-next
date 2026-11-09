@@ -344,6 +344,7 @@
     "status": "Status",
     "active": "active",
     "inactive": "inactive",
+    "retired": "retired",
     "name": "Name",
     "all": "All",
     "none": "None",

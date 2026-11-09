@@ -154,6 +154,21 @@ export class LeaveOfficeService {
         ])
       ).rows;
       checkListSize(rows.length, 'leave requests');
+      // each leave's levels: who decided (or waits), how and when — the earlier register's L1–L3
+      const steps = await c.query<{ id: string; levels: string[] }>(
+        `SELECT r.id::text,
+                array_agg(s.name || ': ' || CASE s.status
+                    WHEN 'approved' THEN 'approved by ' || COALESCE((SELECT u.display_name FROM users u WHERE u.id = s.acted_by), '—')
+                         || ' on ' || to_char(s.acted_at AT TIME ZONE 'Asia/Kolkata', 'DD-MM-YYYY')
+                    WHEN 'rejected' THEN 'not approved by ' || COALESCE((SELECT u.display_name FROM users u WHERE u.id = s.acted_by), '—')
+                         || ' on ' || to_char(s.acted_at AT TIME ZONE 'Asia/Kolkata', 'DD-MM-YYYY')
+                    WHEN 'pending' THEN 'waiting with ' || COALESCE((SELECT string_agg(u.display_name, ', ') FROM users u WHERE u.id = ANY(s.assignee_user_ids)), 'nobody')
+                    ELSE 'passed on' END ORDER BY s.level) AS levels
+           FROM staff_leave_requests r JOIN workflow_steps s ON s.instance_id = r.workflow_instance_id
+          WHERE r.id = ANY($1::bigint[]) GROUP BY r.id`,
+        [rows.map((r) => r.id)],
+      );
+      const levelsOf = new Map(steps.rows.map((x) => [x.id, x.levels]));
       const words = [
         q.from || q.to ? `${q.from ? dmy(q.from) : '…'} to ${q.to ? dmy(q.to) : '…'}` : 'All dates',
         q.bucket ? `Only: ${q.bucket}` : null,
@@ -196,6 +211,9 @@ export class LeaveOfficeService {
                   { label: 'Applied on', type: 'date' },
                   { label: 'Reason', width: 4 },
                   { label: 'Waiting with / decided by', width: 3 },
+                  { label: 'Level 1', width: 3 },
+                  { label: 'Level 2', width: 3 },
+                  { label: 'Level 3', width: 3 },
                   { label: 'Note', width: 3 },
                 ],
           rows: rows.map((r) => {
@@ -230,6 +248,9 @@ export class LeaveOfficeService {
                   r.created_at.toISOString().slice(0, 10),
                   r.reason,
                   by,
+                  levelsOf.get(r.id)?.[0] ?? '',
+                  levelsOf.get(r.id)?.[1] ?? '',
+                  levelsOf.get(r.id)?.[2] ?? '',
                   r.note,
                 ];
           }),
@@ -260,8 +281,9 @@ export class LeaveOfficeService {
       const pairs = await c.query<{ emp: string; type_id: string }>(
         `SELECT e.id::text AS emp, t.id::text AS type_id FROM employees e CROSS JOIN staff_leave_types t ${where}
           ORDER BY e.display_name, e.employee_code, t.sort_order, t.code LIMIT $5 OFFSET $6`,
-        [...args, q.size, (q.page - 1) * q.size],
+        q.format ? [...args, LIST_LIMIT, 0] : [...args, q.size, (q.page - 1) * q.size],
       );
+      if (q.format) checkListSize(pairs.rows.length, 'balances');
       const rows = [];
       for (const p of pairs.rows) {
         const b = (
@@ -324,6 +346,52 @@ export class LeaveOfficeService {
           trail: b.trail,
         });
       }
+      if (q.format)
+        return purchaseListFile({
+          format: q.format,
+          head: await purchaseHead(c, this.storage),
+          title: `Leave balances · ${monthWords(month)}`,
+          slug: 'Leave-balances',
+          words: [
+            monthWords(month),
+            q.department ? `Department: ${q.department}` : null,
+            q.q ? `Search: ${q.q}` : null,
+          ]
+            .filter(Boolean)
+            .join(' · '),
+          list: {
+            columns: [
+              { label: 'Emp. code', width: 1.4 },
+              { label: 'Employee', width: 3 },
+              { label: 'Department', width: 2.2 },
+              { label: 'Leave type', width: 1 },
+              { label: 'Policy', width: 2.4 },
+              { label: 'Opening', type: 'number', width: 1 },
+              { label: 'Credited', type: 'number', width: 1 },
+              { label: 'Held', type: 'number', width: 1 },
+              { label: 'Correction', type: 'number', width: 1 },
+              { label: 'Available', type: 'number', width: 1 },
+              { label: 'Closing', type: 'number', width: 1 },
+              { label: 'Lapsed', type: 'number', width: 1 },
+              { label: 'Month closed', width: 1 },
+            ],
+            rows: rows.map((r) => [
+              r.employee.code,
+              r.employee.name,
+              r.employee.department,
+              r.leaveType.code,
+              r.policy,
+              r.opening,
+              r.credited,
+              r.held,
+              r.correction,
+              r.available,
+              r.closing,
+              r.lapsed,
+              r.closed ? 'Yes' : 'No',
+            ]),
+          },
+        });
       const lists = await c.query<{ kind: string; id: string; name: string }>(
         `SELECT 'type' AS kind, id::text, code || ' · ' || name AS name FROM staff_leave_types
           WHERE status = 'active' AND keeps_balance AND NOT loss_of_pay
