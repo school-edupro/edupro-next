@@ -1,4 +1,4 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable, type OnModuleInit } from '@nestjs/common';
 import type { PoolClient } from '@edupro/db';
 import type { StorageDriver } from '@edupro/storage';
 import { AuditService } from '../../common/audit/audit.service';
@@ -8,7 +8,10 @@ import { readSheet, templateSheet } from '../../common/excel/sheet';
 import { requireTenant, type RequestContext } from '../../common/http/request-context';
 import { STORAGE_DRIVER } from '../files/storage';
 import { libraryFile, type FileColumn } from '../library/library-file';
+import { WorkflowService, type InstanceRow } from '../workflow/workflow.service';
+import { syncFlow } from './purchase-flow';
 import {
+  approvingDepartment,
   dmy,
   istToday,
   money2,
@@ -26,11 +29,17 @@ import {
   type CountDto,
   type CountImportDto,
   type CountLinesDto,
+  type CountViewDto,
   type NoteDto,
   type StockDocQueryDto,
 } from './purchase.dto';
 
 const round3 = (n: number) => Math.round(n * 1000) / 1000;
+
+/** My step at a count's current level (Purchase → Who approves). */
+// eslint-disable-next-line no-restricted-syntax -- MAY_ACT is a fixed fragment
+const MY_STEP = `SELECT s.id::text FROM workflow_steps s JOIN workflow_instances i ON i.id = s.instance_id
+   WHERE i.id = $1 AND i.status = 'pending' AND s.level = i.current_level AND s.status = 'pending' AND ${WorkflowService.MAY_ACT}`;
 const round2 = (n: number) => Math.round(n * 100) / 100;
 
 /** Why a line differs (docs/design/84, "As built — the count rebuilt", 9 Nov 2026), and in words. */
@@ -54,7 +63,7 @@ const reasonWords = (code: string | null, note: string | null) =>
 const SELECT = `
   SELECT k.id::text, k.number, k.status, k.store_id::text, st.name AS store, k.category_id::text, cat.name AS category,
          k.counted_on::text, k.counted_by, k.note, k.submitted_at, k.decided_at, k.decision_note, k.created_by::text,
-         k.submitted_by::text, (SELECT ${PERSON_OF('u')} FROM users u WHERE u.id = k.created_by) AS started_by,
+         k.submitted_by::text, k.workflow_instance_id::text, (SELECT ${PERSON_OF('u')} FROM users u WHERE u.id = k.created_by) AS started_by,
          (SELECT ${PERSON_OF('u')} FROM users u WHERE u.id = k.decided_by) AS decided_by, k.decided_by::text AS decided_by_id,
          (SELECT count(*)::int FROM stock_count_lines l WHERE l.count_id = k.id) AS lines,
          (SELECT count(*)::int FROM stock_count_lines l WHERE l.count_id = k.id AND l.counted_qty IS NOT NULL) AS counted,
@@ -78,6 +87,7 @@ interface CountRow {
   decision_note: string | null;
   created_by: string | null;
   submitted_by: string | null;
+  workflow_instance_id: string | null;
   started_by: string | null;
   decided_by: string | null;
   decided_by_id: string | null;
@@ -115,18 +125,80 @@ interface CountLine {
  * the differences post as adjustments at the average rate, or sends it back to count again.
  */
 @Injectable()
-export class PurchaseCountsService {
+export class PurchaseCountsService implements OnModuleInit {
   constructor(
     private readonly db: DbService,
     private readonly audit: AuditService,
+    private readonly workflow: WorkflowService,
     @Inject(STORAGE_DRIVER) private readonly storage: StorageDriver,
   ) {}
+
+  onModuleInit() {
+    this.workflow.onComplete('purchase_count', (c, ctx, instance, outcome) =>
+      this.onDecided(c, ctx, instance, outcome),
+    );
+  }
+
+  /**
+   * Who approves a count of this store and where it is: the levels set on Purchase → Who approves for
+   * the store's department (none: the school admin), and, once sent, each level's people and outcome.
+   */
+  private async approvalOf(c: PoolClient, k: CountRow) {
+    const departmentId = await approvingDepartment(c, k.store_id);
+    const set = (
+      await c.query<{ department: string | null; levels: Array<{ name: string }> | null }>(
+        `SELECT d.name AS department, a.levels FROM departments d
+           LEFT JOIN purchase_department_approvals a ON a.department_id = d.id AND a.doc_type = 'count'
+          WHERE d.id = $1`,
+        [departmentId],
+      )
+    ).rows[0];
+    const instance = k.workflow_instance_id
+      ? await this.workflow.instanceWith(c, k.workflow_instance_id)
+      : null;
+    const mine = k.workflow_instance_id
+      ? !!(await c.query(MY_STEP, [k.workflow_instance_id])).rowCount
+      : false;
+    return {
+      departmentId: departmentId === '0' ? null : departmentId,
+      department: set?.department ?? null,
+      levels: (set?.levels ?? []).map((l) => l.name),
+      steps: (instance?.steps ?? []).map((st) => ({
+        level: st.level,
+        name: st.name,
+        status: st.status,
+        assignees: st.assignees.map((a) => a.name),
+        actedBy: st.actedBy,
+        actedAt: st.actedAt,
+        note: st.note,
+        overdue: st.overdue,
+      })),
+      currentLevel: instance?.status === 'pending' ? instance.currentLevel : null,
+      mine,
+    };
+  }
 
   private has(ctx: RequestContext, p: string) {
     return ctx.permissions?.has(p) ?? false;
   }
   private mustSee(ctx: RequestContext) {
     if (!this.has(ctx, PURCHASE.storeView))
+      throw new DomainError('permission-denied', 'Only the stores see counts', { status: 403 });
+  }
+  /** The stores, or someone on the count's approval (a level of Purchase → Who approves). */
+  private async mustRead(c: PoolClient, ctx: RequestContext, k: CountRow) {
+    if (this.has(ctx, PURCHASE.storeView)) return;
+    const on =
+      k.workflow_instance_id &&
+      (
+        await c.query(
+          // eslint-disable-next-line no-restricted-syntax -- MAY_ACT is a fixed fragment
+          `SELECT 1 FROM workflow_steps s WHERE s.instance_id = $1
+              AND (app.current_user_id() = ANY(s.assignee_user_ids) OR s.acted_by = app.current_user_id() OR ${WorkflowService.MAY_ACT})`,
+          [k.workflow_instance_id],
+        )
+      ).rowCount;
+    if (!on)
       throw new DomainError('permission-denied', 'Only the stores see counts', { status: 403 });
   }
 
@@ -181,14 +253,20 @@ export class PurchaseCountsService {
   }
 
   async list(ctx: RequestContext, q: StockDocQueryDto) {
-    this.mustSee(ctx);
+    // waiting for me (my level on Purchase → Who approves): for anyone; the rest for the stores
+    if (!q.mine) this.mustSee(ctx);
     return this.db.tenant(requireTenant(ctx), async (c) => {
       const r = await c.query<CountRow>(
         // eslint-disable-next-line no-restricted-syntax -- fixed fragments; values are bound
         `${SELECT} WHERE ($1::text IS NULL OR k.status = $1) AND ($2::bigint IS NULL OR k.store_id = $2)
+            AND (NOT $4 OR (k.status = 'submitted' AND EXISTS (SELECT 1 FROM workflow_steps s JOIN workflow_instances i ON i.id = s.instance_id
+                  WHERE i.id = k.workflow_instance_id AND i.status = 'pending' AND s.level = i.current_level AND s.status = 'pending'
+                    AND ${WorkflowService.MAY_ACT})))
           ORDER BY (k.status IN ('counting', 'submitted')) DESC, k.counted_on DESC, k.id DESC LIMIT 50 OFFSET $3`,
-        [q.status ?? null, q.storeId ?? null, (q.page - 1) * 50],
+        [q.status ?? null, q.storeId ?? null, (q.page - 1) * 50, q.mine],
       );
+      if (q.mine)
+        return { rows: r.rows.map((x) => this.shape(x)), page: q.page, stores: [], categories: [] };
       const stores = await c.query<{
         id: string;
         name: string;
@@ -223,10 +301,10 @@ export class PurchaseCountsService {
     });
   }
 
-  async get(ctx: RequestContext, id: string) {
-    this.mustSee(ctx);
+  async get(ctx: RequestContext, id: string, view: Partial<CountViewDto> = {}) {
     return this.db.tenant(requireTenant(ctx), async (c) => {
       const k = await this.load(c, id);
+      await this.mustRead(c, ctx, k);
       const lines = await this.linesOf(c, id);
       let keeps = this.has(ctx, PURCHASE.storeManage);
       if (!keeps && this.has(ctx, PURCHASE.storeOperate))
@@ -273,9 +351,35 @@ export class PurchaseCountsService {
       const excess = seen.filter((l) => l.difference! > 0);
       const short = seen.filter((l) => l.difference! < 0);
       const sum = (xs: typeof items) => round2(xs.reduce((a, l) => a + (l.value ?? 0), 0));
+      const approval = await this.approvalOf(c, k);
+      // a page of the lines, as found (the figures stay over the whole count)
+      const needle = view.q?.toLowerCase() ?? '';
+      // a page of lines without a choice: every line while counting, the differences once sent
+      const show = view.show ?? (view.page && k.status !== 'counting' ? 'diff' : 'all');
+      const found = items.filter(
+        (l) =>
+          (!needle || `${l.item} ${l.itemCode} ${l.batch ?? ''}`.toLowerCase().includes(needle)) &&
+          (!view.category || l.category === view.category) &&
+          (show !== 'todo' || l.counted === null) &&
+          (show !== 'diff' || (l.difference !== null && l.difference !== 0)) &&
+          (!view.reason ||
+            (view.reason === 'none'
+              ? !!l.difference && !l.reasonCode
+              : l.reasonCode === view.reason)),
+      );
+      const size = view.size ?? 50;
+      const page = view.page
+        ? Math.min(view.page, Math.max(1, Math.ceil(found.length / size)))
+        : null;
       return {
         ...this.shape(k),
-        lineItems: items,
+        approval,
+        lineItems: page ? found.slice((page - 1) * size, page * size) : found,
+        found: found.length,
+        page,
+        size,
+        show,
+        categories: [...new Set(items.map((l) => l.category))].sort(),
         // over the counted lines (the book shows once a line is counted)
         figures: {
           lines: items.length,
@@ -287,15 +391,26 @@ export class PurchaseCountsService {
           net: sum(seen),
           noReason: seen.filter((l) => !l.reasonCode && !l.reason).length,
         },
+        // the differences by reason, over the whole count
+        byReason: [...new Set(seen.map((l) => l.reasonCode ?? 'none'))].map((code) => {
+          const of = seen.filter((l) => (l.reasonCode ?? 'none') === code);
+          return {
+            code,
+            words: code === 'none' ? 'No reason given' : COUNT_REASONS[code as CountReason],
+            lines: of.length,
+            value: sum(of),
+          };
+        }),
         reasons: COUNT_REASONS,
         can: {
           count: k.status === 'counting' && keeps,
           submit: k.status === 'counting' && keeps,
+          // the level's approver now (a count sent before levels existed: the right, as then)
           decide:
             k.status === 'submitted' &&
-            this.has(ctx, PURCHASE.countApprove) &&
             k.created_by !== me &&
-            k.submitted_by !== me,
+            k.submitted_by !== me &&
+            (k.workflow_instance_id ? approval.mine : this.has(ctx, PURCHASE.countApprove)),
           cancel: ['counting', 'submitted'].includes(k.status) && keeps,
         },
       };
@@ -581,25 +696,53 @@ export class PurchaseCountsService {
           { status: 400 },
         );
       await c.query(
-        `UPDATE stock_counts SET status = 'submitted', submitted_at = now(), submitted_by = app.current_user_id() WHERE id = $1`,
+        `UPDATE stock_counts SET status = 'submitted', submitted_at = now(), submitted_by = app.current_user_id(),
+                decision_note = NULL WHERE id = $1`,
         [id],
       );
+      // the levels of the store's department on Purchase → Who approves (none: the school admin)
+      const departmentId = await approvingDepartment(c, k.store_id);
+      const flow = await syncFlow(c, 'count', departmentId);
+      const diffs = lines.filter((l) => Number(l.counted_qty) !== Number(l.book_qty)).length;
+      let instance: InstanceRow;
+      try {
+        instance = await this.workflow.start(c, ctx, {
+          definitionCode: flow.code,
+          entityType: 'purchase_count',
+          entityId: id,
+          subject: `${k.number} · ${k.store} · ${String(diffs)} difference${diffs === 1 ? '' : 's'}`,
+          payload: { department: flow.department, departmentId, number: k.number },
+        });
+      } catch (e) {
+        if (e instanceof DomainError && e.type === 'workflow.no_assignee')
+          throw new DomainError(
+            'purchase.no_approver',
+            `Nobody can approve counts of ${k.store}: set the Physical count levels of ${flow.department || 'its department'} (Purchase → Who approves)`,
+            { status: 409 },
+          );
+        throw e;
+      }
+      await c.query(`UPDATE stock_counts SET workflow_instance_id = $2 WHERE id = $1`, [
+        id,
+        instance.id,
+      ]);
       await this.audit.stage(ctx, c, {
         action: 'purchase.count.submit',
         entityType: 'stock_counts',
         entityId: id,
-        after: { number: k.number, lines: lines.length },
+        after: { number: k.number, lines: lines.length, levels: flow.levels },
       });
       return { submitted: true };
     });
   }
 
+  /**
+   * The approver at the count's current level (Purchase → Who approves) approves — at the last level the
+   * differences post — or sends it back to count again (with what to count). Who started or counted it
+   * never approves it.
+   */
   async decide(ctx: RequestContext, id: string, dto: CountDecisionDto) {
-    if (!this.has(ctx, PURCHASE.countApprove))
-      throw new DomainError('permission-denied', 'Only the school admin approves counts', {
-        status: 403,
-      });
-    return this.db.tenant(requireTenant(ctx), async (c) => {
+    const step = await this.db.tenant(requireTenant(ctx), async (c) => {
       const k = await this.load(c, id, true);
       if (k.status !== 'submitted')
         throw new DomainError('purchase.not_waiting', 'This count is not waiting for approval', {
@@ -611,80 +754,121 @@ export class PurchaseCountsService {
           'You took part in this count: someone else approves it',
           { status: 403 },
         );
-      if (dto.action === 'send_back') {
-        if (!dto.note)
-          throw new DomainError('validation-failed', 'Say what to count again', { status: 400 });
-        await c.query(
-          `UPDATE stock_counts SET status = 'counting', decision_note = $2, submitted_at = NULL, submitted_by = NULL WHERE id = $1`,
-          [id, dto.note],
-        );
-        await this.audit.stage(ctx, c, {
-          action: 'purchase.count.send_back',
-          entityType: 'stock_counts',
-          entityId: id,
-          after: { note: dto.note },
+      if (dto.action === 'send_back' && !dto.note)
+        throw new DomainError('validation-failed', 'Say what to count again', { status: 400 });
+      if (!k.workflow_instance_id) {
+        // sent before approval levels existed: the right decides, as then
+        if (!this.has(ctx, PURCHASE.countApprove))
+          throw new DomainError('permission-denied', 'Only the school admin approves counts', {
+            status: 403,
+          });
+        if (dto.action === 'send_back') await this.sendBack(c, ctx, id, dto.note!);
+        else await this.finalise(c, ctx, id, dto.note ?? null);
+        return null;
+      }
+      const s = await c.query<{ id: string }>(MY_STEP, [k.workflow_instance_id]);
+      if (!s.rows[0])
+        throw new DomainError('workflow.not_assignee', 'This count is not waiting for you', {
+          status: 403,
         });
-        return { status: 'counting' };
-      }
-      const day = istToday();
-      let posted = 0;
-      for (const l of await this.linesOf(c, id)) {
-        const diff = round3(Number(l.counted_qty) - Number(l.book_qty));
-        if (!diff) continue;
-        let rate = Number(l.avg_rate ?? 0);
-        if (diff > 0 && !rate) {
-          const last = await c.query<{ rate: string }>(
-            `SELECT rate::text FROM stock_moves WHERE store_id = $1 AND item_id = $2 AND qty > 0 AND rate > 0 ORDER BY id DESC LIMIT 1`,
-            [k.store_id, l.item_id],
-          );
-          rate = Number(last.rows[0]?.rate ?? 0);
-        }
-        const moveId = await postStock(
-          c,
-          {
-            storeId: k.store_id,
-            itemId: l.item_id,
-            kind: 'adjustment',
-            qty: diff,
-            rate,
-            batch: l.batch_no,
-            expiry: l.expiry,
-            docType: 'stock_count',
-            docId: id,
-            docLineId: l.id,
-            note: `${k.number}: ${reasonWords(l.reason_code, l.reason) ?? 'count difference'}`.slice(
-              0,
-              300,
-            ),
-            day,
-          },
-          l.item,
-        );
-        const m = (
-          await c.query<{ rate: string; value: string }>(
-            `SELECT rate::text, value::text FROM stock_moves WHERE id = $1`,
-            [moveId],
-          )
-        ).rows[0]!;
-        await c.query(
-          `UPDATE stock_count_lines SET rate = $2, value = $3, move_id = $4 WHERE id = $1`,
-          [l.id, m.rate, m.value, moveId],
-        );
-        posted += 1;
-      }
-      await c.query(
-        `UPDATE stock_counts SET status = 'approved', decided_at = now(), decided_by = app.current_user_id(), decision_note = $2
-          WHERE id = $1`,
-        [id, dto.note ?? null],
-      );
-      await this.audit.stage(ctx, c, {
-        action: 'purchase.count.approve',
-        entityType: 'stock_counts',
-        entityId: id,
-        after: { number: k.number, adjustments: posted },
-      });
-      return { status: 'approved', adjustments: posted };
+      return s.rows[0].id;
     });
+    if (step)
+      await this.workflow.act(ctx, step, dto.action === 'approve' ? 'approved' : 'rejected', {
+        note: dto.note,
+      });
+    const k = await this.db.tenant(requireTenant(ctx), (c) => this.load(c, id));
+    return { status: k.status };
+  }
+
+  /** The workflow's end: approved — the differences post; sent back — counting again. */
+  private async onDecided(
+    c: PoolClient,
+    ctx: RequestContext,
+    instance: InstanceRow,
+    outcome: 'approved' | 'rejected',
+  ) {
+    if (instance.status === 'cancelled') return;
+    const note = [...instance.steps].reverse().find((s) => s.note)?.note ?? null;
+    if (outcome === 'approved') await this.finalise(c, ctx, instance.entityId, note);
+    else await this.sendBack(c, ctx, instance.entityId, note ?? 'Count again');
+  }
+
+  private async sendBack(c: PoolClient, ctx: RequestContext, id: string, note: string) {
+    await c.query(
+      `UPDATE stock_counts SET status = 'counting', decision_note = $2, submitted_at = NULL, submitted_by = NULL,
+              workflow_instance_id = NULL WHERE id = $1`,
+      [id, note],
+    );
+    await this.audit.stage(ctx, c, {
+      action: 'purchase.count.send_back',
+      entityType: 'stock_counts',
+      entityId: id,
+      after: { note },
+    });
+  }
+
+  /** Every difference posts as an adjustment at the average rate, the reason on it. */
+  private async finalise(c: PoolClient, ctx: RequestContext, id: string, note: string | null) {
+    const k = await this.load(c, id, true);
+    const day = istToday();
+    let posted = 0;
+    for (const l of await this.linesOf(c, id)) {
+      const diff = round3(Number(l.counted_qty) - Number(l.book_qty));
+      if (!diff) continue;
+      let rate = Number(l.avg_rate ?? 0);
+      if (diff > 0 && !rate) {
+        const last = await c.query<{ rate: string }>(
+          `SELECT rate::text FROM stock_moves WHERE store_id = $1 AND item_id = $2 AND qty > 0 AND rate > 0 ORDER BY id DESC LIMIT 1`,
+          [k.store_id, l.item_id],
+        );
+        rate = Number(last.rows[0]?.rate ?? 0);
+      }
+      const moveId = await postStock(
+        c,
+        {
+          storeId: k.store_id,
+          itemId: l.item_id,
+          kind: 'adjustment',
+          qty: diff,
+          rate,
+          batch: l.batch_no,
+          expiry: l.expiry,
+          docType: 'stock_count',
+          docId: id,
+          docLineId: l.id,
+          note: `${k.number}: ${reasonWords(l.reason_code, l.reason) ?? 'count difference'}`.slice(
+            0,
+            300,
+          ),
+          day,
+        },
+        l.item,
+      );
+      const m = (
+        await c.query<{ rate: string; value: string }>(
+          `SELECT rate::text, value::text FROM stock_moves WHERE id = $1`,
+          [moveId],
+        )
+      ).rows[0]!;
+      await c.query(
+        `UPDATE stock_count_lines SET rate = $2, value = $3, move_id = $4 WHERE id = $1`,
+        [l.id, m.rate, m.value, moveId],
+      );
+      posted += 1;
+    }
+    await c.query(
+      `UPDATE stock_counts SET status = 'approved', decided_at = now(), decided_by = app.current_user_id(), decision_note = $2
+        WHERE id = $1`,
+      [id, note],
+    );
+    await this.audit.stage(ctx, c, {
+      action: 'purchase.count.approve',
+      entityType: 'stock_counts',
+      entityId: id,
+      after: { number: k.number, adjustments: posted },
+    });
+    return posted;
   }
 
   async cancel(ctx: RequestContext, id: string, dto: NoteDto) {
@@ -697,6 +881,8 @@ export class PurchaseCountsService {
       await mustOperateStore(c, ctx.permissions, k.store_id, 'count');
       if (!dto.note)
         throw new DomainError('validation-failed', 'Say why it is cancelled', { status: 400 });
+      if (k.workflow_instance_id && k.status === 'submitted')
+        await this.workflow.cancelIn(c, ctx, k.workflow_instance_id, `Cancelled: ${dto.note}`);
       await c.query(
         `UPDATE stock_counts SET status = 'cancelled', decision_note = $2, decided_at = now(), decided_by = app.current_user_id()
           WHERE id = $1`,
@@ -717,9 +903,9 @@ export class PurchaseCountsService {
    * counting, the book only of the lines counted — the sheet stays blind).
    */
   async statement(ctx: RequestContext, id: string) {
-    this.mustSee(ctx);
     return this.db.tenant(requireTenant(ctx), async (c) => {
       const k = await this.load(c, id);
+      await this.mustRead(c, ctx, k);
       const lines = await this.linesOf(c, id);
       const school = (
         await c.query<{ name: string }>(
@@ -789,9 +975,9 @@ export class PurchaseCountsService {
 
   /** The count sheet (blind while counting) or, once counted, the statement of differences. */
   async pdf(ctx: RequestContext, id: string) {
-    this.mustSee(ctx);
     return this.db.tenant(requireTenant(ctx), async (c) => {
       const k = await this.load(c, id);
+      await this.mustRead(c, ctx, k);
       const lines = await this.linesOf(c, id);
       const read = (key: string) => this.storage.read(key);
       const head = await pdfSchool(c, read);

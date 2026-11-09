@@ -2,7 +2,14 @@ import type { PoolClient } from '@edupro/db';
 import type { Resolver } from '../workflow/workflow.dto';
 import type { Level } from '../workflow/workflow.service';
 
-export type PurchaseDocType = 'indent' | 'requisition' | 'order' | 'inspection';
+export type PurchaseDocType =
+  | 'indent'
+  | 'requisition'
+  | 'order'
+  | 'inspection'
+  /** a store's physical count, and a rate correction (docs/design/84, 9 Nov 2026) */
+  | 'count'
+  | 'revaluation';
 
 interface SetupLevel {
   name: string;
@@ -50,7 +57,10 @@ export async function syncFlow(
   let setup = dep?.levels ?? [];
   // receipts are inspected by the department's HOD when nothing else is set (the school admin when the
   // department has no HOD who signs in)
-  const adminOnly = doc === 'inspection' && !setup.length && !dep?.hod_signs_in;
+  // a count or a rate correction with no levels goes to the school admin, as before levels existed
+  const adminOnly =
+    (doc === 'inspection' && !setup.length && !dep?.hod_signs_in) ||
+    ((doc === 'count' || doc === 'revaluation') && !setup.length);
   if (doc === 'inspection' && !setup.length && !adminOnly)
     setup = [
       { name: 'Head of department', by: 'hod', employeeIds: [], designation: null, slaHours: null },
@@ -59,7 +69,7 @@ export async function syncFlow(
     ? [
         {
           level: 1,
-          name: 'School admin (no HOD set)',
+          name: doc === 'inspection' ? 'School admin (no HOD set)' : 'School admin (no levels set)',
           resolver: { kind: 'role', roleCode: 'school_admin' },
           autoSkip: true,
           noSelfApproval: true,
@@ -85,6 +95,8 @@ export async function syncFlow(
     requisition: 'Purchase Requisition',
     order: 'Purchase Order',
     inspection: 'Inspection of receipts',
+    count: 'Physical count',
+    revaluation: 'Rate correction',
   }[doc];
   const name = `${title} · ${dep?.name ?? departmentId}`;
   const upd = await c.query(

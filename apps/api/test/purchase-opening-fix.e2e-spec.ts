@@ -165,8 +165,11 @@ describe('purchase opening stock corrections, rate corrections and the count (e2
     expect(r.statusCode).toBe(201);
     const o = (await call(office, 'GET', `/purchase/stores/${ids.main!}/openings`)).json();
     expect(o.postings).toHaveLength(1);
-    expect(o.postings[0]).toMatchObject({ source: 'hand', value: 600, canUndo: true });
-    expect(o.items[ids.PROJ!]).toEqual({ canChange: true, why: null });
+    expect(o.postings[0]).toMatchObject({ source: 'hand', value: 600, canUndo: true, lines: 3 });
+    expect(o.lines.find((l: { itemId: string }) => l.itemId === ids.PROJ)).toMatchObject({
+      canChange: true,
+      why: null,
+    });
     const made = await assets(ids.PROJ!);
     expect(made).toHaveLength(5);
     expect(made.every((a) => a.cost === '0.00' && a.status === 'in_store')).toBe(true);
@@ -204,9 +207,14 @@ describe('purchase opening stock corrections, rate corrections and the count (e2
       source: 'correction',
       reason: expect.stringContaining('left at 0'),
     });
-    expect(
-      o.postings[1].lines.find((l: { itemId: string }) => l.itemId === ids.PROJ).reversed,
-    ).toBe(true);
+    const old = (
+      await call(
+        office,
+        'GET',
+        `/purchase/stores/${ids.main!}/openings?posting=${o.postings[1].id as string}&status=reversed`,
+      )
+    ).json();
+    expect(old.lines.map((l: { itemId: string }) => l.itemId)).toEqual([ids.PROJ]);
     const book = await withMigrator(
       async (c) =>
         (
@@ -319,7 +327,11 @@ describe('purchase opening stock corrections, rate corrections and the count (e2
     expect(settled.statusCode).toBe(409);
     expect(settled.json().detail).toContain('moved since');
     const o = (await call(office, 'GET', `/purchase/stores/${ids.main!}/openings`)).json();
-    expect(o.items[ids.PEN!]).toMatchObject({
+    const pen = (
+      await call(office, 'GET', `/purchase/stores/${ids.main!}/openings?q=Ball&status=settled`)
+    ).json();
+    expect(pen.lines[0]).toMatchObject({
+      itemId: ids.PEN,
       canChange: false,
       why: expect.stringContaining('moved since'),
     });
@@ -485,6 +497,113 @@ describe('purchase opening stock corrections, rate corrections and the count (e2
         })
       ).statusCode,
     ).toBe(403);
-    expect((await call(teacher, 'GET', '/purchase/revaluations')).statusCode).toBe(403);
+    // outside the stores: only those one is on the approval of — none here
+    expect((await call(teacher, 'GET', '/purchase/revaluations')).json().rows).toEqual([]);
+  });
+  it('the Physical count and Rate correction levels on Who approves decide who approves; pages and filters', async () => {
+    // the lab store belongs to Science: its counts and rate corrections go to the named teacher
+    for (const doc of ['count', 'revaluation'])
+      expect(
+        (
+          await call(admin, 'PUT', `/purchase/approvals/${ids.science!}/${doc}`, {
+            levels: [{ name: 'Store in-charge', by: 'employees', employeeIds: [ids.H1] }],
+          })
+        ).statusCode,
+      ).toBe(200);
+    expect(
+      (await opening(ids.lab!, { lines: [{ itemId: ids.PEN, qty: 6, rate: 10 }] })).statusCode,
+    ).toBe(201);
+    const k = (await call(keeper, 'POST', '/purchase/counts', { storeId: ids.lab })).json()
+      .id as string;
+    const before = (await call(keeper, 'GET', `/purchase/counts/${k}?page=1&size=25`)).json();
+    expect(before.approval).toMatchObject({ department: 'Science', levels: ['Store in-charge'] });
+    expect(before.show).toBe('all');
+    const pen = before.lineItems.find((l: { itemCode: string }) => l.itemCode === 'PEN');
+    await call(keeper, 'PUT', `/purchase/counts/${k}/lines`, {
+      lines: [{ lineId: pen.id, countedQty: 5, reasonCode: 'damaged' }],
+    });
+    expect((await call(keeper, 'POST', `/purchase/counts/${k}/submit`)).statusCode).toBe(201);
+    const sent = (await call(admin, 'GET', `/purchase/counts/${k}?page=1&size=25`)).json();
+    expect(sent.show).toBe('diff');
+    expect(sent.found).toBe(1);
+    expect(sent.approval.steps).toEqual([
+      expect.objectContaining({ level: 1, name: 'Store in-charge', status: 'pending' }),
+    ]);
+    expect(sent.approval.steps[0].assignees).toHaveLength(1);
+    expect(sent.can.decide).toBe(false);
+    expect(
+      (await call(admin, 'POST', `/purchase/counts/${k}/decide`, { action: 'approve' })).statusCode,
+    ).toBe(403);
+    // the teacher sees it (not of the stores, but on its approval) and approves it
+    expect(
+      (await call(teacher, 'GET', '/purchase/counts?mine=1'))
+        .json()
+        .rows.map((x: { id: string }) => x.id),
+    ).toEqual([k]);
+    expect((await call(teacher, 'GET', `/purchase/counts/${k}`)).json().can.decide).toBe(true);
+    expect((await call(teacher, 'GET', '/purchase/counts')).statusCode).toBe(403);
+    expect(
+      (await call(teacher, 'POST', `/purchase/counts/${k}/decide`, { action: 'approve' })).json(),
+    ).toEqual({ status: 'approved' });
+    expect(await balance(ids.lab!, ids.PEN!)).toMatchObject({ qty: '5.000' });
+    // a rate correction of the lab: with the teacher too
+    await call(keeper, 'POST', '/purchase/issues', {
+      kind: 'counter',
+      storeId: ids.lab,
+      departmentId: ids.science,
+      takenByEmployeeId: ids.H1,
+      purpose: 'Lab',
+      lines: [{ itemId: ids.PEN, qty: 1 }],
+    });
+    const rv = (
+      await call(keeper, 'POST', `/purchase/stores/${ids.lab!}/revaluations`, {
+        itemId: ids.PEN,
+        newRate: 11,
+        reason: 'Pens are 11 now',
+      })
+    ).json().id as string;
+    const waiting = (
+      await call(keeper, 'GET', `/purchase/revaluations?storeId=${ids.lab!}`)
+    ).json();
+    expect(waiting.rows[0]).toMatchObject({
+      id: rv,
+      waitingWith: expect.stringContaining('Store in-charge'),
+    });
+    expect(
+      (await call(admin, 'POST', `/purchase/revaluations/${rv}/decide`, { action: 'approve' }))
+        .statusCode,
+    ).toBe(403);
+    expect((await call(teacher, 'GET', '/purchase/revaluations')).json().rows[0].can.decide).toBe(
+      true,
+    );
+    expect(
+      (
+        await call(teacher, 'POST', `/purchase/revaluations/${rv}/decide`, { action: 'approve' })
+      ).json(),
+    ).toEqual({ status: 'approved' });
+    expect(await balance(ids.lab!, ids.PEN!)).toMatchObject({ qty: '4.000', value: '44.00' });
+    // the stock a page at a time, one item, and the opening lines paged
+    const page = (
+      await call(office, 'GET', `/purchase/stock?storeId=${ids.main!}&page=1&size=25`)
+    ).json();
+    expect(page).toMatchObject({ page: 1, size: 25 });
+    expect(page.data.length).toBe(Math.min(25, page.total as number));
+    const one = (
+      await call(office, 'GET', `/purchase/stock?storeId=${ids.main!}&itemId=${ids.PROJ!}&page=1`)
+    ).json();
+    expect(one.data.map((x: { itemId: string }) => x.itemId)).toEqual([ids.PROJ]);
+    const lines = (
+      await call(
+        office,
+        'GET',
+        `/purchase/stores/${ids.main!}/openings?page=1&size=25&status=standing`,
+      )
+    ).json();
+    expect(lines.lines.every((l: { reversed: boolean }) => !l.reversed)).toBe(true);
+    expect(Object.keys(lines.itemLines)).toEqual(
+      expect.arrayContaining(lines.lines.map((l: { itemId: string }) => l.itemId)),
+    );
+    const store = (await call(office, 'GET', `/purchase/stores/${ids.main!}?stock=0`)).json();
+    expect(store.stock).toEqual([]);
   });
 });

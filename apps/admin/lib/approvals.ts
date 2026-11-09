@@ -253,72 +253,68 @@ export async function myApprovals(
           : null,
       )
       .catch(() => null),
-    // physical counts waiting for approval (docs/design/84, part 8)
-    has.has('purchase.count.approve')
-      ? apiFetch<{
-          rows: Array<{
-            id: string;
-            number: string;
-            store: string;
-            differences: number;
-            submittedAt: string | null;
-          }>;
-        }>(`/purchase/counts?status=submitted`)
-          .then((r): ApprovalGroup | null =>
-            r.rows.length
-              ? {
-                  key: 'count',
-                  title: 'Physical counts to approve',
-                  help: 'Store counts sent for approval: their differences post when approved',
-                  href: '/purchase/counts',
-                  count: r.rows.length,
-                  items: r.rows.slice(0, size).map((x) => ({
-                    id: x.id,
-                    title: `${x.number} · ${x.store}`,
-                    detail: `${String(x.differences)} difference${x.differences === 1 ? '' : 's'}`,
-                    href: `/purchase/counts/${x.id}`,
-                    since: x.submittedAt,
-                  })),
-                }
-              : null,
-          )
-          .catch(() => null)
-      : null,
-    // rate corrections of store stock (docs/design/84, "As built — opening stock corrections")
-    has.has('purchase.count.approve')
-      ? apiFetch<{
-          rows: Array<{
-            id: string;
-            number: string;
-            store: string;
-            storeId: string;
-            item: string;
-            change: number;
-            at: string;
-            can: { decide: boolean };
-          }>;
-        }>(`/purchase/revaluations?status=submitted`)
-          .then((r): ApprovalGroup | null => {
-            const mine = r.rows.filter((x) => x.can.decide);
-            return mine.length
-              ? {
-                  key: 'revaluation',
-                  title: 'Rate corrections to approve',
-                  help: 'Stock at a wrong rate: what is left goes to the right rate when approved',
-                  href: '/purchase/stores',
-                  count: mine.length,
-                  items: mine.slice(0, size).map((x) => ({
-                    id: x.id,
-                    title: `${x.number} · ${x.item}`,
-                    detail: `${x.store} · value ${x.change >= 0 ? '+' : '−'}₹${Math.abs(x.change).toLocaleString('en-IN')}`,
-                    href: `/purchase/stores/${x.storeId}#st-rate`,
-                    since: x.at,
-                  })),
-                }
-              : null;
-          })
-          .catch(() => null)
-      : null,
+    // physical counts waiting at my level (Purchase → Who approves; docs/design/84, 9 Nov 2026)
+    apiFetch<{
+      rows: Array<{
+        id: string;
+        number: string;
+        store: string;
+        differences: number;
+        submittedAt: string | null;
+      }>;
+    }>(`/purchase/counts?mine=1`)
+      .then((r): ApprovalGroup | null =>
+        r.rows.length
+          ? {
+              key: 'count',
+              title: 'Physical counts to approve',
+              help: 'Store counts waiting at your level: their differences post at the last one',
+              href: '/purchase/counts',
+              count: r.rows.length,
+              items: r.rows.slice(0, size).map((x) => ({
+                id: x.id,
+                title: `${x.number} · ${x.store}`,
+                detail: `${String(x.differences)} difference${x.differences === 1 ? '' : 's'}`,
+                href: `/purchase/counts/${x.id}`,
+                since: x.submittedAt,
+              })),
+            }
+          : null,
+      )
+      .catch(() => null),
+    // rate corrections of store stock waiting at my level (Purchase → Who approves)
+    apiFetch<{
+      rows: Array<{
+        id: string;
+        number: string;
+        store: string;
+        storeId: string;
+        item: string;
+        change: number;
+        at: string;
+        can: { decide: boolean };
+      }>;
+    }>(`/purchase/revaluations?status=submitted`)
+      .then((r): ApprovalGroup | null => {
+        const mine = r.rows.filter((x) => x.can.decide);
+        return mine.length
+          ? {
+              key: 'revaluation',
+              title: 'Rate corrections to approve',
+              help: 'Stock at a wrong rate: what is left goes to the right rate when approved',
+              href: '/purchase/stores',
+              count: mine.length,
+              items: mine.slice(0, size).map((x) => ({
+                id: x.id,
+                title: `${x.number} · ${x.item}`,
+                detail: `${x.store} · value ${x.change >= 0 ? '+' : '−'}₹${Math.abs(x.change).toLocaleString('en-IN')}`,
+                href: `/purchase/stores/${x.storeId}?tab=rates`,
+                since: x.at,
+              })),
+            }
+          : null;
+      })
+      .catch(() => null),
     // condemnations for my signature (the committee) or approval (the school admin) — doc 84, part 9
     apiFetch<{
       rows: Array<{

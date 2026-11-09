@@ -179,12 +179,15 @@ export interface PurchaseSettings {
   }>;
 }
 
-export type PurchaseDoc = 'indent' | 'requisition' | 'order' | 'inspection';
+export type PurchaseDoc =
+  'indent' | 'requisition' | 'order' | 'inspection' | 'count' | 'revaluation';
 export const DOC_LABEL: Record<PurchaseDoc, string> = {
   indent: 'Purchase Indent (PI)',
   requisition: 'Purchase Requisition (PR)',
   order: 'Purchase Order (PO)',
   inspection: 'Inspection of goods and services received',
+  count: 'Physical count of a store',
+  revaluation: 'Rate correction of store stock',
 };
 
 export interface DepartmentApprovals {
@@ -1911,6 +1914,33 @@ export interface CountDetail extends CountRow {
     rate: number | null;
     value: number | null;
   }>;
+  /** who approves (Purchase → Who approves) and where it waits */
+  approval: {
+    departmentId: string | null;
+    department: string | null;
+    /** the levels set for the department (none: the school admin) */
+    levels: string[];
+    steps: Array<{
+      level: number;
+      name: string;
+      status: 'pending' | 'approved' | 'rejected' | 'skipped';
+      assignees: string[];
+      actedBy: string | null;
+      actedAt: string | null;
+      note: string | null;
+      overdue: boolean;
+    }>;
+    currentLevel: number | null;
+    mine: boolean;
+  };
+  /** the lines found by the filters; `lineItems` is the page of them */
+  found: number;
+  page: number | null;
+  size: number;
+  /** the lines shown: every one, those not yet counted, or those with a difference */
+  show: 'all' | 'todo' | 'diff';
+  categories: string[];
+  byReason: Array<{ code: string; words: string; lines: number; value: number }>;
   /** over the counted lines */
   figures: {
     lines: number;
@@ -1937,7 +1967,7 @@ export const COUNT_REASONS = {
 } as const;
 export type CountReason = keyof typeof COUNT_REASONS;
 
-/** The opening stock posted to a store (GET /purchase/stores/:id/openings). */
+/** The opening stock posted to a store, a page of its lines (GET /purchase/stores/:id/openings). */
 export interface StoreOpenings {
   postings: Array<{
     id: string;
@@ -1949,26 +1979,37 @@ export interface StoreOpenings {
     undoneAt: string | null;
     undoneBy: string | null;
     undoReason: string | null;
+    lines: number;
+    standing: number;
     value: number;
     canUndo: boolean;
-    lines: Array<{
-      moveId: string;
-      itemId: string;
-      code: string;
-      name: string;
-      unit: string;
-      asset: boolean;
-      qty: number;
-      rate: number;
-      value: number;
-      batch: string | null;
-      expiry: string | null;
-      reversed: boolean;
-      assets: number;
-    }>;
   }>;
-  /** per item with a standing opening: can it still be changed, and if not why */
-  items: Record<string, { canChange: boolean; why: string | null }>;
+  lines: Array<{
+    moveId: string;
+    openingId: string;
+    itemId: string;
+    code: string;
+    name: string;
+    unit: string;
+    asset: boolean;
+    qty: number;
+    rate: number;
+    value: number;
+    batch: string | null;
+    expiry: string | null;
+    reversed: boolean;
+    assets: number;
+    canChange: boolean;
+    why: string | null;
+  }>;
+  found: number;
+  page: number;
+  size: number;
+  /** every standing line of the items shown: a change replaces them all */
+  itemLines: Record<
+    string,
+    Array<{ qty: number; rate: number; batch: string | null; expiry: string | null }>
+  >;
   missingAssets: Array<{
     itemId: string;
     name: string;
@@ -1976,6 +2017,16 @@ export interface StoreOpenings {
     assets: number;
     canMake: boolean;
   }>;
+}
+/** Stock in hand, a page of it (GET /purchase/stock?storeId=&page=). */
+export interface StockPage {
+  data: StockRow[];
+  page: number | null;
+  size: number;
+  total: number;
+  value: number;
+  below: number;
+  categories: Array<{ id: string; name: string }>;
 }
 /** A rate correction (GET /purchase/revaluations). */
 export interface Revaluation {
@@ -1998,6 +2049,8 @@ export interface Revaluation {
   decidedBy: string | null;
   decidedAt: string | null;
   decisionNote: string | null;
+  /** the level it waits at and who holds it */
+  waitingWith: string | null;
   can: { decide: boolean; cancel: boolean };
 }
 

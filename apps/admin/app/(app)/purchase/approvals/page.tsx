@@ -7,7 +7,14 @@ import { DOC_LABEL, inr, type DepartmentApprovals, type PurchaseDoc } from '@/li
 import { saveDepartmentLevels, saveDepartmentRules } from '@/lib/purchase-actions';
 import type { ApprovalSetup } from '@/lib/recruitment';
 
-const DOCS: PurchaseDoc[] = ['indent', 'requisition', 'order', 'inspection'];
+const DOCS: PurchaseDoc[] = [
+  'indent',
+  'requisition',
+  'order',
+  'inspection',
+  'count',
+  'revaluation',
+];
 const INTRO: Record<PurchaseDoc, string> = {
   indent:
     'A PI the department raises goes through these levels in order. A level nobody holds is skipped; a level held by the person who raised it passes to the next level (nobody approves their own).',
@@ -17,6 +24,10 @@ const INTRO: Record<PurchaseDoc, string> = {
     'A PO for this department goes through these levels. Its maker never approves it: their level passes to the next.',
   inspection:
     'Goods and services received against this department’s POs are inspected and accepted at these levels. When none is set, the department’s HOD inspects (the school admin when there is no HOD). Whoever received it never inspects it; POs above the committee limit are inspected by the purchase committee instead.',
+  count:
+    'A physical count of a store of this department (the Main store and stores without one: the purchase office department) is approved at these levels; at the last its differences post. Whoever started or counted it never approves it. None set: the school admin.',
+  revaluation:
+    'A rate correction of a store of this department (what is left of an item, to the right rate) is approved at these levels. Who asked never approves it. None set: the school admin.',
 };
 
 /**
@@ -70,7 +81,7 @@ export default async function PurchaseApprovalsPage({
       <PageHeader
         kicker="Purchase"
         title="Who approves"
-        description="Each department’s approval levels for its Purchase Indents, Requisitions and Orders (up to three each), and its bypass rules. The amount is shown first to every approver."
+        description="Each department’s approval levels (up to three each) for its Purchase Indents, Requisitions and Orders, the inspection of what is received, and its stores’ physical counts and rate corrections; and its bypass rules. The amount is shown first to every approver."
       />
       <Notice params={sp} />
       <div className="ep-table-wrap" tabIndex={0} role="region" aria-label="Departments">
@@ -92,6 +103,12 @@ export default async function PurchaseApprovalsPage({
               <th scope="col" className="is-numeric">
                 Inspection levels
               </th>
+              <th scope="col" className="is-numeric">
+                Count levels
+              </th>
+              <th scope="col" className="is-numeric">
+                Rate correction levels
+              </th>
               <th scope="col">Skips the PR</th>
             </tr>
           </thead>
@@ -104,7 +121,12 @@ export default async function PurchaseApprovalsPage({
                 <td>{d.hod ? d.hod.name : '—'}</td>
                 {DOCS.map((doc) => (
                   <td key={doc} className="is-numeric">
-                    {d.levels[doc].length || (doc === 'inspection' ? 'HOD' : '—')}
+                    {(d.levels[doc] ?? []).length ||
+                      (doc === 'inspection'
+                        ? 'HOD'
+                        : doc === 'count' || doc === 'revaluation'
+                          ? 'School admin'
+                          : '—')}
                   </td>
                 ))}
                 <td>

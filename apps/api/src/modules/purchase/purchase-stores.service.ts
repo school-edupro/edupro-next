@@ -1,4 +1,4 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable, type OnModuleInit } from '@nestjs/common';
 import type { PoolClient } from '@edupro/db';
 import type { StorageDriver } from '@edupro/storage';
 import { AuditService } from '../../common/audit/audit.service';
@@ -8,9 +8,11 @@ import { readSheet, templateSheet } from '../../common/excel/sheet';
 import { requireTenant, type RequestContext } from '../../common/http/request-context';
 import { libraryFile, type FileCell, type FileColumn } from '../library/library-file';
 import { STORAGE_DRIVER } from '../files/storage';
+import { WorkflowService, type InstanceRow } from '../workflow/workflow.service';
 import { assetsForOpening, openingAssets, removeOpeningAssets } from './purchase-asset-core';
 import { blankBox, signerOf } from './purchase-doc-sign';
-import { dmy, money2, pdfSchool, qty3 } from './purchase-stock-core';
+import { syncFlow } from './purchase-flow';
+import { approvingDepartment, dmy, money2, pdfSchool, qty3 } from './purchase-stock-core';
 import { purchaseStockPdf } from './purchase-stock-pdf';
 import { PurchaseVendorsService } from './purchase-vendors.service';
 import {
@@ -115,12 +117,19 @@ export async function postStock(
  * through `app.stock_post` (append-only, weighted average).
  */
 @Injectable()
-export class PurchaseStoresService {
+export class PurchaseStoresService implements OnModuleInit {
   constructor(
     private readonly db: DbService,
     private readonly audit: AuditService,
+    private readonly workflow: WorkflowService,
     @Inject(STORAGE_DRIVER) private readonly storage: StorageDriver,
   ) {}
+
+  onModuleInit() {
+    this.workflow.onComplete('purchase_revaluation', (c, ctx, instance, outcome) =>
+      this.onRevaluationDecided(c, ctx, instance, outcome),
+    );
+  }
 
   private has(ctx: RequestContext, p: string) {
     return ctx.permissions?.has(p) ?? false;
@@ -294,13 +303,16 @@ export class PurchaseStoresService {
   }
 
   /** A store: its keepers, its stock with reorder levels, and what may be done. */
-  async store(ctx: RequestContext, id: string) {
+  /** One store; `withStock` false leaves out its stock rows (the store page pages them through `stock`). */
+  async store(ctx: RequestContext, id: string, withStock = true) {
     return this.db.tenant(requireTenant(ctx), async (c) => {
       await PurchaseStoresService.ensureMain(c);
       const all = await this.stores(ctx);
       const s = all.data.find((x) => x.id === id);
       if (!s) throw new DomainError('not-found', 'Store not found', { status: 404 });
-      const stock = await this.stockRows(c, { storeId: id, empty: true, below: false });
+      const stock = withStock
+        ? await this.stockRows(c, { storeId: id, empty: true, below: false })
+        : [];
       // the physical counts of the store (GFR 213: at least once a year)
       const counts = await c.query<{
         id: string;
@@ -374,7 +386,14 @@ export class PurchaseStoresService {
   // ---- stock in hand -----------------------------------------------------------------------------
   private async stockRows(
     c: PoolClient,
-    q: { storeId?: string; categoryId?: string; q?: string; below: boolean; empty: boolean },
+    q: {
+      storeId?: string;
+      categoryId?: string;
+      q?: string;
+      below: boolean;
+      empty: boolean;
+      itemId?: string;
+    },
   ) {
     const r = await c.query<{
       store_id: string;
@@ -412,9 +431,17 @@ export class PurchaseStoresService {
           AND ($3::text IS NULL OR i.code ILIKE $3 OR i.name ILIKE $3)
           AND (COALESCE(b.qty, 0) > 0 OR COALESCE(b.reserved, 0) > 0 OR ($4 AND l.item_id IS NOT NULL))
           AND (NOT $5 OR (l.reorder_level > 0 AND COALESCE(b.qty, 0) - COALESCE(b.reserved, 0) <= l.reorder_level))
+          AND ($6::bigint IS NULL OR i.id = $6)
         ORDER BY s.kind = 'main' DESC, s.name, cat.name, i.name
         LIMIT 20000`,
-      [q.storeId ?? null, q.categoryId ?? null, q.q ? `%${q.q}%` : null, q.empty, q.below],
+      [
+        q.storeId ?? null,
+        q.categoryId ?? null,
+        q.q ? `%${q.q}%` : null,
+        q.empty,
+        q.below,
+        q.itemId ?? null,
+      ],
     );
     return r.rows.map((x) => {
       const qty = Number(x.qty);
@@ -453,6 +480,7 @@ export class PurchaseStoresService {
         q: q.q,
         below: q.below,
         empty: q.empty || q.below,
+        itemId: q.itemId,
       });
       if (q.format) {
         const columns: FileColumn[] = [
@@ -503,8 +531,13 @@ export class PurchaseStoresService {
       const cats = await c.query<{ id: string; name: string }>(
         `SELECT id::text, name FROM purchase_item_categories WHERE status = 'active' ORDER BY parent_id NULLS FIRST, name`,
       );
+      // a page of them (the store page: 25 / 50 / 100); else the first thousand
+      const size = q.size ?? 50;
+      const page = q.page ? Math.min(q.page, Math.max(1, Math.ceil(rows.length / size))) : null;
       return {
-        data: rows.slice(0, 1000),
+        data: page ? rows.slice((page - 1) * size, page * size) : rows.slice(0, 1000),
+        page,
+        size,
         total: rows.length,
         value: round(rows.reduce((a, x) => a + x.value, 0)),
         below: rows.filter((x) => x.below).length,
@@ -1075,7 +1108,17 @@ export class PurchaseStoresService {
    * lines (reversed ones marked), and per item whether its opening can still be changed — and if not,
    * why; the asset items whose units have no asset yet.
    */
-  async openings(ctx: RequestContext, storeId: string) {
+  async openings(
+    ctx: RequestContext,
+    storeId: string,
+    view: {
+      posting?: string;
+      q?: string;
+      status?: 'standing' | 'changeable' | 'settled' | 'reversed';
+      page?: number;
+      size?: number;
+    } = {},
+  ) {
     return this.db.tenant(requireTenant(ctx), async (c) => {
       if (!this.has(ctx, PURCHASE.storeView))
         throw new DomainError('permission-denied', 'Only the stores see the opening stock', {
@@ -1087,14 +1130,13 @@ export class PurchaseStoresService {
         file_name: string | null;
         reason: string | null;
         by: string | null;
-        by_id: string | null;
         at: Date;
         undone_at: Date | null;
         undone_by: string | null;
         undo_reason: string | null;
       }>(
         // eslint-disable-next-line no-restricted-syntax -- PERSON is a fixed fragment
-        `SELECT o.id::text, o.source, o.file_name, o.reason, ${PERSON('o.created_by')} AS by, o.created_by::text AS by_id, o.created_at AS at,
+        `SELECT o.id::text, o.source, o.file_name, o.reason, ${PERSON('o.created_by')} AS by, o.created_at AS at,
                 o.undone_at, ${PERSON('o.undone_by')} AS undone_by, o.undo_reason
            FROM stock_openings o WHERE o.store_id = $1 ORDER BY o.created_at DESC, o.id DESC`,
         [storeId],
@@ -1121,24 +1163,48 @@ export class PurchaseStoresService {
                 (SELECT count(*)::int FROM assets a WHERE a.opening_move_id = m.id) AS assets
            FROM stock_moves m JOIN purchase_items i ON i.id = m.item_id
            JOIN purchase_uoms u ON u.id = i.uom_id LEFT JOIN purchase_uoms su ON su.id = i.stock_uom_id
-          WHERE m.store_id = $1 AND m.kind = 'opening' ORDER BY m.id`,
+          WHERE m.store_id = $1 AND m.kind = 'opening' ORDER BY m.id DESC`,
         [storeId],
       );
       const live = lines.rows.filter((l) => !l.reversed);
-      const settled = await this.settled(c, storeId, [...new Set(live.map((l) => l.item_id))]);
-      const used = new Set<string>();
-      for (const itemId of new Set(live.map((l) => l.item_id))) {
-        const a = await openingAssets(
-          c,
-          live.filter((l) => l.item_id === itemId).map((l) => l.id),
-        );
-        if (a.used) used.add(itemId);
-      }
+      const liveItems = [...new Set(live.map((l) => l.item_id))];
+      const settled = await this.settled(c, storeId, liveItems);
+      // the items whose opening assets have been used since (one query for them all)
+      const used = new Set(
+        (
+          await c.query<{ item_id: string }>(
+            `SELECT DISTINCT a.item_id::text FROM assets a
+              WHERE a.opening_move_id = ANY($1::bigint[])
+                AND (a.status <> 'in_store'
+                     OR EXISTS (SELECT 1 FROM asset_movements m WHERE m.asset_id = a.id AND m.kind <> 'received')
+                     OR EXISTS (SELECT 1 FROM asset_depreciation d WHERE d.asset_id = a.id)
+                     OR EXISTS (SELECT 1 FROM condemnation_lines l WHERE l.asset_id = a.id))`,
+            [live.filter((l) => l.asset).map((l) => l.id)],
+          )
+        ).rows.map((x) => x.item_id),
+      );
       const why = (itemId: string) =>
         settled.get(itemId) ?? (used.has(itemId) ? 'its assets have been used since' : null);
+      // the lines as found, a page of them
+      const needle = view.q?.toLowerCase() ?? '';
+      const found = lines.rows.filter(
+        (l) =>
+          (!view.posting || l.opening_id === view.posting) &&
+          (!needle || `${l.name} ${l.code} ${l.batch_no ?? ''}`.toLowerCase().includes(needle)) &&
+          (!view.status ||
+            (view.status === 'reversed'
+              ? l.reversed
+              : !l.reversed &&
+                (view.status === 'standing' ||
+                  (view.status === 'changeable' ? !why(l.item_id) : !!why(l.item_id))))),
+      );
+      const size = view.size ?? 50;
+      const page = Math.min(view.page ?? 1, Math.max(1, Math.ceil(found.length / size)));
+      const shown = found.slice((page - 1) * size, page * size);
       return {
         postings: posts.rows.map((p) => {
           const own = lines.rows.filter((l) => l.opening_id === p.id);
+          const standing = own.filter((l) => !l.reversed);
           return {
             id: p.id,
             source: p.source,
@@ -1149,33 +1215,46 @@ export class PurchaseStoresService {
             undoneAt: p.undone_at?.toISOString() ?? null,
             undoneBy: p.undone_by,
             undoReason: p.undo_reason,
-            value: round(own.filter((l) => !l.reversed).reduce((a, l) => a + Number(l.value), 0)),
+            lines: own.length,
+            standing: standing.length,
+            value: round(standing.reduce((a, l) => a + Number(l.value), 0)),
             // undone at once: none of its standing items has moved
-            canUndo:
-              !p.undone_at &&
-              own.some((l) => !l.reversed) &&
-              own.filter((l) => !l.reversed).every((l) => !why(l.item_id)),
-            lines: own.map((l) => ({
-              moveId: l.id,
-              itemId: l.item_id,
-              code: l.code,
-              name: l.name,
-              unit: l.unit,
-              asset: l.asset,
-              qty: Number(l.qty),
-              rate: Number(l.rate),
-              value: Number(l.value),
-              batch: l.batch_no,
-              expiry: l.expiry,
-              reversed: l.reversed,
-              assets: l.assets,
-            })),
+            canUndo: !p.undone_at && standing.length > 0 && standing.every((l) => !why(l.item_id)),
           };
         }),
-        items: Object.fromEntries(
-          [...new Set(live.map((l) => l.item_id))].map((id) => [
+        lines: shown.map((l) => ({
+          moveId: l.id,
+          openingId: l.opening_id,
+          itemId: l.item_id,
+          code: l.code,
+          name: l.name,
+          unit: l.unit,
+          asset: l.asset,
+          qty: Number(l.qty),
+          rate: Number(l.rate),
+          value: Number(l.value),
+          batch: l.batch_no,
+          expiry: l.expiry,
+          reversed: l.reversed,
+          assets: l.assets,
+          canChange: !l.reversed && !why(l.item_id),
+          why: l.reversed ? null : why(l.item_id),
+        })),
+        found: found.length,
+        page,
+        size,
+        // every standing line of the items shown (a change replaces them all: batches across postings)
+        itemLines: Object.fromEntries(
+          [...new Set(shown.map((l) => l.item_id))].map((id) => [
             id,
-            { canChange: !why(id), why: why(id) },
+            live
+              .filter((l) => l.item_id === id)
+              .map((l) => ({
+                qty: Number(l.qty),
+                rate: Number(l.rate),
+                batch: l.batch_no,
+                expiry: l.expiry,
+              })),
           ]),
         ),
         missingAssets: [...new Set(live.filter((l) => l.asset).map((l) => l.item_id))]
@@ -1508,13 +1587,11 @@ export class PurchaseStoresService {
     });
   }
 
-  // ---- a rate correction: what is left of an item, revalued once the school admin approves ----------
+  // ---- a rate correction: what is left of an item, revalued once approved (Purchase → Who approves) --
   async revaluations(ctx: RequestContext, q: { status?: string; storeId?: string }) {
     return this.db.tenant(requireTenant(ctx), async (c) => {
-      if (!this.has(ctx, PURCHASE.storeView) && !this.has(ctx, PURCHASE.countApprove))
-        throw new DomainError('permission-denied', 'Only the stores see rate corrections', {
-          status: 403,
-        });
+      // the stores see them all; anyone else those they are on the approval of
+      const all = this.has(ctx, PURCHASE.storeView) || this.has(ctx, PURCHASE.countApprove);
       const r = await c.query<{
         id: string;
         number: string;
@@ -1535,17 +1612,28 @@ export class PurchaseStoresService {
         decided_by: string | null;
         decided_at: Date | null;
         decision_note: string | null;
+        instance_id: string | null;
+        mine: boolean;
+        waiting_with: string | null;
       }>(
-        // eslint-disable-next-line no-restricted-syntax -- PERSON is a fixed fragment
+        // eslint-disable-next-line no-restricted-syntax -- PERSON and MAY_ACT are fixed fragments
         `SELECT r.id::text, r.number, r.store_id::text, st.name AS store, r.item_id::text, i.name AS item, i.code,
                 COALESCE(su.code, u.code) AS unit, r.qty::text, r.old_rate::text, r.new_rate::text, r.reason, r.status,
                 ${PERSON('r.created_by')} AS by, r.created_by::text AS by_id, r.created_at AS at,
-                ${PERSON('r.decided_by')} AS decided_by, r.decided_at, r.decision_note
+                ${PERSON('r.decided_by')} AS decided_by, r.decided_at, r.decision_note, r.workflow_instance_id::text AS instance_id,
+                EXISTS (SELECT 1 FROM workflow_steps s JOIN workflow_instances wi ON wi.id = s.instance_id
+                         WHERE wi.id = r.workflow_instance_id AND wi.status = 'pending' AND s.level = wi.current_level
+                           AND s.status = 'pending' AND ${WorkflowService.MAY_ACT}) AS mine,
+                (SELECT s.name || ': ' || COALESCE((SELECT string_agg(au.display_name, ', ') FROM users au WHERE au.id = ANY(s.assignee_user_ids)), 'nobody')
+                   FROM workflow_steps s JOIN workflow_instances wi ON wi.id = s.instance_id
+                  WHERE wi.id = r.workflow_instance_id AND wi.status = 'pending' AND s.level = wi.current_level LIMIT 1) AS waiting_with
            FROM stock_revaluations r JOIN stores st ON st.id = r.store_id JOIN purchase_items i ON i.id = r.item_id
            JOIN purchase_uoms u ON u.id = i.uom_id LEFT JOIN purchase_uoms su ON su.id = i.stock_uom_id
           WHERE ($1::text IS NULL OR r.status = $1) AND ($2::bigint IS NULL OR r.store_id = $2)
+            AND ($3 OR EXISTS (SELECT 1 FROM workflow_steps s WHERE s.instance_id = r.workflow_instance_id
+                                AND (app.current_user_id() = ANY(s.assignee_user_ids) OR s.acted_by = app.current_user_id())))
           ORDER BY (r.status = 'submitted') DESC, r.created_at DESC LIMIT 100`,
-        [q.status ?? null, q.storeId ?? null],
+        [q.status ?? null, q.storeId ?? null, all],
       );
       const me = String(ctx.user.id);
       return {
@@ -1569,9 +1657,13 @@ export class PurchaseStoresService {
           decidedBy: x.decided_by,
           decidedAt: x.decided_at?.toISOString() ?? null,
           decisionNote: x.decision_note,
+          waitingWith: x.waiting_with,
           can: {
+            // the approver at its level now (one asked before levels existed: the right, as then)
             decide:
-              x.status === 'submitted' && this.has(ctx, PURCHASE.countApprove) && x.by_id !== me,
+              x.status === 'submitted' &&
+              x.by_id !== me &&
+              (x.instance_id ? x.mine : this.has(ctx, PURCHASE.countApprove)),
             cancel:
               x.status === 'submitted' && (x.by_id === me || this.has(ctx, PURCHASE.storeManage)),
           },
@@ -1584,8 +1676,9 @@ export class PurchaseStoresService {
     return this.db.tenant(requireTenant(ctx), async (c) => {
       await this.mustOperate(c, ctx, storeId);
       const b = (
-        await c.query<{ qty: string; avg: string; name: string }>(
-          `SELECT b.qty::text, b.avg_rate::text AS avg, i.name FROM stock_balances b JOIN purchase_items i ON i.id = b.item_id
+        await c.query<{ qty: string; avg: string; name: string; store: string }>(
+          `SELECT b.qty::text, b.avg_rate::text AS avg, i.name, st.name AS store
+             FROM stock_balances b JOIN purchase_items i ON i.id = b.item_id JOIN stores st ON st.id = b.store_id
             WHERE b.store_id = $1 AND b.item_id = $2`,
           [storeId, dto.itemId],
         )
@@ -1625,6 +1718,31 @@ export class PurchaseStoresService {
             throw e;
           })
       ).rows[0]!.id;
+      // the levels of the store's department on Purchase → Who approves (none: the school admin)
+      const departmentId = await approvingDepartment(c, storeId);
+      const flow = await syncFlow(c, 'revaluation', departmentId);
+      let instance: InstanceRow;
+      try {
+        instance = await this.workflow.start(c, ctx, {
+          definitionCode: flow.code,
+          entityType: 'purchase_revaluation',
+          entityId: id,
+          subject: `${number} · ${b.name} · ${b.store} · ₹${b.avg} → ₹${String(dto.newRate)}`,
+          payload: { department: flow.department, departmentId, number },
+        });
+      } catch (e) {
+        if (e instanceof DomainError && e.type === 'workflow.no_assignee')
+          throw new DomainError(
+            'purchase.no_approver',
+            `Nobody can approve rate corrections of ${b.store}: set the Rate correction levels of ${flow.department || 'its department'} (Purchase → Who approves)`,
+            { status: 409 },
+          );
+        throw e;
+      }
+      await c.query(`UPDATE stock_revaluations SET workflow_instance_id = $2 WHERE id = $1`, [
+        id,
+        instance.id,
+      ]);
       await this.audit.stage(ctx, c, {
         action: 'purchase.stock.revaluation_asked',
         entityType: 'stock_revaluations',
@@ -1636,22 +1754,20 @@ export class PurchaseStoresService {
   }
 
   /**
-   * The school admin (not who asked) approves: what is in the store now goes out at the average and
-   * back in at the new rate (batch by batch), the value of the item's opening assets in the store
-   * follows; or rejects. Who asked (or the stores' manager) may cancel it while it waits.
+   * The approver at its level (Purchase → Who approves; not who asked) approves — at the last level what
+   * is in the store goes to the new rate — or rejects; who asked (or the stores' manager) may cancel it
+   * while it waits.
    */
   async decideRevaluation(ctx: RequestContext, id: string, dto: RevaluationDecisionDto) {
-    return this.db.tenant(requireTenant(ctx), async (c) => {
+    const step = await this.db.tenant(requireTenant(ctx), async (c) => {
       const r = (
         await c.query<{
           number: string;
-          store_id: string;
-          item_id: string;
-          new_rate: string;
           status: string;
           created_by: string | null;
+          instance_id: string | null;
         }>(
-          `SELECT number, store_id::text, item_id::text, new_rate::text, status, created_by::text
+          `SELECT number, status, created_by::text, workflow_instance_id::text AS instance_id
              FROM stock_revaluations WHERE id = $1 FOR UPDATE`,
           [id],
         )
@@ -1667,95 +1783,181 @@ export class PurchaseStoresService {
           throw new DomainError('permission-denied', 'Only who asked may cancel it', {
             status: 403,
           });
-      } else if (!this.has(ctx, PURCHASE.countApprove) || r.created_by === me)
-        throw new DomainError(
-          'permission-denied',
-          'The school admin approves rate corrections (not who asked)',
-          { status: 403 },
-        );
-      if (dto.action === 'approve') {
-        const it = (await this.openingItems(c, [r.item_id])).get(r.item_id)!;
-        const rate = Number(r.new_rate);
-        const parts = it.batch
-          ? (
-              await c.query<{ batch_no: string; expiry: string | null; qty: string }>(
-                `SELECT batch_no, expiry::text, qty_left::text AS qty FROM stock_batches
-                  WHERE store_id = $1 AND item_id = $2 AND qty_left > 0 ORDER BY expiry NULLS LAST, id`,
-                [r.store_id, r.item_id],
-              )
-            ).rows.map((x) => ({ batch: x.batch_no, expiry: x.expiry, qty: Number(x.qty) }))
-          : [
-              {
-                batch: null,
-                expiry: null,
-                qty: Number(
-                  (
-                    await c.query<{ q: string }>(
-                      `SELECT COALESCE(qty, 0)::text AS q FROM stock_balances WHERE store_id = $1 AND item_id = $2`,
-                      [r.store_id, r.item_id],
-                    )
-                  ).rows[0]?.q ?? 0,
-                ),
-              },
-            ];
-        if (!parts.some((p) => p.qty > 0))
-          throw new DomainError('validation-failed', `Nothing of ${it.name} is left to revalue`, {
-            status: 400,
-          });
-        const note = `${r.number}: rate corrected`;
-        for (const p of parts)
-          await postStock(
-            c,
-            {
-              storeId: r.store_id,
-              itemId: r.item_id,
-              kind: 'revalue',
-              qty: -p.qty,
-              batch: p.batch,
-              docType: 'revaluation',
-              docId: id,
-              note,
-            },
-            it.name,
-          );
-        for (const p of parts)
-          await postStock(
-            c,
-            {
-              storeId: r.store_id,
-              itemId: r.item_id,
-              kind: 'revalue',
-              qty: p.qty,
-              rate,
-              batch: p.batch,
-              expiry: p.expiry,
-              docType: 'revaluation',
-              docId: id,
-              note,
-            },
-            it.name,
-          );
-        await c.query(
-          `UPDATE assets SET cost = $3, updated_at = now()
-            WHERE store_id = $1 AND item_id = $2 AND status = 'in_store' AND opening_move_id IS NOT NULL`,
-          [r.store_id, r.item_id, round(rate)],
-        );
+        if (r.instance_id)
+          await this.workflow.cancelIn(c, ctx, r.instance_id, `Cancelled: ${dto.note ?? ''}`);
+        await this.closeRevaluation(c, ctx, id, 'cancelled', dto.note ?? null);
+        return null;
       }
-      const status =
-        dto.action === 'approve' ? 'approved' : dto.action === 'reject' ? 'rejected' : 'cancelled';
-      await c.query(
-        `UPDATE stock_revaluations SET status = $2, decided_at = now(), decided_by = app.current_user_id(),
-                decision_note = $3 WHERE id = $1`,
-        [id, status, dto.note ?? null],
+      if (r.created_by === me)
+        throw new DomainError('workflow.self_approval', 'Someone other than who asked decides it', {
+          status: 403,
+        });
+      if (!r.instance_id) {
+        // asked before approval levels existed: the right decides, as then
+        if (!this.has(ctx, PURCHASE.countApprove))
+          throw new DomainError('permission-denied', 'The school admin approves rate corrections', {
+            status: 403,
+          });
+        if (dto.action === 'approve') await this.applyRevaluation(c, id);
+        await this.closeRevaluation(
+          c,
+          ctx,
+          id,
+          dto.action === 'approve' ? 'approved' : 'rejected',
+          dto.note ?? null,
+        );
+        return null;
+      }
+      const s = await c.query<{ id: string }>(
+        // eslint-disable-next-line no-restricted-syntax -- MAY_ACT is a fixed fragment
+        `SELECT s.id::text FROM workflow_steps s JOIN workflow_instances i ON i.id = s.instance_id
+          WHERE i.id = $1 AND i.status = 'pending' AND s.level = i.current_level AND s.status = 'pending' AND ${WorkflowService.MAY_ACT}`,
+        [r.instance_id],
       );
-      await this.audit.stage(ctx, c, {
-        action: `purchase.stock.revaluation_${status}`,
-        entityType: 'stock_revaluations',
-        entityId: id,
-        after: { number: r.number, status },
-      });
-      return { status };
+      if (!s.rows[0])
+        throw new DomainError(
+          'workflow.not_assignee',
+          'This rate correction is not waiting for you',
+          {
+            status: 403,
+          },
+        );
+      return s.rows[0].id;
     });
+    if (step)
+      await this.workflow.act(ctx, step, dto.action === 'approve' ? 'approved' : 'rejected', {
+        note: dto.note,
+      });
+    const st = await this.db.tenant(
+      requireTenant(ctx),
+      async (c) =>
+        (
+          await c.query<{ status: string }>(`SELECT status FROM stock_revaluations WHERE id = $1`, [
+            id,
+          ])
+        ).rows[0]!.status,
+    );
+    return { status: st };
+  }
+
+  /** The workflow's end: approved — the stock goes to the new rate; rejected — it stays. */
+  private async onRevaluationDecided(
+    c: PoolClient,
+    ctx: RequestContext,
+    instance: InstanceRow,
+    outcome: 'approved' | 'rejected',
+  ) {
+    if (instance.status === 'cancelled') return;
+    const note = [...instance.steps].reverse().find((s) => s.note)?.note ?? null;
+    if (outcome === 'approved') await this.applyRevaluation(c, instance.entityId);
+    await this.closeRevaluation(
+      c,
+      ctx,
+      instance.entityId,
+      outcome === 'approved' ? 'approved' : 'rejected',
+      note,
+    );
+  }
+
+  private async closeRevaluation(
+    c: PoolClient,
+    ctx: RequestContext,
+    id: string,
+    status: 'approved' | 'rejected' | 'cancelled',
+    note: string | null,
+  ) {
+    const number = (
+      await c.query<{ number: string }>(
+        `UPDATE stock_revaluations SET status = $2, decided_at = now(), decided_by = app.current_user_id(),
+                decision_note = $3 WHERE id = $1 RETURNING number`,
+        [id, status, note],
+      )
+    ).rows[0]?.number;
+    await this.audit.stage(ctx, c, {
+      action: `purchase.stock.revaluation_${status}`,
+      entityType: 'stock_revaluations',
+      entityId: id,
+      after: { number, status },
+    });
+  }
+
+  /**
+   * What is in the store now goes out at the average and back in at the new rate (batch by batch); the
+   * cost of the item's opening assets in the store follows.
+   */
+  private async applyRevaluation(c: PoolClient, id: string) {
+    const r = (
+      await c.query<{ number: string; store_id: string; item_id: string; new_rate: string }>(
+        `SELECT number, store_id::text, item_id::text, new_rate::text FROM stock_revaluations WHERE id = $1`,
+        [id],
+      )
+    ).rows[0]!;
+    const it = (await this.openingItems(c, [r.item_id])).get(r.item_id)!;
+    const rate = Number(r.new_rate);
+    const parts = it.batch
+      ? (
+          await c.query<{ batch_no: string; expiry: string | null; qty: string }>(
+            `SELECT batch_no, expiry::text, qty_left::text AS qty FROM stock_batches
+              WHERE store_id = $1 AND item_id = $2 AND qty_left > 0 ORDER BY expiry NULLS LAST, id`,
+            [r.store_id, r.item_id],
+          )
+        ).rows.map((x) => ({ batch: x.batch_no, expiry: x.expiry, qty: Number(x.qty) }))
+      : [
+          {
+            batch: null,
+            expiry: null,
+            qty: Number(
+              (
+                await c.query<{ q: string }>(
+                  `SELECT COALESCE(qty, 0)::text AS q FROM stock_balances WHERE store_id = $1 AND item_id = $2`,
+                  [r.store_id, r.item_id],
+                )
+              ).rows[0]?.q ?? 0,
+            ),
+          },
+        ];
+    if (!parts.some((p) => p.qty > 0))
+      throw new DomainError('validation-failed', `Nothing of ${it.name} is left to revalue`, {
+        status: 400,
+      });
+    const note = `${r.number}: rate corrected`;
+    for (const p of parts)
+      await postStock(
+        c,
+        {
+          storeId: r.store_id,
+          itemId: r.item_id,
+          kind: 'revalue',
+          qty: -p.qty,
+          batch: p.batch,
+          docType: 'revaluation',
+          docId: id,
+          note,
+        },
+        it.name,
+      );
+    for (const p of parts)
+      await postStock(
+        c,
+        {
+          storeId: r.store_id,
+          itemId: r.item_id,
+          kind: 'revalue',
+          qty: p.qty,
+          rate,
+          batch: p.batch,
+          expiry: p.expiry,
+          docType: 'revaluation',
+          docId: id,
+          note,
+        },
+        it.name,
+      );
+    await c.query(
+      `UPDATE assets SET cost = $3, updated_at = now()
+        WHERE store_id = $1 AND item_id = $2 AND status = 'in_store' AND opening_move_id IS NOT NULL`,
+      [r.store_id, r.item_id, round(rate)],
+    );
   }
 
   /** What the store screens pick from. */

@@ -23,7 +23,7 @@ import {
   type VendorImportDto,
 } from './purchase.dto';
 
-const DOCS = ['indent', 'requisition', 'order', 'inspection'] as const;
+const DOCS = ['indent', 'requisition', 'order', 'inspection', 'count', 'revaluation'] as const;
 
 /** The payment terms Excel: one row per term, up to four instalments across (docs/design/83). */
 const TERM_GROUPS = 4;

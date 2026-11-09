@@ -520,3 +520,21 @@ export async function shareAmongIndents(
     });
   return out;
 }
+
+/**
+ * The department whose levels on Purchase → Who approves approve a store's counts and rate corrections
+ * (docs/design/84, 9 Nov 2026): the store's own, else the purchase office's; '0' when neither is set (the
+ * school admin approves).
+ */
+export async function approvingDepartment(c: PoolClient, storeId: string) {
+  return (
+    (
+      await c.query<{ id: string | null }>(
+        `SELECT COALESCE(s.department_id,
+                         (SELECT p.purchase_department_id FROM purchase_settings p WHERE p.school_id = s.school_id))::text AS id
+           FROM stores s WHERE s.id = $1`,
+        [storeId],
+      )
+    ).rows[0]?.id ?? '0'
+  );
+}

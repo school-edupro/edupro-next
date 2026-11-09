@@ -846,11 +846,26 @@ export const OpeningUndoSchema = z.object({
   reason: z.string().trim().min(3, 'Say why (at least 3 letters)').max(300),
 });
 export class OpeningUndoDto extends createZodDto(OpeningUndoSchema) {}
+/** The opening stock posted, a page of its lines: of one posting, found by item or code, by status. */
+export const OpeningViewSchema = z.object({
+  posting: IdSchema.optional(),
+  q: z.string().trim().max(80).optional(),
+  status: z.enum(['standing', 'changeable', 'settled', 'reversed']).optional(),
+  page: z.coerce.number().int().min(1).max(100000).default(1),
+  size: z.coerce
+    .number()
+    .int()
+    .refine((n) => [25, 50, 100].includes(n))
+    .default(50),
+});
+export class OpeningViewDto extends createZodDto(OpeningViewSchema) {}
 export const StatementQuerySchema = z.object({ format: z.enum(['xlsx', 'pdf']).default('pdf') });
 export class StatementQueryDto extends createZodDto(StatementQuerySchema) {}
 
 export const StockQuerySchema = z.object({
   storeId: IdSchema.optional(),
+  /** one item (the store page's rate correction) */
+  itemId: IdSchema.optional(),
   categoryId: IdSchema.optional(),
   q: z.string().trim().max(80).optional(),
   /** below the reorder level only */
@@ -864,6 +879,13 @@ export const StockQuerySchema = z.object({
     .optional()
     .transform((v) => v === '1'),
   format: z.enum(['xlsx', 'pdf']).optional(),
+  /** a page of the rows (the store page) */
+  page: z.coerce.number().int().min(1).max(100000).optional(),
+  size: z.coerce
+    .number()
+    .int()
+    .refine((n) => [25, 50, 100].includes(n))
+    .default(50),
 });
 export class StockQueryDto extends createZodDto(StockQuerySchema) {}
 
@@ -1092,6 +1114,37 @@ export const CountLinesSchema = z.object({
     .max(5000),
 });
 export class CountLinesDto extends createZodDto(CountLinesSchema) {}
+
+/**
+ * A count's lines a page at a time (docs/design/84, "As built — the store page in tabs", 9 Nov 2026):
+ * found by item, code or batch, a category, not yet counted / with a difference / every line, a reason.
+ * Without `page` every line comes (the files and older callers).
+ */
+export const CountViewSchema = z.object({
+  page: z.coerce.number().int().min(1).max(100000).optional(),
+  size: z.coerce
+    .number()
+    .int()
+    .refine((n) => [25, 50, 100].includes(n))
+    .default(50),
+  q: z.string().trim().max(80).optional(),
+  category: z.string().trim().max(80).optional(),
+  show: z.enum(['all', 'todo', 'diff']).optional(),
+  reason: z
+    .enum([
+      'not_found',
+      'damaged',
+      'expired',
+      'issued_no_slip',
+      'received_no_grn',
+      'entry_mistake',
+      'found',
+      'other',
+      'none',
+    ])
+    .optional(),
+});
+export class CountViewDto extends createZodDto(CountViewSchema) {}
 
 export const CountDecisionSchema = z.object({
   action: z.enum(['approve', 'send_back']),

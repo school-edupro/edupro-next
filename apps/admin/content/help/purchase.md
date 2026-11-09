@@ -86,7 +86,8 @@ top. Each of those screens leads back through **Purchase set-up** at its top. Fi
    updates its term (purchase orders already made keep what they printed). A term with more than four
    instalments is changed on the screen.
 4. **Vendors** — see below.
-5. **Who approves** — pick a department: up to three levels each for its **PIs**, **PRs** and **POs**
+5. **Who approves** — pick a department: up to three levels each for its **PIs**, **PRs** and **POs**,
+   the **inspection** of what is received, and its stores' **physical counts** and **rate corrections**
    (named employees, everyone with a designation such as Principal, or the department's HOD), with how
    many hours a level has before the step moves on. A level nobody holds is skipped; the screen says
    which levels would be skipped (no HOD set, nobody who can sign in). **When a PI skips the PR**: under
@@ -488,6 +489,12 @@ inactive; the main store is always active.
 store unit NOS, 10 store units per unit), **Batch and expiry** (lab chemicals, first aid: the earliest
 expiry goes out first), **Serial numbers** (assets). The units cannot change once stock has moved.
 
+**A store's page** has the figures (items in stock, value, below reorder, the last count) and five tabs,
+each found and paged (25, 50 or 100 per page) for stores of thousands of items: **Stock** (find, category,
+in stock / below the reorder level / every item; Excel and PDF of what is found; **Correct the rate** on a
+row), **Opening stock posted**, **Rate corrections**, **Post opening stock** and **Reorder levels** (saving
+a page keeps the other pages as they are).
+
 **Opening stock** (on a store's page, **Post opening stock**): what the store holds on the day it
 starts — per item the quantity in the store unit and what one cost, the batch and expiry for an item
 kept by batch; or **from Excel** (download the format, fill it, upload). **Check** comes first either
@@ -507,8 +514,9 @@ Excel (with the file name), or a correction — with its lines, who posted it an
 - **Undo this upload** reverses every line of a posting while none of its items has moved — the wrong
   sheet uploaded, say. The posting stays on record as undone.
 - Once an item **has moved**: a wrong **quantity** is put right by a physical count; a wrong **rate** by
-  a **rate correction** (Rate corrections, on the store's page): the right rate and why; when the school
-  admin (not who asked) approves it (My approvals), what is left in the store goes to the right rate.
+  a **rate correction** (the store's Rate corrections tab, or **Correct the rate** on the Stock tab): the
+  right rate and why; it goes to the **Rate correction** levels of the store's department on Who approves
+  (none set: the school admin), never to who asked; at the last level what is left goes to the right rate.
   What was issued before keeps its old value.
 - **Asset items without their assets** (stock posted before openings made assets): **Make their assets**
   makes one per unit.
@@ -659,10 +667,19 @@ GRN, entry mistake, other (with a note) — and add a note if you like. The bar 
 **Save**, or **Save and send for approval** (every line counted, 0 when none is found; every difference
 with its reason). A wrong opening stock is better changed on the store's page than counted away.
 
-The **school admin** (not someone who counted) sees book, counted, **excess**, **shortage**, value and
-reason — the differences only, or every line — with the totals and the differences **by reason**, and
-**approves** (each difference posts as an **adjustment** at the average rate, the reason on it) or
-**sends it back** to count again. **Excel** and **PDF** at the top: the count with book, counted,
+**Who approves a count**: the **Physical count** levels of the store's department on **Purchase set-up →
+Who approves** (the Main store and stores without a department go by the purchase office department of
+Purchase settings); none set — the school admin. Whoever started or counted it never approves it. The
+count's page shows the levels, who holds each, where it waits and what each decided; it reaches each
+approver in **My approvals** (they open the count even without the stores' rights). A store with no
+department and no purchase office department set can only be approved by the school admin.
+
+A big store is counted a page at a time (25, 50 or 100 lines): find, category, not yet counted / with a
+difference, a reason; **Save this page** (leaving a page with changes asks first), or upload the Excel
+sheet for every line at once. The approver sees book, counted, **excess**, **shortage**, value and
+reason — the differences only, or every line, a page at a time — and the differences **by reason** over
+the whole count, and **approves** (at the last level each difference posts as an **adjustment** at the
+average rate, the reason on it) or **sends it back** to count again. **Excel** and **PDF** at the top: the count with book, counted,
 excess, shortage, value and reason; the PDF has the boxes for who counted, the store keeper, the
 verifier and who approved.
 

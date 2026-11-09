@@ -14,6 +14,7 @@ import {
   CountDto,
   CountImportDto,
   CountLinesDto,
+  CountViewDto,
   IssueDto,
   ReleaseHoldDto,
   NoteDto,
@@ -230,7 +231,8 @@ export class PurchaseStockController {
 
   // ---- counts -----------------------------------------------------------------------------------------
   @Get('counts')
-  @RequirePermission(PURCHASE.storeView)
+  // the stores; ?mine=1 (waiting at my level) for anyone (checked in the service)
+  @AuthenticatedOnly()
   listCounts(@ReqCtx() ctx: RequestContext, @Query() q: StockDocQueryDto) {
     return this.counts.list(ctx, q);
   }
@@ -243,9 +245,10 @@ export class PurchaseStockController {
   }
 
   @Get('counts/:id')
-  @RequirePermission(PURCHASE.storeView)
-  getCount(@ReqCtx() ctx: RequestContext, @Param('id') id: string) {
-    return this.counts.get(ctx, id);
+  // the stores, or someone on its approval (checked in the service)
+  @AuthenticatedOnly()
+  getCount(@ReqCtx() ctx: RequestContext, @Param('id') id: string, @Query() q: CountViewDto) {
+    return this.counts.get(ctx, id, q);
   }
 
   @Put('counts/:id/lines')
@@ -279,7 +282,8 @@ export class PurchaseStockController {
 
   @Post('counts/:id/decide')
   @ApiOperation({ summary: 'Approve the count (its differences post) or send it back' })
-  @RequirePermission(PURCHASE.countApprove)
+  // the approver at the count's level on Purchase → Who approves (checked in the service)
+  @AuthenticatedOnly()
   decideCount(
     @ReqCtx() ctx: RequestContext,
     @Param('id') id: string,
@@ -296,13 +300,15 @@ export class PurchaseStockController {
 
   @Get('counts/:id/statement')
   @ApiOperation({ summary: 'The count as Excel: book, counted, excess, shortage, value, reason' })
-  @RequirePermission(PURCHASE.storeView)
+  // the stores, or someone on its approval (checked in the service)
+  @AuthenticatedOnly()
   countStatement(@ReqCtx() ctx: RequestContext, @Param('id') id: string) {
     return this.counts.statement(ctx, id);
   }
 
   @Get('counts/:id/pdf')
-  @RequirePermission(PURCHASE.storeView)
+  // the stores, or someone on its approval (checked in the service)
+  @AuthenticatedOnly()
   async countPdf(
     @ReqCtx() ctx: RequestContext,
     @Param('id') id: string,

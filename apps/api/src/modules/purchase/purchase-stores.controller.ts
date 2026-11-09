@@ -11,6 +11,7 @@ import {
   OpeningFixDto,
   OpeningImportDto,
   OpeningUndoDto,
+  OpeningViewDto,
   PURCHASE,
   RevaluationDecisionDto,
   RevaluationDto,
@@ -44,8 +45,12 @@ export class PurchaseStoresController {
 
   @Get('stores/:id')
   @RequirePermission(PURCHASE.storeView)
-  get(@ReqCtx() ctx: RequestContext, @Param('id') id: string) {
-    return this.stores.store(ctx, id);
+  get(
+    @ReqCtx() ctx: RequestContext,
+    @Param('id') id: string,
+    @Query('stock') stock: string | undefined,
+  ) {
+    return this.stores.store(ctx, id, stock !== '0');
   }
 
   @Post('stores')
@@ -96,8 +101,8 @@ export class PurchaseStoresController {
       'The opening stock posted (each posting and its lines), what can still be changed, missing assets',
   })
   @RequirePermission(PURCHASE.storeView)
-  openings(@ReqCtx() ctx: RequestContext, @Param('id') id: string) {
-    return this.stores.openings(ctx, id);
+  openings(@ReqCtx() ctx: RequestContext, @Param('id') id: string, @Query() q: OpeningViewDto) {
+    return this.stores.openings(ctx, id, q);
   }
 
   @Post('stores/:id/opening-fix')

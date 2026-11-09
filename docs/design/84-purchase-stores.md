@@ -544,3 +544,40 @@ and filters, reasons from a list, Excel and PDF, and a save bar.
   their tags, a batch item's batches, remove and open again, an upload undone, a moved item's rate
   correction approved by the school admin only, the missing assets made, the count's reasons, figures,
   Excel and PDF, the statement and refusals); `purchase-stores` updated for the new message.
+
+## As built — count approval on Who approves; the store page in tabs; pages for thousands (9 Nov 2026)
+
+Asked: pagination and filters on the count and store pages for thousands of items; the store page's
+sections in tabs; who approves a count and where that is set. Until now a count was approved by anyone
+holding `purchase.count.approve` (the school and group admins), set only on Access → Roles, and the page
+did not say who. The user's choices: levels on Who approves; five tabs; server pages with filters.
+
+- **Migration 0342**: `purchase_department_approvals.doc_type` gains `count` and `revaluation`;
+  `stock_counts.workflow_instance_id`, `stock_revaluations.workflow_instance_id`.
+- **Approval**: `syncFlow` takes `count` / `revaluation` (none set — one level, the school admin role, as
+  before). The department is the store's, else Purchase settings' purchase office department
+  (`approvingDepartment`, in the stock core); neither — the school admin only (the count page says so).
+  Sending a count starts the workflow (`purchase_count`); `decide` acts on the caller's step (who started
+  or counted it is refused); the end posts the adjustments or sends it back; cancelling a sent count
+  cancels its approval. A count sent before this keeps the right-based approval. Rate corrections the same
+  (`purchase_revaluation`; `waitingWith` on the list). Approvers outside the stores read the counts and
+  corrections they are on (`mustRead`; `GET counts?mine=1`; the routes `@AuthenticatedOnly`, checked in
+  the services). My approvals: counts waiting at my level, rate corrections I may decide. Who approves:
+  the Count and Rate correction columns and sections.
+- **Count page**: `GET counts/:id?page&size&q&category&show&reason` — a page of lines (`found`, `page`,
+  `size`, `show` — every line while counting, the differences once sent, unless asked), `categories`,
+  `byReason` and the figures over the whole count; `approval` (department, levels set, steps with their
+  people and outcome, the current level, mine). The page: figures, Who approves (with the link to set it),
+  the actions, filters (find, category, show, reason, per page), the counting sheet (Save this page saves
+  the page's changed lines; leaving with changes asks first; "still to count in all") or the review, and
+  the differences by reason (each a filter).
+- **Store page**: `GET stores/:id?stock=0` (no stock rows); `GET stock` with `page`, `size`, `itemId`;
+  `GET stores/:id/openings?posting&q&status&page&size` (postings as a summary with standing lines and
+  value; the lines paged with `canChange` / `why`; `itemLines` for the change dialog; settled items and
+  used assets found in one query each). The page: figures, then the tabs Stock / Opening stock posted /
+  Rate corrections / Post opening stock / Reorder levels, each filtered and paged; Correct the rate from a
+  stock row (the rate tab finds the item by id); actions return to the same tab and page (`back`).
+- **Tests**: `purchase-opening-fix.e2e-spec.ts` (+1: the levels set on Who approves decide a count and a
+  rate correction — the school admin refused, the named teacher outside the stores sees and approves
+  them — and the pages: stock, one item, the opening lines, a count's page and default view); the count
+  test in `purchase-issues` updated (decide returns the status).

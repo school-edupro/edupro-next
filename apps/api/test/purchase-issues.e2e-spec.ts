@@ -479,7 +479,8 @@ describe('purchase issues, returns, transfers and counts (e2e)', () => {
     const ok = await call(admin, 'POST', `/purchase/counts/${ids.CNT!}/decide`, {
       action: 'approve',
     });
-    expect(ok.json()).toEqual({ status: 'approved', adjustments: 1 });
+    // the school admin is the level when the lab's department has no Physical count levels
+    expect(ok.json()).toEqual({ status: 'approved' });
     expect((await bal(ids.lab!, ids.PEN!)).qty).toBe('9.000');
     const store = (await call(labKeeper, 'GET', `/purchase/stores/${ids.lab!}`)).json();
     expect(store.countedThisYear).toBe(true);

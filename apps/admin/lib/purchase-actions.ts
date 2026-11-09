@@ -7,6 +7,12 @@ import type { ApprovalLevel } from './recruitment';
 
 const pick = (fd: FormData, k: string) => String(fd.get(k) ?? '').trim();
 const okId = (id: string) => /^\d{1,18}$/.test(id);
+/** Back to a store's page as it was (its tab, filters and page): only that page, else its top. */
+const storeBack = (fd: FormData, storeId: string) => {
+  const home = `/purchase/stores/${storeId}`;
+  const b = String(fd.get('back') ?? '');
+  return b.startsWith(`${home}?`) && /^[\w/?=&%.+-]{1,400}$/.test(b) ? b : home;
+};
 const detailOf = (e: ApiError) => {
   const errs = e.problem.errors as Array<{ path?: string; message?: string }> | undefined;
   if (Array.isArray(errs) && errs.length)
@@ -1120,7 +1126,7 @@ export async function saveStoreLevels(fd: FormData) {
       maxQty: pick(fd, 'max_new') || null,
     });
   return run(
-    `/purchase/stores/${id}`,
+    storeBack(fd, id),
     () =>
       apiFetch(`/purchase/stores/${id}/levels`, { method: 'PUT', body: JSON.stringify({ lines }) }),
     'Reorder levels saved',
@@ -1239,7 +1245,7 @@ export async function fixOpening(
 export async function undoOpening(fd: FormData) {
   const id = pick(fd, 'id');
   const storeId = pick(fd, 'storeId');
-  const to = okId(storeId) ? `/purchase/stores/${storeId}` : '/purchase/stores';
+  const to = okId(storeId) ? storeBack(fd, storeId) : '/purchase/stores';
   if (!okId(id)) back(to, 'validation-failed', 'Unknown upload');
   return run(
     to,
@@ -1257,7 +1263,7 @@ export async function makeOpeningAssets(fd: FormData) {
   const storeId = pick(fd, 'storeId');
   if (!okId(storeId)) back('/purchase/stores', 'validation-failed', 'Unknown store');
   return run(
-    `/purchase/stores/${storeId}`,
+    storeBack(fd, storeId),
     () => apiFetch(`/purchase/stores/${storeId}/opening-assets`, { method: 'POST' }),
     'Assets made: see Purchase → Assets',
   );
@@ -1268,7 +1274,7 @@ export async function requestRevaluation(fd: FormData) {
   const storeId = pick(fd, 'storeId');
   if (!okId(storeId)) back('/purchase/stores', 'validation-failed', 'Unknown store');
   return run(
-    `/purchase/stores/${storeId}`,
+    storeBack(fd, storeId),
     () =>
       apiFetch(`/purchase/stores/${storeId}/revaluations`, {
         method: 'POST',
@@ -1278,7 +1284,7 @@ export async function requestRevaluation(fd: FormData) {
           reason: pick(fd, 'reason'),
         }),
       }),
-    'Rate correction sent: the school admin approves it',
+    'Rate correction sent for approval (Purchase → Who approves)',
   );
 }
 
@@ -1286,7 +1292,7 @@ const revaluationAction =
   (action: 'approve' | 'reject' | 'cancel', done: string) => async (fd: FormData) => {
     const id = pick(fd, 'id');
     const storeId = pick(fd, 'storeId');
-    const to = okId(storeId) ? `/purchase/stores/${storeId}` : '/purchase/stores';
+    const to = okId(storeId) ? storeBack(fd, storeId) : '/purchase/stores';
     if (!okId(id)) back(to, 'validation-failed', 'Unknown rate correction');
     return run(
       to,

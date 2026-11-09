@@ -1,12 +1,11 @@
 'use client';
 import { Badge } from '@edupro/ui';
 import { useRouter } from 'next/navigation';
-import { useMemo, useState, useTransition } from 'react';
+import { useEffect, useMemo, useState, useTransition, type MouseEvent } from 'react';
 import { importCount, saveCountLines, submitCountNow } from '@/lib/purchase-actions';
 import { COUNT_REASONS, type CountDetail, type CountReason } from '@/lib/purchase';
 
 const fmt = (n: number) => n.toLocaleString('en-IN', { maximumFractionDigits: 3 });
-type Show = 'all' | 'todo' | 'diff';
 interface Entry {
   counted: string;
   code: CountReason | '';
@@ -14,19 +13,29 @@ interface Entry {
 }
 
 /**
- * Counting a store (docs/design/84, part 8; "As built — the count rebuilt", 9 Nov 2026): find a line by
- * name or code, by category, those not yet counted or those that differ; enter what is on the shelf
- * (the book quantity shows only once a line is counted); pick why a line differs (and a note); add an
- * item or batch found that is not listed; or upload the filled Excel sheet. The bar at the foot stays
- * in view: Save, or Save and send for approval.
+ * Counting a store a page at a time (docs/design/84, part 8; "As built — the count rebuilt", 9 Nov
+ * 2026): the lines of this page (found by the page's filters), what is on the shelf (the book
+ * quantity shows only once a line is counted), why a line differs (from the list, and a note); an item
+ * or batch found that is not listed; or the filled Excel sheet for everything at once. Save saves this
+ * page's changed lines; leaving a page with changes asks first. The bar at the foot stays in view.
  */
 export function CountSheet({
   count,
   items,
+  pager,
 }: {
   count: CountDetail;
   /** the items kept in stock, for a line found that is not listed */
   items: Array<{ id: string; code: string; name: string; tracksBatch: boolean }>;
+  pager: {
+    page: number;
+    pages: number;
+    found: number;
+    first: string;
+    prev: string;
+    next: string;
+    last: string;
+  };
 }) {
   const router = useRouter();
   const initial = useMemo(
@@ -44,34 +53,32 @@ export function CountSheet({
     [count.lineItems],
   );
   const [state, setState] = useState(initial);
+  useEffect(() => setState(initial), [initial]);
   const [countedBy, setCountedBy] = useState(count.countedBy ?? '');
   const [extra, setExtra] = useState({ itemId: '', batch: '', expiry: '', counted: '' });
-  const [q, setQ] = useState('');
-  const [cat, setCat] = useState('');
-  const [show, setShow] = useState<Show>('all');
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [pending, start] = useTransition();
-  const categories = [...new Set(count.lineItems.map((l) => l.category))].sort();
-  const dirty =
-    countedBy !== (count.countedBy ?? '') ||
-    extra.itemId !== '' ||
-    count.lineItems.some((l) => {
-      const a = state[l.id]!;
-      const b = initial[l.id]!;
-      return a.counted !== b.counted || a.code !== b.code || a.note !== b.note;
-    });
-  const needle = q.trim().toLowerCase();
-  const rows = count.lineItems.filter((l) => {
-    const v = state[l.id]!;
-    return (
-      (!needle || `${l.item} ${l.itemCode} ${l.batch ?? ''}`.toLowerCase().includes(needle)) &&
-      (!cat || l.category === cat) &&
-      (show === 'all' ||
-        (show === 'todo' ? v.counted === '' : l.difference !== null && l.difference !== 0))
-    );
+  const changed = count.lineItems.filter((l) => {
+    const a = state[l.id];
+    const b = initial[l.id];
+    return a && b && (a.counted !== b.counted || a.code !== b.code || a.note !== b.note);
   });
+  const dirty = changed.length > 0 || countedBy !== (count.countedBy ?? '') || extra.itemId !== '';
+  // leaving the page (another page, a filter, closing the tab) with changes asks first
+  useEffect(() => {
+    if (!dirty) return;
+    const warn = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+    };
+    window.addEventListener('beforeunload', warn);
+    return () => window.removeEventListener('beforeunload', warn);
+  }, [dirty]);
+  const go = (e: MouseEvent) => {
+    if (dirty && !window.confirm('This page has changes not saved. Leave it without saving?'))
+      e.preventDefault();
+  };
   const body = () => {
-    const lines: Array<Record<string, unknown>> = count.lineItems.map((l) => {
+    const lines: Array<Record<string, unknown>> = changed.map((l) => {
       const v = state[l.id]!;
       return {
         lineId: l.id,
@@ -93,8 +100,11 @@ export function CountSheet({
   const save = (send: boolean) => {
     setMsg(null);
     start(async () => {
-      const r = await saveCountLines(count.id, body());
-      if (!r.ok) return setMsg({ ok: false, text: r.error });
+      const b = body();
+      if (b.lines.length || countedBy !== (count.countedBy ?? '')) {
+        const r = await saveCountLines(count.id, b);
+        if (!r.ok) return setMsg({ ok: false, text: r.error });
+      }
       setExtra({ itemId: '', batch: '', expiry: '', counted: '' });
       if (send) {
         const s = await submitCountNow(count.id);
@@ -103,7 +113,11 @@ export function CountSheet({
           return router.refresh();
         }
         setMsg({ ok: true, text: 'Saved and sent for approval' });
-      } else setMsg({ ok: true, text: 'Saved' });
+      } else
+        setMsg({
+          ok: true,
+          text: `Saved ${String(b.lines.length)} line${b.lines.length === 1 ? '' : 's'}`,
+        });
       router.refresh();
     });
   };
@@ -125,10 +139,10 @@ export function CountSheet({
     reader.readAsDataURL(f);
   };
   const extraItem = items.find((i) => i.id === extra.itemId);
-  const left = count.lineItems.filter((l) => state[l.id]!.counted === '').length;
+  const left = count.figures.lines - count.figures.counted;
   return (
     <>
-      <div className="ep-grid__toolbar">
+      <div className="ep-grid__toolbar" style={{ marginBottom: 'var(--sp-3)' }}>
         <a
           className="ep-btn ep-btn--secondary ep-btn--sm"
           href={`/api/purchase/stock-doc/counts/${count.id}?sheet=1`}
@@ -136,7 +150,7 @@ export function CountSheet({
           Count sheet (Excel)
         </a>
         <label className="ep-field" htmlFor="cs-file">
-          <span className="ep-field__label">Upload the filled sheet</span>
+          <span className="ep-field__label">Upload the filled sheet (every line at once)</span>
           <input
             id="cs-file"
             type="file"
@@ -153,50 +167,6 @@ export function CountSheet({
         }}
         noValidate
       >
-        <div className="ep-grid__toolbar" style={{ marginTop: 'var(--sp-3)' }}>
-          <label className="ep-field" htmlFor="cs-q">
-            <span className="ep-field__label">Find</span>
-            <input
-              id="cs-q"
-              className="ep-input"
-              type="search"
-              value={q}
-              placeholder="Item, code or batch"
-              onChange={(e) => setQ(e.target.value)}
-            />
-          </label>
-          {categories.length > 1 ? (
-            <label className="ep-field" htmlFor="cs-cat">
-              <span className="ep-field__label">Category</span>
-              <select
-                id="cs-cat"
-                className="ep-select"
-                value={cat}
-                onChange={(e) => setCat(e.target.value)}
-              >
-                <option value="">All</option>
-                {categories.map((c) => (
-                  <option key={c} value={c}>
-                    {c}
-                  </option>
-                ))}
-              </select>
-            </label>
-          ) : null}
-          <label className="ep-field" htmlFor="cs-show">
-            <span className="ep-field__label">Show</span>
-            <select
-              id="cs-show"
-              className="ep-select"
-              value={show}
-              onChange={(e) => setShow(e.target.value as Show)}
-            >
-              <option value="all">Every line</option>
-              <option value="todo">Not yet counted ({left})</option>
-              <option value="diff">With a difference</option>
-            </select>
-          </label>
-        </div>
         <div className="ep-table-wrap" tabIndex={0} role="region" aria-label="The count sheet">
           <table className="ep-table">
             <caption className="ep-sr-only">
@@ -218,9 +188,9 @@ export function CountSheet({
               </tr>
             </thead>
             <tbody>
-              {rows.length ? (
-                rows.map((l) => {
-                  const v = state[l.id]!;
+              {count.lineItems.length ? (
+                count.lineItems.map((l) => {
+                  const v = state[l.id] ?? { counted: '', code: '', note: '' };
                   const set = (patch: Partial<Entry>) =>
                     setState((cur) => ({ ...cur, [l.id]: { ...v, ...patch } }));
                   const differs = l.difference !== null && l.difference !== 0;
@@ -272,9 +242,9 @@ export function CountSheet({
                             onChange={(e) => set({ code: e.target.value as CountReason | '' })}
                           >
                             <option value="">{differs ? 'Pick why…' : '—'}</option>
-                            {(Object.keys(COUNT_REASONS) as CountReason[]).map((k) => (
-                              <option key={k} value={k}>
-                                {COUNT_REASONS[k]}
+                            {(Object.keys(COUNT_REASONS) as CountReason[]).map((key) => (
+                              <option key={key} value={key}>
+                                {COUNT_REASONS[key]}
                               </option>
                             ))}
                           </select>
@@ -297,12 +267,41 @@ export function CountSheet({
                 })
               ) : (
                 <tr>
-                  <td colSpan={5}>No line matches.</td>
+                  <td colSpan={5}>No line matches these filters.</td>
                 </tr>
               )}
             </tbody>
           </table>
         </div>
+        <nav aria-label="Pages of the count" className="ep-field__help">
+          {pager.found} line{pager.found === 1 ? '' : 's'} found
+          {pager.pages > 1 ? (
+            <>
+              {' '}
+              · page {pager.page} of {pager.pages} ·{' '}
+              {pager.page > 1 ? (
+                <>
+                  <a href={pager.first} onClick={go}>
+                    First
+                  </a>{' '}
+                  <a href={pager.prev} onClick={go}>
+                    Previous
+                  </a>
+                </>
+              ) : null}{' '}
+              {pager.page < pager.pages ? (
+                <>
+                  <a href={pager.next} onClick={go}>
+                    Next
+                  </a>{' '}
+                  <a href={pager.last} onClick={go}>
+                    Last
+                  </a>
+                </>
+              ) : null}
+            </>
+          ) : null}
+        </nav>
         <fieldset
           className="ep-purch-line ep-purch-line--wide"
           style={{ marginTop: 'var(--sp-3)' }}
@@ -379,7 +378,7 @@ export function CountSheet({
         ) : null}
         <div className="ep-form-actions" data-sticky="true">
           <button type="submit" className="ep-btn ep-btn--secondary" disabled={pending}>
-            Save
+            Save this page
           </button>
           {count.can.submit ? (
             <button
@@ -392,9 +391,11 @@ export function CountSheet({
             </button>
           ) : null}
           <span className="ep-field__help" style={{ alignSelf: 'center', margin: 0 }} role="status">
-            {dirty ? 'Changes not saved yet · ' : ''}
+            {dirty
+              ? `${String(changed.length)} change${changed.length === 1 ? '' : 's'} not saved · `
+              : ''}
             {left
-              ? `${String(left)} line${left === 1 ? '' : 's'} still to count`
+              ? `${String(left)} line${left === 1 ? '' : 's'} still to count in all`
               : 'Every line counted'}
           </span>
         </div>
