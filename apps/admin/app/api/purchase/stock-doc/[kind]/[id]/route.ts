@@ -15,10 +15,16 @@ export async function GET(
   const { kind, id } = await params;
   if (!(KINDS as readonly string[]).includes(kind) || !/^\d{1,18}$/.test(id))
     return new NextResponse(null, { status: 400 });
-  if (kind === 'counts' && req.nextUrl.searchParams.get('sheet') === '1') {
+  const excel =
+    kind === 'counts' && req.nextUrl.searchParams.get('sheet') === '1'
+      ? 'sheet'
+      : kind === 'counts' && req.nextUrl.searchParams.get('format') === 'xlsx'
+        ? 'statement'
+        : null;
+  if (excel) {
     try {
       const f = await apiFetch<{ filename: string; contentType: string; base64: string }>(
-        `/purchase/counts/${id}/sheet`,
+        `/purchase/counts/${id}/${excel}`,
       );
       return new NextResponse(Buffer.from(f.base64, 'base64'), {
         headers: {

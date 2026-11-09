@@ -1127,20 +1127,36 @@ export async function saveStoreLevels(fd: FormData) {
   );
 }
 
-export type OpeningResult = { ok: true; posted: number } | { ok: false; error: string };
+/** A line of opening stock as checked: its value, warnings, the assets it makes, or why not. */
+export interface OpeningCheckLine {
+  itemId: string;
+  name: string;
+  code: string;
+  unit: string;
+  qty: number;
+  rate: number;
+  value: number;
+  assets: number;
+  warnings: string[];
+  error?: string;
+}
+export type OpeningResult =
+  | { ok: true; dryRun: boolean; lines: OpeningCheckLine[]; value: number; posted: number }
+  | { ok: false; error: string };
 
+/** Opening stock by hand: `dryRun` checks it first (values, warnings), then it posts. */
 export async function postOpening(
   storeId: string,
   body: Record<string, unknown>,
 ): Promise<OpeningResult> {
   if (!okId(storeId)) return { ok: false, error: 'Unknown store' };
   try {
-    const r = await apiFetch<{ posted: number }>(`/purchase/stores/${storeId}/opening`, {
-      method: 'POST',
-      body: JSON.stringify(body),
-    });
-    revalidatePath(`/purchase/stores/${storeId}`);
-    return { ok: true, posted: r.posted };
+    const r = await apiFetch<Omit<Extract<OpeningResult, { ok: true }>, 'ok'>>(
+      `/purchase/stores/${storeId}/opening`,
+      { method: 'POST', body: JSON.stringify(body) },
+    );
+    if (!r.dryRun) revalidatePath(`/purchase/stores/${storeId}`);
+    return { ok: true, ...r };
   } catch (e) {
     if (e instanceof ApiError) return { ok: false, error: detailOf(e) };
     throw e;
@@ -1153,8 +1169,23 @@ export type OpeningImportResult =
       dryRun: boolean;
       good: number;
       bad: number;
+      warned: number;
+      value: number;
+      assets: number;
       posted: number;
-      rows: Array<{ row: number; code: string; ok: boolean; error?: string }>;
+      rows: Array<{
+        row: number;
+        code: string;
+        ok: boolean;
+        error?: string;
+        name?: string;
+        unit?: string;
+        qty?: number;
+        rate?: number;
+        value?: number;
+        assets?: number;
+        warnings?: string[];
+      }>;
     }
   | { ok: false; error: string };
 
@@ -1162,12 +1193,20 @@ export async function importOpening(
   storeId: string,
   file: string,
   dryRun: boolean,
+  fileName?: string,
 ): Promise<OpeningImportResult> {
   if (!okId(storeId)) return { ok: false, error: 'Unknown store' };
   try {
     const r = await apiFetch<Omit<Extract<OpeningImportResult, { ok: true }>, 'ok'>>(
       `/purchase/stores/${storeId}/opening-import`,
-      { method: 'POST', body: JSON.stringify({ file, dryRun }) },
+      {
+        method: 'POST',
+        body: JSON.stringify({
+          file,
+          dryRun,
+          ...(fileName ? { fileName: fileName.slice(0, 200) } : {}),
+        }),
+      },
     );
     if (!dryRun) revalidatePath(`/purchase/stores/${storeId}`);
     return { ok: true, ...r };
@@ -1175,6 +1214,98 @@ export async function importOpening(
     if (e instanceof ApiError) return { ok: false, error: detailOf(e) };
     throw e;
   }
+}
+
+/** One item's opening changed (the lines it should have been) or removed (none), with the reason. */
+export async function fixOpening(
+  storeId: string,
+  body: Record<string, unknown>,
+): Promise<{ ok: true; removed: boolean } | { ok: false; error: string }> {
+  if (!okId(storeId)) return { ok: false, error: 'Unknown store' };
+  try {
+    const r = await apiFetch<{ removed: boolean }>(`/purchase/stores/${storeId}/opening-fix`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    });
+    revalidatePath(`/purchase/stores/${storeId}`);
+    return { ok: true, removed: r.removed };
+  } catch (e) {
+    if (e instanceof ApiError) return { ok: false, error: detailOf(e) };
+    throw e;
+  }
+}
+
+/** A whole opening upload undone (`id`, back to the store `storeId`), with the reason. */
+export async function undoOpening(fd: FormData) {
+  const id = pick(fd, 'id');
+  const storeId = pick(fd, 'storeId');
+  const to = okId(storeId) ? `/purchase/stores/${storeId}` : '/purchase/stores';
+  if (!okId(id)) back(to, 'validation-failed', 'Unknown upload');
+  return run(
+    to,
+    () =>
+      apiFetch(`/purchase/openings/${id}/undo`, {
+        method: 'POST',
+        body: JSON.stringify({ reason: pick(fd, 'reason') }),
+      }),
+    'Upload undone: its lines are reversed',
+  );
+}
+
+/** The assets the store's asset items' opening stock should have made. */
+export async function makeOpeningAssets(fd: FormData) {
+  const storeId = pick(fd, 'storeId');
+  if (!okId(storeId)) back('/purchase/stores', 'validation-failed', 'Unknown store');
+  return run(
+    `/purchase/stores/${storeId}`,
+    () => apiFetch(`/purchase/stores/${storeId}/opening-assets`, { method: 'POST' }),
+    'Assets made: see Purchase → Assets',
+  );
+}
+
+/** A rate correction asked for: an item of the store at the rate it should be, with the reason. */
+export async function requestRevaluation(fd: FormData) {
+  const storeId = pick(fd, 'storeId');
+  if (!okId(storeId)) back('/purchase/stores', 'validation-failed', 'Unknown store');
+  return run(
+    `/purchase/stores/${storeId}`,
+    () =>
+      apiFetch(`/purchase/stores/${storeId}/revaluations`, {
+        method: 'POST',
+        body: JSON.stringify({
+          itemId: pick(fd, 'itemId'),
+          newRate: pick(fd, 'newRate'),
+          reason: pick(fd, 'reason'),
+        }),
+      }),
+    'Rate correction sent: the school admin approves it',
+  );
+}
+
+const revaluationAction =
+  (action: 'approve' | 'reject' | 'cancel', done: string) => async (fd: FormData) => {
+    const id = pick(fd, 'id');
+    const storeId = pick(fd, 'storeId');
+    const to = okId(storeId) ? `/purchase/stores/${storeId}` : '/purchase/stores';
+    if (!okId(id)) back(to, 'validation-failed', 'Unknown rate correction');
+    return run(
+      to,
+      () =>
+        apiFetch(`/purchase/revaluations/${id}/decide`, {
+          method: 'POST',
+          body: JSON.stringify({ action, note: pick(fd, 'reason') || undefined }),
+        }),
+      done,
+    );
+  };
+export async function approveRevaluation(fd: FormData) {
+  return revaluationAction('approve', 'Approved: the stock is at the new rate')(fd);
+}
+export async function rejectRevaluation(fd: FormData) {
+  return revaluationAction('reject', 'Rate correction rejected')(fd);
+}
+export async function cancelRevaluation(fd: FormData) {
+  return revaluationAction('cancel', 'Rate correction cancelled')(fd);
 }
 
 // ---- phase 2, part 7: goods receipts and completion certificates ------------------------------------
@@ -1416,6 +1547,15 @@ export async function importCount(id: string, file: string): Promise<StockAction
     (r) => ({ id, detail: `${String(r.counted)} lines counted from the sheet` }),
     [`/purchase/counts/${id}`],
   );
+}
+
+/** Sent for approval from the counting sheet (after saving it): every line counted, every difference with its reason. */
+export async function submitCountNow(id: string): Promise<StockActionResult> {
+  if (!okId(id)) return { ok: false, error: 'Unknown count' };
+  return stockCall(`/purchase/counts/${id}/submit`, 'POST', {}, () => ({ id }), [
+    `/purchase/counts/${id}`,
+    '/purchase/counts',
+  ]);
 }
 
 const countAction =

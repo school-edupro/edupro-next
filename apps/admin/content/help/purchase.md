@@ -488,10 +488,33 @@ inactive; the main store is always active.
 store unit NOS, 10 store units per unit), **Batch and expiry** (lab chemicals, first aid: the earliest
 expiry goes out first), **Serial numbers** (assets). The units cannot change once stock has moved.
 
-**Opening stock** (on a store's page): what the store holds on the day it starts — per item the
-quantity in the store unit and what one cost, the batch and expiry for an item kept by batch; or **from
-Excel** (download the format, fill it, **Check**, then **Post the good rows**). Once per store and item:
-stock found different later is put right by a physical count.
+**Opening stock** (on a store's page, **Post opening stock**): what the store holds on the day it
+starts — per item the quantity in the store unit and what one cost, the batch and expiry for an item
+kept by batch; or **from Excel** (download the format, fill it, upload). **Check** comes first either
+way: each line's value and the total, how many assets an asset item makes, and a warning on a **₹0
+rate** or a rate **far from the last purchase** or the rate contract — look at them, then post. An
+**asset item** (projector, furniture…) makes one asset per unit, in the store, with its tag and QR label.
+
+**A mistake after posting** (Opening stock posted, on the store's page): every posting — by hand, from
+Excel (with the file name), or a correction — with its lines, who posted it and when.
+
+- While an item **has not moved** since its opening (no receipt, issue, transfer, reservation or count
+  waiting for approval): **Change** gives the lines it should have been (quantity, rate, batch, expiry)
+  and why; **Remove** takes out an item that should not have been opened there. The wrong line is
+  reversed exactly and the right one posted — both show in the item's register, nothing is deleted. Its
+  assets keep their tags and take the new cost (one is added or removed for each unit more or less). A
+  count still being counted takes the new book quantity.
+- **Undo this upload** reverses every line of a posting while none of its items has moved — the wrong
+  sheet uploaded, say. The posting stays on record as undone.
+- Once an item **has moved**: a wrong **quantity** is put right by a physical count; a wrong **rate** by
+  a **rate correction** (Rate corrections, on the store's page): the right rate and why; when the school
+  admin (not who asked) approves it (My approvals), what is left in the store goes to the right rate.
+  What was issued before keeps its old value.
+- **Asset items without their assets** (stock posted before openings made assets): **Make their assets**
+  makes one per unit.
+
+The **Opening stock statement** (PDF or Excel) lists what stands now, with the total, for the keeper, a
+verifier and the principal to sign.
 
 **Reorder levels** (on a store's page, the purchase office): per item the **reorder level** (when the
 free stock — in stock less reserved — falls to it, the item is listed for reordering), the **reorder
@@ -627,13 +650,21 @@ shows when each was last counted. **Start a count** (the keeper): the whole stor
 book quantity of every item (each batch for batch items) is taken then; the sheet is **blind** — it
 shows the book quantity only once a line is counted.
 
-Count on screen, or **Download the sheet (Excel)**, fill **Counted** and upload it. Add a line for an
-item or batch found that is not listed. Every line needs a count (0 when none is found) and every
-difference a **reason**; then **Send for approval**.
+The count's page shows the figures first — lines counted of all, **excess** and **shortage** (lines and
+value) and the net — then the sheet. Find a line by name, code or batch, by category, or show only the
+lines **not yet counted** or **with a difference**. Count on screen, or **Count sheet (Excel)**, fill
+**Counted** and upload it. Add a line for an item or batch found that is not listed. For each
+difference pick **why** — not found / lost, damaged, expired, issued without a slip, received without a
+GRN, entry mistake, other (with a note) — and add a note if you like. The bar at the foot stays in view:
+**Save**, or **Save and send for approval** (every line counted, 0 when none is found; every difference
+with its reason). A wrong opening stock is better changed on the store's page than counted away.
 
-The **school admin** (not someone who counted) sees book, counted, the difference and its value, and
-**approves** — each difference posts as an **adjustment** at the average rate — or **sends it back** to
-count again. The statement prints with the differences.
+The **school admin** (not someone who counted) sees book, counted, **excess**, **shortage**, value and
+reason — the differences only, or every line — with the totals and the differences **by reason**, and
+**approves** (each difference posts as an **adjustment** at the average rate, the reason on it) or
+**sends it back** to count again. **Excel** and **PDF** at the top: the count with book, counted,
+excess, shortage, value and reason; the PDF has the boxes for who counted, the store keeper, the
+verifier and who approved.
 
 **Stock reports**: the **issue register** (every line issued: slip, store, department, who took it, the
 indent or PR, quantity, rate, value, what came back, who acknowledged and when), the **return register**

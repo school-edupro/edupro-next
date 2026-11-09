@@ -7,6 +7,7 @@ import { DomainError } from '../../common/errors/domain-error';
 import { readSheet, templateSheet } from '../../common/excel/sheet';
 import { requireTenant, type RequestContext } from '../../common/http/request-context';
 import { STORAGE_DRIVER } from '../files/storage';
+import { libraryFile, type FileColumn } from '../library/library-file';
 import {
   dmy,
   istToday,
@@ -30,6 +31,24 @@ import {
 } from './purchase.dto';
 
 const round3 = (n: number) => Math.round(n * 1000) / 1000;
+const round2 = (n: number) => Math.round(n * 100) / 100;
+
+/** Why a line differs (docs/design/84, "As built — the count rebuilt", 9 Nov 2026), and in words. */
+export const COUNT_REASONS = {
+  not_found: 'Not found / lost',
+  damaged: 'Damaged',
+  expired: 'Expired',
+  issued_no_slip: 'Issued without a slip',
+  received_no_grn: 'Received without a GRN',
+  entry_mistake: 'Entry mistake (opening or earlier)',
+  found: 'Found, not on the list',
+  other: 'Other',
+} as const;
+export type CountReason = keyof typeof COUNT_REASONS;
+/** The reason in words: its kind, then the note. */
+const reasonWords = (code: string | null, note: string | null) =>
+  [code ? (COUNT_REASONS[code as CountReason] ?? code) : null, note].filter(Boolean).join(': ') ||
+  null;
 
 // eslint-disable-next-line no-restricted-syntax -- PERSON_OF is a fixed fragment
 const SELECT = `
@@ -81,6 +100,7 @@ interface CountLine {
   book_qty: string;
   counted_qty: string | null;
   reason: string | null;
+  reason_code: string | null;
   added: boolean;
   rate: string | null;
   value: string | null;
@@ -148,7 +168,7 @@ export class PurchaseCountsService {
     return (
       await c.query<CountLine>(
         `SELECT l.id::text, l.item_id::text, i.code AS item_code, i.name AS item, cat.name AS category, COALESCE(su.code, u.code) AS unit,
-                i.tracks_batch, l.batch_no, l.expiry::text, l.book_qty::text, l.counted_qty::text, l.reason, l.added, l.rate::text,
+                i.tracks_batch, l.batch_no, l.expiry::text, l.book_qty::text, l.counted_qty::text, l.reason, l.reason_code, l.added, l.rate::text,
                 l.value::text, b.avg_rate::text
            FROM stock_count_lines l JOIN stock_counts k ON k.id = l.count_id
            JOIN purchase_items i ON i.id = l.item_id JOIN purchase_item_categories cat ON cat.id = i.category_id
@@ -219,36 +239,55 @@ export class PurchaseCountsService {
         ).rowCount;
       const me = String(ctx.user.id);
       // blind while counting: the book quantity shows once a line is counted
+      const items = lines.map((l) => {
+        const counted = l.counted_qty === null ? null : Number(l.counted_qty);
+        const show = counted !== null || k.status !== 'counting';
+        const diff = counted === null ? null : round3(counted - Number(l.book_qty));
+        return {
+          id: l.id,
+          itemId: l.item_id,
+          itemCode: l.item_code,
+          item: l.item,
+          category: l.category,
+          unit: l.unit,
+          tracksBatch: l.tracks_batch,
+          batch: l.batch_no,
+          expiry: l.expiry,
+          book: show ? Number(l.book_qty) : null,
+          counted,
+          difference: show ? diff : null,
+          reason: l.reason,
+          reasonCode: l.reason_code,
+          reasonWords: reasonWords(l.reason_code, l.reason),
+          added: l.added,
+          rate: l.rate === null ? (show ? Number(l.avg_rate ?? 0) : null) : Number(l.rate),
+          value:
+            l.value !== null
+              ? Number(l.value)
+              : show && diff !== null
+                ? Math.round(diff * Number(l.avg_rate ?? 0) * 100) / 100
+                : null,
+        };
+      });
+      const seen = items.filter((l) => l.difference);
+      const excess = seen.filter((l) => l.difference! > 0);
+      const short = seen.filter((l) => l.difference! < 0);
+      const sum = (xs: typeof items) => round2(xs.reduce((a, l) => a + (l.value ?? 0), 0));
       return {
         ...this.shape(k),
-        lineItems: lines.map((l) => {
-          const counted = l.counted_qty === null ? null : Number(l.counted_qty);
-          const show = counted !== null || k.status !== 'counting';
-          const diff = counted === null ? null : round3(counted - Number(l.book_qty));
-          return {
-            id: l.id,
-            itemId: l.item_id,
-            itemCode: l.item_code,
-            item: l.item,
-            category: l.category,
-            unit: l.unit,
-            tracksBatch: l.tracks_batch,
-            batch: l.batch_no,
-            expiry: l.expiry,
-            book: show ? Number(l.book_qty) : null,
-            counted,
-            difference: show ? diff : null,
-            reason: l.reason,
-            added: l.added,
-            rate: l.rate === null ? (show ? Number(l.avg_rate ?? 0) : null) : Number(l.rate),
-            value:
-              l.value !== null
-                ? Number(l.value)
-                : show && diff !== null
-                  ? Math.round(diff * Number(l.avg_rate ?? 0) * 100) / 100
-                  : null,
-          };
-        }),
+        lineItems: items,
+        // over the counted lines (the book shows once a line is counted)
+        figures: {
+          lines: items.length,
+          counted: items.filter((l) => l.counted !== null).length,
+          excess: excess.length,
+          excessValue: sum(excess),
+          shortage: short.length,
+          shortageValue: sum(short),
+          net: sum(seen),
+          noReason: seen.filter((l) => !l.reasonCode && !l.reason).length,
+        },
+        reasons: COUNT_REASONS,
         can: {
           count: k.status === 'counting' && keeps,
           submit: k.status === 'counting' && keeps,
@@ -340,11 +379,11 @@ export class PurchaseCountsService {
       if (l.lineId) {
         if (!lines.has(l.lineId))
           throw new DomainError('validation-failed', 'A line not on this count');
-        await c.query(`UPDATE stock_count_lines SET counted_qty = $2, reason = $3 WHERE id = $1`, [
-          l.lineId,
-          l.countedQty,
-          l.reason ?? null,
-        ]);
+        await c.query(
+          `UPDATE stock_count_lines SET counted_qty = $2, reason = $3, reason_code = $4 WHERE id = $1`,
+          // a reason in words alone (an older client) is an "Other" with that note
+          [l.lineId, l.countedQty, l.reason ?? null, l.reasonCode ?? (l.reason ? 'other' : null)],
+        );
         continue;
       }
       // found but not on the list
@@ -362,10 +401,20 @@ export class PurchaseCountsService {
       const expiry = it.tracks_batch ? (l.expiry ?? null) : null;
       const book = await this.bookOf(c, k.store_id, l.itemId!, batch, expiry);
       await c.query(
-        `INSERT INTO stock_count_lines (school_id, count_id, item_id, batch_no, expiry, book_qty, counted_qty, reason, added)
-         VALUES (app.current_school_id(), $1, $2, $3, $4, $5, $6, $7, true)
-         ON CONFLICT (count_id, item_id, batch_no, expiry) DO UPDATE SET counted_qty = EXCLUDED.counted_qty, reason = EXCLUDED.reason`,
-        [k.id, l.itemId, batch, expiry, book, l.countedQty, l.reason ?? null],
+        `INSERT INTO stock_count_lines (school_id, count_id, item_id, batch_no, expiry, book_qty, counted_qty, reason, reason_code, added)
+         VALUES (app.current_school_id(), $1, $2, $3, $4, $5, $6, $7, $8, true)
+         ON CONFLICT (count_id, item_id, batch_no, expiry) DO UPDATE SET counted_qty = EXCLUDED.counted_qty, reason = EXCLUDED.reason,
+                     reason_code = EXCLUDED.reason_code`,
+        [
+          k.id,
+          l.itemId,
+          batch,
+          expiry,
+          book,
+          l.countedQty,
+          l.reason ?? null,
+          l.reasonCode ?? 'found',
+        ],
       );
     }
     if (dto.countedBy !== undefined)
@@ -466,7 +515,12 @@ export class PurchaseCountsService {
           (l) => l.item_code.toUpperCase() === code && (l.batch_no ?? null) === batch,
         );
         if (line) {
-          save.lines.push({ lineId: line.id, countedQty: q, reason: line.reason ?? undefined });
+          save.lines.push({
+            lineId: line.id,
+            countedQty: q,
+            reason: line.reason ?? undefined,
+            reasonCode: (line.reason_code as CountReason | null) ?? undefined,
+          });
           continue;
         }
         const itemId = items.get(code);
@@ -513,12 +567,14 @@ export class PurchaseCountsService {
           { status: 400 },
         );
       const noReason = lines.filter(
-        (l) => Number(l.counted_qty) !== Number(l.book_qty) && !l.reason,
+        (l) =>
+          Number(l.counted_qty) !== Number(l.book_qty) &&
+          (!l.reason_code || (l.reason_code === 'other' && !l.reason)),
       );
       if (noReason.length)
         throw new DomainError(
           'validation-failed',
-          `Give the reason for each difference: ${noReason
+          `Pick the reason for each difference (and add a note for Other): ${noReason
             .slice(0, 5)
             .map((l) => l.item)
             .join(', ')}`,
@@ -596,7 +652,10 @@ export class PurchaseCountsService {
             docType: 'stock_count',
             docId: id,
             docLineId: l.id,
-            note: `${k.number}: ${l.reason ?? 'count difference'}`.slice(0, 300),
+            note: `${k.number}: ${reasonWords(l.reason_code, l.reason) ?? 'count difference'}`.slice(
+              0,
+              300,
+            ),
             day,
           },
           l.item,
@@ -650,6 +709,81 @@ export class PurchaseCountsService {
         after: { note: dto.note },
       });
       return { cancelled: true };
+    });
+  }
+
+  /**
+   * The count as Excel: every line with book, counted, excess, shortage, rate, value and the reason (while
+   * counting, the book only of the lines counted — the sheet stays blind).
+   */
+  async statement(ctx: RequestContext, id: string) {
+    this.mustSee(ctx);
+    return this.db.tenant(requireTenant(ctx), async (c) => {
+      const k = await this.load(c, id);
+      const lines = await this.linesOf(c, id);
+      const school = (
+        await c.query<{ name: string }>(
+          `SELECT name FROM schools WHERE id = app.current_school_id()`,
+        )
+      ).rows[0]!.name;
+      const rows = lines.map((l) => {
+        const counted = l.counted_qty === null ? null : Number(l.counted_qty);
+        const show = counted !== null || k.status !== 'counting';
+        const diff = counted === null ? null : round3(counted - Number(l.book_qty));
+        const rate = l.rate !== null ? Number(l.rate) : Number(l.avg_rate ?? 0);
+        const value =
+          l.value !== null ? Number(l.value) : diff ? round2(diff * Number(l.avg_rate ?? 0)) : null;
+        return [
+          l.item_code,
+          l.item,
+          l.category,
+          l.batch_no,
+          l.expiry,
+          l.unit,
+          show ? Number(l.book_qty) : null,
+          counted,
+          diff && diff > 0 ? diff : null,
+          diff && diff < 0 ? -diff : null,
+          show ? rate : null,
+          diff ? value : null,
+          diff ? reasonWords(l.reason_code, l.reason) : null,
+        ];
+      });
+      const net = round2(rows.reduce((a, r) => a + Number(r[11] ?? 0), 0));
+      return libraryFile({
+        format: 'xlsx',
+        name: `${k.number} — physical count of ${k.store}`,
+        slug: k.number.replaceAll('/', '-'),
+        school,
+        by: k.counted_by ?? k.started_by ?? '',
+        words: [
+          `Counted on ${dmy(k.counted_on)}`,
+          k.category ?? 'all the store holds',
+          {
+            counting: 'counting',
+            submitted: 'waiting for approval',
+            approved: 'approved',
+            cancelled: 'cancelled',
+          }[k.status],
+        ].join(' · '),
+        columns: [
+          { label: 'Item code', width: 1.3 },
+          { label: 'Item', width: 2.8 },
+          { label: 'Category', width: 1.6 },
+          { label: 'Batch', width: 1.2 },
+          { label: 'Expiry', type: 'date' },
+          { label: 'Unit', width: 0.8 },
+          { label: 'Book', type: 'number' },
+          { label: 'Counted', type: 'number' },
+          { label: 'Excess', type: 'number' },
+          { label: 'Shortage', type: 'number' },
+          { label: 'Rate (₹)', type: 'money' },
+          { label: 'Value (₹)', type: 'money' },
+          { label: 'Reason', width: 2.6 },
+        ] as FileColumn[],
+        rows,
+        totals: ['Net difference', '', '', '', '', '', '', '', '', '', '', net, ''],
+      });
     });
   }
 
@@ -708,12 +842,13 @@ export class PurchaseCountsService {
             ]
           : [
               { label: '#', width: 4 },
-              { label: 'Item', width: 36 },
+              { label: 'Item', width: 31 },
               { label: 'Unit', width: 7 },
-              { label: 'Book', width: 10, right: true },
-              { label: 'Counted', width: 10, right: true },
-              { label: 'Difference', width: 11, right: true },
-              { label: 'Value (Rs)', width: 12, right: true },
+              { label: 'Book', width: 9, right: true },
+              { label: 'Counted', width: 9, right: true },
+              { label: 'Excess', width: 9, right: true },
+              { label: 'Shortage', width: 9, right: true },
+              { label: 'Value (Rs)', width: 11, right: true },
             ],
         rows: lines.map((l, i) => {
           const diff =
@@ -735,15 +870,15 @@ export class PurchaseCountsService {
                   l.unit,
                   qty3(Number(l.book_qty)),
                   l.counted_qty === null ? '' : qty3(Number(l.counted_qty)),
-                  diff ? qty3(diff) : '',
+                  diff && diff > 0 ? qty3(diff) : '',
+                  diff && diff < 0 ? qty3(-diff) : '',
                   diff
                     ? money2(l.value !== null ? Number(l.value) : diff * Number(l.avg_rate ?? 0))
                     : '',
                 ],
                 detail: [
                   l.batch_no ? `Batch ${l.batch_no}` : null,
-                  diff ? l.reason : null,
-                  l.added ? 'Found, not on the list' : null,
+                  diff ? reasonWords(l.reason_code, l.reason) : null,
                 ]
                   .filter(Boolean)
                   .join(' · '),
@@ -762,6 +897,7 @@ export class PurchaseCountsService {
               })
             : blankBox('Counted by'),
           blankBox('Store keeper'),
+          blankBox('Verified by'),
           k.decided_at && k.decided_by_id
             ? await signerOf(c, read, {
                 as: 'Approved by',

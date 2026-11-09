@@ -176,7 +176,8 @@ describe('purchase stores and stock (e2e)', () => {
       lines: [{ itemId: ids.PEN, qty: 1, rate: 8 }],
     });
     expect(again.statusCode).toBe(400);
-    expect(again.json().detail).toContain('correct it with a count');
+    // untouched: changed on the store's page (docs/design/84, "As built — opening stock corrections")
+    expect(again.json().detail).toContain('change it under Opening stock posted');
     expect(
       (
         await call(office, 'POST', `/purchase/stores/${ids.lab!}/opening`, {

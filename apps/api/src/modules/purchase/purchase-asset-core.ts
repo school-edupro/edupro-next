@@ -262,3 +262,72 @@ export async function assetsToVendor(
     { kind: 'returned', day: m.day, fromStore: m.storeId, doc: m.doc },
   );
 }
+
+/**
+ * The assets made from an asset item's opening stock (docs/design/84, "As built — opening stock
+ * corrections", 9 Nov 2026): one per whole unit of the opening line, in the store, its cost the line's
+ * rate. `reuse` are assets of the same item from a reversed opening line (a correction): they are kept —
+ * tag, QR label and all — and moved to the new line with the new cost before any new one is made;
+ * whatever is left of them is returned for the caller to remove.
+ */
+export async function assetsForOpening(
+  c: PoolClient,
+  o: {
+    moveId: string;
+    storeId: string;
+    itemId: string;
+    description: string;
+    units: number;
+    cost: number;
+    day: string;
+  },
+  reuse: string[] = [],
+): Promise<{ made: number; left: string[] }> {
+  const take = reuse.slice(0, o.units);
+  if (take.length)
+    await c.query(
+      `UPDATE assets SET opening_move_id = $2, cost = $3, acquired_on = $4::date, updated_at = now() WHERE id = ANY($1::bigint[])`,
+      [take, o.moveId, o.cost, o.day],
+    );
+  const ids: string[] = [];
+  for (let i = take.length; i < o.units; i += 1) {
+    const tag = (await c.query<{ n: string }>(`SELECT app.purchase_next_number('asset') AS n`))
+      .rows[0]!.n;
+    ids.push(
+      (
+        await c.query<{ id: string }>(
+          `INSERT INTO assets (school_id, tag, item_id, description, source_note, cost, acquired_on, status, store_id,
+                               opening_move_id, created_by)
+           VALUES (app.current_school_id(), $1, $2, $3, 'Opening stock', $4, $5::date, 'in_store', $6, $7, app.current_user_id())
+           RETURNING id::text`,
+          [tag, o.itemId, o.description.slice(0, 300), o.cost, o.day, o.storeId, o.moveId],
+        )
+      ).rows[0]!.id,
+    );
+  }
+  await move(c, ids, { kind: 'received', day: o.day, toStore: o.storeId, doc: 'Opening stock' });
+  return { made: ids.length, left: reuse.slice(take.length) };
+}
+
+/**
+ * The assets made from these opening lines, and whether any has been used since (left the store, a
+ * movement other than its arrival, depreciation, or on a condemnation): then the opening is no longer
+ * corrected, and the register's own screens (and a physical count) take over.
+ */
+export async function openingAssets(c: PoolClient, moveIds: string[]) {
+  const r = await c.query<{ id: string; used: boolean }>(
+    `SELECT a.id::text,
+            (a.status <> 'in_store'
+             OR EXISTS (SELECT 1 FROM asset_movements m WHERE m.asset_id = a.id AND m.kind <> 'received')
+             OR EXISTS (SELECT 1 FROM asset_depreciation d WHERE d.asset_id = a.id)
+             OR EXISTS (SELECT 1 FROM condemnation_lines l WHERE l.asset_id = a.id)) AS used
+       FROM assets a WHERE a.opening_move_id = ANY($1::bigint[]) ORDER BY a.id`,
+    [moveIds],
+  );
+  return { ids: r.rows.map((x) => x.id), used: r.rows.some((x) => x.used) };
+}
+
+/** Assets of a wrong opening taken off the register (never used: see `openingAssets`). */
+export async function removeOpeningAssets(c: PoolClient, ids: string[]) {
+  if (ids.length) await c.query(`DELETE FROM assets WHERE id = ANY($1::bigint[])`, [ids]);
+}

@@ -804,14 +804,50 @@ export const OpeningLineSchema = z.object({
 export const OpeningSchema = z.object({
   lines: z.array(OpeningLineSchema).min(1).max(500),
   day: Day.optional(),
+  /** check only: each line's value and warnings (a ₹0 rate, a rate far from the last purchase) */
+  dryRun: z.boolean().default(false),
 });
 export class OpeningDto extends createZodDto(OpeningSchema) {}
 
 export const OpeningImportSchema = z.object({
   file: z.string().min(10).max(2_000_000),
+  fileName: opt(200),
   dryRun: z.boolean().default(true),
 });
 export class OpeningImportDto extends createZodDto(OpeningImportSchema) {}
+
+/**
+ * One item's opening in a store, corrected while it has not moved since (docs/design/84, 9 Nov 2026):
+ * the lines it should have been (none: the opening was wrong — removed), and why.
+ */
+export const OpeningFixSchema = z.object({
+  itemId: IdSchema,
+  lines: z
+    .array(OpeningLineSchema.omit({ itemId: true }))
+    .max(100)
+    .default([]),
+  reason: z.string().trim().min(3, 'Say why (at least 3 letters)').max(300),
+});
+export class OpeningFixDto extends createZodDto(OpeningFixSchema) {}
+
+/** A rate correction: what is left of the item in the store, at the rate it should be. */
+export const RevaluationSchema = z.object({
+  itemId: IdSchema,
+  newRate: z.coerce.number().min(0).max(1e10),
+  reason: z.string().trim().min(3, 'Say why (at least 3 letters)').max(300),
+});
+export class RevaluationDto extends createZodDto(RevaluationSchema) {}
+export const RevaluationDecisionSchema = z.object({
+  action: z.enum(['approve', 'reject', 'cancel']),
+  note: opt(1000),
+});
+export class RevaluationDecisionDto extends createZodDto(RevaluationDecisionSchema) {}
+export const OpeningUndoSchema = z.object({
+  reason: z.string().trim().min(3, 'Say why (at least 3 letters)').max(300),
+});
+export class OpeningUndoDto extends createZodDto(OpeningUndoSchema) {}
+export const StatementQuerySchema = z.object({ format: z.enum(['xlsx', 'pdf']).default('pdf') });
+export class StatementQueryDto extends createZodDto(StatementQuerySchema) {}
 
 export const StockQuerySchema = z.object({
   storeId: IdSchema.optional(),
@@ -1037,6 +1073,19 @@ export const CountLinesSchema = z.object({
           expiry: Day.optional(),
           countedQty: z.coerce.number().min(0).max(9999999).nullable(),
           reason: opt(300),
+          /** why it differs (docs/design/84, 9 Nov 2026); the note above goes with it */
+          reasonCode: z
+            .enum([
+              'not_found',
+              'damaged',
+              'expired',
+              'issued_no_slip',
+              'received_no_grn',
+              'entry_mistake',
+              'found',
+              'other',
+            ])
+            .optional(),
         })
         .refine((l) => !!l.lineId || !!l.itemId, { message: 'Pick the item', path: ['itemId'] }),
     )

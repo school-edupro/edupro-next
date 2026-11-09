@@ -27,6 +27,7 @@ export interface ApprovalGroup {
     | 'receipt'
     | 'issue_ack'
     | 'count'
+    | 'revaluation'
     | 'condemnation'
     | 'asset_ack'
     | 'vendor';
@@ -281,6 +282,41 @@ export async function myApprovals(
                 }
               : null,
           )
+          .catch(() => null)
+      : null,
+    // rate corrections of store stock (docs/design/84, "As built — opening stock corrections")
+    has.has('purchase.count.approve')
+      ? apiFetch<{
+          rows: Array<{
+            id: string;
+            number: string;
+            store: string;
+            storeId: string;
+            item: string;
+            change: number;
+            at: string;
+            can: { decide: boolean };
+          }>;
+        }>(`/purchase/revaluations?status=submitted`)
+          .then((r): ApprovalGroup | null => {
+            const mine = r.rows.filter((x) => x.can.decide);
+            return mine.length
+              ? {
+                  key: 'revaluation',
+                  title: 'Rate corrections to approve',
+                  help: 'Stock at a wrong rate: what is left goes to the right rate when approved',
+                  href: '/purchase/stores',
+                  count: mine.length,
+                  items: mine.slice(0, size).map((x) => ({
+                    id: x.id,
+                    title: `${x.number} · ${x.item}`,
+                    detail: `${x.store} · value ${x.change >= 0 ? '+' : '−'}₹${Math.abs(x.change).toLocaleString('en-IN')}`,
+                    href: `/purchase/stores/${x.storeId}#st-rate`,
+                    since: x.at,
+                  })),
+                }
+              : null;
+          })
           .catch(() => null)
       : null,
     // condemnations for my signature (the committee) or approval (the school admin) — doc 84, part 9

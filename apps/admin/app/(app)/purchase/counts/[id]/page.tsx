@@ -1,11 +1,11 @@
-import { Alert, Badge, Breadcrumbs, PageHeader } from '@edupro/ui';
+import { Alert, Badge, Breadcrumbs, KpiTile, PageHeader } from '@edupro/ui';
 import { notFound } from 'next/navigation';
 import { ConfirmAction } from '@/components/ConfirmAction';
 import { FileLinks } from '@/components/FileLinks';
 import { Notice } from '@/components/Notice';
 import { CountSheet } from '@/components/purchase/CountSheet';
 import { ApiError, apiFetch } from '@/lib/api';
-import { COUNT_STATUS, type CountDetail, type StoreFormLists } from '@/lib/purchase';
+import { COUNT_REASONS, COUNT_STATUS, type CountDetail, type StoreFormLists } from '@/lib/purchase';
 import { approveCount, cancelCount, sendBackCount, submitCount } from '@/lib/purchase-actions';
 
 const when = (iso: string | null) =>
@@ -22,9 +22,11 @@ const money = (n: number) =>
 const fmt = (n: number) => n.toLocaleString('en-IN', { maximumFractionDigits: 3 });
 
 /**
- * One physical count (docs/design/84, part 8): the keeper counts (on screen or from the Excel sheet)
- * and sends it; the school admin sees book, counted and the differences with their value and reasons,
- * and approves (the adjustments post) or sends it back to count again.
+ * One physical count (docs/design/84, part 8; "As built — the count rebuilt", 9 Nov 2026). The figures
+ * first — lines counted, excess, shortage, the net value — then what to do now. While counting, the
+ * keeper's sheet (find, category, not yet counted, differences; the reason from a list; a save bar that
+ * stays in view). Once sent: book, counted, excess, shortage, value and reason, filtered, with the
+ * totals and a summary by reason, and the approval. Excel and PDF of the count at the top.
  */
 export default async function CountPage({
   params,
@@ -42,8 +44,27 @@ export default async function CountPage({
   });
   const st = COUNT_STATUS[k.status];
   const lists = k.can.count ? await apiFetch<StoreFormLists>('/purchase/store-form') : null;
+  const f = k.figures;
+  const counting = k.status === 'counting';
+
+  // the review: differences only unless every line is asked for; a search
+  const all = sp.show === 'all';
+  const needle = (sp.q ?? '').trim().toLowerCase();
+  const shown = k.lineItems.filter(
+    (l) =>
+      (all || (l.difference !== null && l.difference !== 0)) &&
+      (!needle || `${l.item} ${l.itemCode} ${l.batch ?? ''}`.toLowerCase().includes(needle)),
+  );
   const diffs = k.lineItems.filter((l) => l.difference);
-  const net = diffs.reduce((a, l) => a + (l.value ?? 0), 0);
+  const byReason = new Map<string, { lines: number; value: number }>();
+  for (const l of diffs) {
+    const key = l.reasonCode ? COUNT_REASONS[l.reasonCode] : 'No reason given';
+    const x = byReason.get(key) ?? { lines: 0, value: 0 };
+    byReason.set(key, { lines: x.lines + 1, value: x.value + (l.value ?? 0) });
+  }
+  const total = (pick: (l: (typeof shown)[number]) => number) =>
+    shown.reduce((a, l) => a + pick(l), 0);
+
   return (
     <>
       <Breadcrumbs
@@ -56,36 +77,81 @@ export default async function CountPage({
       <PageHeader
         kicker={`Purchase · Physical count · ${k.category ?? 'everything it holds'}`}
         title={`${k.number} · ${k.store}`}
-        description={`Started ${when(k.countedOn)}${k.startedBy ? ` by ${k.startedBy}` : ''} · ${String(k.counted)} of ${String(k.lines)} lines counted`}
+        description={`Started ${when(k.countedOn)}${k.startedBy ? ` by ${k.startedBy}` : ''}${k.countedBy ? ` · counted by ${k.countedBy}` : ''}`}
         actions={
-          <FileLinks
-            href={`/api/purchase/stock-doc/counts/${k.id}`}
-            label={`${k.number} ${k.status === 'counting' ? 'count sheet' : 'statement'} as a PDF`}
-          />
+          <>
+            <a
+              className="ep-btn ep-btn--secondary ep-btn--sm"
+              href={`/api/purchase/stock-doc/counts/${k.id}?format=xlsx`}
+            >
+              Excel
+            </a>
+            <a
+              className="ep-btn ep-btn--secondary ep-btn--sm"
+              href={`/api/purchase/stock-doc/counts/${k.id}?save=1`}
+            >
+              PDF
+            </a>
+            <FileLinks
+              href={`/api/purchase/stock-doc/counts/${k.id}`}
+              label={`${k.number} ${counting ? 'count sheet' : 'statement'} as a PDF`}
+            />
+          </>
         }
       />
       <Notice params={sp} />
-      <section className="ep-card" aria-labelledby="ck-st">
-        <h2 id="ck-st" className="ep-card__title">
-          Status <Badge tone={st.tone}>{st.label}</Badge>
-        </h2>
-        {k.decisionNote ? (
-          <Alert tone={k.status === 'counting' ? 'warning' : 'info'} title="Note">
-            {k.decisionNote}
-          </Alert>
-        ) : null}
-        {k.status !== 'counting' ? (
-          <p style={{ marginTop: 0 }}>
-            {diffs.length
-              ? `${String(diffs.length)} difference${diffs.length === 1 ? '' : 's'}, net ${money(net)}.`
-              : 'No difference: the shelves match the book.'}
-            {k.status === 'approved'
-              ? ` Approved by ${k.decidedBy ?? ''} on ${when(k.decidedAt)}.`
-              : ''}
-          </p>
-        ) : null}
-        <div style={{ display: 'flex', gap: 'var(--sp-2)', flexWrap: 'wrap' }}>
-          {k.can.submit ? (
+      <div className="ep-dash-kpis ep-dash-kpis--4">
+        <KpiTile
+          label="Lines counted"
+          value={`${String(f.counted)} of ${String(f.lines)}`}
+          hint={<Badge tone={st.tone}>{st.label}</Badge>}
+        />
+        <KpiTile
+          label="Excess"
+          value={money(f.excessValue)}
+          hint={`${String(f.excess)} line${f.excess === 1 ? '' : 's'} more than the book`}
+        />
+        <KpiTile
+          label="Shortage"
+          value={money(Math.abs(f.shortageValue))}
+          hint={`${String(f.shortage)} line${f.shortage === 1 ? '' : 's'} less than the book`}
+        />
+        <KpiTile
+          label="Net difference"
+          value={money(f.net)}
+          hint={
+            f.noReason
+              ? `${String(f.noReason)} difference${f.noReason === 1 ? '' : 's'} without a reason`
+              : 'at the average rate'
+          }
+        />
+      </div>
+      {counting ? (
+        <p className="ep-field__help">
+          The sheet is blind: a line&apos;s book quantity shows only once it is counted.
+        </p>
+      ) : null}
+      {k.decisionNote ? (
+        <Alert tone={counting ? 'warning' : 'info'} title="Note">
+          {k.decisionNote}
+        </Alert>
+      ) : null}
+      {k.status === 'approved' ? (
+        <p>
+          Approved by {k.decidedBy ?? ''} on {when(k.decidedAt)}: the differences are posted as
+          adjustments at the average rate.
+        </p>
+      ) : null}
+      {k.can.decide || k.can.cancel || (k.can.submit && !lists) ? (
+        <div
+          style={{
+            display: 'flex',
+            gap: 'var(--sp-2)',
+            flexWrap: 'wrap',
+            marginBottom: 'var(--sp-3)',
+          }}
+        >
+          {k.can.submit && !lists ? (
             <ConfirmAction
               action={submitCount}
               fields={{ id: k.id }}
@@ -109,7 +175,7 @@ export default async function CountPage({
                 variant="primary"
               >
                 {diffs.length
-                  ? `${String(diffs.length)} adjustments post to ${k.store} at the average rate (net ${money(net)}).`
+                  ? `${String(diffs.length)} adjustments post to ${k.store} at the average rate: excess ${money(f.excessValue)}, shortage ${money(Math.abs(f.shortageValue))}, net ${money(f.net)}.`
                   : 'Nothing to adjust: the count is recorded.'}
               </ConfirmAction>
               <ConfirmAction
@@ -140,7 +206,7 @@ export default async function CountPage({
             </ConfirmAction>
           ) : null}
         </div>
-      </section>
+      ) : null}
 
       {k.can.count && lists ? (
         <section className="ep-card" aria-labelledby="ck-sheet">
@@ -148,8 +214,9 @@ export default async function CountPage({
             Count
           </h2>
           <p style={{ marginTop: 0 }}>
-            Enter what is on the shelf, in the store unit (0 when none is found). The book quantity
-            shows once a line is counted; give the reason for each difference.
+            Enter what is on the shelf, in the store unit (0 when none is found), and pick why a
+            line differs. A wrong opening stock is better changed on the store&apos;s page than
+            counted away.
           </p>
           <CountSheet
             count={k}
@@ -162,60 +229,162 @@ export default async function CountPage({
           />
         </section>
       ) : (
-        <section className="ep-card" aria-labelledby="ck-lines">
-          <h2 id="ck-lines" className="ep-card__title">
-            Book and count
-          </h2>
-          <div className="ep-table-wrap" tabIndex={0} role="region" aria-labelledby="ck-lines">
-            <table className="ep-table">
-              <thead>
-                <tr>
-                  <th scope="col">Item</th>
-                  <th scope="col" style={{ textAlign: 'right' }}>
-                    Book
-                  </th>
-                  <th scope="col" style={{ textAlign: 'right' }}>
-                    Counted
-                  </th>
-                  <th scope="col" style={{ textAlign: 'right' }}>
-                    Difference
-                  </th>
-                  <th scope="col" style={{ textAlign: 'right' }}>
-                    Value
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {k.lineItems.map((l) => (
-                  <tr key={l.id}>
-                    <td>
-                      {l.item} ({l.itemCode})
-                      <span className="ep-mr-col__desc">
-                        {[
-                          l.batch ? `Batch ${l.batch}` : null,
-                          l.difference ? l.reason : null,
-                          l.added ? 'found, not listed' : null,
-                        ]
-                          .filter(Boolean)
-                          .join(' · ')}
-                      </span>
-                    </td>
-                    <td style={{ textAlign: 'right' }}>
-                      {l.book === null ? '—' : `${fmt(l.book)} ${l.unit}`}
-                    </td>
-                    <td style={{ textAlign: 'right' }}>
-                      {l.counted === null ? '—' : fmt(l.counted)}
-                    </td>
-                    <td style={{ textAlign: 'right' }}>{l.difference ? fmt(l.difference) : ''}</td>
-                    <td style={{ textAlign: 'right' }}>
-                      {l.difference && l.value !== null ? money(l.value) : ''}
-                    </td>
+        <>
+          <section className="ep-card" aria-labelledby="ck-lines">
+            <h2 id="ck-lines" className="ep-card__title">
+              Book and count
+            </h2>
+            <form method="get" className="ep-grid__toolbar" style={{ marginBottom: 'var(--sp-3)' }}>
+              <label className="ep-field" htmlFor="ck-q">
+                <span className="ep-field__label">Find</span>
+                <input
+                  id="ck-q"
+                  name="q"
+                  type="search"
+                  className="ep-input"
+                  defaultValue={sp.q ?? ''}
+                  placeholder="Item, code or batch"
+                />
+              </label>
+              <label className="ep-field" htmlFor="ck-show">
+                <span className="ep-field__label">Show</span>
+                <select
+                  id="ck-show"
+                  name="show"
+                  className="ep-select"
+                  defaultValue={all ? 'all' : ''}
+                >
+                  <option value="">The differences ({diffs.length})</option>
+                  <option value="all">Every line ({k.lineItems.length})</option>
+                </select>
+              </label>
+              <button type="submit" className="ep-btn ep-btn--secondary ep-btn--sm">
+                Show
+              </button>
+            </form>
+            <div className="ep-table-wrap" tabIndex={0} role="region" aria-labelledby="ck-lines">
+              <table className="ep-table ep-table--dense">
+                <thead>
+                  <tr>
+                    <th scope="col">Item</th>
+                    <th scope="col" style={{ textAlign: 'right' }}>
+                      Book
+                    </th>
+                    <th scope="col" style={{ textAlign: 'right' }}>
+                      Counted
+                    </th>
+                    <th scope="col" style={{ textAlign: 'right' }}>
+                      Excess
+                    </th>
+                    <th scope="col" style={{ textAlign: 'right' }}>
+                      Shortage
+                    </th>
+                    <th scope="col" style={{ textAlign: 'right' }}>
+                      Value
+                    </th>
+                    <th scope="col">Reason</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </section>
+                </thead>
+                <tbody>
+                  {shown.length ? (
+                    shown.map((l) => (
+                      <tr key={l.id}>
+                        <td>
+                          {l.item} ({l.itemCode})
+                          <span className="ep-mr-col__desc">
+                            {[l.category, l.batch ? `Batch ${l.batch}` : null, l.unit]
+                              .filter(Boolean)
+                              .join(' · ')}
+                          </span>
+                        </td>
+                        <td style={{ textAlign: 'right' }}>
+                          {l.book === null ? '—' : fmt(l.book)}
+                        </td>
+                        <td style={{ textAlign: 'right' }}>
+                          {l.counted === null ? '—' : fmt(l.counted)}
+                        </td>
+                        <td style={{ textAlign: 'right' }}>
+                          {l.difference && l.difference > 0 ? fmt(l.difference) : ''}
+                        </td>
+                        <td style={{ textAlign: 'right' }}>
+                          {l.difference && l.difference < 0 ? fmt(-l.difference) : ''}
+                        </td>
+                        <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
+                          {l.difference && l.value !== null ? money(l.value) : ''}
+                        </td>
+                        <td>
+                          {l.difference ? (
+                            (l.reasonWords ?? <Badge tone="warning">No reason</Badge>)
+                          ) : (
+                            <Badge tone="success">Matches</Badge>
+                          )}
+                        </td>
+                      </tr>
+                    ))
+                  ) : (
+                    <tr>
+                      <td colSpan={7}>
+                        {diffs.length || all || needle
+                          ? 'No line matches.'
+                          : 'No difference: the shelves match the book.'}
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+                {shown.length ? (
+                  <tfoot>
+                    <tr>
+                      <td style={{ fontWeight: 600 }}>Total of the lines shown</td>
+                      <td />
+                      <td />
+                      <td style={{ textAlign: 'right', fontWeight: 600 }}>
+                        {fmt(total((l) => (l.difference && l.difference > 0 ? l.difference : 0)))}
+                      </td>
+                      <td style={{ textAlign: 'right', fontWeight: 600 }}>
+                        {fmt(total((l) => (l.difference && l.difference < 0 ? -l.difference : 0)))}
+                      </td>
+                      <td style={{ textAlign: 'right', fontWeight: 600, whiteSpace: 'nowrap' }}>
+                        {money(total((l) => (l.difference ? (l.value ?? 0) : 0)))}
+                      </td>
+                      <td />
+                    </tr>
+                  </tfoot>
+                ) : null}
+              </table>
+            </div>
+          </section>
+          {byReason.size ? (
+            <section className="ep-card" aria-labelledby="ck-why">
+              <h2 id="ck-why" className="ep-card__title">
+                The differences by reason
+              </h2>
+              <div className="ep-table-wrap" tabIndex={0} role="region" aria-labelledby="ck-why">
+                <table className="ep-table ep-table--dense">
+                  <thead>
+                    <tr>
+                      <th scope="col">Reason</th>
+                      <th scope="col" style={{ textAlign: 'right' }}>
+                        Lines
+                      </th>
+                      <th scope="col" style={{ textAlign: 'right' }}>
+                        Value
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {[...byReason.entries()].map(([reason, x]) => (
+                      <tr key={reason}>
+                        <td>{reason}</td>
+                        <td style={{ textAlign: 'right' }}>{x.lines}</td>
+                        <td style={{ textAlign: 'right' }}>{money(x.value)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </section>
+          ) : null}
+        </>
       )}
     </>
   );

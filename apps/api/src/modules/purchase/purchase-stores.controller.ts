@@ -1,13 +1,20 @@
-import { Body, Controller, Get, Param, Post, Put, Query } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, Put, Query, Res } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import type { FastifyReply } from 'fastify';
 import { RequirePermission } from '../../common/access/require-permission.decorator';
+import { AuthenticatedOnly } from '../../common/auth/decorators';
 import { ReqCtx, type RequestContext } from '../../common/http/request-context';
 import { PurchaseStoresService } from './purchase-stores.service';
 import {
   LedgerQueryDto,
   OpeningDto,
+  OpeningFixDto,
   OpeningImportDto,
+  OpeningUndoDto,
   PURCHASE,
+  RevaluationDecisionDto,
+  RevaluationDto,
+  StatementQueryDto,
   StockQueryDto,
   StoreDto,
   StoreLevelsDto,
@@ -81,6 +88,98 @@ export class PurchaseStoresController {
     @Body() body: OpeningImportDto,
   ) {
     return this.stores.openingImport(ctx, id, body);
+  }
+
+  @Get('stores/:id/openings')
+  @ApiOperation({
+    summary:
+      'The opening stock posted (each posting and its lines), what can still be changed, missing assets',
+  })
+  @RequirePermission(PURCHASE.storeView)
+  openings(@ReqCtx() ctx: RequestContext, @Param('id') id: string) {
+    return this.stores.openings(ctx, id);
+  }
+
+  @Post('stores/:id/opening-fix')
+  @ApiOperation({ summary: "One item's opening changed or removed while it has not moved since" })
+  @RequirePermission(PURCHASE.storeOperate)
+  fixOpening(@ReqCtx() ctx: RequestContext, @Param('id') id: string, @Body() body: OpeningFixDto) {
+    return this.stores.fixOpening(ctx, id, body);
+  }
+
+  @Post('openings/:id/undo')
+  @ApiOperation({ summary: 'A whole opening upload undone while none of its items has moved' })
+  @RequirePermission(PURCHASE.storeOperate)
+  undoOpening(
+    @ReqCtx() ctx: RequestContext,
+    @Param('id') id: string,
+    @Body() body: OpeningUndoDto,
+  ) {
+    return this.stores.undoOpening(ctx, id, body);
+  }
+
+  @Post('stores/:id/opening-assets')
+  @ApiOperation({ summary: "Make the assets an asset item's opening stock should have made" })
+  @RequirePermission(PURCHASE.storeOperate)
+  openingAssets(@ReqCtx() ctx: RequestContext, @Param('id') id: string) {
+    return this.stores.makeOpeningAssets(ctx, id);
+  }
+
+  @Get('stores/:id/opening-statement')
+  @ApiOperation({ summary: 'The opening stock statement: PDF (bytes) or ?format=xlsx (a file)' })
+  @RequirePermission(PURCHASE.storeView)
+  async openingStatement(
+    @ReqCtx() ctx: RequestContext,
+    @Param('id') id: string,
+    @Query() q: StatementQueryDto,
+    @Query('save') save: string | undefined,
+    @Res() reply: FastifyReply,
+  ) {
+    const f = await this.stores.openingStatement(ctx, id, q.format);
+    if ('bytes' in f)
+      void reply
+        .header('content-type', 'application/pdf')
+        .header(
+          'content-disposition',
+          `${save === '1' ? 'attachment' : 'inline'}; filename="${f.filename.replace(/[^\w.\- ]+/g, '_')}"`,
+        )
+        .header('cache-control', 'private, no-store')
+        .send(f.bytes);
+    else void reply.send(f);
+  }
+
+  @Get('revaluations')
+  @ApiOperation({ summary: 'Rate corrections (the stores, or the school admin who approves them)' })
+  @AuthenticatedOnly()
+  revaluations(
+    @ReqCtx() ctx: RequestContext,
+    @Query('status') status: string | undefined,
+    @Query('storeId') storeId: string | undefined,
+  ) {
+    return this.stores.revaluations(ctx, {
+      status: status && /^[a-z]{3,12}$/.test(status) ? status : undefined,
+      storeId: storeId && /^\d{1,18}$/.test(storeId) ? storeId : undefined,
+    });
+  }
+
+  @Post('stores/:id/revaluations')
+  @ApiOperation({ summary: 'Ask for a rate correction of what is left of an item in the store' })
+  @RequirePermission(PURCHASE.storeOperate)
+  revalue(@ReqCtx() ctx: RequestContext, @Param('id') id: string, @Body() body: RevaluationDto) {
+    return this.stores.requestRevaluation(ctx, id, body);
+  }
+
+  @Post('revaluations/:id/decide')
+  @ApiOperation({
+    summary: 'Approve (the school admin, not who asked), reject, or cancel a rate correction',
+  })
+  @AuthenticatedOnly()
+  decideRevaluation(
+    @ReqCtx() ctx: RequestContext,
+    @Param('id') id: string,
+    @Body() body: RevaluationDecisionDto,
+  ) {
+    return this.stores.decideRevaluation(ctx, id, body);
   }
 
   @Get('stock')

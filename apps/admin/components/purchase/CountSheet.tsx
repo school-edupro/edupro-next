@@ -1,15 +1,24 @@
 'use client';
+import { Badge } from '@edupro/ui';
 import { useRouter } from 'next/navigation';
-import { useState, useTransition } from 'react';
-import { importCount, saveCountLines } from '@/lib/purchase-actions';
-import type { CountDetail } from '@/lib/purchase';
+import { useMemo, useState, useTransition } from 'react';
+import { importCount, saveCountLines, submitCountNow } from '@/lib/purchase-actions';
+import { COUNT_REASONS, type CountDetail, type CountReason } from '@/lib/purchase';
 
 const fmt = (n: number) => n.toLocaleString('en-IN', { maximumFractionDigits: 3 });
+type Show = 'all' | 'todo' | 'diff';
+interface Entry {
+  counted: string;
+  code: CountReason | '';
+  note: string;
+}
 
 /**
- * Counting a store (docs/design/84, part 8): what is found per line (the book quantity shows only once
- * a line is counted), the reason for each difference, an item or batch found that is not listed, or
- * the filled Excel sheet uploaded. Saved as it goes; sent for approval from the page.
+ * Counting a store (docs/design/84, part 8; "As built — the count rebuilt", 9 Nov 2026): find a line by
+ * name or code, by category, those not yet counted or those that differ; enter what is on the shelf
+ * (the book quantity shows only once a line is counted); pick why a line differs (and a note); add an
+ * item or batch found that is not listed; or upload the filled Excel sheet. The bar at the foot stays
+ * in view: Save, or Save and send for approval.
  */
 export function CountSheet({
   count,
@@ -20,32 +29,55 @@ export function CountSheet({
   items: Array<{ id: string; code: string; name: string; tracksBatch: boolean }>;
 }) {
   const router = useRouter();
-  const [state, setState] = useState(() =>
-    Object.fromEntries(
-      count.lineItems.map((l) => [
-        l.id,
-        { counted: l.counted === null ? '' : String(l.counted), reason: l.reason ?? '' },
-      ]),
-    ),
+  const initial = useMemo(
+    () =>
+      Object.fromEntries(
+        count.lineItems.map((l) => [
+          l.id,
+          {
+            counted: l.counted === null ? '' : String(l.counted),
+            code: (l.reasonCode ?? '') as CountReason | '',
+            note: l.reason ?? '',
+          },
+        ]),
+      ) as Record<string, Entry>,
+    [count.lineItems],
   );
+  const [state, setState] = useState(initial);
   const [countedBy, setCountedBy] = useState(count.countedBy ?? '');
-  const [extra, setExtra] = useState({
-    itemId: '',
-    batch: '',
-    expiry: '',
-    counted: '',
-    reason: '',
-  });
+  const [extra, setExtra] = useState({ itemId: '', batch: '', expiry: '', counted: '' });
+  const [q, setQ] = useState('');
+  const [cat, setCat] = useState('');
+  const [show, setShow] = useState<Show>('all');
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [pending, start] = useTransition();
-  const save = () => {
-    setMsg(null);
+  const categories = [...new Set(count.lineItems.map((l) => l.category))].sort();
+  const dirty =
+    countedBy !== (count.countedBy ?? '') ||
+    extra.itemId !== '' ||
+    count.lineItems.some((l) => {
+      const a = state[l.id]!;
+      const b = initial[l.id]!;
+      return a.counted !== b.counted || a.code !== b.code || a.note !== b.note;
+    });
+  const needle = q.trim().toLowerCase();
+  const rows = count.lineItems.filter((l) => {
+    const v = state[l.id]!;
+    return (
+      (!needle || `${l.item} ${l.itemCode} ${l.batch ?? ''}`.toLowerCase().includes(needle)) &&
+      (!cat || l.category === cat) &&
+      (show === 'all' ||
+        (show === 'todo' ? v.counted === '' : l.difference !== null && l.difference !== 0))
+    );
+  });
+  const body = () => {
     const lines: Array<Record<string, unknown>> = count.lineItems.map((l) => {
       const v = state[l.id]!;
       return {
         lineId: l.id,
         countedQty: v.counted === '' ? null : v.counted,
-        reason: v.reason || undefined,
+        reason: v.note.trim() || undefined,
+        reasonCode: v.code || undefined,
       };
     });
     if (extra.itemId && extra.counted !== '')
@@ -54,15 +86,25 @@ export function CountSheet({
         batch: extra.batch || undefined,
         expiry: extra.expiry || undefined,
         countedQty: extra.counted,
-        reason: extra.reason || 'Found, not on the list',
+        reasonCode: 'found',
       });
+    return { countedBy: countedBy || undefined, lines };
+  };
+  const save = (send: boolean) => {
+    setMsg(null);
     start(async () => {
-      const r = await saveCountLines(count.id, { countedBy: countedBy || undefined, lines });
-      if (r.ok) {
-        setMsg({ ok: true, text: 'Saved' });
-        setExtra({ itemId: '', batch: '', expiry: '', counted: '', reason: '' });
-        router.refresh();
-      } else setMsg({ ok: false, text: r.error });
+      const r = await saveCountLines(count.id, body());
+      if (!r.ok) return setMsg({ ok: false, text: r.error });
+      setExtra({ itemId: '', batch: '', expiry: '', counted: '' });
+      if (send) {
+        const s = await submitCountNow(count.id);
+        if (!s.ok) {
+          setMsg({ ok: false, text: `Saved, but not sent: ${s.error}` });
+          return router.refresh();
+        }
+        setMsg({ ok: true, text: 'Saved and sent for approval' });
+      } else setMsg({ ok: true, text: 'Saved' });
+      router.refresh();
     });
   };
   const upload = (f: File | undefined) => {
@@ -83,6 +125,7 @@ export function CountSheet({
     reader.readAsDataURL(f);
   };
   const extraItem = items.find((i) => i.id === extra.itemId);
+  const left = count.lineItems.filter((l) => state[l.id]!.counted === '').length;
   return (
     <>
       <div className="ep-grid__toolbar">
@@ -90,7 +133,7 @@ export function CountSheet({
           className="ep-btn ep-btn--secondary ep-btn--sm"
           href={`/api/purchase/stock-doc/counts/${count.id}?sheet=1`}
         >
-          Download the sheet (Excel)
+          Count sheet (Excel)
         </a>
         <label className="ep-field" htmlFor="cs-file">
           <span className="ep-field__label">Upload the filled sheet</span>
@@ -106,12 +149,59 @@ export function CountSheet({
       <form
         onSubmit={(e) => {
           e.preventDefault();
-          save();
+          save(false);
         }}
         noValidate
       >
+        <div className="ep-grid__toolbar" style={{ marginTop: 'var(--sp-3)' }}>
+          <label className="ep-field" htmlFor="cs-q">
+            <span className="ep-field__label">Find</span>
+            <input
+              id="cs-q"
+              className="ep-input"
+              type="search"
+              value={q}
+              placeholder="Item, code or batch"
+              onChange={(e) => setQ(e.target.value)}
+            />
+          </label>
+          {categories.length > 1 ? (
+            <label className="ep-field" htmlFor="cs-cat">
+              <span className="ep-field__label">Category</span>
+              <select
+                id="cs-cat"
+                className="ep-select"
+                value={cat}
+                onChange={(e) => setCat(e.target.value)}
+              >
+                <option value="">All</option>
+                {categories.map((c) => (
+                  <option key={c} value={c}>
+                    {c}
+                  </option>
+                ))}
+              </select>
+            </label>
+          ) : null}
+          <label className="ep-field" htmlFor="cs-show">
+            <span className="ep-field__label">Show</span>
+            <select
+              id="cs-show"
+              className="ep-select"
+              value={show}
+              onChange={(e) => setShow(e.target.value as Show)}
+            >
+              <option value="all">Every line</option>
+              <option value="todo">Not yet counted ({left})</option>
+              <option value="diff">With a difference</option>
+            </select>
+          </label>
+        </div>
         <div className="ep-table-wrap" tabIndex={0} role="region" aria-label="The count sheet">
           <table className="ep-table">
+            <caption className="ep-sr-only">
+              The count sheet: what is on the shelf, the book once counted, and why a line differs
+            </caption>
             <thead>
               <tr>
                 <th scope="col">Item</th>
@@ -124,58 +214,92 @@ export function CountSheet({
                 <th scope="col" style={{ textAlign: 'right' }}>
                   Difference
                 </th>
-                <th scope="col">Reason for a difference</th>
+                <th scope="col">Why it differs</th>
               </tr>
             </thead>
             <tbody>
-              {count.lineItems.map((l) => {
-                const v = state[l.id]!;
-                return (
-                  <tr key={l.id}>
-                    <td>
-                      {l.item} ({l.itemCode})
-                      <span className="ep-mr-col__desc">
-                        {[
-                          l.category,
-                          l.batch ? `Batch ${l.batch}` : null,
-                          l.expiry ? `expiry ${l.expiry}` : null,
-                          l.added ? 'found, not listed' : null,
-                        ]
-                          .filter(Boolean)
-                          .join(' · ')}
-                      </span>
-                    </td>
-                    <td style={{ textAlign: 'right' }}>
-                      <input
-                        className="ep-input"
-                        style={{ maxWidth: '8rem', textAlign: 'right' }}
-                        inputMode="decimal"
-                        aria-label={`Counted: ${l.item}${l.batch ? ` batch ${l.batch}` : ''} (${l.unit})`}
-                        value={v.counted}
-                        onChange={(e) =>
-                          setState((cur) => ({ ...cur, [l.id]: { ...v, counted: e.target.value } }))
-                        }
-                      />{' '}
-                      {l.unit}
-                    </td>
-                    <td style={{ textAlign: 'right' }}>{l.book === null ? '—' : fmt(l.book)}</td>
-                    <td style={{ textAlign: 'right' }}>
-                      {l.difference === null || !l.difference ? '' : fmt(l.difference)}
-                    </td>
-                    <td>
-                      <input
-                        className="ep-input"
-                        maxLength={300}
-                        aria-label={`Reason: ${l.item}`}
-                        value={v.reason}
-                        onChange={(e) =>
-                          setState((cur) => ({ ...cur, [l.id]: { ...v, reason: e.target.value } }))
-                        }
-                      />
-                    </td>
-                  </tr>
-                );
-              })}
+              {rows.length ? (
+                rows.map((l) => {
+                  const v = state[l.id]!;
+                  const set = (patch: Partial<Entry>) =>
+                    setState((cur) => ({ ...cur, [l.id]: { ...v, ...patch } }));
+                  const differs = l.difference !== null && l.difference !== 0;
+                  return (
+                    <tr key={l.id}>
+                      <td>
+                        {l.item} ({l.itemCode})
+                        <span className="ep-mr-col__desc">
+                          {[
+                            l.category,
+                            l.batch ? `Batch ${l.batch}` : null,
+                            l.expiry ? `expiry ${l.expiry}` : null,
+                            l.added ? 'found, not listed' : null,
+                          ]
+                            .filter(Boolean)
+                            .join(' · ')}
+                        </span>
+                      </td>
+                      <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
+                        <input
+                          className="ep-input"
+                          style={{ maxWidth: '7rem', textAlign: 'right' }}
+                          inputMode="decimal"
+                          aria-label={`Counted: ${l.item}${l.batch ? ` batch ${l.batch}` : ''} (${l.unit})`}
+                          value={v.counted}
+                          onChange={(e) => set({ counted: e.target.value })}
+                        />{' '}
+                        {l.unit}
+                      </td>
+                      <td style={{ textAlign: 'right' }}>{l.book === null ? '—' : fmt(l.book)}</td>
+                      <td style={{ textAlign: 'right' }}>
+                        {differs ? (
+                          <Badge tone={l.difference! > 0 ? 'info' : 'danger'}>
+                            {l.difference! > 0 ? '+' : ''}
+                            {fmt(l.difference!)}
+                          </Badge>
+                        ) : l.difference === 0 ? (
+                          <Badge tone="success">Matches</Badge>
+                        ) : (
+                          ''
+                        )}
+                      </td>
+                      <td style={{ minWidth: '16rem' }}>
+                        <div style={{ display: 'grid', gap: 'var(--sp-1)' }}>
+                          <select
+                            className="ep-select"
+                            aria-label={`Why ${l.item} differs`}
+                            value={v.code}
+                            onChange={(e) => set({ code: e.target.value as CountReason | '' })}
+                          >
+                            <option value="">{differs ? 'Pick why…' : '—'}</option>
+                            {(Object.keys(COUNT_REASONS) as CountReason[]).map((k) => (
+                              <option key={k} value={k}>
+                                {COUNT_REASONS[k]}
+                              </option>
+                            ))}
+                          </select>
+                          {v.code ? (
+                            <input
+                              className="ep-input"
+                              maxLength={300}
+                              aria-label={`Note: ${l.item}`}
+                              placeholder={
+                                v.code === 'other' ? 'Say what (needed)' : 'A note (optional)'
+                              }
+                              value={v.note}
+                              onChange={(e) => set({ note: e.target.value })}
+                            />
+                          ) : null}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })
+              ) : (
+                <tr>
+                  <td colSpan={5}>No line matches.</td>
+                </tr>
+              )}
             </tbody>
           </table>
         </div>
@@ -236,7 +360,7 @@ export function CountSheet({
           </label>
         </fieldset>
         <label className="ep-field" htmlFor="cs-by" style={{ marginTop: 'var(--sp-3)' }}>
-          <span className="ep-field__label">Counted by (names)</span>
+          <span className="ep-field__label">Counted by (names of the verifiers)</span>
           <input
             id="cs-by"
             className="ep-input"
@@ -253,10 +377,26 @@ export function CountSheet({
             {msg.text}
           </p>
         ) : null}
-        <div style={{ marginTop: 'var(--sp-3)' }}>
+        <div className="ep-form-actions" data-sticky="true">
           <button type="submit" className="ep-btn ep-btn--secondary" disabled={pending}>
-            Save the counts
+            Save
           </button>
+          {count.can.submit ? (
+            <button
+              type="button"
+              className="ep-btn ep-btn--primary"
+              disabled={pending}
+              onClick={() => save(true)}
+            >
+              Save and send for approval
+            </button>
+          ) : null}
+          <span className="ep-field__help" style={{ alignSelf: 'center', margin: 0 }} role="status">
+            {dirty ? 'Changes not saved yet · ' : ''}
+            {left
+              ? `${String(left)} line${left === 1 ? '' : 's'} still to count`
+              : 'Every line counted'}
+          </span>
         </div>
       </form>
     </>

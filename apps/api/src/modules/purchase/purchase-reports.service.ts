@@ -4,6 +4,7 @@ import { DbService } from '../../common/db/db.service';
 import { DomainError } from '../../common/errors/domain-error';
 import { requireTenant, type RequestContext } from '../../common/http/request-context';
 import { libraryFile, type FileCell, type FileColumn } from '../library/library-file';
+import { COUNT_REASONS, type CountReason } from './purchase-counts.service';
 import { LIVE_PO, PLACED, TO_ORDER } from './purchase-order-core';
 import { PurchaseVendorsService } from './purchase-vendors.service';
 import { PURCHASE, type PurchaseReport, type ReportQueryDto } from './purchase.dto';
@@ -1211,9 +1212,10 @@ export class PurchaseReportsService {
           counted: string;
           value: string | null;
           reason: string | null;
+          reason_code: string | null;
         }>(
           `SELECT k.id::text, k.number, k.counted_on::text AS day, st.name AS store, i.name AS item, i.code, l.batch_no AS batch,
-                  l.book_qty::text AS book, l.counted_qty::text AS counted, l.value::text, l.reason
+                  l.book_qty::text AS book, l.counted_qty::text AS counted, l.value::text, l.reason, l.reason_code
              FROM stock_count_lines l JOIN stock_counts k ON k.id = l.count_id AND k.status = 'approved'
              JOIN stores st ON st.id = k.store_id JOIN purchase_items i ON i.id = l.item_id
             WHERE l.counted_qty <> l.book_qty AND k.counted_on BETWEEN $1::date AND $2::date AND ($3::bigint IS NULL OR l.item_id = $3)
@@ -1243,7 +1245,12 @@ export class PurchaseReportsService {
             Number(x.counted),
             Math.round((Number(x.counted) - Number(x.book)) * 1000) / 1000,
             x.value === null ? null : Number(x.value),
-            x.reason,
+            [
+              x.reason_code ? (COUNT_REASONS[x.reason_code as CountReason] ?? x.reason_code) : null,
+              x.reason,
+            ]
+              .filter(Boolean)
+              .join(': ') || null,
           ]),
           links: r.rows.map((x) => `/purchase/counts/${x.id}`),
           sum: [8],

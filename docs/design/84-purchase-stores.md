@@ -488,3 +488,59 @@ unacknowledged issues, with a Report button on each page; New return with the sl
   database, the to-issue department ids, the three registers with the store filter and words, a file,
   the store keeper's reports and refusals, a teacher refused, the return sources and the lab keeper's
   own stores only); throwaway browser and axe checks of the pages.
+
+## As built — opening stock corrections; the count rebuilt (9 Nov 2026)
+
+Asked: on a store's page, what happens when the bulk opening stock has a mistake; and the count page
+was not user-friendly, without Excel / PDF. Found on Alpha's Main store: an upload with the interactive
+panels at ₹0, the microphones at ₹20 and the PA systems at ₹12 — a count corrects quantities only, at
+the average, never a rate — and those three asset items with no asset records. Benchmarked: inventory
+software locks opening stock once it has moved and corrects later stock by adjustments (Zoho Inventory);
+school and university verification formats show book, physical, excess, shortage and remarks, signed by
+the keeper, the verifiers and the principal. The user's choices: change while untouched (else a count or
+an approved rate correction); asset items make their assets (and Alpha's missing ones made); rate
+warnings, totals before posting, the opening statement and undo a whole upload; the count with figures
+and filters, reasons from a list, Excel and PDF, and a save bar.
+
+- **Migrations 0340–0341.** `stock_openings` (a posting: hand / excel / correction, file name, reason,
+  undone with who, when and why; RLS); opening moves carry `doc_type 'opening'`, `doc_id` = the posting
+  (the earlier ones grouped into postings by store, person and moment — the ledger guard is switched off
+  for that one-time tagging only); `stock_moves.kind` gains `opening_undo` and `revalue`;
+  `assets.opening_move_id`; `stock_revaluations` (RVL numbers, one open per item and store);
+  `stock_count_lines.reason_code`. `app.stock_opening_undo(move)` reverses an opening line exactly (its own
+  quantity and value, its batch), the ledger still append-only.
+- **Opening stock** (`PurchaseStoresService`): `postOpening` checks first (dry run) — each line's value,
+  the assets it makes, warnings for a ₹0 rate or one beyond a third / three times the last purchase rate
+  (else the rate contract) per store unit; an asset item in whole units — and posts one posting; an asset
+  item makes one asset per unit (`assetsForOpening`). `GET stores/:id/openings` (postings, lines, per item
+  `canChange` / why, `missingAssets`); `POST stores/:id/opening-fix` (one item's standing lines reversed,
+  the right ones posted as a correction with the reason; its assets kept with the new cost, added or
+  removed; a counting count's book refreshed); `POST openings/:id/undo`; `POST stores/:id/opening-assets`;
+  `GET stores/:id/opening-statement` (PDF with keeper, verifier and principal boxes; `?format=xlsx`). An
+  item is settled once it has another move, a reservation or a count waiting for approval, or its assets
+  have been used.
+- **Rate corrections**: `POST stores/:id/revaluations` (the keeper; refused for an untouched opening —
+  change it instead), `GET revaluations`, `POST revaluations/:id/decide` (approve / reject by
+  `purchase.count.approve`, not who asked; cancel by who asked or the stores' manager). Approved: what is
+  in the store now goes out at the average and back in at the new rate, batch by batch (`revalue` moves),
+  and the item's opening assets in the store take the new cost. My approvals → Rate corrections to
+  approve.
+- **Admin**: the store page — the missing-assets notice (Make their assets), Opening stock posted (a fold
+  per posting; Change / Remove dialogs, `OpeningFix`; Undo; the statement as PDF / Excel), Rate
+  corrections (approve / reject / cancel; Ask for a rate correction), Post opening stock (`OpeningStock`:
+  Check, then post; by hand and from Excel, with values, warnings and assets). The count page — figures
+  (lines counted, excess, shortage, net), Excel and PDF at the top, the counting sheet (find, category,
+  not yet counted / with a difference, the reason from a list and a note, a save bar that stays in view:
+  Save, Save and send for approval), the review (differences or every line, excess and shortage apart,
+  totals, by reason). The shared sticky form bar got its background (`--surface-card`).
+- **Counts** (`PurchaseCountsService`): `reasonCode` saved (a reason in words alone counts as Other);
+  sending needs a reason for every difference and a note for Other; `figures`; `GET counts/:id/statement`
+  (Excel: book, counted, excess, shortage, rate, value, reason); the PDF with excess and shortage columns
+  and a Verified by box; the adjustment's note and the count-differences report carry the reason in
+  words.
+- **Alpha**: the Main store's 16 asset units made (5 panels, 4 microphones, 7 PA systems) at their
+  opening rates — Change the opening to the right rates and they follow.
+- **Tests**: `purchase-opening-fix.e2e-spec.ts` (7: the check, the exact reversal and the assets keeping
+  their tags, a batch item's batches, remove and open again, an upload undone, a moved item's rate
+  correction approved by the school admin only, the missing assets made, the count's reasons, figures,
+  Excel and PDF, the statement and refusals); `purchase-stores` updated for the new message.

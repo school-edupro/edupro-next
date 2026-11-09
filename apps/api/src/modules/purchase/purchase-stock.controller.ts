@@ -294,6 +294,13 @@ export class PurchaseStockController {
     return this.counts.cancel(ctx, id, body);
   }
 
+  @Get('counts/:id/statement')
+  @ApiOperation({ summary: 'The count as Excel: book, counted, excess, shortage, value, reason' })
+  @RequirePermission(PURCHASE.storeView)
+  countStatement(@ReqCtx() ctx: RequestContext, @Param('id') id: string) {
+    return this.counts.statement(ctx, id);
+  }
+
   @Get('counts/:id/pdf')
   @RequirePermission(PURCHASE.storeView)
   async countPdf(

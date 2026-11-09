@@ -1315,8 +1315,9 @@
 .ep-form-actions[data-sticky='true'] {
   position: sticky;
   bottom: 0;
-  background: var(--surface);
-  border-top: 1px solid var(--border);
+  z-index: 2;
+  background: var(--surface-card);
+  border-top: 1px solid var(--border-default);
   padding: var(--sp-3) 0;
 }
 

@@ -1904,11 +1904,101 @@ export interface CountDetail extends CountRow {
     counted: number | null;
     difference: number | null;
     reason: string | null;
+    /** why it differs, from COUNT_REASONS (docs/design/84, 9 Nov 2026) */
+    reasonCode: CountReason | null;
+    reasonWords: string | null;
     added: boolean;
     rate: number | null;
     value: number | null;
   }>;
+  /** over the counted lines */
+  figures: {
+    lines: number;
+    counted: number;
+    excess: number;
+    excessValue: number;
+    shortage: number;
+    shortageValue: number;
+    net: number;
+    noReason: number;
+  };
   can: { count: boolean; submit: boolean; decide: boolean; cancel: boolean };
+}
+/** Why a counted line differs, in words (the API's COUNT_REASONS). */
+export const COUNT_REASONS = {
+  not_found: 'Not found / lost',
+  damaged: 'Damaged',
+  expired: 'Expired',
+  issued_no_slip: 'Issued without a slip',
+  received_no_grn: 'Received without a GRN',
+  entry_mistake: 'Entry mistake (opening or earlier)',
+  found: 'Found, not on the list',
+  other: 'Other',
+} as const;
+export type CountReason = keyof typeof COUNT_REASONS;
+
+/** The opening stock posted to a store (GET /purchase/stores/:id/openings). */
+export interface StoreOpenings {
+  postings: Array<{
+    id: string;
+    source: 'hand' | 'excel' | 'correction';
+    fileName: string | null;
+    reason: string | null;
+    by: string | null;
+    at: string;
+    undoneAt: string | null;
+    undoneBy: string | null;
+    undoReason: string | null;
+    value: number;
+    canUndo: boolean;
+    lines: Array<{
+      moveId: string;
+      itemId: string;
+      code: string;
+      name: string;
+      unit: string;
+      asset: boolean;
+      qty: number;
+      rate: number;
+      value: number;
+      batch: string | null;
+      expiry: string | null;
+      reversed: boolean;
+      assets: number;
+    }>;
+  }>;
+  /** per item with a standing opening: can it still be changed, and if not why */
+  items: Record<string, { canChange: boolean; why: string | null }>;
+  missingAssets: Array<{
+    itemId: string;
+    name: string;
+    units: number;
+    assets: number;
+    canMake: boolean;
+  }>;
+}
+/** A rate correction (GET /purchase/revaluations). */
+export interface Revaluation {
+  id: string;
+  number: string;
+  storeId: string;
+  store: string;
+  itemId: string;
+  item: string;
+  code: string;
+  unit: string;
+  qty: number;
+  oldRate: number;
+  newRate: number;
+  change: number;
+  reason: string;
+  status: 'submitted' | 'approved' | 'rejected' | 'cancelled';
+  by: string | null;
+  at: string;
+  decidedBy: string | null;
+  decidedAt: string | null;
+  decisionNote: string | null;
+  can: { decide: boolean; cancel: boolean };
 }
 
 // ---- phase 2, part 9: reorder, assets, depreciation, condemnation (docs/design/84) ------------------
