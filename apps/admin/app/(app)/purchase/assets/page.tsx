@@ -1,15 +1,29 @@
-import { Badge, Breadcrumbs, PageHeader } from '@edupro/ui';
+import { Badge, Breadcrumbs, KpiTile, PageHeader } from '@edupro/ui';
 import { notFound } from 'next/navigation';
 import { Notice } from '@/components/Notice';
+import { Pager, PerPage, pageSizeOf } from '@/components/Pager';
 import { ApiError, apiFetch, getMe } from '@/lib/api';
 import { ASSET_STATUS, inr, type AssetLists, type AssetRow } from '@/lib/purchase';
 
 const ID = /^\d{1,18}$/;
+const FILTERS = ['itemId', 'categoryId', 'departmentId', 'storeId', 'custodianId'] as const;
+
+interface AssetPage {
+  rows: AssetRow[];
+  total: number;
+  cost: number;
+  bookValue: number;
+  page: number;
+  size: number;
+  figures: { depreciation: number; underRepair: number; lost: number; ending: number };
+}
 
 /**
- * The asset register (docs/design/84, part 9): every tagged unit, filtered by status, item, category,
- * department, store, custodian or a search, warranty or insurance ending soon; its cost and book value;
- * QR labels for the ticked ones; import from Excel; the yearly depreciation.
+ * The asset register (docs/design/84, part 9; "As built — the asset master and the import format",
+ * 9 Nov 2026): figures over what the filters find, the filters (status, item, category, department,
+ * store, custodian, search, warranty or insurance ending), the asset master as Excel (every field, totals
+ * by category) or PDF, the register a page at a time (25, 50 or 100), QR labels for the ticked ones;
+ * import from Excel; the yearly depreciation.
  */
 export default async function AssetsPage({
   searchParams,
@@ -19,28 +33,42 @@ export default async function AssetsPage({
   const sp = await searchParams;
   const me = await getMe();
   const manage = me.permissions.includes('purchase.asset.manage');
-  const qs = new URLSearchParams({ page: String(Math.max(1, Number(sp.page) || 1)) });
-  qs.set('status', sp.status ?? 'held');
-  if (sp.status === 'all') qs.delete('status');
-  for (const k of ['itemId', 'categoryId', 'departmentId', 'storeId', 'custodianId'])
-    if (sp[k] && ID.test(sp[k]!)) qs.set(k, sp[k]!);
-  if (sp.q) qs.set('q', sp.q.slice(0, 80));
-  if (sp.expiring === '1') qs.set('expiring', '1');
-  let data: { rows: AssetRow[]; total: number; cost: number; bookValue: number };
+  const size = pageSizeOf(sp.size);
+  // the filters, kept on every link (pages, files)
+  const keep = new URLSearchParams();
+  keep.set('status', sp.status && /^[a-z_]{2,20}$/.test(sp.status) ? sp.status : 'held');
+  for (const k of FILTERS) if (sp[k] && ID.test(sp[k]!)) keep.set(k, sp[k]!);
+  if (sp.q) keep.set('q', sp.q.slice(0, 80));
+  if (sp.expiring === '1') keep.set('expiring', '1');
+  const qs = new URLSearchParams(keep);
+  if (qs.get('status') === 'all') qs.delete('status');
+  qs.set('page', String(Math.max(1, Number(sp.page) || 1)));
+  qs.set('size', size);
+  let data: AssetPage;
   let lists: AssetLists;
   try {
     [data, lists] = await Promise.all([
-      apiFetch<{ rows: AssetRow[]; total: number; cost: number; bookValue: number }>(
-        `/purchase/assets?${qs.toString()}`,
-      ),
+      apiFetch<AssetPage>(`/purchase/assets?${qs.toString()}`),
       apiFetch<AssetLists>('/purchase/asset-lists'),
     ]);
   } catch (e) {
     if (e instanceof ApiError && e.status === 403) notFound();
     throw e;
   }
+  const link = (page: number) => {
+    const p = new URLSearchParams(keep);
+    p.set('size', size);
+    if (page > 1) p.set('page', String(page));
+    return `/purchase/assets?${p.toString()}`;
+  };
+  const file = (format: 'xlsx' | 'pdf') => {
+    const p = new URLSearchParams(keep);
+    p.set('format', format);
+    return `/api/purchase/assets-file?${p.toString()}`;
+  };
+  const filtered = FILTERS.some((k) => keep.has(k)) || keep.has('q') || keep.has('expiring');
   const sel = (
-    name: string,
+    name: (typeof FILTERS)[number],
     label: string,
     opts: Array<{ id: string; name: string }>,
     all: string,
@@ -57,13 +85,21 @@ export default async function AssetsPage({
       </select>
     </label>
   );
+  const f = data.figures;
+  const status = keep.get('status')!;
+  const statusWords =
+    status === 'held'
+      ? 'on the books'
+      : status === 'all'
+        ? 'all, with those gone'
+        : (ASSET_STATUS[status]?.label.toLowerCase() ?? status);
   return (
     <>
       <Breadcrumbs items={[{ label: 'Purchase', href: '/purchase' }, { label: 'Assets' }]} />
       <PageHeader
         kicker="Purchase"
         title="Assets"
-        description="Every unit of an asset item, tagged when it is accepted on a goods receipt (or imported from the old register): where it is, who keeps it, what it cost and its book value."
+        description="Every unit of an asset item, tagged when it is accepted on a goods receipt, posted as opening stock or imported from the old register: where it is, who keeps it, what it cost and its book value. Download the asset master as Excel or PDF with the filters you set."
         actions={
           <div style={{ display: 'flex', gap: 'var(--sp-2)', flexWrap: 'wrap' }}>
             <a className="ep-btn ep-btn--secondary ep-btn--sm" href="/purchase/assets/depreciation">
@@ -78,6 +114,32 @@ export default async function AssetsPage({
         }
       />
       <Notice params={sp} />
+      <div className="ep-dash-kpis">
+        <KpiTile
+          label="Assets"
+          value={data.total.toLocaleString('en-IN')}
+          hint={filtered ? 'in these filters' : statusWords}
+        />
+        <KpiTile label="Cost" value={inr(data.cost)} />
+        <KpiTile label="Book value" value={inr(data.bookValue)} />
+        <KpiTile label="Depreciation so far" value={inr(f.depreciation)} />
+        <KpiTile
+          label="Under repair or lost"
+          value={String(f.underRepair + f.lost)}
+          hint={`${String(f.underRepair)} under repair · ${String(f.lost)} lost`}
+        />
+        <KpiTile
+          label="Warranty or insurance ending"
+          value={String(f.ending)}
+          hint={
+            f.ending && sp.expiring !== '1' ? (
+              <a href={`${link(1)}&expiring=1`}>in 60 days: show them</a>
+            ) : (
+              'in 60 days'
+            )
+          }
+        />
+      </div>
       <form
         method="get"
         action="/purchase/assets"
@@ -90,7 +152,7 @@ export default async function AssetsPage({
             id="as-status"
             name="status"
             className="ep-select"
-            defaultValue={sp.status ?? 'held'}
+            defaultValue={keep.get('status')!}
           >
             <option value="held">On the books</option>
             <option value="all">All</option>
@@ -101,6 +163,12 @@ export default async function AssetsPage({
             ))}
           </select>
         </label>
+        {sel(
+          'itemId',
+          'Item',
+          lists.items.map((x) => ({ id: x.id, name: `${x.name} (${x.code})` })),
+          'All items',
+        )}
         {sel('categoryId', 'Category', lists.categories, 'All categories')}
         {sel('departmentId', 'Department', lists.departments, 'All departments')}
         {sel('storeId', 'Store', lists.stores, 'All stores')}
@@ -117,7 +185,7 @@ export default async function AssetsPage({
             name="q"
             className="ep-input"
             defaultValue={sp.q ?? ''}
-            placeholder="Tag, serial, item, place"
+            placeholder="Tag, serial, item, place, custodian"
           />
         </label>
         <label className="ep-check" htmlFor="as-exp">
@@ -132,14 +200,31 @@ export default async function AssetsPage({
           <span className="ep-check__box" />
           Warranty or insurance ending in 60 days
         </label>
+        <PerPage id="as-size" value={size} />
         <button type="submit" className="ep-btn ep-btn--secondary ep-btn--sm">
           Show
         </button>
+        {filtered || keep.get('status') !== 'held' ? (
+          <a className="ep-btn ep-btn--ghost ep-btn--sm" href="/purchase/assets">
+            Clear
+          </a>
+        ) : null}
+        <span className="ep-grid__spacer" />
+        <a
+          className="ep-btn ep-btn--secondary ep-btn--sm"
+          href={file('xlsx')}
+          title="The asset master as filtered, every page: every field, and totals by category"
+        >
+          Excel
+        </a>
+        <a
+          className="ep-btn ep-btn--secondary ep-btn--sm"
+          href={file('pdf')}
+          title="The asset register as filtered, every page, on the letterhead"
+        >
+          PDF
+        </a>
       </form>
-      <p className="ep-field__help">
-        {data.total.toLocaleString('en-IN')} assets · cost {inr(data.cost)} · book value{' '}
-        {inr(data.bookValue)}
-      </p>
       <form method="get" action="/api/purchase/asset-labels" target="_blank">
         <div className="ep-table-wrap" tabIndex={0} role="region" aria-label="Assets">
           <table className="ep-table">
@@ -196,18 +281,32 @@ export default async function AssetsPage({
                 ))
               ) : (
                 <tr>
-                  <td colSpan={5}>No assets here.</td>
+                  <td colSpan={5}>
+                    {data.total && data.page > 1 ? (
+                      <>
+                        No assets on this page.{' '}
+                        <a className="ep-btn ep-btn--secondary ep-btn--sm" href={link(1)}>
+                          First page
+                        </a>
+                      </>
+                    ) : (
+                      'No assets here.'
+                    )}
+                  </td>
                 </tr>
               )}
             </tbody>
           </table>
         </div>
+        <Pager
+          page={data.page}
+          size={data.size}
+          total={data.total}
+          href={link}
+          noun={data.total === 1 ? 'asset' : 'assets'}
+        />
         {data.rows.length ? (
-          <button
-            type="submit"
-            className="ep-btn ep-btn--secondary ep-btn--sm"
-            style={{ marginTop: 'var(--sp-3)' }}
-          >
+          <button type="submit" className="ep-btn ep-btn--secondary ep-btn--sm">
             Print QR labels for the ticked ones
           </button>
         ) : null}

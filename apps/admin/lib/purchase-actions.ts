@@ -1661,18 +1661,26 @@ export async function cancelAssetMove(fd: FormData) {
   );
 }
 
+/** One row of the asset sheet as checked: the item, how many assets it makes, their cost. */
+export interface AssetImportRow {
+  row: number;
+  item: string;
+  units: number;
+  tag: string;
+  cost: number;
+  ok: boolean;
+  error?: string;
+}
 export type AssetImportResult =
-  | {
-      ok: true;
-      rows: Array<{ row: number; tag: string; ok: boolean; error?: string }>;
-      saved: number;
-    }
+  | { ok: true; rows: AssetImportRow[]; saved: number; units: number; cost: number }
   | { ok: false; error: string };
 export async function importAssets(file: string, dryRun: boolean): Promise<AssetImportResult> {
   try {
     const r = await apiFetch<{
-      rows: Array<{ row: number; tag: string; ok: boolean; error?: string }>;
+      rows: AssetImportRow[];
       saved: number;
+      units: number;
+      cost: number;
     }>('/purchase/assets-import', { method: 'POST', body: JSON.stringify({ file, dryRun }) });
     if (!dryRun) revalidatePath('/purchase/assets');
     return { ok: true, ...r };

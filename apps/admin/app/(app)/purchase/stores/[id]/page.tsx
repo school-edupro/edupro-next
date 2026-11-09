@@ -3,6 +3,7 @@ import { notFound } from 'next/navigation';
 import { ConfirmAction } from '@/components/ConfirmAction';
 import { FileLinks } from '@/components/FileLinks';
 import { Notice } from '@/components/Notice';
+import { Pager, PerPage, pageSizeOf } from '@/components/Pager';
 import { OpeningFix } from '@/components/purchase/OpeningFix';
 import { OpeningStock } from '@/components/purchase/OpeningStock';
 import { ApiError, apiFetch } from '@/lib/api';
@@ -42,56 +43,8 @@ const REVALUATION_STATUS: Record<Revaluation['status'], string> = {
   cancelled: 'Cancelled',
 };
 const ID = /^\d{1,18}$/;
-const SIZES = ['25', '50', '100'] as const;
 type Tab = 'stock' | 'opening' | 'rates' | 'post' | 'levels';
 const SOURCE = { hand: 'By hand', excel: 'From Excel', correction: 'Correction' } as const;
-
-/** Page n of m, with Previous / Next keeping the filters. */
-function Pager({
-  page,
-  size,
-  total,
-  href,
-  noun,
-}: {
-  page: number;
-  size: number;
-  total: number;
-  href: (page: number) => string;
-  noun: string;
-}) {
-  const pages = Math.max(1, Math.ceil(total / size));
-  if (total <= size)
-    return (
-      <p className="ep-field__help">
-        {total} {noun}
-      </p>
-    );
-  return (
-    <nav aria-label={`Pages of ${noun}`} className="ep-field__help">
-      {total} {noun} · page {page} of {pages} · {page > 1 ? <a href={href(1)}>First</a> : null}{' '}
-      {page > 1 ? <a href={href(page - 1)}>Previous</a> : null}{' '}
-      {page < pages ? <a href={href(page + 1)}>Next</a> : null}{' '}
-      {page < pages ? <a href={href(pages)}>Last</a> : null}
-    </nav>
-  );
-}
-
-/** Records per page: 25, 50 or 100. */
-function PerPage({ id, value }: { id: string; value: string }) {
-  return (
-    <label className="ep-field" htmlFor={id}>
-      <span className="ep-field__label">Per page</span>
-      <select id={id} name="size" className="ep-select" defaultValue={value}>
-        {SIZES.map((n) => (
-          <option key={n} value={n}>
-            {n}
-          </option>
-        ))}
-      </select>
-    </label>
-  );
-}
 
 /**
  * One store (docs/design/84, part 6; "As built — the store page in tabs", 9 Nov 2026): its details and
@@ -123,7 +76,7 @@ export default async function StorePage({
     ...(s.can.manage ? ([['levels', 'Reorder levels']] as Array<[Tab, string]>) : []),
   ];
   const tab: Tab = tabs.some(([k]) => k === sp.tab) ? (sp.tab as Tab) : 'stock';
-  const size = SIZES.includes(sp.size as (typeof SIZES)[number]) ? sp.size! : '50';
+  const size = pageSizeOf(sp.size);
   const page = Math.max(1, Number(sp.page) || 1);
   const q = (sp.q ?? '').trim().slice(0, 80);
   const categoryId = sp.categoryId && ID.test(sp.categoryId) ? sp.categoryId : '';

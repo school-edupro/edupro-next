@@ -10,10 +10,13 @@ import { readSheet, templateSheet } from '../../common/excel/sheet';
 import { requireTenant, type RequestContext } from '../../common/http/request-context';
 import { STORAGE_DRIVER } from '../files/storage';
 import { BOOK_VALUE } from './purchase-asset-core';
+import { purchaseHead } from './purchase-head';
+import { checkListSize, LIST_LIMIT, purchaseListFile, type ListSheet } from './purchase-list-file';
 import { istToday, PERSON_OF } from './purchase-stock-core';
 import {
   PURCHASE,
   type AssetDto,
+  type AssetExportQueryDto,
   type AssetImportDto,
   type AssetListQueryDto,
   type AssetMoveDto,
@@ -113,6 +116,17 @@ interface AssetRow {
   pending_id: string | null;
 }
 
+const CONDITION_WORDS: Record<string, string> = {
+  good: 'Good',
+  fair: 'Fair',
+  poor: 'Poor',
+  unserviceable: 'Unserviceable',
+};
+
+/** Warranty or insurance ending within 60 days (from today). */
+const ENDING = `(a.warranty_until BETWEEN (now() AT TIME ZONE 'Asia/Kolkata')::date AND (now() AT TIME ZONE 'Asia/Kolkata')::date + 60
+               OR a.insurance_renewal BETWEEN (now() AT TIME ZONE 'Asia/Kolkata')::date AND (now() AT TIME ZONE 'Asia/Kolkata')::date + 60)`;
+
 /** I keep it, or a custody change to me waits. */
 const MINE = `(EXISTS (SELECT 1 FROM employees e WHERE e.id = a.custodian_employee_id AND e.user_id = app.current_user_id())
   OR EXISTS (SELECT 1 FROM asset_movements m JOIN employees e ON e.id = m.to_custodian_id
@@ -207,50 +221,271 @@ export class PurchaseAssetsService {
   }
 
   // ---- lists ---------------------------------------------------------------------------------------
-  async list(ctx: RequestContext, q: AssetListQueryDto) {
+  private mustSee(ctx: RequestContext) {
     if (!this.seesAll(ctx))
       throw new DomainError('permission-denied', 'Only the stores see the asset register', {
         status: 403,
       });
-    return this.db.tenant(requireTenant(ctx), async (c) => {
-      const where = `WHERE ($1::text IS NULL OR a.status = $1 OR ($1 = 'held' AND a.status IN ('in_store', 'in_use', 'in_transit', 'under_repair', 'lost')))
+  }
+
+  /** The register's filters (bound as $1 to $8), shared by the page and its file. */
+  // eslint-disable-next-line no-restricted-syntax -- ENDING is a fixed fragment; values are bound
+  private static readonly WHERE = `WHERE ($1::text IS NULL OR a.status = $1 OR ($1 = 'held' AND a.status IN ('in_store', 'in_use', 'in_transit', 'under_repair', 'lost')))
           AND ($2::bigint IS NULL OR a.item_id = $2) AND ($3::bigint IS NULL OR i.category_id = $3 OR cat.parent_id = $3)
           AND ($4::bigint IS NULL OR a.department_id = $4) AND ($5::bigint IS NULL OR a.store_id = $5)
           AND ($6::bigint IS NULL OR a.custodian_employee_id = $6)
           AND ($7::text IS NULL OR a.tag ILIKE '%' || $7 || '%' OR a.serial_no ILIKE '%' || $7 || '%' OR i.name ILIKE '%' || $7 || '%'
                OR a.location ILIKE '%' || $7 || '%' OR ce.display_name ILIKE '%' || $7 || '%')
-          AND (NOT $8 OR a.warranty_until BETWEEN (now() AT TIME ZONE 'Asia/Kolkata')::date AND (now() AT TIME ZONE 'Asia/Kolkata')::date + 60
-               OR a.insurance_renewal BETWEEN (now() AT TIME ZONE 'Asia/Kolkata')::date AND (now() AT TIME ZONE 'Asia/Kolkata')::date + 60)`;
-      const args = [
-        q.status ?? null,
-        q.itemId ?? null,
-        q.categoryId ?? null,
-        q.departmentId ?? null,
-        q.storeId ?? null,
-        q.custodianId ?? null,
-        q.q ?? null,
-        q.expiring,
-      ];
-      const sum = await c.query<{ n: number; cost: string; book: string }>(
+          AND (NOT $8 OR ${ENDING})`;
+
+  private static argsOf(q: AssetListQueryDto) {
+    return [
+      q.status ?? null,
+      q.itemId ?? null,
+      q.categoryId ?? null,
+      q.departmentId ?? null,
+      q.storeId ?? null,
+      q.custodianId ?? null,
+      q.q ?? null,
+      q.expiring,
+    ];
+  }
+
+  /**
+   * The register a page at a time (25, 50 or 100), with figures over everything the filters find: how
+   * many, cost, book value and the depreciation so far, under repair, lost, and warranty or insurance
+   * ending within 60 days.
+   */
+  async list(ctx: RequestContext, q: AssetListQueryDto) {
+    this.mustSee(ctx);
+    return this.db.tenant(requireTenant(ctx), async (c) => {
+      const args = PurchaseAssetsService.argsOf(q);
+      const sum = await c.query<{
+        n: number;
+        cost: string;
+        book: string;
+        repair: number;
+        lost: number;
+        ending: number;
+      }>(
         // eslint-disable-next-line no-restricted-syntax -- fixed fragments; values are bound
-        `SELECT count(*)::int AS n, COALESCE(sum(a.cost), 0)::text AS cost, COALESCE(sum(${BOOK_VALUE('a')}), 0)::text AS book
+        `SELECT count(*)::int AS n, COALESCE(sum(a.cost), 0)::text AS cost, COALESCE(sum(${BOOK_VALUE('a')}), 0)::text AS book,
+                count(*) FILTER (WHERE a.status = 'under_repair')::int AS repair, count(*) FILTER (WHERE a.status = 'lost')::int AS lost,
+                count(*) FILTER (WHERE ${ENDING})::int AS ending
            FROM assets a JOIN purchase_items i ON i.id = a.item_id JOIN purchase_item_categories cat ON cat.id = i.category_id
-           LEFT JOIN employees ce ON ce.id = a.custodian_employee_id ${where}`,
+           LEFT JOIN employees ce ON ce.id = a.custodian_employee_id ${PurchaseAssetsService.WHERE}`,
         args,
       );
       const r = await c.query<AssetRow>(
         // eslint-disable-next-line no-restricted-syntax -- fixed fragments; values are bound
-        `${SELECT} ${where} ORDER BY a.tag LIMIT 100 OFFSET $9`,
-        [...args, (q.page - 1) * 100],
+        `${SELECT} ${PurchaseAssetsService.WHERE} ORDER BY a.tag LIMIT $9 OFFSET $10`,
+        [...args, q.size, (q.page - 1) * q.size],
       );
+      const f = sum.rows[0]!;
+      const cost = Number(f.cost);
+      const book = Number(f.book);
       return {
         rows: r.rows.map((x) => this.shape(x)),
-        total: sum.rows[0]!.n,
-        cost: Number(sum.rows[0]!.cost),
-        bookValue: Number(sum.rows[0]!.book),
+        total: f.n,
+        cost,
+        bookValue: book,
         page: q.page,
+        size: q.size,
+        figures: {
+          depreciation: r2(cost - book),
+          underRepair: f.repair,
+          lost: f.lost,
+          ending: f.ending,
+        },
       };
     });
+  }
+
+  /**
+   * The asset master as filtered on the page (every page, up to 5,000), on the school letterhead: Excel
+   * with every field of each asset (where it came from, cost, depreciation so far, book value, where it
+   * is and who keeps it, warranty, insurance) and a second sheet of totals by category for the auditor;
+   * the PDF a narrower register.
+   */
+  async exportRegister(ctx: RequestContext, q: AssetExportQueryDto) {
+    this.mustSee(ctx);
+    return this.db.tenant(requireTenant(ctx), async (c) => {
+      const rows = (
+        await c.query<AssetRow>(
+          // eslint-disable-next-line no-restricted-syntax -- fixed fragments; values are bound
+          `${SELECT} ${PurchaseAssetsService.WHERE} ORDER BY cat.name, i.name, a.tag LIMIT $9`,
+          [...PurchaseAssetsService.argsOf(q), LIST_LIMIT],
+        )
+      ).rows.map((x) => this.shape(x));
+      checkListSize(rows.length, 'assets');
+      const where = (a: (typeof rows)[number]) => a.store ?? a.department ?? '';
+      const dep = (a: (typeof rows)[number]) => r2(a.cost - a.bookValue);
+      const list: ListSheet =
+        q.format === 'pdf'
+          ? {
+              columns: [
+                { label: 'Tag', width: 1.8 },
+                { label: 'Item', width: 2.4 },
+                { label: 'Make / model / serial', width: 2.4 },
+                { label: 'Acquired on', type: 'date' },
+                { label: 'Cost (₹)', type: 'money' },
+                { label: 'Book value (₹)', type: 'money' },
+                { label: 'Where', width: 2.4 },
+                { label: 'Custodian', width: 2 },
+                { label: 'Condition', width: 1.2 },
+                { label: 'Status', width: 1.4 },
+              ],
+              rows: rows.map((a) => [
+                a.tag,
+                a.item,
+                [[a.make, a.model].filter(Boolean).join(' '), a.serialNo ? `S/N ${a.serialNo}` : '']
+                  .filter(Boolean)
+                  .join(' · '),
+                a.acquiredOn,
+                a.cost,
+                a.bookValue,
+                [where(a), a.location].filter(Boolean).join(' · '),
+                a.custodian,
+                CONDITION_WORDS[a.condition] ?? a.condition,
+                a.statusLabel,
+              ]),
+            }
+          : {
+              columns: [
+                { label: 'Tag', width: 2 },
+                { label: 'Item code', width: 1.6 },
+                { label: 'Item', width: 3 },
+                { label: 'Category', width: 2.2 },
+                { label: 'Description', width: 3 },
+                { label: 'Make', width: 1.8 },
+                { label: 'Model', width: 1.8 },
+                { label: 'Serial no.', width: 2 },
+                { label: 'Vendor', width: 3 },
+                { label: 'Bill / PO / receipt', width: 3 },
+                { label: 'Acquired on', type: 'date' },
+                { label: 'Put to use on', type: 'date' },
+                { label: 'Cost (₹)', type: 'money' },
+                { label: 'Depreciation so far (₹)', type: 'money' },
+                { label: 'Book value (₹)', type: 'money' },
+                { label: 'Status', width: 1.8 },
+                { label: 'Store', width: 2.2 },
+                { label: 'Department', width: 2.4 },
+                { label: 'Location', width: 2.2 },
+                { label: 'Custodian', width: 2.6 },
+                { label: 'Emp. code', width: 1.4 },
+                { label: 'Condition', width: 1.6 },
+                { label: 'Warranty until', type: 'date' },
+                { label: 'Insurer', width: 2.4 },
+                { label: 'Policy no.', width: 2 },
+                { label: 'Insured value (₹)', type: 'money' },
+                { label: 'Insurance renewal', type: 'date' },
+              ],
+              rows: rows.map((a) => [
+                a.tag,
+                a.itemCode,
+                a.item,
+                a.category,
+                a.description,
+                a.make,
+                a.model,
+                a.serialNo,
+                a.vendor,
+                [
+                  a.order ? `PO ${a.order}` : '',
+                  a.receipt ? `GRN ${a.receipt}` : '',
+                  a.sourceNote ?? '',
+                ]
+                  .filter(Boolean)
+                  .join(' · '),
+                a.acquiredOn,
+                a.putToUseOn,
+                a.cost,
+                dep(a),
+                a.bookValue,
+                a.statusLabel,
+                a.store,
+                a.department,
+                a.location,
+                a.custodian,
+                a.custodianCode,
+                CONDITION_WORDS[a.condition] ?? a.condition,
+                a.warrantyUntil,
+                a.insurer,
+                a.policyNo,
+                a.insuredValue,
+                a.insuranceRenewal,
+              ]),
+            };
+      const byCategory = new Map<string, { n: number; cost: number; dep: number; book: number }>();
+      for (const a of rows) {
+        const t = byCategory.get(a.category) ?? { n: 0, cost: 0, dep: 0, book: 0 };
+        t.n += 1;
+        t.cost += a.cost;
+        t.dep += dep(a);
+        t.book += a.bookValue;
+        byCategory.set(a.category, t);
+      }
+      return purchaseListFile({
+        format: q.format,
+        head: await purchaseHead(c, this.storage),
+        title: 'Asset register',
+        slug: 'Asset-register',
+        words: await this.filterWords(c, q),
+        list,
+        sum: q.format === 'pdf' ? [4, 5] : [12, 13, 14, 25],
+        lines: {
+          tab: 'By category',
+          title: 'Asset register: totals by category',
+          columns: [
+            { label: 'Category', width: 3 },
+            { label: 'Assets', type: 'number', width: 1.4 },
+            { label: 'Cost (₹)', type: 'money' },
+            { label: 'Depreciation so far (₹)', type: 'money' },
+            { label: 'Book value (₹)', type: 'money' },
+          ],
+          rows: [...byCategory.entries()].map(([k, t]) => [
+            k,
+            t.n,
+            r2(t.cost),
+            r2(t.dep),
+            r2(t.book),
+          ]),
+          sum: [1, 2, 3, 4],
+        },
+      });
+    });
+  }
+
+  /** The register's filters in words, for the file's details line. */
+  private async filterWords(c: PoolClient, q: AssetListQueryDto) {
+    const name = async (sql: string, id: string | undefined) =>
+      id ? (await c.query<{ name: string }>(sql, [id])).rows[0]?.name : undefined;
+    const [item, category, department, store, custodian] = await Promise.all([
+      name(`SELECT name FROM purchase_items WHERE id = $1`, q.itemId),
+      name(`SELECT name FROM purchase_item_categories WHERE id = $1`, q.categoryId),
+      name(`SELECT name FROM departments WHERE id = $1`, q.departmentId),
+      name(`SELECT name FROM stores WHERE id = $1`, q.storeId),
+      name(
+        `SELECT display_name || ' (' || employee_code || ')' AS name FROM employees WHERE id = $1`,
+        q.custodianId,
+      ),
+    ]);
+    return [
+      !q.status
+        ? 'All assets'
+        : q.status === 'held'
+          ? 'On the books'
+          : (STATUS_WORDS[q.status] ?? q.status),
+      item ? `Item: ${item}` : null,
+      category ? `Category: ${category}` : null,
+      department ? `Department: ${department}` : null,
+      store ? `Store: ${store}` : null,
+      custodian ? `Custodian: ${custodian}` : null,
+      q.q ? `Search: ${q.q}` : null,
+      q.expiring ? 'Warranty or insurance ending in 60 days' : null,
+    ]
+      .filter(Boolean)
+      .join(' · ');
   }
 
   /** The assets I keep, and custody changes waiting for my acknowledgement (the staff app). */
@@ -730,279 +965,522 @@ export class PurchaseAssetsService {
   }
 
   // ---- import ---------------------------------------------------------------------------------------
-  private static readonly COLUMNS = [
-    'Item code',
+  /**
+   * The format's headings, and the older format's names for the same columns (a sheet downloaded before
+   * 9 Nov 2026 is still read): the item, store and custodian typed as codes, the cost and the reference.
+   */
+  private static readonly NAMES = {
+    item: ['Item', 'Item code'],
+    cost: ['Cost per unit (₹)', 'Cost'],
+    store: ['Store', 'Store code'],
+    custodian: ['Custodian', 'Custodian code'],
+    reference: ['Bill / PO no.', 'Reference'],
+  } as const;
+  private static readonly OPTIONAL = [
+    ...Object.values(PurchaseAssetsService.NAMES).flat(),
+    'Quantity',
     'Tag',
     'Description',
     'Make',
     'Model',
     'Serial',
-    'Cost',
     'Acquired on',
     'Put to use on',
-    'Store code',
     'Department',
     'Location',
-    'Custodian code',
     'Condition',
     'Warranty until',
     'Vendor',
-    'Reference',
-  ] as const;
+  ];
+  /** units one row makes at most, and in one file */
+  private static readonly MAX_UNITS = 500;
+  private static readonly MAX_FILE_UNITS = 5000;
 
-  async importTemplate(ctx: RequestContext) {
-    this.mustManage(ctx);
-    const bytes = await templateSheet({
-      sheet: 'Assets',
-      columns: [
-        {
-          header: 'Item code',
-          width: 14,
-          required: true,
-          format: 'text',
-          note: 'An item of type asset',
-        },
-        {
-          header: 'Tag',
-          width: 16,
-          format: 'text',
-          note: 'The tag already on it; empty: a new AST tag',
-        },
-        { header: 'Description', width: 26 },
-        { header: 'Make', width: 14 },
-        { header: 'Model', width: 14 },
-        { header: 'Serial', width: 16, format: 'text' },
-        { header: 'Cost', width: 10, required: true, note: 'What one unit cost, in rupees' },
-        { header: 'Acquired on', width: 12, format: 'text', note: 'YYYY-MM-DD or DD-MM-YYYY' },
-        {
-          header: 'Put to use on',
-          width: 12,
-          format: 'text',
-          note: 'Depreciation runs from this day',
-        },
-        { header: 'Store code', width: 10, format: 'text', note: 'Kept in a store: its code' },
-        { header: 'Department', width: 16, note: 'In use with a department: its name' },
-        { header: 'Location', width: 16, note: 'Room or block' },
-        {
-          header: 'Custodian code',
-          width: 12,
-          format: 'text',
-          note: 'The employee code of who keeps it',
-        },
-        { header: 'Condition', width: 10, options: ['good', 'fair', 'poor', 'unserviceable'] },
-        { header: 'Warranty until', width: 12, format: 'text' },
-        { header: 'Vendor', width: 20, note: 'Who supplied it (from the old register)' },
-        { header: 'Reference', width: 16, note: 'The old PO or bill number' },
-      ],
-      guide: [
-        'One row per unit (a set of 40 chairs is 40 rows, or 40 tags).',
-        'Either a store code (kept in the store) or a department (in use); not both.',
-        'The asset joins the register only: the store’s stock is not changed (put it in with opening stock).',
-        'Upload it: every row is checked first, then the good rows are saved.',
-      ],
-      examples: [
-        [
-          'LAPTOP',
-          '',
-          'Lab laptop',
-          'Dell',
-          'Latitude 3420',
-          'SN123',
-          52000,
-          '2023-07-10',
-          '2023-07-15',
-          '',
-          'Computer Science',
-          'Lab 2',
-          'E104',
-          'good',
-          '2026-07-09',
-          'City Computers',
-          'PO 1182',
-        ],
-      ],
-    });
+  /** What the drop-downs offer: "Name (CODE)" for items, stores and staff; names for the rest. */
+  private async importLists(c: PoolClient) {
+    const [items, stores, deps, staff, vendors] = await Promise.all([
+      c.query<{ id: string; code: string; name: string }>(
+        `SELECT id::text, code, name FROM purchase_items WHERE item_type = 'asset' AND status = 'active' ORDER BY name LIMIT 5000`,
+      ),
+      c.query<{ id: string; code: string; name: string }>(
+        `SELECT id::text, code, name FROM stores WHERE status = 'active' ORDER BY (kind = 'main') DESC, name`,
+      ),
+      c.query<{ id: string; name: string }>(
+        `SELECT id::text, name FROM departments WHERE status = 'active' ORDER BY sort_order, name`,
+      ),
+      c.query<{ id: string; code: string; name: string }>(
+        `SELECT id::text, employee_code AS code, display_name AS name FROM employees
+          WHERE deleted_at IS NULL AND status = 'active' AND employee_code IS NOT NULL ORDER BY display_name LIMIT 5000`,
+      ),
+      c.query<{ id: string; name: string }>(
+        `SELECT id::text, legal_name AS name FROM vendors WHERE status = 'active' ORDER BY legal_name LIMIT 5000`,
+      ),
+    ]);
+    const label = (x: { code: string; name: string }) => `${x.name} (${x.code})`;
     return {
-      filename: 'assets-format.xlsx',
-      contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-      base64: bytes.toString('base64'),
+      items: items.rows,
+      stores: stores.rows,
+      deps: deps.rows,
+      staff: staff.rows,
+      vendors: vendors.rows,
+      label,
     };
   }
 
+  async importTemplate(ctx: RequestContext) {
+    this.mustManage(ctx);
+    return this.db.tenant(requireTenant(ctx), async (c) => {
+      const l = await this.importLists(c);
+      const day = (y: number, m: number, d: number) => new Date(Date.UTC(y, m - 1, d));
+      const bytes = await templateSheet({
+        sheet: 'Assets',
+        hideLists: true,
+        columns: [
+          {
+            header: 'Item',
+            width: 34,
+            required: true,
+            options: l.items.map(l.label),
+            note: 'An item of type asset (set up under Purchase → Items). The code in brackets is read; the code alone works too.',
+          },
+          {
+            header: 'Quantity',
+            width: 10,
+            format: 'whole',
+            check: true,
+            max: PurchaseAssetsService.MAX_UNITS,
+            note: 'Empty means 1. More than 1 (40 chairs): that many assets, each with a new tag and QR label; leave Tag and Serial empty.',
+          },
+          {
+            header: 'Tag',
+            width: 16,
+            format: 'text',
+            note: 'The tag already on it (from the old register). Empty: a new AST tag.',
+          },
+          { header: 'Description', width: 28, note: 'What it is, in a few words' },
+          { header: 'Make', width: 16 },
+          { header: 'Model', width: 16 },
+          { header: 'Serial', width: 18, format: 'text', note: 'Its serial number, if it has one' },
+          {
+            header: 'Cost per unit (₹)',
+            width: 16,
+            required: true,
+            format: 'money',
+            check: true,
+            note: 'What one unit cost, in rupees, without the ₹ sign',
+          },
+          {
+            header: 'Acquired on',
+            width: 14,
+            format: 'date',
+            check: true,
+            note: 'The day it was bought, as a date (10-07-2023)',
+          },
+          {
+            header: 'Put to use on',
+            width: 14,
+            format: 'date',
+            check: true,
+            note: 'Depreciation runs from this day (empty: the day bought)',
+          },
+          {
+            header: 'Store',
+            width: 26,
+            options: l.stores.map(l.label),
+            note: 'Kept in a store: pick it. Leave Department empty.',
+          },
+          {
+            header: 'Department',
+            width: 26,
+            options: l.deps.map((x) => x.name),
+            note: 'In use with a department: pick it. Leave Store empty.',
+          },
+          { header: 'Location', width: 20, note: 'Room, lab or block' },
+          {
+            header: 'Custodian',
+            width: 30,
+            options: l.staff.map(l.label),
+            note: 'Who keeps it. The employee code in brackets is read.',
+          },
+          {
+            header: 'Condition',
+            width: 14,
+            options: ['Good', 'Fair', 'Poor', 'Unserviceable'],
+            note: 'Empty means Good',
+          },
+          {
+            header: 'Warranty until',
+            width: 14,
+            format: 'date',
+            check: true,
+          },
+          {
+            header: 'Vendor',
+            width: 28,
+            options: l.vendors.map((x) => x.name),
+            allowNew: true,
+            note: 'Who supplied it. A vendor not in the list: type the name; it is kept as a note.',
+          },
+          { header: 'Bill / PO no.', width: 18, note: 'The old bill or PO number' },
+        ],
+        guide: [
+          'One row per asset; or one row with a Quantity for many alike (40 chairs bought together: Quantity 40). Each unit gets a new tag and QR label.',
+          'A unit with its own old tag or serial number: one row each (Quantity 1 or empty).',
+          'Pick the Item, Store, Department, Custodian, Condition and Vendor from the drop-down (in Excel, click the cell, then the arrow; newer Excel finds as you type). The code in brackets is what is read.',
+          'Kept in a store: pick the Store. In use: pick the Department, and the Location and Custodian. Not both a store and a department.',
+          'Cost per unit in rupees. Dates as dates (10-07-2023). Depreciation runs from Put to use on, else the day bought.',
+          'Assets lying in a store can instead go in as that store’s opening stock (Purchase → Stores → the store → Post opening stock): that puts the stock in and makes the assets too. Use one way, not both, or they are counted twice.',
+          'Upload the sheet and press Check: every row is checked first and its problems shown; then save the good rows.',
+        ],
+        // made-up rows (the Example sheet is never read), the same shape as the drop-downs' values
+        examples: [
+          [
+            'Laptop (LAPTOP)',
+            1,
+            null,
+            'Computer lab laptop',
+            'Dell',
+            'Latitude 3420',
+            'SN123',
+            52000,
+            day(2023, 7, 10),
+            day(2023, 7, 15),
+            null,
+            'Computer Science',
+            'Computer lab 2',
+            'Teacher name (E104)',
+            'Good',
+            day(2026, 7, 9),
+            'City Computers',
+            'PO 1182',
+          ],
+          [
+            'Student chair (CHAIR)',
+            40,
+            null,
+            'Classroom chairs',
+            'Godrej',
+            null,
+            null,
+            1800,
+            day(2022, 4, 5),
+            day(2022, 4, 5),
+            null,
+            'Primary wing',
+            'Block A',
+            null,
+            'Fair',
+            null,
+            'Local supplier',
+            'Bill 77',
+          ],
+          [
+            'Projector (PROJ)',
+            1,
+            'OLD-0042',
+            'Spare projector',
+            'Epson',
+            'EB-X51',
+            'X51-998',
+            35000,
+            day(2021, 1, 20),
+            null,
+            'Main store (MAIN)',
+            null,
+            null,
+            null,
+            'Good',
+            null,
+            null,
+            null,
+          ],
+        ],
+      });
+      return {
+        filename: 'assets-format.xlsx',
+        contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        base64: bytes.toString('base64'),
+      };
+    });
+  }
+
+  /**
+   * Existing assets from the sheet: every row checked (the item, store or department, custodian, vendor
+   * as picked or typed; the quantity, cost and dates; tags and serial numbers not used already), then the
+   * good rows saved — a row of Quantity 40 makes 40 assets with new tags. The store's stock is not changed.
+   */
   async importAssets(ctx: RequestContext, dto: AssetImportDto) {
     this.mustManage(ctx);
-    const rows = await readSheet(
-      dto.file,
-      ['Item code', 'Cost'],
-      PurchaseAssetsService.COLUMNS.filter((k) => !['Item code', 'Cost'].includes(k)),
-    );
+    const N = PurchaseAssetsService.NAMES;
+    const rows = await readSheet(dto.file, [], PurchaseAssetsService.OPTIONAL, [
+      [...N.item],
+      [...N.cost],
+    ]);
+    const pick = (cells: Record<string, string>, names: readonly string[]) =>
+      names.map((n) => (cells[n] ?? '').trim()).find(Boolean) ?? '';
+    /** the code of "Name (CODE)", or the cell as typed */
+    const inBrackets = (v: string) => /\(([^()]+)\)\s*$/.exec(v)?.[1]?.trim() ?? v.trim();
     return this.db.tenant(requireTenant(ctx), async (c) => {
-      const items = new Map(
+      const l = await this.importLists(c);
+      /** found by code (or the code in brackets), else by the name when only one has it */
+      const finder = (xs: Array<{ id: string; code: string; name: string }>) => {
+        const byCode = new Map(xs.map((x) => [x.code.toUpperCase(), x]));
+        const byName = new Map<string, (typeof xs)[number] | null>();
+        for (const x of xs) {
+          const k = x.name.toLowerCase();
+          byName.set(k, byName.has(k) ? null : x);
+        }
+        return (v: string) =>
+          byCode.get(inBrackets(v).toUpperCase()) ??
+          byCode.get(v.trim().toUpperCase()) ??
+          byName.get(v.trim().toLowerCase()) ??
+          undefined;
+      };
+      const itemOf = finder(l.items);
+      // an inactive asset item, or one of another type, is told apart from a typing mistake
+      const allItems = new Map(
         (
-          await c.query<{ id: string; code: string }>(
-            `SELECT id::text, upper(code) AS code FROM purchase_items WHERE item_type = 'asset'`,
+          await c.query<{ code: string; item_type: string; status: string }>(
+            `SELECT upper(code) AS code, item_type, status FROM purchase_items`,
           )
-        ).rows.map((r) => [r.code, r.id]),
+        ).rows.map((r) => [r.code, r]),
       );
-      const stores = new Map(
-        (
-          await c.query<{ id: string; code: string }>(
-            `SELECT id::text, upper(code) AS code FROM stores`,
-          )
-        ).rows.map((r) => [r.code, r.id]),
-      );
-      const deps = new Map(
-        (
-          await c.query<{ id: string; name: string }>(
-            `SELECT id::text, lower(name) AS name FROM departments WHERE status = 'active'`,
-          )
-        ).rows.map((r) => [r.name, r.id]),
-      );
-      const staff = new Map(
-        (
-          await c.query<{ id: string; code: string }>(
-            `SELECT id::text, upper(employee_code) AS code FROM employees WHERE deleted_at IS NULL`,
-          )
-        ).rows.map((r) => [r.code, r.id]),
-      );
+      const storeOf = finder(l.stores);
+      const staffOf = finder(l.staff);
+      const deps = new Map(l.deps.map((d) => [d.name.toLowerCase(), d.id]));
+      const vendors = new Map(l.vendors.map((v) => [v.name.toLowerCase(), v]));
       const tags = new Set(
         (await c.query<{ tag: string }>(`SELECT upper(tag) AS tag FROM assets`)).rows.map(
           (r) => r.tag,
         ),
       );
+      const serials = new Set(
+        (
+          await c.query<{ k: string }>(
+            `SELECT item_id::text || '|' || upper(serial_no) AS k FROM assets WHERE serial_no IS NOT NULL AND status <> 'returned'`,
+          )
+        ).rows.map((r) => r.k),
+      );
+      const today = istToday();
       const day = (v: string) => {
         const t = (v ?? '').trim();
         if (!t) return null;
-        if (/^\d{2}-\d{2}-\d{4}$/.test(t)) return t.split('-').reverse().join('-');
-        return /^\d{4}-\d{2}-\d{2}$/.test(t) ? t : 'bad';
+        const m = /^(\d{1,2})[-/.](\d{1,2})[-/.](\d{4})$/.exec(t);
+        const iso = m ? `${m[3]}-${m[2]!.padStart(2, '0')}-${m[1]!.padStart(2, '0')}` : t;
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(iso)) return 'bad';
+        const d = new Date(`${iso}T00:00:00Z`);
+        return Number.isNaN(d.getTime()) || d.toISOString().slice(0, 10) !== iso ? 'bad' : iso;
       };
-      const results: Array<{ row: number; tag: string; ok: boolean; error?: string }> = [];
-      const good: Array<Record<string, string | null>> = [];
-      const seen = new Set<string>();
+      const results: Array<{
+        row: number;
+        item: string;
+        units: number;
+        tag: string;
+        cost: number;
+        ok: boolean;
+        error?: string;
+      }> = [];
+      const good: Array<{
+        at: number;
+        units: number;
+        rec: Record<string, string | null>;
+      }> = [];
+      const seenTags = new Set<string>();
+      const seenSerials = new Set<string>();
+      let fileUnits = 0;
       for (const { row, cells } of rows) {
-        const code = (cells['Item code'] ?? '').trim().toUpperCase();
-        if (!code && !cells['Cost']) continue;
+        const itemCell = pick(cells, N.item);
+        const costCell = pick(cells, N.cost);
+        if (!itemCell && !costCell) continue;
         const problems: string[] = [];
-        const itemId = items.get(code);
-        if (!itemId) problems.push(`no asset item has the code ${code || '(empty)'}`);
-        const cost = Number((cells['Cost'] ?? '').replace(/,/g, ''));
-        if (!Number.isFinite(cost) || cost < 0) problems.push('the cost is not a number');
+        const item = itemCell ? itemOf(itemCell) : undefined;
+        if (!itemCell) problems.push('pick the item');
+        else if (!item) {
+          const other = allItems.get(inBrackets(itemCell).toUpperCase());
+          problems.push(
+            !other
+              ? `no asset item is ${itemCell}`
+              : other.item_type !== 'asset'
+                ? `${itemCell} is not an item of type asset (its assets are not tracked one by one)`
+                : `${itemCell} is switched off`,
+          );
+        }
+        const qtyCell = (cells['Quantity'] ?? '').trim();
+        const units = qtyCell ? Number(qtyCell) : 1;
+        if (!Number.isInteger(units) || units < 1 || units > PurchaseAssetsService.MAX_UNITS)
+          problems.push(
+            `the quantity is a whole number from 1 to ${String(PurchaseAssetsService.MAX_UNITS)}`,
+          );
+        const cost = Number(costCell.replace(/[₹,\s]/g, ''));
+        if (!costCell) problems.push('give the cost per unit');
+        else if (!Number.isFinite(cost) || cost < 0) problems.push('the cost is not a number');
         const tag = (cells['Tag'] ?? '').trim();
-        if (tag && (tags.has(tag.toUpperCase()) || seen.has(tag.toUpperCase())))
+        const serial = (cells['Serial'] ?? '').trim();
+        if (units > 1 && (tag || serial))
+          problems.push(
+            'a row of more than 1 makes new tags: leave Tag and Serial empty, or give each unit its own row',
+          );
+        if (tag && (tags.has(tag.toUpperCase()) || seenTags.has(tag.toUpperCase())))
           problems.push(`tag ${tag} is used already`);
-        const storeCode = (cells['Store code'] ?? '').trim().toUpperCase();
-        const storeId = storeCode ? stores.get(storeCode) : undefined;
-        if (storeCode && !storeId) problems.push(`no store has the code ${storeCode}`);
-        const depName = (cells['Department'] ?? '').trim().toLowerCase();
-        const departmentId = depName ? deps.get(depName) : undefined;
-        if (depName && !departmentId)
-          problems.push(`no department is called ${cells['Department'] ?? ''}`);
-        if (storeId && departmentId) problems.push('either a store or a department, not both');
-        if (!storeId && !departmentId) problems.push('give the store code or the department');
-        const custCode = (cells['Custodian code'] ?? '').trim().toUpperCase();
-        const custodianId = custCode ? staff.get(custCode) : undefined;
-        if (custCode && !custodianId) problems.push(`no employee has the code ${custCode}`);
+        if (item && serial) {
+          const k = `${item.id}|${serial.toUpperCase()}`;
+          if (serials.has(k) || seenSerials.has(k))
+            problems.push(`serial ${serial} is on another ${item.name} already`);
+          seenSerials.add(k);
+        }
+        const storeCell = pick(cells, N.store);
+        const store = storeCell ? storeOf(storeCell) : undefined;
+        if (storeCell && !store) problems.push(`no store is ${storeCell}`);
+        const depCell = (cells['Department'] ?? '').trim();
+        const departmentId = depCell ? deps.get(depCell.toLowerCase()) : undefined;
+        if (depCell && !departmentId) problems.push(`no department is called ${depCell}`);
+        if (storeCell && depCell) problems.push('either a store or a department, not both');
+        if (!storeCell && !depCell) problems.push('pick the store or the department');
+        const custCell = pick(cells, N.custodian);
+        const custodian = custCell ? staffOf(custCell) : undefined;
+        if (custCell && !custodian) problems.push(`no employee is ${custCell}`);
         const condition = (cells['Condition'] ?? '').trim().toLowerCase() || 'good';
         if (!['good', 'fair', 'poor', 'unserviceable'].includes(condition))
-          problems.push('the condition is good, fair, poor or unserviceable');
+          problems.push('the condition is Good, Fair, Poor or Unserviceable');
         const dates = {
           acquired: day(cells['Acquired on'] ?? ''),
           putToUse: day(cells['Put to use on'] ?? ''),
           warranty: day(cells['Warranty until'] ?? ''),
         };
         if (Object.values(dates).includes('bad'))
-          problems.push('a date is not YYYY-MM-DD or DD-MM-YYYY');
-        if (tag) seen.add(tag.toUpperCase());
+          problems.push('a date is not a date (10-07-2023)');
+        else {
+          if (
+            (dates.acquired && dates.acquired > today) ||
+            (dates.putToUse && dates.putToUse > today)
+          )
+            problems.push('bought or put to use after today');
+          if (dates.acquired && dates.putToUse && dates.putToUse < dates.acquired)
+            problems.push('put to use before it was bought');
+        }
+        if (tag) seenTags.add(tag.toUpperCase());
+        const shown = item ? `${item.name} (${item.code})` : itemCell;
         if (problems.length) {
-          results.push({ row, tag, ok: false, error: problems.join('; ') });
+          results.push({
+            row,
+            item: shown,
+            units: Number.isInteger(units) ? units : 0,
+            tag,
+            cost: 0,
+            ok: false,
+            error: problems.join('; '),
+          });
           continue;
         }
-        results.push({ row, tag, ok: true });
+        fileUnits += units;
+        const vendorCell = (cells['Vendor'] ?? '').trim();
+        const vendor = vendorCell ? vendors.get(vendorCell.toLowerCase()) : undefined;
+        const reference = pick(cells, N.reference);
+        results.push({ row, item: shown, units, tag, cost: r2(cost * units), ok: true });
         good.push({
-          itemId: itemId!,
-          tag: tag || null,
-          description: (cells['Description'] ?? '').trim().slice(0, 300) || null,
-          make: (cells['Make'] ?? '').trim().slice(0, 80) || null,
-          model: (cells['Model'] ?? '').trim().slice(0, 80) || null,
-          serial: (cells['Serial'] ?? '').trim().slice(0, 60) || null,
-          cost: String(cost),
-          acquired: dates.acquired,
-          putToUse: dates.putToUse ?? (departmentId ? dates.acquired : null),
-          storeId: storeId ?? null,
-          departmentId: departmentId ?? null,
-          location: (cells['Location'] ?? '').trim().slice(0, 120) || null,
-          custodianId: custodianId ?? null,
-          condition,
-          warranty: dates.warranty,
-          source:
-            [cells['Vendor'], cells['Reference']]
-              .map((x) => (x ?? '').trim())
-              .filter(Boolean)
-              .join(' · ')
-              .slice(0, 300) || 'From the old register',
+          at: results.length - 1,
+          units,
+          rec: {
+            itemId: item!.id,
+            tag: tag || null,
+            description: (cells['Description'] ?? '').trim().slice(0, 300) || null,
+            make: (cells['Make'] ?? '').trim().slice(0, 80) || null,
+            model: (cells['Model'] ?? '').trim().slice(0, 80) || null,
+            serial: serial.slice(0, 60) || null,
+            cost: String(cost),
+            acquired: dates.acquired,
+            putToUse: dates.putToUse ?? (departmentId ? dates.acquired : null),
+            storeId: store?.id ?? null,
+            departmentId: departmentId ?? null,
+            location: (cells['Location'] ?? '').trim().slice(0, 120) || null,
+            custodianId: custodian?.id ?? null,
+            condition,
+            warranty: dates.warranty,
+            vendorId: vendor?.id ?? null,
+            source:
+              [vendor ? '' : vendorCell, reference].filter(Boolean).join(' · ').slice(0, 300) ||
+              'From the old register',
+          },
         });
       }
-      if (dto.dryRun) return { rows: results, saved: 0 };
+      if (fileUnits > PurchaseAssetsService.MAX_FILE_UNITS)
+        throw new DomainError(
+          'validation-failed',
+          `The sheet makes ${fileUnits.toLocaleString('en-IN')} assets; up to ${PurchaseAssetsService.MAX_FILE_UNITS.toLocaleString('en-IN')} at a time: split the file`,
+          { status: 400 },
+        );
+      const totals = {
+        units: results.filter((r) => r.ok).reduce((a, r) => a + r.units, 0),
+        cost: r2(results.filter((r) => r.ok).reduce((a, r) => a + r.cost, 0)),
+      };
+      if (dto.dryRun) return { rows: results, saved: 0, ...totals };
       let saved = 0;
       for (const g of good) {
-        const tag =
-          g.tag ??
-          (await c.query<{ n: string }>(`SELECT app.purchase_next_number('asset') AS n`)).rows[0]!
-            .n;
+        const a = g.rec;
         await c.query('SAVEPOINT asset_import');
         try {
-          const id = (
-            await c.query<{ id: string }>(
-              `INSERT INTO assets (school_id, tag, item_id, description, make, model, serial_no, cost, acquired_on, put_to_use_on, status,
-                                   store_id, department_id, location, custodian_employee_id, condition, warranty_until, source_note, created_by)
-               VALUES (app.current_school_id(), $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, app.current_user_id())
-               RETURNING id::text`,
-              [
-                tag,
-                g.itemId,
-                g.description,
-                g.make,
-                g.model,
-                g.serial,
-                g.cost,
-                g.acquired,
-                g.putToUse,
-                g.storeId ? 'in_store' : 'in_use',
-                g.storeId,
-                g.departmentId,
-                g.location,
-                g.custodianId,
-                g.condition,
-                g.warranty,
-                g.source,
-              ],
-            )
-          ).rows[0]!.id;
-          await c.query(
-            `INSERT INTO asset_movements (school_id, asset_id, kind, to_store_id, to_department_id, to_custodian_id, note, created_by)
-             VALUES (app.current_school_id(), $1, 'imported', $2, $3, $4, $5, app.current_user_id())`,
-            [id, g.storeId, g.departmentId, g.custodianId, g.source],
-          );
+          for (let k = 0; k < g.units; k += 1) {
+            const tag =
+              a.tag ??
+              (await c.query<{ n: string }>(`SELECT app.purchase_next_number('asset') AS n`))
+                .rows[0]!.n;
+            const id = (
+              await c.query<{ id: string }>(
+                `INSERT INTO assets (school_id, tag, item_id, description, make, model, serial_no, cost, acquired_on, put_to_use_on, status,
+                                     store_id, department_id, location, custodian_employee_id, condition, warranty_until, vendor_id, source_note, created_by)
+                 VALUES (app.current_school_id(), $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, app.current_user_id())
+                 RETURNING id::text`,
+                [
+                  tag,
+                  a.itemId,
+                  a.description,
+                  a.make,
+                  a.model,
+                  a.serial,
+                  a.cost,
+                  a.acquired,
+                  a.putToUse,
+                  a.storeId ? 'in_store' : 'in_use',
+                  a.storeId,
+                  a.departmentId,
+                  a.location,
+                  a.custodianId,
+                  a.condition,
+                  a.warranty,
+                  a.vendorId,
+                  a.source,
+                ],
+              )
+            ).rows[0]!.id;
+            await c.query(
+              `INSERT INTO asset_movements (school_id, asset_id, kind, to_store_id, to_department_id, to_custodian_id, note, created_by)
+               VALUES (app.current_school_id(), $1, 'imported', $2, $3, $4, $5, app.current_user_id())`,
+              [id, a.storeId, a.departmentId, a.custodianId, a.source],
+            );
+          }
           await c.query('RELEASE SAVEPOINT asset_import');
-          saved += 1;
+          saved += g.units;
         } catch (e) {
           await c.query('ROLLBACK TO SAVEPOINT asset_import');
           if ((e as { code?: string }).code !== '23505') throw e;
-          const r = results.find((x) => x.ok && x.tag === (g.tag ?? ''));
-          if (r)
-            Object.assign(r, {
-              ok: false,
-              error: 'the serial number is on another asset of the item',
-            });
+          Object.assign(results[g.at]!, {
+            ok: false,
+            error: 'the tag or serial number is on another asset already',
+          });
         }
       }
       await this.audit.stage(ctx, c, {
         action: 'purchase.asset.import',
         entityType: 'assets',
         entityId: '0',
-        after: { saved },
+        after: { saved, rows: good.length },
       });
-      return { rows: results, saved };
+      return {
+        rows: results,
+        saved,
+        units: results.filter((r) => r.ok).reduce((a, r) => a + r.units, 0),
+        cost: r2(results.filter((r) => r.ok).reduce((a, r) => a + r.cost, 0)),
+      };
     });
   }
 

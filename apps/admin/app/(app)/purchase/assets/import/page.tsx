@@ -15,7 +15,7 @@ export default function AssetImportPage() {
       <PageHeader
         kicker="Purchase · Assets"
         title="Import from Excel"
-        description="One row per unit: the item (an item of type asset), the tag already on it (or empty for a new one), make, model, serial, what it cost, when bought and put to use, the store or the department with the room and who keeps it, condition, warranty, and where it came from. Every row is checked first; then the good ones are saved. The store's stock is not changed."
+        description="Assets you already have, from the old register, into the asset register. The format has drop-downs for the item, store or department, custodian, condition and vendor from your set-up; one row per asset, or one row with a Quantity for many alike (each gets a new tag and QR label). Every row is checked first; then the good ones are saved. The store's stock is not changed."
       />
       <AssetImport />
     </>

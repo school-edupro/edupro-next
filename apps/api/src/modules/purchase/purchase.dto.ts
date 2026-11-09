@@ -1263,8 +1263,20 @@ export const AssetListQuerySchema = z.object({
     .optional()
     .transform((v) => v === '1'),
   page: z.coerce.number().int().min(1).max(10000).default(1),
+  /** assets a page: 25, 50 or 100 */
+  size: z.coerce
+    .number()
+    .int()
+    .refine((v) => [25, 50, 100].includes(v), '25, 50 or 100 a page')
+    .default(50),
 });
 export class AssetListQueryDto extends createZodDto(AssetListQuerySchema) {}
+
+/** The asset master as filtered on the page, as Excel (every field, totals by category) or PDF. */
+export const AssetExportQuerySchema = AssetListQuerySchema.extend({
+  format: z.enum(['xlsx', 'pdf']).default('xlsx'),
+});
+export class AssetExportQueryDto extends createZodDto(AssetExportQuerySchema) {}
 
 export const AssetLabelsSchema = z.object({ ids: z.array(IdSchema).min(1).max(600) });
 export class AssetLabelsDto extends createZodDto(AssetLabelsSchema) {}

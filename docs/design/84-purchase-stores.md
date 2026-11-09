@@ -581,3 +581,49 @@ did not say who. The user's choices: levels on Who approves; five tabs; server p
   rate correction — the school admin refused, the named teacher outside the stores sees and approves
   them — and the pages: stock, one item, the opening lines, a count's page and default view); the count
   test in `purchase-issues` updated (decide returns the status).
+
+## As built — the asset master and the import format (9 Nov 2026)
+
+Asked: the asset import format was not formatted; the Assets page needed an asset master Excel. Benchmarked
+on the register columns Indian guidance asks for (tag, category, make/model/serial, supplier and bill,
+cost, depreciation, written-down value, location, custodian, condition), GFR 2017 form GFR-22, and school
+and asset tools that bulk-load with a quantity and export the register (d6 School, Snipe-IT). Decided
+(9 Nov 2026): drop-downs and real cells; a Quantity column; the register with totals by category, and a
+PDF; figures and pages on the Assets page.
+
+- **The format** (`GET purchase/assets-format`): Item (asset items as "Name (CODE)"), Quantity (whole,
+  1–500), Tag, Description, Make, Model, Serial, Cost per unit (₹) (number ≥ 0), Acquired on, Put to use
+  on, Store ("Name (CODE)"), Department (names), Location, Custodian (staff as "Name (CODE)"), Condition
+  (Good / Fair / Poor / Unserviceable), Warranty until, Vendor (names; a new name only warns), Bill / PO
+  no. The drop-downs sit on a hidden Lists sheet; dates and money are checked as typed (Excel data
+  validation); the Example sheet has three made-up rows (in use with a custodian, 40 alike, an old tag in
+  a store) and is never read. The shared `templateSheet` gained `format: 'money' | 'whole'`, `check`
+  (date, number, whole-number validation), `max` and `hideLists`; examples may carry dates.
+- **The import** (`POST purchase/assets-import`): reads the format or the older one (`Item code`, `Cost`,
+  `Store code`, `Custodian code`, `Reference`) — `readSheet` gained `oneOf`, header groups of which the
+  sheet must have one. Item, store and custodian are found by the code in brackets, the code, or a name
+  only one has; the department by name; a vendor by its legal name (linked as `vendor_id`; else kept in
+  the source note with the bill / PO). A row of Quantity n makes n assets with new tags (Tag and Serial
+  must be empty); up to 500 a row and 5,000 a file. Row problems are told together: not an asset item or
+  switched off, a tag or serial number already used (in the register or earlier in the file), store and
+  department both or neither, a date that is not a date, bought or put to use after today, put to use
+  before bought. Each row saves in its own savepoint. The result gives each row's item, units, tag and
+  cost, and the totals (`units`, `cost`).
+- **The asset master** (`GET purchase/assets/export?format=xlsx|pdf` + the page's filters; store viewers
+  and the asset office; admin route `/api/purchase/assets-file`, which goes back to the page with the
+  reason when the file would pass 5,000 assets): `purchaseListFile` with the letterhead and the filters in
+  words. Excel: 27 columns (tag, item code and name, category, description, make, model, serial, vendor,
+  bill / PO / receipt, acquired, put to use, cost, depreciation so far, book value, status, store,
+  department, location, custodian and employee code, condition, warranty, insurer, policy, insured value,
+  insurance renewal) with a total row, and a **By category** sheet (assets, cost, depreciation, book
+  value, total). `purchaseListFile`'s second sheet may now carry its own tab, title and totals. PDF: tag,
+  item, make / model / serial, acquired, cost, book value, where, custodian, condition, status.
+- **The Assets page**: six figures over what the filters find (assets, cost, book value, depreciation so
+  far, under repair or lost, warranty or insurance ending in 60 days with **show them**); an Item filter
+  added; 25 / 50 / 100 a page (`size`, default 50; the page used to show only the first 100 with no
+  pager); Excel and PDF with the filters. The pager is the shared `components/Pager.tsx` (the store page
+  uses it too).
+- Tests: `purchase-assets.e2e-spec.ts` (the format's sheets, headings, drop-down lists and validations;
+  label and code values; Quantity, row problems, vendor link; the older format; a sheet without the item
+  column refused; paging and figures; the master's columns, totals and By category; PDF; a teacher
+  refused).

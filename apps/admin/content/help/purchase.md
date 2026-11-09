@@ -714,10 +714,44 @@ Every unit of an **asset item** (item type asset) has its own record with a **ta
   to a repairer, back with the cost), **lost** and **found**, and keeps the make, model, condition,
   warranty and insurance;
 - **Print QR labels** for the ticked assets (24 to an A4 sheet);
-- existing assets come in from the old register by **Import from Excel** (one row per unit; the store's
-  stock is not changed);
+- existing assets come in from the old register by **Import from Excel** (the store's stock is not
+  changed): see below;
 - an employee's assets show on their page (**Assets in care**) and on the **exit clearance**: they come
   back before the employee leaves.
+
+**The Assets page** shows figures over what the filters find — how many assets, their cost, book value,
+the depreciation so far, how many are under repair or lost, and how many have a warranty or insurance
+ending in the next 60 days (**show them**). Filter by status, item, category, department, store,
+custodian or a search (tag, serial, item, place, custodian); the register shows 25, 50 or 100 a page.
+**Excel** downloads the **asset master** as filtered — every page, up to 5,000 assets — on the school
+letterhead: tag, item, category, description, make, model, serial number, vendor, bill / PO / receipt,
+the dates bought and put to use, cost, depreciation so far, book value, status, store, department,
+location, custodian and employee code, condition, warranty and insurance, with a total row; a second
+sheet, **By category**, totals the assets, cost, depreciation and book value of each category for the
+auditor. **PDF** prints a narrower register of the same assets.
+
+**Import from Excel** (Assets → Import from Excel):
+
+1. **Download the format.** The Item, Store, Department, Custodian, Condition and Vendor columns are
+   drop-downs from your set-up (click the cell, then the arrow; newer Excel finds as you type). The
+   code in brackets is what is read; a code typed by hand works too. Dates and the cost are real date
+   and number cells: Excel refuses a wrong one as you type. The **Example** sheet shows three filled
+   rows (it is never read).
+2. **One row per asset**, or **one row with a Quantity** for many alike — 40 chairs bought together: one
+   row, Quantity 40, Tag and Serial empty; each unit gets a new tag and QR label. A unit with its own
+   old tag or serial number is a row of its own.
+3. Kept in a store: pick the **Store**. In use: pick the **Department**, and the Location and
+   Custodian. Not both.
+4. Choose the filled sheet and press **Check**: each row shows its item, how many assets it makes and
+   their cost, or what is wrong (an item that is not an asset item, a tag or serial number already used,
+   a quantity above 1 with a tag, put to use before it was bought, a date after today…). Nothing is saved
+   yet. Correct the rows in Excel and check again, or **Save** the good rows.
+5. A vendor picked from the list is linked to the asset; one typed by hand is kept as a note with the
+   bill or PO number.
+
+Assets lying in a store can instead go in as that store's **opening stock**, which puts the stock in
+and makes the assets too: use one way, not both. A sheet downloaded before 9 Nov 2026 (codes typed,
+"Cost", "Store code") is still read.
 
 **Depreciation** (Assets → Depreciation): each item category has its method on Purchase set-up → Item
 categories — **straight line** over the useful life down to the salvage % (5% if not set), or

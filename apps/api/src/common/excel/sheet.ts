@@ -11,10 +11,60 @@ export interface TemplateColumn {
   allowNew?: boolean;
   /** Shown as a note on the heading cell. */
   note?: string;
-  /** Cell format for the column: text keeps leading zeros (accession nos.), date as dd-mm-yyyy. */
-  format?: 'text' | 'date' | 'number';
+  /**
+   * Cell format for the column: text keeps leading zeros (accession nos.), date as dd-mm-yyyy, money
+   * as 1,23,456.00, whole for counts.
+   */
+  format?: 'text' | 'date' | 'number' | 'money' | 'whole';
+  /**
+   * Excel refuses a wrong value as it is typed: a date column only a date (1950 to 2100), money and
+   * number only a number of at least 0, whole only a whole number from 1 to `max`.
+   */
+  check?: boolean;
+  /** the largest whole number a checked `whole` column takes */
+  max?: number;
 }
 const ROWS = 500;
+const FORMATS: Record<NonNullable<TemplateColumn['format']>, string> = {
+  text: '@',
+  date: 'dd-mm-yyyy',
+  number: '0.##',
+  money: '#,##0.00',
+  whole: '0',
+};
+
+/** The data validation behind a checked column (see `TemplateColumn.check`). */
+function checkOf(c: TemplateColumn): ExcelJS.DataValidation | null {
+  const base = { allowBlank: !c.required, showErrorMessage: true, errorStyle: 'stop' as const };
+  if (c.format === 'date')
+    return {
+      ...base,
+      type: 'date',
+      operator: 'between',
+      formulae: [new Date(Date.UTC(1950, 0, 1)), new Date(Date.UTC(2100, 11, 31))],
+      errorTitle: c.header,
+      error: 'Type a date, like 10-07-2023',
+    };
+  if (c.format === 'money' || c.format === 'number')
+    return {
+      ...base,
+      type: 'decimal',
+      operator: 'greaterThanOrEqual',
+      formulae: [0],
+      errorTitle: c.header,
+      error: 'Type a number (0 or more), without the ₹ sign',
+    };
+  if (c.format === 'whole')
+    return {
+      ...base,
+      type: 'whole',
+      operator: 'between',
+      formulae: [1, c.max ?? 100000],
+      errorTitle: c.header,
+      error: `Type a whole number from 1 to ${String(c.max ?? 100000)}`,
+    };
+  return null;
+}
 
 /**
  * A title made safe as an Excel sheet name: Excel refuses * ? : \ / [ ], a leading or trailing
@@ -42,7 +92,9 @@ export async function templateSheet(t: {
   /** Rows already there, so the sheet can be corrected and uploaded again. */
   rows?: Array<Array<string | number | null>>;
   /** Filled-in sample rows, put on their own "Example" sheet (never read on upload). */
-  examples?: Array<Array<string | number | null>>;
+  examples?: Array<Array<string | number | Date | null>>;
+  /** the Lists sheet (behind the drop-downs) hidden, so the file opens on the sheet to fill */
+  hideLists?: boolean;
 }): Promise<Buffer> {
   const wb = new ExcelJS.Workbook();
   const ws = wb.addWorksheet(sheetName(t.sheet));
@@ -77,12 +129,19 @@ export async function templateSheet(t: {
   ws.views = [{ state: 'frozen', ySplit: 1 }];
   ws.autoFilter = { from: { row: 1, column: 1 }, to: { row: 1, column: t.columns.length } };
   (t.rows ?? []).forEach((r) => ws.addRow(r));
+  const formatOf = (sheet: ExcelJS.Worksheet, c: TemplateColumn, i: number) => {
+    const fmt = c.format ? FORMATS[c.format] : undefined;
+    if (fmt) sheet.getColumn(i + 1).numFmt = fmt;
+  };
   let listCol = 0;
   t.columns.forEach((c, i) => {
     ws.getColumn(i + 1).width = c.width;
-    if (c.format === 'text') ws.getColumn(i + 1).numFmt = '@';
-    if (c.format === 'date') ws.getColumn(i + 1).numFmt = 'dd-mm-yyyy';
-    if (c.format === 'number') ws.getColumn(i + 1).numFmt = '0.##';
+    formatOf(ws, c, i);
+    const rule = !c.options && c.check ? checkOf(c) : null;
+    if (rule) {
+      const col = ws.getColumn(i + 1).letter;
+      for (let r = 2; r <= ROWS + 1; r += 1) ws.getCell(`${col}${String(r)}`).dataValidation = rule;
+    }
     if (!c.options) return;
     listCol += 1;
     const letter = lists.getColumn(listCol).letter;
@@ -109,12 +168,14 @@ export async function templateSheet(t: {
   });
   lists.getRow(1).font = { bold: true };
   lists.views = [{ state: 'frozen', ySplit: 1 }];
+  if (t.hideLists && listCol) lists.state = 'hidden';
   if (t.examples?.length) {
     const ex = wb.addWorksheet('Example');
     head(ex);
     t.examples.forEach((r) => ex.addRow(r));
     t.columns.forEach((c, i) => {
       ex.getColumn(i + 1).width = c.width;
+      formatOf(ex, c, i);
     });
     ex.views = [{ state: 'frozen', ySplit: 1 }];
   }
@@ -153,6 +214,11 @@ export async function readSheet(
   headers: string[],
   /** columns read when the sheet has them (an older format may not): '' when absent */
   optional: string[] = [],
+  /**
+   * Groups of names one column may go by (the format's heading, then an older one's): the sheet must have
+   * one of each group. List them in `optional` too.
+   */
+  oneOf: string[][] = [],
 ): Promise<Array<{ row: number; cells: Record<string, string> }>> {
   const wb = new ExcelJS.Workbook();
   try {
@@ -170,7 +236,10 @@ export async function readSheet(
       .toLowerCase(),
   );
   const at = headers.map((h) => found.indexOf(h.toLowerCase()));
-  const missing = headers.filter((_, i) => at[i] === -1);
+  const missing = [
+    ...headers.filter((_, i) => at[i] === -1),
+    ...oneOf.filter((g) => !g.some((h) => found.includes(h.toLowerCase()))).map((g) => g[0]!),
+  ];
   if (missing.length)
     throw new DomainError(
       'validation-failed',

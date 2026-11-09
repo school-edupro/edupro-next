@@ -12,6 +12,7 @@ import { PurchaseReorderService } from './purchase-reorder.service';
 import {
   AcknowledgeDto,
   AssetDto,
+  AssetExportQueryDto,
   AssetImportDto,
   AssetListQueryDto,
   AssetMoveDto,
@@ -111,6 +112,16 @@ export class PurchaseAssetsController {
         status: 400,
       });
     pdf(reply, save, await this.assets.labels(ctx, list));
+  }
+
+  @Get('assets/export')
+  @ApiOperation({
+    summary:
+      'The asset master as filtered (every page): Excel with every field and totals by category, or PDF',
+  })
+  @AuthenticatedOnly()
+  exportRegister(@ReqCtx() ctx: RequestContext, @Query() q: AssetExportQueryDto) {
+    return this.assets.exportRegister(ctx, q);
   }
 
   @Get('assets-format')

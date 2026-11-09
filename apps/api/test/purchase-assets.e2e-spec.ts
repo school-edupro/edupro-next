@@ -353,27 +353,74 @@ describe('purchase assets, depreciation, reorder and condemnation (e2e)', () => 
     const f = (await call(office, 'GET', '/purchase/assets-format')).json();
     const wb = new ExcelJS.Workbook();
     await wb.xlsx.load(Buffer.from(f.base64, 'base64') as unknown as ArrayBuffer);
+    // the format: drop-downs from the set-up (on a hidden Lists sheet), checked number and date cells
+    expect(wb.worksheets.map((w) => [w.name, w.state])).toEqual([
+      ['Assets', 'visible'],
+      ['Lists', 'hidden'],
+      ['How to fill', 'visible'],
+      ['Example', 'visible'],
+    ]);
     const ws = wb.worksheets[0]!;
-    const row = (n: number, v: Array<string | number>) =>
+    expect((ws.getRow(1).values as unknown[]).slice(1)).toEqual([
+      'Item *',
+      'Quantity',
+      'Tag',
+      'Description',
+      'Make',
+      'Model',
+      'Serial',
+      'Cost per unit (₹) *',
+      'Acquired on',
+      'Put to use on',
+      'Store',
+      'Department',
+      'Location',
+      'Custodian',
+      'Condition',
+      'Warranty until',
+      'Vendor',
+      'Bill / PO no.',
+    ]);
+    expect(ws.getCell('A2').dataValidation.type).toBe('list');
+    expect(ws.getCell('B2').dataValidation.type).toBe('whole');
+    expect(ws.getCell('H2').dataValidation.type).toBe('decimal');
+    expect(ws.getCell('I2').dataValidation.type).toBe('date');
+    const lists = wb.getWorksheet('Lists')!;
+    const listOf = (head: string) => {
+      const col = (lists.getRow(1).values as unknown[]).indexOf(head);
+      const out: string[] = [];
+      lists.getColumn(col).eachCell((c, n) => {
+        if (n > 1 && c.value !== null && c.value !== undefined) out.push(String(c.value));
+      });
+      return out;
+    };
+    expect(listOf('Item')).toEqual(['Laptop (LAP)', 'Student chair (CHAIR)']);
+    expect(listOf('Store')).toContain('Lab store (LAB)');
+    expect(listOf('Custodian')).toContain(`Tara Teacher E2E (${s}T1)`);
+    expect(wb.getWorksheet('Example')!.rowCount).toBe(4);
+    const row = (n: number, v: Array<string | number | Date>) =>
       v.forEach((x, i) => (ws.getRow(n).getCell(i + 1).value = x));
     row(2, [
-      'CHAIR',
+      'Student chair (CHAIR)',
+      '',
       'OLD-001',
       'Chair',
       'Godrej',
       '',
       '',
       2000,
-      '2023-06-01',
+      new Date(Date.UTC(2023, 5, 1)),
       '',
       '',
       'Science',
       'Room 4',
-      `${s}T1`,
-      'good',
+      `Tara Teacher E2E (${s}T1)`,
+      'Good',
     ]);
+    // codes typed by hand still work
     row(3, [
       'CHAIR',
+      '',
       'OLD-002',
       'Chair',
       'Godrej',
@@ -388,13 +435,15 @@ describe('purchase assets, depreciation, reorder and condemnation (e2e)', () => 
       '',
       'poor',
     ]);
-    row(4, ['DESK', '', 'Desk', '', '', '', 1500, '2023-06-01', '', 'MAIN']);
+    row(4, ['DESK', '', '', 'Desk', '', '', '', 1500, '2023-06-01', '', 'MAIN']);
     const file = Buffer.from(await wb.xlsx.writeBuffer()).toString('base64');
     const dry = (
       await call(office, 'POST', '/purchase/assets-import', { file, dryRun: true })
     ).json();
     expect(dry.rows.map((r: { ok: boolean }) => r.ok)).toEqual([true, true, false]);
-    expect(dry.rows[2].error).toContain('no asset item has the code DESK');
+    expect(dry.rows[0]).toMatchObject({ item: 'Student chair (CHAIR)', units: 1, cost: 2000 });
+    expect(dry.rows[2].error).toContain('no asset item is DESK');
+    expect([dry.units, dry.cost]).toEqual([2, 4000]);
     const done = (
       await call(office, 'POST', '/purchase/assets-import', { file, dryRun: false })
     ).json();
@@ -404,6 +453,7 @@ describe('purchase assets, depreciation, reorder and condemnation (e2e)', () => 
       ['OLD-001', 'in_use'],
       ['OLD-002', 'in_store'],
     ]);
+    expect(chairs[0]!.custodian).toBe(ids.T1);
     ids.CH1 = chairs[0]!.id;
     ids.CH2 = chairs[1]!.id;
   });
@@ -563,5 +613,171 @@ describe('purchase assets, depreciation, reorder and condemnation (e2e)', () => 
     const cdn = (await call(admin, 'GET', '/purchase/reports/condemnations')).json();
     expect(cdn.rows).toHaveLength(1);
     expect(cdn.rows[0][8]).toBe('scrap');
+  });
+
+  it('many alike in one row; problems told row by row; the older format still read; the asset master as Excel and PDF', async () => {
+    ids.BENCH = await withMigrator(
+      async (c) =>
+        (
+          await c.query<{ id: string }>(
+            `INSERT INTO purchase_items (school_id, code, name, item_type, category_id, uom_id)
+             VALUES ($1, 'BENCH', 'Bench', 'asset', $2, $3) RETURNING id::text`,
+            [school.id, ids.catFURN, ids.NOS],
+          )
+        ).rows[0]!.id,
+    );
+    const f = (await call(office, 'GET', '/purchase/assets-format')).json();
+    const wb = new ExcelJS.Workbook();
+    await wb.xlsx.load(Buffer.from(f.base64, 'base64') as unknown as ArrayBuffer);
+    const ws = wb.worksheets[0]!;
+    const row = (n: number, v: Array<string | number | Date>) =>
+      v.forEach((x, i) => (ws.getRow(n).getCell(i + 1).value = x));
+    const d = (y: number, m: number, day: number) => new Date(Date.UTC(y, m - 1, day));
+    row(2, [
+      'Bench (BENCH)',
+      3,
+      '',
+      'Hall bench',
+      '',
+      '',
+      '',
+      900,
+      d(2023, 6, 1),
+      '',
+      '',
+      'Administration',
+      'Hall',
+      '',
+      'Fair',
+      '',
+      'Same State Traders',
+      'Bill 9',
+    ]);
+    row(3, ['BENCH', 2, 'B-1', 'Bench', '', '', '', 900, d(2023, 6, 1), '', '', 'Administration']);
+    row(4, ['Ball pen (PEN)', 1, '', 'Pen', '', '', '', 10, d(2023, 6, 1), '', '', 'Science']);
+    row(5, [
+      'BENCH',
+      1,
+      '',
+      'Bench',
+      '',
+      '',
+      '',
+      900,
+      d(2023, 6, 10),
+      d(2023, 6, 1),
+      '',
+      'Science',
+    ]);
+    row(6, ['BENCH', '', '', 'Bench', '', '', '', 'abc', d(2023, 6, 1), '', 'MAIN', 'Science']);
+    const file = Buffer.from(await wb.xlsx.writeBuffer()).toString('base64');
+    const dry = (
+      await call(office, 'POST', '/purchase/assets-import', { file, dryRun: true })
+    ).json();
+    expect(dry.rows.map((r: { ok: boolean }) => r.ok)).toEqual([true, false, false, false, false]);
+    expect(dry.rows[1].error).toContain('leave Tag and Serial empty');
+    expect(dry.rows[2].error).toContain('is not an item of type asset');
+    expect(dry.rows[3].error).toContain('put to use before it was bought');
+    expect(dry.rows[4].error).toContain('the cost is not a number');
+    expect(dry.rows[4].error).toContain('either a store or a department');
+    expect([dry.units, dry.cost]).toEqual([3, 2700]);
+    const done = (
+      await call(office, 'POST', '/purchase/assets-import', { file, dryRun: false })
+    ).json();
+    expect(done.saved).toBe(3);
+    const benches = await withMigrator(
+      async (c) =>
+        (
+          await c.query<{ tag: string; vendor_id: string; source_note: string; condition: string }>(
+            `SELECT tag, vendor_id::text, source_note, condition FROM assets WHERE school_id = $1 AND item_id = $2 ORDER BY id`,
+            [school.id, ids.BENCH],
+          )
+        ).rows,
+    );
+    expect(benches).toHaveLength(3);
+    expect(new Set(benches.map((b) => b.tag)).size).toBe(3);
+    expect(benches[0]).toMatchObject({
+      vendor_id: ids.V1,
+      source_note: 'Bill 9',
+      condition: 'fair',
+    });
+
+    // a sheet in the older format (codes typed, "Cost", "Store code") is still read
+    const old = new ExcelJS.Workbook();
+    const o = old.addWorksheet('Assets');
+    o.addRow([
+      'Item code *',
+      'Tag',
+      'Description',
+      'Cost *',
+      'Acquired on',
+      'Store code',
+      'Custodian code',
+    ]);
+    o.addRow(['BENCH', 'OLD-B9', 'Bench', 700, '2023-06-01', 'MAIN', `${s}K1`]);
+    const oldFile = Buffer.from(await old.xlsx.writeBuffer()).toString('base64');
+    const oldDry = (
+      await call(office, 'POST', '/purchase/assets-import', { file: oldFile, dryRun: true })
+    ).json();
+    expect(oldDry.rows).toEqual([
+      expect.objectContaining({ ok: true, item: 'Bench (BENCH)', tag: 'OLD-B9', units: 1 }),
+    ]);
+    // a sheet without the item column is refused as a whole
+    const bad = new ExcelJS.Workbook();
+    bad.addWorksheet('Assets').addRow(['Tag', 'Cost']);
+    const refused = await call(office, 'POST', '/purchase/assets-import', {
+      file: Buffer.from(await bad.xlsx.writeBuffer()).toString('base64'),
+      dryRun: true,
+    });
+    expect(refused.statusCode).toBe(400);
+    expect(refused.json().detail).toContain('no column "Item"');
+
+    // the register a page at a time, with figures over everything found
+    const page = (await call(office, 'GET', '/purchase/assets?status=held&size=25')).json();
+    expect(page.size).toBe(25);
+    expect(page.figures.depreciation).toBeCloseTo(page.cost - page.bookValue, 2);
+    expect(page.rows.length).toBe(Math.min(25, page.total));
+    expect((await call(office, 'GET', '/purchase/assets?size=7')).statusCode).toBe(400);
+
+    // the asset master: every field, the filters kept, totals by category
+    const x = (
+      await call(
+        office,
+        'GET',
+        `/purchase/assets/export?format=xlsx&status=held&categoryId=${ids.catFURN!}`,
+      )
+    ).json();
+    expect(x.filename).toMatch(/^Asset-register-\d{4}-\d{2}-\d{2}\.xlsx$/);
+    const reg = new ExcelJS.Workbook();
+    await reg.xlsx.load(Buffer.from(x.base64, 'base64') as unknown as ArrayBuffer);
+    expect(reg.worksheets.map((w) => w.name)).toEqual(['Asset register', 'By category']);
+    const sheet = reg.worksheets[0]!;
+    let head = 0;
+    sheet.eachRow((r, n) => {
+      if (!head && r.getCell(1).value === 'Tag') head = n;
+    });
+    expect(head).toBeGreaterThan(1);
+    const heads = (sheet.getRow(head).values as unknown[]).slice(1);
+    expect(heads).toContain('Depreciation so far (₹)');
+    expect(heads).toContain('Custodian');
+    const data: unknown[][] = [];
+    sheet.eachRow((r, n) => {
+      if (n > head) data.push((r.values as unknown[]).slice(1));
+    });
+    const total = data.pop()!;
+    expect(total[0]).toBe('Total');
+    // the chairs (one condemned and gone) and the 3 benches, all furniture
+    expect(data.every((r) => r[3] === 'Furniture')).toBe(true);
+    const bench = data.find((r) => r[1] === 'BENCH')!;
+    expect(bench[heads.indexOf('Vendor')]).toBe('Same State Traders');
+    expect(bench[heads.indexOf('Bill / PO / receipt')]).toBe('Bill 9');
+    expect(bench[heads.indexOf('Condition')]).toBe('Fair');
+    const cat = reg.getWorksheet('By category')!;
+    const catRows: unknown[][] = [];
+    cat.eachRow((r) => catRows.push((r.values as unknown[]).slice(1)));
+    expect(catRows.find((r) => r[0] === 'Furniture')?.[1]).toBe(data.length);
+    const pdf = (await call(office, 'GET', '/purchase/assets/export?format=pdf')).json();
+    expect(Buffer.from(pdf.base64, 'base64').subarray(0, 4).toString()).toBe('%PDF');
+    expect((await call(teacher, 'GET', '/purchase/assets/export')).statusCode).toBe(403);
   });
 });

@@ -46,21 +46,26 @@ export async function purchaseListFile(x: {
   list: ListSheet;
   /** the money columns totalled on a last line (by position) */
   sum?: number[];
-  /** one row per item line (Excel only) */
-  lines?: ListSheet;
+  /**
+   * one row per item line (Excel only); or another sheet with its own tab, title and totals (the asset
+   * register's totals by category)
+   */
+  lines?: ListSheet & { tab?: string; title?: string; sum?: number[] };
 }): Promise<{ filename: string; contentType: string; base64: string; rows: number }> {
   const day = new Date(Date.now() + 330 * 60_000).toISOString().slice(0, 10);
   const base = `${x.slug}-${day}`;
   const details = `${x.words} · Generated on: ${x.head.generatedOn}`;
-  const totals = x.sum?.length
-    ? x.list.columns.map((_, i) =>
-        i === 0
-          ? 'Total'
-          : x.sum!.includes(i)
-            ? Math.round(x.list.rows.reduce((a, r) => a + Number(r[i] ?? 0), 0) * 100) / 100
-            : '',
-      )
-    : null;
+  const totalsOf = (s: ListSheet, sum: number[] | undefined) =>
+    sum?.length
+      ? s.columns.map((_, i) =>
+          i === 0
+            ? 'Total'
+            : sum.includes(i)
+              ? Math.round(s.rows.reduce((a, r) => a + Number(r[i] ?? 0), 0) * 100) / 100
+              : '',
+        )
+      : null;
+  const totals = totalsOf(x.list, x.sum);
 
   if (x.format === 'pdf') {
     const show = (c: FileColumn, v: FileCell) =>
@@ -162,7 +167,13 @@ export async function purchaseListFile(x: {
     });
   };
   sheet(x.title, x.title, x.list, totals);
-  if (x.lines) sheet('Lines', `${x.title}: item lines`, x.lines, null);
+  if (x.lines)
+    sheet(
+      x.lines.tab ?? 'Lines',
+      x.lines.title ?? `${x.title}: item lines`,
+      x.lines,
+      totalsOf(x.lines, x.lines.sum),
+    );
   const bytes = Buffer.from((await wb.xlsx.writeBuffer()) as ArrayBuffer);
   return {
     filename: `${base}.xlsx`,
