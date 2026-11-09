@@ -274,7 +274,9 @@
     "paymentTerms": "Payment terms",
     "purchaseApprovals": "Who approves",
     "purchaseSettings": "Purchase settings",
-    "leaveSetup": "Leave & attendance set-up"
+    "leaveSetup": "Leave & attendance set-up",
+    "myLeave": "My leave",
+    "leaveRegister": "Leave register"
   },
   "shell": {
     "primaryNavigation": "Primary",

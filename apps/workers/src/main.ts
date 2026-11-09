@@ -182,6 +182,18 @@ async function main(): Promise<void> {
     { pattern: '30 2 * * *' },
     { name: 'admissions.level_digest', data: SYSTEM_ENVELOPE('admissions.level_digest') },
   );
+  // staff leave (docs/design/85): past months closed, this month opened and credited, at 00:30 IST
+  // (19:00 UTC) every day (a missed night is caught up); the approvers' morning list at 08:30 IST
+  await maintenance.upsertJobScheduler(
+    'leave.month_end',
+    { pattern: '0 19 * * *' },
+    { name: 'leave.month_end', data: SYSTEM_ENVELOPE('leave.month_end') },
+  );
+  await maintenance.upsertJobScheduler(
+    'leave.digest',
+    { pattern: '0 3 * * *' },
+    { name: 'leave.digest', data: SYSTEM_ENVELOPE('leave.digest') },
+  );
   // hostel: pupils late back from hostel leave (parent, head warden; later the principal), every ten minutes
   await maintenance.upsertJobScheduler(
     'hostel.leave_tick',

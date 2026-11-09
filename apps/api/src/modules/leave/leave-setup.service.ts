@@ -85,7 +85,7 @@ export class LeaveSetupService {
   async overview(ctx: RequestContext) {
     this.mustView(ctx);
     return this.db.tenant(requireTenant(ctx), async (c) => {
-      await c.query(`SELECT app.staff_leave_seed(app.current_school_id())`);
+      await c.query(`SELECT app.staff_leave_seed_all(app.current_school_id())`);
       const types = (
         await c.query<{
           id: string;
@@ -311,7 +311,7 @@ export class LeaveSetupService {
   async rules(ctx: RequestContext) {
     this.mustView(ctx);
     return this.db.tenant(requireTenant(ctx), async (c) => {
-      await c.query(`SELECT app.staff_leave_seed(app.current_school_id())`);
+      await c.query(`SELECT app.staff_leave_seed_all(app.current_school_id())`);
       const rows = (
         await c.query<RuleRow>(
           // eslint-disable-next-line no-restricted-syntax -- RULE is a fixed fragment
@@ -617,7 +617,7 @@ export class LeaveSetupService {
   async settings(ctx: RequestContext) {
     this.mustView(ctx);
     return this.db.tenant(requireTenant(ctx), async (c) => {
-      await c.query(`SELECT app.staff_leave_seed(app.current_school_id())`);
+      await c.query(`SELECT app.staff_leave_seed_all(app.current_school_id())`);
       const s = (
         await c.query<{
           late_marks_per_leave: number;
@@ -681,7 +681,7 @@ export class LeaveSetupService {
   async saveSettings(ctx: RequestContext, dto: LeaveSettingsDto) {
     this.mustManage(ctx);
     return this.db.tenant(requireTenant(ctx), async (c) => {
-      await c.query(`SELECT app.staff_leave_seed(app.current_school_id())`);
+      await c.query(`SELECT app.staff_leave_seed_all(app.current_school_id())`);
       if (dto.defaultShiftId) {
         const ok = await c.query(`SELECT 1 FROM staff_shifts WHERE id = $1 AND status = 'active'`, [
           dto.defaultShiftId,

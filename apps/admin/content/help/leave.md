@@ -3,8 +3,8 @@
 Staff apply for leave; their approvers decide it level by level; balances are credited by policy and
 held while a leave waits. Staff attendance is worked out from the biometric punches: late marks and
 missing punches turn into leave, and an absent day nobody explains becomes loss of pay. This page
-covers the **set-up** (built); applying, approving, balances, the attendance register and the reports
-follow in the next releases.
+covers the set-up, applying, approving and the balances; the attendance register and the reports follow
+in the next releases.
 
 ## Who does what
 
@@ -80,6 +80,60 @@ Every grid (types, policies, weekly offs, shifts, postings) downloads as Excel o
 upload; a wrong value is refused with the reason (a loss-of-pay type marked paid, a quarterly policy
 with two credit months, a day shift that ends before it starts).
 
+## Applying (Employee management → My leave; staff app → My leave)
+
+The page shows what is left of each leave type this month (days held by leave raised this month already
+taken off), the form, your leave and **Waiting for me** (leave you approve). Pick the type and the dates
+(one date may be the first or second half of the day), give the reason and — when the type needs one — a
+document. The school checks, in this order: half day allowed, the document, the type is for you, days ahead
+or how far back, the days counted (weekly offs and holidays are free; between two leave days they count
+when the policy's **sandwich** says so), the payroll lock, the fewest and most days, another leave on those
+days (the other half of a day is fine), not next to other leave, the balance, the most a month, and that
+somebody approves. Two answers come as a question first:
+
+- **The sandwich across two leaves**: a weekly off or holiday between this leave and another of yours is
+  counted too — "Apply from … to …?". Yes applies for the longer dates.
+- **Not enough balance**: "Apply 3 CL + 2 LOP (loss of pay)?". Yes makes the paid part and a loss-of-pay
+  part decided together (a day half paid is paid in its first half).
+
+The days are **held** from your balance as soon as you apply (in the month you apply), and given back if
+it is not approved, withdrawn or cancelled. Loss of pay is never applied for on its own.
+
+## Approving
+
+A leave goes through the levels of **Who approves** for its length; each approver sees it under Waiting
+for me (admin and staff app) and in My approvals, and gets an e-mail and app message; every morning each
+approver gets a list of what waits (3 days or more in red). Approve, or say why not (needed). Nobody
+approves their own leave — their level passes to the next, the last to the school admin; the same person
+at two levels approves once. A month locked for payroll cannot be approved into.
+
+## After applying
+
+- **Withdraw** (yours, still waiting): the days come back at once.
+- **Ask to cancel** an approved leave: your approvers decide; the leave stands until they do.
+- **The leave office** (Leave register, or the leave's page): **cancel** it now (waiting or approved),
+  **decide for the approvers** (with a reason), **shorten** an approved leave from one end, **enter leave for
+  an employee** (approved at once; the fewest days and the document are not asked; loss of pay may be
+  entered; leave already on those days is replaced — only if the entry is made).
+
+Approved leave fills the daily activity log's leave days; cancelled or cut days are taken out again.
+
+## The leave register and balances
+
+**Leave register**: eight figures for the financial year (waiting at the first level, at level 2, at level
+3, approved, not approved, cancelled, withdrawn, loss of pay — click to see them), filters (type,
+employee, department, dates, applied by, search), 25 / 50 / 100 a page, Excel and PDF.
+
+**Balances** (from the register): each employee and leave type this month — opening (carried from last
+month), credited, held, corrections, what is left; past months closed with what lapsed — with each
+row's trail. **Correct** a balance this month with a reason; load the **opening balances** from Excel
+(the figure you type becomes the balance; running the same sheet again changes nothing); **Run now** closes
+past months, opens this month and credits it (the system does it every night).
+
+**How balances move**: credits come in the policy's credit months for the months before (pro rata from the
+day of joining); nothing lapses month to month; in the session-end month (the month before the policy's
+session start) the balance is kept up to the carry-forward cap, the rest lapses.
+
 ## Common questions
 
 1. **A teacher gets no CL.** Leave types at a glance shows how many staff are in no policy of the type:
@@ -90,3 +144,7 @@ with two credit months, a day shift that ends before it starts).
 4. **Second and fourth Saturdays are off.** Weekly offs: weekdays 6, weeks 2,4.
 5. **A new joiner has no approver.** Rules are worked out when the leave is applied: if the joiner's
    department, designation or type is in a rule, they are covered at once.
+6. **"Not enough CL" though the teacher had days last month.** Balances are credited in the credit months
+   only; check Balances (the trail says what came and went) or load the opening balances.
+7. **The HOD applied for leave: who approves it?** Their own level passes on; the last level goes to the
+   school admin.

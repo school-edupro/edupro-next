@@ -537,6 +537,38 @@ export function maintenanceProcessor({ db, storage, log, migratorUrl }: Maintena
       if (sent) log.info({ sent }, 'admission level digest');
       return;
     }
+    if (kind === 'leave.month_end') {
+      // Staff leave (0345, docs/design/85): close the months before this one, open this month for every
+      // active employee and leave type with a balance, credit the policies whose credit month it is
+      const schools = { rows: await schoolsFor(db, job) };
+      let done = 0;
+      for (const s of schools.rows) {
+        const r = await db.withTenant(
+          { schoolId: s.id, userId: null, allowedSchoolIds: [s.id] },
+          (c) => c.query<{ n: number }>('SELECT app.staff_leave_month_end() AS n'),
+        );
+        done += r.rows[0]?.n ?? 0;
+      }
+      if (done) log.info({ done }, 'staff leave month end');
+      return;
+    }
+    if (kind === 'leave.digest') {
+      // Staff leave (0345): each approver's morning e-mail of the leave and cancellations waiting at their level
+      const schools = { rows: await schoolsFor(db, job) };
+      let sent = 0;
+      for (const s of schools.rows) {
+        const r = await db.withTenant(
+          { schoolId: s.id, userId: null, allowedSchoolIds: [s.id] },
+          (c) =>
+            c.query<{ n: number }>('SELECT app.staff_leave_digest($1) AS n', [
+              process.env.ADMIN_APP_URL ?? 'http://localhost:3000',
+            ]),
+        );
+        sent += r.rows[0]?.n ?? 0;
+      }
+      if (sent) log.info({ sent }, 'staff leave digest');
+      return;
+    }
     if (kind === 'hostel.leave_tick') {
       // Hostel (0148): pupils out on hostel leave past their return time and the grace; the database
       // function tells the parent and the head warden once, and the principal / admin past the hours set.

@@ -63,6 +63,9 @@ export const NAV: Array<{
       },
       { href: '/staff/activity', label: 'activityLog', permission: 'staff.activity.fill' },
       // leave types, policies, weekly offs, shifts, who approves and the settings open from here
+      // what waits for my approval and the balances open from My leave and the register
+      { href: '/leave', label: 'myLeave', permission: 'leave.own.apply' },
+      { href: '/leave/register', label: 'leaveRegister', permission: 'leave.office.manage' },
       { href: '/leave/setup', label: 'leaveSetup', permission: 'leave.setup.view' },
       {
         href: '/people/staff-profile-approvals',

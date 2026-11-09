@@ -100,14 +100,84 @@ band at a boundary, a band without levels leaving it to the next rule, the HOD s
 a type approved at once; an unknown department, a second active rule, a fourth level, a missing band
 refused; settings; the rights). Help: `content/help/leave.md`.
 
-## Phase B — leave (next)
+## As built — phase B, leave (9 Nov 2026)
 
-Balance ledger by month (opening, credited, held, correction, closing, lapsed, closed); apply with the
-legacy checks in order (half day, document, gender, working days and the sandwich, the bridge, payroll
-lock, fewest / most days, overlap, balance and the paid + loss-of-pay split, most a month, not next to
-other leave, backdate limit, an approver exists); the approval through the workflow engine with the
-chain from `chainFor`; withdraw, cancel, the cancellation request and its queue, date trim, on behalf (one
-transaction); messages and the daily digest; My leave in the staff app and the admin app; the leave
-register (nine figures, filters, the override); the balance master (adjust, add, Excel opening
-balances); the credit, open and close jobs; the activity log's leave days filled from approved leave; the
-holidays' staff scope and optional flag on the calendar screen.
+**Data** (0344–0347): rights `leave.own.apply` (every staff role) and `leave.office.manage` (school and
+group admin, the leave office). `staff_leave_requests` (number `LV/<FY>/00001` from `staff_leave_counters`,
+dates, days, half day and session, reason, document, status pending / approved / rejected / withdrawn /
+cancelled, source self / on behalf / the system's deductions / import, the loss-of-pay part linked to its
+paid part, the month the balance is held in, the system's note, the workflow instance and rule, the
+decision, the cancellation request and its instance, edits); `staff_leave_days` (a day or a half, the kind:
+working day or a weekly off / holiday charged by the sandwich); `staff_leave_balances` (one row an employee,
+type and month: opening, credited, held, correction, closing, lapsed, closed, imported, the trail);
+`staff_leave_edits`; `staff_month_locks` (the payroll lock; locked and unlocked with attendance in phase C).
+Database functions shared with the nightly job: `staff_leave_rule` (session and carry forward: the policy,
+else the type; the lower cap), `staff_leave_close_figures` (lapse or cap **only in the session-end month** —
+the earlier month-close job lapsed every month), `staff_leave_effective_closing`, `staff_leave_balance_row`
+(opened at the effective closing of the month before), `staff_leave_balance_peek` (the same, read only),
+`staff_leave_resync` (later open months reopened after a change), `staff_leave_close_month`,
+`staff_leave_credit` (the credit months' credit for the 3 / 6 / 12 months before, pro rata from joining,
+set not added), `staff_leave_month_end` (close, open, credit; every night at 00:30 IST in the workers,
+catching up a missed night), `staff_leave_digest` (each approver's morning e-mail). Message templates
+(e-mail and app) seeded with the set-up: waiting, approved, rejected, cancelled, dates changed,
+cancellation waiting, digest.
+
+**The engine** (`leave-engine.ts`, `LeaveService.applyIn`): the earlier checks in order — loss of pay not
+applied for by staff (the earlier module took a posted LOP id), half day (one date, a session), the type
+is for the employee's gender, the document (not for the office or the system), days ahead allowed, the
+backdate limit, the days (weekly offs and declared holidays free; an optional holiday a working day unless
+the policy treats it as a holiday; off days between the first and last working day counted per the policy's
+sandwich; a range of off days only refused, the office excepted), the **bridge** to the nearest live leave
+within 60 days when every day between is off and both policies charge it (asked first), the payroll lock,
+the fewest / most days (the stricter of the type and the policy; the fewest not asked of the office or the
+system), overlap (the other half of a day allowed), not next to other leave (the nearest working day either
+side), the balance in the month of applying (short: the paid part — in half days where the type allows —
+plus loss of pay, asked first; all loss of pay goes to the approvers of the type asked for), the most a
+month, an approver (`chainFor`). Then the request(s), the days, the hold, and the workflow: the rule's
+band as a definition `staff_leave_<rule>_<band>`, levels with `autoSkip` and `noSelfApproval` (the
+employee's own level passes on, the last to the school admin; a level nobody holds is skipped; nobody at all:
+refused and nothing kept), payload employee and department (for the HOD and the reporting manager).
+Approval completes through `onComplete('staff_leave')`: approved (with its loss-of-pay part; the activity
+log's leave days filled) or rejected (the hold given back). A cancelled workflow is not a rejection (the
+engine's cancel calls the handler — the leave closes itself, so the balance is given back once). Given back
+into the month it was held in while open, else into this month as a correction (closed months stay closed).
+Withdraw (own, waiting), cancel (office, waiting or approved; an approved leave's days leave the activity
+log), the cancellation request (approved leave; a fresh chain `staff_leave_cancel_…`; the leave stands until
+the last level), decide for the approvers (office, with a reason; the same effects), shorten (office, one
+end, at least a day left, not a split leave), on behalf (office; replaces leave on those days in the same
+transaction — the earlier module cancelled them even when the new entry failed).
+
+**API** (`/leave`): `mine`, `apply` (a `confirm` answer for the bridge and the split), `on-behalf`,
+`approvals` (waiting / decided), `requests/:id` (facts, `dayRows`, the approval and cancellation steps, the
+changes, `can`), `…/decide`, `…/withdraw`, `…/cancel`, `…/cancel-request`, `…/cancel-decide`,
+`…/override`, `…/trim`; `register` (eight figures for the financial year, filters, pages; `format=xlsx|pdf`
+on the letterhead), `balances` (read without opening rows), `balances/adjust`, `balances/format`,
+`balances/import` (the figure becomes the balance; a second run changes nothing), `balances/run-month`.
+
+**Admin**: Employee management → **My leave** (`/leave`: balance figures, the apply form with the two
+questions, my leave in pages, Waiting for me), **Leave register** (`/leave/register`: figures, filters,
+Excel / PDF, Enter leave for an employee), **Balances** (`/leave/balances` from the register: the ledger
+with the trail, correct, opening balances from Excel, run now), a leave's page (`/leave/requests/:id`:
+decide, decide a cancellation, withdraw, ask to cancel, the office's cancel / decide / shorten), Waiting for
+me (`/leave/approvals`); staff leave in My approvals. The holidays master gained Optional (staff) and For
+which staff. **Staff app**: My leave (`/my-leave`), a leave (`/my-leave/:id`), Leave to approve
+(`/leave-approvals`, shown when something waits). Workers: `leave.month_end` (00:30 IST), `leave.digest`
+(08:30 IST).
+
+Tests: `leave-requests.e2e-spec.ts` (the split asked then made and approved with its loss-of-pay part, the
+activity log; the sandwich by policy and the bridge asked then counted; overlap and the other half of a
+day, a type not for men, a missing document, nobody to approve (nothing kept), loss of pay not applied for,
+a locked month; the HOD's own leave passing to the school admin; withdraw and reject giving the balance
+back once; the cancellation request through its chain; the office's trim, decision for the approvers and
+entry replacing a leave; the register's figures, filters and Excel; balances, opening balances from Excel
+twice, a past month closed and this month reopened at its closing, the credit pro rata from joining).
+
+## Phase C — staff attendance (next)
+
+Punch intake (the device push, the read-only pull from the central device database by the school's device
+serials, Excel), the day from the punches (shift and timing, first in / last out, the double tap, worked
+hours, P / HD / A, one punch, the late and early rule, the trace and history), the attendance register
+(month grid, legend, day correction, bulk upload), regularisation (its chain), late marks and missing
+punches (with the monthly deduction through the deduction order), absent with no application → loss of pay,
+re-check and recompute, the payroll month lock and unlock, department and special timings, credits weighted
+by attendance.

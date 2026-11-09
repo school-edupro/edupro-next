@@ -34,6 +34,8 @@ export interface StaffWaiting {
   issues?: number;
   /** assets in my care, and those handed to me waiting for my acknowledgement */
   assets?: number;
+  /** colleagues' leave and cancellations at my approval level (docs/design/85) */
+  staffLeave?: number;
 }
 export interface StaffGroup {
   id: string;
@@ -223,6 +225,18 @@ export const STAFF_MENU: StaffGroup[] = [
         allowed: (_can, w) => (w.profileChanges ?? 0) > 0,
       },
       {
+        href: '/my-leave',
+        label: 'My leave',
+        help: 'Apply for leave, see my balances, withdraw it or ask to cancel it',
+        allowed: (can) => can('leave.own.apply'),
+      },
+      {
+        href: '/leave-approvals',
+        label: 'Leave to approve',
+        help: 'Colleagues’ leave, and cancellations of their leave, waiting at your level',
+        allowed: (_can, w) => (w.staffLeave ?? 0) > 0,
+      },
+      {
         href: '/resignation',
         label: 'My resignation',
         help: 'Ask for resignation, see where it is, withdraw it until it is accepted',
@@ -379,6 +393,8 @@ const SCREEN_ICON: Array<[string, string]> = [
   ['/appointments', 'calendar'],
   ['/purchase', 'cart'],
   ['/profile', 'user'],
+  ['/my-leave', 'calendar'],
+  ['/leave-approvals', 'check'],
   ['/resignation', 'userPlus'],
   ['/acr', 'file'],
   ['/office-orders', 'file'],

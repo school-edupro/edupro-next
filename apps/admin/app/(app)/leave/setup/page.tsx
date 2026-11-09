@@ -74,8 +74,8 @@ export default async function LeaveSetupPage({
         {
           done: null,
           title: 'Holidays',
-          text: `${String(c.holidays)} holidays ahead for staff (kept on the school calendar)`,
-          href: '/academics/calendar',
+          text: `${String(c.holidays)} holidays ahead for staff: optional ones and which staff on the school's holiday list`,
+          href: '/masters/academics?tab=holidays',
         },
       ],
     },

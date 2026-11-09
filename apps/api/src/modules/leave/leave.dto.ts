@@ -111,3 +111,116 @@ export const LeaveSettingsSchema = z.object({
   sendSms: z.boolean(),
 });
 export class LeaveSettingsDto extends createZodDto(LeaveSettingsSchema) {}
+
+// ---- phase B: applying, deciding, cancelling, balances --------------------------------------------------
+export const LEAVE_OWN = 'leave.own.apply';
+export const LEAVE_OFFICE = 'leave.office.manage';
+
+const ApplyFields = {
+  leaveTypeId: Id,
+  from: Day,
+  to: Day,
+  halfDay: z.boolean().default(false),
+  session: z.enum(['first', 'second']).nullable().optional(),
+  reason: z.string().trim().min(3).max(1000),
+  documentFileId: Id.nullable().optional(),
+  /** the sandwich across two leaves (the bridge) was shown and accepted */
+  bridgeOk: z.boolean().default(false),
+  /** a balance too short: the paid part + loss of pay was shown and accepted */
+  splitOk: z.boolean().default(false),
+};
+export const ApplySchema = z.object(ApplyFields);
+export class ApplyDto extends createZodDto(ApplySchema) {}
+
+/** The office applies for an employee: approved at once, replacing leave already on those days. */
+export const OnBehalfSchema = z.object({ ...ApplyFields, employeeId: Id });
+export class OnBehalfDto extends createZodDto(OnBehalfSchema) {}
+
+export const DecideSchema = z
+  .object({
+    outcome: z.enum(['approved', 'rejected']),
+    note: z.string().trim().max(500).default(''),
+  })
+  .refine((d) => d.outcome === 'approved' || d.note.length >= 3, {
+    message: 'Say why it is not approved',
+    path: ['note'],
+  });
+export class DecideDto extends createZodDto(DecideSchema) {}
+
+export const ReasonSchema = z.object({ reason: z.string().trim().min(3).max(500) });
+export class ReasonDto extends createZodDto(ReasonSchema) {}
+
+export const WithdrawSchema = z.object({ reason: z.string().trim().max(500).default('') });
+export class WithdrawDto extends createZodDto(WithdrawSchema) {}
+
+export const OverrideSchema = z.object({
+  outcome: z.enum(['approved', 'rejected']),
+  reason: z.string().trim().min(3).max(400),
+});
+export class OverrideDto extends createZodDto(OverrideSchema) {}
+
+export const TrimSchema = z.object({
+  from: Day,
+  to: Day,
+  reason: z.string().trim().min(3).max(400),
+});
+export class TrimDto extends createZodDto(TrimSchema) {}
+
+const Page = {
+  page: z.coerce.number().int().min(1).max(10000).default(1),
+  size: z.coerce
+    .number()
+    .int()
+    .refine((v) => [25, 50, 100].includes(v), '25, 50 or 100 a page')
+    .default(50),
+};
+export const RegisterQuerySchema = z.object({
+  leaveTypeId: Id.optional(),
+  employeeId: Id.optional(),
+  department: z.string().trim().max(100).optional(),
+  from: Day.optional(),
+  to: Day.optional(),
+  source: z.enum(['self', 'on_behalf', 'system']).optional(),
+  /** the figure clicked: pending, waiting at L2, at L3+, approved, rejected, cancelled, withdrawn, loss of pay */
+  bucket: z
+    .enum(['pending', 'l1', 'l2', 'approved', 'rejected', 'cancelled', 'withdrawn', 'lop'])
+    .optional(),
+  q: z.string().trim().max(80).optional(),
+  format: z.enum(['xlsx', 'pdf']).optional(),
+  ...Page,
+});
+export class RegisterQueryDto extends createZodDto(RegisterQuerySchema) {}
+
+export const MineQuerySchema = z.object({ ...Page, size: Page.size.default(25) });
+export class MineQueryDto extends createZodDto(MineQuerySchema) {}
+
+export const BalanceQuerySchema = z.object({
+  employeeId: Id.optional(),
+  leaveTypeId: Id.optional(),
+  department: z.string().trim().max(100).optional(),
+  month: z
+    .string()
+    .regex(/^\d{4}-\d{2}$/)
+    .optional(),
+  q: z.string().trim().max(80).optional(),
+  ...Page,
+});
+export class BalanceQueryDto extends createZodDto(BalanceQuerySchema) {}
+
+export const AdjustSchema = z.object({
+  employeeId: Id,
+  leaveTypeId: Id,
+  days: z
+    .number()
+    .min(-999)
+    .max(999)
+    .refine((v) => v !== 0, 'Give the days to add (or take off with a minus)'),
+  reason: z.string().trim().min(3).max(200),
+});
+export class AdjustDto extends createZodDto(AdjustSchema) {}
+
+export const BalanceImportSchema = z.object({
+  file: z.string().min(10).max(4_000_000),
+  dryRun: z.boolean().default(true),
+});
+export class BalanceImportDto extends createZodDto(BalanceImportSchema) {}

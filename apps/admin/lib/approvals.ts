@@ -15,6 +15,7 @@ export interface ApprovalGroup {
     | 'lesson'
     | 'transport'
     | 'leave'
+    | 'staff_leave'
     | 'fee'
     | 'file'
     | 'acr'
@@ -134,7 +135,8 @@ export async function myApprovals(
             r.data.filter(
               (x) =>
                 x.instance.entityType !== 'vacancy' &&
-                !x.instance.entityType?.startsWith('purchase'),
+                !x.instance.entityType?.startsWith('purchase') &&
+                !x.instance.entityType?.startsWith('staff_leave'),
             ),
           )
           .then((data): ApprovalGroup => ({
@@ -801,6 +803,39 @@ export async function myApprovals(
           )
           .catch(() => null)
       : null,
+    // staff leave and cancellations at a level of this user (docs/design/85): anyone may be an approver
+    apiFetch<{
+      rows: Array<{
+        id: string;
+        number: string;
+        what: 'leave' | 'cancellation';
+        since: string;
+        days: number;
+        from: string;
+        to: string;
+        employee: { name: string; code: string };
+        leaveType: { code: string };
+      }>;
+    }>('/leave/approvals')
+      .then((r): ApprovalGroup | null =>
+        r.rows.length
+          ? {
+              key: 'staff_leave',
+              title: 'Staff leave',
+              help: 'Leave of staff, and cancellations of approved leave, waiting at your level',
+              href: '/leave/approvals',
+              count: r.rows.length,
+              items: r.rows.slice(0, size).map((l) => ({
+                id: `${l.id}-${l.what}`,
+                title: `${l.employee.name} (${l.employee.code}) · ${l.number}`,
+                detail: `${l.what === 'cancellation' ? 'Cancel ' : ''}${l.leaveType.code} · ${l.from}${l.to !== l.from ? ` to ${l.to}` : ''} · ${String(l.days)} day${l.days === 1 ? '' : 's'}`,
+                href: `/leave/requests/${l.id}`,
+                since: l.since,
+              })),
+            }
+          : null,
+      )
+      .catch(() => null),
     // admission registrations at a level this user is named in (docs/design/47, 50): anyone may be an
     // approver, so it is asked for every user (an empty answer adds nothing)
     apiFetch<{
