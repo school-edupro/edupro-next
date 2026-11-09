@@ -366,3 +366,10 @@ export class LeaveReportQueryDto extends createZodDto(LeaveReportQuerySchema) {}
 
 export const ReportAccessSchema = z.object({ userIds: z.array(Id).max(200) });
 export class ReportAccessDto extends createZodDto(ReportAccessSchema) {}
+
+// ---- phase E: moving from the old module -------------------------------------------------------------------
+export const CutoverSettingsSchema = z.object({
+  parallelMonth: Month,
+  freezeOn: Day.nullable().optional(),
+});
+export class CutoverSettingsDto extends createZodDto(CutoverSettingsSchema) {}

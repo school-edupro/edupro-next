@@ -720,6 +720,70 @@ export class LeaveService implements OnModuleInit {
 
   // ---- decided --------------------------------------------------------------------------------------
   /** Approved (by the last level, at once, or by the office): the days, the loss-of-pay part, the activity log. */
+  /**
+   * A leave brought from the old module still waiting at the switch (docs/design/85, phase E): its approval
+   * starts at the first level of Who approves (the balance was held when it was brought). 'nobody' when no
+   * rule has an approver for it: the leave office decides it from the register.
+   */
+  async startImported(
+    c: PoolClient,
+    ctx: RequestContext,
+    id: string,
+  ): Promise<'started' | 'approved' | 'nobody'> {
+    const r = (
+      await c.query<{
+        employee_id: string;
+        leave_type_id: string;
+        days: string;
+        number: string;
+        from_date: string;
+        to_date: string;
+        code: string;
+        name: string;
+        department: string | null;
+      }>(
+        `SELECT r.employee_id::text, r.leave_type_id::text, r.days::text, r.number, r.from_date::text, r.to_date::text,
+                t.code, e.display_name AS name, e.department
+           FROM staff_leave_requests r JOIN staff_leave_types t ON t.id = r.leave_type_id JOIN employees e ON e.id = r.employee_id
+          WHERE r.id = $1 AND r.status = 'pending' AND r.workflow_instance_id IS NULL AND r.linked_request_id IS NULL`,
+        [id],
+      )
+    ).rows[0];
+    if (!r) return 'nobody';
+    const chain = await chainFor(c, r.employee_id, 'leave', r.leave_type_id, Number(r.days));
+    if (!chain) return 'nobody';
+    const code = await leaveFlow(
+      c,
+      'staff_leave',
+      chain.ruleId,
+      chain.rule,
+      chain.band,
+      chain.levels,
+    );
+    const inst = await this.workflow.start(c, ctx, {
+      definitionCode: code,
+      entityType: 'staff_leave',
+      entityId: id,
+      subject: `${r.number} · ${r.name} · ${r.code} ${dmy(r.from_date)}${r.from_date === r.to_date ? '' : ` to ${dmy(r.to_date)}`}`,
+      payload: {
+        employeeId: r.employee_id,
+        department: r.department ?? '',
+        number: r.number,
+        days: Number(r.days),
+        leaveType: r.code,
+      },
+    });
+    await c.query(
+      `UPDATE staff_leave_requests SET workflow_instance_id = $2, approval_rule_id = $3 WHERE id = $1`,
+      [id, inst.id, chain.ruleId],
+    );
+    if (inst.status === 'approved') {
+      await this.finishApproved(c, ctx, id, null, null);
+      return 'approved';
+    }
+    return 'started';
+  }
+
   private async finishApproved(
     c: PoolClient,
     ctx: RequestContext,

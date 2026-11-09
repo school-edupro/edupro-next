@@ -244,6 +244,41 @@ absent; **working days** are the days up to yesterday from joining, less weekly 
 for early going and basic work, 62 for late arrival and forgot punch, 400 for the annual and leave
 reports) is refused with a message, not cut.
 
+## Moving from the old module (Leave & attendance set-up → 6. Moving from the old module)
+
+Once, when the school leaves the old leave module. Nothing in the old database is changed: the workers
+read it through a read-only connection IT sets on the server (`LEGACY_LEAVE_DB_URL`).
+
+1. **The months** — the **parallel month** (this month or the next): both systems run, the old one still
+   the record; the **freeze date**: approvals stop in the old module; the switch comes on or after it.
+2. **Read the old database** — now, and every night of the parallel month. The page shows when and how
+   many rows of each table, or why it could not (no connection, a refusal).
+3. **Preview** — every step run and undone: what would come, and what could not with examples (an
+   employee code not found here, a scope this module does not have, a credit that changes).
+4. **Bring the set-up** — leave types (by code), policies (by name; credited by attendance as the old
+   module did; monthly credits become quarterly here), weekly offs (the old rules replace the starting
+   Sunday rule), staff holidays on the school calendar (a holiday already there on the same dates is kept),
+   shifts (by code) and postings, department timings, an employee's timings for some dates (an employee's
+   own timing becomes one for the year), who approves (a rule for each old scope, leave type and priority;
+   its day ranges fill the bands here; a reporting-manager level stays one), the settings (late marks and
+   missing punches a day of leave, time edits, entry for an employee, e-mail, the default shift), the
+   reports' "Not required" list and who opens each report. Brought again, the same rows are updated.
+5. **Bring the balances** — once the parallel month has begun: the ledger from 1 April to the month before
+   the parallel month, closed as the old module closed it; the parallel month opens at that closing and is
+   credited by the policies here. The parallel month starts.
+6. **Bring this year's history** — leave and its days (an old number kept, else OLD-…), the days before the
+   parallel month as the old module had them (the punches here never change them; the day page says they
+   came from the old module), late marks and missing punches (those left over then lapsed), corrections,
+   and the months the old module locked. **Bring it again each day of the parallel month**: new and
+   changed leave comes, approved leave goes onto the days here and what waits is held from the balance —
+   nothing is doubled.
+7. **Compare and switch** — the comparison lists every employee-day whose code differs between the two
+   systems and every balance that differs (with this month's credit of each: the old module credits
+   monthly, this one quarterly). After the freeze date, read the old database once more and **Switch**: the
+   last leave and corrections come, those still waiting start at the first level of Who approves here
+   (approvers see them in Waiting for me / My approvals), and the old module is no longer read. From then
+   on staff apply in EduPro only.
+
 ## Common questions
 
 1. **A teacher gets no CL.** Leave types at a glance shows how many staff are in no policy of the type:
@@ -273,3 +308,8 @@ reports) is refused with a message, not cut.
 14. **The director should not be in the reports.** Set-up → Not required in the reports → add them.
 15. **The monthly summary shows "not marked" days.** The nightly run has not worked those days out (the
     workers stopped, or the first month): Attendance register → Run now → work days out again.
+16. **The preview says an employee was not found.** The old employee id must be the employee code here (or
+    their biometric id); correct the employee's code here, read again and preview again.
+17. **A balance differs in the comparison.** First the credit: the old module credited every month and
+    this one credits quarterly, so a month without a credit differs by the old month's accrual. Anything
+    else: open the balance's trail (Balances) and correct it with a reason.

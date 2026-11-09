@@ -591,3 +591,79 @@ export interface LeaveReportAccess {
   people: Array<{ id: string; name: string; code: string }>;
   manage: boolean;
 }
+
+// ---- phase E: moving from the old module -------------------------------------------------------------
+export type CutoverStep = 'setup' | 'balances' | 'history';
+export interface CutoverProblem {
+  step: CutoverStep;
+  what: string;
+  count: number;
+  examples: string[];
+}
+export interface CutoverOverview {
+  today: string;
+  parallelMonth: string | null;
+  parallelWords: string | null;
+  freezeOn: string | null;
+  status: 'setup' | 'parallel' | 'switched';
+  read: {
+    requestedAt: string | null;
+    startedAt: string | null;
+    at: string | null;
+    error: string | null;
+    counts: Record<string, number>;
+    waiting: boolean;
+  };
+  staged: Record<string, number>;
+  steps: Record<
+    string,
+    { at: string; by: string | null; counts: Record<string, number>; problems?: CutoverProblem[] }
+  >;
+  started: boolean;
+  switchedAt: string | null;
+  canSwitch: boolean;
+}
+export interface CutoverPreview {
+  steps: Array<{
+    step: CutoverStep;
+    ready: boolean;
+    why: string | null;
+    counts: Record<string, number>;
+    problems: CutoverProblem[];
+  }>;
+}
+export interface CutoverCompare {
+  month: string;
+  from: string;
+  to: string;
+  readAt: string | null;
+  days: {
+    compared: number;
+    differ: number | string;
+    rows: Array<{
+      emp: string;
+      code: string;
+      name: string;
+      day: string;
+      old: string | null;
+      new: string | null;
+      old_in: string | null;
+      old_out: string | null;
+      new_in: string | null;
+      new_out: string | null;
+    }>;
+  };
+  balances: {
+    compared: number;
+    differ: number | string;
+    rows: Array<{
+      code: string;
+      name: string;
+      type: string;
+      old: number;
+      new: number | null;
+      old_credit: number;
+      new_credit: number | null;
+    }>;
+  };
+}

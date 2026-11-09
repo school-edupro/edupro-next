@@ -144,6 +144,19 @@ export default async function LeaveSetupPage({
         },
       ],
     },
+    {
+      id: 'lv-cutover',
+      title: '6. Moving from the old module',
+      text: 'Once: the old leave module’s set-up, balances and history, a parallel month, then the switch.',
+      links: [
+        {
+          done: null,
+          title: 'Moving from the old module',
+          text: 'Read the old database, preview, bring the set-up, balances and history, compare, switch',
+          href: '/leave/setup/cutover',
+        },
+      ],
+    },
   ];
   return (
     <>

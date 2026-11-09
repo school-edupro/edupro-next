@@ -5,6 +5,8 @@ import { FilesModule } from '../files/files.module';
 import { WorkflowModule } from '../workflow/workflow.module';
 import { AttendanceController } from './attendance.controller';
 import { AttendanceService } from './attendance.service';
+import { LeaveCutoverController } from './cutover.controller';
+import { LeaveCutoverService } from './cutover.service';
 import { LeaveDashboardService } from './leave-dashboard.service';
 import { LeaveOfficeService } from './leave-office.service';
 import { LeaveReportsController } from './leave-reports.controller';
@@ -22,6 +24,7 @@ import { LeaveService } from './leave.service';
     LeaveController,
     AttendanceController,
     LeaveReportsController,
+    LeaveCutoverController,
   ],
   providers: [
     AuditService,
@@ -31,6 +34,7 @@ import { LeaveService } from './leave.service';
     AttendanceService,
     LeaveDashboardService,
     LeaveReportsService,
+    LeaveCutoverService,
   ],
 })
 export class LeaveModule {}

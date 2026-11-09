@@ -11,6 +11,7 @@ import {
 import type { StorageDriver } from '@edupro/storage';
 import type { Logger } from '../logger';
 import { deliverConsentWebhooks } from './consent-webhooks';
+import { readLegacyLeave } from './legacy-leave';
 import { centralSourceFromEnv, pullCentralPunches } from './staff-punches';
 import type { JobLike } from './notifications';
 
@@ -571,6 +572,22 @@ export function maintenanceProcessor({ db, storage, log, migratorUrl }: Maintena
         done += r.rows[0]?.n ?? 0;
       }
       if (done) log.info({ done }, 'staff attendance nightly');
+      return;
+    }
+    if (kind === 'staff.legacy_read') {
+      // Leave cut-over (docs/design/85, phase E): the old module's database read into the staging rows —
+      // when the cut-over page asks for a school, and every night for the schools in their parallel month
+      const asked = (job.data as JobEnvelope<{ schoolIds?: string[] }>).payload?.schoolIds;
+      for (const s of await schoolsFor(db, job)) {
+        if (!asked?.length) {
+          const st = await db.withTenant(
+            { schoolId: s.id, userId: null, allowedSchoolIds: [s.id] },
+            (c) => c.query<{ status: string }>('SELECT status FROM staff_cutover'),
+          );
+          if (st.rows[0]?.status !== 'parallel') continue;
+        }
+        await readLegacyLeave(db, s.id, log);
+      }
       return;
     }
     if (kind === 'leave.month_end') {

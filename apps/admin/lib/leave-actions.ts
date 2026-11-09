@@ -592,3 +592,49 @@ export async function setReportAccess(report: string, fd: FormData) {
   revalidatePath(safe);
   redirect(`${safe}?ok=1&detail=${encodeURIComponent('Saved.')}#r-${report}`);
 }
+
+// ---- phase E: moving from the old module ---------------------------------------------------------------
+const CUT = '/leave/setup/cutover';
+async function cutCall(path: string, body: unknown, ok: string) {
+  try {
+    await apiFetch(path, { method: 'POST', body: JSON.stringify(body) });
+  } catch (e) {
+    if (e instanceof ApiError) back(CUT, e);
+    throw e;
+  }
+  revalidatePath(CUT);
+  redirect(`${CUT}?ok=1&detail=${encodeURIComponent(ok)}`);
+}
+export async function saveCutoverSettings(fd: FormData) {
+  const freeze = String(fd.get('freezeOn') ?? '');
+  await cutCall(
+    '/staff-cutover/settings',
+    {
+      parallelMonth: String(fd.get('parallelMonth') ?? ''),
+      freezeOn: /^\d{4}-\d{2}-\d{2}$/.test(freeze) ? freeze : null,
+    },
+    'Saved.',
+  );
+}
+export async function requestCutoverRead() {
+  await cutCall(
+    '/staff-cutover/read',
+    {},
+    'Asked: the workers read the old database in a minute or two.',
+  );
+}
+export async function runCutoverStep(step: string) {
+  if (!['setup', 'balances', 'history'].includes(step)) return;
+  await cutCall(
+    `/staff-cutover/steps/${step}`,
+    {},
+    'Brought in: see what came and what could not.',
+  );
+}
+export async function switchCutover() {
+  await cutCall(
+    '/staff-cutover/switch',
+    {},
+    'Switched: EduPro is the record now; what waited starts at the first level.',
+  );
+}

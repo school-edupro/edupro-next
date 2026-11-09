@@ -84,6 +84,8 @@ const hm = (d: Date | null) =>
 
 /** How the day was worked out, as a sentence (the earlier engine's calculation trace). */
 export function traceWords(t: Record<string, unknown>): string {
+  if (t?.imported)
+    return 'Brought from the old module as it was there: the punches here do not change it.';
   if (!t || !t.timing) return '';
   const parts = [
     `${TIMING_WORDS[String(t.timing)] ?? String(t.timing)} ${String(t.shift)} ${String(t.start)}–${String(t.end)}, grace ${String(t.grace)} min`,
@@ -255,7 +257,7 @@ export class AttendanceService implements OnModuleInit {
                 : d.day_type,
             late: d.late_minutes > 0,
             missing: isMiss,
-            manual: d.manual,
+            manual: d.manual && d.source !== 'import',
             title: [
               TYPE_WORDS[d.day_type],
               d.in_at ? `IN ${hm(d.in_at)}` : null,
@@ -473,7 +475,7 @@ export class AttendanceService implements OnModuleInit {
               overtime: Number(d.ot_hours),
               late: d.late_minutes,
               early: d.early_minutes,
-              manual: d.manual,
+              manual: d.manual && d.source !== 'import',
               source: d.source,
               remark: d.remark,
               how: traceWords(d.trace),
@@ -667,7 +669,7 @@ export class AttendanceService implements OnModuleInit {
           worked: d.worked_hours === null ? null : Number(d.worked_hours),
           late: d.late_minutes,
           early: d.early_minutes,
-          manual: d.manual,
+          manual: d.manual && d.source !== 'import',
           remark: d.remark,
         })),
         regularisations: regs.rows,
@@ -744,6 +746,75 @@ export class AttendanceService implements OnModuleInit {
       if (inst.status === 'approved') await this.applyReg(c, id);
       return { id, status: inst.status === 'approved' ? 'approved' : 'pending' };
     });
+  }
+
+  /** A correction brought from the old module, approved there: the day set as asked (phase E). */
+  async applyImportedReg(c: PoolClient, id: string) {
+    const g = (
+      await c.query<{
+        employee_id: string;
+        day: string;
+        in_time: string | null;
+        out_time: string | null;
+        day_type: string | null;
+        reason: string;
+      }>(
+        `SELECT employee_id::text, day::text, to_char(in_time, 'HH24:MI') AS in_time, to_char(out_time, 'HH24:MI') AS out_time, day_type, reason
+           FROM staff_regularisations WHERE id = $1 AND status = 'approved'`,
+        [id],
+      )
+    ).rows[0];
+    if (!g || (await this.locked(c, g.day))) return;
+    await this.setDay(c, g.employee_id, g.day, {
+      dayType: g.day_type,
+      in: g.in_time,
+      out: g.out_time,
+      source: 'regularisation',
+      reason: `Correction approved in the old module: ${g.reason}`,
+    });
+  }
+
+  /** A correction brought from the old module still waiting at the switch: its approval starts (phase E). */
+  async startImportedReg(
+    c: PoolClient,
+    ctx: RequestContext,
+    id: string,
+  ): Promise<'started' | 'approved' | 'nobody'> {
+    const g = (
+      await c.query<{ employee_id: string; day: string; name: string; department: string | null }>(
+        `SELECT g.employee_id::text, g.day::text, e.display_name AS name, e.department
+           FROM staff_regularisations g JOIN employees e ON e.id = g.employee_id
+          WHERE g.id = $1 AND g.status = 'pending' AND g.workflow_instance_id IS NULL`,
+        [id],
+      )
+    ).rows[0];
+    if (!g) return 'nobody';
+    const chain = await chainFor(c, g.employee_id, 'regularisation', null, 1);
+    if (!chain) return 'nobody';
+    const code = await leaveFlow(
+      c,
+      'staff_regularisation',
+      chain.ruleId,
+      chain.rule,
+      chain.band,
+      chain.levels,
+    );
+    const inst = await this.workflow.start(c, ctx, {
+      definitionCode: code,
+      entityType: 'staff_regularisation',
+      entityId: id,
+      subject: `Attendance correction · ${g.name} · ${dmy(g.day)}`,
+      payload: { employeeId: g.employee_id, department: g.department ?? '' },
+    });
+    await c.query(`UPDATE staff_regularisations SET workflow_instance_id = $2 WHERE id = $1`, [
+      id,
+      inst.id,
+    ]);
+    if (inst.status === 'approved') {
+      await this.applyReg(c, id);
+      return 'approved';
+    }
+    return 'started';
   }
 
   private async applyReg(c: PoolClient, id: string) {

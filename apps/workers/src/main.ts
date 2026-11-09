@@ -200,6 +200,12 @@ async function main(): Promise<void> {
     { pattern: '30 20 * * *' },
     { name: 'staff.attendance_nightly', data: SYSTEM_ENVELOPE('staff.attendance_nightly') },
   );
+  // the leave cut-over's parallel month: the old module's database read again every night (02:30 IST)
+  await maintenance.upsertJobScheduler(
+    'staff.legacy_read',
+    { pattern: '0 21 * * *' },
+    { name: 'staff.legacy_read', data: SYSTEM_ENVELOPE('staff.legacy_read') },
+  );
   await maintenance.upsertJobScheduler(
     'leave.digest',
     { pattern: '0 3 * * *' },

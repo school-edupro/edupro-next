@@ -292,7 +292,79 @@ not marked never absent, working days, attendance %; the "Not required" employee
 card's two headings and figures, the register's marks, the daily report's figures; leave availed and
 deducted; the balance as on a date; a report given to one person, others closed, the dashboard).
 
-## Phase E — cut-over (next)
+## As built — phase E, moving from the old module (9 Nov 2026)
 
-Staff, leave types, policies, weekly offs, holidays, shifts and postings, who approves, opening balances
-and the history from the earlier system; a parallel month.
+**Decisions (9 Nov 2026)**: read the old database directly (read only, the server's connection); bring the
+set-up, the balances and this financial year's history; freeze, then bring what still waits (from the first
+level); one parallel month with a comparison. Practice followed: balances as of the month before the
+parallel month so nothing is credited twice, a parallel run reconciled before the old system goes, and a
+freeze for requests in flight (Employment Hero's parallel-run guidance, leavebalance.com's reconciliation
+checklist, the Canadian DND HRMS cut-off).
+
+**Data** (0354): `staff_cutover` (the parallel month, the freeze date, status setup → parallel → switched,
+the reads asked, started, done with their counts or error, each step's when / by / counts / problems, the
+switch); `staff_legacy_rows` (the old rows as read: table, old id, payload, the read they came in);
+`staff_legacy_map` (what each old row became: a re-run updates the same row); `app.staff_legacy_emp` (an old
+employee id → the employee code here, else the biometric id), `app.staff_legacy_id`; the day's source gains
+`import` (kept as it was: protected from the punches, not "set by hand"); `app.staff_report_days` shows
+imported days without the hand mark.
+
+**Workers** (`legacy-leave.ts`, kind `staff.legacy_read`): `LEGACY_LEAVE_DB_URL` (or
+`LEGACY_LEAVE_DB_URL_<SCHOOL CODE>`) — a read-only MySQL session, every table in pages of 5,000 by `srno`
+(the set-up whole; the history from 1 April of the parallel month's year: balances by year-month, leave by
+its end, days, late marks, missing punches, corrections by date), `tbl_module_settings` of the settings and
+MIS pages; rows gone from the old database go from the staging area; a missing table is noted, not an
+error; the error kept without user or host. Asked from the page (through the outbox) and every night at
+02:30 IST for schools in their parallel month.
+
+**API** (`/staff-cutover`): the overview, settings (the parallel month this month or the next; it stays once
+the balances came), read (enqueue), preview (each step in a savepoint, rolled back), `steps/setup|balances|
+history`, compare, switch. **Set-up**: leave types by code (the old TrackBalance, loss of pay unpaid without
+a balance, pay % from the old loss %, monthly credit → quarterly with a note), policies by name (scope ALL /
+DEPARTMENT / DESIGNATION / EMPLOYEETYPE / EMPID, the employee scope by the code here; credited by attendance
+as the old module always did; the sandwich from weekly off / holiday / declared holiday / festival),
+weekly-off rules by name (WEEKLY with weekdays and week numbers, or DATES; the starting rules switched off),
+holidays on the school calendar for employees (same dates already there: kept; restricted → optional; the
+scope from the holiday's scope rows), shifts by code, postings, department timings, an employee's dated
+timings, an employee's own timing as a special timing for the year, who approves (a rule per old RefType,
+scope, leave type and priority; the old day ranges fill the bands they overlap; named approvers or the
+reporting manager; LEAVECANCEL noted — cancellations follow the leave's rule), settings
+(`late_marks_per_leave`, `forgot_punches_per_leave`, `allow_time_edit`, `allow_onbehalf`, `email_enabled`,
+`default_shift_code`), "Not required" and report access (`mis_not_required`, `report_access_<key>` mapped to
+the eighteen reports). Each row in a savepoint: a refusal is a problem, the rest goes on. **Balances**: the
+ledger from 1 April to the month before the parallel month, closed and marked imported (a resync never
+moves them), then the month-end run opens the parallel month at that closing and credits it here.
+**History**: leave set-based (new rows get their ids from the identity first: `OVERRIDING SYSTEM VALUE`),
+the old number kept unless taken (then OLD-<id>), status and how it came (self, by the office, late marks,
+missing punches, absence), held in the month it was raised, its days from the old day rows (half a day with
+its session); a re-run updates what changed in the old module (leave not yet started here), takes the
+parallel month's approved leave off the days and puts it back, and sets what is held in the parallel month
+from the leave that waits or is approved. The days before the parallel month as the old module had them (a
+half day with a leave type is half a day of that leave), late marks (rolled back → waived, converted → used,
+left → lapsed), missing punches likewise, corrections (the parallel month's approved ones set the day here),
+the locked months. **Compare**: the parallel month to yesterday — each employee-day whose code differs, each
+balance that differs (with both months' credits). **Switch**: on or after the freeze date and a read after
+it — the last history, then each imported leave and correction still waiting starts at the first level of
+Who approves (`LeaveService.startImported`, `AttendanceService.startImportedReg`); none: a problem for the
+office; the old module is not read again.
+
+**Screens**: admin — Moving from the old module (`/leave/setup/cutover`, from the set-up's "6. Moving from the
+old module": four figures, 1. the months, 2. the read, 3. the preview, 4–6. the steps with their last counts
+and problems, 7. compare and switch, the switch confirmed and refused with the reason until it may run),
+Compare the parallel month (`/leave/setup/cutover/compare`). `.env.example` names the connections (no
+values).
+
+Tests: `staff-cutover.e2e-spec.ts` (the preview keeps nothing and lists the monthly credit, an unknown scope,
+the cancellation chain and an employee not found; the set-up — types, policies, weekly offs with the starting
+rule off, a staff holiday, a night shift, a posting, timings, who approves, settings, Not required, report
+access — twice without doubling; the history refused before the balances; the balances to last month and the
+parallel month opened at their closing; the history — leave and days, days kept as the old module had them
+and not "set by hand", late marks, missing punches, the locked month, the waiting leave held — twice without
+doubling; the comparison; the switch starting the waiting leave and correction at the first level and closing
+the cut-over); `apps/workers/test/legacy-leave.test.ts` (the connection from the environment, the tables and
+their filters).
+
+## The module is complete
+
+Phases A–E are built. What is left is the school's: the old database connection on the server, the read, the
+preview's problems settled, the parallel month and the switch.
