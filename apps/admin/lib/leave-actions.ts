@@ -574,3 +574,21 @@ export async function importAttendanceSheet(
     throw e;
   }
 }
+
+// ---- phase D: the reports ------------------------------------------------------------------------------
+/** Give a report to these people (and nobody else). */
+export async function setReportAccess(report: string, fd: FormData) {
+  if (!/^[a-z_]{3,40}$/.test(report)) return;
+  const safe = '/leave/setup/report-access';
+  try {
+    await apiFetch(`/leave-reports/access/${report}`, {
+      method: 'PUT',
+      body: JSON.stringify({ userIds: fd.getAll('people').map(String).filter(okId) }),
+    });
+  } catch (e) {
+    if (e instanceof ApiError) back(safe, e);
+    throw e;
+  }
+  revalidatePath(safe);
+  redirect(`${safe}?ok=1&detail=${encodeURIComponent('Saved.')}#r-${report}`);
+}

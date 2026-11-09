@@ -76,6 +76,8 @@
     "attendanceRegisters": "मासिक रजिस्टर",
     "attendanceSetup": "उपस्थिति सेट-अप",
     "attendanceRegister": "रजिस्टर",
+    "leaveDashboard": "अवकाश डैशबोर्ड",
+    "leaveReports": "अवकाश और उपस्थिति रिपोर्ट",
     "rfid": "RFID रीडर",
     "workflow": "अनुमोदन",
     "inbox": "मेरा इनबॉक्स",
@@ -277,7 +279,7 @@
     "leaveSetup": "अवकाश और उपस्थिति सेटअप",
     "myLeave": "मेरा अवकाश",
     "leaveRegister": "अवकाश रजिस्टर",
-    "attendanceRegister": "उपस्थिति रजिस्टर"
+    "staffAttendanceRegister": "उपस्थिति रजिस्टर"
   },
   "shell": {
     "primaryNavigation": "मुख्य",

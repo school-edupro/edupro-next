@@ -236,7 +236,63 @@ night shift and a department timing; punches from Excel, the register's payable 
 stopping at yesterday, the payroll feed; credit by attendance taking two and a half days off);
 `apps/workers/test/staff-punches.test.ts` (the central source from the environment and its queries).
 
-## Phase D — reports (next)
+## As built — phase D, the dashboard and reports (9 Nov 2026)
 
-The 16 MIS reports of the earlier system, then phase E, the cut-over (staff, balances and history from the
-earlier system).
+**Source**: the earlier module's MIS — 16 reports (the monthly one in three forms), a per-report access
+list of people, a "Not required" list of staff left out of the reports, Prepared / Checked / Principal
+signatures on paper; no dashboard (a landing with counts). Kept, with its faults fixed: the annual % that
+went over 100 once blank days were filled (one working-days rule now), half a day of leave counted as a
+day (portions now), working days that counted today, the future, days before joining and holds, the
+cumulative report whose past months changed once late marks turned into leave (marks now count until
+waived), its "Opening" heading over "Credited", "Taken this month" repeating "Availed", late marks
+"pending this month" seeing only the range picked (the whole month now), "balance as on" working by month
+(leave raised after the date now left out), leave availed showing the whole leave for a part in the period
+(both now), year-on-year by calendar year (financial year now), on duty / work from home counted present
+in one report only (all now), a half day of short hours vanishing from two reports, the register export
+without signatures or the access check, range caps cutting the dates silently (refused with a message
+now), and the filters API open to anyone assigned one report.
+
+**Data** (0353): the right `leave.report.view` (group and school admin, the leave office, principal, vice
+principal, HR); `staff_report_exclusions` (the "Not required" list: employee, why, active / retired —
+a master in the leave group); `staff_report_access` (report, person); `app.staff_report_days(employees,
+from, to)` — every day of the range: the worked-out day, else a weekly off or holiday by the calendar (past
+days only), else not marked (never absent); what it counts as present (P 1, HD 0.5, leave counting as
+present 1, the worked half of half a day of leave), paid leave and loss of pay by portion; in, out,
+hours, late, early, set by hand, the missing punch, the shift and its end.
+
+**API** (`/leave-reports`): `dashboard` (twelve figures, today by department, on leave and late today,
+waiting longest, attendance by day this month, leave by type this year), `mine` (how many reports I may
+open), `catalogue` (my reports with their filters and the lists), `access` and `PUT access/:report`,
+`reports/:report` (on screen up to 3,000 rows; `format=xlsx|pdf` up to 20,000) — eighteen reports:
+daily, in_out, monthly_summary, monthly_employee, monthly_register, card, basic_work, monthly_cumulative,
+annual, employee_yearly, year_on_year, late_arrival, early_going, forgot_punch, leave_availed,
+leave_deduction, balance_as_on, opening_closing. Every report for the reports right and the leave office;
+otherwise only those given. Files (`leave-report-file.ts`): the letterhead (logo; school, address, report,
+the filters and financial year, when, records), employee headings across the table, a page an employee
+for the card and the employee-wise month (five employees a page for basic work), the register and the
+cumulative on A3, a note on how the figures are counted, and the Prepared by (the person, with the
+signature on their employee record and the time) / Checked by / Principal boxes — at the foot of each
+card's page too. `tablePdf` gained `breakBefore`, `signs`, `signsEachBreak` and `a3`, and prints curly
+quotes and ≥ in the built-in fonts.
+
+**Screens**: admin — Leave dashboard (`/leave/dashboard`), Leave & attendance reports (`/leave/reports`:
+the report by group, its filters, the figures for the daily ones, the table with employee headings and
+group headings, Excel, PDF), Who may open the reports (`/leave/setup/report-access`, from the set-up's new
+"5. Reports" section with Not required in the reports), a Reports button on My leave for staff given a
+report. **Staff app**: Leave & attendance reports (`/leave-reports`, shown when a report is given: pick,
+filter, Excel or PDF).
+
+Fixed with it (phase C): the staff attendance register's menu label used a message key the student
+attendance register already had (the student menu read "Attendance register"); now
+`staffAttendanceRegister`. The help page's "Common questions" heading, lost in phase C, is back.
+
+Tests: `staff-reports.e2e-spec.ts` (all eighteen on screen, five as Excel and PDF, a period too long
+refused; the month's figures — present, half day, absent, paid leave by half, loss of pay, weekly offs,
+not marked never absent, working days, attendance %; the "Not required" employee out unless picked; the
+card's two headings and figures, the register's marks, the daily report's figures; leave availed and
+deducted; the balance as on a date; a report given to one person, others closed, the dashboard).
+
+## Phase E — cut-over (next)
+
+Staff, leave types, policies, weekly offs, holidays, shifts and postings, who approves, opening balances
+and the history from the earlier system; a parallel month.

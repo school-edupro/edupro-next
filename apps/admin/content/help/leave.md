@@ -3,8 +3,7 @@
 Staff apply for leave; their approvers decide it level by level; balances are credited by policy and
 held while a leave waits. Staff attendance is worked out from the biometric punches: late marks and
 missing punches turn into leave, and an absent day nobody explains becomes loss of pay. This page
-covers the set-up, applying, approving, the balances and staff attendance; the reports follow in the next
-release.
+covers the set-up, applying, approving, the balances, staff attendance, and the dashboard and reports.
 
 ## Who does what
 
@@ -14,6 +13,8 @@ release.
 | **School admin**                                      | The same as the leave office                                                             |
 | **Approvers** (HOD, reporting manager, named staff …) | Decide the leave and attendance corrections of the staff a rule sends to them            |
 | **Every employee**                                    | Applies for leave, sees their attendance and asks for a day to be corrected              |
+| **Principal, vice principal, HR**                     | Open the dashboard and every report                                                      |
+| **Staff given a report** (an HOD …)                   | Open that report (My leave → Reports; staff app → Leave & attendance reports)            |
 
 ## The set-up (Employee management → Leave & attendance set-up)
 
@@ -81,7 +82,12 @@ change punch times and apply leave for an employee, how far back leave may be ap
 device serials (for punches read from the central device database), who else gets the missing-punch
 e-mails, and the message channels (e-mail, WhatsApp, app; SMS once its templates are approved).
 
-Every grid (types, policies, weekly offs, shifts, postings) downloads as Excel or PDF and takes an Excel
+**5. Reports** — **Who may open the reports** (the principal, the leave office, the school admin and HR
+open every one; give a report to other staff here) and **Not required in the reports** (staff left out of
+the reports and the dashboard — the management, staff who do not punch; they still apply for leave and
+their days are still worked out; picking one of them in a report shows them).
+
+Every grid (types, policies, weekly offs, shifts, postings, Not required) downloads as Excel or PDF and takes an Excel
 upload; a wrong value is refused with the reason (a loss-of-pay type marked paid, a quarterly policy
 with two credit months, a day shift that ends before it starts).
 
@@ -197,6 +203,49 @@ Download the sheet, fill it, **Check**, then **Save** the good rows.
 **My attendance** (My leave → My attendance; staff app → My attendance): your month — the figures,
 each day with IN, OUT, hours, late or early — and the corrections you asked, with where each waits.
 
+## The dashboard and the reports (Employee management → Leave dashboard, Leave & attendance reports)
+
+**The dashboard**: twelve figures — staff, in today, on leave today, not in yet (no punch, no leave, a
+working day), late today, weekly off or holiday, the month's attendance %, late marks, missing punches and
+loss-of-pay days this month, leave and corrections waiting — then today by department, who is on leave
+and late today, what waits longest (3 days or more in red), and two small charts: attendance by day this
+month and leave taken this year by type. A reminder shows when last month is not locked for payroll.
+
+**The reports** (pick one, filter, read it here — up to 3,000 rows — and save it as **Excel** or **PDF**
+with the letterhead and the **Prepared by** (you, with your signature and the time), **Checked by** and
+**Principal** boxes):
+
+| Group      | Report                              | What it shows                                                                                                                                      |
+| ---------- | ----------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Daily      | Daily attendance                    | Each employee on a day: in, out, attendance, late, early, a missing punch, shift, hours, timing (12 figures)                                       |
+| Daily      | Yesterday OUT / today IN            | The last OUT of the working day before beside today's IN: who left early, who has not come                                                         |
+| Monthly    | Monthly summary                     | Working days, present, half day, absent, weekly off, holiday, paid leave, loss of pay, hold, not marked, late marks, missing punches, attendance % |
+| Monthly    | Monthly attendance, employee-wise   | Each employee's month day by day (a printed page each)                                                                                             |
+| Monthly    | Monthly attendance register         | The month's grid, four lines an employee (status, in, out, hours) and the totals (A3)                                                              |
+| Monthly    | Monthly employee attendance (card)  | A card an employee: the figures, then each day with shift, in, late, out, early, status, hours (a page each)                                       |
+| Monthly    | Monthly basic work                  | Up to 31 days of status, in, out and hours (five employees a page)                                                                                 |
+| Monthly    | Monthly cumulative                  | The month's codes with late marks this month, before it and in the year, and each balance type                                                     |
+| Yearly     | Annual consolidated                 | A period (the year so far): every kind of day, attendance %, late marks, missing punches, corrections, deductions, leave taken, balances           |
+| Yearly     | Employee yearly                     | From a month to a month: the days of each kind and of each leave type                                                                              |
+| Yearly     | Cumulative year-on-year (leave)     | Each financial year and leave type: opening, credited, corrections, taken, lapsed, closing                                                         |
+| Exceptions | Late arrival                        | Each late mark with its status, the marks counting that month and the leave due                                                                    |
+| Exceptions | Early going                         | Days left before the shift's end (up to 31 days)                                                                                                   |
+| Exceptions | Forgot punch and corrections        | Each missing punch with the correction asked, who decided it and the leave due                                                                     |
+| Leave      | Leave availed                       | Leave in a period: the days in the period and in all, how it was applied, its status                                                               |
+| Leave      | Leave deducted by the system        | Leave charged for late marks, missing punches, absence and the shift's late / early rule                                                           |
+| Leave      | Leave balance as on a date          | Each employee and type on a date: opening, credited, corrections, taken to the date, available                                                     |
+| Leave      | Monthly opening and closing balance | Each employee and month: opening, added, taken and closing of each balance type                                                                    |
+
+**How the figures are counted** (the same in every report): a half day counts half present; on duty and
+work from home count present; half a day of leave is half leave and half present; loss of pay is counted
+apart from paid leave; a day nothing was worked out for shows **·** ("not marked") and is never counted
+absent; **working days** are the days up to yesterday from joining, less weekly offs and holidays;
+**attendance %** = (present + paid leave) ÷ working days. A period longer than the report allows (31 days
+for early going and basic work, 62 for late arrival and forgot punch, 400 for the annual and leave
+reports) is refused with a message, not cut.
+
+## Common questions
+
 1. **A teacher gets no CL.** Leave types at a glance shows how many staff are in no policy of the type:
    add a policy for them, or widen one.
 2. **Who would approve a 10-day leave of this teacher?** Who approves → Test the chain.
@@ -218,3 +267,9 @@ each day with IN, OUT, hours, late or early — and the corrections you asked, w
 11. **Payroll wants the days.** Lock the month, then **Payroll feed (Excel)**.
 12. **The correction button is missing.** The day is today or later, the month is locked, or a correction
     for the day already waits or was approved.
+13. **The HOD should see the daily report of the staff.** Set-up → Who may open the reports → Daily
+    attendance → add the HOD. They find it under My leave → Reports (staff app: Leave & attendance
+    reports).
+14. **The director should not be in the reports.** Set-up → Not required in the reports → add them.
+15. **The monthly summary shows "not marked" days.** The nightly run has not worked those days out (the
+    workers stopped, or the first month): Attendance register → Run now → work days out again.

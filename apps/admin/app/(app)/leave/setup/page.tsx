@@ -121,6 +121,29 @@ export default async function LeaveSetupPage({
         },
       ],
     },
+    {
+      id: 'lv-reports',
+      title: '5. Reports',
+      text: 'Who opens the leave and attendance reports, and the staff the reports leave out.',
+      links: [
+        {
+          done: null,
+          title: 'Who may open the reports',
+          text: c.given
+            ? `${String(c.given)} report${c.given === 1 ? '' : 's'} given to named staff (the principal, the leave office, the school admin and HR open every one)`
+            : 'The principal, the leave office, the school admin and HR open every report; give one to other staff',
+          href: '/leave/setup/report-access',
+        },
+        {
+          done: null,
+          title: 'Not required in the reports',
+          text: c.excluded
+            ? `${String(c.excluded)} staff left out of the reports and the dashboard`
+            : 'Optional: staff left out of the reports and the dashboard (the management, staff who do not punch)',
+          href: '/masters/leave?tab=staff_report_exclusions',
+        },
+      ],
+    },
   ];
   return (
     <>

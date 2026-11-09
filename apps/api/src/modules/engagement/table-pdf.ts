@@ -1,5 +1,6 @@
 import { PDFDocument, StandardFonts, rgb, type PDFFont } from 'pdf-lib';
 import { drawLetterhead, embedLogo, type LetterheadLogo } from '../../common/pdf/letterhead';
+import { drawSignBoxes, type SignBox } from '../purchase/purchase-doc-sign';
 
 export interface TablePdf {
   school: string;
@@ -49,10 +50,19 @@ export interface TablePdf {
    * the band: the purchase lists (docs/design/83).
    */
   letterhead?: { logo: LetterheadLogo | null; details?: string };
+  /** Rows (by position) that start a new page: one employee's card a page (docs/design/85, phase D). */
+  breakBefore?: number[];
+  /** Signature boxes under everything (Prepared by, Checked by, Principal): a filled one or empty to sign. */
+  signs?: SignBox[];
+  /** The signature boxes also at the foot of each page `breakBefore` ends (one employee's card a page). */
+  signsEachBreak?: boolean;
+  /** A3 instead of A4 (a month's register of every employee). */
+  a3?: boolean;
 }
 
 const LONG = 841.89; // A4
 const SHORT = 595.28;
+const A3_LONG = 1190.55;
 const M = 36;
 const NAVY = rgb(0, 0.149, 0.365);
 const INK = rgb(0.043, 0.122, 0.227);
@@ -69,7 +79,15 @@ const BANDS = {
 };
 
 /** The built-in PDF fonts carry Latin letters only: anything else prints as "?" rather than failing. */
-const latin = (s: string) => s.replace(/[‐-―]/g, '-').replace(/[^\x20-\x7E\xA0-\xFF]/g, '?');
+const latin = (s: string) =>
+  s
+    .replace(/[‐-―]/g, '-')
+    .replace(/[‘’]/g, "'")
+    .replace(/[“”]/g, '"')
+    .replace(/≥/g, '>=')
+    .replace(/≤/g, '<=')
+    .replace(/…/g, '...')
+    .replace(/[^\x20-\x7E\xA0-\xFF]/g, '?');
 function fit(font: PDFFont, text: string, size: number, width: number): string {
   let out = latin(text);
   if (font.widthOfTextAtSize(out, size) <= width) return out;
@@ -117,7 +135,8 @@ function wrapLines(
  * (no worker needed).
  */
 export async function tablePdf(t: TablePdf): Promise<Buffer> {
-  const [W, H] = t.portrait ? [SHORT, LONG] : [LONG, SHORT];
+  const [long, short] = t.a3 ? [A3_LONG, LONG] : [LONG, SHORT];
+  const [W, H] = t.portrait ? [short, long] : [long, short];
   const pdf = await PDFDocument.create();
   pdf.setTitle(t.title);
   const regular = await pdf.embedFont(StandardFonts.Helvetica);
@@ -255,8 +274,24 @@ export async function tablePdf(t: TablePdf): Promise<Buffer> {
   };
   head();
   const strongRows = new Set(t.strong ?? []);
-  t.rows.forEach((row, n) => {
-    if (y < M + 20) {
+  const breaks = new Set(t.breakBefore ?? []);
+  for (let n = 0; n < t.rows.length; n += 1) {
+    const row = t.rows[n]!;
+    if (n > 0 && breaks.has(n) && t.signsEachBreak && t.signs?.length) {
+      // the boxes at the foot of the card just ended (on a page of their own when there is no room)
+      // the boxes reach 100 points under their top: under that, a page of their own
+      if (y - 112 < 30) {
+        page = pdf.addPage([W, H]);
+        pages.push(page);
+        y = H - M - 20;
+      }
+      await drawSignBoxes(pdf, page, { regular, bold }, t.signs, {
+        x: M,
+        y: Math.min(y - 12, M + 130),
+        width: W - 2 * M,
+      });
+    }
+    if (y < M + 20 || (n > 0 && breaks.has(n))) {
       page = pdf.addPage([W, H]);
       head();
     }
@@ -273,7 +308,7 @@ export async function tablePdf(t: TablePdf): Promise<Buffer> {
         color: NAVY,
       });
       y -= ROW;
-      return;
+      continue;
     }
     const face = strongRows.has(n) || band ? bold : regular;
     const cells = t.columns.map((_, i) => {
@@ -295,7 +330,7 @@ export async function tablePdf(t: TablePdf): Promise<Buffer> {
       });
     draw(cells, face, band === 'grand' ? rgb(1, 1, 1) : INK);
     y -= ROW + extra;
-  });
+  }
   if (!t.rows.length)
     page.drawText('Nothing to show.', { x: M, y, size: 9, font: regular, color: MUTED });
   // the small tables under the main one: half the page wide, each with a title and its own header row
@@ -369,6 +404,11 @@ export async function tablePdf(t: TablePdf): Promise<Buffer> {
       page.drawText(l, { x: M, y, size: 8, font: regular, color: MUTED });
       y -= 11;
     }
+  }
+  if (t.signs?.length) {
+    if (y - 118 < 30) fresh();
+    y -= 18;
+    y = await drawSignBoxes(pdf, page, { regular, bold }, t.signs, { x: M, y, width: W - 2 * M });
   }
   pages.forEach((p, i) =>
     p.drawText(

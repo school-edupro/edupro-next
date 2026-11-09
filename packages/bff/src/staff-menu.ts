@@ -38,6 +38,8 @@ export interface StaffWaiting {
   staffLeave?: number;
   /** colleagues' attendance corrections at my approval level (docs/design/85, phase C) */
   staffRegularisations?: number;
+  /** leave & attendance reports the leave office gave me (docs/design/85, phase D) */
+  leaveReports?: number;
 }
 export interface StaffGroup {
   id: string;
@@ -251,6 +253,12 @@ export const STAFF_MENU: StaffGroup[] = [
         allowed: (_can, w) => (w.staffRegularisations ?? 0) > 0,
       },
       {
+        href: '/leave-reports',
+        label: 'Leave & attendance reports',
+        help: 'The leave and attendance reports the leave office gave you, as Excel or PDF',
+        allowed: (_can, w) => (w.leaveReports ?? 0) > 0,
+      },
+      {
         href: '/resignation',
         label: 'My resignation',
         help: 'Ask for resignation, see where it is, withdraw it until it is accepted',
@@ -411,6 +419,7 @@ const SCREEN_ICON: Array<[string, string]> = [
   ['/leave-approvals', 'check'],
   ['/my-attendance', 'clock'],
   ['/attendance-corrections', 'check'],
+  ['/leave-reports', 'file'],
   ['/resignation', 'userPlus'],
   ['/acr', 'file'],
   ['/office-orders', 'file'],

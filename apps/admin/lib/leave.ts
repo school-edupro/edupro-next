@@ -18,6 +18,8 @@ export interface LeaveOverview {
     shifts: number;
     postings: number;
     timings: number;
+    excluded: number;
+    given: number;
     leaveRules: number;
     regRules: number;
     staff: number;
@@ -465,3 +467,127 @@ export const DAY_CODE_TONE: Record<string, string> = {
   H: 'holiday',
   HOLD: 'absent',
 };
+
+// ---- phase D: the dashboard and the reports ------------------------------------------------------------
+export interface LeaveDashboard {
+  today: string;
+  monthWords: string;
+  fyFrom: string;
+  figures: {
+    staff: number;
+    punched: number;
+    onLeave: number;
+    notIn: number;
+    late: number;
+    off: number;
+    waiting: number;
+    corrections: number;
+    lateMarks: number;
+    missing: number;
+    lopDays: number;
+    attendance: number | null;
+  };
+  lastMonth: { words: string; month: string; locked: boolean };
+  departments: Array<{
+    department: string;
+    staff: number;
+    punched: number;
+    onLeave: number;
+    notIn: number;
+    late: number;
+    off: number;
+  }>;
+  onLeave: Array<{
+    id: string;
+    name: string;
+    code: string;
+    department: string | null;
+    type: string;
+    from_date: string;
+    to_date: string;
+    half: boolean;
+  }>;
+  lateToday: Array<{
+    id: string;
+    name: string;
+    code: string;
+    department: string | null;
+    at: string;
+    minutes: number;
+  }>;
+  waiting: Array<{
+    kind: string;
+    id: string;
+    label: string;
+    name: string;
+    since: string;
+    href: string;
+  }>;
+  byDay: Array<{ day: string; percent: number | null }>;
+  byType: Array<{ code: string; name: string; days: number }>;
+}
+
+export type LeaveReportFilter =
+  | 'day'
+  | 'period'
+  | 'month'
+  | 'months'
+  | 'asOn'
+  | 'department'
+  | 'employeeType'
+  | 'employee'
+  | 'type'
+  | 'status';
+export interface LeaveReportCatalogue {
+  reports: Array<{
+    code: string;
+    name: string;
+    group: string;
+    filters: LeaveReportFilter[];
+    help: string;
+  }>;
+  departments: string[];
+  employeeTypes: Array<{ code: string; name: string }>;
+  employees: Array<{ id: string; name: string; code: string }>;
+  types: Array<{ id: string; code: string; name: string }>;
+  manage: boolean;
+  all: boolean;
+}
+export interface LeaveReportResult {
+  report: string;
+  name: string;
+  words: string;
+  filters: {
+    day: string;
+    from: string;
+    to: string;
+    month: string;
+    fromMonth: string;
+    toMonth: string;
+    status: string | null;
+  };
+  columns: Array<{
+    label: string;
+    type?: 'text' | 'number' | 'date';
+    group?: string;
+    center?: boolean;
+  }>;
+  rows: Array<Array<string | number | null>>;
+  headings: number[];
+  strong: number[];
+  links: Array<string | null> | null;
+  kpis: Array<{ label: string; value: string | number }> | null;
+  note: string | null;
+  more: boolean;
+  total: number;
+}
+export interface LeaveReportAccess {
+  reports: Array<{
+    code: string;
+    name: string;
+    group: string;
+    people: Array<{ id: string; name: string; code: string | null }>;
+  }>;
+  people: Array<{ id: string; name: string; code: string }>;
+  manage: boolean;
+}

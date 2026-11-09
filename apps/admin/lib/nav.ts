@@ -66,7 +66,13 @@ export const NAV: Array<{
       // what waits for my approval and the balances open from My leave and the register
       { href: '/leave', label: 'myLeave', permission: 'leave.own.apply' },
       { href: '/leave/register', label: 'leaveRegister', permission: 'leave.office.manage' },
-      { href: '/leave/attendance', label: 'attendanceRegister', permission: 'leave.office.manage' },
+      {
+        href: '/leave/attendance',
+        label: 'staffAttendanceRegister',
+        permission: 'leave.office.manage',
+      },
+      { href: '/leave/dashboard', label: 'leaveDashboard', permission: 'leave.report.view' },
+      { href: '/leave/reports', label: 'leaveReports', permission: 'leave.report.view' },
       { href: '/leave/setup', label: 'leaveSetup', permission: 'leave.setup.view' },
       {
         href: '/people/staff-profile-approvals',

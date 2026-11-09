@@ -2522,6 +2522,42 @@ export const MASTERS: MasterDefinition[] = [
     ],
     orderBy: 't.from_date DESC',
   }),
+  master({
+    id: 'staff_report_exclusions',
+    title: 'Not required in the reports',
+    group: 'leave',
+    order: 60,
+    table: 'staff_report_exclusions',
+    permission: LEAVE,
+    naturalKey: ['employee_id'],
+    conflict: "(employee_id) WHERE status = 'active'",
+    uploadHelp:
+      'Staff left out of the leave and attendance reports and the dashboard (the management, staff who do not punch, someone on long leave): they still apply for leave and their days are still worked out. Retire a row to bring them back.',
+    fields: [
+      {
+        key: 'employee_id',
+        header: 'Employee',
+        type: 'ref',
+        required: true,
+        identity: true,
+        lookup: {
+          table: 'employees',
+          column: 'employee_code',
+          labelColumn: 'display_name',
+          nameFirst: true,
+          filter: 't.deleted_at IS NULL',
+        },
+        width: 26,
+      },
+      { key: 'reason', header: 'Why', type: 'text', maxLength: 200, width: 30 },
+    ],
+    status: { column: 'status', values: ['active', 'retired'] as const },
+    search: [
+      "(SELECT e.display_name || ' ' || e.employee_code FROM employees e WHERE e.id = t.employee_id)",
+      't.reason',
+    ],
+    orderBy: 't.created_at DESC',
+  }),
   // ---- attendance ----
   master({
     id: 'leave_types',

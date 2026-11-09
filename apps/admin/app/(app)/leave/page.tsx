@@ -28,6 +28,12 @@ export default async function MyLeavePage({
     throw e;
   }
   const office = me.permissions.includes('leave.office.manage');
+  // a report given to me on its own (docs/design/85, phase D) — those with the reports right have the menu
+  const reports = me.permissions.includes('leave.report.view')
+    ? 0
+    : await apiFetch<{ reports: number }>('/leave-reports/mine')
+        .then((r) => r.reports)
+        .catch(() => 0);
   const link = (p: number) => `/leave?size=${size}${p > 1 ? `&page=${String(p)}` : ''}`;
   return (
     <>
@@ -49,6 +55,11 @@ export default async function MyLeavePage({
             <a className="ep-btn ep-btn--secondary ep-btn--sm" href="/leave/attendance/mine">
               My attendance
             </a>
+            {reports ? (
+              <a className="ep-btn ep-btn--secondary ep-btn--sm" href="/leave/reports">
+                Reports
+              </a>
+            ) : null}
             {office ? (
               <a className="ep-btn ep-btn--secondary ep-btn--sm" href="/leave/register">
                 Leave register

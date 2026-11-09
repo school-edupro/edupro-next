@@ -76,6 +76,8 @@
     "attendanceRegisters": "Monthly registers",
     "attendanceSetup": "Attendance set-up",
     "attendanceRegister": "Register",
+    "leaveDashboard": "Leave dashboard",
+    "leaveReports": "Leave & attendance reports",
     "rfid": "RFID readers",
     "workflow": "Approvals",
     "inbox": "My inbox",
@@ -277,7 +279,7 @@
     "leaveSetup": "Leave & attendance set-up",
     "myLeave": "My leave",
     "leaveRegister": "Leave register",
-    "attendanceRegister": "Attendance register"
+    "staffAttendanceRegister": "Attendance register"
   },
   "shell": {
     "primaryNavigation": "Primary",

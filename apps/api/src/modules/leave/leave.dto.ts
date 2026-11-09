@@ -324,3 +324,45 @@ export const SheetSchema = z.object({
   dryRun: z.boolean().default(true),
 });
 export class SheetDto extends createZodDto(SheetSchema) {}
+
+// ---- phase D: the reports ----------------------------------------------------------------------------------
+export const LEAVE_REPORT_CODES = [
+  'daily',
+  'in_out',
+  'monthly_summary',
+  'monthly_employee',
+  'monthly_register',
+  'card',
+  'basic_work',
+  'monthly_cumulative',
+  'annual',
+  'employee_yearly',
+  'year_on_year',
+  'late_arrival',
+  'early_going',
+  'forgot_punch',
+  'leave_availed',
+  'leave_deduction',
+  'balance_as_on',
+  'opening_closing',
+] as const;
+export type LeaveReport = (typeof LEAVE_REPORT_CODES)[number];
+
+export const LeaveReportQuerySchema = z.object({
+  day: Day.optional(),
+  from: Day.optional(),
+  to: Day.optional(),
+  month: Month.optional(),
+  fromMonth: Month.optional(),
+  toMonth: Month.optional(),
+  department: z.string().trim().max(100).optional(),
+  employeeType: z.string().trim().max(40).optional(),
+  employeeId: Id.optional(),
+  typeId: Id.optional(),
+  status: z.enum(['pending', 'approved', 'rejected', 'withdrawn', 'cancelled', 'all']).optional(),
+  format: z.enum(['xlsx', 'pdf']).optional(),
+});
+export class LeaveReportQueryDto extends createZodDto(LeaveReportQuerySchema) {}
+
+export const ReportAccessSchema = z.object({ userIds: z.array(Id).max(200) });
+export class ReportAccessDto extends createZodDto(ReportAccessSchema) {}
