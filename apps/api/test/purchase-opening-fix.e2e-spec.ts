@@ -326,7 +326,6 @@ describe('purchase opening stock corrections, rate corrections and the count (e2
     });
     expect(settled.statusCode).toBe(409);
     expect(settled.json().detail).toContain('moved since');
-    const o = (await call(office, 'GET', `/purchase/stores/${ids.main!}/openings`)).json();
     const pen = (
       await call(office, 'GET', `/purchase/stores/${ids.main!}/openings?q=Ball&status=settled`)
     ).json();

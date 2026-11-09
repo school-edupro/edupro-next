@@ -61,7 +61,7 @@ jobs:
       - run: pnpm --filter @edupro/admin exec playwright install --with-deps chromium
       - name: Build and start the stack
         run: |
-          pnpm --filter @edupro/storage --filter @edupro/db --filter @edupro/ui --filter @edupro/api build
+          pnpm --filter "@edupro/api..." --filter @edupro/ui build
           (cd apps/api && node dist/main.js > /tmp/api.log 2>&1 &)
           pnpm --filter @edupro/admin build
           (cd apps/admin && pnpm start > /tmp/admin.log 2>&1 &)
