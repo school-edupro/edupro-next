@@ -14661,3 +14661,107 @@ button.ep-subchoice__icon:hover {
   display: grid;
   gap: var(--sp-3);
 }
+
+/* Weekly-off rule dialog (Leave & attendance set-up → Weekly offs): who it is for, then a weekly
+   pattern of ticked days and weeks of the month, or a list of dates */
+.ep-weekoff .ep-dialog__body {
+  padding: 0;
+}
+.ep-weekoff__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  padding: var(--sp-4) var(--sp-5);
+  background: var(--surface-band);
+  border-bottom: 1px solid var(--border-strong);
+  border-radius: var(--radius-md) var(--radius-md) 0 0;
+}
+.ep-weekoff__head .ep-card__title {
+  margin: 0;
+}
+.ep-weekoff__content {
+  margin: 0;
+  padding: var(--sp-4) var(--sp-5);
+  display: grid;
+  gap: var(--sp-3);
+}
+.ep-weekoff__row {
+  display: grid;
+  gap: var(--sp-4);
+  grid-template-columns: minmax(0, 1fr) minmax(0, 2fr);
+  align-items: start;
+}
+.ep-weekoff__row--name {
+  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
+}
+.ep-weekoff__row--dates {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
+  align-items: end;
+}
+.ep-weekoff__add {
+  padding-bottom: var(--sp-1);
+}
+.ep-weekoff__section {
+  margin: var(--sp-2) 0 0;
+  padding-bottom: var(--sp-2);
+  border-bottom: 1px solid var(--border-strong);
+}
+.ep-weekoff__ticks {
+  border: 0;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-3);
+}
+.ep-weekoff__ticks legend {
+  float: left;
+  min-width: 11rem;
+  margin: 0;
+}
+.ep-weekoff__tickrow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+}
+.ep-weekoff__tick {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  min-width: 5.5rem;
+  padding: var(--sp-2) var(--sp-3);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface-card);
+  color: var(--text-heading);
+  font-size: var(--fs-body);
+  cursor: pointer;
+}
+.ep-weekoff__tick input {
+  width: 1.15rem;
+  height: 1.15rem;
+  accent-color: var(--mob-navy-800);
+}
+.ep-weekoff__tick:has(input:checked) {
+  border-color: var(--border-accent);
+  background: var(--surface-band);
+}
+.ep-weekoff__tick:has(input:focus-visible) {
+  outline: 2px solid var(--border-accent);
+  outline-offset: 2px;
+}
+.ep-weekoff__actions {
+  padding: var(--sp-3) var(--sp-5);
+  border-top: 1px solid var(--border-strong);
+  background: var(--surface-subtle);
+  border-radius: 0 0 var(--radius-md) var(--radius-md);
+}
+@media (max-width: 40rem) {
+  .ep-weekoff__row,
+  .ep-weekoff__row--name,
+  .ep-weekoff__row--dates {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

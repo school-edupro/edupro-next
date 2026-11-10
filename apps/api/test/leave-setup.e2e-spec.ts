@@ -168,6 +168,41 @@ describe('staff leave set-up (e2e)', () => {
     expect(o.warnings.join(' | ')).toContain('2 of 4 staff are in no CL policy');
   });
 
+  it('a weekly off edited from the 2nd and 4th Saturday back to every Saturday loses its weeks', async () => {
+    const save = (values: Record<string, unknown>, id?: string) =>
+      call(office, 'POST', '/masters/staff_weekoff_rules/rows', { id, values });
+    const all = { scope_values: null, dates: null, priority: 100 };
+    const made = await save({
+      ...all,
+      name: 'Saturday off',
+      scope: 'all',
+      kind: 'weekly',
+      weekdays: '6',
+      week_numbers: '2,4',
+    });
+    expect(made.statusCode).toBeLessThan(300);
+    const id = made.json().id as string;
+    const row = async () =>
+      (await call(office, 'GET', `/masters/staff_weekoff_rules/rows?id=${id}&size=1&page=1`)).json()
+        .data[0];
+    expect(await row()).toMatchObject({ weekdays: '6', week_numbers: '2,4' });
+    // the edit form sends every field; the weeks left blank mean every week
+    const edited = await save(
+      {
+        ...all,
+        name: 'Saturday off',
+        scope: 'all',
+        kind: 'weekly',
+        weekdays: '6',
+        week_numbers: null,
+      },
+      id,
+    );
+    expect(edited.statusCode).toBeLessThan(300);
+    expect(await row()).toMatchObject({ weekdays: '6', week_numbers: '' });
+    await withMigrator((c) => c.query(`DELETE FROM staff_weekoff_rules WHERE id = $1`, [id]));
+  });
+
   it('who approves: rules by scope and leave type, day bands of up to 3 levels, worked out for the employee', async () => {
     const all = await call(office, 'POST', '/leave/setup/approvals', {
       kind: 'leave',

@@ -714,6 +714,36 @@ test.describe('accessibility (axe)', () => {
     await check('filters dialog');
   });
 
+  test('no serious or critical violations on the weekly-off rule dialog, both kinds', async ({
+    page,
+  }) => {
+    const check = async (where: string) => {
+      const r = await new AxeBuilder({ page })
+        .options({ iframes: false })
+        .setLegacyMode()
+        .withTags(['wcag2a', 'wcag2aa'])
+        .analyze();
+      const bad = r.violations.filter((v) => v.impact === 'serious' || v.impact === 'critical');
+      expect(
+        bad.map(
+          (v) =>
+            `${where} ${v.id}: ${v.help} ${v.nodes
+              .map((n) => n.target.join(' '))
+              .slice(0, 3)
+              .join(' | ')}`,
+        ),
+      ).toEqual([]);
+    };
+    await page.goto('/masters/leave?tab=staff_weekoff_rules&add=1');
+    await page.waitForLoadState('networkidle');
+    await page.waitForTimeout(400); // let the dialog's fade-in finish before measuring contrast
+    await check('weekly pattern');
+    await page.getByLabel('Scope Type').selectOption('designation');
+    await page.getByLabel('Rule Kind').selectOption('dates');
+    await page.waitForTimeout(200);
+    await check('specific dates, by designation');
+  });
+
   test('no serious or critical violations on the portal profile tabs and the review drawer', async ({
     page,
   }) => {

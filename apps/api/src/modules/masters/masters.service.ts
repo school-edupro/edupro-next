@@ -698,6 +698,9 @@ export class MastersService {
               [def.table, blank.map((f) => f.key)],
             );
             for (const x of nullable.rows) out[x.column_name] = null;
+            // a list column that may not be null (a weekly off's weeks of the month) is emptied instead
+            const open = new Set(nullable.rows.map((x) => x.column_name));
+            for (const f of blank) if (f.array && !open.has(f.key)) out[f.key] = [];
           }
         }
         errors.push(...crossChecks(fields, out, lookups).map((e) => `${e.column}: ${e.message}`));

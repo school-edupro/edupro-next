@@ -19,6 +19,7 @@ import { Notice } from '@/components/Notice';
 import { MapPicker } from '@/components/MapPicker';
 import { AutoKey } from '@/components/AutoKey';
 import { RefDatalist } from '@/components/RefDatalist';
+import { WeekOffRuleForm } from '@/components/leave/WeekOffRuleForm';
 import { Icon } from '@/components/nav-icons';
 import {
   masterBulk,
@@ -40,6 +41,7 @@ import {
   type MasterRow,
   type MasterSource,
 } from '@/lib/masters';
+import type { ApprovalRules } from '@/lib/leave';
 import type { Page } from '@/lib/types';
 
 const SIZES = ['10', '25', '50', '100', '200'];
@@ -162,6 +164,11 @@ export default async function MasterGroupPage({
         ).catch(() => ({}) as Record<string, MasterLookupOption[]>)
       : Promise.resolve({} as Record<string, MasterLookupOption[]>),
   ]);
+  // the weekly-off rule has its own dialog: it picks who it is for from the staff lists
+  const weekOff = master.id === 'staff_weekoff_rules' && wantsForm;
+  const scopeLists = weekOff
+    ? await apiFetch<ApprovalRules>('/leave/setup/approvals').catch(() => null)
+    : null;
   const total = rows.page.total;
   const pages = Math.max(1, Math.ceil(total / size));
   const from = total === 0 ? 0 : (page - 1) * size + 1;
@@ -400,7 +407,18 @@ export default async function MasterGroupPage({
         ) : null}
 
         {/* ---- add / edit ---- */}
-        {canManage && (sp.add || editRow) ? (
+        {canManage && weekOff && (sp.add || editRow) ? (
+          <WeekOffRuleForm
+            master={master.id}
+            back={back}
+            id={editRow?.id}
+            initial={typed ?? editRow ?? {}}
+            scopes={
+              scopeLists?.scopes ?? { department: [], designation: [], employee_type: [], employee: [] }
+            }
+            staff={scopeLists?.staff ?? []}
+          />
+        ) : canManage && (sp.add || editRow) ? (
           <RowForm
             master={master}
             row={editRow}
