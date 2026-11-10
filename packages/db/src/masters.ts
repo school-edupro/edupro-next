@@ -2266,7 +2266,7 @@ export const MASTERS: MasterDefinition[] = [
     naturalKey: ['name'],
     conflict: '(school_id, name)',
     uploadHelp:
-      'Which days staff are off each week: weekdays (1 Monday … 7 Sunday) in which weeks of the month (2,4 = the 2nd and 4th; empty = every week), or a list of dates (a rotating off). A day is off when any rule for the employee makes it off.',
+      'Which days staff are off each week: weekdays (1 Monday … 7 Sunday) in which weeks of the month (2,4 = the 2nd and 4th; empty = every week), or a list of dates (a rotating off). A day is off when any active rule for the employee makes it off, as in the old leave module; Priority (lowest first) only orders the rules.',
     fields: [
       {
         key: 'name',
@@ -2331,12 +2331,14 @@ export const MASTERS: MasterDefinition[] = [
       },
       {
         key: 'priority',
-        header: 'Order',
+        header: 'Priority',
+        aliases: ['Order'],
         type: 'number',
         scale: 0,
         min: 1,
         max: 999,
         width: 7,
+        help: 'Lowest first: the order the rules are listed and checked in. It does not stop another rule making a day off. Default 100.',
       },
     ],
     status: STATUS,

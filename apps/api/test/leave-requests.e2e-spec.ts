@@ -282,13 +282,14 @@ describe('staff leave requests (e2e)', () => {
     expect(
       (await apply(t1, { leaveTypeId: ids.LOP, from: W(6, 2), to: W(6, 2) })).json().detail,
     ).toContain('Loss of pay is not applied for');
+    // a month after every other date of this file (week 9 at most), whatever day the tests run
     await withMigrator((c) =>
       c.query(
         `INSERT INTO staff_month_locks (school_id, month) VALUES ($1, date_trunc('month', $2::date))`,
-        [school.id, W(12, 0)],
+        [school.id, W(20, 0)],
       ),
     );
-    const locked = await apply(t1, { leaveTypeId: ids.EL, from: W(12, 0), to: W(12, 0) });
+    const locked = await apply(t1, { leaveTypeId: ids.EL, from: W(20, 0), to: W(20, 0) });
     expect(locked.statusCode).toBe(409);
     expect(locked.json().detail).toContain('locked for payroll');
   });

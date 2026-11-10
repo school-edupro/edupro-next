@@ -233,8 +233,8 @@ export function WeekOffRuleForm({
           <p className="ep-alert ep-alert--info" role="note">
             <span>
               A day is a week-off for an employee when <strong>any</strong> active rule that covers
-              them makes it one — rules add up, none overrides another. Priority (1–999) only sets
-              the order rules are listed in.
+              them makes it one, as in the old leave module — rules add up, none cancels another.
+              Priority (lowest first) only sets the order rules are listed and checked in.
             </span>
           </p>
 

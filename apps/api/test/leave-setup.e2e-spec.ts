@@ -203,6 +203,39 @@ describe('staff leave set-up (e2e)', () => {
     await withMigrator((c) => c.query(`DELETE FROM staff_weekoff_rules WHERE id = $1`, [id]));
   });
 
+  it('weekly offs add up whatever their priority, as in the old module: Sundays (1) and the 2nd and 4th Saturday (2)', async () => {
+    // Saturday 14 (the 2nd) and Sunday 15 November 2026; the school starts with Sunday off for all at 100
+    const off = (emp: string) =>
+      withMigrator(
+        async (c) =>
+          (
+            await c.query<{ sat: boolean; sun: boolean }>(
+              `SELECT app.staff_is_weekoff($1, '2026-11-14') AS sat, app.staff_is_weekoff($1, '2026-11-15') AS sun`,
+              [emp],
+            )
+          ).rows[0],
+      );
+    expect(await off(ids.T1!)).toEqual({ sat: false, sun: true });
+    const sat = await call(office, 'POST', '/masters/staff_weekoff_rules/rows', {
+      values: {
+        name: 'Second and fourth Saturday',
+        scope: 'department',
+        scope_values: 'Science',
+        kind: 'weekly',
+        weekdays: '6',
+        week_numbers: '2,4',
+        priority: 2,
+      },
+    });
+    expect(sat.statusCode).toBeLessThan(300);
+    // a lower number never takes away what another rule gives: Science has both days, Accounts Sunday
+    expect(await off(ids.T1!)).toEqual({ sat: true, sun: true });
+    expect(await off(ids.A1!)).toEqual({ sat: false, sun: true });
+    await withMigrator((c) =>
+      c.query(`DELETE FROM staff_weekoff_rules WHERE id = $1`, [sat.json().id]),
+    );
+  });
+
   it('who approves: rules by scope and leave type, day bands of up to 3 levels, worked out for the employee', async () => {
     const all = await call(office, 'POST', '/leave/setup/approvals', {
       kind: 'leave',
