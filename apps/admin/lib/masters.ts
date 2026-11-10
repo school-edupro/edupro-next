@@ -33,6 +33,8 @@ export interface MasterField {
   after?: string;
   notSelf?: boolean;
   widget?: 'map';
+  /** this list of staff is chosen by that select field (all / department / designation / employee_type / employee) */
+  staffScopeOf?: string;
   width?: number;
   bulk?: boolean;
   array?: boolean;

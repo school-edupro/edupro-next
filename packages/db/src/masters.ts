@@ -72,6 +72,12 @@ export interface MasterField {
   notSelf?: boolean;
   /** `lat`: the form shows a map to search a place and drop the pin (fills this field and `lng`). */
   widget?: 'map';
+  /**
+   * A list of staff (`text`, `array`) chosen by that select field of the row (all / department /
+   * designation / employee_type / employee): the form shows it as a multi-select of those, served by
+   * the master's lookups.
+   */
+  staffScopeOf?: string;
   width?: number;
   /** Offered in the bulk-update control. */
   bulk?: boolean;
@@ -1165,6 +1171,7 @@ export const MASTERS: MasterDefinition[] = [
         header: 'Which',
         type: 'text',
         array: true,
+        staffScopeOf: 'staff_scope',
         maxLength: 1000,
         width: 18,
         help: 'The departments, designations, employee types or employee codes, comma-separated. Empty for all.',
@@ -2075,6 +2082,7 @@ export const MASTERS: MasterDefinition[] = [
         header: 'Which',
         type: 'text',
         array: true,
+        staffScopeOf: 'scope',
         maxLength: 1000,
         width: 22,
         help: 'The departments, designations, employee types (names or codes) or employee codes, comma-separated. Empty for all.',
@@ -2290,6 +2298,7 @@ export const MASTERS: MasterDefinition[] = [
         header: 'Which',
         type: 'text',
         array: true,
+        staffScopeOf: 'scope',
         maxLength: 1000,
         width: 22,
         help: 'Names or codes, comma-separated. Empty for all.',

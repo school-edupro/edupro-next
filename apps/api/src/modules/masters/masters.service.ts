@@ -1038,6 +1038,30 @@ export class MastersService {
           out[`${f.key}__parent`] = pr.rows;
         }
       }
+      if (def.fields.some((f) => f.staffScopeOf)) {
+        // the staff a holiday, a policy or a weekly off may be for, by kind (parent): the values
+        // app.staff_in_scope matches — department and designation names, the employee types staff
+        // carry, employee codes (labelled with the name)
+        const r = await c.query<MasterLookupOption>(
+          `SELECT v AS id, v AS value, 'department' AS parent, NULL AS label
+             FROM (SELECT name AS v FROM departments WHERE status = 'active'
+                   UNION SELECT department FROM employees WHERE deleted_at IS NULL AND COALESCE(department, '') <> '') d
+           UNION ALL
+           SELECT v, v, 'designation', NULL
+             FROM (SELECT name AS v FROM designations WHERE status = 'active'
+                   UNION SELECT designation FROM employees WHERE deleted_at IS NULL AND COALESCE(designation, '') <> '') g
+           UNION ALL
+           SELECT t::text, t::text, 'employee_type', initcap(replace(t::text, '_', '-'))
+             FROM unnest(enum_range(NULL::employee_type)) t
+           UNION ALL
+           SELECT employee_code, employee_code, 'employee', display_name
+             FROM (SELECT employee_code, btrim(first_name || ' ' || COALESCE(last_name, '')) AS display_name
+                     FROM employees WHERE deleted_at IS NULL AND status = 'active' AND employee_code IS NOT NULL
+                    ORDER BY 2 LIMIT 5000) e
+           ORDER BY 3, 4 NULLS FIRST, 2`,
+        );
+        for (const f of def.fields) if (f.staffScopeOf) out[f.key] = r.rows;
+      }
       return out;
     });
   }

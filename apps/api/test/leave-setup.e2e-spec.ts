@@ -236,6 +236,29 @@ describe('staff leave set-up (e2e)', () => {
     );
   });
 
+  it('the "Which" list of a policy, a weekly off or a holiday: the staff by kind, as the scope matches them', async () => {
+    const l = (await call(office, 'GET', '/masters/staff_leave_policies/lookups')).json()
+      .scope_values as Array<{ value: string; parent: string; label: string | null }>;
+    const of = (k: string) => l.filter((o) => o.parent === k);
+    expect(of('department').map((o) => o.value)).toEqual(
+      expect.arrayContaining(['Science', 'Administration', 'Accounts']),
+    );
+    expect(of('designation').map((o) => o.value)).toEqual(
+      expect.arrayContaining(['PGT', 'TGT', 'Accountant']),
+    );
+    // the employee types staff carry (never the master codes the scope cannot match)
+    expect(
+      of('employee_type')
+        .map((o) => o.value)
+        .sort(),
+    ).toEqual(['contract', 'non_teaching', 'teaching', 'visiting']);
+    expect(of('employee')).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ value: `${s}T1`, label: 'Tara Teacher E2E' }),
+      ]),
+    );
+  });
+
   it('who approves: rules by scope and leave type, day bands of up to 3 levels, worked out for the employee', async () => {
     const all = await call(office, 'POST', '/leave/setup/approvals', {
       kind: 'leave',

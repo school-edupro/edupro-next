@@ -19,6 +19,7 @@ import { Notice } from '@/components/Notice';
 import { MapPicker } from '@/components/MapPicker';
 import { AutoKey } from '@/components/AutoKey';
 import { RefDatalist } from '@/components/RefDatalist';
+import { StaffScopeFields } from '@/components/StaffScopeFields';
 import { WeekOffRuleForm } from '@/components/leave/WeekOffRuleForm';
 import { Icon } from '@/components/nav-icons';
 import {
@@ -41,7 +42,6 @@ import {
   type MasterRow,
   type MasterSource,
 } from '@/lib/masters';
-import type { ApprovalRules } from '@/lib/leave';
 import type { Page } from '@/lib/types';
 
 const SIZES = ['10', '25', '50', '100', '200'];
@@ -155,7 +155,7 @@ export default async function MasterGroupPage({
         }>(`/reports/exports/${sp.export}`).catch(() => null)
       : Promise.resolve(null),
     (wantsForm &&
-      (master.fields.some((f) => f.type === 'ref') ||
+      (master.fields.some((f) => f.type === 'ref' || f.staffScopeOf) ||
         Boolean(sp.edit && master.merge && master.canManage))) ||
     filterable.some((f) => f.type === 'ref')
       ? apiFetch<Record<string, MasterLookupOption[]>>(
@@ -164,11 +164,19 @@ export default async function MasterGroupPage({
         ).catch(() => ({}) as Record<string, MasterLookupOption[]>)
       : Promise.resolve({} as Record<string, MasterLookupOption[]>),
   ]);
-  // the weekly-off rule has its own dialog: it picks who it is for from the staff lists
+  // the weekly-off rule has its own dialog: who it is for, from the staff lists of the lookups
   const weekOff = master.id === 'staff_weekoff_rules' && wantsForm;
-  const scopeLists = weekOff
-    ? await apiFetch<ApprovalRules>('/leave/setup/approvals').catch(() => null)
-    : null;
+  const staffLists = lookups.scope_values ?? [];
+  const byKind = (k: string) => staffLists.filter((o) => o.parent === k).map((o) => o.value);
+  const weekOffScopes = {
+    department: byKind('department'),
+    designation: byKind('designation'),
+    employee_type: byKind('employee_type'),
+    employee: byKind('employee'),
+  };
+  const weekOffStaff = staffLists
+    .filter((o) => o.parent === 'employee')
+    .map((o) => ({ code: o.value, name: o.label ?? o.value }));
   const total = rows.page.total;
   const pages = Math.max(1, Math.ceil(total / size));
   const from = total === 0 ? 0 : (page - 1) * size + 1;
@@ -413,10 +421,8 @@ export default async function MasterGroupPage({
             back={back}
             id={editRow?.id}
             initial={typed ?? editRow ?? {}}
-            scopes={
-              scopeLists?.scopes ?? { department: [], designation: [], employee_type: [], employee: [] }
-            }
-            staff={scopeLists?.staff ?? []}
+            scopes={weekOffScopes}
+            staff={weekOffStaff}
           />
         ) : canManage && (sp.add || editRow) ? (
           <RowForm
@@ -811,7 +817,31 @@ function RowForm({
           {fields
             // the map picker of the latitude field carries the longitude too
             .filter((f) => !(f.key === 'lng' && fields.some((x) => x.widget === 'map')))
+            // a "for which staff" select is drawn with the list of staff it chooses
+            .filter((f) => !fields.some((x) => x.staffScopeOf === f.key))
             .map((f) => {
+              const scopeOf = f.staffScopeOf
+                ? fields.find((x) => x.key === f.staffScopeOf)
+                : undefined;
+              if (scopeOf) {
+                const pick = (k: string) =>
+                  typed && k in typed ? (typed[k] ?? '') : row ? (row[k] ?? '') : '';
+                return (
+                  <StaffScopeFields
+                    key={f.key}
+                    id={`f-${f.key}`}
+                    scopeName={`f:${scopeOf.key}`}
+                    scopeLabel={scopeOf.header}
+                    scopeOptions={scopeOf.options ?? []}
+                    scopeRequired={scopeOf.required}
+                    valuesName={`f:${f.key}`}
+                    valuesLabel={f.header}
+                    initialScope={pick(scopeOf.key) || (scopeOf.required ? 'all' : '')}
+                    initialValues={pick(f.key)}
+                    options={lookups[f.key] ?? []}
+                  />
+                );
+              }
               // a key that may change only until the row is in use (copies on a shelf)
               const used = Boolean(row && f.lockedWhen && Number(row[f.lockedWhen.field] ?? 0) > 0);
               const locked = Boolean(

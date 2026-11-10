@@ -583,6 +583,9 @@ const PAGES = [
   '/leave/reports?report=annual',
   '/masters/leave?tab=staff_leave_policies',
   '/masters/leave?tab=staff_report_exclusions',
+  // the add form with its "for which staff" picker
+  '/masters/academics?tab=holidays&add=1',
+  '/masters/leave?tab=staff_leave_policies&add=1',
 ];
 
 test.describe('accessibility (axe)', () => {
