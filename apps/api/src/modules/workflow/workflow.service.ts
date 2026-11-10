@@ -870,9 +870,15 @@ export class WorkflowService {
           JSON.stringify(own.resolver) === JSON.stringify(level.resolver))
           ? own
           : null;
-      // a level that needs all is not approved by one earlier approver: they are counted below
-      const earlier =
-        level.need === 'all' ? undefined : approvals.find((a) => assignees.includes(a.acted_by!));
+      // a level that needs all is not approved by one earlier approver: they are counted below. Any
+      // approver of an earlier level counts, also one of several who all had to approve there (kept in
+      // its approved_by, while its acted_by is the last of them)
+      const earlierBy =
+        level.need === 'all' ? undefined : assignees.find((a) => everApproved.has(a));
+      const earlier = earlierBy
+        ? (approvals.find((a) => a.acted_by === earlierBy) ??
+          steps.find((x) => x.approved_by.includes(earlierBy)))
+        : undefined;
       const have =
         level.need === 'all'
           ? assignees.filter((a) => (own?.approved_by ?? []).includes(a) || everApproved.has(a))
@@ -895,7 +901,7 @@ export class WorkflowService {
         p = {
           ...base,
           status: 'approved',
-          actedBy: earlier.acted_by,
+          actedBy: earlierBy!,
           actedAt: earlier.acted_at,
           note: EARLIER,
         };

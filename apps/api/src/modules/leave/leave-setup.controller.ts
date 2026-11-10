@@ -5,10 +5,13 @@ import { ReqCtx, type RequestContext } from '../../common/http/request-context';
 import { LeaveSetupService } from './leave-setup.service';
 import {
   ApprovalRuleDto,
+  ApproversByEmployeeDto,
+  ApproversImportDto,
   BandLevelsDto,
   ChainPreviewDto,
   LEAVE,
   LeaveSettingsDto,
+  OwnRuleDto,
   RuleStatusDto,
 } from './leave.dto';
 
@@ -31,6 +34,36 @@ export class LeaveSetupController {
   @RequirePermission(LEAVE.setupView)
   rules(@ReqCtx() ctx: RequestContext) {
     return this.setup.rules(ctx);
+  }
+
+  @Get('approvals/by-employee')
+  @ApiOperation({ summary: 'Who approves, by employee: the approvers each employee has now' })
+  @RequirePermission(LEAVE.setupView)
+  byEmployee(@ReqCtx() ctx: RequestContext, @Query() q: ApproversByEmployeeDto) {
+    return this.setup.byEmployee(ctx, q);
+  }
+
+  @Get('approvals/format')
+  @ApiOperation({ summary: 'Approvers by employee as Excel: a row each, approver codes per level' })
+  @RequirePermission(LEAVE.setupView)
+  approversFormat(@ReqCtx() ctx: RequestContext) {
+    return this.setup.approversFormat(ctx);
+  }
+
+  @Post('approvals/import')
+  @ApiOperation({ summary: 'Approvers by employee from Excel: check, then save the changed rows' })
+  @RequirePermission(LEAVE.setupManage)
+  approversImport(@ReqCtx() ctx: RequestContext, @Body() body: ApproversImportDto) {
+    return this.setup.approversImport(ctx, body);
+  }
+
+  @Post('approvals/own')
+  @ApiOperation({
+    summary: 'An employee’s own rule: the one they have, or a new one from their approvers now',
+  })
+  @RequirePermission(LEAVE.setupManage)
+  ownRule(@ReqCtx() ctx: RequestContext, @Body() body: OwnRuleDto) {
+    return this.setup.ownRule(ctx, body);
   }
 
   @Get('approvals/preview')

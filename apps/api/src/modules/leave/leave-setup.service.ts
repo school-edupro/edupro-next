@@ -3,21 +3,62 @@ import type { PoolClient } from '@edupro/db';
 import { AuditService } from '../../common/audit/audit.service';
 import { DbService } from '../../common/db/db.service';
 import { DomainError } from '../../common/errors/domain-error';
+import { readSheet, templateSheet } from '../../common/excel/sheet';
 import { requireTenant, type RequestContext } from '../../common/http/request-context';
 import { buildLevels, setupLists, toSetup } from '../people/approval-levels';
-import { WorkflowService } from '../workflow/workflow.service';
+import { WorkflowService, type Level } from '../workflow/workflow.service';
 import { bandOf, chainFor, emptyBands, type StoredBand } from './leave-chain';
 import {
   BANDS,
   LEAVE,
   REG_BAND,
   type ApprovalRuleDto,
+  type ApproversByEmployeeDto,
+  type ApproversImportDto,
   type BandLevelsDto,
   type ChainPreviewDto,
   type LeaveSettingsDto,
+  type OwnRuleDto,
   type RuleStatusDto,
   type Scope,
 } from './leave.dto';
+
+/** The approver sheet: four chains — three leave lengths and corrections — of up to 3 levels. */
+const SHEET_CHAINS: Array<['leave' | 'regularisation', number]> = [
+  ['leave', 0],
+  ['leave', 1],
+  ['leave', 2],
+  ['regularisation', 0],
+];
+const SHEET_LABELS = ['Leave 0-7 days', 'Leave 7-30 days', 'Leave 30-365 days', 'Corrections'];
+const SHEET_HEADS = SHEET_LABELS.flatMap((l) => [1, 2, 3].map((i) => `${l} L${String(i)}`));
+interface SheetLevel {
+  need: 'any' | 'all';
+  codes: string[];
+}
+type SheetChain = SheetLevel[];
+/** E003 · E003, E005 (any one) · E003 + E005 (all) */
+const cellOf = (l: SheetLevel) => l.codes.join(l.need === 'all' ? ' + ' : ', ');
+const keyOf = (levels: SheetLevel[]) =>
+  levels
+    .map((l) => `${l.codes.length > 1 ? l.need : 'any'}:${[...l.codes].sort().join(',')}`)
+    .join('|');
+const parseCell = (raw: string): SheetLevel | { error: string } => {
+  const all = raw.includes('+');
+  if (all && /[,;/]/.test(raw))
+    return { error: 'use either , (any one of them) or + (all of them), not both' };
+  const codes = [
+    ...new Set(
+      raw
+        .split(/[+,;/]/)
+        .map((x) => x.trim().toUpperCase())
+        .filter(Boolean),
+    ),
+  ];
+  if (!codes.length) return { error: 'no employee code' };
+  if (codes.length > 30) return { error: 'up to 30 people a level' };
+  return { need: all && codes.length > 1 ? 'all' : 'any', codes: codes.sort() };
+};
 
 const SCOPE_WORDS: Record<Scope, string> = {
   all: 'All staff',
@@ -488,6 +529,7 @@ export class LeaveSetupService {
               ...(l.designation ? { designation: l.designation } : {}),
               ...(l.roleCode ? { roleCode: l.roleCode } : {}),
               slaHours: l.slaHours ?? null,
+              need: l.need,
             })),
             { allowManager: true },
           )
@@ -535,6 +577,563 @@ export class LeaveSetupService {
    * Test the chain (the earlier module's "matrix test"): for an employee, a leave type and so many days,
    * the rule and band used and, level by level, who that is today — or why there is nobody.
    */
+  /**
+   * The rules that take each of these employees in, for any leave type (leave) and for corrections, in
+   * the order chainFor reads them: by priority, then the oldest. One query for the whole page.
+   */
+  private async rulesFor(c: PoolClient, employeeIds: string[]) {
+    const r = await c.query<{
+      emp: string;
+      id: string;
+      kind: 'leave' | 'regularisation';
+      name: string;
+      bands: StoredBand[];
+    }>(
+      `SELECT e.id::text AS emp, r.id::text, r.kind, r.name, r.bands
+         FROM employees e
+         JOIN staff_leave_approval_rules r
+           ON r.status = 'active' AND r.leave_type_id IS NULL
+          AND app.staff_in_scope(r.scope, r.scope_values, e.id)
+        WHERE e.id = ANY($1::bigint[])
+        ORDER BY e.id, r.priority, r.id`,
+      [employeeIds],
+    );
+    const by = new Map<string, typeof r.rows>();
+    for (const x of r.rows) by.set(x.emp, [...(by.get(x.emp) ?? []), x]);
+    /** the first rule with levels in that band, as chainFor picks it */
+    return (emp: string, kind: 'leave' | 'regularisation', band: number) =>
+      (by.get(emp) ?? []).find((x) => x.kind === kind && (x.bands[band]?.levels ?? []).length) ??
+      null;
+  }
+
+  /**
+   * Who approves, by employee (the old module's screen): every employee with the approvers the rules
+   * give them now — leave of any type in its three day bands, and corrections — with their own rule
+   * when they have one. The people of a level are worked out once for all who share them.
+   */
+  async byEmployee(ctx: RequestContext, dto: ApproversByEmployeeDto) {
+    this.mustView(ctx);
+    return this.db.tenant(requireTenant(ctx), async (c) => {
+      const where = [`e.deleted_at IS NULL`, `e.status = 'active'`];
+      const params: unknown[] = [];
+      if (dto.q) {
+        params.push(`%${dto.q}%`);
+        where.push(
+          `(e.display_name ILIKE $${String(params.length)} OR e.employee_code ILIKE $${String(params.length)})`,
+        );
+      }
+      if (dto.department) {
+        params.push(dto.department);
+        where.push(`lower(COALESCE(e.department, '')) = lower($${String(params.length)})`);
+      }
+      const own = `EXISTS (SELECT 1 FROM staff_leave_approval_rules o
+                     WHERE o.status = 'active' AND o.scope = 'employee' AND o.leave_type_id IS NULL
+                       AND lower(e.employee_code) = ANY(SELECT lower(v) FROM unnest(o.scope_values) v))`;
+      if (dto.own) where.push(own);
+      const total = (
+        await c.query<{ n: number }>(
+          // eslint-disable-next-line no-restricted-syntax -- fixed fragments; values are bound
+          `SELECT count(*)::int AS n FROM employees e WHERE ${where.join(' AND ')}`,
+          params,
+        )
+      ).rows[0]!.n;
+      const emps = (
+        await c.query<{
+          id: string;
+          code: string | null;
+          name: string;
+          department: string | null;
+          designation: string | null;
+          user_id: string | null;
+        }>(
+          // eslint-disable-next-line no-restricted-syntax -- fixed fragments; values are bound
+          `SELECT e.id::text, e.employee_code AS code, e.display_name AS name, e.department, e.designation,
+                  e.user_id::text
+             FROM employees e WHERE ${where.join(' AND ')}
+            ORDER BY e.display_name, e.employee_code
+            LIMIT ${String(dto.size)} OFFSET ${String((dto.page - 1) * dto.size)}`,
+          params,
+        )
+      ).rows;
+      // the employees' own rules (a rule for that one employee and any leave type)
+      const owned = await c.query<{ id: string; kind: string; code: string }>(
+        `SELECT r.id::text, r.kind, lower(v) AS code
+           FROM staff_leave_approval_rules r, unnest(r.scope_values) v
+          WHERE r.status = 'active' AND r.scope = 'employee' AND r.leave_type_id IS NULL`,
+      );
+      const ownOf = (code: string | null, kind: string) =>
+        owned.rows.find((o) => o.kind === kind && o.code === (code ?? '').toLowerCase())?.id ??
+        null;
+      const pick = await this.rulesFor(
+        c,
+        emps.map((e) => e.id),
+      );
+      // the people of a level: the same for everybody but an HOD (the department) or a manager
+      const held = new Map<string, string[]>();
+      const people = async (l: Level, e: (typeof emps)[number]) => {
+        const r = l.resolver;
+        const key = `${JSON.stringify(r)}|${r.kind === 'staff' && r.by === 'hod' ? (e.department ?? '') : ''}|${r.kind === 'staff' && r.by === 'manager' ? e.id : ''}`;
+        let users = held.get(key);
+        if (!users) {
+          users = await this.workflow.resolveAssignees(c, r, null, {
+            department: e.department,
+            employeeId: e.id,
+          });
+          held.set(key, users);
+        }
+        return users.filter((u) => u !== e.user_id);
+      };
+      // a band of each kind, by the days that fall in it
+      const DAYS = [1, BANDS[0].to + 1, BANDS[1].to + 1];
+      const out = [];
+      const users = new Set<string>();
+      for (const e of emps) {
+        const chain = async (kind: 'leave' | 'regularisation', band: number) => {
+          const rule = pick(e.id, kind, band);
+          if (!rule) return { rule: null, levels: [] };
+          const levels = [];
+          for (const l of rule.bands[band]!.levels) {
+            const who = await people(l, e);
+            who.forEach((u) => users.add(u));
+            levels.push({ name: l.name, need: l.need === 'all' ? 'all' : 'any', users: who });
+          }
+          return {
+            rule: { id: rule.id, name: rule.name, own: ownOf(e.code, kind) === rule.id },
+            levels,
+          };
+        };
+        const leave = [];
+        for (const [i, b] of BANDS.entries())
+          leave.push({ band: b.label, ...(await chain('leave', bandOf('leave', DAYS[i]!))) });
+        out.push({
+          id: e.id,
+          code: e.code,
+          name: e.name,
+          department: e.department,
+          designation: e.designation,
+          signsIn: e.user_id !== null,
+          leave,
+          regularisation: await chain('regularisation', 0),
+          own: { leave: ownOf(e.code, 'leave'), regularisation: ownOf(e.code, 'regularisation') },
+        });
+      }
+      // the names of everybody named, once
+      const names = new Map(
+        (
+          await c.query<{ id: string; name: string }>(
+            `SELECT u.id::text, COALESCE((SELECT x.display_name || ' (' || x.employee_code || ')' FROM employees x
+                                           WHERE x.user_id = u.id AND x.deleted_at IS NULL LIMIT 1), u.display_name) AS name
+               FROM users u WHERE u.id = ANY($1::bigint[])`,
+            [[...users]],
+          )
+        ).rows.map((x) => [x.id, x.name]),
+      );
+      const named = <T extends { levels: Array<{ users: string[] }> }>(ch: T) => ({
+        ...ch,
+        levels: ch.levels.map(({ users: u, ...l }) => ({
+          ...l,
+          people: u.map((x) => names.get(x) ?? x).sort(),
+        })),
+      });
+      const departments = (
+        await c.query<{ d: string }>(
+          `SELECT DISTINCT department AS d FROM employees
+            WHERE deleted_at IS NULL AND status = 'active' AND COALESCE(department, '') <> '' ORDER BY 1`,
+        )
+      ).rows.map((x) => x.d);
+      return {
+        rows: out.map((r) => ({
+          ...r,
+          leave: r.leave.map(named),
+          regularisation: named(r.regularisation),
+        })),
+        page: { page: dto.page, size: dto.size, total },
+        departments,
+        can: { manage: this.has(ctx, LEAVE.setupManage) },
+      };
+    });
+  }
+
+  /**
+   * An employee's own rule (priority 1, so it wins over the rules for many): the one they have, or a new
+   * one holding the approvers they have now, ready to change.
+   */
+  async ownRule(ctx: RequestContext, dto: OwnRuleDto) {
+    this.mustManage(ctx);
+    return this.db.tenant(requireTenant(ctx), async (c) => {
+      const e = (
+        await c.query<{ id: string; code: string | null; name: string }>(
+          `SELECT id::text, employee_code AS code, display_name AS name
+             FROM employees WHERE id = $1 AND deleted_at IS NULL`,
+          [dto.employeeId],
+        )
+      ).rows[0];
+      if (!e) throw new DomainError('not-found', 'Employee not found', { status: 404 });
+      if (!e.code)
+        throw new DomainError(
+          'validation-failed',
+          'The employee has no employee code: give one first',
+          { status: 400 },
+        );
+      const have = (
+        await c.query<{ id: string }>(
+          `SELECT id::text FROM staff_leave_approval_rules
+            WHERE status = 'active' AND kind = $1 AND scope = 'employee' AND leave_type_id IS NULL
+              AND app.scope_key(scope_values) = lower($2)`,
+          [dto.kind, e.code],
+        )
+      ).rows[0];
+      if (have) return { id: have.id, created: false };
+      const pick = await this.rulesFor(c, [e.id]);
+      const bands = emptyBands(dto.kind).map((b, i) => ({
+        ...b,
+        levels: pick(e.id, dto.kind, i)?.bands[i]?.levels ?? [],
+      }));
+      const name =
+        `${e.code} – ${e.name}${dto.kind === 'regularisation' ? ' (corrections)' : ''}`.slice(
+          0,
+          100,
+        );
+      try {
+        const id = (
+          await c.query<{ id: string }>(
+            `INSERT INTO staff_leave_approval_rules (school_id, kind, name, scope, scope_values, leave_type_id, bands, priority, created_by)
+             VALUES (app.current_school_id(), $1, $2, 'employee', $3, NULL, $4::jsonb, 1, app.current_user_id()) RETURNING id::text`,
+            [dto.kind, name, [e.code], JSON.stringify(bands)],
+          )
+        ).rows[0]!.id;
+        await this.audit.stage(ctx, c, {
+          action: 'leave.approval_rule.create',
+          entityType: 'staff_leave_approval_rules',
+          entityId: id,
+          after: { name, scope: 'employee', values: [e.code], from: 'by employee' },
+        });
+        return { id, created: true };
+      } catch (err) {
+        this.clash(err);
+      }
+    });
+  }
+
+  /**
+   * The approvers each of these employees has now, by employee code: the four chains of the sheet
+   * (leave up to 7 days, more than 7 up to 30, more than 30; corrections), each level any one or all.
+   */
+  private async chainCodes(
+    c: PoolClient,
+    emps: Array<{ id: string; department: string | null; user_id: string | null }>,
+  ) {
+    const pick = await this.rulesFor(
+      c,
+      emps.map((e) => e.id),
+    );
+    const codeOf = new Map(
+      (
+        await c.query<{ u: string; code: string }>(
+          `SELECT user_id::text AS u, employee_code AS code FROM employees
+            WHERE user_id IS NOT NULL AND deleted_at IS NULL AND employee_code IS NOT NULL`,
+        )
+      ).rows.map((x) => [x.u, x.code]),
+    );
+    const held = new Map<string, string[]>();
+    const out = new Map<string, SheetChain[]>();
+    for (const e of emps) {
+      const chains: SheetChain[] = [];
+      for (const [kind, band] of SHEET_CHAINS) {
+        const rule = pick(e.id, kind, band);
+        const levels: SheetLevel[] = [];
+        for (const l of rule?.bands[band]?.levels ?? []) {
+          const r = l.resolver;
+          const key = `${JSON.stringify(r)}|${r.kind === 'staff' && r.by === 'hod' ? (e.department ?? '') : ''}|${r.kind === 'staff' && r.by === 'manager' ? e.id : ''}`;
+          let users = held.get(key);
+          if (!users) {
+            users = await this.workflow.resolveAssignees(c, r, null, {
+              department: e.department,
+              employeeId: e.id,
+            });
+            held.set(key, users);
+          }
+          const codes = users
+            .filter((u) => u !== e.user_id)
+            .map((u) => codeOf.get(u))
+            .filter((x): x is string => !!x)
+            .sort();
+          // a level nobody holds for the employee is skipped: it is not on the sheet
+          if (codes.length)
+            levels.push({ need: codes.length > 1 && l.need === 'all' ? 'all' : 'any', codes });
+        }
+        chains.push(levels);
+      }
+      out.set(e.id, chains);
+    }
+    return out;
+  }
+
+  /** Approvers by employee as Excel: every employee, the approvers they have now as codes, to change and upload. */
+  async approversFormat(ctx: RequestContext) {
+    this.mustView(ctx);
+    return this.db.tenant(requireTenant(ctx), async (c) => {
+      const emps = (
+        await c.query<{
+          id: string;
+          code: string;
+          name: string;
+          department: string | null;
+          user_id: string | null;
+        }>(
+          `SELECT id::text, employee_code AS code, display_name AS name, department, user_id::text
+             FROM employees WHERE deleted_at IS NULL AND status = 'active' AND employee_code IS NOT NULL
+            ORDER BY display_name, employee_code LIMIT 5000`,
+        )
+      ).rows;
+      const chains = await this.chainCodes(c, emps);
+      const bytes = await templateSheet({
+        sheet: 'Approvers',
+        hideLists: true,
+        columns: [
+          { header: 'Employee code', width: 14, required: true, format: 'text' },
+          { header: 'Employee', width: 26, note: 'For reading only (the code is read)' },
+          { header: 'Department', width: 18, note: 'For reading only' },
+          ...SHEET_HEADS.map((h) => ({
+            header: h,
+            width: 16,
+            format: 'text' as const,
+            note: 'Approver employee codes. E003: one person. E003, E005: any one of them. E003 + E005: all of them.',
+          })),
+        ],
+        guide: [
+          'One row per employee, with the approvers they have now: leave of any type up to 7 days, more than 7 up to 30, more than 30 days, and attendance corrections — up to 3 levels each (L1, L2, L3).',
+          'A cell holds approver employee codes: E003 is one person; E003, E005 is any one of them; E003 + E005 is all of them (both must approve).',
+          'Change the cells of the employees to change. A row left as it was changes nothing (a second upload of the same file changes nothing).',
+          'What you change becomes that employee’s own approvers (their own rule, which comes first). A length left empty: the general rules decide for it.',
+          'Fill L1 before L2, and L2 before L3. When the same person is at a later level, that level is approved with them.',
+          'Upload it and press Check: every row is checked first; then save.',
+        ],
+        rows: emps.map((e) => [
+          e.code,
+          e.name,
+          e.department,
+          ...chains
+            .get(e.id)!
+            .flatMap((levels) => [0, 1, 2].map((i) => (levels[i] ? cellOf(levels[i]) : null))),
+        ]),
+        examples: [
+          [
+            'E104',
+            'Teacher name',
+            'Science',
+            'E003',
+            'E002',
+            null,
+            'E003',
+            'E002',
+            'E001',
+            'E002',
+            'E001',
+            null,
+            'E003, E011',
+            null,
+            null,
+          ],
+          [
+            'E105',
+            'Office staff',
+            'Accounts',
+            'E015 + E002',
+            null,
+            null,
+            'E002',
+            'E001',
+            null,
+            'E002',
+            'E001',
+            null,
+            'E002',
+            null,
+            null,
+          ],
+        ],
+      });
+      return {
+        filename: 'leave-approvers-by-employee.xlsx',
+        contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        base64: bytes.toString('base64'),
+      };
+    });
+  }
+
+  /**
+   * Approvers by employee from Excel: each row is checked against the approvers the employee has now;
+   * the lengths that differ become the employee's own rule (made when there is none), a length left empty
+   * going back to the general rules. dryRun only checks.
+   */
+  async approversImport(ctx: RequestContext, dto: ApproversImportDto) {
+    this.mustManage(ctx);
+    const rows = await readSheet(dto.file, ['Employee code'], SHEET_HEADS);
+    return this.db.tenant(requireTenant(ctx), async (c) => {
+      const staff = (
+        await c.query<{
+          id: string;
+          code: string;
+          name: string;
+          department: string | null;
+          user_id: string | null;
+        }>(
+          `SELECT id::text, upper(employee_code) AS code, display_name AS name, department, user_id::text
+             FROM employees WHERE deleted_at IS NULL AND status = 'active' AND employee_code IS NOT NULL`,
+        )
+      ).rows;
+      const byCode = new Map(staff.map((x) => [x.code, x]));
+      const results: Array<{
+        row: number;
+        employee: string;
+        changes: string[];
+        ok: boolean;
+        error?: string;
+      }> = [];
+      const work: Array<{ emp: (typeof staff)[number]; chains: Array<SheetLevel[] | null> }> = [];
+      const seen = new Set<string>();
+      const read: Array<{ row: number; emp: (typeof staff)[number]; chains: SheetLevel[][] }> = [];
+      for (const { row, cells } of rows) {
+        const code = (cells['Employee code'] ?? '').trim().toUpperCase();
+        if (!code && SHEET_HEADS.every((h) => !(cells[h] ?? '').trim())) continue;
+        const e = byCode.get(code);
+        const problems: string[] = [];
+        if (!e) problems.push(`no active employee has the code ${code || '(empty)'}`);
+        if (seen.has(code)) problems.push('the same employee again');
+        seen.add(code);
+        const chains: SheetLevel[][] = [];
+        SHEET_CHAINS.forEach((_, k) => {
+          const levels: SheetLevel[] = [];
+          let gap = false;
+          for (let i = 0; i < 3; i++) {
+            const head = SHEET_HEADS[k * 3 + i]!;
+            const raw = (cells[head] ?? '').trim();
+            if (!raw) {
+              gap = true;
+              continue;
+            }
+            if (gap) problems.push(`${head}: fill the level before it first`);
+            const parsed = parseCell(raw);
+            if ('error' in parsed) {
+              problems.push(`${head}: ${parsed.error}`);
+              continue;
+            }
+            for (const x of parsed.codes) {
+              const a = byCode.get(x);
+              if (!a) problems.push(`${head}: no active employee has the code ${x}`);
+              else if (!a.user_id)
+                problems.push(`${head}: ${a.name} (${x}) cannot sign in, so cannot approve`);
+            }
+            levels.push(parsed);
+          }
+          chains.push(levels);
+        });
+        if (problems.length) {
+          results.push({
+            row,
+            employee: e ? `${e.name} (${e.code})` : code || '(empty)',
+            changes: [],
+            ok: false,
+            error: problems.join('; '),
+          });
+          continue;
+        }
+        read.push({ row, emp: e!, chains });
+      }
+      // what each employee has now, to change only what differs
+      const now = await this.chainCodes(
+        c,
+        read.map((x) => x.emp),
+      );
+      for (const x of read) {
+        const cur = now.get(x.emp.id)!;
+        const changes: string[] = [];
+        const diff = x.chains.map((levels, k) => {
+          const same = keyOf(levels) === keyOf(cur[k]!);
+          if (!same)
+            changes.push(
+              `${SHEET_LABELS[k]}: ${cur[k]!.map(cellOf).join(' → ') || 'none'} ⇒ ${levels.map(cellOf).join(' → ') || 'the general rules'}`,
+            );
+          return same ? null : levels;
+        });
+        results.push({
+          row: x.row,
+          employee: `${x.emp.name} (${x.emp.code})`,
+          changes,
+          ok: true,
+        });
+        if (changes.length) work.push({ emp: x.emp, chains: diff });
+      }
+      if (dto.dryRun) return { rows: results, saved: 0 };
+      let saved = 0;
+      for (const w of work) {
+        for (const kind of ['leave', 'regularisation'] as const) {
+          const idx = SHEET_CHAINS.map((ch, k) => (ch[0] === kind ? k : -1)).filter((k) => k >= 0);
+          if (idx.every((k) => w.chains[k] === null)) continue;
+          // the employee's own rule of that kind: the one there is, or a new one (its lengths empty)
+          let rule = (
+            await c.query<{ id: string; bands: StoredBand[] }>(
+              `SELECT id::text, bands FROM staff_leave_approval_rules
+                WHERE status = 'active' AND kind = $1 AND scope = 'employee' AND leave_type_id IS NULL
+                  AND app.scope_key(scope_values) = lower($2)
+                FOR UPDATE`,
+              [kind, w.emp.code],
+            )
+          ).rows[0];
+          if (!rule) {
+            const name =
+              `${w.emp.code} – ${w.emp.name}${kind === 'regularisation' ? ' (corrections)' : ''}`.slice(
+                0,
+                100,
+              );
+            rule = (
+              await c.query<{ id: string; bands: StoredBand[] }>(
+                `INSERT INTO staff_leave_approval_rules (school_id, kind, name, scope, scope_values, leave_type_id, bands, priority, created_by)
+                 VALUES (app.current_school_id(), $1, $2, 'employee', $3, NULL, $4::jsonb, 1, app.current_user_id())
+                 RETURNING id::text, bands`,
+                [kind, name, [w.emp.code], JSON.stringify(emptyBands(kind))],
+              )
+            ).rows[0]!;
+          }
+          const bands = rule.bands.length ? [...rule.bands] : emptyBands(kind);
+          for (const k of idx) {
+            const levels = w.chains[k];
+            if (!levels) continue;
+            const band = SHEET_CHAINS[k]![1];
+            bands[band] = {
+              ...bands[band]!,
+              levels: levels.length
+                ? await buildLevels(
+                    c,
+                    levels.map((l, i) => ({
+                      name: `Level ${String(i + 1)}`,
+                      by: 'employees' as const,
+                      employeeIds: l.codes.map((x) => byCode.get(x)!.id),
+                      need: l.need,
+                    })),
+                    { allowManager: true },
+                  )
+                : [],
+            };
+          }
+          await c.query(
+            `UPDATE staff_leave_approval_rules SET bands = $2::jsonb, updated_at = now() WHERE id = $1`,
+            [rule.id, JSON.stringify(bands)],
+          );
+          await this.audit.stage(ctx, c, {
+            action: 'leave.approval_rule.import',
+            entityType: 'staff_leave_approval_rules',
+            entityId: rule.id,
+            after: { employee: w.emp.code, kind },
+          });
+        }
+        saved += 1;
+      }
+      return { rows: results, saved };
+    });
+  }
+
   async preview(ctx: RequestContext, dto: ChainPreviewDto) {
     this.mustView(ctx);
     return this.db.tenant(requireTenant(ctx), async (c) => {

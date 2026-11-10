@@ -17,6 +17,8 @@ export interface SetupLevel {
   designation: string | null;
   roleCode: string | null;
   slaHours: number | null;
+  /** several people at the level: any one of them decides, or all of them must approve */
+  need: 'any' | 'all';
 }
 export interface LevelInput {
   name: string;
@@ -25,6 +27,8 @@ export interface LevelInput {
   designation?: string;
   roleCode?: string;
   slaHours?: number | null;
+  /** named employees or a designation: 'all' when every one of them must approve */
+  need?: 'any' | 'all';
 }
 interface Staff {
   id: string;
@@ -51,6 +55,7 @@ export function toSetup(l: Level, staff: Staff[]): SetupLevel {
     designation: null,
     roleCode: null,
     slaHours: l.slaHours ?? null,
+    need: l.need === 'all' ? ('all' as const) : ('any' as const),
   };
   if (r.kind === 'staff')
     return { ...base, by: r.by, employeeIds: r.employeeIds, designation: r.designation ?? null };
@@ -184,6 +189,11 @@ export async function buildLevels(
       name: l.name,
       resolver,
       ...(l.slaHours ? { slaHours: l.slaHours } : {}),
+      // several named people or holders of a designation: all of them, when asked (an HOD, a manager
+      // and a role stay any one)
+      ...(l.need === 'all' && (l.by === 'employees' || l.by === 'designation')
+        ? { need: 'all' as const }
+        : {}),
       autoSkip: true,
     });
   }

@@ -14765,3 +14765,44 @@ button.ep-subchoice__icon:hover {
     grid-template-columns: minmax(0, 1fr);
   }
 }
+
+/* Who approves, by employee: three length rows per employee, each level on its own line */
+.ep-approvers {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: var(--sp-1);
+}
+.ep-approvers__lv {
+  display: inline-block;
+  min-width: 1.75rem;
+  color: var(--text-muted);
+  font-size: var(--fs-small);
+  font-weight: var(--fw-semibold);
+}
+.ep-approvers__table td,
+.ep-approvers__table th {
+  vertical-align: top;
+}
+.ep-approvers__first > * {
+  border-top: 2px solid var(--border-strong);
+}
+.ep-approvers__who {
+  text-align: left;
+  font-weight: var(--fw-regular, 400);
+  min-width: 12rem;
+}
+.ep-approvers__who strong,
+.ep-approvers__who .ep-field__help {
+  display: block;
+}
+.ep-approvers__band {
+  white-space: nowrap;
+  color: var(--text-heading);
+}
+.ep-approvers__actions {
+  display: grid;
+  gap: var(--sp-2);
+  justify-items: start;
+}

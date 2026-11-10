@@ -2,6 +2,7 @@ import { Badge, Breadcrumbs, PageHeader } from '@edupro/ui';
 import { notFound } from 'next/navigation';
 import { Notice } from '@/components/Notice';
 import { ScopePicker } from '@/components/leave/ScopePicker';
+import { ApprovalsTabs } from '@/components/leave/ApprovalsTabs';
 import { ApiError, apiFetch, getMe } from '@/lib/api';
 import type { ApprovalRules, ChainPreview } from '@/lib/leave';
 import { createApprovalRule } from '@/lib/leave-actions';
@@ -71,6 +72,7 @@ export default async function LeaveApprovalsPage({
         description="A rule is for all staff or the departments, designations, employee types or employees picked, and for one leave type or any type. A leave goes to the first rule by priority (lowest number) that takes the employee in — a rule for its leave type before one for any type — and to the levels of its length: up to 7 days, more than 7 up to 30, or more than 30. Approvers are worked out when the leave is applied, so a new joiner is covered."
       />
       <Notice params={sp} />
+      <ApprovalsTabs current="rules" />
       <section className="ep-card" aria-labelledby="la-leave">
         <h2 id="la-leave" className="ep-card__title">
           Leave

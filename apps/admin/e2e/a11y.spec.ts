@@ -565,6 +565,7 @@ const PAGES = [
   '/leave/balances',
   '/leave/setup',
   '/leave/setup/approvals',
+  '/leave/setup/approvals/by-employee',
   '/leave/setup/settings',
   '/leave/setup/timings',
   '/leave/setup/report-access',

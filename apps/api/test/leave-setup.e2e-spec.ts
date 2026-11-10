@@ -4,6 +4,7 @@
  * type, day bands of up to 3 levels, the test of the chain), the settings, and the rights.
  */
 import type { NestFastifyApplication } from '@nestjs/platform-fastify';
+import ExcelJS from 'exceljs';
 import {
   createApp,
   headersFor,
@@ -412,5 +413,97 @@ describe('staff leave set-up (e2e)', () => {
         })
       ).statusCode,
     ).toBe(403);
+  });
+
+  it('who approves by employee: the approvers each has now, an own rule, and the Excel round trip', async () => {
+    const list = (q = '') =>
+      call(office, 'GET', `/leave/setup/approvals/by-employee?size=100${q}`).then((r) => r.json());
+    const all = await list();
+    expect(all.page.total).toBe(4);
+    const t1 = all.rows.find((r: { code: string }) => r.code === `${s}T1`);
+    expect(t1.leave.map((b: { band: string }) => b.band)).toEqual([
+      'Up to 7 days',
+      'More than 7, up to 30 days',
+      'More than 30 days',
+    ]);
+    // an own rule, made from the approvers T1 has now; asked again, the same one
+    const own = (
+      await call(office, 'POST', '/leave/setup/approvals/own', {
+        employeeId: ids.T1,
+        kind: 'leave',
+      })
+    ).json();
+    expect(own.created).toBe(true);
+    expect(
+      (
+        await call(office, 'POST', '/leave/setup/approvals/own', {
+          employeeId: ids.T1,
+          kind: 'leave',
+        })
+      ).json(),
+    ).toEqual({ id: own.id, created: false });
+    // the row links to it (it decides a length once it has levels there)
+    expect((await list(`&q=${s}T1`)).rows[0].own).toMatchObject({ leave: own.id });
+    expect((await list('&own=1')).page.total).toBe(1);
+    expect(
+      (
+        await call(teacher, 'POST', '/leave/setup/approvals/own', {
+          employeeId: ids.T1,
+          kind: 'leave',
+        })
+      ).statusCode,
+    ).toBe(403);
+
+    // the sheet: a row each, the approvers as codes
+    const f = (await call(office, 'GET', '/leave/setup/approvals/format')).json();
+    const wb = new ExcelJS.Workbook();
+    await wb.xlsx.load(Buffer.from(f.base64, 'base64') as unknown as ArrayBuffer);
+    const ws = wb.worksheets[0]!;
+    const head = (ws.getRow(1).values as string[]).map((v) => String(v ?? '').replace(/ \*$/, ''));
+    const col = (h: string) => head.indexOf(h);
+    const rowOf = (code: string) => {
+      let at = 0;
+      ws.eachRow((r, n) => {
+        if (String(r.getCell(1).value) === code) at = n;
+      });
+      return ws.getRow(at);
+    };
+    // T1: up to 7 days, the HOD and the accountant both, then the accountant; A1: a code nobody has
+    rowOf(`${s}T1`).getCell(col('Leave 0-7 days L1')).value = `${s}H1 + ${s}A1`;
+    rowOf(`${s}T1`).getCell(col('Leave 0-7 days L2')).value = `${s}A1`;
+    rowOf(`${s}T1`).getCell(col('Leave 0-7 days L3')).value = null;
+    rowOf(`${s}A1`).getCell(col('Corrections L1')).value = 'NOBODY9';
+    const file = async () => Buffer.from(await wb.xlsx.writeBuffer()).toString('base64');
+    const send = async (dryRun: boolean) =>
+      (
+        await call(office, 'POST', '/leave/setup/approvals/import', { file: await file(), dryRun })
+      ).json();
+    const checked = await send(true);
+    const of = (code: string) =>
+      checked.rows.find((r: { employee: string }) => r.employee.includes(`(${code})`));
+    expect(of(`${s}T1`)).toMatchObject({ ok: true });
+    expect(of(`${s}T1`).changes).toHaveLength(1);
+    expect(of(`${s}T1`).changes[0]).toContain(`none ⇒ ${s}A1 + ${s}H1 → ${s}A1`);
+    expect(of(`${s}A1`)).toMatchObject({ ok: false });
+    expect(of(`${s}A1`).error).toContain('no active employee has the code NOBODY9');
+    expect(of(`${s}O1`).changes).toEqual([]);
+    expect(checked.saved).toBe(0);
+    // the bad cell put back: T1 saved, nobody else touched
+    rowOf(`${s}A1`).getCell(col('Corrections L1')).value = null;
+    const saved = await send(false);
+    expect(saved.saved).toBe(1);
+    const band0 = (await list(`&q=${s}T1`)).rows[0].leave[0];
+    expect(band0.rule).toMatchObject({ id: own.id, own: true });
+    expect(
+      band0.levels.map((l: { need: string; people: string[] }) => [l.need, l.people.length]),
+    ).toEqual([
+      ['all', 2],
+      ['any', 1],
+    ]);
+    // the same file again changes nothing
+    expect((await send(false)).saved).toBe(0);
+    await call(office, 'POST', `/leave/setup/approvals/${own.id as string}/status`, {
+      status: 'inactive',
+    });
   });
 });

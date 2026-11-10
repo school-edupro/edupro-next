@@ -145,12 +145,13 @@ export default async function LeaveApprovalRulePage({
             }}
             save={saveApprovalBand.bind(null, r.id, b.index)}
             title={reg ? 'Levels' : `${b.label}: levels`}
-            intro={`A ${what}${reg ? '' : ` of this length`} goes through these levels in order (up to 3) and waits in each approver’s approvals (here and in the staff app). A level nobody holds for the employee is skipped; the employee never approves their own ${what}; the same person at two levels in a row approves once.${reg ? '' : ' No level here: the next rule by priority decides.'}`}
+            intro={`A ${what}${reg ? '' : ` of this length`} goes through these levels in order (up to 3) and waits in each approver’s approvals (here and in the staff app). A level nobody holds for the employee is skipped; the employee never approves their own ${what}; a later level whose approver already approved it is approved by itself (L1 = L2 = L3: one approval). Several people at a level: any one of them, or all of them.${reg ? '' : ' No level here: the next rule by priority decides.'}`}
             hodLabel="HOD of the employee’s department"
             hodHelp="The HOD set on the employee’s department approves."
             waitingNoun={[what, `${what}s`]}
             allowManager
             allowRole
+            allowAll
             maxLevels={3}
             idPrefix={`lb${String(b.index)}`}
           />

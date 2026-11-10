@@ -50,6 +50,7 @@ export const BandLevelsSchema = z.object({
         designation: z.string().trim().max(80).nullable().optional(),
         roleCode: z.string().trim().max(40).nullable().optional(),
         slaHours: z.number().int().min(1).max(720).nullable().optional(),
+        need: z.enum(['any', 'all']).default('any'),
       }),
     )
     .max(3, 'Up to 3 levels'),
@@ -58,6 +59,35 @@ export class BandLevelsDto extends createZodDto(BandLevelsSchema) {}
 
 export const RuleStatusSchema = z.object({ status: z.enum(['active', 'inactive']) });
 export class RuleStatusDto extends createZodDto(RuleStatusSchema) {}
+
+/** "Who approves" by employee: each employee's approvers as the rules give them, a page at a time. */
+export const ApproversByEmployeeSchema = z.object({
+  q: z.string().trim().max(80).optional(),
+  department: z.string().trim().max(100).optional(),
+  /** only the employees with a rule of their own */
+  own: z.enum(['1']).optional(),
+  page: z.coerce.number().int().min(1).max(10000).default(1),
+  size: z.coerce
+    .number()
+    .int()
+    .refine((v) => [25, 50, 100, 500].includes(v), '25, 50, 100 or 500 a page')
+    .default(50),
+});
+export class ApproversByEmployeeDto extends createZodDto(ApproversByEmployeeSchema) {}
+
+/** An employee's own rule (made from the approvers they have now when there is none yet). */
+export const OwnRuleSchema = z.object({
+  employeeId: Id,
+  kind: z.enum(['leave', 'regularisation']),
+});
+export class OwnRuleDto extends createZodDto(OwnRuleSchema) {}
+
+/** Approvers by employee from Excel: checked first (dryRun), then saved as the employees' own rules. */
+export const ApproversImportSchema = z.object({
+  file: z.string().min(10).max(6_000_000),
+  dryRun: z.boolean().default(true),
+});
+export class ApproversImportDto extends createZodDto(ApproversImportSchema) {}
 
 export const ChainPreviewSchema = z.object({
   employeeId: Id,

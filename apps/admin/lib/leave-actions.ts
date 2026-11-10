@@ -54,6 +54,35 @@ export async function createApprovalRule(fd: FormData) {
   );
 }
 
+/** An employee's own rule, from the by-employee view: the one they have, or a new one from their approvers now. */
+export async function ownApprovalRule(fd: FormData) {
+  const employeeId = String(fd.get('employeeId') ?? '');
+  const kind = fd.get('kind') === 'regularisation' ? 'regularisation' : 'leave';
+  const from = String(fd.get('back') ?? '/leave/setup/approvals/by-employee');
+  const path = from.startsWith('/leave/setup/approvals/by-employee')
+    ? from
+    : '/leave/setup/approvals/by-employee';
+  if (!okId(employeeId)) return;
+  let r: { id: string; created: boolean } | null = null;
+  try {
+    r = await apiFetch<{ id: string; created: boolean }>('/leave/setup/approvals/own', {
+      method: 'POST',
+      body: JSON.stringify({ employeeId, kind }),
+    });
+  } catch (e) {
+    if (e instanceof ApiError) back(path, e);
+    throw e;
+  }
+  revalidatePath('/leave/setup');
+  redirect(
+    `/leave/setup/approvals/${r.id}${
+      r.created
+        ? `?ok=1&detail=${encodeURIComponent('Own rule made from the approvers the employee had: change any level below. It comes first for this employee (priority 1).')}`
+        : ''
+    }`,
+  );
+}
+
 export async function updateApprovalRule(id: string, fd: FormData) {
   if (!okId(id)) return;
   try {
@@ -106,6 +135,7 @@ export async function saveApprovalBand(
             ...(l.by === 'designation' && l.designation ? { designation: l.designation } : {}),
             ...(l.by === 'role' && l.roleCode ? { roleCode: l.roleCode } : {}),
             slaHours: l.slaHours,
+            need: l.by === 'employees' || l.by === 'designation' ? (l.need ?? 'any') : 'any',
           })),
         }),
       },
@@ -365,6 +395,40 @@ export async function importBalances(file: string, dryRun: boolean): Promise<Bal
       { method: 'POST', body: JSON.stringify({ file, dryRun }) },
     );
     if (!dryRun) revalidatePath('/leave/balances');
+    return { ok: true, ...r };
+  } catch (e) {
+    if (e instanceof ApiError) return { ok: false, error: detailOf(e) };
+    throw e;
+  }
+}
+
+export type ApproversImportResult =
+  | {
+      ok: true;
+      rows: Array<{
+        row: number;
+        employee: string;
+        changes: string[];
+        ok: boolean;
+        error?: string;
+      }>;
+      saved: number;
+    }
+  | { ok: false; error: string };
+/** Who approves, by employee, from Excel: check (dryRun), then save the rows that change. */
+export async function importApprovers(
+  file: string,
+  dryRun: boolean,
+): Promise<ApproversImportResult> {
+  try {
+    const r = await apiFetch<Omit<Extract<ApproversImportResult, { ok: true }>, 'ok'>>(
+      '/leave/setup/approvals/import',
+      { method: 'POST', body: JSON.stringify({ file, dryRun }) },
+    );
+    if (!dryRun) {
+      revalidatePath('/leave/setup/approvals');
+      revalidatePath('/leave/setup');
+    }
     return { ok: true, ...r };
   } catch (e) {
     if (e instanceof ApiError) return { ok: false, error: detailOf(e) };

@@ -63,6 +63,28 @@ export interface ApprovalRules {
   can: { manage: boolean };
 }
 
+/** "Who approves" by employee: the approvers each employee has now. */
+export interface ApproverChain {
+  rule: { id: string; name: string; own: boolean } | null;
+  levels: Array<{ name: string; need: 'any' | 'all'; people: string[] }>;
+}
+export interface ApproversByEmployee {
+  rows: Array<{
+    id: string;
+    code: string | null;
+    name: string;
+    department: string | null;
+    designation: string | null;
+    signsIn: boolean;
+    leave: Array<ApproverChain & { band: string }>;
+    regularisation: ApproverChain;
+    own: { leave: string | null; regularisation: string | null };
+  }>;
+  page: { page: number; size: number; total: number };
+  departments: string[];
+  can: { manage: boolean };
+}
+
 export interface ApprovalRuleDetail {
   rule: ApprovalRule;
   bands: Array<{ index: number; label: string; levels: ApprovalLevel[] }>;

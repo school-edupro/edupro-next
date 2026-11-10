@@ -309,6 +309,47 @@ describe('staff leave requests (e2e)', () => {
     ).toBe('approved');
   });
 
+  it('a level of two who must both approve; the same person at the next level is not asked again', async () => {
+    // A1's own rule: L1 the office and the HOD, both; L2 the HOD again
+    const rule = (
+      await call(office, 'POST', '/leave/setup/approvals', {
+        kind: 'leave',
+        name: 'Asha: both, then the HOD',
+        scope: 'employee',
+        scopeValues: [`${s}A1`],
+        priority: 1,
+      })
+    ).json();
+    const set = await call(office, 'PUT', `/leave/setup/approvals/${rule.id}/bands/0`, {
+      levels: [
+        { name: 'Office and HOD', by: 'employees', employeeIds: [ids.O1, ids.H1], need: 'all' },
+        { name: 'HOD', by: 'employees', employeeIds: [ids.H1] },
+      ],
+    });
+    expect(set.statusCode).toBeLessThan(300);
+    const shown = (await call(office, 'GET', `/leave/setup/approvals/${rule.id}`)).json();
+    expect(shown.bands[0].levels.map((l: { need: string }) => l.need)).toEqual(['all', 'any']);
+    await call(office, 'POST', '/leave/balances/adjust', {
+      employeeId: ids.A1,
+      leaveTypeId: ids.CL,
+      days: 1,
+      reason: 'For the two-approver test',
+    });
+    const r = (await apply(acc, { leaveTypeId: ids.CL, from: W(9, 3), to: W(9, 3) })).json();
+    expect(r.status).toBe('pending');
+    // the HOD approves first: the office has not, so it still waits at L1
+    expect(
+      (await call(hod, 'POST', `/leave/requests/${r.id}/decide`, { outcome: 'approved' })).json()
+        .status,
+    ).toBe('pending');
+    // the office approves: L1 is done, and L2 (the HOD, who approved already) passes by itself
+    expect(
+      (await call(office, 'POST', `/leave/requests/${r.id}/decide`, { outcome: 'approved' })).json()
+        .status,
+    ).toBe('approved');
+    await call(office, 'POST', `/leave/setup/approvals/${rule.id}/status`, { status: 'inactive' });
+  });
+
   it('withdraw and reject give the balance back; a cancellation request of an approved leave goes through its chain', async () => {
     const before = (await balance(t2, 'CL')).available;
     const w = (await apply(t2, { leaveTypeId: ids.CL, from: W(8, 1), to: W(8, 1) })).json();
