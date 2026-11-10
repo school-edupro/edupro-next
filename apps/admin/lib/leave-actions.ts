@@ -579,7 +579,12 @@ export async function runAttendance(fd: FormData) {
   );
 }
 
-export async function saveTiming(id: string | null, fd: FormData) {
+/**
+ * A timing from its dialog: a special timing, or a department timing — when adding, one for each
+ * department picked (the same times). Refused ones are named; the saved ones stay saved.
+ */
+export async function saveTimingDialog(fd: FormData) {
+  const id = String(fd.get('id') ?? '');
   const num = (k: string) => (String(fd.get(k) ?? '').trim() === '' ? null : Number(fd.get(k)));
   const kind = fd.get('kind') === 'special' ? 'special' : 'department';
   const action = (k: string) => {
@@ -587,30 +592,65 @@ export async function saveTiming(id: string | null, fd: FormData) {
     return ['none', 'HD', 'A', 'leave'].includes(v) ? v : 'none';
   };
   const typeId = (k: string) => (okId(String(fd.get(k) ?? '')) ? String(fd.get(k)) : null);
-  await attCall(
-    '/leave/setup/timings',
-    id ? `/staff-attendance/timings/${id}` : '/staff-attendance/timings',
-    id ? 'PUT' : 'POST',
-    {
-      kind,
-      department: kind === 'department' ? String(fd.get('department') ?? '') : null,
-      employeeId: kind === 'special' ? String(fd.get('employeeId') ?? '') : null,
-      from: kind === 'special' ? String(fd.get('from') ?? '') : null,
-      to: kind === 'special' ? String(fd.get('to') ?? '') : null,
-      startsAt: String(fd.get('startsAt') ?? ''),
-      endsAt: String(fd.get('endsAt') ?? ''),
-      grace: num('grace') ?? 0,
-      presentHours: num('presentHours') ?? 0,
-      halfDayHours: num('halfDayHours') ?? 0,
-      lateOver: num('lateOver'),
-      lateAction: action('lateAction'),
-      lateTypeId: typeId('lateTypeId'),
-      earlyOver: num('earlyOver'),
-      earlyAction: action('earlyAction'),
-      earlyTypeId: typeId('earlyTypeId'),
-      note: String(fd.get('note') ?? '').trim() || null,
-    },
-    'Saved: run "Work days out again" to apply it to past days.',
+  const body = (department: string | null) => ({
+    kind,
+    department,
+    employeeId: kind === 'special' ? String(fd.get('employeeId') ?? '') : null,
+    from: kind === 'special' ? String(fd.get('from') ?? '') : null,
+    to: kind === 'special' ? String(fd.get('to') ?? '') : null,
+    startsAt: String(fd.get('startsAt') ?? ''),
+    endsAt: String(fd.get('endsAt') ?? ''),
+    grace: num('grace') ?? 0,
+    presentHours: num('presentHours') ?? 0,
+    halfDayHours: num('halfDayHours') ?? 0,
+    lateOver: num('lateOver'),
+    lateAction: action('lateAction'),
+    lateTypeId: typeId('lateTypeId'),
+    earlyOver: num('earlyOver'),
+    earlyAction: action('earlyAction'),
+    earlyTypeId: typeId('earlyTypeId'),
+    note: String(fd.get('note') ?? '').trim() || null,
+  });
+  const path = '/leave/setup/timings';
+  const depts = kind === 'department' ? fd.getAll('department').map(String).filter(Boolean) : [];
+  if (id && okId(id)) {
+    try {
+      await apiFetch(`/staff-attendance/timings/${id}`, {
+        method: 'PUT',
+        body: JSON.stringify(body(kind === 'department' ? (depts[0] ?? null) : null)),
+      });
+    } catch (e) {
+      if (e instanceof ApiError) back(`${path}?edit=${id}`, e);
+      throw e;
+    }
+    revalidatePath(path);
+    redirect(
+      `${path}?ok=1&detail=${encodeURIComponent('Saved. Days already worked out change when worked out again (attendance register).')}`,
+    );
+  }
+  const targets = kind === 'department' ? depts : [null];
+  const done: string[] = [];
+  const refused: string[] = [];
+  for (const t of targets) {
+    try {
+      await apiFetch('/staff-attendance/timings', {
+        method: 'POST',
+        body: JSON.stringify(body(t)),
+      });
+      done.push(t ?? 'the timing');
+    } catch (e) {
+      if (!(e instanceof ApiError)) throw e;
+      refused.push(`${t ? `${t}: ` : ''}${detailOf(e)}`);
+    }
+  }
+  revalidatePath(path);
+  if (refused.length && !done.length)
+    redirect(
+      `${path}?add=${kind}&error=validation-failed&detail=${encodeURIComponent(refused.join(' · ').slice(0, 300))}`,
+    );
+  const saved = kind === 'department' ? `Saved for ${done.join(', ')}.` : 'Saved.';
+  redirect(
+    `${path}?ok=1&detail=${encodeURIComponent(`${saved}${refused.length ? ` Not saved — ${refused.join(' · ')}` : ''} Days already worked out change when worked out again.`.slice(0, 400))}`,
   );
 }
 

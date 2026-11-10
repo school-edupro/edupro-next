@@ -14827,3 +14827,10 @@ button.ep-subchoice__icon:hover {
     grid-template-columns: minmax(0, 1fr);
   }
 }
+/* a value shown in a box's place, not typed (a timing's absent hours) */
+.ep-input--readonly {
+  display: flex;
+  align-items: center;
+  background: var(--surface-subtle);
+  color: var(--text-body);
+}

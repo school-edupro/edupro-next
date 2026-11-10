@@ -750,6 +750,33 @@ test.describe('accessibility (axe)', () => {
     await check('specific dates, by designation');
   });
 
+  test('no serious or critical violations on the timing dialogs, with their checks showing', async ({
+    page,
+  }) => {
+    for (const kind of ['department', 'special']) {
+      await page.goto(`/leave/setup/timings?add=${kind}`);
+      await page.waitForLoadState('networkidle');
+      await page.waitForTimeout(400); // let the dialog's fade-in finish before measuring contrast
+      await page.getByRole('button', { name: 'Save Timing' }).click(); // nothing picked: notes show
+      await page.waitForTimeout(200);
+      const r = await new AxeBuilder({ page })
+        .options({ iframes: false })
+        .setLegacyMode()
+        .withTags(['wcag2a', 'wcag2aa'])
+        .analyze();
+      const bad = r.violations.filter((v) => v.impact === 'serious' || v.impact === 'critical');
+      expect(
+        bad.map(
+          (v) =>
+            `${kind} ${v.id}: ${v.help} ${v.nodes
+              .map((n) => n.target.join(' '))
+              .slice(0, 3)
+              .join(' | ')}`,
+        ),
+      ).toEqual([]);
+    }
+  });
+
   test('no serious or critical violations on the shift dialog, with its checks showing', async ({
     page,
   }) => {
