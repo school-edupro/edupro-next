@@ -592,6 +592,113 @@ describe('staff attendance (e2e)', () => {
     ).toBe(403);
   });
 
+  it('special timings from Excel: the sheet has the ones there are; new, changed, refused and unchanged rows', async () => {
+    const f = (await call(office, 'GET', '/staff-attendance/timings/special-format')).json();
+    expect(f.filename).toBe('special-timings.xlsx');
+    const wb = new ExcelJS.Workbook();
+    await wb.xlsx.load(Buffer.from(f.base64, 'base64') as unknown as ArrayBuffer);
+    const ws = wb.worksheets[0]!;
+    const head = (ws.getRow(1).values as string[]).map((v) => String(v ?? '').replace(/ \*$/, ''));
+    const col = (h: string) => head.indexOf(h);
+    // the timings there are come with the sheet (T1's from the bulk edit above)
+    let t1Row = 0;
+    ws.eachRow((r, n) => {
+      if (
+        n > 1 &&
+        String(r.getCell(col('Employee')).value).includes(`(${s}T1)`) &&
+        String(r.getCell(col('From date')).value) === '01-03-2027'
+      )
+        t1Row = n;
+    });
+    expect(t1Row).toBeGreaterThan(1);
+    ws.getRow(t1Row).getCell(col('Remark')).value = 'Exam duty, changed by Excel';
+    const add = (vals: Record<string, string | number>) => {
+      const r = ws.addRow([]);
+      for (const [k, v] of Object.entries(vals)) r.getCell(col(k)).value = v;
+      return r.number;
+    };
+    const base = {
+      'Start time': '07:30',
+      'End time': '13:30',
+      'Present hours': 5.5,
+      'Half-day hours': 3,
+    };
+    const newRow = add({
+      Employee: `Tarun Teacher E2E (${s}T2)`,
+      'From date': '01-04-2027',
+      'To date': '03-04-2027',
+      ...base,
+      'Late by more than (minutes)': 15,
+      'Then (late)': 'Half day',
+    });
+    const badRow = add({
+      Employee: `${s}T2`,
+      'From date': '10-04-2027',
+      'To date': '12-04-2027',
+      ...base,
+      'End time': '07:00',
+    });
+    const overlapRow = add({
+      Employee: `${s}T1`,
+      'From date': '03-03-2027',
+      'To date': '08-03-2027',
+      ...base,
+    });
+    const ruleRow = add({
+      Employee: `${s}T2`,
+      'From date': '20-04-2027',
+      'To date': '21-04-2027',
+      ...base,
+      'Left early by more than (minutes)': 20,
+      'Then (early)': 'Half day of a leave type',
+    });
+    const file = async () => Buffer.from(await wb.xlsx.writeBuffer()).toString('base64');
+    const send = async (dryRun: boolean) =>
+      (
+        await call(office, 'POST', '/staff-attendance/timings/special-import', {
+          file: await file(),
+          dryRun,
+        })
+      ).json();
+    const checked = await send(true);
+    const at = (n: number) => checked.rows.find((r: { row: number }) => r.row === n);
+    expect(at(t1Row)).toMatchObject({ ok: true, what: 'change' });
+    expect(at(newRow)).toMatchObject({ ok: true, what: 'new', dates: '01-04-2027 to 03-04-2027' });
+    expect(at(badRow).error).toContain('the end time is not after the start time');
+    expect(at(overlapRow).error).toContain(
+      'overlaps their special timing 01-03-2027 to 05-03-2027',
+    );
+    expect(at(ruleRow).error).toContain('Early leave type: a leave type code');
+    expect(checked.saved).toBe(0);
+    // save: the good rows only
+    expect((await send(false)).saved).toBe(2);
+    const rows = (await call(office, 'GET', '/staff-attendance/timings')).json().rows;
+    expect(rows).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          employee_id: ids.T2,
+          from_date: '2027-04-01',
+          starts_at: '07:30',
+          late_over_minutes: 15,
+          late_action: 'HD',
+        }),
+        expect.objectContaining({
+          employee_id: ids.T1,
+          from_date: '2027-03-01',
+          note: 'Exam duty, changed by Excel',
+        }),
+      ]),
+    );
+    expect(rows.some((r: { from_date: string }) => r.from_date === '2027-04-10')).toBe(false);
+    // the same file again: the saved rows are as they are now
+    const again = await send(true);
+    expect(again.rows.find((r: { row: number }) => r.row === newRow).what).toBe('same');
+    expect(again.rows.find((r: { row: number }) => r.row === t1Row).what).toBe('same');
+    expect((await call(t1, 'GET', '/staff-attendance/timings/special-format')).statusCode).toBe(
+      403,
+    );
+  });
+
   it('punches from Excel; the register and the payroll feed', async () => {
     const f = (await call(office, 'GET', '/staff-attendance/sheets/punches/format')).json();
     const wb = new ExcelJS.Workbook();

@@ -684,6 +684,38 @@ export async function bulkTimings(body: {
   }
 }
 
+export type SpecialImportResult =
+  | {
+      ok: true;
+      rows: Array<{
+        row: number;
+        employee: string;
+        dates: string;
+        what: 'new' | 'change' | 'same' | null;
+        ok: boolean;
+        error?: string;
+      }>;
+      saved: number;
+    }
+  | { ok: false; error: string };
+/** Special timings from Excel: check (dryRun), then save the good rows. */
+export async function importSpecialTimings(
+  file: string,
+  dryRun: boolean,
+): Promise<SpecialImportResult> {
+  try {
+    const r = await apiFetch<Omit<Extract<SpecialImportResult, { ok: true }>, 'ok'>>(
+      '/staff-attendance/timings/special-import',
+      { method: 'POST', body: JSON.stringify({ file, dryRun }) },
+    );
+    if (!dryRun) revalidatePath('/leave/setup/timings');
+    return { ok: true, ...r };
+  } catch (e) {
+    if (e instanceof ApiError) return { ok: false, error: detailOf(e) };
+    throw e;
+  }
+}
+
 export async function retireTiming(id: string) {
   if (!okId(id)) return;
   await attCall(

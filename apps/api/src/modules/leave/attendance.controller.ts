@@ -159,6 +159,22 @@ export class AttendanceController {
     return this.att.bulkTiming(ctx, body);
   }
 
+  @Get('timings/special-format')
+  @ApiOperation({
+    summary: 'Special timings as Excel: the ones there are, a row each, to change or add to',
+  })
+  @RequirePermission('leave.setup.manage')
+  specialFormat(@ReqCtx() ctx: RequestContext) {
+    return this.att.specialFormat(ctx);
+  }
+
+  @Post('timings/special-import')
+  @ApiOperation({ summary: 'Special timings from Excel: check (dryRun), then save the good rows' })
+  @RequirePermission('leave.setup.manage')
+  specialImport(@ReqCtx() ctx: RequestContext, @Body() body: SheetDto) {
+    return this.att.specialImport(ctx, body);
+  }
+
   @Put('timings/:id')
   @RequirePermission('leave.setup.manage')
   saveTiming(@ReqCtx() ctx: RequestContext, @Param('id') id: string, @Body() body: TimingDto) {

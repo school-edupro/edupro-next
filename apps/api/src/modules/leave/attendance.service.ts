@@ -117,6 +117,25 @@ export function traceWords(t: Record<string, unknown>): string {
  * (regularisation, through Who approves), the late marks and missing punches, the payroll month lock, the
  * department and special timings, the uploads (days, punches), the payroll feed, and running the jobs now.
  */
+/** The late / early rule's outcome as the timing sheet words it. */
+const RULE_WORDS = new Map<string, string>([
+  ['No rule', 'none'],
+  ['Half day', 'HD'],
+  ['Absent', 'A'],
+  ['Half day of a leave type', 'leave'],
+]);
+const RULE_CODES = new Map<string, string>([
+  ['none', 'none'],
+  ['hd', 'HD'],
+  ['a', 'A'],
+  ['leave', 'leave'],
+]);
+/** A timing's values as one text, to tell a row left as it was (empty and null alike). */
+const keyOf = (v: Array<string | number | null | undefined>) =>
+  v.map((x) => (x === null || x === undefined ? '' : String(x))).join('|');
+const wordOf = (action: string) =>
+  [...RULE_WORDS.entries()].find(([, v]) => v === action)?.[0] ?? 'No rule';
+
 @Injectable()
 export class AttendanceService implements OnModuleInit {
   private readonly log = new Logger(AttendanceService.name);
@@ -1678,6 +1697,515 @@ export class AttendanceService implements OnModuleInit {
         },
       });
       return { ...summary, saved: all.length };
+    });
+  }
+
+  /** Special timings as Excel: every active one, a row each (to change), the lists behind the drop-downs. */
+  async specialFormat(ctx: RequestContext) {
+    if (!this.has(ctx, 'leave.setup.manage'))
+      throw new DomainError('permission-denied', 'Only the leave office', { status: 403 });
+    return this.db.tenant(requireTenant(ctx), async (c) => {
+      const staff = await c.query<{ label: string }>(
+        `SELECT display_name || ' (' || employee_code || ')' AS label FROM employees
+          WHERE deleted_at IS NULL AND status = 'active' AND employee_code IS NOT NULL ORDER BY display_name LIMIT 5000`,
+      );
+      const types = await c.query<{ code: string }>(
+        `SELECT code FROM staff_leave_types WHERE status = 'active' AND NOT loss_of_pay ORDER BY sort_order, code`,
+      );
+      const rows = await c.query<{
+        label: string;
+        from: string;
+        to: string;
+        starts: string;
+        ends: string;
+        grace: number;
+        present: string;
+        half: string;
+        late_over: number | null;
+        late_action: string;
+        late_code: string | null;
+        early_over: number | null;
+        early_action: string;
+        early_code: string | null;
+        note: string | null;
+      }>(
+        `SELECT e.display_name || ' (' || e.employee_code || ')' AS label, to_char(t.from_date, 'DD-MM-YYYY') AS "from",
+                to_char(t.to_date, 'DD-MM-YYYY') AS "to", to_char(t.starts_at, 'HH24:MI') AS starts,
+                to_char(t.ends_at, 'HH24:MI') AS ends, t.grace_minutes AS grace, t.present_hours::text AS present,
+                t.half_day_hours::text AS half, t.late_over_minutes AS late_over, t.late_action,
+                lt.code AS late_code, t.early_over_minutes AS early_over, t.early_action, et.code AS early_code, t.note
+           FROM staff_timings t JOIN employees e ON e.id = t.employee_id
+           LEFT JOIN staff_leave_types lt ON lt.id = t.late_leave_type_id
+           LEFT JOIN staff_leave_types et ON et.id = t.early_leave_type_id
+          WHERE t.kind = 'special' AND t.status = 'active'
+          ORDER BY e.display_name, t.from_date LIMIT 20000`,
+      );
+      const bytes = await templateSheet({
+        sheet: 'Special timings',
+        hideLists: true,
+        columns: [
+          {
+            header: 'Employee',
+            width: 30,
+            required: true,
+            options: staff.rows.map((x) => x.label),
+            note: 'The employee code in brackets is read; the code alone works too.',
+          },
+          { header: 'From date', width: 12, required: true, format: 'date', check: true },
+          { header: 'To date', width: 12, required: true, format: 'date', check: true },
+          {
+            header: 'Start time',
+            width: 10,
+            required: true,
+            format: 'text',
+            note: '24-hour, like 07:30',
+          },
+          {
+            header: 'End time',
+            width: 10,
+            required: true,
+            format: 'text',
+            note: '24-hour, like 15:30',
+          },
+          { header: 'Grace minutes', width: 9, format: 'whole', note: '0 to 240; empty: 5' },
+          {
+            header: 'Present hours',
+            width: 9,
+            required: true,
+            format: 'number',
+            note: 'Decimal hours: 7 h 30 m is 7.50',
+          },
+          {
+            header: 'Half-day hours',
+            width: 9,
+            required: true,
+            format: 'number',
+            note: 'Fewer than the present hours',
+          },
+          {
+            header: 'Late by more than (minutes)',
+            width: 12,
+            format: 'whole',
+            note: '0 or empty: no late rule',
+          },
+          { header: 'Then (late)', width: 22, options: [...RULE_WORDS.keys()] },
+          {
+            header: 'Late leave type',
+            width: 12,
+            options: types.rows.map((t) => t.code),
+            note: 'For “Half day of a leave type” only',
+          },
+          {
+            header: 'Left early by more than (minutes)',
+            width: 12,
+            format: 'whole',
+            note: '0 or empty: no early rule',
+          },
+          { header: 'Then (early)', width: 22, options: [...RULE_WORDS.keys()] },
+          {
+            header: 'Early leave type',
+            width: 12,
+            options: types.rows.map((t) => t.code),
+            note: 'For “Half day of a leave type” only',
+          },
+          { header: 'Remark', width: 30, note: 'Up to 200 characters' },
+        ],
+        guide: [
+          'One row per special timing: one employee’s own hours for some dates (a duty, a late bus). A special timing comes before the department timing and the shift.',
+          'The sheet comes with the special timings there are now: change a row to change it, add rows for new ones. A row is matched by the employee and exactly its From and To dates; a row left as it was changes nothing.',
+          'Times are 24-hour (07:30). Hours are decimal: 7 h 30 m is 7.50. At or above Present hours = P, at or above Half-day hours = HD, below = A.',
+          'Late / early rule: past the minutes the day becomes a half day or absent and leave is charged. 0 or empty minutes = no rule.',
+          'A row whose dates overlap another special timing of the same employee is refused: change that one instead.',
+          'Upload it and press Check: every row is checked first; then save the good rows.',
+        ],
+        rows: rows.rows.map((r) => [
+          r.label,
+          r.from,
+          r.to,
+          r.starts,
+          r.ends,
+          r.grace,
+          Number(r.present),
+          Number(r.half),
+          r.late_over,
+          wordOf(r.late_action),
+          r.late_code,
+          r.early_over,
+          wordOf(r.early_action),
+          r.early_code,
+          r.note,
+        ]),
+        examples: [
+          [
+            'Teacher name (E104)',
+            '01-12-2026',
+            '05-12-2026',
+            '07:30',
+            '13:30',
+            5,
+            5.5,
+            3,
+            15,
+            'Half day',
+            null,
+            null,
+            'No rule',
+            null,
+            'Exam duty',
+          ],
+          [
+            'Driver name (E210)',
+            '01-12-2026',
+            '31-12-2026',
+            '06:30',
+            '15:30',
+            10,
+            8,
+            4,
+            null,
+            'No rule',
+            null,
+            30,
+            'Half day of a leave type',
+            'CL',
+            'Winter bus route',
+          ],
+        ],
+      });
+      return {
+        filename: 'special-timings.xlsx',
+        contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        base64: bytes.toString('base64'),
+      };
+    });
+  }
+
+  /**
+   * Special timings from Excel: each row checked as the dialog checks it; a row with the dates of one the
+   * employee has is a change of it, else a new one (refused when it overlaps another of theirs). dryRun
+   * only checks; otherwise the good rows are saved, the others named.
+   */
+  async specialImport(ctx: RequestContext, dto: SheetDto) {
+    if (!this.has(ctx, 'leave.setup.manage'))
+      throw new DomainError('permission-denied', 'Only the leave office', { status: 403 });
+    const rows = await readSheet(
+      dto.file,
+      [
+        'Employee',
+        'From date',
+        'To date',
+        'Start time',
+        'End time',
+        'Present hours',
+        'Half-day hours',
+      ],
+      [
+        'Grace minutes',
+        'Late by more than (minutes)',
+        'Then (late)',
+        'Late leave type',
+        'Left early by more than (minutes)',
+        'Then (early)',
+        'Early leave type',
+        'Remark',
+      ],
+    );
+    return this.db.tenant(requireTenant(ctx), async (c) => {
+      const emps = new Map(
+        (
+          await c.query<{ id: string; code: string; name: string }>(
+            `SELECT id::text, upper(employee_code) AS code, display_name AS name FROM employees
+              WHERE deleted_at IS NULL AND status = 'active' AND employee_code IS NOT NULL`,
+          )
+        ).rows.map((e) => [e.code, e]),
+      );
+      const types = new Map(
+        (
+          await c.query<{ id: string; code: string }>(
+            `SELECT id::text, upper(code) AS code FROM staff_leave_types WHERE status = 'active' AND NOT loss_of_pay`,
+          )
+        ).rows.map((t) => [t.code, t.id]),
+      );
+      const have = (
+        await c.query<{
+          id: string;
+          emp: string;
+          from: string;
+          to: string;
+          starts: string;
+          ends: string;
+          grace: number;
+          present: number;
+          half: number;
+          late_over: number | null;
+          late_action: string;
+          late_type: string | null;
+          early_over: number | null;
+          early_action: string;
+          early_type: string | null;
+          note: string | null;
+        }>(
+          `SELECT id::text, employee_id::text AS emp, from_date::text AS "from", to_date::text AS "to",
+                  to_char(starts_at, 'HH24:MI') AS starts, to_char(ends_at, 'HH24:MI') AS ends, grace_minutes AS grace,
+                  present_hours::float AS present, half_day_hours::float AS half, late_over_minutes AS late_over,
+                  late_action, late_leave_type_id::text AS late_type, early_over_minutes AS early_over, early_action,
+                  early_leave_type_id::text AS early_type, note
+             FROM staff_timings WHERE kind = 'special' AND status = 'active'`,
+        )
+      ).rows.map((h) => ({
+        ...h,
+        key: keyOf([
+          h.starts,
+          h.ends,
+          h.grace,
+          h.present,
+          h.half,
+          h.late_over,
+          h.late_action,
+          h.late_type,
+          h.early_over,
+          h.early_action,
+          h.early_type,
+          h.note,
+        ]),
+      }));
+      const day = (v: string) => {
+        const t = (v ?? '').trim();
+        if (/^\d{2}-\d{2}-\d{4}$/.test(t)) return t.split('-').reverse().join('-');
+        if (/^\d{2}\/\d{2}\/\d{4}$/.test(t)) return t.split('/').reverse().join('-');
+        return t;
+      };
+      const time = (v: string) => {
+        const t = (v ?? '').trim();
+        if (/^0?\.\d+$|^0$/.test(t)) {
+          // a time Excel kept as a fraction of a day
+          const m = Math.round(Number(t) * 24 * 60);
+          return `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
+        }
+        const m = /^(\d{1,2})[:.](\d{2})(?::\d{2})?$/.exec(t);
+        if (!m || Number(m[1]) > 23 || Number(m[2]) > 59) return null;
+        return `${m[1]!.padStart(2, '0')}:${m[2]}`;
+      };
+      const results: Array<{
+        row: number;
+        employee: string;
+        dates: string;
+        what: 'new' | 'change' | 'same' | null;
+        ok: boolean;
+        error?: string;
+      }> = [];
+      type Good = {
+        id: string | null;
+        emp: string;
+        from: string;
+        to: string;
+        starts: string;
+        ends: string;
+        grace: number;
+        present: number;
+        half: number;
+        lateOver: number | null;
+        lateAction: string;
+        lateType: string | null;
+        earlyOver: number | null;
+        earlyAction: string;
+        earlyType: string | null;
+        note: string | null;
+      };
+      const good: Good[] = [];
+      const inFile: Array<{ emp: string; from: string; to: string; row: number }> = [];
+      for (const { row, cells } of rows) {
+        const raw = (cells.Employee ?? '').trim();
+        const code = (/\(([^()]+)\)\s*$/.exec(raw)?.[1] ?? raw).trim().toUpperCase();
+        const e = emps.get(code);
+        const from = day(cells['From date'] ?? '');
+        const to = day(cells['To date'] ?? '');
+        const p: string[] = [];
+        if (!e) p.push(`no active employee is ${raw || '(empty)'}`);
+        const okDay = (d: string) => /^\d{4}-\d{2}-\d{2}$/.test(d) && !Number.isNaN(Date.parse(d));
+        if (!okDay(from)) p.push('the From date is not a date');
+        if (!okDay(to)) p.push('the To date is not a date');
+        else if (okDay(from) && to < from) p.push('the To date is before the From date');
+        const starts = time(cells['Start time'] ?? '');
+        const ends = time(cells['End time'] ?? '');
+        if (!starts) p.push('the start time is not HH:MM');
+        if (!ends) p.push('the end time is not HH:MM');
+        else if (starts && ends <= starts) p.push('the end time is not after the start time');
+        const graceRaw = (cells['Grace minutes'] ?? '').trim();
+        const grace = graceRaw === '' ? 5 : Number(graceRaw);
+        if (!Number.isInteger(grace) || grace < 0 || grace > 240)
+          p.push('grace minutes are 0 to 240');
+        const hrs = (k: string, label: string) => {
+          const v = (cells[k] ?? '').trim();
+          const n = Number(v);
+          if (
+            v === '' ||
+            !Number.isFinite(n) ||
+            n < 0 ||
+            n > 24 ||
+            Math.round(n * 100) / 100 !== n
+          ) {
+            p.push(`${label} are 0 to 24 with at most 2 decimals`);
+            return NaN;
+          }
+          return n;
+        };
+        const present = hrs('Present hours', 'present hours');
+        const half = hrs('Half-day hours', 'half-day hours');
+        if (Number.isFinite(present) && present <= 0) p.push('present hours are more than 0');
+        if (Number.isFinite(present) && Number.isFinite(half) && half >= present)
+          p.push('the half-day hours are not fewer than the present hours');
+        if (starts && ends && Number.isFinite(present)) {
+          const [sh, sm] = starts.split(':').map(Number) as [number, number];
+          const [eh, em] = ends.split(':').map(Number) as [number, number];
+          if (present * 60 > eh * 60 + em - (sh * 60 + sm))
+            p.push('the present hours are longer than the working times');
+        }
+        const rule = (side: 'Late' | 'Early', mk: string, ak: string, tk: string) => {
+          const mRaw = (cells[mk] ?? '').trim();
+          const mins = mRaw === '' ? 0 : Number(mRaw);
+          const word = (cells[ak] ?? '').trim();
+          const action =
+            word === '' ? 'none' : (RULE_WORDS.get(word) ?? RULE_CODES.get(word.toLowerCase()));
+          const typeCode = (cells[tk] ?? '').trim().toUpperCase();
+          if (!Number.isInteger(mins) || mins < 0 || mins > 720)
+            p.push(`${side.toLowerCase()} minutes are 0 to 720`);
+          if (!action) p.push(`${ak} is one of ${[...RULE_WORDS.keys()].join(', ')}`);
+          else if (mins > 0 && action === 'none')
+            p.push(`${ak}: say what the day becomes, or set the minutes to 0`);
+          else if (mins === 0 && action !== 'none') p.push(`${mk}: give the minutes for the rule`);
+          const typeId = typeCode ? types.get(typeCode) : undefined;
+          if (action === 'leave' && !typeId)
+            p.push(`${tk}: a leave type code${typeCode ? ` (${typeCode} is not one)` : ''}`);
+          return {
+            over: mins > 0 ? mins : null,
+            action: mins > 0 && action ? action : 'none',
+            type: action === 'leave' && mins > 0 ? (typeId ?? null) : null,
+          };
+        };
+        const late = rule('Late', 'Late by more than (minutes)', 'Then (late)', 'Late leave type');
+        const early = rule(
+          'Early',
+          'Left early by more than (minutes)',
+          'Then (early)',
+          'Early leave type',
+        );
+        const note = (cells.Remark ?? '').trim() || null;
+        if (note && note.length > 200) p.push('the remark is longer than 200 characters');
+        // the same employee and dates: that timing; overlapping another of theirs (or a row above): refused
+        const same = e
+          ? have.find((h) => h.emp === e.id && h.from === from && h.to === to)
+          : undefined;
+        if (e && okDay(from) && okDay(to)) {
+          const clash = have.find(
+            (h) => h.emp === e.id && h !== same && h.from <= to && h.to >= from,
+          );
+          if (clash)
+            p.push(
+              `overlaps their special timing ${dmy(clash.from)} to ${dmy(clash.to)}: change that row instead`,
+            );
+          const twice = inFile.find((x) => x.emp === e.id && x.from <= to && x.to >= from);
+          if (twice) p.push(`overlaps row ${String(twice.row)} for the same employee`);
+          inFile.push({ emp: e.id, from, to, row });
+        }
+        const dates =
+          okDay(from) && okDay(to)
+            ? `${dmy(from)} to ${dmy(to)}`
+            : `${cells['From date'] ?? ''} to ${cells['To date'] ?? ''}`;
+        if (p.length) {
+          results.push({
+            row,
+            employee: e ? `${e.name} (${e.code})` : raw || '(empty)',
+            dates,
+            what: null,
+            ok: false,
+            error: p.join('; '),
+          });
+          continue;
+        }
+        const g: Good = {
+          id: same?.id ?? null,
+          emp: e!.id,
+          from,
+          to,
+          starts: starts!,
+          ends: ends!,
+          grace,
+          present,
+          half,
+          lateOver: late.over,
+          lateAction: late.action,
+          lateType: late.type,
+          earlyOver: early.over,
+          earlyAction: early.action,
+          earlyType: early.type,
+          note,
+        };
+        const key = keyOf([
+          g.starts,
+          g.ends,
+          g.grace,
+          g.present,
+          g.half,
+          g.lateOver,
+          g.lateAction,
+          g.lateType,
+          g.earlyOver,
+          g.earlyAction,
+          g.earlyType,
+          g.note,
+        ]);
+        const unchanged = same?.key === key;
+        results.push({
+          row,
+          employee: `${e!.name} (${e!.code})`,
+          dates,
+          what: same ? (unchanged ? 'same' : 'change') : 'new',
+          ok: true,
+        });
+        if (!unchanged) good.push(g);
+      }
+      if (dto.dryRun) return { rows: results, saved: 0 };
+      for (const g of good) {
+        const args = [
+          g.starts,
+          g.ends,
+          g.grace,
+          g.present,
+          g.half,
+          g.lateOver,
+          g.lateAction,
+          g.lateType,
+          g.earlyOver,
+          g.earlyAction,
+          g.earlyType,
+          g.note,
+        ];
+        if (g.id)
+          await c.query(
+            `UPDATE staff_timings SET starts_at = $1::time, ends_at = $2::time, grace_minutes = $3, present_hours = $4, half_day_hours = $5,
+                    late_over_minutes = $6, late_action = $7, late_leave_type_id = $8, early_over_minutes = $9, early_action = $10,
+                    early_leave_type_id = $11, note = $12 WHERE id = $13`,
+            [...args, g.id],
+          );
+        else
+          await c.query(
+            `INSERT INTO staff_timings (school_id, kind, starts_at, ends_at, grace_minutes, present_hours, half_day_hours, late_over_minutes,
+                                        late_action, late_leave_type_id, early_over_minutes, early_action, early_leave_type_id, note,
+                                        employee_id, from_date, to_date, created_by)
+             VALUES (app.current_school_id(), 'special', $1::time, $2::time, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14::date, $15::date,
+                     app.current_user_id())`,
+            [...args, g.emp, g.from, g.to],
+          );
+      }
+      if (good.length)
+        await this.audit.stage(ctx, c, {
+          action: 'leave.timing.import',
+          entityType: 'staff_timings',
+          entityId: 'special',
+          after: { saved: good.length, rows: results.length },
+        });
+      return { rows: results, saved: good.length };
     });
   }
 

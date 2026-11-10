@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation';
 import { Button } from '@edupro/ui';
 import { ChipPicker, SearchPick } from '@/components/ChipPicker';
 import { saveTimingDialog } from '@/lib/leave-actions';
+import { SpecialTimingImport } from '@/components/leave/SpecialTimingImport';
 import type { Timings } from '@/lib/leave';
 
 type Row = Timings['rows'][number];
@@ -40,14 +41,20 @@ export function TimingForm({
   kind,
   row,
   d,
+  excel = false,
 }: {
   kind: 'department' | 'special';
   row: Row | null;
   d: Timings;
+  /** a new special timing: open on "Many from Excel" */
+  excel?: boolean;
 }) {
   const router = useRouter();
   const ref = useRef<HTMLDialogElement>(null);
   const dept = kind === 'department';
+  // a new special timing: one employee here, or many at once from Excel
+  const tabs = !dept && !row;
+  const [mode, setMode] = useState<'one' | 'excel'>(tabs && excel ? 'excel' : 'one');
   const [v, setV] = useState({
     departments: row?.department ? [row.department] : ([] as string[]),
     employeeId: row?.employee_id ?? '',
@@ -295,185 +302,224 @@ export function TimingForm({
           value={early && v.earlyAction === 'leave' ? v.earlyTypeId : ''}
         />
         <input type="hidden" name="note" value={v.note} />
+        {tabs ? (
+          <div className="ep-tabs ep-timing__tabs">
+            <div role="tablist" aria-label="How to add" className="ep-tabs__list">
+              <button
+                type="button"
+                role="tab"
+                aria-selected={mode === 'one'}
+                className="ep-tabs__tab"
+                onClick={() => setMode('one')}
+              >
+                One employee
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={mode === 'excel'}
+                className="ep-tabs__tab"
+                onClick={() => setMode('excel')}
+              >
+                Many from Excel (bulk)
+              </button>
+            </div>
+          </div>
+        ) : null}
 
-        <div className="ep-dialog__content ep-weekoff__content">
-          <p className="ep-alert ep-alert--info" role="note">
-            <span>
-              {dept ? (
-                <>
-                  These times apply to <strong>everyone in the department</strong> who has no
-                  special timing of their own. An employee who moves department picks up the new
-                  times automatically.
-                </>
-              ) : (
-                <>
-                  These times apply to <strong>one employee, for the dates given</strong> (a duty, a
-                  late bus). A special timing comes before the department timing and the shift.
-                </>
-              )}
-            </span>
-          </p>
-          {tried && count ? (
-            <p className="ep-alert ep-alert--danger" role="alert">
+        {mode === 'excel' ? (
+          <div className="ep-dialog__content ep-weekoff__content">
+            <p className="ep-alert ep-alert--info" role="note">
               <span>
-                {count === 1 ? 'One box needs' : `${String(count)} boxes need`} correcting: see the
-                red notes below.
+                Add or change <strong>many special timings at once</strong>: download the sheet,
+                fill one row per employee and dates, upload it and press Check. Every row is checked
+                as this form checks it; only the good rows are saved.
               </span>
             </p>
-          ) : null}
+            <SpecialTimingImport />
+          </div>
+        ) : (
+          <div className="ep-dialog__content ep-weekoff__content">
+            <p className="ep-alert ep-alert--info" role="note">
+              <span>
+                {dept ? (
+                  <>
+                    These times apply to <strong>everyone in the department</strong> who has no
+                    special timing of their own. An employee who moves department picks up the new
+                    times automatically.
+                  </>
+                ) : (
+                  <>
+                    These times apply to <strong>one employee, for the dates given</strong> (a duty,
+                    a late bus). A special timing comes before the department timing and the shift.
+                  </>
+                )}
+              </span>
+            </p>
+            {tried && count ? (
+              <p className="ep-alert ep-alert--danger" role="alert">
+                <span>
+                  {count === 1 ? 'One box needs' : `${String(count)} boxes need`} correcting: see
+                  the red notes below.
+                </span>
+              </p>
+            ) : null}
 
-          <h4 className="ep-kicker ep-weekoff__section">Who</h4>
-          {dept ? (
-            <div>
-              {row ? (
-                <div className="ep-field">
-                  <span className="ep-field__label">Department</span>
-                  <strong>{row.department}</strong>
-                  <span className="ep-field__help">
-                    To time another department, add a timing for it.
-                  </span>
-                </div>
-              ) : (
-                <>
-                  <ChipPicker
-                    label="Department"
+            <h4 className="ep-kicker ep-weekoff__section">Who</h4>
+            {dept ? (
+              <div>
+                {row ? (
+                  <div className="ep-field">
+                    <span className="ep-field__label">Department</span>
+                    <strong>{row.department}</strong>
+                    <span className="ep-field__help">
+                      To time another department, add a timing for it.
+                    </span>
+                  </div>
+                ) : (
+                  <>
+                    <ChipPicker
+                      label="Department"
+                      required
+                      options={d.departments
+                        .filter((x) => !taken.has(x.toLowerCase()))
+                        .map((x) => ({ value: x, label: x }))}
+                      value={v.departments}
+                      onChange={(next) => {
+                        set('departments', next);
+                        touch('departments');
+                      }}
+                      placeholder="Select department(s)"
+                      help="Pick one or several — the same times are saved for each."
+                    />
+                    {show('departments') ? (
+                      <span
+                        className="ep-field__error"
+                        id="tf-departments"
+                        role="alert"
+                        tabIndex={-1}
+                      >
+                        {errors.departments}
+                      </span>
+                    ) : null}
+                  </>
+                )}
+              </div>
+            ) : (
+              <div className="ep-shift__row">
+                <div>
+                  <SearchPick
+                    label="Employee"
                     required
-                    options={d.departments
-                      .filter((x) => !taken.has(x.toLowerCase()))
-                      .map((x) => ({ value: x, label: x }))}
-                    value={v.departments}
-                    onChange={(next) => {
-                      set('departments', next);
-                      touch('departments');
+                    options={d.employees.map((x) => ({ value: x.id, label: x.name }))}
+                    value={v.employeeId}
+                    onChange={(x) => {
+                      set('employeeId', x);
+                      touch('employeeId');
                     }}
-                    placeholder="Select department(s)"
-                    help="Pick one or several — the same times are saved for each."
                   />
-                  {show('departments') ? (
-                    <span
-                      className="ep-field__error"
-                      id="tf-departments"
-                      role="alert"
-                      tabIndex={-1}
-                    >
-                      {errors.departments}
+                  {show('employeeId') ? (
+                    <span className="ep-field__error" id="tf-employeeId" role="alert" tabIndex={-1}>
+                      {errors.employeeId}
                     </span>
                   ) : null}
-                </>
+                </div>
+                {field('from', 'From date', box('from', { type: 'date' }), undefined, true)}
+                {field('to', 'To date', box('to', { type: 'date' }), undefined, true)}
+              </div>
+            )}
+
+            <h4 className="ep-kicker ep-weekoff__section">Working times</h4>
+            <div className="ep-shift__row">
+              {field('startsAt', 'Start time', box('startsAt', { type: 'time' }), undefined, true)}
+              {field(
+                'endsAt',
+                'End time',
+                box('endsAt', { type: 'time' }),
+                win && win > 0 ? `The working times are ${hours(win / 60)}.` : undefined,
+                true,
+              )}
+              {field(
+                'grace',
+                'Grace minutes',
+                box('grace', { type: 'number', step: '1', mode: 'numeric' }),
+                'Late counts only after the start time + the grace.',
               )}
             </div>
-          ) : (
-            <div className="ep-shift__row">
-              <div>
-                <SearchPick
-                  label="Employee"
-                  required
-                  options={d.employees.map((x) => ({ value: x.id, label: x.name }))}
-                  value={v.employeeId}
-                  onChange={(x) => {
-                    set('employeeId', x);
-                    touch('employeeId');
-                  }}
-                />
-                {show('employeeId') ? (
-                  <span className="ep-field__error" id="tf-employeeId" role="alert" tabIndex={-1}>
-                    {errors.employeeId}
-                  </span>
-                ) : null}
-              </div>
-              {field('from', 'From date', box('from', { type: 'date' }), undefined, true)}
-              {field('to', 'To date', box('to', { type: 'date' }), undefined, true)}
-            </div>
-          )}
 
-          <h4 className="ep-kicker ep-weekoff__section">Working times</h4>
-          <div className="ep-shift__row">
-            {field('startsAt', 'Start time', box('startsAt', { type: 'time' }), undefined, true)}
-            {field(
-              'endsAt',
-              'End time',
-              box('endsAt', { type: 'time' }),
-              win && win > 0 ? `The working times are ${hours(win / 60)}.` : undefined,
-              true,
-            )}
-            {field(
-              'grace',
-              'Grace minutes',
-              box('grace', { type: 'number', step: '1', mode: 'numeric' }),
-              'Late counts only after the start time + the grace.',
-            )}
-          </div>
-
-          <h4 className="ep-kicker ep-weekoff__section">Hours that decide the day</h4>
-          <p className="ep-alert ep-alert--info" role="note">
-            <span>
-              Worked hours against these thresholds decide the day type:{' '}
-              <strong>
-                at or above Present = P, at or above Half-day = HD, below Half-day = A
-              </strong>
-              . Decimal hours — 7 h 30 m is <code>7.50</code>.
-            </span>
-          </p>
-          <div className="ep-shift__row">
-            {field(
-              'presentHours',
-              'Present hours',
-              box('presentHours', { type: 'number', step: '0.25', mode: 'decimal' }),
-              present ? `${present} or more = P` : undefined,
-              true,
-            )}
-            {field(
-              'halfDayHours',
-              'Half-day hours',
-              box('halfDayHours', { type: 'number', step: '0.25', mode: 'decimal' }),
-              half && present ? `${half} up to ${present} = HD, under ${half} = A` : undefined,
-              true,
-            )}
-            <div className="ep-field">
-              <label className="ep-field__label" htmlFor="tf-absent">
-                Absent hours
-              </label>
-              <input
-                id="tf-absent"
-                className="ep-input ep-input--readonly"
-                readOnly
-                value={half ? `under ${half}` : ''}
-                aria-describedby="tf-absent-help"
-              />
-              <span className="ep-field__help" id="tf-absent-help">
-                Reference only — under Half-day hours is already Absent.
+            <h4 className="ep-kicker ep-weekoff__section">Hours that decide the day</h4>
+            <p className="ep-alert ep-alert--info" role="note">
+              <span>
+                Worked hours against these thresholds decide the day type:{' '}
+                <strong>
+                  at or above Present = P, at or above Half-day = HD, below Half-day = A
+                </strong>
+                . Decimal hours — 7 h 30 m is <code>7.50</code>.
               </span>
+            </p>
+            <div className="ep-shift__row">
+              {field(
+                'presentHours',
+                'Present hours',
+                box('presentHours', { type: 'number', step: '0.25', mode: 'decimal' }),
+                present ? `${present} or more = P` : undefined,
+                true,
+              )}
+              {field(
+                'halfDayHours',
+                'Half-day hours',
+                box('halfDayHours', { type: 'number', step: '0.25', mode: 'decimal' }),
+                half && present ? `${half} up to ${present} = HD, under ${half} = A` : undefined,
+                true,
+              )}
+              <div className="ep-field">
+                <label className="ep-field__label" htmlFor="tf-absent">
+                  Absent hours
+                </label>
+                <input
+                  id="tf-absent"
+                  className="ep-input ep-input--readonly"
+                  readOnly
+                  value={half ? `under ${half}` : ''}
+                  aria-describedby="tf-absent-help"
+                />
+                <span className="ep-field__help" id="tf-absent-help">
+                  Reference only — under Half-day hours is already Absent.
+                </span>
+              </div>
             </div>
+
+            <p className="ep-alert ep-alert--info" role="note">
+              <span>
+                <strong>Late / early threshold rule.</strong> Past these limits the day itself
+                changes, whatever the hours say, and the change also <strong>costs leave</strong> —
+                charged through the deduction order and shown in the Leave register as charged by
+                the system. <code>0</code> minutes or <em>No rule</em> switches that side off. A
+                rule can only make a day <strong>worse</strong>, never better.{' '}
+                {dept
+                  ? 'These apply to everyone in the department who has no special timing of their own.'
+                  : 'These apply to this employee on these dates.'}
+              </span>
+            </p>
+            {ruleRow('late')}
+            {ruleRow('early')}
+
+            {field(
+              'note',
+              'Remark',
+              box('note', {
+                placeholder: dept
+                  ? 'e.g. Transport staff — early start'
+                  : 'e.g. Exam duty this week',
+              }),
+            )}
           </div>
-
-          <p className="ep-alert ep-alert--info" role="note">
-            <span>
-              <strong>Late / early threshold rule.</strong> Past these limits the day itself
-              changes, whatever the hours say, and the change also <strong>costs leave</strong> —
-              charged through the deduction order and shown in the Leave register as charged by the
-              system. <code>0</code> minutes or <em>No rule</em> switches that side off. A rule can
-              only make a day <strong>worse</strong>, never better.{' '}
-              {dept
-                ? 'These apply to everyone in the department who has no special timing of their own.'
-                : 'These apply to this employee on these dates.'}
-            </span>
-          </p>
-          {ruleRow('late')}
-          {ruleRow('early')}
-
-          {field(
-            'note',
-            'Remark',
-            box('note', {
-              placeholder: dept ? 'e.g. Transport staff — early start' : 'e.g. Exam duty this week',
-            }),
-          )}
-        </div>
+        )}
         <div className="ep-dialog__actions ep-weekoff__actions">
           <Button type="button" variant="secondary" onClick={close}>
-            Cancel
+            {mode === 'excel' ? 'Close' : 'Cancel'}
           </Button>
-          <Button type="submit">Save Timing</Button>
+          {mode === 'one' ? <Button type="submit">Save Timing</Button> : null}
         </div>
       </form>
     </dialog>

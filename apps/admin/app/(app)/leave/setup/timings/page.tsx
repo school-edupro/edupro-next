@@ -190,13 +190,21 @@ export default async function TimingsPage({
         <h2 id="tm-special" className="ep-card__title">
           Special timings
         </h2>
+        {can ? (
+          <p className="ep-field__help">
+            Many at once?{' '}
+            <a href="/leave/setup/timings?add=special&excel=1">Add or change them from Excel</a>.
+          </p>
+        ) : null}
         {table(
           d.rows.filter((r) => r.kind === 'special'),
           'special',
         )}
       </section>
       {editing ? <TimingForm key={editing.id} kind={editing.kind} row={editing} d={d} /> : null}
-      {adding ? <TimingForm key={adding} kind={adding} row={null} d={d} /> : null}
+      {adding ? (
+        <TimingForm key={adding} kind={adding} row={null} d={d} excel={sp.excel === '1'} />
+      ) : null}
       {can && !editing && !adding && sp.bulk === 'special' ? (
         <BulkTimingForm departments={d.departments} />
       ) : null}
