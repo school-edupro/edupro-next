@@ -11,6 +11,7 @@ const FIELDS = [
   'code',
   'name',
   'kind',
+  'colour',
   'starts_at',
   'ends_at',
   'grace_minutes',
@@ -29,6 +30,19 @@ const FIELDS = [
   'early_leave_type_id',
 ] as const;
 const CODE = /^[A-Z0-9][A-Z0-9_-]{0,29}$/;
+/** the colours a shift can take in the shift calendar */
+export const SHIFT_COLOURS: Array<{ value: string; label: string }> = [
+  { value: '#2563EB', label: 'Blue' },
+  { value: '#16A34A', label: 'Green' },
+  { value: '#D97706', label: 'Amber' },
+  { value: '#7C3AED', label: 'Purple' },
+  { value: '#0D9488', label: 'Teal' },
+  { value: '#E11D48', label: 'Rose' },
+  { value: '#EA580C', label: 'Orange' },
+  { value: '#4F46E5', label: 'Indigo' },
+  { value: '#0891B2', label: 'Cyan' },
+  { value: '#475569', label: 'Slate' },
+];
 const ACTIONS: Array<{ value: Action; label: string }> = [
   { value: 'none', label: 'No rule' },
   { value: 'HD', label: 'Half day (half a day of leave charged)' },
@@ -79,6 +93,7 @@ export function ShiftForm({
     code: initial.code ?? '',
     name: initial.name ?? '',
     kind: initial.kind === 'night' ? 'night' : 'day',
+    colour: (initial.colour ?? '').toUpperCase(),
     starts_at: hhmm(initial.starts_at) || '08:00',
     ends_at: hhmm(initial.ends_at) || '15:30',
     grace_minutes: initial.grace_minutes ?? '5',
@@ -238,6 +253,7 @@ export function ShiftForm({
     code: v.code.trim(),
     name: v.name.trim(),
     kind: v.kind,
+    colour: v.colour,
     starts_at: v.starts_at,
     ends_at: v.ends_at,
     grace_minutes: v.grace_minutes,
@@ -388,6 +404,33 @@ export function ShiftForm({
                 <option value="day">Day</option>
                 <option value="night">Night (may end the next morning)</option>
               </select>,
+            )}
+            {field(
+              'colour',
+              'Colour in the shift calendar',
+              <span style={{ display: 'flex', gap: 'var(--sp-2)', alignItems: 'center' }}>
+                <span
+                  aria-hidden="true"
+                  className="ep-shiftcal__swatch"
+                  style={{ background: v.colour || 'var(--surface-subtle)' }}
+                />
+                <select
+                  id="sf-colour"
+                  className="ep-select"
+                  value={v.colour}
+                  onChange={(e) => set('colour', e.target.value)}
+                >
+                  <option value="">Chosen for me</option>
+                  {SHIFT_COLOURS.map((c) => (
+                    <option key={c.value} value={c.value}>
+                      {c.label}
+                    </option>
+                  ))}
+                  {v.colour && !SHIFT_COLOURS.some((c) => c.value === v.colour) ? (
+                    <option value={v.colour}>{v.colour}</option>
+                  ) : null}
+                </select>
+              </span>,
             )}
           </div>
 

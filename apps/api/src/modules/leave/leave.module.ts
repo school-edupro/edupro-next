@@ -15,6 +15,8 @@ import { LeaveSetupController } from './leave-setup.controller';
 import { LeaveSetupService } from './leave-setup.service';
 import { LeaveController } from './leave.controller';
 import { LeaveService } from './leave.service';
+import { ShiftCalendarController } from './shift-calendar.controller';
+import { ShiftCalendarService } from './shift-calendar.service';
 
 /** Staff leave and attendance (docs/design/85). */
 @Module({
@@ -25,6 +27,7 @@ import { LeaveService } from './leave.service';
     AttendanceController,
     LeaveReportsController,
     LeaveCutoverController,
+    ShiftCalendarController,
   ],
   providers: [
     AuditService,
@@ -32,6 +35,7 @@ import { LeaveService } from './leave.service';
     LeaveService,
     LeaveOfficeService,
     AttendanceService,
+    ShiftCalendarService,
     LeaveDashboardService,
     LeaveReportsService,
     LeaveCutoverService,

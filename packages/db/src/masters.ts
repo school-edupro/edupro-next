@@ -2379,6 +2379,15 @@ export const MASTERS: MasterDefinition[] = [
       },
       name('Shift'),
       { key: 'kind', header: 'Day / night', type: 'select', options: ['day', 'night'], width: 8 },
+      {
+        key: 'colour',
+        header: 'Colour',
+        type: 'text',
+        maxLength: 7,
+        width: 8,
+        pattern: '^#[0-9a-fA-F]{6}$',
+        patternHelp: 'a colour like #2563EB (the shift calendar shows the code in it)',
+      },
       { ...TIME, key: 'starts_at', header: 'Starts', required: true },
       { ...TIME, key: 'ends_at', header: 'Ends', required: true },
       {

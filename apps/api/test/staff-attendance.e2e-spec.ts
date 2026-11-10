@@ -927,6 +927,250 @@ describe('staff attendance (e2e)', () => {
     expect(none.json().detail).toContain('Not saved');
   });
 
+  it('the shift calendar: post for days and one day, give way, take a day back, copy a month, the log, back-dating', async () => {
+    const [r1, r2, gen] = await withMigrator(async (c) => {
+      const mk = async (code: string, name: string) =>
+        (
+          await c.query<{ id: string }>(
+            `INSERT INTO employees (school_id, employee_code, first_name, last_name, designation, department, employee_type, gender)
+             VALUES ($1, $2, $3, 'E2E', 'Staff', 'Roster', 'non_teaching', 'male') RETURNING id::text`,
+            [school.id, `${s}${code}`, name],
+          )
+        ).rows[0]!.id;
+      const g = (
+        await c.query<{ id: string }>(
+          `SELECT id::text FROM staff_shifts WHERE school_id = $1 AND code = 'GEN'`,
+          [school.id],
+        )
+      ).rows[0]!.id;
+      return [await mk('R1', 'Ravi Roster'), await mk('R2', 'Rina Roster'), g];
+    });
+    const early = await call(office, 'POST', '/masters/staff_shifts/rows', {
+      values: {
+        code: 'EARLY',
+        name: 'Early',
+        kind: 'day',
+        colour: '#7C3AED',
+        starts_at: '06:30',
+        ends_at: '13:30',
+        grace_minutes: 5,
+        present_hours: 6,
+        half_day_hours: 3,
+        total_hours: 7,
+      },
+    });
+    expect(early.statusCode).toBe(201);
+    const ear = await withMigrator(
+      async (c) =>
+        (
+          await c.query<{ id: string }>(
+            `SELECT id::text FROM staff_shifts WHERE school_id = $1 AND code = 'EARLY'`,
+            [school.id],
+          )
+        ).rows[0]!.id,
+    );
+    const cal = async (q = '') =>
+      (
+        await call(
+          office,
+          'GET',
+          `/staff-attendance/shift-calendar?month=2027-07&department=Roster${q}`,
+        )
+      ).json();
+    let m = await cal();
+    expect(m.page.total).toBe(2);
+    expect(m.rows.every((r: { posted: boolean }) => !r.posted)).toBe(true);
+    expect(m.shifts.find((x: { code: string }) => x.code === 'EARLY').colour).toBe('#7C3AED');
+    expect(m.rows[0].cells[0]).toMatchObject({ s: m.defaultShiftId, src: 'default' });
+
+    // a dry run changes nothing; then EARLY for 05 to 20 July for both
+    const body = { employeeIds: [r1, r2], shiftId: ear, from: '2027-07-05', to: '2027-07-20' };
+    const dry = (
+      await call(office, 'POST', '/staff-attendance/shift-calendar/assign', {
+        ...body,
+        dryRun: true,
+      })
+    ).json();
+    expect(dry).toMatchObject({ dryRun: true, changed: 2 });
+    expect((await cal()).rows.every((r: { posted: boolean }) => !r.posted)).toBe(true);
+    const done = (
+      await call(office, 'POST', '/staff-attendance/shift-calendar/assign', body)
+    ).json();
+    expect(done).toMatchObject({ changed: 2, same: 0 });
+    // the same again: nothing changes
+    expect(
+      (await call(office, 'POST', '/staff-attendance/shift-calendar/assign', body)).json(),
+    ).toMatchObject({
+      changed: 0,
+      same: 2,
+    });
+    m = await cal();
+    const ravi = m.rows.find((r: { id: string }) => r.id === r1);
+    expect(ravi.cells[3]).toMatchObject({ src: 'default' });
+    expect(ravi.cells[4]).toMatchObject({ s: ear, src: 'posted' });
+    expect(ravi.cells[19]).toMatchObject({ s: ear, src: 'posted' });
+    expect(ravi.cells[20]).toMatchObject({ src: 'default' });
+    expect(ravi.cells.filter((x: { wo: boolean }) => x.wo).length).toBeGreaterThan(0);
+    // the filters: by shift, and those with none posted
+    expect((await cal(`&shiftId=${ear}`)).page.total).toBe(2);
+    expect((await cal('&unposted=1')).page.total).toBe(0);
+    expect((await cal('&q=Rina')).rows.map((r: { id: string }) => r.id)).toEqual([r2]);
+
+    // GEN for 10 July only: that day changes, EARLY resumes the next
+    await call(office, 'POST', '/staff-attendance/shift-calendar/assign', {
+      employeeIds: [r1],
+      shiftId: gen,
+      from: '2027-07-10',
+      to: '2027-07-10',
+    });
+    m = await cal();
+    let cells = m.rows.find((r: { id: string }) => r.id === r1).cells;
+    expect(cells[9]).toMatchObject({ s: gen, src: 'day' });
+    expect(cells[10]).toMatchObject({ s: ear, src: 'posted' });
+    // GEN from 15 July until changed: EARLY ends on the 14th (the 10th's own day stays)
+    const open = (
+      await call(office, 'POST', '/staff-attendance/shift-calendar/assign', {
+        employeeIds: [r1],
+        shiftId: gen,
+        from: '2027-07-15',
+        to: null,
+        dryRun: true,
+      })
+    ).json();
+    expect(open.lines[0].changes).toEqual([
+      'EARLY from 05-07-2027 now ends 14-07-2027',
+      'GEN 15-07-2027 to until changed',
+    ]);
+    // take the 10th back: it follows EARLY again; a day with no posting of its own is refused
+    expect(
+      (
+        await call(office, 'POST', '/staff-attendance/shift-calendar/clear-day', {
+          employeeId: r1,
+          day: '2027-07-10',
+        })
+      ).json(),
+    ).toMatchObject({ cleared: 1 });
+    cells = (await cal()).rows.find((r: { id: string }) => r.id === r1).cells;
+    expect(cells[9]).toMatchObject({ s: ear, src: 'posted' });
+    expect(
+      (
+        await call(office, 'POST', '/staff-attendance/shift-calendar/clear-day', {
+          employeeId: r1,
+          day: '2027-07-11',
+        })
+      ).statusCode,
+    ).toBe(404);
+
+    // copy July onto August: date for date; a second copy leaves them (posted there already)
+    const preview = (
+      await call(office, 'POST', '/staff-attendance/shift-calendar/copy', {
+        source: '2027-07',
+        target: '2027-08',
+        department: 'Roster',
+      })
+    ).json();
+    expect(preview).toMatchObject({ dryRun: true, copied: 2, postings: 2 });
+    expect(preview.lines[0].changes).toEqual(['EARLY 05-08-2027 to 20-08-2027']);
+    await call(office, 'POST', '/staff-attendance/shift-calendar/copy', {
+      source: '2027-07',
+      target: '2027-08',
+      department: 'Roster',
+      dryRun: false,
+    });
+    const aug = (
+      await call(office, 'GET', '/staff-attendance/shift-calendar?month=2027-08&department=Roster')
+    ).json();
+    expect(aug.rows[0].cells[4]).toMatchObject({ s: ear, src: 'posted' });
+    const again = (
+      await call(office, 'POST', '/staff-attendance/shift-calendar/copy', {
+        source: '2027-07',
+        target: '2027-08',
+        department: 'Roster',
+      })
+    ).json();
+    expect(again).toMatchObject({
+      copied: 0,
+      skipped: expect.arrayContaining([expect.stringContaining('Ravi')]),
+    });
+
+    // the log: each posting, who, what
+    const log = (
+      await call(office, 'GET', `/staff-attendance/shift-calendar/log?employeeId=${r1}&size=50`)
+    ).json();
+    expect(log.rows.map((x: { action: string }) => x.action)).toEqual(
+      expect.arrayContaining(['added', 'removed']),
+    );
+    expect(log.rows.find((x: { action: string }) => x.action === 'added').shift).toContain('EARLY');
+
+    // back-dating: a past day is worked out again; a locked month refuses
+    // 6 h 14 m: a half day on the default shift (present from 7 h), present on EARLY (from 6 h)
+    await punch(`${s}R2`, PAST[3]!, '06:31', '12:45');
+    await run('sync');
+    expect((await dayOf(office, r2, PAST[3]!)).row.dayType).toBe('HD');
+    const back = (
+      await call(office, 'POST', '/staff-attendance/shift-calendar/assign', {
+        employeeIds: [r2],
+        shiftId: ear,
+        from: PAST[3],
+        to: PAST[3],
+      })
+    ).json();
+    expect(back.worked).toBeGreaterThan(0);
+    expect((await dayOf(office, r2, PAST[3]!)).row.dayType).toBe('P');
+    await withMigrator((c) =>
+      c.query(
+        `INSERT INTO staff_month_locks (school_id, month, locked) VALUES ($1, $2::date, true)
+         ON CONFLICT ON CONSTRAINT staff_month_locks_pkey DO UPDATE SET locked = true`,
+        [school.id, oldMonth],
+      ),
+    );
+    const refused = await call(office, 'POST', '/staff-attendance/shift-calendar/assign', {
+      employeeIds: [r2],
+      shiftId: ear,
+      from: OLD[2],
+      to: OLD[2],
+    });
+    expect(refused.statusCode).toBe(409);
+    expect(refused.json().detail).toContain('locked for payroll');
+    await withMigrator((c) =>
+      c.query(
+        `UPDATE staff_month_locks SET locked = false WHERE school_id = $1 AND month = $2::date`,
+        [school.id, oldMonth],
+      ),
+    );
+
+    // Excel and PDF; the roster report; only the office posts
+    const x = (
+      await call(
+        office,
+        'GET',
+        '/staff-attendance/shift-calendar?month=2027-07&department=Roster&format=xlsx',
+      )
+    ).json();
+    expect(x.filename).toMatch(/^Shift-calendar-2027-07/);
+    const book = new ExcelJS.Workbook();
+    await book.xlsx.load(Buffer.from(x.base64, 'base64') as unknown as ArrayBuffer);
+    const texts: string[] = [];
+    book.worksheets[0]!.eachRow((row) => row.eachCell((cell) => texts.push(String(cell.value))));
+    // the display name carries the last name (Ravi Roster E2E)
+    expect(texts.some((t) => t.startsWith('Ravi Roster'))).toBe(true);
+    expect(texts).toContain('EARLY');
+    const roster = (
+      await call(
+        office,
+        'GET',
+        '/leave-reports/reports/shift_roster?month=2027-07&department=Roster',
+      )
+    ).json();
+    expect(roster.columns.map((c: { label: string }) => c.label)).toEqual(
+      expect.arrayContaining(['EARLY', 'GEN']),
+    );
+    expect(
+      (await call(t1, 'POST', '/staff-attendance/shift-calendar/assign', { ...body, dryRun: true }))
+        .statusCode,
+    ).toBe(403);
+  });
+
   it('punches from Excel; the register and the payroll feed', async () => {
     const f = (await call(office, 'GET', '/staff-attendance/sheets/punches/format')).json();
     const wb = new ExcelJS.Workbook();

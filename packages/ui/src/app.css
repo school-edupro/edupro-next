@@ -14852,3 +14852,190 @@ button.ep-subchoice__icon:hover {
   flex-wrap: wrap;
   margin-top: var(--sp-2);
 }
+
+/* Shift calendar (Leave & attendance set-up → Shift calendar): a month grid, each day's shift code in the
+   shift's colour (--sc); dashed: the default shift, none posted; a dot: a shift for that day only */
+.ep-shiftcal__bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-2);
+  margin-block: var(--sp-3);
+}
+.ep-shiftcal__monthnav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-2);
+  margin-block: var(--sp-3) var(--sp-2);
+}
+.ep-shiftcal__legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2) var(--sp-4);
+  margin: 0 0 var(--sp-3);
+  padding: 0;
+  list-style: none;
+  font-size: var(--fs-small);
+  color: var(--text-body);
+}
+.ep-shiftcal__legend li {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-1);
+}
+.ep-shiftcal__unposted {
+  align-self: end;
+  padding-bottom: var(--sp-2);
+}
+.ep-shiftcal {
+  max-height: 70vh;
+}
+.ep-shiftcal__table {
+  border-collapse: separate;
+  border-spacing: 0;
+}
+.ep-shiftcal__table th,
+.ep-shiftcal__table td {
+  padding: 2px;
+  text-align: center;
+  white-space: nowrap;
+}
+.ep-shiftcal__table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: var(--surface-card);
+}
+.ep-shiftcal__tick {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  background: var(--surface-card);
+  width: 2rem;
+}
+.ep-shiftcal__who {
+  position: sticky;
+  left: 2rem;
+  z-index: 1;
+  min-width: 12rem;
+  text-align: left !important;
+  background: var(--surface-card);
+  font-weight: var(--fw-regular);
+  padding-inline: var(--sp-2) !important;
+  border-right: 1px solid var(--border-default);
+}
+.ep-shiftcal__table thead .ep-shiftcal__tick,
+.ep-shiftcal__table thead .ep-shiftcal__who {
+  z-index: 3;
+}
+.ep-shiftcal__day {
+  min-width: 2.6rem;
+  font-size: var(--fs-caption);
+  line-height: 1.2;
+}
+.ep-shiftcal__day > span {
+  display: block;
+}
+.ep-shiftcal__dow {
+  color: var(--text-muted);
+  font-weight: var(--fw-regular);
+}
+.ep-shiftcal__day--sun {
+  color: var(--status-danger-text);
+}
+.ep-shiftcal__day--today {
+  box-shadow: inset 0 -3px 0 var(--action-primary);
+}
+.ep-shiftcal__today {
+  background: var(--status-info-bg);
+}
+.ep-shiftcal__tag {
+  display: inline-block;
+  margin-left: var(--sp-1);
+  padding: 0 var(--sp-1);
+  border-radius: var(--radius-pill);
+  background: var(--status-warning-bg);
+  color: var(--status-warning-text);
+  font-size: var(--fs-caption);
+}
+.ep-shiftcal__cell {
+  --sc: #475569;
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 2.4rem;
+  height: 1.75rem;
+  padding: 0 var(--sp-1);
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  font: inherit;
+  font-size: var(--fs-caption);
+  font-weight: var(--fw-semibold);
+  color: var(--text-heading);
+  background: transparent;
+  cursor: default;
+}
+button.ep-shiftcal__cell {
+  cursor: pointer;
+}
+button.ep-shiftcal__cell:hover {
+  outline: 2px solid var(--border-strong);
+  outline-offset: -1px;
+}
+button.ep-shiftcal__cell:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 1px;
+}
+.ep-shiftcal__cell--posted,
+.ep-shiftcal__cell--day {
+  background: color-mix(in srgb, var(--sc) 20%, var(--surface-card));
+  border-color: color-mix(in srgb, var(--sc) 55%, var(--surface-card));
+  border-left: 3px solid var(--sc);
+}
+.ep-shiftcal__cell--default {
+  border: 1px dashed color-mix(in srgb, var(--sc) 60%, var(--surface-card));
+  color: var(--text-body);
+  font-weight: var(--fw-regular);
+}
+.ep-shiftcal__cell--day::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--text-heading);
+}
+.ep-shiftcal__cell--wo {
+  background: var(--surface-subtle);
+  color: var(--text-muted);
+  border-color: var(--border-subtle);
+}
+.ep-shiftcal__cell--h {
+  background: var(--status-warning-bg);
+  color: var(--status-warning-text);
+  border-color: color-mix(in srgb, var(--status-warning) 40%, transparent);
+}
+.ep-shiftcal__swatch {
+  display: inline-block;
+  width: 1rem;
+  height: 1rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-default);
+  vertical-align: middle;
+}
+.ep-shiftcal__facts {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: var(--sp-1) var(--sp-3);
+  margin: 0;
+}
+.ep-shiftcal__facts dt {
+  color: var(--text-muted);
+}
+.ep-shiftcal__facts dd {
+  margin: 0;
+}

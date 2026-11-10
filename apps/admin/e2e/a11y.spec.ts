@@ -572,6 +572,8 @@ const PAGES = [
   '/leave/setup/timings',
   '/leave/setup/timings?tab=special',
   '/leave/setup/timings?tab=log',
+  '/leave/setup/shift-calendar?month=2026-11',
+  '/leave/setup/shift-calendar?tab=log',
   '/leave/setup/report-access',
   '/leave/setup/cutover',
   '/leave/attendance',
@@ -804,6 +806,40 @@ test.describe('accessibility (axe)', () => {
             .join(' | ')}`,
       ),
     ).toEqual([]);
+  });
+
+  test('no serious or critical violations on the shift calendar dialogs', async ({ page }) => {
+    test.setTimeout(120_000); // three dialogs, each opened and checked
+    const open = async (what: string) => {
+      await page.goto('/leave/setup/shift-calendar?month=2026-11&size=25');
+      await page.waitForLoadState('networkidle');
+      if (what === 'assign') {
+        await page.getByRole('checkbox', { name: 'Tick every employee on this page' }).check();
+        await page.getByRole('button', { name: /^Assign shift/ }).click();
+      } else if (what === 'copy') {
+        await page.getByRole('button', { name: 'Copy a month…' }).click();
+      } else {
+        await page.locator('button.ep-shiftcal__cell').nth(3).click();
+      }
+      await page.waitForTimeout(400); // let the dialog's fade-in finish before measuring contrast
+      const r = await new AxeBuilder({ page })
+        .options({ iframes: false })
+        .setLegacyMode()
+        .withTags(['wcag2a', 'wcag2aa'])
+        .analyze();
+      return r.violations
+        .filter((v) => v.impact === 'serious' || v.impact === 'critical')
+        .map(
+          (v) =>
+            `${what} ${v.id}: ${v.help} ${v.nodes
+              .map((n) => n.target.join(' '))
+              .slice(0, 3)
+              .join(' | ')}`,
+        );
+    };
+    const problems: string[] = [];
+    for (const what of ['assign', 'copy', 'day']) problems.push(...(await open(what)));
+    expect(problems).toEqual([]);
   });
 
   test('no serious or critical violations on the portal profile tabs and the review drawer', async ({

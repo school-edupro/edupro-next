@@ -12,6 +12,7 @@ import { istToday } from '../purchase/purchase-stock-core';
 import { LEAVE_REPORTS } from './leave-dashboard.service';
 import { addDays, dmy, fail, monthStart, monthWords } from './leave-engine';
 import { leaveReportFile, type ReportCell, type ReportTable } from './leave-report-file';
+import { shiftCells, shiftList } from './shift-calendar.service';
 import {
   LEAVE_OFFICE,
   LEAVE_REPORT_CODES,
@@ -67,6 +68,12 @@ export const LEAVE_REPORT_DEFS: Record<
     group: 'Monthly',
     filters: ['month', ...STAFF],
     help: 'The month’s grid, four lines an employee (status, in, out, hours) with the totals of each kind of day and leave type (A3).',
+  },
+  shift_roster: {
+    name: 'Shift roster',
+    group: 'Monthly',
+    filters: ['month', ...STAFF],
+    help: 'The month’s shifts: each employee’s shift code day by day (WO weekly off, H holiday, * a shift for that day only), and the days of each shift.',
   },
   card: {
     name: 'Monthly employee attendance (card)',
@@ -1010,6 +1017,50 @@ export class LeaveReportsService {
           records: emps.length,
           paper: { a3: true, fontSize: 5.5 },
           note: 'Status: P present, HD half day, A absent, WO weekly off, H holiday, the leave’s code (½ half a day), LOP loss of pay, HOLD salary hold, · not marked; ·L late, ·F a punch missing, ·m set by hand. P counts the worked half of a half day of leave.',
+        };
+      }
+
+      case 'shift_roster': {
+        const { shifts, defaultShiftId } = await shiftList(c);
+        const by = await shiftCells(c, ids, s.month, s.monthEnd, defaultShiftId);
+        const code = new Map(shifts.map((x) => [x.id, x.code]));
+        const dates: string[] = [];
+        for (let d = s.month; d <= s.monthEnd; d = addDays(d, 1)) dates.push(d);
+        const rows = emps.map((e) => {
+          const n = new Map<string, number>();
+          const cells = dates.map((d) => {
+            const x = by.get(e.id)?.get(d);
+            if (!x) return '';
+            if (x.h) return 'H';
+            if (x.wo) return 'WO';
+            const k = x.s ? (code.get(x.s) ?? '') : '';
+            if (k) n.set(k, (n.get(k) ?? 0) + 1);
+            return `${k}${x.src === 'day' ? '*' : ''}`;
+          });
+          return [
+            e.code,
+            e.name,
+            e.department,
+            ...cells,
+            ...shifts.map((x) => n.get(x.code) ?? 0),
+          ] as ReportCell[];
+        });
+        return {
+          columns: [
+            { label: 'Emp. code', width: 1.4 },
+            { label: 'Employee', width: 3 },
+            { label: 'Department', width: 2 },
+            ...dates.map((d) => ({
+              label: `${String(Number(d.slice(8, 10)))} ${WEEKDAY[wd(d)]!.slice(0, 2)}`,
+              width: 1,
+              center: true,
+            })),
+            ...shifts.map((x) => ({ label: x.code, type: 'number' as const, width: 0.9 })),
+          ],
+          rows,
+          records: emps.length,
+          paper: { a3: true, fontSize: 6 },
+          note: `Each day: the shift’s code (${shifts.map((x) => `${x.code} ${x.name}`).join(', ')}); WO weekly off, H holiday, * a shift for that day only. Staff with no shift posted work the default shift. The totals: the working days of each shift.`,
         };
       }
 

@@ -469,6 +469,7 @@ export const LEAVE_REPORT_CODES = [
   'monthly_employee',
   'monthly_register',
   'card',
+  'shift_roster',
   'basic_work',
   'monthly_cumulative',
   'annual',
@@ -509,3 +510,79 @@ export const CutoverSettingsSchema = z.object({
   freezeOn: Day.nullable().optional(),
 });
 export class CutoverSettingsDto extends createZodDto(CutoverSettingsSchema) {}
+
+// ---- the shift calendar ---------------------------------------------------------------------------------
+const PageSize = z.coerce
+  .number()
+  .int()
+  .refine((v) => [25, 50, 100, 500].includes(v), '25, 50, 100 or 500 a page')
+  .default(50);
+
+/** A month of who works which shift, a page of employees at a time; Excel or PDF of the same. */
+export const ShiftCalendarSchema = z.object({
+  month: Month.optional(),
+  q: z.string().trim().max(80).optional(),
+  department: z.string().trim().max(100).optional(),
+  /** employees working this shift on some day of the month */
+  shiftId: Id.optional(),
+  /** only the employees with no shift posted for any day of the month (they work the default shift) */
+  unposted: z
+    .enum(['1', 'true'])
+    .transform(() => true)
+    .optional(),
+  page: z.coerce.number().int().min(1).max(10000).default(1),
+  size: PageSize,
+  format: z.enum(['xlsx', 'pdf']).optional(),
+});
+export class ShiftCalendarDto extends createZodDto(ShiftCalendarSchema) {}
+
+/**
+ * Post a shift to employees from a day (to a day; none: until changed). One day (from = to) changes that
+ * day only. What is posted inside those days already gives way; dryRun shows what would change.
+ */
+export const ShiftAssignSchema = z
+  .object({
+    employeeIds: z.array(Id).min(1).max(2000),
+    shiftId: Id,
+    from: Day,
+    to: Day.nullable().optional(),
+    dryRun: z.boolean().default(false),
+  })
+  .refine((v) => !v.to || v.to >= v.from, {
+    message: 'the To date is on or after the From date',
+    path: ['to'],
+  });
+export class ShiftAssignDto extends createZodDto(ShiftAssignSchema) {}
+
+/** Take a day back to the shift around it: the one-day posting of that day is removed. */
+export const ShiftClearDaySchema = z.object({ employeeId: Id, day: Day });
+export class ShiftClearDayDto extends createZodDto(ShiftClearDaySchema) {}
+
+/**
+ * Copy a month's posted shifts onto another month, date for date, for the employees of the filter (or
+ * those named). Employees with a shift already posted in the target month are left as they are.
+ */
+export const ShiftCopySchema = z
+  .object({
+    source: Month,
+    target: Month,
+    q: z.string().trim().max(80).optional(),
+    department: z.string().trim().max(100).optional(),
+    employeeIds: z.array(Id).max(2000).optional(),
+    dryRun: z.boolean().default(true),
+  })
+  .refine((v) => v.source !== v.target, { message: 'copy onto another month', path: ['target'] });
+export class ShiftCopyDto extends createZodDto(ShiftCopySchema) {}
+
+/** The shift posting change log. */
+export const ShiftLogSchema = z.object({
+  q: z.string().trim().max(80).optional(),
+  department: z.string().trim().max(100).optional(),
+  employeeId: Id.optional(),
+  from: Day.optional(),
+  to: Day.optional(),
+  page: z.coerce.number().int().min(1).max(10000).default(1),
+  size: PageSize,
+  format: z.enum(['xlsx', 'pdf']).optional(),
+});
+export class ShiftLogDto extends createZodDto(ShiftLogSchema) {}

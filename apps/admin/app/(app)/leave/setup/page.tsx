@@ -100,6 +100,12 @@ export default async function LeaveSetupPage({
         },
         {
           done: null,
+          title: 'Shift calendar',
+          text: 'The month at a glance: who works which shift each day; post a shift to many staff, change one day, copy a month',
+          href: '/leave/setup/shift-calendar',
+        },
+        {
+          done: null,
           title: 'Department and special timings',
           text: c.timings
             ? `${String(c.timings)} timings over the shift (a department's hours, or one employee's for some dates)`

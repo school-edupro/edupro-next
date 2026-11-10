@@ -39,6 +39,7 @@ const ALL = [
   'monthly_employee',
   'monthly_register',
   'card',
+  'shift_roster',
   'basic_work',
   'monthly_cumulative',
   'annual',

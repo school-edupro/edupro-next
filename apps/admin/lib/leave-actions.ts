@@ -3,7 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { ApiError, apiFetch } from './api';
-import type { ApplyResult } from './leave';
+import type { ApplyResult, ShiftAssignResult, ShiftCopyResult } from './leave';
 import type { ApprovalLevel } from './recruitment';
 
 const okId = (id: string) => /^\d{1,18}$/.test(id);
@@ -872,4 +872,44 @@ export async function switchCutover() {
     {},
     'Switched: EduPro is the record now; what waited starts at the first level.',
   );
+}
+
+// ---- the shift calendar -----------------------------------------------------------------------------
+type Got<T> = { ok: true; r: T } | { ok: false; error: string };
+async function shiftCall<T>(path: string, body: unknown, write: boolean): Promise<Got<T>> {
+  try {
+    const r = await apiFetch<T>(`/staff-attendance/shift-calendar/${path}`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    });
+    if (write) revalidatePath('/leave/setup/shift-calendar');
+    return { ok: true, r };
+  } catch (e) {
+    if (e instanceof ApiError) return { ok: false, error: detailOf(e) };
+    throw e;
+  }
+}
+/** Post a shift to employees for days (one day: that day only); dryRun shows what would change. */
+export async function assignShifts(body: {
+  employeeIds: string[];
+  shiftId: string;
+  from: string;
+  to: string | null;
+  dryRun: boolean;
+}) {
+  return shiftCall<ShiftAssignResult>('assign', body, !body.dryRun);
+}
+/** Take a day back to the shift around it. */
+export async function clearShiftDay(body: { employeeId: string; day: string }) {
+  return shiftCall<{ cleared: number; worked: number }>('clear-day', body, true);
+}
+/** Copy a month's posted shifts onto another month; dryRun shows what it does. */
+export async function copyShiftMonth(body: {
+  source: string;
+  target: string;
+  q?: string;
+  department?: string;
+  dryRun: boolean;
+}) {
+  return shiftCall<ShiftCopyResult>('copy', body, !body.dryRun);
 }

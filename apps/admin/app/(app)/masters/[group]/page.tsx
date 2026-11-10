@@ -9,6 +9,7 @@ import {
   PageHeader,
   SelectField,
 } from '@edupro/ui';
+import { Fragment } from 'react';
 import { notFound, redirect } from 'next/navigation';
 import { getTranslations } from 'next-intl/server';
 import { AutoSubmit } from '@/components/AutoSubmit';
@@ -265,15 +266,27 @@ export default async function MasterGroupPage({
             className="ep-tabs__list ep-tabs__list--wrap"
           >
             {listed.map((m) => (
-              <a
-                key={m.id}
-                role="tab"
-                aria-selected={m.id === master.id}
-                className="ep-tabs__tab"
-                href={`/masters/${group}?tab=${m.id}`}
-              >
-                {m.title}
-              </a>
+              <Fragment key={m.id}>
+                <a
+                  role="tab"
+                  aria-selected={m.id === master.id}
+                  className="ep-tabs__tab"
+                  href={`/masters/${group}?tab=${m.id}`}
+                >
+                  {m.title}
+                </a>
+                {m.id === 'staff_shift_postings' ? (
+                  // the month calendar of who works which shift: its own page
+                  <a
+                    role="tab"
+                    aria-selected={false}
+                    className="ep-tabs__tab"
+                    href="/leave/setup/shift-calendar"
+                  >
+                    Shift calendar
+                  </a>
+                ) : null}
+              </Fragment>
             ))}
             {groupKey === 'library' ? (
               // who works in which library: its own page (docs/design/36-library.md, round 3, part 3)

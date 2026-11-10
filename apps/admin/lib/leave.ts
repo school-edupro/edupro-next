@@ -755,3 +755,68 @@ export interface CutoverCompare {
     }>;
   };
 }
+
+/** The shift calendar: a month of who works which shift (Leave & attendance set-up → Shift calendar). */
+export interface ShiftCalendar {
+  month: string;
+  days: Array<{ date: string; day: number; dow: string }>;
+  departments: string[];
+  locked: boolean;
+  shifts: Array<{
+    id: string;
+    code: string;
+    name: string;
+    kind: string;
+    starts_at: string;
+    ends_at: string;
+    colour: string;
+  }>;
+  defaultShiftId: string | null;
+  rows: Array<{
+    id: string;
+    code: string;
+    name: string;
+    department: string | null;
+    posted: boolean;
+    cells: Array<{ s: string | null; src: 'posted' | 'default' | 'day'; wo: boolean; h: boolean }>;
+  }>;
+  page: { page: number; size: number; total: number };
+  counts: { unposted: number };
+  today: string;
+  can: { manage: boolean };
+}
+export interface ShiftAssignResult {
+  dryRun: boolean;
+  shift: string;
+  changed: number;
+  same: number;
+  lines: Array<{ employee: string; changes: string[] }>;
+  worked: number;
+  pastFrom: string | null;
+}
+export interface ShiftCopyResult {
+  dryRun: boolean;
+  source: string;
+  target: string;
+  copied: number;
+  postings: number;
+  lines: Array<{ employee: string; changes: string[] }>;
+  skipped: string[];
+  nothing: number;
+  worked: number;
+}
+export interface ShiftLogPage {
+  rows: Array<{
+    id: string;
+    subject: string;
+    department: string | null;
+    shift: string;
+    action: 'added' | 'changed' | 'ended' | 'removed';
+    from_date: string | null;
+    to_date: string | null;
+    changes: Array<{ field: string; old: unknown; new: unknown }>;
+    by: string | null;
+    at: string;
+  }>;
+  page: { page: number; size: number; total: number };
+}
