@@ -14810,3 +14810,20 @@ button.ep-subchoice__icon:hover {
 .ep-approvers__moved > td {
   background: var(--surface-band);
 }
+
+/* Shift dialog (Leave & attendance set-up → Shifts): three boxes a row, the ticks lined up with them */
+.ep-shift__row {
+  display: grid;
+  gap: var(--sp-4);
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  align-items: start;
+}
+.ep-shift__tick {
+  align-self: center;
+  padding-top: var(--sp-4);
+}
+@media (max-width: 48rem) {
+  .ep-shift__row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

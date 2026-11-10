@@ -21,6 +21,7 @@ import { AutoKey } from '@/components/AutoKey';
 import { RefDatalist } from '@/components/RefDatalist';
 import { StaffScopeFields } from '@/components/StaffScopeFields';
 import { WeekOffRuleForm } from '@/components/leave/WeekOffRuleForm';
+import { ShiftForm } from '@/components/leave/ShiftForm';
 import { Icon } from '@/components/nav-icons';
 import {
   masterBulk,
@@ -423,6 +424,17 @@ export default async function MasterGroupPage({
             initial={typed ?? editRow ?? {}}
             scopes={weekOffScopes}
             staff={weekOffStaff}
+          />
+        ) : canManage && master.id === 'staff_shifts' && (sp.add || editRow) ? (
+          <ShiftForm
+            master={master.id}
+            back={back}
+            id={editRow?.id}
+            initial={typed ?? editRow ?? {}}
+            leaveTypes={(lookups.late_leave_type_id ?? []).map((o) => ({
+              value: o.value,
+              label: o.label,
+            }))}
           />
         ) : canManage && (sp.add || editRow) ? (
           <RowForm

@@ -750,6 +750,31 @@ test.describe('accessibility (axe)', () => {
     await check('specific dates, by designation');
   });
 
+  test('no serious or critical violations on the shift dialog, with its checks showing', async ({
+    page,
+  }) => {
+    await page.goto('/masters/leave?tab=staff_shifts&add=1');
+    await page.waitForLoadState('networkidle');
+    await page.waitForTimeout(400); // let the dialog's fade-in finish before measuring contrast
+    await page.getByRole('button', { name: 'Save Shift' }).click(); // empty code and name: notes show
+    await page.waitForTimeout(200);
+    const r = await new AxeBuilder({ page })
+      .options({ iframes: false })
+      .setLegacyMode()
+      .withTags(['wcag2a', 'wcag2aa'])
+      .analyze();
+    const bad = r.violations.filter((v) => v.impact === 'serious' || v.impact === 'critical');
+    expect(
+      bad.map(
+        (v) =>
+          `${v.id}: ${v.help} ${v.nodes
+            .map((n) => n.target.join(' '))
+            .slice(0, 3)
+            .join(' | ')}`,
+      ),
+    ).toEqual([]);
+  });
+
   test('no serious or critical violations on the portal profile tabs and the review drawer', async ({
     page,
   }) => {
