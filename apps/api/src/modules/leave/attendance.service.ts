@@ -32,6 +32,7 @@ import {
   type SheetDto,
   type TimingBulkDto,
   type TimingListDto,
+  type TimingLogDto,
   type TimingsQueryDto,
   type TimingDto,
   type WithdrawDto,
@@ -1496,17 +1497,19 @@ export class AttendanceService implements OnModuleInit {
           ORDER BY t.kind, t.department, t.from_date DESC`,
         [q.only ?? null, q.id ?? null],
       );
-      const lists = await c.query<{ kind: string; id: string; name: string }>(
-        `SELECT 'dept' AS kind, name AS id, name FROM departments WHERE status = 'active'
-         UNION SELECT 'dept', department, department FROM employees WHERE deleted_at IS NULL AND COALESCE(department, '') <> ''
-         UNION ALL SELECT 'emp', id::text, display_name || ' (' || employee_code || ')' FROM employees WHERE deleted_at IS NULL AND status = 'active'
-         UNION ALL SELECT 'type', id::text, code || ' · ' || name FROM staff_leave_types WHERE status = 'active'
+      const lists = await c.query<{ kind: string; id: string; name: string; dept: string | null }>(
+        `SELECT 'dept' AS kind, name AS id, name, NULL AS dept FROM departments WHERE status = 'active'
+         UNION SELECT 'dept', department, department, NULL FROM employees WHERE deleted_at IS NULL AND COALESCE(department, '') <> ''
+         UNION ALL SELECT 'emp', id::text, display_name || ' (' || employee_code || ')', department FROM employees WHERE deleted_at IS NULL AND status = 'active'
+         UNION ALL SELECT 'type', id::text, code || ' · ' || name, NULL FROM staff_leave_types WHERE status = 'active'
          ORDER BY 1, 3`,
       );
       return {
         rows: r.rows,
         departments: lists.rows.filter((x) => x.kind === 'dept').map((x) => x.name),
-        employees: lists.rows.filter((x) => x.kind === 'emp').map(({ id, name }) => ({ id, name })),
+        employees: lists.rows
+          .filter((x) => x.kind === 'emp')
+          .map(({ id, name, dept }) => ({ id, name, department: dept })),
         types: lists.rows.filter((x) => x.kind === 'type').map(({ id, name }) => ({ id, name })),
         can: { manage: this.has(ctx, 'leave.setup.manage') },
       };
@@ -1523,15 +1526,25 @@ export class AttendanceService implements OnModuleInit {
       throw new DomainError('permission-denied', 'Only the leave office', { status: 403 });
     return this.db.tenant(requireTenant(ctx), async (c) => {
       const like = q.q ? `%${q.q}%` : null;
-      const args = [q.kind, like, q.department ?? null, q.from ?? null, q.to ?? null];
+      const args = [
+        q.kind,
+        like,
+        q.department ?? null,
+        q.from ?? null,
+        q.to ?? null,
+        q.when,
+        istToday(),
+      ];
       const where = `t.status = 'active' AND t.kind = $1
         AND ($2::text IS NULL OR t.department ILIKE $2 OR t.note ILIKE $2 OR e.display_name ILIKE $2 OR e.employee_code ILIKE $2)
         AND ($3::text IS NULL OR lower(COALESCE(t.department, e.department, '')) = lower($3))
         AND ($4::date IS NULL OR t.kind = 'department' OR t.to_date >= $4::date)
-        AND ($5::date IS NULL OR t.kind = 'department' OR t.from_date <= $5::date)`;
+        AND ($5::date IS NULL OR t.kind = 'department' OR t.from_date <= $5::date)
+        AND (t.kind = 'special' OR $6::text = 'all'
+             OR $6::text = 'now' AND (t.to_date IS NULL OR t.to_date >= $7::date)
+             OR $6::text = 'past' AND t.to_date < $7::date)`;
       const total = (
         await c.query<{ n: number }>(
-           
           `SELECT count(*)::int AS n FROM staff_timings t LEFT JOIN employees e ON e.id = t.employee_id WHERE ${where}`,
           args,
         )
@@ -1563,7 +1576,6 @@ export class AttendanceService implements OnModuleInit {
         early_type: string | null;
         note: string | null;
       }>(
-         
         `SELECT t.id::text, t.kind, t.department, e.display_name || ' (' || e.employee_code || ')' AS employee,
                 t.employee_id::text, e.department AS employee_department, t.from_date::text, t.to_date::text,
                 to_char(t.starts_at, 'HH24:MI') AS starts_at, to_char(t.ends_at, 'HH24:MI') AS ends_at,
@@ -1573,8 +1585,10 @@ export class AttendanceService implements OnModuleInit {
            LEFT JOIN staff_leave_types lt ON lt.id = t.late_leave_type_id
            LEFT JOIN staff_leave_types et ON et.id = t.early_leave_type_id
           WHERE ${where}
-          ORDER BY CASE WHEN t.kind = 'department' THEN lower(t.department) ELSE lower(e.display_name) END, t.from_date DESC, t.id
-          LIMIT $6 OFFSET $7`,
+          ORDER BY CASE WHEN t.kind = 'department' THEN lower(t.department) ELSE lower(e.display_name) END,
+                   CASE WHEN t.kind = 'department' THEN t.from_date END ASC NULLS FIRST,
+                   CASE WHEN t.kind = 'special' THEN t.from_date END DESC, t.id
+          LIMIT $8 OFFSET $9`,
         q.format ? [...args, LIST_LIMIT, 0] : [...args, q.size, (q.page - 1) * q.size],
       );
       if (q.format) {
@@ -1608,7 +1622,11 @@ export class AttendanceService implements OnModuleInit {
                     { label: 'From', type: 'date' as const },
                     { label: 'To', type: 'date' as const },
                   ]
-                : [{ label: 'Department', width: 3 }]),
+                : [
+                    { label: 'Department', width: 3 },
+                    { label: 'Effective from', width: 1.4 },
+                    { label: 'Effective to', width: 1.4 },
+                  ]),
               { label: 'Start', width: 1 },
               { label: 'End', width: 1 },
               { label: 'Grace (min)', type: 'number' as const, width: 1 },
@@ -1621,7 +1639,11 @@ export class AttendanceService implements OnModuleInit {
             rows: rows.rows.map((r) => [
               ...(special
                 ? [r.employee, r.employee_department, r.from_date, r.to_date]
-                : [r.department]),
+                : [
+                    r.department,
+                    r.from_date ? dmy(r.from_date) : 'From the start',
+                    r.to_date ? dmy(r.to_date) : '—',
+                  ]),
               r.starts_at,
               r.ends_at,
               r.grace_minutes,
@@ -1645,16 +1667,69 @@ export class AttendanceService implements OnModuleInit {
     });
   }
 
+  /**
+   * The past days a timing change touches, worked out again: from that day to yesterday (today is still
+   * running), for those employees. A month locked for payroll is never changed: a change reaching back
+   * into one is refused.
+   */
+  private async timingRecompute(
+    c: PoolClient,
+    emps: string[],
+    from: string | null,
+    to: string | null,
+  ) {
+    const yesterday = addDays(istToday(), -1);
+    const end = to && to < yesterday ? to : yesterday;
+    if (!from || from > end) return 0;
+    const locked = (
+      await c.query<{ m: string }>(
+        `SELECT to_char(month, 'Mon YYYY') AS m FROM staff_month_locks
+          WHERE school_id = app.current_school_id() AND locked
+            AND month BETWEEN date_trunc('month', $1::date) AND date_trunc('month', $2::date) ORDER BY month LIMIT 1`,
+        [from, end],
+      )
+    ).rows[0];
+    if (locked)
+      fail(
+        `${locked.m} is locked for payroll: a timing change cannot reach back into it — start it after that month`,
+        409,
+      );
+    // the lock holds even with nobody to work out again now (someone may join the department later)
+    let n = 0;
+    for (const e of emps)
+      n += (
+        await c.query<{ n: number }>(
+          `SELECT app.staff_attendance_recompute($1::date, $2::date, $3) AS n`,
+          [from, end, e],
+        )
+      ).rows[0]!.n;
+    return n;
+  }
+
+  /** The active employees of a department. */
+  private async deptEmployees(c: PoolClient, dept: string) {
+    return (
+      await c.query<{ id: string }>(
+        `SELECT id::text FROM employees WHERE deleted_at IS NULL AND status = 'active'
+            AND lower(COALESCE(department, '')) = lower($1)`,
+        [dept],
+      )
+    ).rows.map((x) => x.id);
+  }
+
+  /**
+   * Save a timing. A department timing is a version with its dates: adding one from a day; changing the one
+   * in force from a day (the old version ends the day before, a new one starts) or changing a scheduled one
+   * as it is. A special timing: one employee, or several at once (those whose own special timing overlaps
+   * are skipped and named). A change reaching back into past days works them out again (never a locked
+   * month). Every change is logged by the database.
+   */
   async saveTiming(ctx: RequestContext, id: string | null, dto: TimingDto) {
     if (!this.has(ctx, 'leave.setup.manage'))
       throw new DomainError('permission-denied', 'Only the leave office', { status: 403 });
     return this.db.tenant(requireTenant(ctx), async (c) => {
-      const args = [
-        dto.kind,
-        dto.kind === 'department' ? dto.department : null,
-        dto.kind === 'special' ? dto.employeeId : null,
-        dto.kind === 'special' ? dto.from : null,
-        dto.kind === 'special' ? dto.to : null,
+      const today = istToday();
+      const values = [
         dto.startsAt,
         dto.endsAt,
         dto.grace,
@@ -1668,40 +1743,170 @@ export class AttendanceService implements OnModuleInit {
         dto.earlyAction === 'leave' ? (dto.earlyTypeId ?? null) : null,
         dto.note ?? null,
       ];
-      try {
-        if (id) {
-          const r = await c.query(
-            `UPDATE staff_timings SET kind = $1, department = $2, employee_id = $3, from_date = $4::date, to_date = $5::date, starts_at = $6::time,
-                    ends_at = $7::time, grace_minutes = $8, present_hours = $9, half_day_hours = $10, late_over_minutes = $11, late_action = $12,
-                    late_leave_type_id = $13, early_over_minutes = $14, early_action = $15, early_leave_type_id = $16, note = $17
-              WHERE id = $18 AND status = 'active'`,
-            [...args, id],
-          );
-          if (!r.rowCount) throw new DomainError('not-found', 'Timing not found', { status: 404 });
-        } else
-          id = (
-            await c.query<{ id: string }>(
-              `INSERT INTO staff_timings (school_id, kind, department, employee_id, from_date, to_date, starts_at, ends_at, grace_minutes, present_hours,
-                                          half_day_hours, late_over_minutes, late_action, late_leave_type_id, early_over_minutes, early_action,
-                                          early_leave_type_id, note, created_by)
-               VALUES (app.current_school_id(), $1, $2, $3, $4::date, $5::date, $6::time, $7::time, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17,
-                       app.current_user_id()) RETURNING id::text`,
-              args,
-            )
-          ).rows[0]!.id;
-      } catch (e) {
-        const x = e as { code?: string; message?: string };
-        if (x.code === '23505') fail('That department already has a timing: change that one', 409);
-        if (x.code === '23514') fail(x.message ?? 'Not accepted');
-        throw e;
+      const SET = `starts_at = $1::time, ends_at = $2::time, grace_minutes = $3, present_hours = $4, half_day_hours = $5,
+                   late_over_minutes = $6, late_action = $7, late_leave_type_id = $8, early_over_minutes = $9,
+                   early_action = $10, early_leave_type_id = $11, note = $12`;
+      const insert = async (
+        kind: string,
+        dept: string | null,
+        emp: string | null,
+        from: string | null,
+        to: string | null,
+      ) =>
+        (
+          await c.query<{ id: string }>(
+            `INSERT INTO staff_timings (school_id, starts_at, ends_at, grace_minutes, present_hours, half_day_hours,
+                                        late_over_minutes, late_action, late_leave_type_id, early_over_minutes, early_action,
+                                        early_leave_type_id, note, kind, department, employee_id, from_date, to_date, created_by)
+             VALUES (app.current_school_id(), $1::time, $2::time, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15,
+                     $16::date, $17::date, app.current_user_id()) RETURNING id::text`,
+            [...values, kind, dept, emp, from, to],
+          )
+        ).rows[0]!.id;
+      const guard = async <T>(fn: () => Promise<T>): Promise<T> => {
+        try {
+          return await fn();
+        } catch (e) {
+          const x = e as { code?: string; message?: string };
+          if (x.code === '23514') fail(x.message ?? 'Not accepted');
+          throw e;
+        }
+      };
+      let worked = 0;
+      if (dto.kind === 'department') {
+        const dept = dto.department!;
+        const emps = await this.deptEmployees(c, dept);
+        if (!id) {
+          // a new timing starts on its day (none given: today)
+          const from = dto.from ?? today;
+          const nid = await guard(() => insert('department', dept, null, from, dto.to ?? null));
+          worked = await this.timingRecompute(c, emps, from, dto.to ?? null);
+          return { id: nid, worked };
+        }
+        const cur = (
+          await c.query<{ from: string | null; to: string | null; department: string }>(
+            `SELECT from_date::text AS "from", to_date::text AS "to", department FROM staff_timings
+              WHERE id = $1 AND kind = 'department' AND status = 'active' FOR UPDATE`,
+            [id],
+          )
+        ).rows[0];
+        if (!cur) throw new DomainError('not-found', 'Timing not found', { status: 404 });
+        // a version already in force changes from a day (none given: tomorrow), so past days keep theirs
+        const inForce = cur.from === null || cur.from <= today;
+        const at = dto.applyFrom ?? (inForce ? addDays(today, 1) : null);
+        if (at && (cur.from === null || at > cur.from)) {
+          // the version in force changes from a day: it ends the day before, a new one starts there
+          if (cur.to && at > cur.to)
+            fail('That day is after this timing ends: pick a day it covers');
+          const nid = await guard(async () => {
+            await c.query(`UPDATE staff_timings SET to_date = $2::date WHERE id = $1`, [
+              id,
+              addDays(at, -1),
+            ]);
+            return insert('department', cur.department, null, at, cur.to);
+          });
+          worked = await this.timingRecompute(c, emps, at, cur.to);
+          return { id: nid, worked, from: at };
+        }
+        // a scheduled version, or the change from its own start: the version itself
+        await guard(() =>
+          c.query(
+            `UPDATE staff_timings SET ${SET}, from_date = $13::date, to_date = $14::date WHERE id = $15`,
+            [...values, dto.from ?? cur.from, dto.to ?? cur.to, id],
+          ),
+        );
+        // here the version has a start (one from the start always changes from a day, above)
+        const start = [dto.from ?? cur.from!, cur.from!].sort()[0]!;
+        worked = await this.timingRecompute(c, emps, start, dto.to ?? cur.to);
+        return { id, worked };
       }
+      // special timings
+      const overlapOf = async (emp: string, skip: string | null) =>
+        (
+          await c.query<{ from: string; to: string }>(
+            `SELECT to_char(from_date, 'DD-MM-YYYY') AS "from", to_char(to_date, 'DD-MM-YYYY') AS "to" FROM staff_timings
+              WHERE kind = 'special' AND status = 'active' AND employee_id = $1 AND id <> COALESCE($2::bigint, 0)
+                AND from_date <= $4::date AND to_date >= $3::date LIMIT 1`,
+            [emp, skip, dto.from, dto.to],
+          )
+        ).rows[0];
+      if (id) {
+        const cur = (
+          await c.query<{ emp: string; from: string; to: string }>(
+            `SELECT employee_id::text AS emp, from_date::text AS "from", to_date::text AS "to" FROM staff_timings
+              WHERE id = $1 AND kind = 'special' AND status = 'active' FOR UPDATE`,
+            [id],
+          )
+        ).rows[0];
+        if (!cur) throw new DomainError('not-found', 'Timing not found', { status: 404 });
+        const emp = dto.employeeId ?? cur.emp;
+        const clash = await overlapOf(emp, id);
+        if (clash)
+          fail(
+            `The employee already has a special timing ${clash.from} to ${clash.to} on some of these dates`,
+          );
+        await guard(() =>
+          c.query(
+            `UPDATE staff_timings SET ${SET}, employee_id = $13, from_date = $14::date, to_date = $15::date WHERE id = $16`,
+            [...values, emp, dto.from, dto.to, id],
+          ),
+        );
+        const from = [dto.from!, cur.from].sort()[0]!;
+        const to = [dto.to!, cur.to].sort().reverse()[0]!;
+        worked = await this.timingRecompute(c, [...new Set([emp, cur.emp])], from, to);
+        return { id, worked };
+      }
+      const emps = [
+        ...new Set([...(dto.employeeIds ?? []), ...(dto.employeeId ? [dto.employeeId] : [])]),
+      ];
+      const names = new Map(
+        (
+          await c.query<{ id: string; name: string }>(
+            `SELECT id::text, display_name || ' (' || employee_code || ')' AS name FROM employees
+              WHERE id = ANY($1::bigint[]) AND deleted_at IS NULL AND status = 'active'`,
+            [emps],
+          )
+        ).rows.map((x) => [x.id, x.name]),
+      );
+      const created: string[] = [];
+      const skipped: Array<{ employee: string; reason: string }> = [];
+      for (const emp of emps) {
+        const name = names.get(emp);
+        if (!name) {
+          skipped.push({ employee: emp, reason: 'not an active employee' });
+          continue;
+        }
+        const clash = await overlapOf(emp, null);
+        if (clash) {
+          skipped.push({
+            employee: name,
+            reason: `already has a special timing ${clash.from} to ${clash.to}`,
+          });
+          continue;
+        }
+        await guard(() => insert('special', null, emp, dto.from!, dto.to!));
+        created.push(name);
+      }
+      if (!created.length)
+        fail(
+          `Not saved — ${skipped
+            .map((x) => `${x.employee}: ${x.reason}`)
+            .join(' · ')
+            .slice(0, 400)}`,
+        );
+      worked = await this.timingRecompute(
+        c,
+        emps.filter((e) => created.includes(names.get(e) ?? '')),
+        dto.from!,
+        dto.to!,
+      );
       await this.audit.stage(ctx, c, {
         action: 'leave.timing.save',
         entityType: 'staff_timings',
-        entityId: id!,
-        after: { ...dto },
+        entityId: 'special',
+        after: { created: created.length, skipped: skipped.length, from: dto.from, to: dto.to },
       });
-      return { id };
+      return { created, skipped, worked };
     });
   }
 
@@ -2346,12 +2551,127 @@ export class AttendanceService implements OnModuleInit {
     });
   }
 
+  /**
+   * Remove a timing. One that already applied to past days ends yesterday instead (those days keep it;
+   * from today the next timing, or the shift, applies); one not started yet goes. Logged by the database.
+   */
   async retireTiming(ctx: RequestContext, id: string) {
     if (!this.has(ctx, 'leave.setup.manage'))
       throw new DomainError('permission-denied', 'Only the leave office', { status: 403 });
     return this.db.tenant(requireTenant(ctx), async (c) => {
+      const today = istToday();
+      const t = (
+        await c.query<{ from: string | null; to: string | null }>(
+          `SELECT from_date::text AS "from", to_date::text AS "to" FROM staff_timings WHERE id = $1 AND status = 'active'`,
+          [id],
+        )
+      ).rows[0];
+      if (!t) throw new DomainError('not-found', 'Timing not found', { status: 404 });
+      if ((t.from === null || t.from < today) && (t.to === null || t.to >= today)) {
+        await c.query(`UPDATE staff_timings SET to_date = $2::date WHERE id = $1`, [
+          id,
+          addDays(today, -1),
+        ]);
+        return { id, status: 'ended', on: addDays(today, -1) };
+      }
+      if (t.to !== null && t.to < today) return { id, status: 'past' };
       await c.query(`UPDATE staff_timings SET status = 'retired' WHERE id = $1`, [id]);
       return { id, status: 'retired' };
+    });
+  }
+
+  /** The timing change log: who changed which timing, when, the fields old and new; Excel or PDF. */
+  async timingLog(ctx: RequestContext, q: TimingLogDto) {
+    if (!this.has(ctx, 'leave.setup.view'))
+      throw new DomainError('permission-denied', 'Only the leave office', { status: 403 });
+    return this.db.tenant(requireTenant(ctx), async (c) => {
+      const args = [
+        q.kind ?? null,
+        q.department ?? null,
+        q.timingId ?? null,
+        q.q ? `%${q.q}%` : null,
+        q.from ?? null,
+        q.to ?? null,
+      ];
+      const where = `($1::text IS NULL OR l.kind = $1)
+        AND ($2::text IS NULL OR lower(COALESCE(l.department, '')) = lower($2))
+        AND ($3::bigint IS NULL OR l.timing_id = $3)
+        AND ($4::text IS NULL OR l.subject ILIKE $4 OR u.display_name ILIKE $4)
+        AND ($5::date IS NULL OR (l.changed_at AT TIME ZONE 'Asia/Kolkata')::date >= $5::date)
+        AND ($6::date IS NULL OR (l.changed_at AT TIME ZONE 'Asia/Kolkata')::date <= $6::date)`;
+      const total = (
+        await c.query<{ n: number }>(
+          `SELECT count(*)::int AS n FROM staff_timing_log l LEFT JOIN users u ON u.id = l.changed_by WHERE ${where}`,
+          args,
+        )
+      ).rows[0]!.n;
+      const rows = await c.query<{
+        id: string;
+        timing_id: string;
+        kind: string;
+        subject: string;
+        department: string | null;
+        action: string;
+        from_date: string | null;
+        to_date: string | null;
+        changes: Array<{ field: string; old: unknown; new: unknown }>;
+        by: string | null;
+        at: string;
+      }>(
+        `SELECT l.id::text, l.timing_id::text, l.kind, l.subject, l.department, l.action, l.from_date::text, l.to_date::text,
+                l.changes, u.display_name AS by, to_char(l.changed_at AT TIME ZONE 'Asia/Kolkata', 'DD-MM-YYYY HH24:MI') AS at
+           FROM staff_timing_log l LEFT JOIN users u ON u.id = l.changed_by
+          WHERE ${where} ORDER BY l.changed_at DESC, l.id DESC LIMIT $7 OFFSET $8`,
+        q.format ? [...args, LIST_LIMIT, 0] : [...args, q.size, (q.page - 1) * q.size],
+      );
+      const words = (v: unknown) => (v === null || v === undefined || v === '' ? '—' : String(v));
+      if (q.format) {
+        checkListSize(rows.rows.length, 'changes');
+        return purchaseListFile({
+          format: q.format,
+          head: await purchaseHead(c, this.storage),
+          title: 'Timing change log',
+          slug: 'Timing-change-log',
+          words:
+            [
+              q.kind ? (q.kind === 'special' ? 'Special timings' : 'Department timings') : null,
+              q.department ? `Department: ${q.department}` : null,
+              q.q ? `Search: ${q.q}` : null,
+              q.from || q.to
+                ? `Changed ${q.from ? dmy(q.from) : '…'} to ${q.to ? dmy(q.to) : '…'}`
+                : null,
+            ]
+              .filter(Boolean)
+              .join(' · ') || 'All changes',
+          list: {
+            columns: [
+              { label: 'When', width: 1.6 },
+              { label: 'By', width: 1.8 },
+              { label: 'Timing', width: 1.2 },
+              { label: 'For', width: 2.6 },
+              { label: 'What', width: 1 },
+              { label: 'Effective', width: 2 },
+              { label: 'Changes', width: 6 },
+            ],
+            rows: rows.rows.map((r) => [
+              r.at,
+              r.by,
+              r.kind === 'special' ? 'Special' : 'Department',
+              r.subject,
+              r.action,
+              `${r.from_date ? dmy(r.from_date) : 'from the start'}${r.to_date ? ` to ${dmy(r.to_date)}` : ''}`,
+              r.changes
+                .map((x) =>
+                  r.action === 'added'
+                    ? `${x.field}: ${words(x.new)}`
+                    : `${x.field}: ${words(x.old)} → ${words(x.new)}`,
+                )
+                .join('; '),
+            ]),
+          },
+        });
+      }
+      return { rows: rows.rows, page: { page: q.page, size: q.size, total } };
     });
   }
 

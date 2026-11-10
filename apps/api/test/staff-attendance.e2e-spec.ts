@@ -499,6 +499,8 @@ describe('staff attendance (e2e)', () => {
     const t = await call(office, 'POST', '/staff-attendance/timings', {
       kind: 'department',
       department: 'Science',
+      // a timing applies from its date: from before the day worked out below
+      from: PAST[15],
       startsAt: '07:00',
       endsAt: '13:00',
       grace: 5,
@@ -742,6 +744,187 @@ describe('staff attendance (e2e)', () => {
       ),
     ).toBe(true);
     expect((await call(t1, 'GET', '/staff-attendance/timings/list')).statusCode).toBe(403);
+  });
+
+  it('department timings by date: a change from a day, scheduled ahead, never overlapping; back-dating; the log', async () => {
+    const base = {
+      startsAt: '07:00',
+      endsAt: '13:00',
+      grace: 5,
+      presentHours: 5,
+      halfDayHours: 2.5,
+    };
+    const hours = async (emp: string, day: string) =>
+      withMigrator(
+        async (c) =>
+          (
+            await c.query<{ s: string; src: string }>(
+              `SELECT to_char(starts_at, 'HH24:MI') AS s, timing_source AS src FROM app.staff_timing($1, $2::date)`,
+              [emp, day],
+            )
+          ).rows[0],
+      );
+    const science = (
+      await call(office, 'GET', '/staff-attendance/timings/list?kind=department&q=Science')
+    )
+      .json()
+      .rows.find((r: { department: string }) => r.department === 'Science');
+    const later = add(today, 10);
+    // the change from a later day: the version in force ends the day before, a new one is scheduled
+    const ch = await call(office, 'PUT', `/staff-attendance/timings/${science.id as string}`, {
+      kind: 'department',
+      department: 'Science',
+      applyFrom: later,
+      ...base,
+      startsAt: '07:30',
+    });
+    expect(ch.statusCode).toBe(200);
+    const next = ch.json().id as string;
+    expect(next).not.toBe(science.id);
+    expect(await hours(ids.H1!, PAST[9]!)).toMatchObject({ s: '07:00', src: 'DEPARTMENT' });
+    expect(await hours(ids.H1!, add(later, 3))).toMatchObject({ s: '07:30', src: 'DEPARTMENT' });
+    const now = (
+      await call(office, 'GET', '/staff-attendance/timings/list?kind=department&q=Science')
+    ).json().rows;
+    expect(
+      now.map((r: { from_date: string | null; to_date: string | null }) => [
+        r.from_date,
+        r.to_date,
+      ]),
+    ).toEqual([
+      [PAST[15], add(later, -1)],
+      [later, null],
+    ]);
+    // a scheduled version is changed as it is; a second one over the same days is refused
+    const same = await call(office, 'PUT', `/staff-attendance/timings/${next}`, {
+      kind: 'department',
+      department: 'Science',
+      from: later,
+      ...base,
+      startsAt: '07:30',
+      endsAt: '13:30',
+    });
+    expect(same.json().id).toBe(next);
+    const clash = await call(office, 'POST', '/staff-attendance/timings', {
+      kind: 'department',
+      department: 'Science',
+      from: add(today, 20),
+      ...base,
+    });
+    expect(clash.statusCode).toBe(400);
+    expect(clash.json().detail).toContain('Science already has a timing');
+    // back-dating: into a month locked for payroll refused; else the past days worked out again
+    const lib = (
+      await call(office, 'POST', '/staff-attendance/timings', {
+        kind: 'department',
+        department: 'Library',
+        from: PAST[15],
+        ...base,
+      })
+    ).json().id as string;
+    const old = `${add(today.slice(0, 7) + '-01', -40).slice(0, 7)}-01`;
+    await withMigrator((c) =>
+      c.query(
+        `INSERT INTO staff_month_locks (school_id, month, locked) VALUES ($1, $2::date, true)
+         ON CONFLICT ON CONSTRAINT staff_month_locks_pkey DO UPDATE SET locked = true`,
+        [school.id, old],
+      ),
+    );
+    const locked = await call(office, 'PUT', `/staff-attendance/timings/${lib}`, {
+      kind: 'department',
+      department: 'Library',
+      applyFrom: old,
+      from: old,
+      ...base,
+    });
+    expect(locked.statusCode).toBe(409);
+    expect(locked.json().detail).toContain('locked for payroll');
+    await withMigrator((c) =>
+      c.query(
+        `UPDATE staff_month_locks SET locked = false WHERE school_id = $1 AND month = $2::date`,
+        [school.id, old],
+      ),
+    );
+    const back = await call(office, 'PUT', `/staff-attendance/timings/${lib}`, {
+      kind: 'department',
+      department: 'Library',
+      applyFrom: PAST[3],
+      ...base,
+      startsAt: '06:45',
+    });
+    expect(back.statusCode).toBe(200);
+    // removing one that already applied ends it yesterday (the past keeps it)
+    const end = (
+      await call(office, 'POST', `/staff-attendance/timings/${back.json().id as string}/retire`, {})
+    ).json();
+    expect(end).toMatchObject({ status: 'ended', on: add(today, -1) });
+    // the log: who, what, old and new
+    const log = (
+      await call(office, 'GET', '/staff-attendance/timings/log?department=Library&size=25')
+    ).json();
+    expect(log.rows.map((r: { action: string }) => r.action)).toEqual(
+      expect.arrayContaining(['added', 'ended']),
+    );
+    const started = log.rows.find(
+      (r: { action: string; changes: Array<{ field: string }> }) =>
+        r.action === 'added' && r.changes.some((x) => x.field === 'Start time'),
+    );
+    expect(started.by).toBeTruthy();
+    const sciLog = (
+      await call(office, 'GET', '/staff-attendance/timings/log?department=Science')
+    ).json().rows;
+    expect(
+      sciLog.some(
+        (r: { action: string; changes: Array<{ field: string; old: unknown; new: unknown }> }) =>
+          r.action === 'changed' &&
+          r.changes.some((x) => x.field === 'End time' && x.old === '13:00' && x.new === '13:30'),
+      ),
+    ).toBe(true);
+    for (const format of ['xlsx', 'pdf'])
+      expect(
+        (await call(office, 'GET', `/staff-attendance/timings/log?format=${format}`)).json()
+          .filename,
+      ).toMatch(/^Timing-change-log-/);
+    expect((await call(t1, 'GET', '/staff-attendance/timings/log')).statusCode).toBe(403);
+  });
+
+  it('a special timing for several employees at once: those with an overlapping one are skipped and named', async () => {
+    const body = {
+      kind: 'special',
+      startsAt: '08:00',
+      endsAt: '14:00',
+      grace: 5,
+      presentHours: 5,
+      halfDayHours: 2.5,
+    };
+    const one = await call(office, 'POST', '/staff-attendance/timings', {
+      ...body,
+      employeeIds: [ids.T1],
+      from: '2027-06-01',
+      to: '2027-06-02',
+    });
+    expect(one.json().created).toHaveLength(1);
+    const many = (
+      await call(office, 'POST', '/staff-attendance/timings', {
+        ...body,
+        employeeIds: [ids.T1, ids.T2, ids.H1],
+        from: '2027-06-02',
+        to: '2027-06-03',
+        note: 'Sports day',
+      })
+    ).json();
+    expect(many.created).toHaveLength(2);
+    expect(many.skipped).toEqual([
+      expect.objectContaining({ reason: 'already has a special timing 01-06-2027 to 02-06-2027' }),
+    ]);
+    const none = await call(office, 'POST', '/staff-attendance/timings', {
+      ...body,
+      employeeIds: [ids.T2, ids.H1],
+      from: '2027-06-03',
+      to: '2027-06-04',
+    });
+    expect(none.statusCode).toBe(400);
+    expect(none.json().detail).toContain('Not saved');
   });
 
   it('punches from Excel; the register and the payroll feed', async () => {

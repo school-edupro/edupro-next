@@ -571,6 +571,7 @@ const PAGES = [
   '/leave/setup/settings',
   '/leave/setup/timings',
   '/leave/setup/timings?tab=special',
+  '/leave/setup/timings?tab=log',
   '/leave/setup/report-access',
   '/leave/setup/cutover',
   '/leave/attendance',

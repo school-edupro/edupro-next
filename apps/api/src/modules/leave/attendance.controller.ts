@@ -20,6 +20,7 @@ import {
   SheetDto,
   TimingBulkDto,
   TimingListDto,
+  TimingLogDto,
   TimingsQueryDto,
   TimingDto,
   WithdrawDto,
@@ -146,6 +147,15 @@ export class AttendanceController {
   @RequirePermission('leave.setup.view')
   timings(@ReqCtx() ctx: RequestContext, @Query() q: TimingsQueryDto) {
     return this.att.timings(ctx, q);
+  }
+
+  @Get('timings/log')
+  @ApiOperation({
+    summary: 'The timing change log: who changed which timing, when, old and new; Excel or PDF',
+  })
+  @RequirePermission('leave.setup.view')
+  timingLog(@ReqCtx() ctx: RequestContext, @Query() q: TimingLogDto) {
+    return this.att.timingLog(ctx, q);
   }
 
   @Get('timings/list')

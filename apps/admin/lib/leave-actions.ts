@@ -586,18 +586,28 @@ export async function runAttendance(fd: FormData) {
 export async function saveTimingDialog(fd: FormData) {
   const id = String(fd.get('id') ?? '');
   const num = (k: string) => (String(fd.get(k) ?? '').trim() === '' ? null : Number(fd.get(k)));
+  const day = (k: string) => {
+    const v = String(fd.get(k) ?? '').trim();
+    return /^\d{4}-\d{2}-\d{2}$/.test(v) ? v : null;
+  };
   const kind = fd.get('kind') === 'special' ? 'special' : 'department';
   const action = (k: string) => {
     const v = String(fd.get(k) ?? 'none');
     return ['none', 'HD', 'A', 'leave'].includes(v) ? v : 'none';
   };
   const typeId = (k: string) => (okId(String(fd.get(k) ?? '')) ? String(fd.get(k)) : null);
+  const employeeIds = fd.getAll('employeeIds').map(String).filter(okId);
   const body = (department: string | null) => ({
     kind,
     department,
-    employeeId: kind === 'special' ? String(fd.get('employeeId') ?? '') : null,
-    from: kind === 'special' ? String(fd.get('from') ?? '') : null,
-    to: kind === 'special' ? String(fd.get('to') ?? '') : null,
+    employeeId:
+      kind === 'special' && okId(String(fd.get('employeeId') ?? ''))
+        ? String(fd.get('employeeId'))
+        : null,
+    ...(kind === 'special' && employeeIds.length ? { employeeIds } : {}),
+    from: day('from'),
+    to: day('to'),
+    applyFrom: kind === 'department' ? day('applyFrom') : null,
     startsAt: String(fd.get('startsAt') ?? ''),
     endsAt: String(fd.get('endsAt') ?? ''),
     grace: num('grace') ?? 0,
@@ -611,46 +621,83 @@ export async function saveTimingDialog(fd: FormData) {
     earlyTypeId: typeId('earlyTypeId'),
     note: String(fd.get('note') ?? '').trim() || null,
   });
-  const path = kind === 'special' ? '/leave/setup/timings?tab=special' : '/leave/setup/timings';
+  const path =
+    kind === 'special' ? '/leave/setup/timings?tab=special' : '/leave/setup/timings?tab=department';
+  const worked = (n: number | undefined) =>
+    n ? ` ${String(n)} past day${n === 1 ? '' : 's'} worked out again.` : '';
   const depts = kind === 'department' ? fd.getAll('department').map(String).filter(Boolean) : [];
   if (id && okId(id)) {
+    let r: { id: string; worked?: number; from?: string } | null = null;
     try {
-      await apiFetch(`/staff-attendance/timings/${id}`, {
+      r = await apiFetch(`/staff-attendance/timings/${id}`, {
         method: 'PUT',
         body: JSON.stringify(body(kind === 'department' ? (depts[0] ?? null) : null)),
       });
     } catch (e) {
-      if (e instanceof ApiError) back(`${path}${path.includes('?') ? '&' : '?'}edit=${id}`, e);
+      if (e instanceof ApiError) back(`${path}&edit=${id}`, e);
       throw e;
     }
     revalidatePath('/leave/setup/timings');
+    const when = r?.from
+      ? ` The new hours apply from ${r.from.split('-').reverse().join('-')}; the days before keep the old ones.`
+      : '';
+    redirect(`${path}&ok=1&detail=${encodeURIComponent(`Saved.${when}${worked(r?.worked)}`)}`);
+  }
+  if (kind === 'special') {
+    let r: {
+      created: string[];
+      skipped: Array<{ employee: string; reason: string }>;
+      worked?: number;
+    } | null = null;
+    try {
+      r = await apiFetch('/staff-attendance/timings', {
+        method: 'POST',
+        body: JSON.stringify(body(null)),
+      });
+    } catch (e) {
+      if (e instanceof ApiError) back(`${path}&add=special`, e);
+      throw e;
+    }
+    revalidatePath('/leave/setup/timings');
+    const skipped = r?.skipped ?? [];
     redirect(
-      `${path}${path.includes('?') ? '&' : '?'}ok=1&detail=${encodeURIComponent('Saved. Days already worked out change when worked out again (attendance register).')}`,
+      `${path}&ok=1&detail=${encodeURIComponent(
+        `Saved for ${String(r?.created.length ?? 0)} employee${r?.created.length === 1 ? '' : 's'}.${
+          skipped.length
+            ? ` Skipped ${String(skipped.length)}: ${skipped.map((x) => `${x.employee} (${x.reason})`).join('; ')}.`
+            : ''
+        }${worked(r?.worked)}`.slice(0, 600),
+      )}`,
     );
   }
-  const targets = kind === 'department' ? depts : [null];
   const done: string[] = [];
   const refused: string[] = [];
-  for (const t of targets) {
+  let n = 0;
+  for (const t of depts) {
     try {
-      await apiFetch('/staff-attendance/timings', {
+      const r = await apiFetch<{ worked?: number }>('/staff-attendance/timings', {
         method: 'POST',
         body: JSON.stringify(body(t)),
       });
-      done.push(t ?? 'the timing');
+      n += r.worked ?? 0;
+      done.push(t);
     } catch (e) {
       if (!(e instanceof ApiError)) throw e;
-      refused.push(`${t ? `${t}: ` : ''}${detailOf(e)}`);
+      refused.push(detailOf(e));
     }
   }
   revalidatePath('/leave/setup/timings');
   if (refused.length && !done.length)
     redirect(
-      `${path}${path.includes('?') ? '&' : '?'}add=${kind}&error=validation-failed&detail=${encodeURIComponent(refused.join(' · ').slice(0, 300))}`,
+      `${path}&add=department&error=validation-failed&detail=${encodeURIComponent(refused.join(' · ').slice(0, 300))}`,
     );
-  const saved = kind === 'department' ? `Saved for ${done.join(', ')}.` : 'Saved.';
   redirect(
-    `${path}${path.includes('?') ? '&' : '?'}ok=1&detail=${encodeURIComponent(`${saved}${refused.length ? ` Not saved — ${refused.join(' · ')}` : ''} Days already worked out change when worked out again.`.slice(0, 400))}`,
+    `${path}&ok=1&detail=${encodeURIComponent(
+      `Saved for ${done.join(', ')}.${refused.length ? ` Not saved — ${refused.join(' · ')}` : ''}${worked(n)}`.slice(
+        0,
+        500,
+      ),
+    )}`,
   );
 }
 
@@ -716,15 +763,23 @@ export async function importSpecialTimings(
   }
 }
 
-export async function retireTiming(id: string) {
+export async function retireTiming(id: string, fd?: FormData) {
   if (!okId(id)) return;
-  await attCall(
-    '/leave/setup/timings',
-    `/staff-attendance/timings/${id}/retire`,
-    'POST',
-    {},
-    'Retired.',
-  );
+  const back_ = String(fd?.get('back') ?? '');
+  const path = back_.startsWith('/leave/setup/timings') ? back_ : '/leave/setup/timings';
+  let r: { status: string; on?: string } | null = null;
+  try {
+    r = await apiFetch(`/staff-attendance/timings/${id}/retire`, { method: 'POST', body: '{}' });
+  } catch (e) {
+    if (e instanceof ApiError) back(path, e);
+    throw e;
+  }
+  revalidatePath('/leave/setup/timings');
+  const said =
+    r?.status === 'ended'
+      ? `It already applied to past days, so it ends on ${(r.on ?? '').split('-').reverse().join('-')} (those days keep it); from today the next timing or the shift applies.`
+      : 'Removed: it had not started.';
+  redirect(`${path}${path.includes('?') ? '&' : '?'}ok=1&detail=${encodeURIComponent(said)}`);
 }
 
 export type SheetResult =

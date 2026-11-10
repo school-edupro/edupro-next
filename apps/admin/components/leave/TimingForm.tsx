@@ -55,11 +55,21 @@ export function TimingForm({
   // a new special timing: one employee here, or many at once from Excel
   const tabs = !dept && !row;
   const [mode, setMode] = useState<'one' | 'excel'>(tabs && excel ? 'excel' : 'one');
+  const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' }).format(new Date());
+  const tomorrow = (() => {
+    const t = new Date(`${today}T00:00:00Z`);
+    t.setUTCDate(t.getUTCDate() + 1);
+    return t.toISOString().slice(0, 10);
+  })();
+  // a department timing already in force changes from a day; a scheduled one is changed as it is
+  const inForce = dept && !!row && (!row.from_date || row.from_date <= today);
   const [v, setV] = useState({
     departments: row?.department ? [row.department] : ([] as string[]),
     employeeId: row?.employee_id ?? '',
-    from: row?.from_date ?? '',
+    employees: [] as string[],
+    from: row?.from_date ?? (dept ? today : ''),
     to: row?.to_date ?? '',
+    applyFrom: inForce ? tomorrow : '',
     startsAt: (row?.starts_at ?? '09:00').slice(0, 5),
     endsAt: (row?.ends_at ?? '17:00').slice(0, 5),
     grace: String(row?.grace_minutes ?? 5),
@@ -86,22 +96,23 @@ export function TimingForm({
   const close = () =>
     router.push(dept ? '/leave/setup/timings' : '/leave/setup/timings?tab=special');
 
-  // departments that already have a timing (one each): not offered again when adding
-  const taken = new Set(
-    d.rows
-      .filter((r) => r.kind === 'department' && r.id !== row?.id)
-      .map((r) => (r.department ?? '').toLowerCase()),
-  );
+  const [whole, setWhole] = useState('');
 
   const errors = useMemo(() => {
     const e: Record<string, string> = {};
     if (dept) {
       if (!v.departments.length) e.departments = 'Pick at least one department.';
-      const dup = v.departments.filter((x) => taken.has(x.toLowerCase()));
-      if (dup.length)
-        e.departments = `${dup.join(', ')} already ${dup.length === 1 ? 'has' : 'have'} a timing: edit it in the list instead.`;
+      if (inForce) {
+        if (!v.applyFrom) e.applyFrom = 'Pick the day the change applies from.';
+        else if (row?.to_date && v.applyFrom > row.to_date)
+          e.applyFrom = `This timing ends on ${row.to_date.split('-').reverse().join('-')}: pick a day up to then.`;
+      } else {
+        if (!v.from) e.from = 'Pick the day it applies from.';
+        if (v.to && v.from && v.to < v.from) e.to = 'It ends before it starts.';
+      }
     } else {
-      if (!v.employeeId) e.employeeId = 'Pick the employee.';
+      if (row ? !v.employeeId : !v.employees.length)
+        e.employeeId = row ? 'Pick the employee.' : 'Pick at least one employee.';
       if (!v.from) e.from = 'Pick the first date.';
       if (!v.to) e.to = 'Pick the last date.';
       else if (v.from && v.to < v.from) e.to = 'The last date is before the first.';
@@ -169,7 +180,7 @@ export function TimingForm({
     </div>
   );
   const box = (
-    k: Exclude<K, 'departments'>,
+    k: Exclude<K, 'departments' | 'employees'>,
     o: { type?: string; step?: string; mode?: 'numeric' | 'decimal'; placeholder?: string } = {},
   ) => (
     <input
@@ -188,7 +199,7 @@ export function TimingForm({
     />
   );
   const select = (
-    k: Exclude<K, 'departments'>,
+    k: Exclude<K, 'departments' | 'employees'>,
     options: Array<{ value: string; label: string }>,
   ) => (
     <select
@@ -275,10 +286,21 @@ export function TimingForm({
         {row ? <input type="hidden" name="id" value={row.id} /> : null}
         <input type="hidden" name="kind" value={kind} />
         {dept ? (
-          v.departments.map((x) => <input key={x} type="hidden" name="department" value={x} />)
+          <>
+            {v.departments.map((x) => (
+              <input key={x} type="hidden" name="department" value={x} />
+            ))}
+            <input type="hidden" name="from" value={inForce ? '' : v.from} />
+            <input type="hidden" name="to" value={inForce ? '' : v.to} />
+            <input type="hidden" name="applyFrom" value={inForce ? v.applyFrom : ''} />
+          </>
         ) : (
           <>
-            <input type="hidden" name="employeeId" value={v.employeeId} />
+            {row ? (
+              <input type="hidden" name="employeeId" value={v.employeeId} />
+            ) : (
+              v.employees.map((x) => <input key={x} type="hidden" name="employeeIds" value={x} />)
+            )}
             <input type="hidden" name="from" value={v.from} />
             <input type="hidden" name="to" value={v.to} />
           </>
@@ -351,8 +373,10 @@ export function TimingForm({
                   </>
                 ) : (
                   <>
-                    These times apply to <strong>one employee, for the dates given</strong> (a duty,
-                    a late bus). A special timing comes before the department timing and the shift.
+                    These times apply to <strong>the employees picked, for the dates given</strong>{' '}
+                    (a duty, a late bus). A special timing comes before the department timing and
+                    the shift. Anyone who already has a special timing on these dates is skipped and
+                    named.
                   </>
                 )}
               </span>
@@ -370,21 +394,50 @@ export function TimingForm({
             {dept ? (
               <div>
                 {row ? (
-                  <div className="ep-field">
-                    <span className="ep-field__label">Department</span>
-                    <strong>{row.department}</strong>
-                    <span className="ep-field__help">
-                      To time another department, add a timing for it.
-                    </span>
+                  <div className="ep-shift__row">
+                    <div className="ep-field">
+                      <span className="ep-field__label">Department</span>
+                      <strong>{row.department}</strong>
+                      <span className="ep-field__help">
+                        {inForce
+                          ? `In force ${row.from_date ? `since ${row.from_date.split('-').reverse().join('-')}` : 'from the start'}${row.to_date ? `, until ${row.to_date.split('-').reverse().join('-')}` : ''}.`
+                          : 'Scheduled: not in force yet.'}
+                      </span>
+                    </div>
+                    {inForce ? (
+                      field(
+                        'applyFrom',
+                        'Apply this change from',
+                        box('applyFrom', { type: 'date' }),
+                        v.applyFrom && v.applyFrom <= today
+                          ? 'A past or today’s date: the days from then to yesterday are worked out again with the new hours (not in a month locked for payroll).'
+                          : 'Days before it keep the present hours; from this day the new ones apply.',
+                        true,
+                      )
+                    ) : (
+                      <>
+                        {field(
+                          'from',
+                          'Effective from',
+                          box('from', { type: 'date' }),
+                          undefined,
+                          true,
+                        )}
+                        {field(
+                          'to',
+                          'Effective to',
+                          box('to', { type: 'date' }),
+                          'Empty: until changed.',
+                        )}
+                      </>
+                    )}
                   </div>
                 ) : (
                   <>
                     <ChipPicker
                       label="Department"
                       required
-                      options={d.departments
-                        .filter((x) => !taken.has(x.toLowerCase()))
-                        .map((x) => ({ value: x, label: x }))}
+                      options={d.departments.map((x) => ({ value: x, label: x }))}
                       value={v.departments}
                       onChange={(next) => {
                         set('departments', next);
@@ -403,22 +456,88 @@ export function TimingForm({
                         {errors.departments}
                       </span>
                     ) : null}
+                    <div className="ep-shift__row">
+                      {field(
+                        'from',
+                        'Effective from',
+                        box('from', { type: 'date' }),
+                        v.from && v.from < today
+                          ? 'A past date: the days from then to yesterday are worked out again (not in a month locked for payroll).'
+                          : 'Set a future date to schedule it in advance.',
+                        true,
+                      )}
+                      {field(
+                        'to',
+                        'Effective to',
+                        box('to', { type: 'date' }),
+                        'Empty: until changed.',
+                      )}
+                    </div>
                   </>
                 )}
               </div>
             ) : (
               <div className="ep-shift__row">
-                <div>
-                  <SearchPick
-                    label="Employee"
-                    required
-                    options={d.employees.map((x) => ({ value: x.id, label: x.name }))}
-                    value={v.employeeId}
-                    onChange={(x) => {
-                      set('employeeId', x);
-                      touch('employeeId');
-                    }}
-                  />
+                <div style={row ? undefined : { gridColumn: '1 / -1' }}>
+                  {row ? (
+                    <SearchPick
+                      label="Employee"
+                      required
+                      options={d.employees.map((x) => ({ value: x.id, label: x.name }))}
+                      value={v.employeeId}
+                      onChange={(x) => {
+                        set('employeeId', x);
+                        touch('employeeId');
+                      }}
+                    />
+                  ) : (
+                    <>
+                      <ChipPicker
+                        label="Employees"
+                        required
+                        options={d.employees.map((x) => ({ value: x.id, label: x.name }))}
+                        value={v.employees}
+                        onChange={(next) => {
+                          set('employees', next);
+                          touch('employeeId');
+                        }}
+                        placeholder="Type a name or code, then pick"
+                        help={`Pick one or several (${String(v.employees.length)} picked) — the same dates and hours are saved for each.`}
+                      />
+                      <div className="ep-timing__whole">
+                        <label className="ep-field" htmlFor="tf-whole">
+                          <span className="ep-field__label">Or add everyone in a department</span>
+                          <select
+                            id="tf-whole"
+                            className="ep-select"
+                            value={whole}
+                            onChange={(e) => setWhole(e.target.value)}
+                          >
+                            <option value="">Choose a department…</option>
+                            {d.departments.map((x) => (
+                              <option key={x} value={x}>
+                                {x} ({d.employees.filter((m) => m.department === x).length})
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                        <button
+                          type="button"
+                          className="ep-btn ep-btn--secondary ep-btn--sm"
+                          disabled={!whole}
+                          onClick={() => {
+                            const add = d.employees
+                              .filter((m) => m.department === whole)
+                              .map((m) => m.id);
+                            set('employees', [...new Set([...v.employees, ...add])]);
+                            touch('employeeId');
+                          }}
+                        >
+                          Add them
+                        </button>
+                      </div>
+                    </>
+                  )}
                   {show('employeeId') ? (
                     <span className="ep-field__error" id="tf-employeeId" role="alert" tabIndex={-1}>
                       {errors.employeeId}

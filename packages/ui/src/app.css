@@ -14845,3 +14845,10 @@ button.ep-subchoice__icon:hover {
   display: grid;
   gap: var(--sp-3);
 }
+.ep-timing__whole {
+  display: flex;
+  gap: var(--sp-2);
+  align-items: end;
+  flex-wrap: wrap;
+  margin-top: var(--sp-2);
+}

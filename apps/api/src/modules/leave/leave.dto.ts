@@ -349,13 +349,50 @@ export const TimingSchema = z
     earlyAction: z.enum(['none', 'HD', 'A', 'leave']).default('none'),
     earlyTypeId: Id.nullable().optional(),
     note: z.string().trim().max(200).nullable().optional(),
+    /** a new special timing for several employees at once (the same dates and hours) */
+    employeeIds: z.array(Id).max(1000).optional(),
+    /**
+     * changing a department timing in force: the change applies from this day (the version ends the day
+     * before and a new one starts); empty or on / before its own start: the version itself is changed
+     */
+    applyFrom: Day.nullable().optional(),
   })
-  .refine((t) => (t.kind === 'department' ? !!t.department : !!(t.employeeId && t.from && t.to)), {
-    message:
-      'A department timing names the department; a special timing the employee and the dates',
-    path: ['kind'],
+  .refine(
+    (t) =>
+      t.kind === 'department'
+        ? !!t.department
+        : !!((t.employeeId || t.employeeIds?.length) && t.from && t.to),
+    {
+      message:
+        'A department timing names the department; a special timing the employee(s) and the dates',
+      path: ['kind'],
+    },
+  )
+  .refine((t) => !(t.from && t.to) || t.to >= t.from, {
+    message: 'The To date is before the From date',
+    path: ['to'],
   });
 export class TimingDto extends createZodDto(TimingSchema) {}
+
+/** The timing change log, a page at a time, filtered; Excel or PDF of the same. */
+export const TimingLogSchema = z.object({
+  kind: z.enum(['department', 'special']).optional(),
+  /** the history of one department's timings (all its versions) */
+  department: z.string().trim().max(100).optional(),
+  /** the history of one timing */
+  timingId: Id.optional(),
+  q: z.string().trim().max(80).optional(),
+  from: Day.optional(),
+  to: Day.optional(),
+  page: z.coerce.number().int().min(1).max(10000).default(1),
+  size: z.coerce
+    .number()
+    .int()
+    .refine((v) => [25, 50, 100, 500].includes(v), '25, 50, 100 or 500 a page')
+    .default(50),
+  format: z.enum(['xlsx', 'pdf']).optional(),
+});
+export class TimingLogDto extends createZodDto(TimingLogSchema) {}
 
 /** What the timing dialogs need: only the department timings, and the one being edited. */
 export const TimingsQuerySchema = z.object({
@@ -369,6 +406,8 @@ export const TimingListSchema = z.object({
   kind: z.enum(['department', 'special']).default('department'),
   q: z.string().trim().max(80).optional(),
   department: z.string().trim().max(100).optional(),
+  /** department timings: in force now and scheduled (the default), past ones, or all */
+  when: z.enum(['now', 'past', 'all']).default('now'),
   /** special timings that cover any day from … to … */
   from: Day.optional(),
   to: Day.optional(),

@@ -496,7 +496,7 @@ export interface Timings {
     note: string | null;
   }>;
   departments: string[];
-  employees: Array<{ id: string; name: string }>;
+  employees: Array<{ id: string; name: string; department: string | null }>;
   types: Array<{ id: string; name: string }>;
   can: { manage: boolean };
 }
@@ -527,6 +527,24 @@ export interface TimingList {
   }>;
   page: { page: number; size: number; total: number };
   counts: { department: number; special: number };
+}
+
+/** The timing change log, a page at a time. */
+export interface TimingLogPage {
+  rows: Array<{
+    id: string;
+    timing_id: string;
+    kind: 'department' | 'special';
+    subject: string;
+    department: string | null;
+    action: 'added' | 'changed' | 'ended' | 'removed';
+    from_date: string | null;
+    to_date: string | null;
+    changes: Array<{ field: string; old: unknown; new: unknown }>;
+    by: string | null;
+    at: string;
+  }>;
+  page: { page: number; size: number; total: number };
 }
 
 export const DAY_CODE_TONE: Record<string, string> = {
