@@ -514,6 +514,84 @@ describe('staff attendance (e2e)', () => {
     expect((await call(t1, 'GET', '/staff-attendance/timings')).statusCode).toBe(403);
   });
 
+  it('bulk edit of special timings: only the ticked fields; existing only, or the whole department made', async () => {
+    const [from, to] = ['2027-03-01', '2027-03-05'];
+    const one = await call(office, 'POST', '/staff-attendance/timings', {
+      kind: 'special',
+      employeeId: ids.T1,
+      from,
+      to,
+      startsAt: '08:00',
+      endsAt: '14:00',
+      grace: 10,
+      presentHours: 6,
+      halfDayHours: 3,
+      note: 'Exam duty',
+    });
+    expect(one.statusCode).toBe(201);
+    const bulk = (body: Record<string, unknown>) =>
+      call(office, 'POST', '/staff-attendance/timings/bulk', { from, to, ...body });
+    const mine = async (emp: string) =>
+      (await call(office, 'GET', '/staff-attendance/timings'))
+        .json()
+        .rows.filter(
+          (r: { employee_id: string; from_date: string }) =>
+            r.employee_id === emp && r.from_date === from,
+        );
+    // the check: who changes, who would be made, what they hold now
+    const a = (await bulk({ scope: 'existing', department: 'Science', dryRun: true })).json();
+    expect(a).toMatchObject({ change: 1, create: 0, saved: 0 });
+    expect(a.current.grace).toEqual({ value: '10', mixed: false });
+    const b = (await bulk({ scope: 'department', department: 'Science', dryRun: true })).json();
+    expect(b.change).toBe(1);
+    expect(b.create).toBeGreaterThanOrEqual(2);
+    expect(b.current.startsAt.mixed).toBe(true); // T1 at 08:00, the rest on Science's 07:00
+    // existing only: the grace changes, nothing else, nobody made
+    const c1 = (
+      await bulk({ scope: 'existing', department: 'Science', fields: { grace: 20 }, dryRun: false })
+    ).json();
+    expect(c1).toMatchObject({ change: 1, create: 0, saved: 1 });
+    expect(await mine(ids.T1!)).toEqual([
+      expect.objectContaining({
+        grace_minutes: 20,
+        starts_at: '08:00',
+        ends_at: '14:00',
+        note: 'Exam duty',
+      }),
+    ]);
+    expect(await mine(ids.H1!)).toEqual([]);
+    // the whole department: the missing ones made from their own hours, the ticked end time for all
+    const c2 = (
+      await bulk({
+        scope: 'department',
+        department: 'Science',
+        fields: { endsAt: '15:00' },
+        dryRun: false,
+      })
+    ).json();
+    expect(c2.create).toBeGreaterThanOrEqual(2);
+    expect(await mine(ids.T1!)).toEqual([
+      expect.objectContaining({ starts_at: '08:00', ends_at: '15:00', grace_minutes: 20 }),
+    ]);
+    expect(await mine(ids.H1!)).toEqual([
+      expect.objectContaining({ starts_at: '07:00', ends_at: '15:00', present_hours: '5.00' }),
+    ]);
+    // a change that would break a row is refused, and nothing is written
+    const bad = await bulk({
+      scope: 'existing',
+      department: 'Science',
+      fields: { halfDayHours: 5.5 },
+      dryRun: false,
+    });
+    expect(bad.statusCode).toBe(400);
+    expect(bad.json().detail).toContain('half-day hours would not be fewer than the present hours');
+    expect((await bulk({ scope: 'existing', fields: {}, dryRun: false })).statusCode).toBe(400);
+    expect(
+      (await call(t1, 'POST', '/staff-attendance/timings/bulk', { scope: 'existing', from, to }))
+        .statusCode,
+    ).toBe(403);
+  });
+
   it('punches from Excel; the register and the payroll feed', async () => {
     const f = (await call(office, 'GET', '/staff-attendance/sheets/punches/format')).json();
     const wb = new ExcelJS.Workbook();

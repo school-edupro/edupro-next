@@ -654,6 +654,36 @@ export async function saveTimingDialog(fd: FormData) {
   );
 }
 
+export interface TimingBulkResult {
+  change: number;
+  create: number;
+  current: Record<string, { value: string | null; mixed: boolean }>;
+  problems: string[];
+  people: Array<{ name: string; made: boolean }>;
+  saved: number;
+}
+/** Bulk edit of special timings: check (dryRun) or apply the ticked fields. */
+export async function bulkTimings(body: {
+  scope: 'existing' | 'department';
+  department: string | null;
+  from: string;
+  to: string;
+  fields: Record<string, string | number | null>;
+  dryRun: boolean;
+}): Promise<{ ok: true; r: TimingBulkResult } | { ok: false; error: string }> {
+  try {
+    const r = await apiFetch<TimingBulkResult>('/staff-attendance/timings/bulk', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    });
+    if (!body.dryRun) revalidatePath('/leave/setup/timings');
+    return { ok: true, r };
+  } catch (e) {
+    if (e instanceof ApiError) return { ok: false, error: detailOf(e) };
+    throw e;
+  }
+}
+
 export async function retireTiming(id: string) {
   if (!okId(id)) return;
   await attCall(

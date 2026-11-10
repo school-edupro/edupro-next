@@ -753,11 +753,11 @@ test.describe('accessibility (axe)', () => {
   test('no serious or critical violations on the timing dialogs, with their checks showing', async ({
     page,
   }) => {
-    for (const kind of ['department', 'special']) {
-      await page.goto(`/leave/setup/timings?add=${kind}`);
+    for (const kind of ['add=department', 'add=special', 'bulk=special']) {
+      await page.goto(`/leave/setup/timings?${kind}`);
       await page.waitForLoadState('networkidle');
       await page.waitForTimeout(400); // let the dialog's fade-in finish before measuring contrast
-      await page.getByRole('button', { name: 'Save Timing' }).click(); // nothing picked: notes show
+      await page.getByRole('button', { name: /Save Timing|Apply/ }).click(); // nothing picked: notes show
       await page.waitForTimeout(200);
       const r = await new AxeBuilder({ page })
         .options({ iframes: false })

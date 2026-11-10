@@ -3,6 +3,7 @@ import { notFound } from 'next/navigation';
 import { ConfirmAction } from '@/components/ConfirmAction';
 import { Notice } from '@/components/Notice';
 import { TimingForm } from '@/components/leave/TimingForm';
+import { BulkTimingForm } from '@/components/leave/BulkTimingForm';
 import { ApiError, apiFetch } from '@/lib/api';
 import { dmy, type Timings } from '@/lib/leave';
 import { retireTiming } from '@/lib/leave-actions';
@@ -156,6 +157,9 @@ export default async function TimingsPage({
               <a className="ep-btn ep-btn--secondary" href="/leave/setup/timings?add=special">
                 ＋ Special timing
               </a>
+              <a className="ep-btn ep-btn--secondary" href="/leave/setup/timings?bulk=special">
+                Bulk edit special timings
+              </a>
             </div>
           ) : undefined
         }
@@ -193,6 +197,9 @@ export default async function TimingsPage({
       </section>
       {editing ? <TimingForm key={editing.id} kind={editing.kind} row={editing} d={d} /> : null}
       {adding ? <TimingForm key={adding} kind={adding} row={null} d={d} /> : null}
+      {can && !editing && !adding && sp.bulk === 'special' ? (
+        <BulkTimingForm departments={d.departments} />
+      ) : null}
     </>
   );
 }

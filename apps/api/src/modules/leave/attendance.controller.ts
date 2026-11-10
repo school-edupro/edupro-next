@@ -18,6 +18,7 @@ import {
   RegulariseDto,
   RunDto,
   SheetDto,
+  TimingBulkDto,
   TimingDto,
   WithdrawDto,
 } from './leave.dto';
@@ -149,6 +150,13 @@ export class AttendanceController {
   @RequirePermission('leave.setup.manage')
   addTiming(@ReqCtx() ctx: RequestContext, @Body() body: TimingDto) {
     return this.att.saveTiming(ctx, null, body);
+  }
+
+  @Post('timings/bulk')
+  @ApiOperation({ summary: 'Bulk edit of special timings: tick-to-apply, check first (dryRun)' })
+  @RequirePermission('leave.setup.manage')
+  bulkTiming(@ReqCtx() ctx: RequestContext, @Body() body: TimingBulkDto) {
+    return this.att.bulkTiming(ctx, body);
   }
 
   @Put('timings/:id')

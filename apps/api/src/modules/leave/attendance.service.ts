@@ -30,6 +30,7 @@ import {
   type RegulariseDto,
   type RunDto,
   type SheetDto,
+  type TimingBulkDto,
   type TimingDto,
   type WithdrawDto,
 } from './leave.dto';
@@ -1545,6 +1546,138 @@ export class AttendanceService implements OnModuleInit {
         after: { ...dto },
       });
       return { id };
+    });
+  }
+
+  /**
+   * Bulk edit of special timings (the old module's tick-to-apply): only the ticked fields are written;
+   * the rest stay each employee's own. "existing": the special timings of exactly these dates (in the
+   * department, or all), nothing made. "department": every active employee of the department — those with
+   * no timing for these dates get one, their unticked fields taken from the hours they have on the first
+   * day (department timing or shift). dryRun: who changes, who is made, what each field holds now (one
+   * value, or mixed), and any row the change would break.
+   */
+  async bulkTiming(ctx: RequestContext, dto: TimingBulkDto) {
+    if (!this.has(ctx, 'leave.setup.manage'))
+      throw new DomainError('permission-denied', 'Only the leave office', { status: 403 });
+    return this.db.tenant(requireTenant(ctx), async (c) => {
+      type T = {
+        id: string | null;
+        emp: string;
+        name: string;
+        startsAt: string;
+        endsAt: string;
+        grace: number;
+        presentHours: number;
+        halfDayHours: number;
+        note: string | null;
+      };
+      const dept = dto.department?.trim() || null;
+      const existing = (
+        await c.query<T>(
+          `SELECT t.id::text, e.id::text AS emp, e.display_name || ' (' || e.employee_code || ')' AS name,
+                  to_char(t.starts_at, 'HH24:MI') AS "startsAt", to_char(t.ends_at, 'HH24:MI') AS "endsAt",
+                  t.grace_minutes AS grace, t.present_hours::float AS "presentHours",
+                  t.half_day_hours::float AS "halfDayHours", t.note
+             FROM staff_timings t JOIN employees e ON e.id = t.employee_id
+            WHERE t.kind = 'special' AND t.status = 'active' AND t.from_date = $1::date AND t.to_date = $2::date
+              AND ($3::text IS NULL OR lower(COALESCE(e.department, '')) = lower($3))
+            ORDER BY e.display_name`,
+          [dto.from, dto.to, dept],
+        )
+      ).rows;
+      const made: T[] =
+        dto.scope === 'department'
+          ? (
+              await c.query<T>(
+                `SELECT NULL AS id, e.id::text AS emp, e.display_name || ' (' || e.employee_code || ')' AS name,
+                        to_char(x.starts_at, 'HH24:MI') AS "startsAt", to_char(x.ends_at, 'HH24:MI') AS "endsAt",
+                        x.grace AS grace, x.present_hours::float AS "presentHours",
+                        x.half_day_hours::float AS "halfDayHours", NULL AS note
+                   FROM employees e CROSS JOIN LATERAL app.staff_timing(e.id, $1::date) x
+                  WHERE e.deleted_at IS NULL AND e.status = 'active'
+                    AND lower(COALESCE(e.department, '')) = lower($3)
+                    AND NOT EXISTS (SELECT 1 FROM staff_timings t WHERE t.employee_id = e.id AND t.kind = 'special'
+                                      AND t.status = 'active' AND t.from_date = $1::date AND t.to_date = $2::date)
+                  ORDER BY e.display_name`,
+                [dto.from, dto.to, dept],
+              )
+            ).rows
+          : [];
+      const all = [...existing, ...made];
+      const keys = ['startsAt', 'endsAt', 'grace', 'presentHours', 'halfDayHours', 'note'] as const;
+      // what each field holds now: one value for everybody, or mixed
+      const current = Object.fromEntries(
+        keys.map((k) => {
+          const seen = [...new Set(all.map((r) => String(r[k] ?? '')))];
+          return [k, { value: seen.length === 1 ? seen[0]! : null, mixed: seen.length > 1 }];
+        }),
+      );
+      const f = dto.fields;
+      const after = all.map((r) => ({
+        ...r,
+        ...(f.startsAt !== undefined ? { startsAt: f.startsAt } : {}),
+        ...(f.endsAt !== undefined ? { endsAt: f.endsAt } : {}),
+        ...(f.grace !== undefined ? { grace: f.grace } : {}),
+        ...(f.presentHours !== undefined ? { presentHours: f.presentHours } : {}),
+        ...(f.halfDayHours !== undefined ? { halfDayHours: f.halfDayHours } : {}),
+        ...(f.note !== undefined ? { note: f.note || null } : {}),
+      }));
+      const problems = after.flatMap((r) => {
+        const p: string[] = [];
+        if (r.endsAt <= r.startsAt) p.push('the end time would not be after the start time');
+        if (r.halfDayHours >= r.presentHours)
+          p.push('the half-day hours would not be fewer than the present hours');
+        return p.length ? [`${r.name}: ${p.join('; ')}`] : [];
+      });
+      const summary = {
+        change: existing.length,
+        create: made.length,
+        current,
+        problems,
+        people: all.map((r) => ({ name: r.name, made: r.id === null })),
+      };
+      if (dto.dryRun) return { ...summary, saved: 0 };
+      if (!all.length) fail('Nobody to change: no special timing has exactly these dates here');
+      if (problems.length) fail(`Not saved — ${problems.slice(0, 5).join(' · ')}`);
+      for (const r of after) {
+        if (r.id)
+          await c.query(
+            `UPDATE staff_timings SET starts_at = $2::time, ends_at = $3::time, grace_minutes = $4, present_hours = $5,
+                    half_day_hours = $6, note = $7 WHERE id = $1`,
+            [r.id, r.startsAt, r.endsAt, r.grace, r.presentHours, r.halfDayHours, r.note],
+          );
+        else
+          await c.query(
+            `INSERT INTO staff_timings (school_id, kind, employee_id, from_date, to_date, starts_at, ends_at, grace_minutes,
+                                        present_hours, half_day_hours, note, created_by)
+             VALUES (app.current_school_id(), 'special', $1, $2::date, $3::date, $4::time, $5::time, $6, $7, $8, $9, app.current_user_id())`,
+            [
+              r.emp,
+              dto.from,
+              dto.to,
+              r.startsAt,
+              r.endsAt,
+              r.grace,
+              r.presentHours,
+              r.halfDayHours,
+              r.note,
+            ],
+          );
+      }
+      await this.audit.stage(ctx, c, {
+        action: 'leave.timing.bulk',
+        entityType: 'staff_timings',
+        entityId: `${dto.from}..${dto.to}`,
+        after: {
+          scope: dto.scope,
+          department: dept,
+          fields: f,
+          changed: existing.length,
+          made: made.length,
+        },
+      });
+      return { ...summary, saved: all.length };
     });
   }
 

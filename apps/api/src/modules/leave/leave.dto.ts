@@ -357,6 +357,40 @@ export const TimingSchema = z
   });
 export class TimingDto extends createZodDto(TimingSchema) {}
 
+/**
+ * Bulk edit of special timings: the ticked fields only, onto the special timings of exactly these dates
+ * (existing), or onto every employee of a department (the missing ones made). dryRun checks and shows.
+ */
+export const TimingBulkSchema = z
+  .object({
+    scope: z.enum(['existing', 'department']),
+    /** empty: all departments (only with existing) */
+    department: z.string().trim().max(100).nullable().optional(),
+    from: Day,
+    to: Day,
+    fields: z
+      .object({
+        startsAt: Time.optional(),
+        endsAt: Time.optional(),
+        grace: z.number().int().min(0).max(240).optional(),
+        presentHours: z.number().min(0).max(24).optional(),
+        halfDayHours: z.number().min(0).max(24).optional(),
+        note: z.string().trim().max(200).nullable().optional(),
+      })
+      .default({}),
+    dryRun: z.boolean().default(true),
+  })
+  .refine((b) => b.to >= b.from, { message: 'The To date is before the From date', path: ['to'] })
+  .refine((b) => b.scope === 'existing' || !!b.department, {
+    message: 'Pick the department whose employees get the timing',
+    path: ['department'],
+  })
+  .refine((b) => b.dryRun || Object.keys(b.fields).length > 0, {
+    message: 'Tick at least one field to change',
+    path: ['fields'],
+  });
+export class TimingBulkDto extends createZodDto(TimingBulkSchema) {}
+
 export const SheetSchema = z.object({
   file: z.string().min(10).max(4_000_000),
   dryRun: z.boolean().default(true),
