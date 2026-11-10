@@ -501,6 +501,34 @@ export interface Timings {
   can: { manage: boolean };
 }
 
+/** The timings list, a page at a time (Department and special timings). */
+export interface TimingList {
+  rows: Array<{
+    id: string;
+    kind: 'department' | 'special';
+    department: string | null;
+    employee: string | null;
+    employee_id: string | null;
+    employee_department: string | null;
+    from_date: string | null;
+    to_date: string | null;
+    starts_at: string;
+    ends_at: string;
+    grace_minutes: number;
+    present_hours: string;
+    half_day_hours: string;
+    late_over_minutes: number | null;
+    late_action: string;
+    late_type: string | null;
+    early_over_minutes: number | null;
+    early_action: string;
+    early_type: string | null;
+    note: string | null;
+  }>;
+  page: { page: number; size: number; total: number };
+  counts: { department: number; special: number };
+}
+
 export const DAY_CODE_TONE: Record<string, string> = {
   P: 'present',
   HD: 'half',

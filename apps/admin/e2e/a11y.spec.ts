@@ -570,6 +570,7 @@ const PAGES = [
   '/leave/setup/approvals/252',
   '/leave/setup/settings',
   '/leave/setup/timings',
+  '/leave/setup/timings?tab=special',
   '/leave/setup/report-access',
   '/leave/setup/cutover',
   '/leave/attendance',
@@ -758,7 +759,7 @@ test.describe('accessibility (axe)', () => {
       await page.goto(`/leave/setup/timings?${kind}`);
       await page.waitForLoadState('networkidle');
       await page.waitForTimeout(400); // let the dialog's fade-in finish before measuring contrast
-      const save = page.getByRole('button', { name: /Save Timing|Apply/ });
+      const save = page.locator('dialog[open]').getByRole('button', { name: /Save Timing|Apply/ });
       if (await save.count()) await save.click(); // nothing picked: notes show
       await page.waitForTimeout(200);
       const r = await new AxeBuilder({ page })

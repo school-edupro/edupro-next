@@ -611,7 +611,7 @@ export async function saveTimingDialog(fd: FormData) {
     earlyTypeId: typeId('earlyTypeId'),
     note: String(fd.get('note') ?? '').trim() || null,
   });
-  const path = '/leave/setup/timings';
+  const path = kind === 'special' ? '/leave/setup/timings?tab=special' : '/leave/setup/timings';
   const depts = kind === 'department' ? fd.getAll('department').map(String).filter(Boolean) : [];
   if (id && okId(id)) {
     try {
@@ -620,12 +620,12 @@ export async function saveTimingDialog(fd: FormData) {
         body: JSON.stringify(body(kind === 'department' ? (depts[0] ?? null) : null)),
       });
     } catch (e) {
-      if (e instanceof ApiError) back(`${path}?edit=${id}`, e);
+      if (e instanceof ApiError) back(`${path}${path.includes('?') ? '&' : '?'}edit=${id}`, e);
       throw e;
     }
-    revalidatePath(path);
+    revalidatePath('/leave/setup/timings');
     redirect(
-      `${path}?ok=1&detail=${encodeURIComponent('Saved. Days already worked out change when worked out again (attendance register).')}`,
+      `${path}${path.includes('?') ? '&' : '?'}ok=1&detail=${encodeURIComponent('Saved. Days already worked out change when worked out again (attendance register).')}`,
     );
   }
   const targets = kind === 'department' ? depts : [null];
@@ -643,14 +643,14 @@ export async function saveTimingDialog(fd: FormData) {
       refused.push(`${t ? `${t}: ` : ''}${detailOf(e)}`);
     }
   }
-  revalidatePath(path);
+  revalidatePath('/leave/setup/timings');
   if (refused.length && !done.length)
     redirect(
-      `${path}?add=${kind}&error=validation-failed&detail=${encodeURIComponent(refused.join(' · ').slice(0, 300))}`,
+      `${path}${path.includes('?') ? '&' : '?'}add=${kind}&error=validation-failed&detail=${encodeURIComponent(refused.join(' · ').slice(0, 300))}`,
     );
   const saved = kind === 'department' ? `Saved for ${done.join(', ')}.` : 'Saved.';
   redirect(
-    `${path}?ok=1&detail=${encodeURIComponent(`${saved}${refused.length ? ` Not saved — ${refused.join(' · ')}` : ''} Days already worked out change when worked out again.`.slice(0, 400))}`,
+    `${path}${path.includes('?') ? '&' : '?'}ok=1&detail=${encodeURIComponent(`${saved}${refused.length ? ` Not saved — ${refused.join(' · ')}` : ''} Days already worked out change when worked out again.`.slice(0, 400))}`,
   );
 }
 

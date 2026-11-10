@@ -46,7 +46,7 @@ export function SpecialTimingImport() {
       setResult(r);
       if (r.ok && !dryRun) {
         router.push(
-          `/leave/setup/timings?ok=1&detail=${encodeURIComponent(
+          `/leave/setup/timings?tab=special&ok=1&detail=${encodeURIComponent(
             `${String(r.saved)} special timing${r.saved === 1 ? '' : 's'} saved from Excel${bad ? ` (${String(bad)} row${bad === 1 ? '' : 's'} not saved)` : ''}. Days already worked out change when worked out again.`,
           )}`,
         );

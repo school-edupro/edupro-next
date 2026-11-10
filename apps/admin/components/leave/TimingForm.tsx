@@ -83,7 +83,8 @@ export function TimingForm({
     const el = ref.current;
     if (el && !el.open) el.showModal();
   }, []);
-  const close = () => router.push('/leave/setup/timings');
+  const close = () =>
+    router.push(dept ? '/leave/setup/timings' : '/leave/setup/timings?tab=special');
 
   // departments that already have a timing (one each): not offered again when adding
   const taken = new Set(

@@ -31,6 +31,8 @@ import {
   type RunDto,
   type SheetDto,
   type TimingBulkDto,
+  type TimingListDto,
+  type TimingsQueryDto,
   type TimingDto,
   type WithdrawDto,
 } from './leave.dto';
@@ -1459,7 +1461,7 @@ export class AttendanceService implements OnModuleInit {
   }
 
   // ---- timings -------------------------------------------------------------------------------------
-  async timings(ctx: RequestContext) {
+  async timings(ctx: RequestContext, q: TimingsQueryDto = {}) {
     if (!this.has(ctx, 'leave.setup.view'))
       throw new DomainError('permission-denied', 'Only the leave office', { status: 403 });
     return this.db.tenant(requireTenant(ctx), async (c) => {
@@ -1489,7 +1491,10 @@ export class AttendanceService implements OnModuleInit {
                 t.grace_minutes, t.present_hours::text, t.half_day_hours::text, t.late_over_minutes, t.late_action, t.late_leave_type_id::text AS late_type_id, t.early_over_minutes,
                 t.early_action, t.early_leave_type_id::text AS early_type_id, t.note
            FROM staff_timings t LEFT JOIN employees e ON e.id = t.employee_id
-          WHERE t.status = 'active' ORDER BY t.kind, t.department, t.from_date DESC`,
+          WHERE t.status = 'active'
+            AND ($1::text IS NULL OR t.kind = 'department' OR t.id = $2::bigint)
+          ORDER BY t.kind, t.department, t.from_date DESC`,
+        [q.only ?? null, q.id ?? null],
       );
       const lists = await c.query<{ kind: string; id: string; name: string }>(
         `SELECT 'dept' AS kind, name AS id, name FROM departments WHERE status = 'active'
@@ -1504,6 +1509,138 @@ export class AttendanceService implements OnModuleInit {
         employees: lists.rows.filter((x) => x.kind === 'emp').map(({ id, name }) => ({ id, name })),
         types: lists.rows.filter((x) => x.kind === 'type').map(({ id, name }) => ({ id, name })),
         can: { manage: this.has(ctx, 'leave.setup.manage') },
+      };
+    });
+  }
+
+  /**
+   * Department or special timings, a page at a time: search (a department, an employee's name or code, a
+   * remark), a department, and for special timings the days they cover; the counts of both for the tabs;
+   * the same rows as an Excel or a PDF.
+   */
+  async timingList(ctx: RequestContext, q: TimingListDto) {
+    if (!this.has(ctx, 'leave.setup.view'))
+      throw new DomainError('permission-denied', 'Only the leave office', { status: 403 });
+    return this.db.tenant(requireTenant(ctx), async (c) => {
+      const like = q.q ? `%${q.q}%` : null;
+      const args = [q.kind, like, q.department ?? null, q.from ?? null, q.to ?? null];
+      const where = `t.status = 'active' AND t.kind = $1
+        AND ($2::text IS NULL OR t.department ILIKE $2 OR t.note ILIKE $2 OR e.display_name ILIKE $2 OR e.employee_code ILIKE $2)
+        AND ($3::text IS NULL OR lower(COALESCE(t.department, e.department, '')) = lower($3))
+        AND ($4::date IS NULL OR t.kind = 'department' OR t.to_date >= $4::date)
+        AND ($5::date IS NULL OR t.kind = 'department' OR t.from_date <= $5::date)`;
+      const total = (
+        await c.query<{ n: number }>(
+           
+          `SELECT count(*)::int AS n FROM staff_timings t LEFT JOIN employees e ON e.id = t.employee_id WHERE ${where}`,
+          args,
+        )
+      ).rows[0]!.n;
+      const counts = (
+        await c.query<{ kind: string; n: number }>(
+          `SELECT kind, count(*)::int AS n FROM staff_timings WHERE status = 'active' GROUP BY kind`,
+        )
+      ).rows;
+      const rows = await c.query<{
+        id: string;
+        kind: 'department' | 'special';
+        department: string | null;
+        employee: string | null;
+        employee_id: string | null;
+        employee_department: string | null;
+        from_date: string | null;
+        to_date: string | null;
+        starts_at: string;
+        ends_at: string;
+        grace_minutes: number;
+        present_hours: string;
+        half_day_hours: string;
+        late_over_minutes: number | null;
+        late_action: string;
+        late_type: string | null;
+        early_over_minutes: number | null;
+        early_action: string;
+        early_type: string | null;
+        note: string | null;
+      }>(
+         
+        `SELECT t.id::text, t.kind, t.department, e.display_name || ' (' || e.employee_code || ')' AS employee,
+                t.employee_id::text, e.department AS employee_department, t.from_date::text, t.to_date::text,
+                to_char(t.starts_at, 'HH24:MI') AS starts_at, to_char(t.ends_at, 'HH24:MI') AS ends_at,
+                t.grace_minutes, t.present_hours::text, t.half_day_hours::text, t.late_over_minutes, t.late_action,
+                lt.code AS late_type, t.early_over_minutes, t.early_action, et.code AS early_type, t.note
+           FROM staff_timings t LEFT JOIN employees e ON e.id = t.employee_id
+           LEFT JOIN staff_leave_types lt ON lt.id = t.late_leave_type_id
+           LEFT JOIN staff_leave_types et ON et.id = t.early_leave_type_id
+          WHERE ${where}
+          ORDER BY CASE WHEN t.kind = 'department' THEN lower(t.department) ELSE lower(e.display_name) END, t.from_date DESC, t.id
+          LIMIT $6 OFFSET $7`,
+        q.format ? [...args, LIST_LIMIT, 0] : [...args, q.size, (q.page - 1) * q.size],
+      );
+      if (q.format) {
+        checkListSize(rows.rows.length, 'timings');
+        const rule = (over: number | null, action: string, type: string | null) =>
+          over && action !== 'none'
+            ? `> ${String(over)} min: ${{ HD: 'half day', A: 'absent', leave: `half day ${type ?? ''}` }[action] ?? action}`
+            : '';
+        const special = q.kind === 'special';
+        return purchaseListFile({
+          format: q.format,
+          head: await purchaseHead(c, this.storage),
+          title: special ? 'Special timings' : 'Department timings',
+          slug: special ? 'Special-timings' : 'Department-timings',
+          words:
+            [
+              q.q ? `Search: ${q.q}` : null,
+              q.department ? `Department: ${q.department}` : null,
+              special && (q.from || q.to)
+                ? `Covering ${q.from ? dmy(q.from) : '…'} to ${q.to ? dmy(q.to) : '…'}`
+                : null,
+            ]
+              .filter(Boolean)
+              .join(' · ') || 'All',
+          list: {
+            columns: [
+              ...(special
+                ? [
+                    { label: 'Employee', width: 3 },
+                    { label: 'Department', width: 2 },
+                    { label: 'From', type: 'date' as const },
+                    { label: 'To', type: 'date' as const },
+                  ]
+                : [{ label: 'Department', width: 3 }]),
+              { label: 'Start', width: 1 },
+              { label: 'End', width: 1 },
+              { label: 'Grace (min)', type: 'number' as const, width: 1 },
+              { label: 'Present (h)', type: 'number' as const, width: 1 },
+              { label: 'Half day (h)', type: 'number' as const, width: 1 },
+              { label: 'Late rule', width: 2 },
+              { label: 'Early rule', width: 2 },
+              { label: 'Remark', width: 3 },
+            ],
+            rows: rows.rows.map((r) => [
+              ...(special
+                ? [r.employee, r.employee_department, r.from_date, r.to_date]
+                : [r.department]),
+              r.starts_at,
+              r.ends_at,
+              r.grace_minutes,
+              Number(r.present_hours),
+              Number(r.half_day_hours),
+              rule(r.late_over_minutes, r.late_action, r.late_type),
+              rule(r.early_over_minutes, r.early_action, r.early_type),
+              r.note,
+            ]),
+          },
+        });
+      }
+      return {
+        rows: rows.rows,
+        page: { page: q.page, size: q.size, total },
+        counts: {
+          department: counts.find((x) => x.kind === 'department')?.n ?? 0,
+          special: counts.find((x) => x.kind === 'special')?.n ?? 0,
+        },
       };
     });
   }

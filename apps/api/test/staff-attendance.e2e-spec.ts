@@ -699,6 +699,51 @@ describe('staff attendance (e2e)', () => {
     );
   });
 
+  it('the timings list: a tab each, search, department, the days covered, a page at a time, Excel and PDF', async () => {
+    const list = (qs: string) =>
+      call(office, 'GET', `/staff-attendance/timings/list?${qs}`).then((r) => r.json());
+    const sp = await list('kind=special&size=25');
+    expect(sp.counts.department).toBeGreaterThanOrEqual(1);
+    expect(sp.counts.special).toBe(sp.page.total);
+    expect(sp.page).toMatchObject({ page: 1, size: 25 });
+    // search by the employee's code; the department of the employee; the days covered
+    const t2 = await list(`kind=special&q=${s}T2`);
+    expect(t2.rows.every((r: { employee: string }) => r.employee.includes(`${s}T2`))).toBe(true);
+    expect(t2.page.total).toBeGreaterThanOrEqual(1);
+    expect((await list('kind=special&department=Nowhere')).page.total).toBe(0);
+    const april = await list('kind=special&from=2027-04-02&to=2027-04-02');
+    expect(april.rows.map((r: { from_date: string }) => r.from_date)).toEqual(['2027-04-01']);
+    expect((await list('kind=special&from=2030-01-01')).page.total).toBe(0);
+    // a page at a time
+    const one = await list('kind=special&size=25&page=2');
+    expect(one.page.page).toBe(2);
+    expect((await call(office, 'GET', '/staff-attendance/timings/list?size=7')).statusCode).toBe(
+      400,
+    );
+    // the department tab, and the same rows as files
+    const dept = await list('kind=department&q=Science');
+    expect(dept.rows[0]).toMatchObject({ kind: 'department', department: 'Science' });
+    for (const format of ['xlsx', 'pdf']) {
+      const f = await list(`kind=special&q=${s}T2&format=${format}`);
+      expect(f.filename).toMatch(new RegExp(`^Special-timings-.*\\.${format}$`));
+      expect(f.rows).toBe(t2.page.total);
+    }
+    // the dialogs' lists: department timings and the one edited only
+    const slim = (
+      await call(
+        office,
+        'GET',
+        `/staff-attendance/timings?only=department&id=${april.rows[0].id as string}`,
+      )
+    ).json();
+    expect(
+      slim.rows.every(
+        (r: { kind: string; id: string }) => r.kind === 'department' || r.id === april.rows[0].id,
+      ),
+    ).toBe(true);
+    expect((await call(t1, 'GET', '/staff-attendance/timings/list')).statusCode).toBe(403);
+  });
+
   it('punches from Excel; the register and the payroll feed', async () => {
     const f = (await call(office, 'GET', '/staff-attendance/sheets/punches/format')).json();
     const wb = new ExcelJS.Workbook();

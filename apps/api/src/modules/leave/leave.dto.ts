@@ -357,6 +357,31 @@ export const TimingSchema = z
   });
 export class TimingDto extends createZodDto(TimingSchema) {}
 
+/** What the timing dialogs need: only the department timings, and the one being edited. */
+export const TimingsQuerySchema = z.object({
+  only: z.enum(['department']).optional(),
+  id: Id.optional(),
+});
+export class TimingsQueryDto extends createZodDto(TimingsQuerySchema) {}
+
+/** The timings list, a page at a time, filtered; Excel or PDF of the same. */
+export const TimingListSchema = z.object({
+  kind: z.enum(['department', 'special']).default('department'),
+  q: z.string().trim().max(80).optional(),
+  department: z.string().trim().max(100).optional(),
+  /** special timings that cover any day from … to … */
+  from: Day.optional(),
+  to: Day.optional(),
+  page: z.coerce.number().int().min(1).max(10000).default(1),
+  size: z.coerce
+    .number()
+    .int()
+    .refine((v) => [25, 50, 100, 500].includes(v), '25, 50, 100 or 500 a page')
+    .default(50),
+  format: z.enum(['xlsx', 'pdf']).optional(),
+});
+export class TimingListDto extends createZodDto(TimingListSchema) {}
+
 /**
  * Bulk edit of special timings: the ticked fields only, onto the special timings of exactly these dates
  * (existing), or onto every employee of a department (the missing ones made). dryRun checks and shows.

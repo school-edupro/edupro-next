@@ -53,7 +53,7 @@ export function BulkTimingForm({ departments }: { departments: string[] }) {
     const el = ref.current;
     if (el && !el.open) el.showModal();
   }, []);
-  const close = () => router.push('/leave/setup/timings');
+  const close = () => router.push('/leave/setup/timings?tab=special');
 
   const who = useMemo(() => {
     const e: Record<string, string> = {};
@@ -167,7 +167,7 @@ export function BulkTimingForm({ departments }: { departments: string[] }) {
       const r = await bulkTimings({ ...body, dryRun: false });
       if (!r.ok) return setFail(r.error);
       router.push(
-        `/leave/setup/timings?ok=1&detail=${encodeURIComponent(
+        `/leave/setup/timings?tab=special&ok=1&detail=${encodeURIComponent(
           `Bulk edit applied: ${String(r.r.change)} changed, ${String(r.r.create)} created. Days already worked out change when worked out again.`,
         )}`,
       );

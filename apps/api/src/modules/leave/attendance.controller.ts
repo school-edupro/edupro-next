@@ -19,6 +19,8 @@ import {
   RunDto,
   SheetDto,
   TimingBulkDto,
+  TimingListDto,
+  TimingsQueryDto,
   TimingDto,
   WithdrawDto,
 } from './leave.dto';
@@ -142,8 +144,17 @@ export class AttendanceController {
 
   @Get('timings')
   @RequirePermission('leave.setup.view')
-  timings(@ReqCtx() ctx: RequestContext) {
-    return this.att.timings(ctx);
+  timings(@ReqCtx() ctx: RequestContext, @Query() q: TimingsQueryDto) {
+    return this.att.timings(ctx, q);
+  }
+
+  @Get('timings/list')
+  @ApiOperation({
+    summary: 'Department or special timings, a page at a time, filtered; Excel or PDF',
+  })
+  @RequirePermission('leave.setup.view')
+  timingList(@ReqCtx() ctx: RequestContext, @Query() q: TimingListDto) {
+    return this.att.timingList(ctx, q);
   }
 
   @Post('timings')
