@@ -18,6 +18,7 @@ import {
   type BandLevelsDto,
   type ChainPreviewDto,
   type LeaveSettingsDto,
+  type MoveRuleDto,
   type OwnRuleDto,
   type RuleStatusDto,
   type Scope,
@@ -66,6 +67,14 @@ const SCOPE_WORDS: Record<Scope, string> = {
   designation: 'Designation',
   employee_type: 'Employee type',
   employee: 'Employee',
+};
+
+/** The employee types staff carry, as people read them. */
+const TYPE_WORDS: Record<string, string> = {
+  teaching: 'Teaching',
+  non_teaching: 'Non-teaching',
+  contract: 'Contract',
+  visiting: 'Visiting',
 };
 
 interface RuleRow {
@@ -283,7 +292,9 @@ export class LeaveSetupService {
       scopeWords:
         r.scope === 'all'
           ? SCOPE_WORDS.all
-          : `${SCOPE_WORDS[r.scope]}: ${r.scope_values.join(', ')}`,
+          : `${SCOPE_WORDS[r.scope]}: ${r.scope_values
+              .map((v) => (r.scope === 'employee_type' ? (TYPE_WORDS[v.toLowerCase()] ?? v) : v))
+              .join(', ')}`,
       scopeValues: r.scope_values,
       leaveType: r.leave_type_id
         ? { id: r.leave_type_id, code: r.type_code!, name: r.type_name! }
@@ -294,6 +305,41 @@ export class LeaveSetupService {
         label,
         levels: (r.bands[i]?.levels ?? []).map((l) => l.name),
       })),
+    };
+  }
+
+  /**
+   * The people of a rule's level, in words for the list: the named staff or the holders of a designation
+   * or a role by name; the HOD and the reporting manager differ per employee, so they are said as such.
+   */
+  private async levelPeople(c: PoolClient) {
+    const names = new Map(
+      (
+        await c.query<{ id: string; name: string }>(
+          `SELECT u.id::text, COALESCE((SELECT x.display_name FROM employees x
+                                         WHERE x.user_id = u.id AND x.deleted_at IS NULL LIMIT 1), u.display_name) AS name
+             FROM users u
+            WHERE EXISTS (SELECT 1 FROM employees x WHERE x.user_id = u.id AND x.deleted_at IS NULL)
+               OR EXISTS (SELECT 1 FROM user_roles ur WHERE ur.user_id = u.id)`,
+        )
+      ).rows.map((x) => [x.id, x.name]),
+    );
+    const held = new Map<string, string[]>();
+    return async (l: Level) => {
+      const r = l.resolver;
+      const need: 'any' | 'all' = l.need === 'all' ? 'all' : 'any';
+      if (r.kind === 'staff' && r.by === 'hod')
+        return { name: l.name, people: [], need, note: 'HOD of the employee’s department' };
+      if (r.kind === 'staff' && r.by === 'manager')
+        return { name: l.name, people: [], need, note: 'The employee’s reporting manager' };
+      const key = JSON.stringify(r);
+      let users = held.get(key);
+      if (!users) {
+        users = await this.workflow.resolveAssignees(c, r, null, {});
+        held.set(key, users);
+      }
+      const people = users.map((u) => names.get(u) ?? u).sort();
+      return { name: l.name, people, need, note: people.length ? null : 'Nobody holds it now' };
     };
   }
 
@@ -365,7 +411,7 @@ export class LeaveSetupService {
       const rows = (
         await c.query<RuleRow>(
           // eslint-disable-next-line no-restricted-syntax -- RULE is a fixed fragment
-          `${RULE} ORDER BY r.kind, (r.status = 'inactive'), r.priority, r.name`,
+          `${RULE} ORDER BY r.kind, (r.status = 'inactive'), r.priority, (r.leave_type_id IS NULL), r.id`,
         )
       ).rows;
       const types = await c.query<{ id: string; code: string; name: string; auto: boolean }>(
@@ -376,8 +422,36 @@ export class LeaveSetupService {
         `SELECT id::text, employee_code AS code, display_name AS name FROM employees
           WHERE deleted_at IS NULL AND status = 'active' ORDER BY display_name LIMIT 5000`,
       );
+      const who = await this.levelPeople(c);
+      const names = new Map(staff.rows.map((x) => [x.code.toLowerCase(), x.name]));
+      const shaped = [];
+      for (const r of rows) {
+        const x = this.shape(r);
+        shaped.push({
+          ...x,
+          // the words for whom, as people read them: employee types by name, employees by name
+          scopeWords:
+            r.scope === 'all'
+              ? SCOPE_WORDS.all
+              : `${SCOPE_WORDS[r.scope]}: ${r.scope_values
+                  .map((v) =>
+                    r.scope === 'employee_type'
+                      ? (TYPE_WORDS[v.toLowerCase()] ?? v)
+                      : r.scope === 'employee'
+                        ? `${names.get(v.toLowerCase()) ?? v} (${v})`
+                        : v,
+                  )
+                  .join(', ')}`,
+          bands: await Promise.all(
+            x.bands.map(async (b, i) => ({
+              ...b,
+              who: await Promise.all((r.bands[i]?.levels ?? []).map(who)),
+            })),
+          ),
+        });
+      }
       return {
-        rules: rows.map((r) => this.shape(r)),
+        rules: shaped,
         types: types.rows,
         staff: staff.rows,
         scopes: await this.scopeLists(c),
@@ -457,6 +531,7 @@ export class LeaveSetupService {
             ],
           )
         ).rows[0]!.id;
+        if (dto.place === 'auto' && dto.scope !== 'employee') await this.placeNew(c, dto.kind, id);
         await this.audit.stage(ctx, c, {
           action: 'leave.approval_rule.create',
           entityType: 'staff_leave_approval_rules',
@@ -548,6 +623,78 @@ export class LeaveSetupService {
       });
       // nothing waits on a rule yet (phase B moves waiting leave to the new people)
       return { moved: 0, approved: 0 };
+    });
+  }
+
+  /**
+   * A group rule one place up or down in the order rules are checked (its kind; an employee's own rule
+   * stays first). The group rules are numbered again 10, 20, 30 … in the order they are read now, then the
+   * two swap: the order changes only where it was asked.
+   */
+  /**
+   * A new group rule put in the order: just above the first catch-all rule (all staff, any type), or
+   * last when there is none; the group rules are numbered again 10, 20, 30 … keeping the others' order.
+   */
+  private async placeNew(c: PoolClient, kind: string, id: string) {
+    const list = (
+      await c.query<{ id: string; catchAll: boolean }>(
+        `SELECT id::text, (scope = 'all' AND leave_type_id IS NULL AND status = 'active') AS "catchAll"
+           FROM staff_leave_approval_rules
+          WHERE kind = $1 AND scope <> 'employee' AND id <> $2
+          ORDER BY (status = 'inactive'), priority, (leave_type_id IS NULL), id`,
+        [kind, id],
+      )
+    ).rows;
+    const at = list.findIndex((x) => x.catchAll);
+    const order = list.map((x) => x.id);
+    order.splice(at === -1 ? order.length : at, 0, id);
+    for (const [i, x] of order.entries())
+      await c.query(
+        `UPDATE staff_leave_approval_rules SET priority = $2, updated_at = now() WHERE id = $1`,
+        [x, Math.min(9999, 10 * (i + 1))],
+      );
+  }
+
+  async moveRule(ctx: RequestContext, id: string, dto: MoveRuleDto) {
+    this.mustManage(ctx);
+    return this.db.tenant(requireTenant(ctx), async (c) => {
+      const me = (
+        await c.query<{ kind: string; scope: string }>(
+          `SELECT kind, scope FROM staff_leave_approval_rules WHERE id = $1 FOR UPDATE`,
+          [id],
+        )
+      ).rows[0];
+      if (!me) throw new DomainError('not-found', 'Rule not found', { status: 404 });
+      if (me.scope === 'employee')
+        throw new DomainError(
+          'validation-failed',
+          'An employee’s own approvers always come first: they are not moved',
+          { status: 400 },
+        );
+      const list = (
+        await c.query<{ id: string }>(
+          `SELECT id::text FROM staff_leave_approval_rules
+            WHERE kind = $1 AND scope <> 'employee'
+            ORDER BY (status = 'inactive'), priority, (leave_type_id IS NULL), id FOR UPDATE`,
+          [me.kind],
+        )
+      ).rows.map((x) => x.id);
+      const at = list.indexOf(id);
+      const to = dto.direction === 'up' ? at - 1 : at + 1;
+      if (to < 0 || to >= list.length) return { moved: false };
+      [list[at], list[to]] = [list[to]!, list[at]!];
+      for (const [i, x] of list.entries())
+        await c.query(
+          `UPDATE staff_leave_approval_rules SET priority = $2, updated_at = now() WHERE id = $1`,
+          [x, Math.min(9999, 10 * (i + 1))],
+        );
+      await this.audit.stage(ctx, c, {
+        action: 'leave.approval_rule.move',
+        entityType: 'staff_leave_approval_rules',
+        entityId: id,
+        after: { direction: dto.direction },
+      });
+      return { moved: true };
     });
   }
 

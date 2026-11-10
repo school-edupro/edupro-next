@@ -565,7 +565,9 @@ const PAGES = [
   '/leave/balances',
   '/leave/setup',
   '/leave/setup/approvals',
-  '/leave/setup/approvals/by-employee',
+  '/leave/setup/approvals/rules',
+  // a sample group rule (seeded Alpha 'Teaching staff'); a new seed changes the id
+  '/leave/setup/approvals/252',
   '/leave/setup/settings',
   '/leave/setup/timings',
   '/leave/setup/report-access',

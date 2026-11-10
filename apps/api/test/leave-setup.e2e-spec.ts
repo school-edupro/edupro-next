@@ -506,4 +506,51 @@ describe('staff leave set-up (e2e)', () => {
       status: 'inactive',
     });
   });
+
+  it('group rules in the order they are checked: a new rule goes above the catch-all, up and down move it', async () => {
+    const make = (name: string, scope: string, scopeValues: string[]) =>
+      call(office, 'POST', '/leave/setup/approvals', {
+        kind: 'regularisation',
+        name,
+        scope,
+        scopeValues,
+        place: 'auto',
+      }).then((r) => r.json().id as string);
+    const order = async () =>
+      (await call(office, 'GET', '/leave/setup/approvals'))
+        .json()
+        .rules.filter(
+          (r: { kind: string; scope: string; status: string }) =>
+            r.kind === 'regularisation' && r.scope !== 'employee' && r.status === 'active',
+        )
+        .map((r: { name: string }) => r.name);
+    // the catch-all for everybody, made earlier in this file: it stays last
+    const last = (await order()).at(-1);
+    const sci = await make('Corrections: Science', 'department', ['Science']);
+    expect((await order()).slice(-2)).toEqual(['Corrections: Science', last]);
+    const acc = await make('Corrections: Accounts', 'department', ['Accounts']);
+    expect((await order()).slice(-3)).toEqual([
+      'Corrections: Science',
+      'Corrections: Accounts',
+      last,
+    ]);
+    await call(office, 'POST', `/leave/setup/approvals/${acc}/move`, { direction: 'up' });
+    expect((await order()).slice(-3)).toEqual([
+      'Corrections: Accounts',
+      'Corrections: Science',
+      last,
+    ]);
+    // the list shows the people and plain words
+    const shown = (await call(office, 'GET', '/leave/setup/approvals'))
+      .json()
+      .rules.find((r: { id: string }) => r.id === sci);
+    expect(shown.scopeWords).toBe('Department: Science');
+    expect(shown.bands[0].who).toEqual([]);
+    expect(
+      (await call(teacher, 'POST', `/leave/setup/approvals/${acc}/move`, { direction: 'down' }))
+        .statusCode,
+    ).toBe(403);
+    for (const id of [sci, acc])
+      await call(office, 'POST', `/leave/setup/approvals/${id}/status`, { status: 'inactive' });
+  });
 });

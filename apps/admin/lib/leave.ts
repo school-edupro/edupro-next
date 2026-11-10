@@ -51,7 +51,12 @@ export interface ApprovalRule {
   leaveType: { id: string; code: string; name: string } | null;
   priority: number;
   status: 'active' | 'inactive';
-  bands: Array<{ label: string; levels: string[] }>;
+  bands: Array<{
+    label: string;
+    levels: string[];
+    /** each level's people by name (an HOD or a reporting manager differs per employee: a note) */
+    who: Array<{ name: string; people: string[]; need: 'any' | 'all'; note: string | null }>;
+  }>;
 }
 
 export interface ApprovalRules {

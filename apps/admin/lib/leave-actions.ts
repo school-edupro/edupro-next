@@ -34,23 +34,39 @@ const ruleBody = (fd: FormData) => ({
   priority: Math.min(9999, Math.max(1, Number(fd.get('priority') ?? 100) || 100)),
 });
 
-/** A new rule: its staff and leave type first; the levels of each day band next, on its page. */
+/** A group rule one place up or down in the order the rules are checked. */
+export async function moveApprovalRule(id: string, direction: 'up' | 'down') {
+  if (!okId(id)) return;
+  try {
+    await apiFetch(`/leave/setup/approvals/${id}/move`, {
+      method: 'POST',
+      body: JSON.stringify({ direction }),
+    });
+  } catch (e) {
+    if (e instanceof ApiError) back('/leave/setup/approvals/rules', e);
+    throw e;
+  }
+  revalidatePath('/leave/setup/approvals/rules');
+  redirect(`/leave/setup/approvals/rules?moved=${id}&r=${Date.now().toString(36)}`);
+}
+
+/** A new rule: who it is for and the leave type first (placed above “All staff”); its levels next, on its page. */
 export async function createApprovalRule(fd: FormData) {
   let id = '';
   try {
     id = (
       await apiFetch<{ id: string }>('/leave/setup/approvals', {
         method: 'POST',
-        body: JSON.stringify(ruleBody(fd)),
+        body: JSON.stringify({ ...ruleBody(fd), place: 'auto' }),
       })
     ).id;
   } catch (e) {
-    if (e instanceof ApiError) back('/leave/setup/approvals', e);
+    if (e instanceof ApiError) back('/leave/setup/approvals/rules', e);
     throw e;
   }
   revalidatePath('/leave/setup');
   redirect(
-    `/leave/setup/approvals/${id}?ok=1&detail=${encodeURIComponent('Rule added: now set who approves in each day band.')}`,
+    `/leave/setup/approvals/${id}?ok=1&detail=${encodeURIComponent('Rule added just above “All staff” in Group rules (move it with ↑ ↓ there). Now set who approves below.')}`,
   );
 }
 
@@ -58,10 +74,8 @@ export async function createApprovalRule(fd: FormData) {
 export async function ownApprovalRule(fd: FormData) {
   const employeeId = String(fd.get('employeeId') ?? '');
   const kind = fd.get('kind') === 'regularisation' ? 'regularisation' : 'leave';
-  const from = String(fd.get('back') ?? '/leave/setup/approvals/by-employee');
-  const path = from.startsWith('/leave/setup/approvals/by-employee')
-    ? from
-    : '/leave/setup/approvals/by-employee';
+  const from = String(fd.get('back') ?? '/leave/setup/approvals');
+  const path = /^\/leave\/setup\/approvals(\?|$)/.test(from) ? from : '/leave/setup/approvals';
   if (!okId(employeeId)) return;
   let r: { id: string; created: boolean } | null = null;
   try {

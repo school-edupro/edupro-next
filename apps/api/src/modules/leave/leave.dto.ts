@@ -33,6 +33,8 @@ export const ApprovalRuleSchema = z
     scopeValues: z.array(z.string().trim().min(1).max(100)).max(100).default([]),
     leaveTypeId: Id.nullable().optional(),
     priority: z.number().int().min(1).max(9999).default(100),
+    /** a new group rule placed in the order for you: just above the catch-all "all staff, any type" rule */
+    place: z.enum(['auto']).optional(),
   })
   .refine((r) => r.scope === 'all' || r.scopeValues.length > 0, {
     message: 'Name the departments, designations, employee types or employees the rule is for',
@@ -56,6 +58,10 @@ export const BandLevelsSchema = z.object({
     .max(3, 'Up to 3 levels'),
 });
 export class BandLevelsDto extends createZodDto(BandLevelsSchema) {}
+
+/** A group rule one place up or down in the order the rules are checked. */
+export const MoveRuleSchema = z.object({ direction: z.enum(['up', 'down']) });
+export class MoveRuleDto extends createZodDto(MoveRuleSchema) {}
 
 export const RuleStatusSchema = z.object({ status: z.enum(['active', 'inactive']) });
 export class RuleStatusDto extends createZodDto(RuleStatusSchema) {}

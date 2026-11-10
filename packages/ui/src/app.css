@@ -14806,3 +14806,7 @@ button.ep-subchoice__icon:hover {
   gap: var(--sp-2);
   justify-items: start;
 }
+/* the group rule just moved up or down: easy to find again */
+.ep-approvers__moved > td {
+  background: var(--surface-band);
+}

@@ -1,23 +1,23 @@
-/** The two views of "Who approves": the rules, and each employee with the approvers they have. */
-export function ApprovalsTabs({ current }: { current: 'rules' | 'employees' }) {
+/** The two views of "Who approves": each employee with their approvers (first), and the group rules. */
+export function ApprovalsTabs({ current }: { current: 'employees' | 'rules' }) {
   return (
     <div className="ep-tabs">
       <div role="tablist" aria-label="Who approves" className="ep-tabs__list">
         <a
           role="tab"
-          aria-selected={current === 'rules'}
+          aria-selected={current === 'employees'}
           className="ep-tabs__tab"
           href="/leave/setup/approvals"
         >
-          Rules
+          Each employee
         </a>
         <a
           role="tab"
-          aria-selected={current === 'employees'}
+          aria-selected={current === 'rules'}
           className="ep-tabs__tab"
-          href="/leave/setup/approvals/by-employee"
+          href="/leave/setup/approvals/rules"
         >
-          By employee
+          Group rules
         </a>
       </div>
     </div>

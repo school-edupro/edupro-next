@@ -11,6 +11,7 @@ import {
   ChainPreviewDto,
   LEAVE,
   LeaveSettingsDto,
+  MoveRuleDto,
   OwnRuleDto,
   RuleStatusDto,
 } from './leave.dto';
@@ -105,6 +106,13 @@ export class LeaveSetupController {
     @Body() body: BandLevelsDto,
   ) {
     return this.setup.setBand(ctx, id, band, body);
+  }
+
+  @Post('approvals/:id/move')
+  @ApiOperation({ summary: 'A group rule one place up or down in the order rules are checked' })
+  @RequirePermission(LEAVE.setupManage)
+  moveRule(@ReqCtx() ctx: RequestContext, @Param('id') id: string, @Body() body: MoveRuleDto) {
+    return this.setup.moveRule(ctx, id, body);
   }
 
   @Post('approvals/:id/status')
