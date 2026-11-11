@@ -24,33 +24,12 @@ export function ListBar({
   noun: string;
   files?: { xlsx: string; pdf: string } | null;
 }) {
-  const first = total ? (page - 1) * size + 1 : 0;
-  const last = Math.min(total, page * size);
-  const n = (x: number) => x.toLocaleString('en-IN');
-  const id = `${noun.replace(/\W+/g, '-')}-size`;
   return (
     <>
       <div className="ep-listbar">
-        <div className="ep-listbar__sizes">
-          <span id={id}>Records per page:</span>
-          <ul className="ep-pages" aria-labelledby={id} style={{ margin: 0 }}>
-            {PAGE_SIZES.map((s) => (
-              <li key={s}>
-                <a
-                  href={sizeHref(s)}
-                  aria-current={String(size) === s ? 'true' : undefined}
-                  aria-label={`${s} ${noun} a page`}
-                >
-                  {s}
-                </a>
-              </li>
-            ))}
-          </ul>
-        </div>
+        <SizeLinks size={size} sizeHref={sizeHref} noun={noun} />
         <div className="ep-listbar__end">
-          <p className="ep-listbar__count" aria-live="polite">
-            Showing {n(first)} – {n(last)} of {n(total)} results
-          </p>
+          <Showing page={page} size={size} total={total} />
           {files && total ? (
             <>
               <a className="ep-btn ep-btn--secondary ep-btn--sm" href={files.xlsx} download>
@@ -65,6 +44,66 @@ export function ListBar({
       </div>
       <Pages page={page} size={size} total={total} href={href} noun={noun} />
     </>
+  );
+}
+
+/** Records per page: 25 / 50 / 100, a link each (page 1 at that size, filters kept). */
+export function SizeLinks({
+  size,
+  sizeHref,
+  noun,
+}: {
+  size: number;
+  sizeHref: (size: string) => string;
+  noun: string;
+}) {
+  const id = `${noun.replace(/\W+/g, '-')}-size`;
+  return (
+    <div className="ep-listbar__sizes">
+      <span id={id}>Records per page:</span>
+      <ul className="ep-pages" aria-labelledby={id} style={{ margin: 0 }}>
+        {PAGE_SIZES.map((s) => (
+          <li key={s}>
+            <a
+              href={sizeHref(s)}
+              aria-current={String(size) === s ? 'true' : undefined}
+              aria-label={`${s} ${noun} a page`}
+            >
+              {s}
+            </a>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+/** "Showing 1 – 50 of 584 results" */
+export function Showing({ page, size, total }: { page: number; size: number; total: number }) {
+  const first = total ? (page - 1) * size + 1 : 0;
+  const last = Math.min(total, page * size);
+  const n = (x: number) => x.toLocaleString('en-IN');
+  return (
+    <p className="ep-listbar__count" aria-live="polite">
+      Showing {n(first)} – {n(last)} of {n(total)} results
+    </p>
+  );
+}
+
+/** Download ▾ with Excel and PDF of everything the filters match. */
+export function DownloadMenu({ xlsx, pdf }: { xlsx: string; pdf: string }) {
+  return (
+    <details className="ep-grid__chooser">
+      <summary className="ep-btn ep-btn--primary ep-btn--sm">Download ▾</summary>
+      <div className="ep-grid__popover" style={{ minWidth: '10rem' }}>
+        <a href={xlsx} download>
+          Excel
+        </a>
+        <a href={pdf} download>
+          PDF
+        </a>
+      </div>
+    </details>
   );
 }
 

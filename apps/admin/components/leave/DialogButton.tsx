@@ -8,6 +8,7 @@ export function DialogButton({
   title,
   className = 'ep-btn ep-btn--primary ep-btn--sm',
   open: startOpen = false,
+  tip,
   children,
 }: {
   id: string;
@@ -15,6 +16,8 @@ export function DialogButton({
   title: string;
   className?: string;
   open?: boolean;
+  /** a tooltip on the button (an icon-only button names itself with hidden text in `label`) */
+  tip?: string;
   children: ReactNode;
 }) {
   const [open, setOpen] = useState(startOpen);
@@ -25,7 +28,7 @@ export function DialogButton({
   }, [open]);
   return (
     <>
-      <button type="button" className={className} onClick={() => setOpen(true)}>
+      <button type="button" className={className} title={tip} onClick={() => setOpen(true)}>
         {label}
       </button>
       {open ? (

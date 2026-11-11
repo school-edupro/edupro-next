@@ -289,8 +289,8 @@ export interface LeaveRegister {
   figures: Record<
     'total' | 'pending' | 'l1' | 'l2' | 'approved' | 'rejected' | 'cancelled' | 'withdrawn' | 'lop',
     number
-  > & { fy: string };
-  rows: LeaveRequest[];
+  > & { fy: string; fyFrom: string; fyTo: string };
+  rows: RegisterRow[];
   total: number;
   page: number;
   size: number;
@@ -301,13 +301,34 @@ export interface LeaveRegister {
   };
 }
 
+/** A leave on the register (the old Approve / Reject Leave): its stage, last action, current approver, office rights. */
+export interface RegisterRow extends LeaveRequest {
+  /** Pending, L1 Approved, L2 Approved, Approved, Rejected, Withdrawn, Cancelled, LWP */
+  stage: string;
+  /** "CODE — Name" of who entered it (on behalf) */
+  appliedPerson: string | null;
+  lastAction: { words: string; by: string | null; at: string | null };
+  /** LEVEL 2 PENDING and who; or APPROVED and by whom */
+  approver: { head: string; people: string | null };
+  can: { override: boolean; trim: boolean; cancel: boolean };
+}
+
+/** The balance ledger: one row per employee × leave type × month, every month newest first (or one month). */
 export interface LeaveBalances {
-  month: string;
+  /** the month asked, or null for every month */
+  month: string | null;
+  /** this month (YYYY-MM-01): the one a correction goes to */
+  current: string;
   monthWords: string;
-  current: boolean;
   rows: Array<{
     id: string;
-    employee: { id: string; name: string; code: string; department: string | null };
+    employee: {
+      id: string;
+      name: string;
+      code: string;
+      department: string | null;
+      designation: string | null;
+    };
     leaveType: { id: string; code: string; name: string };
     policy: string | null;
     month: string;
@@ -320,6 +341,7 @@ export interface LeaveBalances {
     lapsed: number;
     closed: boolean;
     trail: string[];
+    current: boolean;
   }>;
   total: number;
   page: number;

@@ -15181,3 +15181,133 @@ button.ep-shiftcal__cell:focus-visible {
   flex-wrap: wrap;
   gap: var(--sp-1);
 }
+
+/* The leave register as the old Approve / Reject Leave: figure cards that filter, the stage and final
+   status chips, the current approver by level, who entered a leave on the employee's behalf, row icons */
+.ep-regkpis {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(7rem, 1fr));
+  gap: var(--sp-2);
+  margin: var(--sp-3) 0;
+  padding: 0;
+  list-style: none;
+}
+.ep-regkpi {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  height: 100%;
+  padding: var(--sp-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface-card);
+  color: var(--text-body);
+  text-decoration: none;
+}
+.ep-regkpi:hover {
+  background: var(--surface-band);
+}
+.ep-regkpi[aria-current='true'] {
+  border-color: var(--action-primary);
+  box-shadow: var(--shadow-1);
+}
+.ep-regkpi__ic {
+  display: inline-flex;
+  padding: var(--sp-1);
+  border-radius: var(--radius-sm);
+  background: var(--surface-band);
+  color: var(--action-primary);
+}
+.ep-regkpi__label {
+  display: block;
+  font-size: var(--fs-caption);
+  color: var(--text-muted);
+}
+.ep-regkpi__num {
+  display: block;
+  font-size: var(--fs-h5);
+  font-weight: var(--fw-bold);
+  color: var(--text-heading);
+}
+.ep-stage {
+  display: inline-block;
+  padding: 0 var(--sp-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-band);
+  color: var(--text-body);
+  font-size: var(--fs-small);
+  white-space: nowrap;
+}
+.ep-stage--l1 {
+  background: var(--status-warning-bg);
+  color: var(--status-warning-text);
+}
+.ep-stage--l2 {
+  background: var(--status-info-bg);
+  color: var(--status-info-text);
+}
+.ep-stage--ok {
+  background: var(--status-success-bg);
+  color: var(--status-success-text);
+}
+.ep-stage--no {
+  background: var(--status-danger-bg);
+  color: var(--status-danger-text);
+}
+.ep-stage--off {
+  color: var(--text-muted);
+}
+.ep-approver__head {
+  display: block;
+  font-size: var(--fs-caption);
+  font-weight: var(--fw-bold);
+  white-space: nowrap;
+}
+.ep-approver__head--1 {
+  color: var(--status-warning-text);
+}
+.ep-approver__head--2 {
+  color: var(--status-info-text);
+}
+.ep-approver__head--3,
+.ep-approver__head--ok {
+  color: var(--status-success-text);
+}
+.ep-approver__head--no {
+  color: var(--status-danger-text);
+}
+.ep-approver__head--off {
+  color: var(--text-muted);
+}
+.ep-onbehalf {
+  display: inline-block;
+  margin-top: var(--sp-1);
+  padding: 0 var(--sp-1);
+  border: 1px solid var(--status-info);
+  border-radius: var(--radius-sm);
+  background: var(--status-info-bg);
+  color: var(--status-info-text);
+  font-size: var(--fs-caption);
+  white-space: nowrap;
+}
+.ep-iconbtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 2rem;
+  min-height: 2rem;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-heading);
+  cursor: pointer;
+}
+.ep-iconbtn:hover {
+  background: var(--surface-band);
+}
+.ep-iconbtn:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}

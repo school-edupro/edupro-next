@@ -1,5 +1,6 @@
 /* eslint-disable no-restricted-syntax -- the interpolations in this file are fixed fragments; values are bound */
 import { Inject, Injectable } from '@nestjs/common';
+import type { PoolClient } from '@edupro/db';
 import type { StorageDriver } from '@edupro/storage';
 import { AuditService } from '../../common/audit/audit.service';
 import { DbService } from '../../common/db/db.service';
@@ -8,9 +9,10 @@ import { readSheet, templateSheet } from '../../common/excel/sheet';
 import { requireTenant, type RequestContext } from '../../common/http/request-context';
 import { STORAGE_DRIVER } from '../files/storage';
 import { purchaseHead } from '../purchase/purchase-head';
-import { checkListSize, LIST_LIMIT, purchaseListFile } from '../purchase/purchase-list-file';
+import { checkListSize, LIST_LIMIT } from '../purchase/purchase-list-file';
 import { istToday } from '../purchase/purchase-stock-core';
-import { dmy, monthStart, monthWords, round2 } from './leave-engine';
+import { dmy, fail, monthStart, monthWords, round2 } from './leave-engine';
+import { leaveReportFile, preparedChecked } from './leave-report-file';
 import { LeaveService, REQ, type ReqRow } from './leave.service';
 import {
   LEAVE_OFFICE,
@@ -27,6 +29,68 @@ const STATUS_WORDS: Record<string, string> = {
   withdrawn: 'Withdrawn',
   cancelled: 'Cancelled',
 };
+const BUCKET_WORDS: Record<string, string> = {
+  pending: 'Pending',
+  l1: 'L1 Approved',
+  l2: 'L2 Approved',
+  approved: 'Approved',
+  rejected: 'Rejected',
+  cancelled: 'Cancelled',
+  withdrawn: 'Withdrawn',
+  lop: 'LWP',
+};
+/** "CODE — Name" of a user (with their employee code when they are staff) */
+const PERSON = (col: string) =>
+  `(SELECT COALESCE((SELECT x.employee_code FROM employees x WHERE x.user_id = u.id AND x.deleted_at IS NULL LIMIT 1) || ' — ', '') || u.display_name
+      FROM users u WHERE u.id = ${col})`;
+/** the open instance: the cancellation while one is asked, else the leave's */
+const OPEN = `COALESCE(CASE WHEN r.cancel_status = 'pending' THEN r.cancel_instance_id END, r.workflow_instance_id)`;
+/** what the register adds to a leave row: who decided, who entered it, the last step acted, the current approvers */
+const REG_EXTRA = `, ${PERSON('r.decided_by')} AS decided_person, ${PERSON('r.applied_by')} AS applied_person,
+       ${PERSON('r.cancel_raised_by')} AS cancel_person,
+       (SELECT jsonb_build_object('level', s.level, 'status', s.status, 'person', ${PERSON('s.acted_by')}, 'at', s.acted_at)
+          FROM workflow_steps s WHERE s.instance_id = r.workflow_instance_id AND s.acted_at IS NOT NULL AND s.status IN ('approved', 'rejected')
+         ORDER BY s.acted_at DESC, s.level DESC LIMIT 1) AS last_step,
+       (SELECT i.current_level FROM workflow_instances i WHERE i.id = ${OPEN} AND i.status = 'pending') AS approver_level,
+       (SELECT string_agg(${PERSON('a.uid')}, ', ')
+          FROM workflow_steps s JOIN workflow_instances i ON i.id = s.instance_id CROSS JOIN LATERAL unnest(s.assignee_user_ids) AS a(uid)
+         WHERE i.id = ${OPEN} AND i.status = 'pending' AND s.level = i.current_level AND s.status = 'pending') AS approvers`;
+type RegDb = ReqRow & {
+  decided_person: string | null;
+  applied_person: string | null;
+  cancel_person: string | null;
+  last_step: { level: number; status: string; person: string | null; at: string } | null;
+  approver_level: number | null;
+  approvers: string | null;
+};
+const MONTH_NAMES = [
+  'January',
+  'February',
+  'March',
+  'April',
+  'May',
+  'June',
+  'July',
+  'August',
+  'September',
+  'October',
+  'November',
+  'December',
+];
+/** dd-mm-yyyy hh:mm, India time */
+const dateTime = (iso: string) =>
+  new Intl.DateTimeFormat('en-GB', {
+    timeZone: 'Asia/Kolkata',
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  })
+    .format(new Date(iso))
+    .replace(/\//g, '-')
+    .replace(',', '');
 
 /**
  * The leave office (docs/design/85, phase B): the leave register (nine figures for the financial year,
@@ -82,6 +146,118 @@ export class LeaveOfficeService {
     };
   }
 
+  /** The register's rows with what the old screen showed of each (docs/design/85, "the register and balances as the old screens"). */
+  private async regRows(
+    c: PoolClient,
+    where: string,
+    args: unknown[],
+    order: string,
+    limit: string,
+  ) {
+    return (
+      await c.query<RegDb>(
+        `${REQ.replace('FROM staff_leave_requests r', `${REG_EXTRA} FROM staff_leave_requests r`)} ${where} ${order} ${limit}`,
+        args,
+      )
+    ).rows.map((r) => this.regShape(r));
+  }
+
+  /**
+   * One row as the old Approve / Reject Leave screen: the stage (Pending, L1 / L2 Approved, LWP…), the
+   * final status, the last action (who, when), the current approver, and what the office may do from it —
+   * only while a leave waits (Approve / Reject over every approver), Edit dates and Cancel once approved.
+   */
+  private regShape(r: RegDb) {
+    const step = r.last_step;
+    const office = r.decision_note?.startsWith('Decided by the leave office') ?? false;
+    const at = (d: Date | string | null) => (d ? new Date(d).toISOString() : null);
+    const last: { words: string; by: string | null; at: string | null } =
+      r.cancel_status === 'pending'
+        ? { words: 'Cancellation asked', by: r.cancel_person, at: at(r.cancel_raised_at) }
+        : r.status === 'pending'
+          ? step
+            ? { words: `L${String(step.level)} Approved`, by: step.person, at: at(step.at) }
+            : { words: 'L1 Pending', by: null, at: null }
+          : r.status === 'approved'
+            ? r.source === 'on_behalf'
+              ? {
+                  words: 'Applied & approved on behalf',
+                  by: r.applied_person,
+                  at: at(r.created_at),
+                }
+              : r.source.startsWith('auto')
+                ? {
+                    words: 'Deducted by the system',
+                    by: null,
+                    at: at(r.decided_at ?? r.created_at),
+                  }
+                : r.source === 'import'
+                  ? { words: 'Brought from the old module', by: null, at: at(r.created_at) }
+                  : office
+                    ? {
+                        words: 'Approved by the leave office',
+                        by: r.decided_person,
+                        at: at(r.decided_at),
+                      }
+                    : step
+                      ? {
+                          words: `L${String(step.level)} Approved`,
+                          by: step.person,
+                          at: at(step.at),
+                        }
+                      : { words: 'Approved', by: r.decided_person, at: at(r.decided_at) }
+            : r.status === 'rejected'
+              ? office
+                ? {
+                    words: 'Rejected by the leave office',
+                    by: r.decided_person,
+                    at: at(r.decided_at),
+                  }
+                : step && step.status === 'rejected'
+                  ? { words: `L${String(step.level)} Rejected`, by: step.person, at: at(step.at) }
+                  : { words: 'Rejected', by: r.decided_person, at: at(r.decided_at) }
+              : {
+                  words: STATUS_WORDS[r.status] ?? r.status,
+                  by: r.decided_person,
+                  at: at(r.decided_at),
+                };
+    const done = (r.level ?? 1) - 1;
+    const stage = r.loss_of_pay
+      ? 'LWP'
+      : r.status === 'pending'
+        ? done <= 0
+          ? 'Pending'
+          : `L${String(done)} Approved`
+        : r.status === 'approved'
+          ? step?.status === 'approved' && !office
+            ? `L${String(step.level)} Approved`
+            : 'Approved'
+          : (STATUS_WORDS[r.status] ?? r.status);
+    const waiting = r.approver_level !== null;
+    return {
+      ...this.leave.shape(r),
+      stage,
+      appliedPerson: r.applied_person,
+      lastAction: last,
+      approver: waiting
+        ? {
+            head: `${r.cancel_status === 'pending' ? 'CANCELLATION · ' : ''}LEVEL ${String(r.approver_level)} PENDING`,
+            people: r.approvers,
+          }
+        : { head: (STATUS_WORDS[r.status] ?? r.status).toUpperCase(), people: last.by },
+      can: {
+        override: r.status === 'pending' && !!r.workflow_instance_id,
+        trim:
+          r.status === 'approved' &&
+          !r.linked_request_id &&
+          !r.lop_part_id &&
+          Number(r.days) > 1 &&
+          r.cancel_status !== 'pending',
+        cancel: r.status === 'approved' && !r.linked_request_id && r.cancel_status !== 'pending',
+      },
+    };
+  }
+
   /**
    * Every leave as filtered, a page at a time (the loss-of-pay part of a split shows with its paid part);
    * the nine figures count the financial year whatever the filters (as the earlier register did).
@@ -113,9 +289,12 @@ export class LeaveOfficeService {
           f.args,
         )
       ).rows[0]!.n;
-      const rows = await c.query<ReqRow>(
-        `${REQ} ${f.where} ORDER BY r.created_at DESC, r.id DESC LIMIT $8 OFFSET $9`,
+      const rows = await this.regRows(
+        c,
+        f.where,
         [...f.args, q.size, (q.page - 1) * q.size],
+        'ORDER BY r.created_at DESC, r.id DESC',
+        'LIMIT $8 OFFSET $9',
       );
       const lists = await c.query<{ kind: string; id: string; name: string }>(
         `SELECT 'type' AS kind, id::text, code || ' · ' || name AS name FROM staff_leave_types WHERE status = 'active'
@@ -126,8 +305,13 @@ export class LeaveOfficeService {
          ORDER BY 1, 3`,
       );
       return {
-        figures: { ...fig, fy: `${String(y)}-${String((y + 1) % 100).padStart(2, '0')}` },
-        rows: rows.rows.map((r) => this.leave.shape(r)),
+        figures: {
+          ...fig,
+          fy: `${String(y)}-${String((y + 1) % 100).padStart(2, '0')}`,
+          fyFrom,
+          fyTo,
+        },
+        rows,
         total,
         page: q.page,
         size: q.size,
@@ -142,17 +326,18 @@ export class LeaveOfficeService {
     });
   }
 
-  /** The register as filtered (every page) on the letterhead: Excel or PDF. */
+  /** The register as filtered (every page), the old screen's columns, on the letterhead: Excel or PDF. */
   async registerFile(ctx: RequestContext, q: RegisterQueryDto) {
     this.mustOffice(ctx);
     return this.db.tenant(requireTenant(ctx), async (c) => {
       const f = this.filter(q);
-      const rows = (
-        await c.query<ReqRow>(`${REQ} ${f.where} ORDER BY r.from_date, r.number LIMIT $8`, [
-          ...f.args,
-          LIST_LIMIT,
-        ])
-      ).rows;
+      const rows = await this.regRows(
+        c,
+        f.where,
+        [...f.args, LIST_LIMIT],
+        'ORDER BY r.created_at DESC, r.id DESC',
+        'LIMIT $8',
+      );
       checkListSize(rows.length, 'leave requests');
       // each leave's levels: who decided (or waits), how and when — the earlier register's L1–L3
       const steps = await c.query<{ id: string; levels: string[] }>(
@@ -171,170 +356,160 @@ export class LeaveOfficeService {
       const levelsOf = new Map(steps.rows.map((x) => [x.id, x.levels]));
       const words = [
         q.from || q.to ? `${q.from ? dmy(q.from) : '…'} to ${q.to ? dmy(q.to) : '…'}` : 'All dates',
-        q.bucket ? `Only: ${q.bucket}` : null,
+        q.bucket ? `Only: ${BUCKET_WORDS[q.bucket]}` : null,
         q.department ? `Department: ${q.department}` : null,
-        q.source ? `Applied: ${q.source}` : null,
+        q.source
+          ? `Applied: ${q.source === 'system' ? 'by the system' : q.source === 'self' ? 'by the employee' : 'on behalf'}`
+          : null,
+        q.q ? `Search: ${q.q}` : null,
       ]
         .filter(Boolean)
         .join(' · ');
-      return purchaseListFile({
+      const when = (iso: string | null) => (iso ? dateTime(iso) : '');
+      return leaveReportFile({
         format: q.format ?? 'xlsx',
         head: await purchaseHead(c, this.storage),
-        title: 'Leave register',
+        name: 'Approve / Reject Leave',
         slug: 'Leave-register',
         words,
-        list: {
-          columns:
-            q.format === 'pdf'
-              ? [
-                  { label: 'Leave no.', width: 2 },
-                  { label: 'Employee', width: 3 },
-                  { label: 'Type', width: 1 },
-                  { label: 'From', type: 'date' },
-                  { label: 'To', type: 'date' },
-                  { label: 'Days', type: 'number', width: 1 },
-                  { label: 'Status', width: 1.6 },
-                  { label: 'Waiting with / decided by', width: 3 },
-                ]
-              : [
-                  { label: 'Leave no.', width: 2 },
-                  { label: 'Emp. code', width: 1.4 },
-                  { label: 'Employee', width: 3 },
-                  { label: 'Department', width: 2.4 },
-                  { label: 'Type', width: 1 },
-                  { label: 'From', type: 'date' },
-                  { label: 'To', type: 'date' },
-                  { label: 'Days', type: 'number', width: 1 },
-                  { label: 'Half day', width: 1.4 },
-                  { label: 'Status', width: 1.6 },
-                  { label: 'Applied', width: 2 },
-                  { label: 'Applied on', type: 'date' },
-                  { label: 'Reason', width: 4 },
-                  { label: 'Waiting with / decided by', width: 3 },
-                  { label: 'Level 1', width: 3 },
-                  { label: 'Level 2', width: 3 },
-                  { label: 'Level 3', width: 3 },
-                  { label: 'Note', width: 3 },
-                ],
-          rows: rows.map((r) => {
-            const by = r.status === 'pending' ? (r.waiting_with ?? '') : (r.decided_by ?? '');
-            return q.format === 'pdf'
-              ? [
-                  r.number,
-                  `${r.employee} (${r.code})`,
-                  r.type_code,
-                  r.from_date,
-                  r.to_date,
-                  Number(r.days),
-                  STATUS_WORDS[r.status] ?? r.status,
-                  by,
-                ]
-              : [
-                  r.number,
-                  r.code,
-                  r.employee,
-                  r.department,
-                  r.type_code,
-                  r.from_date,
-                  r.to_date,
-                  Number(r.days),
-                  r.half_day ? (r.session === 'first' ? 'First half' : 'Second half') : '',
-                  STATUS_WORDS[r.status] ?? r.status,
-                  r.source === 'self'
-                    ? 'By the employee'
-                    : r.source === 'on_behalf'
-                      ? 'By the office'
-                      : 'By the system',
-                  r.created_at.toISOString().slice(0, 10),
-                  r.reason,
-                  by,
-                  levelsOf.get(r.id)?.[0] ?? '',
-                  levelsOf.get(r.id)?.[1] ?? '',
-                  levelsOf.get(r.id)?.[2] ?? '',
-                  r.note,
-                ];
-          }),
+        table: {
+          columns: [
+            { label: 'S. no.', type: 'number', width: 0.6 },
+            { label: 'Leave ID', width: 2 },
+            { label: 'Employee', width: 2.4 },
+            { label: 'Emp. code', width: 1.2 },
+            { label: 'On behalf by', width: 2 },
+            { label: 'Leave type', width: 1.8 },
+            { label: 'Applied date', width: 1.5 },
+            { label: 'From date', type: 'date', width: 1.1 },
+            { label: 'To date', type: 'date', width: 1.1 },
+            { label: 'Total days', type: 'number', width: 0.8 },
+            { label: 'Status', width: 1.2 },
+            { label: 'Final status', width: 1.1 },
+            { label: 'Reason', width: 3 },
+            { label: 'Last action', width: 2 },
+            { label: 'Last action by', width: 2 },
+            { label: 'Last action date', width: 1.5 },
+            { label: 'Current approver', width: 2.4 },
+            { label: 'Level 1', width: 3 },
+            { label: 'Level 2', width: 3 },
+            { label: 'Level 3', width: 3 },
+          ],
+          rows: rows.map((r, i) => [
+            i + 1,
+            r.number,
+            r.employee.name,
+            r.employee.code,
+            r.source === 'on_behalf' ? (r.appliedPerson ?? '') : '',
+            `${r.leaveType.code} — ${r.leaveType.name}`,
+            when(r.appliedAt),
+            r.from,
+            r.to,
+            r.days,
+            r.stage,
+            STATUS_WORDS[r.status] ?? r.status,
+            r.reason,
+            r.lastAction.words,
+            r.lastAction.by ?? '',
+            when(r.lastAction.at),
+            [r.approver.head, r.approver.people].filter(Boolean).join(' · '),
+            ...[0, 1, 2].map((k) => levelsOf.get(r.id)?.[k] ?? ''),
+          ]),
+          // the PDF leaves out the code (with the name), who entered it and the levels (Excel has them)
+          pdfColumns: [0, 1, 2, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16],
+          paper: { a3: true, fontSize: 7 },
         },
-        sum: [q.format === 'pdf' ? 5 : 7],
+        signs: await preparedChecked(c, (k) => this.storage.read(k)),
       });
     });
   }
 
   // ---- balances ------------------------------------------------------------------------------------
-  /** The month's ledger of every employee and leave type with a balance (rows opened as they are shown). */
+  /**
+   * The balance ledger as the old Employee Leave Balance: one row per employee × leave type × month, every
+   * month newest first (or the month asked). This month is read as it would open (nothing is written by
+   * looking) and is the one that may be corrected; earlier months are as they were stored.
+   */
   async balances(ctx: RequestContext, q: BalanceQueryDto) {
     this.mustOffice(ctx);
     return this.db.tenant(requireTenant(ctx), async (c) => {
-      const month = q.month ? `${q.month}-01` : monthStart(istToday());
-      const current = month === monthStart(istToday());
-      const where = `WHERE e.deleted_at IS NULL AND e.status = 'active' AND t.status = 'active' AND t.keeps_balance AND NOT t.loss_of_pay
+      const cur = monthStart(istToday());
+      const month = q.month ? `${q.month}-01` : null;
+      const withCurrent = month === null || month === cur;
+      const withStored = month === null || month < cur;
+      const people = `e.deleted_at IS NULL AND e.status = 'active' AND t.status = 'active' AND t.keeps_balance AND NOT t.loss_of_pay
           AND ($1::bigint IS NULL OR e.id = $1) AND ($2::bigint IS NULL OR t.id = $2)
           AND ($3::text IS NULL OR lower(e.department) = lower($3))
           AND ($4::text IS NULL OR e.display_name ILIKE '%' || $4 || '%' OR e.employee_code ILIKE '%' || $4 || '%')`;
       const args = [q.employeeId ?? null, q.leaveTypeId ?? null, q.department ?? null, q.q ?? null];
-      const total = (
-        await c.query<{ n: number }>(
-          `SELECT count(*)::int AS n FROM employees e CROSS JOIN staff_leave_types t ${where}`,
-          args,
-        )
-      ).rows[0]!.n;
-      const pairs = await c.query<{ emp: string; type_id: string }>(
-        `SELECT e.id::text AS emp, t.id::text AS type_id FROM employees e CROSS JOIN staff_leave_types t ${where}
-          ORDER BY e.display_name, e.employee_code, t.sort_order, t.code LIMIT $5 OFFSET $6`,
-        q.format ? [...args, LIST_LIMIT, 0] : [...args, q.size, (q.page - 1) * q.size],
-      );
-      if (q.format) checkListSize(pairs.rows.length, 'balances');
-      const rows = [];
-      for (const p of pairs.rows) {
-        const b = (
-          await c.query<{
-            id: string;
-            opening: string;
-            credited: string;
-            held: string;
-            correction: string;
-            closing: string | null;
-            lapsed: string;
-            closed: boolean;
-            trail: string[];
-          }>(
-            // this month is read as it would open (nothing is written by looking); an earlier month as it was
-            current
-              ? `SELECT COALESCE(id::text, 'new-' || $1 || '-' || $2) AS id, opening::text, credited::text, held::text, correction::text,
-                        closing::text, lapsed::text, closed, trail
-                   FROM app.staff_leave_balance_peek($1, $2, $3::date)`
-              : `SELECT id::text, opening::text, credited::text, held::text, correction::text, closing::text, lapsed::text, closed, trail
-                   FROM staff_leave_balances WHERE employee_id = $1 AND leave_type_id = $2 AND month = $3::date`,
-            [p.emp, p.type_id, month],
-          )
-        ).rows[0];
-        if (!b) continue;
-        const who = (
-          await c.query<{
-            name: string;
-            code: string;
-            department: string | null;
-            type: string;
-            type_name: string;
-            policy: string | null;
-          }>(
-            `SELECT e.display_name AS name, e.employee_code AS code, e.department, t.code AS type, t.name AS type_name,
-                    (SELECT x.name FROM staff_leave_policies x WHERE x.leave_type_id = t.id AND x.status = 'active'
-                       AND app.staff_in_scope(x.scope, x.scope_values, e.id) ORDER BY x.priority, x.id LIMIT 1) AS policy
-               FROM employees e, staff_leave_types t WHERE e.id = $1 AND t.id = $2`,
-            [p.emp, p.type_id],
-          )
-        ).rows[0]!;
+      const stored = `FROM staff_leave_balances b JOIN employees e ON e.id = b.employee_id JOIN staff_leave_types t ON t.id = b.leave_type_id
+          WHERE ${people} AND b.month < $5::date AND ($6::date IS NULL OR b.month = $6::date)`;
+      const nCur = withCurrent
+        ? (
+            await c.query<{ n: number }>(
+              `SELECT count(*)::int AS n FROM employees e CROSS JOIN staff_leave_types t WHERE ${people}`,
+              args,
+            )
+          ).rows[0]!.n
+        : 0;
+      const nStored = withStored
+        ? (
+            await c.query<{ n: number }>(`SELECT count(*)::int AS n ${stored}`, [
+              ...args,
+              cur,
+              month,
+            ])
+          ).rows[0]!.n
+        : 0;
+      const total = nCur + nStored;
+      const file = !!q.format;
+      if (file && total > 20000)
+        fail('More than 20,000 balance rows: pick a month, a leave type or a department');
+      const off = file ? 0 : (q.page - 1) * q.size;
+      const want = file ? total : q.size;
+      const who = `e.id::text AS emp, e.display_name AS name, e.employee_code AS code, e.department, e.designation,
+              t.id::text AS type_id, t.code AS type, t.name AS type_name,
+              (SELECT x.name FROM staff_leave_policies x WHERE x.leave_type_id = t.id AND x.status = 'active'
+                 AND app.staff_in_scope(x.scope, x.scope_values, e.id) ORDER BY x.priority, x.id LIMIT 1) AS policy`;
+      type Who = {
+        emp: string;
+        name: string;
+        code: string;
+        department: string | null;
+        designation: string | null;
+        type_id: string;
+        type: string;
+        type_name: string;
+        policy: string | null;
+      };
+      type Bal = {
+        id: string;
+        opening: string;
+        credited: string;
+        held: string;
+        correction: string;
+        closing: string | null;
+        lapsed: string;
+        closed: boolean;
+        trail: string[];
+      };
+      const shape = (w: Who, b: Bal, m: string) => {
         const o = Number(b.opening);
         const cr = Number(b.credited);
         const h = Number(b.held);
         const co = Number(b.correction);
-        rows.push({
+        return {
           id: b.id,
-          employee: { id: p.emp, name: who.name, code: who.code, department: who.department },
-          leaveType: { id: p.type_id, code: who.type, name: who.type_name },
-          policy: who.policy,
-          month,
+          employee: {
+            id: w.emp,
+            name: w.name,
+            code: w.code,
+            department: w.department,
+            designation: w.designation,
+          },
+          leaveType: { id: w.type_id, code: w.type, name: w.type_name },
+          policy: w.policy,
+          month: m,
           opening: o,
           credited: cr,
           held: h,
@@ -344,53 +519,98 @@ export class LeaveOfficeService {
           lapsed: Number(b.lapsed),
           closed: b.closed,
           trail: b.trail,
-        });
+          /** this month: the one a correction goes to */
+          current: m === cur,
+        };
+      };
+      const rows: Array<ReturnType<typeof shape>> = [];
+      // this month first: each employee and type as it would open
+      if (withCurrent && off < nCur) {
+        const pairs = await c.query<Who>(
+          `SELECT ${who} FROM employees e CROSS JOIN staff_leave_types t WHERE ${people}
+            ORDER BY e.display_name, e.employee_code, t.sort_order, t.code LIMIT $5 OFFSET $6`,
+          [...args, Math.min(want, nCur - off), off],
+        );
+        for (const p of pairs.rows) {
+          const b = (
+            await c.query<Bal>(
+              `SELECT COALESCE(id::text, 'new-' || $1 || '-' || $2) AS id, opening::text, credited::text, held::text, correction::text,
+                      closing::text, lapsed::text, closed, trail
+                 FROM app.staff_leave_balance_peek($1, $2, $3::date)`,
+              [p.emp, p.type_id, cur],
+            )
+          ).rows[0];
+          if (b) rows.push(shape(p, b, cur));
+        }
+      }
+      // then the months before, newest first, as they were stored
+      const left = want - rows.length;
+      if (withStored && left > 0) {
+        const got = await c.query<Who & Bal & { month: string }>(
+          `SELECT ${who}, b.id::text, b.month::text, b.opening::text, b.credited::text, b.held::text, b.correction::text,
+                  b.closing::text, b.lapsed::text, b.closed, b.trail
+             ${stored}
+            ORDER BY b.month DESC, e.display_name, e.employee_code, t.sort_order, t.code LIMIT $7 OFFSET $8`,
+          [...args, cur, month, left, Math.max(0, off - nCur)],
+        );
+        for (const r of got.rows) rows.push(shape(r, r, r.month));
       }
       if (q.format)
-        return purchaseListFile({
+        return leaveReportFile({
           format: q.format,
           head: await purchaseHead(c, this.storage),
-          title: `Leave balances · ${monthWords(month)}`,
+          name: 'Employee Leave Balance',
           slug: 'Leave-balances',
           words: [
-            monthWords(month),
+            month ? monthWords(month) : 'Every month',
             q.department ? `Department: ${q.department}` : null,
             q.q ? `Search: ${q.q}` : null,
           ]
             .filter(Boolean)
             .join(' · '),
-          list: {
+          table: {
             columns: [
-              { label: 'Emp. code', width: 1.4 },
-              { label: 'Employee', width: 3 },
-              { label: 'Department', width: 2.2 },
-              { label: 'Leave type', width: 1 },
-              { label: 'Policy', width: 2.4 },
-              { label: 'Opening', type: 'number', width: 1 },
-              { label: 'Credited', type: 'number', width: 1 },
-              { label: 'Held', type: 'number', width: 1 },
-              { label: 'Correction', type: 'number', width: 1 },
-              { label: 'Available', type: 'number', width: 1 },
-              { label: 'Closing', type: 'number', width: 1 },
-              { label: 'Lapsed', type: 'number', width: 1 },
-              { label: 'Month closed', width: 1 },
+              { label: 'Sr. no.', type: 'number', width: 0.6 },
+              { label: 'Emp Id', width: 1.2 },
+              { label: 'Emp name', width: 2.4 },
+              { label: 'Designation', width: 1.8 },
+              { label: 'Department', width: 1.8 },
+              { label: 'Leave type', width: 2 },
+              { label: 'Month', width: 1.1 },
+              { label: 'Year', type: 'number', width: 0.7 },
+              { label: 'Open bal', type: 'number', width: 0.9 },
+              { label: 'Accrued', type: 'number', width: 0.9 },
+              { label: 'Availed', type: 'number', width: 0.9 },
+              { label: 'Correction', type: 'number', width: 0.9 },
+              { label: 'Close bal', type: 'number', width: 0.9 },
+              { label: 'Lapsed', type: 'number', width: 0.9 },
+              { label: 'Total bal', type: 'number', width: 0.9 },
+              { label: 'Status', width: 0.8 },
+              { label: 'Policy', width: 2 },
             ],
-            rows: rows.map((r) => [
+            rows: rows.map((r, i) => [
+              i + 1,
               r.employee.code,
               r.employee.name,
+              r.employee.designation,
               r.employee.department,
-              r.leaveType.code,
-              r.policy,
+              `${r.leaveType.code} — ${r.leaveType.name}`,
+              MONTH_NAMES[Number(r.month.slice(5, 7)) - 1]!,
+              Number(r.month.slice(0, 4)),
               r.opening,
               r.credited,
               r.held,
               r.correction,
-              r.available,
               r.closing,
               r.lapsed,
-              r.closed ? 'Yes' : 'No',
+              r.available,
+              r.closed ? 'Closed' : 'Open',
+              r.policy,
             ]),
+            pdfColumns: [0, 1, 2, 3, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15],
+            paper: { fontSize: 7 },
           },
+          signs: await preparedChecked(c, (k) => this.storage.read(k)),
         });
       const lists = await c.query<{ kind: string; id: string; name: string }>(
         `SELECT 'type' AS kind, id::text, code || ' · ' || name AS name FROM staff_leave_types
@@ -403,8 +623,8 @@ export class LeaveOfficeService {
       );
       return {
         month,
-        monthWords: monthWords(month),
-        current,
+        current: cur,
+        monthWords: month ? monthWords(month) : 'Every month',
         rows,
         total,
         page: q.page,

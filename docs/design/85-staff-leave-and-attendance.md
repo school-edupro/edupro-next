@@ -479,6 +479,43 @@ ListBar.tsx`, `LeaveCells.tsx` (date chips, half day, date-time, status).
   (dev-principal, dev-teacher): each tab's columns and defaults, the downloads, a refused range, old
   month links, axe clean at 1280 and 375.
 
+## As built — the register and balances as the old screens (11 Nov 2026)
+
+Asked: `/leave/register` as the old Approve / Reject Leave and `/leave/balances` as the old Employee Leave
+Balance (screenshots). Benchmarked: Keka (admins edit the dates of approved leave and cancel it), Zoho People
+and Paybooks (a balance report of opening, granted / accrued, used / availed, closing, lapsed). Decided with
+the user: the office's row icons act **only while a leave waits** (approved leave: Edit dates and Cancel;
+decided leave is not re-decided); balances list **every month, newest first**; the register opens on **this
+leave year**.
+
+- **Register** (`/leave/register`, title Approve / Reject Leave): nine figure cards (Total Leaves, Pending,
+  L1 Approved, L2 Approved, Approved, Rejected, Cancelled, LWP, Withdrawn) that filter the list; Records per
+  page (25 / 50 / 100); Filter (a panel: leave type, employee, department, From / To, applied by, search);
+  Download ▾ (Excel / PDF); "Showing a – b of N results" and numbered pages; the old columns — S.No., Leave
+  ID (document, dates changed), Employee Details (On behalf · who), Leave Type, Applied Date, From / To Date,
+  Total Days, Status (stage), Final Status, Reason (View More), Last Action (+ by), Last Action Date, Current
+  Approver (LEVEL n PENDING + who, or APPROVED + by), Action (icons: Approve / Reject over every approver with
+  a reason — the override; Edit dates — the trim; Cancel). ＋ Leave for an employee opens in a dialog. API:
+  each `/leave/register` row adds `stage`, `appliedPerson`, `lastAction {words, by, at}`, `approver {head,
+people}` and `can {override, trim, cancel}` (people as "CODE — Name"); `figures.fyFrom / fyTo`. The file
+  (`leaveReportFile`, A3 PDF, Prepared / Checked) has the same columns; the Excel keeps Level 1–3.
+- **Balances** (`/leave/balances`, title Employee Leave Balance): one row per employee × leave type × month,
+  every month newest first — this month as it would open (the peek), then the stored months — or the month
+  filtered. Columns Sr.No, Emp Id, Emp Name (designation · department), Leave Type, Month, Year, Open Bal,
+  Accrued, Availed, Correction, Close Bal, Lapsed, Total Bal, Status (Open / Closed), Action (the eye opens the
+  ledger: figures, policy, movements; the pencil adjusts this open month). Filter, ＋ Add (a correction of
+  this month), Import (opening balances), Download ▾, Run the month now. API: `month` optional (none = every
+  month), rows add `current` and the employee's `designation`; files up to 20,000 rows.
+- Shared: `ListBar` split into `SizeLinks`, `Showing`, `Pages`, `DownloadMenu`; `DialogButton` takes a
+  tooltip; icons checkCircle, xCircle, ban, list, undo; office row actions return to the register with its
+  filters.
+- Tests: `leave-requests.e2e-spec.ts` — a waiting row (Pending, L1 Pending, LEVEL 1 PENDING, the override),
+  the trimmed bridge (L1 Approved, Edit dates and Cancel), the office's entry (LWP, Applied & approved on
+  behalf), rejected by the office; the balances every month newest first, one month, pages running from this
+  month into the months before, the files. `leave-gaps` still finds Level 1 in the register Excel. Browser
+  (dev-admin): the cards, columns, Filter, Download, a card filtering, the row and ledger dialogs, axe clean
+  at 1280 and 375; both PDFs rendered and checked.
+
 ## The module is complete
 
 Phases A–E are built. What is left is the school's: the old database connection on the server, the read, the

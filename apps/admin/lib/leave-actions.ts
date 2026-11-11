@@ -290,7 +290,7 @@ const reqPath = (id: string) => `/leave/requests/${id}`;
 /** The list a row was acted on from (My leave's tabs, with their filters), to come back to; else none. */
 const listOf = (fd: FormData) => {
   const b = String(fd.get('back') ?? '');
-  return /^\/leave\?[\w=&%.+-]{1,500}$/.test(b) ? b : null;
+  return /^\/leave(\/register)?\?[\w=&%.+-]{1,500}$/.test(b) ? b : null;
 };
 const done = (id: string, detail: string, list?: string | null): never =>
   redirect(`${list ?? reqPath(id)}${list ? '&' : '?'}ok=1&detail=${encodeURIComponent(detail)}`);
@@ -339,23 +339,35 @@ export async function askCancelLeave(id: string, fd: FormData) {
 }
 
 export async function cancelLeave(id: string, fd: FormData) {
-  await act(id, 'cancel', { reason: String(fd.get('reason') ?? '').trim() });
-  done(id, 'Cancelled: the days are given back and the employee is told.');
+  const list = listOf(fd);
+  await act(id, 'cancel', { reason: String(fd.get('reason') ?? '').trim() }, list);
+  done(id, 'Cancelled: the days are given back and the employee is told.', list);
 }
 
 export async function overrideLeave(id: string, fd: FormData) {
   const outcome = fd.get('outcome') === 'rejected' ? 'rejected' : 'approved';
-  await act(id, 'override', { outcome, reason: String(fd.get('reason') ?? '').trim() });
-  done(id, outcome === 'approved' ? 'Approved by the office.' : 'Not approved by the office.');
+  const list = listOf(fd);
+  await act(id, 'override', { outcome, reason: String(fd.get('reason') ?? '').trim() }, list);
+  done(
+    id,
+    outcome === 'approved' ? 'Approved by the office.' : 'Not approved by the office.',
+    list,
+  );
 }
 
 export async function trimLeave(id: string, fd: FormData) {
-  await act(id, 'trim', {
-    from: String(fd.get('from') ?? ''),
-    to: String(fd.get('to') ?? ''),
-    reason: String(fd.get('reason') ?? '').trim(),
-  });
-  done(id, 'The dates are changed: the days cut are given back.');
+  const list = listOf(fd);
+  await act(
+    id,
+    'trim',
+    {
+      from: String(fd.get('from') ?? ''),
+      to: String(fd.get('to') ?? ''),
+      reason: String(fd.get('reason') ?? '').trim(),
+    },
+    list,
+  );
+  done(id, 'The dates are changed: the days cut are given back.', list);
 }
 
 export async function adjustBalance(fd: FormData) {

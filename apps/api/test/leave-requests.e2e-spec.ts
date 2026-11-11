@@ -458,6 +458,61 @@ describe('staff leave requests (e2e)', () => {
     expect(rej.rows.every((x: { status: string }) => x.status === 'rejected')).toBe(true);
     const x = (await call(office, 'GET', '/leave/register?format=xlsx')).json();
     expect(x.filename).toMatch(/^Leave-register-/);
+    // each row as the old Approve / Reject Leave: stage, last action, current approver, the office's icons
+    type Row = {
+      id: string;
+      number: string;
+      status: string;
+      source: string;
+      days: number;
+      stage: string;
+      appliedPerson: string | null;
+      lastAction: { words: string; by: string | null; at: string | null };
+      approver: { head: string; people: string | null };
+      can: { override: boolean; trim: boolean; cancel: boolean };
+    };
+    const rowOf = async (id: string) =>
+      ((await call(office, 'GET', '/leave/register?size=100')).json().rows as Row[]).find(
+        (r) => r.id === id,
+      )!;
+    const w = (await apply(t1, { leaveTypeId: ids.CL, from: W(11, 0), to: W(11, 0) })).json();
+    expect(await rowOf(w.id)).toMatchObject({
+      stage: 'Pending',
+      lastAction: { words: 'L1 Pending', by: null, at: null },
+      approver: { head: 'LEVEL 1 PENDING', people: expect.any(String) },
+      can: { override: true, trim: false, cancel: false },
+    });
+    // the trimmed bridge: approved by the HOD at level 1, two days — Edit dates and Cancel
+    const bridge = await rowOf(ids.BRIDGE!);
+    expect(bridge.lastAction.words).toMatch(/^L1 Approved$/);
+    expect(bridge.lastAction.by).toBeTruthy();
+    expect(bridge).toMatchObject({
+      stage: 'L1 Approved',
+      approver: { head: 'APPROVED' },
+      can: { override: false, trim: true, cancel: true },
+    });
+    // the office's own entry: loss of pay, applied and approved on behalf, by the office
+    const ob = (await call(office, 'GET', '/leave/register?size=100&source=on_behalf')).json()
+      .rows[0] as Row;
+    expect(ob).toMatchObject({
+      stage: 'LWP',
+      lastAction: { words: 'Applied & approved on behalf' },
+      can: { override: false, trim: false, cancel: true },
+    });
+    expect(ob.appliedPerson).toBeTruthy();
+    // rejected by the office from the row: the reason kept as the office's
+    await call(office, 'POST', `/leave/requests/${w.id as string}/override`, {
+      outcome: 'rejected',
+      reason: 'Exams that week',
+    });
+    expect(await rowOf(w.id)).toMatchObject({
+      stage: 'Rejected',
+      lastAction: { words: 'Rejected by the leave office' },
+      approver: { head: 'REJECTED' },
+      can: { override: false, trim: false, cancel: false },
+    });
+    const pdf = (await call(office, 'GET', '/leave/register?format=pdf')).json();
+    expect(Buffer.from(pdf.base64, 'base64').subarray(0, 5).toString()).toBe('%PDF-');
   });
 
   it('balances: the month’s ledger, opening balances from Excel (a second run changes nothing), the month closed and credited', async () => {
@@ -536,5 +591,42 @@ describe('staff leave requests (e2e)', () => {
     expect(
       again.find((r: { leaveType: { code: string } }) => r.leaveType.code === 'CL').credited,
     ).toBe(6);
+    // every month, newest first, as the old Employee Leave Balance: this month (Open), then before (Closed)
+    type B = {
+      id: string;
+      month: string;
+      current: boolean;
+      closed: boolean;
+      closing: number | null;
+      leaveType: { code: string };
+    };
+    const every = (
+      await call(office, 'GET', `/leave/balances?employeeId=${ids.A1}&size=100`)
+    ).json();
+    expect(every.month).toBeNull();
+    const months = (every.rows as B[]).map((r) => r.month);
+    expect(months[0]).toBe(`${today.slice(0, 7)}-01`);
+    expect([...months].sort().reverse()).toEqual(months);
+    expect(every.rows[0]).toMatchObject({ current: true, closed: false });
+    expect(
+      (every.rows as B[]).find((r) => r.month === `${prev}-01` && r.leaveType.code === 'EL'),
+    ).toMatchObject({ current: false, closed: true, closing: 2 });
+    expect(every.total).toBe(every.rows.length);
+    // one month only
+    const one = (
+      await call(office, 'GET', `/leave/balances?employeeId=${ids.A1}&month=${prev}`)
+    ).json();
+    expect(one.rows.length).toBeGreaterThan(0);
+    expect((one.rows as B[]).every((r) => r.month === `${prev}-01` && !r.current)).toBe(true);
+    // the pages run on from this month into the months before
+    const key = (r: B) => `${r.id}|${r.month}`;
+    const fifty = (await call(office, 'GET', '/leave/balances?size=50')).json();
+    const second = (await call(office, 'GET', '/leave/balances?size=25&page=2')).json();
+    expect((second.rows as B[]).map(key)).toEqual((fifty.rows as B[]).slice(25, 50).map(key));
+    for (const f of ['xlsx', 'pdf'])
+      expect(
+        (await call(office, 'GET', `/leave/balances?employeeId=${ids.A1}&format=${f}`)).json()
+          .filename,
+      ).toMatch(/^Leave-balances/);
   });
 });

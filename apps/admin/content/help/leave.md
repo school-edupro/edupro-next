@@ -152,16 +152,31 @@ Approved leave fills the daily activity log's leave days; cancelled or cut days 
 
 ## The leave register and balances
 
-**Leave register**: eight figures for the financial year (waiting at the first level, at level 2, at level
-3, approved, not approved, cancelled, withdrawn, loss of pay — click to see them), filters (type,
-employee, department, dates, applied by, search), 25 / 50 / 100 a page, Excel and PDF (the Excel with each
-leave's levels: who approved, when, or who it waits with).
+**Leave register** (**Approve / Reject Leave**, as the old screen): nine figure cards for the leave year —
+Total Leaves, Pending (at the first level), L1 Approved and L2 Approved (waiting at the next level), Approved
+(the final level), Rejected, Cancelled, LWP (loss of pay), Withdrawn — click one to see its leave, again to
+see all. **Records per page** (25 / 50 / 100), **Filter** (leave type, employee, department, From – To,
+applied by, search; the list opens on this leave year), **Download** (Excel and PDF; the Excel adds each
+level: who approved, when, or who it waits with). Each row: Leave ID (with the document and how often its
+dates changed), Employee Details (and **On behalf · who** when the office entered it), Leave Type, Applied
+Date, From / To Date, Total Days, **Status** (Pending, L1 / L2 Approved, Approved, LWP…), **Final Status**,
+Reason (View More), **Last Action** and its date (L1 Approved by whom, Applied & approved on behalf,
+Deducted by the system, Rejected by the leave office…), **Current Approver** (LEVEL 2 PENDING and who, or
+APPROVED and by whom). The **Action** icons are the office's: while a leave waits, **Approve** or **Reject** it
+over every approver (with the reason, kept as the leave office's; the employee is told); once approved,
+**Edit dates** (trim the ends; the days cut are given back) and **Cancel**. A rejected, withdrawn or cancelled
+leave stays as it is — enter a fresh leave for the employee (**＋ Leave for an employee**) if needed.
 
-**Balances** (from the register): each employee and leave type this month — opening (carried from last
-month), credited, held, corrections, what is left; past months closed with what lapsed — with each
-row's trail; Excel and PDF of the month. **Correct** a balance this month with a reason; load the **opening balances** from Excel
-(the figure you type becomes the balance; running the same sheet again changes nothing); **Run now** closes
-past months, opens this month and credits it (the system does it every night).
+**Employee Leave Balance** (as the old screen): one row per employee × leave type × month, every month newest
+first (this month first) — Emp Id, name, leave type, month, year, **Open Bal** (carried from last month),
+**Accrued** (credited), **Availed** (the leave raised in the month, waiting or approved), **Correction**,
+**Close Bal** and **Lapsed** (once closed), **Total Bal** (Open + Accrued + Correction − Availed) and
+**Open / Closed**. The eye opens the row's **ledger** (the policy and every movement: who, when, why); the
+pencil **adjusts** this month's balance (only this month is open). **Filter** (employee, department, month,
+leave type, search), **＋ Add** (a correction of this month for any employee, with a remark), **Import** (the
+opening balances from Excel: the figure you type becomes the balance; running the same sheet again changes
+nothing), **Download** (Excel and PDF), and **Run the month now** (closes past months, opens this month and
+credits it; the system does it every night).
 
 **How balances move**: credits come in the policy's credit months for the months before (pro rata from the
 day of joining); nothing lapses month to month; in the session-end month (the month before the policy's
