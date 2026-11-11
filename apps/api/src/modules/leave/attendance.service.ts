@@ -18,6 +18,7 @@ import { chainFor } from './leave-chain';
 import { notifyLeave } from './leave-notify';
 import { LeaveService } from './leave.service';
 import { addDays, dmy, fail, leaveFlow, monthStart, monthWords } from './leave-engine';
+import { leaveReportFile, preparedChecked } from './leave-report-file';
 import {
   LEAVE_OFFICE,
   LEAVE_OWN,
@@ -30,6 +31,7 @@ import {
   type RegulariseDto,
   type RunDto,
   type SheetDto,
+  type TeamAttendanceDto,
   type TimingBulkDto,
   type TimingListDto,
   type TimingLogDto,
@@ -89,6 +91,27 @@ const hm = (d: Date | null) =>
         hour12: false,
       }).format(d)
     : null;
+
+const WEEK2 = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
+const WEEKDAY_LONG = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+/** the last day of the month a date is in */
+const lastOf = (d: string) => addDays(monthStart(addDays(monthStart(d), 32)), -1);
+const daysBetween = (a: string, b: string) =>
+  Math.round((Date.parse(`${b}T00:00:00Z`) - Date.parse(`${a}T00:00:00Z`)) / 86_400_000);
+/** One employee's days added up: each kind (a half-day leave is half leave, half present), late, missing. */
+const dayTotals = (days: Array<{ code: string; late: number; missing: boolean }>) => {
+  const t: Record<string, number> = {};
+  for (const d of days) {
+    if (!d.code || d.code === '·') continue;
+    const half = d.code.endsWith('½');
+    const k = half ? d.code.slice(0, -1) : d.code;
+    t[k] = (t[k] ?? 0) + (half ? 0.5 : 1);
+    if (half) t.P = (t.P ?? 0) + 0.5;
+    if (d.late) t.late = (t.late ?? 0) + 1;
+    if (d.missing) t.missing = (t.missing ?? 0) + 1;
+  }
+  return t;
+};
 
 /** How the day was worked out, as a sentence (the earlier engine's calculation trace). */
 export function traceWords(t: Record<string, unknown>): string {
@@ -276,16 +299,190 @@ export class AttendanceService implements OnModuleInit {
   }
 
   /** My team's attendance (docs/design/85, "my reportees' attendance"): the register of those reporting to me. */
-  async team(ctx: RequestContext, q: RegisterMonthDto) {
+  async team(ctx: RequestContext, q: TeamAttendanceDto) {
     return this.db.tenant(requireTenant(ctx), async (c) => {
       const ids = await this.reportees(c);
-      return { ...(await this.registerIn(c, q, ids)), team: ids.length };
+      const month = this.monthOf(q.month);
+      const from = q.from ?? (q.to ? monthStart(q.to) : month);
+      const to = q.to ?? (q.from ? lastOf(q.from) : lastOf(month));
+      const span = daysBetween(from, to) + 1;
+      const employees = ids.length
+        ? (
+            await c.query<{ id: string; name: string; code: string }>(
+              `SELECT id::text, display_name AS name, employee_code AS code FROM employees
+                WHERE id = ANY($1::bigint[]) ORDER BY display_name, employee_code`,
+              [ids],
+            )
+          ).rows
+        : [];
+      const range = `${dmy(from)} to ${dmy(to)}`;
+      if (q.employeeId) {
+        // one of my reportees, day by day (the old screen's Reporties Attendance)
+        const who =
+          employees.find((e) => e.id === q.employeeId) ??
+          fail('This employee does not report to you', 404);
+        if (span > 92) fail('Pick at most 92 days for one employee');
+        const all = await this.daysOf(c, who.id, from, to);
+        if (q.format)
+          return leaveReportFile({
+            format: q.format,
+            head: await purchaseHead(c, this.storage),
+            name: 'Reporties attendance',
+            slug: `Reporties-attendance-${who.code}`,
+            words: `${who.name} (${who.code}) · ${range}`,
+            table: {
+              columns: [
+                { label: 'S. no.', type: 'number', width: 0.6 },
+                { label: 'Date', type: 'date', width: 1.4 },
+                { label: 'Day', width: 1.4 },
+                { label: 'Attendance', width: 2.4 },
+                { label: 'In time', width: 0.9, center: true },
+                { label: 'Out time', width: 0.9, center: true },
+                { label: 'Hours', type: 'number', width: 0.8 },
+                { label: 'Late / early', width: 1.8 },
+                { label: 'Remark', width: 3 },
+              ],
+              rows: all.map((d, i) => [
+                i + 1,
+                d.day,
+                d.weekday,
+                d.code ? `${d.code}${d.words ? ` ${d.words}` : ''}` : '',
+                d.in ?? '',
+                d.out ?? '',
+                d.worked,
+                d.lateEarly,
+                d.remark ?? '',
+              ]),
+            },
+            signs: await preparedChecked(c, (k) => this.storage.read(k)),
+          });
+        return {
+          mode: 'days' as const,
+          from,
+          to,
+          team: ids.length,
+          employees,
+          employee: who,
+          days: all.slice((q.page - 1) * q.size, q.page * q.size),
+          totals: dayTotals(all),
+          total: all.length,
+          page: q.page,
+          size: q.size,
+        };
+      }
+      // all my reportees: a column a day
+      if (span > 31)
+        fail('Pick at most 31 days for all employees, or one employee for up to 92 days');
+      const reg = await this.registerIn(
+        c,
+        { page: q.format ? 1 : q.page, size: q.format ? 10000 : q.size } as RegisterMonthDto,
+        ids,
+        { from, to },
+      );
+      if (q.format) {
+        const heads = ['P', 'HD', 'A', 'WO', 'H', ...reg.types, 'Late', 'Miss'];
+        const keys = ['P', 'HD', 'A', 'WO', 'H', ...reg.types, 'late', 'missing'];
+        return leaveReportFile({
+          format: q.format,
+          head: await purchaseHead(c, this.storage),
+          name: 'Reporties attendance',
+          slug: 'Reporties-attendance',
+          words: `${range} · L late, M a punch missing, * set by hand`,
+          table: {
+            columns: [
+              { label: 'Employee', width: 3 },
+              ...reg.dates.map((d) => ({
+                label: `${d.slice(8, 10)} ${WEEK2[new Date(`${d}T00:00:00Z`).getUTCDay()]!}`,
+                width: 0.75,
+                center: true,
+              })),
+              ...heads.map((h) => ({ label: h, type: 'number' as const, width: 0.7 })),
+            ],
+            rows: reg.rows.map((r) => [
+              `${r.employee.name} (${r.employee.code})`,
+              ...r.cells.map((x) =>
+                x.code === '·'
+                  ? ''
+                  : `${x.code}${'late' in x && x.late ? 'L' : ''}${'missing' in x && x.missing ? 'M' : ''}${'manual' in x && x.manual ? '*' : ''}`,
+              ),
+              ...keys.map((k) => r.totals[k] ?? 0),
+            ]),
+            records: reg.rows.length,
+            paper: { a3: true, fontSize: 6 },
+          },
+          signs: await preparedChecked(c, (k) => this.storage.read(k)),
+        });
+      }
+      return { mode: 'grid' as const, ...reg, team: ids.length, employees };
     });
   }
 
-  private async registerIn(c: PoolClient, q: RegisterMonthDto, only: string[] | null) {
-    const month = this.monthOf(q.month);
-    const end = addDays(monthStart(addDays(month, 32)), -1);
+  /** Every day of one employee From–To: what it was, the punches, late / early, the remark. */
+  private async daysOf(c: PoolClient, emp: string, from: string, to: string) {
+    const rows = await c.query<DayRow>(
+      `SELECT a.id::text, a.employee_id::text, a.day::text, a.day_type, a.leave_type_id::text, t.code AS leave_code, a.leave_portion::text,
+              t.loss_of_pay, a.in_at, a.out_at, a.worked_hours::text, a.ot_hours::text, a.late_minutes, a.early_minutes, a.manual,
+              a.source, a.trace, a.remark
+         FROM staff_attendance_days a LEFT JOIN staff_leave_types t ON t.id = a.leave_type_id
+        WHERE a.employee_id = $1 AND a.day BETWEEN $2::date AND $3::date`,
+      [emp, from, to],
+    );
+    const miss = new Set(
+      (
+        await c.query<{ day: string }>(
+          `SELECT day::text FROM staff_missing_punches
+            WHERE employee_id = $1 AND day BETWEEN $2::date AND $3::date AND status IN ('pending', 'used')`,
+          [emp, from, to],
+        )
+      ).rows.map((m) => m.day),
+    );
+    const by = new Map(rows.rows.map((d) => [d.day, d]));
+    const today = istToday();
+    const out = [];
+    for (let day = from; day <= to; day = addDays(day, 1)) {
+      const d = by.get(day);
+      const half = !!d && d.leave_portion !== null && Number(d.leave_portion) < 1;
+      out.push({
+        day,
+        weekday: WEEKDAY_LONG[new Date(`${day}T00:00:00Z`).getUTCDay()]!,
+        dayType: d?.day_type ?? null,
+        code: d
+          ? d.day_type === 'LV'
+            ? `${d.loss_of_pay ? 'LOP' : (d.leave_code ?? 'LV')}${half ? '½' : ''}`
+            : d.day_type
+          : day < today
+            ? '·'
+            : '',
+        words: d ? (TYPE_WORDS[d.day_type] ?? null) : day < today ? 'Not worked out yet' : null,
+        in: d ? hm(d.in_at) : null,
+        out: d ? hm(d.out_at) : null,
+        worked: d?.worked_hours ? Number(d.worked_hours) : null,
+        late: d?.late_minutes ?? 0,
+        early: d?.early_minutes ?? 0,
+        lateEarly: [
+          d?.late_minutes ? `late ${String(d.late_minutes)} min` : null,
+          d?.early_minutes ? `early ${String(d.early_minutes)} min` : null,
+        ]
+          .filter(Boolean)
+          .join(' · '),
+        missing: miss.has(day),
+        manual: !!d && d.manual && d.source !== 'import',
+        remark: d?.remark ?? null,
+      });
+    }
+    return out;
+  }
+
+  private async registerIn(
+    c: PoolClient,
+    q: RegisterMonthDto,
+    only: string[] | null,
+    /** any range within a month or across two (My team's attendance); else q's month */
+    range?: { from: string; to: string },
+  ) {
+    const month = range ? monthStart(range.from) : this.monthOf(q.month);
+    const start = range?.from ?? month;
+    const end = range?.to ?? addDays(monthStart(addDays(month, 32)), -1);
     const where = `WHERE e.deleted_at IS NULL AND e.status = 'active'
           AND ($1::bigint IS NULL OR e.id = $1) AND ($2::text IS NULL OR lower(e.department) = lower($2))
           AND ($3::text IS NULL OR e.display_name ILIKE '%' || $3 || '%' OR e.employee_code ILIKE '%' || $3 || '%')
@@ -313,7 +510,7 @@ export class AttendanceService implements OnModuleInit {
                       a.late_minutes, a.early_minutes, a.manual, a.source, a.trace, a.remark
                  FROM staff_attendance_days a LEFT JOIN staff_leave_types t ON t.id = a.leave_type_id
                 WHERE a.employee_id = ANY($1::bigint[]) AND a.day BETWEEN $2::date AND $3::date`,
-            [ids, month, end],
+            [ids, start, end],
           )
         ).rows
       : [];
@@ -322,7 +519,7 @@ export class AttendanceService implements OnModuleInit {
           await c.query<{ employee_id: string; day: string }>(
             `SELECT employee_id::text, day::text FROM staff_missing_punches
                 WHERE employee_id = ANY($1::bigint[]) AND day BETWEEN $2::date AND $3::date AND status IN ('pending', 'used')`,
-            [ids, month, end],
+            [ids, start, end],
           )
         ).rows
       : [];
@@ -345,7 +542,7 @@ export class AttendanceService implements OnModuleInit {
       )
     ).rows[0];
     const dates: string[] = [];
-    for (let d = month; d <= end; d = addDays(d, 1)) dates.push(d);
+    for (let d = start; d <= end; d = addDays(d, 1)) dates.push(d);
     const today = istToday();
     const byEmp = new Map<string, DayRow[]>();
     for (const d of days) byEmp.set(d.employee_id, [...(byEmp.get(d.employee_id) ?? []), d]);
@@ -405,6 +602,8 @@ export class AttendanceService implements OnModuleInit {
     return {
       month,
       monthWords: monthWords(month),
+      from: start,
+      to: end,
       dates,
       types: types.map((t) => t.code),
       rows,

@@ -1564,15 +1564,17 @@ export class LeaveService implements OnModuleInit {
           policy: pol?.name ?? null,
         });
       }
+      // the leave touching From–To (either end open)
+      const touches = `($2::date IS NULL OR r.to_date >= $2::date) AND ($3::date IS NULL OR r.from_date <= $3::date)`;
       const total = (
         await c.query<{ n: number }>(
-          `SELECT count(*)::int AS n FROM staff_leave_requests WHERE employee_id = $1`,
-          [me],
+          `SELECT count(*)::int AS n FROM staff_leave_requests r WHERE r.employee_id = $1 AND ${touches}`,
+          [me, q.from ?? null, q.to ?? null],
         )
       ).rows[0]!.n;
       const rows = await c.query<ReqRow>(
-        `${REQ} WHERE r.employee_id = $1 ORDER BY r.from_date DESC, r.id DESC LIMIT $2 OFFSET $3`,
-        [me, q.size, (q.page - 1) * q.size],
+        `${REQ} WHERE r.employee_id = $1 AND ${touches} ORDER BY r.from_date DESC, r.id DESC LIMIT $4 OFFSET $5`,
+        [me, q.from ?? null, q.to ?? null, q.size, (q.page - 1) * q.size],
       );
       return {
         employee: { id: e.id, name: e.name, code: e.code, department: e.department },
@@ -1589,10 +1591,20 @@ export class LeaveService implements OnModuleInit {
             maxDays: t.max_days === null ? null : Number(t.max_days),
             approvedAtOnce: t.auto,
           })),
-        rows: rows.rows.map((r) => this.shape(r)),
+        rows: rows.rows.map((r) => ({
+          ...this.shape(r),
+          // what I may do from the list (as on the leave's own page)
+          can: {
+            withdraw: r.status === 'pending' && !r.linked_request_id,
+            requestCancel:
+              r.status === 'approved' && r.cancel_status !== 'pending' && !r.linked_request_id,
+          },
+        })),
         total,
         page: q.page,
         size: q.size,
+        from: q.from ?? null,
+        to: q.to ?? null,
         waiting,
         can: { apply: this.has(ctx, LEAVE_OWN), office: this.isOffice(ctx) },
       };

@@ -1,8 +1,12 @@
 import type { NextRequest } from 'next/server';
 import { fileFrom } from '@/lib/file-proxy';
 
-/** All my leave as Excel or PDF. */
+const DAY = /^\d{4}-\d{2}-\d{2}$/;
+
+/** My leave touching From–To (or all of it) as Excel or PDF. */
 export async function GET(req: NextRequest) {
-  const format = req.nextUrl.searchParams.get('format') === 'pdf' ? 'pdf' : 'xlsx';
-  return fileFrom(`/leave/self/leave-file?format=${format}`);
+  const sp = req.nextUrl.searchParams;
+  const q = new URLSearchParams({ format: sp.get('format') === 'pdf' ? 'pdf' : 'xlsx' });
+  for (const k of ['from', 'to']) if (DAY.test(sp.get(k) ?? '')) q.set(k, sp.get(k)!);
+  return fileFrom(`/leave/self/leave-file?${q.toString()}`);
 }

@@ -232,9 +232,29 @@ Download the sheet, fill it, **Check**, then **Save** the good rows.
 each day with IN, OUT, hours, late or early — and the corrections you asked, with where each waits.
 
 **My team's attendance** (Employee leave & attendance → My team's attendance; staff app → My team's attendance): a reporting
-manager sees the month of each person who reports to them (the reporting manager on this year's posting)
+manager sees the days of each person who reports to them (the reporting manager on this year's posting)
 and opens their days. When leave comes off a past day (cancelled, shortened), the day is worked out again
 from its punches, or becomes a weekly off, a holiday or absent — never left blank.
+
+### The tabs of My leave
+
+Under the leave cards, **My leave** has four tabs. Each list shows **Records per page** (25, 50 or 100),
+"Showing 1 – 50 of N results", the page numbers, and **Excel** and **PDF** of everything the filters
+match (the letterhead, the filters, Prepared by and Checked by).
+
+- **My Attendance**: every day of the month, with Regularise on a past day.
+- **My Leave**: your leave touching **From Date – To Date** (it opens on this leave year, 1 April to
+  31 March) — Leave Id, type, the dates, the attachment, half day, reason, applied, **Action By** and
+  **Action Date** (System for leave the school deducted), and **Actions**: View, **Withdraw** while it
+  waits (the days come back), **Ask to cancel** once approved (it goes to your approvers).
+- **Reporties Leave**: filters **Search Employee**, **Leave Type**, **Status**, **From – To**. Status
+  opens on **Waiting with me**: leave and cancellations waiting at your approval level, from anyone the
+  rules send to you — **Approve** acts at once, **Reject** asks the reason the employee is told. Any other
+  status shows the leave of the staff who report to you. **On Behalf?** says Yes when the office entered
+  the leave, System when the school deducted it (late marks, missing punches, absence).
+- **Reporties Attendance**: **Employee**, **From – To** (it opens on the 1st of this month to today). All
+  employees: a column a day, up to 31 days; one employee: their days one by one (date, day, attendance,
+  in, out, hours, remark), up to 92 days.
 
 ## The dashboard and the reports (Employee leave & attendance → Leave dashboard, Leave & attendance reports)
 

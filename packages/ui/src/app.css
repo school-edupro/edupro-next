@@ -15102,3 +15102,82 @@ button.ep-shiftcal__cell:focus-visible {
 .ep-myleave__filter .ep-field {
   min-width: 12rem;
 }
+
+/* My leave's lists (My Leave, Reporties Leave, Reporties Attendance), as the old screens: records per page
+   and the count over the table, numbered pages, the leave's dates as chips */
+.ep-listbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-2) var(--sp-4);
+  margin-block: var(--sp-3);
+}
+.ep-listbar__sizes,
+.ep-listbar__end {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-2);
+}
+.ep-listbar__count {
+  margin: 0;
+  font-weight: var(--fw-semibold);
+  color: var(--text-heading);
+}
+.ep-pages {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--sp-1);
+  margin-block: var(--sp-2);
+  padding: 0;
+  list-style: none;
+}
+.ep-pages a,
+.ep-pages span {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 2.25rem;
+  min-height: 2.25rem;
+  padding: 0 var(--sp-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-card);
+  color: var(--text-heading);
+  text-decoration: none;
+}
+.ep-pages a:hover {
+  background: var(--surface-band);
+}
+.ep-pages a[aria-current='page'],
+.ep-pages a[aria-current='true'] {
+  background: var(--action-primary);
+  border-color: var(--action-primary);
+  color: var(--text-inverse);
+}
+.ep-pages span {
+  color: var(--text-muted);
+}
+.ep-datechips {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--sp-1);
+}
+.ep-datechip {
+  display: inline-block;
+  padding: 0 var(--sp-2);
+  border-radius: var(--radius-sm);
+  background: var(--status-warning-bg);
+  color: var(--status-warning-text);
+  font-size: var(--fs-small);
+  font-weight: var(--fw-semibold);
+  white-space: nowrap;
+}
+.ep-rowacts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-1);
+}

@@ -287,15 +287,20 @@ export async function applyLeave(fd: FormData): Promise<ApplyResult> {
 }
 
 const reqPath = (id: string) => `/leave/requests/${id}`;
-const done = (id: string, detail: string): never =>
-  redirect(`${reqPath(id)}?ok=1&detail=${encodeURIComponent(detail)}`);
+/** The list a row was acted on from (My leave's tabs, with their filters), to come back to; else none. */
+const listOf = (fd: FormData) => {
+  const b = String(fd.get('back') ?? '');
+  return /^\/leave\?[\w=&%.+-]{1,500}$/.test(b) ? b : null;
+};
+const done = (id: string, detail: string, list?: string | null): never =>
+  redirect(`${list ?? reqPath(id)}${list ? '&' : '?'}ok=1&detail=${encodeURIComponent(detail)}`);
 
-async function act(id: string, path: string, body: unknown): Promise<void> {
+async function act(id: string, path: string, body: unknown, list?: string | null): Promise<void> {
   if (!okId(id)) return;
   try {
     await apiFetch(`${reqPath(id)}/${path}`, { method: 'POST', body: JSON.stringify(body) });
   } catch (e) {
-    if (e instanceof ApiError) back(reqPath(id), e);
+    if (e instanceof ApiError) back(list ?? reqPath(id), e);
     throw e;
   }
   revalidatePath('/leave');
@@ -305,27 +310,32 @@ async function act(id: string, path: string, body: unknown): Promise<void> {
 
 export async function decideLeave(id: string, fd: FormData) {
   const outcome = fd.get('outcome') === 'rejected' ? 'rejected' : 'approved';
-  await act(id, 'decide', { outcome, note: String(fd.get('note') ?? '').trim() });
-  done(id, outcome === 'approved' ? 'Approved.' : 'Not approved: the employee is told.');
+  const list = listOf(fd);
+  await act(id, 'decide', { outcome, note: String(fd.get('note') ?? '').trim() }, list);
+  done(id, outcome === 'approved' ? 'Approved.' : 'Not approved: the employee is told.', list);
 }
 
 export async function decideLeaveCancel(id: string, fd: FormData) {
   const outcome = fd.get('outcome') === 'rejected' ? 'rejected' : 'approved';
-  await act(id, 'cancel-decide', { outcome, note: String(fd.get('note') ?? '').trim() });
+  const list = listOf(fd);
+  await act(id, 'cancel-decide', { outcome, note: String(fd.get('note') ?? '').trim() }, list);
   done(
     id,
     outcome === 'approved' ? 'The cancellation is approved.' : 'The cancellation is not approved.',
+    list,
   );
 }
 
 export async function withdrawLeave(id: string, fd: FormData) {
-  await act(id, 'withdraw', { reason: String(fd.get('reason') ?? '').trim() });
-  done(id, 'Withdrawn: the days are given back.');
+  const list = listOf(fd);
+  await act(id, 'withdraw', { reason: String(fd.get('reason') ?? '').trim() }, list);
+  done(id, 'Withdrawn: the days are given back.', list);
 }
 
 export async function askCancelLeave(id: string, fd: FormData) {
-  await act(id, 'cancel-request', { reason: String(fd.get('reason') ?? '').trim() });
-  done(id, 'The cancellation is sent to your approvers.');
+  const list = listOf(fd);
+  await act(id, 'cancel-request', { reason: String(fd.get('reason') ?? '').trim() }, list);
+  done(id, 'The cancellation is sent to your approvers.', list);
 }
 
 export async function cancelLeave(id: string, fd: FormData) {

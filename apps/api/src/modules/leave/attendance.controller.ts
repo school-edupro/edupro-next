@@ -15,6 +15,7 @@ import {
   MyMonthDto,
   ReasonDto,
   RegisterMonthDto,
+  TeamAttendanceDto,
   RegulariseDto,
   RunDto,
   SheetDto,
@@ -63,9 +64,12 @@ export class AttendanceController {
   }
 
   @Get('team')
-  @ApiOperation({ summary: 'My team’s attendance: the register of the staff reporting to me' })
+  @ApiOperation({
+    summary:
+      'My team’s attendance: all my reportees a column a day (up to 31 days), or one of them day by day (up to 92); Excel or PDF',
+  })
   @AuthenticatedOnly()
-  team(@ReqCtx() ctx: RequestContext, @Query() q: RegisterMonthDto) {
+  team(@ReqCtx() ctx: RequestContext, @Query() q: TeamAttendanceDto) {
     return this.att.team(ctx, q);
   }
 

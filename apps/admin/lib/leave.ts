@@ -244,10 +244,13 @@ export interface MyLeave {
     policy: string | null;
   }>;
   types: LeaveFormType[];
-  rows: LeaveRequest[];
+  /** my leave touching From–To, with what I may do from the list */
+  rows: Array<LeaveRequest & { can: { withdraw: boolean; requestCancel: boolean } }>;
   total: number;
   page: number;
   size: number;
+  from: string | null;
+  to: string | null;
   waiting: number;
   can: { apply: boolean; office: boolean };
 }
@@ -365,8 +368,56 @@ export interface AttendanceRegister {
   lock: { locked: boolean; at: string; by: string | null; unlockReason: string | null } | null;
   mayLock: boolean;
   departments: string[];
+  /** the range shown (a month, or My team's From–To) */
+  from?: string;
+  to?: string;
   /** the team view: how many report to me */
   team?: number;
+}
+
+/** My team's attendance (My leave → Reporties Attendance): all of them a column a day, or one day by day. */
+export type TeamAttendance =
+  | (AttendanceRegister & {
+      mode: 'grid';
+      from: string;
+      to: string;
+      team: number;
+      employees: TeamEmployee[];
+    })
+  | {
+      mode: 'days';
+      from: string;
+      to: string;
+      team: number;
+      employees: TeamEmployee[];
+      employee: TeamEmployee;
+      days: TeamDay[];
+      /** P, HD, A, WO, H, the leave codes, late, missing over the range */
+      totals: Record<string, number>;
+      total: number;
+      page: number;
+      size: number;
+    };
+export interface TeamEmployee {
+  id: string;
+  name: string;
+  code: string;
+}
+export interface TeamDay {
+  day: string;
+  weekday: string;
+  dayType: string | null;
+  code: string;
+  words: string | null;
+  in: string | null;
+  out: string | null;
+  worked: number | null;
+  late: number;
+  early: number;
+  lateEarly: string;
+  missing: boolean;
+  manual: boolean;
+  remark: string | null;
 }
 
 export interface AttendanceDay {
@@ -823,13 +874,28 @@ export interface ShiftLogPage {
   page: { page: number; size: number; total: number };
 }
 
-/** The leave of the staff reporting to me that touches a month (My leave → Reporties leave). */
+/**
+ * My leave → Reporties leave: what waits at my approval level (`waiting`), or my reportees' leave, with the
+ * filters' lists; each row says whether I decide it here (a leave, or its cancellation).
+ */
 export interface TeamLeave {
-  month: string;
-  monthWords: string;
+  from: string | null;
+  to: string | null;
+  status: string | null;
   team: number;
-  rows: LeaveRequest[];
+  /** leave and cancellations waiting at my level */
+  waiting: number;
+  rows: Array<
+    LeaveRequest & {
+      what: 'leave' | 'cancellation';
+      can: { decide: boolean; decideCancel: boolean };
+    }
+  >;
   total: number;
   page: number;
   size: number;
+  filters: {
+    employees: TeamEmployee[];
+    types: Array<{ id: string; code: string; name: string }>;
+  };
 }

@@ -2,19 +2,21 @@ import type { ReactNode } from 'react';
 import { Badge, Breadcrumbs, PageHeader } from '@edupro/ui';
 import { notFound } from 'next/navigation';
 import { Notice } from '@/components/Notice';
-import { Pager, PerPage, pageSizeOf } from '@/components/Pager';
+import { pageSizeOf } from '@/components/Pager';
 import { DialogButton } from '@/components/leave/DialogButton';
 import { LeaveApplyForm } from '@/components/leave/LeaveApplyForm';
-import { TeamAttendanceGrid } from '@/components/leave/TeamAttendanceGrid';
+import { MyLeaveTab } from '@/components/leave/MyLeaveTab';
+import { TeamAttendanceTab } from '@/components/leave/TeamAttendanceTab';
+import { TeamLeaveTab } from '@/components/leave/TeamLeaveTab';
 import { ApiError, apiFetch, getMe } from '@/lib/api';
 import {
   LEAVE_STATUS,
   dmy,
-  leaveDates,
-  type AttendanceRegister,
   type LeaveStatus,
   type MyAttendance,
   type MyLeave,
+  type TeamAttendance,
+  type TeamEmployee,
   type TeamLeave,
 } from '@/lib/leave';
 import { applyLeave } from '@/lib/leave-actions';
@@ -49,14 +51,20 @@ const EDGE = [
   'var(--status-info)',
   'var(--status-success)',
 ];
-const STATUSES = Object.keys(LEAVE_STATUS) as LeaveStatus[];
+const TEAM_STATUSES = ['waiting', 'all', ...Object.keys(LEAVE_STATUS)];
+const DAY = /^\d{4}-\d{2}-\d{2}$/;
+const ID = /^\d{1,18}$/;
 const addDays = (d: string, n: number) => {
   const t = new Date(`${d}T00:00:00Z`);
   t.setUTCDate(t.getUTCDate() + n);
   return t.toISOString().slice(0, 10);
 };
-const NOBODY =
-  'Nobody reports to you this year (the reporting manager on each employee’s posting).';
+/** the leave year a day is in: 1 April to 31 March, the year balances run on */
+const leaveYear = (day: string) => {
+  const y = Number(day.slice(0, 4)) - (Number(day.slice(5, 7)) < 4 ? 1 : 0);
+  return { from: `${String(y)}-04-01`, to: `${String(y + 1)}-03-31` };
+};
+const lastOf = (d: string) => addDays(`${addDays(`${d.slice(0, 7)}-01`, 32).slice(0, 7)}-01`, -1);
 
 /**
  * My leave and attendance on one page, as in the earlier module's Employee Leave / Attendance: the leave
@@ -76,51 +84,106 @@ export default async function MyLeavePage({
   const year = /^\d{4}$/.test(sp.year ?? '') ? sp.year! : today.slice(0, 4);
   const mon = /^(0[1-9]|1[0-2])$/.test(sp.month ?? '') ? sp.month! : today.slice(5, 7);
   const month = /^\d{4}-(0[1-9]|1[0-2])$/.test(sp.month ?? '') ? sp.month! : `${year}-${mon}`;
-  const size = pageSizeOf(sp.size ?? '25');
+  const size = pageSizeOf(sp.size);
   const page = Math.max(1, Number(sp.page) || 1);
-  const status = STATUSES.includes(sp.status as LeaveStatus) ? (sp.status as LeaveStatus) : '';
-  const q = (sp.q ?? '').trim().slice(0, 80);
+  /** a date filter: as given (empty for an open end) once it is in the address, else the default */
+  const given = (k: string, dflt: string) =>
+    k in sp ? (DAY.test(sp[k] ?? '') ? sp[k]! : '') : dflt;
+  const fy = leaveYear(today);
+  // My Leave and Reporties Leave open on this leave year; Reporties Attendance on this month to today
+  // (or the month asked, as the old links do)
+  const lf = { from: given('from', fy.from), to: given('to', fy.to) };
+  const af = {
+    from: given(
+      'from',
+      sp.month && /^\d{4}-\d{2}$/.test(sp.month) ? `${sp.month}-01` : `${today.slice(0, 7)}-01`,
+    ),
+    to: given('to', sp.month && /^\d{4}-\d{2}$/.test(sp.month) ? lastOf(`${sp.month}-01`) : today),
+  };
+  const employeeId = ID.test(sp.employeeId ?? '') ? sp.employeeId! : '';
+  const leaveTypeId = ID.test(sp.leaveTypeId ?? '') ? sp.leaveTypeId! : '';
+  const status = TEAM_STATUSES.includes(sp.status ?? '') ? sp.status! : 'waiting';
 
   let d: MyLeave;
   let att: MyAttendance | null = null;
   let teamLeave: TeamLeave | null = null;
-  let teamAtt: AttendanceRegister | null = null;
+  let teamAtt: TeamAttendance | null = null;
+  let attProblem: string | null = null;
+  let leaveProblem: string | null = null;
   let team = 0;
+  let waitingWithMe = 0;
+  /** a range the API refuses (From after To, too many days) says why on the tab, not as an error page */
+  const refused = (e: unknown) => {
+    if (e instanceof ApiError && e.status === 400) {
+      const errs = e.problem.errors as Array<{ message?: string }> | undefined;
+      return (Array.isArray(errs) ? errs.map((x) => x.message).find(Boolean) : null) ?? e.message;
+    }
+    throw e;
+  };
+  const q = (o: Record<string, string>) =>
+    new URLSearchParams(Object.entries(o).filter(([, v]) => v !== '')).toString();
   try {
-    const paged = `page=${String(page)}&size=${size}`;
-    const tq = new URLSearchParams({ month, page: String(page), size });
-    if (status) tq.set('status', status);
-    if (q) tq.set('q', q);
-    [d, att, teamLeave, teamAtt, team] = await Promise.all([
-      apiFetch<MyLeave>(`/leave/mine?${tab === 'leave' ? paged : 'size=25'}`),
+    [d, att, teamLeave, teamAtt, [team, waitingWithMe]] = await Promise.all([
+      apiFetch<MyLeave>(
+        `/leave/mine?${tab === 'leave' ? q({ page: String(page), size, from: lf.from, to: lf.to }) : 'size=25'}`,
+      ).catch((e: unknown) => {
+        if (tab !== 'leave') throw e;
+        leaveProblem = refused(e);
+        return apiFetch<MyLeave>('/leave/mine?size=25');
+      }),
       tab === 'attendance'
         ? apiFetch<MyAttendance>(`/staff-attendance/mine?month=${month}`)
         : Promise.resolve(null),
       tab === 'team-leave'
-        ? apiFetch<TeamLeave>(`/leave/self/team?${tq.toString()}`)
+        ? apiFetch<TeamLeave>(
+            `/leave/self/team?${q({
+              page: String(page),
+              size,
+              from: lf.from,
+              to: lf.to,
+              status: status === 'all' ? '' : status,
+              employeeId,
+              leaveTypeId,
+            })}`,
+          ).catch((e: unknown) => {
+            leaveProblem = refused(e);
+            return null;
+          })
         : Promise.resolve(null),
       tab === 'team-attendance'
-        ? apiFetch<AttendanceRegister>(`/staff-attendance/team?month=${month}&${paged}`)
+        ? apiFetch<TeamAttendance>(
+            `/staff-attendance/team?${q({ page: String(page), size, from: af.from, to: af.to, employeeId })}`,
+          ).catch((e: unknown) => {
+            attProblem = refused(e);
+            return null;
+          })
         : Promise.resolve(null),
-      apiFetch<{ team: number }>('/leave/menu')
-        .then((r) => r.team)
-        .catch(() => 0),
+      apiFetch<{ team: number; leave: number }>('/leave/menu')
+        .then((r) => [r.team, r.leave] as const)
+        .catch(() => [0, 0] as const),
     ]);
   } catch (e) {
     if (e instanceof ApiError && e.status === 403) notFound();
     throw e;
   }
+  // the reportees for the attendance filter when the range was refused
+  const teamList: TeamEmployee[] =
+    tab === 'team-attendance' && !teamAtt && team
+      ? await apiFetch<TeamAttendance>('/staff-attendance/team?size=25')
+          .then((r) => r.employees)
+          .catch(() => [])
+      : [];
   const office = me.permissions.includes('leave.office.manage');
   const reports = me.permissions.includes('leave.report.view');
-  const link = (p: number) => {
-    const k = new URLSearchParams({ tab });
-    if (tab !== 'leave') k.set('month', month);
-    if (size !== '25') k.set('size', size);
-    if (status && tab === 'team-leave') k.set('status', status);
-    if (q && tab === 'team-leave') k.set('q', q);
-    if (p > 1) k.set('page', String(p));
-    return `/leave?${k.toString()}`;
-  };
+  /** a tab's page at a size, its filters kept (an empty date is an open end, kept as such) */
+  const link =
+    (params: Record<string, string>) =>
+    (p: number, sz: string = size) => {
+      const k = new URLSearchParams({ tab, ...params });
+      if (sz !== '50') k.set('size', sz);
+      if (p > 1) k.set('page', String(p));
+      return `/leave?${k.toString()}`;
+    };
   const balance = new Map(d.balances.map((b) => [b.typeId, b]));
   const years = Array.from({ length: 4 }, (_, i) => String(Number(today.slice(0, 4)) - 2 + i));
 
@@ -409,10 +472,14 @@ export default async function MyLeavePage({
               role="tab"
               aria-selected={tab === t.id}
               className="ep-tabs__tab"
-              href={`/leave?tab=${t.id}${t.id === 'leave' ? '' : `&month=${month}`}`}
+              href={`/leave?tab=${t.id}${t.id === 'attendance' ? `&month=${month}` : ''}`}
             >
               {t.label}
-              {t.id.startsWith('team') && team ? ` (${String(team)})` : ''}
+              {t.id === 'team-leave' && waitingWithMe
+                ? ` (${String(waitingWithMe)} waiting)`
+                : t.id === 'team-attendance' && team
+                  ? ` (${String(team)})`
+                  : ''}
             </a>
           ))}
         </div>
@@ -483,228 +550,41 @@ export default async function MyLeavePage({
       ) : null}
 
       {tab === 'leave' ? (
-        <section aria-label="My leave">
-          <form method="get" action="/leave" className="ep-grid__toolbar">
-            <input type="hidden" name="tab" value="leave" />
-            <PerPage id="ml-size" value={size} />
-            <button type="submit" className="ep-btn ep-btn--secondary ep-btn--sm">
-              Show
-            </button>
-          </form>
-          <div className="ep-table-wrap" tabIndex={0} role="region" aria-label="My leave list">
-            <table className="ep-table">
-              <thead>
-                <tr>
-                  <th scope="col">Leave</th>
-                  <th scope="col">Dates</th>
-                  <th scope="col" style={{ textAlign: 'right' }}>
-                    Days
-                  </th>
-                  <th scope="col">Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                {d.rows.length ? (
-                  d.rows.map((r) => (
-                    <tr key={r.id}>
-                      <td>
-                        <a href={`/leave/requests/${r.id}`}>{r.number}</a>
-                        <span className="ep-mr-col__desc">
-                          {r.leaveType.name} ({r.leaveType.code}) · applied{' '}
-                          {dmy(r.appliedAt.slice(0, 10))}
-                        </span>
-                      </td>
-                      <td>{leaveDates(r)}</td>
-                      <td style={{ textAlign: 'right' }}>{r.days}</td>
-                      <td>
-                        <Badge tone={LEAVE_STATUS[r.status].tone}>
-                          {LEAVE_STATUS[r.status].label}
-                        </Badge>
-                        {r.status === 'pending' && r.waitingWith ? (
-                          <span className="ep-mr-col__desc">with {r.waitingWith}</span>
-                        ) : null}
-                        {r.cancelStatus === 'pending' ? (
-                          <span className="ep-mr-col__desc">cancellation waiting</span>
-                        ) : null}
-                      </td>
-                    </tr>
-                  ))
-                ) : (
-                  <tr>
-                    <td colSpan={4}>
-                      {d.employee ? 'No leave yet.' : 'No leave for this sign-in.'}
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-          <Pager
-            page={d.page}
-            size={d.size}
-            total={d.total}
-            href={link}
-            noun="leave applications"
+        <>
+          {leaveProblem ? (
+            <p className="ep-alert ep-alert--warning" role="alert">
+              <span>{leaveProblem}</span>
+            </p>
+          ) : null}
+          <MyLeaveTab d={d} from={lf.from} to={lf.to} size={size} link={link(lf)} />
+        </>
+      ) : null}
+
+      {tab === 'team-leave' ? (
+        teamLeave ? (
+          <TeamLeaveTab
+            t={teamLeave}
+            f={{ employeeId, leaveTypeId, status, from: lf.from, to: lf.to, size }}
+            link={link({ ...lf, status, employeeId, leaveTypeId })}
           />
-        </section>
+        ) : (
+          <p className="ep-alert ep-alert--warning" role="alert">
+            <span>
+              {leaveProblem ?? 'The list could not be shown.'}{' '}
+              <a href="/leave?tab=team-leave">Start again</a>
+            </span>
+          </p>
+        )
       ) : null}
 
-      {tab === 'team-leave' && teamLeave ? (
-        <section aria-label="Reporties leave">
-          {monthForm(
-            'tl',
-            <>
-              <label className="ep-field" htmlFor="tl-status">
-                <span className="ep-field__label">Status</span>
-                <select id="tl-status" name="status" className="ep-select" defaultValue={status}>
-                  <option value="">All</option>
-                  {STATUSES.map((s) => (
-                    <option key={s} value={s}>
-                      {LEAVE_STATUS[s].label}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className="ep-field" htmlFor="tl-q">
-                <span className="ep-field__label">Employee</span>
-                <input
-                  id="tl-q"
-                  name="q"
-                  type="search"
-                  className="ep-input"
-                  maxLength={80}
-                  defaultValue={q}
-                  placeholder="Name or code"
-                />
-              </label>
-              <PerPage id="tl-size" value={size} />
-            </>,
-          )}
-          {!teamLeave.team ? (
-            <p className="ep-alert ep-alert--info" role="status">
-              <span>{NOBODY}</span>
-            </p>
-          ) : (
-            <>
-              <div className="ep-master__toolbar">
-                <div className="ep-master__count">
-                  {teamLeave.total} leave applications touching {teamLeave.monthWords} ·{' '}
-                  {teamLeave.team} staff report to you
-                </div>
-                <div className="ep-master__actions">
-                  {(['xlsx', 'pdf'] as const).map((f) => (
-                    <a
-                      key={f}
-                      className="ep-btn ep-btn--secondary ep-btn--sm"
-                      href={`/api/leave/team-leave-file?${new URLSearchParams({
-                        month,
-                        format: f,
-                        ...(status ? { status } : {}),
-                        ...(q ? { q } : {}),
-                      }).toString()}`}
-                      download
-                    >
-                      {f === 'xlsx' ? 'Excel' : 'PDF'}
-                    </a>
-                  ))}
-                </div>
-              </div>
-              <div
-                className="ep-table-wrap"
-                tabIndex={0}
-                role="region"
-                aria-label="Reporties leave list"
-              >
-                <table className="ep-table">
-                  <thead>
-                    <tr>
-                      <th scope="col">S.No.</th>
-                      <th scope="col">Employee</th>
-                      <th scope="col">Leave</th>
-                      <th scope="col">Dates</th>
-                      <th scope="col" style={{ textAlign: 'right' }}>
-                        Days
-                      </th>
-                      <th scope="col">Reason</th>
-                      <th scope="col">Status</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {teamLeave.rows.length ? (
-                      teamLeave.rows.map((r, i) => (
-                        <tr key={r.id}>
-                          <td>{(teamLeave.page - 1) * teamLeave.size + i + 1}</td>
-                          <td>
-                            <strong>{r.employee.name}</strong>
-                            <span className="ep-mr-col__desc">
-                              {r.employee.code}
-                              {r.employee.department ? ` · ${r.employee.department}` : ''}
-                            </span>
-                          </td>
-                          <td>
-                            <a href={`/leave/requests/${r.id}`}>{r.number}</a>
-                            <span className="ep-mr-col__desc">
-                              {r.leaveType.name} ({r.leaveType.code})
-                            </span>
-                          </td>
-                          <td>{leaveDates(r)}</td>
-                          <td style={{ textAlign: 'right' }}>{r.days}</td>
-                          <td>{r.reason}</td>
-                          <td>
-                            <Badge tone={LEAVE_STATUS[r.status].tone}>
-                              {LEAVE_STATUS[r.status].label}
-                            </Badge>
-                            {r.status === 'pending' && r.waitingWith ? (
-                              <span className="ep-mr-col__desc">with {r.waitingWith}</span>
-                            ) : null}
-                          </td>
-                        </tr>
-                      ))
-                    ) : (
-                      <tr>
-                        <td colSpan={7}>No leave in {teamLeave.monthWords}.</td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
-              <Pager
-                page={teamLeave.page}
-                size={teamLeave.size}
-                total={teamLeave.total}
-                href={link}
-                noun="leave applications"
-              />
-            </>
-          )}
-        </section>
-      ) : null}
-
-      {tab === 'team-attendance' && teamAtt ? (
-        <section aria-label="Reporties attendance">
-          {monthForm('ta', <PerPage id="ta-size" value={size} />)}
-          {!teamAtt.team ? (
-            <p className="ep-alert ep-alert--info" role="status">
-              <span>{NOBODY}</span>
-            </p>
-          ) : (
-            <>
-              <p className="ep-field__help">
-                {teamAtt.monthWords}: P present, HD half day, A absent, WO weekly off, H holiday,
-                the leave’s code; L late, M a punch missing, ✎ set by hand. Click a day to see its
-                punches.
-              </p>
-              <TeamAttendanceGrid d={teamAtt} />
-              <Pager
-                page={teamAtt.page}
-                size={teamAtt.size}
-                total={teamAtt.total}
-                href={link}
-                noun="staff"
-              />
-            </>
-          )}
-        </section>
+      {tab === 'team-attendance' ? (
+        <TeamAttendanceTab
+          a={teamAtt}
+          employees={teamList}
+          f={{ employeeId, from: af.from, to: af.to, size }}
+          link={link({ ...af, employeeId })}
+          problem={attProblem}
+        />
       ) : null}
     </>
   );

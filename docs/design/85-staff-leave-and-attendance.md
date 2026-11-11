@@ -434,6 +434,51 @@ Decided with the user: **both apps**, and **one set-up entry** (its section card
   drop once decided. Checked in a browser (dev-admin, dev-principal, dev-teacher; staff app dev-teacher):
   every entry opens, is the current one in its open group, and passes axe at 1280 and 375.
 
+## As built — the three tabs as the old screen (11 Nov 2026)
+
+Asked: My leave's Reporties Attendance with an employee and a From–To filter, Excel, PDF and pages;
+Reporties Leave and My Leave as the old module's screens, with Excel, PDF and pages. Benchmarked: Zoho
+People's leave list (date range, employee, leave type; export), greytHR's manager review (approve, or
+reject with a reason, from the list; Excel of the filtered list), Keka's team attendance (My Team; Excel
+or PDF over a date range). Decided with the user: **Waiting with me first, Approve / Reject in the row**;
+**a grid for all, a day list for one**; **My Leave is mine only** (the whole school stays in the Leave
+register); lists open on **this leave year**.
+
+- **Every list**: a filter card and Search; Records per page (25 / 50 / 100, links, so it changes at
+  once); "Showing 1 – 50 of N results"; numbered pages (Previous 1 2 3 … 12 Next); Excel and PDF of all
+  the filters match (`leaveReportFile`: letterhead, filters, Prepared by from the system and Checked by).
+  The filters stay in the address; an empty date is an open end. Shared pieces: `components/leave/
+ListBar.tsx`, `LeaveCells.tsx` (date chips, half day, date-time, status).
+- **My Leave** (`MyLeaveTab`): From / To (default 1 April – 31 March); Sr No, Leave Id, Leave Type, Days
+  (date chips and the count), Attachment (View / Download), Is Half Day, Reason, Applied Date, Action By
+  (System for the school's deductions), Action Date, Actions (View; Withdraw while waiting; Ask to cancel
+  once approved — each in a dialog, back to the list), Status (with whom it waits). API: `GET /leave/mine`
+  takes `from`, `to`; each row has `can.withdraw` / `can.requestCancel`; `GET /leave/self/leave-file`
+  takes `from`, `to`.
+- **Reporties Leave** (`TeamLeaveTab`): Search Employee, Leave Type, Status, From / To; the old screen's
+  columns (Sr.No., Leave Id, Emp Name, Applied Date, Attachment, Days, Is Half Day, Leave Type, On Behalf?
+  — Yes / System / Imported / No — On Behalf Created By, Reason, Action, Status). `status=waiting` is
+  every leave or cancellation with a step at my level (anyone's, as Leave waiting for me); any other
+  status, or none, is my reportees' leave plus what waits on me. A row says `what` (leave or cancellation)
+  and `can.decide` / `can.decideCancel`: Approve acts at once, Reject asks the reason. The tab shows how
+  many wait. API: `GET /leave/self/team` takes `from`, `to`, `employeeId`, `leaveTypeId`, `status`
+  (incl. `waiting`) and gives `filters` (the employees: reportees and whoever waits on me; the types).
+- **Reporties Attendance** (`TeamAttendanceTab`): Employee, From / To (default the 1st to today; an old
+  link's month is that whole month). All employees: the grid over the range (at most 31 days; A3 PDF);
+  one employee: day by day — S.No., Date, Day, Attendance, In, Out, Hours, Remark — with the range's
+  figures (at most 92 days; another's employee is refused, 404). API: `GET /staff-attendance/team` takes
+  `from`, `to`, `employeeId`, `format` and answers `mode: 'grid' | 'days'`; the staff app's My team still
+  gets the month grid.
+- A range the API refuses (From after To, too many days) is said on the tab, not as an error page.
+- Migration **0358**: every role with `leave.office.manage` may view stored files (the leave office opens
+  a leave's document; the leave_office role had no right to before).
+- Tests: `leave-gaps.e2e-spec.ts` — My Leave by dates and its row rights; Waiting with me equal to Leave
+  waiting for me (for the HOD, whom nobody reports to); the employee, type and date filters; the reporting
+  manager sees the reportee's leave but does not decide it; a cancellation waiting on the row; the files'
+  columns; the grid and the day list, their pages and limits; the leave office's file right. Browser
+  (dev-principal, dev-teacher): each tab's columns and defaults, the downloads, a refused range, old
+  month links, axe clean at 1280 and 375.
+
 ## The module is complete
 
 Phases A–E are built. What is left is the school's: the old database connection on the server, the read, the

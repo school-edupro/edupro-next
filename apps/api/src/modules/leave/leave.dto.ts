@@ -227,7 +227,15 @@ export const RegisterQuerySchema = z.object({
 });
 export class RegisterQueryDto extends createZodDto(RegisterQuerySchema) {}
 
-export const MineQuerySchema = z.object({ ...Page, size: Page.size.default(25) });
+/** A From–To range on a list (either end may be left open); From may not be after To. */
+const range = <T extends { from?: string; to?: string }>(d: T) =>
+  !d.from || !d.to || d.from <= d.to;
+const RANGE_MSG = { message: 'From must be on or before To', path: ['to'] };
+
+/** My leave: a page of it, the leave touching From–To (docs/design/85, "the three tabs as the old screen"). */
+export const MineQuerySchema = z
+  .object({ ...Page, size: Page.size.default(25), from: Day.optional(), to: Day.optional() })
+  .refine(range, RANGE_MSG);
 export class MineQueryDto extends createZodDto(MineQuerySchema) {}
 
 export const BalanceQuerySchema = z.object({
@@ -275,6 +283,22 @@ export const RegisterMonthSchema = z.object({
   ...Page,
 });
 export class RegisterMonthDto extends createZodDto(RegisterMonthSchema) {}
+
+/**
+ * My team's attendance: all my reportees as a grid (a column a day, up to 31 days), or one of them day by
+ * day (up to 92 days); From–To, or the month as before; Excel or PDF.
+ */
+export const TeamAttendanceSchema = z
+  .object({
+    month: Month.optional(),
+    from: Day.optional(),
+    to: Day.optional(),
+    employeeId: Id.optional(),
+    ...Page,
+    format: z.enum(['xlsx', 'pdf']).optional(),
+  })
+  .refine(range, RANGE_MSG);
+export class TeamAttendanceDto extends createZodDto(TeamAttendanceSchema) {}
 
 export const DayCorrectSchema = z.object({
   employeeId: Id,
@@ -589,19 +613,35 @@ export class ShiftLogDto extends createZodDto(ShiftLogSchema) {}
 
 // ---- My leave as one page: the reporties' leave, the downloads ---------------------------------------
 /** The leave of the staff reporting to me that touches a month, a page at a time; Excel or PDF. */
-export const TeamLeaveSchema = z.object({
-  month: Month.optional(),
-  status: z.enum(['pending', 'approved', 'rejected', 'withdrawn', 'cancelled']).optional(),
-  q: z.string().trim().max(80).optional(),
-  ...Page,
-  size: Page.size.default(25),
-  format: z.enum(['xlsx', 'pdf']).optional(),
-});
+/**
+ * Reporties leave: `waiting` is everything at my approval level (anyone's), the other statuses my
+ * reportees' leave; the leave touching From–To (or the month, as before).
+ */
+export const TeamLeaveSchema = z
+  .object({
+    month: Month.optional(),
+    from: Day.optional(),
+    to: Day.optional(),
+    employeeId: Id.optional(),
+    leaveTypeId: Id.optional(),
+    status: z
+      .enum(['waiting', 'pending', 'approved', 'rejected', 'withdrawn', 'cancelled'])
+      .optional(),
+    q: z.string().trim().max(80).optional(),
+    ...Page,
+    size: Page.size.default(25),
+    format: z.enum(['xlsx', 'pdf']).optional(),
+  })
+  .refine(range, RANGE_MSG);
 export class TeamLeaveDto extends createZodDto(TeamLeaveSchema) {}
 
 /** My leave or my month's attendance as a file. */
-export const MyFileSchema = z.object({
-  month: Month.optional(),
-  format: z.enum(['xlsx', 'pdf']).default('xlsx'),
-});
+export const MyFileSchema = z
+  .object({
+    month: Month.optional(),
+    from: Day.optional(),
+    to: Day.optional(),
+    format: z.enum(['xlsx', 'pdf']).default('xlsx'),
+  })
+  .refine(range, RANGE_MSG);
 export class MyFileDto extends createZodDto(MyFileSchema) {}

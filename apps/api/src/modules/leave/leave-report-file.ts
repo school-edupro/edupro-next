@@ -1,7 +1,31 @@
 import ExcelJS from 'exceljs';
+import type { PoolClient } from '@edupro/db';
 import type { LetterheadLogo } from '../../common/pdf/letterhead';
 import { tablePdf } from '../engagement/table-pdf';
-import type { SignBox } from '../purchase/purchase-doc-sign';
+import { blankBox, signerOf, type SignBox } from '../purchase/purchase-doc-sign';
+
+/** Prepared by (the signed-in person, from the system) and Checked by (to sign by hand). */
+export async function preparedChecked(
+  c: PoolClient,
+  read: (key: string) => Promise<Buffer>,
+): Promise<SignBox[]> {
+  const me = (
+    await c.query<{ id: string; name: string }>(
+      `SELECT u.id::text, COALESCE((SELECT e.display_name FROM employees e WHERE e.user_id = u.id AND e.deleted_at IS NULL LIMIT 1), u.display_name) AS name
+         FROM users u WHERE u.id = app.current_user_id()`,
+    )
+  ).rows[0];
+  return [
+    await signerOf(c, read, {
+      as: 'Prepared by',
+      name: me?.name ?? null,
+      userId: me?.id ?? null,
+      at: new Date(),
+      verb: 'Prepared on',
+    }),
+    blankBox('Checked by'),
+  ];
+}
 
 /** A column of a leave report: text, a count, a date (YYYY-MM-DD) or a time / hours already in words. */
 export interface ReportCol {

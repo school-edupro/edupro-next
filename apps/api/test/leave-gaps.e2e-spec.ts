@@ -752,6 +752,153 @@ describe('the leave module against its plan (e2e)', () => {
     expect(await menu(hod)).toMatchObject({ leave: m.leave - 1, corrections: m.corrections - 1 });
   });
 
+  it('the three tabs as the old screen: My Leave by dates; Reporties Leave waiting with me; Reporties Attendance a grid or day by day; files', async () => {
+    type Row = { id: string };
+    const ids2 = (rows: Row[]) => rows.map((r) => r.id).sort();
+    const a = (await apply(t1, { leaveTypeId: ids.CL, from: W(10, 0), to: W(10, 0) })).json();
+    const b = (await apply(t1, { leaveTypeId: ids.CL, from: W(10, 2), to: W(10, 3) })).json();
+    expect([a.status, b.status]).toEqual(['pending', 'pending']);
+    // My Leave: the leave touching From–To, and what I may do from the row
+    const one = (await call(t1, 'GET', `/leave/mine?from=${W(10, 0)}&to=${W(10, 1)}`)).json();
+    expect(one).toMatchObject({ total: 1, from: W(10, 0), to: W(10, 1) });
+    expect(one.rows[0]).toMatchObject({ id: a.id, can: { withdraw: true, requestCancel: false } });
+    expect((await call(t1, 'GET', `/leave/mine?from=${W(10, 3)}&to=${W(10, 2)}`)).statusCode).toBe(
+      400,
+    );
+    // Reporties Leave, waiting with me: the HOD's queue (nobody reports to the HOD), as Leave waiting for me
+    const queue = ids2((await call(hod, 'GET', '/leave/approvals')).json().rows);
+    const w = (await call(hod, 'GET', '/leave/self/team?status=waiting&size=100')).json();
+    expect(ids2(w.rows)).toEqual(queue);
+    expect(w).toMatchObject({ team: 0, waiting: queue.length, total: queue.length });
+    expect(w.rows.find((r: Row) => r.id === a.id)).toMatchObject({
+      what: 'leave',
+      can: { decide: true, decideCancel: false },
+    });
+    expect(ids2(w.filters.employees)).toContain(ids.T1);
+    expect(ids2(w.filters.types)).toContain(ids.CL);
+    // the employee, leave type and date filters
+    const range = `from=${W(10, 0)}&to=${W(10, 3)}`;
+    expect(
+      ids2(
+        (
+          await call(hod, 'GET', `/leave/self/team?status=waiting&employeeId=${ids.T1!}&${range}`)
+        ).json().rows,
+      ),
+    ).toEqual([a.id, b.id].sort());
+    expect(
+      (
+        await call(
+          hod,
+          'GET',
+          `/leave/self/team?status=waiting&employeeId=${ids.T1!}&leaveTypeId=${ids.SL!}&${range}`,
+        )
+      ).json().total,
+    ).toBe(0);
+    // the reporting manager sees the reportee's leave in any status, not to decide here
+    const mgr = (await call(t2, 'GET', `/leave/self/team?${range}`)).json();
+    expect(ids2(mgr.rows)).toEqual([a.id, b.id].sort());
+    expect(mgr.rows.every((r: { can: { decide: boolean } }) => !r.can.decide)).toBe(true);
+    expect((await call(t2, 'GET', `/leave/self/team?status=waiting&${range}`)).json().total).toBe(
+      0,
+    );
+    // someone else's leave stays out
+    expect((await call(t3, 'GET', `/leave/self/team?employeeId=${ids.T1!}`)).json().total).toBe(0);
+    // approved from the row; then I may ask to cancel it, and the cancellation waits on the HOD's row
+    expect((await decide(hod, a.id, 'approved')).json()).toMatchObject({ status: 'approved' });
+    expect(
+      (await call(t1, 'GET', `/leave/mine?from=${W(10, 0)}&to=${W(10, 0)}`)).json().rows[0].can,
+    ).toEqual({ withdraw: false, requestCancel: true });
+    await call(t1, 'POST', `/leave/requests/${a.id as string}/cancel-request`, {
+      reason: 'Plans changed',
+    });
+    const cx = (
+      await call(
+        hod,
+        'GET',
+        `/leave/self/team?status=waiting&employeeId=${ids.T1!}&from=${W(10, 0)}&to=${W(10, 0)}`,
+      )
+    ).json();
+    expect(cx.rows[0]).toMatchObject({
+      id: a.id,
+      what: 'cancellation',
+      can: { decide: false, decideCancel: true },
+    });
+    // the files: as filtered, with the old screen's columns
+    const xl = (
+      await call(
+        hod,
+        'GET',
+        `/leave/self/team?status=waiting&employeeId=${ids.T1!}&${range}&format=xlsx`,
+      )
+    ).json();
+    expect(xl.filename).toMatch(/^Reporties-leave/);
+    const wb = new ExcelJS.Workbook();
+    await wb.xlsx.load(Buffer.from(xl.base64, 'base64') as unknown as ArrayBuffer);
+    const cells = wb.worksheets[0]!.getSheetValues().flat().map(String);
+    expect(cells).toEqual(
+      expect.arrayContaining([
+        'Leave Id',
+        'On behalf?',
+        'On behalf created by',
+        a.number,
+        b.number,
+      ]),
+    );
+    expect(cells.some((x) => x.includes('Waiting with me'))).toBe(true);
+    const pdf = (await call(t1, 'GET', `/leave/self/leave-file?format=pdf&${range}`)).json();
+    expect(pdf.filename).toMatch(/^My-leave.*\.pdf$/);
+    expect(Buffer.from(pdf.base64, 'base64').subarray(0, 5).toString()).toBe('%PDF-');
+    await call(hod, 'POST', `/leave/requests/${a.id as string}/cancel-decide`, {
+      outcome: 'approved',
+    });
+    await call(t1, 'POST', `/leave/requests/${b.id as string}/withdraw`, { reason: 'Not needed' });
+
+    // Reporties Attendance: all of them a column a day for From–To
+    const span = (x: string, y: string) => (Date.parse(y) - Date.parse(x)) / 86_400_000 + 1;
+    const g = (
+      await call(t2, 'GET', `/staff-attendance/team?from=${PAST[6]!}&to=${PAST[0]!}`)
+    ).json();
+    expect(g).toMatchObject({ mode: 'grid', from: PAST[6], to: PAST[0], team: 1 });
+    expect(g.dates).toHaveLength(span(PAST[6]!, PAST[0]!));
+    expect(g.rows.map((r: { employee: Row }) => r.employee.id)).toEqual([ids.T1]);
+    expect(ids2(g.employees)).toEqual([ids.T1]);
+    // one employee day by day, a page at a time
+    const d2 = (
+      await call(
+        t2,
+        'GET',
+        `/staff-attendance/team?employeeId=${ids.T1!}&from=${PAST[29]!}&to=${PAST[0]!}&size=25&page=2`,
+      )
+    ).json();
+    expect(d2).toMatchObject({ mode: 'days', employee: { id: ids.T1 }, page: 2, size: 25 });
+    expect(d2.total).toBe(span(PAST[29]!, PAST[0]!));
+    expect(d2.days[0].day).toBe(add(PAST[29]!, 25));
+    expect(d2.days).toHaveLength(Math.min(25, d2.total - 25));
+    // the limits: 31 days for all, 92 for one; From after To; someone not reporting to me
+    for (const [url, code] of [
+      [`/staff-attendance/team?from=${PAST[29]!}&to=${PAST[0]!}`, 400],
+      [
+        `/staff-attendance/team?employeeId=${ids.T1!}&from=${add(PAST[0]!, -100)}&to=${PAST[0]!}`,
+        400,
+      ],
+      [`/staff-attendance/team?from=${PAST[0]!}&to=${PAST[6]!}`, 400],
+      [`/staff-attendance/team?employeeId=${ids.T3!}&from=${PAST[6]!}&to=${PAST[0]!}`, 404],
+    ] as const)
+      expect([url, (await call(t2, 'GET', url)).statusCode]).toEqual([url, code]);
+    for (const url of [
+      `/staff-attendance/team?from=${PAST[6]!}&to=${PAST[0]!}&format=pdf`,
+      `/staff-attendance/team?employeeId=${ids.T1!}&from=${PAST[6]!}&to=${PAST[0]!}&format=xlsx`,
+    ]) {
+      const f = (await call(t2, 'GET', url)).json();
+      expect(f.filename).toMatch(/^Reporties-attendance/);
+      expect(f.base64.length).toBeGreaterThan(300);
+    }
+    // the leave office opens leave documents now (403 before: no right to view files)
+    expect((await call(office, 'GET', '/platform/files/999999999/download-url')).statusCode).toBe(
+      404,
+    );
+  });
+
   it('the payroll feed shows part pay and encashment; the balances, attendance lists and register have files', async () => {
     await q(`UPDATE staff_leave_types SET pay_percent = 50 WHERE id = $1`, [ids.HPL]);
     await q(
