@@ -1488,6 +1488,67 @@ describe('staff attendance (e2e)', () => {
         })
       ).json().detail,
     ).toContain('CSV');
+    // the corrections log: who changed which day, how, why and when; people only hides the system's
+    type Log = {
+      employee: { id: string };
+      day: string;
+      changes: Array<{ what: string; from: string; to: string }>;
+      reason: string | null;
+      by: { code: string | null; name: string } | null;
+    };
+    const log = async (qs: string) =>
+      (await call(office, 'GET', `/staff-attendance/corrections?${qs}`)).json();
+    const satLog = await log(`month=${sat.slice(0, 7)}&employeeId=${ids.T1!}`);
+    expect(
+      satLog.rows.find((r: Log) => r.day === sat && r.reason === 'Called in, did not come'),
+    ).toMatchObject({
+      changes: [{ what: 'Status', from: 'WO', to: 'A' }],
+      reason: 'Called in, did not come',
+      by: { name: expect.any(String) },
+    });
+    expect(satLog.rows.find((r: Log) => r.day === sat && r.reason === 'Called in')).toMatchObject({
+      changes: [{ what: 'Set by', from: 'hand', to: 'bulk update' }],
+    });
+    // a person's first write of a day (no earlier version) is kept too
+    await withMigrator((c) =>
+      c.query(`DELETE FROM staff_attendance_days WHERE employee_id = $1 AND day = $2::date`, [
+        ids.H1,
+        PAST[12],
+      ]),
+    );
+    expect(
+      (
+        await call(office, 'POST', '/staff-attendance/days', {
+          employeeId: ids.H1,
+          day: PAST[12],
+          dayType: 'P',
+          reason: 'Came in, the device was off',
+        })
+      ).statusCode,
+    ).toBe(201);
+    const m12 = PAST[12]!.slice(0, 7);
+    const h1 = await log(`month=${m12}&employeeId=${ids.H1!}`);
+    expect(h1.rows.find((r: Log) => r.day === PAST[12])).toMatchObject({
+      changes: [{ what: 'Status', from: '—', to: 'P' }],
+      reason: 'Came in, the device was off',
+    });
+    // people only (the default) against everything: the system's own marks only in the second
+    const peopleOnly = await log(`month=${m12}`);
+    const everything = await log(`month=${m12}&people=0`);
+    expect(everything.total).toBeGreaterThan(peopleOnly.total);
+    expect(
+      (peopleOnly.rows as Log[]).every(
+        (r) => r.by && r.reason !== 'punches' && !(r.reason ?? '').startsWith('marked '),
+      ),
+    ).toBe(true);
+    // the search: an employee's code, or who made the change
+    const byCode = await log(`month=${m12}&q=${encodeURIComponent(`${s}H1`)}`);
+    // H1 is the HOD: the changes to H1's days, and the ones H1 made (approving T1's leave)
+    expect(
+      (byCode.rows as Log[]).every((r) => r.employee.id === ids.H1 || r.by?.code === `${s}H1`),
+    ).toBe(true);
+    expect((byCode.rows as Log[]).some((r) => r.employee.id === ids.H1)).toBe(true);
+    expect((await call(t1, 'GET', '/staff-attendance/corrections')).statusCode).toBe(403);
     expect(
       (
         await call(t1, 'POST', '/staff-attendance/days/bulk', {

@@ -321,6 +321,19 @@ export const DayCorrectSchema = z.object({
 });
 export class DayCorrectDto extends createZodDto(DayCorrectSchema) {}
 
+/**
+ * The corrections log (the register's Attendance Corrections): the changes to the days of a month, newest
+ * first; `people` leaves out what the system worked out itself (punches, the nightly marks).
+ */
+export const CorrectionsSchema = z.object({
+  month: Month.optional(),
+  q: z.string().trim().max(80).optional(),
+  people: z.enum(['0', '1']).default('1'),
+  employeeId: Id.optional(),
+  ...Page,
+});
+export class CorrectionsDto extends createZodDto(CorrectionsSchema) {}
+
 /** Bulk update: one status for many employees (or a department) over a few days, with the reason. */
 export const BulkDaysSchema = z
   .object({

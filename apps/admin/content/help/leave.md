@@ -220,6 +220,13 @@ half day, loss of pay and holds; "not marked" says how many past days the system
   (the corrections staff asked), **Bulk Update**, **Apply Leave** (for an employee, approved at once),
   **Run now** (read the punches, the nightly run, work days out again, deduct late marks), the **Open /
   Locked** button and the **Legend**.
+- **Corrections** opens **Attendance Corrections** for the month: every change to a day — the employee, the
+  day, **what changed** (Status A → P, IN, OUT), the reason (a leave's number, a correction approved, the
+  hand change's reason), **who changed it** and when. ‹ › move a month; search by employee ID, name or who
+  made the change; **People only** (ticked) hides what the system worked out itself (from the punches, the
+  nightly weekly off / holiday / absent marks). The correction requests staff asked for are linked below it.
+- **Click a count** on the right (P, A, a leave, L, F…) for its days: "Absent — 1 day", the dates, and the
+  hand corrections made on those days (or "No manual corrections on these days").
 - **Click a day** for its quick edit: the status, IN, OUT and the reason; saving sets the day by hand (m).
   **Full day detail** opens the day's page. Making a weekly off or holiday **Absent** asks for a tick: it
   becomes loss of pay once the month is locked.

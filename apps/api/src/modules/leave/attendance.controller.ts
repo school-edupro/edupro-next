@@ -8,6 +8,7 @@ import { AttendanceService } from './attendance.service';
 import {
   DayCorrectDto,
   BulkDaysDto,
+  CorrectionsDto,
   DecideDto,
   ExceptionsDto,
   LEAVE_OFFICE,
@@ -62,6 +63,15 @@ export class AttendanceController {
   @RequirePermission(LEAVE_OFFICE)
   correct(@ReqCtx() ctx: RequestContext, @Body() body: DayCorrectDto) {
     return this.att.correct(ctx, body);
+  }
+
+  @Get('corrections')
+  @ApiOperation({
+    summary: 'The corrections log: who changed which day, how, why and when (people only, or all)',
+  })
+  @RequirePermission(LEAVE_OFFICE)
+  corrections(@ReqCtx() ctx: RequestContext, @Query() q: CorrectionsDto) {
+    return this.att.corrections(ctx, q);
   }
 
   @Post('days/bulk')

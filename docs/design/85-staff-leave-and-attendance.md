@@ -565,6 +565,28 @@ Tests: `staff-attendance.e2e-spec.ts` — a CSV with the old headings, the Defau
 leave day skipped, the day saved by hand, a file that is neither; `sheet.spec.ts` for the CSV. Browser
 (dev-admin, 1440 and 375): every tab, a dry run, axe clean.
 
+## As built — the register's corrections log and count panels (11 Nov 2026)
+
+Asked: on `/leave/attendance`, a log of every correction an administrator or an authorised person made (the old
+register's Attendance Corrections), and a count that opens its days (screenshots).
+
+- **Corrections** opens `CorrectionLog` in a dialog: ‹ month ›, a search (employee ID, name, or who made the
+  change), **People only** (ticked: hides the system's own work — reason `punches` or `marked …`, or no person),
+  Search; Employee, Day (opens the day), What Changed (Status A → P, IN, OUT; else Set by hand / Set by hand →
+  bulk update / Late), Reason, Changed By (code, name), When; pages of 50; a link to the correction requests.
+  API: `GET /staff-attendance/corrections` (office) over `staff_attendance_history`, newest first.
+- A count on the right is a button: `CountPopover` (one panel for the grid) shows "Absent — 1 day", the dates
+  (½ for a half day) and the hand corrections of those days from the log, or "No manual corrections on these
+  days"; it follows its count when the grid scrolls, opens above it when there is no room below, closes with
+  Escape, × or a click elsewhere.
+- Migration **0359**: `app.staff_day_write` keeps a person's first write of a day in the history too (a hand
+  correction of a day not worked out yet); the system's own first writes still are not.
+- The register's employee column stays in view when the days scroll (it lost to the plain row-header rule).
+- Tests: `staff-attendance.e2e-spec.ts` — the log shows a weekly off made absent (Status WO → A, the reason, who),
+  a bulk change of the same day (Set by hand → bulk update), a first write (Status — → P), people only against
+  everything, the search by employee or by who changed it, the office only. Browser (dev-admin, 1440 and 375):
+  the dialog, the month arrows, a count's panel in view, axe clean.
+
 ## The module is complete
 
 Phases A–E are built. What is left is the school's: the old database connection on the server, the read, the

@@ -15391,7 +15391,7 @@ button.ep-shiftcal__cell:focus-visible {
   text-align: left;
 }
 .ep-areg thead .ep-areg__emp {
-  background: inherit;
+  background: var(--surface-subtle);
 }
 .ep-areg .ep-areg__lbl {
   font-size: var(--fs-caption);
@@ -15468,7 +15468,12 @@ button.ep-shiftcal__cell:focus-visible {
   align-items: center;
   gap: var(--sp-1);
 }
-.ep-areg tbody .ep-areg__emp {
+/* above the plain row-header rule (.ep-table tbody th[scope='row']): the employee stays in view */
+.ep-table.ep-areg tbody th.ep-areg__emp {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  background: var(--surface-card);
   top: auto;
   font-family: inherit;
   font-size: var(--fs-small);
@@ -15578,4 +15583,103 @@ button.ep-shiftcal__cell:focus-visible {
   padding: var(--sp-2) var(--sp-3);
   overflow: auto;
   list-style: none;
+}
+
+/* The register's corrections log and the panel a count opens (as the old register's) */
+.ep-areg__cnt {
+  padding: 0 var(--sp-1);
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  font: inherit;
+  font-weight: var(--fw-semibold);
+  color: var(--text-heading);
+  cursor: pointer;
+  text-decoration: underline dotted;
+  text-underline-offset: 3px;
+}
+.ep-areg__cnt:hover {
+  background: var(--surface-band);
+}
+.ep-areg__cnt:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 1px;
+}
+.ep-areg__cnt--bad {
+  color: var(--status-danger-text);
+}
+.ep-areg__cnt--warn {
+  color: var(--status-warning-text);
+}
+.ep-cpop {
+  position: fixed;
+  z-index: 60;
+  width: min(20rem, calc(100vw - 1rem));
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface-card);
+  box-shadow: var(--shadow-overlay);
+}
+.ep-cpop:focus {
+  outline: none;
+}
+.ep-cpop__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-2);
+  padding: var(--sp-2) var(--sp-3);
+  border-bottom: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md) var(--radius-md) 0 0;
+  background: var(--surface-band);
+  color: var(--text-heading);
+}
+.ep-cpop__body {
+  display: grid;
+  gap: var(--sp-2);
+  max-height: 18rem;
+  overflow: auto;
+  padding: var(--sp-3);
+}
+.ep-cpop__days {
+  margin: 0;
+  font-weight: var(--fw-semibold);
+  color: var(--text-heading);
+}
+.ep-cpop__rule {
+  margin: 0;
+  border: 0;
+  border-top: 1px solid var(--border-subtle);
+}
+.ep-cpop__log {
+  display: grid;
+  gap: var(--sp-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: var(--fs-small);
+}
+.ep-clog__bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-3);
+}
+.ep-clog__month {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-1);
+}
+.ep-clog__q {
+  flex: 1 1 16rem;
+}
+.ep-clog__name {
+  display: block;
+  color: var(--text-heading);
+}
+.ep-clog__change {
+  display: block;
+  font-weight: var(--fw-semibold);
+  color: var(--action-primary);
+  white-space: nowrap;
 }

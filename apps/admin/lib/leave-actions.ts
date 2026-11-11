@@ -3,7 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { ApiError, apiFetch } from './api';
-import type { ApplyResult, ShiftAssignResult, ShiftCopyResult } from './leave';
+import type { ApplyResult, CorrectionsLog, ShiftAssignResult, ShiftCopyResult } from './leave';
 import type { ApprovalLevel } from './recruitment';
 
 const okId = (id: string) => /^\d{1,18}$/.test(id);
@@ -510,6 +510,34 @@ export async function correctDay(fd: FormData) {
     },
     'The day is corrected.',
   );
+}
+
+/** The corrections log for the register's dialog and its count panels (a read: nothing changes). */
+export async function loadCorrections(q: {
+  month: string;
+  q?: string;
+  people: boolean;
+  employeeId?: string;
+  page?: number;
+  size?: 25 | 50 | 100;
+}): Promise<({ ok: true } & CorrectionsLog) | { ok: false; error: string }> {
+  const p = new URLSearchParams({
+    people: q.people ? '1' : '0',
+    page: String(Math.max(1, q.page ?? 1)),
+    size: String(q.size ?? 50),
+  });
+  if (/^\d{4}-\d{2}$/.test(q.month)) p.set('month', q.month);
+  if (q.q?.trim()) p.set('q', q.q.trim().slice(0, 80));
+  if (q.employeeId && /^\d{1,18}$/.test(q.employeeId)) p.set('employeeId', q.employeeId);
+  try {
+    return {
+      ok: true,
+      ...(await apiFetch<CorrectionsLog>(`/staff-attendance/corrections?${p.toString()}`)),
+    };
+  } catch (e) {
+    if (e instanceof ApiError) return { ok: false, error: detailOf(e) };
+    throw e;
+  }
 }
 
 /** Bulk update: one status for the employees picked (or a department) over the dates, with the reason. */

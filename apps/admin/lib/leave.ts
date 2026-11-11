@@ -402,6 +402,24 @@ export interface AttendanceRegister {
   team?: number;
 }
 
+/** The corrections log: who changed which day, how, why and when (newest first). */
+export interface CorrectionsLog {
+  month: string;
+  monthWords: string;
+  rows: Array<{
+    id: string;
+    employee: { id: string; name: string; code: string; department: string | null };
+    day: string;
+    changes: Array<{ what: string; from: string; to: string }>;
+    reason: string | null;
+    by: { code: string | null; name: string } | null;
+    at: string;
+  }>;
+  total: number;
+  page: number;
+  size: number;
+}
+
 /** The office's attendance register (as the old Payroll / Attendance Register). */
 export interface AttendanceRegisterPage extends AttendanceRegister {
   status: string | null;

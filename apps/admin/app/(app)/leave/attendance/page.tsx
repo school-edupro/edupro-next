@@ -5,6 +5,8 @@ import { Notice } from '@/components/Notice';
 import { pageSizeOf } from '@/components/Pager';
 import { Icon } from '@/components/nav-icons';
 import { BulkAttendance } from '@/components/leave/BulkAttendance';
+import { CorrectionLog } from '@/components/leave/CorrectionLog';
+import { CountPopover } from '@/components/leave/CountPopover';
 import { DayQuickEdit } from '@/components/leave/DayQuickEdit';
 import { DialogButton } from '@/components/leave/DialogButton';
 import { LeaveApplyForm } from '@/components/leave/LeaveApplyForm';
@@ -28,6 +30,32 @@ const STATUS_WORDS: Array<[string, string]> = [
   ['H', 'H — Holiday'],
   ['HOLD', 'HOLD — Salary hold'],
 ];
+/** what a count of the register is, in its panel */
+const COUNT_WORDS: Record<string, string> = {
+  P: 'Present',
+  A: 'Absent',
+  WO: 'Weekly off',
+  H: 'Holiday',
+  HD: 'Half day',
+  HOLD: 'Salary hold',
+  late: 'Late marks',
+  missing: 'Missing punches',
+};
+/**
+ * The days behind a count: the days of that code (a half-day leave is half present: "½"), the late or
+ * missing-punch days; a loss-of-pay type's days show as LOP.
+ */
+const daysOf = (cells: AttendanceRegisterPage['rows'][number]['cells'], k: string): string[] => {
+  const base = (c: string) => c.replace('½', '');
+  const half = (c: { day: string; code: string }) => `${c.day}${c.code.endsWith('½') ? '½' : ''}`;
+  if (k === 'late') return cells.filter((c) => c.late).map((c) => c.day);
+  if (k === 'missing') return cells.filter((c) => c.missing).map((c) => c.day);
+  if (k === 'P') return cells.filter((c) => c.code === 'P' || c.code.endsWith('½')).map(half);
+  const own = cells.filter((c) => base(c.code) === k);
+  return (
+    own.length ? own : cells.filter((c) => base(c.code) === 'LOP' && !BASE.slice(0, 6).includes(k))
+  ).map(half);
+};
 const MARKS: Array<[string, string, string]> = [
   ['L', 'ep-sq--L', 'Late Mark'],
   ['F', 'ep-sq--F', 'Missing Punch'],
@@ -304,12 +332,15 @@ export default async function AttendanceRegisterPage({
           </button>
         </form>
         <span className="ep-arbar__spacer" />
-        <a
+        <DialogButton
+          id="ar-log"
+          label="Corrections"
+          title={`Attendance Corrections — ${d.monthWords}`}
+          icon={<Icon name="refresh" size={20} />}
           className="ep-btn ep-btn--secondary ep-btn--sm"
-          href={`/leave/attendance/exceptions?kind=regularisation&month=${month}`}
         >
-          Corrections
-        </a>
+          <CorrectionLog month={month} />
+        </DialogButton>
         <DialogButton
           id="ar-bulk"
           label="Bulk Update"
@@ -432,11 +463,32 @@ export default async function AttendanceRegisterPage({
                     <span className="ep-mr-col__desc">{r.employee.department ?? '—'}</span>
                   </th>
                 );
-                const totals = [...sums, 'late', 'missing'].map((k) => (
-                  <td key={k} rowSpan={view === 'full' ? 4 : 1}>
-                    {r.totals[k] ?? 0}
-                  </td>
-                ));
+                const totals = [...sums, 'late', 'missing'].map((k) => {
+                  const v = r.totals[k] ?? 0;
+                  const label = COUNT_WORDS[k] ?? `${k} leave`;
+                  return (
+                    <td key={k} rowSpan={view === 'full' ? 4 : 1}>
+                      {v ? (
+                        <button
+                          type="button"
+                          className={`ep-areg__cnt${k === 'A' || k === 'missing' ? ' ep-areg__cnt--bad' : k === 'late' ? ' ep-areg__cnt--warn' : ''}`}
+                          data-cnt=""
+                          data-emp={r.employee.id}
+                          data-name={r.employee.name}
+                          data-label={label}
+                          data-count={String(v)}
+                          data-days={daysOf(r.cells, k).join(',')}
+                          data-month={month}
+                          aria-label={`${r.employee.name}: ${label} ${String(v)} — show the days`}
+                        >
+                          {v}
+                        </button>
+                      ) : (
+                        0
+                      )}
+                    </td>
+                  );
+                });
                 const pay = (
                   <td rowSpan={view === 'full' ? 4 : 1}>
                     <strong>{r.payable}</strong>
@@ -543,6 +595,7 @@ export default async function AttendanceRegisterPage({
         noun="employees"
       />
       <DayQuickEdit action={correctDay} back={here} />
+      <CountPopover />
     </>
   );
 }

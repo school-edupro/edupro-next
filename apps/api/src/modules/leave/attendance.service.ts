@@ -32,6 +32,7 @@ import {
   type RunDto,
   type SheetDto,
   type BulkDaysDto,
+  type CorrectionsDto,
   type TeamAttendanceDto,
   type TimingBulkDto,
   type TimingListDto,
@@ -93,6 +94,18 @@ const hm = (d: Date | null) =>
       }).format(d)
     : null;
 
+/** who or what set a day, in the corrections log */
+const SOURCE_SET: Record<string, string> = {
+  punches: 'punches',
+  manual: 'hand',
+  bulk: 'bulk update',
+  regularisation: 'approved correction',
+  weekoff: 'nightly run',
+  holiday: 'nightly run',
+  absent: 'nightly run',
+  leave: 'leave',
+  import: 'old module',
+};
 const WEEK2 = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
 const WEEKDAY_LONG = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 /** the last day of the month a date is in */
@@ -325,6 +338,119 @@ export class AttendanceService implements OnModuleInit {
           missingTotal: missing.rows[0]?.n ?? 0,
           noDepartment,
         },
+      };
+    });
+  }
+
+  /**
+   * The corrections log (the old register's Attendance Corrections): every change to a day of the month,
+   * newest first — the employee, the day, what changed (status, IN, OUT), the reason, who and when. People
+   * only leaves out what the system worked out itself (from the punches, the nightly weekly off / holiday /
+   * absent marks); a leave, a correction approved, a hand or bulk change and a leave taken off stay.
+   */
+  async corrections(ctx: RequestContext, q: CorrectionsDto) {
+    this.mustOffice(ctx);
+    return this.db.tenant(requireTenant(ctx), async (c) => {
+      const month = this.monthOf(q.month);
+      const end = addDays(monthStart(addDays(month, 32)), -1);
+      const who = (col: string) =>
+        `(SELECT COALESCE((SELECT x.employee_code FROM employees x WHERE x.user_id = u.id AND x.deleted_at IS NULL LIMIT 1), '')
+            || '|' || u.display_name FROM users u WHERE u.id = ${col})`;
+      const where = `WHERE h.day BETWEEN $1::date AND $2::date
+          AND ($3::bigint IS NULL OR h.employee_id = $3)
+          AND (NOT $4::boolean OR (h.changed_by IS NOT NULL AND h.reason IS DISTINCT FROM 'punches'
+                                   AND COALESCE(h.reason, '') NOT LIKE 'marked %'))
+          AND ($5::text IS NULL OR e.display_name ILIKE '%' || $5 || '%' OR e.employee_code ILIKE '%' || $5 || '%'
+               OR ${who('h.changed_by')} ILIKE '%' || $5 || '%')`;
+      const args = [month, end, q.employeeId ?? null, q.people === '1', q.q ?? null];
+      const total = (
+        await c.query<{ n: number }>(
+          `SELECT count(*)::int AS n FROM staff_attendance_history h JOIN employees e ON e.id = h.employee_id ${where}`,
+          args,
+        )
+      ).rows[0]!.n;
+      const rows = await c.query<{
+        id: string;
+        employee_id: string;
+        name: string;
+        code: string;
+        department: string | null;
+        day: string;
+        before: Record<string, unknown> | null;
+        after: Record<string, unknown> | null;
+        reason: string | null;
+        by: string | null;
+        at: Date;
+      }>(
+        `SELECT h.id::text, h.employee_id::text, e.display_name AS name, e.employee_code AS code, e.department,
+                h.day::text, h.before, h.after, h.reason, ${who('h.changed_by')} AS by, h.changed_at AS at
+           FROM staff_attendance_history h JOIN employees e ON e.id = h.employee_id ${where}
+          ORDER BY h.changed_at DESC, h.id DESC LIMIT $6 OFFSET $7`,
+        [...args, q.size, (q.page - 1) * q.size],
+      );
+      const types = new Map(
+        (
+          await c.query<{ id: string; code: string; lop: boolean }>(
+            `SELECT id::text, code, loss_of_pay AS lop FROM staff_leave_types`,
+          )
+        ).rows.map((t) => [t.id, t]),
+      );
+      const status = (j: Record<string, unknown> | null) => {
+        if (!j) return '—';
+        const t = String(j.day_type ?? '');
+        if (t !== 'LV') return t || '—';
+        const lt = types.get(String(j.leave_type_id ?? ''));
+        const half =
+          j.leave_portion !== null && j.leave_portion !== undefined && Number(j.leave_portion) < 1;
+        return `${lt?.lop ? 'LOP' : (lt?.code ?? 'LV')}${half ? '½' : ''}`;
+      };
+      const time = (v: unknown) => (v ? hm(new Date(String(v))) : null);
+      return {
+        month,
+        monthWords: monthWords(month),
+        rows: rows.rows.map((r) => {
+          const changes: Array<{ what: string; from: string; to: string }> = [];
+          const [s0, s1] = [status(r.before), status(r.after)];
+          if (s0 !== s1) changes.push({ what: 'Status', from: s0, to: s1 });
+          for (const [k, words] of [
+            ['in_at', 'IN'],
+            ['out_at', 'OUT'],
+          ] as const) {
+            const [a, b] = [time(r.before?.[k]), time(r.after?.[k])];
+            if (a !== b) changes.push({ what: words, from: a ?? '—', to: b ?? '—' });
+          }
+          if (!changes.length) {
+            const [m0, m1] = [!!r.before?.manual, !!r.after?.manual];
+            if (m0 !== m1)
+              changes.push({ what: 'Set by hand', from: m0 ? 'yes' : 'no', to: m1 ? 'yes' : 'no' });
+            else if (r.before?.source !== r.after?.source)
+              changes.push({
+                what: 'Set by',
+                from: SOURCE_SET[String(r.before?.source ?? '')] ?? String(r.before?.source ?? '—'),
+                to: SOURCE_SET[String(r.after?.source ?? '')] ?? String(r.after?.source ?? '—'),
+              });
+            else if (Number(r.before?.late_minutes ?? 0) !== Number(r.after?.late_minutes ?? 0))
+              changes.push({
+                what: 'Late (min)',
+                from: String(r.before?.late_minutes ?? 0),
+                to: String(r.after?.late_minutes ?? 0),
+              });
+            else changes.push({ what: 'Saved again', from: '', to: '' });
+          }
+          const [byCode, byName] = r.by ? r.by.split('|') : ['', ''];
+          return {
+            id: r.id,
+            employee: { id: r.employee_id, name: r.name, code: r.code, department: r.department },
+            day: r.day,
+            changes,
+            reason: r.reason,
+            by: r.by ? { code: byCode || null, name: byName ?? '' } : null,
+            at: r.at.toISOString(),
+          };
+        }),
+        total,
+        page: q.page,
+        size: q.size,
       };
     });
   }
