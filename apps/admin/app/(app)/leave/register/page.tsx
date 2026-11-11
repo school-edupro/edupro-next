@@ -8,6 +8,7 @@ import { Icon, type IconName } from '@/components/nav-icons';
 import { DialogButton } from '@/components/leave/DialogButton';
 import { when } from '@/components/leave/LeaveCells';
 import { LeaveApplyForm } from '@/components/leave/LeaveApplyForm';
+import { LeaveDetailDialog } from '@/components/leave/LeaveDetailDialog';
 import { DownloadMenu, Pages, Showing, SizeLinks } from '@/components/leave/ListBar';
 import { ApiError, apiFetch, getMe } from '@/lib/api';
 import { dmy, type LeaveFormType, type LeaveRegister, type RegisterRow } from '@/lib/leave';
@@ -345,12 +346,16 @@ export default async function LeaveRegisterPage({
         noun="leave"
       />
       <div className="ep-table-wrap" tabIndex={0} role="region" aria-label="Leave register">
-        <table className="ep-table">
+        <table className="ep-table ep-reg">
           <thead>
             <tr>
               <th scope="col">S.No.</th>
-              <th scope="col">Leave ID</th>
-              <th scope="col">Employee Details</th>
+              <th scope="col" className="ep-reg__id">
+                Leave ID
+              </th>
+              <th scope="col" className="ep-reg__emp">
+                Employee Details
+              </th>
               <th scope="col">Leave Type</th>
               <th scope="col">Applied Date</th>
               <th scope="col">From Date</th>
@@ -372,8 +377,10 @@ export default async function LeaveRegisterPage({
               d.rows.map((r, i) => (
                 <tr key={r.id}>
                   <td>{(d.page - 1) * d.size + i + 1}</td>
-                  <td style={{ whiteSpace: 'nowrap' }}>
-                    <a href={`/leave/requests/${r.id}`}>#{r.number}</a>
+                  <td className="ep-reg__id">
+                    <a href={`/leave/requests/${r.id}`} data-lv={r.id}>
+                      #{r.number}
+                    </a>
                     {r.documentFileId ? (
                       <FileLinks
                         href={`/api/files/${r.documentFileId}/download`}
@@ -387,7 +394,7 @@ export default async function LeaveRegisterPage({
                       </span>
                     ) : null}
                   </td>
-                  <td style={{ minWidth: '11rem' }}>
+                  <td className="ep-reg__emp">
                     <strong>{r.employee.name}</strong>
                     <span className="ep-mr-col__desc">
                       {r.employee.code}
@@ -469,6 +476,7 @@ export default async function LeaveRegisterPage({
         href={(p) => href({ page: p })}
         noun="leave"
       />
+      <LeaveDetailDialog cancel={cancelLeave} back={back} />
     </>
   );
 }

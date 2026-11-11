@@ -1423,19 +1423,40 @@ export class LeaveService implements OnModuleInit {
           WHERE request_id IN (SELECT id FROM staff_leave_requests WHERE id = $1 OR linked_request_id = $1) ORDER BY day, session NULLS FIRST`,
         [id],
       );
-      const steps = async (instanceId: string | null) =>
-        instanceId
-          ? ((await this.workflow.instanceWith(c, instanceId))?.steps.map((s) => ({
-              level: s.level,
-              name: s.name,
-              people: s.assignees.map((a) => a.name),
-              status: s.status,
-              actedBy: s.actedBy,
-              actedAt: s.actedAt,
-              note: s.note,
-              overdue: s.overdue,
-            })) ?? [])
-          : [];
+      // the approvers as "CODE — Name" (their employee code, when they are staff)
+      const codeOf = async (ids: string[]) =>
+        new Map(
+          ids.length
+            ? (
+                await c.query<{ id: string; code: string }>(
+                  `SELECT e.user_id::text AS id, e.employee_code AS code FROM employees e
+                    WHERE e.user_id = ANY($1::bigint[]) AND e.deleted_at IS NULL`,
+                  [ids],
+                )
+              ).rows.map((x) => [x.id, x.code])
+            : [],
+        );
+      const steps = async (instanceId: string | null) => {
+        if (!instanceId) return [];
+        const inst = await this.workflow.instanceWith(c, instanceId);
+        const codes = await codeOf([
+          ...new Set((inst?.steps ?? []).flatMap((x) => x.assignees.map((a) => a.id))),
+        ]);
+        return (
+          inst?.steps.map((s) => ({
+            level: s.level,
+            name: s.name,
+            people: s.assignees.map((a) =>
+              codes.get(a.id) ? `${codes.get(a.id)!} — ${a.name}` : a.name,
+            ),
+            status: s.status,
+            actedBy: s.actedBy,
+            actedAt: s.actedAt,
+            note: s.note,
+            overdue: s.overdue,
+          })) ?? []
+        );
+      };
       const edits = await c.query<{
         old_from: string;
         old_to: string;
@@ -1456,6 +1477,8 @@ export class LeaveService implements OnModuleInit {
       const live = r.status === 'pending' || r.status === 'approved';
       return {
         ...this.shape(r),
+        /** when the cancellation was asked */
+        cancelRaisedAt: r.cancel_raised_at?.toISOString() ?? null,
         lopPart: lop,
         dayRows: days.rows.map((d) => ({
           day: d.day,

@@ -3,7 +3,13 @@
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { ApiError, apiFetch } from './api';
-import type { ApplyResult, CorrectionsLog, ShiftAssignResult, ShiftCopyResult } from './leave';
+import type {
+  ApplyResult,
+  CorrectionsLog,
+  LeaveDetail,
+  ShiftAssignResult,
+  ShiftCopyResult,
+} from './leave';
 import type { ApprovalLevel } from './recruitment';
 
 const okId = (id: string) => /^\d{1,18}$/.test(id);
@@ -510,6 +516,19 @@ export async function correctDay(fd: FormData) {
     },
     'The day is corrected.',
   );
+}
+
+/** One leave for the register's Leave Approval Details (a read: nothing changes). */
+export async function loadLeave(
+  id: string,
+): Promise<{ ok: true; d: LeaveDetail } | { ok: false; error: string }> {
+  if (!/^\d{1,18}$/.test(id)) return { ok: false, error: 'No such leave' };
+  try {
+    return { ok: true, d: await apiFetch<LeaveDetail>(`/leave/requests/${id}`) };
+  } catch (e) {
+    if (e instanceof ApiError) return { ok: false, error: detailOf(e) };
+    throw e;
+  }
 }
 
 /** The corrections log for the register's dialog and its count panels (a read: nothing changes). */

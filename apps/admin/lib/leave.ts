@@ -207,6 +207,8 @@ export interface LeaveStep {
 }
 
 export interface LeaveDetail extends LeaveRequest {
+  /** when the cancellation was asked */
+  cancelRaisedAt?: string | null;
   lopPart: LeaveRequest | null;
   dayRows: LeaveDay[];
   approval: LeaveStep[];

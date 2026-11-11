@@ -167,6 +167,14 @@ over every approver (with the reason, kept as the leave office's; the employee i
 **Edit dates** (trim the ends; the days cut are given back) and **Cancel**. A rejected, withdrawn or cancelled
 leave stays as it is — enter a fresh leave for the employee (**＋ Leave for an employee**) if needed.
 
+**Click a Leave ID** for its **Leave Approval Details** (without leaving the register): the employee, leave
+type, status, From — To with the weekdays, days, when and by whom it was applied, the reason; the **Approval
+Workflow** level by level (L1, L2, L3 — the approver as code and name, Awaiting or Approved / Rejected, the
+remark, the action date and who acted); the **Leave Cancellation Details** the same way; and the **Days**.
+**Cancel Leave** (with the reason) is there for a leave the office may cancel; **Full page** opens the
+leave's own page (Ctrl / ⌘-click a Leave ID to open it in a new tab). **Leave ID** and **Employee Details**
+stay in view when the other columns scroll.
+
 **Employee Leave Balance** (as the old screen): one row per employee × leave type × month, every month newest
 first (this month first) — Emp Id, name, leave type, month, year, **Open Bal** (carried from last month),
 **Accrued** (credited), **Availed** (the leave raised in the month, waiting or approved), **Correction**,

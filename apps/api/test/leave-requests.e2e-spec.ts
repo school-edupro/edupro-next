@@ -500,6 +500,12 @@ describe('staff leave requests (e2e)', () => {
       can: { override: false, trim: false, cancel: true },
     });
     expect(ob.appliedPerson).toBeTruthy();
+    // its Leave Approval Details: the levels with the approvers as "CODE — Name", no cancellation yet
+    const det = (await call(office, 'GET', `/leave/requests/${w.id as string}`)).json();
+    expect(det.approval[0]).toMatchObject({ level: 1, status: 'pending', actedBy: null });
+    expect(det.approval[0].people[0]).toMatch(/^\S+ — \S/);
+    expect(det).toMatchObject({ cancelRaisedAt: null, cancellation: [] });
+    expect(det.dayRows[0]).toMatchObject({ day: W(11, 0), status: 'pending' });
     // rejected by the office from the row: the reason kept as the office's
     await call(office, 'POST', `/leave/requests/${w.id as string}/override`, {
       outcome: 'rejected',

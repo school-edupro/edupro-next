@@ -15683,3 +15683,110 @@ button.ep-shiftcal__cell:focus-visible {
   color: var(--action-primary);
   white-space: nowrap;
 }
+
+/* The leave register: Leave ID and Employee Details stay in view when the columns scroll (as the attendance
+   register's employee); Leave Approval Details as the old register's */
+.ep-table.ep-reg .ep-reg__id,
+.ep-table.ep-reg .ep-reg__emp {
+  position: sticky;
+  z-index: 1;
+  background: var(--surface-card);
+}
+.ep-table.ep-reg .ep-reg__id {
+  left: 0;
+  width: 12rem;
+  min-width: 12rem;
+  max-width: 12rem;
+}
+.ep-table.ep-reg .ep-reg__emp {
+  left: 12rem;
+  min-width: 13rem;
+  border-right: 1px solid var(--border);
+}
+.ep-table.ep-reg thead .ep-reg__id,
+.ep-table.ep-reg thead .ep-reg__emp {
+  z-index: 3;
+  background: var(--surface-subtle);
+}
+.ep-table.ep-reg tbody tr:hover .ep-reg__id,
+.ep-table.ep-reg tbody tr:hover .ep-reg__emp {
+  background: var(--surface-subtle);
+}
+.ep-lvd__card {
+  display: grid;
+  gap: var(--sp-2);
+  padding: var(--sp-3);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--surface-card);
+}
+.ep-lvd__facts {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr) max-content minmax(0, 1fr) max-content minmax(
+      0,
+      1fr
+    );
+  margin: 0;
+  border: 1px solid var(--border-subtle);
+}
+.ep-lvd__facts dt,
+.ep-lvd__facts dd {
+  margin: 0;
+  padding: var(--sp-2) var(--sp-3);
+  border-bottom: 1px solid var(--border-subtle);
+}
+.ep-lvd__facts dt {
+  background: var(--surface-band);
+  font-weight: var(--fw-semibold);
+  color: var(--text-heading);
+}
+.ep-lvd__facts .ep-lvd__wide {
+  grid-column: 2 / -1;
+}
+@media (max-width: 48rem) {
+  .ep-lvd__facts {
+    grid-template-columns: max-content minmax(0, 1fr);
+  }
+  .ep-lvd__facts .ep-lvd__wide {
+    grid-column: auto;
+  }
+}
+.ep-lvd__title {
+  margin: 0;
+  font-size: var(--fs-small);
+  font-weight: var(--fw-bold);
+  letter-spacing: var(--ls-overline);
+  text-transform: uppercase;
+  color: var(--action-primary);
+}
+.ep-lvd__title--ok {
+  color: var(--status-success-text);
+}
+.ep-lvd__title--no {
+  color: var(--status-danger-text);
+}
+.ep-lvd__days {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.ep-lvd__day {
+  padding: var(--sp-1) var(--sp-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-weight: var(--fw-semibold);
+  color: var(--text-heading);
+}
+.ep-lvl {
+  display: inline-block;
+  min-width: 2rem;
+  padding: 0 var(--sp-1);
+  border-radius: var(--radius-sm);
+  background: var(--action-primary);
+  color: var(--text-inverse);
+  font-weight: var(--fw-bold);
+  text-align: center;
+}

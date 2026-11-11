@@ -587,6 +587,22 @@ register's Attendance Corrections), and a count that opens its days (screenshots
   everything, the search by employee or by who changed it, the office only. Browser (dev-admin, 1440 and 375):
   the dialog, the month arrows, a count's panel in view, axe clean.
 
+## As built — Leave Approval Details on the register; frozen columns (11 Nov 2026)
+
+Asked: on `/leave/register`, a leave opens a page as the old Leave Approval Details (screenshot), and Leave ID
+and Employee Details frozen as on the attendance register. `LeaveDetailDialog` (one dialog for the list,
+opened from `a[data-lv]` on a plain click; Ctrl / ⌘ / middle click still opens `/leave/requests/:id`) loads
+the leave (`loadLeave` → `GET /leave/requests/:id`): the facts grid (Employee, Leave Type, Status; From — To
+with weekdays, Days, Applied — when and by whom; Reason, note), **Approval Workflow** (L1… badges, approver
+"CODE — Name", Awaiting for the level waiting and — for levels not reached, Approved / Rejected / Passed on,
+remark, action date, action by), **Leave Cancellation Details** (the same, with the applied date time and the
+reason asked) or "No cancellation records", **Days** (weekday, ½, weekly off / holiday); Close, Full page,
+**Cancel Leave** (the reason, back to the register). API: the leave's steps give the approvers as "CODE — Name";
+`cancelRaisedAt` added. Leave ID (12rem, left 0) and Employee Details (left 12rem) are sticky with a solid
+background (`.ep-table.ep-reg`). Tests: `leave-requests.e2e-spec.ts` — a waiting leave's levels, the approver's
+code, no cancellation, its days. Browser (dev-admin, 1440 and 375): the dialog in place, Cancel Leave's
+reason (not sent), the columns pinned when scrolled, axe clean.
+
 ## The module is complete
 
 Phases A–E are built. What is left is the school's: the old database connection on the server, the read, the
