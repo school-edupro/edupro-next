@@ -808,6 +808,45 @@ test.describe('accessibility (axe)', () => {
     ).toEqual([]);
   });
 
+  test('no serious or critical violations on my leave as one page: each tab and both dialogs', async ({
+    page,
+  }) => {
+    test.setTimeout(150_000); // four tabs and two dialogs, as a manager with an employee record
+    await signInAsDeveloper(page, 'dev-coordinator');
+    const problems: string[] = [];
+    const axe = async (what: string) => {
+      const r = await new AxeBuilder({ page })
+        .options({ iframes: false })
+        .setLegacyMode()
+        .withTags(['wcag2a', 'wcag2aa'])
+        .analyze();
+      problems.push(
+        ...r.violations
+          .filter((v) => v.impact === 'serious' || v.impact === 'critical')
+          .map(
+            (v) =>
+              `${what} ${v.id}: ${v.help} ${v.nodes
+                .map((n) => n.target.join(' '))
+                .slice(0, 3)
+                .join(' | ')}`,
+          ),
+      );
+    };
+    for (const tab of ['attendance', 'leave', 'team-leave', 'team-attendance']) {
+      await page.goto(`/leave?tab=${tab}&month=2026-10`);
+      await page.waitForLoadState('networkidle');
+      await axe(tab);
+    }
+    for (const button of ['Leave Details', '＋ Apply Leave']) {
+      await page.goto('/leave');
+      await page.waitForLoadState('networkidle');
+      await page.getByRole('button', { name: button }).click();
+      await page.waitForTimeout(400); // let the dialog's fade-in finish before measuring contrast
+      await axe(button);
+    }
+    expect(problems).toEqual([]);
+  });
+
   test('no serious or critical violations on the shift calendar dialogs', async ({ page }) => {
     test.setTimeout(120_000); // three dialogs, each opened and checked
     const open = async (what: string) => {

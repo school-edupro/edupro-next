@@ -6,6 +6,7 @@ import { DbService } from '../../common/db/db.service';
 import { DomainError } from '../../common/errors/domain-error';
 import { requireTenant, type RequestContext } from '../../common/http/request-context';
 import { MessagesService } from '../comms/messages.service';
+import { fyStart } from '../purchase/purchase-reports.service';
 import { istToday } from '../purchase/purchase-stock-core';
 import { WorkflowService, type InstanceRow } from '../workflow/workflow.service';
 import { chainFor } from './leave-chain';
@@ -1398,7 +1399,18 @@ export class LeaveService implements OnModuleInit {
             )
           ).rowCount
         : false;
-      if (!own && !office && !approver && !mayDecideCancel)
+      // the reporting manager sees the leave of the staff reporting to them (My leave → Reporties leave)
+      const manager =
+        !!me &&
+        !own &&
+        !!(
+          await c.query(
+            `SELECT 1 FROM postings p WHERE p.employee_id = $1 AND p.reports_to_employee_id = $2
+                AND p.academic_year_id = app.current_academic_year_id() LIMIT 1`,
+            [r.employee_id, me],
+          )
+        ).rowCount;
+      if (!own && !office && !approver && !mayDecideCancel && !manager)
         throw new DomainError('not-found', 'Leave not found', { status: 404 });
       const days = await c.query<{
         day: string;
@@ -1532,7 +1544,16 @@ export class LeaveService implements OnModuleInit {
         );
         const x = b.rows[0]!;
         const pol = await policyFor(c, me, t.id);
+        const availed = (
+          await c.query<{ n: string }>(
+            `SELECT COALESCE(sum(days), 0)::text AS n FROM staff_leave_requests
+              WHERE employee_id = $1 AND leave_type_id = $2 AND status = 'approved'
+                AND from_date >= $3::date AND from_date < ($3::date + interval '1 year')`,
+            [me, t.id, fyStart(month)],
+          )
+        ).rows[0]!.n;
         balances.push({
+          availed: round2(Number(availed)),
           typeId: t.id,
           code: t.code,
           name: t.name,

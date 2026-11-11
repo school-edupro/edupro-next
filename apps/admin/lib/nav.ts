@@ -106,14 +106,14 @@ export const NAV: Array<{
     items: [
       { href: '/leave/dashboard', label: 'leaveDashboard', permission: 'leave.report.view' },
       { href: '/leave', label: 'myLeave', permission: 'leave.own.apply' },
-      { href: '/leave/attendance/mine', label: 'myAttendance', permission: 'leave.own.apply' },
+      { href: '/leave?tab=attendance', label: 'myAttendance', permission: 'leave.own.apply' },
       { href: '/leave/approvals', label: 'leaveApprovals', permission: LEAVE_MENU.approvals },
       {
         href: '/leave/attendance/approvals',
         label: 'attendanceCorrections',
         permission: LEAVE_MENU.corrections,
       },
-      { href: '/leave/attendance/team', label: 'teamAttendance', permission: LEAVE_MENU.team },
+      { href: '/leave?tab=team-attendance', label: 'teamAttendance', permission: LEAVE_MENU.team },
       { href: '/leave/register', label: 'leaveRegister', permission: 'leave.office.manage' },
       { href: '/leave/balances', label: 'leaveBalances', permission: 'leave.office.manage' },
       {

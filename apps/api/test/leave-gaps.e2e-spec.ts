@@ -675,6 +675,50 @@ describe('the leave module against its plan (e2e)', () => {
     expect((await call(t3, 'GET', '/staff-attendance/team?size=25')).json().team).toBe(0);
   });
 
+  it('my leave as one page: the reporties’ leave of a month, opening one, availed days, the downloads', async () => {
+    const day = W(7, 1);
+    const leave = (await apply(t1, { leaveTypeId: ids.CL, from: day, to: day })).json();
+    expect(leave.id).toMatch(/^\d+$/);
+    const team = (await call(t2, 'GET', `/leave/self/team?month=${day.slice(0, 7)}`)).json();
+    expect(team.team).toBe(1);
+    expect(team.rows.map((r: { id: string }) => r.id)).toContain(leave.id);
+    expect(team.rows.every((r: { employee: { id: string } }) => r.employee.id === ids.T1)).toBe(
+      true,
+    );
+    // the status filter, another month
+    expect(
+      (await call(t2, 'GET', `/leave/self/team?month=${day.slice(0, 7)}&status=cancelled`)).json()
+        .rows,
+    ).toEqual([]);
+    // the reporting manager opens the leave; someone else does not
+    expect((await call(t2, 'GET', `/leave/requests/${leave.id as string}`)).statusCode).toBe(200);
+    expect((await call(t3, 'GET', `/leave/requests/${leave.id as string}`)).statusCode).toBe(404);
+    expect(
+      (await call(t3, 'GET', `/leave/self/team?month=${day.slice(0, 7)}`)).json(),
+    ).toMatchObject({
+      team: 0,
+      total: 0,
+    });
+    // each balance card has the days availed this leave year
+    const mine = (await call(t1, 'GET', '/leave/mine')).json();
+    expect(mine.balances[0]).toHaveProperty('availed');
+    // the downloads
+    for (const url of [
+      '/leave/self/leave-file?format=xlsx',
+      `/leave/self/attendance-file?month=${PAST[1]!.slice(0, 7)}&format=pdf`,
+      `/leave/self/team?month=${day.slice(0, 7)}&format=xlsx`,
+    ]) {
+      const f = await call(url.includes('team') ? t2 : t1, 'GET', url);
+      expect(f.statusCode).toBe(200);
+      expect(f.json().filename).toMatch(/^(My-leave|My-attendance|Reporties-leave)/);
+    }
+    // a sign-in with no employee record has no file of its own
+    expect((await call(admin, 'GET', '/leave/self/leave-file')).statusCode).toBe(404);
+    await call(t1, 'POST', `/leave/requests/${leave.id as string}/withdraw`, {
+      reason: 'Not needed',
+    });
+  });
+
   it('the side menu counts what waits at my level, the staff reporting to me and my reports', async () => {
     const leave = (await apply(t3, { leaveTypeId: ids.CL, from: W(5, 0), to: W(5, 0) })).json();
     expect(leave).toMatchObject({ status: 'pending' });

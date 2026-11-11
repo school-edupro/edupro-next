@@ -239,6 +239,8 @@ export interface MyLeave {
     name: string;
     available: number;
     held: number;
+    /** approved days this leave year (April to March) */
+    availed: number;
     policy: string | null;
   }>;
   types: LeaveFormType[];
@@ -819,4 +821,15 @@ export interface ShiftLogPage {
     at: string;
   }>;
   page: { page: number; size: number; total: number };
+}
+
+/** The leave of the staff reporting to me that touches a month (My leave → Reporties leave). */
+export interface TeamLeave {
+  month: string;
+  monthWords: string;
+  team: number;
+  rows: LeaveRequest[];
+  total: number;
+  page: number;
+  size: number;
 }

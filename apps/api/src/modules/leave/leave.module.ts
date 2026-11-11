@@ -14,6 +14,8 @@ import { LeaveReportsService } from './leave-reports.service';
 import { LeaveSetupController } from './leave-setup.controller';
 import { LeaveSetupService } from './leave-setup.service';
 import { LeaveController } from './leave.controller';
+import { LeaveSelfController } from './leave-self.controller';
+import { LeaveSelfService } from './leave-self.service';
 import { LeaveService } from './leave.service';
 import { ShiftCalendarController } from './shift-calendar.controller';
 import { ShiftCalendarService } from './shift-calendar.service';
@@ -28,6 +30,7 @@ import { ShiftCalendarService } from './shift-calendar.service';
     LeaveReportsController,
     LeaveCutoverController,
     ShiftCalendarController,
+    LeaveSelfController,
   ],
   providers: [
     AuditService,
@@ -36,6 +39,7 @@ import { ShiftCalendarService } from './shift-calendar.service';
     LeaveOfficeService,
     AttendanceService,
     ShiftCalendarService,
+    LeaveSelfService,
     LeaveDashboardService,
     LeaveReportsService,
     LeaveCutoverService,

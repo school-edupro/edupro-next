@@ -15039,3 +15039,66 @@ button.ep-shiftcal__cell:focus-visible {
 .ep-shiftcal__facts dd {
   margin: 0;
 }
+
+/* My leave (Employee Leave / Attendance): the leave cards over the tabs, each with a coloured left edge */
+.ep-myleave__top {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-3);
+}
+.ep-myleave__who {
+  margin: 0;
+  flex: 1 1 18rem;
+}
+.ep-myleave__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+}
+.ep-myleave__cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(11rem, 1fr));
+  gap: var(--sp-3);
+  margin: var(--sp-4) 0 0;
+  padding: 0;
+  list-style: none;
+}
+.ep-myleave__card {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--sp-2) var(--sp-3);
+  border: 1px solid var(--border-subtle);
+  border-left: 4px solid var(--action-primary);
+  border-radius: var(--radius-sm);
+  background: var(--surface-card);
+  font-size: var(--fs-small);
+  color: var(--text-body);
+}
+.ep-myleave__name {
+  font-weight: var(--fw-semibold);
+  color: var(--text-heading);
+}
+.ep-myleave__code {
+  font-size: var(--fs-body-lg);
+  color: var(--text-heading);
+}
+.ep-myleave__avail {
+  font-weight: var(--fw-bold);
+  color: var(--status-success-text);
+}
+.ep-myleave__none {
+  color: var(--text-muted);
+}
+.ep-myleave__filter {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: var(--sp-3);
+  margin-block: var(--sp-3);
+}
+.ep-myleave__filter .ep-field {
+  min-width: 12rem;
+}

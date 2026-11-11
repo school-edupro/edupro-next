@@ -586,3 +586,22 @@ export const ShiftLogSchema = z.object({
   format: z.enum(['xlsx', 'pdf']).optional(),
 });
 export class ShiftLogDto extends createZodDto(ShiftLogSchema) {}
+
+// ---- My leave as one page: the reporties' leave, the downloads ---------------------------------------
+/** The leave of the staff reporting to me that touches a month, a page at a time; Excel or PDF. */
+export const TeamLeaveSchema = z.object({
+  month: Month.optional(),
+  status: z.enum(['pending', 'approved', 'rejected', 'withdrawn', 'cancelled']).optional(),
+  q: z.string().trim().max(80).optional(),
+  ...Page,
+  size: Page.size.default(25),
+  format: z.enum(['xlsx', 'pdf']).optional(),
+});
+export class TeamLeaveDto extends createZodDto(TeamLeaveSchema) {}
+
+/** My leave or my month's attendance as a file. */
+export const MyFileSchema = z.object({
+  month: Month.optional(),
+  format: z.enum(['xlsx', 'pdf']).default('xlsx'),
+});
+export class MyFileDto extends createZodDto(MyFileSchema) {}
