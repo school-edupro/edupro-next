@@ -15299,6 +15299,9 @@ button.ep-shiftcal__cell:focus-visible {
   white-space: nowrap;
 }
 .ep-iconbtn {
+  /* its hidden words (.ep-sr-only) are placed in it: in a wide table they would otherwise sit far to the
+     right of the page and widen it (a gap at the side) */
+  position: relative;
   display: inline-flex;
   align-items: center;
   justify-content: center;
