@@ -31,6 +31,7 @@ import {
   type RegulariseDto,
   type RunDto,
   type SheetDto,
+  type BulkDaysDto,
   type TeamAttendanceDto,
   type TimingBulkDto,
   type TimingListDto,
@@ -274,9 +275,139 @@ export class AttendanceService implements OnModuleInit {
    * half a day — LOP for loss of pay, HOLD), whether late, a punch missing, set by hand; the totals (P, HD, A,
    * WO, H, each leave type, late, missing, payable days); whether the month is locked.
    */
+  /**
+   * The attendance register as the old Payroll / Attendance Register: the month's grid (the status filter,
+   * the staff not required in the reports left out unless asked), every employee for the dialogs, and what
+   * the payroll lock should look at first — missing punches still open, staff with no department.
+   */
   async register(ctx: RequestContext, q: RegisterMonthDto) {
     this.mustOffice(ctx);
-    return this.db.tenant(requireTenant(ctx), (c) => this.registerIn(c, q, null));
+    return this.db.tenant(requireTenant(ctx), async (c) => {
+      const reg = await this.registerIn(c, q, null, undefined, {
+        status: q.status ?? null,
+        hideExcluded: q.all !== '1',
+      });
+      const end = addDays(monthStart(addDays(reg.month, 32)), -1);
+      const employees = (
+        await c.query<{ id: string; name: string; code: string; department: string | null }>(
+          `SELECT id::text, display_name AS name, employee_code AS code, department FROM employees
+            WHERE deleted_at IS NULL AND status = 'active' ORDER BY display_name, employee_code`,
+        )
+      ).rows;
+      const excluded = (
+        await c.query<{ n: number }>(
+          `SELECT count(*)::int AS n FROM staff_report_exclusions x JOIN employees e ON e.id = x.employee_id
+            WHERE x.status = 'active' AND e.deleted_at IS NULL AND e.status = 'active'`,
+        )
+      ).rows[0]!.n;
+      const missing = await c.query<{ name: string; code: string; day: string; n: number }>(
+        `SELECT e.display_name AS name, e.employee_code AS code, m.day::text, count(*) OVER ()::int AS n
+           FROM staff_missing_punches m JOIN employees e ON e.id = m.employee_id
+          WHERE m.day BETWEEN $1::date AND $2::date AND m.status = 'pending' AND e.deleted_at IS NULL
+          ORDER BY m.day, e.display_name LIMIT 50`,
+        [reg.month, end],
+      );
+      const noDepartment = (
+        await c.query<{ name: string; code: string }>(
+          `SELECT display_name AS name, employee_code AS code FROM employees
+            WHERE deleted_at IS NULL AND status = 'active' AND COALESCE(btrim(department), '') = ''
+            ORDER BY display_name LIMIT 50`,
+        )
+      ).rows;
+      return {
+        ...reg,
+        status: q.status ?? null,
+        all: q.all === '1',
+        employees,
+        excluded,
+        checks: {
+          missing: missing.rows.map(({ name, code, day }) => ({ name, code, day })),
+          missingTotal: missing.rows[0]?.n ?? 0,
+          noDepartment,
+        },
+      };
+    });
+  }
+
+  /**
+   * Bulk update (the old register's): one status for many employees over a few days, each day set by hand
+   * with the reason. A locked month, a day to come, or a day under a full day's leave is not set; a weekly
+   * off or holiday made absent must be confirmed (it becomes loss of pay).
+   */
+  async bulkDays(ctx: RequestContext, dto: BulkDaysDto) {
+    this.mustOffice(ctx);
+    return this.db.tenant(requireTenant(ctx), async (c) => {
+      if (dto.to > istToday()) fail('Days still to come are not set');
+      for (let m = monthStart(dto.from); m <= dto.to; m = monthStart(addDays(m, 32)))
+        if (await this.locked(c, m))
+          fail(`${monthWords(m)} is locked for payroll: unlock it first`, 409);
+      const emps = (
+        await c.query<{ id: string }>(
+          `SELECT id::text FROM employees WHERE deleted_at IS NULL AND status = 'active'
+              AND (($1::bigint[] IS NOT NULL AND id = ANY($1::bigint[]))
+                OR ($1::bigint[] IS NULL AND lower(department) = lower($2)))
+            ORDER BY display_name`,
+          [dto.employeeIds?.length ? dto.employeeIds : null, dto.department ?? null],
+        )
+      ).rows.map((x) => x.id);
+      if (!emps.length) fail('Nobody to set: pick the employees or a department with staff');
+      const days: string[] = [];
+      for (let d = dto.from; d <= dto.to; d = addDays(d, 1)) days.push(d);
+      if (emps.length * days.length > 2000)
+        fail(
+          `${String(emps.length * days.length)} days at once: set at most 2,000 (fewer staff or days)`,
+        );
+      if (dto.dayType === 'A' && !dto.confirmOff) {
+        const off = (
+          await c.query<{ n: number }>(
+            `SELECT count(*)::int AS n FROM staff_attendance_days
+              WHERE employee_id = ANY($1::bigint[]) AND day BETWEEN $2::date AND $3::date AND day_type IN ('WO', 'H')`,
+            [emps, dto.from, dto.to],
+          )
+        ).rows[0]!.n;
+        if (off)
+          fail(
+            `${String(off)} weekly off / holiday day${off === 1 ? '' : 's'} would become absent (loss of pay once the month is locked): tick to confirm`,
+            409,
+          );
+      }
+      const leave = new Set(
+        (
+          await c.query<{ k: string }>(
+            `SELECT x.employee_id::text || '|' || x.day::text AS k
+               FROM staff_leave_days x JOIN staff_leave_requests r ON r.id = x.request_id
+              WHERE x.employee_id = ANY($1::bigint[]) AND x.day BETWEEN $2::date AND $3::date
+                AND x.status IN ('pending', 'approved') AND x.portion = 1
+                AND r.source NOT IN ('auto_late', 'auto_missing', 'auto_rule')`,
+            [emps, dto.from, dto.to],
+          )
+        ).rows.map((x) => x.k),
+      );
+      let set = 0;
+      let onLeave = 0;
+      for (const e of emps)
+        for (const d of days) {
+          if (leave.has(`${e}|${d}`)) {
+            onLeave++;
+            continue;
+          }
+          await this.setDay(c, e, d, {
+            dayType: dto.dayType,
+            in: null,
+            out: null,
+            source: 'bulk',
+            reason: dto.reason,
+          });
+          set++;
+        }
+      await this.audit.stage(ctx, c, {
+        action: 'leave.attendance.bulk',
+        entityType: 'staff_attendance_days',
+        entityId: emps[0]!,
+        after: { ...dto, employees: emps.length, set, onLeave },
+      });
+      return { set, onLeave, employees: emps.length };
+    });
   }
 
   /** The staff whose reporting manager I am (this year's postings). */
@@ -387,7 +518,7 @@ export class AttendanceService implements OnModuleInit {
           head: await purchaseHead(c, this.storage),
           name: 'Reporties attendance',
           slug: 'Reporties-attendance',
-          words: `${range} · L late, M a punch missing, * set by hand`,
+          words: `${range} · L late, F a punch missing, m set by hand`,
           table: {
             columns: [
               { label: 'Employee', width: 3 },
@@ -403,7 +534,7 @@ export class AttendanceService implements OnModuleInit {
               ...r.cells.map((x) =>
                 x.code === '·'
                   ? ''
-                  : `${x.code}${'late' in x && x.late ? 'L' : ''}${'missing' in x && x.missing ? 'M' : ''}${'manual' in x && x.manual ? '*' : ''}`,
+                  : `${x.code}${'late' in x && x.late ? 'L' : ''}${'missing' in x && x.missing ? 'F' : ''}${'manual' in x && x.manual ? 'm' : ''}`,
               ),
               ...keys.map((k) => r.totals[k] ?? 0),
             ]),
@@ -479,26 +610,46 @@ export class AttendanceService implements OnModuleInit {
     only: string[] | null,
     /** any range within a month or across two (My team's attendance); else q's month */
     range?: { from: string; to: string },
+    /**
+     * the register page's own: staff with a day of this code in the range (P, A, HD, WO, H, HOLD, LOP, a
+     * leave code, late, missing, manual); leave out the staff not required in the reports
+     */
+    opts: { status?: string | null; hideExcluded?: boolean } = {},
   ) {
     const month = range ? monthStart(range.from) : this.monthOf(q.month);
     const start = range?.from ?? month;
     const end = range?.to ?? addDays(monthStart(addDays(month, 32)), -1);
+    const day = `a.employee_id = e.id AND a.day BETWEEN $7::date AND $8::date`;
     const where = `WHERE e.deleted_at IS NULL AND e.status = 'active'
           AND ($1::bigint IS NULL OR e.id = $1) AND ($2::text IS NULL OR lower(e.department) = lower($2))
           AND ($3::text IS NULL OR e.display_name ILIKE '%' || $3 || '%' OR e.employee_code ILIKE '%' || $3 || '%')
-          AND ($6::bigint[] IS NULL OR e.id = ANY($6::bigint[]))`;
-    const args = [q.employeeId ?? null, q.department ?? null, q.q ?? null];
+          AND ($4::bigint[] IS NULL OR e.id = ANY($4::bigint[]))
+          AND ($5::text IS NULL
+               OR ($5 = 'late' AND EXISTS (SELECT 1 FROM staff_attendance_days a WHERE ${day} AND a.late_minutes > 0))
+               OR ($5 = 'missing' AND EXISTS (SELECT 1 FROM staff_missing_punches a WHERE ${day} AND a.status IN ('pending', 'used')))
+               OR ($5 = 'manual' AND EXISTS (SELECT 1 FROM staff_attendance_days a WHERE ${day} AND a.manual AND a.source <> 'import'))
+               OR EXISTS (SELECT 1 FROM staff_attendance_days a LEFT JOIN staff_leave_types t ON t.id = a.leave_type_id
+                           WHERE ${day} AND (a.day_type = $5
+                             OR (a.day_type = 'LV' AND (t.code = $5 OR (t.loss_of_pay AND $5 = 'LOP'))))))
+          AND (NOT $6::boolean OR NOT EXISTS (SELECT 1 FROM staff_report_exclusions x WHERE x.employee_id = e.id AND x.status = 'active'))`;
+    const args = [
+      q.employeeId ?? null,
+      q.department ?? null,
+      q.q ?? null,
+      only,
+      opts.status ?? null,
+      opts.hideExcluded ?? false,
+      start,
+      end,
+    ];
     const total = (
-      await c.query<{ n: number }>(
-        `SELECT count(*)::int AS n FROM employees e ${where.replace(/\$6/g, () => '$4')}`,
-        [...args, only],
-      )
+      await c.query<{ n: number }>(`SELECT count(*)::int AS n FROM employees e ${where}`, args)
     ).rows[0]!.n;
     const emps = (
       await c.query<{ id: string; name: string; code: string; department: string | null }>(
         `SELECT e.id::text, e.display_name AS name, e.employee_code AS code, e.department FROM employees e ${where}
-            ORDER BY e.display_name, e.employee_code LIMIT $4 OFFSET $5`,
-        [...args, q.size, (q.page - 1) * q.size, only],
+            ORDER BY e.display_name, e.employee_code LIMIT $9 OFFSET $10`,
+        [...args, q.size, (q.page - 1) * q.size],
       )
     ).rows;
     const ids = emps.map((e) => e.id);
@@ -578,6 +729,11 @@ export class AttendanceService implements OnModuleInit {
             d.day_type === 'LV'
               ? `${d.loss_of_pay ? 'LOP' : (d.leave_code ?? 'LV')}${half ? '½' : ''}`
               : d.day_type,
+          /** as stored (LV for leave): what the quick edit starts from */
+          type: d.day_type,
+          in: hm(d.in_at),
+          out: hm(d.out_at),
+          hrs: d.worked_hours === null ? null : Number(d.worked_hours),
           late: d.late_minutes > 0,
           missing: isMiss,
           manual: d.manual && d.source !== 'import',
@@ -1053,6 +1209,19 @@ export class AttendanceService implements OnModuleInit {
       );
       if (lv.rows[0])
         fail(`${lv.rows[0].number} covers this day: cancel or shorten the leave first`, 409);
+      if (dto.dayType === 'A' && !dto.confirmOff) {
+        const was = (
+          await c.query<{ t: string }>(
+            `SELECT day_type AS t FROM staff_attendance_days WHERE employee_id = $1 AND day = $2::date`,
+            [dto.employeeId, dto.day],
+          )
+        ).rows[0]?.t;
+        if (was === 'WO' || was === 'H')
+          fail(
+            `This day is a ${was === 'WO' ? 'weekly off' : 'holiday'}: tick to confirm it becomes absent (loss of pay once the month is locked)`,
+            409,
+          );
+      }
       const res = await this.setDay(c, dto.employeeId, dto.day, {
         dayType: dto.dayType ?? null,
         in: dto.in ?? null,

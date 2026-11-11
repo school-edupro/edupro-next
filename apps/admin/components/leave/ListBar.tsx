@@ -90,18 +90,29 @@ export function Showing({ page, size, total }: { page: number; size: number; tot
   );
 }
 
-/** Download ▾ with Excel and PDF of everything the filters match. */
-export function DownloadMenu({ xlsx, pdf }: { xlsx: string; pdf: string }) {
+/** Download ▾ with Excel and PDF of everything the filters match (or the items given). */
+export function DownloadMenu({
+  xlsx,
+  pdf,
+  items,
+}: {
+  xlsx?: string;
+  pdf?: string;
+  items?: Array<{ label: string; href: string }>;
+}) {
+  const list = items ?? [
+    ...(xlsx ? [{ label: 'Excel', href: xlsx }] : []),
+    ...(pdf ? [{ label: 'PDF', href: pdf }] : []),
+  ];
   return (
     <details className="ep-grid__chooser">
       <summary className="ep-btn ep-btn--primary ep-btn--sm">Download ▾</summary>
-      <div className="ep-grid__popover" style={{ minWidth: '10rem' }}>
-        <a href={xlsx} download>
-          Excel
-        </a>
-        <a href={pdf} download>
-          PDF
-        </a>
+      <div className="ep-grid__popover" style={{ minWidth: '12rem' }}>
+        {list.map((x) => (
+          <a key={x.label} href={x.href} download>
+            {x.label}
+          </a>
+        ))}
       </div>
     </details>
   );

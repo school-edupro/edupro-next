@@ -516,6 +516,38 @@ people}` and `can {override, trim, cancel}` (people as "CODE — Name"); `figure
   (dev-admin): the cards, columns, Filter, Download, a card filtering, the row and ledger dialogs, axe clean
   at 1280 and 375; both PDFs rendered and checked.
 
+## As built — the attendance register as the old screen (11 Nov 2026)
+
+Asked: `/leave/attendance` as the old Payroll / Attendance Register (a page overview the user supplied), in the
+Mobilise design. Benchmarked: greytHR's Attendance Muster (a month's grid filtered by employee, category and
+month, Excel export, bulk override date-wise, an Excel importer) and Zoho People (tabular attendance, bulk
+import). Decided with the user: **Bulk Update = a screen form and the Excel sheets**; **a day opens a quick
+edit**; guards — **a weekly off / holiday made absent needs a tick**, **staff not required in the reports are
+left off unless asked**, **the lock lists what is still open**.
+
+- Header: kicker Payroll / Attendance register, Filter (month, department, Show all staff) and Download ▾
+  (the `monthly_register` report as Excel and A3 PDF, the payroll feed).
+- One strip of tools: Search (ID or name), Attendance Status (staff with such a day: a code, a leave, late,
+  missing, manual), View (status, IN, OUT, hours / status only), Corrections (the regularisations list),
+  Bulk Update, Apply Leave (on behalf), Run now, the Open / Locked button, the Legend; the marker key (L late
+  mark, F missing punch, m manual, LOP) and "Showing a – b of N".
+- The grid: per employee Emp ID, name, department (the old Category) and the STATUS, IN, OUT, HRS lines a
+  column a day, weekly offs and holidays shaded, the employee column kept in view; the counts P, A, WO, H, HD,
+  each leave type, HOLD, L, F and Pay. A day (not locked, not to come, not leave) opens `DayQuickEdit` — one
+  client dialog for the grid (status, IN, OUT, reason, the tick; Full day detail).
+- Bulk Update (`POST /staff-attendance/days/bulk`): employees or a department, From–To (≤ 62 days, ≤ 2,000
+  days), P / A / HD / WO / H, the reason; each day through `setDay` (source bulk); a full day's leave is left
+  (counted), a day to come or a locked month refused, WO / H → A needs `confirmOff`. The day correction takes
+  `confirmOff` too.
+- API: register cells add `type`, `in`, `out`, `hrs`; `GET /staff-attendance/register` takes `status` and
+  `all`, and adds `employees`, `excluded` and `checks` (open missing punches of the month, staff with no
+  department). The payroll feed and My team still see every employee.
+- My team's grid and its PDF use the same markers (L, F, m).
+- Tests: `staff-attendance.e2e-spec.ts` — IN / OUT / HRS on a day, the status filters, hidden staff, the
+  WO → A tick (one day and bulk), bulk over a day of leave, a department, the limits and a locked month, the
+  office only. Browser (dev-admin): the strip, the four lines, the quick edit, Bulk Update, Apply Leave, Run
+  now, Legend, status-only view, the lock's checks, the three downloads; axe clean at 1280 and 375.
+
 ## The module is complete
 
 Phases A–E are built. What is left is the school's: the old database connection on the server, the read, the

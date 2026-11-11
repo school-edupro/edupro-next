@@ -91,7 +91,7 @@ export function TeamAttendanceTab({
         <>
           <p className="ep-field__help">
             {dmy(a.from)} to {dmy(a.to)}: P present, HD half day, A absent, WO weekly off, H
-            holiday, the leave’s code; L late, M a punch missing, ✎ set by hand. Click a day to see
+            holiday, the leave’s code; L late, F a punch missing, m set by hand. Click a day to see
             its punches.
           </p>
           <ListBar

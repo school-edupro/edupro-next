@@ -201,14 +201,35 @@ offs and holidays, absent days (no punch, no leave, no correction asked), late m
 (an e-mail to the employee), works the last few days out again, and turns absence past the settings' days
 into loss of pay.
 
-**The register**: a month of every employee — each day's code (P present, HD half day, A absent, WO, H,
-the leave's code, ½ for half a day, LOP loss of pay, HOLD salary hold, · not marked) with L late, M punch
-missing, ✎ set by hand — and the totals and **payable days** (the month less absent days, half of each
+**The register** (as the old Payroll / Attendance Register): a block per employee — Emp ID, name and
+department, then four lines a column a day: **STATUS** (P present, HD half day, A absent, WO, H, the leave's
+code with ½ for half a day, LOP loss of pay, HOLD salary hold, · not worked out yet), **IN**, **OUT** and
+**HRS**; weekly offs and holidays are shaded. Markers on a day: **L** late mark, **F** a missing (forgotten)
+punch, **m** set by hand. On the right, the month's counts — P, A, WO, H, HD, each leave type, HOLD, **L**
+late marks, **F** forgotten punches — and **Pay**, the payable days (the month less absent days, half of each
 half day, loss of pay and holds; "not marked" says how many past days the system has not worked out).
-Filters: month, department, search, 25 / 50 / 100 a page. **Payroll feed (Excel)** gives each employee's
-figures for payroll, with **pay-equivalent days** (a half-pay leave such as HPL counted at its pay %) and
-a second sheet, **Encashment (information)**: the leave each employee may encash under their policy and the
-balance it is paid from (the school's encashment is not run here).
+
+- **Filter**: month, department, and **Show all staff** — the staff on the "Not required in the reports"
+  list (test, vendor or management accounts) are left off the register unless ticked; their days still
+  count for payroll.
+- **Download**: the register as Excel or as an A3 PDF (four lines an employee), and the **Payroll feed
+  (Excel)** — each employee's figures for payroll, with **pay-equivalent days** (a half-pay leave such as
+  HPL counted at its pay %) and a second sheet, **Encashment (information)**.
+- The strip of tools: **Search** (employee ID or name), **Attendance Status** (only the staff with such a
+  day: a code, a leave, L, F or m), **View** (status, IN, OUT and hours, or status only), **Corrections**
+  (the corrections staff asked), **Bulk Update**, **Apply Leave** (for an employee, approved at once),
+  **Run now** (read the punches, the nightly run, work days out again, deduct late marks), the **Open /
+  Locked** button and the **Legend**.
+- **Click a day** for its quick edit: the status, IN, OUT and the reason; saving sets the day by hand (m).
+  **Full day detail** opens the day's page. Making a weekly off or holiday **Absent** asks for a tick: it
+  becomes loss of pay once the month is locked.
+- **Bulk Update**: one status (P, A, HD, WO, H) for the employees picked — or everyone in a department —
+  over up to 62 days, with the reason; each day is set by hand. A day under a full day's leave is left as
+  it is; a day to come or a locked month is refused; weekly offs or holidays made Absent need the tick.
+  The Excel sheets (days set by hand, punches the device could not send) are in the same dialog.
+- **Lock** (a past month): the dialog first lists the missing punches (F) still open and the staff with no
+  department; locking turns the absent days nobody explained into loss of pay, then stops every change.
+  **Unlock** asks why.
 
 **A day** (click it): how it was worked out in a sentence, the punches with where they came from, the
 late mark or missing punch, the leave, the corrections asked and the history (every change, why and by

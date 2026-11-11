@@ -1,27 +1,46 @@
-import { Badge, Breadcrumbs, PageHeader } from '@edupro/ui';
+import type { ReactNode } from 'react';
+import { Breadcrumbs, PageHeader } from '@edupro/ui';
 import { notFound } from 'next/navigation';
 import { Notice } from '@/components/Notice';
-import { Pager, PerPage, pageSizeOf } from '@/components/Pager';
+import { pageSizeOf } from '@/components/Pager';
+import { Icon } from '@/components/nav-icons';
 import { AttendanceSheetImport } from '@/components/leave/AttendanceSheetImport';
+import { DayQuickEdit } from '@/components/leave/DayQuickEdit';
+import { DialogButton } from '@/components/leave/DialogButton';
+import { LeaveApplyForm } from '@/components/leave/LeaveApplyForm';
+import { DownloadMenu, Pages, Showing, SizeLinks } from '@/components/leave/ListBar';
 import { ApiError, apiFetch, getMe } from '@/lib/api';
-import type { AttendanceRegister } from '@/lib/leave';
-import { lockMonth, runAttendance } from '@/lib/leave-actions';
+import { dmy, type AttendanceRegisterPage, type LeaveFormType } from '@/lib/leave';
+import { applyLeave, bulkDays, correctDay, lockMonth, runAttendance } from '@/lib/leave-actions';
 
-const TONE: Record<string, string> = {
-  P: 'var(--status-success-text)',
-  HD: 'var(--status-warning-text)',
-  A: 'var(--status-danger-text)',
-  LOP: 'var(--status-danger-text)',
-  HOLD: 'var(--status-danger-text)',
-  WO: 'var(--text-muted)',
-  H: 'var(--text-muted)',
-};
 const WEEKDAY = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
+const BASE = ['P', 'HD', 'A', 'WO', 'H', 'HOLD', 'LOP'];
+/** the colour class of a day's code: the day kinds, else a leave's */
+const codeClass = (code: string) => {
+  const c = code.replace('½', '');
+  return `ep-areg__code--${BASE.includes(c) ? c : 'LV'}`;
+};
+const STATUS_WORDS: Array<[string, string]> = [
+  ['P', 'P — Present'],
+  ['A', 'A — Absent'],
+  ['HD', 'HD — Half day'],
+  ['WO', 'WO — Weekly off'],
+  ['H', 'H — Holiday'],
+  ['HOLD', 'HOLD — Salary hold'],
+];
+const MARKS: Array<[string, string, string]> = [
+  ['L', 'ep-sq--L', 'Late Mark'],
+  ['F', 'ep-sq--F', 'Missing Punch'],
+  ['m', 'ep-sq--m', 'Manual Entry'],
+  ['LOP', 'ep-sq--LOP', 'Loss of Pay'],
+];
 
 /**
- * The attendance register (docs/design/85, phase C): a month of every employee — each day's code with
- * late, missing-punch and set-by-hand marks, the totals and payable days — a day opens its detail; the
- * payroll lock; run the jobs now; days and punches from Excel; the payroll feed.
+ * The attendance register as the old Payroll / Attendance Register (docs/design/85, "the attendance register
+ * as the old screen", in the Mobilise design): Filter and Download; one strip of tools — search, Attendance
+ * Status, View, Corrections, Bulk Update, Apply Leave, Run now, the payroll lock, the legend; the marker key;
+ * then a block per employee (STATUS, IN, OUT, HRS) a column a day with the month's counts. A day opens its
+ * quick edit.
  */
 export default async function AttendanceRegisterPage({
   searchParams,
@@ -32,131 +51,363 @@ export default async function AttendanceRegisterPage({
   const me = await getMe();
   if (!me.permissions.includes('leave.office.manage')) notFound();
   const size = pageSizeOf(sp.size ?? '25');
+  const view = sp.view === 'status' ? 'status' : 'full';
   const keep = new URLSearchParams();
   if (sp.month && /^\d{4}-\d{2}$/.test(sp.month)) keep.set('month', sp.month);
   if (sp.department) keep.set('department', sp.department.slice(0, 100));
   if (sp.q) keep.set('q', sp.q.slice(0, 80));
+  if (sp.status && /^[A-Za-z0-9_]{1,20}$/.test(sp.status)) keep.set('status', sp.status);
+  if (sp.all === '1') keep.set('all', '1');
   const qs = new URLSearchParams(keep);
   qs.set('size', size);
   qs.set('page', String(Math.max(1, Number(sp.page) || 1)));
-  let d: AttendanceRegister;
+  let d: AttendanceRegisterPage;
+  let formTypes: LeaveFormType[] = [];
   try {
-    d = await apiFetch<AttendanceRegister>(`/staff-attendance/register?${qs.toString()}`);
+    d = await apiFetch<AttendanceRegisterPage>(`/staff-attendance/register?${qs.toString()}`);
+    formTypes = await apiFetch<{
+      data: Array<{
+        id: string;
+        code: string;
+        name: string;
+        keeps_balance: string;
+        half_day: string;
+        loss_of_pay: string;
+        document_needed: string;
+        max_days: string | null;
+        status: string;
+      }>;
+    }>('/masters/staff_leave_types/rows?size=200')
+      .then((r) =>
+        r.data
+          .filter((t) => t.status === 'active')
+          .map((t) => ({
+            id: t.id,
+            code: t.code,
+            name: t.name,
+            keepsBalance: t.keeps_balance === 'true' && t.loss_of_pay !== 'true',
+            halfDay: t.half_day === 'true' || t.loss_of_pay === 'true',
+            documentNeeded: t.document_needed === 'true',
+            maxDays: t.max_days === null ? null : Number(t.max_days),
+            approvedAtOnce: true,
+          })),
+      )
+      .catch(() => []);
   } catch (e) {
     if (e instanceof ApiError && e.status === 403) notFound();
     throw e;
   }
-  const link = (page: number) => {
-    const p = new URLSearchParams(keep);
-    p.set('size', size);
-    if (page > 1) p.set('page', String(page));
-    return `/leave/attendance?${p.toString()}`;
-  };
-  const here = link(d.page);
   const month = d.month.slice(0, 7);
+  const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' }).format(new Date());
   const locked = !!d.lock?.locked;
+  const href = (o: { page?: number; size?: string; filter?: boolean; all?: boolean }) => {
+    const p = new URLSearchParams(keep);
+    if (view === 'status') p.set('view', 'status');
+    const sz = o.size ?? size;
+    if (sz !== '25') p.set('size', sz);
+    if (o.page && o.page > 1) p.set('page', String(o.page));
+    if (o.filter) p.set('filter', '1');
+    if (o.all) p.set('all', '1');
+    const s = p.toString();
+    return `/leave/attendance${s ? `?${s}` : ''}`;
+  };
+  const here = href({ page: d.page });
+  const filtered = keep.has('month') || keep.has('department') || keep.has('all');
+  const showFilter = sp.filter === '1' || filtered;
+  const report = (format: 'xlsx' | 'pdf') =>
+    `/api/leave/report?${new URLSearchParams({
+      report: 'monthly_register',
+      format,
+      month,
+      ...(sp.department ? { department: sp.department } : {}),
+    }).toString()}`;
+  const hidden = (names: string[]) =>
+    names.map((n) =>
+      keep.get(n) ? <input key={n} type="hidden" name={n} value={keep.get(n)!} /> : null,
+    );
+  const sums = ['P', 'A', 'WO', 'H', 'HD', ...d.types, 'HOLD'];
+  const monthStart = d.month.slice(0, 10);
+  const monthEnd = d.dates[d.dates.length - 1] ?? monthStart;
+  const legend = (
+    <div className="ep-form-section__body">
+      <div>
+        <h4 className="ep-field__label">Status codes</h4>
+        <ul style={{ margin: 0, paddingLeft: 'var(--sp-4)' }}>
+          <li>P Present · A Absent · WO Weekly off · H Holiday · HD Half day · HOLD Salary hold</li>
+          <li>
+            The leave’s code — {d.types.join(', ')} — with ½ for half a day (counted 0.5, the other
+            half present)
+          </li>
+          <li>
+            LOP Loss of pay · · not worked out yet (a past day the nightly run has not reached)
+          </li>
+        </ul>
+      </div>
+      <div>
+        <h4 className="ep-field__label">Markers on a day</h4>
+        <ul className="ep-armeta__key" style={{ flexDirection: 'column', gap: 'var(--sp-1)' }}>
+          {MARKS.map(([k, cls, words]) => (
+            <li key={k}>
+              <span className={`ep-sq ${cls}`} aria-hidden="true" />
+              {k} — {words}
+              {k === 'F' ? ' (a forgotten punch, usually OUT)' : ''}
+              {k === 'm' ? ' (set or corrected by hand)' : ''}
+            </li>
+          ))}
+        </ul>
+      </div>
+      <div>
+        <h4 className="ep-field__label">The month’s counts</h4>
+        <p className="ep-field__help" style={{ margin: 0 }}>
+          {sums.join(', ')}: days of each kind (half days count 0.5). L late marks, F forgotten
+          punches, Pay the payable days (the days not absent, on loss of pay or held; past days not
+          worked out count until they are).
+        </p>
+      </div>
+    </div>
+  );
   return (
     <>
       <Breadcrumbs
         items={[
-          { label: 'Employee management', href: '/people/employees' },
+          { label: 'Employee leave & attendance', href: '/leave' },
           { label: 'Attendance register' },
         ]}
       />
       <PageHeader
-        kicker="Leave & attendance"
-        title={`Attendance register · ${d.monthWords}`}
-        description="Every employee's days, worked out from the biometric punches: P present, HD half day, A absent, WO weekly off, H holiday, the leave's code (½ for half a day), LOP loss of pay. A dot after the code: late (L), a punch missing (M), set by hand (✎). Click a day to see how it was worked out, its punches and history, and to correct it."
+        kicker="Payroll / Attendance register"
+        title={`Attendance Register · ${d.monthWords}`}
+        description={`Every employee's day, worked out from the biometric punches: the status, IN, OUT and hours, with the month's counts. Click a day to correct it. ${String(d.total)} employees.`}
         actions={
           <div style={{ display: 'flex', gap: 'var(--sp-2)', flexWrap: 'wrap' }}>
             <a
-              className="ep-btn ep-btn--secondary ep-btn--sm"
-              href={`/leave/attendance/exceptions?month=${month}`}
+              className="ep-btn ep-btn--primary ep-btn--sm"
+              href={showFilter && !filtered ? href({}) : href({ filter: true })}
             >
-              Late marks and missing punches
+              {showFilter && !filtered ? 'Hide filter' : 'Filter'}
             </a>
-            <a
-              className="ep-btn ep-btn--secondary ep-btn--sm"
-              href={`/api/leave/attendance-file?month=${month}${sp.department ? `&department=${encodeURIComponent(sp.department)}` : ''}`}
-            >
-              Payroll feed (Excel)
-            </a>
+            <DownloadMenu
+              items={[
+                { label: 'Register (Excel)', href: report('xlsx') },
+                { label: 'Register (PDF, A3)', href: report('pdf') },
+                {
+                  label: 'Payroll feed (Excel)',
+                  href: `/api/leave/attendance-file?month=${month}${sp.department ? `&department=${encodeURIComponent(sp.department)}` : ''}`,
+                },
+              ]}
+            />
           </div>
         }
       />
       <Notice params={sp} />
-      <p className={locked ? 'ep-alert ep-alert--info' : 'ep-field__help'} role="status">
-        {locked
-          ? `${d.monthWords} is locked for payroll${d.lock?.by ? ` by ${d.lock.by}` : ''}: nothing in it changes until it is unlocked.`
-          : d.mayLock
-            ? `${d.monthWords} is open. Lock it once payroll is final: the absent days nobody explained become loss of pay first.`
-            : `${d.monthWords} is still running.`}
-        {d.lock && !d.lock.locked && d.lock.unlockReason
-          ? ` Unlocked before: ${d.lock.unlockReason}.`
-          : ''}
-      </p>
-      <form
-        method="get"
-        action="/leave/attendance"
-        className="ep-grid__toolbar"
-        style={{ flexWrap: 'wrap' }}
-      >
-        <label className="ep-field" htmlFor="ar-month">
-          <span className="ep-field__label">Month</span>
-          <input
-            id="ar-month"
-            name="month"
-            type="month"
-            className="ep-input"
-            defaultValue={month}
+      {showFilter ? (
+        <form
+          method="get"
+          action="/leave/attendance"
+          className="ep-card ep-myleave__filter"
+          aria-label="Filter"
+        >
+          <input type="hidden" name="filter" value="1" />
+          {hidden(['q', 'status'])}
+          {view === 'status' ? <input type="hidden" name="view" value="status" /> : null}
+          <label className="ep-field" htmlFor="ar-month">
+            <span className="ep-field__label">Month</span>
+            <input
+              id="ar-month"
+              name="month"
+              type="month"
+              className="ep-input"
+              defaultValue={month}
+            />
+          </label>
+          <label className="ep-field" htmlFor="ar-dept">
+            <span className="ep-field__label">Department</span>
+            <select
+              id="ar-dept"
+              name="department"
+              className="ep-select"
+              defaultValue={sp.department ?? ''}
+            >
+              <option value="">All departments</option>
+              {d.departments.map((x) => (
+                <option key={x} value={x}>
+                  {x}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="ep-check" htmlFor="ar-all">
+            <input id="ar-all" type="checkbox" name="all" value="1" defaultChecked={d.all} />
+            <span>Show all staff ({d.excluded} not required in the reports)</span>
+          </label>
+          <button type="submit" className="ep-btn ep-btn--primary ep-btn--sm">
+            Search
+          </button>
+          <a className="ep-btn ep-btn--secondary ep-btn--sm" href="/leave/attendance">
+            Reset
+          </a>
+        </form>
+      ) : null}
+      <div className="ep-arbar">
+        <form
+          method="get"
+          action="/leave/attendance"
+          className="ep-arbar"
+          style={{ margin: 0, padding: 0, border: 0 }}
+        >
+          {hidden(['month', 'department', 'all'])}
+          {size !== '25' ? <input type="hidden" name="size" value={size} /> : null}
+          <label className="ep-field" htmlFor="ar-q">
+            <span className="ep-field__label">Search</span>
+            <input
+              id="ar-q"
+              name="q"
+              type="search"
+              className="ep-input"
+              defaultValue={sp.q ?? ''}
+              placeholder="Search employee ID or name"
+            />
+          </label>
+          <label className="ep-field" htmlFor="ar-status">
+            <span className="ep-field__label">Attendance Status</span>
+            <select
+              id="ar-status"
+              name="status"
+              className="ep-select"
+              defaultValue={keep.get('status') ?? ''}
+            >
+              <option value="">All</option>
+              {STATUS_WORDS.map(([k, w]) => (
+                <option key={k} value={k}>
+                  {w}
+                </option>
+              ))}
+              {d.types.map((t) => (
+                <option key={t} value={t}>
+                  {t} — leave
+                </option>
+              ))}
+              <option value="late">L — Late mark</option>
+              <option value="missing">F — Missing punch</option>
+              <option value="manual">m — Manual entry</option>
+            </select>
+          </label>
+          <label className="ep-field" htmlFor="ar-view">
+            <span className="ep-field__label">View</span>
+            <select id="ar-view" name="view" className="ep-select" defaultValue={view}>
+              <option value="full">Status, IN, OUT, hours</option>
+              <option value="status">Status only</option>
+            </select>
+          </label>
+          <button type="submit" className="ep-btn ep-btn--secondary ep-btn--sm">
+            Show
+          </button>
+        </form>
+        <span className="ep-arbar__spacer" />
+        <a
+          className="ep-btn ep-btn--secondary ep-btn--sm"
+          href={`/leave/attendance/exceptions?kind=regularisation&month=${month}`}
+        >
+          Corrections
+        </a>
+        <DialogButton
+          id="ar-bulk"
+          label="Bulk Update"
+          title="Bulk update"
+          className="ep-btn ep-btn--secondary ep-btn--sm"
+        >
+          <BulkForm d={d} here={here} today={today} from={monthStart} to={monthEnd} />
+        </DialogButton>
+        <DialogButton
+          id="ar-apply"
+          label="Apply Leave"
+          title="Apply leave for an employee"
+          className="ep-btn ep-btn--secondary ep-btn--sm"
+        >
+          <p className="ep-field__help" style={{ marginTop: 0 }}>
+            Entered by the office: approved at once (the fewest days and the document are not asked;
+            loss of pay may be entered). Leave already on those days is replaced.
+          </p>
+          <LeaveApplyForm
+            types={formTypes}
+            employees={d.employees.map((e) => ({ id: e.id, name: `${e.name} (${e.code})` }))}
+            apply={applyLeave}
+            idPrefix="ar-ob"
+            submitLabel="Apply the leave"
           />
-        </label>
-        <label className="ep-field" htmlFor="ar-dept">
-          <span className="ep-field__label">Department</span>
-          <select
-            id="ar-dept"
-            name="department"
-            className="ep-select"
-            defaultValue={sp.department ?? ''}
-          >
-            <option value="">All departments</option>
-            {d.departments.map((x) => (
-              <option key={x} value={x}>
-                {x}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="ep-field" htmlFor="ar-q">
-          <span className="ep-field__label">Search</span>
-          <input
-            id="ar-q"
-            name="q"
-            className="ep-input"
-            defaultValue={sp.q ?? ''}
-            placeholder="Name or code"
-          />
-        </label>
-        <PerPage id="ar-size" value={size} />
-        <button type="submit" className="ep-btn ep-btn--secondary ep-btn--sm">
-          Show
-        </button>
-      </form>
+        </DialogButton>
+        <DialogButton
+          id="ar-run"
+          label="Run now"
+          title="Run now"
+          className="ep-btn ep-btn--secondary ep-btn--sm"
+        >
+          <RunNow here={here} />
+        </DialogButton>
+        <LockPill d={d} here={here} month={month} locked={locked} />
+        <DialogButton
+          id="ar-legend"
+          label={
+            <span className="ep-lockpill">
+              <Icon name="help" size={16} /> Legend
+            </span>
+          }
+          title="What the colours and codes in the grid mean"
+          className="ep-btn ep-btn--ghost ep-btn--sm"
+        >
+          {legend}
+        </DialogButton>
+      </div>
+      <div className="ep-armeta">
+        <ul className="ep-armeta__key" aria-label="Markers">
+          {MARKS.map(([k, cls, words]) => (
+            <li key={k}>
+              <span className={`ep-sq ${cls}`} aria-hidden="true" />
+              {words}
+            </li>
+          ))}
+        </ul>
+        <Showing page={d.page} size={d.size} total={d.total} />
+      </div>
+      {!d.all && d.excluded ? (
+        <p className="ep-field__help" style={{ margin: 0 }}>
+          {d.excluded} staff not required in the reports (test, vendor or management accounts) are
+          left out — <a href={href({ all: true })}>show all staff</a>. Their days still count for
+          payroll.
+        </p>
+      ) : null}
+      <div className="ep-listbar">
+        <SizeLinks size={d.size} sizeHref={(s) => href({ size: s })} noun="employees" />
+        <Pages
+          page={d.page}
+          size={d.size}
+          total={d.total}
+          href={(p) => href({ page: p })}
+          noun="employees"
+        />
+      </div>
       <div className="ep-table-wrap" tabIndex={0} role="region" aria-label="Attendance register">
-        <table className="ep-table ep-table--dense">
+        <table className="ep-table ep-table--dense ep-areg">
           <thead>
             <tr>
-              <th scope="col">Employee</th>
+              <th scope="col" className="ep-areg__emp">
+                Employee
+              </th>
+              {view === 'full' ? (
+                <th scope="col">
+                  <span className="ep-sr-only">Line</span>
+                </th>
+              ) : null}
               {d.dates.map((x) => (
-                <th key={x} scope="col" style={{ textAlign: 'center', padding: 'var(--sp-1)' }}>
+                <th key={x} scope="col">
                   {Number(x.slice(8, 10))}
                   <span className="ep-mr-col__desc">
                     {WEEKDAY[new Date(`${x}T00:00:00Z`).getUTCDay()]}
                   </span>
                 </th>
               ))}
-              {['P', 'HD', 'A', 'WO', 'H', ...d.types, 'HOLD', 'Late', 'Miss', 'Pay'].map((h) => (
-                <th key={h} scope="col" style={{ textAlign: 'right' }}>
+              {[...sums, 'L', 'F', 'Pay'].map((h) => (
+                <th key={h} scope="col">
                   {h}
                 </th>
               ))}
@@ -164,169 +415,421 @@ export default async function AttendanceRegisterPage({
           </thead>
           <tbody>
             {d.rows.length ? (
-              d.rows.map((r) => (
-                <tr key={r.employee.id}>
-                  <th scope="row" style={{ whiteSpace: 'nowrap' }}>
-                    {r.employee.name}
-                    <span className="ep-mr-col__desc">{r.employee.code}</span>
+              d.rows.flatMap((r) => {
+                const emp = (
+                  <th scope="row" className="ep-areg__emp" rowSpan={view === 'full' ? 4 : 1}>
+                    <strong>{r.employee.code}</strong>
+                    <span style={{ display: 'block' }}>{r.employee.name}</span>
+                    <span className="ep-mr-col__desc">{r.employee.department ?? '—'}</span>
                   </th>
-                  {r.cells.map((c) => (
-                    <td
-                      key={c.day}
-                      style={{ textAlign: 'center', padding: 'var(--sp-1)' }}
-                      title={c.title || undefined}
-                    >
-                      {c.code ? (
-                        <a
-                          href={`/leave/attendance/day?emp=${r.employee.id}&day=${c.day}`}
-                          style={{
-                            color: TONE[c.code.replace('½', '')] ?? 'var(--text-primary)',
-                            textDecoration: 'none',
-                            fontWeight: 600,
-                          }}
-                          aria-label={`${r.employee.name} ${c.day}: ${c.title || c.code}`}
-                        >
-                          {c.code}
-                          {c.late ? <sup>L</sup> : null}
-                          {c.missing ? <sup>M</sup> : null}
-                          {c.manual ? <sup>✎</sup> : null}
-                        </a>
-                      ) : null}
-                    </td>
-                  ))}
-                  {['P', 'HD', 'A', 'WO', 'H', ...d.types, 'HOLD', 'late', 'missing'].map((k) => (
-                    <td key={k} style={{ textAlign: 'right' }}>
-                      {r.totals[k] ?? 0}
-                    </td>
-                  ))}
-                  <td style={{ textAlign: 'right' }}>
+                );
+                const totals = [...sums, 'late', 'missing'].map((k) => (
+                  <td key={k} rowSpan={view === 'full' ? 4 : 1}>
+                    {r.totals[k] ?? 0}
+                  </td>
+                ));
+                const pay = (
+                  <td rowSpan={view === 'full' ? 4 : 1}>
                     <strong>{r.payable}</strong>
                     {r.unmarked ? (
-                      <span className="ep-mr-col__desc" style={{ whiteSpace: 'nowrap' }}>
-                        {r.unmarked} not marked
-                      </span>
+                      <span className="ep-mr-col__desc">{r.unmarked} not marked</span>
                     ) : null}
                   </td>
-                </tr>
-              ))
+                );
+                const status = r.cells.map((c) => {
+                  const off = c.code === 'WO' || c.code === 'H';
+                  const mark: ReactNode = (
+                    <>
+                      {c.late ? <sup className="ep-mk ep-mk--L">L</sup> : null}
+                      {c.missing ? <sup className="ep-mk ep-mk--F">F</sup> : null}
+                      {c.manual ? <sup className="ep-mk ep-mk--m">m</sup> : null}
+                    </>
+                  );
+                  const label = `${r.employee.name}, ${dmy(c.day)}: ${c.title || c.code || 'nothing yet'}`;
+                  const editable = !locked && c.day <= today && c.type !== 'LV';
+                  return (
+                    <td
+                      key={c.day}
+                      className={off ? 'ep-areg__off' : undefined}
+                      title={c.title || undefined}
+                    >
+                      {!c.code ? null : editable ? (
+                        <button
+                          type="button"
+                          className={`ep-areg__cell ${codeClass(c.code)}`}
+                          data-qe=""
+                          data-emp={r.employee.id}
+                          data-name={r.employee.name}
+                          data-day={c.day}
+                          data-type={c.type ?? ''}
+                          data-code={c.code === '·' ? '' : c.code}
+                          data-in={c.in ?? ''}
+                          data-out={c.out ?? ''}
+                          aria-label={`Edit ${label}`}
+                        >
+                          {c.code}
+                          {mark}
+                        </button>
+                      ) : (
+                        <a
+                          className={`ep-areg__cell ${codeClass(c.code)}`}
+                          href={`/leave/attendance/day?emp=${r.employee.id}&day=${c.day}`}
+                          aria-label={label}
+                        >
+                          {c.code}
+                          {mark}
+                        </a>
+                      )}
+                    </td>
+                  );
+                });
+                if (view === 'status')
+                  return [
+                    <tr key={r.employee.id} className="ep-areg__first">
+                      {emp}
+                      {status}
+                      {totals}
+                      {pay}
+                    </tr>,
+                  ];
+                const line = (k: 'in' | 'out' | 'hrs', words: string) => (
+                  <tr key={`${r.employee.id}-${k}`}>
+                    <td className="ep-areg__lbl">{words}</td>
+                    {r.cells.map((c) => (
+                      <td
+                        key={c.day}
+                        className={`ep-areg__time${c.code === 'WO' || c.code === 'H' ? ' ep-areg__off' : ''}`}
+                      >
+                        {k === 'hrs' ? (c.hrs ? c.hrs.toFixed(2) : '') : (c[k] ?? '')}
+                      </td>
+                    ))}
+                  </tr>
+                );
+                return [
+                  <tr key={r.employee.id} className="ep-areg__first">
+                    {emp}
+                    <td className="ep-areg__lbl">STATUS</td>
+                    {status}
+                    {totals}
+                    {pay}
+                  </tr>,
+                  line('in', 'IN'),
+                  line('out', 'OUT'),
+                  line('hrs', 'HRS'),
+                ];
+              })
             ) : (
               <tr>
-                <td colSpan={d.dates.length + 10 + d.types.length}>No staff in these filters.</td>
+                <td colSpan={d.dates.length + sums.length + 5}>No staff in these filters.</td>
               </tr>
             )}
           </tbody>
         </table>
       </div>
-      <Pager page={d.page} size={d.size} total={d.total} href={link} noun="employees" />
-      <div className="ep-setup-sections" style={{ marginTop: 'var(--sp-4)' }}>
-        <section className="ep-card" aria-labelledby="ar-lock">
-          <h2 id="ar-lock" className="ep-card__title">
-            Payroll lock
-          </h2>
-          {locked ? (
-            <form action={lockMonth.bind(null, false)} className="ep-form-section__body">
-              <input type="hidden" name="back" value={here} />
-              <input type="hidden" name="month" value={month} />
-              <label className="ep-field" htmlFor="ar-why">
-                <span className="ep-field__label">Why unlock</span>
-                <input
-                  id="ar-why"
-                  name="reason"
-                  className="ep-input"
-                  required
-                  minLength={3}
-                  maxLength={300}
-                />
-              </label>
-              <button type="submit" className="ep-btn ep-btn--secondary ep-btn--sm">
-                Unlock {d.monthWords}
-              </button>
-            </form>
-          ) : d.mayLock ? (
-            <form action={lockMonth.bind(null, true)}>
-              <input type="hidden" name="back" value={here} />
-              <input type="hidden" name="month" value={month} />
-              <p className="ep-field__help">
-                Locking turns the absent days with no leave and no correction asked into loss of
-                pay, then stops every change in the month (leave, corrections, punches).
-              </p>
-              <button type="submit" className="ep-btn ep-btn--primary ep-btn--sm">
-                Lock {d.monthWords}
-              </button>
-            </form>
-          ) : (
-            <p className="ep-field__help">A month is locked once it is over.</p>
-          )}
-        </section>
-        <section className="ep-card" aria-labelledby="ar-run">
-          <h2 id="ar-run" className="ep-card__title">
-            Run now
-          </h2>
-          <p className="ep-field__help" style={{ marginTop: 0 }}>
-            The system reads punches every 15 minutes and does the rest every night. Run a step now
-            after a change.
-          </p>
-          {(
-            [
-              ['sync', 'Read the new punches'],
-              [
-                'nightly',
-                'The nightly run (weekly offs, holidays, absent, late marks, missing punches, loss of pay)',
-              ],
-            ] as const
-          ).map(([what, label]) => (
-            <form key={what} action={runAttendance} style={{ marginBottom: 'var(--sp-2)' }}>
-              <input type="hidden" name="back" value={here} />
-              <input type="hidden" name="what" value={what} />
-              <button type="submit" className="ep-btn ep-btn--secondary ep-btn--sm">
-                {label}
-              </button>
-            </form>
-          ))}
-          <form action={runAttendance} className="ep-grid__toolbar" style={{ flexWrap: 'wrap' }}>
-            <input type="hidden" name="back" value={here} />
-            <input type="hidden" name="what" value="recompute" />
-            <label className="ep-field" htmlFor="ar-rf">
-              <span className="ep-field__label">From</span>
-              <input id="ar-rf" name="from" type="date" className="ep-input" />
-            </label>
-            <label className="ep-field" htmlFor="ar-rt">
-              <span className="ep-field__label">To</span>
-              <input id="ar-rt" name="to" type="date" className="ep-input" />
-            </label>
-            <button type="submit" className="ep-btn ep-btn--secondary ep-btn--sm">
-              Work these days out again
-            </button>
-          </form>
-          <form action={runAttendance} className="ep-grid__toolbar" style={{ flexWrap: 'wrap' }}>
-            <input type="hidden" name="back" value={here} />
-            <input type="hidden" name="what" value="deduct" />
-            <label className="ep-field" htmlFor="ar-dm">
-              <span className="ep-field__label">Month</span>
-              <input id="ar-dm" name="month" type="month" className="ep-input" />
-            </label>
-            <button type="submit" className="ep-btn ep-btn--secondary ep-btn--sm">
-              Deduct its late marks and missing punches
-            </button>
-          </form>
-        </section>
-      </div>
-      <section className="ep-card" aria-labelledby="ar-up" style={{ marginTop: 'var(--sp-4)' }}>
-        <h2 id="ar-up" className="ep-card__title">
-          From Excel
-        </h2>
-        <h3 className="ep-field__label">Days set by hand (the punches no longer change them)</h3>
-        <AttendanceSheetImport what="days" />
-        <h3 className="ep-field__label" style={{ marginTop: 'var(--sp-4)' }}>
-          Punches the device could not send
-        </h3>
-        <AttendanceSheetImport what="punches" />
-      </section>
-      <p className="ep-field__help">
-        <Badge tone="neutral">Legend</Badge> P present · HD half day · A absent · WO weekly off · H
-        holiday · CL, EL… leave (½ half a day) · LOP loss of pay · HOLD salary hold · L late · M
-        punch missing · ✎ set by hand · · not marked
-      </p>
+      <Pages
+        page={d.page}
+        size={d.size}
+        total={d.total}
+        href={(p) => href({ page: p })}
+        noun="employees"
+      />
+      <DayQuickEdit action={correctDay} back={here} />
     </>
+  );
+}
+
+/** Bulk Update: one status for the employees picked (or a department) over the dates; the Excel sheets. */
+function BulkForm({
+  d,
+  here,
+  today,
+  from,
+  to,
+}: {
+  d: AttendanceRegisterPage;
+  here: string;
+  today: string;
+  from: string;
+  to: string;
+}) {
+  const end = to < today ? to : today;
+  return (
+    <>
+      <form action={bulkDays} className="ep-form-section__body">
+        <input type="hidden" name="back" value={here} />
+        <p className="ep-field__help" style={{ marginTop: 0 }}>
+          Sets one status on every day picked for each employee, by hand (m), with the reason. A day
+          under a full day’s leave is left as it is; a locked month or a day to come is refused.
+        </p>
+        <fieldset className="ep-field" style={{ border: 0, padding: 0, margin: 0 }}>
+          <legend className="ep-field__label">Who</legend>
+          <label className="ep-check" htmlFor="ab-who-e">
+            <input id="ab-who-e" type="radio" name="who" value="employees" defaultChecked />
+            <span>The employees picked below</span>
+          </label>
+          <label className="ep-check" htmlFor="ab-who-d">
+            <input id="ab-who-d" type="radio" name="who" value="department" />
+            <span>Everyone in a department</span>
+          </label>
+        </fieldset>
+        <label className="ep-field" htmlFor="ab-emps">
+          <span className="ep-field__label">Employees (Ctrl / ⌘ to pick several)</span>
+          <select id="ab-emps" name="employeeIds" className="ep-select" multiple size={8}>
+            {d.employees.map((e) => (
+              <option key={e.id} value={e.id}>
+                {e.code} — {e.name}
+                {e.department ? ` · ${e.department}` : ''}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="ep-field" htmlFor="ab-dept">
+          <span className="ep-field__label">Department</span>
+          <select id="ab-dept" name="department" className="ep-select" defaultValue="">
+            <option value="">Pick a department</option>
+            {d.departments.map((x) => (
+              <option key={x} value={x}>
+                {x}
+              </option>
+            ))}
+          </select>
+        </label>
+        <div className="ep-form-row">
+          <label className="ep-field" htmlFor="ab-from">
+            <span className="ep-field__label">From Date</span>
+            <input
+              id="ab-from"
+              name="from"
+              type="date"
+              className="ep-input"
+              defaultValue={from}
+              max={today}
+              required
+            />
+          </label>
+          <label className="ep-field" htmlFor="ab-to">
+            <span className="ep-field__label">To Date</span>
+            <input
+              id="ab-to"
+              name="to"
+              type="date"
+              className="ep-input"
+              defaultValue={end}
+              max={today}
+              required
+            />
+          </label>
+        </div>
+        <label className="ep-field" htmlFor="ab-type">
+          <span className="ep-field__label">Status</span>
+          <select id="ab-type" name="dayType" className="ep-select" required defaultValue="P">
+            {STATUS_WORDS.filter(([k]) => k !== 'HOLD').map(([k, w]) => (
+              <option key={k} value={k}>
+                {w}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="ep-field" htmlFor="ab-why">
+          <span className="ep-field__label">Reason</span>
+          <textarea
+            id="ab-why"
+            name="reason"
+            className="ep-input"
+            rows={2}
+            minLength={3}
+            maxLength={300}
+            required
+          />
+        </label>
+        <label className="ep-check" htmlFor="ab-off">
+          <input id="ab-off" type="checkbox" name="confirmOff" value="1" />
+          <span>
+            If the status is Absent and a weekly off or holiday falls in these days: yes, make it
+            absent too (loss of pay once the month is locked)
+          </span>
+        </label>
+        <button type="submit" className="ep-btn ep-btn--primary ep-btn--sm">
+          Set the days
+        </button>
+      </form>
+      <h4 className="ep-field__label" style={{ marginTop: 'var(--sp-4)' }}>
+        From Excel: days set by hand (the punches no longer change them)
+      </h4>
+      <AttendanceSheetImport what="days" />
+      <h4 className="ep-field__label" style={{ marginTop: 'var(--sp-4)' }}>
+        From Excel: punches the device could not send
+      </h4>
+      <AttendanceSheetImport what="punches" />
+    </>
+  );
+}
+
+/** The jobs the system runs by itself (punches every 15 minutes, the rest every night), run now. */
+function RunNow({ here }: { here: string }) {
+  return (
+    <div className="ep-form-section__body">
+      <p className="ep-field__help" style={{ margin: 0 }}>
+        The system reads punches every 15 minutes and does the rest every night. Run a step now
+        after a change.
+      </p>
+      {(
+        [
+          ['sync', 'Read the new punches'],
+          [
+            'nightly',
+            'The nightly run (weekly offs, holidays, absent, late marks, missing punches, loss of pay)',
+          ],
+        ] as const
+      ).map(([what, label]) => (
+        <form key={what} action={runAttendance}>
+          <input type="hidden" name="back" value={here} />
+          <input type="hidden" name="what" value={what} />
+          <button type="submit" className="ep-btn ep-btn--secondary ep-btn--sm">
+            {label}
+          </button>
+        </form>
+      ))}
+      <form action={runAttendance} className="ep-myleave__filter" style={{ margin: 0 }}>
+        <input type="hidden" name="back" value={here} />
+        <input type="hidden" name="what" value="recompute" />
+        <label className="ep-field" htmlFor="ar-rf">
+          <span className="ep-field__label">From</span>
+          <input id="ar-rf" name="from" type="date" className="ep-input" />
+        </label>
+        <label className="ep-field" htmlFor="ar-rt">
+          <span className="ep-field__label">To</span>
+          <input id="ar-rt" name="to" type="date" className="ep-input" />
+        </label>
+        <button type="submit" className="ep-btn ep-btn--secondary ep-btn--sm">
+          Work these days out again
+        </button>
+      </form>
+      <form action={runAttendance} className="ep-myleave__filter" style={{ margin: 0 }}>
+        <input type="hidden" name="back" value={here} />
+        <input type="hidden" name="what" value="deduct" />
+        <label className="ep-field" htmlFor="ar-dm">
+          <span className="ep-field__label">Month</span>
+          <input id="ar-dm" name="month" type="month" className="ep-input" />
+        </label>
+        <button type="submit" className="ep-btn ep-btn--secondary ep-btn--sm">
+          Deduct its late marks and missing punches
+        </button>
+      </form>
+    </div>
+  );
+}
+
+/**
+ * The payroll lock as the old register's Open / Locked button: locking first shows what is still open
+ * (missing punches, staff with no department); unlocking asks why.
+ */
+function LockPill({
+  d,
+  here,
+  month,
+  locked,
+}: {
+  d: AttendanceRegisterPage;
+  here: string;
+  month: string;
+  locked: boolean;
+}) {
+  if (!locked && !d.mayLock)
+    return (
+      <span
+        className="ep-btn ep-btn--secondary ep-btn--sm ep-lockpill"
+        title="A month is locked once it is over"
+        aria-label={`${d.monthWords} is open (a month is locked once it is over)`}
+      >
+        <Icon name="unlock" size={16} /> Open
+      </span>
+    );
+  return (
+    <DialogButton
+      id="ar-lock"
+      label={
+        <span className="ep-lockpill">
+          <Icon name={locked ? 'lock' : 'unlock'} size={16} /> {locked ? 'Locked' : 'Open'}
+        </span>
+      }
+      title={locked ? `Unlock ${d.monthWords}` : `Lock ${d.monthWords} for payroll`}
+      className="ep-btn ep-btn--secondary ep-btn--sm"
+      tip={locked ? `${d.monthWords} is locked for payroll` : `${d.monthWords} is open`}
+    >
+      {locked ? (
+        <form action={lockMonth.bind(null, false)} className="ep-form-section__body">
+          <input type="hidden" name="back" value={here} />
+          <input type="hidden" name="month" value={month} />
+          <p className="ep-field__help" style={{ margin: 0 }}>
+            Locked{d.lock?.by ? ` by ${d.lock.by}` : ''}: nothing in {d.monthWords} changes (leave,
+            corrections, punches) until it is unlocked.
+          </p>
+          <label className="ep-field" htmlFor="ar-why">
+            <span className="ep-field__label">Why unlock</span>
+            <textarea
+              id="ar-why"
+              name="reason"
+              className="ep-input"
+              rows={2}
+              required
+              minLength={3}
+              maxLength={300}
+            />
+          </label>
+          <button type="submit" className="ep-btn ep-btn--secondary ep-btn--sm">
+            Unlock {d.monthWords}
+          </button>
+        </form>
+      ) : (
+        <form action={lockMonth.bind(null, true)} className="ep-form-section__body">
+          <input type="hidden" name="back" value={here} />
+          <input type="hidden" name="month" value={month} />
+          {d.checks.missingTotal ? (
+            <div className="ep-alert ep-alert--warning" role="status">
+              <span>
+                {d.checks.missingTotal} missing punch{d.checks.missingTotal === 1 ? '' : 'es'} (F)
+                in {d.monthWords} {d.checks.missingTotal === 1 ? 'is' : 'are'} still open — locking
+                turns what nobody explains into leave or loss of pay:{' '}
+                {d.checks.missing
+                  .slice(0, 12)
+                  .map((m) => `${m.code} ${dmy(m.day)}`)
+                  .join(', ')}
+                {d.checks.missingTotal > 12 ? '…' : ''}
+              </span>
+            </div>
+          ) : (
+            <p className="ep-field__help" style={{ margin: 0 }}>
+              No missing punch is open in {d.monthWords}.
+            </p>
+          )}
+          {d.checks.noDepartment.length ? (
+            <div className="ep-alert ep-alert--warning" role="status">
+              <span>
+                {d.checks.noDepartment.length} staff have no department (they cannot be filtered or
+                reported by department):{' '}
+                {d.checks.noDepartment
+                  .slice(0, 12)
+                  .map((e) => e.code)
+                  .join(', ')}
+                {d.checks.noDepartment.length > 12 ? '…' : ''}
+              </span>
+            </div>
+          ) : null}
+          {d.lock?.unlockReason ? (
+            <p className="ep-field__help" style={{ margin: 0 }}>
+              Unlocked before: {d.lock.unlockReason}.
+            </p>
+          ) : null}
+          <p className="ep-field__help" style={{ margin: 0 }}>
+            Locking turns the absent days with no leave and no correction asked into loss of pay,
+            then stops every change in the month (leave, corrections, punches).
+          </p>
+          <button type="submit" className="ep-btn ep-btn--primary ep-btn--sm">
+            Lock {d.monthWords}
+          </button>
+        </form>
+      )}
+    </DialogButton>
   );
 }

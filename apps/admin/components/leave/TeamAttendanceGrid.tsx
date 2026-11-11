@@ -58,9 +58,9 @@ export function TeamAttendanceGrid({ d }: { d: AttendanceRegister }) {
                       aria-label={`${r.employee.name} ${c.day}: ${c.title || c.code}`}
                     >
                       {c.code}
-                      {c.late ? <sup>L</sup> : null}
-                      {c.missing ? <sup>M</sup> : null}
-                      {c.manual ? <sup>✎</sup> : null}
+                      {c.late ? <sup className="ep-mk ep-mk--L">L</sup> : null}
+                      {c.missing ? <sup className="ep-mk ep-mk--F">F</sup> : null}
+                      {c.manual ? <sup className="ep-mk ep-mk--m">m</sup> : null}
                     </a>
                   ) : null}
                 </td>

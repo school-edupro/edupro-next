@@ -506,9 +506,42 @@ export async function correctDay(fd: FormData) {
       in: t(fd, 'in'),
       out: t(fd, 'out'),
       reason: String(fd.get('reason') ?? '').trim(),
+      confirmOff: fd.get('confirmOff') === '1',
     },
     'The day is corrected.',
   );
+}
+
+/** Bulk update: one status for the employees picked (or a department) over the dates, with the reason. */
+export async function bulkDays(fd: FormData) {
+  const ids = fd
+    .getAll('employeeIds')
+    .map(String)
+    .filter((x) => /^\d{1,18}$/.test(x));
+  const dept = String(fd.get('department') ?? '').trim();
+  const who = fd.get('who') === 'department' ? 'department' : 'employees';
+  const type = String(fd.get('dayType') ?? '');
+  let r: { set: number; onLeave: number; employees: number } | null = null;
+  const safe = attBack(String(fd.get('back') ?? ''));
+  try {
+    r = await apiFetch('/staff-attendance/days/bulk', {
+      method: 'POST',
+      body: JSON.stringify({
+        ...(who === 'department' ? { department: dept || undefined } : { employeeIds: ids }),
+        from: String(fd.get('from') ?? ''),
+        to: String(fd.get('to') ?? ''),
+        dayType: ['P', 'A', 'HD', 'WO', 'H'].includes(type) ? type : 'P',
+        reason: String(fd.get('reason') ?? '').trim(),
+        confirmOff: fd.get('confirmOff') === '1',
+      }),
+    });
+  } catch (e) {
+    if (e instanceof ApiError) back(safe, e);
+    throw e;
+  }
+  revalidatePath('/leave/attendance');
+  const words = `${String(r!.set)} day${r!.set === 1 ? '' : 's'} set for ${String(r!.employees)} staff${r!.onLeave ? `; ${String(r!.onLeave)} on leave left as they are` : ''}.`;
+  redirect(`${safe}${safe.includes('?') ? '&' : '?'}ok=1&detail=${encodeURIComponent(words)}`);
 }
 
 export async function askRegularisation(fd: FormData) {

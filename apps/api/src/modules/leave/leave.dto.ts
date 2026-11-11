@@ -279,6 +279,14 @@ export const RegisterMonthSchema = z.object({
   department: z.string().trim().max(100).optional(),
   employeeId: Id.optional(),
   q: z.string().trim().max(80).optional(),
+  /** staff with a day of this code in the month: P, A, HD, WO, H, HOLD, LOP, a leave code, late, missing, manual */
+  status: z
+    .string()
+    .trim()
+    .regex(/^[A-Za-z0-9_]{1,20}$/)
+    .optional(),
+  /** 1: the staff not required in the reports too */
+  all: z.enum(['0', '1']).optional(),
   format: z.enum(['xlsx']).optional(),
   ...Page,
 });
@@ -308,8 +316,32 @@ export const DayCorrectSchema = z.object({
   in: Time.nullable().optional(),
   out: Time.nullable().optional(),
   reason: z.string().trim().min(3).max(300),
+  /** yes, a weekly off or holiday becomes absent */
+  confirmOff: z.boolean().optional(),
 });
 export class DayCorrectDto extends createZodDto(DayCorrectSchema) {}
+
+/** Bulk update: one status for many employees (or a department) over a few days, with the reason. */
+export const BulkDaysSchema = z
+  .object({
+    employeeIds: z.array(Id).max(500).optional(),
+    department: z.string().trim().min(1).max(100).optional(),
+    from: Day,
+    to: Day,
+    dayType: z.enum(['P', 'A', 'HD', 'WO', 'H']),
+    reason: z.string().trim().min(3).max(300),
+    confirmOff: z.boolean().optional(),
+  })
+  .refine((d) => (d.employeeIds?.length ?? 0) > 0 || !!d.department, {
+    message: 'Pick the employees or a department',
+    path: ['employeeIds'],
+  })
+  .refine((d) => d.from <= d.to, { message: 'From must be on or before To', path: ['to'] })
+  .refine((d) => (Date.parse(d.to) - Date.parse(d.from)) / 86_400_000 < 62, {
+    message: 'At most 62 days at once',
+    path: ['to'],
+  });
+export class BulkDaysDto extends createZodDto(BulkDaysSchema) {}
 
 export const RegulariseSchema = z
   .object({

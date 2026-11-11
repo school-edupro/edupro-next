@@ -7,6 +7,7 @@ import { ReqCtx, type RequestContext } from '../../common/http/request-context';
 import { AttendanceService } from './attendance.service';
 import {
   DayCorrectDto,
+  BulkDaysDto,
   DecideDto,
   ExceptionsDto,
   LEAVE_OFFICE,
@@ -61,6 +62,15 @@ export class AttendanceController {
   @RequirePermission(LEAVE_OFFICE)
   correct(@ReqCtx() ctx: RequestContext, @Body() body: DayCorrectDto) {
     return this.att.correct(ctx, body);
+  }
+
+  @Post('days/bulk')
+  @ApiOperation({
+    summary: 'Bulk update: one status for many employees (or a department) over a few days',
+  })
+  @RequirePermission(LEAVE_OFFICE)
+  bulk(@ReqCtx() ctx: RequestContext, @Body() body: BulkDaysDto) {
+    return this.att.bulkDays(ctx, body);
   }
 
   @Get('team')

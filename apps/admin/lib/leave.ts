@@ -374,6 +374,11 @@ export interface AttendanceRegister {
     cells: Array<{
       day: string;
       code: string;
+      /** as stored (LV for leave) */
+      type?: string;
+      in?: string | null;
+      out?: string | null;
+      hrs?: number | null;
       late?: boolean;
       missing?: boolean;
       manual?: boolean;
@@ -395,6 +400,22 @@ export interface AttendanceRegister {
   to?: string;
   /** the team view: how many report to me */
   team?: number;
+}
+
+/** The office's attendance register (as the old Payroll / Attendance Register). */
+export interface AttendanceRegisterPage extends AttendanceRegister {
+  status: string | null;
+  all: boolean;
+  /** every active employee, for Bulk Update and Apply Leave */
+  employees: Array<{ id: string; name: string; code: string; department: string | null }>;
+  /** staff on the Not required in the reports list, left out unless asked */
+  excluded: number;
+  /** what the payroll lock looks at first */
+  checks: {
+    missing: Array<{ name: string; code: string; day: string }>;
+    missingTotal: number;
+    noDepartment: Array<{ name: string; code: string }>;
+  };
 }
 
 /** My team's attendance (My leave → Reporties Attendance): all of them a column a day, or one day by day. */

@@ -1278,4 +1278,191 @@ describe('staff attendance (e2e)', () => {
     expect(after.credited).toBe(before - 2.5);
     expect(after.trail.join(' ')).toMatch(/by attendance: [\d.]+ of \d+ days/);
   });
+
+  it('the register as the old Payroll / Attendance Register: IN, OUT, HRS, the status filter, hidden staff, quick edit and bulk update with their guards', async () => {
+    type Cell = {
+      day: string;
+      code: string;
+      type?: string;
+      in?: string;
+      out?: string;
+      hrs?: number;
+    };
+    type Row = {
+      employee: { id: string; department: string | null };
+      cells: Cell[];
+      totals: Record<string, number>;
+    };
+    const reg = async (qs: string) =>
+      (await call(office, 'GET', `/staff-attendance/register?${qs}`)).json();
+    // each day carries its IN, OUT and hours (the punches from Excel on PAST[10])
+    const m10 = PAST[10]!.slice(0, 7);
+    const r10 = await reg(`month=${m10}`);
+    const t2 = (r10.rows as Row[]).find((r) => r.employee.id === ids.T2)!;
+    expect(t2.cells.find((c) => c.day === PAST[10])).toMatchObject({
+      type: 'P',
+      in: '08:01',
+      out: '15:31',
+      hrs: 7.5,
+    });
+    expect(r10.employees.map((e: { id: string }) => e.id)).toEqual(
+      expect.arrayContaining([ids.T1, ids.T2, ids.H1]),
+    );
+    expect(r10.checks).toMatchObject({
+      missingTotal: expect.any(Number),
+      missing: expect.any(Array),
+      noDepartment: expect.any(Array),
+    });
+    // the status filter: only staff with such a day in the month
+    for (const [code, key] of [
+      ['A', 'A'],
+      ['WO', 'WO'],
+      ['late', 'late'],
+    ] as const) {
+      const f = await reg(`month=${m10}&status=${code}`);
+      expect((f.rows as Row[]).every((r) => (r.totals[key] ?? 0) > 0)).toBe(true);
+    }
+    // staff not required in the reports: left out unless asked, counted
+    await withMigrator((c) =>
+      c.query(
+        `INSERT INTO staff_report_exclusions (school_id, employee_id, reason) VALUES ($1, $2, 'Vendor account')`,
+        [school.id, ids.H1],
+      ),
+    );
+    const hid = await reg(`month=${m10}`);
+    expect((hid.rows as Row[]).map((r) => r.employee.id)).not.toContain(ids.H1);
+    expect(hid).toMatchObject({ excluded: 1, all: false });
+    expect(((await reg(`month=${m10}&all=1`)).rows as Row[]).map((r) => r.employee.id)).toContain(
+      ids.H1,
+    );
+    await withMigrator((c) =>
+      c.query(`UPDATE staff_report_exclusions SET status = 'retired' WHERE employee_id = $1`, [
+        ids.H1,
+      ]),
+    );
+    // quick edit: a weekly off made absent must be confirmed
+    const sat = add(lastSaturday, -7);
+    await withMigrator((c) =>
+      c.query(
+        `INSERT INTO staff_attendance_days (school_id, employee_id, day, day_type, source)
+         SELECT $1, x, $3::date, 'WO', 'weekoff' FROM unnest($2::bigint[]) AS x
+         ON CONFLICT (employee_id, day) DO UPDATE SET day_type = 'WO', source = 'weekoff', manual = false, leave_type_id = NULL`,
+        [school.id, [ids.T1, ids.T2], sat],
+      ),
+    );
+    const no = await call(office, 'POST', '/staff-attendance/days', {
+      employeeId: ids.T1,
+      day: sat,
+      dayType: 'A',
+      reason: 'Called in, did not come',
+    });
+    expect(no.statusCode).toBe(409);
+    expect(no.json().detail).toContain('weekly off');
+    expect(
+      (
+        await call(office, 'POST', '/staff-attendance/days', {
+          employeeId: ids.T1,
+          day: sat,
+          dayType: 'A',
+          reason: 'Called in, did not come',
+          confirmOff: true,
+        })
+      ).statusCode,
+    ).toBe(201);
+    expect((await dayOf(office, ids.T1!, sat)).row).toMatchObject({ dayType: 'A', manual: true });
+    // bulk update: the same for both over the days; a day under a full day's leave is left as it is
+    const lv = (
+      await call(t1, 'POST', '/leave/apply', {
+        leaveTypeId: ids.CL,
+        from: PAST[13],
+        to: PAST[13],
+        reason: 'Family',
+      })
+    ).json();
+    if (lv.status === 'pending')
+      await call(hod, 'POST', `/leave/requests/${lv.id as string}/decide`, { outcome: 'approved' });
+    const bulk = (body: Record<string, unknown>) =>
+      call(office, 'POST', '/staff-attendance/days/bulk', body);
+    const b1 = (
+      await bulk({
+        employeeIds: [ids.T1, ids.T2],
+        from: PAST[13],
+        to: PAST[13],
+        dayType: 'P',
+        reason: 'Training day at school',
+      })
+    ).json();
+    expect(b1).toMatchObject({ set: 1, onLeave: 1, employees: 2 });
+    expect((await dayOf(office, ids.T2!, PAST[13]!)).row).toMatchObject({
+      dayType: 'P',
+      manual: true,
+    });
+    // a department; the weekly off in the range needs the tick when made absent
+    const dept = t2.employee.department!;
+    const off = await bulk({
+      department: dept,
+      from: sat,
+      to: sat,
+      dayType: 'A',
+      reason: 'Called in',
+    });
+    expect(off.statusCode).toBe(409);
+    expect(off.json().detail).toContain('weekly off');
+    expect(
+      (
+        await bulk({
+          department: dept,
+          from: sat,
+          to: sat,
+          dayType: 'A',
+          reason: 'Called in',
+          confirmOff: true,
+        })
+      ).json(),
+    ).toMatchObject({ set: 3, employees: 3 });
+    // refused: nobody picked, more than 62 days, a day to come, a locked month
+    for (const [body, code] of [
+      [{ from: PAST[12], to: PAST[12], dayType: 'P', reason: 'x y z' }, 400],
+      [
+        {
+          employeeIds: [ids.T1],
+          from: add(today, -80),
+          to: PAST[0],
+          dayType: 'P',
+          reason: 'x y z',
+        },
+        400,
+      ],
+      [
+        { employeeIds: [ids.T1], from: PAST[0], to: add(today, 2), dayType: 'P', reason: 'x y z' },
+        400,
+      ],
+    ] as const)
+      expect((await bulk(body)).statusCode).toBe(code);
+    await call(office, 'POST', '/staff-attendance/lock', { month: oldMonth.slice(0, 7) });
+    const locked = await bulk({
+      employeeIds: [ids.T1],
+      from: OLD[2],
+      to: OLD[2],
+      dayType: 'P',
+      reason: 'Too late',
+    });
+    expect(locked.statusCode).toBe(409);
+    expect(locked.json().detail).toContain('locked');
+    await call(office, 'POST', '/staff-attendance/unlock', {
+      month: oldMonth.slice(0, 7),
+      reason: 'Bulk update checked',
+    });
+    expect(
+      (
+        await call(t1, 'POST', '/staff-attendance/days/bulk', {
+          employeeIds: [ids.T1],
+          from: PAST[12],
+          to: PAST[12],
+          dayType: 'P',
+          reason: 'x y z',
+        })
+      ).statusCode,
+    ).toBe(403);
+  });
 });

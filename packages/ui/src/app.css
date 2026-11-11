@@ -15311,3 +15311,167 @@ button.ep-shiftcal__cell:focus-visible {
   outline: 2px solid var(--focus-ring);
   outline-offset: 2px;
 }
+
+/* The attendance register as the old Payroll / Attendance Register: one strip of tools, the marker key,
+   then a block per employee (STATUS, IN, OUT, HRS) with the employee column kept in view */
+.ep-arbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: var(--sp-2);
+  margin-block: var(--sp-3);
+  padding: var(--sp-2) var(--sp-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface-card);
+}
+.ep-arbar .ep-field {
+  min-width: 10rem;
+}
+.ep-arbar__spacer {
+  flex: 1 1 auto;
+}
+.ep-armeta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-2) var(--sp-4);
+  margin-block: var(--sp-2);
+  font-size: var(--fs-small);
+}
+.ep-armeta__key {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.ep-sq {
+  display: inline-block;
+  width: 0.75rem;
+  height: 0.75rem;
+  margin-right: var(--sp-1);
+  border-radius: var(--radius-sm);
+  vertical-align: middle;
+}
+.ep-sq--L {
+  background: var(--status-warning);
+}
+.ep-sq--F {
+  background: var(--status-danger);
+}
+.ep-sq--m {
+  background: var(--action-primary);
+}
+.ep-sq--LOP {
+  background: var(--status-danger-text);
+}
+.ep-areg th,
+.ep-areg td {
+  padding: var(--sp-1);
+  text-align: center;
+  white-space: nowrap;
+}
+.ep-areg .ep-areg__emp {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  min-width: 12rem;
+  border-right: 1px solid var(--border);
+  background: var(--surface-card);
+  text-align: left;
+}
+.ep-areg thead .ep-areg__emp {
+  background: inherit;
+}
+.ep-areg .ep-areg__lbl {
+  font-size: var(--fs-caption);
+  font-weight: var(--fw-semibold);
+  color: var(--text-muted);
+  text-align: left;
+}
+.ep-areg__first > * {
+  border-top: 2px solid var(--border);
+}
+.ep-areg__off {
+  background: var(--surface-band);
+}
+.ep-areg__time {
+  color: var(--text-muted);
+  font-size: var(--fs-caption);
+  font-variant-numeric: tabular-nums;
+}
+.ep-areg__cell {
+  display: inline-flex;
+  align-items: baseline;
+  padding: 0 var(--sp-1);
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  font: inherit;
+  font-weight: var(--fw-semibold);
+  color: var(--text-heading);
+  cursor: pointer;
+}
+.ep-areg__cell:hover {
+  background: var(--surface-band);
+}
+.ep-areg__cell:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 1px;
+}
+.ep-areg__code--P {
+  color: var(--status-success-text);
+}
+.ep-areg__code--HD {
+  color: var(--status-warning-text);
+}
+.ep-areg__code--A,
+.ep-areg__code--LOP,
+.ep-areg__code--HOLD {
+  color: var(--status-danger-text);
+}
+.ep-areg__code--WO,
+.ep-areg__code--H {
+  color: var(--text-muted);
+}
+.ep-areg__code--LV {
+  color: var(--status-info-text);
+}
+.ep-mk {
+  margin-left: 1px;
+  font-size: var(--fs-caption);
+  font-weight: var(--fw-bold);
+  vertical-align: super;
+  line-height: 1;
+}
+.ep-mk--L {
+  color: var(--status-warning-text);
+}
+.ep-mk--F {
+  color: var(--status-danger-text);
+}
+.ep-mk--m {
+  color: var(--action-primary);
+}
+.ep-lockpill {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-1);
+}
+.ep-areg tbody .ep-areg__emp {
+  top: auto;
+  font-family: inherit;
+  font-size: var(--fs-small);
+  letter-spacing: normal;
+  text-transform: none;
+  vertical-align: top;
+}
+.ep-areg thead th {
+  z-index: 2;
+}
+.ep-areg thead .ep-areg__emp {
+  z-index: 3;
+}
