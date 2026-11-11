@@ -514,6 +514,8 @@ export class TimingBulkDto extends createZodDto(TimingBulkSchema) {}
 export const SheetSchema = z.object({
   file: z.string().min(10).max(4_000_000),
   dryRun: z.boolean().default(true),
+  /** the days sheet: used for every row whose Reason is blank */
+  reason: z.string().trim().max(300).optional(),
 });
 export class SheetDto extends createZodDto(SheetSchema) {}
 

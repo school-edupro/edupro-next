@@ -1453,6 +1453,41 @@ describe('staff attendance (e2e)', () => {
       month: oldMonth.slice(0, 7),
       reason: 'Bulk update checked',
     });
+    // the spreadsheet as the old module's: a CSV with its headings, no Reason column, the Default Reason
+    const csv = (rows: string[]) => Buffer.from(rows.join('\r\n')).toString('base64');
+    const file = csv([
+      'EmpId,Date,DayType,InTime,OutTime',
+      `${s}T2,${PAST[14]!},P,08:00,15:30`,
+      `${s}T1,${PAST[13]!},P,,`,
+    ]);
+    const sheet = (body: Record<string, unknown>) =>
+      call(office, 'POST', '/staff-attendance/sheets/days/import', body).then((r) => r.json());
+    const noWhy = await sheet({ file, dryRun: true });
+    expect(noWhy.rows[0].error).toContain('Default Reason');
+    const dry = await sheet({
+      file,
+      dryRun: true,
+      reason: 'Device down, declared by the principal',
+    });
+    expect(dry.rows.map((r: { ok: boolean }) => r.ok)).toEqual([true, false]);
+    expect(dry.rows[1].error).toMatch(/^skipped: .* \(leave\) covers the day/);
+    expect(
+      (await sheet({ file, dryRun: false, reason: 'Device down, declared by the principal' }))
+        .saved,
+    ).toBe(1);
+    expect((await dayOf(office, ids.T2!, PAST[14]!)).row).toMatchObject({
+      dayType: 'P',
+      manual: true,
+      in: '08:00',
+      out: '15:30',
+    });
+    expect(
+      (
+        await call(office, 'POST', '/staff-attendance/sheets/days/import', {
+          file: Buffer.from('not a sheet').toString('base64'),
+        })
+      ).json().detail,
+    ).toContain('CSV');
     expect(
       (
         await call(t1, 'POST', '/staff-attendance/days/bulk', {

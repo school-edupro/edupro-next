@@ -4,7 +4,7 @@ import { notFound } from 'next/navigation';
 import { Notice } from '@/components/Notice';
 import { pageSizeOf } from '@/components/Pager';
 import { Icon } from '@/components/nav-icons';
-import { AttendanceSheetImport } from '@/components/leave/AttendanceSheetImport';
+import { BulkAttendance } from '@/components/leave/BulkAttendance';
 import { DayQuickEdit } from '@/components/leave/DayQuickEdit';
 import { DialogButton } from '@/components/leave/DialogButton';
 import { LeaveApplyForm } from '@/components/leave/LeaveApplyForm';
@@ -313,10 +313,19 @@ export default async function AttendanceRegisterPage({
         <DialogButton
           id="ar-bulk"
           label="Bulk Update"
-          title="Bulk update"
+          title="Bulk Attendance Update"
+          icon={<Icon name="upload" size={20} />}
           className="ep-btn ep-btn--secondary ep-btn--sm"
         >
-          <BulkForm d={d} here={here} today={today} from={monthStart} to={monthEnd} />
+          <BulkAttendance
+            employees={d.employees}
+            departments={d.departments}
+            back={here}
+            today={today}
+            from={monthStart}
+            to={monthEnd}
+            bulk={bulkDays}
+          />
         </DialogButton>
         <DialogButton
           id="ar-apply"
@@ -534,133 +543,6 @@ export default async function AttendanceRegisterPage({
         noun="employees"
       />
       <DayQuickEdit action={correctDay} back={here} />
-    </>
-  );
-}
-
-/** Bulk Update: one status for the employees picked (or a department) over the dates; the Excel sheets. */
-function BulkForm({
-  d,
-  here,
-  today,
-  from,
-  to,
-}: {
-  d: AttendanceRegisterPage;
-  here: string;
-  today: string;
-  from: string;
-  to: string;
-}) {
-  const end = to < today ? to : today;
-  return (
-    <>
-      <form action={bulkDays} className="ep-form-section__body">
-        <input type="hidden" name="back" value={here} />
-        <p className="ep-field__help" style={{ marginTop: 0 }}>
-          Sets one status on every day picked for each employee, by hand (m), with the reason. A day
-          under a full day’s leave is left as it is; a locked month or a day to come is refused.
-        </p>
-        <fieldset className="ep-field" style={{ border: 0, padding: 0, margin: 0 }}>
-          <legend className="ep-field__label">Who</legend>
-          <label className="ep-check" htmlFor="ab-who-e">
-            <input id="ab-who-e" type="radio" name="who" value="employees" defaultChecked />
-            <span>The employees picked below</span>
-          </label>
-          <label className="ep-check" htmlFor="ab-who-d">
-            <input id="ab-who-d" type="radio" name="who" value="department" />
-            <span>Everyone in a department</span>
-          </label>
-        </fieldset>
-        <label className="ep-field" htmlFor="ab-emps">
-          <span className="ep-field__label">Employees (Ctrl / ⌘ to pick several)</span>
-          <select id="ab-emps" name="employeeIds" className="ep-select" multiple size={8}>
-            {d.employees.map((e) => (
-              <option key={e.id} value={e.id}>
-                {e.code} — {e.name}
-                {e.department ? ` · ${e.department}` : ''}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="ep-field" htmlFor="ab-dept">
-          <span className="ep-field__label">Department</span>
-          <select id="ab-dept" name="department" className="ep-select" defaultValue="">
-            <option value="">Pick a department</option>
-            {d.departments.map((x) => (
-              <option key={x} value={x}>
-                {x}
-              </option>
-            ))}
-          </select>
-        </label>
-        <div className="ep-form-row">
-          <label className="ep-field" htmlFor="ab-from">
-            <span className="ep-field__label">From Date</span>
-            <input
-              id="ab-from"
-              name="from"
-              type="date"
-              className="ep-input"
-              defaultValue={from}
-              max={today}
-              required
-            />
-          </label>
-          <label className="ep-field" htmlFor="ab-to">
-            <span className="ep-field__label">To Date</span>
-            <input
-              id="ab-to"
-              name="to"
-              type="date"
-              className="ep-input"
-              defaultValue={end}
-              max={today}
-              required
-            />
-          </label>
-        </div>
-        <label className="ep-field" htmlFor="ab-type">
-          <span className="ep-field__label">Status</span>
-          <select id="ab-type" name="dayType" className="ep-select" required defaultValue="P">
-            {STATUS_WORDS.filter(([k]) => k !== 'HOLD').map(([k, w]) => (
-              <option key={k} value={k}>
-                {w}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="ep-field" htmlFor="ab-why">
-          <span className="ep-field__label">Reason</span>
-          <textarea
-            id="ab-why"
-            name="reason"
-            className="ep-input"
-            rows={2}
-            minLength={3}
-            maxLength={300}
-            required
-          />
-        </label>
-        <label className="ep-check" htmlFor="ab-off">
-          <input id="ab-off" type="checkbox" name="confirmOff" value="1" />
-          <span>
-            If the status is Absent and a weekly off or holiday falls in these days: yes, make it
-            absent too (loss of pay once the month is locked)
-          </span>
-        </label>
-        <button type="submit" className="ep-btn ep-btn--primary ep-btn--sm">
-          Set the days
-        </button>
-      </form>
-      <h4 className="ep-field__label" style={{ marginTop: 'var(--sp-4)' }}>
-        From Excel: days set by hand (the punches no longer change them)
-      </h4>
-      <AttendanceSheetImport what="days" />
-      <h4 className="ep-field__label" style={{ marginTop: 'var(--sp-4)' }}>
-        From Excel: punches the device could not send
-      </h4>
-      <AttendanceSheetImport what="punches" />
     </>
   );
 }

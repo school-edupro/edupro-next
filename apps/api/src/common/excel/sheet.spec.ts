@@ -1,6 +1,6 @@
 import ExcelJS from 'exceljs';
 import { MASTERS } from '@edupro/db';
-import { sheetName } from './sheet';
+import { parseCsv, readSheet, sheetName } from './sheet';
 
 describe('sheetName: a title Excel accepts as a sheet name', () => {
   it('turns the refused characters into a dash and keeps 31 characters at most', () => {
@@ -19,5 +19,35 @@ describe('sheetName: a title Excel accepts as a sheet name', () => {
       expect(() => new ExcelJS.Workbook().addWorksheet(name)).not.toThrow();
       expect(name.length).toBeLessThanOrEqual(31);
     }
+  });
+});
+
+describe('a CSV saved from a spreadsheet', () => {
+  it('splits commas, keeps quoted commas and quotes, takes CRLF and a BOM', () => {
+    expect(
+      parseCsv(
+        '\uFEFFEmpId,Date,Reason\r\nE1,2026-11-02,"Device down, fixed"\r\nE2,2026-11-03,"Said ""ok"""\n',
+      ),
+    ).toEqual([
+      ['EmpId', 'Date', 'Reason'],
+      ['E1', '2026-11-02', 'Device down, fixed'],
+      ['E2', '2026-11-03', 'Said "ok"'],
+    ]);
+  });
+  it('is not a CSV: binary bytes, or a single column', () => {
+    expect(parseCsv('PK\u0003\u0004\u0000binary')).toBeNull();
+    expect(parseCsv('just one line of words')).toBeNull();
+  });
+  it('is read like an Excel sheet, by header', async () => {
+    const csv = Buffer.from('EmpId,Date,DayType\nE1,2026-11-02,P\n').toString('base64');
+    const rows = await readSheet(
+      csv,
+      ['Date'],
+      ['Employee', 'EmpId', 'DayType'],
+      [['Employee', 'EmpId']],
+    );
+    expect(rows).toEqual([
+      { row: 2, cells: { Date: '2026-11-02', Employee: '', EmpId: 'E1', DayType: 'P' } },
+    ]);
   });
 });

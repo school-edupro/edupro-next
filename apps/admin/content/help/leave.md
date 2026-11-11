@@ -223,10 +223,18 @@ half day, loss of pay and holds; "not marked" says how many past days the system
 - **Click a day** for its quick edit: the status, IN, OUT and the reason; saving sets the day by hand (m).
   **Full day detail** opens the day's page. Making a weekly off or holiday **Absent** asks for a tick: it
   becomes loss of pay once the month is locked.
-- **Bulk Update**: one status (P, A, HD, WO, H) for the employees picked — or everyone in a department —
-  over up to 62 days, with the reason; each day is set by hand. A day under a full day's leave is left as
-  it is; a day to come or a locked month is refused; weekly offs or holidays made Absent need the tick.
-  The Excel sheets (days set by hand, punches the device could not send) are in the same dialog.
+- **Bulk Update** (**Bulk Attendance Update**, as the old module's dialog), three tabs:
+  - **From a spreadsheet**: one row = one employee on one day, P / HD / A / WO / H / HOLD, each day set by
+    hand (Manual) with its reason. It never cancels leave: a day under waiting or approved leave is
+    **skipped** and named in the preview; leave and LOP go through Apply Leave. **Download Template**, give
+    the **Default Reason** (used for every row whose Reason is blank), choose the file (.xlsx or .csv; the
+    old module's headings EmpId, DayType, InTime, OutTime are read too), **Preview & Validate (dry run)**,
+    then **Save** the good rows. Days to come and locked months are refused.
+  - **On screen**: one status (P, A, HD, WO, H) for the employees picked (search, Pick all shown) — or
+    everyone in a department — over up to 62 days, with the reason; weekly offs or holidays made Absent
+    need the tick.
+  - **Punches from a spreadsheet**: the IN and OUT the device could not send; the day is worked out from
+    them as from the device.
 - **Lock** (a past month): the dialog first lists the missing punches (F) still open and the staff with no
   department; locking turns the absent days nobody explained into loss of pay, then stops every change.
   **Unlock** asks why.

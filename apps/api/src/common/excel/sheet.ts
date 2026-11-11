@@ -208,6 +208,44 @@ const cellText = (v: ExcelJS.CellValue): string => {
   return String(v).trim();
 };
 
+/**
+ * The rows of a CSV file (RFC 4180: commas, "quoted" cells with "" inside, CRLF or LF), or null when the
+ * text is not one (binary, or no comma-separated header).
+ */
+export function parseCsv(text: string): string[][] | null {
+  const t = text.replace(/^\uFEFF/, '');
+  if (!t.trim() || /[\u0000-\u0008\u000E-\u001F]/.test(t)) return null;
+  const rows: string[][] = [];
+  let row: string[] = [];
+  let cell = '';
+  let quoted = false;
+  for (let i = 0; i < t.length; i++) {
+    const ch = t[i]!;
+    if (quoted) {
+      if (ch === '"' && t[i + 1] === '"') {
+        cell += '"';
+        i++;
+      } else if (ch === '"') quoted = false;
+      else cell += ch;
+    } else if (ch === '"') quoted = true;
+    else if (ch === ',') {
+      row.push(cell);
+      cell = '';
+    } else if (ch === '\n' || ch === '\r') {
+      if (ch === '\r' && t[i + 1] === '\n') i++;
+      row.push(cell);
+      rows.push(row);
+      row = [];
+      cell = '';
+    } else cell += ch;
+  }
+  if (cell !== '' || row.length) {
+    row.push(cell);
+    rows.push(row);
+  }
+  return rows.length && rows[0]!.length > 1 ? rows : null;
+}
+
 /** The filled rows of an uploaded sheet, keyed by header (without the "*"), with the Excel row number. */
 export async function readSheet(
   fileBase64: string,
@@ -221,12 +259,18 @@ export async function readSheet(
   oneOf: string[][] = [],
 ): Promise<Array<{ row: number; cells: Record<string, string> }>> {
   const wb = new ExcelJS.Workbook();
+  const bytes = Buffer.from(fileBase64, 'base64');
   try {
-    await wb.xlsx.load(Buffer.from(fileBase64, 'base64') as unknown as ArrayBuffer);
+    await wb.xlsx.load(bytes as unknown as ArrayBuffer);
   } catch {
-    throw new DomainError('validation-failed', 'The file is not an Excel (.xlsx) file', {
-      status: 400,
-    });
+    // not an Excel workbook: a CSV saved from a spreadsheet is read the same way
+    const rows = parseCsv(bytes.toString('utf8'));
+    if (!rows)
+      throw new DomainError('validation-failed', 'The file is not an Excel (.xlsx) or CSV file', {
+        status: 400,
+      });
+    const csv = wb.addWorksheet('CSV');
+    for (const r of rows) csv.addRow(r);
   }
   const ws = wb.worksheets[0];
   if (!ws) throw new DomainError('validation-failed', 'The file has no sheet', { status: 400 });

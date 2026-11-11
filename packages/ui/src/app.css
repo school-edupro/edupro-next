@@ -14666,6 +14666,10 @@ button.ep-subchoice__icon:hover {
    pattern of ticked days and weeks of the month, or a list of dates */
 .ep-weekoff .ep-dialog__body {
   padding: 0;
+  /* never taller than the screen: the head stays, the content scrolls (a phone, a long form) */
+  display: flex;
+  flex-direction: column;
+  max-height: 92vh;
 }
 .ep-weekoff__head {
   display: flex;
@@ -14685,6 +14689,9 @@ button.ep-subchoice__icon:hover {
   padding: var(--sp-4) var(--sp-5);
   display: grid;
   gap: var(--sp-3);
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
 }
 .ep-weekoff__row {
   display: grid;
@@ -15474,4 +15481,101 @@ button.ep-shiftcal__cell:focus-visible {
 }
 .ep-areg thead .ep-areg__emp {
   z-index: 3;
+}
+
+/* Bulk Attendance Update (as the old module's dialog): the note boxes, the column rules, the employee
+   picker, a two-column form and the Cancel foot */
+.ep-note {
+  margin: 0;
+  padding: var(--sp-3) var(--sp-4);
+  border-left: 4px solid var(--action-primary);
+  border-radius: var(--radius-sm);
+  background: var(--status-info-bg);
+  color: var(--text-body);
+  line-height: 1.55;
+}
+.ep-note strong {
+  color: var(--text-heading);
+}
+.ep-note--warn {
+  border-left-color: var(--status-warning);
+  background: var(--status-warning-bg);
+  color: var(--status-warning-text);
+}
+.ep-note--warn strong {
+  color: var(--status-warning-text);
+}
+.ep-bulk {
+  display: grid;
+  gap: var(--sp-4);
+}
+.ep-bulk [hidden] {
+  display: none;
+}
+.ep-bulk__label {
+  margin: 0 0 var(--sp-2);
+  font-weight: var(--fw-semibold);
+  color: var(--text-heading);
+}
+.ep-bulk__rules {
+  display: grid;
+  gap: var(--sp-1);
+  margin: 0;
+  padding-left: var(--sp-5);
+}
+.ep-bulk__row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-3);
+}
+.ep-bulk__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+  gap: var(--sp-3) var(--sp-4);
+}
+.ep-bulk__who {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2) var(--sp-5);
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.ep-bulk__who legend {
+  width: 100%;
+  margin-bottom: var(--sp-1);
+}
+.ep-bulk__foot {
+  display: flex;
+  justify-content: flex-end;
+  margin: 0;
+  padding-top: var(--sp-3);
+  border-top: 1px solid var(--border-subtle);
+}
+.ep-picker {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface-card);
+}
+.ep-picker__bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: var(--sp-2);
+  border-bottom: 1px solid var(--border-subtle);
+}
+.ep-picker__bar .ep-input {
+  flex: 1 1 14rem;
+}
+.ep-picker__list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(16rem, 1fr));
+  gap: var(--sp-1) var(--sp-3);
+  max-height: 15rem;
+  margin: 0;
+  padding: var(--sp-2) var(--sp-3);
+  overflow: auto;
+  list-style: none;
 }

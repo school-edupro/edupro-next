@@ -848,13 +848,15 @@ export async function importAttendanceSheet(
   what: 'days' | 'punches',
   file: string,
   dryRun: boolean,
+  /** the days sheet's Default Reason: used for every row whose Reason is blank */
+  reason?: string,
 ): Promise<SheetResult> {
   try {
     const r = await apiFetch<Omit<Extract<SheetResult, { ok: true }>, 'ok'>>(
       `/staff-attendance/sheets/${what}/import`,
       {
         method: 'POST',
-        body: JSON.stringify({ file, dryRun }),
+        body: JSON.stringify({ file, dryRun, ...(reason ? { reason } : {}) }),
       },
     );
     if (!dryRun) revalidatePath('/leave/attendance');

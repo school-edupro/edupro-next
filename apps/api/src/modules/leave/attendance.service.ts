@@ -3074,12 +3074,16 @@ export class AttendanceService implements OnModuleInit {
                 },
                 { header: 'In', width: 8, format: 'text', note: '24-hour, like 08:05' },
                 { header: 'Out', width: 8, format: 'text', note: '24-hour, like 15:40' },
-                { header: 'Reason', width: 30, required: true },
+                {
+                  header: 'Reason',
+                  width: 30,
+                  note: 'Blank: the Default Reason given with the file',
+                },
               ],
               guide: [
-                'One row a day of an employee. The day is set by hand: the punches no longer change it.',
-                'A day on leave is skipped (cancel or shorten the leave first); a month locked for payroll is refused.',
-                'Upload it and press Check: every row is checked first; then save the good rows.',
+                'One row = one employee on one day: P, HD, A, WO, H or HOLD. The day is set by hand (manual): the nightly run no longer changes it, and the reason is kept on the day.',
+                'This never cancels leave: a day under a waiting or approved leave is skipped and named in the preview. Leave and LOP are not imported: they go through Apply Leave.',
+                'A month locked for payroll is refused. Delete the sample row before you upload. Preview & Validate checks every row first; then save the good rows.',
               ],
               examples: [
                 [
@@ -3125,11 +3129,25 @@ export class AttendanceService implements OnModuleInit {
 
   async sheetImport(ctx: RequestContext, what: 'days' | 'punches', dto: SheetDto) {
     this.mustOffice(ctx);
-    const rows = await readSheet(
-      dto.file,
-      ['Employee', 'Date'],
-      ['Day type', 'In', 'Out', 'Reason'],
-    );
+    // this format's headings, or the old module's (EmpId, DayType, InTime, OutTime)
+    const rows = (
+      await readSheet(
+        dto.file,
+        ['Date'],
+        ['Employee', 'EmpId', 'Day type', 'DayType', 'In', 'InTime', 'Out', 'OutTime', 'Reason'],
+        [['Employee', 'EmpId']],
+      )
+    ).map(({ row, cells }) => ({
+      row,
+      cells: {
+        Employee: cells.Employee || cells.EmpId || '',
+        Date: cells.Date ?? '',
+        'Day type': cells['Day type'] || cells.DayType || '',
+        In: cells.In || cells.InTime || '',
+        Out: cells.Out || cells.OutTime || '',
+        Reason: cells.Reason ?? '',
+      },
+    }));
     return this.db.tenant(requireTenant(ctx), async (c) => {
       const emps = new Map(
         (
@@ -3171,7 +3189,8 @@ export class AttendanceService implements OnModuleInit {
         const tIn = time(cells.In ?? '');
         const tOut = time(cells.Out ?? '');
         const type = (cells['Day type'] ?? '').trim().toUpperCase() || null;
-        const reason = (cells.Reason ?? '').trim();
+        // the row's own reason, else the Default Reason given with the file
+        const reason = (cells.Reason ?? '').trim() || (dto.reason ?? '').trim();
         const problems: string[] = [];
         if (!e) problems.push(`no active employee is ${raw || '(empty)'}`);
         if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) problems.push('the date is not a date');
@@ -3181,7 +3200,8 @@ export class AttendanceService implements OnModuleInit {
           if (type && !['P', 'HD', 'A', 'WO', 'H', 'HOLD'].includes(type))
             problems.push('the day type is P, HD, A, WO, H or HOLD');
           if (!type && !(tIn && tOut)) problems.push('give the day type, or both times');
-          if (reason.length < 3) problems.push('give the reason');
+          if (reason.length < 3)
+            problems.push('give the reason (on the row, or the Default Reason)');
         } else if (!tIn && !tOut) problems.push('give the IN or OUT time');
         if (e && /^\d{4}-\d{2}-\d{2}$/.test(day)) {
           const key = `${e.id}|${day}`;
@@ -3195,7 +3215,10 @@ export class AttendanceService implements OnModuleInit {
                   AND r.source NOT IN ('auto_late', 'auto_missing', 'auto_rule') LIMIT 1`,
               [e.id, day],
             );
-            if (lv.rows[0]) problems.push(`${lv.rows[0].number} covers the day`);
+            if (lv.rows[0])
+              problems.push(
+                `skipped: ${lv.rows[0].number} (leave) covers the day — correct it on the day instead`,
+              );
           }
         }
         if (problems.length) {

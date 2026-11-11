@@ -9,6 +9,7 @@ export function DialogButton({
   className = 'ep-btn ep-btn--primary ep-btn--sm',
   open: startOpen = false,
   tip,
+  icon,
   children,
 }: {
   id: string;
@@ -18,6 +19,8 @@ export function DialogButton({
   open?: boolean;
   /** a tooltip on the button (an icon-only button names itself with hidden text in `label`) */
   tip?: string;
+  /** a small drawing before the dialog's title */
+  icon?: ReactNode;
   children: ReactNode;
 }) {
   const [open, setOpen] = useState(startOpen);
@@ -41,7 +44,14 @@ export function DialogButton({
         >
           <div className="ep-dialog__body">
             <div className="ep-weekoff__head">
-              <h3 id={`${id}-title`} className="ep-card__title">
+              <h3
+                id={`${id}-title`}
+                className="ep-card__title"
+                style={
+                  icon ? { display: 'flex', alignItems: 'center', gap: 'var(--sp-2)' } : undefined
+                }
+              >
+                {icon}
                 {title}
               </h3>
               <button

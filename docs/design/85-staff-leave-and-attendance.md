@@ -548,6 +548,23 @@ left off unless asked**, **the lock lists what is still open**.
   office only. Browser (dev-admin): the strip, the four lines, the quick edit, Bulk Update, Apply Leave, Run
   now, Legend, status-only view, the lock's checks, the three downloads; axe clean at 1280 and 375.
 
+## As built — Bulk Attendance Update as the old dialog (11 Nov 2026)
+
+Asked: the Bulk Update dialog "follow the first screenshot" (the old module's Bulk Attendance Update).
+Decided with the user: **the old dialog plus two more tabs**. `BulkAttendance` (client): **From a
+spreadsheet** — the info note (one row = one employee on one day; Manual; reason audited), the warning (never
+cancels leave: skipped and named; leave and LOP through Apply Leave), the column rules, Download Template, a
+required **Default Reason**, Choose file, **Preview & Validate (dry run)**, then Save the good rows with a
+summary (ready · skipped · with a problem); **On screen** — the bulk form in two columns with a searchable
+employee picker (Pick all shown, Clear, the count) or a department; **Punches from a spreadsheet**; a Cancel
+foot. API: the sheet import takes `reason` (the Default Reason) and reads the old headings (EmpId, DayType,
+InTime, OutTime); a day under leave says "skipped: … (leave) covers the day"; `readSheet` reads a CSV when the
+file is not an Excel workbook (`parseCsv`, unit-tested). Dialogs (`ep-weekoff`) now stay within the screen —
+the head stays, the content scrolls — so a long dialog works on a phone. `AttendanceSheetImport` removed.
+Tests: `staff-attendance.e2e-spec.ts` — a CSV with the old headings, the Default Reason asked and used, the
+leave day skipped, the day saved by hand, a file that is neither; `sheet.spec.ts` for the CSV. Browser
+(dev-admin, 1440 and 375): every tab, a dry run, axe clean.
+
 ## The module is complete
 
 Phases A–E are built. What is left is the school's: the old database connection on the server, the read, the
