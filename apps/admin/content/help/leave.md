@@ -139,6 +139,14 @@ person at two levels approves once. A month locked for payroll cannot be approve
 approval comes. Leave and corrections are decided on their own pages (the general approval steps send you
 there). A leave withdrawn by the employee tells the approvers it was withdrawn.
 
+**Leave to approve** (Employee leave & attendance → Leave to approve) has two tabs, **Waiting** (at your
+level, the longest waiting first) and **Decided by me** (newest first, one row a leave or its cancellation).
+Each shows its figures — waiting, 3 days or more, cancellations asked; or decided, approved, not approved,
+cancellations — and a figure clicked lists only those. Filter by search (leave ID, name, code), employee,
+department, leave type, leave or cancellation, waiting 3 days or more (Waiting) or what you decided
+(Decided by me), and From – To (the leave touching those dates); 25, 50 or 100 a page; **Excel** and **PDF**
+of exactly what is filtered, with the letterhead and the Prepared / Checked boxes.
+
 ## After applying
 
 - **Withdraw** (yours, still waiting): the days come back at once.

@@ -1642,32 +1642,4 @@ export class LeaveService implements OnModuleInit {
     );
     return r.rows[0]!.n;
   }
-
-  /** What waits for my decision (leave and cancellations), oldest first; and what I decided lately. */
-  async approvals(ctx: RequestContext, view: 'waiting' | 'decided') {
-    return this.db.tenant(requireTenant(ctx), async (c) => {
-      const rows =
-        view === 'waiting'
-          ? await c.query<ReqRow & { what: string; since: Date }>(
-              `${REQ.replace('FROM staff_leave_requests r', ', i.entity_type AS what, i.requested_at AS since FROM staff_leave_requests r')}
-                JOIN workflow_instances i ON i.entity_id = r.id AND i.entity_type IN ('staff_leave', 'staff_leave_cancel') AND i.status = 'pending'
-                JOIN workflow_steps s ON s.instance_id = i.id AND s.level = i.current_level AND s.status = 'pending'
-               WHERE ${WorkflowService.MAY_ACT}
-               ORDER BY i.requested_at LIMIT 500`,
-            )
-          : await c.query<ReqRow & { what: string; since: Date }>(
-              `${REQ.replace('FROM staff_leave_requests r', ', i.entity_type AS what, s.acted_at AS since FROM staff_leave_requests r')}
-                JOIN workflow_instances i ON i.entity_id = r.id AND i.entity_type IN ('staff_leave', 'staff_leave_cancel')
-                JOIN workflow_steps s ON s.instance_id = i.id AND s.acted_by = app.current_user_id()
-               ORDER BY s.acted_at DESC LIMIT 100`,
-            );
-      return {
-        rows: rows.rows.map((r) => ({
-          ...this.shape(r),
-          what: r.what === 'staff_leave_cancel' ? 'cancellation' : 'leave',
-          since: r.since.toISOString(),
-        })),
-      };
-    });
-  }
 }

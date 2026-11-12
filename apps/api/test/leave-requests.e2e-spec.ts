@@ -636,6 +636,50 @@ describe('staff leave requests (e2e)', () => {
       ).toMatch(/^Leave-balances/);
   });
 
+  it('leave waiting for me / decided by me: figures, filters, a page at a time, Excel and PDF', async () => {
+    type A = {
+      rows: Array<{ id: string; what: string; decided: string | null; employee: { id: string } }>;
+      total: number;
+      figures: { n: number; approved: number; rejected: number; cancels: number; overdue: number };
+      lists: { employees: Array<{ id: string }> };
+    };
+    const get = async (u: SeededUser, qs: string) =>
+      (await call(u, 'GET', `/leave/approvals?${qs}`)).json() as Promise<A>;
+    const all = await get(hod, 'view=decided&size=100');
+    expect(all.total).toBeGreaterThan(0);
+    expect(all.figures.n).toBe(all.total);
+    expect(all.figures.approved + all.figures.rejected).toBe(all.total);
+    // one row a leave or its cancellation, however many levels I acted on
+    expect(new Set(all.rows.map((r) => `${r.id}-${r.what}`)).size).toBe(all.rows.length);
+    const approved = await get(hod, 'view=decided&outcome=approved&size=100');
+    expect(approved.total).toBe(all.figures.approved);
+    expect(approved.rows.every((r) => r.decided === 'approved')).toBe(true);
+    const one = all.rows[0]!.employee.id;
+    const mine = await get(hod, `view=decided&employeeId=${one}&size=100`);
+    expect(mine.rows.every((r) => r.employee.id === one)).toBe(true);
+    expect(all.lists.employees.map((e) => e.id)).toContain(one);
+    // a page at a time
+    const p1 = await get(hod, 'view=decided&size=25&page=1');
+    expect(p1.rows.length).toBe(Math.min(25, all.total));
+    expect((await get(hod, 'view=decided&q=no-such-leave')).total).toBe(0);
+    // waiting: the cancellations only, waiting 3 days or more
+    const w = await get(hod, 'view=waiting&size=100');
+    expect(w.figures.n).toBe(w.total);
+    expect(
+      (await get(hod, 'view=waiting&kind=cancellation&size=100')).rows.every(
+        (r) => r.what === 'cancellation',
+      ),
+    ).toBe(true);
+    expect((await get(hod, 'view=waiting&overdue=1')).total).toBe(w.figures.overdue);
+    for (const [view, f] of [
+      ['decided', 'xlsx'],
+      ['waiting', 'pdf'],
+    ] as const)
+      expect(
+        (await call(hod, 'GET', `/leave/approvals?view=${view}&format=${f}`)).json().filename,
+      ).toMatch(view === 'decided' ? /^Leave-decided-by-me/ : /^Leave-waiting-for-me/);
+  });
+
   it('balances: a row’s Leave Details — the policy, the credit worked out as the run does, the days behind it', async () => {
     const month = today.slice(0, 7);
     const start = `${month}-01`;

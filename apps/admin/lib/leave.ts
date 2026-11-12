@@ -355,6 +355,28 @@ export interface LeaveBalances {
   };
 }
 
+/** Leave waiting for me / decided by me: a page, the figures and the lists to filter by. */
+export interface LeaveApprovals {
+  view: 'waiting' | 'decided';
+  rows: Array<
+    LeaveRequest & {
+      what: 'leave' | 'cancellation';
+      /** waiting: since it reached my level; decided: when I acted */
+      since: string;
+      decided: 'approved' | 'rejected' | null;
+    }
+  >;
+  total: number;
+  page: number;
+  size: number;
+  figures: { n: number; overdue: number; cancels: number; approved: number; rejected: number };
+  lists: {
+    employees: Array<{ id: string; name: string; code: string }>;
+    departments: string[];
+    types: Array<{ id: string; code: string; name: string }>;
+  };
+}
+
 /** A balance row's Leave Details (GET /leave/balances/detail): the policy, the month's credit worked out, the days. */
 export interface BalanceDetail {
   month: string;

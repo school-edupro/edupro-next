@@ -10,7 +10,7 @@ import { WorkflowService } from '../workflow/workflow.service';
 import { AttendanceService } from './attendance.service';
 import { addDays, dmy, fail, monthStart, monthWords } from './leave-engine';
 import { leaveReportFile, preparedChecked } from './leave-report-file';
-import type { MyFileDto, TeamLeaveDto } from './leave.dto';
+import type { LeaveApprovalsDto, MyFileDto, TeamLeaveDto } from './leave.dto';
 import { LeaveService, REQ, type ReqRow } from './leave.service';
 
 const STATUS: Record<string, string> = {
@@ -76,6 +76,207 @@ export class LeaveSelfService {
     private readonly att: AttendanceService,
     @Inject(STORAGE_DRIVER) private readonly storage: StorageDriver,
   ) {}
+
+  /**
+   * Leave waiting for me (at my approval level, the longest waiting first) or decided by me (newest first):
+   * the leave's dates, employee, department, leave type, leave or cancellation and a search; waiting 3 days
+   * or more; what I decided. A page at a time, the figures over the list, Excel or PDF of the same.
+   */
+  async approvals(ctx: RequestContext, q: LeaveApprovalsDto) {
+    return this.db.tenant(requireTenant(ctx), async (c) => {
+      const waiting = q.view === 'waiting';
+      const join = waiting
+        ? `JOIN workflow_instances i ON i.entity_id = r.id AND i.entity_type IN ('staff_leave', 'staff_leave_cancel') AND i.status = 'pending'
+           JOIN workflow_steps s ON s.instance_id = i.id AND s.level = i.current_level AND s.status = 'pending'`
+        : // one row a leave (or its cancellation): my decision at the highest level I acted on
+          `JOIN workflow_instances i ON i.entity_id = r.id AND i.entity_type IN ('staff_leave', 'staff_leave_cancel')
+           JOIN workflow_steps s ON s.id = (SELECT x.id FROM workflow_steps x WHERE x.instance_id = i.id AND x.acted_by = app.current_user_id()
+                                            AND x.status IN ('approved', 'rejected') ORDER BY x.level DESC LIMIT 1)`;
+      // waiting: since it reached my level (the level before acted, else asked); decided: when I acted
+      const since = waiting
+        ? `COALESCE((SELECT max(p.acted_at) FROM workflow_steps p WHERE p.instance_id = i.id AND p.level < s.level), i.requested_at)`
+        : `s.acted_at`;
+      const mine = waiting ? WorkflowService.MAY_ACT : 'true';
+      const args = [
+        q.from ?? null,
+        q.to ?? null,
+        q.employeeId ?? null,
+        q.leaveTypeId ?? null,
+        q.department ?? null,
+        q.kind ?? null,
+        q.q ? `%${q.q}%` : null,
+        q.overdue && waiting ? 1 : null,
+        !waiting ? (q.outcome ?? null) : null,
+      ];
+      // eslint-disable-next-line no-restricted-syntax -- MAY_ACT and the since are fixed fragments; values are bound
+      const where = `WHERE ${mine}
+          AND ($1::date IS NULL OR r.to_date >= $1::date) AND ($2::date IS NULL OR r.from_date <= $2::date)
+          AND ($3::bigint IS NULL OR r.employee_id = $3) AND ($4::bigint IS NULL OR r.leave_type_id = $4)
+          AND ($5::text IS NULL OR lower(e.department) = lower($5))
+          AND ($6::text IS NULL OR ($6 = 'cancellation') = (i.entity_type = 'staff_leave_cancel'))
+          AND ($7::text IS NULL OR r.number ILIKE $7 OR e.display_name ILIKE $7 OR e.employee_code ILIKE $7)
+          AND ($8::int IS NULL OR ${since} <= now() - interval '3 days')
+          AND ($9::text IS NULL OR s.status::text = $9)`;
+      // eslint-disable-next-line no-restricted-syntax -- the joins are fixed fragments
+      const from = `FROM staff_leave_requests r JOIN employees e ON e.id = r.employee_id ${join}`;
+      const fig = (
+        await c.query<{
+          n: number;
+          overdue: number;
+          cancels: number;
+          approved: number;
+          rejected: number;
+        }>(
+          // eslint-disable-next-line no-restricted-syntax -- the joins and where are fixed fragments; values are bound
+          `SELECT count(*)::int AS n,
+                  count(*) FILTER (WHERE ${since} <= now() - interval '3 days')::int AS overdue,
+                  count(*) FILTER (WHERE i.entity_type = 'staff_leave_cancel')::int AS cancels,
+                  count(*) FILTER (WHERE s.status = 'approved')::int AS approved,
+                  count(*) FILTER (WHERE s.status = 'rejected')::int AS rejected
+             ${from} ${where}`,
+          args,
+        )
+      ).rows[0]!;
+      if (q.format) checkListSize(fig.n, 'leave');
+      const rows = await c.query<ReqRow & { what: string; since: Date; my: string }>(
+        // eslint-disable-next-line no-restricted-syntax -- REQ, the joins and the where are fixed fragments; values are bound
+        `${REQ.replace('FROM staff_leave_requests r', `, i.entity_type AS what, ${since} AS since, s.status AS my FROM staff_leave_requests r`)}
+          ${join} ${where}
+          ORDER BY since ${waiting ? 'ASC' : 'DESC'}, r.id LIMIT $10 OFFSET $11`,
+        q.format ? [...args, LIST_LIMIT, 0] : [...args, q.size, (q.page - 1) * q.size],
+      );
+      const shaped = rows.rows.map((r) => ({
+        ...this.leave.shape(r),
+        what: r.what === 'staff_leave_cancel' ? ('cancellation' as const) : ('leave' as const),
+        since: r.since.toISOString(),
+        decided: waiting ? null : (r.my as 'approved' | 'rejected'),
+      }));
+      const types = (
+        await c.query<{ id: string; code: string; name: string }>(
+          `SELECT id::text, code, name FROM staff_leave_types WHERE status = 'active' ORDER BY sort_order, code`,
+        )
+      ).rows;
+      const days = (iso: string) =>
+        Math.max(0, Math.floor((Date.now() - new Date(iso).getTime()) / 86_400_000));
+      if (q.format) {
+        const emp = q.employeeId
+          ? (
+              await c.query<{ n: string }>(
+                `SELECT display_name || ' (' || employee_code || ')' AS n FROM employees WHERE id = $1`,
+                [q.employeeId],
+              )
+            ).rows[0]?.n
+          : null;
+        const type = q.leaveTypeId ? types.find((t) => t.id === q.leaveTypeId) : null;
+        return leaveReportFile({
+          format: q.format,
+          head: await purchaseHead(c, this.storage),
+          name: waiting ? 'Leave waiting for me' : 'Leave decided by me',
+          slug: waiting ? 'Leave-waiting-for-me' : 'Leave-decided-by-me',
+          words: [
+            q.kind
+              ? q.kind === 'cancellation'
+                ? 'Cancellations'
+                : 'Leave'
+              : 'Leave and cancellations',
+            q.overdue && waiting ? 'Waiting 3 days or more' : null,
+            q.outcome && !waiting
+              ? q.outcome === 'approved'
+                ? 'I approved'
+                : 'I did not approve'
+              : null,
+            emp ? `Employee: ${emp}` : null,
+            q.department ? `Department: ${q.department}` : null,
+            type ? `Leave type: ${type.name} (${type.code})` : null,
+            q.q ? `Search: ${q.q}` : null,
+            q.from || q.to
+              ? `${q.from ? dmy(q.from) : '…'} to ${q.to ? dmy(q.to) : '…'}`
+              : 'All dates',
+          ]
+            .filter(Boolean)
+            .join(' · '),
+          table: {
+            columns: [
+              { label: 'Sr. no.', type: 'number', width: 0.6 },
+              { label: 'Leave Id', width: 2 },
+              { label: 'For', width: 1.2 },
+              { label: 'Employee', width: 2.4 },
+              { label: 'Department', width: 1.6 },
+              { label: 'Leave type', width: 1.8 },
+              { label: 'From', type: 'date', width: 1.1 },
+              { label: 'To', type: 'date', width: 1.1 },
+              { label: 'Days', type: 'number', width: 0.7 },
+              { label: 'Half day', width: 1 },
+              { label: 'Reason', width: 2.6 },
+              { label: 'Applied', width: 1.5 },
+              ...(waiting
+                ? [
+                    { label: 'Waiting since', width: 1.5 },
+                    { label: 'Days waiting', type: 'number' as const, width: 0.9 },
+                  ]
+                : [
+                    { label: 'I decided', width: 1.2 },
+                    { label: 'On', width: 1.5 },
+                    { label: 'Status now', width: 2 },
+                  ]),
+            ],
+            rows: shaped.map((r, i) => [
+              i + 1,
+              r.number,
+              r.what === 'cancellation' ? 'Cancellation' : 'Leave',
+              `${r.employee.name} (${r.employee.code})`,
+              r.employee.department,
+              `${r.leaveType.name} (${r.leaveType.code})`,
+              r.from,
+              r.to,
+              r.days,
+              halfWords(r),
+              r.reason,
+              when(r.appliedAt),
+              ...(waiting
+                ? [when(r.since), days(r.since)]
+                : [
+                    r.decided === 'approved' ? 'Approved' : 'Not approved',
+                    when(r.since),
+                    statusWords(r),
+                  ]),
+            ]),
+            pdfColumns: waiting
+              ? [0, 1, 2, 3, 5, 6, 7, 8, 10, 12, 13]
+              : [0, 1, 2, 3, 5, 6, 7, 8, 12, 13, 14],
+            paper: { fontSize: 7 },
+          },
+          signs: await preparedChecked(c, (k) => this.storage.read(k)),
+        });
+      }
+      const lists = await c.query<{
+        id: string;
+        name: string;
+        code: string;
+        department: string | null;
+      }>(
+        // eslint-disable-next-line no-restricted-syntax -- the joins and MAY_ACT are fixed fragments
+        `SELECT DISTINCT e.id::text, e.display_name AS name, e.employee_code AS code, e.department
+           FROM staff_leave_requests r JOIN employees e ON e.id = r.employee_id ${join} WHERE ${mine}
+          ORDER BY 2, 3`,
+      );
+      return {
+        view: q.view,
+        rows: shaped,
+        total: fig.n,
+        page: q.page,
+        size: q.size,
+        figures: fig,
+        lists: {
+          employees: lists.rows.map(({ id, name, code }) => ({ id, name, code })),
+          departments: [
+            ...new Set(lists.rows.map((x) => x.department).filter((x): x is string => !!x)),
+          ].sort(),
+          types,
+        },
+      };
+    });
+  }
 
   /** The staff whose reporting manager I am (this year's postings). */
   private async reportees(c: PoolClient, me: string) {

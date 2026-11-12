@@ -702,6 +702,23 @@ person, dates, pages). Tests: `staff-punch-log.e2e-spec.ts` — a manager's team
 versions, the refusals, the 31-day limit, the office's empty team. Browser (dev-coordinator, both apps, 1440
 and 375): axe clean, no sideways scroll; a pure manager (E002) checked through the API.
 
+## As built — Leave to approve: filters, pages, Excel and PDF on both tabs (12 Nov 2026)
+
+Asked: `/leave/approvals` needs Excel and PDF, pagination and filters, on both tabs. `GET /leave/approvals`
+(`LeaveSelfService.approvals`, `LeaveApprovalsDto`) takes view, from / to (the leave touching them),
+employee, department, leave type, kind (leave / cancellation), search (leave ID, name, code), `overdue=1`
+(waiting: since it reached my level — the level before acted, else asked — 3 days or more), `outcome`
+(decided: approved / rejected), page and size (default 100: the staff app's call keeps its list) and
+`format`; it answers the rows, total, figures (n, overdue, cancellations, approved, rejected) and the
+lists (my employees, their departments, the types). Decided by me is one row a leave or cancellation (my
+decision at the highest level I acted on; the same person at two levels showed twice before). The file:
+Leave waiting for me / Leave decided by me with the filters in words, letterhead, Prepared / Checked.
+The side menu's count uses the total (the list stopped at 500). The page: tabs, the figures as filter
+cards, the filter card, records per page with Excel / PDF, pages. Tests: `leave-requests.e2e-spec.ts` (the
+figures, approved only, an employee, a page, a search, cancellations, waiting 3 days, the files);
+`leave-gaps` unchanged and green. Browser (dev-coordinator, 1440 and 375): both tabs, a figure filtering,
+the files keep the filter, axe clean.
+
 ## The module is complete
 
 Phases A–E are built. What is left is the school's: the old database connection on the server, the read, the

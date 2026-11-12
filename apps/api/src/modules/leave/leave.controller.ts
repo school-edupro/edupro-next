@@ -6,12 +6,14 @@ import { ReqCtx, type RequestContext } from '../../common/http/request-context';
 import { AttendanceService } from './attendance.service';
 import { LeaveOfficeService } from './leave-office.service';
 import { LeaveReportsService } from './leave-reports.service';
+import { LeaveSelfService } from './leave-self.service';
 import { LeaveService } from './leave.service';
 import {
   AdjustDto,
   ApplyDto,
   BalanceImportDto,
   BalanceDetailDto,
+  LeaveApprovalsDto,
   BalanceQueryDto,
   DecideDto,
   LEAVE_OFFICE,
@@ -35,6 +37,7 @@ export class LeaveController {
     private readonly office: LeaveOfficeService,
     private readonly att: AttendanceService,
     private readonly reports: LeaveReportsService,
+    private readonly self: LeaveSelfService,
   ) {}
 
   @Get('menu')
@@ -45,7 +48,9 @@ export class LeaveController {
   @AuthenticatedOnly()
   async menu(@ReqCtx() ctx: RequestContext) {
     const [leave, corrections, team, reports] = await Promise.all([
-      this.leave.approvals(ctx, 'waiting').then((r) => r.rows.length),
+      this.self
+        .approvals(ctx, { view: 'waiting', page: 1, size: 25 } as LeaveApprovalsDto)
+        .then((r) => ('total' in r ? r.total : 0)),
       this.att.regApprovals(ctx, 'waiting').then((r) => r.rows.length),
       this.att.teamSize(ctx),
       this.reports.count(ctx).then((r) => r.reports),
@@ -77,10 +82,13 @@ export class LeaveController {
   }
 
   @Get('approvals')
-  @ApiOperation({ summary: 'Leave and cancellations waiting for my decision (or decided by me)' })
+  @ApiOperation({
+    summary:
+      'Leave and cancellations waiting for my decision (or decided by me): filters, a page, Excel / PDF',
+  })
   @AuthenticatedOnly()
-  approvals(@ReqCtx() ctx: RequestContext, @Query('view') view: string | undefined) {
-    return this.leave.approvals(ctx, view === 'decided' ? 'decided' : 'waiting');
+  approvals(@ReqCtx() ctx: RequestContext, @Query() q: LeaveApprovalsDto) {
+    return this.self.approvals(ctx, q);
   }
 
   @Get('register')

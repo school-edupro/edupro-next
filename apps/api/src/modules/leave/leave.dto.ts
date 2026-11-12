@@ -695,6 +695,31 @@ export const TeamLeaveSchema = z
   .refine(range, RANGE_MSG);
 export class TeamLeaveDto extends createZodDto(TeamLeaveSchema) {}
 
+/**
+ * Leave waiting for me / decided by me: filters (the leave's dates, employee, department, leave type, leave
+ * or cancellation, search; waiting 3 days or more; my decision), a page at a time; Excel or PDF.
+ */
+export const LeaveApprovalsSchema = z
+  .object({
+    view: z.enum(['waiting', 'decided']).default('waiting'),
+    from: Day.optional(),
+    to: Day.optional(),
+    employeeId: Id.optional(),
+    leaveTypeId: Id.optional(),
+    department: z.string().trim().max(100).optional(),
+    kind: z.enum(['leave', 'cancellation']).optional(),
+    /** waiting: only those waiting 3 days or more */
+    overdue: z.enum(['1']).optional(),
+    /** decided: what I decided */
+    outcome: z.enum(['approved', 'rejected']).optional(),
+    q: z.string().trim().max(80).optional(),
+    ...Page,
+    size: Page.size.default(100),
+    format: z.enum(['xlsx', 'pdf']).optional(),
+  })
+  .refine(range, RANGE_MSG);
+export class LeaveApprovalsDto extends createZodDto(LeaveApprovalsSchema) {}
+
 /** My leave or my month's attendance as a file. */
 export const MyFileSchema = z
   .object({

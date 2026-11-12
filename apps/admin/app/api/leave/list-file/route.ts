@@ -1,7 +1,8 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { apiFetch } from '@/lib/api';
 
-const KEEP = /^(month|department|q|employeeId|leaveTypeId|kind|status|from|to|team)$/;
+const KEEP =
+  /^(month|department|q|employeeId|leaveTypeId|kind|status|from|to|team|view|overdue|outcome)$/;
 
 /** The balances, the late-mark / missing-punch / correction lists, the punch log and the day versions as Excel or PDF (docs/design/85), filters kept. */
 export async function GET(req: NextRequest) {
@@ -16,7 +17,9 @@ export async function GET(req: NextRequest) {
           ? '/staff-punches/log'
           : list === 'versions'
             ? '/staff-punches/versions'
-            : null;
+            : list === 'approvals'
+              ? '/leave/approvals'
+              : null;
   if (!path) return new NextResponse(null, { status: 404 });
   const q = new URLSearchParams({ format: sp.get('format') === 'pdf' ? 'pdf' : 'xlsx' });
   for (const [k, v] of sp) if (KEEP.test(k) && v) q.set(k, v.slice(0, 100));
