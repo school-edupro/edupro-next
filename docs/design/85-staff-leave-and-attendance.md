@@ -781,6 +781,23 @@ past days); leave, staff, set-up and reporting specs green. Browser (dev-admin: 
 dev-coordinator: CL not for past days, SL from 7 days back; staff app as dev-teacher: SL rule, a day 10 days
 back shows the note and no form; 1440 and 375): axe clean.
 
+## As built — corrections: the approval checked, Regularise only where it may be asked (12 Nov 2026)
+
+Asked: does an employee's own correction (Regularise) go through an approval? Checked: yes. `regularise`
+finds the chain from the **attendance corrections** rule of Who approves (`chainFor(…, 'regularisation')`;
+none → "Nobody is set to approve attendance corrections for you", 409), saves the request pending and starts
+the workflow (`leaveFlow`: every level `noSelfApproval` + `autoSkip`); the day is set only when the last level
+approves (`applyReg`); the approver is told when it is asked, the employee when it is decided. Nobody
+approves their own: the requester's level passes on, the last to the school admin, and the requester cannot
+decide it. The sample school: 5 approved and 1 not approved, all by an approver other than the asker; 1
+waiting, 1 withdrawn. New test (`leave-gaps`, corrections): the HOD — the corrections approver — asks their
+own: pending, the HOD has no decision and is refused, the school admin decides it and only then is the day
+set. Seen on the screenshot: Regularise on every day of the month, also those before the days-back limit
+(0363). `/staff-attendance/mine` now gives `correctionFrom`; the admin My attendance tab shows Regularise
+only from that day (and today back) and both apps' My attendance say from which day corrections may be
+asked and that each goes to the approver. Browser (dev-coordinator, staff app as dev-teacher; 1440 and
+375): no Regularise before the day, the note, axe clean.
+
 ## The module is complete
 
 Phases A–E are built. What is left is the school's: the old database connection on the server, the read, the

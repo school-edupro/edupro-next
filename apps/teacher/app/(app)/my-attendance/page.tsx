@@ -52,6 +52,12 @@ export default async function MyAttendancePage({
             <p className="ep-alert ep-alert--info" role="status">
               This month is locked for payroll: corrections can no longer be asked.
             </p>
+          ) : d.correctionFrom && d.correctionFrom > d.month.slice(0, 10) ? (
+            <p className="ep-alert ep-alert--info" role="status">
+              Corrections can be asked for days from {dmy(d.correctionFrom)} on; for an earlier day,
+              ask the leave office. Each correction goes to your approver and the day changes only
+              once it is approved.
+            </p>
           ) : null}
           <div className="ep-dash-kpis">
             {(

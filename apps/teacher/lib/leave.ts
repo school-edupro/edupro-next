@@ -187,6 +187,8 @@ export interface MyAttendance {
   month: string;
   monthWords?: string;
   locked?: boolean;
+  /** the first day I may ask to correct (null: any day of an open month) */
+  correctionFrom?: string | null;
   days: Array<{
     day: string;
     dayType: string;

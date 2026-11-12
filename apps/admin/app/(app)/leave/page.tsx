@@ -265,7 +265,7 @@ export default async function MyLeavePage({
           <td>{x?.in ?? ''}</td>
           <td>{x?.out ?? ''}</td>
           <td>
-            {day <= today && !att.locked ? (
+            {day <= today && !att.locked && (!att.correctionFrom || day >= att.correctionFrom) ? (
               <a
                 className="ep-btn ep-btn--secondary ep-btn--sm"
                 href={`/leave/attendance/day?emp=${att.employee.id}&day=${day}`}
@@ -505,6 +505,14 @@ export default async function MyLeavePage({
                 <p className="ep-alert ep-alert--info" role="status">
                   <span>
                     {att.monthWords} is locked for payroll: corrections can no longer be asked.
+                  </span>
+                </p>
+              ) : att.correctionFrom && att.correctionFrom > att.month.slice(0, 10) ? (
+                <p className="ep-alert ep-alert--info" role="status">
+                  <span>
+                    Corrections can be asked for days from {dmy(att.correctionFrom)} on; for an
+                    earlier day, ask the leave office. Each correction goes to your approver and the
+                    day changes only once it is approved.
                   </span>
                 </p>
               ) : null}

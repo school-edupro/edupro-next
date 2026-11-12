@@ -329,6 +329,45 @@ describe('the leave module against its plan (e2e)', () => {
       ).statusCode,
     ).toBe(201);
     expect(await sent('leave_correction_rejected', t3)).toBe(1);
+    // nobody approves their own: the HOD's own correction (the HOD is the corrections approver) waits
+    // for the school admin; the HOD cannot decide it and the day is not changed until it is approved
+    const own = await call(hod, 'POST', '/staff-attendance/regularisations', {
+      day: PAST[4],
+      in: '08:00',
+      out: '15:30',
+      reason: 'The device missed me',
+    });
+    expect(own.json()).toMatchObject({ status: 'pending' });
+    const ownDay = async (u: SeededUser) =>
+      (await call(u, 'GET', `/staff-attendance/days/${ids.H1!}/${PAST[4]!}`)).json();
+    expect((await ownDay(hod)).can.decide).toBeNull();
+    const self = await call(
+      hod,
+      'POST',
+      `/staff-attendance/regularisations/${String(own.json().id)}/decide`,
+      { outcome: 'approved' },
+    );
+    expect(self.statusCode).toBeGreaterThanOrEqual(400);
+    expect(
+      (
+        await q<{ s: string }>(`SELECT status AS s FROM staff_regularisations WHERE id = $1`, [
+          own.json().id,
+        ])
+      )[0]!.s,
+    ).toBe('pending');
+    const forAdmin = await ownDay(admin);
+    expect(forAdmin.can.decide).not.toBeNull();
+    expect(
+      (
+        await call(
+          admin,
+          'POST',
+          `/staff-attendance/regularisations/${String(own.json().id)}/decide`,
+          { outcome: 'approved' },
+        )
+      ).statusCode,
+    ).toBe(201);
+    expect((await ownDay(admin)).row).toMatchObject({ in: '08:00', out: '15:30' });
   });
 
   it('the same person at two levels approves once; a designation and a role approve', async () => {

@@ -1418,6 +1418,8 @@ export class AttendanceService implements OnModuleInit {
         month,
         monthWords: monthWords(month),
         locked: await this.locked(c, month),
+        /** the first day I may ask to correct (null: any day of an open month); 0363 */
+        correctionFrom: await this.correctionFrom(c),
         days: rows.rows.map((d) => ({
           day: d.day,
           dayType: d.day_type,

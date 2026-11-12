@@ -328,7 +328,10 @@ corrections** rule of Who approves, like leave; the approver sees it in Waiting 
 opens the day with its punches and approves (the day is set, its late mark or missing punch cleared) or
 says why not. The approver is told when a correction is asked and the employee when it is decided. One
 correction a day; a locked month takes none; a day further back than the school's **corrections for past
-days** (7 to start) says so and is corrected by the leave office instead.
+days** (7 to start) says so and is corrected by the leave office instead (My attendance shows
+**Regularise** only on the days that may be asked). Nobody approves their own correction: when the person
+asking is the approver of their level, it passes to the next level, and from the last level to the school
+admin.
 
 **The payroll lock**: once a month is over, **Lock** it when payroll is final — the absent days nobody
 explained become loss of pay first, then nothing in the month changes (leave, corrections, punches,
