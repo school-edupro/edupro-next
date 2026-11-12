@@ -588,6 +588,19 @@ export class PayrollPeopleService {
   }
 
   // ---- templates (a payroll admin keeps them) ------------------------------------------------------------------
+  /** The structure templates: a name, the staff types it suits and the amount of each head. */
+  async templates(ctx: RequestContext) {
+    return this.db.tenant(requireTenant(ctx), async (c) => {
+      await PayrollSetupService.seed(c);
+      const rows = (
+        await c.query<Record<string, unknown>>(
+          `SELECT id::text, name, description, staff_types, lines, updated_at FROM payroll_structure_templates ORDER BY name`,
+        )
+      ).rows.map(camelRow);
+      return { templates: rows, can: PayrollSetupService.can(ctx) };
+    });
+  }
+
   async saveTemplate(ctx: RequestContext, id: string | null, dto: TemplateDto) {
     must(ctx, PAYROLL.admin, 'Only a payroll admin keeps structure templates');
     return this.db.tenant(requireTenant(ctx), async (c) => {

@@ -220,7 +220,9 @@ export async function Shell({
           !features ||
           features.has(g.section) ||
           // staff screens ride on the people module switch
-          ((g.section === 'employeeManagement' || g.section === 'employeeLeave') &&
+          ((g.section === 'employeeManagement' ||
+            g.section === 'employeeLeave' ||
+            g.section === 'payroll') &&
             features.has('people')) ||
           // appointments ride on the engagement module switch
           ((g.section === 'appointments' || g.section === 'clinic') &&

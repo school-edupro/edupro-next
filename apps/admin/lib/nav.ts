@@ -134,6 +134,18 @@ export const NAV: Array<{
     ],
   },
   {
+    // payroll (docs/design/86): the set-up is one entry with section cards; drafts wait for a checker
+    section: 'payroll',
+    items: [
+      { href: '/payroll/setup', label: 'payrollSetup', permission: 'payroll.setup.view' },
+      {
+        href: '/payroll/setup/approvals',
+        label: 'payrollApprovals',
+        permission: 'payroll.setup.approve',
+      },
+    ],
+  },
+  {
     section: 'admissions',
     items: [
       {

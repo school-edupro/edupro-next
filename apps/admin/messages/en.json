@@ -286,7 +286,10 @@
     "attendanceCorrections": "Attendance corrections to approve",
     "teamAttendance": "My team’s attendance",
     "leaveBalances": "Leave balances",
-    "attendanceExceptions": "Late marks and missing punches"
+    "attendanceExceptions": "Late marks and missing punches",
+    "payroll": "Payroll",
+    "payrollSetup": "Payroll set-up",
+    "payrollApprovals": "Payroll drafts to approve"
   },
   "shell": {
     "primaryNavigation": "Primary",

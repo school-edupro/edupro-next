@@ -426,6 +426,13 @@ export class PayrollController {
     return this.people.saveStructure(ctx, id(employeeId), dto);
   }
 
+  @Get('templates')
+  @ApiOperation({ summary: 'The salary-structure templates' })
+  @RequirePermission(PAYROLL.view)
+  templates(@ReqCtx() ctx: RequestContext) {
+    return this.people.templates(ctx);
+  }
+
   @Post('templates')
   @ApiOperation({ summary: 'A structure template (payroll admin)' })
   @RequirePermission(PAYROLL.admin)

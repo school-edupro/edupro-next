@@ -573,6 +573,10 @@ describe('payroll set-up (e2e)', () => {
         })
       ).statusCode,
     ).toBe(201);
+    // anyone who sees payroll set-up lists them
+    expect((await call(maker, 'GET', '/payroll/templates')).json().templates).toEqual([
+      expect.objectContaining({ name: 'PRT', staffTypes: ['Teaching'], lines: { BASIC: '35400' } }),
+    ]);
     // B's refused draft is deleted by the maker
     expect(
       (

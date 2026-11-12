@@ -286,7 +286,10 @@
     "attendanceCorrections": "स्वीकृति हेतु उपस्थिति सुधार",
     "teamAttendance": "मेरी टीम की उपस्थिति",
     "leaveBalances": "अवकाश शेष",
-    "attendanceExceptions": "देर से आना और छूटे पंच"
+    "attendanceExceptions": "देर से आना और छूटे पंच",
+    "payroll": "पेरोल",
+    "payrollSetup": "पेरोल सेट-अप",
+    "payrollApprovals": "स्वीकृति हेतु पेरोल ड्राफ़्ट"
   },
   "shell": {
     "primaryNavigation": "मुख्य",

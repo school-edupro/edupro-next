@@ -17,6 +17,7 @@ training sessions.
 | Exams         | [exams.md](exams.md)                 | Examination cell, teachers (90 min)          |
 | Purchase      | [purchase.md](purchase.md)           | Purchase office, admin, all staff (75 min)   |
 | Leave         | [leave.md](leave.md)                 | Leave office, approvers, all staff (60 min)  |
+| Payroll       | [payroll.md](payroll.md)             | Payroll makers and checkers (90 min)         |
 
 Session format: 20 minutes of demonstration on the demo school, 40 minutes of hands-on with the
 exercises, 20 minutes of questions; the trainer records questions that need a change in the product in
