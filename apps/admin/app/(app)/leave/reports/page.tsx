@@ -55,6 +55,8 @@ export default async function LeaveReportsPage({
   if (has('employee') && sp.employeeId && ID.test(sp.employeeId)) f.employeeId = sp.employeeId;
   if (has('type') && sp.typeId && ID.test(sp.typeId)) f.typeId = sp.typeId;
   if (has('status') && sp.status && sp.status in STATUS) f.status = sp.status;
+  // a figure over the table picked: only its rows (the API ignores a key the report has not)
+  if (sp.pick && /^[a-z_]{1,20}$/.test(sp.pick)) f.pick = sp.pick;
   let data: LeaveReportResult | null = null;
   let error: string | null = null;
   try {
@@ -68,6 +70,14 @@ export default async function LeaveReportsPage({
         typeof e.problem.detail === 'string' ? e.problem.detail : 'The report could not be made.';
     else throw e;
   }
+  /** this report with these filters, a figure picked (or none: everyone) */
+  const pickHref = (key: string | null) => {
+    const q = new URLSearchParams({ report: def.code, ...f });
+    q.delete('pick');
+    if (key) q.set('pick', key);
+    return `/leave/reports?${q.toString()}`;
+  };
+  const picked = data?.kpis?.find((k) => k.key && k.key === data?.pick) ?? null;
   const file = (format: 'xlsx' | 'pdf') =>
     `/api/leave/report?${new URLSearchParams({ report: def.code, ...f, format }).toString()}`;
   const groups = [...new Set(cat.reports.map((r) => r.group))];
@@ -309,15 +319,43 @@ export default async function LeaveReportsPage({
       {data ? (
         <>
           <p className="ep-field__help" role="status">
-            {data.words} · {data.total} {data.total === 1 ? 'row' : 'rows'}. Staff in the “Not
-            required” list are left out unless picked.
+            {data.words} · {data.total} {data.total === 1 ? 'row' : 'rows'}.{' '}
+            {picked ? (
+              <a href={pickHref(null)}>Show everyone</a>
+            ) : (
+              <>Staff in the “Not required” list are left out unless picked.</>
+            )}
           </p>
           {data.kpis ? (
-            <div className="ep-dash-kpis">
-              {data.kpis.map((k) => (
-                <KpiTile key={k.label} label={k.label} value={String(k.value)} />
-              ))}
-            </div>
+            <ul
+              className="ep-dash-kpis ep-kpipick"
+              aria-label="Figures: pick one to list only its staff"
+            >
+              {data.kpis.map((k) => {
+                const tile = <KpiTile label={k.label} value={String(k.value)} />;
+                // a figure lists only its staff; clicked again (or Staff) lists everyone; a 0 has nobody
+                const on = !!k.key && k.key === data.pick;
+                const link = on || (k.key ? Number(k.value) > 0 : !!data.pick);
+                return (
+                  <li key={k.label}>
+                    {link ? (
+                      <a
+                        className="ep-kpipick__card"
+                        href={on || !k.key ? pickHref(null) : pickHref(k.key!)}
+                        aria-current={on ? 'true' : undefined}
+                        title={
+                          on || !k.key ? 'Show everyone' : `List only: ${k.label.toLowerCase()}`
+                        }
+                      >
+                        {tile}
+                      </a>
+                    ) : (
+                      tile
+                    )}
+                  </li>
+                );
+              })}
+            </ul>
           ) : null}
           {data.more ? (
             <p className="ep-alert ep-alert--info" role="status">

@@ -836,7 +836,10 @@ export interface LeaveReportResult {
   headings: number[];
   strong: number[];
   links: Array<string | null> | null;
-  kpis: Array<{ label: string; value: string | number }> | null;
+  /** the figures over the table; one with a key lists only its rows when picked */
+  kpis: Array<{ key?: string; label: string; value: string | number }> | null;
+  /** the figure picked (its key), or null for everyone */
+  pick: string | null;
   note: string | null;
   more: boolean;
   total: number;

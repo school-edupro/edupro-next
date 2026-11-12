@@ -51,8 +51,12 @@ export interface ReportTable {
   breaks?: number[];
   /** the link of each row on screen (an employee's day, a leave) */
   links?: Array<string | null>;
-  /** the figures over the table (daily attendance, yesterday OUT / today IN) */
-  kpis?: Array<{ label: string; value: string | number }>;
+  /**
+   * the figures over the table (daily attendance, yesterday OUT / today IN); a figure with a key can be
+   * picked to list only its rows (`tags`: the keys each row counts under)
+   */
+  kpis?: Array<{ key?: string; label: string; value: string | number }>;
+  tags?: string[][];
   /** the columns the PDF keeps (by position), when the page is narrower than the screen */
   pdfColumns?: number[];
   paper?: { portrait?: boolean; a3?: boolean; fontSize?: number };

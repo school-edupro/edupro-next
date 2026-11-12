@@ -21,6 +21,26 @@ import {
   type ReportAccessDto,
 } from './leave.dto';
 
+/**
+ * Only the rows a picked figure counts (a figure over the table clicked): the rows and their links,
+ * numbered again from 1; an unknown pick, or a report without figures, leaves the table as it is. The
+ * figures still count everyone.
+ */
+function pickRows(t: ReportTable, pick: string | undefined): ReportTable {
+  if (!pick || !t.tags || !t.kpis?.some((k) => k.key === pick)) return t;
+  const keep = t.tags.map((x, i) => (x.includes(pick) ? i : -1)).filter((i) => i >= 0);
+  const numbered = t.columns[0]?.label === '#' || t.columns[0]?.label === 'S. no.';
+  return {
+    ...t,
+    rows: keep.map((i, n) => (numbered ? [n + 1, ...t.rows[i]!.slice(1)] : t.rows[i]!)),
+    links: t.links ? keep.map((i) => t.links![i] ?? null) : undefined,
+    tags: keep.map((i) => t.tags![i]!),
+    headings: undefined,
+    strong: undefined,
+    breaks: undefined,
+  };
+}
+
 type Filter =
   | 'day'
   | 'period'
@@ -612,22 +632,29 @@ export class LeaveReportsService {
         };
         const rows: ReportCell[][] = [];
         const links: string[] = [];
+        const tags: string[][] = [];
         emps.forEach((e, i) => {
           const d = by.get(e.id)?.[0];
           const t = tmOf.get(e.id);
           const code = d ? codeOf(d, today) : '';
-          if (d?.day_type === 'P') k.P += 1;
-          else if (d?.day_type === 'HD') k.HD += 1;
-          else if (d?.day_type === 'A') k.A += 1;
-          else if (d?.day_type === 'WO' || d?.day_type === 'H') k.off += 1;
+          const tag: string[] = [];
+          const count = (key: keyof typeof k, name: string) => {
+            k[key] += 1;
+            tag.push(name);
+          };
+          if (d?.day_type === 'P') count('P', 'present');
+          else if (d?.day_type === 'HD') count('HD', 'half');
+          else if (d?.day_type === 'A') count('A', 'absent');
+          else if (d?.day_type === 'WO' || d?.day_type === 'H') count('off', 'off');
           else if (d?.day_type === 'LV') {
-            if (d.loss_of_pay) k.lop += 1;
-            else k.leave += 1;
-          } else if (d?.day_type === null && d.joined) k.nm += 1;
-          if (d && d.late > 0) k.late += 1;
-          if (d && d.early > 0) k.early += 1;
-          if (d?.missing) k.miss += 1;
-          if (d?.manual) k.hand += 1;
+            if (d.loss_of_pay) count('lop', 'lop');
+            else count('leave', 'leave');
+          } else if (d?.day_type === null && d.joined) count('nm', 'not_marked');
+          if (d && d.late > 0) count('late', 'late');
+          if (d && d.early > 0) count('early', 'early');
+          if (d?.missing) count('miss', 'missing');
+          if (d?.manual) count('hand', 'hand');
+          tags.push(tag);
           rows.push([
             i + 1,
             e.code,
@@ -669,21 +696,22 @@ export class LeaveReportsService {
           ],
           rows,
           links,
+          tags,
           pdfColumns: [0, 1, 2, 5, 6, 7, 8, 9, 10, 11, 12, 13],
           paper: { portrait: true },
           kpis: [
             { label: 'Staff', value: emps.length },
-            { label: 'Present', value: k.P },
-            { label: 'Half day', value: k.HD },
-            { label: 'Absent', value: k.A },
-            { label: 'On leave', value: k.leave },
-            { label: 'Loss of pay', value: k.lop },
-            { label: 'Weekly off / holiday', value: k.off },
-            { label: 'Late', value: k.late },
-            { label: 'Left early', value: k.early },
-            { label: 'Punch missing', value: k.miss },
-            { label: 'Not marked', value: k.nm },
-            { label: 'Set by hand', value: k.hand },
+            { key: 'present', label: 'Present', value: k.P },
+            { key: 'half', label: 'Half day', value: k.HD },
+            { key: 'absent', label: 'Absent', value: k.A },
+            { key: 'leave', label: 'On leave', value: k.leave },
+            { key: 'lop', label: 'Loss of pay', value: k.lop },
+            { key: 'off', label: 'Weekly off / holiday', value: k.off },
+            { key: 'late', label: 'Late', value: k.late },
+            { key: 'early', label: 'Left early', value: k.early },
+            { key: 'missing', label: 'Punch missing', value: k.miss },
+            { key: 'not_marked', label: 'Not marked', value: k.nm },
+            { key: 'hand', label: 'Set by hand', value: k.hand },
           ],
         };
       }
@@ -715,6 +743,7 @@ export class LeaveReportsService {
         const firstOf = new Map(first.rows.map((x) => [x.emp, x.at]));
         const k = { in: 0, notIn: 0, leave: 0, late: 0, early: 0, missOut: 0 };
         const rows: ReportCell[][] = [];
+        const tags: string[][] = [];
         emps.forEach((e, i) => {
           const d = by.get(e.id)?.[0];
           const p = prevOf.get(e.id);
@@ -724,12 +753,27 @@ export class LeaveReportsService {
             p && p.had_in && !p.out_t ? 'OUT (prev)' : null,
             !inT && !off && s.day <= today ? 'IN (today)' : null,
           ].filter(Boolean);
-          if (inT) k.in += 1;
-          else if (d?.day_type === 'LV') k.leave += 1;
-          else if (!off) k.notIn += 1;
-          if (d && d.late > 0) k.late += 1;
-          if (p && p.early > 0) k.early += 1;
+          const tag: string[] = [];
+          if (inT) {
+            k.in += 1;
+            tag.push('in');
+          } else if (d?.day_type === 'LV') {
+            k.leave += 1;
+            tag.push('leave');
+          } else if (!off) {
+            k.notIn += 1;
+            tag.push('not_in');
+          }
+          if (d && d.late > 0) {
+            k.late += 1;
+            tag.push('late');
+          }
+          if (p && p.early > 0) {
+            k.early += 1;
+            tag.push('early');
+          }
           if (p && p.had_in && !p.out_t) k.missOut += 1;
+          tags.push(tag);
           rows.push([
             i + 1,
             e.code,
@@ -770,15 +814,16 @@ export class LeaveReportsService {
           ],
           rows,
           links: emps.map((e) => dayLink(e.id, s.day)),
+          tags,
           pdfColumns: [0, 1, 2, 5, 6, 7, 8, 9, 10, 11],
           paper: { portrait: true },
           kpis: [
             { label: 'Staff', value: emps.length },
-            { label: 'In', value: k.in },
-            { label: 'Not in', value: k.notIn },
-            { label: 'On leave', value: k.leave },
-            { label: 'Late today', value: k.late },
-            { label: 'Left early (day before)', value: k.early },
+            { key: 'in', label: 'In', value: k.in },
+            { key: 'not_in', label: 'Not in', value: k.notIn },
+            { key: 'leave', label: 'On leave', value: k.leave },
+            { key: 'late', label: 'Late today', value: k.late },
+            { key: 'early', label: 'Left early (day before)', value: k.early },
           ],
           note: 'Last OUT: the latest OUT of the seven days before, with its date; Early: against the shift’s end of that day. OUT (prev): the working day before has an IN and no OUT.',
         };
@@ -1864,8 +1909,11 @@ export class LeaveReportsService {
         throw new DomainError('permission-denied', 'This report is not given to you', {
           status: 403,
         });
-      const t = await this.build(c, code, s);
-      const words = await this.words(c, code, s);
+      const t = pickRows(await this.build(c, code, s), q.pick);
+      const picked = q.pick ? t.kpis?.find((x) => x.key === q.pick) : undefined;
+      const words = [await this.words(c, code, s), picked ? `${picked.label} only` : null]
+        .filter(Boolean)
+        .join(' · ');
       const name = LEAVE_REPORT_DEFS[code].name;
       if (q.format) {
         if (t.rows.length > 20000) fail('More than 20,000 rows: narrow the filters');
@@ -1909,6 +1957,7 @@ export class LeaveReportsService {
         strong: (t.strong ?? []).filter((i) => i < LIMIT),
         links: t.links?.slice(0, LIMIT) ?? null,
         kpis: t.kpis ?? null,
+        pick: picked?.key ?? null,
         note: t.note ?? null,
         more: t.rows.length > LIMIT,
         total: t.rows.length - (t.headings?.length ?? 0),

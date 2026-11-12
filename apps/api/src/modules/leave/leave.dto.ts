@@ -576,6 +576,11 @@ export const LeaveReportQuerySchema = z.object({
   employeeId: Id.optional(),
   typeId: Id.optional(),
   status: z.enum(['pending', 'approved', 'rejected', 'withdrawn', 'cancelled', 'all']).optional(),
+  /** a figure over the table picked: only the rows it counts */
+  pick: z
+    .string()
+    .regex(/^[a-z_]{1,20}$/)
+    .optional(),
   format: z.enum(['xlsx', 'pdf']).optional(),
 });
 export class LeaveReportQueryDto extends createZodDto(LeaveReportQuerySchema) {}

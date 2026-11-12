@@ -649,6 +649,18 @@ leave was raised. Alpha's leave messages are off while it runs and put back afte
 was queued. Found on the way: the credit's ledger line read "credited 6.0000000000000000" — 0360 trims it;
 links in a `.ep-list` line (the leave dashboard's "On leave today") are underlined (WCAG 1.4.1).
 
+## As built — the report figures pick their staff (12 Nov 2026)
+
+Asked: on `/leave/reports`, clicking a figure filters the report. The two reports with figures (Daily
+attendance: 12; Yesterday OUT / today IN: 6) give each figure a key and each row the keys it counts under
+(`kpis[].key`, `tags`); `?pick=<key>` keeps only those rows, numbered from 1 (`pickRows`), says "<figure>
+only" in the report's words and returns `pick`; the figures still count everyone and an unknown key lists
+everyone. The page shows the figures as links (a 0 is not one; the picked one is outlined with
+`aria-current`, and clicking it again, Staff or "Show everyone" lists everyone); Excel and PDF keep the
+pick. Tests: `staff-reports.e2e-spec.ts` — a figure picked, an unknown one, the in/out figures and the
+Excel. Browser (dev-admin, 1440 and 375): Not in → 2 rows, outlined, back to 25, the daily report's
+figures, axe clean.
+
 ## The module is complete
 
 Phases A–E are built. What is left is the school's: the old database connection on the server, the read, the

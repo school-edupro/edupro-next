@@ -2,7 +2,7 @@ import { NextResponse, type NextRequest } from 'next/server';
 import { apiFetch } from '@/lib/api';
 
 const KEEP =
-  /^(day|from|to|month|fromMonth|toMonth|department|employeeType|employeeId|typeId|status)$/;
+  /^(day|from|to|month|fromMonth|toMonth|department|employeeType|employeeId|typeId|status|pick)$/;
 
 /** A staff leave & attendance report as Excel or PDF (docs/design/85, phase D), filters kept. */
 export async function GET(req: NextRequest) {

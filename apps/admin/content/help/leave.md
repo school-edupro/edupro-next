@@ -352,6 +352,11 @@ with the letterhead and the **Prepared by** (you, with your signature and the ti
 | Leave      | Leave balance as on a date          | Each employee and type on a date: opening, credited, corrections, taken to the date, available                                                     |
 | Leave      | Monthly opening and closing balance | Each employee and month: opening, added, taken and closing of each balance type                                                                    |
 
+The two daily reports show their **figures** over the table (staff, in, not in, on leave, late…). Click a
+figure to list only those staff — **Not in** gives the people who have not come; the figure picked is
+outlined and the line above says so. Click it again (or **Staff**, or **Show everyone**) for everyone. The
+Excel and PDF keep what is picked; a figure of 0 has nobody to show.
+
 **How the figures are counted** (the same in every report): a half day counts half present; on duty and
 work from home count present; half a day of leave is half leave and half present; loss of pay is counted
 apart from paid leave; a day nothing was worked out for shows **·** ("not marked") and is never counted

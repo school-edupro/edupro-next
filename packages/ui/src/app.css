@@ -3990,6 +3990,30 @@ a.ep-tabs__tab {
     grid-template-columns: repeat(6, minmax(0, 1fr));
   }
 }
+/* a report's figures as filters: a figure lists only its staff; the one picked is outlined */
+.ep-kpipick {
+  padding: 0;
+  list-style: none;
+}
+.ep-kpipick > li {
+  display: grid;
+}
+.ep-kpipick__card {
+  display: grid;
+  border-radius: var(--radius-md);
+  color: inherit;
+  text-decoration: none;
+}
+.ep-kpipick__card:hover .ep-card {
+  background: var(--surface-band);
+}
+.ep-kpipick__card:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+.ep-kpipick__card[aria-current='true'] .ep-card {
+  box-shadow: 0 0 0 2px var(--action-primary);
+}
 .ep-dash-kpis .ep-kpi__value {
   font-size: var(--fs-h3);
   overflow-wrap: anywhere;

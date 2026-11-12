@@ -309,6 +309,33 @@ describe('staff leave reports (e2e)', () => {
     expect(d1.slice(5, 9)).toEqual(['08:10', '15:30', 'P', 10]);
     expect(daily.kpis.find((k: { label: string }) => k.label === 'Late').value).toBe(1);
     expect(rowOf(daily, `${s}E3`)).toBeUndefined();
+    // a figure picked lists only its staff, numbered from 1; the figures still count everyone
+    const late = (
+      await call(office, 'GET', `/leave-reports/reports/daily?day=${PREV[0]!}&pick=late`)
+    ).json();
+    expect(late.pick).toBe('late');
+    expect(late.total).toBe(1);
+    expect(late.rows[0].slice(0, 2)).toEqual([1, `${s}E1`]);
+    expect(late.words).toMatch(/ · Late only$/);
+    expect(late.kpis).toEqual(daily.kpis);
+    // an unknown figure lists everyone
+    const any = (
+      await call(office, 'GET', `/leave-reports/reports/daily?day=${PREV[0]!}&pick=nobody`)
+    ).json();
+    expect(any.pick).toBeNull();
+    expect(any.total).toBe(daily.total);
+    // the yesterday OUT / today IN figures pick too, and the Excel keeps the pick
+    const io = (await call(office, 'GET', `/leave-reports/reports/in_out?day=${PREV[0]!}`)).json();
+    const inKey = io.kpis.find((k: { label: string }) => k.label === 'In');
+    expect(inKey.key).toBe('in');
+    const ioIn = (
+      await call(office, 'GET', `/leave-reports/reports/in_out?day=${PREV[0]!}&pick=in`)
+    ).json();
+    expect(ioIn.total).toBe(inKey.value);
+    const file = (
+      await call(office, 'GET', `/leave-reports/reports/in_out?day=${PREV[0]!}&pick=in&format=xlsx`)
+    ).json();
+    expect(file.filename).toMatch(/^Leave-in-out/);
   });
 
   it('leave availed and deducted, the balance as on a date', async () => {
