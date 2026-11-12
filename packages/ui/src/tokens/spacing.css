@@ -25,6 +25,10 @@
   --shadow-card: 0 2px 8px rgba(0, 38, 93, 0.08);
   --shadow-card-hover: 0 8px 24px rgba(0, 38, 93, 0.14);
   --shadow-overlay: 0 16px 48px rgba(0, 26, 68, 0.22);
+  /* older names (see colors.css) */
+  --shadow-1: var(--shadow-card);
+  --shadow-2: var(--shadow-card-hover);
+  --radius-2: var(--radius-md);
 
   /* Motion */
   --ease-out: cubic-bezier(0.16, 1, 0.3, 1);

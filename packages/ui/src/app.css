@@ -1235,6 +1235,15 @@
   border-radius: var(--radius-md);
   box-shadow: var(--shadow-2);
 }
+/* a list's Download menu: on a phone the buttons wrap to the left, so it opens from the button's left
+   edge (pinned right it ran off the screen) */
+@media (max-width: 48rem) {
+  .ep-dlmenu {
+    right: auto;
+    left: 0;
+    max-width: calc(100vw - 2rem);
+  }
+}
 .ep-grid__sort {
   all: unset;
   cursor: pointer;

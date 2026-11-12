@@ -107,7 +107,7 @@ export function DownloadMenu({
   return (
     <details className="ep-grid__chooser">
       <summary className="ep-btn ep-btn--primary ep-btn--sm">Download ▾</summary>
-      <div className="ep-grid__popover" style={{ minWidth: '12rem' }}>
+      <div className="ep-grid__popover ep-dlmenu" style={{ minWidth: '12rem' }}>
         {list.map((x) => (
           <a key={x.label} href={x.href} download>
             {x.label}

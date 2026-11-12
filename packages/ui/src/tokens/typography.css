@@ -34,4 +34,7 @@
   /* Letter spacing */
   --ls-overline: 0.12em; /* uppercase kickers */
   --ls-heading: -0.01em;
+  /* older names (see colors.css) */
+  --ff-heading: var(--font-heading);
+  --fs-h5: var(--fs-body);
 }

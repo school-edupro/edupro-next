@@ -74,4 +74,15 @@
   --status-danger-bg: var(--mob-red-50);
   --status-info: var(--mob-cyan-700);
   --status-info-bg: var(--mob-cyan-50);
+
+  /* Names some components were written with but never defined (they fell back to nothing: a
+     transparent menu, missing lines). Each is the Mobilise token it meant. */
+  --surface: var(--surface-card);
+  --surface-1: var(--surface-card);
+  --surface-2: var(--surface-subtle);
+  --surface-muted: var(--surface-subtle);
+  --border: var(--border-default);
+  --border-subtle: var(--mob-gray-100);
+  --text-primary: var(--text-body);
+  --warning: var(--status-warning);
 }
