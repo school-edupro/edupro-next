@@ -2,7 +2,9 @@
  * My leave and My attendance are every employee's (docs/design/85, "As built — My leave for every
  * employee"): a sign-in linked to an active staff record has the right whatever its roles, none at all
  * included; a sign-in with no staff record does not, even through a role that carries it, so it is not shown
- * pages that could only say it is not linked; the roles screen neither offers nor keeps the right.
+ * pages that could only say it is not linked; the roles screen neither offers nor keeps the right. The
+ * document a leave asks for: every employee uploads it and opens their own upload; another's file still
+ * needs the file right.
  */
 import type { NestFastifyApplication } from '@nestjs/platform-fastify';
 import {
@@ -27,7 +29,27 @@ describe('My leave and My attendance for every employee (e2e)', () => {
   let noRole: SeededUser;
   let adminStaff: SeededUser;
   let leftStaff: SeededUser;
+  let stranger: SeededUser;
   const s = stamp('OW');
+  const pdf = Buffer.from('%PDF-1.4\n% EduPro Next test file\n'.repeat(40));
+  /** a ready PDF uploaded by u: the slot, then the bytes */
+  const upload = async (u: SeededUser) => {
+    const slot = await call(u, 'POST', '/platform/files', {
+      fileName: 'medical.pdf',
+      contentType: 'application/pdf',
+      sizeBytes: pdf.length,
+      classification: 'personal',
+    });
+    if (slot.statusCode !== 201) return { status: slot.statusCode, id: '' };
+    const put = await inject({
+      method: 'PUT',
+      url: slot.json().upload.url,
+      headers: {},
+      raw: { body: pdf, contentType: 'application/pdf' },
+    });
+    expect(put.statusCode).toBe(200);
+    return { status: 201, id: String(slot.json().file.id) };
+  };
   const call = (u: SeededUser, method: 'GET' | 'POST', url: string, json?: unknown) =>
     inject({
       method,
@@ -45,6 +67,7 @@ describe('My leave and My attendance for every employee (e2e)', () => {
       noRole = await seedUser(c, school, `${s}-nr`);
       adminStaff = await seedUser(c, school, `${s}-as`, 'school_admin');
       leftStaff = await seedUser(c, school, `${s}-lf`, 'subject_teacher');
+      stranger = await seedUser(c, school, `${s}-st`);
       for (const [u, code, status] of [
         [noRole, 'A', 'active'],
         [adminStaff, 'B', 'active'],
@@ -96,5 +119,25 @@ describe('My leave and My attendance for every employee (e2e)', () => {
     });
     expect(role.statusCode).toBe(201);
     expect(role.json().permissions).toEqual(['leave.report.view']);
+  });
+
+  it('the document: every employee uploads it and opens their own; another’s file needs the file right', async () => {
+    expect(await rights(noRole)).toContain('platform.files.upload');
+    const mine = await upload(noRole);
+    expect(mine.status).toBe(201);
+    expect((await call(noRole, 'GET', `/platform/files/${mine.id}/download-url`)).statusCode).toBe(
+      200,
+    );
+    const theirs = await upload(adminStaff);
+    expect(theirs.status).toBe(201);
+    const refused = await call(noRole, 'GET', `/platform/files/${theirs.id}/download-url`);
+    expect(refused.statusCode).toBe(403);
+    expect(refused.json().detail).toBe('Missing permission platform.files.view');
+    // the school admin (the file right) opens it
+    expect((await call(admin, 'GET', `/platform/files/${mine.id}/download-url`)).statusCode).toBe(
+      200,
+    );
+    // a sign-in with no staff record and no role uploads nothing
+    expect((await upload(stranger)).status).toBe(403);
   });
 });

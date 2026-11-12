@@ -737,6 +737,22 @@ screen); `purchase-indents` now expects both baseline rights; leave, staff, acce
 green. Browser (staff app as a teacher; admin as dev-admin → leave dashboard, dev-coordinator → My leave;
 1440 and 375): axe clean.
 
+## As built — the leave document for staff with no role (12 Nov 2026)
+
+Seen: a staff member with no role (opened by Dev Admin through Act as) applying for sick leave with its
+document got "Missing permission platform.files.upload": My leave opened for them, but the upload behind
+the Document field went by a role right, which no-role staff (and roles without it: leave office, exam
+office) did not have. `platform.files.upload` is now in the employee baseline too (not employee-only:
+roles keep it); each feature still takes only a file its own sign-in uploaded. Opening a file: `GET
+/platform/files/:id/download-url` is now `@AuthenticatedOnly` and decided in `FilesService.downloadUrlChecked`:
+`platform.files.view` opens any of the school's files, without it only one's own upload (so a no-role
+employee, a nurse or a gate guard opens the document of their own leave); the features that check their
+own entity first still call `downloadUrl` directly. `platform.files.view` was not given to every employee:
+it opens any file of the school by number. Tests: `leave-own-every-employee.e2e-spec.ts` (no role → uploads,
+opens their own, another's refused, a sign-in with no staff record and no role uploads nothing);
+`purchase-indents` expects the three baseline rights; files, daily academics, ACR, employee master and
+transfer, leave and access specs green.
+
 ## The module is complete
 
 Phases A–E are built. What is left is the school's: the old database connection on the server, the read, the

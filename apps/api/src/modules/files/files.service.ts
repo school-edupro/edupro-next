@@ -4,6 +4,7 @@ import type { TenantContext } from '@edupro/db';
 import { DbService } from '../../common/db/db.service';
 import { DomainError } from '../../common/errors/domain-error';
 import { requireTenant, type RequestContext } from '../../common/http/request-context';
+import { PLATFORM } from '../platform/platform.permissions';
 import { ALLOWED_CONTENT_TYPES, MAX_BYTES_BY_CLASS, type CreateUploadDto } from './files.dto';
 import { LocalStorage } from '@edupro/storage';
 import { SCANNER, STORAGE_DRIVER, type Scanner, type StorageDriver } from './storage';
@@ -211,6 +212,20 @@ export class FilesService {
     return toRow(updated);
   }
 
+  /**
+   * GET /platform/files/:id/download-url: the file right opens any of the school's files; without it, only
+   * one's own upload (an employee with no role opening the document of their own leave). Features that check
+   * their own entity first call downloadUrl directly.
+   */
+  async downloadUrlChecked(ctx: RequestContext, id: string) {
+    const tenant = requireTenant(ctx);
+    if (!ctx.permissions?.has(PLATFORM.filesView) && !(await this.uploadedByMe(tenant, id)))
+      throw new DomainError('permission-denied', `Missing permission ${PLATFORM.filesView}`, {
+        status: 403,
+      });
+    return this.downloadUrl(ctx, id);
+  }
+
   async downloadUrl(ctx: RequestContext, id: string) {
     const tenant = requireTenant(ctx);
     const row = await this.find(tenant, id);
@@ -292,6 +307,16 @@ export class FilesService {
     if (!(this.storage instanceof LocalStorage))
       throw new DomainError('not-found', 'Local file endpoints are disabled');
     return this.storage;
+  }
+
+  private async uploadedByMe(tenant: TenantContext, id: string): Promise<boolean> {
+    return this.db.tenant(tenant, async (c) => {
+      const r = await c.query(
+        `SELECT 1 FROM files WHERE id = $1 AND created_by = app.current_user_id() AND deleted_at IS NULL`,
+        [id],
+      );
+      return (r.rowCount ?? 0) > 0;
+    });
   }
 
   private async find(tenant: TenantContext, id: string): Promise<FileDbRow> {

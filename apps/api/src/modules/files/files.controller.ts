@@ -3,7 +3,7 @@ import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import { disposition } from '@edupro/storage';
 import { RequirePermission } from '../../common/access/require-permission.decorator';
-import { Public } from '../../common/auth/decorators';
+import { AuthenticatedOnly, Public } from '../../common/auth/decorators';
 import { DomainError } from '../../common/errors/domain-error';
 import { ReqCtx, type RequestContext } from '../../common/http/request-context';
 import { PLATFORM } from '../platform/platform.permissions';
@@ -37,10 +37,14 @@ export class FilesController {
   }
 
   @Get(':id/download-url')
-  @ApiOperation({ summary: 'Signed download URL (sensitive downloads are audited)' })
-  @RequirePermission(PLATFORM.filesView)
+  @ApiOperation({
+    summary:
+      'Signed download URL (sensitive downloads are audited): platform.files.view, or a file I uploaded',
+  })
+  // decided in the service: the file right, or one's own upload (a leave document on My leave)
+  @AuthenticatedOnly()
   downloadUrl(@ReqCtx() ctx: RequestContext, @Param('id') id: string) {
-    return this.files.downloadUrl(ctx, id);
+    return this.files.downloadUrlChecked(ctx, id);
   }
 
   // ---- local driver: token-authenticated byte endpoints -------------------------------------------
