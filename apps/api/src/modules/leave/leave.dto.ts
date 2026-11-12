@@ -709,13 +709,15 @@ export class MyFileDto extends createZodDto(MyFileSchema) {}
 // ---- the staff punch log (the old Employee / Attendance Details) ---------------------------------------
 export const PUNCH_LOG = 'leave.punch_log.view';
 /**
- * The raw punches: a department's (up to 31 days — every punch of every person in it) or one employee's
- * (up to 92 days), a page at a time; Excel or PDF of the same.
+ * The raw punches: a department's (up to 31 days — every punch of every person in it), a reporting
+ * manager's team's (up to 31 days) or one employee's (up to 92 days), a page at a time; Excel or PDF.
  */
 export const PunchLogSchema = z
   .object({
     department: z.string().trim().min(1).max(100).optional(),
     employeeId: Id.optional(),
+    /** a reporting manager's own team: every reportee (up to 31 days) */
+    team: z.enum(['1']).optional(),
     from: Day,
     to: Day,
     page: z.coerce.number().int().min(1).max(10000).default(1),
@@ -726,8 +728,8 @@ export const PunchLogSchema = z
       .default(50),
     format: z.enum(['xlsx', 'pdf']).optional(),
   })
-  .refine((d) => !!d.department !== !!d.employeeId, {
-    message: 'Pick a department or an employee',
+  .refine((d) => [d.department, d.employeeId, d.team].filter(Boolean).length === 1, {
+    message: 'Pick a department, an employee or your team',
     path: ['department'],
   })
   .refine((d) => d.from <= d.to, { message: 'From must be on or before To', path: ['to'] });

@@ -60,6 +60,19 @@ describe('staff punch log (e2e)', () => {
             [school.id, `${s}${code}`, bio],
           )
         ).rows[0]!.id;
+      // the teacher is P1's and P2's reporting manager this year
+      ids.M1 = (
+        await c.query<{ id: string }>(
+          `INSERT INTO employees (school_id, employee_code, first_name, last_name, department, employee_type, gender, user_id)
+           VALUES ($1, $2, 'Manager', 'E2E', 'Science', 'teaching', 'female', $3) RETURNING id::text`,
+          [school.id, `${s}M1`, teacher.id],
+        )
+      ).rows[0]!.id;
+      for (const e of [ids.P1, ids.P2])
+        await c.query(
+          `INSERT INTO postings (school_id, employee_id, academic_year_id, reports_to_employee_id) VALUES ($1, $2, $3, $4)`,
+          [school.id, e, school.yearId, ids.M1],
+        );
     });
     app = await createApp();
     inject = injector(app);
@@ -247,7 +260,53 @@ describe('staff punch log (e2e)', () => {
         })
       ).statusCode,
     ).toBe(409);
-    // the log is not open to a teacher
+    // the machines' view is not open to a teacher
     expect((await call(teacher, 'GET', '/staff-punches/overview')).statusCode).toBe(403);
+  });
+
+  it('a reporting manager sees the punches of their reportees only: the team, one of them, their days', async () => {
+    const t = (await call(teacher, 'GET', '/staff-punches/team')).json();
+    expect(t.all).toBe(false);
+    expect(t.reportees.map((r: { code: string }) => r.code).sort()).toEqual([`${s}P1`, `${s}P2`]);
+    const team = (
+      await call(teacher, 'GET', `/staff-punches/log?team=1&from=${day2}&to=${day}`)
+    ).json();
+    expect(team).toMatchObject({ mode: 'team', figures: { n: 5, people: 2 } });
+    expect(team.words).toMatch(/^My team \(2 people\)/);
+    expect(
+      (
+        await call(teacher, 'GET', `/staff-punches/log?employeeId=${ids.P1!}&from=${day}&to=${day}`)
+      ).json().figures.n,
+    ).toBe(4);
+    expect(
+      (
+        await call(
+          teacher,
+          'GET',
+          `/staff-punches/versions?employeeId=${ids.P2!}&from=${day}&to=${day}`,
+        )
+      ).json().rows,
+    ).toHaveLength(2);
+    // not someone who does not report to them, not a department, not the unmatched
+    for (const url of [
+      `/staff-punches/log?employeeId=${ids.P3!}&from=${day}&to=${day}`,
+      `/staff-punches/versions?employeeId=${ids.P3!}&from=${day}&to=${day}`,
+      `/staff-punches/log?department=Science&from=${day}&to=${day}`,
+      `/staff-punches/unmatched?from=${day}&to=${day}`,
+    ])
+      expect([url, (await call(teacher, 'GET', url)).statusCode]).toEqual([url, 403]);
+    // the team up to 31 days
+    expect(
+      (await call(teacher, 'GET', `/staff-punches/log?team=1&from=${ist(-32)}&to=${day}`))
+        .statusCode,
+    ).toBe(400);
+    // the office sees everyone; a manager with nobody reporting is refused
+    expect((await call(office, 'GET', '/staff-punches/team')).json()).toMatchObject({
+      all: true,
+      reportees: [],
+    });
+    expect(
+      (await call(office, 'GET', `/staff-punches/log?team=1&from=${day}&to=${day}`)).statusCode,
+    ).toBe(403);
   });
 });

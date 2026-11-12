@@ -7,18 +7,28 @@ import { Icon } from '@/components/nav-icons';
 import { DialogButton } from '@/components/leave/DialogButton';
 import { DownloadMenu, Pages, Showing, SizeLinks } from '@/components/leave/ListBar';
 import { ApiError, apiFetch, getMe } from '@/lib/api';
-import type { DayVersions, PunchLog, PunchOverview, UnmatchedPunches } from '@/lib/leave';
+import type {
+  DayVersions,
+  PunchLog,
+  PunchOverview,
+  PunchTeam,
+  UnmatchedPunches,
+} from '@/lib/leave';
 import { assignPunchId, processPunches } from '@/lib/leave-actions';
 
 const DAY = /^\d{4}-\d{2}-\d{2}$/;
 const ID = /^\d{1,18}$/;
 const TABS = [
+  { id: 'team', label: 'My team', icon: 'users' },
   { id: 'department', label: 'Department', icon: 'users' },
   { id: 'history', label: 'Attendance History', icon: 'calendar' },
   { id: 'log', label: 'Attendance Log', icon: 'list' },
   { id: 'unmatched', label: 'Unmatched', icon: 'xCircle' },
 ] as const;
 type Tab = (typeof TABS)[number]['id'];
+/** the office (the punch-log right) and a reporting manager (their reportees) */
+const OFFICE_TABS: Tab[] = ['department', 'history', 'log', 'unmatched'];
+const MANAGER_TABS: Tab[] = ['team', 'history', 'log'];
 const dmy = (d: string) => `${d.slice(8, 10)}-${d.slice(5, 7)}-${d.slice(0, 4)}`;
 /** dd-mm-yyyy hh:mm, India time */
 const when = (iso: string | null) =>
@@ -44,6 +54,8 @@ const istToday = () => new Date(Date.now() + 330 * 60_000).toISOString().slice(0
  * up to 31 days), Attendance History (every version of an employee's days, the one in force Active and the
  * ones it replaced InActive, with how the day was worked out), Attendance Log (one employee's raw punches,
  * up to 92 days) and Unmatched (an unknown ID's punches, given to an employee here; the double taps).
+ * A reporting manager without the punch-log right sees their reportees: My team (every punch of everyone
+ * reporting to them, up to 31 days), Attendance History and Attendance Log.
  */
 export default async function StaffPunchesPage({
   searchParams,
@@ -52,8 +64,19 @@ export default async function StaffPunchesPage({
 }) {
   const sp = await searchParams;
   const me = await getMe();
-  if (!me.permissions.includes('leave.punch_log.view')) notFound();
-  const tab: Tab = TABS.some((t) => t.id === sp.tab) ? (sp.tab as Tab) : 'department';
+  const all = me.permissions.includes('leave.punch_log.view');
+  const mine = await apiFetch<PunchTeam>('/staff-punches/team');
+  if (!all && !mine.reportees.length) notFound();
+  // the office also gets My team when staff report to them
+  const show = all
+    ? [...(mine.reportees.length ? (['team'] as Tab[]) : []), ...OFFICE_TABS]
+    : MANAGER_TABS;
+  const tabs = TABS.filter((t) => show.includes(t.id));
+  const tab: Tab = tabs.some((t) => t.id === sp.tab)
+    ? (sp.tab as Tab)
+    : all
+      ? 'department'
+      : 'team';
   const today = istToday();
   const from = sp.from && DAY.test(sp.from) ? sp.from : `${today.slice(0, 7)}-01`;
   const to = sp.to && DAY.test(sp.to) ? sp.to : today;
@@ -61,7 +84,8 @@ export default async function StaffPunchesPage({
   const employeeId = sp.employeeId && ID.test(sp.employeeId) ? sp.employeeId : '';
   const size = pageSizeOf(sp.size);
   const page = Math.max(1, Number(sp.page) || 1);
-  const ov = await apiFetch<PunchOverview>('/staff-punches/overview');
+  const ov = all ? await apiFetch<PunchOverview>('/staff-punches/overview') : null;
+  const employees = ov?.lists.employees ?? mine.reportees.map((e) => ({ ...e, biometricId: null }));
 
   /** this page with these filters (and changes) */
   const href = (o: Record<string, string | number | null>) => {
@@ -80,12 +104,18 @@ export default async function StaffPunchesPage({
   let versions: DayVersions | null = null;
   let unmatched: UnmatchedPunches | null = null;
   let error: string | null = null;
-  const pick = tab === 'department' ? !!department : tab === 'unmatched' ? true : !!employeeId;
+  const pick =
+    tab === 'department'
+      ? !!department
+      : tab === 'unmatched' || tab === 'team'
+        ? true
+        : !!employeeId;
   if (pick)
     try {
-      if (tab === 'department' || tab === 'log') {
+      if (tab === 'department' || tab === 'log' || tab === 'team') {
         const q = new URLSearchParams({ from, to, size, page: String(page) });
         if (tab === 'department') q.set('department', department);
+        else if (tab === 'team') q.set('team', '1');
         else q.set('employeeId', employeeId);
         log = await apiFetch<PunchLog>(`/staff-punches/log?${q.toString()}`);
       } else if (tab === 'history')
@@ -105,12 +135,14 @@ export default async function StaffPunchesPage({
   const file = (list: 'punches' | 'versions', format: 'xlsx' | 'pdf') => {
     const p = new URLSearchParams({ list, format, from, to });
     if (list === 'punches' && tab === 'department') p.set('department', department);
+    else if (list === 'punches' && tab === 'team') p.set('team', '1');
     else p.set('employeeId', employeeId);
     return `/api/leave/list-file?${p.toString()}`;
   };
-  const unknownCount = ov.devices.reduce((a, d) => a + d.unknown, 0);
-  const waiting =
-    ov.devices.reduce((a, d) => a + d.waiting, 0) + ov.others.reduce((a, o) => a + o.waiting, 0);
+  const unknownCount = ov?.devices.reduce((a, d) => a + d.unknown, 0) ?? 0;
+  const waiting = ov
+    ? ov.devices.reduce((a, d) => a + d.waiting, 0) + ov.others.reduce((a, o) => a + o.waiting, 0)
+    : 0;
 
   const dates = (idp: string, cap: string) => (
     <>
@@ -156,7 +188,7 @@ export default async function StaffPunchesPage({
         required
       >
         <option value="">Select employee</option>
-        {ov.lists.employees.map((e) => (
+        {employees.map((e) => (
           <option key={e.id} value={e.id}>
             {e.name} ({e.code})
           </option>
@@ -195,98 +227,104 @@ export default async function StaffPunchesPage({
       <PageHeader
         kicker="Biometric log"
         title="Employee / Attendance Details"
-        description="Every punch the machines and the uploads brought in, how each day was set and changed, and the punches nobody could be matched to."
+        description={
+          all
+            ? 'Every punch the machines and the uploads brought in, how each day was set and changed, and the punches nobody could be matched to.'
+            : 'The punches of the staff who report to you: every punch the machines and the uploads brought in, and how each of their days was set and changed.'
+        }
       />
       <Notice params={sp} />
 
-      <section className="ep-pdev" aria-label="Where the punches come from">
-        {ov.devices.map((d) => {
-          const fresh = !!d.lastSeen && Date.now() - Date.parse(d.lastSeen) < 86_400_000;
-          return (
-            <article key={d.id} className="ep-pdev__card">
-              <header className="ep-pdev__head">
-                <span className="ep-pdev__ic" aria-hidden="true">
-                  <Icon name="clock" size={18} />
-                </span>
-                <span className="ep-pdev__name">
-                  <strong>{d.name}</strong>
-                  <span className="ep-mr-col__desc">
-                    {d.code} · biometric{d.status !== 'active' ? ` · ${d.status}` : ''}
+      {ov ? (
+        <section className="ep-pdev" aria-label="Where the punches come from">
+          {ov.devices.map((d) => {
+            const fresh = !!d.lastSeen && Date.now() - Date.parse(d.lastSeen) < 86_400_000;
+            return (
+              <article key={d.id} className="ep-pdev__card">
+                <header className="ep-pdev__head">
+                  <span className="ep-pdev__ic" aria-hidden="true">
+                    <Icon name="clock" size={18} />
                   </span>
-                </span>
-                <span className={`ep-stage ${fresh ? 'ep-stage--ok' : 'ep-stage--off'}`}>
-                  {fresh ? 'In touch' : `Last seen ${when(d.lastSeen)}`}
-                </span>
-              </header>
-              <dl className="ep-pdev__facts">
-                <div>
-                  <dt>Today</dt>
-                  <dd>{d.today}</dd>
-                </div>
-                <div>
-                  <dt>Last punch</dt>
-                  <dd>{when(d.lastPunch)}</dd>
-                </div>
-                <div>
-                  <dt>Waiting</dt>
-                  <dd>{d.waiting}</dd>
-                </div>
-                <div>
-                  <dt>Unknown IDs, 30 days</dt>
-                  <dd>
-                    {d.unknown ? (
-                      <a href={href({ tab: 'unmatched', page: null })}>{d.unknown}</a>
-                    ) : (
-                      0
-                    )}
-                  </dd>
-                </div>
-              </dl>
-            </article>
-          );
-        })}
-        <article className="ep-pdev__card">
-          <header className="ep-pdev__head">
-            <span className="ep-pdev__ic" aria-hidden="true">
-              <Icon name="upload" size={18} />
-            </span>
-            <span className="ep-pdev__name">
-              <strong>Other sources</strong>
-              <span className="ep-mr-col__desc">central sync, sheet uploads, by hand</span>
-            </span>
-          </header>
-          {ov.others.length ? (
-            <ul className="ep-pdev__list">
-              {ov.others.map((o) => (
-                <li key={o.source}>
-                  <strong>{o.words}</strong>: {o.punches.toLocaleString('en-IN')} punches · last{' '}
-                  {when(o.last)}
-                  {o.waiting ? ` · ${String(o.waiting)} waiting` : ''}
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <p className="ep-field__help" style={{ margin: 0 }}>
-              None yet.
-            </p>
-          )}
-          {ov.can.process ? (
-            <form action={processPunches} className="ep-pdev__run">
-              <input type="hidden" name="back" value={here} />
-              <button type="submit" className="ep-btn ep-btn--secondary ep-btn--sm">
-                Process now{waiting ? ` (${String(waiting)} waiting)` : ''}
-              </button>
-              <span className="ep-field__help" style={{ margin: 0 }}>
-                Works new punches into their days (the system does it every few minutes).
+                  <span className="ep-pdev__name">
+                    <strong>{d.name}</strong>
+                    <span className="ep-mr-col__desc">
+                      {d.code} · biometric{d.status !== 'active' ? ` · ${d.status}` : ''}
+                    </span>
+                  </span>
+                  <span className={`ep-stage ${fresh ? 'ep-stage--ok' : 'ep-stage--off'}`}>
+                    {fresh ? 'In touch' : `Last seen ${when(d.lastSeen)}`}
+                  </span>
+                </header>
+                <dl className="ep-pdev__facts">
+                  <div>
+                    <dt>Today</dt>
+                    <dd>{d.today}</dd>
+                  </div>
+                  <div>
+                    <dt>Last punch</dt>
+                    <dd>{when(d.lastPunch)}</dd>
+                  </div>
+                  <div>
+                    <dt>Waiting</dt>
+                    <dd>{d.waiting}</dd>
+                  </div>
+                  <div>
+                    <dt>Unknown IDs, 30 days</dt>
+                    <dd>
+                      {d.unknown ? (
+                        <a href={href({ tab: 'unmatched', page: null })}>{d.unknown}</a>
+                      ) : (
+                        0
+                      )}
+                    </dd>
+                  </div>
+                </dl>
+              </article>
+            );
+          })}
+          <article className="ep-pdev__card">
+            <header className="ep-pdev__head">
+              <span className="ep-pdev__ic" aria-hidden="true">
+                <Icon name="upload" size={18} />
               </span>
-            </form>
-          ) : null}
-        </article>
-      </section>
+              <span className="ep-pdev__name">
+                <strong>Other sources</strong>
+                <span className="ep-mr-col__desc">central sync, sheet uploads, by hand</span>
+              </span>
+            </header>
+            {ov.others.length ? (
+              <ul className="ep-pdev__list">
+                {ov.others.map((o) => (
+                  <li key={o.source}>
+                    <strong>{o.words}</strong>: {o.punches.toLocaleString('en-IN')} punches · last{' '}
+                    {when(o.last)}
+                    {o.waiting ? ` · ${String(o.waiting)} waiting` : ''}
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="ep-field__help" style={{ margin: 0 }}>
+                None yet.
+              </p>
+            )}
+            {ov.can.process ? (
+              <form action={processPunches} className="ep-pdev__run">
+                <input type="hidden" name="back" value={here} />
+                <button type="submit" className="ep-btn ep-btn--secondary ep-btn--sm">
+                  Process now{waiting ? ` (${String(waiting)} waiting)` : ''}
+                </button>
+                <span className="ep-field__help" style={{ margin: 0 }}>
+                  Works new punches into their days (the system does it every few minutes).
+                </span>
+              </form>
+            ) : null}
+          </article>
+        </section>
+      ) : null}
 
       <div className="ep-tabs">
         <div role="tablist" aria-label="Staff punches" className="ep-tabs__list">
-          {TABS.map((t) => (
+          {tabs.map((t) => (
             <a
               key={t.id}
               role="tab"
@@ -301,46 +339,48 @@ export default async function StaffPunchesPage({
         </div>
       </div>
 
-      {tab === 'department'
-        ? filter(
-            <>
-              <label className="ep-field" htmlFor="pd-dept">
-                <span className="ep-field__label">
-                  Department<span aria-hidden="true"> *</span>
-                </span>
-                <select
-                  id="pd-dept"
-                  name="department"
-                  className="ep-select"
-                  defaultValue={department}
-                  required
-                >
-                  <option value="">Select Department</option>
-                  {ov.lists.departments.map((d) => (
-                    <option key={d} value={d}>
-                      {d}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              {dates('pd', 'Up to 31 days: every punch of everyone in it.')}
-            </>,
-          )
-        : tab === 'history'
+      {tab === 'team'
+        ? filter(dates('pt', 'Up to 31 days: every punch of everyone who reports to you.'))
+        : tab === 'department'
           ? filter(
               <>
-                {employeeSelect('ph')}
-                {dates('ph', 'Up to 92 days.')}
+                <label className="ep-field" htmlFor="pd-dept">
+                  <span className="ep-field__label">
+                    Department<span aria-hidden="true"> *</span>
+                  </span>
+                  <select
+                    id="pd-dept"
+                    name="department"
+                    className="ep-select"
+                    defaultValue={department}
+                    required
+                  >
+                    <option value="">Select Department</option>
+                    {(ov?.lists.departments ?? []).map((d) => (
+                      <option key={d} value={d}>
+                        {d}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                {dates('pd', 'Up to 31 days: every punch of everyone in it.')}
               </>,
             )
-          : tab === 'log'
+          : tab === 'history'
             ? filter(
                 <>
-                  {employeeSelect('pl')}
-                  {dates('pl', 'Up to 92 days.')}
+                  {employeeSelect('ph')}
+                  {dates('ph', 'Up to 92 days.')}
                 </>,
               )
-            : filter(dates('pu', 'The unknown IDs and the double taps in these dates.'))}
+            : tab === 'log'
+              ? filter(
+                  <>
+                    {employeeSelect('pl')}
+                    {dates('pl', 'Up to 92 days.')}
+                  </>,
+                )
+              : filter(dates('pu', 'The unknown IDs and the double taps in these dates.'))}
 
       {error ? (
         <p className="ep-alert ep-alert--danger" role="alert">
@@ -348,7 +388,7 @@ export default async function StaffPunchesPage({
         </p>
       ) : null}
 
-      {!pick
+      {!pick && tab !== 'unmatched'
         ? prompt(
             tab === 'department'
               ? 'Pick a department and a date range, then Search.'
@@ -357,10 +397,18 @@ export default async function StaffPunchesPage({
         : null}
 
       {log ? (
-        <section aria-label={tab === 'department' ? 'Department punches' : 'Attendance log'}>
+        <section
+          aria-label={
+            tab === 'department'
+              ? 'Department punches'
+              : tab === 'team'
+                ? 'My team’s punches'
+                : 'Attendance log'
+          }
+        >
           <p className="ep-field__help" role="status">
             {log.words}: <strong>{log.figures.n.toLocaleString('en-IN')}</strong> punches
-            {log.mode === 'department' ? ` by ${String(log.figures.people)} people` : ''} on{' '}
+            {log.mode !== 'employee' ? ` by ${String(log.figures.people)} people` : ''} on{' '}
             {log.figures.days} days
             {log.figures.waiting
               ? ` · ${String(log.figures.waiting)} not yet worked into their days`
@@ -382,13 +430,19 @@ export default async function StaffPunchesPage({
             className="ep-table-wrap"
             tabIndex={0}
             role="region"
-            aria-label={tab === 'department' ? 'Punches of the department' : 'Punches'}
+            aria-label={
+              tab === 'department'
+                ? 'Punches of the department'
+                : tab === 'team'
+                  ? 'Punches of my team'
+                  : 'Punches'
+            }
           >
             <table className="ep-table ep-table--dense">
               <thead>
                 <tr>
                   <th scope="col">S.No.</th>
-                  {log.mode === 'department' ? <th scope="col">Employee</th> : null}
+                  {log.mode !== 'employee' ? <th scope="col">Employee</th> : null}
                   <th scope="col">Date</th>
                   <th scope="col">Day</th>
                   <th scope="col">Punch Time</th>
@@ -403,7 +457,7 @@ export default async function StaffPunchesPage({
                   log.rows.map((r, i) => (
                     <tr key={r.id}>
                       <td>{(log.page - 1) * log.size + i + 1}</td>
-                      {log.mode === 'department' ? (
+                      {log.mode !== 'employee' ? (
                         <td>
                           <strong>{r.employee.name}</strong>
                           <span className="ep-mr-col__desc">{r.employee.code}</span>
@@ -439,7 +493,7 @@ export default async function StaffPunchesPage({
                   ))
                 ) : (
                   <tr>
-                    <td colSpan={log.mode === 'department' ? 9 : 8}>No punches in these dates.</td>
+                    <td colSpan={log.mode !== 'employee' ? 9 : 8}>No punches in these dates.</td>
                   </tr>
                 )}
               </tbody>
@@ -664,7 +718,7 @@ export default async function StaffPunchesPage({
                                   defaultValue=""
                                 >
                                   <option value="">Select employee</option>
-                                  {ov.lists.employees
+                                  {employees
                                     .filter((e) =>
                                       r.holder ? e.biometricId === r.id : !e.biometricId,
                                     )

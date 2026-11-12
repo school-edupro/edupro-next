@@ -6,6 +6,8 @@ export const LEAVE_MENU = {
   corrections: 'menu:attendance-corrections',
   team: 'menu:leave-team',
   reports: 'menu:leave-reports',
+  /** the staff punch log: the punch-log right, or a reporting manager (their reportees) */
+  punches: 'menu:staff-punches',
 } as const;
 
 /** Navigation is projected from permissions (ADR-004 point 10). Labels come from the message catalogue (S4-01). */
@@ -126,7 +128,7 @@ export const NAV: Array<{
         label: 'attendanceExceptions',
         permission: 'leave.office.manage',
       },
-      { href: '/attendance/punches', label: 'punches', permission: 'leave.punch_log.view' },
+      { href: '/attendance/punches', label: 'punches', permission: LEAVE_MENU.punches },
       { href: '/leave/reports', label: 'leaveReports', permission: LEAVE_MENU.reports },
       { href: '/leave/setup', label: 'leaveSetup', permission: 'leave.setup.view' },
     ],

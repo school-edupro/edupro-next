@@ -687,6 +687,21 @@ punches with a double tap and an unknown ID, Process now, the logs and their lim
 after a correction, unmatched, the ID given, the refusals, the right). Browser (dev-admin, 1440 and 375):
 every tab, the trace and Give dialogs, axe clean, no sideways scroll.
 
+## As built — reporting managers see their reportees' punches (12 Nov 2026)
+
+Asked: managers see their reportees' punch log. Decided: My team, Attendance Log and Attendance History for
+reportees only, in both apps. `GET /staff-punches/team` (who I may see: `all` for the punch-log right, and my
+reportees from this year's postings); `log` and `versions` are open to any signed-in user and decide in the
+service (`scope`): the punch-log right sees everyone, a manager only their reportees (403 for anyone else, a
+department, or with nobody reporting); `log?team=1` lists every reportee's punches (up to 31 days, "My team (n
+people)", Excel / PDF). The overview, unmatched and giving an ID stay with their rights. Admin: Staff punches
+shows in the menu for the right or for anyone with reportees (`menu:staff-punches`); a manager's page has My
+team, Attendance History and Attendance Log (employee lists = reportees, no machine strip); the office gets
+My team too when staff report to them. Staff app: My team has Month and Punches tabs (all my team or one
+person, dates, pages). Tests: `staff-punch-log.e2e-spec.ts` — a manager's team, one reportee, their day
+versions, the refusals, the 31-day limit, the office's empty team. Browser (dev-coordinator, both apps, 1440
+and 375): axe clean, no sideways scroll; a pure manager (E002) checked through the API.
+
 ## The module is complete
 
 Phases A–E are built. What is left is the school's: the old database connection on the server, the read, the

@@ -221,6 +221,12 @@ sources — with **Process now** for the office. Four tabs:
 
 Department, Attendance Log and Attendance History download as Excel or PDF.
 
+**A reporting manager** (anyone set as **Reports to** on an employee's Posting) sees **Staff punches** in
+the menu for the staff who report to them: **My team** (every punch of all of them, up to 31 days),
+**Attendance Log** and **Attendance History** for one of them — not anyone else's, not a department, not the
+machines or the unmatched punches. In the staff app the same is under **My team → Punches**. The office
+also gets **My team** when staff report to them.
+
 **How a day is worked out**: the day's shift (a special timing, else the department's, else the shift
 posting, else the default shift; a night shift takes the next morning's OUT), first IN and last OUT (two
 punches closer than the settings' minutes are one), the hours (less the late minutes when the settings

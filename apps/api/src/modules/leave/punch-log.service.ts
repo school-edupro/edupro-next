@@ -1,5 +1,6 @@
 /* eslint-disable no-restricted-syntax -- the interpolations in this file are fixed fragments; values are bound */
 import { Inject, Injectable } from '@nestjs/common';
+import type { PoolClient } from '@edupro/db';
 import type { StorageDriver } from '@edupro/storage';
 import { AuditService } from '../../common/audit/audit.service';
 import { DbService } from '../../common/db/db.service';
@@ -11,6 +12,7 @@ import { dmy, fail } from './leave-engine';
 import { leaveReportFile, preparedChecked, type ReportTable } from './leave-report-file';
 import {
   LEAVE_OFFICE,
+  PUNCH_LOG,
   type AssignPunchIdDto,
   type DayVersionsDto,
   type PunchLogDto,
@@ -111,6 +113,51 @@ export class PunchLogService {
     return ctx.permissions?.has(LEAVE_OFFICE) ?? false;
   }
 
+  /** the whole log (the punch-log right) */
+  private all(ctx: RequestContext) {
+    return ctx.permissions?.has(PUNCH_LOG) ?? false;
+  }
+
+  /** the staff whose reporting manager I am (this year's postings) */
+  private async reportees(c: PoolClient) {
+    return (
+      await c.query<{ id: string; code: string; name: string; department: string | null }>(
+        `SELECT DISTINCT e.id::text, e.employee_code AS code, e.display_name AS name, e.department
+           FROM postings p JOIN employees e ON e.id = p.employee_id
+          WHERE p.reports_to_employee_id = (SELECT m.id FROM employees m WHERE m.user_id = app.current_user_id()
+                                              AND m.deleted_at IS NULL AND m.status = 'active' ORDER BY m.id LIMIT 1)
+            AND p.academic_year_id = app.current_academic_year_id() AND e.status = 'active' AND e.deleted_at IS NULL
+          ORDER BY e.display_name`,
+      )
+    ).rows;
+  }
+
+  /**
+   * Who may see whose punches: the punch-log right sees everyone; a reporting manager, their reportees
+   * (a department, the machines and the unmatched punches stay with the office).
+   */
+  private async scope(
+    c: PoolClient,
+    ctx: RequestContext,
+    q: { department?: string; employeeId?: string; team?: string },
+  ) {
+    if (this.all(ctx) && !q.team) return null;
+    const mine = await this.reportees(c);
+    if (q.department) fail('A department’s punches are for the office', 403);
+    if (q.employeeId && !mine.some((e) => e.id === q.employeeId))
+      fail('Only the punches of the staff who report to you', 403);
+    if (!mine.length) fail('Nobody reports to you this year', 403);
+    return mine.map((e) => e.id);
+  }
+
+  /** What the page shows me: everything (the punch-log right) or my reportees. */
+  async team(ctx: RequestContext) {
+    return this.db.tenant(requireTenant(ctx), async (c) => ({
+      all: this.all(ctx),
+      reportees: await this.reportees(c),
+    }));
+  }
+
   /** The machines (last seen, today's punches, waiting to be worked out, unknown IDs) and the other sources. */
   async overview(ctx: RequestContext) {
     return this.db.tenant(requireTenant(ctx), async (c) => {
@@ -189,16 +236,26 @@ export class PunchLogService {
     });
   }
 
-  /** The raw punches of a department (up to 31 days) or of one employee (up to 92), newest first. */
+  /**
+   * The raw punches of a department (up to 31 days), of a reporting manager's team (up to 31) or of one
+   * employee (up to 92), newest first. A reporting manager sees their reportees only.
+   */
   async log(ctx: RequestContext, q: PunchLogDto) {
     const span = daysIn(q.from, q.to);
-    if (q.department && span > 31)
-      fail('A department’s punches are up to 31 days at a time: shorten the dates');
+    if ((q.department || q.team) && span > 31)
+      fail(
+        `${q.team ? 'Your team’s' : 'A department’s'} punches are up to 31 days at a time: shorten the dates`,
+      );
     if (q.employeeId && span > 92)
       fail('An employee’s punches are up to 92 days at a time: shorten the dates');
     return this.db.tenant(requireTenant(ctx), async (c) => {
-      const who = q.department ? `lower(e.department) = lower($3)` : `p.employee_id = $3::bigint`;
-      const args = [q.from, q.to, q.department ?? q.employeeId!];
+      const team = await this.scope(c, ctx, q);
+      const who = q.department
+        ? `lower(e.department) = lower($3)`
+        : q.team
+          ? `p.employee_id = ANY($3::bigint[])`
+          : `p.employee_id = $3::bigint`;
+      const args: unknown[] = [q.from, q.to, q.department ?? (q.team ? team : q.employeeId!)];
       const base = `FROM staff_punches p JOIN employees e ON e.id = p.employee_id WHERE ${IN_RANGE('p.punched_at')} AND ${who}`;
       const fig = (
         await c.query<{ n: number; people: number; days: number; waiting: number }>(
@@ -258,7 +315,11 @@ export class PunchLogService {
         marked: r.day_type === 'LV' ? (r.leave_code ?? 'LV') : r.day_type,
       }));
       const words = [
-        q.department ? `Department: ${q.department}` : `Employee: ${rows[0]?.employee.name ?? ''}`,
+        q.department
+          ? `Department: ${q.department}`
+          : q.team
+            ? `My team (${String(team?.length ?? 0)} people)`
+            : `Employee: ${rows[0]?.employee.name ?? ''}`,
         `${dmy(q.from)} to ${dmy(q.to)}`,
       ].join(' · ');
       if (q.format) {
@@ -289,8 +350,9 @@ export class PunchLogService {
             r.processed ? 'Yes' : 'Waiting',
             r.marked ?? '',
           ]),
-          pdfColumns: q.department ? [0, 1, 2, 4, 5, 6, 7, 8, 9, 10] : [0, 4, 5, 6, 7, 8, 9, 10],
-          paper: { portrait: !q.department },
+          pdfColumns:
+            q.department || q.team ? [0, 1, 2, 4, 5, 6, 7, 8, 9, 10] : [0, 4, 5, 6, 7, 8, 9, 10],
+          paper: { portrait: !(q.department || q.team) },
         };
         return leaveReportFile({
           format: q.format,
@@ -303,7 +365,7 @@ export class PunchLogService {
         });
       }
       return {
-        mode: q.department ? 'department' : 'employee',
+        mode: q.department ? 'department' : q.team ? 'team' : 'employee',
         from: q.from,
         to: q.to,
         words,
@@ -325,6 +387,7 @@ export class PunchLogService {
     if (daysIn(q.from, q.to) > 92)
       fail('An employee’s days are up to 92 at a time: shorten the dates');
     return this.db.tenant(requireTenant(ctx), async (c) => {
+      await this.scope(c, ctx, { employeeId: q.employeeId });
       const emp = (
         await c.query<{ id: string; code: string; name: string; department: string | null }>(
           `SELECT id::text, employee_code AS code, display_name AS name, department FROM employees WHERE id = $1 AND deleted_at IS NULL`,

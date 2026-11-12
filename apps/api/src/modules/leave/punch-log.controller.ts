@@ -1,6 +1,7 @@
 import { Body, Controller, Get, Post, Query } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { RequirePermission } from '../../common/access/require-permission.decorator';
+import { AuthenticatedOnly } from '../../common/auth/decorators';
 import { ReqCtx, type RequestContext } from '../../common/http/request-context';
 import {
   AssignPunchIdDto,
@@ -29,11 +30,23 @@ export class PunchLogController {
     return this.punches.overview(ctx);
   }
 
+  @Get('team')
+  @ApiOperation({
+    summary: 'Whose punches I may see: everyone (the punch-log right) or my reportees',
+  })
+  @AuthenticatedOnly()
+  team(@ReqCtx() ctx: RequestContext) {
+    return this.punches.team(ctx);
+  }
+
+  // the log and the versions: the punch-log right sees everyone, a reporting manager their reportees
+  // (the service decides)
   @Get('log')
   @ApiOperation({
-    summary: 'Raw punches of a department (31 days) or an employee (92 days); Excel / PDF',
+    summary:
+      'Raw punches of a department or my team (31 days) or an employee (92 days); Excel / PDF',
   })
-  @RequirePermission(PUNCH_LOG)
+  @AuthenticatedOnly()
   log(@ReqCtx() ctx: RequestContext, @Query() q: PunchLogDto) {
     return this.punches.log(ctx, q);
   }
@@ -42,7 +55,7 @@ export class PunchLogController {
   @ApiOperation({
     summary: 'Every version of an employee’s days, Active and InActive; Excel / PDF',
   })
-  @RequirePermission(PUNCH_LOG)
+  @AuthenticatedOnly()
   versions(@ReqCtx() ctx: RequestContext, @Query() q: DayVersionsDto) {
     return this.punches.versions(ctx, q);
   }

@@ -1052,7 +1052,7 @@ export interface PunchOverview {
 
 /** A department's or an employee's raw punches, a page at a time. */
 export interface PunchLog {
-  mode: 'department' | 'employee';
+  mode: 'department' | 'team' | 'employee';
   from: string;
   to: string;
   words: string;
@@ -1072,6 +1072,12 @@ export interface PunchLog {
   total: number;
   page: number;
   size: number;
+}
+
+/** Whose punches I may see: everyone (the punch-log right) or my reportees. */
+export interface PunchTeam {
+  all: boolean;
+  reportees: Array<{ id: string; code: string; name: string; department: string | null }>;
 }
 
 /** Every version of an employee's days: the one in force (active) and the ones it replaced. */

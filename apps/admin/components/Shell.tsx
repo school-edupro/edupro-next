@@ -52,6 +52,7 @@ export async function Shell({
   if (leaveMenu?.leave) allowed.add(LEAVE_MENU.approvals);
   if (leaveMenu?.corrections) allowed.add(LEAVE_MENU.corrections);
   if (leaveMenu?.team) allowed.add(LEAVE_MENU.team);
+  if (leaveMenu?.team || allowed.has('leave.punch_log.view')) allowed.add(LEAVE_MENU.punches);
   if (leaveMenu?.reports || allowed.has('leave.report.view')) allowed.add(LEAVE_MENU.reports);
   // a menu entry that opens a sub-page (the notices report) still stands for its whole section
   const SECTION_OF: Record<string, string> = { '/academics/notices/report': '/academics/notices' };

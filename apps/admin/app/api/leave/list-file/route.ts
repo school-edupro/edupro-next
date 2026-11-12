@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { apiFetch } from '@/lib/api';
 
-const KEEP = /^(month|department|q|employeeId|leaveTypeId|kind|status|from|to)$/;
+const KEEP = /^(month|department|q|employeeId|leaveTypeId|kind|status|from|to|team)$/;
 
 /** The balances, the late-mark / missing-punch / correction lists, the punch log and the day versions as Excel or PDF (docs/design/85), filters kept. */
 export async function GET(req: NextRequest) {
