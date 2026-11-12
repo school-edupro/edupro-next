@@ -73,6 +73,13 @@ export class PayrollInputsController {
     return this.att.month(ctx, q);
   }
 
+  @Get('staff')
+  @ApiOperation({ summary: 'The month\u2019s roster, for pickers' })
+  @RequirePermission(RUN.view)
+  staff(@ReqCtx() ctx: RequestContext, @Query() q: MonthQueryDto) {
+    return this.att.staff(ctx, q.month);
+  }
+
   @Post('attendance/pull')
   @ApiOperation({
     summary: 'Pull the month from the attendance register (a month over must be locked there)',

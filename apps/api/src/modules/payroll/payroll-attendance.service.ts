@@ -196,6 +196,22 @@ export class PayrollAttendanceService {
     });
   }
 
+  /** The month's roster as picker options (a maker does not see confidential staff). */
+  async staff(ctx: RequestContext, month: string) {
+    return this.db.tenant(requireTenant(ctx), async (c) => {
+      const { from, to } = await windowOf(c, month);
+      const rows = await this.roster(c, from, to, await hiddenFor(c, ctx));
+      return {
+        rows: rows.map((r) => ({
+          id: r.employee_id,
+          code: r.employee_code,
+          name: r.display_name,
+          department: r.department,
+        })),
+      };
+    });
+  }
+
   // ---- pull from the attendance register --------------------------------------------------------------------
   async pull(ctx: RequestContext, dto: PullDto) {
     must(ctx, RUN.manage, 'Only payroll makers pull attendance');

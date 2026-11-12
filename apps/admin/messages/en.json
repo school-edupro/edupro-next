@@ -288,6 +288,7 @@
     "leaveBalances": "Leave balances",
     "attendanceExceptions": "Late marks and missing punches",
     "payroll": "Payroll",
+    "payrollInputs": "Monthly inputs",
     "payrollSetup": "Payroll set-up",
     "payrollApprovals": "Payroll drafts to approve"
   },
