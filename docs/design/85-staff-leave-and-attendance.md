@@ -798,6 +798,27 @@ only from that day (and today back) and both apps' My attendance say from which 
 asked and that each goes to the approver. Browser (dev-coordinator, staff app as dev-teacher; 1440 and
 375): no Regularise before the day, the note, axe clean.
 
+## As built — the day's History from the start; who a correction waits for and who decided it (12 Nov 2026)
+
+Seen: `/leave/attendance/day?emp=…&day=…` showed an empty History for a day worked out once from the
+punches and never changed — the system's first write of a day left no history (0359 kept only a person's).
+Migration **0364**: `app.staff_day_write` keeps every first write (before NULL, the reason, the person or
+nobody); the days already made got that entry (the version before their first change, else the day as it
+stands; when it was written, the system's reasons `punches` / `marked …` / `leave`; nobody for the system's
+sources) — 9 264 days on the dev database, none left without. The corrections log leaves the system's first
+entries out (before NULL and nobody, `punches` or `marked …`); the staff punch versions already read a first
+entry. The day's History words them: "Worked out from the punches", "Marked … (nightly run)", by "the
+system" (also when a person pressed Process now), from "—"; the hint counts the entries. Asked too: both
+pages should show the approver's name. `day` and `myMonth` corrections carry `waiting` (the current level's
+name: its approvers) and `decided_by` / `decided_at` / `decided_note` (the last level acted on, for an
+approved or not approved correction); `correctionPeople()` (admin and staff app `lib/leave.ts`) words them —
+"Waiting for Vice Principal: …", "Approved by … on …", "Not approved by … on …: why". Shown on the admin day
+page (the Corrections asked hint and each one), the admin My attendance tab (under a day's attendance and in
+Corrections I asked) and the staff app's My attendance and its day. Tests: `staff-attendance` (the log's total
+leaves the first entries out; a day's oldest History entry is the system's working-out), `leave-gaps` (who the
+HOD's own correction waits for — the school admin — and who decided it, on the day and the month). Browser
+(dev-admin on the reported day; 1440 and 375): the History entry, the waiting approver, axe clean.
+
 ## The module is complete
 
 Phases A–E are built. What is left is the school's: the old database connection on the server, the read, the

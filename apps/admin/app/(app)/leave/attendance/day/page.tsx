@@ -3,7 +3,13 @@ import { notFound } from 'next/navigation';
 import { FoldCard } from '@/components/FoldCard';
 import { Notice } from '@/components/Notice';
 import { ApiError, apiFetch, getMe } from '@/lib/api';
-import { LEAVE_STATUS, dmy, type AttendanceDay, type LeaveStatus } from '@/lib/leave';
+import {
+  LEAVE_STATUS,
+  correctionPeople,
+  dmy,
+  type AttendanceDay,
+  type LeaveStatus,
+} from '@/lib/leave';
 import {
   askRegularisation,
   correctDay,
@@ -403,7 +409,9 @@ export default async function AttendanceDayPage({
           id="ad-regs"
           title="Corrections asked"
           hint={
-            live ? 'One is waiting for the approver' : `${String(d.regularisations.length)} asked`
+            live
+              ? (correctionPeople(live) ?? 'One is waiting for the approver')
+              : `${String(d.regularisations.length)} asked`
           }
           open={!!live}
         >
@@ -421,6 +429,9 @@ export default async function AttendanceDayPage({
                 <Badge tone={LEAVE_STATUS[g.status as LeaveStatus]?.tone ?? 'neutral'}>
                   {LEAVE_STATUS[g.status as LeaveStatus]?.label ?? g.status}
                 </Badge>
+                {correctionPeople(g) ? (
+                  <span className="ep-mr-col__desc">{correctionPeople(g)}</span>
+                ) : null}
                 {g.status === 'pending' && d.can.mine ? (
                   <form
                     action={withdrawRegularisation.bind(null, g.id)}
@@ -442,8 +453,8 @@ export default async function AttendanceDayPage({
         title="History"
         hint={
           d.history.length
-            ? `${String(d.history.length)} change${d.history.length === 1 ? '' : 's'}`
-            : 'No changes'
+            ? `${String(d.history.length)} entr${d.history.length === 1 ? 'y' : 'ies'}: how the day was made and every change`
+            : 'Not worked out yet'
         }
       >
         {d.history.length ? (
@@ -472,7 +483,7 @@ export default async function AttendanceDayPage({
             </table>
           </div>
         ) : (
-          <p className="ep-field__help">The day has not changed since it was first worked out.</p>
+          <p className="ep-field__help">Nothing is recorded for this day yet.</p>
         )}
       </FoldCard>
     </>

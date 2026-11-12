@@ -331,7 +331,10 @@ correction a day; a locked month takes none; a day further back than the school'
 days** (7 to start) says so and is corrected by the leave office instead (My attendance shows
 **Regularise** only on the days that may be asked). Nobody approves their own correction: when the person
 asking is the approver of their level, it passes to the next level, and from the last level to the school
-admin.
+admin. The day and My attendance show who a correction waits for (the level and its
+approvers) and, once decided, who approved it or not, when and why. A day's **History** starts with how it
+was first made — worked out from the punches or marked by the nightly run (by the system), or set by a
+person — and then every change.
 
 **The payroll lock**: once a month is over, **Lock** it when payroll is final — the absent days nobody
 explained become loss of pay first, then nothing in the month changes (leave, corrections, punches,

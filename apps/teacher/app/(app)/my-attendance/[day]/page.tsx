@@ -3,7 +3,13 @@ import { Badge, Card, PageHeader } from '@edupro/ui';
 import { notFound } from 'next/navigation';
 import { CorrectionDecision } from '@/components/CorrectionDecision';
 import { bff } from '@/lib/bff';
-import { LEAVE_STATUS, dmy, type AttendanceDay, type LeaveStatus } from '@/lib/leave';
+import {
+  LEAVE_STATUS,
+  correctionPeople,
+  dmy,
+  type AttendanceDay,
+  type LeaveStatus,
+} from '@/lib/leave';
 import { askCorrection, decideCorrection, withdrawCorrection } from '../actions';
 
 const SOURCE: Record<string, string> = {
@@ -134,6 +140,11 @@ export default async function MyAttendanceDayPage({
                   .filter(Boolean)
                   .join(' · ')}{' '}
                 — {g.reason}
+                {correctionPeople(g) ? (
+                  <span style={{ display: 'block' }} className="ep-field__help">
+                    {correctionPeople(g)}
+                  </span>
+                ) : null}
                 {g.status === 'pending' && d.can.mine ? (
                   <form
                     action={withdrawCorrection.bind(null, g.id)}

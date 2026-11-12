@@ -596,7 +596,11 @@ export interface AttendanceDay {
     in_time: string | null;
     out_time: string | null;
     day_type: string | null;
-    reason: string;
+    reason: string; /** the level and its approvers it waits for; who decided it, when, why */
+    waiting?: string | null;
+    decided_by?: string | null;
+    decided_at?: string | null;
+    decided_note?: string | null;
   }>;
   locked: boolean;
   can: {
@@ -639,6 +643,9 @@ export interface MyAttendance {
     day_type: string | null;
     reason: string;
     waiting: string | null;
+    decided_by?: string | null;
+    decided_at?: string | null;
+    decided_note?: string | null;
   }>;
 }
 
@@ -1153,4 +1160,31 @@ export interface UnmatchedPunches {
   unknown: number;
   double: number;
   can: { assign: boolean };
+}
+
+/** Who a correction waits for or who decided it, in words (both apps' days and months). */
+export function correctionPeople(g: {
+  status: string;
+  waiting?: string | null;
+  decided_by?: string | null;
+  decided_at?: string | null;
+  decided_note?: string | null;
+}): string | null {
+  const when = g.decided_at
+    ? new Date(g.decided_at).toLocaleString('en-IN', {
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+        timeZone: 'Asia/Kolkata',
+      })
+    : '';
+  if (g.status === 'pending')
+    return g.waiting ? `Waiting for ${g.waiting}` : 'Waiting for the approver';
+  if (g.status === 'approved' && g.decided_by)
+    return `Approved by ${g.decided_by}${when ? ` on ${when}` : ''}`;
+  if (g.status === 'rejected' && g.decided_by)
+    return `Not approved by ${g.decided_by}${when ? ` on ${when}` : ''}${g.decided_note ? `: ${g.decided_note}` : ''}`;
+  return null;
 }

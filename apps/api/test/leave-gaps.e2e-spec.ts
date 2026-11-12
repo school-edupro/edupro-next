@@ -340,7 +340,10 @@ describe('the leave module against its plan (e2e)', () => {
     expect(own.json()).toMatchObject({ status: 'pending' });
     const ownDay = async (u: SeededUser) =>
       (await call(u, 'GET', `/staff-attendance/days/${ids.H1!}/${PAST[4]!}`)).json();
-    expect((await ownDay(hod)).can.decide).toBeNull();
+    const asked = await ownDay(hod);
+    expect(asked.can.decide).toBeNull();
+    // the day says who it waits for: the school admin (the HOD's level passed on)
+    expect(asked.regularisations[0].waiting).toContain(`${s}-ad`);
     const self = await call(
       hod,
       'POST',
@@ -367,7 +370,22 @@ describe('the leave module against its plan (e2e)', () => {
         )
       ).statusCode,
     ).toBe(201);
-    expect((await ownDay(admin)).row).toMatchObject({ in: '08:00', out: '15:30' });
+    const done = await ownDay(admin);
+    expect(done.row).toMatchObject({ in: '08:00', out: '15:30' });
+    // and who decided it, when
+    expect(done.regularisations[0]).toMatchObject({
+      status: 'approved',
+      decided_by: `${s}-ad`,
+      decided_at: expect.any(String),
+      waiting: null,
+    });
+    // the employee's month shows the same
+    const month = (
+      await call(hod, 'GET', `/staff-attendance/mine?month=${PAST[4]!.slice(0, 7)}`)
+    ).json();
+    expect(
+      month.regularisations.find((g: { id: string }) => g.id === String(own.json().id)),
+    ).toMatchObject({ decided_by: `${s}-ad` });
   });
 
   it('the same person at two levels approves once; a designation and a role approve', async () => {

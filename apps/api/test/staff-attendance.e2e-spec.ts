@@ -1547,6 +1547,38 @@ describe('staff attendance (e2e)', () => {
         (r) => r.by && r.reason !== 'punches' && !(r.reason ?? '').startsWith('marked '),
       ),
     ).toBe(true);
+    // 0364: a day's History starts with how it was first made (the system's working-out from the
+    // punches), which the corrections log leaves out even with everything shown
+    const kept = (
+      await withMigrator((c) =>
+        c.query<{ shown: number; firsts: number }>(
+          `SELECT count(*) FILTER (WHERE NOT (before IS NULL AND (changed_by IS NULL OR reason = 'punches'
+                                                                  OR COALESCE(reason, '') LIKE 'marked %')))::int AS shown,
+                  count(*) FILTER (WHERE before IS NULL AND (changed_by IS NULL OR reason = 'punches'
+                                                             OR COALESCE(reason, '') LIKE 'marked %'))::int AS firsts
+             FROM staff_attendance_history
+            WHERE school_id = $1 AND day >= $2::date AND day < ($2::date + interval '1 month')`,
+          [school.id, `${m12}-01`],
+        ),
+      )
+    ).rows[0]!;
+    expect(kept.firsts).toBeGreaterThan(0);
+    expect(everything.total).toBe(kept.shown);
+    const worked = await withMigrator((c) =>
+      c.query<{ day: string }>(
+        `SELECT day::text FROM staff_attendance_days WHERE employee_id = $1 AND source = 'punches' ORDER BY day LIMIT 1`,
+        [ids.T1],
+      ),
+    );
+    const firstDay = worked.rows[0]!.day;
+    const hist = (await call(office, 'GET', `/staff-attendance/days/${ids.T1!}/${firstDay}`)).json()
+      .history as Array<{ from: string; to: string; reason: string | null; by: string }>;
+    expect(hist.length).toBeGreaterThan(0);
+    expect(hist[hist.length - 1]).toMatchObject({
+      from: '—',
+      reason: 'Worked out from the punches',
+      by: 'the system',
+    });
     // the search: an employee's code, or who made the change
     const byCode = await log(`month=${m12}&q=${encodeURIComponent(`${s}H1`)}`);
     // H1 is the HOD: the changes to H1's days, and the ones H1 made (approving T1's leave)

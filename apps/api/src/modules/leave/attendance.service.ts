@@ -356,7 +356,10 @@ export class AttendanceService implements OnModuleInit {
       const who = (col: string) =>
         `(SELECT COALESCE((SELECT x.employee_code FROM employees x WHERE x.user_id = u.id AND x.deleted_at IS NULL LIMIT 1), '')
             || '|' || u.display_name FROM users u WHERE u.id = ${col})`;
+      // a day's first working-out by the system (0364: kept in its history) is not a change
       const where = `WHERE h.day BETWEEN $1::date AND $2::date
+          AND NOT (h.before IS NULL AND (h.changed_by IS NULL OR h.reason = 'punches'
+                                         OR COALESCE(h.reason, '') LIKE 'marked %'))
           AND ($3::bigint IS NULL OR h.employee_id = $3)
           AND (NOT $4::boolean OR (h.changed_by IS NOT NULL AND h.reason IS DISTINCT FROM 'punches'
                                    AND COALESCE(h.reason, '') NOT LIKE 'marked %'))
@@ -1129,9 +1132,15 @@ export class AttendanceService implements OnModuleInit {
         out_time: string | null;
         day_type: string | null;
         reason: string;
+        waiting: string | null;
+        decided_by: string | null;
+        decided_at: Date | null;
+        decided_note: string | null;
       }>(
-        `SELECT id::text, status, to_char(in_time, 'HH24:MI') AS in_time, to_char(out_time, 'HH24:MI') AS out_time, day_type, reason
-           FROM staff_regularisations WHERE employee_id = $1 AND day = $2::date ORDER BY id DESC`,
+        `SELECT g.id::text, g.status, to_char(g.in_time, 'HH24:MI') AS in_time, to_char(g.out_time, 'HH24:MI') AS out_time,
+                g.day_type, g.reason, ${AttendanceService.REG_PEOPLE}
+           FROM staff_regularisations g ${AttendanceService.REG_DECIDED}
+          WHERE g.employee_id = $1 AND g.day = $2::date ORDER BY g.id DESC`,
         [employeeId, day],
       );
       const isLocked = await this.locked(c, day);
@@ -1170,13 +1179,27 @@ export class AttendanceService implements OnModuleInit {
           source: p.source,
           device: p.device,
         })),
-        history: history.rows.map((h) => ({
-          from: word(h.before),
-          to: word(h.after),
-          reason: h.reason,
-          by: h.by ?? 'the system',
-          at: h.at.toISOString(),
-        })),
+        history: history.rows.map((h) => {
+          // worked out from the punches or marked by the nightly run: the system's, whoever pressed
+          // Process now
+          const system =
+            h.reason === 'punches' ||
+            /^marked /.test(h.reason ?? '') ||
+            (!h.by &&
+              ['punches', 'absent', 'weekoff', 'holiday'].includes(String(h.after?.source)));
+          return {
+            from: h.before ? word(h.before) : '—',
+            to: word(h.after),
+            reason:
+              h.reason === 'punches'
+                ? 'Worked out from the punches'
+                : h.reason?.startsWith('marked ')
+                  ? `Marked ${h.reason.slice(7)} (nightly run)`
+                  : (h.reason ?? (h.before ? null : 'First set')),
+            by: system ? 'the system' : (h.by ?? 'the system'),
+            at: h.at.toISOString(),
+          };
+        }),
         marks: marks.rows,
         leave: leave.rows.map((l) => ({ ...l, portion: Number(l.portion) })),
         regularisations: regs.rows,
@@ -1398,13 +1421,14 @@ export class AttendanceService implements OnModuleInit {
         day_type: string | null;
         reason: string;
         waiting: string | null;
+        decided_by: string | null;
+        decided_at: Date | null;
+        decided_note: string | null;
       }>(
         `SELECT g.id::text, g.day::text, g.status, to_char(g.in_time, 'HH24:MI') AS in_time, to_char(g.out_time, 'HH24:MI') AS out_time,
-                g.day_type, g.reason,
-                (SELECT s.name || ': ' || COALESCE((SELECT string_agg(u.display_name, ', ') FROM users u WHERE u.id = ANY(s.assignee_user_ids)), 'nobody')
-                   FROM workflow_steps s JOIN workflow_instances i ON i.id = s.instance_id
-                  WHERE i.id = g.workflow_instance_id AND i.status = 'pending' AND s.level = i.current_level AND s.status = 'pending' LIMIT 1) AS waiting
-           FROM staff_regularisations g WHERE g.employee_id = $1 AND g.day BETWEEN $2::date AND $3::date ORDER BY g.day DESC`,
+                g.day_type, g.reason, ${AttendanceService.REG_PEOPLE}
+           FROM staff_regularisations g ${AttendanceService.REG_DECIDED}
+          WHERE g.employee_id = $1 AND g.day BETWEEN $2::date AND $3::date ORDER BY g.day DESC, g.id DESC`,
         [me, month, end],
       );
       const e = (
@@ -1440,6 +1464,25 @@ export class AttendanceService implements OnModuleInit {
       };
     });
   }
+
+  /**
+   * Who a correction waits for (the current level's name and its approvers) and who decided it (the last
+   * level acted on, when, the note): the employee's day and month show them. Alias `g` is the correction.
+   */
+  private static readonly REG_PEOPLE = `
+    (SELECT s.name || ': ' || COALESCE((SELECT string_agg(u.display_name, ', ' ORDER BY u.display_name) FROM users u
+                                          WHERE u.id = ANY(s.assignee_user_ids)), 'nobody')
+       FROM workflow_steps s JOIN workflow_instances i ON i.id = s.instance_id
+      WHERE i.id = g.workflow_instance_id AND i.status = 'pending' AND s.level = i.current_level
+        AND s.status = 'pending' LIMIT 1) AS waiting,
+    dec.by AS decided_by, dec.at AS decided_at, dec.note AS decided_note`;
+  private static readonly REG_DECIDED = `
+    LEFT JOIN LATERAL (
+      SELECT u.display_name AS by, s.acted_at AS at, s.note FROM workflow_steps s JOIN users u ON u.id = s.acted_by
+       WHERE s.instance_id = g.workflow_instance_id AND s.status::text IN ('approved', 'rejected')
+         AND g.status IN ('approved', 'rejected')
+       ORDER BY s.level DESC, s.acted_at DESC LIMIT 1
+    ) dec ON true`;
 
   /**
    * The first day an employee may ask to correct (0363: the school's Corrections for past days up to, 7 to

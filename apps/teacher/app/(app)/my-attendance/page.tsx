@@ -1,6 +1,12 @@
 import { Badge, Card, PageHeader } from '@edupro/ui';
 import { bff } from '@/lib/bff';
-import { LEAVE_STATUS, dmy, type LeaveStatus, type MyAttendance } from '@/lib/leave';
+import {
+  LEAVE_STATUS,
+  correctionPeople,
+  dmy,
+  type LeaveStatus,
+  type MyAttendance,
+} from '@/lib/leave';
 
 const WEEKDAY = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const TONE: Record<string, 'success' | 'warning' | 'neutral' | 'danger' | 'info'> = {
@@ -155,7 +161,7 @@ export default async function MyAttendancePage({
                       ]
                         .filter(Boolean)
                         .join(' · ')}
-                      {g.waiting ? ` · with ${g.waiting}` : ''}
+                      {correctionPeople(g) ? ` · ${correctionPeople(g)}` : ''}
                     </div>
                   </li>
                 ))}

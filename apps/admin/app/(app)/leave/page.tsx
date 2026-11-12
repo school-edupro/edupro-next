@@ -12,6 +12,7 @@ import { ApiError, apiFetch, getMe } from '@/lib/api';
 import { NAV } from '@/lib/nav';
 import {
   LEAVE_STATUS,
+  correctionPeople,
   dmy,
   type LeaveStatus,
   type MyAttendance,
@@ -239,6 +240,9 @@ export default async function MyLeavePage({
   const myDays = () => {
     if (!att?.employee) return null;
     const by = new Map(att.days.map((x) => [x.day, x]));
+    // the latest correction asked for a day (newest first): its status and who it waits for / who decided
+    const regOf = new Map<string, (typeof att.regularisations)[number]>();
+    for (const g of att.regularisations) if (!regOf.has(g.day)) regOf.set(g.day, g);
     const first = att.month.slice(0, 10);
     const rows: ReactNode[] = [];
     for (
@@ -260,6 +264,11 @@ export default async function MyLeavePage({
                 {x.early ? <span className="ep-mr-col__desc">left {x.early} min early</span> : null}
                 {x.remark ? <span className="ep-mr-col__desc">{x.remark}</span> : null}
               </>
+            ) : null}
+            {regOf.get(day) && correctionPeople(regOf.get(day)!) ? (
+              <span className="ep-mr-col__desc">
+                Correction: {correctionPeople(regOf.get(day)!)}
+              </span>
             ) : null}
           </td>
           <td>{x?.in ?? ''}</td>
@@ -554,7 +563,9 @@ export default async function MyLeavePage({
                       <Badge tone={LEAVE_STATUS[g.status as LeaveStatus]?.tone ?? 'neutral'}>
                         {LEAVE_STATUS[g.status as LeaveStatus]?.label ?? g.status}
                       </Badge>
-                      {g.waiting ? <span className="ep-mr-col__desc">With {g.waiting}</span> : null}
+                      {correctionPeople(g) ? (
+                        <span className="ep-mr-col__desc">{correctionPeople(g)}</span>
+                      ) : null}
                     </li>
                   ))}
                 </ul>
