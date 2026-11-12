@@ -83,14 +83,10 @@ export const ROSTER_SQL = `
      AND COALESCE(p.payroll_status, 'ACTIVE') <> 'LEFT'`;
 
 /**
- * The stages of the month's runs (none until runs exist, phase B step 3). The inputs are frozen while a run
+ * The stages of the month's runs. The inputs are frozen while a run
  * of the month is being processed or is approved or later.
  */
 export async function runStages(c: PoolClient, month: string): Promise<string[]> {
-  const exists = (
-    await c.query<{ t: string | null }>(`SELECT to_regclass('payroll_runs')::text AS t`)
-  ).rows[0]?.t;
-  if (!exists) return [];
   return (
     await c.query<{ stage: string }>(
       `SELECT stage FROM payroll_runs WHERE month = $1::date AND deleted_at IS NULL`,

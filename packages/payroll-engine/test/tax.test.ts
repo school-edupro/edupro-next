@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { annualTax, monthsLeftInYear, projectTax, slabTax, type TaxRules } from '../src/tax';
+import {
+  annualTax,
+  monthsLeftInYear,
+  projectTax,
+  slabTax,
+  topUpTax,
+  type TaxRules,
+} from '../src/tax';
 
 const R = (rupees: number) => BigInt(Math.round(rupees * 100));
 const NEW: TaxRules = {
@@ -162,5 +169,33 @@ describe('monthsLeftInYear', () => {
     expect(monthsLeftInYear('2026-06', '2026-09-15')).toBe(4);
     expect(monthsLeftInYear('2026-06', '2028-01-01')).toBe(10);
     expect(monthsLeftInYear('2026-06', '2026-01-01')).toBe(1);
+  });
+});
+
+describe('topUpTax', () => {
+  const base = {
+    regime: 'NEW' as const,
+    ytdTaxable: R(1200000),
+    thisTaxable: R(100000),
+    monthlyRate: R(100000),
+    monthsLeft: 4,
+    ytdPt: 0n,
+    thisPt: 0n,
+    monthlyPt: 0n,
+    ytdTds: R(50000),
+    panPresent: true,
+    rules: NEW,
+  };
+  it('only the tax the payment adds, now', () => {
+    const t = topUpTax(base);
+    // ₹1 lakh more in the ₹12–16 lakh slab: 15 % and 4 % cess
+    expect(t.monthly).toBe(R(15600));
+    expect(t.cess).toBe(R(600));
+    expect(t.it).toBe(R(15000));
+  });
+  it('nothing when the payment adds no tax', () => {
+    expect(
+      topUpTax({ ...base, ytdTaxable: 0n, thisTaxable: R(1000), monthlyRate: R(10000) }).monthly,
+    ).toBe(0n);
   });
 });

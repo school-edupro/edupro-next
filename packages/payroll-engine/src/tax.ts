@@ -143,15 +143,7 @@ export function projectTax(p: ProjectionInput): Projection {
   } else {
     monthly = remaining > 0n ? roundHead(divHalfUp(remaining, BigInt(left)), 'NEAREST_1') : 0n;
   }
-  // the cess part of the month, in the year's proportion (none on the no-PAN rate)
-  const taxPart = tax.slabTax - tax.rebate + tax.surcharge;
-  const cess =
-    tax.panAbsent || taxPart + tax.cess === 0n
-      ? 0n
-      : (() => {
-          const c = roundHead(divHalfUp(monthly * tax.cess, taxPart + tax.cess), 'NEAREST_1');
-          return c < monthly ? c : monthly;
-        })();
+  const cess = cessPart(tax, monthly);
   return {
     gross,
     standardDeduction: sd,
@@ -179,4 +171,25 @@ export function monthsLeftInYear(month: string, leftOn?: string | null): number 
     end = Math.min(end, ly * 12 + lm);
   }
   return Math.max(1, end - (y * 12 + m) + 1);
+}
+
+/** A month's deduction split: the cess part in the year's proportion (none on the no-PAN rate). */
+export function cessPart(tax: AnnualTax, monthly: bigint): bigint {
+  const taxPart = tax.slabTax - tax.rebate + tax.surcharge;
+  if (tax.panAbsent || taxPart + tax.cess === 0n) return 0n;
+  const c = roundHead(divHalfUp(monthly * tax.cess, taxPart + tax.cess), 'NEAREST_1');
+  return c < monthly ? c : monthly;
+}
+
+/**
+ * A top-up's tax (a month already paid): only what its payment adds to the year's tax, deducted now — the month's
+ * own share was deducted by the run that paid it (the legacy deducted a month's share again).
+ */
+export function topUpTax(p: ProjectionInput): Projection {
+  const withIt = projectTax(p);
+  const without = projectTax({ ...p, thisTaxable: 0n, thisPt: 0n });
+  const extra = withIt.tax.total - without.tax.total;
+  const monthly = extra > 0n ? extra : 0n;
+  const cess = cessPart(withIt.tax, monthly);
+  return { ...withIt, monthly, it: monthly - cess, cess, warnings: [] };
 }

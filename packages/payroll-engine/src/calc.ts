@@ -32,7 +32,7 @@ import {
   type PfRates,
   type PtSlab,
 } from './statutory';
-import { projectTax, type TaxRules } from './tax';
+import { projectTax, topUpTax, type TaxRules } from './tax';
 
 /** the heads payroll works out itself */
 export const ENGINE_HEADS = ['PF', 'VPF', 'NPS', 'ESI', 'PT', 'LWF', 'TDS', 'ADV'] as const;
@@ -153,6 +153,8 @@ export interface Line {
   earned: bigint;
   isArrear: boolean;
   isStructure: boolean;
+  /** counts for income tax (earnings only) */
+  taxable: boolean;
   calcOrder: number;
   printOrder: number;
   showIfZero: boolean;
@@ -398,6 +400,7 @@ export function calculate(i: CalcInput): CalcOutcome {
       earned,
       isArrear: false,
       isStructure: true,
+      taxable: v.isTaxable,
       calcOrder: (order += 1),
       printOrder: h.printOrder,
       showIfZero: h.showIfZero,
@@ -417,6 +420,7 @@ export function calculate(i: CalcInput): CalcOutcome {
       earned: a.amount,
       isArrear: true,
       isStructure: false,
+      taxable: a.taxable,
       calcOrder: (order += 1),
       printOrder: h?.printOrder ?? 900,
       showIfZero: false,
@@ -442,6 +446,7 @@ export function calculate(i: CalcInput): CalcOutcome {
       earned: a.amount,
       isArrear: false,
       isStructure: false,
+      taxable: v?.isTaxable ?? true,
       calcOrder: (order += 1),
       printOrder: h.printOrder,
       showIfZero: h.showIfZero,
@@ -551,7 +556,7 @@ export function calculate(i: CalcInput): CalcOutcome {
         'NO_TAX_RULES',
         `No income-tax slabs for the ${p.taxRegime === 'NEW' ? 'new' : 'old'} regime this year: add the year in Payroll set-up → Income tax.`,
       );
-    const pr = projectTax({
+    const pr = (top ? topUpTax : projectTax)({
       regime: p.taxRegime,
       ytdTaxable: i.tax.ytdTaxable,
       thisTaxable: taxableNow,
@@ -589,6 +594,7 @@ export function calculate(i: CalcInput): CalcOutcome {
       earned: amount,
       isArrear: false,
       isStructure: source.kind === 'structure',
+      taxable: false,
       calcOrder: (order += 1),
       printOrder: h.printOrder,
       showIfZero: h.showIfZero,
@@ -722,6 +728,7 @@ export function calculate(i: CalcInput): CalcOutcome {
       earned: adj,
       isArrear: false,
       isStructure: false,
+      taxable: false,
       calcOrder: (order += 1),
       printOrder: 999,
       showIfZero: false,
