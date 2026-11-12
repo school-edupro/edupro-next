@@ -4,7 +4,7 @@ import { DbService } from '../../common/db/db.service';
 import { DomainError } from '../../common/errors/domain-error';
 import { requireTenant, type RequestContext } from '../../common/http/request-context';
 import type { CreateRoleDto, UpdateRoleDto } from './access.dto';
-import { AccessService } from './access.service';
+import { AccessService, EMPLOYEE_ONLY } from './access.service';
 
 export interface RoleRow {
   id: string;
@@ -53,6 +53,9 @@ const toRole = (x: RoleDbRow): RoleRow => ({
   activeAssignments: x.active_assignments,
 });
 
+/** A role never carries what only a staff record gives (My leave, My attendance): it is dropped quietly. */
+const roleGrantable = (codes: string[]) => codes.filter((p) => !EMPLOYEE_ONLY.includes(p));
+
 @Injectable()
 export class RolesService {
   constructor(
@@ -100,6 +103,7 @@ export class RolesService {
         const source = await this.get(tenant, dto.copyFromRoleId, c);
         permissions = [...new Set([...source.permissions, ...permissions])];
       }
+      permissions = roleGrantable(permissions);
       await this.assertPermissionsExist(c, permissions);
 
       const r = await c.query<{ id: string }>(
@@ -144,8 +148,9 @@ export class RolesService {
       // eslint-disable-next-line no-restricted-syntax -- sets holds fixed column assignments; values are bound parameters
       await c.query(`UPDATE roles SET ${sets.join(', ')} WHERE id = $${params.length}`, params);
       if (dto.permissions !== undefined) {
-        await this.assertPermissionsExist(c, dto.permissions);
-        await this.replacePermissions(c, id, dto.permissions);
+        const permissions = roleGrantable(dto.permissions);
+        await this.assertPermissionsExist(c, permissions);
+        await this.replacePermissions(c, id, permissions);
       }
       const after = await this.get(tenant, id, c);
       return { before, after };

@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 import { Badge, Breadcrumbs, PageHeader } from '@edupro/ui';
-import { notFound } from 'next/navigation';
+import { notFound, redirect } from 'next/navigation';
 import { Notice } from '@/components/Notice';
 import { pageSizeOf } from '@/components/Pager';
 import { DialogButton } from '@/components/leave/DialogButton';
@@ -9,6 +9,7 @@ import { MyLeaveTab } from '@/components/leave/MyLeaveTab';
 import { TeamAttendanceTab } from '@/components/leave/TeamAttendanceTab';
 import { TeamLeaveTab } from '@/components/leave/TeamLeaveTab';
 import { ApiError, apiFetch, getMe } from '@/lib/api';
+import { NAV } from '@/lib/nav';
 import {
   LEAVE_STATUS,
   dmy,
@@ -80,6 +81,14 @@ export default async function MyLeavePage({
   const sp = await searchParams;
   const tab: Tab = TABS.some((t) => t.id === sp.tab) ? (sp.tab as Tab) : 'attendance';
   const me = await getMe();
+  // My leave and My attendance are every employee's (docs/design/85): a sign-in with no staff record has
+  // neither, so the section's own link (the breadcrumb) takes it to the first leave screen it may open
+  if (!me.permissions.includes('leave.own.apply')) {
+    const first = NAV.find((g) => g.section === 'employeeLeave')?.items.find(
+      (i) => i.href.startsWith('/leave/') && i.permission && me.permissions.includes(i.permission),
+    );
+    if (first) redirect(first.href);
+  }
   const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' }).format(new Date());
   const year = /^\d{4}$/.test(sp.year ?? '') ? sp.year! : today.slice(0, 4);
   const mon = /^(0[1-9]|1[0-2])$/.test(sp.month ?? '') ? sp.month! : today.slice(5, 7);

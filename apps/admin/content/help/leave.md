@@ -12,7 +12,7 @@ covers the set-up, applying, approving, the balances, staff attendance, and the 
 | **Leave & attendance office** (its own role)          | Keeps the set-up: leave types, policies, weekly offs, shifts, who approves, the settings |
 | **School admin**                                      | The same as the leave office                                                             |
 | **Approvers** (HOD, reporting manager, named staff …) | Decide the leave and attendance corrections of the staff a rule sends to them            |
-| **Every employee**                                    | Applies for leave, sees their attendance and asks for a day to be corrected              |
+| **Every employee** (whatever their role, or none)     | Applies for leave, sees their attendance and asks for a day to be corrected              |
 | **Principal, vice principal, HR**                     | Open the dashboard and every report                                                      |
 | **Staff given a report** (an HOD …)                   | Open that report (Leave & attendance reports, in the menu of both apps)                  |
 
@@ -21,7 +21,10 @@ covers the set-up, applying, approving, the balances, staff attendance, and the 
 Every screen is in the side menu's **Employee leave & attendance** (the staff app: **Leave &
 attendance**); each shows only to those it is for:
 
-- **Everyone**: My leave, My attendance.
+- **Every employee**: My leave, My attendance, in both apps. Whoever's sign-in is linked to an active
+  staff record has them, whatever their roles (none at all included); a role does not give them. A
+  sign-in with no staff record (a demo or support sign-in) does not see them, and the section's own link
+  takes it to the first leave screen it may open.
 - **When something waits for you, or staff report to you**: Leave to approve, Attendance corrections
   to approve, My team's attendance (the entry goes once nothing waits).
 - **The leave office**: Leave register, Leave balances, Attendance register, Late marks and missing

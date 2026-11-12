@@ -719,6 +719,24 @@ figures, approved only, an employee, a page, a search, cancellations, waiting 3 
 `leave-gaps` unchanged and green. Browser (dev-coordinator, 1440 and 375): both tabs, a figure filtering,
 the files keep the filter, axe clean.
 
+## As built — My leave and My attendance for every employee (12 Nov 2026)
+
+Asked: My leave and My attendance should show for every user, in the admin app and the staff app. Found:
+both went by the role right `leave.own.apply` (every system role but parent, student, auditor and the
+support roles had it), so staff with no role, or only a role the school made (Front Office), had neither
+(3 of the 24 staff sign-ins of the sample school), and sign-ins with no staff record (the demo office
+sign-ins) were shown pages that could only say they are not linked. Decided: every employee. The right is
+now in the API's employee baseline (`AccessService.EMPLOYEE_BASELINE`, as the Purchase Indent's): every
+sign-in linked to an active employee has it, whatever its roles. It is employee-only (`EMPLOYEE_ONLY`): a
+role or a delegation carrying it is ignored, migration **0362** removes it from every role, the roles
+screen's catalogue does not offer it and a role saved with it drops it. An employee who leaves (inactive)
+loses it. The admin `/leave` page forwards a sign-in without it to the first leave screen it may open (the
+breadcrumb links there). Tests: `leave-own-every-employee.e2e-spec.ts` (no role → has it, applies past the
+guard, My leave on its record; school admin with no staff record and a teacher who left → not; the roles
+screen); `purchase-indents` now expects both baseline rights; leave, staff, access and reporting specs
+green. Browser (staff app as a teacher; admin as dev-admin → leave dashboard, dev-coordinator → My leave;
+1440 and 375): axe clean.
+
 ## The module is complete
 
 Phases A–E are built. What is left is the school's: the old database connection on the server, the read, the

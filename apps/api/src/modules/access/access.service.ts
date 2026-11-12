@@ -9,9 +9,16 @@ export type ScopeType = 'class_section' | 'subject' | 'department' | 'route' | '
 const PERM_TTL_SECONDS = 300;
 /**
  * What every active employee who signs in may do, whatever their roles (none at all included): raise a
- * Purchase Indent for their own department (docs/design/83: any staff raises a PI). Roles add the rest.
+ * Purchase Indent for their own department (docs/design/83: any staff raises a PI); My leave and My
+ * attendance in both apps (docs/design/85: every employee's). Roles add the rest.
  */
-export const EMPLOYEE_BASELINE = ['purchase.indent.raise'];
+export const EMPLOYEE_BASELINE = ['purchase.indent.raise', 'leave.own.apply'];
+/**
+ * Of those, the ones only a staff record gives: a role or a delegation carrying one is ignored and the roles
+ * screen does not offer it, so a sign-in with no staff record (a demo or support sign-in) is not shown My
+ * leave and My attendance pages that could only say it is not linked.
+ */
+export const EMPLOYEE_ONLY = ['leave.own.apply'];
 const permKey = (schoolId: string, userId: string) => `perm:${schoolId}:${userId}`;
 
 /**
@@ -92,7 +99,7 @@ export class AccessService implements OnApplicationBootstrap {
       `SELECT DISTINCT rp.permission_code AS code
          FROM user_roles ur
          JOIN roles r ON r.id = ur.role_id AND r.status = 'active' AND r.deleted_at IS NULL
-         JOIN role_permissions rp ON rp.role_id = ur.role_id
+         JOIN role_permissions rp ON rp.role_id = ur.role_id AND rp.permission_code <> ALL($3::text[])
         WHERE ur.user_id = $1
           AND ur.revoked_at IS NULL
           AND ur.valid_from <= CURRENT_DATE
@@ -101,7 +108,7 @@ export class AccessService implements OnApplicationBootstrap {
        SELECT DISTINCT rp.permission_code
          FROM delegations d
          JOIN roles r ON r.id = d.role_id AND r.status = 'active' AND r.deleted_at IS NULL
-         JOIN role_permissions rp ON rp.role_id = d.role_id
+         JOIN role_permissions rp ON rp.role_id = d.role_id AND rp.permission_code <> ALL($3::text[])
         WHERE d.to_user_id = $1
           AND d.revoked_at IS NULL
           AND now() BETWEEN d.starts_at AND d.ends_at
@@ -110,7 +117,7 @@ export class AccessService implements OnApplicationBootstrap {
         WHERE EXISTS (SELECT 1 FROM employees e
                        WHERE e.user_id = $1 AND e.school_id = app.current_school_id()
                          AND e.status = 'active' AND e.deleted_at IS NULL)`,
-      [userId, EMPLOYEE_BASELINE],
+      [userId, EMPLOYEE_BASELINE, EMPLOYEE_ONLY],
     );
     return r.rows.map((x) => x.code);
   }
@@ -245,7 +252,9 @@ export class AccessService implements OnApplicationBootstrap {
         description: string;
         requires_mfa: boolean;
       }>(
-        `SELECT code, module, description, requires_mfa FROM permissions WHERE orphaned = false ORDER BY code`,
+        `SELECT code, module, description, requires_mfa FROM permissions
+          WHERE orphaned = false AND code <> ALL($1::text[]) ORDER BY code`,
+        [EMPLOYEE_ONLY],
       );
       return r.rows.map((p) => ({
         code: p.code,

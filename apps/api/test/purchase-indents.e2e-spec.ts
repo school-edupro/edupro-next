@@ -471,7 +471,8 @@ describe('purchase indents (e2e)', () => {
       return u;
     });
     const me = (await call(plain, 'GET', '/me')).json();
-    expect(me.permissions).toEqual(['purchase.indent.raise']);
+    // what every employee has, whatever their roles: a PI, and My leave / My attendance (docs/design/85)
+    expect(me.permissions).toEqual(['leave.own.apply', 'purchase.indent.raise']);
     const r = await call(plain, 'POST', '/purchase/indents', {
       purpose: 'Counselling room charts',
       lines: [{ itemId: ids.PAPER, quantity: 1 }],
