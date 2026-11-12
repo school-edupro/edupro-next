@@ -1,4 +1,6 @@
+import { nextWithCsp } from '@edupro/bff/csp';
 import { NextResponse, type NextRequest } from 'next/server';
+import { pageCsp } from './csp';
 
 const PUBLIC_PATHS = [
   '/login',
@@ -13,12 +15,13 @@ const PUBLIC_PATHS = [
 
 /**
  * Redirects unauthenticated browsers to /login. Session validity is checked server-side in the layout;
- * here we only look for the cookie's presence to keep the middleware cheap.
+ * here we only look for the cookie's presence to keep the middleware cheap. Pages go through with the
+ * Content Security Policy and a nonce per request (production builds: csp.ts).
  */
 export function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
   if (PUBLIC_PATHS.some((p) => pathname === p || pathname.startsWith(`${p}/`)))
-    return NextResponse.next();
+    return nextWithCsp(req, pageCsp);
   if (
     pathname.startsWith('/_next') ||
     pathname.startsWith('/assets') ||
@@ -35,7 +38,7 @@ export function middleware(req: NextRequest) {
   // Expose the path to server layouts for the active navigation state.
   const headers = new Headers(req.headers);
   headers.set('x-pathname', pathname);
-  return NextResponse.next({ request: { headers } });
+  return nextWithCsp(req, pageCsp, headers);
 }
 
 export const config = {

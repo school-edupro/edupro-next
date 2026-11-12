@@ -1,27 +1,14 @@
 import type { NextConfig } from 'next';
 import createNextIntlPlugin from 'next-intl/plugin';
 
-/** Security headers per the foundation design section 11. CSP nonces are added with middleware in Sprint 2. */
-// Content Security Policy for production builds (S5-10 review item 3). Development keeps Next's eval/hmr
-// requirements; Google Fonts serves the Devanagari face for Hindi.
-const csp = [
-  "default-src 'self'",
-  "script-src 'self'",
-  "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
-  "font-src 'self' https://fonts.gstatic.com",
-  // map tiles of the stoppage picker (Transport setup) come from OpenStreetMap
-  "img-src 'self' data: blob: https://tile.openstreetmap.org",
-  "connect-src 'self'",
-  "frame-ancestors 'none'",
-  "form-action 'self'",
-  "base-uri 'self'",
-  "object-src 'none'",
-].join('; ');
+import { routeCsp } from './csp';
 
+/**
+ * Security headers per the foundation design section 11. The Content Security Policy (production builds):
+ * pages get one with a nonce per request from middleware.ts; route handlers get the fixed one below.
+ */
+const production = process.env.NODE_ENV === 'production';
 const securityHeaders = [
-  ...(process.env.NODE_ENV === 'production'
-    ? [{ key: 'Content-Security-Policy', value: csp }]
-    : []),
   { key: 'X-Frame-Options', value: 'DENY' },
   { key: 'X-Content-Type-Options', value: 'nosniff' },
   { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
@@ -48,20 +35,22 @@ const nextConfig: NextConfig = {
   async headers() {
     return [
       { source: '/(.*)', headers: securityHeaders },
+      // route handlers (files, print pages): scripts from this site only
+      ...(production
+        ? [
+            {
+              source: '/api/((?!profile-proofs|report-cards/preview).*)',
+              headers: [{ key: 'Content-Security-Policy', value: routeCsp() }],
+            },
+          ]
+        : []),
       // framed by this site's own pages only: proof documents in the approvals panel, and the
       // report-card preview (the card designer and a release's preview panel)
       ...['/api/profile-proofs/:path*', '/api/report-cards/preview'].map((source) => ({
         source,
         headers: [
           { key: 'X-Frame-Options', value: 'SAMEORIGIN' },
-          ...(process.env.NODE_ENV === 'production'
-            ? [
-                {
-                  key: 'Content-Security-Policy',
-                  value: csp.replace("frame-ancestors 'none'", "frame-ancestors 'self'"),
-                },
-              ]
-            : []),
+          ...(production ? [{ key: 'Content-Security-Policy', value: routeCsp(true) }] : []),
         ],
       })),
     ];

@@ -1,8 +1,9 @@
 import type { NextConfig } from 'next';
+import { routeCsp } from './csp';
 
 /**
  * Security headers (foundation design section 11; Sprint 21 VAPT readiness). The Content Security Policy
- * applies to production builds only: development needs Next's eval and HMR. The pay routes render a gateway hand-off page with an inline script (Razorpay checkout or an auto-posted form), so they carry a policy that allows that script and the gateway origins; every other page is 'self' only.
+ * applies to production builds only: development needs Next's eval and HMR. The pay routes render a gateway hand-off page with an inline script (Razorpay checkout or an auto-posted form), so they carry a policy that allows that script and the gateway origins; the other pages get a nonce per request from middleware.ts and route handlers 'self' only (csp.ts).
  */
 const base = [
   "default-src 'self'",
@@ -14,7 +15,6 @@ const base = [
   "base-uri 'self'",
   "object-src 'none'",
 ];
-const csp = [...base, "script-src 'self'", "form-action 'self'", "frame-src 'none'"].join('; ');
 const GATEWAYS = [
   'https://checkout.razorpay.com',
   'https://api.razorpay.com',
@@ -60,12 +60,19 @@ const nextConfig: NextConfig = {
         ],
       },
       {
+        // pages get the Content Security Policy with a nonce per request from middleware.ts
         source: '/((?!fees/pay|fees/pay-misc|consents/pay).*)',
-        headers: [
-          ...common,
-          ...(production ? [{ key: 'Content-Security-Policy', value: csp }] : []),
-        ],
+        headers: common,
       },
+      // route handlers (files, the report-card print page with its script): scripts from this site only
+      ...(production
+        ? [
+            {
+              source: '/api/:path*',
+              headers: [{ key: 'Content-Security-Policy', value: routeCsp() }],
+            },
+          ]
+        : []),
     ];
   },
 };

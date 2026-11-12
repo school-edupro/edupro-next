@@ -1,20 +1,11 @@
 import type { NextConfig } from 'next';
+import { routeCsp } from './csp';
 
 /**
  * Security headers (foundation design section 11; Sprint 21 VAPT readiness). The Content Security Policy
- * applies to production builds only: development needs Next's eval and HMR.
+ * applies to production builds only: development needs Next's eval and HMR. Pages get it with a nonce per
+ * request from middleware.ts; route handlers the fixed one (csp.ts).
  */
-const base = [
-  "default-src 'self'",
-  "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
-  "font-src 'self' https://fonts.gstatic.com",
-  "img-src 'self' data: blob:",
-  "connect-src 'self'",
-  "frame-ancestors 'none'",
-  "base-uri 'self'",
-  "object-src 'none'",
-];
-const csp = [...base, "script-src 'self'", "form-action 'self'", "frame-src 'none'"].join('; ');
 
 const common = [
   { key: 'X-Frame-Options', value: 'DENY' },
@@ -37,12 +28,19 @@ const nextConfig: NextConfig = {
   async headers() {
     return [
       {
+        // pages get the Content Security Policy with a nonce per request from middleware.ts
         source: '/(.*)',
-        headers: [
-          ...common,
-          ...(production ? [{ key: 'Content-Security-Policy', value: csp }] : []),
-        ],
+        headers: common,
       },
+      // route handlers (files, print pages): scripts from this site only
+      ...(production
+        ? [
+            {
+              source: '/api/:path*',
+              headers: [{ key: 'Content-Security-Policy', value: routeCsp() }],
+            },
+          ]
+        : []),
     ];
   },
 };

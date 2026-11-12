@@ -6,6 +6,7 @@ import { EncryptJWT, jwtDecrypt } from 'jose';
 import { cookies } from 'next/headers';
 import { NextResponse, type NextRequest } from 'next/server';
 import * as client from 'openid-client';
+import { nextWithCsp } from './csp';
 import { createOtp, type OtpApp } from './otp';
 
 export { createOtp, type OtpApp, type OtpPending, type OtpSessionOut } from './otp';
@@ -406,10 +407,18 @@ export function createBff(options: BffOptions) {
     },
   };
 
-  /** Middleware: redirect anonymous visitors to /login; static assets and auth routes stay public. */
+  /**
+   * Middleware: redirect anonymous visitors to /login; static assets and auth routes stay public. With the
+   * app's page policy, every page goes through with a Content Security Policy of its own (csp.ts: a nonce
+   * per request); `skip`: routes whose policy is their own (next.config.ts).
+   */
   const middleware =
-    (publicPaths: string[] = []) =>
+    (publicPaths: string[] = [], csp?: { page: (nonce: string) => string; skip?: RegExp }) =>
     (req: NextRequest) => {
+      const pass = (headers?: Headers) =>
+        csp
+          ? nextWithCsp(req, csp.page, headers, csp.skip)
+          : NextResponse.next(headers ? { request: { headers } } : undefined);
       const { pathname } = req.nextUrl;
       const open = [
         '/login',
@@ -424,7 +433,7 @@ export function createBff(options: BffOptions) {
         open.some((p) => pathname === p || pathname.startsWith(`${p}/`)) ||
         pathname.startsWith('/_next')
       )
-        return NextResponse.next();
+        return pass();
       if (!req.cookies.get(SESSION_COOKIE)) {
         const login = req.nextUrl.clone();
         login.pathname = '/login';
@@ -434,7 +443,7 @@ export function createBff(options: BffOptions) {
       // expose the path to server layouts for the active navigation state
       const headers = new Headers(req.headers);
       headers.set('x-pathname', pathname);
-      return NextResponse.next({ request: { headers } });
+      return pass(headers);
     };
 
   return { env, session, api, handlers, otp, middleware, cookies: { session: SESSION_COOKIE } };
