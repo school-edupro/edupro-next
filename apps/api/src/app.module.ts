@@ -44,6 +44,7 @@ import { MeController } from './modules/me/me.controller';
 import { LibraryModule } from './modules/library/library.module';
 import { PurchaseModule } from './modules/purchase/purchase.module';
 import { LeaveModule } from './modules/leave/leave.module';
+import { PayrollModule } from './modules/payroll/payroll.module';
 import { MastersModule } from './modules/masters/masters.module';
 import { ShadowModule } from './modules/shadow/shadow.module';
 import { ExamsModule } from './modules/exams/exams.module';
@@ -93,6 +94,7 @@ import { ReportsModule } from './modules/reports/reports.module';
     LibraryModule,
     PurchaseModule,
     LeaveModule,
+    PayrollModule,
     PeopleModule,
     CompatModule,
     OpsModule,

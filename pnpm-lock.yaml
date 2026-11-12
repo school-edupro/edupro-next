@@ -144,6 +144,9 @@ importers:
       '@edupro/etl':
         specifier: workspace:*
         version: link:../../packages/etl
+      '@edupro/payroll-engine':
+        specifier: workspace:*
+        version: link:../../packages/payroll-engine
       '@edupro/storage':
         specifier: workspace:*
         version: link:../../packages/storage
