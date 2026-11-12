@@ -7,3 +7,5 @@
 export * from './money';
 export * from './formula';
 export * from './order';
+export * from './attendance';
+export * from './loans';
