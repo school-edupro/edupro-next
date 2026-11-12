@@ -58,6 +58,9 @@ import { StudentProfileService } from './student-profile.service';
 import { StudentsController } from './students.controller';
 import { StudentsService } from './students.service';
 
+import { ReportingController } from './reporting.controller';
+import { ReportingService } from './reporting.service';
+
 @Module({
   imports: [
     FilesModule,
@@ -68,6 +71,7 @@ import { StudentsService } from './students.service';
     MastersModule,
   ],
   controllers: [
+    ReportingController,
     EmployeeSelfController,
     PeopleDashboardController,
     AcrController,
@@ -86,6 +90,7 @@ import { StudentsService } from './students.service';
     ImportsController,
   ],
   providers: [
+    ReportingService,
     EmployeeSelfService,
     PeopleDashboardService,
     AcrSetupService,

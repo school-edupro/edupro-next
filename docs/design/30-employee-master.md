@@ -179,3 +179,23 @@ the `training` kind in `EMPLOYEE_LISTS` / `EMPLOYEE_ROW_SCHEMAS`, the **Training
 employee's page (table, add, remove; the overview names the latest), the profile PDF, the transfer
 snapshot, and on My profile under the staff profile policy (`list:training`, default with approval;
 usual proof a training certificate). Date of entry defaults to the day the row is added.
+
+## Reporting managers, one by one and in bulk (12 Nov 2026)
+
+Asked: update employees' reporting managers in bulk and one by one. Benchmarked: Keka (the Job tab, and a
+job-details Excel import), greytHR (an Excel import), Zoho People (tick employees → Assign Reporting To).
+Decided: all three bulk ways — ticked on screen, Excel, a whole team moved — plus one by one in the list; the
+Posting tab kept and fixed; leave and corrections already waiting stay with the old manager, counted.
+`/people/employees/reporting` (People → Employees → Reporting managers): figures (staff, with / without a
+manager, managers; the last two filter), filters (search, department, designation, reports to: anyone /
+nobody / a manager), records per page; a row's manager with its own Save; Tick all / ticked → Assign (or
+Nobody); Move a team; Excel upload (the sheet filled with today's managers' codes; Check: old → new, refused
+rows with the reason; the good rows saved). API `/people/reporting` (view: the list; edit: `assign`,
+`move`, `format`, `import`) changes this working year's posting (made from the employee's record when there is
+none), audited per employee (`people.reporting.set`, how: one / ticked / moved / excel); refused: an employee
+not active, as their own manager, or a loop (`reportingLoops`, also on the Posting tab). The answer counts
+the leave / corrections of those employees waiting at a step with an old manager. Fixed: the Posting tab
+could not remove a manager (the save kept the old one when the field came empty); it now clears it, and a
+field left out keeps it. Also `.ep-table-wrap` is positioned, so screen-reader text in a table never widens
+the page. Tests: `people-reporting.e2e-spec.ts`. Browser (dev-admin, 1440 and 375): the list, a row's Save
+and Assign to the ticked (set to the managers they already had: Alpha unchanged), the dialogs, axe clean.

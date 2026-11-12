@@ -227,6 +227,14 @@ the menu for the staff who report to them: **My team** (every punch of all of th
 machines or the unmatched punches. In the staff app the same is under **My team → Punches**. The office
 also gets **My team** when staff report to them.
 
+**Who reports to whom** is set in **People → Employees → Reporting managers**: every employee with their
+manager this year — change one in its row (Save), tick several and **Assign to the ticked** (or Nobody),
+**Move a team** (all of one manager's reportees to another, when a manager leaves or changes role), or
+**Excel upload** (the sheet comes filled with today's managers: change the codes, Check shows old → new and
+what is refused, then save). One employee can also be changed on their **Posting** tab. A line that would go
+round a loop (someone reporting to a person who reports to them) is refused. Leave and corrections already
+waiting with the old manager stay with them; new ones go to the new manager.
+
 **How a day is worked out**: the day's shift (a special timing, else the department's, else the shift
 posting, else the default shift; a night shift takes the next morning's OUT), first IN and last OUT (two
 punches closer than the settings' minutes are one), the hours (less the late minutes when the settings

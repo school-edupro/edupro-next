@@ -732,7 +732,10 @@
 }
 
 /* ---- Data table ----------------------------------------------------------------- */
+/* positioned, so text kept for screen readers inside a table (absolutely placed) scrolls with it and
+   never widens the page */
 .ep-table-wrap {
+  position: relative;
   overflow: auto;
   max-width: 100%;
   border: 1px solid var(--border-default);
@@ -15908,6 +15911,28 @@ button.ep-shiftcal__cell:focus-visible {
   border-radius: var(--radius-md);
   text-align: center;
   color: var(--text-muted);
+}
+/* reporting managers: the bar to assign the ticked, a row's manager and its Save */
+.ep-rmbulk {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--sp-3);
+  margin: var(--sp-2) 0 var(--sp-3);
+  padding: var(--sp-3);
+}
+.ep-rmbulk__pick {
+  flex: 1 1 16rem;
+  margin: 0;
+}
+.ep-rmrow {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+}
+.ep-rmrow .ep-select {
+  min-width: 0;
+  flex: 1 1 12rem;
 }
 .ep-pver .ep-pver--old td {
   background: var(--surface-subtle);

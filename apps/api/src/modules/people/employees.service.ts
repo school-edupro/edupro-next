@@ -13,6 +13,7 @@ import type {
   UpdateEmployeeDto,
   UpsertPostingDto,
 } from './people.dto';
+import { reportingLoops } from './reporting.service';
 
 export interface PostingRow {
   id: string;
@@ -401,12 +402,26 @@ export class EmployeesService {
       if ((mgr.rowCount ?? 0) === 0)
         throw new DomainError('not-found', 'Reporting manager not found');
     }
+    // a line that goes round a loop (they would report to someone who reports to them) is refused
+    if (
+      dto.reportsToEmployeeId &&
+      (!dto.academicYearId || dto.academicYearId === tenant.academicYearId)
+    ) {
+      const loops = await reportingLoops(c, new Map([[employeeId, dto.reportsToEmployeeId]]));
+      if (loops.size)
+        throw new DomainError(
+          'validation-failed',
+          'That manager reports (directly or through others) to this employee: change the manager above first',
+          { status: 409 },
+        );
+    }
     const r = await c.query<{ id: string }>(
       `INSERT INTO postings (school_id, employee_id, academic_year_id, campus_id, department, designation, reports_to_employee_id, valid_from, valid_to, created_by, updated_by)
        VALUES (app.current_school_id(), $1, $2, $3, $4, $5, $6, COALESCE($7::date, CURRENT_DATE), $8::date, app.current_user_id(), app.current_user_id())
        ON CONFLICT (employee_id, academic_year_id) DO UPDATE
          SET campus_id = COALESCE(EXCLUDED.campus_id, postings.campus_id), department = COALESCE(EXCLUDED.department, postings.department),
-             designation = COALESCE(EXCLUDED.designation, postings.designation), reports_to_employee_id = COALESCE(EXCLUDED.reports_to_employee_id, postings.reports_to_employee_id),
+             designation = COALESCE(EXCLUDED.designation, postings.designation),
+             reports_to_employee_id = CASE WHEN $9 THEN EXCLUDED.reports_to_employee_id ELSE postings.reports_to_employee_id END,
              valid_from = COALESCE($7::date, postings.valid_from), valid_to = $8::date, updated_at = now(), updated_by = app.current_user_id()
        RETURNING id::text`,
       [
@@ -418,6 +433,8 @@ export class EmployeesService {
         dto.reportsToEmployeeId ?? null,
         dto.validFrom ?? null,
         dto.validTo ?? null,
+        // given (a manager, or null to clear it) or left out (kept as it is)
+        dto.reportsToEmployeeId !== undefined,
       ],
     );
     return r.rows[0]!.id;

@@ -452,3 +452,44 @@ export const EmployeeTransferAcceptSchema = z.object({
 export class EmployeeTransferAcceptDto extends createZodDto(EmployeeTransferAcceptSchema) {}
 export const EmployeeTransferCloseSchema = z.object({ reason: z.string().trim().min(3).max(500) });
 export class EmployeeTransferCloseDto extends createZodDto(EmployeeTransferCloseSchema) {}
+
+// ---- reporting managers (who each employee reports to, this working year) ----------------------------------
+const ReportingSize = z.coerce
+  .number()
+  .int()
+  .refine((v) => [25, 50, 100].includes(v), '25, 50 or 100 a page')
+  .default(50);
+/** The reporting lines: every active employee with their manager, filtered, a page at a time. */
+export const ReportingQuerySchema = z.object({
+  q: z.string().trim().max(80).optional(),
+  department: z.string().trim().max(80).optional(),
+  designation: z.string().trim().max(80).optional(),
+  /** a manager's reportees, or `none`: nobody set */
+  managerId: z.union([IdSchema, z.literal('none')]).optional(),
+  page: z.coerce.number().int().min(1).max(10000).default(1),
+  size: ReportingSize,
+});
+export class ReportingQueryDto extends createZodDto(ReportingQuerySchema) {}
+
+/** These employees report to this manager from now on (null: to nobody). */
+export const ReportingAssignSchema = z.object({
+  employeeIds: z.array(IdSchema).min(1, 'Tick the employees').max(500),
+  managerId: IdSchema.nullable(),
+});
+export class ReportingAssignDto extends createZodDto(ReportingAssignSchema) {}
+
+/** Everyone reporting to one manager moves to another (null: to nobody). */
+export const ReportingMoveSchema = z
+  .object({ fromManagerId: IdSchema, toManagerId: IdSchema.nullable() })
+  .refine((d) => d.fromManagerId !== d.toManagerId, {
+    message: 'Pick a different manager to move the team to',
+    path: ['toManagerId'],
+  });
+export class ReportingMoveDto extends createZodDto(ReportingMoveSchema) {}
+
+/** Reporting managers from Excel: checked first (dryRun), then the valid rows saved. */
+export const ReportingImportSchema = z.object({
+  file: z.string().min(10).max(6_000_000),
+  dryRun: z.boolean().default(true),
+});
+export class ReportingImportDto extends createZodDto(ReportingImportSchema) {}

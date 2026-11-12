@@ -48,6 +48,13 @@ export default async function EmployeesPage({
         kicker="People"
         title="Employees"
         description="Every staff member. Search, filter on any field, choose the columns you want, and export exactly what you see."
+        actions={
+          can('people.employee.view') ? (
+            <a className="ep-btn ep-btn--secondary ep-btn--sm" href="/people/employees/reporting">
+              Reporting managers
+            </a>
+          ) : null
+        }
       />
       <Notice params={sp} />
       <EmployeeList
