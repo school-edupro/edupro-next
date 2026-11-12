@@ -126,7 +126,7 @@ export const NAV: Array<{
         label: 'attendanceExceptions',
         permission: 'leave.office.manage',
       },
-      { href: '/attendance/punches', label: 'punches', permission: 'attendance.punch.view' },
+      { href: '/attendance/punches', label: 'punches', permission: 'leave.punch_log.view' },
       { href: '/leave/reports', label: 'leaveReports', permission: LEAVE_MENU.reports },
       { href: '/leave/setup', label: 'leaveSetup', permission: 'leave.setup.view' },
     ],

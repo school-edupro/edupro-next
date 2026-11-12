@@ -705,3 +705,49 @@ export const MyFileSchema = z
   })
   .refine(range, RANGE_MSG);
 export class MyFileDto extends createZodDto(MyFileSchema) {}
+
+// ---- the staff punch log (the old Employee / Attendance Details) ---------------------------------------
+export const PUNCH_LOG = 'leave.punch_log.view';
+/**
+ * The raw punches: a department's (up to 31 days — every punch of every person in it) or one employee's
+ * (up to 92 days), a page at a time; Excel or PDF of the same.
+ */
+export const PunchLogSchema = z
+  .object({
+    department: z.string().trim().min(1).max(100).optional(),
+    employeeId: Id.optional(),
+    from: Day,
+    to: Day,
+    page: z.coerce.number().int().min(1).max(10000).default(1),
+    size: z.coerce
+      .number()
+      .int()
+      .refine((v) => [25, 50, 100].includes(v), '25, 50 or 100 a page')
+      .default(50),
+    format: z.enum(['xlsx', 'pdf']).optional(),
+  })
+  .refine((d) => !!d.department !== !!d.employeeId, {
+    message: 'Pick a department or an employee',
+    path: ['department'],
+  })
+  .refine((d) => d.from <= d.to, { message: 'From must be on or before To', path: ['to'] });
+export class PunchLogDto extends createZodDto(PunchLogSchema) {}
+
+/** Every version of an employee's days (the one in force and the ones it replaced), up to 92 days. */
+export const DayVersionsSchema = z
+  .object({ employeeId: Id, from: Day, to: Day, format: z.enum(['xlsx', 'pdf']).optional() })
+  .refine((d) => d.from <= d.to, { message: 'From must be on or before To', path: ['to'] });
+export class DayVersionsDto extends createZodDto(DayVersionsSchema) {}
+
+/** The punches nobody could be matched to (an unknown ID) and the double taps, in a period. */
+export const UnmatchedSchema = z
+  .object({ from: Day, to: Day })
+  .refine((d) => d.from <= d.to, { message: 'From must be on or before To', path: ['to'] });
+export class UnmatchedDto extends createZodDto(UnmatchedSchema) {}
+
+/** An unknown ID on the machine given to an employee: their punches are matched and their days worked out. */
+export const AssignPunchIdSchema = z.object({
+  biometricId: z.string().trim().min(1).max(64),
+  employeeId: Id,
+});
+export class AssignPunchIdDto extends createZodDto(AssignPunchIdSchema) {}

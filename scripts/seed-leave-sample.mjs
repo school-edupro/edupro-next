@@ -4,7 +4,9 @@
  * every kind of day and every kind of leave in every state, spread over the staff (all but the user's own
  * E021 and E022), so each person's two months read like real ones.
  *
- *   Days (1 Oct – yesterday, from punches): present on time, late in (late marks: one waived, one cleared by
+ *   Days (1 Oct – yesterday) from the staff-room biometric machine's log, as its upload records it (2–4
+ *   punches a day with lunch out and back, double taps, a card nobody holds; staff with no biometric ID by
+ *   the sheet upload): present on time, late in (late marks: one waived, one cleared by
  *   an approved correction, three in a month taken as a day, the rest lapsed), early going, short hours
  *   (half day), one punch only (missing punches: corrected on request or by the office, still open, or
  *   taken as a day and given back when the punches were corrected), absent (charged after 7 days — the
@@ -168,13 +170,24 @@ if (!adminUser) {
 }
 const staff = await q(
   `SELECT e.id::text, e.employee_code AS code, e.display_name AS name, e.employee_type AS etype,
-          e.department, u.oneauth_sub AS sub
+          e.department, e.biometric_id AS bio, u.oneauth_sub AS sub
      FROM employees e LEFT JOIN users u ON u.id = e.user_id AND u.deleted_at IS NULL
     WHERE e.school_id = $1 AND e.deleted_at IS NULL AND e.status = 'active' AND e.employee_code IS NOT NULL
     ORDER BY e.employee_code`,
   [SCHOOL],
 );
 const byCode = new Map(staff.map((s) => [s.code, s]));
+// the staff-room biometric machine: the sample's punches come from it, as it records them
+const machine =
+  (
+    await q(
+      `SELECT id::text, code, name FROM rfid_devices WHERE school_id = $1 AND kind = 'biometric' AND status = 'active'
+        ORDER BY code LIMIT 1`,
+      [SCHOOL],
+    )
+  )[0] ?? null;
+/** a card on the machine nobody in the school holds (a new joiner's, not yet on their record) */
+const UNKNOWN_CARD = 'BIO-0099';
 const sample = staff.filter((s) => !SKIP.includes(s.code));
 const ids = sample.map((s) => s.id);
 const subOf = new Map(staff.filter((s) => s.sub).map((s) => [s.code, s.sub]));
@@ -1007,6 +1020,11 @@ try {
           AND punched_at >= ($2::date::timestamp AT TIME ZONE 'Asia/Kolkata') AND punched_at < (($3::date + 1)::timestamp AT TIME ZONE 'Asia/Kolkata')`,
       [ids, FROM, TO],
     );
+    n.machine = await del(
+      `DELETE FROM punch_logs WHERE school_id = $1 AND (employee_id = ANY($2::bigint[]) OR biometric_id = $5)
+          AND punched_at >= ($3::date::timestamp AT TIME ZONE 'Asia/Kolkata') AND punched_at < (($4::date + 1)::timestamp AT TIME ZONE 'Asia/Kolkata')`,
+      [SCHOOL, ids, FROM, TO, UNKNOWN_CARD],
+    );
     n.balances = await del(
       `DELETE FROM staff_leave_balances WHERE employee_id = ANY($1::bigint[]) AND month BETWEEN $2::date AND $3::date`,
       [ids, OCT, NOV],
@@ -1028,7 +1046,7 @@ try {
     );
     await mig.query('COMMIT');
     console.log(
-      `Cleared: ${String(n.leave)} leave, ${String(n.days)} days, ${String(n.punches)} punches, ${String(n.lateMarks)} late marks, ${String(n.missing)} missing punches, ${String(n.corrections)} correction requests, ${String(n.balances)} balance rows.`,
+      `Cleared: ${String(n.leave)} leave, ${String(n.days)} days, ${String(n.punches)} punches (${String(n.machine)} machine log rows), ${String(n.lateMarks)} late marks, ${String(n.missing)} missing punches, ${String(n.corrections)} correction requests, ${String(n.balances)} balance rows.`,
     );
   } catch (e) {
     await mig.query('ROLLBACK');
@@ -1083,13 +1101,83 @@ try {
         throw new Error("October's credit would change another employee's balance: stopped");
     }),
   );
-  // each day: the punches in the evening, then the night's marks (absent, late, missing punch)
+  // each day: the machine's punches (staff with a biometric ID) and the sheet upload (the others) in the
+  // evening, then the night's marks (absent, late, missing punch)
   for (const day of working) {
     const rows = [];
+    const taps = []; // [biometric id, 'HH:MM:SS']
     for (const s of sample) {
       const p = punches(s.code, day);
-      if (p) rows.push(`${s.code},${day},${p.in ?? ''},${p.out ?? ''}`);
+      if (!p) continue;
+      if (!machine || !s.bio) {
+        rows.push(`${s.code},${day},${p.in ?? ''},${p.out ?? ''}`);
+        continue;
+      }
+      const j = (n, salt) => jitter(`${s.code}|${day}|${salt}`, n);
+      if (p.in) {
+        taps.push([s.bio, `${p.in}:${String(10 + j(40, 's')).padStart(2, '0')}`]);
+        // now and then the finger is put twice: the machine keeps the second as a double tap
+        if (j(12, 'dt') === 0)
+          taps.push([s.bio, `${p.in}:${String(52 + j(7, 'd2')).padStart(2, '0')}`]);
+      }
+      // a third of the staff punch out for lunch and back on full days
+      const k = kindOf(s.code, day);
+      if (
+        p.in &&
+        p.out &&
+        jitter(s.code, 3) === 0 &&
+        (k === 'present' || k.startsWith('late') || k.startsWith('early'))
+      ) {
+        const out = 12 * 60 + 25 + j(25, 'lo');
+        taps.push([s.bio, `${hm(out)}:${String(j(60, 'ls')).padStart(2, '0')}`]);
+        taps.push([s.bio, `${hm(out + 22 + j(15, 'li'))}:${String(j(60, 'lt')).padStart(2, '0')}`]);
+      }
+      if (p.out) taps.push([s.bio, `${p.out}:${String(5 + j(50, 'o')).padStart(2, '0')}`]);
     }
+    // the unknown card: working days from 22 October (a new joiner whose ID is not on their record yet)
+    if (machine && day >= '2026-10-22' && sample[0] && !off(sample[0].code, day)) {
+      taps.push([UNKNOWN_CARD, `08:0${String(jitter(day, 9))}:14`]);
+      taps.push([UNKNOWN_CARD, `16:1${String(jitter(`${day}o`, 9))}:40`]);
+    }
+    if (taps.length)
+      ev(`${day}T23:20`, `machine punches ${dmy(day)}`, () =>
+        tenant(async (c) => {
+          // as the machine's upload records them: matched by the biometric ID, a second tap within a
+          // minute kept as a double, an ID nobody holds kept as unknown; recorded ones become staff punches
+          taps.sort((a, b) => (a[1] < b[1] ? -1 : a[1] > b[1] ? 1 : 0));
+          for (const [bio, t] of taps) {
+            const at = `${day}T${t}+05:30`;
+            const emp =
+              (
+                await c.query(
+                  `SELECT id::text FROM employees WHERE biometric_id = $1 AND deleted_at IS NULL AND status = 'active'`,
+                  [bio],
+                )
+              ).rows[0]?.id ?? null;
+            let outcome = emp ? 'recorded' : 'unknown_id';
+            if (emp) {
+              const dup = await c.query(
+                `SELECT 1 FROM punch_logs WHERE employee_id = $1 AND outcome = 'recorded'
+                    AND punched_at BETWEEN $2::timestamptz - interval '60 seconds' AND $2::timestamptz + interval '60 seconds'`,
+                [emp, at],
+              );
+              if (dup.rowCount) outcome = 'duplicate';
+            }
+            await c.query(
+              `INSERT INTO punch_logs (school_id, device_id, employee_id, biometric_id, punched_at, outcome, raw)
+               VALUES ($1, $2, $3, $4, $5::timestamptz, $6, $7::jsonb) ON CONFLICT (device_id, biometric_id, punched_at) DO NOTHING`,
+              [SCHOOL, machine.id, emp, bio, at, outcome, JSON.stringify({ id: bio, at })],
+            );
+          }
+          // the machine was in touch then (as its upload stamps it), and the punches are worked into the
+          // days, as the sync does every few minutes
+          await c.query(
+            `UPDATE rfid_devices SET last_seen_at = GREATEST(COALESCE(last_seen_at, $2::timestamptz), $2::timestamptz) WHERE id = $1`,
+            [machine.id, `${day}T23:20:00+05:30`],
+          );
+          await c.query(`SELECT app.staff_attendance_sync(5000)`);
+        }),
+      );
     if (rows.length)
       ev(`${day}T23:30`, `punches ${dmy(day)}`, async () => {
         const file = Buffer.from(`Employee,Date,In,Out\n${rows.join('\n')}\n`).toString('base64');
@@ -1443,6 +1531,7 @@ try {
       `UPDATE staff_missing_punches SET created_at = pg_temp.m(created_at), mailed_at = pg_temp.m(mailed_at) WHERE ${mine}`,
       `UPDATE staff_leave_edits SET edited_at = pg_temp.m(edited_at) WHERE request_id IN (SELECT id FROM staff_leave_requests WHERE ${mine})`,
       `UPDATE staff_punches SET created_at = pg_temp.m(created_at) WHERE ${mine}`,
+      `UPDATE punch_logs SET received_at = pg_temp.m(received_at) WHERE (${mine} OR biometric_id = '${UNKNOWN_CARD}') AND school_id = ${SCHOOL}`,
       `UPDATE staff_leave_balances SET updated_at = pg_temp.m(updated_at) WHERE ${mine}`,
     ];
     for (const sql of upd) await mig.query(sql, [ids]);

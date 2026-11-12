@@ -416,6 +416,64 @@ export async function runLeaveMonth() {
   );
 }
 
+/** the punch log page this action returns to (only that page, with its filters) */
+const punchBack = (fd: FormData) => {
+  const b = String(fd.get('back') ?? '');
+  return /^\/attendance\/punches(\?[\w=&%.\-+]*)?$/.test(b) ? b : '/attendance/punches';
+};
+const withNote = (path: string, note: string) =>
+  `${path}${path.includes('?') ? '&' : '?'}ok=1&detail=${encodeURIComponent(note)}`;
+
+/** Process now: the punches not yet worked into days (as the sync does every few minutes). */
+export async function processPunches(fd: FormData) {
+  const path = punchBack(fd);
+  let n = 0;
+  try {
+    n = (
+      await apiFetch<{ n: number }>('/staff-attendance/run', {
+        method: 'POST',
+        body: JSON.stringify({ what: 'sync' }),
+      })
+    ).n;
+  } catch (e) {
+    if (e instanceof ApiError) back(path, e);
+    throw e;
+  }
+  revalidatePath('/attendance/punches');
+  redirect(
+    withNote(
+      path,
+      n
+        ? `Done: ${String(n)} employee-days worked out from the punches.`
+        : 'Nothing was waiting: every punch is worked into its day.',
+    ),
+  );
+}
+
+/** An unknown ID on the machine given to an employee: its punches are matched and the days worked out. */
+export async function assignPunchId(fd: FormData) {
+  const path = punchBack(fd);
+  const biometricId = String(fd.get('biometricId') ?? '').trim();
+  const employeeId = String(fd.get('employeeId') ?? '');
+  let r: { employee: string; punches: number; days: number };
+  try {
+    r = await apiFetch('/staff-punches/unmatched/assign', {
+      method: 'POST',
+      body: JSON.stringify({ biometricId, employeeId }),
+    });
+  } catch (e) {
+    if (e instanceof ApiError) back(path, e);
+    throw e;
+  }
+  revalidatePath('/attendance/punches');
+  redirect(
+    withNote(
+      path,
+      `${biometricId} is now ${r.employee}'s: ${String(r.punches)} punches matched, ${String(r.days)} days worked out.`,
+    ),
+  );
+}
+
 export type BalanceImportResult =
   | {
       ok: true;

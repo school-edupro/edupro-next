@@ -17,6 +17,8 @@ import { LeaveController } from './leave.controller';
 import { LeaveSelfController } from './leave-self.controller';
 import { LeaveSelfService } from './leave-self.service';
 import { LeaveService } from './leave.service';
+import { PunchLogController } from './punch-log.controller';
+import { PunchLogService } from './punch-log.service';
 import { ShiftCalendarController } from './shift-calendar.controller';
 import { ShiftCalendarService } from './shift-calendar.service';
 
@@ -31,6 +33,7 @@ import { ShiftCalendarService } from './shift-calendar.service';
     LeaveCutoverController,
     ShiftCalendarController,
     LeaveSelfController,
+    PunchLogController,
   ],
   providers: [
     AuditService,
@@ -43,6 +46,7 @@ import { ShiftCalendarService } from './shift-calendar.service';
     LeaveDashboardService,
     LeaveReportsService,
     LeaveCutoverService,
+    PunchLogService,
   ],
 })
 export class LeaveModule {}

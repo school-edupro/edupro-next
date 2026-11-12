@@ -661,6 +661,32 @@ pick. Tests: `staff-reports.e2e-spec.ts` — a figure picked, an unknown one, th
 Excel. Browser (dev-admin, 1440 and 375): Not in → 2 rows, outlined, back to 25, the daily report's
 figures, axe clean.
 
+## As built — the biometric log as the old Employee / Attendance Details (12 Nov 2026)
+
+Asked: the old `attendancelog_track.php` (Department, Attendance History, Attendance Log) at
+`/attendance/punches` in the Mobilise design, with a sample machine log for October–November. Decided:
+the three tabs plus Unmatched and the machines at a glance (as greytHR's swipes / swipe management, Keka's
+biometric and device-sync logs, Eazework's unmatched log); the sample as the staff-room machine's own upload
+records it; the old one-day summary replaced (the daily reports keep first IN / last OUT); office only.
+Right `leave.punch_log.view` (0361) for every role with `attendance.punch.view` or `leave.office.manage`;
+giving an ID is the leave office's. API `/staff-punches`: `overview` (biometric devices: last seen, today,
+last punch, waiting, unknown in 30 days; the other sources; the lists), `log` (a department ≤31 days or an
+employee ≤92 from `staff_punches` with the device, source, `read` and the day's code; Excel / PDF), `versions`
+(`staff_attendance_history` before/after with the current row: Active and InActive, by — the system for
+punches and the nightly marks, whoever pressed Process now — when, why; the trace of the day in force only,
+as history keeps no trace; Excel / PDF), `unmatched` (`punch_logs` not recorded — unknown IDs and double
+taps — and `staff_punches` of no employee), `unmatched/assign` (the ID on the employee's record, refused when
+someone holds it or they have another; the logs recorded, staff punches added, the days computed; audited).
+Process now is `run sync`. The page: the device strip, tab links, a filter card per tab, records per page,
+Showing, Download, pages; the trace in a dialog; Give to employee in a dialog (staff with no ID). The sample
+(`seed-leave-sample.mjs`): staff with a biometric ID punch the staff-room machine (in, a third of them out
+for lunch and back, a double tap now and then, the OUT), written into `punch_logs` as its ingest decides and
+synced into the days; a card nobody holds (BIO-0099) on working days from 22 October; staff without an ID
+by the sheet upload; the device's last seen stamped. Tests: `staff-punch-log.e2e-spec.ts` (the device's
+punches with a double tap and an unknown ID, Process now, the logs and their limits, the Excel, versions
+after a correction, unmatched, the ID given, the refusals, the right). Browser (dev-admin, 1440 and 375):
+every tab, the trace and Give dialogs, axe clean, no sideways scroll.
+
 ## The module is complete
 
 Phases A–E are built. What is left is the school's: the old database connection on the server, the read, the

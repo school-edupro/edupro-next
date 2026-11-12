@@ -15821,6 +15821,114 @@ button.ep-shiftcal__cell:focus-visible {
   font-weight: var(--fw-semibold);
   color: var(--text-heading);
 }
+/* the staff punch log: the machines and other sources, the filter card, the day versions */
+.ep-pdev {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 20rem), 1fr));
+  gap: var(--sp-3);
+  margin: 0 0 var(--sp-4);
+}
+.ep-pdev__card {
+  display: grid;
+  align-content: start;
+  gap: var(--sp-2);
+  padding: var(--sp-3);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  background: var(--surface-card);
+  box-shadow: var(--shadow-card);
+}
+.ep-pdev__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-2);
+}
+.ep-pdev__name {
+  flex: 1 1 10rem;
+  min-width: 0;
+}
+.ep-pdev__ic {
+  display: inline-flex;
+  padding: var(--sp-1);
+  border-radius: var(--radius-sm);
+  background: var(--surface-band);
+  color: var(--action-primary);
+}
+.ep-pdev__facts {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--sp-2);
+  margin: 0;
+}
+@media (max-width: 30rem) {
+  .ep-pdev__facts {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+.ep-pdev__facts dt {
+  font-size: var(--fs-caption);
+  color: var(--text-muted);
+}
+.ep-pdev__facts dd {
+  margin: 0;
+  font-weight: var(--fw-semibold);
+  color: var(--text-heading);
+}
+.ep-pdev__list {
+  margin: 0;
+  padding-left: var(--sp-4);
+  font-size: var(--fs-small);
+}
+.ep-pdev__run {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-2);
+}
+.ep-pfilter {
+  margin: var(--sp-3) 0;
+  padding: var(--sp-3);
+}
+.ep-pfilter__row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 12rem), 1fr));
+  align-items: end;
+  gap: var(--sp-3);
+}
+.ep-pfilter__go {
+  display: flex;
+  gap: var(--sp-2);
+  padding-bottom: var(--sp-1);
+}
+.ep-pprompt {
+  margin: var(--sp-3) 0;
+  padding: var(--sp-4);
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius-md);
+  text-align: center;
+  color: var(--text-muted);
+}
+.ep-pver .ep-pver--old td {
+  background: var(--surface-subtle);
+  color: var(--text-muted);
+}
+.ep-ptrace {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: var(--sp-1) var(--sp-3);
+  margin: 0;
+}
+.ep-ptrace > div {
+  display: contents;
+}
+.ep-ptrace dt {
+  font-weight: var(--fw-semibold);
+  color: var(--text-heading);
+}
+.ep-ptrace dd {
+  margin: 0;
+}
 .ep-lbd__note {
   margin: 0;
 }

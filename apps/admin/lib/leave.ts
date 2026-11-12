@@ -1021,3 +1021,97 @@ export interface TeamLeave {
     types: Array<{ id: string; code: string; name: string }>;
   };
 }
+
+/** The staff punch log (docs/design/85): the machines, the other sources and the lists to pick from. */
+export interface PunchOverview {
+  today: string;
+  devices: Array<{
+    id: string;
+    code: string;
+    name: string;
+    status: string;
+    lastSeen: string | null;
+    today: number;
+    lastPunch: string | null;
+    waiting: number;
+    unknown: number;
+  }>;
+  others: Array<{
+    source: string;
+    words: string;
+    punches: number;
+    waiting: number;
+    last: string | null;
+  }>;
+  lists: {
+    employees: Array<{ id: string; name: string; code: string | null; biometricId: string | null }>;
+    departments: string[];
+  };
+  can: { assign: boolean; process: boolean };
+}
+
+/** A department's or an employee's raw punches, a page at a time. */
+export interface PunchLog {
+  mode: 'department' | 'employee';
+  from: string;
+  to: string;
+  words: string;
+  figures: { n: number; people: number; days: number; waiting: number };
+  rows: Array<{
+    id: string;
+    employee: { id: string; code: string; name: string; department: string | null };
+    day: string;
+    weekday: string;
+    time: string;
+    device: string | null;
+    source: string;
+    sourceWords: string;
+    processed: boolean;
+    marked: string | null;
+  }>;
+  total: number;
+  page: number;
+  size: number;
+}
+
+/** Every version of an employee's days: the one in force (active) and the ones it replaced. */
+export interface DayVersions {
+  employee: { id: string; code: string; name: string; department: string | null };
+  from: string;
+  to: string;
+  words: string;
+  rows: Array<{
+    day: string;
+    weekday: string;
+    attendance: string;
+    in: string;
+    out: string;
+    active: boolean;
+    by: string;
+    at: string | null;
+    remark: string;
+    trace: Array<[string, string]> | null;
+  }>;
+  days: number;
+  changed: number;
+}
+
+/** The punches of an unknown ID and the double taps. */
+export interface UnmatchedPunches {
+  from: string;
+  to: string;
+  rows: Array<{
+    id: string;
+    kind: 'unknown' | 'double';
+    device: string;
+    punches: number;
+    days: number;
+    first: string;
+    last: string;
+    employee: { id: string; code: string | null; name: string | null } | null;
+    holder: string | null;
+  }>;
+  unknown: number;
+  double: number;
+  can: { assign: boolean };
+}

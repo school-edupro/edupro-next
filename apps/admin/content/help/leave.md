@@ -202,6 +202,25 @@ under Attendance → RFID readers), the system reads the school's central device
 matched to an employee by their biometric id, else their employee code; punches of an unknown code wait
 until someone has it.
 
+**Staff punches** (Employee leave & attendance → Staff punches, as the old Employee / Attendance Details)
+shows where the punches come from — each biometric machine (in touch or when last seen, today's punches,
+the last punch, how many wait to be worked into their days, unknown IDs in the last 30 days) and the other
+sources — with **Process now** for the office. Four tabs:
+
+- **Department** — every raw punch of a department in a date range (up to 31 days): the employee, date,
+  day, punch time to the second, the device, the source (machine, central sync, sheet upload, by hand),
+  Processed or Waiting, and what the day was marked (it opens the day).
+- **Attendance History** — every version of an employee's days (up to 92): the one in force **Active**,
+  the ones it replaced **InActive** under it, with what the day was, IN and OUT, who marked it (the system
+  for days worked out from the punches) and when, and the remark; the eye shows how the day in force was
+  worked out (timing, grace, punches, hours, late, early, result). The record to trust in a dispute.
+- **Attendance Log** — one employee's raw punches (up to 92 days), as above.
+- **Unmatched** — punches of an ID nobody holds (a new joiner's card, a mistyped ID) and the double taps (a
+  second punch within a minute, not counted). **Give to employee** (the office) puts the ID on their record,
+  matches its punches to them and works those days out again (not in a month locked for payroll).
+
+Department, Attendance Log and Attendance History download as Excel or PDF.
+
 **How a day is worked out**: the day's shift (a special timing, else the department's, else the shift
 posting, else the default shift; a night shift takes the next morning's OUT), first IN and last OUT (two
 punches closer than the settings' minutes are one), the hours (less the late minutes when the settings
@@ -417,7 +436,8 @@ read it through a read-only connection IT sets on the server (`LEGACY_LEAVE_DB_U
 8. **The register is all dots.** Nothing is worked out yet: check the device serials in the settings and
    that the workers run, or **Run now → work days out again** for the dates.
 9. **A teacher's punch is not on the register.** Their biometric id (or employee code) must match the
-   device's; the punch waits until it does, then **Run now → read the new punches**.
+   device's; the punch waits until it does. Look in **Staff punches → Unmatched**: give the ID there to the
+   teacher and their punches are matched and the days worked out.
 10. **The exam duty came late by bus: no late mark, please.** Add a special timing for those dates, then
     work the days out again — or waive the late marks.
 11. **Payroll wants the days.** Lock the month, then **Payroll feed (Excel)**.
