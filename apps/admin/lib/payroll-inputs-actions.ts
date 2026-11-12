@@ -441,3 +441,57 @@ export async function deleteOvertime(month: string, id: string) {
   await attempt(here, () => send(`/payroll/inputs/overtime/${id}`, 'DELETE'));
   done(here, 'Removed.');
 }
+
+// ---- loss-of-pay reversal ---------------------------------------------------------------------------------
+export async function previewLop(employeeId: string, sourceMonth: string, days: string) {
+  try {
+    return {
+      result: await send<{
+        perDay: { pf: string; other: string };
+        amountPf: string;
+        amountOther: string;
+        total: string;
+        lopDays: string;
+        monthDays: string;
+      }>('/payroll/lop-reversals/preview', 'POST', { employeeId, sourceMonth, days }),
+      error: null,
+    };
+  } catch (e) {
+    if (e instanceof ApiError) return { result: null, error: detailOf(e) };
+    throw e;
+  }
+}
+
+export async function addLop(month: string, fd: FormData) {
+  const here = tab(month, 'lop');
+  const r = await attempt(here, () =>
+    send<{ total: string }>('/payroll/lop-reversals', 'POST', {
+      employeeId: text(fd, 'employeeId'),
+      sourceMonth: text(fd, 'sourceMonth'),
+      days: text(fd, 'days'),
+      reason: text(fd, 'reason'),
+    }),
+  );
+  done(
+    here,
+    `Staged: ₹${r.total}. A checker who did not stage it approves it; it is then paid as arrears.`,
+  );
+}
+
+export async function lopAction(
+  month: string,
+  id: string,
+  action: 'approve' | 'cancel',
+  fd: FormData,
+) {
+  if (!okId(id)) return;
+  const here = tab(month, 'lop');
+  const r = await attempt(here, () =>
+    send<{ message?: string }>(
+      `/payroll/lop-reversals/${id}/${action}`,
+      'POST',
+      action === 'cancel' ? { reason: text(fd, 'reason') } : undefined,
+    ),
+  );
+  done(here, r.message ?? 'Cancelled.');
+}

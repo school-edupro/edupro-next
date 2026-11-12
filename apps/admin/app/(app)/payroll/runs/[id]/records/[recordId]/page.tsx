@@ -105,6 +105,14 @@ export default async function PayrollRecordPage({
         </ul>
       ) : null}
       <div className="ep-grid__toolbar" style={{ marginBottom: 'var(--sp-3)' }}>
+        {d.can.approve ? (
+          <a
+            className="ep-btn ep-btn--secondary ep-btn--sm"
+            href={`/payroll/reconcile?employee=${r.employeeId}&month=${r.month}`}
+          >
+            Reconcile
+          </a>
+        ) : null}
         {d.can.approve && approvedOn && r.status === 'COMPUTED' ? (
           <DialogButton
             id="rc-hold"

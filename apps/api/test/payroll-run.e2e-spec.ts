@@ -404,4 +404,90 @@ describe('payroll run (e2e)', () => {
         .statusCode,
     ).toBe(409);
   });
+
+  it('a loss-of-pay reversal of a locked month, approved by another checker; reconciliation saves nothing', async () => {
+    const body = { employeeId: emp.A, sourceMonth: '2026-06', days: '-2' };
+    const pre = (await call(maker, 'POST', '/payroll/lop-reversals/preview', body)).json();
+    // a day: basic 1,870 + DA 1,122 (PF); HRA 561 + TA 192 (the rest)
+    expect(pre.perDay).toEqual({ pf: '2992.00', other: '753.00' });
+    expect(pre).toMatchObject({ amountPf: '-5984.00', amountOther: '-1506.00', total: '-7490.00' });
+    expect(
+      (await call(maker, 'POST', '/payroll/lop-reversals/preview', { ...body, days: '3' })).json()
+        .detail,
+    ).toContain('At most 0.00 day(s) can be given back');
+    const id = (
+      await call(maker, 'POST', '/payroll/lop-reversals', {
+        ...body,
+        reason: 'Two days of unauthorised absence found later',
+      })
+    ).json().id as string;
+    expect(
+      (await call(maker, 'POST', '/payroll/lop-reversals', { ...body, reason: 'Again' }))
+        .statusCode,
+    ).toBe(409);
+    expect((await call(maker, 'POST', `/payroll/lop-reversals/${id}/approve`)).statusCode).toBe(
+      403,
+    );
+    expect((await call(checker, 'POST', `/payroll/lop-reversals/${id}/approve`)).statusCode).toBe(
+      201,
+    );
+    const arrears = await q<{ amount: string; pf_applicable: boolean }>(
+      `SELECT amount::text, pf_applicable FROM payroll_arrears WHERE source = 'LOP_REVERSAL' AND employee_id = $1 ORDER BY pf_applicable DESC`,
+      [emp.A],
+    );
+    expect(arrears).toEqual([
+      { amount: '-5984.00', pf_applicable: true },
+      { amount: '-1506.00', pf_applicable: false },
+    ]);
+    expect(
+      (await call(maker, 'POST', `/payroll/lop-reversals/${id}/cancel`, { reason: 'Not needed' }))
+        .statusCode,
+    ).toBe(403);
+    // reconciliation: June worked out again now, beside what was paid — nothing is written
+    const before = await q<{ n: number }>(
+      `SELECT count(*)::int AS n FROM payroll_records WHERE school_id = $1`,
+      [school.id],
+    );
+    const rec = (
+      await call(checker, 'GET', `/payroll/reconcile?employeeId=${emp.A!}&month=2026-06`)
+    ).json();
+    expect(rec.ok).toBe(true);
+    expect(rec.stored).toMatchObject({ stage: 'LOCKED' });
+    expect(rec.lineDiff.map((x: { line: string }) => x.line)).toContain('LOP_REV (arrear)');
+    expect(
+      await q<{ n: number }>(
+        `SELECT count(*)::int AS n FROM payroll_records WHERE school_id = $1`,
+        [school.id],
+      ),
+    ).toEqual(before);
+    expect(
+      (await call(maker, 'GET', `/payroll/reconcile?employeeId=${emp.A!}&month=2026-06`))
+        .statusCode,
+    ).toBe(403);
+    // a checker cancels the approved reversal while its arrears are unpaid
+    expect(
+      (
+        await call(checker, 'POST', `/payroll/lop-reversals/${id}/cancel`, {
+          reason: 'Recorded in error',
+        })
+      ).statusCode,
+    ).toBe(201);
+    expect(
+      (
+        await q<{ n: number }>(
+          `SELECT count(*)::int AS n FROM payroll_arrears WHERE source = 'LOP_REVERSAL' AND cancelled_at IS NULL AND employee_id = $1`,
+          [emp.A],
+        )
+      )[0]!.n,
+    ).toBe(0);
+    // the month can be reversed again once the earlier one is cancelled (the legacy blocked it for ever)
+    expect(
+      (
+        await call(maker, 'POST', '/payroll/lop-reversals', {
+          ...body,
+          reason: 'Re-entered correctly',
+        })
+      ).statusCode,
+    ).toBe(201);
+  });
 });

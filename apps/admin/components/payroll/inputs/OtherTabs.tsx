@@ -22,6 +22,7 @@ import {
   deleteOvertime,
   deleteTds,
   liftHold,
+  lopAction,
   recurringStatus,
   saveOvertime,
   savePayee,
@@ -29,6 +30,7 @@ import {
   setTds,
 } from '@/lib/payroll-inputs-actions';
 import { LoanForm } from './LoanForm';
+import { LopForm } from './LopForm';
 import { MonthField, ReasonField, StaffSelect } from './StaffSelect';
 
 const help = (t: string) => (
@@ -1190,6 +1192,165 @@ export async function OvertimeTab({ month, staff }: { month: string; staff: Staf
             ) : (
               <tr>
                 <td colSpan={6}>No overtime entered this month.</td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  );
+}
+
+// ---- loss-of-pay reversal ---------------------------------------------------------------------------------------
+interface LopList {
+  rows: Array<{
+    id: string;
+    code: string;
+    name: string;
+    sourceMonth: string;
+    days: string;
+    amountPf: string;
+    amountOther: string;
+    reason: string;
+    status: 'DRAFT' | 'APPROVED' | 'CANCELLED';
+    cancelledReason: string | null;
+    byName: string | null;
+    approvedByName: string | null;
+    mine: boolean;
+    paid: boolean | null;
+  }>;
+  can: { manage: boolean; approve: boolean; admin: boolean };
+}
+export async function LopTab({
+  month,
+  staff,
+  sp,
+}: {
+  month: string;
+  staff: StaffOption[];
+  sp: Record<string, string | undefined>;
+}) {
+  const status = ['all', 'DRAFT', 'APPROVED', 'CANCELLED'].includes(sp.status ?? '')
+    ? sp.status!
+    : 'DRAFT';
+  const d = await apiFetch<LopList>(`/payroll/lop-reversals?status=${status}`);
+  const WORD: Record<string, string> = {
+    DRAFT: 'Waiting',
+    APPROVED: 'Approved',
+    CANCELLED: 'Cancelled',
+    all: 'All',
+  };
+  return (
+    <section className="ep-card" aria-labelledby="iv-t">
+      <div className="ep-grid__toolbar">
+        <h2 id="iv-t" className="ep-card__title">
+          Loss-of-pay reversal
+        </h2>
+        <nav aria-label="Show" className="ep-field__help">
+          {(['DRAFT', 'APPROVED', 'CANCELLED', 'all'] as const).map((x, i) => (
+            <span key={x}>
+              {i ? ' · ' : ''}
+              {x === status ? (
+                <strong>{WORD[x]}</strong>
+              ) : (
+                <a href={`/payroll/inputs?month=${month}&tab=lop&status=${x}`}>{WORD[x]}</a>
+              )}
+            </span>
+          ))}
+        </nav>
+        <span className="ep-grid__spacer" />
+        {d.can.manage ? (
+          <DialogButton id="iv-add" label="＋ New reversal" title="A loss-of-pay reversal">
+            <LopForm month={month} staff={staff} />
+          </DialogButton>
+        ) : null}
+      </div>
+      {help(
+        'Days of a locked month given back or charged after it was paid. A checker who did not stage it approves; it is paid as two arrears (with and without PF) by the next run.',
+      )}
+      <div className="ep-table-wrap" tabIndex={0} role="region" aria-labelledby="iv-t">
+        <table className="ep-table ep-table--dense">
+          <thead>
+            <tr>
+              <th scope="col">Employee</th>
+              <th scope="col">Month</th>
+              <th scope="col">Days</th>
+              <th scope="col">With PF (₹)</th>
+              <th scope="col">Without (₹)</th>
+              <th scope="col">Status</th>
+              <th scope="col">
+                <span className="ep-sr-only">Actions</span>
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            {d.rows.length ? (
+              d.rows.map((r) => (
+                <tr key={r.id}>
+                  <td>
+                    {r.name}
+                    {sub(r.code)}
+                  </td>
+                  <td>
+                    {r.sourceMonth}
+                    {sub(r.reason)}
+                  </td>
+                  <td>{r.days}</td>
+                  <td>{money(r.amountPf)}</td>
+                  <td>{money(r.amountOther)}</td>
+                  <td>
+                    <Badge
+                      tone={
+                        r.status === 'APPROVED'
+                          ? 'success'
+                          : r.status === 'DRAFT'
+                            ? 'warning'
+                            : 'neutral'
+                      }
+                    >
+                      {WORD[r.status]}
+                    </Badge>
+                    {r.paid ? sub('Paid') : null}
+                    {sub(r.cancelledReason)}
+                    {sub([r.byName, r.approvedByName].filter(Boolean).join(' · '))}
+                  </td>
+                  <td>
+                    <div className="ep-grid__toolbar">
+                      {r.status === 'DRAFT' && d.can.approve && (!r.mine || d.can.admin) ? (
+                        <form action={lopAction.bind(null, month, r.id, 'approve')}>
+                          <button type="submit" className="ep-btn ep-btn--primary ep-btn--sm">
+                            Approve
+                          </button>
+                        </form>
+                      ) : null}
+                      {(r.status === 'DRAFT' && d.can.manage) ||
+                      (r.status === 'APPROVED' && d.can.approve && !r.paid) ? (
+                        <DialogButton
+                          id={`iv-c-${r.id}`}
+                          label="Cancel"
+                          title="Cancel the reversal"
+                          className="ep-btn ep-btn--ghost ep-btn--sm"
+                        >
+                          <form
+                            action={lopAction.bind(null, month, r.id, 'cancel')}
+                            className="ep-form-section__body"
+                          >
+                            <ReasonField id={`iv-cw-${r.id}`} />
+                            <p>
+                              <button type="submit" className="ep-btn ep-btn--danger">
+                                Cancel it
+                              </button>
+                            </p>
+                          </form>
+                        </DialogButton>
+                      ) : null}
+                    </div>
+                  </td>
+                </tr>
+              ))
+            ) : (
+              <tr>
+                <td colSpan={7}>None.</td>
               </tr>
             )}
           </tbody>

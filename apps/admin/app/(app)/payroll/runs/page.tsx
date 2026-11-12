@@ -58,6 +58,14 @@ export default async function PayrollRunsPage({
         >
           Monthly inputs
         </a>
+        {d.can.approve ? (
+          <a
+            className="ep-btn ep-btn--secondary ep-btn--sm"
+            href={`/payroll/reconcile?month=${d.thisMonth}`}
+          >
+            Reconciliation
+          </a>
+        ) : null}
         {d.can.manage ? (
           <DialogButton id="pr-new" label="＋ New run" title="A new pay run">
             <form action={createRun} className="ep-form-section__body">

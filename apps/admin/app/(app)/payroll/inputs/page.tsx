@@ -7,6 +7,7 @@ import {
   ClaimsTab,
   HoldTab,
   LoansTab,
+  LopTab,
   OvertimeTab,
   RecurringTab,
   TaxTab,
@@ -22,6 +23,7 @@ const TABS = [
   { id: 'recurring', label: 'Recurring' },
   { id: 'claims', label: 'Claims' },
   { id: 'overtime', label: 'Overtime' },
+  { id: 'lop', label: 'LOP reversal' },
   { id: 'tax', label: 'Typed tax' },
 ] as const;
 
@@ -93,6 +95,7 @@ export default async function PayrollInputsPage({
       {tab === 'claims' ? <ClaimsTab month={month} staff={staff} sp={sp} /> : null}
       {tab === 'overtime' ? <OvertimeTab month={month} staff={staff} /> : null}
       {tab === 'tax' ? <TaxTab month={month} staff={staff} /> : null}
+      {tab === 'lop' ? <LopTab month={month} staff={staff} sp={sp} /> : null}
     </>
   );
 }
