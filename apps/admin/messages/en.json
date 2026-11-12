@@ -289,6 +289,7 @@
     "attendanceExceptions": "Late marks and missing punches",
     "payroll": "Payroll",
     "payrollInputs": "Monthly inputs",
+    "payrollRuns": "Pay runs",
     "payrollSetup": "Payroll set-up",
     "payrollApprovals": "Payroll drafts to approve"
   },

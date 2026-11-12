@@ -138,6 +138,7 @@ export const NAV: Array<{
     section: 'payroll',
     items: [
       { href: '/payroll/inputs', label: 'payrollInputs', permission: 'payroll.run.view' },
+      { href: '/payroll/runs', label: 'payrollRuns', permission: 'payroll.run.view' },
       { href: '/payroll/setup', label: 'payrollSetup', permission: 'payroll.setup.view' },
       {
         href: '/payroll/setup/approvals',
