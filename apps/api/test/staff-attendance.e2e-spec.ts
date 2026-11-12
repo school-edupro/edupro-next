@@ -85,6 +85,12 @@ describe('staff attendance (e2e)', () => {
       t1 = await seedUser(c, school, `${s}-t1`, 'subject_teacher');
       t2 = await seedUser(c, school, `${s}-t2`, 'subject_teacher');
       await c.query(`SELECT app.staff_masters_seed($1)`, [school.id]);
+      // these tests apply for past days and ask to correct them: open (0363 starts a school at none)
+      await c.query(`SELECT app.staff_leave_seed_all($1)`, [school.id]);
+      await c.query(
+        `UPDATE staff_leave_settings SET backdate_days = NULL, correction_backdate_days = NULL WHERE school_id = $1`,
+        [school.id],
+      );
       await c.query(
         `INSERT INTO departments (school_id, code, name, staff_group) VALUES ($1, 'science', 'Science', 'teaching')`,
         [school.id],

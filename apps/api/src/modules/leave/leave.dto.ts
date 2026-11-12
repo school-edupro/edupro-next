@@ -116,6 +116,8 @@ export const LeaveSettingsSchema = z.object({
   allowTimeEdit: z.boolean(),
   allowOnBehalf: z.boolean(),
   backdateDays: z.number().int().min(0).max(366).nullable(),
+  /** corrections an employee may ask: up to this many days back (empty: any day of an open month) */
+  correctionBackdateDays: z.number().int().min(0).max(366).nullable().default(7),
   missingPunchCc: z
     .string()
     .trim()

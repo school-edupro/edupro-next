@@ -14,6 +14,9 @@ import { notifyLeave } from './leave-notify';
 import {
   addDays,
   available,
+  backdateLimit,
+  backdateOf,
+  backdateWords,
   bridgeDays,
   dayKinds,
   dmy,
@@ -29,8 +32,10 @@ import {
   release,
   round2,
   sandwiched,
+  schoolBackdate,
   staffOf,
   type DayKind,
+  type LeaveType,
   type Source,
 } from './leave-engine';
 import {
@@ -297,19 +302,13 @@ export class LeaveService implements OnModuleInit {
     }
     if (!t.advance_allowed && a.to > today && !system)
       fail(`${t.code} is for days already passed (or today), not days ahead`);
-    const set = (
-      await c.query<{ backdate_days: number | null }>(
-        `SELECT backdate_days FROM staff_leave_settings`,
-      )
-    ).rows[0];
-    if (
-      set?.backdate_days !== null &&
-      set?.backdate_days !== undefined &&
-      !o.relaxed &&
-      a.from < addDays(today, -set.backdate_days)
-    )
+    // past days: the type's own rule, else the school's (the office's entry and the system are not held)
+    const back = o.relaxed ? null : await backdateLimit(c, t);
+    if (back !== null && a.from < addDays(today, -back))
       fail(
-        `Leave can be applied up to ${String(set.backdate_days)} day${set.backdate_days === 1 ? '' : 's'} back: ask the office for earlier days`,
+        back === 0
+          ? `${t.name} is not applied for past days: ask the office to enter it`
+          : `${t.name} can be applied ${backdateWords(back)} (from ${dmy(addDays(today, -back))}): ask the office for earlier days`,
       );
     const pol = await policyFor(c, e.id, t.id);
     // ---- the days counted
@@ -1534,6 +1533,8 @@ export class LeaveService implements OnModuleInit {
         };
       const e = await staffOf(c, me);
       const month = monthStart(istToday());
+      const today = istToday();
+      const schoolBack = await schoolBackdate(c);
       const types = await c.query<{
         id: string;
         code: string;
@@ -1544,9 +1545,13 @@ export class LeaveService implements OnModuleInit {
         document_needed: boolean;
         max_days: string | null;
         auto: boolean;
+        advance_allowed: boolean;
+        backdate: LeaveType['backdate'];
+        backdate_days: number | null;
       }>(
         `SELECT t.id::text, t.code, t.name, t.keeps_balance AND NOT t.loss_of_pay AS keeps, t.loss_of_pay AS lop,
-                t.half_day OR t.loss_of_pay AS half_day, t.document_needed, t.max_days::text, t.auto_approve AS auto
+                t.half_day OR t.loss_of_pay AS half_day, t.document_needed, t.max_days::text, t.auto_approve AS auto,
+                t.advance_allowed, t.backdate, t.backdate_days
            FROM staff_leave_types t
           WHERE t.status = 'active'
             AND ((SELECT gender::text FROM employees WHERE id = $1) IS DISTINCT FROM 'male' OR t.for_male)
@@ -1604,16 +1609,23 @@ export class LeaveService implements OnModuleInit {
         balances,
         types: types.rows
           .filter((t) => !t.lop)
-          .map((t) => ({
-            id: t.id,
-            code: t.code,
-            name: t.name,
-            keepsBalance: t.keeps,
-            halfDay: t.half_day,
-            documentNeeded: t.document_needed,
-            maxDays: t.max_days === null ? null : Number(t.max_days),
-            approvedAtOnce: t.auto,
-          })),
+          .map((t) => {
+            // past days (0363): the earliest day the form offers, and the rule in words
+            const back = backdateOf(t, schoolBack);
+            return {
+              id: t.id,
+              code: t.code,
+              name: t.name,
+              keepsBalance: t.keeps,
+              halfDay: t.half_day,
+              documentNeeded: t.document_needed,
+              maxDays: t.max_days === null ? null : Number(t.max_days),
+              approvedAtOnce: t.auto,
+              earliest: back === null ? null : addDays(today, -back),
+              latest: t.advance_allowed ? null : today,
+              pastDays: backdateWords(back),
+            };
+          }),
         rows: rows.rows.map((r) => ({
           ...this.shape(r),
           // what I may do from the list (as on the leave's own page)

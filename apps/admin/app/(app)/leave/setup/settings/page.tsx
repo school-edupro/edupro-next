@@ -191,7 +191,15 @@ export default async function LeaveSettingsPage({
               'Leave for past days up to (days back)',
               0,
               366,
-              'Empty: any past day of an open month. A month locked for payroll is never open.',
+              'For the leave types whose Past days is "school" (Leave types sets each). 0: not for past days; empty: any past day of an open month. A month locked for payroll is never open; the office may enter any day.',
+              true,
+            )}
+            {num(
+              'correctionBackdateDays',
+              'Attendance corrections for past days up to (days back)',
+              0,
+              366,
+              'How far back an employee may ask to correct a day (7: a week). Empty: any day of an open month. The office corrects any day.',
               true,
             )}
           </div>

@@ -25,6 +25,9 @@ export interface LeaveType {
   document_needed: boolean;
   gap_from_other: boolean;
   advance_allowed: boolean;
+  /** past days (0363): the school's setting, none, up to backdate_days, any day of an open month */
+  backdate: 'school' | 'none' | 'days' | 'any';
+  backdate_days: number | null;
   min_days: string | null;
   max_days: string | null;
   max_per_month: string | null;
@@ -68,8 +71,48 @@ export const addDays = (d: string, n: number) => {
 export const round2 = (n: number) => Math.round(n * 100) / 100;
 
 export const TYPE_COLS = `t.id::text, t.code, t.name, t.paid, t.loss_of_pay, t.keeps_balance, t.half_day, t.auto_approve,
-  t.document_needed, t.gap_from_other, t.advance_allowed, t.min_days::text, t.max_days::text, t.max_per_month::text,
+  t.document_needed, t.gap_from_other, t.advance_allowed, t.backdate, t.backdate_days, t.min_days::text, t.max_days::text, t.max_per_month::text,
   t.for_male, t.for_female, t.status`;
+
+/**
+ * How many days back an employee may apply for this type (0: today on), or null for any day of a month not
+ * locked for payroll: the type's own Past days, else the school's setting (empty there: any day).
+ */
+export async function backdateLimit(
+  c: PoolClient,
+  t: Pick<LeaveType, 'backdate' | 'backdate_days'>,
+): Promise<number | null> {
+  return backdateOf(t, t.backdate === 'school' ? await schoolBackdate(c) : 0);
+}
+
+/** The school's setting (empty: any day); no settings row yet: the column's default, none. */
+export async function schoolBackdate(c: PoolClient): Promise<number | null> {
+  const s = await c.query<{ backdate_days: number | null }>(
+    `SELECT backdate_days FROM staff_leave_settings`,
+  );
+  return s.rows[0] ? s.rows[0].backdate_days : 0;
+}
+
+/** backdateLimit with the school's setting already read (a list of types). */
+export const backdateOf = (
+  t: Pick<LeaveType, 'backdate' | 'backdate_days'>,
+  school: number | null,
+): number | null =>
+  t.backdate === 'any'
+    ? null
+    : t.backdate === 'none'
+      ? 0
+      : t.backdate === 'days'
+        ? (t.backdate_days ?? 0)
+        : school;
+
+/** The words for a limit: "not for past days", "up to 7 days back", "any day of an open month". */
+export const backdateWords = (limit: number | null) =>
+  limit === null
+    ? 'any day of an open month'
+    : limit === 0
+      ? 'not for past days'
+      : `up to ${String(limit)} day${limit === 1 ? '' : 's'} back`;
 
 export async function leaveType(c: PoolClient, id: string): Promise<LeaveType> {
   const r = await c.query<LeaveType>(

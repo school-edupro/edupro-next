@@ -108,6 +108,12 @@ export interface LeaveFormType {
   documentNeeded: boolean;
   maxDays: number | null;
   approvedAtOnce: boolean;
+  /** the first day I may apply from (null: any day of an open month); the office's entry is not held */
+  earliest?: string | null;
+  /** the last day (today) for a type not for days ahead, else null */
+  latest?: string | null;
+  /** the past-days rule in words: "not for past days", "up to 7 days back", "any day of an open month" */
+  pastDays?: string;
 }
 
 export type ApplyResult =
@@ -172,6 +178,8 @@ export interface AttendanceDay {
   }>;
   locked: boolean;
   can: { mine: boolean; decide: string | null; correct: boolean; regularise: boolean };
+  /** my own day too far back to ask for a correction: why (0363) */
+  correctionNote?: string | null;
 }
 
 export interface MyAttendance {

@@ -315,6 +315,11 @@ export default async function AttendanceDayPage({
           </form>
         </FoldCard>
       ) : null}
+      {d.correctionNote ? (
+        <p className="ep-alert ep-alert--info" role="status">
+          <span>{d.correctionNote}</span>
+        </p>
+      ) : null}
       {d.can.regularise ? (
         <FoldCard
           id="ad-reg"

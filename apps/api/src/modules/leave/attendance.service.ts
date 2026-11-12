@@ -1135,6 +1135,8 @@ export class AttendanceService implements OnModuleInit {
         [employeeId, day],
       );
       const isLocked = await this.locked(c, day);
+      // corrections an employee may ask: up to the school's days back (empty: any day of an open month)
+      const correctionFrom = await this.correctionFrom(c);
       const word = (x: Record<string, unknown> | null) =>
         x
           ? `${TYPE_WORDS[String(x.day_type)] ?? String(x.day_type)}${x.in_at ? ` IN ${hm(new Date(String(x.in_at))) ?? ''}` : ''}${x.out_at ? ` OUT ${hm(new Date(String(x.out_at))) ?? ''}` : ''}`
@@ -1190,8 +1192,14 @@ export class AttendanceService implements OnModuleInit {
             me === employeeId &&
             !isLocked &&
             day <= istToday() &&
+            (correctionFrom === null || day >= correctionFrom) &&
             !regs.rows.some((r) => r.status === 'pending' || r.status === 'approved'),
         },
+        /** my own day too far back to ask for a correction: why, in words */
+        correctionNote:
+          me === employeeId && !isLocked && correctionFrom !== null && day < correctionFrom
+            ? `Corrections can be asked from ${dmy(correctionFrom)} on: for an earlier day, ask the leave office`
+            : null,
       };
     });
   }
@@ -1431,6 +1439,18 @@ export class AttendanceService implements OnModuleInit {
     });
   }
 
+  /**
+   * The first day an employee may ask to correct (0363: the school's Corrections for past days up to, 7 to
+   * start), or null for any day of a month not locked for payroll. The office corrects any day.
+   */
+  private async correctionFrom(c: PoolClient): Promise<string | null> {
+    const s = await c.query<{ n: number | null }>(
+      `SELECT correction_backdate_days AS n FROM staff_leave_settings`,
+    );
+    const n = s.rows[0] ? s.rows[0].n : 7;
+    return n === null ? null : addDays(istToday(), -n);
+  }
+
   /** I ask for my day to be corrected: decided by the regularisation rule of Who approves. */
   async regularise(ctx: RequestContext, dto: RegulariseDto) {
     if (!this.has(ctx, LEAVE_OWN))
@@ -1439,6 +1459,11 @@ export class AttendanceService implements OnModuleInit {
       const me = await this.meIn(c);
       if (!me) fail('Your sign-in is not linked to an employee: ask the office', 403);
       if (dto.day > istToday()) fail('A day still to come is not corrected');
+      const from = await this.correctionFrom(c);
+      if (from !== null && dto.day < from)
+        fail(
+          `Corrections can be asked from ${dmy(from)} on: for an earlier day, ask the leave office`,
+        );
       if (await this.locked(c, dto.day)) fail(`${monthWords(dto.day)} is locked for payroll`, 409);
       if (dto.documentFileId) {
         const f = await c.query(

@@ -181,6 +181,7 @@ const day = (fd: FormData, k: string) => {
 
 export async function saveLeaveSettings(fd: FormData) {
   const backdate = String(fd.get('backdateDays') ?? '').trim();
+  const correctionBack = String(fd.get('correctionBackdateDays') ?? '').trim();
   const shift = String(fd.get('defaultShiftId') ?? '');
   try {
     await apiFetch('/leave/setup/settings', {
@@ -198,6 +199,7 @@ export async function saveLeaveSettings(fd: FormData) {
         allowTimeEdit: fd.get('allowTimeEdit') === 'on',
         allowOnBehalf: fd.get('allowOnBehalf') === 'on',
         backdateDays: backdate === '' ? null : int(fd, 'backdateDays', 0),
+        correctionBackdateDays: correctionBack === '' ? null : int(fd, 'correctionBackdateDays', 7),
         missingPunchCc: String(fd.get('missingPunchCc') ?? '').trim() || null,
         deviceSerials: String(fd.get('deviceSerials') ?? '')
           .split(/[\s,]+/)

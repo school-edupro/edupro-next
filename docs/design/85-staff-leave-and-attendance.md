@@ -753,6 +753,34 @@ opens their own, another's refused, a sign-in with no staff record and no role u
 `purchase-indents` expects the three baseline rights; files, daily academics, ACR, employee master and
 transfer, leave and access specs green.
 
+## As built — past days per leave type, and for corrections (12 Nov 2026)
+
+Asked: applying leave for past days may be refused, but the admin must be able to allow it. Found: one
+school setting (`staff_leave_settings.backdate_days`, empty = any day of an open month; the sample school had
+it empty) and no limit on corrections (the old module's analysis asked a configurable one, 7 days). Decided:
+per leave type; closed until the admin allows; corrections get a days-back setting too. Migration **0363**:
+`staff_leave_types.backdate` (`school` / `none` / `days` / `any`, default `school`) and `backdate_days`
+(1–366, with `days` only — the rules trigger says so and drops it for the other choices); the school's
+`backdate_days` defaults to 0 and the schools that had it empty were closed;
+`staff_leave_settings.correction_backdate_days` (default 7, empty = any day of an open month). The engine:
+`backdateLimit` / `backdateOf` / `schoolBackdate` / `backdateWords` (leave-engine.ts); `applyIn` refuses a
+from-date before today − the limit ("Casual leave is not applied for past days: ask the office to enter
+it", "Sick leave can be applied up to 7 days back (from dd-mm-yyyy): ask the office for earlier days"); the
+office's entry and the system's (relaxed) are not held. `/leave/mine` types carry `earliest`, `latest` (a
+type not for days ahead) and `pastDays`; both apps' apply forms set the date pickers' min / max from them and
+say the rule under the type. Corrections: `regularise` refuses a day before today − the setting; the day's
+page (`/staff-attendance/days/:emp/:day`) gives `can.regularise` false and `correctionNote` for my own day
+too far back, shown on the admin day page and the staff app's My attendance day; the office corrects any
+day. The set-up: Leave types grid columns **Past days** and **Days back** (`packages/db/src/masters.ts`);
+Settings gets **Attendance corrections for past days up to (days back)**. The sample school: SL 7 days
+back, the others the school's (none), corrections 7. `scripts/seed-leave-sample.mjs` opens past days (the
+school and every type) while it runs and puts them back. Tests: `leave-gaps` (the school's limit, the type's
+none / days / any, the form's first day, "days" needs Days back, corrections refused and the day's note, the
+setting saved); `leave-gaps` and `staff-attendance` open past days for their test school (they apply for
+past days); leave, staff, set-up and reporting specs green. Browser (dev-admin: types grid and settings;
+dev-coordinator: CL not for past days, SL from 7 days back; staff app as dev-teacher: SL rule, a day 10 days
+back shows the note and no form; 1440 and 375): axe clean.
+
 ## The module is complete
 
 Phases A–E are built. What is left is the school's: the old database connection on the server, the read, the

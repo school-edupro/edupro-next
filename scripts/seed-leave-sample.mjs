@@ -939,11 +939,24 @@ if (!WRITE) {
 // ---- messages off while it runs ----------------------------------------------------------------------------
 const before = (await api('GET', '/leave/setup/settings')).settings;
 const { updatedAt: _u, ...settings } = before;
+// past days open while it runs (the sample's leave and corrections go back to October): the school's
+// setting through the settings, each leave type's Past days here; both put back afterwards
+const typeBack = await q(
+  `SELECT id::text, backdate, backdate_days FROM staff_leave_types WHERE school_id = $1`,
+  [SCHOOL],
+);
 let restored = false;
 async function restore() {
   if (restored) return;
   restored = true;
+  for (const t of typeBack)
+    await q(`UPDATE staff_leave_types SET backdate = $2, backdate_days = $3 WHERE id = $1`, [
+      t.id,
+      t.backdate,
+      t.backdate_days,
+    ]);
   await api('PUT', '/leave/setup/settings', settings);
+  console.log('Past days for leave and corrections put back as the set-up had them.');
   console.log(
     `Leave messages put back: e-mail ${settings.sendEmail ? 'on' : 'off'}, app ${settings.sendApp ? 'on' : 'off'}, WhatsApp ${settings.sendWhatsapp ? 'on' : 'off'}, SMS ${settings.sendSms ? 'on' : 'off'}.`,
   );
@@ -957,7 +970,10 @@ await api('PUT', '/leave/setup/settings', {
   sendApp: false,
   sendWhatsapp: false,
   sendSms: false,
+  backdateDays: null,
+  correctionBackdateDays: null,
 });
+await q(`UPDATE staff_leave_types SET backdate = 'any' WHERE school_id = $1`, [SCHOOL]);
 console.log('\nLeave messages switched off while the sample is made.');
 const commsBefore = (
   await q(`SELECT COALESCE(max(id), 0)::text AS id FROM comms_messages WHERE school_id = $1`, [

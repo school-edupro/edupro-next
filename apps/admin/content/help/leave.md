@@ -45,7 +45,9 @@ leave types at a glance. Fill the sections in order.
   paid or **loss of pay** (no pay, no balance, a half day always allowed), **keeps a balance** (credited
   by a policy, checked and held when applied; no for on duty or maternity, which only have their limits),
   counts as present (on duty, work from home), half day allowed, approved at once, document needed, not
-  next to other leave, for days ahead, the fewest and most days an application, the most days a month (a
+  next to other leave, for days ahead, **past days** (how far back an employee may apply: _school_ — the
+  school's setting below; _none_; _days_ — up to **Days back**, say 7 for sick leave; _any_ — any day of a
+  month not locked for payroll), the fewest and most days an application, the most days a month (a
   type without a balance), the **deduction order** (late marks, missing punches and absence take CL, then
   EL … loss of pay last), how often it is credited, carry forward and its cap, for men / women, pay %
   (half-pay leave, for payroll).
@@ -95,7 +97,10 @@ leave types at a glance. Fill the sections in order.
 pay after so many days of absence with no application (7), the date to count late marks from (a fresh
 start), the default shift, punches closer than so many minutes are one (10), how far back the nightly
 re-check and absent marking look, whether late minutes lower the day's hours, whether the office may
-change punch times and apply leave for an employee, how far back leave may be applied, this school's
+change punch times and apply leave for an employee, how far back leave may be applied (for the leave
+types whose Past days is _school_: 0 to start, so past days are closed until you allow them; empty is any
+day of an open month), how far back an employee may ask for an attendance correction (7 to start; empty is
+any day of an open month), this school's
 device serials (for punches read from the central device database), who else gets the missing-punch
 e-mails (each address gets a copy), and the message channels (e-mail, WhatsApp, app; SMS once its
 templates are approved). Under the settings, **Message templates** shows each leave and correction message
@@ -116,8 +121,10 @@ with two credit months, a day shift that ends before it starts).
 The page shows what is left of each leave type this month (days held by leave raised this month already
 taken off), the form, your leave and **Waiting for me** (leave you approve). Pick the type and the dates
 (one date may be the first or second half of the day), give the reason and — when the type needs one — a
-document. The school checks, in this order: half day allowed, the document, the type is for you, days ahead
-or how far back, the days counted (weekly offs and holidays are free; between two leave days they count
+document. Under the type the form says how far back it may go (_not for past days_, _past days: up to 7
+days back_) and the dates start there; for an earlier day ask the leave office, who may enter any day. The
+school checks, in this order: half day allowed, the document, the type is for you, days ahead or how far
+back, the days counted (weekly offs and holidays are free; between two leave days they count
 when the policy's **sandwich** says so), the payroll lock, the fewest and most days, another leave on those
 days (the other half of a day is fine), not next to other leave, the balance, the most a month, and that
 somebody approves. Two answers come as a question first:
@@ -320,7 +327,8 @@ corrected — the IN, the OUT or what the day was, with the reason. It goes thro
 corrections** rule of Who approves, like leave; the approver sees it in Waiting for me / My approvals,
 opens the day with its punches and approves (the day is set, its late mark or missing punch cleared) or
 says why not. The approver is told when a correction is asked and the employee when it is decided. One
-correction a day; a locked month takes none.
+correction a day; a locked month takes none; a day further back than the school's **corrections for past
+days** (7 to start) says so and is corrected by the leave office instead.
 
 **The payroll lock**: once a month is over, **Lock** it when payroll is final — the absent days nobody
 explained become loss of pay first, then nothing in the month changes (leave, corrections, punches,

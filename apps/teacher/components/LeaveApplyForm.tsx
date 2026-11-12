@@ -135,6 +135,12 @@ export function LeaveApplyForm({
               type.maxDays !== null ? `at most ${String(type.maxDays)} days an application` : null,
               type.approvedAtOnce ? 'approved at once' : null,
               type.documentNeeded ? 'needs a document' : null,
+              // the past-days rule (the office's entry is not held by it)
+              !employees && type.pastDays
+                ? type.pastDays === 'not for past days'
+                  ? type.pastDays
+                  : `past days: ${type.pastDays}`
+                : null,
             ]
               .filter(Boolean)
               .join(' · ') ||
@@ -151,6 +157,8 @@ export function LeaveApplyForm({
             type="date"
             required
             className="ep-input"
+            min={(!employees && type?.earliest) || undefined}
+            max={(!employees && type?.latest) || undefined}
             value={from}
             onChange={(e) => {
               setFrom(e.target.value);
@@ -168,6 +176,7 @@ export function LeaveApplyForm({
             required
             className="ep-input"
             min={from || undefined}
+            max={(!employees && type?.latest) || undefined}
             value={half ? from : to}
             disabled={half}
             onChange={(e) => {

@@ -97,6 +97,12 @@ describe('the leave module against its plan (e2e)', () => {
       t3 = await seedUser(c, school, `${s}-t3`, 'subject_teacher');
       vp = await seedUser(c, school, `${s}-vp`, 'subject_teacher');
       await c.query(`SELECT app.staff_masters_seed($1)`, [school.id]);
+      // these tests apply for past days and ask to correct them: open (0363 starts a school at none)
+      await c.query(`SELECT app.staff_leave_seed_all($1)`, [school.id]);
+      await c.query(
+        `UPDATE staff_leave_settings SET backdate_days = NULL, correction_backdate_days = NULL WHERE school_id = $1`,
+        [school.id],
+      );
       await c.query(
         `INSERT INTO departments (school_id, code, name, staff_group) VALUES ($1, 'science', 'Science', 'teaching')`,
         [school.id],
@@ -416,14 +422,80 @@ describe('the leave module against its plan (e2e)', () => {
       (await apply(t1, { leaveTypeId: ids.SL, from: W(6, 0), to: W(6, 0) })).json().detail,
     ).toMatch(/not days ahead/);
     await q(`UPDATE staff_leave_types SET advance_allowed = true WHERE id = $1`, [ids.SL]);
-    // how far back
+    // how far back (0363): the type's own Past days, else the school's; the form is told the first day
     await q(`UPDATE staff_leave_settings SET backdate_days = 2 WHERE school_id = $1`, [school.id]);
     expect(
       (await apply(t2, { leaveTypeId: ids.CL, from: PAST[10], to: PAST[10] })).json().detail,
-    ).toMatch(/up to 2 days back/);
+    ).toMatch(/Casual leave can be applied up to 2 days back \(from \d\d-\d\d-\d{4}\)/);
+    await q(`UPDATE staff_leave_types SET backdate = 'none' WHERE id = $1`, [ids.CL]);
+    expect(
+      (await apply(t2, { leaveTypeId: ids.CL, from: PAST[0], to: PAST[0] })).json().detail,
+    ).toMatch(/Casual leave is not applied for past days: ask the office/);
+    await q(`UPDATE staff_leave_types SET backdate = 'days', backdate_days = 5 WHERE id = $1`, [
+      ids.CL,
+    ]);
+    expect(
+      (await apply(t2, { leaveTypeId: ids.CL, from: PAST[10], to: PAST[10] })).json().detail,
+    ).toMatch(/up to 5 days back/);
+    const form = (await call(t2, 'GET', '/leave/mine?size=25')).json().types;
+    const cl = form.find((t: { id: string }) => t.id === ids.CL);
+    expect(cl).toMatchObject({ earliest: add(today, -5), pastDays: 'up to 5 days back' });
+    expect(form.find((t: { id: string }) => t.id === ids.EL)).toMatchObject({
+      earliest: add(today, -2),
+      pastDays: 'up to 2 days back',
+    });
+    // "days" needs Days back; another choice drops them
+    await expect(
+      q(`UPDATE staff_leave_types SET backdate = 'days', backdate_days = NULL WHERE id = $1`, [
+        ids.CL,
+      ]),
+    ).rejects.toThrow(/needs Days back/);
+    await q(`UPDATE staff_leave_types SET backdate = 'any', backdate_days = 9 WHERE id = $1`, [
+      ids.CL,
+    ]);
+    expect(
+      (
+        await q<{ d: number | null }>(
+          `SELECT backdate_days AS d FROM staff_leave_types WHERE id = $1`,
+          [ids.CL],
+        )
+      )[0]!.d,
+    ).toBeNull();
+    expect(
+      (await call(t2, 'GET', '/leave/mine?size=25'))
+        .json()
+        .types.find((t: { id: string }) => t.id === ids.CL),
+    ).toMatchObject({ earliest: null, pastDays: 'any day of an open month' });
+    await q(`UPDATE staff_leave_types SET backdate = 'school' WHERE id = $1`, [ids.CL]);
     await q(`UPDATE staff_leave_settings SET backdate_days = NULL WHERE school_id = $1`, [
       school.id,
     ]);
+    // corrections an employee may ask: up to the school's days back; the day says why when too far
+    await q(`UPDATE staff_leave_settings SET correction_backdate_days = 3 WHERE school_id = $1`, [
+      school.id,
+    ]);
+    const old = await call(t2, 'POST', '/staff-attendance/regularisations', {
+      day: PAST[10],
+      in: '08:00',
+      reason: 'Forgot to punch',
+    });
+    expect(old.statusCode).toBe(400);
+    expect(old.json().detail).toMatch(/Corrections can be asked from \d\d-\d\d-\d{4} on/);
+    const oldDay = (await call(t2, 'GET', `/staff-attendance/days/${ids.T2!}/${PAST[10]!}`)).json();
+    expect(oldDay.can.regularise).toBe(false);
+    expect(oldDay.correctionNote).toMatch(/ask the leave office/);
+    const ls = (await call(admin, 'GET', '/leave/setup/settings')).json().settings;
+    expect(ls.correctionBackdateDays).toBe(3);
+    const back = { ...ls } as Record<string, unknown>;
+    delete back.updatedAt;
+    expect(
+      (await call(admin, 'PUT', '/leave/setup/settings', { ...back, correctionBackdateDays: null }))
+        .statusCode,
+    ).toBe(200);
+    expect(
+      (await call(t2, 'GET', `/staff-attendance/days/${ids.T2!}/${PAST[10]!}`)).json()
+        .correctionNote,
+    ).toBeNull();
     // the document: a PDF or image of up to 5 MB of one's own
     const file = async (type: string, size: number) =>
       (

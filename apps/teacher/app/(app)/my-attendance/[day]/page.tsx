@@ -150,6 +150,11 @@ export default async function MyAttendanceDayPage({
           </ul>
         </Card>
       ) : null}
+      {d.correctionNote ? (
+        <p className="ep-alert ep-alert--info" role="status">
+          <span>{d.correctionNote}</span>
+        </p>
+      ) : null}
       {d.can.regularise ? (
         <Card>
           <h2 className="ep-card__title">Ask for a correction</h2>

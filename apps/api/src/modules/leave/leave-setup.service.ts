@@ -1387,6 +1387,7 @@ export class LeaveSetupService {
           allow_time_edit: boolean;
           allow_on_behalf: boolean;
           backdate_days: number | null;
+          correction_backdate_days: number | null;
           missing_punch_cc: string | null;
           device_serials: string[];
           send_email: boolean;
@@ -1397,8 +1398,8 @@ export class LeaveSetupService {
         }>(
           `SELECT late_marks_per_leave, missing_punches_per_leave, lop_after_days, punch_gap_minutes, recheck_days,
                   absent_lookback_days, exceptions_from::text, default_shift_id::text, late_reduces_hours, allow_time_edit,
-                  allow_on_behalf, backdate_days, missing_punch_cc, device_serials, send_email, send_whatsapp, send_app,
-                  send_sms, updated_at
+                  allow_on_behalf, backdate_days, correction_backdate_days, missing_punch_cc, device_serials, send_email,
+                  send_whatsapp, send_app, send_sms, updated_at
              FROM staff_leave_settings`,
         )
       ).rows[0]!;
@@ -1419,6 +1420,7 @@ export class LeaveSetupService {
           allowTimeEdit: s.allow_time_edit,
           allowOnBehalf: s.allow_on_behalf,
           backdateDays: s.backdate_days,
+          correctionBackdateDays: s.correction_backdate_days,
           missingPunchCc: s.missing_punch_cc,
           deviceSerials: s.device_serials,
           sendEmail: s.send_email,
@@ -1467,7 +1469,8 @@ export class LeaveSetupService {
                 punch_gap_minutes = $4, recheck_days = $5, absent_lookback_days = $6, exceptions_from = $7::date,
                 default_shift_id = $8::bigint, late_reduces_hours = $9, allow_time_edit = $10, allow_on_behalf = $11,
                 backdate_days = $12, missing_punch_cc = $13, device_serials = $14, send_email = $15, send_whatsapp = $16,
-                send_app = $17, send_sms = $18, updated_by = app.current_user_id(), updated_at = now()`,
+                send_app = $17, send_sms = $18, correction_backdate_days = $19, updated_by = app.current_user_id(),
+                updated_at = now()`,
         [
           dto.lateMarksPerLeave,
           dto.missingPunchesPerLeave,
@@ -1487,6 +1490,7 @@ export class LeaveSetupService {
           dto.sendWhatsapp,
           dto.sendApp,
           dto.sendSms,
+          dto.correctionBackdateDays,
         ],
       );
       await this.audit.stage(ctx, c, {
