@@ -635,4 +635,83 @@ describe('staff leave requests (e2e)', () => {
           .filename,
       ).toMatch(/^Leave-balances/);
   });
+
+  it('balances: a row’s Leave Details — the policy, the credit worked out as the run does, the days behind it', async () => {
+    const month = today.slice(0, 7);
+    const start = `${month}-01`;
+    const back6 = new Date(`${start}T00:00:00Z`);
+    back6.setUTCMonth(back6.getUTCMonth() - 6);
+    const from = back6.toISOString().slice(0, 10);
+    const to = add(start, -1);
+    const n = Math.round((Date.parse(to) - Date.parse(from)) / 86_400_000) + 1;
+    const lbd = (u: SeededUser, emp: string, type: string, m = month) =>
+      call(u, 'GET', `/leave/balances/detail?employeeId=${emp}&leaveTypeId=${type}&month=${m}`);
+    type Day = { day: string; code: string; present: string; lop: boolean; lopPct: number | null };
+    // a full credit: CL, half-yearly, credited this month for the six months before
+    const t = (await lbd(office, ids.T1!, ids.CL!)).json();
+    expect(t.employee.code).toBe(`${s}T1`);
+    expect(t.policy).toMatchObject({ name: 'CL all', annualDays: 12 });
+    expect(t.policy.accrual).toMatch(/^Half-yearly, 6 days a credit, in /);
+    expect(t.note).toMatch(/\(credited from .+ attendance\)$/);
+    expect(t.accrual).toMatchObject({
+      kind: 'credit',
+      period: { from, to },
+      daysInPeriod: n,
+      accrued: 6,
+      onRow: 6,
+      formula: '(12 ÷ 2) = 6.00',
+      remark: null,
+    });
+    expect(t.days).toHaveLength(n);
+    expect(t.balance.trail.some((x: string) => x.includes(' credited 6'))).toBe(true);
+    // pro rata from joining: the days before it count nothing, and the figure is the row's
+    const a = (await lbd(office, ids.A1!, ids.CL!)).json();
+    const cl = (await call(office, 'GET', `/leave/balances?employeeId=${ids.A1}`))
+      .json()
+      .rows.find((r: { leaveType: { code: string } }) => r.leaveType.code === 'CL');
+    expect(a.accrual.accrued).toBe(cl.credited);
+    expect(a.accrual.formula).toMatch(/^\(12 ÷ 2\) × \(\d+ ÷ \d+\) = /);
+    expect((a.days as Day[]).some((d) => d.code === '—' && d.present === 'No')).toBe(true);
+    // by attendance: an absent day in the period is a day lost, 100% LOP
+    const absent = add(from, 10);
+    await withMigrator(async (c) => {
+      await c.query(
+        `UPDATE staff_leave_policies SET by_attendance = true WHERE school_id = $1 AND name = 'CL all'`,
+        [school.id],
+      );
+      await c.query(
+        `INSERT INTO staff_attendance_days (school_id, employee_id, day, day_type, source, manual)
+         VALUES ($1, $2, $3::date, 'A', 'manual', true)
+         ON CONFLICT (employee_id, day) DO UPDATE SET day_type = 'A', leave_type_id = NULL, leave_portion = NULL`,
+        [school.id, ids.T1, absent],
+      );
+    });
+    const b = (await lbd(office, ids.T1!, ids.CL!)).json();
+    expect(b.accrual).toMatchObject({ lostDays: 1, presentDays: n - 1, accrued: 6 });
+    expect(b.accrual.formula).toBe(
+      `(12 ÷ 2) × (${String(n - 1)} ÷ ${String(n)}) = ${((6 * (n - 1)) / n).toFixed(2)} → 6.00 to the half day`,
+    );
+    expect(b.accrual.rule).toMatch(/^Present, weekly off/);
+    expect((b.days as Day[]).find((d) => d.day === absent)).toMatchObject({
+      code: 'A',
+      present: 'No',
+      lop: true,
+      lopPct: 100,
+    });
+    await withMigrator((c) =>
+      c.query(
+        `UPDATE staff_leave_policies SET by_attendance = false WHERE school_id = $1 AND name = 'CL all'`,
+        [school.id],
+      ),
+    );
+    // a month kept before this one, a month with none kept, a month to come; the office only
+    const prev = add(start, -1).slice(0, 7);
+    const el = (await lbd(office, ids.A1!, ids.EL!, prev)).json();
+    expect(el.balance).toMatchObject({ closed: true, closing: 2 });
+    const none = add(`${prev}-01`, -1).slice(0, 7);
+    expect((await lbd(office, ids.A1!, ids.EL!, none)).statusCode).toBe(404);
+    const next = add(add(start, 31).slice(0, 7) + '-01', 0).slice(0, 7);
+    expect((await lbd(office, ids.A1!, ids.EL!, next)).statusCode).toBe(400);
+    expect((await lbd(t1, ids.T1!, ids.CL!)).statusCode).toBe(403);
+  });
 });

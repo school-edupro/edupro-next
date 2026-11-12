@@ -3,6 +3,7 @@ import { notFound } from 'next/navigation';
 import { Notice } from '@/components/Notice';
 import { pageSizeOf } from '@/components/Pager';
 import { Icon } from '@/components/nav-icons';
+import { BalanceDetailDialog } from '@/components/leave/BalanceDetailDialog';
 import { BalanceImport } from '@/components/leave/BalanceImport';
 import { DialogButton } from '@/components/leave/DialogButton';
 import { DownloadMenu, Pages, Showing, SizeLinks } from '@/components/leave/ListBar';
@@ -32,7 +33,8 @@ type Row = LeaveBalances['rows'][number];
  * The balance ledger as the old Employee Leave Balance (docs/design/85, "the register and balances as the
  * old screens"): one row per employee × leave type × month, every month newest first (or the month
  * filtered) — opening, accrued, availed, correction, closing, lapsed, the total, Open or Closed — with the
- * row's ledger, a correction of this (open) month, Add, Import, Download, and the month's run now.
+ * row's Leave Details (the eye: the policy, the month's accrual worked out, the attendance behind it, the
+ * movements), a correction of this (open) month, Add, Import, Download, and the month's run now.
  */
 export default async function LeaveBalancesPage({
   searchParams,
@@ -330,23 +332,18 @@ export default async function LeaveBalancesPage({
                   </td>
                   <td>
                     <div className="ep-rowacts" style={{ flexWrap: 'nowrap' }}>
-                      <DialogButton
-                        id={`lb-v-${String(i)}`}
+                      <button
+                        type="button"
                         className="ep-iconbtn"
-                        tip="View ledger"
-                        title={`Ledger: ${r.employee.name} · ${r.leaveType.code} · ${MONTHS[Number(r.month.slice(5, 7)) - 1]!} ${r.month.slice(0, 4)}`}
-                        label={
-                          <>
-                            <Icon name="eye" size={20} />
-                            <span className="ep-sr-only">
-                              View the ledger of {r.employee.name}, {r.leaveType.code},{' '}
-                              {r.month.slice(0, 7)}
-                            </span>
-                          </>
-                        }
+                        title="Leave details"
+                        data-lbd={`${r.employee.id}|${r.leaveType.id}|${r.month.slice(0, 7)}`}
                       >
-                        <Ledger r={r} />
-                      </DialogButton>
+                        <Icon name="eye" size={20} />
+                        <span className="ep-sr-only">
+                          Leave details of {r.employee.name}, {r.leaveType.code},{' '}
+                          {MONTHS[Number(r.month.slice(5, 7)) - 1]} {r.month.slice(0, 4)}
+                        </span>
+                      </button>
                       {r.current && !r.closed ? (
                         <DialogButton
                           id={`lb-e-${String(i)}`}
@@ -388,49 +385,7 @@ export default async function LeaveBalancesPage({
         href={(p) => href({ page: p })}
         noun="balances"
       />
-    </>
-  );
-}
-
-/** A balance row's ledger: the figures, the policy and every movement (who, when, why). */
-function Ledger({ r }: { r: Row }) {
-  const facts: Array<[string, string]> = [
-    ['Employee', `${r.employee.name} (${r.employee.code})`],
-    ['Department', r.employee.department ?? '—'],
-    ['Designation', r.employee.designation ?? '—'],
-    ['Leave type', `${r.leaveType.code} — ${r.leaveType.name}`],
-    ['Policy', r.policy ?? 'No policy'],
-    [
-      'Period',
-      `${MONTHS[Number(r.month.slice(5, 7)) - 1]!} ${r.month.slice(0, 4)} · ${r.closed ? 'Closed' : 'Open'}`,
-    ],
-    ['Opening / Accrued', `${n2(r.opening)} / ${n2(r.credited)}`],
-    ['Availed / Correction', `${n2(r.held)} / ${n2(r.correction)}`],
-    ['Closing / Lapsed', `${n2(r.closing)} / ${n2(r.lapsed)}`],
-    ['Available', n2(r.available)],
-  ];
-  return (
-    <>
-      <dl className="ep-shiftcal__facts">
-        {facts.map(([k, v]) => (
-          <div key={k} style={{ display: 'contents' }}>
-            <dt>{k}</dt>
-            <dd>{v}</dd>
-          </div>
-        ))}
-      </dl>
-      <h4 className="ep-field__label" style={{ marginTop: 'var(--sp-3)' }}>
-        Movements
-      </h4>
-      {r.trail.length ? (
-        <ul style={{ margin: 0, paddingLeft: 'var(--sp-4)' }}>
-          {r.trail.map((t, i) => (
-            <li key={i}>{t}</li>
-          ))}
-        </ul>
-      ) : (
-        <p className="ep-field__help">Nothing moved in this month.</p>
-      )}
+      <BalanceDetailDialog />
     </>
   );
 }

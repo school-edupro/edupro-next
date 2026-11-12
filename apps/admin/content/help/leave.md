@@ -179,8 +179,12 @@ stay in view when the other columns scroll.
 first (this month first) — Emp Id, name, leave type, month, year, **Open Bal** (carried from last month),
 **Accrued** (credited), **Availed** (the leave raised in the month, waiting or approved), **Correction**,
 **Close Bal** and **Lapsed** (once closed), **Total Bal** (Open + Accrued + Correction − Availed) and
-**Open / Closed**. The eye opens the row's **ledger** (the policy and every movement: who, when, why); the
-pencil **adjusts** this month's balance (only this month is open). **Filter** (employee, department, month,
+**Open / Closed**. The eye opens the row's **Leave Details** (as the old screen): the month it is based on,
+the employee, the **policy** (annual entitlement, how it is credited), the **accrual** worked out — the days
+in the period the credit counts, the present days, what is credited this month and the sum behind it (in a
+month with no credit: the period the next credit counts, so far, and what it comes to if no more days are
+lost) — the **attendance** day by day (Is Present, Is LOP, LOP %), and, folded, the balance and every movement
+(who, when, why). The pencil **adjusts** this month's balance (only this month is open). **Filter** (employee, department, month,
 leave type, search), **＋ Add** (a correction of this month for any employee, with a remark), **Import** (the
 opening balances from Excel: the figure you type becomes the balance; running the same sheet again changes
 nothing), **Download** (Excel and PDF), and **Run the month now** (closes past months, opens this month and

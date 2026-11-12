@@ -15783,6 +15783,78 @@ button.ep-shiftcal__cell:focus-visible {
   font-weight: var(--fw-semibold);
   color: var(--text-heading);
 }
+.ep-lbd__note {
+  margin: 0;
+}
+.ep-lbd__sec {
+  display: grid;
+  gap: var(--sp-2);
+}
+.ep-lbd__head {
+  margin: 0;
+  padding: var(--sp-2) var(--sp-3);
+  border-radius: var(--radius-sm);
+  background: var(--surface-band);
+  font-size: var(--fs-small);
+  font-weight: var(--fw-bold);
+  letter-spacing: var(--ls-overline);
+  text-transform: uppercase;
+  color: var(--text-heading);
+}
+.ep-lbd__kv {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--fs-small);
+}
+.ep-lbd__kv th,
+.ep-lbd__kv td {
+  padding: var(--sp-2) var(--sp-3);
+  border-bottom: 1px solid var(--border-subtle);
+  text-align: left;
+  vertical-align: top;
+}
+.ep-lbd__kv th {
+  width: 40%;
+  font-weight: var(--fw-semibold);
+  color: var(--text-heading);
+}
+.ep-lbd__small {
+  margin: 0;
+  font-size: var(--fs-caption);
+  color: var(--text-muted);
+}
+.ep-lbd__warn {
+  margin: 0;
+  font-size: var(--fs-small);
+  color: var(--status-danger-text);
+}
+.ep-lbd__days {
+  max-height: 22rem;
+  overflow: auto;
+}
+.ep-lbd__att thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--surface-subtle);
+}
+.ep-lbd__lop {
+  font-weight: var(--fw-semibold);
+  color: var(--status-danger-text);
+}
+.ep-lbd__more summary {
+  cursor: pointer;
+}
+.ep-lbd__more summary .ep-mr-col__desc {
+  font-weight: var(--fw-regular);
+  letter-spacing: normal;
+  text-transform: none;
+}
+.ep-lbd__trail {
+  margin: 0;
+  padding-left: var(--sp-4);
+  font-size: var(--fs-small);
+}
 .ep-lvl {
   display: inline-block;
   min-width: 2rem;

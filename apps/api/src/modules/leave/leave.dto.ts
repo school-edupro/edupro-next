@@ -252,6 +252,14 @@ export const BalanceQuerySchema = z.object({
 });
 export class BalanceQueryDto extends createZodDto(BalanceQuerySchema) {}
 
+/** A balance row's Leave Details: the employee, the leave type and the month. */
+export const BalanceDetailSchema = z.object({
+  employeeId: Id,
+  leaveTypeId: Id,
+  month: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/),
+});
+export class BalanceDetailDto extends createZodDto(BalanceDetailSchema) {}
+
 export const AdjustSchema = z.object({
   employeeId: Id,
   leaveTypeId: Id,

@@ -355,6 +355,62 @@ export interface LeaveBalances {
   };
 }
 
+/** A balance row's Leave Details (GET /leave/balances/detail): the policy, the month's credit worked out, the days. */
+export interface BalanceDetail {
+  month: string;
+  current: boolean;
+  /** "November 2026 (credited from … attendance)" */
+  note: string;
+  employee: {
+    id: string;
+    code: string;
+    name: string;
+    department: string | null;
+    designation: string | null;
+    joinedOn: string | null;
+  };
+  leaveType: { id: string; code: string; name: string };
+  policy: { name: string; annualDays: number; accrual: string } | null;
+  accrual: {
+    /** credit: this month's credit; towards: the next credit's period so far; none: not credited */
+    kind: 'credit' | 'towards' | 'none';
+    credit: string | null;
+    /** the period counted ("April – September 2026"), or the month */
+    words: string;
+    period: { from: string; to: string } | null;
+    shown: { from: string; to: string };
+    daysInPeriod: number;
+    daysShown: number;
+    presentDays: number;
+    lostDays: number;
+    accrued: number;
+    onRow: number;
+    expected: number | null;
+    formula: string | null;
+    rule: string | null;
+    remark: string | null;
+  };
+  days: Array<{
+    day: string;
+    code: string;
+    words: string;
+    present: 'Yes' | 'Half' | 'No' | '—';
+    lop: boolean;
+    lopPct: number | null;
+  }>;
+  balance: {
+    opening: number;
+    credited: number;
+    held: number;
+    correction: number;
+    closing: number | null;
+    lapsed: number;
+    available: number;
+    closed: boolean;
+    trail: string[];
+  };
+}
+
 export const dmy = (d: string | null | undefined) =>
   d ? `${d.slice(8, 10)}-${d.slice(5, 7)}-${d.slice(0, 4)}` : '—';
 export const leaveDates = (r: {

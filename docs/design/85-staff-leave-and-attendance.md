@@ -603,6 +603,30 @@ background (`.ep-table.ep-reg`). Tests: `leave-requests.e2e-spec.ts` — a waiti
 code, no cancellation, its days. Browser (dev-admin, 1440 and 375): the dialog in place, Cancel Leave's
 reason (not sent), the columns pinned when scrolled, axe clean.
 
+## As built — Leave Details on a balance (12 Nov 2026)
+
+Asked: the old balance's Leave Details (screenshot) on `/leave/balances`. The old one explained a monthly
+accrual, `(entitlement ÷ 12) × (factor ÷ days in last month)`; EduPro credits in the policy's credit months
+for the months before, so the same box explains that credit. `GET /leave/balances/detail?employeeId&
+leaveTypeId&month` (leave office; a month to come 400, a month with no balance kept 404) works the credit
+out as `app.staff_leave_credit` (0352) does — the policy picked the same way, the share a credit (or the
+policy's days a credit), × (days counted ÷ days in the period) when by attendance (absent and salary hold
+lose the day, a half day half, loss-of-pay leave its portion; a day not marked counts in full) or pro rata
+from joining, to the half day — and gives: the note ("November 2026 (credited from April – September 2026
+attendance)"), the employee, the policy (annual days; "Half-yearly, 5 days a credit, in April and October ·
+by attendance · pro rata from joining"), the accrual (kind `credit` / `towards` / `none`, days in the period,
+present days, accrued this month, the sum, the rule, a remark when the row's figure differs), the days (code,
+words, Is Present Yes / Half / No / —, Is LOP, LOP %), and the row's figures and trail. In a month with no
+credit (`towards`) it shows the period the next credit counts, from its start to the month's end or today,
+and that credit if no more days are lost. `BalanceDetailDialog` (one dialog for the list, from the eye's
+`[data-lbd]` "employee|type|YYYY-MM"; `loadBalanceDetail`): Note, User Details, Policy Details, Accrual —
+the period, Employee Attendance (Sr No., Date with weekday, Attendance, Is Present, Is LOP, LOP %; scrolls with
+its header pinned), Balance and movements folded, Close. The inline ledger of every row is gone. Tests:
+`leave-requests.e2e-spec.ts` — a full credit (the sum, every day of the period), pro rata (days before
+joining), by attendance (an absent day: 1 lost, 100% LOP, the sum), a closed month, 404 / 400 / 403. Browser
+(dev-admin, 1440 and 375): three rows (by attendance, in full, not credited), the folded section, axe clean,
+no sideways scroll.
+
 ## The module is complete
 
 Phases A–E are built. What is left is the school's: the old database connection on the server, the read, the

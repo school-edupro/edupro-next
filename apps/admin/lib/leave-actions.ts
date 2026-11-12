@@ -5,6 +5,7 @@ import { redirect } from 'next/navigation';
 import { ApiError, apiFetch } from './api';
 import type {
   ApplyResult,
+  BalanceDetail,
   CorrectionsLog,
   LeaveDetail,
   ShiftAssignResult,
@@ -525,6 +526,23 @@ export async function loadLeave(
   if (!/^\d{1,18}$/.test(id)) return { ok: false, error: 'No such leave' };
   try {
     return { ok: true, d: await apiFetch<LeaveDetail>(`/leave/requests/${id}`) };
+  } catch (e) {
+    if (e instanceof ApiError) return { ok: false, error: detailOf(e) };
+    throw e;
+  }
+}
+
+/** A balance row's Leave Details for the balances dialog (a read: nothing changes). */
+export async function loadBalanceDetail(
+  employeeId: string,
+  leaveTypeId: string,
+  month: string,
+): Promise<{ ok: true; d: BalanceDetail } | { ok: false; error: string }> {
+  if (!okId(employeeId) || !okId(leaveTypeId) || !/^\d{4}-\d{2}$/.test(month))
+    return { ok: false, error: 'No such balance' };
+  const p = new URLSearchParams({ employeeId, leaveTypeId, month });
+  try {
+    return { ok: true, d: await apiFetch<BalanceDetail>(`/leave/balances/detail?${p.toString()}`) };
   } catch (e) {
     if (e instanceof ApiError) return { ok: false, error: detailOf(e) };
     throw e;

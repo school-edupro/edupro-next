@@ -11,6 +11,7 @@ import {
   AdjustDto,
   ApplyDto,
   BalanceImportDto,
+  BalanceDetailDto,
   BalanceQueryDto,
   DecideDto,
   LEAVE_OFFICE,
@@ -95,6 +96,16 @@ export class LeaveController {
   @RequirePermission(LEAVE_OFFICE)
   balances(@ReqCtx() ctx: RequestContext, @Query() q: BalanceQueryDto) {
     return this.office.balances(ctx, q);
+  }
+
+  @Get('balances/detail')
+  @ApiOperation({
+    summary:
+      "A balance row's Leave Details: the policy, the month's credit worked out, the days behind it",
+  })
+  @RequirePermission(LEAVE_OFFICE)
+  balanceDetail(@ReqCtx() ctx: RequestContext, @Query() q: BalanceDetailDto) {
+    return this.office.balanceDetail(ctx, q);
   }
 
   @Post('balances/adjust')

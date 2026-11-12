@@ -11,12 +11,13 @@ import { STORAGE_DRIVER } from '../files/storage';
 import { purchaseHead } from '../purchase/purchase-head';
 import { checkListSize, LIST_LIMIT } from '../purchase/purchase-list-file';
 import { istToday } from '../purchase/purchase-stock-core';
-import { dmy, fail, monthStart, monthWords, round2 } from './leave-engine';
+import { addDays, dmy, fail, monthStart, monthWords, round2 } from './leave-engine';
 import { leaveReportFile, preparedChecked } from './leave-report-file';
 import { LeaveService, REQ, type ReqRow } from './leave.service';
 import {
   LEAVE_OFFICE,
   type AdjustDto,
+  type BalanceDetailDto,
   type BalanceImportDto,
   type BalanceQueryDto,
   type RegisterQueryDto,
@@ -635,6 +636,302 @@ export class LeaveOfficeService {
             .filter((x) => x.kind === 'employee')
             .map(({ id, name }) => ({ id, name })),
           departments: lists.rows.filter((x) => x.kind === 'department').map((x) => x.name),
+        },
+      };
+    });
+  }
+
+  // ---- a balance row's Leave Details --------------------------------------------------------------------
+  /**
+   * Leave Details (as the old balance's "how was this month's accrual arrived at"): the employee, the policy
+   * that credits the type, the month's credit worked out as the nightly credit works it out
+   * (app.staff_leave_credit, 0352: the year's days shared over the credits, scaled by the days of the period
+   * not lost when the policy credits by attendance, pro rata from joining, to the half day) and the days of
+   * the period behind it. In a month nothing is credited: the period the next credit counts, so far, and
+   * what that credit comes to if no more days are lost. With the row's figures and movements.
+   */
+  async balanceDetail(ctx: RequestContext, q: BalanceDetailDto) {
+    this.mustOffice(ctx);
+    return this.db.tenant(requireTenant(ctx), async (c) => {
+      const today = istToday();
+      const cur = monthStart(today);
+      const month = `${q.month}-01`;
+      if (month > cur) fail('A month to come has no balance yet');
+      const w = (
+        await c.query<{
+          emp: string;
+          name: string;
+          code: string;
+          department: string | null;
+          designation: string | null;
+          joined: string | null;
+          type_id: string;
+          type: string;
+          type_name: string;
+          policy: string | null;
+          annual: string | null;
+          accrues: boolean | null;
+          freq: 'Q' | 'H' | 'Y' | null;
+          credit_months: number[] | null;
+          per_credit: string | null;
+          pro_rata: boolean | null;
+          by_attendance: boolean | null;
+        }>(
+          `SELECT e.id::text AS emp, e.display_name AS name, e.employee_code AS code, e.department, e.designation,
+                  e.joined_on::text AS joined, t.id::text AS type_id, t.code AS type, t.name AS type_name,
+                  p.name AS policy, p.annual_days::text AS annual, p.accrues, p.freq, p.credit_months,
+                  p.days_per_credit::text AS per_credit, p.pro_rata, p.by_attendance
+             FROM employees e CROSS JOIN staff_leave_types t
+             LEFT JOIN LATERAL (SELECT x.name, x.annual_days, x.accrues, COALESCE(x.credit, NULLIF(t.credit, 'none')) AS freq,
+                                       x.credit_months, x.days_per_credit, x.pro_rata, x.by_attendance
+                                  FROM staff_leave_policies x
+                                 WHERE x.leave_type_id = t.id AND x.status = 'active'
+                                   AND app.staff_in_scope(x.scope, x.scope_values, e.id)
+                                 ORDER BY x.priority, x.id LIMIT 1) p ON true
+            WHERE e.id = $1 AND t.id = $2 AND e.deleted_at IS NULL AND t.keeps_balance AND NOT t.loss_of_pay`,
+          [q.employeeId, q.leaveTypeId],
+        )
+      ).rows[0];
+      if (!w) return fail('No such balance', 404);
+      const b = (
+        await c.query<{
+          kept: boolean;
+          opening: string;
+          credited: string;
+          held: string;
+          correction: string;
+          closing: string | null;
+          lapsed: string;
+          closed: boolean;
+          trail: string[];
+        }>(
+          `SELECT id IS NOT NULL AS kept, opening::text, credited::text, held::text, correction::text, closing::text,
+                  lapsed::text, closed, trail
+             FROM app.staff_leave_balance_peek($1, $2, $3::date)`,
+          [w.emp, w.type_id, month],
+        )
+      ).rows[0]!;
+      // the months listed: this month (as it would open) and the months kept before it
+      if (!b.kept && month !== cur) fail('No balance was kept for that month', 404);
+      const full = (d: string) => `${MONTH_NAMES[Number(d.slice(5, 7)) - 1]!} ${d.slice(0, 4)}`;
+      /** April – September 2026; October 2026 – March 2027; November 2026 */
+      const span = (from: string, to: string) =>
+        from.slice(0, 7) === to.slice(0, 7)
+          ? full(from)
+          : from.slice(0, 4) === to.slice(0, 4)
+            ? `${MONTH_NAMES[Number(from.slice(5, 7)) - 1]!} – ${full(to)}`
+            : `${full(from)} – ${full(to)}`;
+      const addMonths = (d: string, n: number) => {
+        const t = new Date(`${d}T00:00:00Z`);
+        t.setUTCMonth(t.getUTCMonth() + n);
+        return t.toISOString().slice(0, 10);
+      };
+      const daysOf = (from: string, to: string) =>
+        to < from ? 0 : Math.round((Date.parse(to) - Date.parse(from)) / 86_400_000) + 1;
+      /** April; April and October; January, April, July and October */
+      const and = (xs: string[]) =>
+        xs.length < 2 ? (xs[0] ?? '') : `${xs.slice(0, -1).join(', ')} and ${xs[xs.length - 1]!}`;
+      /** 10, 0.5, 181.5 (no trailing zeros, as the old note) */
+      const num = (n: number) => String(round2(n));
+      const monthEnd = addDays(addMonths(month, 1), -1);
+      const annual = Number(w.annual ?? 0);
+      const months = w.credit_months ?? [];
+      const accrues = !!w.policy && !!w.accrues && !!w.freq && months.length > 0;
+      const credits = w.freq === 'Q' ? 4 : w.freq === 'H' ? 2 : 1;
+      const per = w.per_credit !== null ? Number(w.per_credit) : annual / credits;
+      const perWords =
+        w.per_credit !== null ? `${num(per)} days a credit` : `(${num(annual)} ÷ ${credits})`;
+      const isCredit = accrues && months.includes(Number(month.slice(5, 7)));
+      // the credit whose period is shown: this month's, else the next one after it
+      let credit: string | null = null;
+      if (isCredit) credit = month;
+      else if (accrues)
+        for (let k = 1; k <= 12 && !credit; k++) {
+          const x = addMonths(month, k);
+          if (months.includes(Number(x.slice(5, 7)))) credit = x;
+        }
+      const period = credit
+        ? { from: addMonths(credit, -(12 / credits)), to: addDays(credit, -1) }
+        : null;
+      // the days shown: the credit's period (so far, to the end of this month, when the credit is to come);
+      // with no credit, this month's days (so far)
+      let shown = { from: month, to: monthEnd < today ? monthEnd : today };
+      if (period) {
+        const end = isCredit ? period.to : [period.to, monthEnd, today].sort()[0]!;
+        if (end >= period.from) shown = { from: period.from, to: end };
+      }
+      // a new joiner is counted from joining when the policy is pro rata (as the credit)
+      const startOf = (from: string, to: string) =>
+        w.pro_rata && w.joined && w.joined > from ? [w.joined, addDays(to, 1)].sort()[0]! : from;
+      const start = period ? startOf(period.from, period.to) : shown.from;
+      const got = await c.query<{
+        day: string;
+        day_type: string | null;
+        leave_code: string | null;
+        lop: boolean | null;
+        portion: string | null;
+      }>(
+        `SELECT g.d::date::text AS day, a.day_type, lt.code AS leave_code, lt.loss_of_pay AS lop, a.leave_portion::text AS portion
+           FROM generate_series($2::date, $3::date, interval '1 day') g(d)
+           LEFT JOIN staff_attendance_days a ON a.employee_id = $1 AND a.day = g.d::date
+           LEFT JOIN staff_leave_types lt ON lt.id = a.leave_type_id
+          ORDER BY 1`,
+        [w.emp, shown.from, shown.to],
+      );
+      const WORDS: Record<string, string> = {
+        P: 'Present',
+        HD: 'Half day',
+        A: 'Absent',
+        WO: 'Weekly off',
+        H: 'Holiday',
+        HOLD: 'Salary hold',
+      };
+      let lost = 0;
+      let counted = 0;
+      const days = got.rows.map((r) => {
+        if (r.day < start)
+          return {
+            day: r.day,
+            code: '—',
+            words: 'Before joining',
+            present: 'No',
+            lop: false,
+            lopPct: null,
+          };
+        // as the credit: absent and salary hold lose the day, a half day half, loss-of-pay leave its portion
+        const off =
+          r.day_type === 'A' || r.day_type === 'HOLD'
+            ? 1
+            : r.day_type === 'HD'
+              ? 0.5
+              : r.day_type === 'LV' && r.lop
+                ? Number(r.portion ?? 1)
+                : 0;
+        lost += off;
+        counted += 1;
+        const half = r.day_type === 'LV' && Number(r.portion ?? 1) < 1 ? ' (half day)' : '';
+        return {
+          day: r.day,
+          code: r.day_type ?? '—',
+          words:
+            r.day_type === null
+              ? 'Not marked'
+              : r.day_type === 'LV'
+                ? `Leave — ${r.leave_code ?? '?'}${r.lop ? ' (loss of pay)' : ''}${half}`
+                : WORDS[r.day_type]!,
+          present: r.day_type === null ? '—' : off >= 1 ? 'No' : off > 0 ? 'Half' : 'Yes',
+          lop: off > 0,
+          lopPct: off > 0 ? Math.round(off * 100) : null,
+        };
+      });
+      const present = Math.max(0, counted - lost);
+      const rule = w.by_attendance
+        ? 'Present, weekly off, holiday, leave and a day not marked count 1, a half day 0.5; absent, salary hold and loss-of-pay leave 0.'
+        : 'This policy credits in full: attendance does not change it.';
+      /** the credit of a period: its share, scaled by the days not lost (by attendance) or from joining */
+      const work = (periodDays: number, from: string, to: string, lostDays: number) => {
+        const s = startOf(from, to);
+        const fromJoin = daysOf(s, to);
+        const base = w.by_attendance ? Math.max(0, fromJoin - lostDays) : fromJoin;
+        const scaled = w.by_attendance || s > from;
+        const raw = per * (base / periodDays);
+        const value = Math.round(raw * 2) / 2;
+        const formula = `${perWords}${scaled ? ` × (${num(base)} ÷ ${periodDays})` : ''} = ${raw.toFixed(2)}${
+          Math.abs(raw - value) > 0.001 ? ` → ${value.toFixed(2)} to the half day` : ''
+        }`;
+        return { value, formula };
+      };
+      const onRow = Number(b.credited);
+      let accrued = 0;
+      let expected: number | null = null;
+      let formula: string | null = null;
+      let remark: string | null = null;
+      let note: string;
+      if (!w.policy) {
+        note = `${full(month)} (no active policy gives this leave to this employee, so nothing is credited)`;
+        remark = 'Check Leave set-up → Policies: the scope of each policy of this leave type.';
+      } else if (!accrues) {
+        note = `${full(month)} (this policy is not credited: opening balances and corrections only)`;
+      } else if (isCredit && period) {
+        const r = work(daysOf(period.from, period.to), period.from, period.to, lost);
+        accrued = r.value;
+        formula = r.formula;
+        note = `${full(month)} (credited from ${span(period.from, period.to)} attendance)`;
+        if (Math.abs(onRow - accrued) > 0.001)
+          remark =
+            month === cur && onRow === 0
+              ? `Not on the row yet (${onRow.toFixed(2)}): the nightly run credits it, or Run month now.`
+              : `The figure credited on this row is ${onRow.toFixed(2)}: it was worked out before a later change (the period's attendance corrected after the month closed, or the policy changed).`;
+      } else if (credit && period) {
+        const r = work(daysOf(period.from, period.to), period.from, period.to, lost);
+        expected = r.value;
+        note = `${full(month)} (nothing is credited this month; ${span(period.from, period.to)} attendance counts towards the ${full(credit)} credit)`;
+        formula = w.by_attendance
+          ? `If no more days are lost, the ${full(credit)} credit: ${r.formula}`
+          : `The ${full(credit)} credit: ${r.formula}`;
+      } else note = full(month);
+      const o = Number(b.opening);
+      const co = Number(b.correction);
+      const h = Number(b.held);
+      return {
+        month,
+        current: month === cur,
+        note,
+        employee: {
+          id: w.emp,
+          code: w.code,
+          name: w.name,
+          department: w.department,
+          designation: w.designation,
+          joinedOn: w.joined,
+        },
+        leaveType: { id: w.type_id, code: w.type, name: w.type_name },
+        policy: w.policy
+          ? {
+              name: w.policy,
+              annualDays: annual,
+              accrual: accrues
+                ? [
+                    `${w.freq === 'Q' ? 'Quarterly' : w.freq === 'H' ? 'Half-yearly' : 'Yearly'}, ${num(per)} days a credit, in ${and(
+                      [...months].sort((x, y) => x - y).map((m) => MONTH_NAMES[m - 1]!),
+                    )}`,
+                    w.by_attendance ? 'by attendance' : null,
+                    w.pro_rata ? 'pro rata from joining' : null,
+                  ]
+                    .filter(Boolean)
+                    .join(' · ')
+                : 'Not credited (opening balances and corrections only)',
+            }
+          : null,
+        accrual: {
+          /** credit: this month's credit; towards: the next credit's period so far; none: not credited */
+          kind: isCredit ? 'credit' : credit ? 'towards' : 'none',
+          credit,
+          words: period ? span(period.from, period.to) : full(month),
+          period,
+          shown,
+          daysInPeriod: period ? daysOf(period.from, period.to) : daysOf(month, monthEnd),
+          daysShown: days.length,
+          presentDays: round2(present),
+          lostDays: round2(lost),
+          accrued,
+          onRow,
+          expected,
+          formula,
+          rule: accrues ? rule : null,
+          remark,
+        },
+        days,
+        balance: {
+          opening: o,
+          credited: onRow,
+          held: h,
+          correction: co,
+          closing: b.closing === null ? null : Number(b.closing),
+          lapsed: Number(b.lapsed),
+          available: round2(o + onRow + co - h),
+          closed: b.closed,
+          trail: b.trail,
         },
       };
     });
