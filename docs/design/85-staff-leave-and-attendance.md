@@ -627,6 +627,28 @@ joining), by attendance (an absent day: 1 lost, 100% LOP, the sum), a closed mon
 (dev-admin, 1440 and 375): three rows (by attendance, in full, not credited), the folded section, axe clean,
 no sideways scroll.
 
+## As built — a sample October and November for Alpha (12 Nov 2026)
+
+Asked: sample data in the leave and attendance module for October and November, every combination of
+attendance and leave. `node scripts/seed-leave-sample.mjs` (lists what is there) / `--yes` (replaces it):
+Alpha's staff but the user's own E021 / E022, 1 Oct – yesterday from punches (imported per day), leave over
+both months. Days: present, late (marks waived, cleared by a correction, taken as a day, lapsed), early
+going, short hours, one punch only (corrected on request or by the office, open, taken as a day and given
+back when corrected), absent (charged after 7 days — CL by the deduction order, then LOP; one still open),
+salary hold, a Sunday worked (comp-off by a correction, then CO), bus duty, office corrections (day, bulk),
+correction requests waiting / approved / rejected / withdrawn. Leave: CL, EL, SL, HPL, CO, OD, WFH, ML, PL,
+LOP; full, several days, first / second half; waiting at L1 and L2, approved at 1–3 levels, rejected at
+either, withdrawn, cancelled by the office, cancellation asked / approved / refused, decided by the office,
+trimmed, entered by the office (one replacing a leave; for the role-less E013, E014, E019 too), short of
+balance (CL + LOP), sandwich over a Sunday and a holiday. Balances: October opens with a brought-forward
+figure, gets its credit, closes; November carries it. A person's steps go through the API as that person
+and the office's as dev-admin; the nightly run's steps are the module's functions as the system, for the
+sample staff only. Every step runs in date order and is then dated as it would have happened (a piecewise
+map of the run's clock onto the intended times), and the ledger is laid out with days held in the month the
+leave was raised. Alpha's leave messages are off while it runs and put back after; the run checks nothing
+was queued. Found on the way: the credit's ledger line read "credited 6.0000000000000000" — 0360 trims it;
+links in a `.ep-list` line (the leave dashboard's "On leave today") are underlined (WCAG 1.4.1).
+
 ## The module is complete
 
 Phases A–E are built. What is left is the school's: the old database connection on the server, the read, the

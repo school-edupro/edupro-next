@@ -1183,6 +1183,11 @@
   text-decoration: underline;
   text-underline-offset: 0.15em;
 }
+/* so are links inside a plain list's lines (the leave dashboard's "On leave today") */
+.ep-list a {
+  text-decoration: underline;
+  text-underline-offset: 0.15em;
+}
 
 /* ---- DataGrid (Sprint 3) ---------------------------------------------------- */
 .ep-grid {
