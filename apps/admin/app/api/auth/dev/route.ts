@@ -5,7 +5,8 @@ import { writeSession } from '@/lib/session';
 
 /**
  * Development-only sign-in that mirrors the API's dev bypass: POST { sub } creates a session whose access
- * token is "dev:<sub>". Returns 404 unless AUTH_DEV_BYPASS=1 and NODE_ENV is not production.
+ * token is "dev:<sub>". Returns 404 unless AUTH_DEV_BYPASS=1 and NODE_ENV is not production (or the
+ * production build runs under CI: env.devBypass).
  */
 export async function POST(req: NextRequest) {
   if (!env.devBypass) return NextResponse.json({ type: 'not-found' }, { status: 404 });

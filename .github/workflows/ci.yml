@@ -136,6 +136,9 @@ jobs:
       - run: psql "$DATABASE_MIGRATOR_URL" -v ON_ERROR_STOP=1 -f packages/db/init/01_roles.sql
       - run: pnpm db:migrate
       - run: pnpm --filter @edupro/db seed:dev
+      # the sample schools (classes, sections, staff and families, one login per role): the browser checks
+      # are written against them
+      - run: pnpm --filter @edupro/db seed:demo
       - run: pnpm --filter @edupro/admin exec playwright install --with-deps chromium
       - name: Build and start the API and the admin app
         run: |

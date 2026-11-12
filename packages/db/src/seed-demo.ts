@@ -1369,13 +1369,15 @@ async function main(): Promise<void> {
           pinned?: boolean;
           publish: boolean;
           daysAgo: number;
-          until?: string | null;
+          /** shown until so many days from today (a fixed date went stale and broke the seed: it fell before
+           *  the publish date, which is counted back from today) */
+          untilInDays?: number | null;
           targets?: Array<[string, string]>;
         },
       ) => {
         const r = await c.query<{ id: string }>(
           `INSERT INTO notices (school_id, academic_year_id, kind, title, body, audience, publish_from, publish_until, is_pinned, published_at, published_by, created_by)
-           VALUES ($1, $2, $3::notice_kind, $4, $5, $6::audience_kind, CURRENT_DATE - $7::int, $8::date, $9,
+           VALUES ($1, $2, $3::notice_kind, $4, $5, $6::audience_kind, CURRENT_DATE - $7::int, CURRENT_DATE + $8::int, $9,
                    CASE WHEN $10 THEN now() - make_interval(days => $7::int) END, CASE WHEN $10 THEN $11::bigint END, $11::bigint)
            RETURNING id::text`,
           [
@@ -1386,7 +1388,7 @@ async function main(): Promise<void> {
             fields.body,
             fields.audience ?? 'everyone',
             fields.daysAgo,
-            fields.until ?? null,
+            fields.untilInDays ?? null,
             fields.pinned ?? false,
             fields.publish,
             userIds[sub],
@@ -1411,7 +1413,7 @@ async function main(): Promise<void> {
         audience: 'students',
         publish: true,
         daysAgo: 8,
-        until: '2026-10-15',
+        untilInDays: 7,
       });
       await notice('dev-coordinator', {
         title: 'Parent–teacher meeting for Classes VI to VIII',
@@ -2536,7 +2538,8 @@ async function main(): Promise<void> {
       ];
       for (const [i, [code, name, routeTo]] of categories.entries())
         await c.query(
-          `INSERT INTO query_categories (school_id, code, name, route_to, sort_order) VALUES ($1, $2, $3, $4, $5) ON CONFLICT (school_id, code) DO NOTHING`,
+          // the parent desk's heads (the default desk; 0056 made the key school, desk, code)
+          `INSERT INTO query_categories (school_id, code, name, route_to, sort_order) VALUES ($1, $2, $3, $4, $5) ON CONFLICT (school_id, desk, code) DO NOTHING`,
           [school.id, code, name, routeTo, i],
         );
       const templates: Array<
@@ -2667,7 +2670,17 @@ async function main(): Promise<void> {
       );
       for (const sub of ['dev-parent', 'dev-teacher', 'dev-coordinator'])
         await c.query(
-          `INSERT INTO comms_group_members (school_id, group_id, user_id, added_by) VALUES ($1, $2, $3, $4) ON CONFLICT (group_id, user_id) DO NOTHING`,
+          // a member is a person (0050: the employee, guardian or student behind the sign-in)
+          `INSERT INTO comms_group_members (school_id, group_id, user_id, person_type, person_id, added_by)
+           SELECT $1, $2, $3,
+                  COALESCE((SELECT 'employee' FROM employees e WHERE e.user_id = $3 AND e.school_id = $1 LIMIT 1),
+                           (SELECT 'guardian' FROM guardians g WHERE g.user_id = $3 AND g.school_id = $1 LIMIT 1),
+                           (SELECT 'student' FROM students s WHERE s.user_id = $3 AND s.school_id = $1 LIMIT 1), 'user'),
+                  COALESCE((SELECT e.id FROM employees e WHERE e.user_id = $3 AND e.school_id = $1 LIMIT 1),
+                           (SELECT g.id FROM guardians g WHERE g.user_id = $3 AND g.school_id = $1 LIMIT 1),
+                           (SELECT s.id FROM students s WHERE s.user_id = $3 AND s.school_id = $1 LIMIT 1), $3::bigint),
+                  $4
+           ON CONFLICT (group_id, person_type, person_id) DO NOTHING`,
           [alpha.id, group.rows[0]!.id, userIds[sub], userIds['dev-admin']],
         );
 
@@ -4346,9 +4359,10 @@ async function main(): Promise<void> {
       await withCtx(alpha.id, 'dev-admin');
       {
         await c.query(
-          `INSERT INTO consent_forms (school_id, code, title, description, fields, fee_amount, status, created_by)
-           SELECT $1, 'science_city_2026', 'Science City educational trip', 'One-day trip on 18 October 2026 with the class teachers. Lunch is included.',
-                  $2::jsonb, 350, 'open', (SELECT id FROM users WHERE oneauth_sub = 'dev-admin')
+          // the form builder's statuses and types (0166: open → published, choice → radio)
+          `INSERT INTO consent_forms (school_id, academic_year_id, code, title, description, fields, fee_amount, status, published_at, created_by)
+           SELECT $1, $3, 'science_city_2026', 'Science City educational trip', 'One-day trip on 18 October 2026 with the class teachers. Lunch is included.',
+                  $2::jsonb, 350, 'published', now(), (SELECT id FROM users WHERE oneauth_sub = 'dev-admin')
             WHERE NOT EXISTS (SELECT 1 FROM consent_forms WHERE school_id = $1 AND code = 'science_city_2026')`,
           [
             alpha.id,
@@ -4367,11 +4381,12 @@ async function main(): Promise<void> {
               {
                 key: 'pickup',
                 label: 'Pick-up after the trip',
-                type: 'choice',
+                type: 'radio',
                 options: ['School bus', 'Parent at school gate'],
                 required: true,
               },
             ]),
+            alpha.yearId,
           ],
         );
         await c.query(

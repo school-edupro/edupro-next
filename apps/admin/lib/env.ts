@@ -30,7 +30,15 @@ export const env = {
   get parentAppUrl(): string {
     return process.env.PARENT_APP_URL ?? 'http://localhost:3001';
   },
+  /**
+   * The development sign-in (AUTH_DEV_BYPASS=1): in development, or in a production build under CI (GitHub
+   * sets CI=true), where the smoke and nightly checks sign in as the seeded users. A deployed site never has
+   * CI set, and the API — the real gate — refuses to start with AUTH_DEV_BYPASS in production.
+   */
   get devBypass(): boolean {
-    return process.env.NODE_ENV !== 'production' && process.env.AUTH_DEV_BYPASS === '1';
+    return (
+      process.env.AUTH_DEV_BYPASS === '1' &&
+      (process.env.NODE_ENV !== 'production' || process.env.CI === 'true')
+    );
   },
 };
