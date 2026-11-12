@@ -9,3 +9,6 @@ export * from './formula';
 export * from './order';
 export * from './attendance';
 export * from './loans';
+export * from './statutory';
+export * from './tax';
+export * from './calc';
