@@ -16,6 +16,7 @@ and accounts** work (PF ECR, ESI, profession tax, LWF, the salary voucher, the c
 | **Payroll maker** (its own role)       | Makes the drafts: rates, pay-head versions, formula tests, profiles, salary structures, the Excel sheet |
 | **Payroll checker** (its own role)     | Approves the drafts someone else made; changes the pay matrix; may see a full PAN or account number     |
 | **School admin** (and the group admin) | The payroll admin: the settings, tax years, templates, confidential staff; may also approve their own   |
+| **Payroll auditor** (its own role)     | Reads everything for an audit — runs, registers, reports, the audit trail — and changes nothing         |
 
 A checker never approves their own draft: the same person cannot make and approve a change (the school
 admin can, and it is in the audit log). Every change is in the audit log with who and when.
@@ -24,6 +25,7 @@ admin can, and it is in the audit log). Every change is in the audit log with wh
 
 The side menu's **Payroll** has these entries:
 
+- **Payroll home** — the month's figures, the work waiting, the filings due and small charts.
 - **Monthly inputs** — the month's attendance for pay, salary holds, loans, one-off items, recurring
   items, claims, overtime, loss-of-pay given back and typed tax, one tab each.
 - **Pay runs** — the month's runs; a run opens its employees, and each employee their pay in full.
@@ -33,6 +35,8 @@ The side menu's **Payroll** has these entries:
   quarterly return and the certificates.
 - **Pay changes and leavers** — leavers' settlements, pay revisions (DA and the like) and their arrears, the yearly
   increments with their letters, and staff come from a sister school.
+- **Payroll reports** — every report in one place, each shown on screen and downloaded as Excel, PDF or CSV.
+- **Payroll audit trail** — every payroll change, event and read (checkers, the payroll admin and the auditor).
 - **My tax** — every employee's own tax: declarations, the regime, the certificate (the staff app has it too).
 - **My payslips** — every employee's own payslips (the staff app has it too, under Office).
 - **Payroll set-up** — one page with four numbered section cards; every set-up screen opens from it.
@@ -367,6 +371,71 @@ not locked yet, the page says so. The date of joining comes with the employee, s
   (Income tax → the employee).
 - **Loan statement** — on a loan's page; its **no-dues certificate** once it is closed with nothing owed.
 
+## Payroll home (Payroll → Payroll home)
+
+The month's six figures first: **cost to school** (gross pay and what the school pays on top — PF, EPS, EDLI and
+admin charges, ESI, NPS, LWF; gratuity is not in it), **net paid**, **staff paid** (people, not pay records: a person
+paid twice in a month counts once), **average cost**, **statutory outgo** (the staff's PF, ESI, PT, TDS, LWF and NPS
+plus the school's share) and **loss of pay**, each against the month before. Then the work waiting (runs to approve,
+lock or pay; settlements, revisions, declarations and drafts) and the filings due, the gratuity liability today, and
+small charts: twelve months, staff paid, gross by department, salary bands, what the pay is made of and what is taken
+out. A month with an approved run not yet locked says **PROVISIONAL**. A maker sees it without the confidential staff.
+
+## Payroll reports (Payroll → Payroll reports)
+
+Pick a report under **All reports**, choose the period and the filters, then **Show**. Every report:
+
+- has **one line per employee** — the month's regular pay and any additional run together (choose a run to see one);
+- shows held salaries apart (**Paid** and **Held — not paid yet** sub-totals);
+- keeps the details as they were paid (department, designation, staff type, level and cell of that month);
+- hides the confidential staff from makers;
+- downloads as **PDF** (on the letterhead, with Prepared by / Checked by), **Excel** or **CSV** — always the same rows,
+  sub-totals and totals as the screen, with the same filters;
+- says **PROVISIONAL** on the screen and in every file while a run of the period is approved but not locked.
+
+The reports: the **salary register** (views: every head, gross–deductions–net, basic and allowances, earnings,
+deductions, arrears, overtime, bonus, PF, ESI, PT, TDS, LWF, loan recovery, other deductions, net and payment, loss of
+pay — or **Choose columns** and **Save these columns** as your own set; a checker can share a set with everyone); pay
+by **department, designation, staff type or category**; the **head-wise summary**; **year to date**; **attendance and
+salary**; **arrears paid** (the month each belongs to and why); **cost to school** (checkers); **month-on-month
+variance** (each head of each employee, changes of at least the amount given); **headcount reconciliation** (who is new
+this month and who was not paid, and why); the **TDS, PF, ESI, PT, LWF and NPS registers**; **ESI coverage**; the
+**gratuity liability**; the **bonus register**; **bank-wise payments** with each bank file and UTR (checkers); **loans
+outstanding**; and the **third-party payout** — what the runs actually deducted for each payee (checkers).
+
+The same payroll data is in **Reports → Report builder** and its schedules (datasets _Payroll register_ and _Payroll by
+pay head_), for checkers, the payroll admin and the auditor.
+
+### Gratuity liability
+
+Choose the date: each employee's gratuity if they left that day — the years (a part year above six months counts), the
+monthly wage (basic + DA, or the labour codes' wages when switched on), whether it is due yet (5 years; 1 for contract
+staff), **payable if all left** and **accrued for the years** served. Staff it cannot work out (no date of joining, no
+locked month) are listed below the total. The figure for the accounts (AS 15 / Ind AS 19) is an actuary's valuation:
+**Data for the actuary** (checkers) gives them the staff, the leavers of the year and the rule as Excel.
+
+### Bonus
+
+Schools are outside the Code on Wages' statutory bonus, so the school sets its own rule for each year on the **Bonus
+register**: a **% of basic + DA**, a **fixed sum** each (by the months counted, if ticked), or **the statutory
+formula**; with the months counted only while basic + DA is within a limit, the wage counted at most a cap, and at
+least so many months or days. The register shows each employee's months, days, the wage counted, the bonus and why
+not. A checker **sees what it posts**, then **posts** it to a month: each employee's bonus once, as a one-off item the
+month's run pays (or a bonus run once that month is locked). Once posted, the year's rule stays.
+
+## Audit trail (Payroll → Payroll audit trail)
+
+Every payroll **change** (each table's row before and after), **event** (runs, approvals, settings, roles, bank files,
+filings) and **read** (a report run or downloaded, a PAN or account revealed). Filter by dates, kind, table, who,
+action, record or text; open an entry to see each field before and after. **Excel** exports what is found with the
+fields. Looking at the trail is itself recorded. The trail is kept as long as the audit log — the app never deletes
+it (labour registers must be kept 5 years; tax records may be reopened for longer).
+
+The **auditor pack** (checkers) is one ZIP for a financial year: the salary, TDS, PF, ESI and PT registers of each
+month, the year to date, the gratuity liability and the bonus, the TDS challans, the filings with their
+acknowledgements, the year's audit trail with the fields before and after, and a **MANIFEST.csv** with each file's
+rows and SHA-256 checksum, so the auditor can check nothing was changed.
+
 ## Common questions
 
 **I changed DA from July; will June's pay change?** No. The July row is a new dated row; June still
@@ -424,3 +493,12 @@ the days with the reason.
 
 **"Send to be paid" asks for a full-and-final run.** The last day's month is already locked: make the run from the
 settlement's page, process it, then approve and lock it.
+
+**A report shows someone twice / the old system did.** EduPro shows one line per employee: the month's regular pay
+and any additional run are added together. Pick a run to see one run alone.
+
+**Why does a file say PROVISIONAL?** A run of that month is approved but not locked: its figures can still change.
+
+**The bonus register says to set the rule first.** Set the year's rule on the bonus register (a payroll maker).
+
+**I cannot see the audit trail.** It is for checkers, the payroll admin and the payroll auditor.

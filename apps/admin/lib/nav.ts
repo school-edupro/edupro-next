@@ -137,11 +137,14 @@ export const NAV: Array<{
     // payroll (docs/design/86): the month's work first, then the set-up (one entry with section cards) and drafts
     section: 'payroll',
     items: [
+      { href: '/payroll', label: 'payrollHome', permission: 'payroll.run.view' },
       { href: '/payroll/inputs', label: 'payrollInputs', permission: 'payroll.run.view' },
       { href: '/payroll/runs', label: 'payrollRuns', permission: 'payroll.run.view' },
       { href: '/payroll/statutory', label: 'payrollStatutory', permission: 'payroll.run.view' },
       { href: '/payroll/tax', label: 'payrollTax', permission: 'payroll.run.view' },
       { href: '/payroll/people', label: 'payrollPeople', permission: 'payroll.run.view' },
+      { href: '/payroll/reports', label: 'payrollReports', permission: 'payroll.run.view' },
+      { href: '/payroll/audit', label: 'payrollAudit', permission: 'payroll.audit.view' },
       { href: '/payroll/me', label: 'myPayslips', permission: 'payroll.own.view' },
       { href: '/payroll/me/tax', label: 'myTax', permission: 'payroll.own.view' },
       { href: '/payroll/setup', label: 'payrollSetup', permission: 'payroll.setup.view' },

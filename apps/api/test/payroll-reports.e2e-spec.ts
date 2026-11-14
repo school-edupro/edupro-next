@@ -277,6 +277,18 @@ describe('payroll reports and audit (e2e)', () => {
       );
     for (const key of ['loans', 'esi_coverage'])
       expect((await call(checker, 'GET', `/payroll/reports/${key}`)).statusCode).toBe(200);
+    // the report builder's payroll datasets: persons by month, for those who see every employee
+    const ds = await call(
+      admin,
+      'GET',
+      '/reports/datasets/payroll_register/rows?from=2026-05-01&to=2026-05-31',
+    );
+    expect(ds.statusCode).toBe(200);
+    const dsRows = (ds.json().rows ?? ds.json().data ?? []) as Array<{ employee_code: string }>;
+    expect(dsRows.map((r) => r.employee_code).sort()).toEqual([`${s}A`, `${s}B`, `${s}C`, `${s}D`]);
+    expect(
+      (await call(maker, 'GET', '/reports/datasets/payroll_register/rows?from=2026-05-01')).statusCode,
+    ).toBe(403);
     const ctc = await grid(checker, 'ctc', 'month=2026-05');
     const ca = ctc.rows.find((r) => r.code === `${s}A`)!;
     expect(Number(ca.ctc)).toBeCloseTo(

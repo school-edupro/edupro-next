@@ -63,7 +63,35 @@ export async function GET(req: NextRequest) {
       if (e instanceof ApiError) return new NextResponse(null, { status: e.status });
       throw e;
     }
-  } else if (kind === 'letters' && okId(id)) path = `/payroll/revisions/${id!}/letters/pdf`;
+  } else if (kind === 'report' && /^[a-z_]{2,40}$/.test(p.get('key') ?? '')) {
+    // a report as a file: the same filters as the screen, passed through as they are
+    const fwd = new URLSearchParams();
+    for (const k of [
+      'month',
+      'fy',
+      'asOf',
+      'runId',
+      'department',
+      'staffType',
+      'employeeId',
+      'view',
+      'columns',
+      'groupBy',
+      'threshold',
+    ])
+      if (p.get(k)) fwd.set(k, p.get(k)!);
+    fwd.set('format', oneOf(p.get('format'), ['xlsx', 'pdf', 'csv'], 'xlsx'));
+    path = `/payroll/reports/${p.get('key')!}/file?${fwd.toString()}`;
+  } else if (kind === 'actuary' && /^\d{4}-\d{2}-\d{2}$/.test(p.get('asOf') ?? ''))
+    path = `/payroll/gratuity/actuary?asOf=${p.get('asOf')!}`;
+  else if (kind === 'auditlog') {
+    const fwd = new URLSearchParams();
+    for (const k of ['from', 'to', 'kind', 'table', 'action', 'who', 'record', 'contains'])
+      if (p.get(k)) fwd.set(k, p.get(k)!);
+    path = `/payroll/audit/export?${fwd.toString()}`;
+  } else if (kind === 'auditpack' && okFy(p.get('fy')))
+    path = `/payroll/audit/pack?fy=${p.get('fy')!}`;
+  else if (kind === 'letters' && okId(id)) path = `/payroll/revisions/${id!}/letters/pdf`;
   else if (kind === 'letter' && okId(id))
     path = p.get('own') === '1' ? `/payroll/me/letters/${id!}/pdf` : `/payroll/letters/${id!}/pdf`;
   else if (kind === 'fnf' && okId(id)) path = `/payroll/settlements/${id!}/statement`;

@@ -468,3 +468,51 @@ DA. The exit statement now says how much of its net payroll pays and how much is
 **Not in phase E**: relief for earlier years' arrears (Form 10E) — the arrears are paid and taxed in the month paid;
 promotions (a structure change by hand); fee dues read from the fee ledger (typed as other recovery, or through the
 no-dues clearance); the settlement's pending salary estimate (the month's run pays it).
+
+## As built — phase F, reports and audit (14 Nov 2026)
+
+Decided 14 Nov 2026 (plan §5; legacy spec `PAYROLL_REPORTS_SPEC.md`, 44 legacy reports): one clean catalogue, one line
+per employee, every download equal to the screen with PROVISIONAL on files; the gratuity liability as of a date with the
+actuary's file; the bonus by the school's own rule (schools are outside the Code on Wages' bonus, s.41(1)(e)); a full
+audit trail with a read-only Payroll auditor and the yearly auditor pack; the payroll home for checkers and scoped
+makers, cost to school without gratuity. Fixed against the legacy: downloads ignored the screen's filters and had no
+PROVISIONAL; a person with a top-up was counted twice; past months showed today's heads, designation and type; the PT
+register, third-party payout and headcount were broken; the auditor pack could not be built; settings and role changes,
+reveals and reads were unaudited; the bonus counted per record and ignored confidential staff; the gratuity liability
+dropped failures silently and had no total.
+
+**Data**: 0377 (093ffbe5) — `payroll_records.staff_type / pay_cell / category` as paid (a BEFORE INSERT trigger; old
+records back-filled); `payroll_report_presets` (own, or shared: `owner_id` NULL, made by a checker);
+`payroll_bonus_rules` (per year: PERCENT, FIXED, STATUTORY; rate or sum, prorate, minimum months and days, the wage limit
+and cap) and `payroll_bonus_postings`; right `payroll.audit.view` (checker, school and group admin) and role
+`payroll_auditor` (audit, run view, set-up view; `hiddenFor` lets it see every employee).
+
+**API** (`payroll-reports.ts`, `payroll-report-grid.ts`, `payroll-reports.service.ts`, `payroll-annual.service.ts`,
+`payroll-audit.service.ts`, `payroll-home.service.ts`), under `/payroll`: `reports` (the catalogue by role),
+`reports/options?month`, `reports/presets` (+ POST, `/:id/delete`), `reports/:key` (the grid) and `reports/:key/file`
+(`format` xlsx | pdf | csv — the same grid), `gratuity/actuary?asOf`, `bonus/:fy` (GET, PUT), `bonus/:fy/post`
+(`dryRun`), `audit` (filters, pages), `audit/export`, `audit/pack?fy`, `audit/:id`, `home?month`. One record scope
+(`RECS`: approved, locked or paid runs, not FAILED, the period, run, department, staff type, employee, confidential
+staff) and one grid (columns, rows, sub-totals, total, PROVISIONAL, after-tables, note) drawn to the screen, Excel
+(numbers as numbers, frozen header, filter), PDF (letterhead, Prepared / Checked) and CSV. The catalogue (21): salary
+register (17 views; chosen columns), group summary, head-wise, year to date, attendance and salary, arrears paid, cost
+to school (checker), month-on-month variance (per head), headcount reconciliation, TDS, PF, ESI, PT, LWF (phase C's
+tables), NPS, ESI coverage, gratuity liability, bonus register, bank-wise payments (checker), loans outstanding,
+third-party payout (checker; actual deductions). Every run and download is audited (`payroll.report.view` /
+`.download`), as are viewing and exporting the trail. Datasets `payroll_register` and `payroll_heads` in the report
+builder and schedules (checkers, payroll admin, auditor).
+
+**Screens**: admin — **Payroll home** (`/payroll`), **Payroll reports** (`/payroll/reports?key=…`: all reports folded,
+the period and filters, the grid, PDF / Excel / CSV, the register's views, Choose columns and saved sets, the bonus
+rule and posting, the actuary's file), **Payroll audit trail** (`/payroll/audit`, `/payroll/audit/[id]`, Excel, the
+auditor pack).
+
+**Tests**: `payroll-reports.e2e-spec.ts` (5: the register — one line per employee, held apart, confidential hidden,
+views, columns, filters, CSV equal to the screen, PROVISIONAL in files; summaries, year to date, variance, headcount,
+the other reports, the builder dataset; the gratuity liability and the actuary's file, the bonus rule, register and a
+single posting; presets; the audit trail for checkers and the auditor, viewing recorded, the auditor pack's manifest
+checksums, the home in persons); a browser pass with axe at 1440 and 375 px.
+
+**Not in phase F**: an actuarial valuation itself (the actuary's); Bonus Form C and the ESI return file (the ESIC
+upload is phase C's); scheduled e-mailing of payroll reports beyond the report builder's schedules; PRAN on the NPS
+register (not kept on the employee record).

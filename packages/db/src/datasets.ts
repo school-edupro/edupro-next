@@ -536,6 +536,73 @@ export const DATASETS: Record<string, DatasetDefinition> = {
       values: [str(p.status)],
     }),
   },
+  // ---- payroll (docs/design/86, phase F): the locked and approved months for the report builder and schedules ----
+  // checkers, the payroll admin and the auditor see every employee, so no confidential scope is needed here
+  payroll_register: {
+    id: 'payroll_register',
+    title: 'Payroll register (one line per employee and month)',
+    permission: 'payroll.run.approve',
+    orPermissions: ['payroll.audit.view', 'payroll.settings.manage'],
+    maxRows: 50_000,
+    columns: [
+      { key: 'month', header: 'Month', width: 9 },
+      { key: 'employee_code', header: 'Emp. ID', width: 10 },
+      { key: 'employee_name', header: 'Employee', width: 26 },
+      { key: 'designation', header: 'Designation', width: 18 },
+      { key: 'department', header: 'Department', width: 16 },
+      { key: 'staff_type', header: 'Staff type', width: 12 },
+      { key: 'paid_days', header: 'Days paid', type: 'number', width: 9 },
+      { key: 'gross', header: 'Gross', type: 'number', width: 12 },
+      { key: 'deductions', header: 'Deductions', type: 'number', width: 12 },
+      { key: 'net', header: 'Net', type: 'number', width: 12 },
+      { key: 'income_tax', header: 'Income tax', type: 'number', width: 12 },
+      { key: 'held', header: 'Held', width: 6 },
+      { key: 'provisional', header: 'Provisional', width: 10 },
+    ],
+    query: (p) => ({
+      text: `SELECT to_char(r.month, 'YYYY-MM') AS month, max(r.employee_code) AS employee_code, max(r.employee_name) AS employee_name,
+                    max(r.designation) AS designation, max(r.department) AS department, max(r.staff_type) AS staff_type,
+                    max(r.paid_days) FILTER (WHERE NOT r.is_top_up) AS paid_days, sum(r.gross_earned) AS gross,
+                    sum(r.total_deductions) AS deductions, sum(r.net_pay) AS net, sum(r.it_amount + r.cess_amount) AS income_tax,
+                    CASE WHEN bool_or(r.status = 'HELD') THEN 'Yes' ELSE '' END AS held,
+                    CASE WHEN bool_or(u.stage = 'APPROVED') THEN 'Yes' ELSE '' END AS provisional
+               FROM payroll_records r JOIN payroll_runs u ON u.id = r.run_id
+              WHERE u.stage IN ('APPROVED', 'LOCKED', 'PAID') AND u.deleted_at IS NULL AND r.status <> 'FAILED'
+                AND ($1::text IS NULL OR r.month >= ($1::text || '-01')::date)
+                AND ($2::text IS NULL OR r.month <= ($2::text || '-01')::date)
+              GROUP BY r.month, r.employee_id ORDER BY r.month, max(r.department) NULLS LAST, max(r.employee_name)`,
+      values: [str(p.from)?.slice(0, 7) ?? null, str(p.to)?.slice(0, 7) ?? null],
+    }),
+  },
+  payroll_heads: {
+    id: 'payroll_heads',
+    title: 'Payroll by pay head (one line per employee, month and head)',
+    permission: 'payroll.run.approve',
+    orPermissions: ['payroll.audit.view', 'payroll.settings.manage'],
+    maxRows: 200_000,
+    columns: [
+      { key: 'month', header: 'Month', width: 9 },
+      { key: 'employee_code', header: 'Emp. ID', width: 10 },
+      { key: 'employee_name', header: 'Employee', width: 26 },
+      { key: 'department', header: 'Department', width: 16 },
+      { key: 'head', header: 'Head', width: 10 },
+      { key: 'head_name', header: 'Pay head', width: 22 },
+      { key: 'head_type', header: 'Type', width: 10 },
+      { key: 'amount', header: 'Amount', type: 'number', width: 12 },
+    ],
+    query: (p) => ({
+      text: `SELECT to_char(r.month, 'YYYY-MM') AS month, max(r.employee_code) AS employee_code, max(r.employee_name) AS employee_name,
+                    max(r.department) AS department, l.code AS head, max(l.name) AS head_name, max(l.head_type) AS head_type,
+                    sum(l.amount) AS amount
+               FROM payroll_record_lines l JOIN payroll_records r ON r.id = l.record_id JOIN payroll_runs u ON u.id = r.run_id
+              WHERE u.stage IN ('APPROVED', 'LOCKED', 'PAID') AND u.deleted_at IS NULL AND r.status <> 'FAILED'
+                AND ($1::text IS NULL OR r.month >= ($1::text || '-01')::date)
+                AND ($2::text IS NULL OR r.month <= ($2::text || '-01')::date)
+              GROUP BY r.month, r.employee_id, l.code HAVING sum(l.amount) <> 0
+              ORDER BY r.month, max(r.employee_name), max(l.head_type), l.code`,
+      values: [str(p.from)?.slice(0, 7) ?? null, str(p.to)?.slice(0, 7) ?? null],
+    }),
+  },
   // ---- Sprint 15: the fee reports centre (screen and file share these definitions) -----------------
   fee_day_book: {
     id: 'fee_day_book',
