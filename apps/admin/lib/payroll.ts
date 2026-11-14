@@ -19,6 +19,12 @@ export interface PayrollOverview {
     headsUnversioned: number;
     matrixCells: number;
     drafts: { rates: number; statutory: number; versions: number; structures: number };
+    /** rate rows in force today */
+    ratesInForce?: number;
+    /** the school's bank accounts in use (none: every bank gets the default file) */
+    bankAccounts?: number;
+    /** the move from the old payroll: SETUP, BROUGHT, PARALLEL, SIGNED, SWITCHED, or not started */
+    golive?: string | null;
   };
   checks: Array<{ level: 'red' | 'amber'; text: string; href: string }>;
   can: PayrollCan;

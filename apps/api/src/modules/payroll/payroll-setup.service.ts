@@ -195,6 +195,19 @@ export class PayrollSetupService {
       const taxYear = await n(`SELECT count(*)::int AS n FROM payroll_tds_slabs WHERE fy = $1`, [
         fy,
       ]);
+      // the set-up home's other badges: the rates in force today, the school's bank accounts, the go-live's stage
+      const ratesInForce = await n(
+        `SELECT count(*)::int AS n FROM payroll_rates WHERE status = 'active' AND effective_from <= $1::date
+            AND (effective_to IS NULL OR effective_to >= $1::date)`,
+        [today],
+      );
+      const bankAccounts = await n(
+        `SELECT count(*)::int AS n FROM payroll_bank_accounts WHERE active`,
+        [],
+      );
+      const golive =
+        (await c.query<{ status: string }>(`SELECT status FROM payroll_cutover LIMIT 1`)).rows[0]
+          ?.status ?? null;
       // what is missing or would stop a run (the legacy "check before you continue")
       const checks: Array<{ level: 'red' | 'amber'; text: string; href: string }> = [];
       if (!s.state_code)
@@ -284,7 +297,18 @@ export class PayrollSetupService {
           tan: s.tan,
           pfEstablishmentCode: s.pf_establishment_code,
         },
-        figures: { staff, profiles, structured, heads, headsUnversioned, matrixCells, drafts },
+        figures: {
+          staff,
+          profiles,
+          structured,
+          heads,
+          headsUnversioned,
+          matrixCells,
+          drafts,
+          ratesInForce,
+          bankAccounts,
+          golive,
+        },
         checks,
         can: PayrollSetupService.can(ctx),
       };

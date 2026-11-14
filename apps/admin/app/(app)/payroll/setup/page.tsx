@@ -1,4 +1,5 @@
 import { Badge, Breadcrumbs, KpiTile, PageHeader } from '@edupro/ui';
+import { DownloadMenu } from '@/components/leave/ListBar';
 import { notFound } from 'next/navigation';
 import { Notice } from '@/components/Notice';
 import { ApiError, apiFetch, getMe } from '@/lib/api';
@@ -26,7 +27,22 @@ export default async function PayrollSetupPage({
   }
   const f = o.figures;
   const waiting = f.drafts.rates + f.drafts.statutory + f.drafts.versions + f.drafts.structures;
-  type Link = { done: boolean | null; title: string; text: string; href: string; flag?: string };
+  type Link = {
+    done: boolean | null;
+    title: string;
+    text: string;
+    href: string;
+    flag?: string;
+    /** a badge of its own (the bank file, the go-live's stage) */
+    badge?: { tone: 'success' | 'info' | 'neutral' | 'warning'; text: string };
+  };
+  const GOLIVE: Record<string, string> = {
+    SETUP: 'Started',
+    BROUGHT: 'People and history brought',
+    PARALLEL: 'Parallel months',
+    SIGNED: 'Signed off',
+    SWITCHED: 'Switched',
+  };
   const sections: Array<{ id: string; title: string; text: string; links: Link[] }> = [
     {
       id: 'pr-rules',
@@ -40,7 +56,7 @@ export default async function PayrollSetupPage({
           href: '/payroll/setup/settings',
         },
         {
-          done: null,
+          done: (f.ratesInForce ?? 0) > 0,
           title: 'Rates and statutory rules',
           text: 'DA, HRA and other rates; PF, ESI, profession tax by state, labour welfare fund, overtime rates',
           href: '/payroll/setup/rates',
@@ -113,6 +129,9 @@ export default async function PayrollSetupPage({
           title: 'Bank accounts and ledgers',
           text: 'The school’s accounts and the file each bank takes; arrears in the ECR; the salary voucher’s ledger names',
           href: '/payroll/setup/bank',
+          badge: f.bankAccounts
+            ? { tone: 'success', text: `${String(f.bankAccounts)} account(s)` }
+            : { tone: 'neutral', text: 'Default file for every bank' },
         },
         {
           done: !o.checks.some((c) => c.href === '/payroll/statutory?tab=calendar'),
@@ -147,35 +166,43 @@ export default async function PayrollSetupPage({
           title: 'Moving from the old payroll',
           text: 'Read, bring, parity, the parallel months, the sign-off and the switch',
           href: '/payroll/setup/golive',
+          badge: f.golive
+            ? {
+                tone: f.golive === 'SWITCHED' ? 'success' : 'info',
+                text: GOLIVE[f.golive] ?? f.golive,
+              }
+            : { tone: 'neutral', text: 'Not started' },
         },
       ],
     },
   ];
   return (
     <>
-      <Breadcrumbs items={[{ label: 'Payroll' }, { label: 'Payroll set-up' }]} />
+      <Breadcrumbs
+        items={[
+          me.permissions.includes('payroll.run.view')
+            ? { label: 'Payroll', href: '/payroll' }
+            : { label: 'Payroll' },
+          { label: 'Payroll set-up' },
+        ]}
+      />
       <PageHeader
         kicker="Payroll"
         title="Payroll set-up"
         description="Everything the monthly pay run reads. Fill it in order: rules and rates, pay heads and the matrix, then each employee’s profile and salary structure."
         actions={
-          <>
-            <a
-              className="ep-btn ep-btn--secondary ep-btn--sm"
-              href="/api/payroll/pay-file?kind=setupbook&format=xlsx&save=1"
-              download
-              title="The settings, pay heads, rates in force, matrix, templates, tax and bank accounts: a sheet each"
-            >
-              Set-up book (Excel)
-            </a>
-            <a
-              className="ep-btn ep-btn--secondary ep-btn--sm"
-              href="/api/payroll/pay-file?kind=setupbook&format=pdf&save=1"
-              download
-            >
-              Set-up book (PDF)
-            </a>
-          </>
+          <DownloadMenu
+            items={[
+              {
+                label: 'Set-up book (Excel)',
+                href: '/api/payroll/pay-file?kind=setupbook&format=xlsx&save=1',
+              },
+              {
+                label: 'Set-up book (PDF)',
+                href: '/api/payroll/pay-file?kind=setupbook&format=pdf&save=1',
+              },
+            ]}
+          />
         }
       />
       <Notice params={sp} />
@@ -221,6 +248,8 @@ export default async function PayrollSetupPage({
                   </a>{' '}
                   {l.flag ? (
                     <Badge tone="warning">{l.flag}</Badge>
+                  ) : l.badge ? (
+                    <Badge tone={l.badge.tone}>{l.badge.text}</Badge>
                   ) : l.done === null ? null : (
                     <Badge tone={l.done ? 'success' : 'neutral'}>{l.done ? 'Done' : 'To do'}</Badge>
                   )}

@@ -171,7 +171,7 @@ bar:
   Each download is recorded in the payroll audit trail.
 
 A table that is a form saved whole (the nominees, a structure's amounts) has only its **Excel** and **PDF**. The
-settings page has its own Excel and PDF, and **Set-up book** on the Payroll set-up page downloads the whole set-up —
+settings page has its own Excel and PDF, and **Download → Set-up book** on the Payroll set-up page downloads the whole set-up —
 settings, pay heads with the formula in force, each rate tab in force today, the pay matrix, templates, this year's
 tax and (for checkers) the bank accounts — as one workbook, a sheet each, or one PDF.
 
