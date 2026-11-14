@@ -513,6 +513,9 @@ the other reports, the builder dataset; the gratuity liability and the actuary's
 single posting; presets; the audit trail for checkers and the auditor, viewing recorded, the auditor pack's manifest
 checksums, the home in persons); a browser pass with axe at 1440 and 375 px.
 
+**Gate** (14 Nov, 933f7722): the engine (162, 100 %), every payroll spec with the exit, transfer, leave, attendance,
+access, fee-ledger and report-builder specs, permissions, the database's 143, lint, types and formatting — all green.
+
 **Not in phase F**: an actuarial valuation itself (the actuary's); Bonus Form C and the ESI return file (the ESIC
 upload is phase C's); scheduled e-mailing of payroll reports beyond the report builder's schedules; PRAN on the NPS
 register (not kept on the employee record).
