@@ -40,7 +40,7 @@ const rupees = (p: bigint) => {
   return `${s.slice(0, -2)}.${s.slice(-2)}`;
 };
 /** A paragraph in lines of at most `width` characters (the PDF draws each line as it is). */
-function wrapWords(text: string, width: number): string[] {
+export function wrapWords(text: string, width: number): string[] {
   const out: string[] = [];
   let line = '';
   for (const w of text.split(/\s+/)) {

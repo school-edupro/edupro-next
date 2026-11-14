@@ -299,6 +299,16 @@ describe('payroll full and final settlements (e2e)', () => {
     expect(
       (await call(maker, 'GET', `/payroll/settlements/${fnf.A!}`)).json().settlement.status,
     ).toBe('SETTLED');
+    // the statement prints once worked out
+    const paper = (await call(maker, 'GET', `/payroll/settlements/${fnf.A!}/statement`)).json();
+    expect(
+      Buffer.from(paper.base64 as string, 'base64')
+        .subarray(0, 4)
+        .toString(),
+    ).toBe('%PDF');
+    expect(
+      (await call(maker, 'GET', `/payroll/settlements/${fnf.A!}/dues-letter`)).statusCode,
+    ).toBe(409);
   });
 
   it('below nothing: dues with a letter; on a death the nominees’ shares; a checker never approves their own', async () => {
@@ -326,6 +336,13 @@ describe('payroll full and final settlements (e2e)', () => {
     expect(
       (await call(maker, 'GET', `/payroll/settlements/${fnf.B!}`)).json().settlement.status,
     ).toBe('SETTLED');
+    const letter = (await call(maker, 'GET', `/payroll/settlements/${fnf.B!}/dues-letter`)).json();
+    expect(letter.filename).toBe(`DUES_2026_0001_${s}B.pdf`);
+    expect(
+      Buffer.from(letter.base64 as string, 'base64')
+        .subarray(0, 4)
+        .toString(),
+    ).toBe('%PDF');
     // C died after 1 year 11 months: gratuity for 2 years whatever the service, all of the leave money tax-free
     const c = (await call(checker, 'POST', `/payroll/settlements/${fnf.C!}/compute`, {})).json();
     expect(c.gratuity).toBe('34615.38');
@@ -356,5 +373,8 @@ describe('payroll full and final settlements (e2e)', () => {
     const g = (await lines('C')).find((l) => l.code === 'gratuity')!;
     expect(g.amount).toBe(0);
     expect(g.fromPayroll).toBeUndefined();
+    expect((await call(maker, 'GET', `/payroll/settlements/${fnf.C!}/statement`)).statusCode).toBe(
+      409,
+    );
   });
 });
