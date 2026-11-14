@@ -6,6 +6,8 @@ import { PayrollInputsController } from './payroll-inputs.controller';
 import { PayrollItemsService } from './payroll-items.service';
 import { PayrollBankController } from './payroll-bank.controller';
 import { PayrollBankService } from './payroll-bank.service';
+import { PayrollStatutoryController } from './payroll-statutory.controller';
+import { PayrollStatutoryService } from './payroll-statutory.service';
 import { PayrollPayslipController } from './payroll-payslip.controller';
 import { PayrollPayslipService } from './payroll-payslip.service';
 import { PayrollReviewController } from './payroll-review.controller';
@@ -30,6 +32,7 @@ import { PayrollSetupService } from './payroll-setup.service';
     PayrollReviewController,
     PayrollPayslipController,
     PayrollBankController,
+    PayrollStatutoryController,
   ],
   providers: [
     PayrollSetupService,
@@ -41,6 +44,7 @@ import { PayrollSetupService } from './payroll-setup.service';
     PayrollReviewService,
     PayrollPayslipService,
     PayrollBankService,
+    PayrollStatutoryService,
     AuditService,
   ],
   exports: [PayrollSetupService],
