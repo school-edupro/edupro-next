@@ -400,3 +400,61 @@ tests; a browser pass with axe at 1440 and 375 px.
 **Not in phase D**: relief for arrears of earlier years (the certificate shows 0; Form 10E by hand — with the pay
 revision in phase E); the e-filing utility's own text format (the return is the utility's CSV input); LTA and other
 salary exemptions; a bulk import of declarations.
+
+## As built — phase E, people events (14 Nov 2026)
+
+Decided 14 Nov 2026 (plan §5; legacy spec `PAYROLL_PEOPLE_SPEC.md`): gratuity by the law, fully; leave encashment from
+the leave module's balance; every exit through payroll with a statement, a negative balance becoming dues with a
+letter; increments by the pay-matrix step, yearly. Fixed against the legacy: a revision recomputes locked months
+through the engine (every dependent head follows; a second revision pays only its own difference; each locked regular
+month's record is worked out again, top-ups aside); increments once a year,
+with service, the next matrix cell, applied by another checker, with numbered letters that print; the settlement's
+approver is never the one who worked it out; dismissal forfeiture only by a checker with a reason; loans close on
+staging, or carry into the dues; the statement prints; nominees' shares on death; the transfer is read live and
+written once.
+
+**Engine** (3c32ccf5): `settle.ts` — `serviceLength` (years, months, days, counting both ends), `gratuity` (15/26 a
+year of the monthly wage, a part year above six months, the minimum years, any service on death or disablement, the
+cap, the tax-free part), `leaveEncashment` (days × wage ÷ 30), `leaveEncashmentTaxFree` (the least of the amount, the
+days at the ten-month average, ten months' average, 30 days a completed year, what is left of the cap), `noticeShortfall`,
+`monthArrears`. 158 tests, 100 %.
+
+**Data**: 0375 (4f63251b) — the settlement heads (GRAT_EX/TX, ENCASH_EX/TX, NOTICE_REC, FNF_REC; manual, tax-free ones
+not taxable), `payroll_runs.purpose` (FNF), the settings (increment month, minimum months, % off the matrix, gratuity cap
+and tax-free cap, encashment tax-free cap and maximum days), `payroll_profiles.last_increment_on`, `payroll_revisions`
+(RATE, FORMULA, INCREMENT; DRAFT, APPLIED, CANCELLED), `payroll_arrears.revision_id`, `payroll_revision_letters`
+(PR/year/n), `payroll_settlements` (DRAFT → COMPUTED → APPROVED → STAGED or DUES → SETTLED; CANCELLED) and the trigger
+that drafts one when an exit is accepted. 0376 (303df5d3) — `payroll_transfer_imports` and two owner-rights functions
+limited to an accepted transfer into the current school: `app.payroll_transfer_packet` (the source's name, TAN, last
+locked month, profile, structure on the transfer date, loans owed, the tax year's taxable salary, PF, PT and TDS from
+its locked months) and `app.payroll_transfer_close_loans`.
+
+**API** (`/payroll`): revisions — `revisions` (+ POST), `revisions/:id/simulate|apply|cancel|letters`,
+`increments?month` (+ POST to propose); settlements — `settlements` (`?status`), `settlements/:id`,
+`/compute|approve|stage|run|collected|cancel`; papers — `revisions/:id/letters/pdf`, `letters/:id/pdf`,
+`me/letters` (+ `/:id/pdf`), `settlements/:id/statement|dues-letter`, `me/salary-certificate`,
+`employees/:id/salary-certificate` (a checker), `loans/:id/paper?kind=statement|noc`; transfers — `transfers`,
+`transfers/:id` (a checker: the plan, read live), `transfers/:id/bring`. The settlement's figures go to the exit's
+statement (`employee_fnf.lines`, marked `fromPayroll`; the statement's form keeps them; a cancel gives them back).
+Staging: the last day's month while its regular run is open, else the latest locked month and a full-and-final
+(supplementary, purpose FNF) run; `stage` refuses a month whose run is processing or approved. Every paper is on the
+register letterhead with signature boxes filled from the system (who worked out, approved, issued; the signature
+image of their employee record).
+
+**Screens**: admin — **Pay changes and leavers** (`/payroll/people?tab=settlements|revisions|increments|transfers`),
+a settlement (`/payroll/people/settlements/[id]`: figures, what next, the working, work it out, the leave balance,
+nominees), a revision (`/payroll/people/revisions/[id]`: figures, apply or cancel, letters, arrears by employee), a
+transfer (`/payroll/people/transfers/[id]`); the loan page's statement and no-dues certificate; the employee's tax year's
+salary certificate; My payslips' letters and certificate (both apps); the exit statement shows payroll's lines
+read-only.
+
+**Tests**: `payroll-revision.e2e-spec.ts` (3), `payroll-settlement.e2e-spec.ts` (3: drafted by the exit, worked out by
+the law, on the statement and kept by its form; another checker approves; staged into a locked month, paid by the
+full-and-final run, settled, the statement prints; below nothing — dues and the letter; death — nominees' shares; a
+checker never approves their own; cancel gives the statement its lines back), `payroll-people-docs.e2e-spec.ts` (2:
+letters to staff and in My payslips, the salary certificate, the loan papers; the transfer seen live and brought once,
+never one not accepted into this school); the engine's 158 tests; a browser pass with axe at 1440 and 375 px.
+
+**Not in phase E**: relief for earlier years' arrears (Form 10E) — the arrears are paid and taxed in the month paid;
+promotions (a structure change by hand); fee dues read from the fee ledger (typed as other recovery, or through the
+no-dues clearance); the settlement's pending salary estimate (the month's run pays it).

@@ -141,6 +141,7 @@ export const NAV: Array<{
       { href: '/payroll/runs', label: 'payrollRuns', permission: 'payroll.run.view' },
       { href: '/payroll/statutory', label: 'payrollStatutory', permission: 'payroll.run.view' },
       { href: '/payroll/tax', label: 'payrollTax', permission: 'payroll.run.view' },
+      { href: '/payroll/people', label: 'payrollPeople', permission: 'payroll.run.view' },
       { href: '/payroll/me', label: 'myPayslips', permission: 'payroll.own.view' },
       { href: '/payroll/me/tax', label: 'myTax', permission: 'payroll.own.view' },
       { href: '/payroll/setup', label: 'payrollSetup', permission: 'payroll.setup.view' },

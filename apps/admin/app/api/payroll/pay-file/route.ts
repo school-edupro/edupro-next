@@ -10,7 +10,8 @@ const oneOf = <T extends string>(v: string | null, all: readonly T[], d: T): T =
 
 /**
  * The payment and statutory files (docs/design/86, phase C): a bank file or its letter, the ECR (next or as filed),
- * the ESIC upload, a register, the salary voucher. The API checks the rights; a PDF opens in the tab unless saved.
+ * the ESIC upload, a register, the salary voucher; the tax papers (phase D); the people papers (phase E): increment
+ * letters, a settlement's statement or dues letter, the salary certificate, a loan's statement or no-dues certificate. The API checks the rights; a PDF opens in the tab unless saved.
  */
 export async function GET(req: NextRequest) {
   const p = req.nextUrl.searchParams;
@@ -62,7 +63,18 @@ export async function GET(req: NextRequest) {
       if (e instanceof ApiError) return new NextResponse(null, { status: e.status });
       throw e;
     }
-  } else if (kind === 'voucher' && okMonth(month))
+  } else if (kind === 'letters' && okId(id)) path = `/payroll/revisions/${id!}/letters/pdf`;
+  else if (kind === 'letter' && okId(id))
+    path = p.get('own') === '1' ? `/payroll/me/letters/${id!}/pdf` : `/payroll/letters/${id!}/pdf`;
+  else if (kind === 'fnf' && okId(id)) path = `/payroll/settlements/${id!}/statement`;
+  else if (kind === 'dues' && okId(id)) path = `/payroll/settlements/${id!}/dues-letter`;
+  else if (kind === 'salcert' && okFy(p.get('fy')))
+    path = okId(id)
+      ? `/payroll/employees/${id!}/salary-certificate?fy=${p.get('fy')!}`
+      : `/payroll/me/salary-certificate?fy=${p.get('fy')!}`;
+  else if (kind === 'loan' && okId(id))
+    path = `/payroll/loans/${id!}/paper?kind=${oneOf(p.get('of'), ['statement', 'noc'], 'statement')}`;
+  else if (kind === 'voucher' && okMonth(month))
     path = `/payroll/voucher/file?month=${month!}&format=${oneOf(p.get('format'), ['xlsx', 'csv', 'pdf'], 'xlsx')}`;
   if (!path) return new NextResponse(null, { status: 400 });
   try {

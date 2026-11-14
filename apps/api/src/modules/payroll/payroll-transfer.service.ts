@@ -118,6 +118,25 @@ export class PayrollTransferService {
       )
     ).rows[0];
     if (!t?.to_employee_id) bad('Transfer not found', 404);
+    // once brought across: what was read and written then, not the source as it is now
+    if (t!.imported) {
+      const done = (
+        await c.query<{
+          packet: Packet;
+          written: { profile?: boolean; prevEmployment?: string; structures?: string[] };
+        }>(`SELECT packet, written FROM payroll_transfer_imports WHERE transfer_id = $1`, [id])
+      ).rows[0]!;
+      return {
+        employeeId: t!.to_employee_id!,
+        imported: true,
+        packet: done.packet,
+        structures: done.packet.structures,
+        dropped: [] as string[],
+        writesPrev: !!done.written.prevEmployment,
+        writesProfile: !!done.written.profile,
+        notices: [] as string[],
+      };
+    }
     const p = await this.packetOf(c, id);
     const heads = new Set(
       (

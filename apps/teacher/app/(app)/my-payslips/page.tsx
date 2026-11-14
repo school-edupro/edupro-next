@@ -46,6 +46,13 @@ export default async function MyPayslipsPage({
   } catch (e) {
     if (!(e instanceof ApiError && (e.status === 403 || e.status === 404))) throw e;
   }
+  let letters: Array<{ id: string; letterNo: string; effectiveFrom: string; kind: string }> = [];
+  if (d)
+    try {
+      letters = (await bff.api.fetch<{ rows: typeof letters }>('/payroll/me/letters')).rows;
+    } catch (e) {
+      if (!(e instanceof ApiError)) throw e;
+    }
   if (!d)
     return (
       <>
@@ -141,6 +148,36 @@ export default async function MyPayslipsPage({
           </div>
         ) : (
           <p>No payslip yet this year.</p>
+        )}
+      </Card>
+      <Card>
+        <h2 className="ep-card__title">Letters and certificate</h2>
+        {d.fy && d.rows.length ? (
+          <p>
+            Salary certificate {fyLabel(d.fy)}{' '}
+            <FileLinks
+              url={`/api/my-payroll-paper?kind=salcert&fy=${fyLabel(d.fy)}`}
+              saveUrl={`/api/my-payroll-paper?kind=salcert&fy=${fyLabel(d.fy)}&save=1`}
+              label={`my salary certificate of ${fyLabel(d.fy)}`}
+            />
+          </p>
+        ) : null}
+        {letters.length ? (
+          <ul className="ep-list">
+            {letters.map((l) => (
+              <li key={l.id}>
+                {l.kind === 'INCREMENT' ? 'Increment letter' : 'Pay revision letter'} {l.letterNo},
+                from {l.effectiveFrom.split('-').reverse().join('-')}{' '}
+                <FileLinks
+                  url={`/api/my-payroll-paper?kind=letter&id=${l.id}`}
+                  saveUrl={`/api/my-payroll-paper?kind=letter&id=${l.id}&save=1`}
+                  label={`letter ${l.letterNo}`}
+                />
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="ep-field__help">No increment or pay revision letter yet.</p>
         )}
       </Card>
     </>

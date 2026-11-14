@@ -1,5 +1,6 @@
 import { Badge, Breadcrumbs, KpiTile, PageHeader } from '@edupro/ui';
 import { notFound } from 'next/navigation';
+import { FileLinks } from '@/components/FileLinks';
 import { Notice } from '@/components/Notice';
 import { DialogButton } from '@/components/leave/DialogButton';
 import { ApiError, apiFetch, getMe } from '@/lib/api';
@@ -81,6 +82,19 @@ export default async function PayrollLoanPage({
         <KpiTile label="Instalment" value={`₹${money(l.emi)}`} />
         <KpiTile label="Still owed" value={`₹${money(l.balance)}`} />
         <KpiTile label="Instalments left" value={String(d.remaining.length)} />
+      </div>
+      <div className="ep-grid__toolbar" style={{ marginBottom: 'var(--sp-3)' }}>
+        <span className="ep-field__help">Statement of the instalments deducted</span>
+        <FileLinks href={`/api/payroll/pay-file?kind=loan&id=${id}`} label="the loan statement" />
+        {l.status === 'CLOSED' && Number(l.balance) <= 0 ? (
+          <>
+            <span className="ep-field__help">No-dues certificate</span>
+            <FileLinks
+              href={`/api/payroll/pay-file?kind=loan&of=noc&id=${id}`}
+              label="the no-dues certificate"
+            />
+          </>
+        ) : null}
       </div>
       <section className="ep-card" aria-labelledby="lp-t">
         <div className="ep-grid__toolbar">

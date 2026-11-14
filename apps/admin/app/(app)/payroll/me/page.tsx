@@ -34,10 +34,12 @@ export default async function MyPayslipsPage({
   const me = await getMe();
   if (!me.permissions.includes('payroll.own.view')) notFound();
   let d: Mine;
+  let letters: Array<{ id: string; letterNo: string; effectiveFrom: string; kind: string }> = [];
   try {
     d = await apiFetch<Mine>(
       `/payroll/me/payslips${/^\d{4}$/.test(sp.fy ?? '') ? `?fy=${sp.fy!}` : ''}`,
     );
+    letters = (await apiFetch<{ rows: typeof letters }>('/payroll/me/letters')).rows;
   } catch (e) {
     if (e instanceof ApiError && (e.status === 403 || e.status === 404)) notFound();
     throw e;
@@ -136,6 +138,36 @@ export default async function MyPayslipsPage({
             </tbody>
           </table>
         </div>
+      </section>
+      <section className="ep-card" aria-labelledby="mp-papers">
+        <h2 id="mp-papers" className="ep-card__title">
+          Letters and certificate
+        </h2>
+        {d.fy && d.ytd.count ? (
+          <div className="ep-grid__toolbar">
+            <span>Salary certificate {fyLabel(d.fy)}</span>
+            <FileLinks
+              href={`/api/payroll/pay-file?kind=salcert&fy=${fyLabel(d.fy)}`}
+              label={`my salary certificate of ${fyLabel(d.fy)}`}
+            />
+          </div>
+        ) : null}
+        {letters.length ? (
+          <ul className="ep-list">
+            {letters.map((l) => (
+              <li key={l.id}>
+                {l.kind === 'INCREMENT' ? 'Increment letter' : 'Pay revision letter'} {l.letterNo},
+                from {l.effectiveFrom.split('-').reverse().join('-')}{' '}
+                <FileLinks
+                  href={`/api/payroll/pay-file?kind=letter&own=1&id=${l.id}`}
+                  label={`letter ${l.letterNo}`}
+                />
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="ep-field__help">No increment or pay revision letter yet.</p>
+        )}
       </section>
     </>
   );

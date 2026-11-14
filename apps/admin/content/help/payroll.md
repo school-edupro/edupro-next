@@ -31,6 +31,8 @@ The side menu's **Payroll** has these entries:
   year's compliance calendar.
 - **Income tax** — the year's declarations and proofs, earlier employers, perquisites, TDS challans, the
   quarterly return and the certificates.
+- **Pay changes and leavers** — leavers' settlements, pay revisions (DA and the like) and their arrears, the yearly
+  increments with their letters, and staff come from a sister school.
 - **My tax** — every employee's own tax: declarations, the regime, the certificate (the staff app has it too).
 - **My payslips** — every employee's own payslips (the staff app has it too, under Office).
 - **Payroll set-up** — one page with four numbered section cards; every set-up screen opens from it.
@@ -189,6 +191,9 @@ Every employee sees their own payslips of locked runs, year by year, with the ye
 and net so far: **Payroll → My payslips** here, or **Office → My payslips** in the staff app. Each
 payslip opens with the password the page describes.
 
+Under the payslips, **Letters and certificate**: the salary certificate of the year (the months paid and locked) and
+every increment or pay revision letter, to view or save.
+
 ## Paying the salaries (a run's Payments)
 
 Open the run and press **Bank files and payments** (a payroll checker).
@@ -299,6 +304,67 @@ Every employee sees their year's tax as payroll works it out, month by month, an
 - **My declaration form** (Form 124; 12BB to 2025-26) and **my tax certificate** (once released; it opens with your
   payslip password).
 
+## Pay changes and leavers (Payroll → Pay changes and leavers)
+
+### Leavers' settlements
+
+When an exit is accepted (People → Exits), its full and final settlement comes here as a draft, with the last working
+day and the days of notice short.
+
+1. **Work it out** (a maker). Payroll reads the leave balance on the last day, the loans still owed and the no-dues
+   clearance's dues by itself, and works out:
+   - **Gratuity** — 15 days' wages (basic + DA ÷ 26) for each completed year; a part year above six months counts. Due
+     after 5 years' service (1 year for a fixed-term employee, ticked here or by a contract end), and at once on death
+     or disablement whatever the service. Capped at the school's limit (₹20 lakh); tax-free up to the tax limit.
+     On a dismissal or termination for misconduct a checker may forfeit it, with a reason.
+   - **Leave encashment** — the balance on the last day of the leave types whose policy encashes on exit, each up to
+     the policy's maximum, at basic + DA ÷ 30 a day. To pay other days, type them with the reason. The tax-free part is
+     the least of four (the law's ₹25 lakh limit among them); on death all of it is tax-free.
+   - **Notice shortfall** — the days short at basic + DA ÷ 30.
+   - Anything else payable or to recover, typed.
+
+   The figures go on the exit's statement as payroll's lines (accounts sees them there and cannot change them); the
+   statement says how much of its net payroll pays through its run, and how much is left for accounts.
+
+2. **Approve** — another payroll checker (not the one who worked it out).
+3. **Send to be paid** (a checker). The items go in the last day's month as one-off lines (gratuity and leave each as
+   tax-free and taxable parts) and the loans close. If that month's regular run is already locked, **Make the
+   full-and-final run**, then process, approve and lock it like any run. Once its run is locked the settlement shows
+   **Settled**.
+   When the balance is below nothing, nothing is paid: the dues are noted with a numbered letter (DUES/year/number) for
+   the employee, and **Dues collected** records the receipt.
+
+On a death the gratuity is shared among the employee's gratuity nominees by their shares (the profile's nominees). The
+statement and the dues letter print from the settlement.
+
+### Revisions
+
+A change of a rate (DA) or of a head's formula, from a month, back-dated if need be. **Draft** it (a maker); its page
+shows what it pays: each locked month worked out again through the engine, head by head, against what was paid. A
+checker who did not draft it **applies** it: the arrears go to the next run and the new figure holds from the first open
+month. A second revision of the same months pays only its own difference.
+
+### Increments
+
+Pick the month: everyone due is listed — once a year in the increment month (July unless set otherwise, or each
+employee's own), with the service needed — with the next cell of their pay level, or a % for staff off the pay matrix.
+A maker ticks and **proposes**; another checker applies them on the revision's page. Each gets a numbered letter
+(PR/year/number), signed by the checker who applied it; the employee sees it in My payslips.
+
+### From a sister school
+
+When this school takes an employee transferred within the group (People → Transfers), a payroll checker opens them
+here and **brings their payroll across**: the earlier-employer record of the year's tax (verified, so the tax here
+counts the salary and tax there), the payroll profile, the pay structure as drafts for another checker to approve, and
+the loans still owed (closed there). The figures are read from the other school when you open it: if its last month is
+not locked yet, the page says so. The date of joining comes with the employee, so gratuity counts the whole service.
+
+### Papers
+
+- **Salary certificate** — the employee's own in My payslips; a checker prints anyone's from their tax year
+  (Income tax → the employee).
+- **Loan statement** — on a loan's page; its **no-dues certificate** once it is closed with nothing owed.
+
 ## Common questions
 
 **I changed DA from July; will June's pay change?** No. The July row is a new dated row; June still
@@ -345,3 +411,14 @@ payroll. In the new regime most sections (80C, 80D, HRA) do not count at all.
 
 **The quarterly return is refused.** A month of the quarter is not locked, or its TDS has no challan or a different
 amount; the message names it.
+
+**An exit is accepted but no settlement shows.** Payroll must be set up (Payroll set-up opened once); the settlement
+comes with the exit's acceptance.
+
+**The leave days are 0.** No leave type's policy encashes on exit, or the balance is 0: set it in Leave set-up, or type
+the days with the reason.
+
+**Gratuity is 0.** The service is below 5 years (1 for fixed-term), and the exit is not a death or disablement.
+
+**"Send to be paid" asks for a full-and-final run.** The last day's month is already locked: make the run from the
+settlement's page, process it, then approve and lock it.

@@ -52,6 +52,11 @@ export function ExitSettle({
   const sum = (k: FnfLine['kind']) =>
     lines.filter((l) => l.kind === k).reduce((s, l) => s + (Number(l.amount) || 0), 0);
   const net = sum('earning') - sum('deduction');
+  // payroll pays (or recovers) its own lines through its run; the rest is settled here
+  const byPayroll = lines
+    .filter((l) => l.fromPayroll)
+    .reduce((t, l) => t + (l.kind === 'earning' ? 1 : -1) * (Number(l.amount) || 0), 0);
+  const hasPayroll = lines.some((l) => l.fromPayroll);
   const setAmount = (code: string, v: string) =>
     setLines((cur) => cur.map((l) => (l.code === code ? { ...l, amount: Number(v) || 0 } : l)));
   const setNoteOf = (code: string, v: string) =>
@@ -152,6 +157,13 @@ export function ExitSettle({
                 {rs(Math.abs(net))}
               </strong>
             </p>
+            {hasPayroll ? (
+              <p className="ep-field__help" style={{ margin: 0 }}>
+                Of this, payroll {byPayroll >= 0 ? 'pays' : 'recovers'} {rs(Math.abs(byPayroll))}{' '}
+                through its run (the payroll settlement); {net - byPayroll >= 0 ? 'pay' : 'recover'}{' '}
+                only {rs(Math.abs(net - byPayroll))} here.
+              </p>
+            ) : null}
             {statement.status === 'draft' && statement.clearancePending ? (
               <p className="ep-field__help" style={{ margin: 0 }}>
                 {statement.clearancePending} department(s) have not cleared: it is sent for approval

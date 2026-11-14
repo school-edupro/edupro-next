@@ -164,6 +164,15 @@ export default async function EmployeeTaxPage({
             href={`/api/payroll/pay-file?kind=declform&fy=${d.fy}&id=${employeeId}`}
             label="the employee’s declaration form"
           />
+          {checker ? (
+            <>
+              <span className="ep-field__help">Salary certificate {d.fy} (PDF)</span>
+              <FileLinks
+                href={`/api/payroll/pay-file?kind=salcert&fy=${d.fy}&id=${employeeId}`}
+                label="the employee’s salary certificate"
+              />
+            </>
+          ) : null}
         </div>
       </section>
     </>
