@@ -143,6 +143,7 @@ export interface FnfLine {
   amount: number;
   note: string | null;
   fromClearance?: boolean;
+  fromPayroll?: boolean;
 }
 export interface FnfStatement {
   status: 'draft' | 'submitted' | 'approved' | 'paid';

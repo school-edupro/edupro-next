@@ -100,10 +100,12 @@ export function ExitSettle({
                             {l.label}
                             {l.fromClearance ? (
                               <div className="ep-field__help">From the no-dues clearance</div>
+                            ) : l.fromPayroll ? (
+                              <div className="ep-field__help">From the payroll settlement</div>
                             ) : null}
                           </td>
                           <td>
-                            {edit && !l.fromClearance ? (
+                            {edit && !l.fromClearance && !l.fromPayroll ? (
                               <input
                                 className="ep-input"
                                 type="number"
@@ -119,7 +121,7 @@ export function ExitSettle({
                             )}
                           </td>
                           <td>
-                            {edit && !l.fromClearance ? (
+                            {edit && !l.fromClearance && !l.fromPayroll ? (
                               <input
                                 className="ep-input"
                                 maxLength={200}

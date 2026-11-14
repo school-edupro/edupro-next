@@ -22,6 +22,8 @@ export interface FnfLine {
   note: string | null;
   /** dues a clearance department noted: kept in step with the clearance, not typed */
   fromClearance?: boolean;
+  /** worked out by payroll's settlement (gratuity, leave encashment, notice, loans): not typed here */
+  fromPayroll?: boolean;
 }
 type FnfStatus = 'draft' | 'submitted' | 'approved' | 'paid';
 interface ExitCore {
@@ -54,7 +56,7 @@ const days = (a: string, b: string) =>
 const rupees = (n: number) =>
   `Rupees ${amountInWords(Math.abs(n)).replace(/\b[a-z]/g, (ch) => ch.toUpperCase())} Only`;
 
-const FIXED: Array<Omit<FnfLine, 'amount' | 'note'>> = [
+export const FNF_FIXED: Array<Omit<FnfLine, 'amount' | 'note'>> = [
   { kind: 'earning', code: 'salary', label: 'Salary for the days worked' },
   { kind: 'earning', code: 'leave_encashment', label: 'Leave encashment' },
   { kind: 'earning', code: 'gratuity', label: 'Gratuity' },
@@ -183,7 +185,7 @@ export class ExitSettleService {
         ? Math.max(0, days(x.expected_last_day, x.accepted_last_day ?? x.proposed_last_day))
         : 0;
     const lines: FnfLine[] = [
-      ...FIXED.map((f) => ({
+      ...FNF_FIXED.map((f) => ({
         ...f,
         amount: 0,
         note: f.code === 'notice' && short ? `${String(short)} days short` : null,
@@ -294,17 +296,28 @@ export class ExitSettleService {
             status: 409,
           },
         );
+      // payroll's lines stay as payroll worked them out
+      const payroll = (
+        await c.query<{ lines: FnfLine[] }>(`SELECT lines FROM employee_fnf WHERE exit_id = $1`, [
+          x.id,
+        ])
+      ).rows[0]!.lines.filter((l) => l.fromPayroll);
+      const theirs = new Map(payroll.map((l) => [l.code, l]));
       const typed = dto.lines.filter((l) => !l.code.startsWith('dues_'));
       if (new Set(typed.map((l) => l.code)).size !== typed.length)
         throw new DomainError('validation-failed', 'Each line needs its own code', { status: 400 });
       await this.write(c, x.id, [
-        ...typed.map((l) => ({
-          kind: l.kind,
-          code: l.code,
-          label: l.label,
-          amount: r2(l.amount),
-          note: l.note?.trim() || null,
-        })),
+        ...typed.map(
+          (l) =>
+            theirs.get(l.code) ?? {
+              kind: l.kind,
+              code: l.code,
+              label: l.label,
+              amount: r2(l.amount),
+              note: l.note?.trim() || null,
+            },
+        ),
+        ...payroll.filter((l) => !typed.some((t) => t.code === l.code)),
         ...(await this.duesLines(c, x.id)),
       ]);
       await this.audit.stage(ctx, c, {

@@ -204,7 +204,7 @@ export async function saveFnf(id: string, lines: FnfLine[]) {
     'PUT',
     {
       lines: lines
-        .filter((l) => !l.fromClearance)
+        .filter((l) => !l.fromClearance && !l.fromPayroll)
         .map(({ kind, code, label, amount, note }) => ({ kind, code, label, amount, note })),
     },
     fnfPaths(id),
