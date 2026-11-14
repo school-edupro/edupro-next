@@ -41,10 +41,11 @@ export type ConfigValue = { ok: true; value: string } | { ok: false; message: st
 
 /**
  * One field of a rate form. A field named …Rate is typed as a per cent (12 → 0.12; a % sign may be typed). The rate
- * registry's Value is a decimal (0.62) or an amount (1500) as typed, or a per cent when it ends in % (62% → 0.62).
+ * registry's Value is a decimal (0.62) or an amount (1500) as typed, or a per cent when it ends in % (62% → 0.62);
+ * for a code ending in RATE, a number above 5 typed without % is refused (60 would be 6000 %).
  * Codes are upper-cased; fields that are not numbers pass as typed.
  */
-export function configValue(field: string, typed: string): ConfigValue {
+export function configValue(field: string, typed: string, rateCode?: string | null): ConfigValue {
   const v = typed.trim();
   if (field === 'stateCode' || field === 'rateCode') return { ok: true, value: v.toUpperCase() };
   if (!FIELD_LABELS[field]) return { ok: true, value: v };
@@ -63,6 +64,12 @@ export function configValue(field: string, typed: string): ConfigValue {
     const pct = s.endsWith('%');
     const n = pct ? s.slice(0, -1) : s;
     if (!NUMERIC.test(n)) return no('type a rate as 0.62 or 62%, or an amount such as 1500');
+    // a …RATE code is a fraction: 60 typed without the % sign would be 6000 %
+    if (!pct && /RATE$/i.test(rateCode ?? '') && Number(n) > 5)
+      return {
+        ok: false,
+        message: `Value: ${n} for ${(rateCode ?? '').toUpperCase()} would be ${String(Number(n) * 100)} % — type ${n}% or ${six(Number(n) / 100)}`,
+      };
     return { ok: true, value: pct ? six(Number(n) / 100) : n.includes('.') ? six(Number(n)) : n };
   }
   return NUMERIC.test(s) ? { ok: true, value: s } : no('type an amount such as 15000');

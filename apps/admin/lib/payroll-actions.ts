@@ -118,7 +118,7 @@ function configBody(kind: ConfigKind, fd: FormData, here: string) {
   for (const f of FIELDS[kind]) {
     const v = text(fd, f);
     if (v === null) continue;
-    const r = configValue(f, v);
+    const r = configValue(f, v, text(fd, 'rateCode'));
     if (!r.ok)
       redirect(
         `${here}${join(here)}error=validation-failed&detail=${encodeURIComponent(r.message)}`,
