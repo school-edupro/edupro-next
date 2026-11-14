@@ -39,7 +39,15 @@ export interface AttendanceMonth {
   month: string;
   monthWords: string;
   window: { from: string; to: string };
-  register: { unlocked: string[]; running: string[]; locked: string[] };
+  register: {
+    unlocked: string[];
+    running: string[];
+    locked: string[];
+    /** missing punches still open in the unlocked months (locking turns them into leave or loss of pay) */
+    openMissing: number;
+    /** the leave office or the Payroll SPOC: may lock an unlocked month from here */
+    canLock: boolean;
+  };
   figures: {
     staff: number;
     pulled: number;

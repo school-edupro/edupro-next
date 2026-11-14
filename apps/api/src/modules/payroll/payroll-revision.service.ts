@@ -491,6 +491,7 @@ export class PayrollRevisionService {
           total: S(total),
           firstOpenMonth: open,
           increments: employees.length,
+          ...(rev.mine ? { selfApproved: true } : {}),
         },
       });
       return {

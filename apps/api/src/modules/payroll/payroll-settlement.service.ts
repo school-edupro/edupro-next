@@ -510,6 +510,7 @@ export class PayrollSettlementService {
         action: 'payroll.settlement.approve',
         entityType: 'payroll_settlements',
         entityId: id,
+        ...(s.computed_mine ? { after: { selfApproved: true } } : {}),
       });
       return { ok: true };
     });

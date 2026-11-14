@@ -74,7 +74,7 @@ export async function approveDated(
   id: string,
   approver: string,
   approverIsAdmin: boolean,
-): Promise<{ closed: number; closedTo: string | null }> {
+): Promise<{ closed: number; closedTo: string | null; selfApproved?: true }> {
   const row = await loadDated(c, t, id);
   if (row.status !== 'draft')
     fail(`Only DRAFT records can be approved (this one is ${row.status.toUpperCase()})`, 409);
@@ -118,7 +118,12 @@ export async function approveDated(
             updated_by = app.current_user_id(), updated_at = now() WHERE id = $1`,
     [id],
   );
-  return { closed: toClose.length, closedTo: toClose.length ? closeTo : null };
+  return {
+    closed: toClose.length,
+    closedTo: toClose.length ? closeTo : null,
+    // the payroll admin approving their own draft: marked in the audit trail
+    ...(row.created_by === approver ? { selfApproved: true as const } : {}),
+  };
 }
 
 /** Ends an ACTIVE row by hand: from the day after `effectiveTo` nothing reads it. */

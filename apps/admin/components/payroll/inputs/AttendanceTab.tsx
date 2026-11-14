@@ -3,6 +3,7 @@ import { Pager, PerPage } from '@/components/Pager';
 import { DialogButton } from '@/components/leave/DialogButton';
 import { apiFetch } from '@/lib/api';
 import { monthName, SOURCE, type AttendanceMonth } from '@/lib/payroll-inputs';
+import { lockMonth } from '@/lib/leave-actions';
 import {
   finaliseAttendance,
   markPresent,
@@ -65,8 +66,44 @@ export async function AttendanceTab({
           <div>
             <strong>Lock the month in the attendance register first.</strong>{' '}
             {d.register.unlocked.map(monthName).join(' and ')} is over but not locked there: payroll
-            pulls only a locked month (Employee leave &amp; attendance → Attendance register).
+            pulls only a locked month
+            {d.register.canLock
+              ? '.'
+              : ' (Employee leave & attendance → Attendance register, the leave office).'}
           </div>
+          {d.register.canLock ? (
+            <div className="ep-grid__toolbar">
+              {d.register.unlocked.map((m) => (
+                <DialogButton
+                  key={m}
+                  id={`ia-lock-${m}`}
+                  label={`Lock ${monthName(m)}`}
+                  title={`Lock ${monthName(m)} for payroll`}
+                  className="ep-btn ep-btn--secondary ep-btn--sm"
+                >
+                  <form action={lockMonth.bind(null, true)} className="ep-form-section__body">
+                    <input type="hidden" name="back" value={`/payroll/inputs?${qs(page)}`} />
+                    <input type="hidden" name="month" value={m} />
+                    <p className="ep-field__help">
+                      Nothing in {monthName(m)} changes after this — leave, corrections, punches —
+                      until the leave office unlocks it. Unexplained absence becomes loss of pay.
+                    </p>
+                    {d.register.openMissing ? (
+                      <p className="ep-alert ep-alert--warning" role="status">
+                        {d.register.openMissing} missing punch
+                        {d.register.openMissing === 1 ? ' is' : 'es are'} still open: locking turns
+                        what nobody explains into leave or loss of pay. Ask the leave office to
+                        settle them first if they can be explained.
+                      </p>
+                    ) : null}
+                    <button type="submit" className="ep-btn ep-btn--primary ep-btn--sm">
+                      Lock {monthName(m)}
+                    </button>
+                  </form>
+                </DialogButton>
+              ))}
+            </div>
+          ) : null}
         </div>
       ) : d.register.running.length ? (
         <div className="ep-alert ep-alert--info" role="status">

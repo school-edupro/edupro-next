@@ -541,7 +541,10 @@ export async function importApprovers(
 
 // ---- phase C: staff attendance -------------------------------------------------------------------------
 const attBack = (path: string) =>
-  path.startsWith('/leave/attendance') || path.startsWith('/leave/setup/timings')
+  path.startsWith('/leave/attendance') ||
+  path.startsWith('/leave/setup/timings') ||
+  // the Payroll SPOC locks a month from the payroll attendance tab
+  path.startsWith('/payroll/inputs?')
     ? path
     : '/leave/attendance';
 async function attCall(back_: string, path: string, method: string, body: unknown, ok: string) {
@@ -552,7 +555,7 @@ async function attCall(back_: string, path: string, method: string, body: unknow
     if (e instanceof ApiError) back(safe, e);
     throw e;
   }
-  revalidatePath('/leave/attendance');
+  revalidatePath(safe.startsWith('/payroll') ? '/payroll/inputs' : '/leave/attendance');
   redirect(`${safe}${safe.includes('?') ? '&' : '?'}ok=1&detail=${encodeURIComponent(ok)}`);
 }
 const t = (fd: FormData, k: string) => {

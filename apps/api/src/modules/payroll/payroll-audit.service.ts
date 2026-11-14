@@ -123,6 +123,8 @@ export class PayrollAuditService {
       ).rows.map(({ before, after, ...r }) => ({
         ...r,
         changed: changed(before, after).slice(0, 8),
+        // the payroll admin (or the Payroll SPOC) approved what they made themselves
+        self: after?.selfApproved === true,
       }));
       const tables = (
         await c.query<{ t: string }>(

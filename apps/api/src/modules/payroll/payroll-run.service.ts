@@ -1121,6 +1121,7 @@ export class PayrollRunService {
         action: 'payroll.run.approve',
         entityType: 'payroll_runs',
         entityId: id,
+        ...(run.mine ? { after: { selfApproved: true } } : {}),
       });
       return { message: 'Approved. Lock it to release the payslips.' };
     });

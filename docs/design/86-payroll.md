@@ -569,3 +569,33 @@ lint, types and formatting of the API, admin, staff app and workers — all gree
 **Not in phase G**: decrypting the old PAN and bank copies (EduPro uses the employee record's); replaying the old
 additional and full-and-final runs (only regular months are replayed; the parallel comparison takes every run);
 a separate opening year-to-date figure (the history brought gives it).
+
+## As built — Payroll SPOC (14 Nov 2026)
+
+**Asked**: a role for a payroll SPOC who runs the whole payroll process, and a dev sign-in for it. **Decided**: one
+person may take the month alone (the payroll admin's own-approval rule), each self-approval marked in the audit trail;
+a narrow right to lock a month's staff attendance for payroll; the dev login on Alpha.
+
+**Migration 0379**: permission `leave.month.lock` (lock a month that is over; unlocking stays `leave.office.manage`),
+granted to every role holding `leave.office.manage` (school roles too); system role `payroll_spoc` "Payroll SPOC" with
+`payroll.setup.view|manage|approve`, `payroll.run.view|manage|approve`, `payroll.profile.reveal`,
+`payroll.settings.manage`, `payroll.audit.view`, `leave.report.view`, `leave.month.lock`. Not `leave.office.manage`, not
+`payroll.golive.countersign`.
+
+**API**: `POST /staff-attendance/lock` needs `leave.month.lock` (unlock still the office). `GET
+/payroll/inputs/attendance` returns `register.canLock` and `register.openMissing` (missing punches still open in the
+unlocked months). Self-approval: the run, settlement, LOP reversal and revision approvals and every dated approval
+(`approveDated` → `selfApproved`) put `selfApproved: true` in the audit event when the approver made the item; the
+audit list returns `self`. Still refused for the SPOC as for anyone: committing a go-live they prepared, countersigning
+one they signed (and the countersign right is not theirs), deciding their own claims and verifying their own tax.
+
+**Screens**: the payroll attendance tab's "lock the month first" warning gets **Lock ⟨month⟩** (a dialog with the open
+missing punches) for holders of the right; the audit trail shows a **Self-approved** badge and a **Self-approvals**
+filter. Help: Payroll → Who does what.
+
+**Dev sign-in**: `dev-payroll` "Pankaj Payroll", employee PS01 (Accounts, Alpha), role `payroll_spoc`; in seed:demo,
+the admin and staff app pickers; added to Alpha by a one-off insert of only those rows.
+
+**Tests**: `payroll-spoc.e2e-spec.ts` (4: the role's rights; locking — a checker refused, the SPOC locks, only the
+office unlocks; the month alone with the run self-approved, marked and listed, then locked; a checker refused their own
+run, the SPOC approves it unmarked).

@@ -538,6 +538,7 @@ export class PayrollPeopleService {
       const approver = requireTenant(ctx).userId!;
       const admin = has(ctx, PAYROLL.admin);
       const done: string[] = [];
+      const self = new Set<string>();
       const refused: Array<{ employeeId: string; reason: string }> = [];
       for (const employeeId of dto.employeeIds) {
         const rows = (
@@ -549,7 +550,9 @@ export class PayrollPeopleService {
         if (!rows.length) continue;
         await c.query('SAVEPOINT emp');
         try {
-          for (const r of rows) await approveDated(c, DATED.structures!, r.id, approver, admin);
+          for (const r of rows)
+            if ((await approveDated(c, DATED.structures!, r.id, approver, admin)).selfApproved)
+              self.add(employeeId);
           await c.query('RELEASE SAVEPOINT emp');
           done.push(employeeId);
         } catch (e) {
@@ -562,7 +565,11 @@ export class PayrollPeopleService {
         action: 'payroll.structure.approve',
         entityType: 'payroll_structures',
         entityId: 'many',
-        after: { approved: done, refused },
+        after: {
+          approved: done,
+          refused,
+          ...(self.size ? { selfApproved: true, self: [...self] } : {}),
+        },
       });
       return { approved: done.length, refused };
     });

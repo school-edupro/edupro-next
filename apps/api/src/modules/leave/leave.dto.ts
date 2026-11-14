@@ -153,6 +153,8 @@ export class LeaveSettingsDto extends createZodDto(LeaveSettingsSchema) {}
 // ---- phase B: applying, deciding, cancelling, balances --------------------------------------------------
 export const LEAVE_OWN = 'leave.own.apply';
 export const LEAVE_OFFICE = 'leave.office.manage';
+/** Lock a month that is over for payroll: the leave office and the Payroll SPOC (unlocking is the office's). */
+export const LEAVE_LOCK = 'leave.month.lock';
 
 const ApplyFields = {
   leaveTypeId: Id,

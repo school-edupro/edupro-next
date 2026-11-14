@@ -123,6 +123,16 @@ const DEMO_USERS: DemoUser[] = [
       'Store keeper (employee SK01), keeper of the Main store: receives goods (GRN), issues, returns, transfers, counts',
   },
   {
+    sub: 'dev-payroll',
+    name: 'Pankaj Payroll',
+    mobile: '9999999923',
+    email: 'payroll@alpha.example.test',
+    personType: 'employee',
+    roles: { ALPHA: ['payroll_spoc'] },
+    description:
+      "Payroll SPOC (employee PS01): runs the whole payroll month alone — set-up, people, inputs, the run to lock, bank file, returns, reports, audit trail; locks the month's staff attendance",
+  },
+  {
     sub: 'dev-group',
     name: 'Gita Group Admin',
     mobile: '9999999901',
@@ -657,6 +667,15 @@ async function main(): Promise<void> {
                    '9999999921', 'purchase@alpha.example.test', $2, 'PO01')
            ON CONFLICT (school_id, employee_code) DO UPDATE SET user_id = COALESCE(employees.user_id, EXCLUDED.user_id)`,
           [school.id, userIds['dev-purchase']],
+        );
+      // the Payroll SPOC's login (dev-payroll) as an employee of Alpha (PS01), in Accounts
+      if (schoolCode === 'ALPHA')
+        await c.query(
+          `INSERT INTO employees (school_id, employee_code, first_name, last_name, dob, gender, employee_type, designation, department, joined_on, mobile, email, user_id, legacy_ref)
+           VALUES ($1, 'PS01', 'Pankaj', 'Payroll', '1987-02-11', 'male', 'non_teaching', 'Payroll SPOC', 'Accounts', '2017-07-01',
+                   '9999999923', 'payroll@alpha.example.test', $2, 'PS01')
+           ON CONFLICT (school_id, employee_code) DO UPDATE SET user_id = COALESCE(employees.user_id, EXCLUDED.user_id)`,
+          [school.id, userIds['dev-payroll']],
         );
       // the store keeper's login (dev-store) as an employee of Alpha (SK01), the keeper of its main store
       // when the store exists (Purchase → Stores makes it)

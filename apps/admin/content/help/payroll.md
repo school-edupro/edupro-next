@@ -17,9 +17,19 @@ and accounts** work (PF ECR, ESI, profession tax, LWF, the salary voucher, the c
 | **Payroll checker** (its own role)     | Approves the drafts someone else made; changes the pay matrix; may see a full PAN or account number     |
 | **School admin** (and the group admin) | The payroll admin: the settings, tax years, templates, confidential staff; may also approve their own   |
 | **Payroll auditor** (its own role)     | Reads everything for an audit — runs, registers, reports, the audit trail — and changes nothing         |
+| **Payroll SPOC** (its own role)        | Runs the whole month alone: maker, checker and payroll admin together; locks the month's attendance     |
 
 A checker never approves their own draft: the same person cannot make and approve a change (the school
 admin can, and it is in the audit log). Every change is in the audit log with who and when.
+
+**The Payroll SPOC** (single point of contact) is for a school where one person does payroll. They make and
+approve the set-up and the people's records, pull and finalise attendance, create, process, approve and lock the
+run, make the bank file, file the returns and run the reports. When they approve something they made themselves,
+the audit trail marks it **Self-approved** (Payroll audit trail → **Self-approvals** lists them), so the principal
+or an auditor can look through them. Three things still need another person: the principal countersigns the
+go-live, a second person commits the move from the old payroll, and another checker decides the SPOC's own claims
+and tax declaration. The SPOC can **lock** a month that is over in the staff attendance register from the payroll
+attendance tab (**Lock** on the warning); unlocking, corrections and balances stay with the leave office.
 
 ## Where to find it
 

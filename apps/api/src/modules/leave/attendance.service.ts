@@ -20,6 +20,7 @@ import { LeaveService } from './leave.service';
 import { addDays, dmy, fail, leaveFlow, monthStart, monthWords } from './leave-engine';
 import { leaveReportFile, preparedChecked } from './leave-report-file';
 import {
+  LEAVE_LOCK,
   LEAVE_OFFICE,
   LEAVE_OWN,
   type DayCorrectDto,
@@ -1928,7 +1929,15 @@ export class AttendanceService implements OnModuleInit {
   // ---- the payroll lock ----------------------------------------------------------------------------
   /** Lock a past month (the absent days nobody explained become loss of pay first); unlock with a reason. */
   async lock(ctx: RequestContext, dto: LockDto, lock: boolean) {
-    this.mustOffice(ctx);
+    if (!lock) this.mustOffice(ctx);
+    else if (!this.has(ctx, LEAVE_LOCK))
+      throw new DomainError(
+        'permission-denied',
+        'Only the leave office or the payroll SPOC locks a month',
+        {
+          status: 403,
+        },
+      );
     return this.db.tenant(requireTenant(ctx), async (c) => {
       const month = `${dto.month}-01`;
       if (lock) {

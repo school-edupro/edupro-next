@@ -233,6 +233,7 @@ export class PayrollReviewService {
         action: 'payroll.lop_reversal.approve',
         entityType: 'payroll_lop_reversals',
         entityId: id,
+        ...(l!.mine ? { after: { selfApproved: true } } : {}),
       });
       return { message: 'Approved: paid as arrears by the next run that processes the employee.' };
     });

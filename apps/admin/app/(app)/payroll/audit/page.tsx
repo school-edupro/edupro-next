@@ -12,6 +12,7 @@ interface Row {
   entity_type: string | null;
   entity_id: string | null;
   changed: string[];
+  self?: boolean;
 }
 const KEYS = ['from', 'to', 'kind', 'table', 'action', 'who', 'record', 'contains'] as const;
 const TONE = { Change: 'info', Event: 'neutral', Read: 'warning' } as const;
@@ -183,6 +184,12 @@ export default async function PayrollAuditPage({
             >
               Excel (before and after)
             </a>
+            <a
+              className="ep-btn ep-btn--ghost ep-btn--sm"
+              href="/payroll/audit?contains=selfApproved"
+            >
+              Self-approvals
+            </a>
             {me.permissions.includes('payroll.run.approve') ? (
               <a
                 className="ep-btn ep-btn--ghost ep-btn--sm"
@@ -224,6 +231,12 @@ export default async function PayrollAuditPage({
                     </td>
                     <td>
                       {ACTION_WORDS[r.action] ?? r.action}
+                      {r.self ? (
+                        <>
+                          {' '}
+                          <Badge tone="warning">Self-approved</Badge>
+                        </>
+                      ) : null}
                       {r.entity_type ? (
                         <div className="ep-field__help">{r.entity_type.replace(/_/g, ' ')}</div>
                       ) : null}

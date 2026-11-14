@@ -21,6 +21,10 @@ export const DEMO_ROLES: Array<{ sub: string; label: string }> = [
     sub: 'dev-store',
     label: 'Store Keeper (Main store: goods receipts, issues, returns, transfers, counts)',
   },
+  {
+    sub: 'dev-payroll',
+    label: 'Payroll SPOC (the whole payroll month alone; locks the month’s staff attendance)',
+  },
   { sub: 'dev-hostel', label: 'Hostel Clerk (set-up, beds, registers, hostel withdrawals)' },
   { sub: 'dev-warden', label: 'Warden (head warden of a hostel; roll-call in the staff app)' },
   {

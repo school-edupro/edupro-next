@@ -11,6 +11,7 @@ import {
   CorrectionsDto,
   DecideDto,
   ExceptionsDto,
+  LEAVE_LOCK,
   LEAVE_OFFICE,
   LEAVE_OWN,
   LockDto,
@@ -146,7 +147,7 @@ export class AttendanceController {
   @ApiOperation({
     summary: 'Lock a past month for payroll (unexplained absence becomes loss of pay first)',
   })
-  @RequirePermission(LEAVE_OFFICE)
+  @RequirePermission(LEAVE_LOCK)
   lock(@ReqCtx() ctx: RequestContext, @Body() body: LockDto) {
     return this.att.lock(ctx, body, true);
   }

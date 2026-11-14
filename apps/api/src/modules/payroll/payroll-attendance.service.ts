@@ -27,6 +27,7 @@ import {
   bad,
   camelRow,
   firstOf,
+  has,
   hiddenFor,
   monthOf,
   monthWords,
@@ -168,11 +169,22 @@ export class PayrollAttendanceService {
       const skip = all.filter((r) => r.hold?.mode === 'SKIP').length;
       const counted = all.filter((r) => r.hold?.mode !== 'SKIP');
       const locks = await this.registerLocks(c, from, to);
+      // the leave office or the Payroll SPOC locks an unlocked month from here; what locking turns into loss of pay
+      const openMissing = locks.unlocked.length
+        ? (
+            await c.query<{ n: number }>(
+              `SELECT count(*)::int AS n FROM staff_missing_punches m JOIN employees e ON e.id = m.employee_id
+                WHERE m.status = 'pending' AND e.deleted_at IS NULL
+                  AND m.day >= $1::date AND m.day < $2::date + interval '1 month'`,
+              [firstOf(locks.unlocked[0]!), firstOf(locks.unlocked[locks.unlocked.length - 1]!)],
+            )
+          ).rows[0]!.n
+        : 0;
       return {
         month: q.month,
         monthWords: monthWords(q.month),
         window: { from, to },
-        register: locks,
+        register: { ...locks, openMissing, canLock: has(ctx, 'leave.month.lock') },
         figures: {
           staff: all.length,
           pulled: counted.filter((r) => r.attendance).length,
