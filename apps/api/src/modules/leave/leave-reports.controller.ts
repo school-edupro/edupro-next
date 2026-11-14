@@ -5,7 +5,7 @@ import { AuthenticatedOnly } from '../../common/auth/decorators';
 import { ReqCtx, type RequestContext } from '../../common/http/request-context';
 import { LeaveDashboardService } from './leave-dashboard.service';
 import { LeaveReportsService } from './leave-reports.service';
-import { LeaveReportQueryDto, ReportAccessDto } from './leave.dto';
+import { DashboardQueryDto, LeaveReportQueryDto, ReportAccessDto } from './leave.dto';
 
 /** Staff leave & attendance: the dashboard and the reports (docs/design/85, phase D). */
 @ApiTags('leave')
@@ -23,8 +23,8 @@ export class LeaveReportsController {
   })
   // the reports right or the leave office (checked in the service)
   @AuthenticatedOnly()
-  dashboard(@ReqCtx() ctx: RequestContext) {
-    return this.dash.dashboard(ctx);
+  dashboard(@ReqCtx() ctx: RequestContext, @Query() q: DashboardQueryDto) {
+    return this.dash.dashboard(ctx, q);
   }
 
   @Get('mine')

@@ -4032,6 +4032,182 @@ a.ep-tabs__tab {
 .ep-dash-compact .ep-chart__legend {
   justify-content: center;
 }
+
+/* ---- staff leave & attendance dashboard (docs/design/85, rebuilt 14 Nov 2026) ----------------------------- */
+.ep-sdash__fig {
+  display: block;
+  height: 100%;
+  color: inherit;
+  text-decoration: none;
+  transition: border-color 0.15s ease;
+}
+.ep-sdash__fig:hover,
+.ep-sdash__fig:focus-visible {
+  border-color: var(--border-accent);
+}
+.ep-sdash__fig .ep-kpi__value small {
+  font-size: var(--fs-body);
+  font-weight: var(--fw-regular);
+  color: var(--text-muted);
+}
+.ep-sdash__fig[data-tone='danger'] .ep-kpi__value {
+  color: var(--status-danger);
+}
+.ep-sdash__hint {
+  font-size: var(--fs-small);
+  color: var(--text-muted);
+}
+.ep-sdash__glance {
+  margin-bottom: var(--sp-4);
+}
+.ep-sdash__bar {
+  display: flex;
+  height: 0.875rem;
+  border-radius: var(--radius-pill);
+  overflow: hidden;
+  background: var(--surface-band);
+}
+.ep-sdash__bar > span {
+  display: block;
+  height: 100%;
+}
+[data-s='in'] {
+  --sdash-tone: var(--status-success);
+}
+[data-s='leave'] {
+  --sdash-tone: var(--status-info);
+}
+[data-s='notin'] {
+  --sdash-tone: var(--status-danger);
+}
+[data-s='off'] {
+  --sdash-tone: var(--border-strong);
+}
+.ep-sdash__bar > span[data-s] {
+  background: var(--sdash-tone);
+}
+.ep-sdash__legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2) var(--sp-5);
+  list-style: none;
+  margin: var(--sp-2) 0 0;
+  padding: 0;
+  font-size: var(--fs-small);
+}
+.ep-sdash__legend a {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  color: var(--text-body);
+  text-decoration: none;
+}
+.ep-sdash__legend a:hover strong,
+.ep-sdash__legend a:focus-visible strong {
+  text-decoration: underline;
+}
+.ep-sdash__sw {
+  display: inline-block;
+  width: 0.75rem;
+  height: 0.75rem;
+  border-radius: var(--radius-sm);
+  background: var(--sdash-tone);
+}
+.ep-sdash__two {
+  display: grid;
+  gap: var(--sp-4);
+  margin-bottom: var(--sp-4);
+}
+@media (min-width: 64rem) {
+  .ep-sdash__two {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+.ep-sdash__attn {
+  display: grid;
+  gap: var(--sp-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.ep-sdash__attn li {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: var(--sp-2) var(--sp-3);
+  border: 1px solid var(--border-default);
+  border-left-width: 0.25rem;
+  border-radius: var(--radius-md);
+}
+.ep-sdash__attn li[data-tone='danger'] {
+  border-left-color: var(--status-danger);
+}
+.ep-sdash__attn li[data-tone='warning'] {
+  border-left-color: var(--status-warning);
+}
+.ep-sdash__attn li[data-tone='info'] {
+  border-left-color: var(--status-info);
+}
+.ep-sdash__n {
+  min-width: 2.5rem;
+  font-family: var(--font-heading);
+  font-size: var(--fs-h4);
+  font-weight: var(--fw-semibold);
+  color: var(--text-heading);
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.ep-sdash__what {
+  flex: 1;
+  min-width: 0;
+}
+.ep-sdash__what span {
+  display: block;
+  font-size: var(--fs-small);
+  color: var(--text-muted);
+}
+.ep-sdash__out {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.ep-sdash__out li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--sp-1) var(--sp-2);
+  padding: var(--sp-2) 0;
+  border-bottom: 1px solid var(--border-default);
+}
+.ep-sdash__out li:last-child {
+  border-bottom: 0;
+}
+.ep-sdash__out .ep-sdash__hint {
+  flex-basis: 100%;
+}
+.ep-sdash__daywords {
+  margin: var(--sp-3) 0 var(--sp-1);
+  font-size: var(--fs-caption);
+  font-weight: var(--fw-semibold);
+  letter-spacing: var(--ls-overline);
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+.ep-sdash__tabs {
+  margin-bottom: var(--sp-3);
+}
+.ep-sdash__tabs a {
+  font-size: var(--fs-small);
+}
+.ep-sdash__scroll {
+  max-height: 26rem;
+  overflow-y: auto;
+}
+@media (max-width: 40rem) {
+  .ep-sdash__opt {
+    display: none;
+  }
+}
 .ep-cdash__kpis {
   display: grid;
   gap: var(--sp-4);

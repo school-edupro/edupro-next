@@ -769,62 +769,99 @@ export const DAY_CODE_TONE: Record<string, string> = {
 };
 
 // ---- phase D: the dashboard and the reports ------------------------------------------------------------
+export type DashStatus = 'in' | 'leave' | 'notin' | 'off';
 export interface LeaveDashboard {
   today: string;
+  day: string;
+  isToday: boolean;
+  dayWords: string;
   monthWords: string;
+  lastMonthWords: string;
   fyFrom: string;
+  filters: { department: string | null; type: string | null };
+  options: { departments: string[]; types: string[] };
   figures: {
     staff: number;
-    punched: number;
+    due: number;
+    in: number;
     onLeave: number;
     notIn: number;
     late: number;
     off: number;
     waiting: number;
-    corrections: number;
-    lateMarks: number;
-    missing: number;
-    lopDays: number;
-    attendance: number | null;
+    oldestDays: number | null;
+    attendance: {
+      month: number | null;
+      lastMonth: number | null;
+      to: string | null;
+      lastTo: string;
+    };
   };
-  lastMonth: { words: string; month: string; locked: boolean };
+  glance: { in: number; leave: number; notIn: number; off: number };
+  attention: Array<{
+    key: string;
+    label: string;
+    count: number;
+    detail?: string;
+    href: string | null;
+    tone: 'danger' | 'warning' | 'info';
+  }>;
+  cover: { due: number; covered: number };
+  people: Array<{
+    id: string;
+    name: string;
+    code: string;
+    department: string;
+    staffType: string;
+    status: DashStatus;
+    inAt: string | null;
+    late: number;
+    leave: { type: string; half: boolean; session: string | null; requestId: string | null } | null;
+    periods: { due: number; covered: number } | null;
+  }>;
+  nextDays: Array<{
+    day: string;
+    words: string;
+    people: Array<{
+      id: string;
+      name: string;
+      code: string;
+      department: string;
+      type: string;
+      half: boolean;
+      waiting: boolean;
+      requestId: string;
+    }>;
+  }>;
   departments: Array<{
     department: string;
     staff: number;
-    punched: number;
-    onLeave: number;
+    in: number;
+    leave: number;
     notIn: number;
     late: number;
     off: number;
-  }>;
-  onLeave: Array<{
-    id: string;
-    name: string;
-    code: string;
-    department: string | null;
-    type: string;
-    from_date: string;
-    to_date: string;
-    half: boolean;
-  }>;
-  lateToday: Array<{
-    id: string;
-    name: string;
-    code: string;
-    department: string | null;
-    at: string;
-    minutes: number;
+    due: number;
+    presence: number | null;
   }>;
   waiting: Array<{
     kind: string;
     id: string;
     label: string;
     name: string;
+    code: string;
+    department: string;
     since: string;
+    days: number;
     href: string;
   }>;
-  byDay: Array<{ day: string; percent: number | null }>;
+  trend: {
+    thisMonth: Array<{ day: string; percent: number | null }>;
+    lastMonth: Array<{ day: string; percent: number | null }>;
+  };
   byType: Array<{ code: string; name: string; days: number }>;
+  lastMonth: { words: string; month: string; locked: boolean };
+  can: { office: boolean; lock: boolean };
 }
 
 export type LeaveReportFilter =

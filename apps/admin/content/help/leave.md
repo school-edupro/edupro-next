@@ -379,11 +379,24 @@ match (the letterhead, the filters, Prepared by and Checked by).
 
 ## The dashboard and the reports (Employee leave & attendance → Leave dashboard, Leave & attendance reports)
 
-**The dashboard**: twelve figures — staff, in today, on leave today, not in yet (no punch, no leave, a
-working day), late today, weekly off or holiday, the month's attendance %, late marks, missing punches and
-loss-of-pay days this month, leave and corrections waiting — then today by department, who is on leave
-and late today, what waits longest (3 days or more in red), and two small charts: attendance by day this
-month and leave taken this year by type. A reminder shows when last month is not locked for payroll.
+**The dashboard** shows one day — today unless you pick another — for everyone, a department or a staff
+type (teaching, non-teaching, contract, visiting). Staff in the "Not required" list are left out.
+
+- **Six figures**, each opening its list: **In** (of those due in that day, with the %), **On leave** (and the
+  periods teachers on leave leave to cover, and how many are covered), **Not in yet** (a working day: no punch,
+  no leave), **Late**, **Waiting for approval** (red when the oldest waits 3 days or more) and the month's
+  **Attendance** against last month's same days.
+- **The day at a glance**: one bar — in, on leave, not in, weekly off or holiday — each person counted once.
+  Press a colour to see who.
+- **Needs attention**: leave, cancellations and corrections waiting; periods to cover; last month not yet
+  locked for payroll; the month's missing punches, late marks and loss-of-pay days — each with **Open** where
+  it is dealt with.
+- **Who's out**: the day's leave (½ for half a day, the periods covered of those due), or **Next 7 days** —
+  approved leave and leave still waiting, day by day.
+- **People**: the day's list by status — not in, in, on leave, late, off — with the time in, minutes late and
+  the leave; a name opens the employee's day.
+- **Departments**, lowest presence first (a department's name filters the page to it); **Waiting longest**;
+  then two small charts: attendance by day this month against last month, and leave taken this year by type.
 
 **The reports** (pick one, filter, read it here — up to 3,000 rows — and save it as **Excel** or **PDF**
 with the letterhead and the **Prepared by** (you, with your signature and the time), **Checked by** and

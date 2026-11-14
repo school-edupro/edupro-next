@@ -819,6 +819,39 @@ leaves the first entries out; a day's oldest History entry is the system's worki
 HOD's own correction waits for — the school admin — and who decided it, on the day and the month). Browser
 (dev-admin on the reported day; 1440 and 375): the History entry, the waiting approver, axe clean.
 
+## As built — the dashboard rebuilt (14 Nov 2026)
+
+**Asked**: "this UI not good, rebuild as benchmark with best in education ERP". **Benchmark**: Keka (Time &
+Attendance → Attendance Summary: today's attendance stats — on time, late, not yet in, off — each opening its
+people; leave in its own Leave Summary), greytHR (Leave → Who Is In by date; the Leave Calendar), school ERPs
+(on a teacher's absence, the periods that need a substitute). **Decided** (all recommended): the full rebuild —
+a day picker, department and staff-type filters, six figures that open their lists, the day at a glance, needs
+attention, who's out today and the next seven days with periods to cover, departments with a presence bar lowest
+first, small trend charts last; card lists and fewer columns on a phone.
+
+**API** `GET /leave-reports/dashboard?day&department&type` (`DashboardQueryDto`; a day after today or more than
+400 days back falls back to today; a bad type is refused). Each counted person once: **in** (a punch that day, or
+P / HD), **on leave** (approved leave on a working day, or LV), **off** (weekly off or holiday), else **not in**.
+Figures: in of due (staff less off), on leave (half days included), not in, late, waiting (leave, cancellations,
+corrections; the oldest in days), attendance this month to yesterday (or the day picked) against last month's
+same days. `attention` (each with an href by the viewer's rights: the office's register, the approvals, the
+payroll attendance tab for the Payroll SPOC's lock, the substitutions for the day), `people`, `cover` (timetable
+slots of the weekday in the academic year holding the day, for the people on leave; covered when a substitution
+that date matches the slot), `nextDays` (seven days, approved and waiting), `departments` (presence = in / due,
+lowest first), `waiting` (the ten oldest), `trend` (this month and last, by day), `byType` (this financial year).
+The payroll lock reminder is always about the month before this one.
+
+**Screen** `/leave/dashboard`: the filter band; six linked figure cards (`.ep-sdash__fig`); the glance bar
+(`.ep-sdash__bar`, `role="img"` with the counts, a linked legend); Needs attention and Who's out side by side
+(`.ep-sdash__two`; the day / next 7 days as links); People by status (links, a scrolling table); Departments
+(`.ep-meter` presence; staff, in, late and off hidden under 40rem); Waiting longest; a line chart (this month
+against last) and the leave-by-type bars. Help: Leave → The dashboard and the reports.
+
+**Tests**: `staff-reports` (the dashboard: the glance adds up, the people and seven days; a past day — present
+and late, then on loss of pay; the month's trend; the department and type filters, a bad type refused, a day
+ahead turned to today; the lock item's link). Browser (dev-principal and dev-payroll; 1440 and 375; four views
+each): axe clean.
+
 ## The module is complete
 
 Phases A–E are built. What is left is the school's: the old database connection on the server, the read, the

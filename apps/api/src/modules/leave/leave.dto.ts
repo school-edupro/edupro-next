@@ -397,6 +397,16 @@ export const ExceptionsSchema = z.object({
 });
 export class ExceptionsDto extends createZodDto(ExceptionsSchema) {}
 
+/** The staff types a dashboard filters by (employees.employee_type). */
+export const STAFF_TYPES = ['teaching', 'non_teaching', 'contract', 'visiting'] as const;
+export const DashboardQuerySchema = z.object({
+  /** a day that is over or today (default today) */
+  day: Day.optional(),
+  department: z.string().trim().max(100).optional(),
+  type: z.enum(STAFF_TYPES).optional(),
+});
+export class DashboardQueryDto extends createZodDto(DashboardQuerySchema) {}
+
 export const LockSchema = z.object({
   month: Month,
   reason: z.string().trim().max(300).default(''),

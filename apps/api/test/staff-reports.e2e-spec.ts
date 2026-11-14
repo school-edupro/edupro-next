@@ -401,20 +401,55 @@ describe('staff leave reports (e2e)', () => {
     const dash = (await call(office, 'GET', '/leave-reports/dashboard')).json();
     // E1 and E2; E3 is not required
     expect(dash.figures.staff).toBe(2);
-    // today by department adds up; the figures are numbers; this year's leave by type has last month's
+    // today by department adds up; the figures are numbers; the day at a glance counts each person once
     expect(dash.departments.reduce((n: number, d: { staff: number }) => n + d.staff, 0)).toBe(2);
-    for (const k of [
-      'punched',
-      'onLeave',
-      'notIn',
-      'late',
-      'off',
-      'waiting',
-      'corrections',
-      'lateMarks',
-      'missing',
-    ])
+    for (const k of ['due', 'in', 'onLeave', 'notIn', 'late', 'off', 'waiting'])
       expect([k, typeof dash.figures[k]]).toEqual([k, 'number']);
+    const sum = (g: Record<string, number>) => g.in! + g.leave! + g.notIn! + g.off!;
+    expect(sum(dash.glance)).toBe(2);
+    expect(dash.people).toHaveLength(2);
+    expect(dash.nextDays).toHaveLength(7);
+    expect(dash.isToday).toBe(true);
+    // a day that is over: E1 present and late on the first weekday, on loss of pay on the fifth
+    const d0 = (await call(office, 'GET', `/leave-reports/dashboard?day=${PREV[0]!}`)).json();
+    expect(d0.day).toBe(PREV[0]);
+    const e1 = (x: { people: Array<{ code: string }> }) =>
+      x.people.find((p) => p.code === `${s}E1`) as unknown as {
+        status: string;
+        late: number;
+        leave: { type: string; half: boolean } | null;
+      };
+    expect(e1(d0)).toEqual(expect.objectContaining({ status: 'in', late: 10 }));
+    expect(d0.figures.late).toBe(1);
+    const d4 = (await call(office, 'GET', `/leave-reports/dashboard?day=${PREV[4]!}`)).json();
+    expect(e1(d4).status).toBe('leave');
+    expect(e1(d4).leave).toEqual(expect.objectContaining({ type: 'LOP', half: false }));
+    expect(sum(d4.glance)).toBe(2);
+    // the month's attendance and last month's same days; the trend has last month's days
+    expect(d4.trend.thisMonth.length).toBeGreaterThan(0);
+    // filters: a department or a staff type with nobody in it; a bad type is refused; a day ahead is today
+    expect(
+      (await call(office, 'GET', '/leave-reports/dashboard?department=Nowhere')).json().figures
+        .staff,
+    ).toBe(0);
+    expect(
+      (await call(office, 'GET', '/leave-reports/dashboard?type=non_teaching')).json().figures
+        .staff,
+    ).toBe(0);
+    expect(
+      (
+        await call(office, 'GET', '/leave-reports/dashboard?department=Science&type=teaching')
+      ).json().figures.staff,
+    ).toBe(2);
+    expect((await call(office, 'GET', '/leave-reports/dashboard?type=pupil')).statusCode).toBe(400);
+    expect(
+      (await call(office, 'GET', `/leave-reports/dashboard?day=${add(today, 3)}`)).json().day,
+    ).toBe(today);
+    // what needs attention: last month is not locked for payroll; each item says where to act
+    const lock = dash.attention.find((a: { key: string }) => a.key === 'lock');
+    expect(lock).toEqual(
+      expect.objectContaining({ href: `/leave/attendance?month=${prevMonth.slice(0, 7)}` }),
+    );
     if (prevMonth >= `${today.slice(0, 4)}-04-01` || Number(today.slice(5, 7)) < 4)
       expect(dash.byType).toEqual(
         expect.arrayContaining([
