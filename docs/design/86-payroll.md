@@ -417,7 +417,8 @@ written once.
 year of the monthly wage, a part year above six months, the minimum years, any service on death or disablement, the
 cap, the tax-free part), `leaveEncashment` (days × wage ÷ 30), `leaveEncashmentTaxFree` (the least of the amount, the
 days at the ten-month average, ten months' average, 30 days a completed year, what is left of the cap), `noticeShortfall`,
-`monthArrears`. 158 tests, 100 %.
+`monthArrears`, `codeWages` (the labour codes' wages: the wage heads, or half of the pay when the allowances are more).
+162 tests, 100 %.
 
 **Data**: 0375 (4f63251b) — the settlement heads (GRAT_EX/TX, ENCASH_EX/TX, NOTICE_REC, FNF_REC; manual, tax-free ones
 not taxable), `payroll_runs.purpose` (FNF), the settings (increment month, minimum months, % off the matrix, gratuity cap
@@ -453,7 +454,16 @@ the law, on the statement and kept by its form; another checker approves; staged
 full-and-final run, settled, the statement prints; below nothing — dues and the letter; death — nominees' shares; a
 checker never approves their own; cancel gives the statement its lines back), `payroll-people-docs.e2e-spec.ts` (2:
 letters to staff and in My payslips, the salary certificate, the loan papers; the transfer seen live and brought once,
-never one not accepted into this school); the engine's 158 tests; a browser pass with axe at 1440 and 375 px.
+never one not accepted into this school); the engine's 162 tests; a browser pass with axe at 1440 and 375 px of every
+new screen (seeded test schools; admin and staff app).
+
+**Gate** (14 Nov): the engine (162 tests, 100 %), every payroll spec with the exit, transfer, leave, attendance, access
+and fee-ledger specs, permissions, the database's 143, lint, types and formatting of the three apps — all green. It
+found one gap from phase B and fixed it: the labour codes' wage rule (decision 3) was a rate nobody read. Now, with
+`LABOUR_CODE_WAGES` = 1 in force, a regular month's PF wage takes the allowances above half of the structure pay as
+wages too (`calc.ts`, trace `labourCode`; never on a top-up; NPS stays on basic + DA), and a settlement's gratuity
+stands on the last month's labour-code wages (`detail.gratuity.wage`, `labourCode`); leave and notice stay on basic +
+DA. The exit statement now says how much of its net payroll pays and how much is left for accounts.
 
 **Not in phase E**: relief for earlier years' arrears (Form 10E) — the arrears are paid and taxed in the month paid;
 promotions (a structure change by hand); fee dues read from the fee ledger (typed as other recovery, or through the

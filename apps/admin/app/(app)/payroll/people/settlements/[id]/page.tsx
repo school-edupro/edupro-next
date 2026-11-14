@@ -46,7 +46,14 @@ interface Settlement {
     basisMonth?: string;
     averageMonthly?: string;
     service?: { years: number; months: number; days: number };
-    gratuity?: { eligible: boolean; years: number; why?: string; capped?: boolean };
+    gratuity?: {
+      eligible: boolean;
+      years: number;
+      why?: string;
+      capped?: boolean;
+      wage?: string;
+      labourCode?: boolean;
+    };
     leave?: {
       byType: Array<{ code: string; name: string; balance: number; counted: number }>;
       fromBalance: number;
@@ -276,7 +283,7 @@ export default async function SettlementPage({
                   <td>
                     {w.gratuity?.eligible === false
                       ? (w.gratuity.why ?? 'Not due')
-                      : `${String(w.gratuity?.years ?? 0)} year(s) × 15/26 of ₹${money(s.basis)}${w.gratuity?.capped ? ', capped' : ''}`}
+                      : `${String(w.gratuity?.years ?? 0)} year(s) × 15/26 of ₹${money(w.gratuity?.wage ?? s.basis)}${w.gratuity?.labourCode ? ' (the labour codes’ wages)' : ''}${w.gratuity?.capped ? ', capped' : ''}`}
                     {Number(s.gratuityForfeited) > 0 ? (
                       <div className="ep-field__help">
                         ₹{money(s.gratuityForfeited)} forfeited: {s.forfeitReason}

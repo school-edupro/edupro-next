@@ -13,12 +13,14 @@ import {
   daysToHundredths,
   decToScaled,
   divHalfUp,
+  MICRO_PER_RUPEE,
   paiseToMicro,
   prorate,
   roundHead,
   type Rounding,
 } from './money';
 import { calcOrder } from './order';
+import { codeWages } from './settle';
 import {
   ageOn,
   esi as esiOf,
@@ -477,6 +479,16 @@ export function calculate(i: CalcInput): CalcOutcome {
   const sumIf = (k: 'pf' | 'esi' | 'pt' | 'taxable') =>
     earnings.reduce((n, l) => n + (flags.get(l)![k] ? l.earned : 0n), 0n);
   const pfBasket = sumIf('pf');
+  // the labour codes' wage rule once the school switches it on (the dated rate LABOUR_CODE_WAGES = 1): allowances above
+  // half of the month's structure pay count as PF wages too; never on a top-up, which pays one-off items only
+  const codeRule = !top && (rateMicro('LABOUR_CODE_WAGES') ?? 0n) >= MICRO_PER_RUPEE;
+  const structurePay = earnings.reduce((n, l) => n + (l.isStructure ? l.earned : 0n), 0n);
+  const structurePf = earnings.reduce(
+    (n, l) => n + (l.isStructure && flags.get(l)!.pf ? l.earned : 0n),
+    0n,
+  );
+  const codeExtra = codeRule ? codeWages(structurePf, structurePay) - structurePf : 0n;
+  const pfWageBasket = pfBasket + codeExtra;
   const esiWage = sumIf('esi');
   const ptWage = sumIf('pt');
   const taxableNow = sumIf('taxable');
@@ -501,7 +513,7 @@ export function calculate(i: CalcInput): CalcOutcome {
       epsNote = `EPS stops: ${String(st.epsStopAge)} or over by the month's end`;
     }
     pfR = pfOf({
-      basket: pfBasket,
+      basket: pfWageBasket,
       basis: p.pfWageBasis,
       prorateCeiling: st.pfCeilingProrate,
       paidDays: top ? '1' : att.paidDays,
@@ -701,7 +713,7 @@ export function calculate(i: CalcInput): CalcOutcome {
       const vars = {
         ...fullVars(paidH, otH),
         GROSS_EARNED: paiseToMicro(grossEarned),
-        PF_WAGE: paiseToMicro(pfR?.pfWage ?? pfBasket),
+        PF_WAGE: paiseToMicro(pfR?.pfWage ?? pfWageBasket),
         BASIC_DA: paiseToMicro(earnedOf('BASIC') + earnedOf('DA')),
       };
       const r = formulaValue(h, 2, [{ heads: { ...dValues }, vars }]);
@@ -793,6 +805,9 @@ export function calculate(i: CalcInput): CalcOutcome {
       rates: ratesUsed,
       attributes: i.attributes,
       pfSegments: st.pfSegments?.map((s) => s.id) ?? [],
+      labourCode: codeRule
+        ? { structurePay, wages: structurePf + codeExtra, added: codeExtra }
+        : null,
       eps: epsNote,
       esi: esiR
         ? {

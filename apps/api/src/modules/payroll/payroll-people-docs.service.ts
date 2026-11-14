@@ -257,7 +257,13 @@ export class PayrollPeopleDocsService {
         net: string;
         detail: {
           service?: { years: number; months: number; days: number };
-          gratuity?: { years: number; eligible: boolean; why?: string };
+          gratuity?: {
+            years: number;
+            eligible: boolean;
+            why?: string;
+            wage?: string;
+            labourCode?: boolean;
+          };
           notice?: { days: number };
           clearanceDues?: string;
           nominees?: Array<{
@@ -381,8 +387,12 @@ export class PayrollPeopleDocsService {
             sv ? ` · service ${String(sv.years)} y ${String(sv.months)} m ${String(sv.days)} d` : ''
           }`,
           `Worked on Rs. ${money(s.basis)} a month (basic + DA of the last month paid)${
-            s.pay_month ? ` · paid with ${monthWords(s.pay_month)}` : ''
-          }${s.dues_letter_no ? ` · dues letter ${s.dues_letter_no}` : ''}`,
+            d.gratuity?.labourCode
+              ? `; gratuity on Rs. ${money(d.gratuity.wage)} (the labour codes' wages)`
+              : ''
+          }${s.pay_month ? ` · paid with ${monthWords(s.pay_month)}` : ''}${
+            s.dues_letter_no ? ` · dues letter ${s.dues_letter_no}` : ''
+          }`,
           `In words: ${words(Math.abs(net).toFixed(2))}`,
         ],
         portrait: true,
@@ -396,7 +406,9 @@ export class PayrollPeopleDocsService {
         shade,
         after,
         footnote: [
-          'Gratuity: 15 days’ wages (basic + DA ÷ 26) for each completed year, a part year above six months counted. Leave: basic + DA ÷ 30 a day.',
+          `Gratuity: 15 days' wages (${
+            d.gratuity?.labourCode ? 'the labour codes’ wages' : 'basic + DA'
+          } ÷ 26) for each completed year, a part year above six months counted. Leave: basic + DA ÷ 30 a day.`,
           Number(s.gratuity_forfeited) > 0
             ? `Gratuity of Rs. ${money(s.gratuity_forfeited)} forfeited: ${s.forfeit_reason ?? ''}.`
             : '',

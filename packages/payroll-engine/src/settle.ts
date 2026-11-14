@@ -162,3 +162,13 @@ export function monthArrears(p: {
   }
   return out;
 }
+
+/**
+ * The labour codes' wages (Code on Wages 2019 s.2(y), in force 21 Nov 2025): the heads that are wages (basic, DA,
+ * retaining allowance) and, when the allowances left out are more than half of the pay, the excess as well — so the
+ * wages are never below half of the pay (the half rounded up to the paisa).
+ */
+export function codeWages(wages: bigint, pay: bigint): bigint {
+  const half = pay - pay / 2n;
+  return wages >= half ? wages : half;
+}

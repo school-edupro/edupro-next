@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import {
+  codeWages,
   gratuity,
   leaveEncashment,
   leaveEncashmentTaxFree,
@@ -177,10 +178,12 @@ export class PayrollSettlementService {
       ).rows[0]!;
       // the basis: the last locked month's basic and DA (each at the full month)
       const recs = (
-        await c.query<{ month: string; basis: string }>(
+        await c.query<{ month: string; basis: string; pay: string }>(
           `SELECT to_char(r.month, 'YYYY-MM') AS month,
                   (SELECT COALESCE(sum(l.rate), 0) FROM payroll_record_lines l
-                    WHERE l.record_id = r.id AND l.is_structure AND NOT l.is_arrear AND l.code IN ('BASIC', 'DA'))::text AS basis
+                    WHERE l.record_id = r.id AND l.is_structure AND NOT l.is_arrear AND l.code IN ('BASIC', 'DA'))::text AS basis,
+                  (SELECT COALESCE(sum(l.rate), 0) FROM payroll_record_lines l
+                    WHERE l.record_id = r.id AND l.is_structure AND NOT l.is_arrear AND l.head_type = 'EARNING')::text AS pay
              FROM payroll_records r JOIN payroll_runs u ON u.id = r.run_id
             WHERE r.employee_id = $1 AND u.stage IN ('LOCKED', 'PAID') AND u.deleted_at IS NULL AND r.status <> 'FAILED'
               AND NOT r.is_top_up
@@ -191,12 +194,26 @@ export class PayrollSettlementService {
       if (!recs.length)
         bad('No locked month with basic and DA: the settlement stands on the last month paid', 409);
       const basis = P(recs[0]!.basis);
+      // gratuity on the labour codes' wages once the school has switched the rule on for the last day: allowances
+      // above half of the month's pay count as wages too (leave and notice stay on basic + DA)
+      const codeRule =
+        Number(
+          (
+            await c.query<{ v: string }>(
+              `SELECT rate_value::text AS v FROM payroll_rates WHERE rate_code = 'LABOUR_CODE_WAGES' AND status = 'active'
+                  AND effective_from <= $1::date AND (effective_to IS NULL OR effective_to >= $1::date)
+                ORDER BY effective_from DESC LIMIT 1`,
+              [s.last_day],
+            )
+          ).rows[0]?.v ?? 0,
+        ) >= 1;
+      const gratuityWage = codeRule ? codeWages(basis, P(recs[0]!.pay)) : basis;
       const average = recs.reduce((t, r) => t + P(r.basis), 0n) / BigInt(recs.length);
       const fixedTerm =
         dto.fixedTerm ?? (s.fixed_term || e.contract || s.reason === 'CONTRACT_END');
       // gratuity
       const g = gratuity({
-        monthlyWage: basis,
+        monthlyWage: gratuityWage,
         from: e.joined_on!,
         to: s.last_day,
         rule: {
@@ -317,6 +334,8 @@ export class PayrollSettlementService {
         service: { ...service, from: e.joined_on, to: s.last_day },
         gratuity: {
           ...g,
+          wage: S(gratuityWage),
+          labourCode: codeRule,
           amount: S(g.amount),
           taxFree: S(g.taxFree),
           taxable: S(g.taxable),

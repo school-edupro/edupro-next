@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  codeWages,
   gratuity,
   leaveEncashment,
   leaveEncashmentTaxFree,
@@ -193,5 +194,14 @@ describe('monthArrears', () => {
     expect(
       monthArrears({ paid: {}, revisedRates: { BASIC: R(1) }, paidDays: 0, monthDays: 0 }),
     ).toEqual([]);
+  });
+});
+
+describe('codeWages', () => {
+  it('the wage heads, or half of the pay when the allowances are more than half', () => {
+    expect(codeWages(R(30000), R(50000))).toBe(R(30000));
+    expect(codeWages(R(10000), R(50000))).toBe(R(25000));
+    // the half rounded up to the paisa
+    expect(codeWages(0n, 3n)).toBe(2n);
   });
 });

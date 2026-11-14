@@ -924,3 +924,54 @@ describe('refusals', () => {
     ).toContain('old regime');
   });
 });
+
+describe('the labour codes’ wage rule (switched on by a dated rate)', () => {
+  const lean = (rates: CalcInput['rates']) =>
+    input({
+      profile: { ...input().profile, pfWageBasis: 'ACTUAL' },
+      structure: [
+        { code: 'BASIC', amount: R(10000), rowId: 's1' },
+        { code: 'DA', amount: 0n, rowId: 's2' },
+        { code: 'HRA', amount: 0n, rowId: 's3' },
+        { code: 'TA', amount: R(3600), rowId: 's4' },
+        { code: 'MED', amount: R(1250), rowId: 's5' },
+      ],
+      rates: { ...rates, DA_RATE: { value: '0', id: 'r1' }, HRA_RATE: { value: '2', id: 'r2' } },
+    });
+  const pay = (r: CalcResult) =>
+    r.lines
+      .filter((l) => l.isStructure && l.headType === 'EARNING')
+      .reduce((n, l) => n + l.earned, 0n);
+  it('off: PF on basic and DA', () => {
+    const r = ok(calculate(lean({})));
+    expect(r.pfWage).toBe(R(10000));
+    expect(r.trace.labourCode).toBeNull();
+  });
+  it('on: the allowances above half the pay count as PF wages; a figure under half does not change', () => {
+    const r = ok(calculate(lean({ LABOUR_CODE_WAGES: { value: '1', id: 'lc' } })));
+    const p = pay(r);
+    expect(r.pfWage).toBe(p - p / 2n);
+    expect(r.trace.labourCode).toMatchObject({ structurePay: p, added: p - p / 2n - R(10000) });
+    // the full month above: basic and DA are more than half already
+    const full = ok(
+      calculate(
+        input({ rates: { ...input().rates, LABOUR_CODE_WAGES: { value: '1', id: 'lc' } } }),
+      ),
+    );
+    expect(full.pfWage).toBe(R(15000));
+    expect(full.trace.labourCode).toMatchObject({ added: 0n });
+    // switched off again by a later dated row (0)
+    expect(
+      ok(calculate(lean({ LABOUR_CODE_WAGES: { value: '0', id: 'lc0' } }))).trace.labourCode,
+    ).toBeNull();
+  });
+  it('never on a top-up', () => {
+    const r = ok(
+      calculate({
+        ...lean({ LABOUR_CODE_WAGES: { value: '1', id: 'lc' } }),
+        topUp: { pfWageUsed: 0n },
+      }),
+    );
+    expect(r.trace.labourCode).toBeNull();
+  });
+});

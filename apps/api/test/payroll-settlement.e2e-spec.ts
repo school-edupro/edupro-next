@@ -100,6 +100,17 @@ describe('payroll full and final settlements (e2e)', () => {
          VALUES ($1, $2, $3, $4, '2026-04-01', 'active')`,
         [school.id, emp[code], head.BASIC, amount],
       );
+    // the labour codes' wage rule on from April; C has a special allowance above half of the pay
+    await q(
+      `INSERT INTO payroll_structures (school_id, employee_id, pay_head_id, amount, effective_from, status)
+       VALUES ($1, $2, $3, 40000, '2026-04-01', 'active')`,
+      [school.id, emp.C, head.SPL_ALW],
+    );
+    await q(
+      `INSERT INTO payroll_rates (school_id, rate_code, rate_value, effective_from, status, change_reason)
+       VALUES ($1, 'LABOUR_CODE_WAGES', 1, '2026-04-01', 'active', 'The labour codes from April')`,
+      [school.id],
+    );
     // April paid and locked
     await call(checker, 'POST', '/payroll/inputs/attendance/mark-present', {
       month: '2026-04',
@@ -343,14 +354,22 @@ describe('payroll full and final settlements (e2e)', () => {
         .subarray(0, 4)
         .toString(),
     ).toBe('%PDF');
-    // C died after 1 year 11 months: gratuity for 2 years whatever the service, all of the leave money tax-free
+    // C died after 1 year 11 months: gratuity for 2 years whatever the service, on the labour codes' wages — basic
+    // 30,000 and an allowance of 40,000: half of the 70,000 is wages, 35,000 × 15 / 26 × 2
     const c = (await call(checker, 'POST', `/payroll/settlements/${fnf.C!}/compute`, {})).json();
-    expect(c.gratuity).toBe('34615.38');
+    expect(c.gratuity).toBe('40384.62');
     const got = (await call(checker, 'GET', `/payroll/settlements/${fnf.C!}`)).json();
+    expect(got.settlement.detail.gratuity).toMatchObject({ wage: '35000.00', labourCode: true });
     expect(got.settlement.detail.nominees.map((n: { amount: string }) => n.amount)).toEqual([
-      '20769.22',
-      '13846.16',
+      '24230.77',
+      '16153.85',
     ]);
+    // the run took the same rule for PF: 5,000 more of PF wages in April
+    const tr = await q<{ added: string }>(
+      `SELECT r.trace->'labourCode'->>'added' AS added FROM payroll_records r WHERE r.employee_id = $1`,
+      [emp.C],
+    );
+    expect(tr[0]!.added).toBe('500000');
     expect(got.can.approve).toBe(false);
     expect((await call(checker, 'POST', `/payroll/settlements/${fnf.C!}/approve`)).statusCode).toBe(
       403,
