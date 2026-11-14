@@ -3,9 +3,9 @@
 Payroll works out each employee's monthly pay from their salary structure, the rates in force and the
 attendance, then the deductions — PF, ESI, profession tax, labour welfare fund, NPS and income tax — and
 gives the payslips, the bank file and the statutory returns. It follows the school's old payroll module
-step by step. This page covers the **set-up** (phase A): the rules and rates, pay heads and the pay
-matrix, each employee's payroll profile and salary structure, and approving the drafts. The monthly
-pay run, payslips and returns come in the next phases.
+step by step. This page covers the **set-up** (the rules and rates, pay heads and the pay matrix, each
+employee's payroll profile and salary structure, approving the drafts), the **month's inputs**, the
+**pay run** and the **payslips**. The bank file and the statutory returns come in the next phase.
 
 ## Who does what
 
@@ -20,10 +20,14 @@ admin can, and it is in the audit log). Every change is in the audit log with wh
 
 ## Where to find it
 
-The side menu's **Payroll** has two entries:
+The side menu's **Payroll** has these entries:
 
+- **Monthly inputs** — the month's attendance for pay, salary holds, loans, one-off items, recurring
+  items, claims, overtime, loss-of-pay given back and typed tax, one tab each.
+- **Pay runs** — the month's runs; a run opens its employees, and each employee their pay in full.
+- **My payslips** — every employee's own payslips (the staff app has it too, under Office).
 - **Payroll set-up** — one page with four numbered section cards; every set-up screen opens from it.
-- **Drafts to approve** — for checkers: everything that waits, in one place.
+- **Payroll drafts to approve** — for checkers: everything that waits, in one place.
 
 ## Dated rows: how a change works
 
@@ -105,6 +109,76 @@ Salary structures (tick the staff and **Approve the ticked**: each employee is a
 at all), rates and statutory rules (approve each), and the pay heads with draft versions (open the head
 to see the formula and its tests, then approve).
 
+## The month's inputs (Payroll → Monthly inputs)
+
+Get the month ready before its pay run. Each tab is one kind of input; pick the month at the top.
+
+- **Attendance** — **Pull from staff attendance** fills each employee's days from the punches and the
+  approved leave (the leave types say which leave is paid), once the leave office has locked the
+  month's staff attendance. Days nobody marked count as the settings
+  say. Change a day by hand, **mark present** the staff with no punches (drivers, say), or upload the
+  month from Excel (the format file shows the columns). **Finalise** the month when it is right: the
+  run reads only a finalised month, and the leave office cannot unlock that month's staff attendance
+  until payroll un-finalises it.
+- **Salary hold** — stop an employee's pay from a month, with a reason; **lift** it when it ends.
+- **Loans** — an advance or a loan: the amount, the interest (none, flat or reducing), the months.
+  **See the schedule** before saving. The run takes each month's instalment; pause or close a loan
+  from its page.
+- **One-off items** — an amount paid or kept back once, in this month only (an arrear, a fine).
+- **Recurring** — an amount paid or kept back every month until its end month.
+- **Claims** — an employee's claim (travel, a bill); approved claims are paid in the next run.
+- **Overtime** — the hours worked over, for staff whose structure pays overtime.
+- **LOP reversal** — loss of pay a past month took wrongly: preview what it gives back, then a
+  checker approves it and the next run pays it.
+- **Typed tax** — the income tax to keep back this month for an employee, typed in place of the
+  worked-out figure.
+- **Fee recovery** (from One-off items) — a ward's unpaid fee, kept back from the parent's pay: the fee receipt
+  is made when the run is locked.
+
+## The pay run (Payroll → Pay runs)
+
+**One regular run a month.** Once it is locked, a **supplementary** run pays the staff it missed
+(name them) and a **bonus** run pays a bonus on top; their tax is only the extra they add.
+
+1. **New run** — the month and the kind. The checks show first: red ones (attendance not finalised, no salary
+   structure in force, a pay head with no version in force) stop the run until they are fixed;
+   amber ones are worth a look.
+2. **Process** — works out every employee's pay. An employee it cannot work out shows **Failed** with
+   the reason; fix the cause and process again, or a checker **drops** them from the run with a reason.
+3. **Check** — open the run's employees and any employee's pay in full: each pay head, the statutory
+   deductions with how they were worked out, the income tax projection, loans and arrears.
+   **Reconcile** compares the run with last month's, head by head and employee by employee.
+   Someone whose pay comes out below nothing: **recover it** as a loan over the next months.
+4. **Approve** — a checker who did not process it (the school admin may). A run with failed
+   employees, or nobody in it, cannot be approved. **Reject** sends it back with a comment; processing
+   it again works everyone out afresh.
+5. **Lock** — the month's pay is final: the payslips are made and kept as they are, and the fee
+   receipts for fee recovery are made. A checker can **hold** an employee's payment (and release it)
+   from approval on.
+
+The school admin can **unapprove** an approved run, or **reopen** a locked one (it goes back to a
+draft, the fee receipts are reversed and the loans restored) as long as no later run exists.
+
+## Payslips
+
+A locked run's page has **Payslips**:
+
+- **Office copy** — every employee's payslip in one PDF, not locked, for the office file.
+- **Each locked (zip)** — one PDF per employee, each locked with that employee's password.
+- **Send pending e-mails** — e-mails each employee their locked payslip, once. Staff with no e-mail
+  address on their record, or with something missing from the password (no PAN, say), are listed and
+  skipped.
+
+The **password rule** is in the settings (Payroll set-up → Settings), built from parts such as
+`{EMPID}`, `{PAN4}` or `{DOB_DDMMYYYY}`; staff see the rule in words on My payslips. An employee's
+payslip shows the school's letterhead, the days, the pay and deductions, and the net in words.
+
+## My payslips
+
+Every employee sees their own payslips of locked runs, year by year, with the year's gross, income tax
+and net so far: **Payroll → My payslips** here, or **Office → My payslips** in the staff app. Each
+payslip opens with the password the page describes.
+
 ## Common questions
 
 **I changed DA from July; will June's pay change?** No. The July row is a new dated row; June still
@@ -120,3 +194,12 @@ handles them.
 
 **Where do I change an employee's PAN or bank account?** On the employee record (People); payroll
 reads it from there.
+
+**The pay run will not start.** A red check stops it: the run's page says which (often attendance not
+finalised, or no salary structure in force).
+
+**An employee's payslip did not e-mail.** They have no e-mail address on their record, or the
+password needs a detail they do not have (their PAN, say); the run's Payslips section lists them.
+
+**Can I change a locked month?** The school admin can reopen the run while no later run exists; it
+goes back to a draft and every employee is worked out again.

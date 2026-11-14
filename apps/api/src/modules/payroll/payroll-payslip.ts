@@ -3,9 +3,12 @@
  * identical (the legacy read the address, bank and PAN again at print time). Employer shares never print.
  */
 import type { PoolClient } from '@edupro/db';
+import { registerLetterhead } from '../exams/register-head';
 
 export interface Payslip {
   version: 1;
+  /** the letterhead as it was at the lock */
+  school?: { name: string; address: string; logoFileId: string | null };
   month: string;
   runType: string;
   isTopUp: boolean;
@@ -113,8 +116,19 @@ export async function buildPayslip(c: PoolClient, recordId: string): Promise<Pay
         },
       ];
   }
+  const head = await registerLetterhead(c);
+  const logo = (
+    await c.query<{ id: string | null }>(
+      `SELECT NULLIF(branding->>'logoFileId', '') AS id FROM schools WHERE id = app.current_school_id()`,
+    )
+  ).rows[0]?.id;
   return {
     version: 1,
+    school: {
+      name: head.school,
+      address: head.address,
+      logoFileId: logo && /^\d{1,18}$/.test(logo) ? logo : null,
+    },
     month: r.month,
     runType: r.run_type,
     isTopUp: r.is_top_up,

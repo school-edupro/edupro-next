@@ -269,6 +269,12 @@ export const STAFF_MENU: StaffGroup[] = [
         allowed: always,
       },
       {
+        href: '/my-payslips',
+        label: 'My payslips',
+        help: 'My monthly payslips (locked with my password) and my pay and tax so far this year',
+        allowed: (can) => can('payroll.own.view'),
+      },
+      {
         href: '/profile/approvals',
         label: 'Profile changes to approve',
         help: 'Changes colleagues asked for on their profile, routed to you',
@@ -431,6 +437,7 @@ const SCREEN_ICON: Array<[string, string]> = [
   ['/appointments', 'calendar'],
   ['/purchase', 'cart'],
   ['/profile', 'user'],
+  ['/my-payslips', 'file'],
   ['/my-leave', 'calendar'],
   ['/leave-approvals', 'check'],
   ['/my-attendance', 'clock'],

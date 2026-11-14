@@ -17,7 +17,7 @@ import {
   type RunDetail,
   type RunStage,
 } from '@/lib/payroll-runs';
-import { runAction } from '@/lib/payroll-runs-actions';
+import { runAction, sendPayslips } from '@/lib/payroll-runs-actions';
 
 const STEPS: RunStage[] = ['DRAFT', 'PROCESSING', 'REVIEW', 'APPROVED', 'LOCKED', 'PAID'];
 const SHOW = [
@@ -83,11 +83,19 @@ export default async function PayrollRunPage({
   let d: RunDetail;
   let checks: RunChecks | null = null;
   let recs: RecordList;
+  let slips: {
+    released: number;
+    emailed: number;
+    no_email: number;
+    passwordHint: string | null;
+  } | null = null;
   try {
     d = await apiFetch<RunDetail>(`/payroll/runs/${id}`);
     if (['DRAFT', 'PROCESSING', 'REJECTED'].includes(d.run.stage))
       checks = await apiFetch<RunChecks>(`/payroll/runs/${id}/checks`);
     recs = await apiFetch<RecordList>(`/payroll/runs/${id}/records?${qs(page)}`);
+    if (['LOCKED', 'PAID'].includes(d.run.stage))
+      slips = await apiFetch(`/payroll/runs/${id}/payslips/status`);
   } catch (e) {
     if (e instanceof ApiError && (e.status === 403 || e.status === 404)) notFound();
     throw e;
@@ -363,6 +371,49 @@ export default async function PayrollRunPage({
           </p>
         ) : null}
       </section>
+      {slips ? (
+        <section
+          className="ep-card"
+          aria-labelledby="rn-slips"
+          style={{ marginTop: 'var(--sp-4)' }}
+        >
+          <h2 id="rn-slips" className="ep-card__title">
+            Payslips
+          </h2>
+          <p className="ep-field__help" style={{ marginTop: 0 }}>
+            {slips.released} released (staff see them in My payslips); {slips.emailed} e-mailed
+            {slips.no_email ? `; ${String(slips.no_email)} without an e-mail address` : ''}.{' '}
+            {slips.passwordHint
+              ? `Each opens with: ${slips.passwordHint}.`
+              : 'No password is set in the payroll settings.'}
+          </p>
+          <div className="ep-grid__toolbar">
+            {d.can.approve ? (
+              <>
+                <a
+                  className="ep-btn ep-btn--secondary ep-btn--sm"
+                  href={`/api/payroll/run-payslips?run=${id}`}
+                >
+                  Office copy (one PDF)
+                </a>
+                <a
+                  className="ep-btn ep-btn--secondary ep-btn--sm"
+                  href={`/api/payroll/run-payslips?run=${id}&mode=zip`}
+                >
+                  Each locked (zip)
+                </a>
+                {slips.released > slips.emailed ? (
+                  <form action={sendPayslips.bind(null, id)}>
+                    <button type="submit" className="ep-btn ep-btn--primary ep-btn--sm">
+                      Send pending e-mails ({String(slips.released - slips.emailed)})
+                    </button>
+                  </form>
+                ) : null}
+              </>
+            ) : null}
+          </div>
+        </section>
+      ) : null}
       <section className="ep-card" aria-labelledby="rn-recs" style={{ marginTop: 'var(--sp-4)' }}>
         <h2 id="rn-recs" className="ep-card__title">
           Records{' '}

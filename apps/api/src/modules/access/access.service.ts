@@ -12,19 +12,20 @@ const PERM_TTL_SECONDS = 300;
  * Purchase Indent for their own department (docs/design/83: any staff raises a PI); My leave and My
  * attendance in both apps (docs/design/85: every employee's); upload a file, for the document a leave, a
  * correction or an indent asks for (each takes only a file its own sign-in uploaded; opening one's own
- * upload needs no file right, opening others' still does). Roles add the rest.
+ * upload needs no file right, opening others' still does); My payslips (docs/design/86). Roles add the rest.
  */
 export const EMPLOYEE_BASELINE = [
   'purchase.indent.raise',
   'leave.own.apply',
   'platform.files.upload',
+  'payroll.own.view',
 ];
 /**
  * Of those, the ones only a staff record gives: a role or a delegation carrying one is ignored and the roles
  * screen does not offer it, so a sign-in with no staff record (a demo or support sign-in) is not shown My
  * leave and My attendance pages that could only say it is not linked.
  */
-export const EMPLOYEE_ONLY = ['leave.own.apply'];
+export const EMPLOYEE_ONLY = ['leave.own.apply', 'payroll.own.view'];
 const permKey = (schoolId: string, userId: string) => `perm:${schoolId}:${userId}`;
 
 /**

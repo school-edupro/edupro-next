@@ -141,3 +141,103 @@ screen at 1440 and 375 px with axe.
 **Not in phase A**: the leave → pay map is not a separate table — the leave types already say loss of pay and
 pay %, which the run reads (phase B; confirmed then). The labour-code wage switch is a dated rate the run reads
 (phase B). Nothing here pays anyone: the monthly run, payslips and files come in phases B and C.
+
+## As built — phase B, the monthly run (13–14 Nov 2026)
+
+Decided 12 Nov 2026 (plan §5): the run works out monthly TDS from the year's projection (declarations, proofs,
+challans and returns in phase D); a payslip is a PDF locked with the Settings password pattern, frozen at Lock,
+e-mailed only when a checker presses **Send pending**; fee recovery is in this phase, with the fee receipt posted
+at Lock; there is no leave map of its own (the leave types say loss of pay and pay %). The full and final run moved
+to phase E with the rest of the exit.
+
+**Engine** (`packages/payroll-engine`, commits af7c80bf, f980f056): `attendance` (the month's days from the
+register, the pay window for joiners and leavers, paid days), `loans` (flat and reducing interest, the month's
+instalment, the schedule), `statutory` (PF with the ceiling, segments and the top-up headroom on the ceiling only,
+EPS stop age, NCP days; NPS; ESI with the contribution period and the limit for persons with disability; profession
+tax by state slab and month; LWF), `tax` (slabs, rebate with marginal relief, surcharge with marginal relief, cess,
+the no-PAN rate; the year's projection; a top-up's tax only the extra it adds; months left), and `calc` —
+`calculate(input)` gives one employee's month: earnings in dependency order, the wages, statutory deductions, TDS
+(a typed month wins), loans, one-off and recurring items, claims, overtime, LOP and its reversal, arrears, net with
+the school's rounding — or a refusal with a code and a reason. PF, VPF, NPS, ESI, PT, LWF, TDS and ADV are the
+engine's own heads. 136 tests, coverage held at 100 %.
+
+**Data**:
+
+- 0366 (af7c80bf) — `payroll_attendance` (one row per employee and month: the days, the source, finalised),
+  `payroll_holds`, `payroll_loans`, `payroll_adhoc`, `payroll_ward_links` (a staff child, linked by a checker),
+  `payroll_payees`, `payroll_recurring`, `payroll_claims`, `payroll_ot_entries`, `payroll_tds_manual`; settings
+  `unmarked_as`, `net_rounding`, `arrear_display`; rights `payroll.run.view`, `payroll.run.manage`,
+  `payroll.run.approve` (MFA). A trigger on `staff_month_locks` refuses unlocking a month payroll has finalised.
+- 0367 (3b476e38) — `payroll_runs` (REGULAR, SUPPLEMENTARY with its named staff, BONUS; one live regular run a
+  month), `payroll_run_events`, `payroll_records` (one per employee, with the frozen payslip), `payroll_record_lines`
+  (each head, taxable or not), `payroll_record_statutory` (each deduction's wage, rate and working),
+  `payroll_record_tax` (the projection), `payroll_record_loans`, `payroll_arrears`, `payroll_esi_coverage`.
+- 0368 (304fb27c) — the loss-of-pay reversal (a locked month's LOP given back in a later run, approved by a
+  checker; a cancelled one frees its month).
+- 0369 — `payroll.own.view` (every employee, as My leave is: the API adds it to each staff record's rights, no
+  role carries it); `payroll_records.payslip_emailed_at`, `payslip_message_id`.
+
+**The run** (`payroll-run.service.ts`): DRAFT → PROCESSING → REVIEW → APPROVED → LOCKED (→ PAID in phase C);
+REJECTED goes back to DRAFT on the next Process. Create shows the checks (red ones — nobody in the run, attendance not finalised,
+no salary structure in force, a head on a structure with no version in force — refuse Process; amber are warnings).
+Process works through the employees in batches and can be pressed again to go on; one it cannot work out is
+FAILED with the reason. Supplementary and bonus runs only after the month's regular run is locked; a bonus is
+always a top-up. Approve: a checker who did not create it (the payroll admin excepted), no FAILED records, not
+empty. Lock freezes each payslip and posts the fee-recovery receipts (`app.post_receipt`, mode bank, "Salary
+deduction"). Reopen (payroll admin): LOCKED → DRAFT, the receipts reversed (`app.reverse_fee_payment`), loans
+restored, refused if a later run exists. Unapprove (payroll admin): APPROVED → REJECTED. Drop failed: a checker
+with a reason of 10 characters or more. Hold / release: a checker, from APPROVED on. A negative net is recovered as
+a RECOVERY loan over the coming months, with the matching one-off item. Every step is a run event and in the audit
+log.
+
+**API**, all under `/payroll`:
+
+- Inputs (`payroll-inputs.controller.ts`): `attendance` (the month), `attendance/pull` (from a locked register
+  month), `attendance/mark-present`, `attendance/finalise`, `attendance/unfinalise` (payroll admin),
+  `attendance/format` and `attendance/import` (the Excel round trip, `dryRun` first), `attendance/:employeeId`;
+  `holds` (+ `/:id/lift`); `tds` (typed tax); `loans`, `loans/schedule`, `loans/:id`, `loans/:id/status`;
+  `adhoc`; `wards` and `fee-recovery`; `payees`, `recurring` (+ `/:id/status`), `payout`; `claims` (+
+  `/:id/decide`); `overtime`; `staff` (the picker).
+- Runs (`payroll-run.controller.ts`): `runs` (list, create), `runs/:id` (read, delete a draft), `/checks`,
+  `/process`, `/records`, `/records/:recordId` (the employee's month in full, with the trace), `/approve`,
+  `/reject`, `/lock`, `/unapprove`, `/reopen`, `/drop-failed`, `/records/:recordId/hold|release|recovery`.
+- Review (`payroll-review.controller.ts`): `lop-reversals` (list, preview, add, approve, cancel), `reconcile`
+  (a run against the month before, head by head and employee by employee).
+- Payslips (`payroll-payslip.controller.ts`): `runs/:id/records/:recordId/payslip` (run.view; locked with the
+  employee's password), `runs/:id/payslips?mode=single|zip` (run.approve; one unlocked office copy, or a zip of
+  each locked file), `runs/:id/payslips/status`, `runs/:id/payslips/send` (run.approve; each not yet e-mailed:
+  the PDF stored as a sensitive file, a queued e-mail with it attached; staff with no e-mail, or a password token
+  with no value, listed and skipped), `me/payslips?fy` and `me/payslips/:recordId` (payroll.own.view; only my own,
+  only locked runs).
+
+**Payslip PDF** (`payroll-payslip-pdf.ts`): drawn with `@cantoo/pdf-lib` from the frozen payslip — the register
+letterhead, the employee, the days, earnings and deductions side by side, totals, the net in words — and encrypted
+AES-256 with the employee's password and a random owner password (printing allowed, copying and changes not). The
+pattern is built from `{EMPID} {NAME3} {NAME4} {PAN} {PAN4} {AADHAAR4} {DOB_DDMM} {DOB_DDMMYY} {DOB_DDMMYYYY}
+{DOB_YYYY} {DOJ_DDMM} {DOJ_DDMMYYYY}` (capitals only, checked on save); staff see it in words.
+
+**Screens** — admin app (menu **Payroll → Monthly inputs**, **Pay runs**, **My payslips**):
+
+- `/payroll/inputs?tab=` — Attendance, Salary hold, Loans, One-off items, Recurring, Claims, Overtime, LOP
+  reversal, Typed tax; `/payroll/inputs/attendance/[employeeId]`, `/payroll/inputs/loans/[id]`,
+  `/payroll/inputs/fee-recovery`.
+- `/payroll/runs` — the month's runs and **New run**; `/payroll/runs/[id]` — the stage, figures, the checks, the
+  employees, the actions for the stage; when locked, **Payslips** (office copy, the zip, **Send pending
+  e-mails (n)**); `/payroll/runs/[id]/records/[recordId]` — one employee's month: heads, statutory working, tax
+  projection, loans, arrears, the payslip (View and Download icons).
+- `/payroll/reconcile` — two runs side by side.
+- `/payroll/me` — my payslips by financial year, the year's figures, the password in words.
+
+Staff app: **Office → My payslips** (`/my-payslips`, shared staff menu in `packages/bff`), the same list and
+figures; `/api/my-payslip` gives the locked PDF.
+
+**Tests**: `apps/api/test/payroll-inputs.e2e-spec.ts` (8: the pull from a locked register month with loss of pay,
+joiners and leavers; by hand, mark present, finalise and un-finalise; the sheet; hold and typed tax; loans;
+one-off items; fee recovery; recurring, payees, claims, overtime) and `payroll-run.e2e-spec.ts` (8: the checks
+block a run; a negative net recovered; reject and afresh; approve by another checker, hold and release, lock;
+reopen with the receipt reversed and the loan restored; a supplementary top-up; the LOP reversal and
+reconciliation; payslips — the pattern checked, the locked file, the office copy, the zip, e-mail only on Send, My
+payslips mine only); the engine's 136 unit tests; a browser pass with axe at 1440 and 375 px.
+
+**Not in phase B**: the bank file, PF / ESI / PT / LWF returns and the PAID stage (phase C); declarations, proofs
+and the tax forms (phase D); the full and final run (phase E).

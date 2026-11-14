@@ -135,6 +135,9 @@ importers:
       '@azure/keyvault-secrets':
         specifier: ^4.11.2
         version: 4.11.2
+      '@cantoo/pdf-lib':
+        specifier: 2.11.1
+        version: 2.11.1(html-entities@2.6.0)
       '@edupro/ai':
         specifier: workspace:*
         version: link:../../packages/ai
@@ -1137,6 +1140,11 @@ packages:
 
   '@borewit/text-codec@0.2.2':
     resolution: {integrity: sha512-DDaRehssg1aNrH4+2hnj1B7vnUGEjU6OIlyRdkMd0aUdIUvKXrJfXsy8LVtXAy7DRvYVluWbMspsRhz2lcW0mQ==}
+
+  '@cantoo/pdf-lib@2.11.1':
+    resolution: {integrity: sha512-lYuRJFfXgoP8WVE8HYSeoLfDcnSXmjMLmdZS7YvmYHngbcZfiqDOruHrZBqjYizkrNa4ad1yW4WCrPYyb26T3Q==}
+    peerDependencies:
+      html-entities: '>=2.3.2'
 
   '@colors/colors@1.5.0':
     resolution: {integrity: sha512-ooWCrlZP11i8GImSjTHYHLkvFDP48nS4+204nGb1RiX/WXYHmJA2III9/e2DWVabCESdW7hBAEzHRqUn9OUVvQ==}
@@ -5257,6 +5265,10 @@ packages:
   csstype@3.2.3:
     resolution: {integrity: sha512-z1HGKcYy2xA8AGQfwrn0PAy+PB7X/GSj3UVJW9qKyn43xWa+gl5nXmU4qqLMRzWVLFC8KusUX8T/0kCiOYpAIQ==}
 
+  culori@4.0.2:
+    resolution: {integrity: sha512-1+BhOB8ahCn4O0cep0Sh2l9KCOfOdY+BXJnKMHFFzDEouSr/el18QwXEMRlOj9UY5nCeA8UN3a/82rUWRBeyBw==}
+    engines: {node: ^12.20.0 || ^14.13.1 || >=16.0.0}
+
   cwd@0.10.0:
     resolution: {integrity: sha512-YGZxdTTL9lmLkCUTpg4j0zQ7IhRB5ZmqNBbGCl3Tg6MP/d5/6sY7L5mmTjzbc6JKgVZYiqTQTNhPFsbXNGlRaA==}
     engines: {node: '>=0.8'}
@@ -5849,6 +5861,9 @@ packages:
     resolution: {integrity: sha512-7yAQpD2UMJzLi1Dqv7qFYnPbaPx7ZfFK6PiIxQ4PfkGPyNyl2Ugx+a/umUonmKqjhM4DnfbMvdX6otXq83soQQ==}
     engines: {node: ^12.20 || >= 14.13}
 
+  fflate@0.8.3:
+    resolution: {integrity: sha512-tbZNuJrLwGUp3zshBtdy4W+ORxZuIh8a5ilyIEQDC5rY1f3U20JMry0Ll3WBzU58EZKsEuJFXhb5gwv8CsPvgA==}
+
   file-entry-cache@8.0.0:
     resolution: {integrity: sha512-XXTUwCvisa5oacNGRP9SfNtYBNAMi+RPwBFmblZEF7N7swHYQS6/Zfk7SRwx4D5j3CH211YNRco1DEMNVfZCnQ==}
     engines: {node: '>=16.0.0'}
@@ -6148,6 +6163,9 @@ packages:
   html-encoding-sniffer@3.0.0:
     resolution: {integrity: sha512-oWv4T4yJ52iKrufjnyZPkrN0CH3QnrUqdB6In1g5Fe1mia8GmF36gnfNySxoZtxD5+NmYw1EElVXiBk93UeskA==}
     engines: {node: '>=12'}
+
+  html-entities@2.6.0:
+    resolution: {integrity: sha512-kig+rMn/QOVRvr7c86gQ8lWXq+Hkv6CbAH1hLu+RG338StTpE8Z0b44SDVaqVu7HGKf27frdmUYEs9hTUX/cLQ==}
 
   html-escaper@2.0.2:
     resolution: {integrity: sha512-H2iMtd0I4Mt5eYiapRdIDjp+XzelXQ0tFE4JS7YFwFevXXMmOp9myNrUvCg0D6ws8iqkRPBfKHgbwig1SmlLfg==}
@@ -7305,6 +7323,9 @@ packages:
   node-gyp-build-optional-packages@5.2.2:
     resolution: {integrity: sha512-s+w+rBWnpTMwSFbaE0UXsRlg7hU4FjekKU4eyAih5T8nJuNZT1nNsskXpxmeqSK9UzkBl6UgRlnKc8hz8IEqOw==}
     hasBin: true
+
+  node-html-better-parser@1.5.9:
+    resolution: {integrity: sha512-z1I5UINMezJXYL9cH3h0a9KBth2G978gSLlfkpQ+CQzzVHVQy9gpARgm9eDsz1O4gn1HtgUqjdAIYxKFZm6uHQ==}
 
   node-int64@0.4.0:
     resolution: {integrity: sha512-O5lz91xSOeoXP6DulyHfllpq+Eg00MWitZIbtPfoSEvqIHdl5gfcY6hYzDWnj0qD5tz52PI08u9qUvSVeUBeHw==}
@@ -9115,7 +9136,7 @@ snapshots:
       '@aws-sdk/types': 3.974.6
       '@smithy/core': 3.35.0
       '@smithy/types': 4.19.0
-      tslib: 2.8.1
+      tslib: 2.9.1
 
   '@aws-sdk/credential-provider-http@3.972.74':
     dependencies:
@@ -9125,7 +9146,7 @@ snapshots:
       '@smithy/fetch-http-handler': 5.8.0
       '@smithy/node-http-handler': 4.12.1
       '@smithy/types': 4.19.0
-      tslib: 2.8.1
+      tslib: 2.9.1
 
   '@aws-sdk/credential-provider-ini@3.973.17':
     dependencies:
@@ -9141,7 +9162,7 @@ snapshots:
       '@smithy/core': 3.35.0
       '@smithy/credential-provider-imds': 4.5.2
       '@smithy/types': 4.19.0
-      tslib: 2.8.1
+      tslib: 2.9.1
 
   '@aws-sdk/credential-provider-login@3.972.79':
     dependencies:
@@ -9150,7 +9171,7 @@ snapshots:
       '@aws-sdk/types': 3.974.6
       '@smithy/core': 3.35.0
       '@smithy/types': 4.19.0
-      tslib: 2.8.1
+      tslib: 2.9.1
 
   '@aws-sdk/credential-provider-node@3.972.84':
     dependencies:
@@ -9172,7 +9193,7 @@ snapshots:
       '@aws-sdk/types': 3.974.6
       '@smithy/core': 3.35.0
       '@smithy/types': 4.19.0
-      tslib: 2.8.1
+      tslib: 2.9.1
 
   '@aws-sdk/credential-provider-sso@3.973.16':
     dependencies:
@@ -9182,7 +9203,7 @@ snapshots:
       '@aws-sdk/types': 3.974.6
       '@smithy/core': 3.35.0
       '@smithy/types': 4.19.0
-      tslib: 2.8.1
+      tslib: 2.9.1
 
   '@aws-sdk/credential-provider-web-identity@3.972.78':
     dependencies:
@@ -9191,7 +9212,7 @@ snapshots:
       '@aws-sdk/types': 3.974.6
       '@smithy/core': 3.35.0
       '@smithy/types': 4.19.0
-      tslib: 2.8.1
+      tslib: 2.9.1
 
   '@aws-sdk/middleware-sdk-s3@3.972.77':
     dependencies:
@@ -9211,7 +9232,7 @@ snapshots:
       '@smithy/fetch-http-handler': 5.8.0
       '@smithy/node-http-handler': 4.12.1
       '@smithy/types': 4.19.0
-      tslib: 2.8.1
+      tslib: 2.9.1
 
   '@aws-sdk/s3-request-presigner@3.1141.0':
     dependencies:
@@ -9236,7 +9257,7 @@ snapshots:
       '@aws-sdk/types': 3.974.6
       '@smithy/core': 3.35.0
       '@smithy/types': 4.19.0
-      tslib: 2.8.1
+      tslib: 2.9.1
 
   '@aws-sdk/types@3.974.6':
     dependencies:
@@ -9246,7 +9267,7 @@ snapshots:
   '@aws-sdk/xml-builder@3.972.41':
     dependencies:
       '@smithy/types': 4.19.0
-      tslib: 2.8.1
+      tslib: 2.9.1
 
   '@aws/lambda-invoke-store@0.3.0': {}
 
@@ -9661,6 +9682,14 @@ snapshots:
 
   '@borewit/text-codec@0.2.2': {}
 
+  '@cantoo/pdf-lib@2.11.1(html-entities@2.6.0)':
+    dependencies:
+      culori: 4.0.2
+      fflate: 0.8.3
+      html-entities: 2.6.0
+      node-html-better-parser: 1.5.9
+      tslib: 2.9.1
+
   '@colors/colors@1.5.0':
     optional: true
 
@@ -9682,12 +9711,12 @@ snapshots:
   '@emnapi/core@1.10.0':
     dependencies:
       '@emnapi/wasi-threads': 1.2.1
-      tslib: 2.8.1
+      tslib: 2.9.1
     optional: true
 
   '@emnapi/runtime@1.10.0':
     dependencies:
-      tslib: 2.8.1
+      tslib: 2.9.1
     optional: true
 
   '@emnapi/runtime@1.11.3':
@@ -9697,7 +9726,7 @@ snapshots:
 
   '@emnapi/wasi-threads@1.2.1':
     dependencies:
-      tslib: 2.8.1
+      tslib: 2.9.1
     optional: true
 
   '@esbuild/aix-ppc64@0.25.12':
@@ -10105,7 +10134,7 @@ snapshots:
   '@firebase/component@0.7.5':
     dependencies:
       '@firebase/util': 1.15.3
-      tslib: 2.8.1
+      tslib: 2.9.1
 
   '@firebase/data-connect@0.7.4(@firebase/app@0.16.2)':
     dependencies:
@@ -10220,7 +10249,7 @@ snapshots:
 
   '@firebase/logger@0.5.2':
     dependencies:
-      tslib: 2.8.1
+      tslib: 2.9.1
 
   '@firebase/messaging-compat@0.2.30(@firebase/app-compat@0.5.18)(@firebase/app@0.16.2)':
     dependencies:
@@ -12230,7 +12259,7 @@ snapshots:
     dependencies:
       '@smithy/core': 3.35.0
       '@smithy/types': 4.19.0
-      tslib: 2.8.1
+      tslib: 2.9.1
 
   '@smithy/fetch-http-handler@5.8.0':
     dependencies:
@@ -12248,7 +12277,7 @@ snapshots:
     dependencies:
       '@smithy/core': 3.35.0
       '@smithy/types': 4.19.0
-      tslib: 2.8.1
+      tslib: 2.9.1
 
   '@smithy/types@4.19.0':
     dependencies:
@@ -12833,7 +12862,7 @@ snapshots:
 
   '@tybys/wasm-util@0.10.4':
     dependencies:
-      tslib: 2.8.1
+      tslib: 2.9.1
     optional: true
 
   '@types/aria-query@5.0.4': {}
@@ -13169,7 +13198,7 @@ snapshots:
     dependencies:
       http-proxy-agent: 7.0.2
       https-proxy-agent: 7.0.6(supports-color@10.2.2)
-      tslib: 2.8.1
+      tslib: 2.9.1
     transitivePeerDependencies:
       - supports-color
 
@@ -14229,6 +14258,8 @@ snapshots:
 
   csstype@3.2.3: {}
 
+  culori@4.0.2: {}
+
   cwd@0.10.0:
     dependencies:
       find-pkg: 0.1.2
@@ -15036,6 +15067,8 @@ snapshots:
       node-domexception: 1.0.0
       web-streams-polyfill: 3.3.3
 
+  fflate@0.8.3: {}
+
   file-entry-cache@8.0.0:
     dependencies:
       flat-cache: 4.0.1
@@ -15404,6 +15437,8 @@ snapshots:
   html-encoding-sniffer@3.0.0:
     dependencies:
       whatwg-encoding: 2.0.0
+
+  html-entities@2.6.0: {}
 
   html-escaper@2.0.2: {}
 
@@ -16980,6 +17015,10 @@ snapshots:
     dependencies:
       detect-libc: 2.1.2
     optional: true
+
+  node-html-better-parser@1.5.9:
+    dependencies:
+      html-entities: 2.6.0
 
   node-int64@0.4.0: {}
 

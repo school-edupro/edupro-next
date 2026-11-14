@@ -1,5 +1,6 @@
 import { createZodDto } from 'nestjs-zod';
 import { z } from 'zod';
+import { checkPattern } from './payroll-payslip-pdf';
 
 /** Payroll rights (0365). */
 export const PAYROLL = {
@@ -58,7 +59,16 @@ export const PayrollSettingsSchema = z.object({
   matrixCode: Code,
   payCycleFromDay: z.number().int().min(2).max(28).nullable(),
   otHoursLimit: z.number().min(1).max(744),
-  payslipPassword: z.string().trim().max(80).nullable(),
+  payslipPassword: z
+    .string()
+    .trim()
+    .max(80)
+    .nullable()
+    // every {PART} a known part in capitals (the legacy took a lower-case part as plain text: one password for all)
+    .superRefine((p, ctx) => {
+      const e = p ? checkPattern(p) : null;
+      if (e) ctx.addIssue({ code: 'custom', message: e });
+    }),
   bankFileFormat: z.enum(['GENERIC_CSV', 'CUSTOM_CSV', 'BANK_LETTER_XLSX']),
   confidentialEmployeeIds: z.array(Id).max(500),
   formulaAttributes: z

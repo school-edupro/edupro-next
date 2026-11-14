@@ -2,6 +2,7 @@ import { Badge, Breadcrumbs, KpiTile, PageHeader } from '@edupro/ui';
 import { notFound } from 'next/navigation';
 import { FoldCard } from '@/components/FoldCard';
 import { Notice } from '@/components/Notice';
+import { FileLinks } from '@/components/FileLinks';
 import { DialogButton } from '@/components/leave/DialogButton';
 import { ApiError, apiFetch, getMe } from '@/lib/api';
 import { money } from '@/lib/payroll';
@@ -105,6 +106,15 @@ export default async function PayrollRecordPage({
         </ul>
       ) : null}
       <div className="ep-grid__toolbar" style={{ marginBottom: 'var(--sp-3)' }}>
+        {['LOCKED', 'PAID'].includes(r.runStage) && r.status !== 'FAILED' ? (
+          <span className="ep-grid__toolbar">
+            <span className="ep-field__help">Payslip</span>
+            <FileLinks
+              href={`/api/payroll/payslip?run=${id}&record=${recordId}`}
+              label={`the payslip of ${r.employeeCode}`}
+            />
+          </span>
+        ) : null}
         {d.can.approve ? (
           <a
             className="ep-btn ep-btn--secondary ep-btn--sm"

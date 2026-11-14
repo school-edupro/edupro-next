@@ -126,3 +126,23 @@ export async function recordAction(
   );
   done(action === 'recovery' ? `/payroll/runs/${runId}` : here, r.message);
 }
+
+/** "Send pending": e-mail the payslips not yet sent, each with its locked PDF (a checker). */
+export async function sendPayslips(id: string) {
+  if (!okId(id)) return;
+  const here = `/payroll/runs/${id}`;
+  const r = await attempt(here, () =>
+    send<{ queued: number; noEmail: string[]; noPassword: string[] }>(
+      `/payroll/runs/${id}/payslips/send`,
+      'POST',
+    ),
+  );
+  done(
+    here,
+    `${String(r.queued)} payslip(s) queued to e-mail.${r.noEmail.length ? ` ${String(r.noEmail.length)} have no e-mail address (${r.noEmail.slice(0, 5).join(', ')}).` : ''}${
+      r.noPassword.length
+        ? ` ${String(r.noPassword.length)} not sent: the password cannot be made (${r.noPassword.slice(0, 5).join(', ')}).`
+        : ''
+    }`,
+  );
+}

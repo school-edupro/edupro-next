@@ -490,4 +490,84 @@ describe('payroll run (e2e)', () => {
       ).statusCode,
     ).toBe(201);
   });
+
+  it('payslips: locked with the password pattern, the office copy, e-mailed only on Send, My payslips', async () => {
+    // a lower-case part is refused (the legacy took it as plain text: one password for everyone)
+    const settings = (await call(admin, 'GET', '/payroll/settings')).json().settings;
+    const body = { ...settings };
+    delete body.updatedAt;
+    expect(
+      (await call(admin, 'PUT', '/payroll/settings', { ...body, payslipPassword: '{empid}' }))
+        .statusCode,
+    ).toBe(400);
+    expect(
+      (
+        await call(admin, 'PUT', '/payroll/settings', {
+          ...body,
+          payslipPassword: '{EMPID}{DOB_DDMMYYYY}',
+        })
+      ).statusCode,
+    ).toBe(200);
+    const a = await recordOf(runId, 'A');
+    const pdf = (
+      await call(checker, 'GET', `/payroll/runs/${runId}/records/${a.id as string}/payslip`)
+    ).json();
+    expect(pdf).toMatchObject({ filename: `Payslip_${s}A_2026-06.pdf`, locked: true, note: null });
+    const bytes = Buffer.from(pdf.base64 as string, 'base64').toString('latin1');
+    expect(bytes.startsWith('%PDF')).toBe(true);
+    expect(bytes).toContain('/Encrypt');
+    // the payroll admin's office copy is not locked
+    expect(
+      (await call(admin, 'GET', `/payroll/runs/${runId}/records/${a.id as string}/payslip`)).json()
+        .locked,
+    ).toBe(false);
+    const zip = (await call(checker, 'GET', `/payroll/runs/${runId}/payslips?mode=zip`)).json();
+    expect(zip).toMatchObject({ filename: 'Payslips_2026-06.zip', count: 3, unlocked: 0 });
+    expect((await call(maker, 'GET', `/payroll/runs/${runId}/payslips`)).statusCode).toBe(403);
+    // e-mailed only when a checker sends: to those with an e-mail, with the locked PDF attached
+    await q(`UPDATE employees SET email = $2 WHERE id = $1`, [
+      emp.A,
+      `${s.toLowerCase()}a@example.test`,
+    ]);
+    expect(
+      (
+        await q<{ n: number }>(
+          `SELECT count(*)::int AS n FROM comms_messages WHERE school_id = $1`,
+          [school.id],
+        )
+      )[0]!.n,
+    ).toBe(0);
+    const sent = (await call(checker, 'POST', `/payroll/runs/${runId}/payslips/send`)).json();
+    expect(sent.queued).toBe(1);
+    expect(sent.noEmail).toEqual([`${s}B`, `${s}E`]);
+    const msg = await q<{ subject: string; attachments: Array<{ name: string }>; body: string }>(
+      `SELECT subject, attachments, body FROM comms_messages WHERE school_id = $1`,
+      [school.id],
+    );
+    expect(msg[0]).toMatchObject({
+      subject: 'Payslip for June 2026',
+      attachments: [{ name: `Payslip_${s}A_2026-06.pdf` }],
+    });
+    expect(msg[0]!.body).toContain('your employee code, then your date of birth as DDMMYYYY');
+    expect(
+      (await call(checker, 'POST', `/payroll/runs/${runId}/payslips/send`)).json().queued,
+    ).toBe(0);
+    // My payslips: the employee's own, with the year so far
+    const staff = await withMigrator((c) => seedUser(c, school, `${s}-st`));
+    await q(`UPDATE employees SET user_id = $2 WHERE id = $1`, [emp.A, staff.id]);
+    const mine = (await call(staff, 'GET', '/payroll/me/payslips')).json();
+    expect(mine.fy).toBe(2026);
+    // the regular run's payslip; the supplementary run is not locked, so not released
+    expect(mine.rows.map((r: { month: string }) => r.month)).toEqual(['2026-06']);
+    expect(mine.passwordHint).toContain('your employee code');
+    expect((await call(staff, 'GET', `/payroll/me/payslips/${a.id as string}`)).json().locked).toBe(
+      true,
+    );
+    const other = await recordOf(runId, 'B');
+    expect(
+      (await call(staff, 'GET', `/payroll/me/payslips/${other.id as string}`)).statusCode,
+    ).toBe(404);
+    // a sign-in with no staff record does not have My payslips
+    expect((await call(maker, 'GET', '/payroll/me/payslips')).statusCode).toBe(403);
+  });
 });

@@ -22,6 +22,7 @@
     "@aws-sdk/s3-request-presigner": "^3.670.0",
     "@azure/identity": "^4.14.1",
     "@azure/keyvault-secrets": "^4.11.2",
+    "@cantoo/pdf-lib": "2.11.1",
     "@edupro/ai": "workspace:*",
     "@edupro/db": "workspace:*",
     "@edupro/etl": "workspace:*",
