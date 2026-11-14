@@ -137,6 +137,19 @@ export default async function PayrollSetupPage({
         },
       ],
     },
+    {
+      id: 'pr-golive',
+      title: '6. Moving from the old payroll',
+      text: 'Bring the old payroll’s people and history, prove EduPro pays the same, run two months side by side, then switch.',
+      links: [
+        {
+          done: null,
+          title: 'Moving from the old payroll',
+          text: 'Read, bring, parity, the parallel months, the sign-off and the switch',
+          href: '/payroll/setup/golive',
+        },
+      ],
+    },
   ];
   return (
     <>

@@ -89,7 +89,8 @@ export async function GET(req: NextRequest) {
     for (const k of ['from', 'to', 'kind', 'table', 'action', 'who', 'record', 'contains'])
       if (p.get(k)) fwd.set(k, p.get(k)!);
     path = `/payroll/audit/export?${fwd.toString()}`;
-  } else if (kind === 'auditpack' && okFy(p.get('fy')))
+  } else if (kind === 'golivearchive') path = '/payroll/golive/archive';
+  else if (kind === 'auditpack' && okFy(p.get('fy')))
     path = `/payroll/audit/pack?fy=${p.get('fy')!}`;
   else if (kind === 'letters' && okId(id)) path = `/payroll/revisions/${id!}/letters/pdf`;
   else if (kind === 'letter' && okId(id))
