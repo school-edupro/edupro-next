@@ -42,6 +42,24 @@ const Dated = {
 };
 
 // ---- settings ------------------------------------------------------------------------------------------
+const Ledger = z.string().trim().min(2).max(80);
+const Side = z.object({ PF: Ledger, ESI: Ledger, NPS: Ledger, LWF: Ledger }).partial();
+/** the salary voucher's ledger names (docs/design/86, phase C step 3) */
+export const JvLedgersSchema = z.object({
+  salary: z.record(z.string().trim().min(1).max(60), Ledger).default({}),
+  heads: z
+    .record(
+      z
+        .string()
+        .trim()
+        .regex(/^[A-Z][A-Z0-9_]{0,19}$/, 'a pay head code'),
+      Ledger,
+    )
+    .default({}),
+  employer: Side.default({}),
+  payable: Side.default({}),
+  net: Ledger.optional(),
+});
 export const PayrollSettingsSchema = z.object({
   stateCode: State.nullable(),
   pfEstablishmentCode: z.string().trim().max(40).nullable(),
@@ -81,6 +99,9 @@ export const PayrollSettingsSchema = z.object({
     )
     .max(30),
   regimeCutoffMonth: z.number().int().min(1).max(12),
+  // phase C (left out: kept as they are)
+  ecrArrearMode: z.enum(['FOLDED', 'SEPARATE']).optional(),
+  jvLedgers: JvLedgersSchema.optional(),
 });
 export class PayrollSettingsDto extends createZodDto(PayrollSettingsSchema) {}
 

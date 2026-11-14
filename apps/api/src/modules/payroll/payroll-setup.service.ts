@@ -240,6 +240,36 @@ export class PayrollSetupService {
           text: `${String(waiting)} draft(s) wait for a checker`,
           href: '/payroll/setup/approvals',
         });
+      // the statutory dues (phase C): the year's calendar set up, nothing overdue
+      const fyStart =
+        Number(today.slice(5, 7)) >= 4 ? Number(today.slice(0, 4)) : Number(today.slice(0, 4)) - 1;
+      const due = (
+        await c.query<{ seeded: number; overdue: number; soon: number }>(
+          `SELECT count(*) FILTER (WHERE fy = $2)::int AS seeded,
+                  count(*) FILTER (WHERE done_at IS NULL AND due_on < $1::date)::int AS overdue,
+                  count(*) FILTER (WHERE done_at IS NULL AND due_on >= $1::date AND due_on <= $1::date + 7)::int AS soon
+             FROM payroll_compliance`,
+          [today, fyStart],
+        )
+      ).rows[0]!;
+      if (due.overdue)
+        checks.push({
+          level: 'red',
+          text: `${String(due.overdue)} statutory due(s) overdue`,
+          href: '/payroll/statutory?tab=calendar',
+        });
+      if (due.soon)
+        checks.push({
+          level: 'amber',
+          text: `${String(due.soon)} statutory due(s) in the next 7 days`,
+          href: '/payroll/statutory?tab=calendar',
+        });
+      if (!due.seeded)
+        checks.push({
+          level: 'amber',
+          text: `The compliance calendar of ${String(fyStart)}-${String((fyStart + 1) % 100).padStart(2, '0')} is not set up`,
+          href: '/payroll/statutory?tab=calendar',
+        });
       return {
         today,
         fy,
@@ -264,7 +294,7 @@ export class PayrollSetupService {
           `SELECT state_code, pf_establishment_code, tan, ptrc_no, esi_code, lwf_enabled, eps_stop_age, pf_ceiling_prorate,
                   matrix_code, pay_cycle_from_day, ot_hours_limit::float8 AS ot_hours_limit, payslip_password,
                   bank_file_format, confidential_employee_ids::text[] AS confidential_employee_ids, formula_attributes,
-                  regime_cutoff_month, updated_at
+                  regime_cutoff_month, ecr_arrear_mode, jv_ledgers, updated_at
              FROM payroll_settings`,
         )
       ).rows[0]!;
@@ -314,6 +344,7 @@ export class PayrollSetupService {
                 lwf_enabled = $6, eps_stop_age = $7, pf_ceiling_prorate = $8, matrix_code = $9, pay_cycle_from_day = $10,
                 ot_hours_limit = $11, payslip_password = $12, bank_file_format = $13,
                 confidential_employee_ids = $14::bigint[], formula_attributes = $15::jsonb, regime_cutoff_month = $16,
+                ecr_arrear_mode = COALESCE($17, ecr_arrear_mode), jv_ledgers = COALESCE($18::jsonb, jv_ledgers),
                 updated_by = app.current_user_id(), updated_at = now()`,
         [
           dto.stateCode,
@@ -332,6 +363,8 @@ export class PayrollSetupService {
           [...new Set(dto.confidentialEmployeeIds)],
           JSON.stringify(dto.formulaAttributes),
           dto.regimeCutoffMonth,
+          dto.ecrArrearMode ?? null,
+          dto.jvLedgers ? JSON.stringify(dto.jvLedgers) : null,
         ],
       );
       await this.audit.stage(ctx, c, {
