@@ -11,6 +11,7 @@ import {
 import type { StorageDriver } from '@edupro/storage';
 import type { Logger } from '../logger';
 import { deliverConsentWebhooks } from './consent-webhooks';
+import { readLegacyCertificates } from './legacy-certificates';
 import { readLegacyLeave } from './legacy-leave';
 import { readLegacyPayroll } from './legacy-payroll';
 import { centralSourceFromEnv, pullCentralPunches } from './staff-punches';
@@ -589,6 +590,13 @@ export function maintenanceProcessor({ db, storage, log, migratorUrl }: Maintena
         }
         await readLegacyLeave(db, s.id, log);
       }
+      return;
+    }
+    if (kind === 'certificate.legacy_read') {
+      // Certificates from the old system (docs/design/87, phase F): read when the page asks, for the schools asked
+      const asked = (job.data as JobEnvelope<{ schoolIds?: string[] }>).payload?.schoolIds ?? [];
+      for (const s of await schoolsFor(db, job))
+        if (asked.includes(s.id)) await readLegacyCertificates(db, s.id, log);
       return;
     }
     if (kind === 'payroll.legacy_read') {

@@ -15,6 +15,8 @@ export interface CertificateTemplate {
   typeCode: string;
   /** a variant to choose at issue, not the type's default */
   variantOf?: string;
+  /** made for every school but no type's layout (the reprint of a certificate from the old system) */
+  standalone?: boolean;
   pageWidth: string;
   pageHeight: string;
   stylesCss: string;
@@ -342,6 +344,24 @@ ${FOOT}`,
     ),
   },
 ];
+
+/** The reprint of a certificate brought from the old system (docs/design/87, phase F): what its record holds. */
+CERTIFICATE_TEMPLATES.push({
+  code: 'cert_legacy',
+  name: 'Certificate from the old system (reprint)',
+  kind: 'certificate',
+  typeCode: 'LEGACY',
+  standalone: true,
+  ...A4,
+  stylesCss: `${CSS}
+.legacy-note { text-align: center; font-size: 9pt; color: #6b4e00; border: 1px solid #c9a227; padding: 1.5mm; margin: 2mm 0 4mm; }`,
+  bodyHtml: `<div class="cert">{{{blocks.duplicate}}}{{{blocks.letterhead}}}
+<div class="ids"><span>No. <strong>{{cert.number}}</strong></span>{{#if cert.bookNo}}<span>Book no. <strong>{{cert.bookNo}}</strong></span><span>Sl. no. <strong>{{cert.slNo}}</strong></span>{{/if}}<span>Date <strong>{{cert.issuedOn}}</strong></span></div>
+<h2>{{cert.name}}</h2>
+<p class="legacy-note">Reprinted from the record of the school's earlier system, as it was issued.</p>
+<table class="f">{{#each legacyFields}}<tr><td class="k">{{label}}</td><td class="v">{{value}}</td></tr>{{/each}}</table>
+{{{blocks.signatures}}}{{{blocks.footer}}}</div>`,
+});
 
 /** A ready template by its code (Reset to the ready layout). */
 export const readyTemplate = (code: string): CertificateTemplate | undefined =>

@@ -76,6 +76,18 @@ export default async function CertificateSetupPage({
         },
       ],
     },
+    {
+      id: 'cs-legacy',
+      title: '4. From the old system',
+      text: "The old system's certificates as read-only history under their own numbers; each type's series and the TC book carry on after its last number.",
+      links: [
+        {
+          title: 'From the old system',
+          text: 'Read the old register, map each old name to a type, check, bring, the count check',
+          href: '/certificates/setup/legacy',
+        },
+      ],
+    },
   ];
   return (
     <>

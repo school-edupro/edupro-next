@@ -222,3 +222,37 @@ export async function saveCertificateRequests(fd: FormData) {
   revalidatePath('/certificates/setup');
   redirect(`${here}?ok=requests#requests`);
 }
+
+// ---- from the old system (phase F) ----------------------------------------------------------------------------------
+export async function legacyRead() {
+  await call('/certificates/setup/legacy', () =>
+    apiFetch('/certificates/setup/legacy/read', { method: 'POST' }),
+  );
+  redirect('/certificates/setup/legacy?ok=read');
+}
+
+export async function legacySaveMap(fd: FormData) {
+  const map: Record<string, string | null> = {};
+  for (const [k, v] of fd.entries())
+    if (k.startsWith('map:') && typeof v === 'string') map[k.slice(4)] = okCode(v) ? v : null;
+  await call('/certificates/setup/legacy', () =>
+    apiFetch('/certificates/setup/legacy/map', { method: 'PUT', body: JSON.stringify({ map }) }),
+  );
+  redirect('/certificates/setup/legacy?ok=map');
+}
+
+export async function legacyBring(fd: FormData) {
+  const dryRun = str(fd, 'dryRun') === '1';
+  const r = await call('/certificates/setup/legacy', () =>
+    apiFetch<{ counts: Record<string, number> }>('/certificates/setup/legacy/bring', {
+      method: 'POST',
+      body: JSON.stringify({ dryRun }),
+    }),
+  );
+  const c = r.counts;
+  const detail = `${dryRun ? 'Would bring' : 'Brought'} ${String(c.brought ?? 0)} of ${String(c.read ?? 0)}; already here ${String(c.already ?? 0)}; left out: ${String(c.noType ?? 0)} with no type, ${String(c.noPerson ?? 0)} with no student or employee found`;
+  revalidatePath('/certificates');
+  redirect(
+    `/certificates/setup/legacy?ok=${dryRun ? 'dry' : 'brought'}&detail=${encodeURIComponent(detail)}`,
+  );
+}

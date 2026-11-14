@@ -295,3 +295,12 @@ export const ReportsFileQuerySchema = ReportsQuerySchema.extend({
   format: z.enum(['xlsx', 'pdf']),
 });
 export class ReportsFileQueryDto extends createZodDto(ReportsFileQuerySchema) {}
+
+// ---- from the old system (phase F) ----------------------------------------------------------------------------------
+export const LegacyMapSchema = z.object({
+  /** "<old certificate name>[ (staff)]" → a type code, or null (not brought) */
+  map: z.record(z.string().min(1).max(120), TypeCode.nullable()),
+});
+export class LegacyMapDto extends createZodDto(LegacyMapSchema) {}
+export const LegacyBringSchema = z.object({ dryRun: z.boolean().default(true) });
+export class LegacyBringDto extends createZodDto(LegacyBringSchema) {}

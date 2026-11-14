@@ -57,6 +57,15 @@ export function CertificateCheckResult({ r, lang }: { r: CertificateCheck; lang:
             )}
           </p>
         )}
+        {x?.legacy ? (
+          <p className="ep-certcheck__note">
+            {t(
+              lang,
+              'From the record of the school’s earlier system.',
+              'विद्यालय की पिछली प्रणाली के रिकॉर्ड से।',
+            )}
+          </p>
+        ) : null}
         {x && r.result === 'cancelled' ? (
           <p className="ep-certcheck__note">
             {t(

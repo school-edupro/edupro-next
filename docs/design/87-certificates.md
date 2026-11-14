@@ -337,3 +337,48 @@ Tests: `certificates-office.e2e-spec.ts` (6: the preview in roll order with one 
 order, the holder left out, one PDF, no PDF of their own; the principal's reason in bulk and the office refused; the
 awards, a CSV with errors then clean, issue by type, numbers, no second issue, no removal after; the achievement
 module's numbers and register rows and its batch PDF; the TC book and the reports with every file).
+
+## As built — phase F, from the old system (14 Nov 2026)
+
+**Gate for E.** Every item of phase E was built and tested (bulk issue, the batch PDF, awards, the achievement
+module moved in, the TC book register and the reports).
+
+**Data** (migration 0388). `certificate_cutover` (one row a school: when a read was asked, started and finished, its
+error, the counts, the old TC book's last Sl. No., the map of old names to types, when and by whom the certificates
+were brought and the counts; RLS, audit); `certificate_legacy_rows` (the old register's rows as read, by `srno`; RLS);
+a unique index on `certificates (school_id, legacy_ref)` where set, so a certificate is brought once — a duplicate
+keeps it on the original only. A standalone template `cert_legacy` ("from the old system": the holder, the type, the
+number, the date, the old fields as label and value, a line saying where it comes from) is pushed to each school and
+not offered as a type's layout.
+
+**The read** (workers, `processors/legacy-certificates.ts`, maintenance job `certificate.legacy_read`): the
+connection comes from the server's environment only — `LEGACY_CERT_DB_URL` (or `_<SCHOOL CODE>`), else the leave
+cut-over's `LEGACY_LEAVE_DB_URL`, as payroll does; without one, the page says to ask IT. Reads `certificate_master`
+in pages by `srno` and the old TC book setting, read only; replaces the school's holding rows; the log carries counts,
+never a name.
+
+**The bring** (`certificate-legacy.service.ts`): the rows grouped by name (a staff row's name marked "(staff)") with a
+guessed type (TC, bonafide, character, DOB, study, fee paid, caste, domicile, NOC, visa, experience, service, the
+award types …) and the
+school's own map; the person by admission no. or employee code; a dry run counts without saving. Each certificate comes
+with its old number, date, year (from the financial year), serial (the number's last digits), book and Sl. No.,
+`legacy`, `legacy_ref 'legacy:<srno>'`, the `cert_legacy` version and the old fields as `legacyFields`; one the old
+system deleted comes cancelled ("Deleted in the old system"); one already here is left. Then
+`certificate_series` takes the greater of its own and the old last number per type and year, and
+`certificate_book_series` the greater of its own, the old setting and the highest Sl. No. read. The count check: read
+= brought + left out with no type or no person.
+
+**API** (set-up right): `GET /certificates/setup/legacy`, `POST /certificates/setup/legacy/read`, `PUT
+/certificates/setup/legacy/map`, `POST /certificates/setup/legacy/bring` (`dryRun`, default true).
+
+**Screens**: set-up section **4. From the old system** → a page with six figures and five steps: read (last read,
+the error, Read the old register), each old name with its rows, deleted, person found and a searchable type
+(Not brought), the check run and Bring (asks first), the numbers that carry on (type, year, old last, next here) and
+the TC book, the count check. The register marks them "Old system"; the public check says it comes from the old
+system.
+
+Tests: `certificate-legacy.e2e-spec.ts` (5: the groups with guessed types and the right; the dry run, a bad type
+refused, a mapped name; the bring — old numbers, book and Sl. No., a deleted one cancelled, a staff one, the old
+fields, a duplicate, never twice, the next TC, bonafide and book number after the old ones; the reprint from the old
+record and the public check; the count check and a read asked); workers `legacy-certificates.test.ts` (2: the
+connection from the environment with the leave fallback; nothing read without it, and why).

@@ -324,7 +324,7 @@ export class CertificatesService {
       )
     ).rows[0]!;
     const builtIn = new Set(
-      CERTIFICATE_TEMPLATES.filter((t) => !t.variantOf).map((t) => t.typeCode),
+      CERTIFICATE_TEMPLATES.filter((t) => !t.variantOf && !t.standalone).map((t) => t.typeCode),
     ).size;
     if (
       st.types >= builtIn &&
@@ -353,6 +353,7 @@ export class CertificatesService {
         `UPDATE document_templates SET ready_code = code WHERE code = $1 AND ready_code IS NULL AND deleted_at IS NULL`,
         [t.code],
       );
+      if (t.standalone) continue;
       if (t.variantOf)
         await c.query(
           `UPDATE certificate_types ct SET variants = ct.variants || jsonb_build_array(jsonb_build_object('templateId', d.id::text, 'label', d.name))
@@ -1192,7 +1193,10 @@ export class CertificatesService {
     });
   }
 
-  /** A duplicate of an issued certificate: the same number and paper, printed DUPLICATE (copy n). */
+  /**
+   * A duplicate of an issued certificate: the same number and paper, printed DUPLICATE (copy n). The reference to where
+   * a brought certificate came from stays on the original only (one row a reference).
+   */
   async duplicate(ctx: RequestContext, id: string, reason: string): Promise<CertificateRow> {
     const tenant = requireTenant(ctx);
     const dupId = await this.db.tenant(tenant, async (c) => {
@@ -1223,11 +1227,11 @@ export class CertificatesService {
         );
       const r = await c.query<{ id: string; copy_no: number }>(
         `INSERT INTO certificates (school_id, type_id, number, serial, year_code, copy_no, original_id, student_id, employee_id,
-                                   issued_on, issued_by, purpose, data, template_version_id, checks, book_no, sl_no, legacy, legacy_ref)
+                                   issued_on, issued_by, purpose, data, template_version_id, checks, book_no, sl_no, legacy)
          SELECT school_id, type_id, number, serial, year_code,
                 (SELECT max(copy_no) + 1 FROM certificates WHERE id = $1 OR original_id = $1), id, student_id, employee_id,
                 CURRENT_DATE, app.current_user_id(), purpose,
-                jsonb_set(data, '{cert,duplicateReason}', to_jsonb($2::text)) - 'qr', template_version_id, checks, book_no, sl_no, legacy, legacy_ref
+                jsonb_set(data, '{cert,duplicateReason}', to_jsonb($2::text)) - 'qr', template_version_id, checks, book_no, sl_no, legacy
            FROM certificates WHERE id = $1
          RETURNING id::text, copy_no`,
         [originalId, reason],

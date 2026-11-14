@@ -2,11 +2,14 @@ import { Body, Controller, Get, Param, ParseIntPipe, Post, Put, Query } from '@n
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { RequirePermission } from '../../common/access/require-permission.decorator';
 import { ReqCtx, type RequestContext } from '../../common/http/request-context';
+import { CertificateLegacyService } from './certificate-legacy.service';
 import { CertificateSetupService } from './certificate-setup.service';
 import {
   CERTIFICATE,
   CreateTemplateDto,
   CreateTypeDto,
+  LegacyBringDto,
+  LegacyMapDto,
   SaveTemplateDto,
   SettingsDto,
   TemplatePreviewDto,
@@ -23,6 +26,7 @@ export class CertificateSetupController {
   constructor(
     private readonly setup: CertificateSetupService,
     private readonly certificates: CertificatesService,
+    private readonly legacy: CertificateLegacyService,
   ) {}
 
   @Get()
@@ -142,5 +146,39 @@ export class CertificateSetupController {
   @RequirePermission(CERTIFICATE.setup)
   saveSettings(@ReqCtx() ctx: RequestContext, @Body() body: SettingsDto) {
     return this.setup.saveSettings(ctx, body);
+  }
+
+  // ---- from the old system (phase F) ----
+  @Get('legacy')
+  @ApiOperation({
+    summary:
+      'From the old system: the read, the old names and their types, what came, the count check',
+  })
+  @RequirePermission(CERTIFICATE.setup)
+  legacyState(@ReqCtx() ctx: RequestContext) {
+    return this.legacy.state(ctx);
+  }
+
+  @Post('legacy/read')
+  @ApiOperation({ summary: "Ask the workers to read the old register (the server's connection)" })
+  @RequirePermission(CERTIFICATE.setup)
+  legacyRead(@ReqCtx() ctx: RequestContext) {
+    return this.legacy.requestRead(ctx);
+  }
+
+  @Put('legacy/map')
+  @RequirePermission(CERTIFICATE.setup)
+  legacyMap(@ReqCtx() ctx: RequestContext, @Body() body: LegacyMapDto) {
+    return this.legacy.saveMap(ctx, body.map);
+  }
+
+  @Post('legacy/bring')
+  @ApiOperation({
+    summary:
+      'Bring the old certificates (a dry run counts only); continue each series and the TC book',
+  })
+  @RequirePermission(CERTIFICATE.setup)
+  legacyBring(@ReqCtx() ctx: RequestContext, @Body() body: LegacyBringDto) {
+    return this.legacy.bring(ctx, body.dryRun);
   }
 }

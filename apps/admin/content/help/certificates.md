@@ -147,7 +147,7 @@ now (`ACH/2026-27/00001`) and appear in it; their PDF stays the batch's.
 ## Set-up (Certificates → Certificate set-up)
 
 The page shows six figures, a **To look at** list (no signatory yet, a signatory with no signature image,
-a type with no template) and three sections:
+a type with no template) and four sections:
 
 1. **Signatory and print** — find the principal (or whoever signs) among the employees; their name, Emp. ID,
    designation and the **signature image on their employee record** print in the last box (untick it to
@@ -167,4 +167,29 @@ a type with no template) and three sections:
    the school a moment after each change. **Save** makes a new version: certificates already issued keep
    the one they were made with. **Versions** lets you use an earlier one again; **Back to the ready layout**
    restores EduPro's. **Copy a template** makes a new layout from one. A template may hold text, tables,
-   styles and images as data, never scripts or addresses on the internet.
+   styles and images as data, never scripts or addresses on the internet. **Certificate from the old system
+   (reprint)** is the layout for certificates brought from the earlier system; no type prints with it.
+4. **From the old system** — bringing the earlier system's certificates across, once (below).
+
+## From the old system (Certificate set-up → From the old system)
+
+For the move from the earlier system. Nothing in the old system is changed, and nothing is typed here to reach
+it: IT sets the server's read-only connection.
+
+1. **Read the old register** — the server reads the old system's certificates and the TC book's last Sl. No.
+   The page shows when it was last read. Read again just before you bring them, so the newest come too.
+2. **Each old certificate name and its type** — every name the old system used, with how many it has, how many
+   it deleted, and for how many EduPro found the student (by admission no.) or the employee (by employee code).
+   EduPro suggests a type (TC, bonafide, character, experience …): change it, or choose **Not brought**, then
+   **Save the types**.
+3. **Check first (nothing saved)** says how many would come and why any are left out. **Bring them** brings each
+   one once, under its old number and date (a TC with its book and Sl. No.); one the old system deleted comes
+   cancelled. Bringing again later adds only the new ones: nothing comes twice.
+4. **The numbers that carry on** — for each type and year, the old system's last number and the next one here;
+   the TC book goes on after the old Sl. No. No number is given twice.
+5. **The count check** — read = brought + left out (no type chosen, or no student or employee found). For a
+   left-out one, add the student or choose its type, then bring again.
+
+A brought certificate sits in the register marked **Old system**. It can't be changed, but it can be printed
+again (with a line saying it comes from the old system), given a duplicate or cancelled. Its QR check says the
+same.

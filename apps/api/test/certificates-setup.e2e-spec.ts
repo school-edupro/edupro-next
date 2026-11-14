@@ -138,7 +138,12 @@ describe('certificate set-up (e2e)', () => {
     const o = await get('/certificates/setup');
     expect(o.statusCode).toBe(200);
     expect(o.json().figures).toMatchObject({ types: 21, active: 21, own: 0, signatory: false });
-    expect(o.json().templates.filter((t: { ready: boolean }) => t.ready)).toHaveLength(22);
+    // the 22 ready layouts and the reprint of certificates from the old system (used by no type)
+    const ready = (
+      o.json().templates as Array<{ ready: boolean; code: string; usedBy: string[] }>
+    ).filter((t) => t.ready);
+    expect(ready).toHaveLength(23);
+    expect(ready.find((t) => t.code === 'cert_legacy')).toMatchObject({ usedBy: [] });
     expect(o.json().checks[0].text).toMatch(/No signatory/);
     const staffTypes = (o.json().types as Array<{ code: string; audience: string }>)
       .filter((t) => t.audience === 'STAFF')
@@ -338,6 +343,18 @@ describe('certificate set-up (e2e)', () => {
     expect(dupKey.statusCode).toBe(400);
     const taken = await send('PUT', '/certificates/setup/types/DOB', { ...body, prefix: 'BON' });
     expect(taken.statusCode).toBe(409);
+    // the reprint layout of certificates from the old system is no type's to print with
+    expect((t.templates as Array<{ code: string }>).some((x) => x.code === 'cert_legacy')).toBe(
+      false,
+    );
+    const legacyId = (
+      (await get('/certificates/setup')).json().templates as Array<{ id: string; code: string }>
+    ).find((x) => x.code === 'cert_legacy')!.id;
+    const asLegacy = await send('PUT', '/certificates/setup/types/DOB', {
+      ...body,
+      templateId: legacyId,
+    });
+    expect(asLegacy.statusCode).toBe(400);
     const saved = await send('PUT', '/certificates/setup/types/DOB', body);
     expect(saved.statusCode).toBe(200);
     // the clerk's role may issue but is not the office: refused; the office may

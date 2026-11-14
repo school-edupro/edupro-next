@@ -265,7 +265,11 @@ export class CertificateSetupService {
     });
   }
 
-  private async templates(c: PoolClient) {
+  /**
+   * The certificate templates. `forType`: those a type may print with — the reprint layout of certificates brought from
+   * the old system (phase F) is the school's to edit, never a type's.
+   */
+  private async templates(c: PoolClient, forType = false) {
     const r = await c.query<{
       id: string;
       code: string;
@@ -284,7 +288,9 @@ export class CertificateSetupService {
                 WHERE v.template_id = d.id) AS made
          FROM document_templates d
         WHERE d.deleted_at IS NULL AND d.kind::text IN ('transfer_certificate', 'bonafide', 'certificate')
+          AND (NOT $1 OR d.ready_code IS DISTINCT FROM 'cert_legacy')
         ORDER BY (d.ready_code IS NULL), d.name`,
+      [forType],
     );
     return r.rows.map((x) => ({
       id: x.id,
@@ -346,7 +352,7 @@ export class CertificateSetupService {
         fields: Array.isArray(t.fields) ? (t.fields as FieldSpec[]) : [],
         issued: issued.rows[0]?.n ?? 0,
         checks: Object.entries(CHECK_LABELS).map(([key, label]) => ({ key, label })),
-        templates: await this.templates(c),
+        templates: await this.templates(c, true),
         roles: roles.rows,
         request: requestSettings(t.request),
       };
@@ -357,7 +363,8 @@ export class CertificateSetupService {
     if (!ids.length) return;
     const r = await c.query<{ n: number }>(
       `SELECT count(DISTINCT id)::int AS n FROM document_templates
-        WHERE id = ANY($1::bigint[]) AND deleted_at IS NULL AND kind::text IN ('transfer_certificate', 'bonafide', 'certificate')`,
+        WHERE id = ANY($1::bigint[]) AND deleted_at IS NULL AND kind::text IN ('transfer_certificate', 'bonafide', 'certificate')
+          AND ready_code IS DISTINCT FROM 'cert_legacy'`,
       [ids],
     );
     if ((r.rows[0]?.n ?? 0) !== new Set(ids).size)

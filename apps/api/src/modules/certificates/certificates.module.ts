@@ -9,6 +9,7 @@ import { CertificateAwardsService } from './certificate-awards.service';
 import { CertificateBulkService } from './certificate-bulk.service';
 import { CertificateOfficeController } from './certificate-office.controller';
 import { CertificateReportsService } from './certificate-reports.service';
+import { CertificateLegacyService } from './certificate-legacy.service';
 import { CertificateRequestsController } from './certificate-requests.controller';
 import { CertificateRequestsService } from './certificate-requests.service';
 import { CertificateSetupController } from './certificate-setup.controller';
@@ -37,6 +38,7 @@ import { CertificatesService } from './certificates.service';
     CertificateBulkService,
     CertificateAwardsService,
     CertificateReportsService,
+    CertificateLegacyService,
     PublicThrottleGuard,
     AuditService,
   ],
