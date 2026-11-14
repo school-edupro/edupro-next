@@ -38,6 +38,7 @@ function issueBody(fd: FormData) {
     typeCode: str(fd, 'type'),
     ...(okId(employee) ? { employeeId: employee } : { studentId: str(fd, 'student') }),
     ...(okId(variant) ? { variant } : {}),
+    ...(okId(str(fd, 'requestId')) ? { requestId: str(fd, 'requestId') } : {}),
     purpose: str(fd, 'purpose') || undefined,
     issuedOn: /^\d{4}-\d{2}-\d{2}$/.test(str(fd, 'issuedOn')) ? str(fd, 'issuedOn') : undefined,
     fields,
@@ -49,7 +50,9 @@ export async function issueCertificate(fd: FormData) {
   const body = issueBody(fd);
   const person =
     'employeeId' in body ? `employee=${body.employeeId ?? ''}` : `student=${body.studentId ?? ''}`;
-  const here = `/certificates/issue?type=${encodeURIComponent(body.typeCode)}&${person}`;
+  const here = `/certificates/issue?type=${encodeURIComponent(body.typeCode)}&${person}${
+    'requestId' in body && body.requestId ? `&request=${body.requestId}` : ''
+  }`;
   if (!okId(('employeeId' in body ? body.employeeId : body.studentId) ?? ''))
     redirect('/certificates/issue?error=validation-failed&detail=Choose+the+person');
   let made: Certificate;
@@ -109,4 +112,40 @@ export async function renderCertificate(fd: FormData) {
     throw e;
   }
   redirect(`/certificates/${id}?ok=rendered`);
+}
+
+/** Approve or reject a request at the level the caller acts at. */
+export async function decideCertificateRequest(fd: FormData) {
+  const id = str(fd, 'id');
+  if (!okId(id)) return;
+  const decision = str(fd, 'decision') === 'reject' ? 'reject' : 'approve';
+  try {
+    await apiFetch(`/certificate-requests/${id}/decide`, {
+      method: 'POST',
+      body: JSON.stringify({ decision, note: str(fd, 'reason') || undefined }),
+    });
+  } catch (e) {
+    if (e instanceof ApiError) back(`/certificates/requests/${id}`, e);
+    throw e;
+  }
+  revalidatePath('/certificates/requests');
+  redirect(`/certificates/requests/${id}?ok=${decision === 'approve' ? 'approved' : 'rejected'}`);
+}
+
+/** Take the fee off a request, or turn an approved request down. */
+export async function closeCertificateRequestFee(fd: FormData) {
+  const id = str(fd, 'id');
+  const what = str(fd, 'what') === 'refuse' ? 'refuse' : 'waive-fee';
+  if (!okId(id)) return;
+  try {
+    await apiFetch(`/certificate-requests/${id}/${what}`, {
+      method: 'POST',
+      body: JSON.stringify({ reason: str(fd, 'reason') }),
+    });
+  } catch (e) {
+    if (e instanceof ApiError) back(`/certificates/requests/${id}`, e);
+    throw e;
+  }
+  revalidatePath('/certificates/requests');
+  redirect(`/certificates/requests/${id}?ok=${what === 'refuse' ? 'refused' : 'waived'}`);
 }

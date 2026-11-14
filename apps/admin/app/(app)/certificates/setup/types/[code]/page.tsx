@@ -1,9 +1,10 @@
 import { Badge, Breadcrumbs, Button, Card, PageHeader, SelectField } from '@edupro/ui';
 import { notFound } from 'next/navigation';
 import { FieldRows } from '@/components/certificates/FieldRows';
+import { LevelRows, type Level } from '@/components/certificates/LevelRows';
 import { Notice } from '@/components/Notice';
 import { ApiError, apiFetch, getMe } from '@/lib/api';
-import { saveCertificateType } from '@/lib/certificate-setup-actions';
+import { saveCertificateRequests, saveCertificateType } from '@/lib/certificate-setup-actions';
 import type { CertificateTypeDetail } from '@/lib/certificates';
 
 const OK: Record<string, string> = {
@@ -278,6 +279,91 @@ export default async function CertificateTypePage({
           {t.usesBook ? <Badge tone="info">Keeps the TC book and Sl. No.</Badge> : null}
         </div>
       </form>
+      <section
+        id="requests"
+        className="ep-card"
+        aria-labelledby="req-title"
+        style={{ marginTop: 'var(--sp-4)' }}
+      >
+        <h2 id="req-title" className="ep-card__title">
+          Requests online
+        </h2>
+        <p className="ep-field__help" style={{ marginTop: 0 }}>
+          {staff
+            ? 'Staff ask for it in the staff app; it is decided level by level, then the office issues it and they download it.'
+            : 'Parents (for a child) and students ask for it in their app; it is decided level by level, the fee (if any) is paid, then the office issues it and they download it.'}
+        </p>
+        <form action={saveCertificateRequests} style={{ display: 'grid', gap: 'var(--sp-3)' }}>
+          <input type="hidden" name="code" value={t.code} />
+          <fieldset className="ep-setup-checks">
+            <legend className="ep-field__label">Who may ask for it</legend>
+            {staff ? (
+              check('openStaff', 'Staff (for themselves)', t.request.open.staff)
+            ) : (
+              <>
+                {check('openParent', 'Parents (for a child)', t.request.open.parent)}
+                {check('openStudent', 'Students (for themselves)', t.request.open.student)}
+              </>
+            )}
+          </fieldset>
+          <div className="ep-cert-fields">
+            <label className="ep-field" htmlFor="rqCopies">
+              <span className="ep-field__label">Copies a request may ask for</span>
+              <input
+                id="rqCopies"
+                name="maxCopies"
+                type="number"
+                min={1}
+                max={10}
+                className="ep-input"
+                defaultValue={t.request.maxCopies}
+              />
+            </label>
+            {staff ? null : (
+              <label className="ep-field" htmlFor="rqFee">
+                <span className="ep-field__label">Fee a copy (₹; empty or 0: free)</span>
+                <input
+                  id="rqFee"
+                  name="fee"
+                  type="number"
+                  min={0}
+                  step="0.01"
+                  className="ep-input"
+                  defaultValue={t.request.fee ?? ''}
+                />
+                <span className="ep-field__help">
+                  Charged to the student as a misc fee when the request is approved.
+                </span>
+              </label>
+            )}
+            <label className="ep-field" htmlFor="rqPurposes" style={{ gridColumn: '1 / -1' }}>
+              <span className="ep-field__label">
+                Purposes to choose from (one a line; empty: typed freely)
+              </span>
+              <textarea
+                id="rqPurposes"
+                name="purposes"
+                rows={3}
+                className="ep-input"
+                defaultValue={t.request.purposes.join('\n')}
+              />
+            </label>
+          </div>
+          <div>
+            <span className="ep-field__label">Approval levels, in order</span>
+            <LevelRows
+              initial={t.request.levels.filter((l): l is Level => l.kind !== 'user')}
+              roles={t.roles}
+              staff={staff}
+            />
+          </div>
+          <div>
+            <Button type="submit" variant="secondary">
+              Save request settings
+            </Button>
+          </div>
+        </form>
+      </section>
     </>
   );
 }

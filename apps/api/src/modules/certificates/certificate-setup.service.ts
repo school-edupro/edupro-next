@@ -7,12 +7,15 @@ import { requireTenant, type RequestContext } from '../../common/http/request-co
 import { CHECK_LABELS } from './certificate-checks';
 import { checkCustomFields, fieldsOf, type FieldSpec } from './certificate-fields';
 import { assertSafeTemplate } from './certificate-safety';
-import type {
-  CreateTemplateDto,
-  CreateTypeDto,
-  SaveTemplateDto,
-  SettingsDto,
-  UpdateTypeDto,
+import {
+  RequestSettingsSchema,
+  type CreateTemplateDto,
+  type CreateTypeDto,
+  type RequestSettings,
+  type SaveTemplateDto,
+  type SettingsDto,
+  type UpdateRequestSettingsDto,
+  type UpdateTypeDto,
 } from './certificates.dto';
 import { CertificatesService, type TypeRow } from './certificates.service';
 
@@ -138,6 +141,24 @@ function catalogue(audience: 'STUDENT' | 'STAFF', fields: FieldSpec[]) {
         ]
       : []),
   ];
+}
+
+/** A type's request settings, read with their defaults (closed, one copy, no fee, no levels). */
+export function requestSettings(raw: unknown): RequestSettings {
+  const parsed = RequestSettingsSchema.safeParse(
+    raw && typeof raw === 'object' && Object.keys(raw).length
+      ? raw
+      : { open: { parent: false, student: false, staff: false } },
+  );
+  return parsed.success
+    ? parsed.data
+    : {
+        open: { parent: false, student: false, staff: false },
+        purposes: [],
+        maxCopies: 1,
+        fee: null,
+        levels: [],
+      };
 }
 
 const genericBody = (name: string, audience: 'STUDENT' | 'STAFF') =>
@@ -282,7 +303,8 @@ export class CertificateSetupService {
   private async typeRow(c: PoolClient, code: string): Promise<TypeRow> {
     const r = await c.query<TypeRow>(
       `SELECT t.id::text, t.code, t.name, t.audience, t.prefix, t.template_id::text, d.name AS template_name, t.rules,
-              t.multiple, t.uses_book, t.active, t.sort_order, t.description, t.fields, t.variants, t.issuers, t.built_in
+              t.multiple, t.uses_book, t.active, t.sort_order, t.description, t.fields, t.variants, t.issuers, t.built_in,
+              t.request
          FROM certificate_types t LEFT JOIN document_templates d ON d.id = t.template_id AND d.deleted_at IS NULL
         WHERE t.code = $1`,
       [code],
@@ -326,6 +348,7 @@ export class CertificateSetupService {
         checks: Object.entries(CHECK_LABELS).map(([key, label]) => ({ key, label })),
         templates: await this.templates(c),
         roles: roles.rows,
+        request: requestSettings(t.request),
       };
     });
   }
@@ -411,6 +434,76 @@ export class CertificateSetupService {
           rules: before.rules,
         },
         after: { name: dto.name, prefix: dto.prefix, active: dto.active, rules: dto.rules },
+      });
+    });
+    return this.type(ctx, code);
+  }
+
+  /**
+   * Who may ask for a type online and how it is decided (phase C): open to parents, students or staff; the purposes to
+   * choose from; how many copies; a fee a copy (a misc fee on the student); the approval levels in order.
+   */
+  async saveRequestSettings(ctx: RequestContext, code: string, dto: UpdateRequestSettingsDto) {
+    await this.db.tenant(requireTenant(ctx), async (c) => {
+      const t = await this.typeRow(c, code);
+      if (t.audience === 'STAFF' && (dto.open.parent || dto.open.student))
+        throw new DomainError(
+          'validation-failed',
+          'A staff certificate is asked for by staff only',
+          {
+            status: 400,
+          },
+        );
+      if (t.audience === 'STUDENT' && dto.open.staff)
+        throw new DomainError(
+          'validation-failed',
+          'A student certificate is asked for by parents or students',
+          {
+            status: 400,
+          },
+        );
+      if (dto.fee && t.audience === 'STAFF')
+        throw new DomainError('validation-failed', 'A staff certificate carries no fee', {
+          status: 400,
+        });
+      if ((dto.open.parent || dto.open.student || dto.open.staff) && !dto.levels.length)
+        throw new DomainError('validation-failed', 'Set at least one approval level', {
+          status: 400,
+        });
+      const roleIds = dto.levels.flatMap((l) => (l.kind === 'role' ? [l.roleId] : []));
+      if (roleIds.length) {
+        const r = await c.query<{ n: number }>(
+          `SELECT count(DISTINCT id)::int AS n FROM roles WHERE id = ANY($1::bigint[])
+              AND (school_id IS NULL OR school_id = app.current_school_id()) AND deleted_at IS NULL`,
+          [roleIds],
+        );
+        if ((r.rows[0]?.n ?? 0) !== new Set(roleIds).size)
+          throw new DomainError('validation-failed', 'Choose roles of this school', {
+            status: 400,
+          });
+      }
+      const userIds = dto.levels.flatMap((l) => (l.kind === 'user' ? [l.userId] : []));
+      if (userIds.length) {
+        const r = await c.query<{ n: number }>(
+          `SELECT count(DISTINCT user_id)::int AS n FROM user_school_memberships
+            WHERE user_id = ANY($1::bigint[]) AND school_id = app.current_school_id()`,
+          [userIds],
+        );
+        if ((r.rows[0]?.n ?? 0) !== new Set(userIds).size)
+          throw new DomainError('validation-failed', 'Choose people of this school', {
+            status: 400,
+          });
+      }
+      await c.query(
+        `UPDATE certificate_types SET request = $2::jsonb, updated_at = now(), updated_by = app.current_user_id() WHERE code = $1`,
+        [code, JSON.stringify(dto)],
+      );
+      await this.audit.stage(ctx, c, {
+        action: 'certificate.type.requests',
+        entityType: 'certificate_types',
+        entityId: t.id,
+        before: { request: t.request },
+        after: { request: dto },
       });
     });
     return this.type(ctx, code);

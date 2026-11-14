@@ -41,6 +41,8 @@ import {
  */
 export interface TypeRow {
   id: string;
+  /** request settings (phase C) */
+  request?: unknown;
   description: string | null;
   fields: unknown;
   variants: Array<{ templateId: string; label: string }>;
@@ -198,8 +200,78 @@ export function stamp(d: Date, timeZone?: string | null): string {
   return `${get('day')}-${get('month')}-${get('year')} ${get('hour')}:${get('minute')} ${get('dayPeriod').toUpperCase()}`;
 }
 
+/** The ready request settings of the built-in types (as migration 0384 set them for the schools of the time). */
+const everyday = {
+  open: { parent: true, student: true, staff: false },
+  purposes: [],
+  maxCopies: 2,
+  fee: null,
+  levels: [{ kind: 'office' }],
+};
+const DEFAULT_REQUESTS: Record<string, unknown> = {
+  ...Object.fromEntries(
+    [
+      'BONAFIDE',
+      'DOB',
+      'STUDY',
+      'FEE_PAID',
+      'SCHOLAR',
+      'BOARD_REG',
+      'NOC',
+      'TRAVEL_NOC',
+      'VISA',
+      'DOMICILE',
+      'CASTE',
+      'DOB_JUST',
+    ].map((k) => [k, everyday]),
+  ),
+  ...Object.fromEntries(
+    ['TC', 'CHARACTER'].map((k) => [
+      k,
+      {
+        open: { parent: true, student: false, staff: false },
+        purposes: [],
+        maxCopies: 1,
+        fee: null,
+        levels: [{ kind: 'office' }, { kind: 'signatory' }],
+      },
+    ]),
+  ),
+  ...Object.fromEntries(
+    ['EXPERIENCE', 'SERVICE', 'STAFF_VISA'].map((k) => [
+      k,
+      {
+        open: { parent: false, student: false, staff: true },
+        purposes: [],
+        maxCopies: 1,
+        fee: null,
+        levels: [{ kind: 'office' }],
+      },
+    ]),
+  ),
+};
+
+/** The requests side of an issue (set by CertificateRequestsService; phase C). */
+export interface RequestHook {
+  check(
+    c: PoolClient,
+    requestId: string,
+    typeId: string,
+    person: { kind: 'student' | 'employee'; id: string },
+  ): Promise<{ purpose: string | null }>;
+  issued(
+    c: PoolClient,
+    ctx: RequestContext,
+    requestId: string,
+    certificateId: string,
+    number: string,
+  ): Promise<void>;
+}
+
 @Injectable()
 export class CertificatesService {
+  requestHook: RequestHook | null = null;
+
   constructor(
     private readonly db: DbService,
     private readonly audit: AuditService,
@@ -218,9 +290,17 @@ export class CertificatesService {
   async ensureSetup(c: PoolClient): Promise<void> {
     const ready = CERTIFICATE_TEMPLATES.map((t) => t.code);
     const st = (
-      await c.query<{ types: number; unlinked: number; have: string[] }>(
+      await c.query<{
+        types: number;
+        unlinked: number;
+        have: string[];
+        unset: number;
+        messages: boolean;
+      }>(
         `SELECT (SELECT count(*)::int FROM certificate_types WHERE built_in) AS types,
                 (SELECT count(*)::int FROM certificate_types WHERE built_in AND template_id IS NULL) AS unlinked,
+                (SELECT count(*)::int FROM certificate_types WHERE built_in AND request = '{}'::jsonb) AS unset,
+                EXISTS (SELECT 1 FROM comms_templates WHERE code = 'certificate_request_ready') AS messages,
                 (SELECT COALESCE(array_agg(ready_code), '{}') FROM document_templates
                   WHERE ready_code = ANY($1::text[]) AND deleted_at IS NULL) AS have`,
         [ready],
@@ -229,8 +309,22 @@ export class CertificatesService {
     const builtIn = new Set(
       CERTIFICATE_TEMPLATES.filter((t) => !t.variantOf).map((t) => t.typeCode),
     ).size;
-    if (st.types >= builtIn && st.unlinked === 0 && ready.every((r) => st.have.includes(r))) return;
+    if (
+      st.types >= builtIn &&
+      st.unlinked === 0 &&
+      st.unset === 0 &&
+      st.messages &&
+      ready.every((r) => st.have.includes(r))
+    )
+      return;
     await c.query(`SELECT app.certificate_types_seed(app.current_school_id())`);
+    await c.query(`SELECT app.certificate_seed_templates(app.current_school_id())`);
+    // the ready request settings (docs/design/87, phase C) for a type not yet set
+    for (const [code, settings] of Object.entries(DEFAULT_REQUESTS))
+      await c.query(
+        `UPDATE certificate_types SET request = $2::jsonb WHERE code = $1 AND built_in AND request = '{}'::jsonb`,
+        [code, JSON.stringify(settings)],
+      );
     for (const t of CERTIFICATE_TEMPLATES) {
       await c.query(
         `INSERT INTO document_templates (school_id, code, name, kind, page_width, page_height, body_html, styles_css, variables, ready_code, created_by, updated_by)
@@ -262,7 +356,7 @@ export class CertificatesService {
   async typeOf(c: PoolClient, code: string): Promise<TypeRow> {
     const r = await c.query<TypeRow>(
       `SELECT t.id::text, t.code, t.name, t.audience, t.prefix, t.template_id::text, d.name AS template_name, t.rules,
-              t.multiple, t.uses_book, t.active, t.sort_order, t.description, t.fields, t.variants, t.issuers, t.built_in
+              t.multiple, t.uses_book, t.active, t.sort_order, t.description, t.fields, t.variants, t.issuers, t.built_in, t.request
          FROM certificate_types t LEFT JOIN document_templates d ON d.id = t.template_id AND d.deleted_at IS NULL
         WHERE t.code = $1`,
       [code],
@@ -911,6 +1005,10 @@ export class CertificatesService {
         dto.studentId ?? `e${dto.employeeId ?? ''}`,
       ]);
       const b = await this.build(c, ctx, type, dto, ledger, opts);
+      if (dto.requestId) {
+        if (!this.requestHook) throw new Error('certificate requests are not wired');
+        await this.requestHook.check(c, dto.requestId, type.id, b.person);
+      }
       if (b.problems.length)
         throw new DomainError('validation-failed', b.problems.join('; '), {
           status: 400,
@@ -1025,6 +1123,10 @@ export class CertificatesService {
         ],
       );
       const id = r.rows[0]!.id;
+      if (dto.requestId && this.requestHook) {
+        await c.query(`UPDATE certificates SET request_id = $2 WHERE id = $1`, [id, dto.requestId]);
+        await this.requestHook.issued(c, ctx, dto.requestId, id, no.number);
+      }
       await this.audit.stage(ctx, c, {
         action: 'certificate.issue',
         entityType: 'certificates',

@@ -241,6 +241,21 @@ export interface CertificateTypeDetail {
   issued: number;
   templates: CertificateTemplateRow[];
   roles: Array<{ id: string; name: string; code: string }>;
+  request: CertificateRequestSettings;
+}
+
+export interface CertificateRequestSettings {
+  open: { parent: boolean; student: boolean; staff: boolean };
+  purposes: string[];
+  maxCopies: number;
+  fee: number | null;
+  levels: Array<
+    | { kind: 'office' }
+    | { kind: 'class_teacher' }
+    | { kind: 'signatory' }
+    | { kind: 'role'; roleId: string; name?: string }
+    | { kind: 'user'; userId: string; name?: string }
+  >;
 }
 
 export interface CertificateTemplateDetail {
@@ -284,3 +299,79 @@ export function fitPaper(html: string, pageWidthPx = 800): string {
     steps.push(`@media screen and (max-width: ${String(w)}px) { html { zoom: ${String(z)}; } }`);
   return html.replace('</head>', `<style>${steps.join('\n')}</style></head>`);
 }
+
+// ---- phase C: requests ------------------------------------------------------------------------------------------------
+export type RequestStage = 'waiting' | 'fee' | 'ready' | 'issued' | 'rejected' | 'withdrawn';
+export interface CertificateRequest {
+  id: string;
+  typeCode: string;
+  typeName: string;
+  audience: 'STUDENT' | 'STAFF';
+  studentId: string | null;
+  employeeId: string | null;
+  person: string;
+  personNo: string;
+  classLabel: string | null;
+  channel: 'parent' | 'student' | 'staff' | 'office';
+  requestedBy: string | null;
+  purpose: string | null;
+  copies: number;
+  note: string | null;
+  status: 'submitted' | 'approved' | 'issued' | 'rejected' | 'withdrawn';
+  stage: RequestStage;
+  waitingWith: string | null;
+  waitingWithMe: boolean;
+  fee: number | null;
+  feePaid: boolean;
+  feeWaived: string | null;
+  certificateIds: string[];
+  checks: CertificateCheck[];
+  decisionNote: string | null;
+  decidedBy: string | null;
+  decidedAt: string | null;
+  issuedAt: string | null;
+  createdAt: string;
+  ageDays: number;
+}
+export interface CertificateRequestList {
+  rows: CertificateRequest[];
+  total: number;
+  figures: {
+    waiting: number;
+    fee: number;
+    ready: number;
+    month: number;
+    oldest: number | null;
+    mine: number;
+  };
+  can: { issue: boolean };
+}
+export interface CertificateRequestDetail extends CertificateRequest {
+  levels: Array<{
+    level: number;
+    name: string;
+    status: string;
+    assignees: string[];
+    actedBy: string | null;
+    actedAt: string | null;
+    note: string | null;
+  }>;
+  can: { decide: boolean; issue: boolean; waive: boolean; reject: boolean };
+}
+export const STAGE: Record<
+  RequestStage,
+  { label: string; tone: 'warning' | 'info' | 'success' | 'danger' | 'neutral' }
+> = {
+  waiting: { label: 'Waiting for approval', tone: 'warning' },
+  fee: { label: 'Waiting for the fee', tone: 'warning' },
+  ready: { label: 'Ready to issue', tone: 'info' },
+  issued: { label: 'Issued', tone: 'success' },
+  rejected: { label: 'Not approved', tone: 'danger' },
+  withdrawn: { label: 'Withdrawn', tone: 'neutral' },
+};
+export const CHANNEL: Record<CertificateRequest['channel'], string> = {
+  parent: 'Parent app',
+  student: 'Student',
+  staff: 'Staff app',
+  office: 'Office',
+};

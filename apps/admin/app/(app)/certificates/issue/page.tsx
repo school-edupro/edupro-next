@@ -90,6 +90,8 @@ export default async function IssueCertificatePage({
   const purpose = (sp.purpose ?? '').slice(0, 200);
   const issuedOn = /^\d{4}-\d{2}-\d{2}$/.test(sp.issuedOn ?? '') ? sp.issuedOn! : '';
   const variant = id(sp.variant);
+  // answering a request (phase C): it travels with the form and the issue marks it issued
+  const requestId = id(sp.request ?? sp.requestId);
   let preview: CertificatePreview | null = null;
   let previewError: string | null = null;
   if (type && personId)
@@ -130,6 +132,12 @@ export default async function IssueCertificatePage({
         description="Choose the type and the person, look at the checks and the paper, then issue. The number is the type's next for the year and is never given again."
       />
       <Notice params={sp} />
+      {requestId ? (
+        <div className="ep-alert ep-alert--info" role="status">
+          Answering <a href={`/certificates/requests/${requestId}`}>request {requestId}</a>: issuing
+          it marks the request issued and tells the requester in the app.
+        </div>
+      ) : null}
       <div className="ep-cert-issue">
         <Card>
           <h2 className="ep-card__title">1. Type and {staff ? 'employee' : 'student'}</h2>
@@ -256,6 +264,7 @@ export default async function IssueCertificatePage({
               <h2 className="ep-card__title">3. What it prints</h2>
               <form action={issueCertificate} className="ep-cert-form">
                 <input type="hidden" name="type" value={type.code} />
+                {requestId ? <input type="hidden" name="requestId" value={requestId} /> : null}
                 {staff ? (
                   <input type="hidden" name="employee" value={employeeId} />
                 ) : (

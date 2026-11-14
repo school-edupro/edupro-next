@@ -10,6 +10,7 @@ import {
   SaveTemplateDto,
   SettingsDto,
   TemplatePreviewDto,
+  UpdateRequestSettingsDto,
   UpdateTypeDto,
 } from './certificates.dto';
 import { CertificatesService } from './certificates.service';
@@ -52,6 +53,19 @@ export class CertificateSetupController {
     @Body() body: UpdateTypeDto,
   ) {
     return this.setup.updateType(ctx, code, body);
+  }
+
+  @Put('types/:code/requests')
+  @ApiOperation({
+    summary: 'Who may ask for a type online, the purposes, copies, fee and approval levels',
+  })
+  @RequirePermission(CERTIFICATE.setup)
+  requests(
+    @ReqCtx() ctx: RequestContext,
+    @Param('code') code: string,
+    @Body() body: UpdateRequestSettingsDto,
+  ) {
+    return this.setup.saveRequestSettings(ctx, code, body);
   }
 
   @Post('types')

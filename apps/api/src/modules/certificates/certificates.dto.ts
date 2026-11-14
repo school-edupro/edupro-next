@@ -40,6 +40,8 @@ export class PreviewCertificateDto extends createZodDto(PreviewCertificateSchema
 export const IssueCertificateSchema = PreviewBase.extend({
   /** the principal's reason to issue although a check fails */
   overrideReason: z.string().trim().min(10, 'at least 10 characters').max(300).optional(),
+  /** the request it answers (phase C): approved, its fee paid or waived */
+  requestId: IdSchema.optional(),
 }).refine(onePerson, { message: 'a student or an employee, not both' });
 export class IssueCertificateDto extends createZodDto(IssueCertificateSchema) {}
 
@@ -152,3 +154,53 @@ export const SettingsSchema = z.object({
   footerNote: z.string().trim().max(200).optional(),
 });
 export class SettingsDto extends createZodDto(SettingsSchema) {}
+
+// ---- requests (phase C) --------------------------------------------------------------------------------------------
+const LevelSchema = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('office') }),
+  z.object({ kind: z.literal('class_teacher') }),
+  /** the certificate signatory (the principal set in the settings) */
+  z.object({ kind: z.literal('signatory') }),
+  z.object({ kind: z.literal('role'), roleId: IdSchema, name: z.string().max(80).optional() }),
+  z.object({ kind: z.literal('user'), userId: IdSchema, name: z.string().max(80).optional() }),
+]);
+export type RequestLevel = z.infer<typeof LevelSchema>;
+export const RequestSettingsSchema = z.object({
+  open: z.object({ parent: z.boolean(), student: z.boolean(), staff: z.boolean() }),
+  purposes: z.array(z.string().trim().min(2).max(80)).max(20).default([]),
+  maxCopies: z.number().int().min(1).max(10).default(1),
+  /** the fee charged a copy (a misc fee on the student), or none */
+  fee: z.number().min(0).max(100000).nullable().default(null),
+  levels: z.array(LevelSchema).max(5).default([]),
+});
+export type RequestSettings = z.infer<typeof RequestSettingsSchema>;
+export const UpdateRequestSettingsSchema = RequestSettingsSchema;
+export class UpdateRequestSettingsDto extends createZodDto(UpdateRequestSettingsSchema) {}
+
+export const CreateRequestSchema = z.object({
+  typeCode: TypeCode,
+  /** the child (a parent) or the student / employee the office asks for; a student and a staff member ask for themselves */
+  studentId: IdSchema.optional(),
+  employeeId: IdSchema.optional(),
+  purpose: z.string().trim().min(2, 'say what it is for').max(200),
+  copies: z.number().int().min(1).max(10).default(1),
+  note: z.string().trim().max(500).optional(),
+});
+export class CreateRequestDto extends createZodDto(CreateRequestSchema) {}
+
+export const DecideRequestSchema = z.object({
+  decision: z.enum(['approve', 'reject']),
+  note: z.string().trim().max(300).optional(),
+});
+export class DecideRequestDto extends createZodDto(DecideRequestSchema) {}
+
+export const ListRequestsQuerySchema = z.object({
+  status: z.enum(['submitted', 'approved', 'issued', 'rejected', 'withdrawn', 'open']).optional(),
+  type: TypeCode.optional(),
+  /** only those waiting at a level the caller acts at */
+  mine: z.enum(['true']).optional(),
+  q: z.string().trim().max(80).optional(),
+  page: z.coerce.number().int().min(1).default(1),
+  size: z.coerce.number().int().min(1).max(200).default(50),
+});
+export class ListRequestsQueryDto extends createZodDto(ListRequestsQuerySchema) {}

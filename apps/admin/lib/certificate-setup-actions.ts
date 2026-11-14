@@ -185,3 +185,40 @@ export async function saveCertificateSettings(fd: FormData) {
   revalidatePath('/certificates/setup');
   redirect('/certificates/setup/settings?ok=saved');
 }
+
+/** Who may ask for a type online and how it is decided. */
+export async function saveCertificateRequests(fd: FormData) {
+  const code = str(fd, 'code');
+  if (!okCode(code)) return;
+  const here = `/certificates/setup/types/${code}`;
+  let levels: unknown = [];
+  try {
+    levels = JSON.parse(str(fd, 'levelsJson') || '[]');
+  } catch {
+    redirect(
+      `${here}?error=validation-failed&detail=${encodeURIComponent('The levels could not be read')}`,
+    );
+  }
+  const fee = str(fd, 'fee');
+  await call(here, () =>
+    apiFetch(`/certificates/setup/types/${code}/requests`, {
+      method: 'PUT',
+      body: JSON.stringify({
+        open: {
+          parent: fd.get('openParent') !== null,
+          student: fd.get('openStudent') !== null,
+          staff: fd.get('openStaff') !== null,
+        },
+        purposes: str(fd, 'purposes')
+          .split('\n')
+          .map((x) => x.trim())
+          .filter(Boolean),
+        maxCopies: Math.min(10, Math.max(1, Number(str(fd, 'maxCopies')) || 1)),
+        fee: fee && Number(fee) > 0 ? Number(fee) : null,
+        levels,
+      }),
+    }),
+  );
+  revalidatePath('/certificates/setup');
+  redirect(`${here}?ok=requests#requests`);
+}

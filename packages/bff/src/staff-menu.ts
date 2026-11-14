@@ -275,6 +275,12 @@ export const STAFF_MENU: StaffGroup[] = [
         allowed: (can) => can('payroll.own.view'),
       },
       {
+        href: '/my-certificates',
+        label: 'My certificates',
+        help: 'Ask for an experience, service or visa certificate; download the ones issued to me',
+        allowed: always,
+      },
+      {
         href: '/my-tax',
         label: 'My tax',
         help: 'My income tax for the year: declare investments and rent with proofs, my regime, my Form 16 / 130',
@@ -445,6 +451,7 @@ const SCREEN_ICON: Array<[string, string]> = [
   ['/profile', 'user'],
   ['/my-payslips', 'file'],
   ['/my-tax', 'file'],
+  ['/my-certificates', 'file'],
   ['/my-leave', 'calendar'],
   ['/leave-approvals', 'check'],
   ['/my-attendance', 'clock'],

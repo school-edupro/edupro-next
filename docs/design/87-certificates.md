@@ -1,6 +1,6 @@
 # 87 — Certificate management
 
-Status: phases A (foundation) and B (templates and all types) built 14 Nov 2026; phases C–F planned. Plan: `CERTIFICATE_MODULE_PLAN.md` beside
+Status: phases A (foundation), B (templates and all types) and C (requests) built 14 Nov 2026; phases D–F planned. Plan: `CERTIFICATE_MODULE_PLAN.md` beside
 the legacy code (outside this repository).
 
 ## Source and approach
@@ -202,3 +202,56 @@ travel dates; the class rule and the board defaults; layouts; a type's own field
 clash, a type of the school's own; the template editor — refusals, preview, versions, restore, reset, copy);
 `packages/db/test/certificate-templates.test.ts` (blocks escape and place images; only `blocks.*` raw; all 18
 ready templates render with nothing unfilled); the phase A suites updated (17 types).
+
+## As built — phase C, requests (14 Nov 2026)
+
+**Gate for B.** Every item of phase B was built and tested (the QR block's place is in the footer; the QR itself is
+phase D's, as planned).
+
+**Data** (migration 0384). `certificate_requests`: type, student or employee, requested by, channel (parent,
+student, staff, office), purpose, copies (1–10), note, status (submitted → approved → issued; rejected, withdrawn),
+the workflow instance, the fee (amount, the misc fee raised, a waiver's reason), the certificates that answered it,
+the type's checks as they stood when it was asked, decision fields; RLS and audit; `certificates.request_id`. The
+type's `request` settings: `open` (parent / student / staff), `purposes`, `maxCopies`, `fee` (a copy), `levels`
+(office, class teacher, the signatory, a role, a user). Ready settings: the everyday student types open to parents
+and students, two copies, the office in one step; TC and character open to parents, the office then the signatory;
+staff types open to staff, the office. The certificate office gets `workflow.inbox.act`. Four app (push only)
+message templates a school — approved, the fee to pay, not approved, ready — so nothing goes by e-mail or SMS.
+Schools added later get the settings and the templates on first use.
+
+**Approval** runs on the workflow engine: one definition a type (`certificate_request_<code>`, entity type
+`certificate_request`) made equal to the type's levels each time a request starts or the settings are saved; the
+office is `any_of` the certificate office and school admin roles, the class teacher the engine's own (the student's
+section in the payload), the signatory the employee set in the certificate settings (else the school admin), a role
+by its code. One completion handler: approved → the fee raised (head CERTFEE "Certificate fee", a misc fee with the
+student's line, due in 15 days) or ready; rejected → closed with the last note; a cancelled instance (withdrawn) is
+left to the withdraw. Approvers act in the Approvals inbox or on the request (`POST /certificate-requests/:id/decide`,
+the caller must be an assignee of the pending level).
+
+**Issue against a request**: `requestId` on the issue — the request must be approved, for the same type and person,
+its fee paid (the misc fee line `paid`) or waived; the certificate is linked, the request marked issued and the
+requester told. A hook set by the requests service keeps one issue path without a module cycle.
+
+**API** (`/certificate-requests`): `mine` (what I may ask for, my people — a parent's children, the student
+themself, the employee themself — my requests and the certificates issued to us), `POST mine` (ask: the type open to
+my channel, the person mine, copies within the type's, the purpose one of the type's when it lists some, one open
+request a type and person; the checks kept), `POST mine/:id/withdraw` (cancels the approval and an unpaid fee),
+`POST mine/certificates/:id/pdf` and `GET mine/exports/:id` (an export the asker owns); for the office (`view`): the
+queue with figures — waiting, waiting with me, waiting for the fee, ready, issued this month, the oldest open — and
+filters; `GET :id` (the office or an approver of it), `decide`, `waive-fee` and `refuse` (`issue`). Setup: `PUT
+/certificates/setup/types/:code/requests` (a staff type is asked by staff only, a student type by parents or
+students; open needs a level; roles and people of the school).
+
+**Screens.** Admin: **Requests** (from the register's header): six figures, filters, each request's stage, who it
+waits with, its age and fee; a request's page: the request, the checks when asked, the levels (fold), Approve /
+Reject (with a reason), Take the fee off, Turn it down, **Issue it** (the issue screen for that student and type,
+carrying the request). A type's page: **Requests online** (who may ask, copies, fee, purposes, the levels with an
+up / down / remove editor). Parent app, Certificates: **Ask for a certificate** for the chosen child (the types open
+to parents, or to a student signed in), **Your requests** (stage, the fee to pay, withdraw), **Issued by the school**
+(PDF), then the awards as before. Staff app, Office → **My certificates**: ask, my requests, issued to me (PDF).
+
+Tests: `certificate-requests.e2e-spec.ts` (5: what parents, a student and staff may ask for; a parent's bonafide
+through the office and issued against the request, the parent's PDF, not another family's, a request answered once;
+the TC through the office then the principal, the issue still checking; the fee — settings refused when wrong,
+purposes, copies × fee, not issued unpaid, paid, waived; reject with a reason, withdraw cancelling the approval,
+closed types).

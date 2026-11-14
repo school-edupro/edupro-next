@@ -13,6 +13,12 @@ export async function currentLang(): Promise<Lang> {
 }
 
 const DICT: Record<string, string> = {
+  'Ask for a certificate': 'प्रमाणपत्र के लिए अनुरोध करें',
+  'Issued by the school': 'विद्यालय द्वारा जारी',
+  'Awards and achievements': 'पुरस्कार और उपलब्धियाँ',
+  Copies: 'प्रतियाँ',
+  Issued: 'जारी',
+  'Request withdrawn.': 'अनुरोध वापस लिया गया।',
   'With me now': 'अभी मेरे पास',
   'none overdue': 'कोई देर नहीं',
   'Read this session': 'इस सत्र में पढ़ीं',

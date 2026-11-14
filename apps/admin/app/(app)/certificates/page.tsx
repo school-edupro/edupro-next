@@ -72,6 +72,9 @@ export default async function CertificatesPage({
                 Issue a certificate
               </a>
             ) : null}
+            <a className="ep-btn ep-btn--secondary ep-btn--sm" href="/certificates/requests">
+              Requests
+            </a>
             {list.can.setup ? (
               <a className="ep-btn ep-btn--ghost ep-btn--sm" href="/certificates/setup">
                 Set-up
