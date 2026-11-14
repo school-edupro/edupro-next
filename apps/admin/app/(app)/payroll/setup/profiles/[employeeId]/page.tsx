@@ -3,7 +3,9 @@ import { notFound } from 'next/navigation';
 import { FoldCard } from '@/components/FoldCard';
 import { Notice } from '@/components/Notice';
 import { RevealValue } from '@/components/payroll/RevealValue';
+import { SetupListBar, SetupListFiles } from '@/components/payroll/SetupListBar';
 import { ApiError, apiFetch, getMe } from '@/lib/api';
+import { setupList, type SetupList, type SetupListNav } from '@/lib/payroll-lists';
 import { dmy, MONTHS, type ProfileDetail, type ProfileValues } from '@/lib/payroll';
 import { savePayrollNominees, savePayrollProfile } from '@/lib/payroll-actions';
 
@@ -75,8 +77,21 @@ export default async function PayrollProfilePage({
   const me = await getMe();
   if (!me.permissions.includes('payroll.setup.view')) notFound();
   let d: ProfileDetail;
+  let nl: { list: SetupList<ProfileDetail['nominees'][number]>; nav: SetupListNav };
+  let hl: { list: SetupList<ProfileDetail['changes'][number]>; nav: SetupListNav };
   try {
     d = await apiFetch<ProfileDetail>(`/payroll/profiles/${employeeId}`);
+    const path = `/payroll/setup/profiles/${employeeId}`;
+    [nl, hl] = await Promise.all([
+      setupList<ProfileDetail['nominees'][number]>('profile-nominees', path, sp, {
+        params: { employeeId },
+        prefix: 'n',
+      }),
+      setupList<ProfileDetail['changes'][number]>('profile-changes', path, sp, {
+        params: { employeeId },
+        prefix: 'h',
+      }),
+    ]);
   } catch (e) {
     if (e instanceof ApiError && (e.status === 403 || e.status === 404)) notFound();
     throw e;
@@ -403,6 +418,7 @@ export default async function PayrollProfilePage({
             : 'For gratuity, EDLI and dues: the shares of each purpose make 100 %'
         }
       >
+        <SetupListFiles list={nl.list} nav={nl.nav} />
         <form action={savePayrollNominees.bind(null, e.id)}>
           <div className="ep-table-wrap" tabIndex={0} role="region" aria-labelledby="pf-nominees">
             <table className="ep-table ep-table--dense">
@@ -500,32 +516,34 @@ export default async function PayrollProfilePage({
         }
       >
         {d.changes.length ? (
-          <div className="ep-table-wrap" tabIndex={0} role="region" aria-labelledby="pf-history">
-            <table className="ep-table ep-table--dense">
-              <thead>
-                <tr>
-                  <th scope="col">What</th>
-                  <th scope="col">Was</th>
-                  <th scope="col">Now</th>
-                  <th scope="col">From</th>
-                  <th scope="col">Changed by · on</th>
-                </tr>
-              </thead>
-              <tbody>
-                {d.changes.map((c, i) => (
-                  <tr key={`${c.field}-${String(i)}`}>
-                    <td>{FIELD_LABEL[c.field] ?? c.field}</td>
-                    <td>{c.oldValue ?? '—'}</td>
-                    <td>{c.newValue ?? '—'}</td>
-                    <td>{dmy(c.effectiveFrom)}</td>
-                    <td>
-                      {c.changedBy ?? ''} · {dmy(c.changedAt.slice(0, 10))}
-                    </td>
+          <SetupListBar list={hl.list} nav={hl.nav} id="pf-h">
+            <div className="ep-table-wrap" tabIndex={0} role="region" aria-labelledby="pf-history">
+              <table className="ep-table ep-table--dense">
+                <thead>
+                  <tr>
+                    <th scope="col">What</th>
+                    <th scope="col">Was</th>
+                    <th scope="col">Now</th>
+                    <th scope="col">From</th>
+                    <th scope="col">Changed by · on</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody>
+                  {hl.list.rows.map((c, i) => (
+                    <tr key={`${c.field}-${String(i)}`}>
+                      <td>{FIELD_LABEL[c.field] ?? c.field}</td>
+                      <td>{c.oldValue ?? '—'}</td>
+                      <td>{c.newValue ?? '—'}</td>
+                      <td>{dmy(c.effectiveFrom)}</td>
+                      <td>
+                        {c.changedBy ?? ''} · {dmy(c.changedAt.slice(0, 10))}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </SetupListBar>
         ) : (
           <p>No changes yet.</p>
         )}

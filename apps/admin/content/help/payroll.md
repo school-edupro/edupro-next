@@ -134,6 +134,26 @@ Salary structures (tick the staff and **Approve the ticked**: each employee is a
 at all), rates and statutory rules (approve each), and the pay heads with draft versions (open the head
 to see the formula and its tests, then approve).
 
+### Finding, paging and downloading a set-up list
+
+Every list in Payroll set-up — pay heads, a head's versions and formula tests, each tab of Rates and statutory
+rules, the pay matrix, profiles, structures and templates, a structure's timeline, the profile history, tax slabs
+and lines, bank accounts, drafts to approve, the rows read from the old payroll and each comparison — has the same
+bar:
+
+- **Filters** for that list (a search, the type, kind, status, department, staff type, "in force on" a date …):
+  press **Show**; **Clear** removes them. The address keeps them, so a link opens the same view.
+- **Records per page** (25, 50 or 100), **Showing 1 – 25 of N results** and the page numbers under the list.
+- **Excel** and **PDF**: every row the filters leave (all pages, not only the one on screen). The PDF is on the
+  school's letterhead with the filters written under the title and the **Prepared by** / **Checked by** boxes. PAN
+  and bank accounts stay masked, and a maker's file leaves out the staff marked confidential, as on the screen.
+  Each download is recorded in the payroll audit trail.
+
+A table that is a form saved whole (the nominees, a structure's amounts) has only its **Excel** and **PDF**. The
+settings page has its own Excel and PDF, and **Set-up book** on the Payroll set-up page downloads the whole set-up —
+settings, pay heads with the formula in force, each rate tab in force today, the pay matrix, templates, this year's
+tax and (for checkers) the bank accounts — as one workbook, a sheet each, or one PDF.
+
 ## The month's inputs (Payroll → Monthly inputs)
 
 Get the month ready before its pay run. Each tab is one kind of input; pick the month at the top.

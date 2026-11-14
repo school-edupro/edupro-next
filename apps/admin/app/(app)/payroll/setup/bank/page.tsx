@@ -3,7 +3,9 @@ import { notFound } from 'next/navigation';
 import { Notice } from '@/components/Notice';
 import { DialogButton } from '@/components/leave/DialogButton';
 import { BankAccountForm } from '@/components/payroll/bank/BankAccountForm';
+import { SetupListBar } from '@/components/payroll/SetupListBar';
 import { ApiError, apiFetch, getMe } from '@/lib/api';
+import { setupList, type SetupList, type SetupListNav } from '@/lib/payroll-lists';
 import { FORMAT_WORD, type BankAccount } from '@/lib/payroll-pay';
 import { saveBankAccount, saveLedgers } from '@/lib/payroll-pay-actions';
 
@@ -31,8 +33,10 @@ export default async function PayrollBankSetupPage({
   if (!p.includes('payroll.run.approve') && !p.includes('payroll.settings.manage')) notFound();
   let d: { rows: BankAccount[]; fallback: { fileFormat: string }; can: { manage: boolean } };
   let settings: Record<string, unknown> = {};
+  let bl: { list: SetupList<BankAccount>; nav: SetupListNav };
   try {
     d = await apiFetch('/payroll/bank/accounts');
+    bl = await setupList<BankAccount>('bank-accounts', '/payroll/setup/bank', sp);
     if (p.includes('payroll.setup.view'))
       settings = (await apiFetch<{ settings: Record<string, unknown> }>('/payroll/settings'))
         .settings;
@@ -71,60 +75,62 @@ export default async function PayrollBankSetupPage({
           {FORMAT_WORD[d.fallback.fileFormat] ?? d.fallback.fileFormat} set in Settings.
         </p>
         {d.rows.length ? (
-          <div className="ep-table-wrap" tabIndex={0} role="region" aria-labelledby="sb-acc">
-            <table className="ep-table ep-table--dense">
-              <thead>
-                <tr>
-                  <th scope="col">Bank</th>
-                  <th scope="col">Branch</th>
-                  <th scope="col">Account</th>
-                  <th scope="col">File</th>
-                  <th scope="col">
-                    <span className="ep-sr-only">Action</span>
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {d.rows.map((a) => (
-                  <tr key={a.id}>
-                    <td>
-                      <strong>{a.bankCode}</strong> · {a.bankName}
-                      {a.active ? null : (
-                        <>
-                          {' '}
-                          <Badge tone="neutral">Not in use</Badge>
-                        </>
-                      )}
-                    </td>
-                    <td>{a.branch ?? '—'}</td>
-                    <td>{a.accountNo}</td>
-                    <td>
-                      {FORMAT_WORD[a.fileFormat] ?? a.fileFormat}
-                      {a.fileFormat === 'CUSTOM_CSV'
-                        ? ` · ${String(a.layout.columns?.length ?? 0)} column(s)`
-                        : ''}
-                    </td>
-                    <td>
-                      {can ? (
-                        <DialogButton
-                          id={`sb-edit-${a.id}`}
-                          label="Change"
-                          title={`Bank account: ${a.bankCode}`}
-                          className="ep-btn ep-btn--secondary ep-btn--sm"
-                        >
-                          <BankAccountForm
-                            account={a}
-                            save={saveBankAccount.bind(null, a.id)}
-                            idp={`sb-${a.id}`}
-                          />
-                        </DialogButton>
-                      ) : null}
-                    </td>
+          <SetupListBar list={bl.list} nav={bl.nav} id="sb">
+            <div className="ep-table-wrap" tabIndex={0} role="region" aria-labelledby="sb-acc">
+              <table className="ep-table ep-table--dense">
+                <thead>
+                  <tr>
+                    <th scope="col">Bank</th>
+                    <th scope="col">Branch</th>
+                    <th scope="col">Account</th>
+                    <th scope="col">File</th>
+                    <th scope="col">
+                      <span className="ep-sr-only">Action</span>
+                    </th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody>
+                  {bl.list.rows.map((a) => (
+                    <tr key={a.id}>
+                      <td>
+                        <strong>{a.bankCode}</strong> · {a.bankName}
+                        {a.active ? null : (
+                          <>
+                            {' '}
+                            <Badge tone="neutral">Not in use</Badge>
+                          </>
+                        )}
+                      </td>
+                      <td>{a.branch ?? '—'}</td>
+                      <td>{a.accountNo}</td>
+                      <td>
+                        {FORMAT_WORD[a.fileFormat] ?? a.fileFormat}
+                        {a.fileFormat === 'CUSTOM_CSV'
+                          ? ` · ${String(a.layout.columns?.length ?? 0)} column(s)`
+                          : ''}
+                      </td>
+                      <td>
+                        {can ? (
+                          <DialogButton
+                            id={`sb-edit-${a.id}`}
+                            label="Change"
+                            title={`Bank account: ${a.bankCode}`}
+                            className="ep-btn ep-btn--secondary ep-btn--sm"
+                          >
+                            <BankAccountForm
+                              account={a}
+                              save={saveBankAccount.bind(null, a.id)}
+                              idp={`sb-${a.id}`}
+                            />
+                          </DialogButton>
+                        ) : null}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </SetupListBar>
         ) : (
           <p>No account yet: every bank gets the default file.</p>
         )}

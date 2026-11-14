@@ -4,7 +4,9 @@ import { FoldCard } from '@/components/FoldCard';
 import { Notice } from '@/components/Notice';
 import { DialogButton } from '@/components/leave/DialogButton';
 import { VersionFields } from '@/components/payroll/VersionFields';
+import { SetupListBar } from '@/components/payroll/SetupListBar';
 import { ApiError, apiFetch, getMe } from '@/lib/api';
+import { setupList, type SetupList, type SetupListNav } from '@/lib/payroll-lists';
 import { CALC_LABEL, CATEGORY, dmy, STATUS_TONE, type HeadDetail } from '@/lib/payroll';
 import {
   addFormulaTest,
@@ -39,8 +41,20 @@ export default async function PayHeadPage({
   const me = await getMe();
   if (!me.permissions.includes('payroll.setup.view')) notFound();
   let d: HeadDetail;
+  let vl: { list: SetupList<HeadDetail['versions'][number]>; nav: SetupListNav };
+  let tl: { list: SetupList<HeadDetail['tests'][number]>; nav: SetupListNav };
   try {
     d = await apiFetch<HeadDetail>(`/payroll/heads/${id}`);
+    [vl, tl] = await Promise.all([
+      setupList<HeadDetail['versions'][number]>('head-versions', `/payroll/setup/heads/${id}`, sp, {
+        params: { id },
+        prefix: 'v',
+      }),
+      setupList<HeadDetail['tests'][number]>('head-tests', `/payroll/setup/heads/${id}`, sp, {
+        params: { id },
+        prefix: 't',
+      }),
+    ]);
   } catch (e) {
     if (e instanceof ApiError && (e.status === 403 || e.status === 404)) notFound();
     throw e;
@@ -126,134 +140,136 @@ export default async function PayHeadPage({
             </DialogButton>
           ) : null}
         </div>
-        <div className="ep-table-wrap" tabIndex={0} role="region" aria-labelledby="hd-versions">
-          <table className="ep-table ep-table--dense">
-            <thead>
-              <tr>
-                <th scope="col">From</th>
-                <th scope="col">To</th>
-                <th scope="col">Worked out</th>
-                <th scope="col">Counts for</th>
-                <th scope="col">Rounding</th>
-                <th scope="col">Status</th>
-                <th scope="col">Made · approved by</th>
-                <th scope="col">Why</th>
-                <th scope="col">
-                  <span className="ep-sr-only">Actions</span>
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {d.versions.map((v) => (
-                <tr key={v.id}>
-                  <td>{dmy(v.effectiveFrom)}</td>
-                  <td>{v.effectiveTo ? dmy(v.effectiveTo) : 'Open'}</td>
-                  <td>
-                    {CALC_LABEL[v.calcType] ?? v.calcType}
-                    {v.formula ? (
-                      <>
-                        {' '}
-                        <code>{v.formula}</code>
-                      </>
-                    ) : null}
-                    {v.calcType === 'SLAB'
-                      ? slabsOf(v.id).map((s) => (
-                          <span
-                            key={s.rangeFrom}
-                            className="ep-field__help"
-                            style={{ display: 'block', margin: 0 }}
-                          >
-                            ₹{s.rangeFrom}–{s.rangeTo ? `₹${s.rangeTo}` : 'above'}:{' '}
-                            {s.percent ? `${s.percent} %` : `₹${s.flatAmount ?? ''}`}
-                          </span>
-                        ))
-                      : null}
-                  </td>
-                  <td>{flags(v)}</td>
-                  <td>{ROUND_LABEL[v.rounding] ?? v.rounding}</td>
-                  <td>
-                    <Badge tone={STATUS_TONE[v.status]}>
-                      {v.status === 'draft'
-                        ? 'Draft'
-                        : v === live
-                          ? 'In force'
-                          : v.status === 'active'
-                            ? 'Approved'
-                            : 'Ended'}
-                    </Badge>
-                  </td>
-                  <td>
-                    {v.createdByName ?? 'Default'}
-                    {v.approvedByName ? ` · ${v.approvedByName}` : ''}
-                  </td>
-                  <td>{v.changeReason ?? ''}</td>
-                  <td>
-                    <div className="ep-grid__toolbar">
-                      {v.status === 'draft' && d.can.approve ? (
-                        <form action={versionAction.bind(null, h.id, v.id, 'approve')}>
-                          <button type="submit" className="ep-btn ep-btn--primary ep-btn--sm">
-                            Approve
-                          </button>
-                        </form>
-                      ) : null}
-                      {v.status === 'draft' && (v.mine || d.can.approve) ? (
-                        <form action={versionAction.bind(null, h.id, v.id, 'delete')}>
-                          <button type="submit" className="ep-btn ep-btn--ghost ep-btn--sm">
-                            Delete
-                          </button>
-                        </form>
-                      ) : null}
-                      {v.status === 'active' && !v.effectiveTo && d.can.approve ? (
-                        <DialogButton
-                          id={`hd-end-${v.id}`}
-                          label="End"
-                          title="End this version"
-                          className="ep-btn ep-btn--ghost ep-btn--sm"
-                        >
-                          <form
-                            action={endHeadVersion.bind(null, h.id, v.id)}
-                            className="ep-form-section__body"
-                          >
-                            <p className="ep-field__help">
-                              After this day the head is not worked out at all. To change how it is
-                              worked out, add a new version instead.
-                            </p>
-                            <label className="ep-field" htmlFor={`hd-end-to-${v.id}`}>
-                              <span className="ep-field__label">Last day</span>
-                              <input
-                                id={`hd-end-to-${v.id}`}
-                                name="effectiveTo"
-                                type="date"
-                                className="ep-input"
-                                required
-                              />
-                            </label>
-                            <label className="ep-field" htmlFor={`hd-end-why-${v.id}`}>
-                              <span className="ep-field__label">Why</span>
-                              <input
-                                id={`hd-end-why-${v.id}`}
-                                name="reason"
-                                className="ep-input"
-                                required
-                                minLength={3}
-                                maxLength={200}
-                              />
-                            </label>
-                            <p>
-                              <button type="submit" className="ep-btn ep-btn--primary">
-                                End it
-                              </button>
-                            </p>
-                          </form>
-                        </DialogButton>
-                      ) : null}
-                    </div>
-                  </td>
+        <SetupListBar list={vl.list} nav={vl.nav} id="hd-v">
+          <div className="ep-table-wrap" tabIndex={0} role="region" aria-labelledby="hd-versions">
+            <table className="ep-table ep-table--dense">
+              <thead>
+                <tr>
+                  <th scope="col">From</th>
+                  <th scope="col">To</th>
+                  <th scope="col">Worked out</th>
+                  <th scope="col">Counts for</th>
+                  <th scope="col">Rounding</th>
+                  <th scope="col">Status</th>
+                  <th scope="col">Made · approved by</th>
+                  <th scope="col">Why</th>
+                  <th scope="col">
+                    <span className="ep-sr-only">Actions</span>
+                  </th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody>
+                {vl.list.rows.map((v) => (
+                  <tr key={v.id}>
+                    <td>{dmy(v.effectiveFrom)}</td>
+                    <td>{v.effectiveTo ? dmy(v.effectiveTo) : 'Open'}</td>
+                    <td>
+                      {CALC_LABEL[v.calcType] ?? v.calcType}
+                      {v.formula ? (
+                        <>
+                          {' '}
+                          <code>{v.formula}</code>
+                        </>
+                      ) : null}
+                      {v.calcType === 'SLAB'
+                        ? slabsOf(v.id).map((s) => (
+                            <span
+                              key={s.rangeFrom}
+                              className="ep-field__help"
+                              style={{ display: 'block', margin: 0 }}
+                            >
+                              ₹{s.rangeFrom}–{s.rangeTo ? `₹${s.rangeTo}` : 'above'}:{' '}
+                              {s.percent ? `${s.percent} %` : `₹${s.flatAmount ?? ''}`}
+                            </span>
+                          ))
+                        : null}
+                    </td>
+                    <td>{flags(v)}</td>
+                    <td>{ROUND_LABEL[v.rounding] ?? v.rounding}</td>
+                    <td>
+                      <Badge tone={STATUS_TONE[v.status]}>
+                        {v.status === 'draft'
+                          ? 'Draft'
+                          : v === live
+                            ? 'In force'
+                            : v.status === 'active'
+                              ? 'Approved'
+                              : 'Ended'}
+                      </Badge>
+                    </td>
+                    <td>
+                      {v.createdByName ?? 'Default'}
+                      {v.approvedByName ? ` · ${v.approvedByName}` : ''}
+                    </td>
+                    <td>{v.changeReason ?? ''}</td>
+                    <td>
+                      <div className="ep-grid__toolbar">
+                        {v.status === 'draft' && d.can.approve ? (
+                          <form action={versionAction.bind(null, h.id, v.id, 'approve')}>
+                            <button type="submit" className="ep-btn ep-btn--primary ep-btn--sm">
+                              Approve
+                            </button>
+                          </form>
+                        ) : null}
+                        {v.status === 'draft' && (v.mine || d.can.approve) ? (
+                          <form action={versionAction.bind(null, h.id, v.id, 'delete')}>
+                            <button type="submit" className="ep-btn ep-btn--ghost ep-btn--sm">
+                              Delete
+                            </button>
+                          </form>
+                        ) : null}
+                        {v.status === 'active' && !v.effectiveTo && d.can.approve ? (
+                          <DialogButton
+                            id={`hd-end-${v.id}`}
+                            label="End"
+                            title="End this version"
+                            className="ep-btn ep-btn--ghost ep-btn--sm"
+                          >
+                            <form
+                              action={endHeadVersion.bind(null, h.id, v.id)}
+                              className="ep-form-section__body"
+                            >
+                              <p className="ep-field__help">
+                                After this day the head is not worked out at all. To change how it
+                                is worked out, add a new version instead.
+                              </p>
+                              <label className="ep-field" htmlFor={`hd-end-to-${v.id}`}>
+                                <span className="ep-field__label">Last day</span>
+                                <input
+                                  id={`hd-end-to-${v.id}`}
+                                  name="effectiveTo"
+                                  type="date"
+                                  className="ep-input"
+                                  required
+                                />
+                              </label>
+                              <label className="ep-field" htmlFor={`hd-end-why-${v.id}`}>
+                                <span className="ep-field__label">Why</span>
+                                <input
+                                  id={`hd-end-why-${v.id}`}
+                                  name="reason"
+                                  className="ep-input"
+                                  required
+                                  minLength={3}
+                                  maxLength={200}
+                                />
+                              </label>
+                              <p>
+                                <button type="submit" className="ep-btn ep-btn--primary">
+                                  End it
+                                </button>
+                              </p>
+                            </form>
+                          </DialogButton>
+                        ) : null}
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </SetupListBar>
       </section>
       <FoldCard
         id="hd-tests"
@@ -266,53 +282,55 @@ export default async function PayHeadPage({
         open={failing > 0}
       >
         {d.tests.length ? (
-          <div className="ep-table-wrap" tabIndex={0} role="region" aria-labelledby="hd-tests">
-            <table className="ep-table ep-table--dense">
-              <thead>
-                <tr>
-                  <th scope="col">Test</th>
-                  <th scope="col">Values</th>
-                  <th scope="col">Expected (₹)</th>
-                  <th scope="col">Last result (₹)</th>
-                  <th scope="col">
-                    <span className="ep-sr-only">Actions</span>
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {d.tests.map((t) => (
-                  <tr key={t.id}>
-                    <td>{t.name}</td>
-                    <td>
-                      <code>
-                        {Object.entries(t.inputs)
-                          .map(([k, v]) => `${k}=${v}`)
-                          .join(', ')}
-                      </code>
-                    </td>
-                    <td>{t.expected}</td>
-                    <td>
-                      {t.lastResult ?? ''}{' '}
-                      {t.lastStatus ? (
-                        <Badge tone={t.lastStatus === 'pass' ? 'success' : 'danger'}>
-                          {t.lastStatus === 'pass' ? 'Passes' : 'Fails'}
-                        </Badge>
-                      ) : null}
-                    </td>
-                    <td>
-                      {d.can.manage ? (
-                        <form action={testAction.bind(null, h.id, t.id)}>
-                          <button type="submit" className="ep-btn ep-btn--ghost ep-btn--sm">
-                            Delete
-                          </button>
-                        </form>
-                      ) : null}
-                    </td>
+          <SetupListBar list={tl.list} nav={tl.nav} id="hd-t">
+            <div className="ep-table-wrap" tabIndex={0} role="region" aria-labelledby="hd-tests">
+              <table className="ep-table ep-table--dense">
+                <thead>
+                  <tr>
+                    <th scope="col">Test</th>
+                    <th scope="col">Values</th>
+                    <th scope="col">Expected (₹)</th>
+                    <th scope="col">Last result (₹)</th>
+                    <th scope="col">
+                      <span className="ep-sr-only">Actions</span>
+                    </th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody>
+                  {tl.list.rows.map((t) => (
+                    <tr key={t.id}>
+                      <td>{t.name}</td>
+                      <td>
+                        <code>
+                          {Object.entries(t.inputs)
+                            .map(([k, v]) => `${k}=${v}`)
+                            .join(', ')}
+                        </code>
+                      </td>
+                      <td>{t.expected}</td>
+                      <td>
+                        {t.lastResult ?? ''}{' '}
+                        {t.lastStatus ? (
+                          <Badge tone={t.lastStatus === 'pass' ? 'success' : 'danger'}>
+                            {t.lastStatus === 'pass' ? 'Passes' : 'Fails'}
+                          </Badge>
+                        ) : null}
+                      </td>
+                      <td>
+                        {d.can.manage ? (
+                          <form action={testAction.bind(null, h.id, t.id)}>
+                            <button type="submit" className="ep-btn ep-btn--ghost ep-btn--sm">
+                              Delete
+                            </button>
+                          </form>
+                        ) : null}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </SetupListBar>
         ) : null}
         <div className="ep-grid__toolbar" style={{ marginTop: 'var(--sp-3)' }}>
           {d.tests.length ? (

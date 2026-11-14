@@ -158,6 +158,25 @@ export default async function PayrollSetupPage({
         kicker="Payroll"
         title="Payroll set-up"
         description="Everything the monthly pay run reads. Fill it in order: rules and rates, pay heads and the matrix, then each employee’s profile and salary structure."
+        actions={
+          <>
+            <a
+              className="ep-btn ep-btn--secondary ep-btn--sm"
+              href="/api/payroll/pay-file?kind=setupbook&format=xlsx&save=1"
+              download
+              title="The settings, pay heads, rates in force, matrix, templates, tax and bank accounts: a sheet each"
+            >
+              Set-up book (Excel)
+            </a>
+            <a
+              className="ep-btn ep-btn--secondary ep-btn--sm"
+              href="/api/payroll/pay-file?kind=setupbook&format=pdf&save=1"
+              download
+            >
+              Set-up book (PDF)
+            </a>
+          </>
+        }
       />
       <Notice params={sp} />
       <div className="ep-dash-kpis">

@@ -73,6 +73,24 @@ export default async function PayrollSettingsPage({
             ? 'The school’s payroll identity and switches. Only a payroll admin changes them.'
             : 'The school’s payroll identity and switches. Changes apply to the next run; every change is in the audit log.'
         }
+        actions={
+          <>
+            <a
+              className="ep-btn ep-btn--secondary ep-btn--sm"
+              href="/api/payroll/pay-file?kind=setuplist&key=settings&format=xlsx&save=1"
+              download
+            >
+              Excel<span className="ep-sr-only"> of the settings</span>
+            </a>
+            <a
+              className="ep-btn ep-btn--secondary ep-btn--sm"
+              href="/api/payroll/pay-file?kind=setuplist&key=settings&format=pdf&save=1"
+              download
+            >
+              PDF<span className="ep-sr-only"> of the settings</span>
+            </a>
+          </>
+        }
       />
       <Notice params={sp} />
       <form action={savePayrollSettings}>

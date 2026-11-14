@@ -3,6 +3,7 @@ import { notFound } from 'next/navigation';
 import type { ReactNode } from 'react';
 import { Notice } from '@/components/Notice';
 import { DialogButton } from '@/components/leave/DialogButton';
+import { SetupListBar } from '@/components/payroll/SetupListBar';
 import { ApiError, apiFetch, getMe } from '@/lib/api';
 import {
   dmy,
@@ -20,6 +21,7 @@ import {
   deletePayrollConfig,
   endPayrollConfig,
 } from '@/lib/payroll-actions';
+import { setupList, type SetupList, type SetupListNav } from '@/lib/payroll-lists';
 
 const TABS: Array<{ id: ConfigKind; label: string; text: string }> = [
   {
@@ -310,10 +312,15 @@ export default async function PayrollRatesPage({
   const me = await getMe();
   if (!me.permissions.includes('payroll.setup.view')) notFound();
   const kind = TABS.find((t) => t.id === sp.tab)?.id ?? 'rates';
-  const status = ['draft', 'active', 'ended'].includes(sp.status ?? '') ? sp.status! : 'all';
   let d: ConfigList;
+  let list: SetupList<ConfigRow>;
+  let nav: SetupListNav;
   try {
-    d = await apiFetch<ConfigList>(`/payroll/config/${kind}?status=${status}`);
+    // the rows in force give the draft form its defaults; the list is filtered and paged
+    d = await apiFetch<ConfigList>(`/payroll/config/${kind}?status=active`);
+    ({ list, nav } = await setupList<ConfigRow>('config', '/payroll/setup/rates', sp, {
+      params: { kind },
+    }));
   } catch (e) {
     if (e instanceof ApiError && e.status === 403) notFound();
     throw e;
@@ -358,20 +365,6 @@ export default async function PayrollRatesPage({
             </p>
           </div>
           <span className="ep-grid__spacer" />
-          <nav aria-label="Show" className="ep-field__help">
-            {(['all', 'draft', 'active', 'ended'] as const).map((x, i) => (
-              <span key={x}>
-                {i ? ' · ' : ''}
-                {x === status ? (
-                  <strong>{x === 'all' ? 'All' : x[0]!.toUpperCase() + x.slice(1)}</strong>
-                ) : (
-                  <a href={`/payroll/setup/rates?tab=${kind}&status=${x}`}>
-                    {x === 'all' ? 'All' : x[0]!.toUpperCase() + x.slice(1)}
-                  </a>
-                )}
-              </span>
-            ))}
-          </nav>
           {d.can.manage ? (
             <DialogButton
               id="pr-new"
@@ -410,120 +403,124 @@ export default async function PayrollRatesPage({
             </DialogButton>
           ) : null}
         </div>
-        <div className="ep-table-wrap" tabIndex={0} role="region" aria-labelledby="pr-list">
-          <table className="ep-table ep-table--dense">
-            <thead>
-              <tr>
-                {cols.map((c) => (
-                  <th key={c.label} scope="col">
-                    {c.label}
+        <SetupListBar list={list} nav={nav} id="pr">
+          <div className="ep-table-wrap" tabIndex={0} role="region" aria-labelledby="pr-list">
+            <table className="ep-table ep-table--dense">
+              <thead>
+                <tr>
+                  {cols.map((c) => (
+                    <th key={c.label} scope="col">
+                      {c.label}
+                    </th>
+                  ))}
+                  <th scope="col">From</th>
+                  <th scope="col">To</th>
+                  <th scope="col">Status</th>
+                  <th scope="col">Made · approved by</th>
+                  <th scope="col">Why</th>
+                  <th scope="col">
+                    <span className="ep-sr-only">Actions</span>
                   </th>
-                ))}
-                <th scope="col">From</th>
-                <th scope="col">To</th>
-                <th scope="col">Status</th>
-                <th scope="col">Made · approved by</th>
-                <th scope="col">Why</th>
-                <th scope="col">
-                  <span className="ep-sr-only">Actions</span>
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {d.rows.length ? (
-                d.rows.map((r) => (
-                  <tr key={r.id}>
-                    {cols.map((c) => (
-                      <td key={c.label}>{c.cell(r)}</td>
-                    ))}
-                    <td>{dmy(r.effectiveFrom)}</td>
-                    <td>{r.effectiveTo ? dmy(r.effectiveTo) : 'Open'}</td>
-                    <td>
-                      <Badge tone={STATUS_TONE[r.status]}>
-                        {r.status === 'draft'
-                          ? 'Draft'
-                          : r.status === 'active'
-                            ? 'Active'
-                            : 'Ended'}
-                      </Badge>
-                    </td>
-                    <td>
-                      {r.createdByName ?? 'Default'}
-                      {r.approvedByName ? ` · ${r.approvedByName}` : ''}
-                    </td>
-                    <td>{r.changeReason ?? ''}</td>
-                    <td>
-                      <div className="ep-grid__toolbar">
-                        {r.status === 'draft' && d.can.approve ? (
-                          <form action={approvePayrollConfig.bind(null, kind, r.id)}>
-                            <button type="submit" className="ep-btn ep-btn--primary ep-btn--sm">
-                              Approve
-                            </button>
-                          </form>
-                        ) : null}
-                        {r.status === 'draft' && (r.mine || d.can.approve) ? (
-                          <form action={deletePayrollConfig.bind(null, kind, r.id)}>
-                            <button type="submit" className="ep-btn ep-btn--ghost ep-btn--sm">
-                              Delete
-                            </button>
-                          </form>
-                        ) : null}
-                        {r.status === 'active' && !r.effectiveTo && d.can.approve ? (
-                          <DialogButton
-                            id={`pr-end-${r.id}`}
-                            label="End"
-                            title="End this row"
-                            className="ep-btn ep-btn--ghost ep-btn--sm"
-                          >
-                            <form
-                              action={endPayrollConfig.bind(null, kind, r.id)}
-                              className="ep-form-section__body"
-                            >
-                              <p className="ep-field__help">
-                                No month after the date reads this row. To change a rate, add a new
-                                dated row instead: it ends this one by itself.
-                              </p>
-                              <label className="ep-field" htmlFor={`pr-end-to-${r.id}`}>
-                                <span className="ep-field__label">Last day</span>
-                                <input
-                                  id={`pr-end-to-${r.id}`}
-                                  name="effectiveTo"
-                                  type="date"
-                                  className="ep-input"
-                                  required
-                                />
-                              </label>
-                              <label className="ep-field" htmlFor={`pr-end-why-${r.id}`}>
-                                <span className="ep-field__label">Why</span>
-                                <input
-                                  id={`pr-end-why-${r.id}`}
-                                  name="reason"
-                                  className="ep-input"
-                                  required
-                                  minLength={3}
-                                  maxLength={200}
-                                />
-                              </label>
-                              <p>
-                                <button type="submit" className="ep-btn ep-btn--primary">
-                                  End it
-                                </button>
-                              </p>
+                </tr>
+              </thead>
+              <tbody>
+                {list.rows.length ? (
+                  list.rows.map((r) => (
+                    <tr key={r.id}>
+                      {cols.map((c) => (
+                        <td key={c.label}>{c.cell(r)}</td>
+                      ))}
+                      <td>{dmy(r.effectiveFrom)}</td>
+                      <td>{r.effectiveTo ? dmy(r.effectiveTo) : 'Open'}</td>
+                      <td>
+                        <Badge tone={STATUS_TONE[r.status]}>
+                          {r.status === 'draft'
+                            ? 'Draft'
+                            : r.status === 'active'
+                              ? 'Active'
+                              : 'Ended'}
+                        </Badge>
+                      </td>
+                      <td>
+                        {r.createdByName ?? 'Default'}
+                        {r.approvedByName ? ` · ${r.approvedByName}` : ''}
+                      </td>
+                      <td>{r.changeReason ?? ''}</td>
+                      <td>
+                        <div className="ep-grid__toolbar">
+                          {r.status === 'draft' && d.can.approve ? (
+                            <form action={approvePayrollConfig.bind(null, kind, r.id)}>
+                              <button type="submit" className="ep-btn ep-btn--primary ep-btn--sm">
+                                Approve
+                              </button>
                             </form>
-                          </DialogButton>
-                        ) : null}
-                      </div>
+                          ) : null}
+                          {r.status === 'draft' && (r.mine || d.can.approve) ? (
+                            <form action={deletePayrollConfig.bind(null, kind, r.id)}>
+                              <button type="submit" className="ep-btn ep-btn--ghost ep-btn--sm">
+                                Delete
+                              </button>
+                            </form>
+                          ) : null}
+                          {r.status === 'active' && !r.effectiveTo && d.can.approve ? (
+                            <DialogButton
+                              id={`pr-end-${r.id}`}
+                              label="End"
+                              title="End this row"
+                              className="ep-btn ep-btn--ghost ep-btn--sm"
+                            >
+                              <form
+                                action={endPayrollConfig.bind(null, kind, r.id)}
+                                className="ep-form-section__body"
+                              >
+                                <p className="ep-field__help">
+                                  No month after the date reads this row. To change a rate, add a
+                                  new dated row instead: it ends this one by itself.
+                                </p>
+                                <label className="ep-field" htmlFor={`pr-end-to-${r.id}`}>
+                                  <span className="ep-field__label">Last day</span>
+                                  <input
+                                    id={`pr-end-to-${r.id}`}
+                                    name="effectiveTo"
+                                    type="date"
+                                    className="ep-input"
+                                    required
+                                  />
+                                </label>
+                                <label className="ep-field" htmlFor={`pr-end-why-${r.id}`}>
+                                  <span className="ep-field__label">Why</span>
+                                  <input
+                                    id={`pr-end-why-${r.id}`}
+                                    name="reason"
+                                    className="ep-input"
+                                    required
+                                    minLength={3}
+                                    maxLength={200}
+                                  />
+                                </label>
+                                <p>
+                                  <button type="submit" className="ep-btn ep-btn--primary">
+                                    End it
+                                  </button>
+                                </p>
+                              </form>
+                            </DialogButton>
+                          ) : null}
+                        </div>
+                      </td>
+                    </tr>
+                  ))
+                ) : (
+                  <tr>
+                    <td colSpan={cols.length + 6}>
+                      {list.all ? 'No row matches the filters.' : 'Nothing here.'}
                     </td>
                   </tr>
-                ))
-              ) : (
-                <tr>
-                  <td colSpan={cols.length + 6}>Nothing here.</td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </SetupListBar>
       </section>
     </>
   );

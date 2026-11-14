@@ -3,7 +3,9 @@ import { notFound } from 'next/navigation';
 import { FoldCard } from '@/components/FoldCard';
 import { Notice } from '@/components/Notice';
 import { ApplyTemplate } from '@/components/payroll/ApplyTemplate';
+import { SetupListBar, SetupListFiles } from '@/components/payroll/SetupListBar';
 import { ApiError, apiFetch, getMe } from '@/lib/api';
+import { setupList, type SetupList, type SetupListNav } from '@/lib/payroll-lists';
 import { CALC_LABEL, dmy, money, type StructureView } from '@/lib/payroll';
 import { savePayrollStructure, structureDrafts } from '@/lib/payroll-actions';
 
@@ -22,8 +24,24 @@ export default async function PayrollStructurePage({
   if (!me.permissions.includes('payroll.setup.view')) notFound();
   const asOf = /^\d{4}-\d{2}-\d{2}$/.test(sp.asOf ?? '') ? `?asOf=${sp.asOf!}` : '';
   let d: StructureView;
+  let hl: { list: SetupList<StructureView['heads'][number]>; nav: SetupListNav };
+  let tl: { list: SetupList<StructureView['timeline'][number]>; nav: SetupListNav };
   try {
     d = await apiFetch<StructureView>(`/payroll/structures/${employeeId}${asOf}`);
+    const path = `/payroll/setup/structures/${employeeId}`;
+    [hl, tl] = await Promise.all([
+      setupList<StructureView['heads'][number]>('structure-heads', path, sp, {
+        params: {
+          employeeId,
+          ...(sp.asOf && /^\d{4}-\d{2}-\d{2}$/.test(sp.asOf) ? { asOf: sp.asOf } : {}),
+        },
+        prefix: 'a',
+      }),
+      setupList<StructureView['timeline'][number]>('structure-timeline', path, sp, {
+        params: { employeeId },
+        prefix: 't',
+      }),
+    ]);
   } catch (e) {
     if (e instanceof ApiError && (e.status === 403 || e.status === 404)) notFound();
     throw e;
@@ -123,6 +141,7 @@ export default async function PayrollStructurePage({
             <span className="ep-grid__spacer" />
             {d.can.manage ? <ApplyTemplate formId="sv-form" templates={d.templates} /> : null}
           </div>
+          <SetupListFiles list={hl.list} nav={hl.nav} />
           <div className="ep-table-wrap" tabIndex={0} role="region" aria-labelledby="sv-heads">
             <table className="ep-table ep-table--dense">
               <thead>
@@ -244,55 +263,57 @@ export default async function PayrollStructurePage({
         }
       >
         {d.timeline.length ? (
-          <div className="ep-table-wrap" tabIndex={0} role="region" aria-labelledby="sv-time">
-            <table className="ep-table ep-table--dense">
-              <thead>
-                <tr>
-                  <th scope="col">From</th>
-                  <th scope="col">To</th>
-                  <th scope="col">Head</th>
-                  <th scope="col">Amount (₹)</th>
-                  <th scope="col">Status</th>
-                  <th scope="col">Why</th>
-                  <th scope="col">Made · approved by</th>
-                </tr>
-              </thead>
-              <tbody>
-                {d.timeline.map((t) => (
-                  <tr key={t.id}>
-                    <td>{dmy(t.effectiveFrom)}</td>
-                    <td>{t.effectiveTo ? dmy(t.effectiveTo) : 'Open'}</td>
-                    <td>
-                      <code>{t.code}</code> {t.name}
-                    </td>
-                    <td>{money(t.amount)}</td>
-                    <td>
-                      <Badge
-                        tone={
-                          t.status === 'draft'
-                            ? 'warning'
-                            : t.status === 'active'
-                              ? 'success'
-                              : 'neutral'
-                        }
-                      >
-                        {t.status === 'draft'
-                          ? 'Draft'
-                          : t.status === 'active'
-                            ? 'Approved'
-                            : 'Ended'}
-                      </Badge>
-                    </td>
-                    <td>{t.changeReason ?? ''}</td>
-                    <td>
-                      {t.madeBy ?? ''}
-                      {t.approvedBy ? ` · ${t.approvedBy}` : ''}
-                    </td>
+          <SetupListBar list={tl.list} nav={tl.nav} id="sv-t">
+            <div className="ep-table-wrap" tabIndex={0} role="region" aria-labelledby="sv-time">
+              <table className="ep-table ep-table--dense">
+                <thead>
+                  <tr>
+                    <th scope="col">From</th>
+                    <th scope="col">To</th>
+                    <th scope="col">Head</th>
+                    <th scope="col">Amount (₹)</th>
+                    <th scope="col">Status</th>
+                    <th scope="col">Why</th>
+                    <th scope="col">Made · approved by</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody>
+                  {tl.list.rows.map((t) => (
+                    <tr key={t.id}>
+                      <td>{dmy(t.effectiveFrom)}</td>
+                      <td>{t.effectiveTo ? dmy(t.effectiveTo) : 'Open'}</td>
+                      <td>
+                        <code>{t.code}</code> {t.name}
+                      </td>
+                      <td>{money(t.amount)}</td>
+                      <td>
+                        <Badge
+                          tone={
+                            t.status === 'draft'
+                              ? 'warning'
+                              : t.status === 'active'
+                                ? 'success'
+                                : 'neutral'
+                          }
+                        >
+                          {t.status === 'draft'
+                            ? 'Draft'
+                            : t.status === 'active'
+                              ? 'Approved'
+                              : 'Ended'}
+                        </Badge>
+                      </td>
+                      <td>{t.changeReason ?? ''}</td>
+                      <td>
+                        {t.madeBy ?? ''}
+                        {t.approvedBy ? ` · ${t.approvedBy}` : ''}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </SetupListBar>
         ) : (
           <p>No amounts yet.</p>
         )}

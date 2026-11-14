@@ -2,7 +2,9 @@ import { Badge, Breadcrumbs, PageHeader } from '@edupro/ui';
 import { notFound } from 'next/navigation';
 import { Notice } from '@/components/Notice';
 import { DialogButton } from '@/components/leave/DialogButton';
+import { SetupListBar } from '@/components/payroll/SetupListBar';
 import { ApiError, apiFetch, getMe } from '@/lib/api';
+import { setupList, type SetupList, type SetupListNav } from '@/lib/payroll-lists';
 import { type PayMatrix } from '@/lib/payroll';
 import { removeMatrixCell, saveMatrixCell } from '@/lib/payroll-actions';
 
@@ -19,14 +21,26 @@ export default async function PayMatrixPage({
   if (!me.permissions.includes('payroll.setup.view')) notFound();
   const code = /^[A-Z0-9_]{1,30}$/.test(sp.code ?? '') ? `?code=${sp.code!}` : '';
   let d: PayMatrix;
+  let list: SetupList<Record<string, string | number | null>>;
+  let nav: SetupListNav;
   try {
     d = await apiFetch<PayMatrix>(`/payroll/matrix${code}`);
+    ({ list, nav } = await setupList<Record<string, string | number | null>>(
+      'matrix',
+      '/payroll/setup/matrix',
+      sp,
+      { params: { code: d.code } },
+    ));
   } catch (e) {
     if (e instanceof ApiError && e.status === 403) notFound();
     throw e;
   }
   const maxCell = Math.max(0, ...d.levels.flatMap((l) => l.cells.map((c) => c.cell)));
-  const cellRows = Array.from({ length: maxCell }, (_, i) => i + 1);
+  // the levels the filter keeps, in the matrix's order
+  const order = d.levels.map((l) => l.level);
+  const lo = nav.values.levelFrom ? order.indexOf(nav.values.levelFrom) : 0;
+  const hi = nav.values.levelTo ? order.indexOf(nav.values.levelTo) : order.length - 1;
+  const levels = d.levels.slice(Math.max(0, lo), hi < 0 ? order.length : hi + 1);
   const used = d.levels.reduce((n, l) => n + l.cells.reduce((m, c) => m + c.used, 0), 0);
   return (
     <>
@@ -188,41 +202,45 @@ export default async function PayMatrixPage({
         <h2 id="pm-grid" className="ep-card__title">
           {d.levels.length} levels, up to {maxCell} cells
         </h2>
-        <div className="ep-table-wrap" tabIndex={0} role="region" aria-labelledby="pm-grid">
-          <table className="ep-table ep-table--dense">
-            <thead>
-              <tr>
-                <th scope="col">Cell</th>
-                {d.levels.map((l) => (
-                  <th key={l.level} scope="col">
-                    Level {l.level}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {cellRows.map((n) => (
-                <tr key={n}>
-                  <th scope="row">{n}</th>
-                  {d.levels.map((l) => {
-                    const c = l.cells.find((x) => x.cell === n);
-                    return (
-                      <td key={l.level} title={c ? `From ${c.effectiveFrom}` : undefined}>
-                        {c ? rupees(c.basic) : ''}
-                        {c?.used ? (
-                          <>
-                            {' '}
-                            <Badge tone="info">{String(c.used)}</Badge>
-                          </>
-                        ) : null}
-                      </td>
-                    );
-                  })}
+        <SetupListBar list={list} nav={nav} id="pm">
+          <div className="ep-table-wrap" tabIndex={0} role="region" aria-labelledby="pm-grid">
+            <table className="ep-table ep-table--dense">
+              <thead>
+                <tr>
+                  <th scope="col">Cell</th>
+                  {levels.map((l) => (
+                    <th key={l.level} scope="col">
+                      Level {l.level}
+                    </th>
+                  ))}
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody>
+                {list.rows.map((r) => (
+                  <tr key={String(r.cell)}>
+                    <th scope="row">{r.cell}</th>
+                    {levels.map((l) => {
+                      const basic = r[`L${l.level}`];
+                      const used = Number(r[`U${l.level}`] ?? 0);
+                      const c = l.cells.find((x) => x.cell === Number(r.cell));
+                      return (
+                        <td key={l.level} title={c ? `From ${c.effectiveFrom}` : undefined}>
+                          {basic ? rupees(String(basic)) : ''}
+                          {used ? (
+                            <>
+                              {' '}
+                              <Badge tone="info">{String(used)}</Badge>
+                            </>
+                          ) : null}
+                        </td>
+                      );
+                    })}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </SetupListBar>
         <p className="ep-field__help">
           A number beside an amount is how many profiles sit on that cell.
         </p>

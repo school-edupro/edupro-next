@@ -2,8 +2,9 @@ import { Badge, Breadcrumbs, KpiTile, PageHeader } from '@edupro/ui';
 import { notFound } from 'next/navigation';
 import { FoldCard } from '@/components/FoldCard';
 import { Notice } from '@/components/Notice';
-import { Pager, PerPage, pageSizeOf } from '@/components/Pager';
-import { ApiError, apiFetch, getMe } from '@/lib/api';
+import { SetupListBar } from '@/components/payroll/SetupListBar';
+import { ApiError, getMe } from '@/lib/api';
+import { setupList, type SetupList, type SetupListNav } from '@/lib/payroll-lists';
 import { money } from '@/lib/payroll';
 import { explain, sign } from '@/lib/payroll-golive-actions';
 
@@ -69,27 +70,24 @@ export default async function ParityPage({
   if (!/^\d{1,18}$/.test(batchId)) notFound();
   const me = await getMe();
   if (!me.permissions.includes('payroll.run.view')) notFound();
-  const size = pageSizeOf(sp.size);
-  const page = Math.max(1, Number(sp.page ?? 1) || 1);
-  const status = ['OPEN', 'EXPLAINED', 'MATCH'].includes(sp.status ?? '')
-    ? sp.status!
-    : sp.status === 'all'
-      ? ''
-      : 'OPEN';
-  const q = new URLSearchParams();
-  if (status) q.set('status', status);
-  if (/^[A-Z][A-Z0-9_]{0,29}$/.test(sp.component ?? '')) q.set('component', sp.component!);
-  if (/^\d{4}-\d{2}$/.test(sp.month ?? '')) q.set('month', sp.month!);
+  // the differences open first: a first visit shows the open ones; "All" is a choice
+  const spx = { ...sp, status: sp.status === undefined ? 'OPEN' : sp.status };
   let d: Results;
+  let list: SetupList<Results['rows'][number]>;
+  let nav: SetupListNav;
   try {
-    d = await apiFetch<Results>(
-      `/payroll/golive/parity/${batchId}?${q.toString()}&page=${String(page)}&size=${size}`,
-    );
+    ({ list, nav } = await setupList<Results['rows'][number]>(
+      'parity',
+      `/payroll/setup/golive/parity/${batchId}`,
+      spx,
+      { params: { batchId } },
+    ));
+    d = { ...(list.extra as Omit<Results, 'rows' | 'total'>), rows: list.rows, total: list.total };
   } catch (e) {
     if (e instanceof ApiError && (e.status === 403 || e.status === 404)) notFound();
     throw e;
   }
-  const here = `/payroll/setup/golive/parity/${batchId}?${q.toString()}&size=${size}&page=${String(page)}`;
+  const here = nav.href(list.page);
   const open = d.byMonth.reduce((t, m) => t + m.open, 0);
   const explained = d.byMonth.reduce((t, m) => t + m.explained, 0);
   const matched = d.byMonth.reduce((t, m) => t + m.match, 0);
@@ -178,145 +176,113 @@ export default async function ParityPage({
         <h2 id="pp-list" className="ep-card__title">
           Differences
         </h2>
-        <form method="get" className="ep-grid__toolbar">
-          <label className="ep-field" htmlFor="pp-st">
-            <span className="ep-field__label">Show</span>
-            <select id="pp-st" name="status" className="ep-select" defaultValue={status || 'all'}>
-              <option value="OPEN">Open</option>
-              <option value="EXPLAINED">Explained</option>
-              <option value="MATCH">Same to the paisa</option>
-              <option value="all">All</option>
-            </select>
-          </label>
-          <label className="ep-field" htmlFor="pp-m">
-            <span className="ep-field__label">Month</span>
-            <select id="pp-m" name="month" className="ep-select" defaultValue={sp.month ?? ''}>
-              <option value="">All</option>
-              {d.batch.months.map((m) => (
-                <option key={m} value={m}>
-                  {words(m)}
-                </option>
-              ))}
-            </select>
-          </label>
-          <PerPage id="pp-size" value={size} />
-          <button type="submit" className="ep-btn ep-btn--secondary">
-            Show
-          </button>
-        </form>
-        <form action={explain.bind(null, batchId, here)}>
-          {d.rows.length ? (
-            <div className="ep-table-wrap" tabIndex={0} role="region" aria-labelledby="pp-list">
-              <table className="ep-table ep-table--dense">
-                <thead>
-                  <tr>
-                    <th scope="col">
-                      <span className="ep-sr-only">Choose</span>
-                    </th>
-                    <th scope="col">Employee</th>
-                    <th scope="col">Month</th>
-                    <th scope="col">Head</th>
-                    <th scope="col">Old payroll (₹)</th>
-                    <th scope="col">EduPro (₹)</th>
-                    <th scope="col">Difference (₹)</th>
-                    <th scope="col">Status</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {d.rows.map((r) => (
-                    <tr key={r.id}>
-                      <td>
-                        {r.status !== 'MATCH' && checker ? (
-                          <input
-                            type="checkbox"
-                            name="resultId"
-                            value={r.id}
-                            aria-label={`Choose ${r.name} ${r.component} ${r.month}`}
-                          />
-                        ) : null}
-                      </td>
-                      <td>
-                        {r.name} <span className="ep-field__help">{r.code}</span>
-                      </td>
-                      <td>{words(r.month)}</td>
-                      <td>{r.component}</td>
-                      <td>{r.legacy === null ? '—' : money(r.legacy)}</td>
-                      <td>{r.ours === null ? '—' : money(r.ours)}</td>
-                      <td>{money(r.diff)}</td>
-                      <td>
-                        <Badge tone={TONE[r.status]}>
-                          {r.status === 'MATCH'
-                            ? 'Same'
-                            : r.status === 'OPEN'
-                              ? 'Open'
-                              : 'Explained'}
-                        </Badge>
-                        {r.note ? <div className="ep-field__help">{r.note}</div> : null}
-                        {r.status === 'EXPLAINED' && r.explanation ? (
-                          <div className="ep-field__help">
-                            {CODES[r.explanation_code ?? ''] ?? r.explanation_code}: {r.explanation}
-                            {r.explained_by ? ` (${r.explained_by})` : ''}
-                          </div>
-                        ) : null}
-                      </td>
+        <SetupListBar list={list} nav={nav} id="pp">
+          <form action={explain.bind(null, batchId, here)}>
+            {d.rows.length ? (
+              <div className="ep-table-wrap" tabIndex={0} role="region" aria-labelledby="pp-list">
+                <table className="ep-table ep-table--dense">
+                  <thead>
+                    <tr>
+                      <th scope="col">
+                        <span className="ep-sr-only">Choose</span>
+                      </th>
+                      <th scope="col">Employee</th>
+                      <th scope="col">Month</th>
+                      <th scope="col">Head</th>
+                      <th scope="col">Old payroll (₹)</th>
+                      <th scope="col">EduPro (₹)</th>
+                      <th scope="col">Difference (₹)</th>
+                      <th scope="col">Status</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          ) : (
-            <p>Nothing to show.</p>
-          )}
-          {checker && d.rows.some((r) => r.status !== 'MATCH') ? (
-            <fieldset className="ep-fieldset" style={{ marginTop: 'var(--sp-3)' }}>
-              <legend className="ep-field__label">Explain the ticked differences</legend>
-              <div className="ep-form-row" data-columns="3">
-                <label className="ep-field" htmlFor="pp-code">
-                  <span className="ep-field__label">Why</span>
-                  <select id="pp-code" name="code" className="ep-select" required defaultValue="">
-                    <option value="" disabled>
-                      Choose…
-                    </option>
-                    {Object.entries(CODES).map(([k, v]) => (
-                      <option key={k} value={k}>
-                        {v}
-                      </option>
+                  </thead>
+                  <tbody>
+                    {d.rows.map((r) => (
+                      <tr key={r.id}>
+                        <td>
+                          {r.status !== 'MATCH' && checker ? (
+                            <input
+                              type="checkbox"
+                              name="resultId"
+                              value={r.id}
+                              aria-label={`Choose ${r.name} ${r.component} ${r.month}`}
+                            />
+                          ) : null}
+                        </td>
+                        <td>
+                          {r.name} <span className="ep-field__help">{r.code}</span>
+                        </td>
+                        <td>{words(r.month)}</td>
+                        <td>{r.component}</td>
+                        <td>{r.legacy === null ? '—' : money(r.legacy)}</td>
+                        <td>{r.ours === null ? '—' : money(r.ours)}</td>
+                        <td>{money(r.diff)}</td>
+                        <td>
+                          <Badge tone={TONE[r.status]}>
+                            {r.status === 'MATCH'
+                              ? 'Same'
+                              : r.status === 'OPEN'
+                                ? 'Open'
+                                : 'Explained'}
+                          </Badge>
+                          {r.note ? <div className="ep-field__help">{r.note}</div> : null}
+                          {r.status === 'EXPLAINED' && r.explanation ? (
+                            <div className="ep-field__help">
+                              {CODES[r.explanation_code ?? ''] ?? r.explanation_code}:{' '}
+                              {r.explanation}
+                              {r.explained_by ? ` (${r.explained_by})` : ''}
+                            </div>
+                          ) : null}
+                        </td>
+                      </tr>
                     ))}
-                  </select>
-                </label>
-                <label className="ep-field" htmlFor="pp-def">
-                  <span className="ep-field__label">
-                    Which defect (for a defect of the old payroll)
-                  </span>
-                  <input id="pp-def" name="defect" className="ep-input" maxLength={60} />
-                </label>
-                <label className="ep-field" htmlFor="pp-note">
-                  <span className="ep-field__label">The evidence</span>
-                  <input
-                    id="pp-note"
-                    name="note"
-                    className="ep-input"
-                    required
-                    minLength={10}
-                    maxLength={480}
-                  />
-                </label>
+                  </tbody>
+                </table>
               </div>
-              <button type="submit" className="ep-btn ep-btn--primary">
-                Explain
-              </button>
-            </fieldset>
-          ) : null}
-        </form>
-        <Pager
-          page={page}
-          size={Number(size)}
-          total={d.total}
-          href={(n) =>
-            `/payroll/setup/golive/parity/${batchId}?${q.toString()}&size=${size}&page=${String(n)}`
-          }
-          noun="differences"
-        />
+            ) : (
+              <p>{list.all ? 'No difference matches the filters.' : 'Nothing to show.'}</p>
+            )}
+            {checker && d.rows.some((r) => r.status !== 'MATCH') ? (
+              <fieldset className="ep-fieldset" style={{ marginTop: 'var(--sp-3)' }}>
+                <legend className="ep-field__label">Explain the ticked differences</legend>
+                <div className="ep-form-row" data-columns="3">
+                  <label className="ep-field" htmlFor="pp-code">
+                    <span className="ep-field__label">Why</span>
+                    <select id="pp-code" name="code" className="ep-select" required defaultValue="">
+                      <option value="" disabled>
+                        Choose…
+                      </option>
+                      {Object.entries(CODES).map(([k, v]) => (
+                        <option key={k} value={k}>
+                          {v}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="ep-field" htmlFor="pp-def">
+                    <span className="ep-field__label">
+                      Which defect (for a defect of the old payroll)
+                    </span>
+                    <input id="pp-def" name="defect" className="ep-input" maxLength={60} />
+                  </label>
+                  <label className="ep-field" htmlFor="pp-note">
+                    <span className="ep-field__label">The evidence</span>
+                    <input
+                      id="pp-note"
+                      name="note"
+                      className="ep-input"
+                      required
+                      minLength={10}
+                      maxLength={480}
+                    />
+                  </label>
+                </div>
+                <button type="submit" className="ep-btn ep-btn--primary">
+                  Explain
+                </button>
+              </fieldset>
+            ) : null}
+          </form>
+        </SetupListBar>
       </section>
     </>
   );

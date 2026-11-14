@@ -3,9 +3,11 @@ import { notFound } from 'next/navigation';
 import { Notice } from '@/components/Notice';
 import { DialogButton } from '@/components/leave/DialogButton';
 import { VersionFields } from '@/components/payroll/VersionFields';
-import { ApiError, apiFetch, getMe } from '@/lib/api';
-import { CALC_LABEL, CATEGORY, dmy, type HeadListRow, type PayrollCan } from '@/lib/payroll';
+import { SetupListBar } from '@/components/payroll/SetupListBar';
+import { ApiError, getMe } from '@/lib/api';
+import { CALC_LABEL, CATEGORY, dmy, type HeadListRow } from '@/lib/payroll';
 import { addPayHead } from '@/lib/payroll-actions';
+import { setupList, type SetupList, type SetupListNav } from '@/lib/payroll-lists';
 
 /** Pay heads (legacy Pay Heads): one line of the payslip each, worked out by its version in force. */
 export default async function PayHeadsPage({
@@ -16,17 +18,15 @@ export default async function PayHeadsPage({
   const sp = await searchParams;
   const me = await getMe();
   if (!me.permissions.includes('payroll.setup.view')) notFound();
-  let d: { heads: HeadListRow[]; can: PayrollCan };
+  let list: SetupList<HeadListRow>;
+  let nav: SetupListNav;
   try {
-    d = await apiFetch<{ heads: HeadListRow[]; can: PayrollCan }>('/payroll/heads');
+    ({ list, nav } = await setupList<HeadListRow>('heads', '/payroll/setup/heads', sp));
   } catch (e) {
     if (e instanceof ApiError && e.status === 403) notFound();
     throw e;
   }
-  const groups = [
-    { type: 'EARNING', title: 'Earnings' },
-    { type: 'DEDUCTION', title: 'Deductions' },
-  ] as const;
+  const d = { can: { manage: me.permissions.includes('payroll.setup.manage') } };
   const flags = (h: HeadListRow) =>
     [
       h.pfWage && 'PF',
@@ -117,29 +117,19 @@ export default async function PayHeadsPage({
           </DialogButton>
         </div>
       ) : null}
-      {groups.map((g) => {
-        const rows = d.heads.filter((h) => h.headType === g.type);
-        return (
-          <section
-            key={g.type}
-            className="ep-card"
-            aria-labelledby={`ph-${g.type}`}
-            style={{ marginBottom: 'var(--sp-4)' }}
-          >
-            <h2 id={`ph-${g.type}`} className="ep-card__title">
-              {g.title} ({rows.length})
-            </h2>
-            <div
-              className="ep-table-wrap"
-              tabIndex={0}
-              role="region"
-              aria-labelledby={`ph-${g.type}`}
-            >
+      <section className="ep-card" aria-labelledby="ph-list">
+        <h2 id="ph-list" className="ep-card__title">
+          Pay heads ({list.total})
+        </h2>
+        <SetupListBar list={list} nav={nav} id="ph">
+          {list.rows.length ? (
+            <div className="ep-table-wrap" tabIndex={0} role="region" aria-labelledby="ph-list">
               <table className="ep-table ep-table--dense">
                 <thead>
                   <tr>
                     <th scope="col">Code</th>
                     <th scope="col">Name</th>
+                    <th scope="col">Type</th>
                     <th scope="col">Kind</th>
                     <th scope="col">Worked out</th>
                     <th scope="col">Counts for</th>
@@ -149,7 +139,7 @@ export default async function PayHeadsPage({
                   </tr>
                 </thead>
                 <tbody>
-                  {rows.map((h) => (
+                  {list.rows.map((h) => (
                     <tr key={h.id}>
                       <td>
                         <a href={`/payroll/setup/heads/${h.id}`}>
@@ -157,6 +147,7 @@ export default async function PayHeadsPage({
                         </a>
                       </td>
                       <td>{h.name}</td>
+                      <td>{h.headType === 'EARNING' ? 'Earning' : 'Deduction'}</td>
                       <td>{CATEGORY[h.category] ?? h.category}</td>
                       <td>
                         {h.calcType ? CALC_LABEL[h.calcType] : ''}
@@ -190,9 +181,11 @@ export default async function PayHeadsPage({
                 </tbody>
               </table>
             </div>
-          </section>
-        );
-      })}
+          ) : (
+            <p className="ep-field__help">No pay head matches the filters.</p>
+          )}
+        </SetupListBar>
+      </section>
     </>
   );
 }

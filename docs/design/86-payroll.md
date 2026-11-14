@@ -599,3 +599,39 @@ the admin and staff app pickers; added to Alpha by a one-off insert of only thos
 **Tests**: `payroll-spoc.e2e-spec.ts` (4: the role's rights; locking — a checker refused, the SPOC locks, only the
 office unlocks; the month alone with the run self-approved, marked and listed, then locked; a checker refused their own
 run, the SPOC approves it unmarked).
+
+## As built — set-up lists: filters, pages, Excel and PDF (14 Nov 2026)
+
+**Asked**: every page of Payroll set-up with a filter, Excel / PDF and pages. **Benchmark**: greytHR's grids export
+to Excel only what the filters leave; Zoho Payroll's reports download as XLS/XLSX/PDF. **Decided** (all
+recommended): every list of every set-up page; a download is every filtered row with the screen's columns, on the
+letterhead with the filters and the Prepared / Checked boxes, recorded; PAN and bank masked and confidential staff
+out of a maker's file, as on the screen; a Set-up book on the set-up home.
+
+**API** (`payroll-setup-lists.service.ts`, `payroll-setup-lists.controller.ts`): one catalogue of 27 lists — `heads`,
+`head-versions` (id), `head-tests` (id), `config` (kind: rates, pf, esi, pt, lwf, ot), `matrix` (a row per cell, a
+column per level), `profiles`, `structures`, `templates`, `structure-drafts`, `setup-drafts` (rate, rule and
+pay-head drafts), `profile-nominees` / `profile-changes` (employeeId), `structure-heads` (employeeId, asOf) /
+`structure-timeline` (employeeId), `tax-slabs` / `tax-labels` (fy), `bank-accounts` (a checker or the payroll admin),
+`golive-staged`, `golive-batches`, `parity` (batchId), `settings`. Each loads through the set-up's own service (its
+rights, masking and `hiddenFor` hold), filters, and maps its rows to the report grid. `GET
+/payroll/setup-lists/:key?…filters&page&size` (25/50/100) → `{ filters (with choices), applied, rows (the page), total,
+all, page, size, extra }`; `GET /payroll/setup-lists/:key/file?format=xlsx|pdf&…` → every filtered row
+(`gridPdf` / `gridSheet`), audit `payroll.setup.download`; `GET /payroll/setup-book?format=xlsx|pdf` → the settings,
+heads, each rate tab in force today, matrix, templates, tax slabs and lines, bank accounts (checkers), a sheet each,
+or one PDF (sections joined with pdf-lib, the logo on the first only). The comparison (`parity`) pages in the
+database (`pageLoad`: status, month and head go to the results query) — a replay of two years holds many rows.
+
+**Admin**: `lib/payroll-lists.ts` `setupList(key, path, sp, { params, prefix })` (a page with more lists gives each a
+prefix: `v_status`, `t_page`; everything else in the address is kept); `components/payroll/SetupListBar.tsx` (the
+filter form, records per page, Showing, Excel / PDF, the rows, the pages; `SetupListFiles` for a table saved whole);
+the pay-file route's kinds `setuplist` and `setupbook`. Pages: set-up home (Set-up book), heads (one list with a Type
+column instead of two tables), a head (versions, tests), rates (each tab; the status links became the Status
+filter), matrix, profiles, a profile (nominees files, history), structures (staff, templates), a structure (amounts
+files, timeline), tax, bank, drafts to approve (structure drafts; rate, rule and pay-head drafts in one list), go-live
+(rows read, comparisons), a comparison (opens on Open as before), settings (Excel / PDF).
+
+**Tests**: `payroll-setup-lists.e2e-spec.ts` (4: filters and pages, a search, a rate in force on a date, refusals;
+files with the filters line, recorded, PAN masked, the confidential employee out of a maker's file, missing-PAN and
+department filters; the bank list refused to a maker, the comparison paged in the database; the Set-up book's sheets,
+a maker's without bank accounts, the PDF). Browser (dev-admin; 1440 and 375; 17 views): axe clean.

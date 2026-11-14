@@ -105,6 +105,16 @@ export async function GET(req: NextRequest) {
     path = `/payroll/loans/${id!}/paper?kind=${oneOf(p.get('of'), ['statement', 'noc'], 'statement')}`;
   else if (kind === 'voucher' && okMonth(month))
     path = `/payroll/voucher/file?month=${month!}&format=${oneOf(p.get('format'), ['xlsx', 'csv', 'pdf'], 'xlsx')}`;
+  else if (kind === 'setuplist' && /^[a-z-]{2,40}$/.test(p.get('key') ?? '')) {
+    // a payroll set-up list as a file: the list's own params and filters, passed through (the API checks them)
+    const fwd = new URLSearchParams();
+    for (const [k, v] of p.entries())
+      if (/^[A-Za-z]{1,20}$/.test(k) && !['kind', 'key', 'save'].includes(k) && v)
+        fwd.set(k, v.slice(0, 100));
+    fwd.set('format', oneOf(p.get('format'), ['xlsx', 'pdf'], 'xlsx'));
+    path = `/payroll/setup-lists/${p.get('key')!}/file?${fwd.toString()}`;
+  } else if (kind === 'setupbook')
+    path = `/payroll/setup-book?format=${oneOf(p.get('format'), ['xlsx', 'pdf'], 'xlsx')}`;
   if (!path) return new NextResponse(null, { status: 400 });
   try {
     const f = await apiFetch<{ filename: string; base64: string; contentType: string }>(path);

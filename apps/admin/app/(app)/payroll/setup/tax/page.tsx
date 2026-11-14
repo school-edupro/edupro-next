@@ -2,7 +2,9 @@ import { Badge, Breadcrumbs, PageHeader } from '@edupro/ui';
 import { notFound } from 'next/navigation';
 import { Notice } from '@/components/Notice';
 import { DialogButton } from '@/components/leave/DialogButton';
+import { SetupListBar } from '@/components/payroll/SetupListBar';
 import { ApiError, apiFetch, getMe } from '@/lib/api';
+import { setupList, type SetupList, type SetupListNav } from '@/lib/payroll-lists';
 import { money, pct, type TaxYear } from '@/lib/payroll';
 import { addTaxYear } from '@/lib/payroll-actions';
 
@@ -20,8 +22,20 @@ export default async function PayrollTaxPage({
   if (!me.permissions.includes('payroll.setup.view')) notFound();
   const fyQ = /^\d{4}-\d{2}$/.test(sp.fy ?? '') ? `?fy=${sp.fy!}` : '';
   let d: TaxYear;
+  let sl: { list: SetupList<TaxYear['slabs'][number]>; nav: SetupListNav };
+  let ll: { list: SetupList<TaxYear['labels'][number]>; nav: SetupListNav };
   try {
     d = await apiFetch<TaxYear>(`/payroll/tax${fyQ}`);
+    [sl, ll] = await Promise.all([
+      setupList<TaxYear['slabs'][number]>('tax-slabs', '/payroll/setup/tax', sp, {
+        params: { fy: d.fy },
+        prefix: 's',
+      }),
+      setupList<TaxYear['labels'][number]>('tax-labels', '/payroll/setup/tax', sp, {
+        params: { fy: d.fy },
+        prefix: 'l',
+      }),
+    ]);
   } catch (e) {
     if (e instanceof ApiError && e.status === 403) notFound();
     throw e;
@@ -105,60 +119,68 @@ export default async function PayrollTaxPage({
           </div>
         </div>
       ) : null}
+      {d.slabs.length ? <SetupListBar list={sl.list} nav={sl.nav} id="tx-s" /> : null}
       <div className="ep-setup-sections">
-        {regimes.map((r) => {
-          const cfg = d.config.find((c) => c.regime === r);
-          return (
-            <section key={r} className="ep-card" aria-labelledby={`tx-${r}`}>
-              <h2 id={`tx-${r}`} className="ep-card__title">
-                {regime(r)}
-              </h2>
-              <div className="ep-table-wrap" tabIndex={0} role="region" aria-labelledby={`tx-${r}`}>
-                <table className="ep-table ep-table--dense">
-                  <caption className="ep-sr-only">The {regime(r).toLowerCase()} slabs</caption>
-                  <thead>
-                    <tr>
-                      <th scope="col">Taxable income from (₹)</th>
-                      <th scope="col">up to (₹)</th>
-                      <th scope="col">Rate</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {d.slabs
-                      .filter((x) => x.regime === r)
-                      .map((x) => (
-                        <tr key={x.slabFrom}>
-                          <td>{money(x.slabFrom)}</td>
-                          <td>{x.slabTo ? money(x.slabTo) : 'and above'}</td>
-                          <td>{pct(x.rate)}</td>
-                        </tr>
-                      ))}
-                  </tbody>
-                </table>
-              </div>
-              {cfg ? (
-                <ul className="ep-setup-links" style={{ marginTop: 'var(--sp-3)' }}>
-                  <li>Standard deduction ₹{money(cfg.standardDeduction)}</li>
-                  <li>
-                    Rebate up to ₹{money(cfg.rebateMax)} when taxable income is at most ₹
-                    {money(cfg.rebateIncomeLimit)}
-                    {cfg.marginalRelief ? ', with marginal relief just above it' : ''}
-                  </li>
-                  <li>
-                    Cess {pct(cfg.cessRate)}; without a PAN at least {pct(cfg.panAbsentRate)}
-                  </li>
-                  <li>
-                    Surcharge:{' '}
-                    {d.surcharges
-                      .filter((x) => x.regime === r)
-                      .map((x) => `${pct(x.rate)} above ₹${money(x.incomeFrom)}`)
-                      .join('; ') || 'none'}
-                  </li>
-                </ul>
-              ) : null}
-            </section>
-          );
-        })}
+        {regimes
+          .filter((r) => sl.list.rows.some((x) => x.regime === r) || !d.slabs.length)
+          .map((r) => {
+            const cfg = d.config.find((c) => c.regime === r);
+            return (
+              <section key={r} className="ep-card" aria-labelledby={`tx-${r}`}>
+                <h2 id={`tx-${r}`} className="ep-card__title">
+                  {regime(r)}
+                </h2>
+                <div
+                  className="ep-table-wrap"
+                  tabIndex={0}
+                  role="region"
+                  aria-labelledby={`tx-${r}`}
+                >
+                  <table className="ep-table ep-table--dense">
+                    <caption className="ep-sr-only">The {regime(r).toLowerCase()} slabs</caption>
+                    <thead>
+                      <tr>
+                        <th scope="col">Taxable income from (₹)</th>
+                        <th scope="col">up to (₹)</th>
+                        <th scope="col">Rate</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {sl.list.rows
+                        .filter((x) => x.regime === r)
+                        .map((x) => (
+                          <tr key={x.slabFrom}>
+                            <td>{money(x.slabFrom)}</td>
+                            <td>{x.slabTo ? money(x.slabTo) : 'and above'}</td>
+                            <td>{pct(x.rate)}</td>
+                          </tr>
+                        ))}
+                    </tbody>
+                  </table>
+                </div>
+                {cfg ? (
+                  <ul className="ep-setup-links" style={{ marginTop: 'var(--sp-3)' }}>
+                    <li>Standard deduction ₹{money(cfg.standardDeduction)}</li>
+                    <li>
+                      Rebate up to ₹{money(cfg.rebateMax)} when taxable income is at most ₹
+                      {money(cfg.rebateIncomeLimit)}
+                      {cfg.marginalRelief ? ', with marginal relief just above it' : ''}
+                    </li>
+                    <li>
+                      Cess {pct(cfg.cessRate)}; without a PAN at least {pct(cfg.panAbsentRate)}
+                    </li>
+                    <li>
+                      Surcharge:{' '}
+                      {d.surcharges
+                        .filter((x) => x.regime === r)
+                        .map((x) => `${pct(x.rate)} above ₹${money(x.incomeFrom)}`)
+                        .join('; ') || 'none'}
+                    </li>
+                  </ul>
+                ) : null}
+              </section>
+            );
+          })}
       </div>
       {d.labels.length ? (
         <section
@@ -173,32 +195,34 @@ export default async function PayrollTaxPage({
             The deductions and exemptions staff declare and the printed lines of the tax
             computation, with the cap the projection uses.
           </p>
-          <div className="ep-table-wrap" tabIndex={0} role="region" aria-labelledby="tx-labels">
-            <table className="ep-table ep-table--dense">
-              <thead>
-                <tr>
-                  <th scope="col">Code</th>
-                  <th scope="col">Label</th>
-                  <th scope="col">Regime</th>
-                  <th scope="col">Cap (₹)</th>
-                  <th scope="col">Staff declare it</th>
-                </tr>
-              </thead>
-              <tbody>
-                {d.labels.map((l) => (
-                  <tr key={l.lineCode}>
-                    <td>
-                      <code>{l.lineCode}</code>
-                    </td>
-                    <td>{l.label}</td>
-                    <td>{l.appliesTo === 'BOTH' ? 'Both' : regime(l.appliesTo)}</td>
-                    <td>{l.capAmount ? money(l.capAmount) : ''}</td>
-                    <td>{l.declarable ? <Badge tone="info">Declared</Badge> : ''}</td>
+          <SetupListBar list={ll.list} nav={ll.nav} id="tx-l">
+            <div className="ep-table-wrap" tabIndex={0} role="region" aria-labelledby="tx-labels">
+              <table className="ep-table ep-table--dense">
+                <thead>
+                  <tr>
+                    <th scope="col">Code</th>
+                    <th scope="col">Label</th>
+                    <th scope="col">Regime</th>
+                    <th scope="col">Cap (₹)</th>
+                    <th scope="col">Staff declare it</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody>
+                  {ll.list.rows.map((l) => (
+                    <tr key={l.lineCode}>
+                      <td>
+                        <code>{l.lineCode}</code>
+                      </td>
+                      <td>{l.label}</td>
+                      <td>{l.appliesTo === 'BOTH' ? 'Both' : regime(l.appliesTo)}</td>
+                      <td>{l.capAmount ? money(l.capAmount) : ''}</td>
+                      <td>{l.declarable ? <Badge tone="info">Declared</Badge> : ''}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </SetupListBar>
         </section>
       ) : null}
     </>

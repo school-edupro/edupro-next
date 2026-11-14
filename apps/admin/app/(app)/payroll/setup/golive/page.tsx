@@ -4,7 +4,9 @@ import { FileLinks } from '@/components/FileLinks';
 import { FoldCard } from '@/components/FoldCard';
 import { Notice } from '@/components/Notice';
 import { DialogButton } from '@/components/leave/DialogButton';
+import { SetupListBar } from '@/components/payroll/SetupListBar';
 import { ApiError, apiFetch, getMe } from '@/lib/api';
+import { setupList, type SetupList, type SetupListNav } from '@/lib/payroll-lists';
 import {
   countersign,
   goLiveStep,
@@ -127,8 +129,18 @@ export default async function GoLivePage({
   const me = await getMe();
   if (!me.permissions.includes('payroll.run.view')) notFound();
   let d: Overview;
+  let stl: { list: SetupList<Overview['staged'][number]>; nav: SetupListNav };
+  let bal: { list: SetupList<Overview['batches'][number]>; nav: SetupListNav };
   try {
     d = await apiFetch<Overview>('/payroll/golive');
+    [stl, bal] = await Promise.all([
+      setupList<Overview['staged'][number]>('golive-staged', '/payroll/setup/golive', sp, {
+        prefix: 'r',
+      }),
+      setupList<Overview['batches'][number]>('golive-batches', '/payroll/setup/golive', sp, {
+        prefix: 'b',
+      }),
+    ]);
   } catch (e) {
     if (e instanceof ApiError && (e.status === 403 || e.status === 404)) notFound();
     throw e;
@@ -260,13 +272,26 @@ export default async function GoLivePage({
                 title={`Rows read (${String(staged)})`}
                 hint="Each table of the old payroll"
               >
-                <ul className="ep-list">
-                  {d.staged.map((x) => (
-                    <li key={x.tbl}>
-                      {x.tbl.replace(/^payroll_/, '').replace(/_/g, ' ')}: {x.n}
-                    </li>
-                  ))}
-                </ul>
+                <SetupListBar list={stl.list} nav={stl.nav} id="gl-r">
+                  <div className="ep-table-wrap" tabIndex={0} role="region" aria-label="Rows read">
+                    <table className="ep-table ep-table--dense">
+                      <thead>
+                        <tr>
+                          <th scope="col">Table of the old payroll</th>
+                          <th scope="col">Rows read</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {stl.list.rows.map((x) => (
+                          <tr key={x.tbl}>
+                            <td>{x.tbl.replace(/^payroll_/, '').replace(/_/g, ' ')}</td>
+                            <td>{x.n}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </SetupListBar>
               </FoldCard>
             ) : null}
           </section>
@@ -358,23 +383,40 @@ export default async function GoLivePage({
               </form>
             ) : null}
             {d.batches.length ? (
-              <ul className="ep-list">
-                {d.batches.map((b) => (
-                  <li key={b.id}>
-                    <a href={`/payroll/setup/golive/parity/${b.id}`}>
-                      {b.kind === 'REPLAY' ? 'Replay' : 'Parallel months'} ·{' '}
-                      {b.months.map(words).join(', ')}
-                    </a>{' '}
-                    <Badge tone={b.open ? 'warning' : 'success'}>
-                      {b.open ? `${String(b.open)} open` : 'Nothing open'}
-                    </Badge>{' '}
-                    <span className="ep-field__help">
-                      {when(b.created_at)}
-                      {b.by ? ` · ${b.by}` : ''}
-                    </span>
-                  </li>
-                ))}
-              </ul>
+              <SetupListBar list={bal.list} nav={bal.nav} id="gl-b">
+                <div className="ep-table-wrap" tabIndex={0} role="region" aria-label="Comparisons">
+                  <table className="ep-table ep-table--dense">
+                    <thead>
+                      <tr>
+                        <th scope="col">Comparison</th>
+                        <th scope="col">Differences</th>
+                        <th scope="col">Made</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {bal.list.rows.map((b) => (
+                        <tr key={b.id}>
+                          <td>
+                            <a href={`/payroll/setup/golive/parity/${b.id}`}>
+                              {b.kind === 'REPLAY' ? 'Replay' : 'Parallel months'} ·{' '}
+                              {b.months.map(words).join(', ')}
+                            </a>
+                          </td>
+                          <td>
+                            <Badge tone={b.open ? 'warning' : 'success'}>
+                              {b.open ? `${String(b.open)} open` : 'Nothing open'}
+                            </Badge>
+                          </td>
+                          <td>
+                            {when(b.created_at)}
+                            {b.by ? ` · ${b.by}` : ''}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </SetupListBar>
             ) : null}
           </section>
           <section className="ep-card" aria-labelledby="gl-parallel">

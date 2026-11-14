@@ -1,12 +1,20 @@
 import { Badge, Breadcrumbs, PageHeader } from '@edupro/ui';
 import { notFound } from 'next/navigation';
 import { Notice } from '@/components/Notice';
-import { Pager, PerPage, pageSizeOf } from '@/components/Pager';
 import { DialogButton } from '@/components/leave/DialogButton';
+import { SetupListBar } from '@/components/payroll/SetupListBar';
 import { StructureImport } from '@/components/payroll/StructureImport';
-import { ApiError, apiFetch, getMe } from '@/lib/api';
-import { money, type PayrollCan, type ProfileList, type StructureView } from '@/lib/payroll';
+import { ApiError, getMe } from '@/lib/api';
+import { money, type ProfileList, type StructureView } from '@/lib/payroll';
 import { deletePayrollTemplate, savePayrollTemplate } from '@/lib/payroll-actions';
+import { setupList, type SetupList, type SetupListNav } from '@/lib/payroll-lists';
+
+const STAFF_WORD: Record<string, string> = {
+  teaching: 'Teaching',
+  non_teaching: 'Non-teaching',
+  contract: 'Contract',
+  visiting: 'Visiting',
+};
 
 type Template = StructureView['templates'][number];
 const TABS = [
@@ -94,25 +102,22 @@ export default async function PayrollStructuresPage({
   const me = await getMe();
   if (!me.permissions.includes('payroll.setup.view')) notFound();
   const tab = TABS.find((t) => t.id === sp.tab)?.id ?? 'staff';
-  const q = (sp.q ?? '').trim().slice(0, 60);
-  const size = Number(pageSizeOf(sp.size));
-  const page = Math.max(1, Number(sp.page) || 1);
-  const qs = (p: number) => {
-    const u = new URLSearchParams({ size: String(size), page: String(p) });
-    if (q) u.set('q', q);
-    return u.toString();
-  };
-  let list: ProfileList | null = null;
-  let templates: { templates: Template[]; can: PayrollCan } | null = null;
+  type Staff = ProfileList['rows'][number];
+  let list: { list: SetupList<Staff>; nav: SetupListNav } | null = null;
+  let templates: { list: SetupList<Template>; nav: SetupListNav } | null = null;
   try {
-    if (tab === 'staff') list = await apiFetch<ProfileList>(`/payroll/profiles?${qs(page)}`);
+    if (tab === 'staff')
+      list = await setupList<Staff>('structures', '/payroll/setup/structures', sp);
     if (tab === 'templates')
-      templates = await apiFetch<{ templates: Template[]; can: PayrollCan }>('/payroll/templates');
+      templates = await setupList<Template>('templates', '/payroll/setup/structures', sp);
   } catch (e) {
     if (e instanceof ApiError && e.status === 403) notFound();
     throw e;
   }
-  const can = list?.can ?? templates?.can;
+  const can = {
+    manage: me.permissions.includes('payroll.setup.manage'),
+    admin: me.permissions.includes('payroll.settings.manage'),
+  };
   return (
     <>
       <Breadcrumbs
@@ -144,65 +149,49 @@ export default async function PayrollStructuresPage({
           <h2 id="st-list" className="ep-card__title">
             Staff
           </h2>
-          <form method="get" className="ep-pfilter ep-grid__toolbar">
-            <input type="hidden" name="tab" value="staff" />
-            <label className="ep-field" htmlFor="st-q">
-              <span className="ep-field__label">Name or code</span>
-              <input id="st-q" name="q" className="ep-input" defaultValue={q} maxLength={60} />
-            </label>
-            <PerPage id="st-size" value={String(size)} />
-            <button type="submit" className="ep-btn ep-btn--ghost">
-              Show
-            </button>
-          </form>
-          <div className="ep-table-wrap" tabIndex={0} role="region" aria-labelledby="st-list">
-            <table className="ep-table ep-table--dense">
-              <thead>
-                <tr>
-                  <th scope="col">Employee</th>
-                  <th scope="col">Department</th>
-                  <th scope="col">Staff type</th>
-                  <th scope="col">Level · cell</th>
-                  <th scope="col">Structure</th>
-                </tr>
-              </thead>
-              <tbody>
-                {list.rows.length ? (
-                  list.rows.map((r) => (
-                    <tr key={r.id}>
-                      <td>
-                        <a href={`/payroll/setup/structures/${r.id}`}>{r.name}</a>
-                        <span className="ep-field__help" style={{ display: 'block', margin: 0 }}>
-                          {r.code}
-                        </span>
-                      </td>
-                      <td>{r.department ?? ''}</td>
-                      <td>{r.staffType ?? ''}</td>
-                      <td>{r.payLevel ? `${r.payLevel} · ${String(r.payCell ?? '')}` : ''}</td>
-                      <td>
-                        {r.structured ? (
-                          <Badge tone="success">In force</Badge>
-                        ) : (
-                          <Badge tone="neutral">None</Badge>
-                        )}
-                      </td>
-                    </tr>
-                  ))
-                ) : (
+          <SetupListBar list={list.list} nav={list.nav} id="st">
+            <div className="ep-table-wrap" tabIndex={0} role="region" aria-labelledby="st-list">
+              <table className="ep-table ep-table--dense">
+                <thead>
                   <tr>
-                    <td colSpan={5}>No staff match.</td>
+                    <th scope="col">Employee</th>
+                    <th scope="col">Department</th>
+                    <th scope="col">Staff type</th>
+                    <th scope="col">Level · cell</th>
+                    <th scope="col">Structure</th>
                   </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-          <Pager
-            page={list.page}
-            size={list.size}
-            total={list.total}
-            href={(p) => `/payroll/setup/structures?tab=staff&${qs(p)}`}
-            noun="staff"
-          />
+                </thead>
+                <tbody>
+                  {list.list.rows.length ? (
+                    list.list.rows.map((r) => (
+                      <tr key={r.id}>
+                        <td>
+                          <a href={`/payroll/setup/structures/${r.id}`}>{r.name}</a>
+                          <span className="ep-field__help" style={{ display: 'block', margin: 0 }}>
+                            {r.code}
+                          </span>
+                        </td>
+                        <td>{r.department ?? ''}</td>
+                        <td>{STAFF_WORD[r.staffType ?? ''] ?? r.staffType ?? ''}</td>
+                        <td>{r.payLevel ? `${r.payLevel} · ${String(r.payCell ?? '')}` : ''}</td>
+                        <td>
+                          {r.structured ? (
+                            <Badge tone="success">In force</Badge>
+                          ) : (
+                            <Badge tone="neutral">None</Badge>
+                          )}
+                        </td>
+                      </tr>
+                    ))
+                  ) : (
+                    <tr>
+                      <td colSpan={5}>No staff match.</td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </SetupListBar>
         </section>
       ) : null}
       {tab === 'import' ? (
@@ -234,63 +223,72 @@ export default async function PayrollStructuresPage({
             A starting set of amounts for a kind of post. Applying one on an employee’s structure
             fills the form; nothing is saved until the maker saves it.
           </p>
-          {templates.templates.length ? (
-            <div className="ep-table-wrap" tabIndex={0} role="region" aria-labelledby="st-tpl">
-              <table className="ep-table ep-table--dense">
-                <thead>
-                  <tr>
-                    <th scope="col">Template</th>
-                    <th scope="col">For</th>
-                    <th scope="col">Amounts (₹ a month)</th>
-                    <th scope="col">
-                      <span className="ep-sr-only">Actions</span>
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {templates.templates.map((t) => (
-                    <tr key={t.id}>
-                      <td>
-                        {t.name}
-                        {t.description ? (
-                          <span className="ep-field__help" style={{ display: 'block', margin: 0 }}>
-                            {t.description}
-                          </span>
-                        ) : null}
-                      </td>
-                      <td>{t.staffTypes.length ? t.staffTypes.join(', ') : 'Any'}</td>
-                      <td>
-                        {Object.entries(t.lines)
-                          .map(([k, v]) => `${k} ${money(v)}`)
-                          .join(' · ')}
-                      </td>
-                      <td>
-                        {can?.admin ? (
-                          <div className="ep-grid__toolbar">
-                            <DialogButton
-                              id={`tp-e-${t.id}`}
-                              label="Change"
-                              title={`Change ${t.name}`}
-                              className="ep-btn ep-btn--ghost ep-btn--sm"
-                            >
-                              <TemplateForm t={t} />
-                            </DialogButton>
-                            <form action={deletePayrollTemplate.bind(null, t.id)}>
-                              <button type="submit" className="ep-btn ep-btn--ghost ep-btn--sm">
-                                Delete
-                              </button>
-                            </form>
-                          </div>
-                        ) : null}
-                      </td>
+          <SetupListBar list={templates.list} nav={templates.nav} id="tp">
+            {templates.list.rows.length ? (
+              <div className="ep-table-wrap" tabIndex={0} role="region" aria-labelledby="st-tpl">
+                <table className="ep-table ep-table--dense">
+                  <thead>
+                    <tr>
+                      <th scope="col">Template</th>
+                      <th scope="col">For</th>
+                      <th scope="col">Amounts (₹ a month)</th>
+                      <th scope="col">
+                        <span className="ep-sr-only">Actions</span>
+                      </th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          ) : (
-            <p>No templates yet.</p>
-          )}
+                  </thead>
+                  <tbody>
+                    {templates.list.rows.map((t) => (
+                      <tr key={t.id}>
+                        <td>
+                          {t.name}
+                          {t.description ? (
+                            <span
+                              className="ep-field__help"
+                              style={{ display: 'block', margin: 0 }}
+                            >
+                              {t.description}
+                            </span>
+                          ) : null}
+                        </td>
+                        <td>
+                          {t.staffTypes.length
+                            ? t.staffTypes.map((x) => STAFF_WORD[x] ?? x).join(', ')
+                            : 'Any'}
+                        </td>
+                        <td>
+                          {Object.entries(t.lines)
+                            .map(([k, v]) => `${k} ${money(v)}`)
+                            .join(' · ')}
+                        </td>
+                        <td>
+                          {can?.admin ? (
+                            <div className="ep-grid__toolbar">
+                              <DialogButton
+                                id={`tp-e-${t.id}`}
+                                label="Change"
+                                title={`Change ${t.name}`}
+                                className="ep-btn ep-btn--ghost ep-btn--sm"
+                              >
+                                <TemplateForm t={t} />
+                              </DialogButton>
+                              <form action={deletePayrollTemplate.bind(null, t.id)}>
+                                <button type="submit" className="ep-btn ep-btn--ghost ep-btn--sm">
+                                  Delete
+                                </button>
+                              </form>
+                            </div>
+                          ) : null}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <p>{templates.list.all ? 'No template matches the filters.' : 'No templates yet.'}</p>
+            )}
+          </SetupListBar>
         </section>
       ) : null}
     </>
