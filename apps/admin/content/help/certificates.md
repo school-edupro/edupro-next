@@ -110,6 +110,19 @@ The **Requests** page shows six figures (waiting for approval, waiting with me, 
 ready to issue, issued this month, the oldest open request in days), filters (status, type, waiting with
 me, a name or number) and each request's stage, who it waits with and its age.
 
+## Checking a certificate (QR)
+
+Every certificate prints a **QR code** at its foot with its own link. Anyone holding the paper — another
+school, an embassy, an employer — scans it (or opens the school's check page,
+`<public site>/<school code>/verify`, and types the number and the date of issue) and sees, without
+signing in: **Valid** or **Cancelled**, the type, number, date of issue, the school, and the holder's name
+in part (e.g. "A\*\*\*v S\*\*\*\*a") to compare with the paper. A duplicate has its own QR and shows as
+"duplicate 1" of the same number. The page allows a few checks a minute from one place.
+
+Each check is recorded: a certificate's page (**Public checks**) shows when it was checked, by QR or by
+number, and what it answered — never who checked. Certificates issued before the QR get one when their PDF
+is made again (**Make it again**).
+
 ## Set-up (Certificates → Certificate set-up)
 
 The page shows six figures, a **To look at** list (no signatory yet, a signatory with no signature image,

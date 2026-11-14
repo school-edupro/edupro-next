@@ -31,6 +31,11 @@ export async function gateFetch<T>(
   return call<T>('/public/visitors', path, init, token);
 }
 
+/** The public check of a certificate (docs/design/87, phase D); no sign-in. */
+export async function certFetch<T>(path: string): Promise<T> {
+  return call<T>('/public/certificates', path, {}, null);
+}
+
 export async function visitFetch<T>(
   path: string,
   init: RequestInit = {},
@@ -233,3 +238,20 @@ export const whenIst = (v: string, lang: Lang) =>
     hour: '2-digit',
     minute: '2-digit',
   });
+
+export interface CertificateCheck {
+  result: 'valid' | 'cancelled' | 'not_found';
+  school: { name: string; code: string };
+  certificate: {
+    type: string;
+    number: string;
+    copy: number;
+    issuedOn: string;
+    holder: string;
+    holderKind: 'student' | 'staff';
+    cancelledOn: string | null;
+    duplicates: number;
+    legacy: boolean;
+  } | null;
+  checkedAt: string;
+}

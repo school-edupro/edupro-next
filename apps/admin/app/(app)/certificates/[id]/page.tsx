@@ -66,6 +66,12 @@ export default async function CertificatePage({
     if (e instanceof ApiError && (e.status === 404 || e.status === 403)) notFound();
     throw e;
   }
+  // the public checks of it (docs/design/87, phase D)
+  const checks = await apiFetch<{
+    total: number;
+    rows: Array<{ at: string; method: string; result: string; repeat: boolean }>;
+  }>(`/certificates/${id}/verifications`).catch(() => ({ total: 0, rows: [] }));
+  const qrUrl = (x.data.qr as { url?: string } | undefined)?.url ?? null;
   const label = `${x.typeName} ${x.number}${x.copyNo ? ` duplicate ${String(x.copyNo)}` : ''}`;
   const failed = x.checks.filter((c) => !c.ok);
   const rows = printed(x.data);
@@ -168,6 +174,16 @@ export default async function CertificatePage({
               </dd>
             </>
           ) : null}
+          <dt>Check link</dt>
+          <dd>
+            {qrUrl ? (
+              <a href={qrUrl} target="_blank" rel="noopener noreferrer">
+                The public check of this certificate
+              </a>
+            ) : (
+              'Printed as a QR from its next PDF'
+            )}
+          </dd>
           <dt>PDF</dt>
           <dd>
             {x.exportId && exportReady ? (
@@ -221,6 +237,28 @@ export default async function CertificatePage({
           </ul>
         ) : (
           <p className="ep-field__help">Made before the register recorded its checks.</p>
+        )}
+      </FoldCard>
+      <FoldCard
+        id="cert-verify"
+        title="Public checks"
+        hint={checks.total ? `Checked ${String(checks.total)} time(s)` : 'Not checked yet'}
+      >
+        {checks.rows.length ? (
+          <ul className="ep-cert-checks">
+            {checks.rows.map((v) => (
+              <li key={v.at}>
+                {dmy(v.at.slice(0, 10))} {v.at.slice(11, 16)} UTC ·{' '}
+                {v.method === 'qr' ? 'by its QR' : 'by number and date'} ·{' '}
+                <Badge tone={v.result === 'valid' ? 'success' : 'danger'}>
+                  {v.result === 'valid' ? 'Valid' : 'Cancelled'}
+                </Badge>
+                {v.repeat ? ' · the same device again' : ''}
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="ep-field__help">Nobody has checked it on the public page yet.</p>
         )}
       </FoldCard>
       <FoldCard

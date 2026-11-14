@@ -8,6 +8,9 @@ import { WorkflowModule } from '../workflow/workflow.module';
 import { CertificateRequestsController } from './certificate-requests.controller';
 import { CertificateRequestsService } from './certificate-requests.service';
 import { CertificateSetupController } from './certificate-setup.controller';
+import { CertificateVerifyService } from './certificate-verify.service';
+import { PublicCertificatesController } from './public-certificates.controller';
+import { PublicThrottleGuard } from '../admissions/public/public-throttle.guard';
 import { CertificateSetupService } from './certificate-setup.service';
 import { CertificatesController } from './certificates.controller';
 import { CertificatesService } from './certificates.service';
@@ -15,11 +18,18 @@ import { CertificatesService } from './certificates.service';
 /** Certificate management (docs/design/87): types, the register, numbering, checks, duplicates and cancels. */
 @Module({
   imports: [ReportsModule, FeesModule, FilesModule, WorkflowModule, CommsModule],
-  controllers: [CertificateSetupController, CertificateRequestsController, CertificatesController],
+  controllers: [
+    CertificateSetupController,
+    CertificateRequestsController,
+    PublicCertificatesController,
+    CertificatesController,
+  ],
   providers: [
     CertificatesService,
     CertificateSetupService,
     CertificateRequestsService,
+    CertificateVerifyService,
+    PublicThrottleGuard,
     AuditService,
   ],
   exports: [CertificatesService],

@@ -1,6 +1,6 @@
 # 87 — Certificate management
 
-Status: phases A (foundation), B (templates and all types) and C (requests) built 14 Nov 2026; phases D–F planned. Plan: `CERTIFICATE_MODULE_PLAN.md` beside
+Status: phases A–D (foundation; templates and all types; requests; verification) built 14 Nov 2026; phases E–F planned. Plan: `CERTIFICATE_MODULE_PLAN.md` beside
 the legacy code (outside this repository).
 
 ## Source and approach
@@ -255,3 +255,32 @@ through the office and issued against the request, the parent's PDF, not another
 the TC through the office then the principal, the issue still checking; the fee — settings refused when wrong,
 purposes, copies × fee, not issued unpaid, paid, waived; reject with a reason, withdraw cancelling the approval,
 closed types).
+
+## As built — phase D, verification (14 Nov 2026)
+
+**Gate for C.** Every item of phase C was built and tested (requests from the three apps, the levels per type on the
+workflow engine, the fee through Fees, app notices, downloads, the office queue).
+
+**The QR.** Each certificate's link is `<PUBLIC_APP_URL>/<school code>/verify/<verify_token>` (the token random, 36
+hex characters, unique — made by 0381). At issue the link and its QR (SVG, `qrcode`) are frozen in the certificate's
+data (`data.qr`); a duplicate gets its own (the original's is not copied); a certificate made before phase D gets it
+when its PDF is made again. `{{{blocks.footer}}}` prints the QR beside the number and date; the previews show a QR of
+the school's check page.
+
+**The check** (`certificate-verify.service.ts`, `PublicCertificatesController`, no sign-in, the public throttle per
+address): `GET /public/certificates/:school/verify/:token` (30 a minute) and `GET /public/certificates/:school/verify`
+(the page; with `number` and `date`, the search — 10 a minute; the number in any case, the date exact, originals
+only). The school comes from its code (`app.public_school_id`), so a token is good only at its own school. The answer:
+valid / cancelled / not found, the school, the type, number (and duplicate n), the date of issue, the holder's name
+masked (first and last letter of each word), student or staff, the cancel date, how many duplicates. Every check is
+logged in `certificate_verifications` (migration 0385; school, certificate, method, result, the number tried, a
+hash of the address with the school code, the browser cut to 160 characters; RLS) — never the address.
+
+**Screens.** The public site: `/<school>/verify` (number and date, the answer under the form) and
+`/<school>/verify/<token>` (the answer), in English and Hindi. Admin, a certificate's page: its check link, and
+**Public checks** (fold): when, by QR or number, the answer, the same device again.
+
+Tests: `certificate-verify.e2e-spec.ts` (7: the QR frozen at issue and in the preview; the QR check without a sign-in,
+the masked name, a bogus token, another school's token, an unknown school; the search with both number and date, a
+wrong date, a bad date; a duplicate's own link; cancelled; the log with a hash only; a QR added on the next PDF; the
+search limit).

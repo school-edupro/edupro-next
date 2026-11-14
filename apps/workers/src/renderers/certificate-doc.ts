@@ -74,7 +74,9 @@ export async function renderCertificateDoc(
           // an image that cannot be read prints an empty box
         }
     }
-    data.blocks = certificateBlocks(data, { logo, images });
+    // the QR of its own check link, frozen at issue (docs/design/87, phase D)
+    const qr = data.qr as { url: string; image: string } | undefined;
+    data.blocks = certificateBlocks(data, { logo, images, qr: qr ?? null });
     const width = row.page_width ?? '210mm';
     const height = row.page_height ?? '297mm';
     return {

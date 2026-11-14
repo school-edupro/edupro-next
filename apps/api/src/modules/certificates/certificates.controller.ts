@@ -12,13 +12,17 @@ import {
   StudentSearchQueryDto,
 } from './certificates.dto';
 import { CertificatesService } from './certificates.service';
+import { CertificateVerifyService } from './certificate-verify.service';
 
 /** The certificate register (docs/design/87): types, preview and issue, the register, duplicates and cancels. */
 @ApiTags('certificates')
 @ApiBearerAuth()
 @Controller('certificates')
 export class CertificatesController {
-  constructor(private readonly certificates: CertificatesService) {}
+  constructor(
+    private readonly certificates: CertificatesService,
+    private readonly verify: CertificateVerifyService,
+  ) {}
 
   @Get('types')
   @ApiOperation({ summary: 'The certificate types: their checks and the fields each asks for' })
@@ -93,6 +97,13 @@ export class CertificatesController {
   @RequirePermission(CERTIFICATE.view)
   get(@ReqCtx() ctx: RequestContext, @Param('id') id: string) {
     return this.certificates.detail(ctx, id);
+  }
+
+  @Get(':id/verifications')
+  @ApiOperation({ summary: 'The public checks of a certificate (by its QR or a search)' })
+  @RequirePermission(CERTIFICATE.view)
+  verifications(@ReqCtx() ctx: RequestContext, @Param('id') id: string) {
+    return this.verify.ofCertificate(ctx, id);
   }
 
   @Post(':id/duplicate')

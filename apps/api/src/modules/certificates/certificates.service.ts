@@ -23,6 +23,7 @@ import { runChecks, type CertificateCheck, type CertificateRules } from './certi
 import { employeeData, feePaidData, schoolData, studentData } from './certificate-data';
 import { checkFields, fieldDefaults, fieldsOf, fieldText } from './certificate-fields';
 import { assertSafeTemplate } from './certificate-safety';
+import { CertificateVerifyService } from './certificate-verify.service';
 import {
   CERTIFICATE,
   type CertificatesFileQueryDto,
@@ -279,6 +280,7 @@ export class CertificatesService {
     private readonly ledgers: FeeLedgerService,
     @Inject(ENV) private readonly env: Env,
     @Inject(STORAGE_DRIVER) private readonly storage: StorageDriver,
+    private readonly verify: CertificateVerifyService,
   ) {}
 
   // ---- set-up ------------------------------------------------------------------------------------------------------
@@ -578,8 +580,12 @@ export class CertificatesService {
     data: Record<string, unknown>,
     assets: { logo: string | null; images: Record<string, string> },
   ): string {
+    const qr = data.qr as { url: string; image: string } | undefined;
     return documentHtml({
-      body: renderTemplate(t.body_html, { ...data, blocks: certificateBlocks(data, assets) }),
+      body: renderTemplate(t.body_html, {
+        ...data,
+        blocks: certificateBlocks(data, { ...assets, qr: qr ?? null }),
+      }),
       css: CERTIFICATE_BLOCK_CSS + t.styles_css,
       pageWidth: t.page_width,
       pageHeight: t.page_height,
@@ -817,6 +823,7 @@ export class CertificatesService {
           copyNo: 0,
           duplicate: false,
         },
+        qr: await this.verify.samplePageQr(c),
       };
       const assets = await this.assets(c, data);
       return {
@@ -934,6 +941,7 @@ export class CertificatesService {
           copyNo: 0,
           duplicate: false,
         },
+        qr: await this.verify.samplePageQr(c),
       };
       const assets = await this.assets(c, data);
       return {
@@ -1123,6 +1131,7 @@ export class CertificatesService {
         ],
       );
       const id = r.rows[0]!.id;
+      await this.verify.stamp(c, id);
       if (dto.requestId && this.requestHook) {
         await c.query(`UPDATE certificates SET request_id = $2 WHERE id = $1`, [id, dto.requestId]);
         await this.requestHook.issued(c, ctx, dto.requestId, id, no.number);
@@ -1184,12 +1193,13 @@ export class CertificatesService {
          SELECT school_id, type_id, number, serial, year_code,
                 (SELECT max(copy_no) + 1 FROM certificates WHERE id = $1 OR original_id = $1), id, student_id, employee_id,
                 CURRENT_DATE, app.current_user_id(), purpose,
-                jsonb_set(data, '{cert,duplicateReason}', to_jsonb($2::text)), template_version_id, checks, book_no, sl_no, legacy, legacy_ref
+                jsonb_set(data, '{cert,duplicateReason}', to_jsonb($2::text)) - 'qr', template_version_id, checks, book_no, sl_no, legacy, legacy_ref
            FROM certificates WHERE id = $1
          RETURNING id::text, copy_no`,
         [originalId, reason],
       );
       const dup = r.rows[0]!;
+      await this.verify.stamp(c, dup.id);
       await this.audit.stage(ctx, c, {
         action: 'certificate.duplicate',
         entityType: 'certificates',
@@ -1283,6 +1293,7 @@ export class CertificatesService {
       return r.rows[0];
     });
     if (!x) throw new DomainError('not-found', 'Certificate not found');
+    if (x.version) await this.db.tenant(tenant, (c) => this.verify.stamp(c, id));
     const title = `${x.type_name} ${x.number}${x.copy_no ? ` (duplicate ${String(x.copy_no)})` : ''}`;
     let exp;
     if (x.version)

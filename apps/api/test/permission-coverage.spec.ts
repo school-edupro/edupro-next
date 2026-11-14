@@ -156,6 +156,9 @@ describe('permission coverage', () => {
       'PublicAppointmentsController.pass (public/appointments)',
       'PublicAppointmentsController.passCard (public/appointments)',
       'PublicAppointmentsController.slots (public/appointments)',
+      // docs/design/87, phase D: the public check of a certificate (no sign-in, rate-limited)
+      'PublicCertificatesController.byToken (public/certificates)',
+      'PublicCertificatesController.search (public/certificates)',
       // the public link and QR of a consent form (0169): only with the form's random link token, throttled per IP;
       // info is read-only, otp needs a proof of work (three live codes per address), verify allows five tries;
       // the rest need the `cf.` pass (two hours, signed, bound to the form) and touch only that pass's answers

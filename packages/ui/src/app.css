@@ -16392,3 +16392,39 @@ button.ep-shiftcal__cell:focus-visible {
   padding: 0;
   border: 0;
 }
+
+/* ---- certificate check, public site (docs/design/87, phase D) --------------------------------------------------- */
+.ep-certcheck {
+  display: grid;
+  gap: var(--sp-3);
+}
+.ep-certcheck__result {
+  margin: 0;
+  font-size: var(--fs-body);
+}
+.ep-certcheck__facts {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--sp-2) var(--sp-4);
+  margin: 0;
+}
+@media (min-width: 40rem) {
+  .ep-certcheck__facts {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+.ep-certcheck__facts dt {
+  color: var(--text-muted);
+  font-size: var(--fs-small);
+}
+.ep-certcheck__facts dd {
+  margin: 0;
+  color: var(--text-heading);
+  font-weight: var(--fw-semibold);
+  overflow-wrap: anywhere;
+}
+.ep-certcheck__note {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: var(--fs-small);
+}
