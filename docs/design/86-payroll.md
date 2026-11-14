@@ -243,3 +243,96 @@ checker, the run unapproved by the payroll admin); the engine's 136 unit tests; 
 
 **Not in phase B**: the bank file, PF / ESI / PT / LWF returns and the PAID stage (phase C); declarations, proofs
 and the tax forms (phase D); the full and final run (phase E).
+
+## As built — phase C, payment and statutory (14 Nov 2026)
+
+Decided 14 Nov 2026 (plan §5; legacy spec `PAYROLL_PAYMENT_SPEC.md`): the bank file is the generic CSV, a column
+layout per bank account set from that bank's own sample file, or the bank letter; the PF ECR is the month's — every
+locked run together, then supplementary files of members not yet filed (EPFO's revamped ECR keeps the 11-field text
+layout and adds regular / supplementary / revised returns); ESI is covered staff only with the ESIC monthly upload;
+one salary voucher a month with its ledger names in the settings. The legacy defects found in this part are fixed:
+a confirmed line returned no longer pays twice, a bounced salary re-issues to the corrected account, one live line
+a salary, a held salary is never left in a file, the run turns PAID, staff without PF no longer block the ECR, the
+ESI statement leaves out uncovered staff, a maker no longer reads confidential staff's statutory rows, every report
+of an unlocked month says PROVISIONAL, a compliance item needs its acknowledgement and is never acknowledged twice.
+
+**Data**:
+
+- 0370 (a3061719) — `payroll_bank_accounts` (one a bank code: the school's account, `file_format` GENERIC_CSV /
+  CUSTOM_CSV / BANK_LETTER, `layout` {columns [{field | value, header, format}], header, delimiter, extension}),
+  `payroll_bank_batches` (per run: the format, layout and debit account copied in; value date; `provisional`;
+  GENERATED → UPLOADED → CONFIRMED with the UTR, or CANCELLED with a reason), `payroll_bank_batch_lines` (the payee,
+  IFSC, encrypted account and amount as sent; SENT / REJECTED / CANCELLED; a unique index keeps one SENT line a
+  record), `payroll_records.paid_at`, `paid_by`, `payment_ref`.
+- 0371 (c09eae3d) — `payroll_returns` (an ECR filed: month, sequence 1 regular / 2+ supplementary, members, totals,
+  acknowledgement, filed on) and `payroll_return_members` (each member's line as filed and its records);
+  `payroll_settings.ecr_arrear_mode` (FOLDED / SEPARATE).
+- 0372 (fa3bb6e8) — `payroll_compliance` (a financial year's dues: item ECR / ESI / TDS / PT / LWF / TDS_RETURN, period,
+  due date, done with acknowledgement, date, amount paid and payroll's figure, reopen reason);
+  `payroll_settings.jv_ledgers`.
+
+**Bank** (`payroll-bank.ts` pure, `payroll-bank.service.ts`): payable = COMPUTED or RELEASED, paid by bank, net above
+nothing, on no live line; a record whose line the bank returned (or that carried no account) is paid to the
+employee's current account, and the record says so. A file is made from an APPROVED (provisional), LOCKED or PAID run,
+for one bank or every bank together; its total ties out to the payable total. Uploaded and confirmed only once the
+run is locked; confirming marks the file's salaries PAID with the UTR and the run PAID when nothing is left (held
+salaries wait). Cancel: a file not yet uploaded, with a reason. A returned line: only on an uploaded or confirmed
+file; the salary is HELD (no longer paid) and a PAID run goes back to LOCKED; release, then a new file. Cash and
+cheque: marked paid with the voucher or cheque number once locked. While a live file exists a salary in it is not
+held and the run is neither unapproved nor reopened. Files: generic CSV (Name, Account, IFSC, Amount, `SALARY
+YYYY-MM`; no header; LF), the bank's own layout (fields name, empid, account, ifsc, amount 0.00 / 0, narration, date
+in four formats, debit_account — the batch's own bank account —, line_no, fixed values; header, separator , | ; ^
+tab; .csv / .txt), the bank letter as Excel and PDF (letterhead, the body with the amount in words, S. No., account,
+IFSC, name, amount, total; Prepared by, Accountant, Principal, Authorised signatory). A re-download of the bank file
+is the file as made. Generating and downloading are audited with the number of accounts read.
+
+**Statutory** (`payroll-statutory.ts` pure, `payroll-statutory.service.ts`): a month's records of its runs (APPROVED,
+LOCKED, PAID for the registers — PROVISIONAL when one is only approved —, LOCKED and PAID for the files). PF: members
+summed across a member's regular record and top-ups, staff without PF left out; the ECR line (UAN, name in letters,
+spaces and dots, gross, EPF / EPS / EDLI wages, EE share with VPF, EPS, the employer difference, NCP days, refund 0;
+whole rupees half up) and its checks (12-digit UAN, EPF ≥ EPS wages, EPS and EDLI within the ceilings, NCP in range,
+no contributions on a month without a paid day); in SEPARATE mode the PF arrears paid leave the line for the 8-field
+arrear ECR. The next file is everyone if nothing is filed, else the members not in a filed return; a filed member's
+later record is listed for a revised return. Recording a filing keeps the members' lines (a filed ECR downloads as
+filed); the payroll admin withdraws the latest. The challan's accounts 1, 2 (admin, at least the minimum), 10, 21
+(EDLI, at least the minimum), 22. ESI: covered staff only — days paid, ESI wages, reason 0 / 1 on leave / 2 left
+service with the last working day, IP number checked (10 digits) — and the ESIC upload Excel (the portal template's
+six columns). Profession tax by monthly rate with men and women, the state's slabs, Maharashtra's Form IIIB figures.
+LWF register and challan, due by the state's months. Registers as Excel and PDF (letterhead, Prepared by / Checked
+by).
+
+**Calendar and voucher** (`payroll-accounts.service.ts`): a year set up by a checker (adds only what is missing):
+ECR and ESI by the 15th of the next month, TDS by the 7th (March by 30 April), PT by the next month's end when a state
+is set, LWF on the 15th after each due month when it is on, the TDS returns 31 Jul / 31 Oct / 31 Jan / 31 May. Status
+DONE / DONE_LATE / OVERDUE / DUE_SOON (7 days) / PENDING; done needs the acknowledgement (3+ characters) and a date not
+in the future, the amount set against payroll's figure (PF challan, ESI, IT + cess, PT, LWF of the locked runs);
+reopened only by the payroll admin. Overdue, due-soon and a year not set up show on the set-up page. The voucher: debit
+salaries by staff type (EARNING lines) and the employer's PF (EPS + difference + EDLI + admin), ESI, NPS, LWF; credit
+each deduction head (PF and VPF, ESI, NPS, LWF with the employer's share; PT, TDS, loans, the rounding line, others by
+name) and the net salaries; balanced checked to the paisa; CSV, Excel and PDF, PROVISIONAL while a run is approved.
+
+**API**, under `/payroll`: `bank/accounts` (GET; POST, PUT `:id` the payroll admin), `bank/layout/check`,
+`runs/:id/bank` (GET the payments, POST make a file), `runs/:id/records/:recordId/paid`, `bank/batches/:id` (+
+`/file?as=file|letter|pdf`, `/uploaded`, `/confirm`, `/cancel`), `bank/lines/:id/reject`; `statutory?month`,
+`statutory/pf`, `statutory/pf/ecr?part`, `statutory/pf/ecr/filed`, `statutory/returns/:id/file`,
+`statutory/returns/:id/withdraw`, `statutory/esi`, `statutory/esi/upload`, `statutory/pt`, `statutory/lwf`,
+`statutory/register?kind&format`; `compliance?fy`, `compliance/seed`, `compliance/:id/done`, `compliance/:id/reopen`;
+`voucher?month`, `voucher/file?format`. Settings take `ecrArrearMode` and `jvLedgers`.
+
+**Screens** (admin app): the run page's **Payments** section; `/payroll/runs/[id]/bank` (still to pay by bank, make a
+file, the files, cash and cheque, who is paid folded); `/payroll/bank/[batchId]` (downloads, uploaded, confirm,
+cancel, a returned line); `/payroll/statutory?month&tab=pf|esi|pt|lwf|voucher|calendar` (menu **Statutory and
+accounts**); `/payroll/setup/bank` (the bank accounts with the layout builder and its try-out; the ECR arrear mode and
+the voucher's ledgers), linked from the set-up page's **4. Payment and statutory**. Files through
+`/api/payroll/pay-file?kind=bank|ecr|return|esic|register|voucher` (a refused file says why).
+
+**Tests**: `payroll-bank.e2e-spec.ts` (3: accounts and layouts; a provisional file, cancel, nothing changes under it;
+upload, confirm, a returned payment paid again to the corrected account, cash, the run paid),
+`payroll-statutory.e2e-spec.ts` (4: registers provisional and confidential; the ECR refused on a UAN, filed and kept; a
+supplementary file of the new member only, a top-up listed for revision, withdraw; ESI and the ESIC upload, profession
+tax with Form IIIB, LWF in June), `payroll-accounts.e2e-spec.ts` (2: the voucher balanced, by staff type, provisional,
+ledger names; the calendar set up once, done against payroll's figure, reopened by the admin); a browser pass of
+the statutory tabs, bank set-up and set-up pages with axe at 1440 and 375 px.
+
+**Not in phase C**: the TDS deposit's challans, the quarterly TDS return files and Form 16 / 130 (phase D); a bank's
+host-to-host upload or response file; Tally import of the voucher (with the accounts module).

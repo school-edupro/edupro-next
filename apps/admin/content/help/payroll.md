@@ -5,7 +5,9 @@ attendance, then the deductions — PF, ESI, profession tax, labour welfare fund
 gives the payslips, the bank file and the statutory returns. It follows the school's old payroll module
 step by step. This page covers the **set-up** (the rules and rates, pay heads and the pay matrix, each
 employee's payroll profile and salary structure, approving the drafts), the **month's inputs**, the
-**pay run** and the **payslips**. The bank file and the statutory returns come in the next phase.
+**pay run**, the **payslips**, **paying the salaries** (bank files, cash and cheque) and the **statutory
+and accounts** work (PF ECR, ESI, profession tax, LWF, the salary voucher, the compliance calendar). Income-tax
+declarations and the tax returns come in the next phase.
 
 ## Who does what
 
@@ -25,6 +27,8 @@ The side menu's **Payroll** has these entries:
 - **Monthly inputs** — the month's attendance for pay, salary holds, loans, one-off items, recurring
   items, claims, overtime, loss-of-pay given back and typed tax, one tab each.
 - **Pay runs** — the month's runs; a run opens its employees, and each employee their pay in full.
+- **Statutory and accounts** — a month's PF and ECR, ESI, profession tax, LWF and salary voucher, and the
+  year's compliance calendar.
 - **My payslips** — every employee's own payslips (the staff app has it too, under Office).
 - **Payroll set-up** — one page with four numbered section cards; every set-up screen opens from it.
 - **Payroll drafts to approve** — for checkers: everything that waits, in one place.
@@ -182,6 +186,70 @@ Every employee sees their own payslips of locked runs, year by year, with the ye
 and net so far: **Payroll → My payslips** here, or **Office → My payslips** in the staff app. Each
 payslip opens with the password the page describes.
 
+## Paying the salaries (a run's Payments)
+
+Open the run and press **Bank files and payments** (a payroll checker).
+
+- **Still to pay by bank** lists the salaries not yet paid, by bank (the first four letters of each employee's
+  IFSC), with the file that bank takes. **Make the file** for a bank (or one file for every bank), with a value
+  date if the bank wants one. A salary is in one live file only.
+- A file made while the run is only **approved** is **PROVISIONAL**: check it, but it goes to the bank only after
+  the run is locked.
+- On the file's page: **Download the bank file** (or the **bank letter**, Excel or PDF, with the signature boxes),
+  upload it on the bank's portal, then **Mark uploaded to the bank**. When the bank has paid, **Confirm** with
+  the bank's **UTR**: every salary in the file is marked paid. When nothing is left to pay, the run is **Paid**.
+- A file not yet uploaded can be **cancelled** (with a reason); its salaries go in a new file.
+- The bank **returned** a payment (a closed account, a wrong IFSC)? Press **Returned** on its line: the salary is
+  held and no longer counted as paid. Correct the account on the employee record, then **release** the salary on
+  the run: the next bank file pays it to the corrected account.
+- **Cash and cheque** salaries are marked paid with the voucher or cheque number, once the run is locked.
+
+While a bank file of the run exists, a salary in it is not held, and the run is neither unapproved nor reopened:
+cancel the file first, or (once the bank has it) correct with arrears or a supplementary run.
+
+## Statutory and accounts (Payroll → Statutory and accounts)
+
+Pick the month (it opens on last month). Every figure comes from the month's runs; while a run is only approved,
+the page says **PROVISIONAL** and the files wait for the lock.
+
+- **PF and ECR** — the members (staff without PF are left out), the PF challan's accounts (the admin and EDLI
+  minimums applied) and the **ECR**: the month's file holds every locked run, one line a member. **Download the
+  ECR**, upload it on the EPFO portal, and once the return is approved there, **Record as filed** with its
+  acknowledgement and date. A run locked later in the month gives a **supplementary** ECR of only the members not
+  yet filed; someone paid again after their ECR was filed (a top-up) is listed for a revised return on the portal.
+  A member with a wrong UAN stops the file until it is corrected. The payroll admin can **withdraw** the latest
+  filing if it was recorded by mistake.
+- **ESI** — the covered staff only (above the ESI limit they are not in it), their days and wages, and for someone
+  with no paid day the reason (left service with the last working day, or on leave). **Download the ESIC upload**
+  and upload it on the ESIC portal's monthly contribution page (compare its columns with the portal's sample
+  template the first time). The challan figures are on the page.
+- **Profession tax** — the register by monthly rate (men and women), the state's slabs, and for Maharashtra the
+  **Form IIIB** figures to key in.
+- **LWF** — the register and the amount to pay in the state's LWF months, when LWF is switched on.
+- **Salary voucher** — one journal voucher for the month: salaries by staff type and the employer's PF, ESI, NPS
+  and LWF on the debit side; each deduction payable (with the employer's share) and the net salaries on the credit
+  side. It must balance; if it does not, it says so. Download it as Excel, CSV or PDF and post it in the accounts
+  package.
+- **Compliance calendar** — the year's dues: PF ECR and ESI by the 15th of the next month, TDS by the 7th
+  (March's by 30 April), profession tax by the next month's end, LWF after its months, the quarterly TDS returns.
+  **Set up** the year once; **Mark done** each with its challan or acknowledgement number, the date and the amount
+  paid (set against payroll's figure). Overdue dues show on the payroll set-up page. Nothing here pays or files
+  by itself.
+
+Each register downloads as Excel or PDF (the PDF with the letterhead and the Prepared by / Checked by boxes).
+
+## Bank accounts and ledgers (Payroll set-up → 4. Payment and statutory)
+
+- **The school's bank accounts** (the payroll admin): one a bank, with the school's account number (for the letter
+  and the file's debit account) and the file that bank takes — the **generic CSV**, the **bank letter** only, or
+  the **bank's own layout**: take the bank's sample salary file and set its columns in the same order (name,
+  account, IFSC, amount, narration, value date and its format, the school's account, a fixed value such as NEFT),
+  whether it has a header row, the separator and the file type. **Try it** on two made-up payments before saving.
+  A bank with no account here gets the default file of the payroll settings.
+- **Arrears in the PF ECR**: folded into the month's wages (one file), or a separate arrear file.
+- **The voucher's ledger names**: salaries by staff type, deductions by pay head, the employer's cost and the
+  payables for PF, ESI, NPS and LWF, and the net salaries. Left blank, the default names are used.
+
 ## Common questions
 
 **I changed DA from July; will June's pay change?** No. The July row is a new dated row; June still
@@ -206,3 +274,15 @@ password needs a detail they do not have (their PAN, say); the run's Payslips se
 
 **Can I change a locked month?** The school admin can reopen the run while no later run exists; it
 goes back to a draft and every employee is worked out again.
+
+**The bank file shows PROVISIONAL.** The run is approved but not locked: lock it before the file goes to the bank.
+
+**The bank returned a salary. How do I pay it again?** Record it as returned on the file's line, correct the account
+on the employee record, release the salary on the run, then make a new bank file.
+
+**The ECR is refused.** A member's details are wrong (most often a UAN that is not 12 digits); the page lists them.
+
+**Someone joined the month after the ECR was filed.** Once their run is locked, the PF tab offers a supplementary ECR
+of only the members not yet filed.
+
+**The salary voucher is not balanced.** Do not post it; tell the payroll admin (the page shows both totals).
