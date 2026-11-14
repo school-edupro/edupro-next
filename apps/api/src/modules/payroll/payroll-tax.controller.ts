@@ -19,6 +19,7 @@ import {
   TaxYearDto,
 } from './payroll-tax.dto';
 import { OWN, PayrollTaxService } from './payroll-tax.service';
+import { fyOf, istToday } from './payroll-setup.service';
 import { PAYROLL } from './payroll.dto';
 
 const id = (v: string) => {
@@ -181,7 +182,7 @@ export class PayrollTaxController {
   @ApiOperation({ summary: 'An employee’s year of tax, worked out live (nothing stored)' })
   @RequirePermission(RUN.view)
   sheet(@ReqCtx() ctx: RequestContext, @Param('employeeId') eid: string, @Query() q: FyQueryDto) {
-    return this.tax.sheet(ctx, id(eid), q.fy ?? '');
+    return this.tax.sheet(ctx, id(eid), q.fy ?? fyOf(istToday()));
   }
 
   @Post('tax/finals')

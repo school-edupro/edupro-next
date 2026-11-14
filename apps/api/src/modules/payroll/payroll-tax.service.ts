@@ -287,9 +287,18 @@ export class PayrollTaxService {
           [fy],
         )
       ).rows;
+      const labels = (await this.labels(c, fy))
+        .filter((l) => l.declarable && l.line_code !== 'NPS_ER')
+        .map((l) => ({
+          code: l.line_code,
+          label: l.label,
+          appliesTo: l.applies_to,
+          cap: l.cap_amount,
+        }));
       return {
         fy,
         year: await taxYear(c, fy),
+        labels,
         rows,
         counts: Object.fromEntries(counts.map((r) => [r.status, r.n])),
         can: { manage: has(ctx, RUN.manage), decide: has(ctx, RUN.approve) },

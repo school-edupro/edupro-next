@@ -292,6 +292,8 @@
     "payrollRuns": "वेतन रन",
     "myPayslips": "मेरी वेतन पर्चियाँ",
     "payrollStatutory": "वैधानिक और लेखा",
+    "payrollTax": "आयकर",
+    "myTax": "मेरा कर",
     "payrollSetup": "पेरोल सेट-अप",
     "payrollApprovals": "स्वीकृति हेतु पेरोल ड्राफ़्ट"
   },

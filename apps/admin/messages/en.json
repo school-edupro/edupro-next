@@ -292,6 +292,8 @@
     "payrollRuns": "Pay runs",
     "myPayslips": "My payslips",
     "payrollStatutory": "Statutory and accounts",
+    "payrollTax": "Income tax",
+    "myTax": "My tax",
     "payrollSetup": "Payroll set-up",
     "payrollApprovals": "Payroll drafts to approve"
   },

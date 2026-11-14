@@ -275,6 +275,12 @@ export const STAFF_MENU: StaffGroup[] = [
         allowed: (can) => can('payroll.own.view'),
       },
       {
+        href: '/my-tax',
+        label: 'My tax',
+        help: 'My income tax for the year: declare investments and rent with proofs, my regime, my Form 16 / 130',
+        allowed: (can) => can('payroll.own.view'),
+      },
+      {
         href: '/profile/approvals',
         label: 'Profile changes to approve',
         help: 'Changes colleagues asked for on their profile, routed to you',
@@ -438,6 +444,7 @@ const SCREEN_ICON: Array<[string, string]> = [
   ['/purchase', 'cart'],
   ['/profile', 'user'],
   ['/my-payslips', 'file'],
+  ['/my-tax', 'file'],
   ['/my-leave', 'calendar'],
   ['/leave-approvals', 'check'],
   ['/my-attendance', 'clock'],
