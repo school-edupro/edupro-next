@@ -7,13 +7,30 @@ const KEYS = ['type', 'status', 'copy', 'override', 'q', 'from', 'to', 'year'];
 export async function GET(req: Request) {
   const sp = new URL(req.url).searchParams;
   const qs = new URLSearchParams({ format: sp.get('format') === 'pdf' ? 'pdf' : 'xlsx' });
-  for (const k of KEYS) {
+  // the register (default), the TC book register, or a report (docs/design/87, phase E)
+  const kind = sp.get('kind');
+  const keys =
+    kind === 'tc-book'
+      ? ['book', 'status', 'from', 'to', 'q']
+      : kind === 'report'
+        ? ['from', 'to']
+        : KEYS;
+  for (const k of keys) {
     const v = sp.get(k);
     if (v) qs.set(k, v.slice(0, 80));
   }
+  const report = sp.get('report') ?? '';
+  if (kind === 'report' && ['types', 'months', 'issuers', 'overrides', 'requests'].includes(report))
+    qs.set('kind', report);
+  const path =
+    kind === 'tc-book'
+      ? '/certificates/tc-book/file'
+      : kind === 'report'
+        ? '/certificates/reports/file'
+        : '/certificates/file';
   try {
     const f = await apiFetch<{ filename: string; contentType: string; base64: string }>(
-      `/certificates/file?${qs.toString()}`,
+      `${path}?${qs.toString()}`,
     );
     return new NextResponse(Buffer.from(f.base64, 'base64'), {
       headers: {

@@ -1,6 +1,6 @@
 # 87 — Certificate management
 
-Status: phases A–D (foundation; templates and all types; requests; verification) built 14 Nov 2026; phases E–F planned. Plan: `CERTIFICATE_MODULE_PLAN.md` beside
+Status: phases A–E (foundation; templates and all types; requests; verification; bulk, registers, awards) built 14 Nov 2026; phase F planned. Plan: `CERTIFICATE_MODULE_PLAN.md` beside
 the legacy code (outside this repository).
 
 ## Source and approach
@@ -284,3 +284,56 @@ Tests: `certificate-verify.e2e-spec.ts` (7: the QR frozen at issue and in the pr
 the masked name, a bogus token, another school's token, an unknown school; the search with both number and date, a
 wrong date, a bad date; a duplicate's own link; cancelled; the log with a hash only; a QR added on the next PDF; the
 search limit).
+
+## As built — phase E, bulk, registers, awards (14 Nov 2026)
+
+**Gate for D.** Every item of phase D was built and tested (the QR on every certificate, the public check, the
+limits, the log).
+
+**Data** (migrations 0386, 0387). `certificate_batches` (type, title, scope — a section, chosen students, the
+leavers or allotments — the certificates in print order, who was left out and why, the principal's reason, the
+batch PDF; RLS, audit); `certificates.batch_id`. `certificate_awards` (name, the type it is printed on, active,
+order) and `certificate_award_allotments` (award, student, event, place, date, remarks, the certificate issued).
+Four more built-in types — ACHIEVEMENT (ACH), MERIT (MRT), PARTICIPATION (PRT), AWARD (AWD) — with landscape ready
+layouts (a border, the name large; fields: for, event, place, date, a line more), closed to requests. The
+engagement module's achievement certificates came into the register under their own numbers
+(`legacy_ref achievement:<id>`, their PDF the batch's).
+
+**Bulk** (`certificate-bulk.service.ts`): the scope's students in roll order (a section's on the rolls; chosen
+students by class and roll; the leavers — a withdrawal cleared or complete, not an admission cancellation, no TC yet
+— at most 300); `assess` runs each one's checks without issuing (preview: clear, not clear, already holds it). The
+issue makes the batch, then issues each in its own transaction with `batchId` (no PDF of its own), a failure left out
+with its message, then queues `certificate_batch_doc` — a worker renderer printing each certificate's frozen data
+through its version, a page each, in order, with the logo, signatures and its QR. The principal's reason applies to
+those whose checks fail; "already holds" stays out.
+
+**Awards** (`certificate-awards.service.ts`): the master (set-up right; the type must be a student type switched on;
+names unique); allotments one by one or from a CSV (admission_no, award, event, position, date dd-mm-yyyy or
+yyyy-mm-dd, remarks; quoted fields; a heading row skipped; every line checked, nothing saved with an error, a check
+only when asked); issue: the chosen allotments not yet issued, a batch a type, each with its award's fields; the
+allotment keeps its certificate (removed only before).
+
+**The achievement module moved in**: `POST /engagement/certificates` numbers each by
+`app.next_certificate_no('ACHIEVEMENT', …)` (it was a count of the year's rows, which could repeat) and writes its
+register row; reprinting one gives its batch PDF.
+
+**Registers and reports** (`certificate-reports.service.ts`): the TC book register (book, Sl. No., TC no., date,
+student, last class, reason, copies, status; filters book, status, dates, text; pages; Excel / PDF with the
+letterhead); the reports of a period (the school year so far by default): by type, by month, by issuer, issued past a
+check, requests with the days to issue, the public checks — each as Excel / PDF.
+
+**API**: `POST /certificates/bulk/preview`, `POST /certificates/bulk/issue`, `GET /certificates/batches[/:id]`, `GET
+/certificates/awards`, `POST|PUT /certificates/awards[/:id]`, `GET|POST /certificates/allotments`, `POST
+/certificates/allotments/import`, `POST /certificates/allotments/issue`, `POST /certificates/allotments/:id/remove`,
+`GET /certificates/tc-book[/file]`, `GET /certificates/reports[/file]`.
+
+**Screens** (from the register's header): **Bulk issue** (type, a section or the leavers, purpose, the type's
+fields for all; the preview with six figures and each student's checks; Issue; earlier batches), a batch's page
+(figures, the batch PDF, issued in order, left out with the reason), **Awards** (who received them with filters,
+tick and issue; add one; from a CSV; the awards and a new one), **TC book**, **Reports** (dates, six figures, five
+tables each with Download).
+
+Tests: `certificates-office.e2e-spec.ts` (6: the preview in roll order with one holding it; the batch — issued in
+order, the holder left out, one PDF, no PDF of their own; the principal's reason in bulk and the office refused; the
+awards, a CSV with errors then clean, issue by type, numbers, no second issue, no removal after; the achievement
+module's numbers and register rows and its batch PDF; the TC book and the reports with every file).

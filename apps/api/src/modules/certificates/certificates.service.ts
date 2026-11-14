@@ -68,6 +68,8 @@ export interface IssueOptions {
   leavingOn?: string | null;
   /** the withdrawal is still in progress: the student stays on the rolls until it completes */
   keepStatus?: boolean;
+  /** part of a batch (phase E): no PDF of its own (the batch prints them together) */
+  batchId?: string;
 }
 
 export interface CertificateRow {
@@ -235,6 +237,19 @@ const DEFAULT_REQUESTS: Record<string, unknown> = {
         maxCopies: 1,
         fee: null,
         levels: [{ kind: 'office' }, { kind: 'signatory' }],
+      },
+    ]),
+  ),
+  // the award certificates are issued by the office from the awards, not asked for
+  ...Object.fromEntries(
+    ['ACHIEVEMENT', 'MERIT', 'PARTICIPATION', 'AWARD'].map((k) => [
+      k,
+      {
+        open: { parent: false, student: false, staff: false },
+        purposes: [],
+        maxCopies: 1,
+        fee: null,
+        levels: [{ kind: 'office' }],
       },
     ]),
   ),
@@ -1130,6 +1145,11 @@ export class CertificatesService {
           b.person.kind === 'employee' ? b.person.id : null,
         ],
       );
+      if (opts.batchId)
+        await c.query(`UPDATE certificates SET batch_id = $2 WHERE id = $1`, [
+          r.rows[0]!.id,
+          opts.batchId,
+        ]);
       const id = r.rows[0]!.id;
       await this.verify.stamp(c, id);
       if (dto.requestId && this.requestHook) {
@@ -1154,8 +1174,22 @@ export class CertificatesService {
       });
       return id;
     });
-    await this.queue(ctx, id);
+    if (!opts.batchId) await this.queue(ctx, id);
     return this.get(ctx, id);
+  }
+
+  /**
+   * What issuing would find for one person, without issuing: the checks and the fields' problems (bulk preview,
+   * phase E).
+   */
+  async assess(ctx: RequestContext, dto: PreviewCertificateDto) {
+    const tenant = requireTenant(ctx);
+    const type = await this.db.tenant(tenant, (c) => this.typeOf(c, dto.typeCode));
+    const ledger = await this.ledgerOf(ctx, type, dto.studentId);
+    return this.db.tenant(tenant, async (c) => {
+      const b = await this.build(c, ctx, type, dto, ledger, {});
+      return { checks: b.checks, problems: b.problems, person: b.person };
+    });
   }
 
   /** A duplicate of an issued certificate: the same number and paper, printed DUPLICATE (copy n). */
@@ -1280,11 +1314,13 @@ export class CertificatesService {
         tc: string | null;
         tc_template: string | null;
         type_name: string;
+        legacy_ref: string | null;
+        export_id: string | null;
       }>(
         `SELECT x.number, x.copy_no, x.template_version_id::text AS version, x.transfer_certificate_id::text AS tc,
                 COALESCE(tc.template_id, (SELECT id FROM document_templates WHERE kind = 'transfer_certificate' AND status = 'active'
                                            AND deleted_at IS NULL ORDER BY id LIMIT 1))::text AS tc_template,
-                t.name AS type_name
+                t.name AS type_name, x.legacy_ref, x.export_id::text
            FROM certificates x JOIN certificate_types t ON t.id = x.type_id
            LEFT JOIN transfer_certificates tc ON tc.id = x.transfer_certificate_id
           WHERE x.id = $1`,
@@ -1293,6 +1329,7 @@ export class CertificatesService {
       return r.rows[0];
     });
     if (!x) throw new DomainError('not-found', 'Certificate not found');
+    if (!x.version && x.legacy_ref?.startsWith('achievement:') && x.export_id) return x.export_id;
     if (x.version) await this.db.tenant(tenant, (c) => this.verify.stamp(c, id));
     const title = `${x.type_name} ${x.number}${x.copy_no ? ` (duplicate ${String(x.copy_no)})` : ''}`;
     let exp;

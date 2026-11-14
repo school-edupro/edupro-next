@@ -305,7 +305,8 @@ describe('engagement plus, scheduled reports, MIS and the shadow close (e2e, Spr
       });
       const cert = (mine.json().data as Array<{ id: string; serialNo: string; title: string }>)[0]!;
       expect(cert).toMatchObject({ title: 'Certificate of Merit' });
-      expect(cert.serialNo).toMatch(/^CERT\/\d{4}\/\d{5}$/);
+      // numbered by the certificate register's achievement series (docs/design/87, phase E)
+      expect(cert.serialNo).toMatch(/^ACH\/[\w-]+\/\d{5}$/);
       const pdf = await inject({
         method: 'POST',
         url: `/engagement/mine/certificates/${cert.id}/pdf`,

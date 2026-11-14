@@ -63,6 +63,23 @@ const PUPIL_FATHER = `<strong>{{student.name}}</strong>, {{student.childOf}} of 
 const STUDYING = `{{#if student.left}}was a student of this school from <strong>{{student.admittedOn}}</strong> to <strong>{{student.leftOn}}</strong>, last studying in <strong>{{student.classLabel}}</strong>{{else}}is a bonafide student of this school, studying in <strong>{{student.classLabel}}</strong> in the academic year <strong>{{student.academicYear}}</strong>{{/if}}`;
 const EMPLOYEE = `{{employee.honorific}} <strong>{{employee.name}}</strong>{{#if employee.fatherName}}, {{employee.childOf}} of Shri {{employee.fatherName}}{{/if}}, employee ID <strong>{{employee.code}}</strong>`;
 
+/** an award certificate: landscape, a border, the award in large letters */
+const AWARD_CSS = `${CSS}
+.cert.award { border: 3mm double #0b1f3a; padding: 8mm 12mm; min-height: 160mm; box-sizing: border-box; }
+.award h2 { font-size: 26pt; letter-spacing: 0.12em; margin: 6mm 0 2mm; }
+.award .to { text-align: center; font-size: 12pt; margin: 4mm 0 0; }
+.award .name { text-align: center; font-family: Poppins, Arial, sans-serif; font-size: 22pt; font-weight: 700; margin: 2mm 0; }
+.award .what { text-align: center; font-size: 13pt; line-height: 1.7; margin: 4mm 10mm; }
+`;
+const award = (title: string, lead: string) =>
+  `<div class="cert award">{{{blocks.duplicate}}}{{{blocks.letterhead}}}
+<h2>${title}</h2>
+<p class="to">${lead}</p>
+<p class="name">{{student.name}}</p>
+<p class="what">{{student.childOf}} of {{#if student.fatherName}}Shri {{student.fatherName}}{{else}}{{student.guardianName}}{{/if}}, {{student.classLabel}}, for <strong>{{fields.award}}</strong>{{#if fields.position}} — <strong>{{fields.position}}</strong>{{/if}}{{#if fields.event}} in <strong>{{fields.event}}</strong>{{/if}}{{#if text.awardedOn}} on {{text.awardedOn}}{{/if}}.{{#if fields.text}}<br>{{fields.text}}{{/if}}</p>
+{{{blocks.signatures}}}{{{blocks.footer}}}</div>`;
+const LANDSCAPE = { pageWidth: '297mm', pageHeight: '210mm', stylesCss: AWARD_CSS };
+
 export const CERTIFICATE_TEMPLATES: CertificateTemplate[] = [
   {
     code: 'cert_tc',
@@ -258,6 +275,38 @@ ${FOOT}`,
 <table class="m"><tr><th>Fee head</th><th class="n">Paid (₹)</th></tr>{{#each fees.heads}}<tr><td>{{name}}</td><td class="n">{{amount}}</td></tr>{{/each}}<tr><th>Total</th><th class="n">{{fees.total}}</th></tr></table>
 <p class="to">Total paid: <strong>₹{{fees.total}}</strong>{{#if fees.totalWords}} (rupees {{fees.totalWords}} only){{/if}}.</p>
 ${FOOT}`,
+  },
+  {
+    code: 'cert_achievement',
+    name: 'Achievement certificate',
+    kind: 'certificate',
+    typeCode: 'ACHIEVEMENT',
+    ...LANDSCAPE,
+    bodyHtml: award('Certificate of achievement', 'This certificate is presented to'),
+  },
+  {
+    code: 'cert_merit',
+    name: 'Merit certificate',
+    kind: 'certificate',
+    typeCode: 'MERIT',
+    ...LANDSCAPE,
+    bodyHtml: award('Certificate of merit', 'This certificate of merit is awarded to'),
+  },
+  {
+    code: 'cert_participation',
+    name: 'Participation certificate',
+    kind: 'certificate',
+    typeCode: 'PARTICIPATION',
+    ...LANDSCAPE,
+    bodyHtml: award('Certificate of participation', 'This is to certify the participation of'),
+  },
+  {
+    code: 'cert_award',
+    name: 'Award certificate',
+    kind: 'certificate',
+    typeCode: 'AWARD',
+    ...LANDSCAPE,
+    bodyHtml: award('Award', 'This award is presented to'),
   },
   {
     code: 'cert_experience',

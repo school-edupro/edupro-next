@@ -96,7 +96,7 @@ describe('the template engine and the ready templates', () => {
   });
 
   it('every ready template renders with nothing left unfilled and escapes the data', () => {
-    expect(CERTIFICATE_TEMPLATES).toHaveLength(18);
+    expect(CERTIFICATE_TEMPLATES).toHaveLength(22);
     const blocks = certificateBlocks(data);
     for (const t of CERTIFICATE_TEMPLATES) {
       const html = renderTemplate(t.bodyHtml, { ...data, blocks });

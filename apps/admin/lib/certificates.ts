@@ -375,3 +375,119 @@ export const CHANNEL: Record<CertificateRequest['channel'], string> = {
   staff: 'Staff app',
   office: 'Office',
 };
+
+// ---- phase E ------------------------------------------------------------------------------------------------------
+export interface BulkPreview {
+  type: { code: string; name: string };
+  rows: Array<{
+    id: string;
+    name: string;
+    admissionNo: string;
+    rollNo: string | null;
+    classLabel: string | null;
+    checks: CertificateCheck[];
+    problems: string[];
+    held: boolean;
+    ok: boolean;
+  }>;
+  figures: { total: number; ok: number; failed: number; held: number };
+  can: { override: boolean };
+}
+export interface CertificateBatch {
+  id: string;
+  title: string;
+  typeName: string;
+  typeCode: string;
+  scope: Record<string, unknown>;
+  issued: Array<{
+    id: string;
+    number: string;
+    status: string;
+    name: string;
+    admissionNo: string;
+    override: boolean;
+  }>;
+  skipped: Array<{ studentId: string; name: string; reason: string }>;
+  overrideReason: string | null;
+  exportId: string | null;
+  by: string | null;
+  createdAt: string;
+}
+export interface CertificateAward {
+  id: string;
+  name: string;
+  typeCode: string;
+  typeName: string | null;
+  description: string | null;
+  active: boolean;
+  sortOrder: number;
+  allotted: number;
+  issued: number;
+}
+export interface CertificateAllotment {
+  id: string;
+  award: string;
+  awardId: string;
+  studentId: string;
+  name: string;
+  admissionNo: string;
+  classLabel: string | null;
+  event: string | null;
+  position: string | null;
+  awardedOn: string;
+  remarks: string | null;
+  certificateId: string | null;
+  number: string | null;
+}
+export interface TcBookRow {
+  id: string;
+  bookNo: number | null;
+  slNo: number | null;
+  number: string;
+  issuedOn: string;
+  name: string | null;
+  admissionNo: string | null;
+  lastClass: string | null;
+  reason: string | null;
+  status: string;
+  cancelReason: string | null;
+  copies: number;
+}
+export interface CertificateReports {
+  from: string;
+  to: string;
+  figures: {
+    issued: number;
+    duplicates: number;
+    cancelled: number;
+    overrides: number;
+    requests: number;
+    checks: number;
+  };
+  types: Array<{
+    name: string;
+    issued: number;
+    duplicates: number;
+    cancelled: number;
+    overrides: number;
+  }>;
+  months: Array<{ month: string; issued: number; duplicates: number; cancelled: number }>;
+  issuers: Array<{ name: string; issued: number; overrides: number }>;
+  overrides: Array<{
+    number: string;
+    type: string;
+    issuedOn: string;
+    name: string | null;
+    reason: string;
+    by: string | null;
+  }>;
+  requests: Array<{
+    name: string;
+    asked: number;
+    issued: number;
+    rejected: number;
+    open: number;
+    avgDays: number | null;
+  }>;
+  checks: { total: number; valid: number; cancelled: number; not_found: number };
+}

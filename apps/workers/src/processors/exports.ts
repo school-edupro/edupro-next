@@ -22,6 +22,7 @@ import type { PdfEngine } from './pdf';
 import { renderAiReport } from '../renderers/ai-report';
 import { buildStrength, strengthToHtml, strengthToXlsx } from '../renderers/strength-report';
 import { renderCertificate, renderCertificateBatch } from '../renderers/certificate';
+import { renderCertificateBatchDoc } from '../renderers/certificate-batch-doc';
 import { renderCertificateDoc } from '../renderers/certificate-doc';
 import { renderReportCard, renderReportCardBatch } from '../renderers/report-card';
 import { renderDocument } from '../renderers/document';
@@ -165,6 +166,10 @@ export function exportProcessor({ db, storage, pdf, log, ttlDays }: ExportDeps) 
         } else if (renderer.id === 'certificate_doc') {
           const doc = await renderCertificateDoc(db, storage, envelope, row.params);
           bytes = await pdf.render(doc.html, { width: doc.width, height: doc.height });
+        } else if (renderer.id === 'certificate_batch_doc') {
+          const doc = await renderCertificateBatchDoc(db, storage, envelope, row.params);
+          bytes = await pdf.render(doc.html, { width: doc.width, height: doc.height });
+          log.info({ exportId, count: doc.count }, 'certificates of a batch rendered');
         } else if (renderer.id === 'certificate') {
           const doc = await renderCertificate(db, envelope, row.params);
           bytes = await pdf.render(doc.html, { width: doc.width, height: doc.height });

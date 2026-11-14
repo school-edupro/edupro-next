@@ -204,3 +204,94 @@ export const ListRequestsQuerySchema = z.object({
   size: z.coerce.number().int().min(1).max(200).default(50),
 });
 export class ListRequestsQueryDto extends createZodDto(ListRequestsQuerySchema) {}
+
+// ---- bulk, awards, registers (phase E) ------------------------------------------------------------------------------
+const BulkBase = z.object({
+  typeCode: TypeCode,
+  /** a section's students on the rolls, chosen students, or the leavers (withdrawal cleared or complete, no TC yet) */
+  sectionId: IdSchema.optional(),
+  studentIds: z.array(IdSchema).max(300).optional(),
+  leavers: z.boolean().optional(),
+  purpose: z.string().trim().max(200).optional(),
+  issuedOn: DateSchema.optional(),
+  fields: Fields,
+});
+const oneScope = (v: { sectionId?: string; studentIds?: string[]; leavers?: boolean }) =>
+  [!!v.sectionId, !!v.studentIds?.length, !!v.leavers].filter(Boolean).length === 1;
+export const BulkPreviewSchema = BulkBase.refine(oneScope, {
+  message: 'a section, chosen students or the leavers',
+});
+export class BulkPreviewDto extends createZodDto(BulkPreviewSchema) {}
+export const BulkIssueSchema = BulkBase.extend({
+  title: z.string().trim().min(2).max(200).optional(),
+  /** the principal's reason to issue to those whose checks fail too */
+  overrideReason: z.string().trim().min(10, 'at least 10 characters').max(300).optional(),
+}).refine(oneScope, { message: 'a section, chosen students or the leavers' });
+export class BulkIssueDto extends createZodDto(BulkIssueSchema) {}
+
+export const AwardSchema = z.object({
+  name: z.string().trim().min(2).max(120),
+  typeCode: TypeCode,
+  description: z.string().trim().max(300).optional(),
+  active: z.boolean().default(true),
+  sortOrder: z.number().int().min(0).max(9999).default(100),
+});
+export class AwardDto extends createZodDto(AwardSchema) {}
+
+export const AllotmentSchema = z.object({
+  awardId: IdSchema,
+  studentId: IdSchema,
+  event: z.string().trim().max(160).optional(),
+  position: z.string().trim().max(40).optional(),
+  awardedOn: DateSchema,
+  remarks: z.string().trim().max(300).optional(),
+});
+export class AllotmentDto extends createZodDto(AllotmentSchema) {}
+
+export const AllotmentImportSchema = z.object({
+  /** CSV: admission_no, award, event, position, date (dd-mm-yyyy or yyyy-mm-dd), remarks */
+  csv: z.string().min(10).max(300_000),
+  /** only check it (nothing saved) */
+  dryRun: z.boolean().default(false),
+});
+export class AllotmentImportDto extends createZodDto(AllotmentImportSchema) {}
+
+export const ListAllotmentsQuerySchema = z.object({
+  award: IdSchema.optional(),
+  issued: z.enum(['yes', 'no']).optional(),
+  q: z.string().trim().max(80).optional(),
+  from: DateSchema.optional(),
+  to: DateSchema.optional(),
+  page: z.coerce.number().int().min(1).default(1),
+  size: z.coerce.number().int().min(1).max(200).default(50),
+});
+export class ListAllotmentsQueryDto extends createZodDto(ListAllotmentsQuerySchema) {}
+
+export const IssueAllotmentsSchema = z.object({
+  allotmentIds: z.array(IdSchema).min(1).max(300),
+});
+export class IssueAllotmentsDto extends createZodDto(IssueAllotmentsSchema) {}
+
+export const TcBookQuerySchema = z.object({
+  book: z.coerce.number().int().min(1).max(100000).optional(),
+  status: z.enum(['issued', 'cancelled']).optional(),
+  from: DateSchema.optional(),
+  to: DateSchema.optional(),
+  q: z.string().trim().max(80).optional(),
+  page: z.coerce.number().int().min(1).default(1),
+  size: z.coerce.number().int().min(1).max(200).default(100),
+});
+export class TcBookQueryDto extends createZodDto(TcBookQuerySchema) {}
+export const TcBookFileQuerySchema = TcBookQuerySchema.extend({ format: z.enum(['xlsx', 'pdf']) });
+export class TcBookFileQueryDto extends createZodDto(TcBookFileQuerySchema) {}
+
+export const ReportsQuerySchema = z.object({
+  from: DateSchema.optional(),
+  to: DateSchema.optional(),
+});
+export class ReportsQueryDto extends createZodDto(ReportsQuerySchema) {}
+export const ReportsFileQuerySchema = ReportsQuerySchema.extend({
+  kind: z.enum(['types', 'months', 'issuers', 'overrides', 'requests']),
+  format: z.enum(['xlsx', 'pdf']),
+});
+export class ReportsFileQueryDto extends createZodDto(ReportsFileQuerySchema) {}

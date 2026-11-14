@@ -330,24 +330,60 @@ export class EngagementPlusService {
       'engagement.certificate.issue',
     );
     return this.db.tenant(tenant, async (c) => {
-      const year = new Date().getFullYear();
+      // numbered by the certificate register's series of achievement certificates (docs/design/87, phase E):
+      // ACH/<year>/00001, row-locked and never reused (it was a count, which could repeat), and each one in the register
+      await c.query(`SELECT app.certificate_types_seed(app.current_school_id())`);
+      const type = (
+        await c.query<{ id: string; prefix: string }>(
+          `SELECT id::text, prefix FROM certificate_types WHERE code = 'ACHIEVEMENT'`,
+        )
+      ).rows[0]!;
+      const yearCode =
+        (
+          await c.query<{ code: string }>(
+            `SELECT code FROM academic_years WHERE id = app.current_academic_year_id()`,
+          )
+        ).rows[0]?.code ?? String(new Date().getFullYear());
       let issued = 0;
       for (const sid of ids) {
-        const seq = await c.query<{ n: string }>(
-          `SELECT (count(*) + 1)::text AS n FROM certificates_issued WHERE issued_on >= make_date($1, 1, 1)`,
-          [year],
-        );
-        await c.query(
+        const no = (
+          await c.query<{ number: string; serial: number }>(
+            `SELECT * FROM app.next_certificate_no('ACHIEVEMENT', $1, $2)`,
+            [type.prefix, yearCode],
+          )
+        ).rows[0]!;
+        const row = await c.query<{ id: string }>(
           `INSERT INTO certificates_issued (school_id, student_id, template_id, serial_no, title, text, issued_on, export_id, issued_by)
-           VALUES (app.current_school_id(), $1, $2, $3, $4, $5, COALESCE($6::date, CURRENT_DATE), $7, app.current_user_id())`,
+           VALUES (app.current_school_id(), $1, $2, $3, $4, $5, COALESCE($6::date, CURRENT_DATE), $7, app.current_user_id())
+           RETURNING id::text`,
           [
             sid,
             dto.templateId,
-            `CERT/${year}/${String(seq.rows[0]!.n).padStart(5, '0')}`,
+            no.number,
             dto.title,
             dto.text ?? null,
             dto.issuedOn ?? null,
             exp.id,
+          ],
+        );
+        await c.query(
+          `INSERT INTO certificates (school_id, type_id, number, serial, year_code, student_id, issued_on, issued_by, data, export_id, legacy_ref)
+           SELECT app.current_school_id(), $1, $2, $3, $4, s.id, COALESCE($5::date, CURRENT_DATE), app.current_user_id(),
+                  jsonb_build_object('student', jsonb_build_object('name', s.display_name, 'admissionNo', s.admission_no),
+                                     'fields', jsonb_build_object('award', $6::text, 'text', $7::text)),
+                  $8, 'achievement:' || $9
+             FROM students s WHERE s.id = $10`,
+          [
+            type.id,
+            no.number,
+            no.serial,
+            yearCode,
+            dto.issuedOn ?? null,
+            dto.title,
+            dto.text ?? null,
+            exp.id,
+            row.rows[0]!.id,
+            sid,
           ],
         );
         issued += 1;

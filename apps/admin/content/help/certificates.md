@@ -123,6 +123,27 @@ Each check is recorded: a certificate's page (**Public checks**) shows when it w
 number, and what it answered — never who checked. Certificates issued before the QR get one when their PDF
 is made again (**Make it again**).
 
+## Bulk issue, awards, the TC book and reports
+
+From the register's header:
+
+- **Bulk issue** — one type to a section's students on the rolls, or to the **leavers** (a withdrawal cleared
+  or complete and no TC yet), in roll order. **Preview** shows each student's checks; **Issue** gives each
+  that can have it its own number and leaves out the others with the reason (who already holds it; a check
+  not clear — the principal can include them with a reason). One PDF prints the whole batch in roll order;
+  the batch's page lists who got one and who was left out.
+- **Awards** — the awards the school gives (set-up: each printed on the achievement, merit, participation
+  or award certificate), and who received them: add one (admission no., event, place, date) or upload a
+  CSV (admission_no, award, event, position, date, remarks). The file is checked first and nothing is
+  saved while a line is wrong; tick **Save them** to save a clean file. Tick the awards and **Issue the
+  ticked certificates**: a batch a certificate type, each with its award, event, place and date.
+- **TC book** — every TC by book and Sl. No. (100 to a book), with filters and Excel / PDF.
+- **Reports** — for a period: by type, by month, by who issued them, those issued past a check, the
+  requests (asked, issued, not approved, open, days to issue) and the public checks; each as Excel / PDF.
+
+The achievement certificates of Parent engagement → Achievement certificates are numbered by the register
+now (`ACH/2026-27/00001`) and appear in it; their PDF stays the batch's.
+
 ## Set-up (Certificates → Certificate set-up)
 
 The page shows six figures, a **To look at** list (no signatory yet, a signatory with no signature image,

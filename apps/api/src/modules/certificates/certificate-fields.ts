@@ -22,6 +22,15 @@ const TRAVEL: FieldSpec[] = [
   { key: 'toDate', label: 'Back by', kind: 'date', required: true },
 ];
 
+/** the award certificates (phase E): what was won, where, the place and the day */
+const AWARD_FIELDS: FieldSpec[] = [
+  { key: 'award', label: 'For (the award or achievement)', kind: 'text', required: true },
+  { key: 'event', label: 'Event or competition', kind: 'text' },
+  { key: 'position', label: 'Place or level', kind: 'text', hint: 'e.g. First, Gold, Distinction' },
+  { key: 'awardedOn', label: 'Date', kind: 'date' },
+  { key: 'text', label: 'A line more (optional)', kind: 'text' },
+];
+
 export const TYPE_FIELDS: Record<string, FieldSpec[]> = {
   TC: [
     { key: 'reason', label: 'Reason for leaving the school', kind: 'text', required: true },
@@ -130,6 +139,9 @@ export const TYPE_FIELDS: Record<string, FieldSpec[]> = {
     { key: 'remark', label: 'A line more (optional)', kind: 'text' },
   ],
   STAFF_VISA: [...TRAVEL, { key: 'embassy', label: 'Addressed to (optional)', kind: 'text' }],
+  ...Object.fromEntries(
+    ['ACHIEVEMENT', 'MERIT', 'PARTICIPATION', 'AWARD'].map((k) => [k, AWARD_FIELDS]),
+  ),
 };
 
 /** The fields of a type: EduPro's own, then the school's own (custom) ones. */

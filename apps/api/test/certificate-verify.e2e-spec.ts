@@ -5,6 +5,7 @@
  * is rate-limited; a certificate issued before the QR gets one on its next PDF.
  */
 import type { NestFastifyApplication } from '@nestjs/platform-fastify';
+import { CacheService } from '../src/common/cache/cache.service';
 import {
   createApp,
   headersFor,
@@ -45,6 +46,8 @@ describe('certificate check (e2e)', () => {
     });
     app = await createApp();
     inject = injector(app);
+    // the public limit counts per address for a minute: start this suite with a clean count (a rerun within the minute)
+    await app.get(CacheService).delByPrefix('edupro:throttle:PublicCertificatesController');
     const k = await inject({
       method: 'POST',
       url: '/academics/classes',

@@ -5,6 +5,10 @@ import { FeesModule } from '../fees/fees.module';
 import { FilesModule } from '../files/files.module';
 import { ReportsModule } from '../reports/reports.module';
 import { WorkflowModule } from '../workflow/workflow.module';
+import { CertificateAwardsService } from './certificate-awards.service';
+import { CertificateBulkService } from './certificate-bulk.service';
+import { CertificateOfficeController } from './certificate-office.controller';
+import { CertificateReportsService } from './certificate-reports.service';
 import { CertificateRequestsController } from './certificate-requests.controller';
 import { CertificateRequestsService } from './certificate-requests.service';
 import { CertificateSetupController } from './certificate-setup.controller';
@@ -22,6 +26,7 @@ import { CertificatesService } from './certificates.service';
     CertificateSetupController,
     CertificateRequestsController,
     PublicCertificatesController,
+    CertificateOfficeController,
     CertificatesController,
   ],
   providers: [
@@ -29,6 +34,9 @@ import { CertificatesService } from './certificates.service';
     CertificateSetupService,
     CertificateRequestsService,
     CertificateVerifyService,
+    CertificateBulkService,
+    CertificateAwardsService,
+    CertificateReportsService,
     PublicThrottleGuard,
     AuditService,
   ],

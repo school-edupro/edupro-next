@@ -75,6 +75,20 @@ export default async function CertificatesPage({
             <a className="ep-btn ep-btn--secondary ep-btn--sm" href="/certificates/requests">
               Requests
             </a>
+            {list.can.issue ? (
+              <a className="ep-btn ep-btn--secondary ep-btn--sm" href="/certificates/bulk">
+                Bulk issue
+              </a>
+            ) : null}
+            <a className="ep-btn ep-btn--secondary ep-btn--sm" href="/certificates/awards">
+              Awards
+            </a>
+            <a className="ep-btn ep-btn--secondary ep-btn--sm" href="/certificates/tc-book">
+              TC book
+            </a>
+            <a className="ep-btn ep-btn--secondary ep-btn--sm" href="/certificates/reports">
+              Reports
+            </a>
             {list.can.setup ? (
               <a className="ep-btn ep-btn--ghost ep-btn--sm" href="/certificates/setup">
                 Set-up

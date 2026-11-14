@@ -137,8 +137,8 @@ describe('certificate set-up (e2e)', () => {
   it('shows the set-up: every type, the ready templates, what to look at; only to the set-up right', async () => {
     const o = await get('/certificates/setup');
     expect(o.statusCode).toBe(200);
-    expect(o.json().figures).toMatchObject({ types: 17, active: 17, own: 0, signatory: false });
-    expect(o.json().templates.filter((t: { ready: boolean }) => t.ready)).toHaveLength(18);
+    expect(o.json().figures).toMatchObject({ types: 21, active: 21, own: 0, signatory: false });
+    expect(o.json().templates.filter((t: { ready: boolean }) => t.ready)).toHaveLength(22);
     expect(o.json().checks[0].text).toMatch(/No signatory/);
     const staffTypes = (o.json().types as Array<{ code: string; audience: string }>)
       .filter((t) => t.audience === 'STAFF')

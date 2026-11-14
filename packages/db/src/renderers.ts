@@ -76,6 +76,15 @@ RENDERERS.certificate_doc = {
   requiredParams: ['certificateId'],
 };
 
+/** docs/design/87, phase E: the certificates of a batch, one a page, in the batch's order. */
+RENDERERS.certificate_batch_doc = {
+  id: 'certificate_batch_doc',
+  title: 'Certificates of a batch',
+  permission: 'certificate.register.view',
+  page: { width: '210mm', height: '297mm' },
+  requiredParams: ['batchId'],
+};
+
 RENDERERS.acr_report = {
   id: 'acr_report',
   title: 'Annual confidential report',
