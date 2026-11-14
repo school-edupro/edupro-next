@@ -519,3 +519,49 @@ access, fee-ledger and report-builder specs, permissions, the database's 143, li
 **Not in phase F**: an actuarial valuation itself (the actuary's); Bonus Form C and the ESI return file (the ESIC
 upload is phase C's); scheduled e-mailing of payroll reports beyond the report builder's schedules; PRAN on the NPS
 register (not kept on the employee record).
+
+## As built — phase G, go-live (14 Nov 2026)
+
+Decided 14 Nov 2026 (plan §5; legacy spec `PAYROLL_GOLIVE_SPEC.md`: the old module has no data-move tool, a parity
+harness against the wrong system that auto-explains every tax difference and failure, no opening balances and no
+sign-off): read the old payroll database into a holding area and bring the people and the current and last year's
+locked runs as read-only history (older years as an archive file; the set-up compared, not copied; PAN and bank from the
+employee record); parity by replay, every employee × head × month to the paisa, open until explained; two parallel
+months (EduPro to Approved only), signed by a checker and countersigned by the principal, gating the first live lock and
+bank file; the switch at a tax year's start when possible, the old months refused afterwards, a rollback until the first
+live lock; the payroll admin prepares and a second person commits.
+
+**Data**: 0378 (b9892b11) — `payroll_cutover` (SETUP → BROUGHT → PARALLEL → SIGNED → SWITCHED; history start, parallel
+months, switch month, the read, what was prepared, committed, signed, switched, the first live lock, a rollback),
+`payroll_legacy_rows` (the holding area) and `payroll_legacy_map` (what each old row became), `payroll_runs.imported`,
+`payroll_parity_batches` (REPLAY, PARALLEL), `payroll_parity_results` (MATCH, OPEN, EXPLAINED per employee, month and
+component), `payroll_parity_explanations` (by kind, employee, month, component; the difference explained; code, note,
+evidence), `payroll_golive_signoffs` (scoreboard, engine version, SHA-256 checksum, signer and a different
+countersigner); right `payroll.golive.countersign` (school and group admin — the principal holds the school admin role).
+
+**Worker** (`legacy-payroll.ts`, job `payroll.legacy_read`): the old payroll tables read into the holding area through
+`LEGACY_PAYROLL_DB_URL[_<CODE>]` (else the leave cut-over's connection), read only; `PanEnc`, `BankAccountEnc`,
+`CalcTrace` never read; on request and nightly in the parallel months.
+
+**API** (`payroll-golive.ts`, `payroll-golive.service.ts`, `/payroll/golive`): overview, `start`, `read`, `preview` (in
+a savepoint, nothing kept), `prepare` (the payroll admin; counts, problems, a checksum of the rows read), `commit` (a
+second person; refused if the rows changed), `archive`, `parallel-months`, `parity/replay`, `parity/parallel`,
+`parity/:batch` (results, scoreboard, by month), `parity/:batch/explain`, `parity/:batch/sign`, `signoffs/:id/countersign`,
+`switch`, `rollback`. The replay works each old regular month through `loadEmployee` + `calculate` with that month's
+own loan instalments, one-off items and arrears taken from the old lines. Guards (`payroll-month.ts`): until the switch
+EduPro creates only the parallel months' regular runs (the second may follow an approved first) and locks nothing and
+makes no bank file; after it, months before the switch are refused; an imported run never changes.
+
+**Screens**: Payroll set-up → **6. Moving from the old payroll** (`/payroll/setup/golive`: figures, steps, read, archive,
+what would come, prepare and commit, replay, parallel months, sign-off, switch and switch back) and each comparison
+(`/payroll/setup/golive/parity/[batchId]`: scoreboard, differences with filters, explain the ticked ones, sign).
+
+**Tests**: `payroll-golive.e2e-spec.ts` (4: preview keeps nothing, prepare and a second person's commit, history
+read-only, nothing run before the parallel months, the archive; the replay to the paisa, explanations kept on a re-run;
+the parallel months to Approved only, the comparison, sign and countersign, the switch, the old months refused, the
+rollback; the parallel months brought as history, the first live lock ending the rollback); the worker's reader test;
+a browser pass with axe at 1440 and 375 px.
+
+**Not in phase G**: decrypting the old PAN and bank copies (EduPro uses the employee record's); replaying the old
+additional and full-and-final runs (only regular months are replayed; the parallel comparison takes every run);
+a separate opening year-to-date figure (the history brought gives it).

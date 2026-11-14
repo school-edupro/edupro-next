@@ -436,6 +436,35 @@ month, the year to date, the gratuity liability and the bonus, the TDS challans,
 acknowledgements, the year's audit trail with the fields before and after, and a **MANIFEST.csv** with each file's
 rows and SHA-256 checksum, so the auditor can check nothing was changed.
 
+## Moving from the old payroll (Payroll set-up → 6. Moving from the old payroll)
+
+For a school paying salaries with the old payroll module, the move happens in six steps on one page:
+
+1. **The old payroll.** The payroll admin starts the move and asks for the old payroll to be read. IT sets the
+   connection to the old database on the server (it is never typed in EduPro; it reads only; the encrypted PAN and bank
+   copies are never read — PAN and bank come from the employee record). Reading takes a minute or two.
+2. **Bring it across.** **See what would come** (nothing is kept) lists what comes and what cannot, and why — an
+   employee code not found here, a pay head not set up here. The payroll admin **prepares** it and a **second person
+   commits** it: the payroll profiles, salary structures, loans, nominees, payees and recurring deductions, ESI coverage,
+   earlier employers, declarations and TDS challans, the attendance, and the locked runs of the current and last
+   financial year as **history** — read-only here; their payslips reprint, and year-to-date tax and Form 16 / 130
+   follow from them. Older years download as an archive file. Brought again later, each row updates what it became;
+   history already brought never changes. EduPro's own set-up (rates, heads) is not overwritten.
+3. **Parity.** **Replay** the old payroll's locked months: each employee, pay head and month worked out again here from
+   that month's own inputs, compared to the paisa — every head, the gross, deductions, net, TDS and the employer's PF,
+   NPS and LWF. A difference stays **open** until a checker ticks it and **explains** it with a reason (rounding, a
+   defect of the old payroll fixed here, the labour codes' wage rule, a set-up difference, an input missing here) and
+   the evidence. An explanation stays on a re-run while the difference is the same; if it changes, it is open again.
+4. **Two months side by side.** Set the two parallel months (ideally across a quarter's end). The old payroll locks
+   and pays them; EduPro runs them to **Approved only** — it locks no month and makes no bank file until the switch.
+   **Compare the two months** checks every employee against what the old payroll paid.
+5. **Sign-off.** Once the second month has nothing open, a payroll checker **signs** the comparison (EduPro keeps its
+   scoreboard, the engine's version and a checksum) and the principal **countersigns** (another person).
+6. **The switch.** The payroll admin chooses the month EduPro pays from (after the parallel months). Set the old
+   payroll read-only from then. EduPro refuses the old months and removes its own parallel runs; then read the old
+   payroll again, prepare and commit, so the parallel months come across as history. Until EduPro locks its first
+   live month the payroll admin may **switch back**, with a reason.
+
 ## Common questions
 
 **I changed DA from July; will June's pay change?** No. The July row is a new dated row; June still
@@ -502,3 +531,11 @@ and any additional run are added together. Pick a run to see one run alone.
 **The bonus register says to set the rule first.** Set the year's rule on the bonus register (a payroll maker).
 
 **I cannot see the audit trail.** It is for checkers, the payroll admin and the payroll auditor.
+
+**The old payroll will not read.** The page shows why: most often the server has no connection to the old database
+yet — IT sets it (`LEGACY_PAYROLL_DB_URL`).
+
+**Commit says "you prepared it".** A second person commits what the payroll admin prepared.
+
+**A run will not lock during the move.** Until the go-live is signed and switched, EduPro runs only the parallel
+months, and only to Approved; the old payroll pays them.
