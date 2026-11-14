@@ -6,8 +6,8 @@ gives the payslips, the bank file and the statutory returns. It follows the scho
 step by step. This page covers the **set-up** (the rules and rates, pay heads and the pay matrix, each
 employee's payroll profile and salary structure, approving the drafts), the **month's inputs**, the
 **pay run**, the **payslips**, **paying the salaries** (bank files, cash and cheque) and the **statutory
-and accounts** work (PF ECR, ESI, profession tax, LWF, the salary voucher, the compliance calendar). Income-tax
-declarations and the tax returns come in the next phase.
+and accounts** work (PF ECR, ESI, profession tax, LWF, the salary voucher, the compliance calendar). and **income tax**
+(declarations and proofs, the earlier employer, perquisites, TDS challans, the quarterly return and Form 16 / 130).
 
 ## Who does what
 
@@ -29,6 +29,9 @@ The side menu's **Payroll** has these entries:
 - **Pay runs** — the month's runs; a run opens its employees, and each employee their pay in full.
 - **Statutory and accounts** — a month's PF and ECR, ESI, profession tax, LWF and salary voucher, and the
   year's compliance calendar.
+- **Income tax** — the year's declarations and proofs, earlier employers, perquisites, TDS challans, the
+  quarterly return and the certificates.
+- **My tax** — every employee's own tax: declarations, the regime, the certificate (the staff app has it too).
 - **My payslips** — every employee's own payslips (the staff app has it too, under Office).
 - **Payroll set-up** — one page with four numbered section cards; every set-up screen opens from it.
 - **Payroll drafts to approve** — for checkers: everything that waits, in one place.
@@ -250,6 +253,52 @@ Each register downloads as Excel or PDF (the PDF with the letterhead and the Pre
 - **The voucher's ledger names**: salaries by staff type, deductions by pay head, the employer's cost and the
   payables for PF, ESI, NPS and LWF, and the net salaries. Left blank, the default names are used.
 
+## Income tax (Payroll → Income tax)
+
+The run works out each month's tax from the year: the salary paid, this month and the months left, the earlier
+employer's salary, perquisites and the employer's NPS, less the HRA exemption, the standard deduction, profession tax
+(old regime) and the deductions; then the year's tax, and what is left of it spread over the months left (March takes
+the rest). Pick the year at the top.
+
+- **Declarations** — what employees declared (or a maker declared for staff without a sign-in). A declared amount
+  counts in the monthly tax **until the proof deadline** (31 January unless set otherwise); after it, only what a
+  checker **verified** counts and the remaining months make up the difference. Open the proofs, then **Verify** (all or
+  part of the amount) or **Reject** with a reason the employee sees; **Reopen** to change a decision. Your own
+  declaration is verified by another checker. HRA shows the city (50 % in the year's listed cities, 40 % elsewhere),
+  the landlord and the relationship.
+- **Earlier employers** — salary and tax from an employer earlier in the year (Form 122; 12B before 2026-27); it counts
+  like a declaration. Verify or reject the same way.
+- **Perquisites** — the year's taxable value of what the school gives besides pay (a ward's free education, housing,
+  a vehicle, a loan …). It counts once a checker who did not enter it verifies it.
+- **TDS challans** — each deposit: quarter, BSR code, challan serial, date, amount (tax and cess), interest, late fee
+  and the months it pays. A month is paid by one challan; the page shows the TDS deducted in each month and any month
+  with no challan yet.
+- **Quarterly return** — each quarter's files (challans, Annexure I, and Annexure II in the fourth quarter) for the
+  return utility (Form 24Q to 2025-26, Form 138 from 2026-27). They are made once every month of the quarter is locked
+  and each month's TDS equals its challan.
+- **Form 16 / 130** — 1. upload the Part A files from TRACES (each named with the employee's PAN); 2. **Make the
+  certificates** once every run of the year is locked: Part A then Part B (the year's pay and tax), one PDF locked with
+  the payslip password; 3. **Release in My tax**; 4. **Send pending e-mails**.
+- **The year** — the declaration window, the proof deadline and the listed cities (the payroll admin); **Check the
+  PANs** (without a PAN, tax is at least 20 %); **Close the year** after the fourth quarter's return.
+
+Open an employee's name for their year: worked out as the next run would (looking never changes anything), the other
+regime beside it, month by month. A checker can set **the year's tax** (the school's final figure, with a reason) and
+go back to the worked-out one; the payroll admin can set the **regime** (a reason after the cut-off month).
+
+## My tax (Payroll → My tax; the staff app's Office → My tax)
+
+Every employee sees their year's tax as payroll works it out, month by month, and the other regime beside it.
+
+- **Declare** in the year's window: choose the section and the amount for the year, or for HRA the rent of each month,
+  the city, the landlord (name, address, your relationship, and the PAN when the rent is above ₹1,00,000 a year). Add
+  proofs (PDF or photo, 10 MB each) now or later. Declaring a section again replaces it until it is verified. The PF
+  and VPF payroll deducts are added to 80C by themselves.
+- **Earlier employer** — if you worked elsewhere earlier in the year, enter that salary and tax.
+- **My regime** — change it until the cut-off month (December unless the school set another).
+- **My declaration form** (Form 124; 12BB to 2025-26) and **my tax certificate** (once released; it opens with your
+  payslip password).
+
 ## Common questions
 
 **I changed DA from July; will June's pay change?** No. The July row is a new dated row; June still
@@ -286,3 +335,13 @@ on the employee record, release the salary on the run, then make a new bank file
 of only the members not yet filed.
 
 **The salary voucher is not balanced.** Do not post it; tell the payroll admin (the page shows both totals).
+
+**My declaration does not lower my tax.** After the proof deadline only verified amounts count: give the proofs to
+payroll. In the new regime most sections (80C, 80D, HRA) do not count at all.
+
+**Which regime is better for me?** My tax shows the year's tax in both; change it until the cut-off month.
+
+**The certificate cannot be made.** A run of the year is not locked yet; lock (or remove) it first.
+
+**The quarterly return is refused.** A month of the quarter is not locked, or its TDS has no challan or a different
+amount; the message names it.

@@ -336,3 +336,67 @@ the statutory tabs, bank set-up and set-up pages with axe at 1440 and 375 px.
 
 **Not in phase C**: the TDS deposit's challans, the quarterly TDS return files and Form 16 / 130 (phase D); a bank's
 host-to-host upload or response file; Tally import of the voucher (with the accounts module).
+
+## As built — phase D, income tax (14 Nov 2026)
+
+Decided 14 Nov 2026 (plan §5; legacy spec `PAYROLL_TAX_SPEC.md`): declared amounts count until the year's proof
+deadline (default 31 January), then only verified ones; a checker verifies, never their own; My tax in both apps with
+HRA by month (city, landlord, relationship, the landlord's PAN above ₹1 lakh a year); Form 16 / 130 as one locked PDF
+released in My tax and e-mailed on Send. Under the Income-tax Act 2025 (from 1 April 2026) the forms change — 12BB →
+124, 12B / 12BAA → 122, 16 → 130, 24Q → 138 — and HRA counts at 50 % in eight cities instead of four; all of these are
+data per year (`payroll_tax_labels`, `payroll_tax_years.listed_cities`), so both years work. Fixed against the legacy:
+declared amounts no longer wait for verification all year; a checker never verifies their own; a rejection keeps its
+reason; the employee's own PF and VPF go to 80C by themselves; viewing a tax sheet never stores anything; a challan is
+checked against its quarter and its months' TDS; the return refuses an unlocked month or a mismatched challan.
+
+**Engine** (commits 5727dbb0, 572a8233): `declare.ts` — `hraExemption` (the least of HRA received, rent less a tenth of
+basic + DA, half or two fifths of basic + DA), `allowedDeductions` (each section within its cap and its regime, shared
+caps such as 80C + 80CCC + 80CCD(1)), `houseLoss` (old regime, within its cap). `tax.ts` — `TaxExtras` (earlier
+employers' salary, TDS and PT, perquisites, exemptions, other income, a house's loss, deductions, the HRA claim, the
+employer's NPS, the declared sections with the PF-in-80C rule, the school's final figure and spread); the projection
+shows each. `calc.ts` works out the year's HRA (paid, this month, the months left at this month's rates), the
+employer's NPS (income, then allowed within 14 % new / 10 % old of basic + DA), the declared sections with the year's
+PF and VPF in 80C, and returns `taxWorking`. 149 tests, 100 %.
+
+**Data**: 0373 (572a8233) — `payroll_tax_years` (window, proof deadline, listed cities, frozen), `payroll_declarations`
+(declared, verified, SUBMITTED / VERIFIED / REJECTED with reason, HRA detail with the landlord's PAN encrypted and
+masked, proofs, made for staff), `payroll_prev_employment`, `payroll_perquisites` (a change supersedes), `payroll_tax_finals`,
+`payroll_tds_challans` (one live challan a month), `payroll_regime_events`, `payroll_certificates`;
+`payroll_tax_labels.cap_group` and more sections per year (`app.payroll_tax_sections_seed`). 0374 (6be2ffa9) —
+`payroll_record_tax` keeps exemptions, perquisites, the earlier employer's salary and TDS, other income, a house's loss
+and the working.
+
+**The run** reads the year (`payroll-tax-extras.ts`): each declaration as it counts that month (verified; declared until
+the deadline; rejected none), the HRA claim and the year's HRA, basic and DA paid, a house's loss, other income, the
+earlier employer the same way, verified perquisites, the employer's NPS paid, the PF paid, the final figure.
+
+**API** (`payroll-tax.service.ts`, `payroll-tax-docs.service.ts`), under `/payroll`: My tax — `me/tax` (the year live,
+the other regime, the plan, declarations, the earlier employer, the regime window, the certificate), `me/tax/declarations`
+(POST in the window; DELETE), `me/tax/prev`, `me/tax/regime`, `me/tax/declaration-form`, `me/tax/certificate`; the tax
+centre — `tax/declarations` (list with the year's sections; POST for staff), `tax/declarations/:id/decide`,
+`tax/proofs/:fileId`, `tax/prev` (+ POST, `:id/decide`), `tax/regime` (the payroll admin), `tax/perquisites` (+ POST,
+`:id/verify|unverify|delete`), `tax/employees/:id` (the year live, nothing stored), `tax/finals` (+ `/clear`),
+`tax/challans` (+ POST, `:id/remove`), `tax/pan-check`, `tax/years/:fy` (GET, PUT, `/freeze`), `tax/returns?quarter&file`,
+`tax/declaration-form/:employeeId`, `tax/certificates` (+ `/part-a`, `/make`, `/release`, `/send`, `/:employeeId/file`).
+Proofs: the uploader's own PDF / JPEG / PNG up to 10 MB, then owned by the declaration and marked sensitive. The return:
+CHALLANS, ANNEXURE_I (PANNOTAVBL and remark C without a PAN) and ANNEXURE_II (Q4) as CSV named by the year's form.
+Certificates: Part A matched by the PAN in its file name; Part B from the year's last locked record (gross with
+perquisites and the earlier employer, HRA, standard deduction, PT, salaries, the earlier employer, other income less a
+house's loss, each section claimed and allowed, taxable, tax, rebate, surcharge, cess, relief 0, total, TDS); Part A
+pages first; locked with the payslip password; refused while a run of the year is not locked.
+
+**Screens**: admin — **Income tax** (`/payroll/tax?fy&tab=declarations|prev|perquisites|challans|returns|certificates|year`),
+an employee's year (`/payroll/tax/employees/[id]`), **My tax** (`/payroll/me/tax`); staff app — **My tax** (`/my-tax`,
+Office). Shared parts: `DeclareForm` (client: a section and amount, or HRA's twelve months, the city and the landlord;
+proofs) and `TaxSheet` (figures, the working, month by month).
+
+**Tests**: `payroll-tax.e2e-spec.ts` (6: the year's settings; declarations with proofs, HRA and the landlord's PAN, one
+made for staff; the run counting declared amounts; part verification, rejection with a reason, never one's own, proofs
+for staff; the earlier employer, perquisites, the final figure, the regime; challans, the PAN check, a closed year) and
+`payroll-tax-docs.e2e-spec.ts` (3: the return waiting for the locked quarter and its challans, then its three files;
+the declaration form; Part A by PAN, certificates locked from the locked year, released, e-mailed); the engine's 149
+tests; a browser pass with axe at 1440 and 375 px.
+
+**Not in phase D**: relief for arrears of earlier years (the certificate shows 0; Form 10E by hand — with the pay
+revision in phase E); the e-filing utility's own text format (the return is the utility's CSV input); LTA and other
+salary exemptions; a bulk import of declarations.
