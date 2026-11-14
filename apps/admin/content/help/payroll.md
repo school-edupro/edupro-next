@@ -80,7 +80,7 @@ matrix.
   name that is 1 in a formula when an employee field has a value: `IS_PERMANENT | nature_of_appointment
 | Permanent`).
 - **Rates and statutory rules** — six tabs: **Rates** (DA_RATE, HRA_RATE … any code a formula names;
-  type a rate as a decimal, 0.55 for 55 %; **LABOUR_CODE_WAGES** = 1 from a date switches on the labour codes'
+  type a rate as 0.55 or 55% (with the % sign), an amount as 1500 — commas and ₹ are fine; **LABOUR_CODE_WAGES** = 1 from a date switches on the labour codes'
   wage rule — allowances above half of the month's pay then count as wages for PF and for gratuity — and 0 from a
   later date switches it off), **PF** (shares, pension and EDLI ceilings, admin charges),
   **ESI** (shares, the wage limit, the higher limit for persons with disability), **Profession tax**

@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { ApiError, apiFetch } from './api';
 import type { ConfigKind, FormulaCheck } from './payroll';
+import { configValue, FIELD_LABELS } from './payroll-values';
 
 const okId = (id: string) => /^\d{1,18}$/.test(id);
 const KINDS: ConfigKind[] = ['rates', 'pf', 'esi', 'pt', 'lwf', 'ot'];
@@ -11,7 +12,13 @@ const detailOf = (e: ApiError) => {
   const errors = e.problem.errors as
     Record<string, string> | Array<{ message?: string }> | undefined;
   const first = Array.isArray(errors)
-    ? errors.map((x) => x.message).find(Boolean)
+    ? (errors as Array<{ message?: string; path?: string | Array<string | number> }>)
+        .map((x) => {
+          const path = Array.isArray(x.path) ? String(x.path[x.path.length - 1] ?? '') : x.path;
+          const label = path ? FIELD_LABELS[path] : undefined;
+          return x.message && label ? `${label}: ${x.message}` : x.message;
+        })
+        .find(Boolean)
     : errors
       ? Object.values(errors)[0]
       : undefined;
@@ -97,8 +104,12 @@ const FIELDS: Record<ConfigKind, string[]> = {
   lwf: ['stateCode', 'eeRate', 'eeCap', 'eeFlat', 'erFlat', 'erMultiplier', 'frequency'],
   ot: ['employeeType', 'dailyAmount', 'hourlyAmount'],
 };
-/** The draft's fields from its form: rates given in per cent on the form are sent as decimals. */
-function configBody(kind: ConfigKind, fd: FormData) {
+/**
+ * The draft's fields from its form, read by `configValue` (payroll-values.ts): a …Rate field is a per cent, the rate
+ * registry's Value a decimal or an amount (or a per cent ending in %); a value that is still not a number comes back
+ * with the field's name instead of going to the API.
+ */
+function configBody(kind: ConfigKind, fd: FormData, here: string) {
   const body: Record<string, unknown> = {
     effectiveFrom: text(fd, 'effectiveFrom'),
     referenceNo: text(fd, 'referenceNo'),
@@ -107,12 +118,12 @@ function configBody(kind: ConfigKind, fd: FormData) {
   for (const f of FIELDS[kind]) {
     const v = text(fd, f);
     if (v === null) continue;
-    // a field named …Rate is typed as a per cent (12 → 0.12), except the generic rate value
-    body[f] = f.endsWith('Rate')
-      ? String(Number((Number(v) / 100).toFixed(6)))
-      : f === 'stateCode' || f === 'rateCode'
-        ? v.toUpperCase()
-        : v;
+    const r = configValue(f, v);
+    if (!r.ok)
+      redirect(
+        `${here}${join(here)}error=validation-failed&detail=${encodeURIComponent(r.message)}`,
+      );
+    body[f] = r.value;
   }
   if (kind === 'lwf')
     body.months = fd
@@ -131,7 +142,7 @@ export async function addPayrollConfig(kind: ConfigKind, fd: FormData) {
   if (!KINDS.includes(kind)) return;
   const here = `/payroll/setup/rates?tab=${kind}`;
   try {
-    await send(`/payroll/config/${kind}`, 'POST', configBody(kind, fd));
+    await send(`/payroll/config/${kind}`, 'POST', configBody(kind, fd, here));
   } catch (e) {
     if (e instanceof ApiError) back(here, e);
     throw e;

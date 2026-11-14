@@ -199,7 +199,7 @@ function draftFields(kind: ConfigKind, last: ConfigRow | undefined) {
           max: 30,
         }),
         n('rateValue', 'Value', {
-          help: 'A rate as a decimal (0.62 for 62 %) or an amount',
+          help: 'A rate as 0.62 or 62%, or an amount such as 1500',
           dflt: '',
         }),
         <label className="ep-field" htmlFor="pr-rates-source" key="source">
