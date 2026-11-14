@@ -562,6 +562,10 @@ the parallel months to Approved only, the comparison, sign and countersign, the 
 rollback; the parallel months brought as history, the first live lock ending the rollback); the worker's reader test;
 a browser pass with axe at 1440 and 375 px.
 
+**Gate** (14 Nov): the engine (162, 100 %), every payroll spec (go-live included) with the exit, transfer, leave,
+attendance, access, fee-ledger and report-builder specs, permissions, the database's 143, the worker's reader tests,
+lint, types and formatting of the API, admin, staff app and workers — all green. Payroll phases A–G are built.
+
 **Not in phase G**: decrypting the old PAN and bank copies (EduPro uses the employee record's); replaying the old
 additional and full-and-final runs (only regular months are replayed; the parallel comparison takes every run);
 a separate opening year-to-date figure (the history brought gives it).
