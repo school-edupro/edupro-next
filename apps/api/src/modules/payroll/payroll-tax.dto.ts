@@ -155,3 +155,19 @@ export const DeclListSchema = z.object({
   q: z.string().trim().max(60).optional(),
 });
 export class DeclListDto extends createZodDto(DeclListSchema) {}
+
+export const ReturnQuerySchema = z.object({
+  fy: Fy,
+  quarter: z.coerce.number().int().min(1).max(4),
+  file: z.enum(['challans', 'annexure1', 'annexure2']),
+});
+export class ReturnQueryDto extends createZodDto(ReturnQuerySchema) {}
+
+export const FyBodySchema = z.object({ fy: Fy });
+export class FyBodyDto extends createZodDto(FyBodySchema) {}
+
+export const PartASchema = z.object({ fy: Fy, fileIds: z.array(Id).min(1).max(500) });
+export class PartADto extends createZodDto(PartASchema) {}
+
+export const FyRequiredSchema = z.object({ fy: Fy });
+export class FyRequiredDto extends createZodDto(FyRequiredSchema) {}

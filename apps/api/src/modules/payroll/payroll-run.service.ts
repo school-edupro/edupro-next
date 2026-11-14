@@ -762,8 +762,10 @@ export class PayrollRunService {
       await c.query(
         `INSERT INTO payroll_record_tax (record_id, school_id, fy, mode, regime, gross_projection, standard_deduction, pt_deduction,
                                          other_deductions, taxable_income, slab_tax, rebate, surcharge, cess, annual_tax, ytd_tds,
-                                         months_left, monthly_tds, pan_absent)
-         VALUES ($1, app.current_school_id(), $2, 'PROJECTION', $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)`,
+                                         months_left, monthly_tds, pan_absent, exemptions, perquisites, prev_salary, prev_tds,
+                                         other_income, house_loss, working)
+         VALUES ($1, app.current_school_id(), $2, 'PROJECTION', $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17,
+                 $18, $19, $20, $21, $22, $23, $24::jsonb)`,
         [
           recordId,
           fy,
@@ -782,6 +784,36 @@ export class PayrollRunService {
           t.monthsLeft,
           S(t.monthly),
           t.tax.panAbsent,
+          S(t.exemptions),
+          S(t.perquisites),
+          S(t.prevSalary),
+          S(loaded.input.tax.extras?.prevTds ?? 0n),
+          S(t.otherIncome),
+          S(t.houseLoss),
+          JSON.stringify(
+            r.taxWorking
+              ? {
+                  hra: r.taxWorking.hra
+                    ? Object.fromEntries(
+                        Object.entries(r.taxWorking.hra).map(([k, v]) => [k, S(v)]),
+                      )
+                    : null,
+                  npsEr: r.taxWorking.npsEr
+                    ? Object.fromEntries(
+                        Object.entries(r.taxWorking.npsEr).map(([k, v]) => [k, S(v)]),
+                      )
+                    : null,
+                  deductions: (r.taxWorking.deductions ?? [])
+                    .filter((d) => d.declared > 0n)
+                    .map((d) => ({
+                      code: d.code,
+                      declared: S(d.declared),
+                      allowed: S(d.allowed),
+                      cut: d.cut,
+                    })),
+                }
+              : {},
+          ),
         ],
       );
     else

@@ -8,6 +8,8 @@ import { PayrollAccountsController } from './payroll-accounts.controller';
 import { PayrollAccountsService } from './payroll-accounts.service';
 import { PayrollBankController } from './payroll-bank.controller';
 import { PayrollBankService } from './payroll-bank.service';
+import { PayrollTaxDocsController } from './payroll-tax-docs.controller';
+import { PayrollTaxDocsService } from './payroll-tax-docs.service';
 import { PayrollTaxController } from './payroll-tax.controller';
 import { PayrollTaxService } from './payroll-tax.service';
 import { PayrollStatutoryController } from './payroll-statutory.controller';
@@ -39,6 +41,7 @@ import { PayrollSetupService } from './payroll-setup.service';
     PayrollStatutoryController,
     PayrollAccountsController,
     PayrollTaxController,
+    PayrollTaxDocsController,
   ],
   providers: [
     PayrollSetupService,
@@ -53,6 +56,7 @@ import { PayrollSetupService } from './payroll-setup.service';
     PayrollStatutoryService,
     PayrollAccountsService,
     PayrollTaxService,
+    PayrollTaxDocsService,
     AuditService,
   ],
   exports: [PayrollSetupService],
