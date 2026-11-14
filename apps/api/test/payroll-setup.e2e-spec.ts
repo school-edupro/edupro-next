@@ -79,7 +79,7 @@ describe('payroll set-up (e2e)', () => {
     expect(o.figures).toMatchObject({
       staff: 3,
       profiles: 0,
-      heads: 22,
+      heads: 28, // 22 legacy heads and the 6 settlement heads (phase E)
       headsUnversioned: 0,
       matrixCells: 538,
     });
@@ -96,7 +96,7 @@ describe('payroll set-up (e2e)', () => {
           [school.id],
         )
       )[0]!.n,
-    ).toBe(22);
+    ).toBe(28);
   });
 
   it('settings: a payroll admin only', async () => {
