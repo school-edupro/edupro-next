@@ -254,7 +254,7 @@ export class PayrollSetupService {
       ).rows[0]!;
       if (due.overdue)
         checks.push({
-          level: 'red',
+          level: 'amber',
           text: `${String(due.overdue)} statutory due(s) overdue`,
           href: '/payroll/statutory?tab=calendar',
         });

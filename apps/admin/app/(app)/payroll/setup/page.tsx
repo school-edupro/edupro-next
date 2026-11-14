@@ -104,8 +104,27 @@ export default async function PayrollSetupPage({
       ],
     },
     {
+      id: 'pr-pay',
+      title: '4. Payment and statutory',
+      text: 'How salaries are paid and what goes to the PF, ESI and accounts: the school’s bank accounts with each bank’s file, the voucher’s ledgers, the year’s statutory dues.',
+      links: [
+        {
+          done: null,
+          title: 'Bank accounts and ledgers',
+          text: 'The school’s accounts and the file each bank takes; arrears in the ECR; the salary voucher’s ledger names',
+          href: '/payroll/setup/bank',
+        },
+        {
+          done: !o.checks.some((c) => c.href === '/payroll/statutory?tab=calendar'),
+          title: 'Compliance calendar',
+          text: 'The year’s PF, ESI, TDS, profession tax and LWF due dates; mark each done with its challan',
+          href: '/payroll/statutory?tab=calendar',
+        },
+      ],
+    },
+    {
       id: 'pr-approve',
-      title: '4. Drafts to approve',
+      title: '5. Drafts to approve',
       text: 'Everything above is made as a draft and goes live when a checker who did not make it approves it.',
       links: [
         {

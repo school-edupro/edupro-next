@@ -80,7 +80,7 @@ export async function Shell({
     // Leave & attendance set-up stands for its master screens (leave types, policies, shifts…)
     '/leave/setup': ['/masters/leave'],
     // pay runs stand for reconciliation too
-    '/payroll/runs': ['/payroll/reconcile'],
+    '/payroll/runs': ['/payroll/reconcile', '/payroll/bank'],
     '/exams/masters': [
       '/exams/indicators',
       '/exams/indicator-areas',

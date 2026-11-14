@@ -371,6 +371,31 @@ export default async function PayrollRunPage({
           </p>
         ) : null}
       </section>
+      {d.can.approve && ['APPROVED', 'LOCKED', 'PAID'].includes(stage) ? (
+        <section className="ep-card" aria-labelledby="rn-pay" style={{ marginTop: 'var(--sp-4)' }}>
+          <h2 id="rn-pay" className="ep-card__title">
+            Payments
+          </h2>
+          <p className="ep-field__help" style={{ marginTop: 0 }}>
+            {stage === 'PAID'
+              ? 'Every salary of the run is paid.'
+              : stage === 'APPROVED'
+                ? 'A bank file can be made now to check it (provisional); it goes to the bank once the run is locked.'
+                : 'Make the bank files, confirm them with the bank’s UTR, and mark the cash and cheque salaries paid.'}
+          </p>
+          <div className="ep-grid__toolbar">
+            <a className="ep-btn ep-btn--primary ep-btn--sm" href={`/payroll/runs/${id}/bank`}>
+              Bank files and payments
+            </a>
+            <a
+              className="ep-btn ep-btn--secondary ep-btn--sm"
+              href={`/payroll/statutory?month=${r.month}&tab=pf`}
+            >
+              PF, ESI and the voucher for the month
+            </a>
+          </div>
+        </section>
+      ) : null}
       {slips ? (
         <section
           className="ep-card"
