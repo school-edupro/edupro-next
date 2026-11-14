@@ -16275,3 +16275,120 @@ button.ep-shiftcal__cell:focus-visible {
   color: var(--text-body);
   overflow-wrap: anywhere;
 }
+
+/* ---- certificate template editor (docs/design/87, phase B) ----------------------------------------------------- */
+.ep-tpl {
+  display: grid;
+  gap: var(--sp-4);
+  grid-template-columns: minmax(0, 1fr);
+}
+@media (min-width: 72rem) {
+  .ep-tpl {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    align-items: start;
+  }
+}
+.ep-tpl__edit,
+.ep-tpl__preview {
+  display: grid;
+  gap: var(--sp-3);
+  min-width: 0;
+}
+.ep-tpl__row {
+  display: grid;
+  gap: var(--sp-3);
+  grid-template-columns: minmax(0, 1fr);
+}
+@media (min-width: 40rem) {
+  .ep-tpl__row {
+    grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
+  }
+}
+.ep-tpl__row .ep-field,
+.ep-tpl__edit .ep-field {
+  margin: 0;
+}
+.ep-tpl__code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: var(--fs-small);
+  line-height: 1.5;
+  width: 100%;
+  resize: vertical;
+}
+.ep-tpl__h {
+  font-family: var(--font-heading);
+  font-size: var(--fs-body);
+  color: var(--text-heading);
+  margin: 0;
+}
+.ep-tpl__css > summary,
+.ep-tpl__group > summary {
+  cursor: pointer;
+  font-weight: var(--fw-semibold);
+  color: var(--text-heading);
+}
+.ep-tpl__fields {
+  border-top: 1px solid var(--border-default);
+  padding-top: var(--sp-3);
+}
+.ep-tpl__group ul {
+  list-style: none;
+  margin: var(--sp-2) 0;
+  padding: 0;
+  display: grid;
+  gap: var(--sp-1);
+}
+.ep-tpl__token {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-1) var(--sp-2);
+  width: 100%;
+  text-align: left;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  background: var(--surface-card);
+  color: var(--text-body);
+  padding: var(--sp-1) var(--sp-2);
+  cursor: pointer;
+  font: inherit;
+  font-size: var(--fs-small);
+}
+.ep-tpl__token:hover,
+.ep-tpl__token:focus-visible {
+  border-color: var(--border-accent);
+  background: var(--surface-subtle);
+}
+.ep-tpl__token code {
+  color: var(--text-link);
+  overflow-wrap: anywhere;
+}
+.ep-fieldrows {
+  display: grid;
+  gap: var(--sp-3);
+}
+.ep-fieldrows__row {
+  display: grid;
+  gap: var(--sp-2) var(--sp-3);
+  grid-template-columns: minmax(0, 1fr);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  padding: var(--sp-3);
+  margin: 0;
+}
+@media (min-width: 48rem) {
+  .ep-fieldrows__row {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    align-items: end;
+  }
+}
+.ep-fieldrows__row .ep-field {
+  margin: 0;
+}
+.ep-setup-checks {
+  display: grid;
+  gap: var(--sp-2) var(--sp-4);
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 14rem), 1fr));
+  margin: 0;
+  padding: 0;
+  border: 0;
+}

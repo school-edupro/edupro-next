@@ -57,6 +57,7 @@ export async function Shell({
   // a menu entry that opens a sub-page (the notices report) still stands for its whole section
   const SECTION_OF: Record<string, string> = { '/academics/notices/report': '/academics/notices' };
   const ALSO: Record<string, string[]> = {
+    '/certificates': ['/certificates/issue'],
     '/fees/demands': ['/fees/bills'],
     '/fees/cashier': ['/fees/ledger', '/fees/receipt', '/fees/parent-view'],
     '/fees/refunds': ['/fees/refund', '/fees/refund-voucher'],

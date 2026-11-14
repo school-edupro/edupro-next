@@ -63,6 +63,11 @@ export const NAV: Array<{
         label: 'certificateRegister',
         permission: 'certificate.register.view',
       },
+      {
+        href: '/certificates/setup',
+        label: 'certificateSetup',
+        permission: 'certificate.setup.manage',
+      },
     ],
   },
   {

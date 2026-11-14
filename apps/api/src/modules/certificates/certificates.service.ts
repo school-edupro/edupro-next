@@ -1,5 +1,15 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { CERTIFICATE_TEMPLATES, documentHtml, renderTemplate, type PoolClient } from '@edupro/db';
+import {
+  CERTIFICATE_BLOCK_CSS,
+  CERTIFICATE_TEMPLATES,
+  certificateBlocks,
+  certificateImageIds,
+  documentHtml,
+  renderTemplate,
+  type CertificateSign,
+  type PoolClient,
+} from '@edupro/db';
+import type { StorageDriver } from '@edupro/storage';
 import { AuditService } from '../../common/audit/audit.service';
 import { DbService } from '../../common/db/db.service';
 import { DomainError } from '../../common/errors/domain-error';
@@ -7,16 +17,19 @@ import { requireTenant, type RequestContext } from '../../common/http/request-co
 import { ENV, type Env } from '../../config/env';
 import { generatedOn, registerFile, schoolHead } from '../attendance/register-file';
 import { FeeLedgerService, type Ledger } from '../fees/fee-ledger.service';
+import { STORAGE_DRIVER } from '../files/storage';
 import { ReportsService } from '../reports/reports.service';
 import { runChecks, type CertificateCheck, type CertificateRules } from './certificate-checks';
-import { schoolData, studentData } from './certificate-data';
-import { checkFields, fieldDefaults, fieldsOf } from './certificate-fields';
+import { employeeData, feePaidData, schoolData, studentData } from './certificate-data';
+import { checkFields, fieldDefaults, fieldsOf, fieldText } from './certificate-fields';
+import { assertSafeTemplate } from './certificate-safety';
 import {
   CERTIFICATE,
   type CertificatesFileQueryDto,
   type IssueCertificateDto,
   type ListCertificatesQueryDto,
   type PreviewCertificateDto,
+  type TemplatePreviewDto,
 } from './certificates.dto';
 
 /**
@@ -26,8 +39,13 @@ import {
  * the TC, the next book Sl. No.; it freezes every printed field and the template version, so a reprint or a duplicate
  * is the same paper. The TC is issued here from every route (the student's profile, the withdrawal, the register).
  */
-interface TypeRow {
+export interface TypeRow {
   id: string;
+  description: string | null;
+  fields: unknown;
+  variants: Array<{ templateId: string; label: string }>;
+  issuers: string[];
+  built_in: boolean;
   code: string;
   name: string;
   audience: 'STUDENT' | 'STAFF';
@@ -57,8 +75,11 @@ export interface CertificateRow {
   copyNo: number;
   originalId: string | null;
   studentId: string | null;
+  /** the student's name, or the employee's on a staff certificate */
   studentName: string | null;
+  /** the admission no., or the employee code */
   admissionNo: string | null;
+  employeeId: string | null;
   className: string | null;
   status: 'issued' | 'cancelled';
   issuedOn: string;
@@ -79,13 +100,16 @@ export interface CertificateRow {
 }
 
 const SELECT = `SELECT x.id::text, t.code AS type_code, t.name AS type_name, x.number, x.copy_no, x.original_id::text,
-        x.student_id::text, s.display_name AS student_name, s.admission_no, x.data->'student'->>'className' AS class_name,
+        x.student_id::text, COALESCE(s.display_name, em.display_name) AS student_name,
+        COALESCE(s.admission_no, em.employee_code) AS admission_no, x.employee_id::text,
+        COALESCE(x.data->'student'->>'className', x.data->'employee'->>'designation') AS class_name,
         x.status, x.issued_on::text, u.display_name AS issued_by, x.purpose, x.book_no, x.sl_no, x.override_reason,
         ou.display_name AS override_by, x.checks, x.export_id::text, x.transfer_certificate_id::text, x.legacy,
         x.cancelled_at, cu.display_name AS cancelled_by, x.cancel_reason, x.created_at
    FROM certificates x
    JOIN certificate_types t ON t.id = x.type_id
    LEFT JOIN students s ON s.id = x.student_id
+   LEFT JOIN employees em ON em.id = x.employee_id
    LEFT JOIN users u ON u.id = x.issued_by
    LEFT JOIN users ou ON ou.id = x.override_by
    LEFT JOIN users cu ON cu.id = x.cancelled_by`;
@@ -100,6 +124,7 @@ interface Db {
   student_id: string | null;
   student_name: string | null;
   admission_no: string | null;
+  employee_id: string | null;
   class_name: string | null;
   status: 'issued' | 'cancelled';
   issued_on: string;
@@ -129,6 +154,7 @@ const toRow = (r: Db): CertificateRow => ({
   studentId: r.student_id,
   studentName: r.student_name,
   admissionNo: r.admission_no,
+  employeeId: r.employee_id,
   className: r.class_name,
   status: r.status,
   issuedOn: r.issued_on,
@@ -150,6 +176,27 @@ const toRow = (r: Db): CertificateRow => ({
 
 const dmy = (iso: string) => `${iso.slice(8, 10)}-${iso.slice(5, 7)}-${iso.slice(0, 4)}`;
 const todayIso = () => new Date().toISOString().slice(0, 10);
+/** "14-11-2026 09:40 AM" in the school's time zone */
+export function stamp(d: Date, timeZone?: string | null): string {
+  const fmt = (tz: string) =>
+    new Intl.DateTimeFormat('en-GB', {
+      timeZone: tz,
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: true,
+    }).formatToParts(d);
+  let parts: Intl.DateTimeFormatPart[];
+  try {
+    parts = fmt(timeZone || 'Asia/Kolkata');
+  } catch {
+    parts = fmt('Asia/Kolkata');
+  }
+  const get = (t: string) => parts.find((x) => x.type === t)?.value ?? '';
+  return `${get('day')}-${get('month')}-${get('year')} ${get('hour')}:${get('minute')} ${get('dayPeriod').toUpperCase()}`;
+}
 
 @Injectable()
 export class CertificatesService {
@@ -159,36 +206,63 @@ export class CertificatesService {
     private readonly reports: ReportsService,
     private readonly ledgers: FeeLedgerService,
     @Inject(ENV) private readonly env: Env,
+    @Inject(STORAGE_DRIVER) private readonly storage: StorageDriver,
   ) {}
 
   // ---- set-up ------------------------------------------------------------------------------------------------------
-  /** The school's types and their ready templates, made on first use (a school added after 0381 starts with them). */
-  private async ensureSetup(c: PoolClient): Promise<void> {
-    const missing = await c.query<{ n: number }>(
-      `SELECT (4 - count(*) FILTER (WHERE template_id IS NOT NULL))::int AS n FROM certificate_types
-        WHERE code IN ('TC', 'BONAFIDE', 'CHARACTER', 'DOB')`,
-    );
-    if ((missing.rows[0]?.n ?? 4) <= 0) return;
+  /**
+   * The school's types and their ready templates, made on first use (a school added after a migration starts with
+   * them): the built-in types, each ready template (remembering its ready layout), each type's default template and
+   * its variants.
+   */
+  async ensureSetup(c: PoolClient): Promise<void> {
+    const ready = CERTIFICATE_TEMPLATES.map((t) => t.code);
+    const st = (
+      await c.query<{ types: number; unlinked: number; have: string[] }>(
+        `SELECT (SELECT count(*)::int FROM certificate_types WHERE built_in) AS types,
+                (SELECT count(*)::int FROM certificate_types WHERE built_in AND template_id IS NULL) AS unlinked,
+                (SELECT COALESCE(array_agg(ready_code), '{}') FROM document_templates
+                  WHERE ready_code = ANY($1::text[]) AND deleted_at IS NULL) AS have`,
+        [ready],
+      )
+    ).rows[0]!;
+    const builtIn = new Set(
+      CERTIFICATE_TEMPLATES.filter((t) => !t.variantOf).map((t) => t.typeCode),
+    ).size;
+    if (st.types >= builtIn && st.unlinked === 0 && ready.every((r) => st.have.includes(r))) return;
     await c.query(`SELECT app.certificate_types_seed(app.current_school_id())`);
     for (const t of CERTIFICATE_TEMPLATES) {
       await c.query(
-        `INSERT INTO document_templates (school_id, code, name, kind, page_width, page_height, body_html, styles_css, variables, created_by, updated_by)
-         SELECT app.current_school_id(), $1, $2, $3::template_kind, $4, $5, $6, $7, '[]'::jsonb, app.current_user_id(), app.current_user_id()
+        `INSERT INTO document_templates (school_id, code, name, kind, page_width, page_height, body_html, styles_css, variables, ready_code, created_by, updated_by)
+         SELECT app.current_school_id(), $1, $2, $3::template_kind, $4, $5, $6, $7, '[]'::jsonb, $1, app.current_user_id(), app.current_user_id()
          ON CONFLICT (school_id, code) WHERE deleted_at IS NULL DO NOTHING`,
         [t.code, t.name, t.kind, t.pageWidth, t.pageHeight, t.bodyHtml, t.stylesCss],
       );
       await c.query(
-        `UPDATE certificate_types SET template_id = (SELECT id FROM document_templates WHERE code = $2 AND deleted_at IS NULL)
-          WHERE code = $1 AND template_id IS NULL`,
-        [t.typeCode, t.code],
+        `UPDATE document_templates SET ready_code = code WHERE code = $1 AND ready_code IS NULL AND deleted_at IS NULL`,
+        [t.code],
       );
+      if (t.variantOf)
+        await c.query(
+          `UPDATE certificate_types ct SET variants = ct.variants || jsonb_build_array(jsonb_build_object('templateId', d.id::text, 'label', d.name))
+             FROM document_templates d
+            WHERE ct.code = $1 AND d.code = $2 AND d.deleted_at IS NULL
+              AND NOT ct.variants @> jsonb_build_array(jsonb_build_object('templateId', d.id::text))`,
+          [t.variantOf, t.code],
+        );
+      else
+        await c.query(
+          `UPDATE certificate_types SET template_id = (SELECT id FROM document_templates WHERE code = $2 AND deleted_at IS NULL)
+            WHERE code = $1 AND template_id IS NULL`,
+          [t.typeCode, t.code],
+        );
     }
   }
 
-  private async typeOf(c: PoolClient, code: string): Promise<TypeRow> {
+  async typeOf(c: PoolClient, code: string): Promise<TypeRow> {
     const r = await c.query<TypeRow>(
       `SELECT t.id::text, t.code, t.name, t.audience, t.prefix, t.template_id::text, d.name AS template_name, t.rules,
-              t.multiple, t.uses_book, t.active, t.sort_order
+              t.multiple, t.uses_book, t.active, t.sort_order, t.description, t.fields, t.variants, t.issuers, t.built_in
          FROM certificate_types t LEFT JOIN document_templates d ON d.id = t.template_id AND d.deleted_at IS NULL
         WHERE t.code = $1`,
       [code],
@@ -208,7 +282,7 @@ export class CertificatesService {
       await this.ensureSetup(c);
       const r = await c.query<TypeRow & { issued: number }>(
         `SELECT t.id::text, t.code, t.name, t.audience, t.prefix, t.template_id::text, d.name AS template_name, t.rules,
-                t.multiple, t.uses_book, t.active, t.sort_order,
+              t.multiple, t.uses_book, t.active, t.sort_order, t.description, t.fields, t.variants, t.issuers, t.built_in,
                 (SELECT count(*)::int FROM certificates x WHERE x.type_id = t.id AND x.copy_no = 0) AS issued
            FROM certificate_types t LEFT JOIN document_templates d ON d.id = t.template_id AND d.deleted_at IS NULL
           ORDER BY t.sort_order, t.name`,
@@ -225,7 +299,11 @@ export class CertificatesService {
           usesBook: t.uses_book,
           active: t.active,
           issued: t.issued,
-          fields: fieldsOf(t.code),
+          description: t.description,
+          builtIn: t.built_in,
+          variants: t.variants,
+          restricted: t.issuers.length > 0,
+          fields: fieldsOf(t.code, t.fields),
         })),
         can: this.can(ctx),
       };
@@ -246,15 +324,172 @@ export class CertificatesService {
   private async ledgerOf(
     ctx: RequestContext,
     type: TypeRow,
-    studentId: string,
+    studentId: string | undefined,
   ): Promise<Ledger | null> {
-    if (!type.rules.fees) return null;
+    if (!type.rules.fees || type.audience !== 'STUDENT' || !studentId) return null;
     try {
       return await this.ledgers.ledger(ctx, studentId);
     } catch (error) {
       if (error instanceof DomainError && error.status === 404) return null;
       throw error;
     }
+  }
+
+  /** Whoever the type is restricted to (its issuers' roles); the set-up right may always issue. */
+  private async assertIssuer(c: PoolClient, ctx: RequestContext, type: TypeRow): Promise<void> {
+    if (!type.issuers.length || (ctx.permissions?.has(CERTIFICATE.setup) ?? false)) return;
+    const r = await c.query<{ ok: boolean; names: string | null }>(
+      `SELECT EXISTS (SELECT 1 FROM user_roles ur
+                       WHERE ur.user_id = app.current_user_id() AND ur.role_id = ANY($1::bigint[]) AND ur.revoked_at IS NULL
+                         AND (ur.valid_from IS NULL OR ur.valid_from::date <= CURRENT_DATE)
+                         AND (ur.valid_to IS NULL OR ur.valid_to::date >= CURRENT_DATE)) AS ok,
+              (SELECT string_agg(name, ', ' ORDER BY name) FROM roles WHERE id = ANY($1::bigint[])) AS names`,
+      [type.issuers],
+    );
+    if (!r.rows[0]?.ok)
+      throw new DomainError(
+        'permission-denied',
+        `${type.name} is issued by: ${r.rows[0]?.names ?? 'the roles set on the type'}`,
+        { status: 403 },
+      );
+  }
+
+  /** The layout a certificate is made with: the type's template, or one of its variants. */
+  private async templateOf(c: PoolClient, type: TypeRow, variant?: string) {
+    if (
+      variant &&
+      variant !== type.template_id &&
+      !type.variants.some((v) => v.templateId === variant)
+    )
+      throw new DomainError('validation-failed', `That layout is not one of ${type.name}'s`, {
+        status: 400,
+      });
+    const id = variant ?? type.template_id;
+    if (!id) return undefined;
+    return (
+      await c.query<{
+        version_id: string;
+        body_html: string;
+        styles_css: string;
+        page_width: string;
+        page_height: string;
+      }>(
+        `SELECT v.id::text AS version_id, v.body_html, v.styles_css, v.page_width, v.page_height
+           FROM document_template_versions v JOIN document_templates d ON d.id = v.template_id AND d.deleted_at IS NULL
+          WHERE v.template_id = $1 ORDER BY v.version DESC LIMIT 1`,
+        [id],
+      )
+    ).rows[0];
+  }
+
+  /**
+   * The signature boxes as they print (docs/design/87, phase B): Prepared by — whoever issues it, with their signature
+   * image, name, Emp. ID · designation and the date and time; Checked by — left to sign; the signatory (the principal)
+   * with the signature image when the settings print it. Frozen with the certificate.
+   */
+  private async signs(
+    c: PoolClient,
+    ctx: RequestContext,
+  ): Promise<{ signs: CertificateSign[]; footerNote: string }> {
+    const r = (
+      await c.query<{
+        title: string | null;
+        print_signature: boolean | null;
+        print_preparer: boolean | null;
+        footer_note: string | null;
+        s_name: string | null;
+        s_code: string | null;
+        s_designation: string | null;
+        s_file: string | null;
+        p_name: string | null;
+        p_code: string | null;
+        p_designation: string | null;
+        p_file: string | null;
+        timezone: string | null;
+      }>(
+        `SELECT cs.signatory_title AS title, cs.print_signature, cs.print_preparer, cs.footer_note,
+                e.display_name AS s_name, e.employee_code AS s_code, e.designation AS s_designation, e.signature_file_id::text AS s_file,
+                me.display_name AS p_name, me.employee_code AS p_code, me.designation AS p_designation,
+                me.signature_file_id::text AS p_file, sc.timezone
+           FROM schools sc
+           LEFT JOIN certificate_settings cs ON cs.school_id = sc.id
+           LEFT JOIN employees e ON e.id = cs.signatory_employee_id AND e.deleted_at IS NULL
+           LEFT JOIN LATERAL (SELECT x.display_name, x.employee_code, x.designation, x.signature_file_id FROM employees x
+                               WHERE x.user_id = app.current_user_id() AND x.deleted_at IS NULL
+                               ORDER BY (x.status = 'active') DESC, x.id LIMIT 1) me ON true
+          WHERE sc.id = app.current_school_id()`,
+      )
+    ).rows[0];
+    const preparer = r?.print_preparer ?? true;
+    return {
+      signs: [
+        {
+          title: 'Prepared by',
+          ...(preparer
+            ? {
+                name: r?.p_name ?? ctx.user.displayName,
+                empId: r?.p_code ?? null,
+                designation: r?.p_designation ?? null,
+                at: `Issued on ${stamp(new Date(), r?.timezone)}`,
+                fileId: r?.p_file ?? null,
+              }
+            : {}),
+        },
+        { title: 'Checked by' },
+        {
+          title: r?.title ?? 'Principal',
+          name: r?.s_name ?? null,
+          empId: r?.s_code ?? null,
+          designation: r?.s_designation ?? null,
+          fileId: (r?.print_signature ?? true) ? (r?.s_file ?? null) : null,
+        },
+      ],
+      footerNote: r?.footer_note ?? '',
+    };
+  }
+
+  /** The logo and the signature images, as data URIs (the preview; the workers load the same for the PDF). */
+  private async assets(c: PoolClient, data: Record<string, unknown>) {
+    const ids = certificateImageIds(data);
+    const r = await c.query<{
+      id: string;
+      object_key: string;
+      content_type: string | null;
+      logo: boolean;
+    }>(
+      `WITH l AS (SELECT NULLIF(branding->>'logoFileId', '') AS id FROM schools WHERE id = app.current_school_id())
+       SELECT f.id::text, f.object_key, f.content_type, (f.id::text = (SELECT id FROM l)) AS logo
+         FROM files f
+        WHERE f.deleted_at IS NULL AND (f.id::text = ANY($1::text[]) OR f.id::text = (SELECT id FROM l))`,
+      [ids],
+    );
+    let logo: string | null = null;
+    const images: Record<string, string> = {};
+    for (const f of r.rows) {
+      try {
+        const bytes = await this.storage.read(f.object_key);
+        const uri = `data:${f.content_type ?? 'image/png'};base64,${bytes.toString('base64')}`;
+        if (f.logo) logo = uri;
+        if (ids.includes(f.id)) images[f.id] = uri;
+      } catch {
+        // a file that cannot be read prints without its image
+      }
+    }
+    return { logo, images };
+  }
+
+  /** The paper: the template with EduPro's blocks, on its page. */
+  private paperHtml(
+    t: { body_html: string; styles_css: string; page_width: string; page_height: string },
+    data: Record<string, unknown>,
+    assets: { logo: string | null; images: Record<string, string> },
+  ): string {
+    return documentHtml({
+      body: renderTemplate(t.body_html, { ...data, blocks: certificateBlocks(data, assets) }),
+      css: CERTIFICATE_BLOCK_CSS + t.styles_css,
+      pageWidth: t.page_width,
+      pageHeight: t.page_height,
+    });
   }
 
   private async build(
@@ -266,10 +501,7 @@ export class CertificatesService {
     opts: IssueOptions,
   ) {
     const tenant = requireTenant(ctx);
-    if (type.audience !== 'STUDENT')
-      throw new DomainError('certificate.staff_type', 'Staff certificates come in phase B', {
-        status: 409,
-      });
+    await this.assertIssuer(c, ctx, type);
     const year = tenant.academicYearId
       ? (
           await c.query<{ code: string }>(`SELECT code FROM academic_years WHERE id = $1`, [
@@ -281,7 +513,91 @@ export class CertificatesService {
       throw new DomainError('year.not_selected', 'No academic year is active or selected', {
         status: 409,
       });
-    const sd = await studentData(c, dto.studentId, null);
+    const today = todayIso();
+    const issuedOn = dto.issuedOn ?? today;
+    const specs = fieldsOf(type.code, type.fields);
+    const keys = new Set(specs.map((f) => f.key));
+    const given = Object.fromEntries(Object.entries(dto.fields).filter(([k]) => keys.has(k)));
+    const template = await this.templateOf(c, type, dto.variant);
+    const paper = await this.signs(c, ctx);
+    const school = await schoolData(c);
+    const cert = {
+      name: type.name,
+      typeCode: type.code,
+      number: '',
+      issuedOn: dmy(issuedOn),
+      purpose: dto.purpose ?? '',
+      bookNo: null as number | null,
+      slNo: null as number | null,
+      issuedBy: ctx.user.displayName,
+    };
+    const none = {
+      today: issuedOn,
+      leavingOn: null,
+      requestedOn: null,
+      reason: null,
+      subjects: '',
+      paidTo: '',
+      concession: '',
+      workingDays: 0,
+      present: 0,
+    };
+
+    if (type.audience === 'STAFF') {
+      if (!dto.employeeId)
+        throw new DomainError('validation-failed', 'Choose the employee', { status: 400 });
+      const employee = await employeeData(c, dto.employeeId);
+      if (!employee) throw new DomainError('not-found', 'Employee not found');
+      const fields: Record<string, string | number> = {
+        ...fieldDefaults(type.code, none),
+        ...given,
+      };
+      const checks = await runChecks(c, {
+        audience: 'STAFF',
+        studentId: dto.employeeId,
+        typeId: type.id,
+        rules: type.rules,
+        multiple: type.multiple,
+        asOf: today,
+        yearCode: year,
+        ledger: null,
+      });
+      return {
+        year,
+        issuedOn,
+        leavingOn: null as string | null,
+        checks,
+        problems: checkFields(specs, fields),
+        fields,
+        specs,
+        template,
+        withdrawal: null,
+        student: null as Record<string, unknown> | null,
+        person: {
+          kind: 'employee' as 'student' | 'employee',
+          id: dto.employeeId,
+          name: String(employee.name),
+          no: String(employee.code),
+          detail: String(employee.designation ?? ''),
+          left: Boolean(employee.left),
+        },
+        data: {
+          school,
+          employee,
+          fields,
+          text: fieldText(specs, fields),
+          cert,
+          signs: paper.signs,
+          footerNote: paper.footerNote,
+          today: dmy(today),
+        } as Record<string, unknown> & { cert: typeof cert },
+      };
+    }
+
+    if (!dto.studentId)
+      throw new DomainError('validation-failed', 'Choose the student', { status: 400 });
+    const studentId = dto.studentId;
+    const sd = await studentData(c, studentId, null);
     if (!sd) throw new DomainError('not-found', 'Student not found');
     const wd = (
       await c.query<{
@@ -292,29 +608,30 @@ export class CertificatesService {
       }>(
         `SELECT id::text, leaving_on::text, requested_on::text, reason FROM student_withdrawals
           WHERE student_id = $1 AND status NOT IN ('cancelled', 'revoked') ORDER BY created_at DESC LIMIT 1`,
-        [dto.studentId],
+        [studentId],
       )
     ).rows[0];
-    const today = todayIso();
-    const issuedOn = dto.issuedOn ?? today;
     const leavingOn = opts.leavingOn ?? wd?.leaving_on ?? null;
-    const defaults = fieldDefaults(type.code, {
-      today: issuedOn,
-      leavingOn,
-      requestedOn: wd?.requested_on ?? null,
-      reason: wd?.reason ?? null,
-      subjects: sd.subjects,
-      paidTo: String(sd.fees.paidTo ?? ''),
-      concession: String(sd.fees.concession ?? 'No'),
-      workingDays: Number(sd.attendance.workingDays ?? 0),
-      present: Number(sd.attendance.present ?? 0),
-    });
-    const keys = new Set(fieldsOf(type.code).map((f) => f.key));
-    const given = Object.fromEntries(Object.entries(dto.fields).filter(([k]) => keys.has(k)));
-    const fields: Record<string, string | number> = { ...defaults, ...given };
-    const problems = checkFields(type.code, fields);
+    const st = sd.student;
+    const fields: Record<string, string | number> = {
+      ...fieldDefaults(type.code, {
+        ...none,
+        leavingOn,
+        requestedOn: wd?.requested_on ?? null,
+        reason: wd?.reason ?? null,
+        subjects: sd.subjects,
+        paidTo: String(sd.fees.paidTo ?? ''),
+        concession: String(sd.fees.concession ?? 'No'),
+        workingDays: Number(sd.attendance.workingDays ?? 0),
+        present: Number(sd.attendance.present ?? 0),
+        board: String(school.board ?? ''),
+        registrationNo: String(st.registrationNo ?? ''),
+        year,
+      }),
+      ...given,
+    };
     const checks = await runChecks(c, {
-      studentId: dto.studentId,
+      studentId,
       typeId: type.id,
       rules: type.rules,
       multiple: type.multiple,
@@ -323,22 +640,6 @@ export class CertificatesService {
       yearCode: year,
       ledger,
     });
-    const template = type.template_id
-      ? (
-          await c.query<{
-            version_id: string;
-            body_html: string;
-            styles_css: string;
-            page_width: string;
-            page_height: string;
-          }>(
-            `SELECT v.id::text AS version_id, v.body_html, v.styles_css, v.page_width, v.page_height
-               FROM document_template_versions v WHERE v.template_id = $1 ORDER BY v.version DESC LIMIT 1`,
-            [type.template_id],
-          )
-        ).rows[0]
-      : undefined;
-    const st = sd.student;
     const asDate = (v: string | number | undefined) =>
       typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v) ? dmy(v) : String(v ?? '');
     const tc =
@@ -363,36 +664,42 @@ export class CertificatesService {
             remarks: fields.remarks ?? '',
           }
         : undefined;
-    const data = {
-      school: await schoolData(c),
-      student: st,
-      attendance: sd.attendance,
-      ...(tc ? { tc } : {}),
-      fields,
-      // words as they read in a sentence ("bears a very good moral character")
-      text: { conduct: String(fields.conduct ?? '').toLowerCase() },
-      cert: {
-        name: type.name,
-        typeCode: type.code,
-        number: '',
-        issuedOn: dmy(issuedOn),
-        purpose: dto.purpose ?? '',
-        bookNo: null as number | null,
-        slNo: null as number | null,
-        issuedBy: ctx.user.displayName,
-      },
-      today: dmy(today),
-    };
+    const fees =
+      type.code === 'FEE_PAID'
+        ? await feePaidData(c, studentId, tenant.academicYearId ?? null)
+        : undefined;
     return {
       year,
       issuedOn,
       leavingOn,
       checks,
-      problems,
+      problems: checkFields(specs, fields),
       fields,
-      data,
+      specs,
       template,
       withdrawal: wd ?? null,
+      student: st as Record<string, unknown> | null,
+      person: {
+        kind: 'student' as 'student' | 'employee',
+        id: studentId,
+        name: String(st.name),
+        no: String(st.admissionNo),
+        detail: String(st.classLabel ?? ''),
+        left: Boolean(st.left),
+      },
+      data: {
+        school,
+        student: st,
+        attendance: sd.attendance,
+        ...(tc ? { tc } : {}),
+        ...(fees ? { fees } : {}),
+        fields,
+        text: fieldText(specs, fields),
+        cert,
+        signs: paper.signs,
+        footerNote: paper.footerNote,
+        today: dmy(today),
+      } as Record<string, unknown> & { cert: typeof cert },
     };
   }
 
@@ -408,7 +715,6 @@ export class CertificatesService {
       const b = await this.build(c, ctx, type, dto, ledger, {});
       const data = {
         ...b.data,
-        logo: null,
         cert: {
           ...b.data.cert,
           number: `${type.prefix}/${b.year}/(next)`,
@@ -418,36 +724,136 @@ export class CertificatesService {
           duplicate: false,
         },
       };
+      const assets = await this.assets(c, data);
       return {
         type: {
           code: type.code,
           name: type.name,
+          audience: type.audience,
           usesBook: type.uses_book,
           multiple: type.multiple,
         },
-        student: {
-          id: dto.studentId,
-          name: b.data.student.name,
-          admissionNo: b.data.student.admissionNo,
-          className: b.data.student.className,
-          section: b.data.student.section,
-          left: b.data.student.left,
-        },
+        person: b.person,
+        student:
+          b.person.kind === 'student'
+            ? {
+                id: b.person.id,
+                name: b.person.name,
+                admissionNo: b.person.no,
+                className: b.student?.className,
+                section: b.student?.section,
+                left: b.person.left,
+              }
+            : null,
         checks: b.checks,
         failed: b.checks.filter((x) => !x.ok).length,
         held: b.checks.some((x) => x.key === 'one' && !x.ok),
-        fields: fieldsOf(type.code),
+        fields: b.specs,
         values: b.fields,
         problems: b.problems,
-        html: b.template
-          ? documentHtml({
-              body: renderTemplate(b.template.body_html, data),
-              css: b.template.styles_css,
-              pageWidth: b.template.page_width,
-              pageHeight: b.template.page_height,
-            })
-          : null,
+        variants: type.variants.length
+          ? [
+              { templateId: type.template_id, label: type.template_name ?? 'Standard' },
+              ...type.variants,
+            ]
+          : [],
+        variant: dto.variant ?? type.template_id,
+        html: b.template ? this.paperHtml(b.template, data, assets) : null,
         can: this.can(ctx),
+      };
+    });
+  }
+
+  /**
+   * A template as it would print, while it is being edited (docs/design/87, phase B): the body and styles given, with
+   * a student or employee — the one chosen, else the school's first on the rolls — and each typed field shown as
+   * [its label].
+   */
+  async templatePreview(ctx: RequestContext, dto: TemplatePreviewDto) {
+    assertSafeTemplate(dto.bodyHtml, dto.stylesCss);
+    const tenant = requireTenant(ctx);
+    return this.db.tenant(tenant, async (c) => {
+      await this.ensureSetup(c);
+      const type = await this.typeOf(c, dto.typeCode).catch((e: unknown) => {
+        // a switched-off type is still shown while its template is edited
+        if (e instanceof DomainError && e.type === 'certificate.type_inactive')
+          return c
+            .query<TypeRow>(
+              `SELECT t.id::text, t.code, t.name, t.audience, t.prefix, t.template_id::text, NULL AS template_name, t.rules,
+                      t.multiple, t.uses_book, t.active, t.sort_order, t.description, t.fields, t.variants, t.issuers, t.built_in
+                 FROM certificate_types t WHERE t.code = $1`,
+              [dto.typeCode],
+            )
+            .then((r) => r.rows[0]!);
+        throw e;
+      });
+      const sample =
+        type.audience === 'STAFF'
+          ? (dto.employeeId ??
+            (
+              await c.query<{ id: string }>(
+                `SELECT id::text FROM employees WHERE status = 'active' AND deleted_at IS NULL ORDER BY id LIMIT 1`,
+              )
+            ).rows[0]?.id)
+          : (dto.studentId ??
+            (
+              await c.query<{ id: string }>(
+                `SELECT s.id::text FROM students s WHERE s.status = 'active' AND s.deleted_at IS NULL
+                    AND EXISTS (SELECT 1 FROM enrolments e WHERE e.student_id = s.id AND e.status = 'active')
+                  ORDER BY s.id LIMIT 1`,
+              )
+            ).rows[0]?.id);
+      if (!sample)
+        throw new DomainError(
+          'certificate.no_sample',
+          type.audience === 'STAFF'
+            ? 'No employee to show the template with'
+            : 'No student on the rolls to show the template with',
+          { status: 409 },
+        );
+      const b = await this.build(
+        c,
+        ctx,
+        { ...type, issuers: [] },
+        {
+          typeCode: type.code,
+          ...(type.audience === 'STAFF' ? { employeeId: sample } : { studentId: sample }),
+          fields: {},
+        },
+        null,
+        {},
+      );
+      const shown: Record<string, string | number> = { ...b.fields };
+      for (const f of b.specs)
+        if (shown[f.key] === undefined || String(shown[f.key]).trim() === '')
+          shown[f.key] = `[${f.label}]`;
+      const data = {
+        ...b.data,
+        fields: shown,
+        text: fieldText(b.specs, shown),
+        cert: {
+          ...b.data.cert,
+          number: `${type.prefix}/${b.year}/00001`,
+          bookNo: type.uses_book ? 1 : null,
+          slNo: type.uses_book ? 1 : null,
+          purpose: '[purpose]',
+          copyNo: 0,
+          duplicate: false,
+        },
+      };
+      const assets = await this.assets(c, data);
+      return {
+        person: b.person,
+        html: this.paperHtml(
+          {
+            body_html: dto.bodyHtml,
+            styles_css: dto.stylesCss,
+            page_width: dto.pageWidth,
+            page_height: dto.pageHeight,
+          },
+          data,
+          assets,
+        ),
       };
     });
   }
@@ -499,10 +905,10 @@ export class CertificatesService {
     });
     const ledger = await this.ledgerOf(ctx, type, dto.studentId);
     const id = await this.db.tenant(tenant, async (c) => {
-      // one issue at a time for a student and a type (two clicks never make two TCs)
+      // one issue at a time for a person and a type (two clicks never make two TCs)
       await c.query(`SELECT pg_advisory_xact_lock(hashtext('certificate:' || $1 || ':' || $2))`, [
         type.id,
-        dto.studentId,
+        dto.studentId ?? `e${dto.employeeId ?? ''}`,
       ]);
       const b = await this.build(c, ctx, type, dto, ledger, opts);
       if (b.problems.length)
@@ -567,12 +973,12 @@ export class CertificatesService {
               no.serial,
               b.issuedOn,
               String(b.fields.reason ?? ''),
-              [b.data.student.classCode, b.data.student.section].filter(Boolean).join('-') || null,
+              [b.student?.classCode, b.student?.section].filter(Boolean).join('-') || null,
               String(b.fields.conduct ?? 'Good'),
               String(b.fields.promotion ?? '') || null,
               feesOk,
               String(b.fields.remarks ?? '') || null,
-              JSON.stringify(data.student),
+              JSON.stringify(b.student),
               type.template_id,
             ],
           )
@@ -595,16 +1001,17 @@ export class CertificatesService {
       }
       const r = await c.query<{ id: string }>(
         `INSERT INTO certificates (school_id, type_id, number, serial, year_code, student_id, issued_on, issued_by, purpose, data,
-                                   template_version_id, checks, override_reason, override_by, book_no, sl_no, transfer_certificate_id)
+                                   template_version_id, checks, override_reason, override_by, book_no, sl_no, transfer_certificate_id,
+                                   employee_id)
          VALUES (app.current_school_id(), $1, $2, $3, $4, $5, $6::date, app.current_user_id(), $7, $8::jsonb, $9, $10::jsonb,
-                 $11, CASE WHEN $11::text IS NULL THEN NULL ELSE app.current_user_id() END, $12, $13, $14)
+                 $11, CASE WHEN $11::text IS NULL THEN NULL ELSE app.current_user_id() END, $12, $13, $14, $15)
          RETURNING id::text`,
         [
           type.id,
           no.number,
           no.serial,
           b.year,
-          dto.studentId,
+          b.person.kind === 'student' ? b.person.id : null,
           b.issuedOn,
           dto.purpose || null,
           JSON.stringify(data),
@@ -614,6 +1021,7 @@ export class CertificatesService {
           book?.book_no ?? null,
           book?.sl_no ?? null,
           tcId,
+          b.person.kind === 'employee' ? b.person.id : null,
         ],
       );
       const id = r.rows[0]!.id;
@@ -624,7 +1032,9 @@ export class CertificatesService {
         after: {
           number: no.number,
           type: type.code,
-          studentId: dto.studentId,
+          ...(b.person.kind === 'student'
+            ? { studentId: b.person.id }
+            : { employeeId: b.person.id }),
           ...(failed.length
             ? { override: dto.overrideReason, failed: failed.map((x) => x.key) }
             : {}),
@@ -868,7 +1278,9 @@ export class CertificatesService {
     if (q.q) {
       params.push(`%${q.q}%`);
       const n = `$${String(params.length)}`;
-      where.push(`(x.number ILIKE ${n} OR s.display_name ILIKE ${n} OR s.admission_no ILIKE ${n})`);
+      where.push(
+        `(x.number ILIKE ${n} OR s.display_name ILIKE ${n} OR s.admission_no ILIKE ${n} OR em.display_name ILIKE ${n} OR em.employee_code ILIKE ${n})`,
+      );
     }
     return { sql: where.join(' AND '), params };
   }
@@ -877,7 +1289,8 @@ export class CertificatesService {
     return this.db.tenant(requireTenant(ctx), async (c) => {
       await this.ensureSetup(c);
       const w = this.where(q);
-      const from = `FROM certificates x JOIN certificate_types t ON t.id = x.type_id LEFT JOIN students s ON s.id = x.student_id`;
+      const from = `FROM certificates x JOIN certificate_types t ON t.id = x.type_id LEFT JOIN students s ON s.id = x.student_id
+                      LEFT JOIN employees em ON em.id = x.employee_id`;
       const figures = (
         await c.query<{
           total: number;
@@ -944,6 +1357,34 @@ export class CertificatesService {
           className: x.class_label,
           left: x.status !== 'active',
           leftOn: x.left_on,
+        })),
+      };
+    });
+  }
+
+  /** Employees to issue to (in service or past), by name or employee code: staff certificates and the signatory. */
+  async employees(ctx: RequestContext, q: string) {
+    return this.db.tenant(requireTenant(ctx), async (c) => {
+      const r = await c.query<{
+        id: string;
+        name: string;
+        code: string;
+        designation: string | null;
+        status: string;
+      }>(
+        `SELECT id::text, display_name AS name, employee_code AS code, designation, status::text
+           FROM employees
+          WHERE deleted_at IS NULL AND (display_name ILIKE $1 OR employee_code ILIKE $1)
+          ORDER BY (status = 'active') DESC, display_name LIMIT 20`,
+        [`%${q}%`],
+      );
+      return {
+        rows: r.rows.map((x) => ({
+          id: x.id,
+          name: x.name,
+          code: x.code,
+          designation: x.designation,
+          left: x.status !== 'active',
         })),
       };
     });

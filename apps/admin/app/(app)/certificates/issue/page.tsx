@@ -5,39 +5,50 @@ import { ApiError, apiFetch, getMe } from '@/lib/api';
 import { issueCertificate } from '@/lib/certificate-actions';
 import {
   FIELD_PREFIX,
+  fitPaper,
+  type CertificateEmployeeHit,
   type CertificatePreview,
   type CertificateStudentHit,
   type CertificateType,
 } from '@/lib/certificates';
 
-const STATE: Record<string, string> = {
-  active: 'a student on the rolls',
-  leaving: 'the withdrawal complete (or the student has left)',
-  any: 'any student, on the rolls or past',
+const STATE: Record<'STUDENT' | 'STAFF', Record<string, string>> = {
+  STUDENT: {
+    active: 'a student on the rolls',
+    leaving: 'the withdrawal complete (or the student has left)',
+    any: 'any student, on the rolls or past',
+  },
+  STAFF: {
+    active: 'an employee in service',
+    leaving: 'an employee who has left',
+    any: 'any employee, in service or past',
+  },
 };
 const MULTIPLE: Record<string, string> = {
-  ONE: 'one a student (cancel it, or print a duplicate)',
-  YEAR: 'one a student a year',
+  ONE: 'one a person (cancel it, or print a duplicate)',
+  YEAR: 'one a person a year',
   ANY: 'as many as needed',
 };
 
 /** What a type checks before it is issued, in words. */
 const rulesText = (t: CertificateType) =>
   [
-    STATE[t.rules.state ?? 'any'],
+    STATE[t.audience][t.rules.state ?? 'any'],
     t.rules.fees ? 'no fees due' : null,
     t.rules.library ? 'library books and dues cleared' : null,
     t.rules.hostel ? 'no hostel bed held' : null,
     t.rules.transport ? 'school transport ended' : null,
+    t.rules.classes?.length ? `classes ${t.rules.classes.join(', ')} only` : null,
     MULTIPLE[t.multiple],
   ]
     .filter(Boolean)
     .join('; ');
 
 /**
- * Issue a certificate (docs/design/87, phase A): choose the type and the student, see the checks and what it prints,
- * fill the fields it asks for (filled from the record where it holds them), then issue. A failed check stops it; the
- * principal (the override right) may issue it anyway with a reason, which is recorded.
+ * Issue a certificate (docs/design/87): choose the type and the student (or, for a staff certificate, the employee),
+ * see the checks and what it prints, choose the layout when the type has more than one, fill the fields it asks for
+ * (filled from the record where it holds them), then issue. A failed check stops it; the principal (the override
+ * right) may issue it anyway with a reason, which is recorded.
  */
 export default async function IssueCertificatePage({
   searchParams,
@@ -48,40 +59,47 @@ export default async function IssueCertificatePage({
   const me = await getMe();
   if (!me.permissions.includes('certificate.register.issue')) notFound();
   const types = await apiFetch<{ rows: CertificateType[] }>('/certificates/types').then((r) =>
-    r.rows.filter((t) => t.active && t.audience === 'STUDENT'),
+    r.rows.filter((t) => t.active),
   );
   const type = types.find((t) => t.code === sp.type) ?? null;
-  const studentId = /^\d{1,18}$/.test(sp.student ?? '') ? sp.student! : '';
+  const staff = type?.audience === 'STAFF';
+  const id = (v?: string) => (v && /^\d{1,18}$/.test(v) ? v : '');
+  const studentId = staff ? '' : id(sp.student);
+  const employeeId = staff ? id(sp.employee) : '';
+  const personId = staff ? employeeId : studentId;
   const sq = (sp.sq ?? '').trim().slice(0, 80);
-  const hits =
+  const hits: Array<CertificateStudentHit | (CertificateEmployeeHit & { admissionNo?: string })> =
     sq.length >= 2
-      ? await apiFetch<{ rows: CertificateStudentHit[] }>(
-          `/certificates/students?q=${encodeURIComponent(sq)}`,
-        ).then((r) => r.rows)
+      ? staff
+        ? await apiFetch<{ rows: CertificateEmployeeHit[] }>(
+            `/certificates/employees?q=${encodeURIComponent(sq)}`,
+          ).then((r) => r.rows)
+        : await apiFetch<{ rows: CertificateStudentHit[] }>(
+            `/certificates/students?q=${encodeURIComponent(sq)}`,
+          ).then((r) => r.rows)
       : [];
   // the fields typed so far travel in the address (Update the preview) and go to the API as they are
   const fields: Record<string, string | number> = {};
-  for (const [k, v] of Object.entries(sp))
-    if (
-      k.startsWith(FIELD_PREFIX) &&
-      typeof v === 'string' &&
-      /^[a-zA-Z]{2,30}$/.test(k.slice(4))
-    ) {
-      const spec = type?.fields.find((f) => f.key === k.slice(4));
-      fields[k.slice(4)] =
-        spec?.kind === 'number' && /^\d{1,4}$/.test(v.trim()) ? Number(v.trim()) : v;
+  for (const [k, v] of Object.entries(sp)) {
+    const key = k.slice(FIELD_PREFIX.length);
+    if (k.startsWith(FIELD_PREFIX) && typeof v === 'string' && /^[a-zA-Z]{2,30}$/.test(key)) {
+      const spec = type?.fields.find((f) => f.key === key);
+      fields[key] = spec?.kind === 'number' && /^\d{1,4}$/.test(v.trim()) ? Number(v.trim()) : v;
     }
+  }
   const purpose = (sp.purpose ?? '').slice(0, 200);
   const issuedOn = /^\d{4}-\d{2}-\d{2}$/.test(sp.issuedOn ?? '') ? sp.issuedOn! : '';
+  const variant = id(sp.variant);
   let preview: CertificatePreview | null = null;
   let previewError: string | null = null;
-  if (type && studentId)
+  if (type && personId)
     try {
       preview = await apiFetch<CertificatePreview>('/certificates/preview', {
         method: 'POST',
         body: JSON.stringify({
           typeCode: type.code,
-          studentId,
+          ...(staff ? { employeeId } : { studentId }),
+          ...(variant ? { variant } : {}),
           purpose: purpose || undefined,
           issuedOn: issuedOn || undefined,
           fields,
@@ -94,13 +112,13 @@ export default async function IssueCertificatePage({
   const link = (over: Record<string, string>) => {
     const u = new URLSearchParams();
     if (type) u.set('type', type.code);
-    if (studentId) u.set('student', studentId);
     for (const [k, v] of Object.entries(over)) if (v) u.set(k, v);
     return `/certificates/issue?${u.toString()}`;
   };
   const failed = preview?.checks.filter((x) => !x.ok) ?? [];
   const blocked = !!preview && (preview.held || (failed.length > 0 && !preview.can.override));
   const asksPurpose = type ? type.code !== 'TC' : false;
+  const who = staff ? 'employee' : 'student';
   return (
     <>
       <Breadcrumbs
@@ -109,12 +127,12 @@ export default async function IssueCertificatePage({
       <PageHeader
         kicker="Certificates"
         title="Issue a certificate"
-        description="Choose the type and the student, look at the checks and the paper, then issue. The number is the type's next for the year and is never given again."
+        description="Choose the type and the person, look at the checks and the paper, then issue. The number is the type's next for the year and is never given again."
       />
       <Notice params={sp} />
       <div className="ep-cert-issue">
         <Card>
-          <h2 className="ep-card__title">1. Type and student</h2>
+          <h2 className="ep-card__title">1. Type and {staff ? 'employee' : 'student'}</h2>
           <form
             method="get"
             action="/certificates/issue"
@@ -127,12 +145,18 @@ export default async function IssueCertificatePage({
               defaultValue={type?.code ?? ''}
               options={[
                 { value: '', label: 'Choose…' },
-                ...types.map((t) => ({ value: t.code, label: t.name })),
+                ...types.map((t) => ({
+                  value: t.code,
+                  label: `${t.name}${t.audience === 'STAFF' ? ' (staff)' : ''}`,
+                })),
               ]}
             />
             {studentId ? <input type="hidden" name="student" value={studentId} /> : null}
+            {employeeId ? <input type="hidden" name="employee" value={employeeId} /> : null}
             <label className="ep-field" htmlFor="sq" style={{ margin: 0 }}>
-              <span className="ep-field__label">Find the student (name or admission no.)</span>
+              <span className="ep-field__label">
+                Find the {who} ({staff ? 'name or employee code' : 'name or admission no.'})
+              </span>
               <input
                 id="sq"
                 name="sq"
@@ -152,35 +176,45 @@ export default async function IssueCertificatePage({
           {type ? (
             <p className="ep-field__help">
               <strong>{type.name}</strong> checks: {rulesText(type)}.
+              {type.restricted ? ' Issued only by the roles set on the type.' : ''}
             </p>
           ) : null}
           {sq.length >= 2 ? (
             hits.length ? (
-              <ul className="ep-cert-hits" aria-label="Students found">
-                {hits.map((h) => (
-                  <li key={h.id}>
-                    <a
-                      href={link({ student: h.id })}
-                      aria-current={h.id === studentId ? 'true' : undefined}
-                    >
-                      <strong>{h.name}</strong> · {h.admissionNo}
-                      {h.className ? ` · ${h.className}` : ''}
-                    </a>{' '}
-                    {h.left ? <Badge tone="neutral">Left</Badge> : null}
-                  </li>
-                ))}
+              <ul
+                className="ep-cert-hits"
+                aria-label={staff ? 'Employees found' : 'Students found'}
+              >
+                {hits.map((h) => {
+                  const no = 'code' in h ? h.code : h.admissionNo;
+                  const detail = 'code' in h ? h.designation : h.className;
+                  return (
+                    <li key={h.id}>
+                      <a
+                        href={link(staff ? { employee: h.id } : { student: h.id })}
+                        aria-current={h.id === personId ? 'true' : undefined}
+                      >
+                        <strong>{h.name}</strong> · {no}
+                        {detail ? ` · ${detail}` : ''}
+                      </a>{' '}
+                      {h.left ? <Badge tone="neutral">Left</Badge> : null}
+                    </li>
+                  );
+                })}
               </ul>
             ) : (
-              <p className="ep-field__help">No student matches “{sq}”.</p>
+              <p className="ep-field__help">
+                No {who} matches “{sq}”.
+              </p>
             )
           ) : null}
         </Card>
-        {!type || !studentId ? (
+        {!type || !personId ? (
           <Card>
             <p className="ep-field__help" style={{ margin: 0 }}>
               {!type
-                ? 'Choose the certificate, then find the student.'
-                : 'Find the student and choose them from the list.'}
+                ? 'Choose the certificate, then find the person.'
+                : `Find the ${who} and choose them from the list.`}
             </p>
           </Card>
         ) : previewError ? (
@@ -191,7 +225,7 @@ export default async function IssueCertificatePage({
           <>
             <Card>
               <h2 className="ep-card__title">
-                2. Checks for {preview.student.name} · {preview.student.admissionNo}
+                2. Checks for {preview.person.name} · {preview.person.no}
               </h2>
               <ul className="ep-cert-checks">
                 {preview.checks.map((x) => (
@@ -203,9 +237,9 @@ export default async function IssueCertificatePage({
               </ul>
               {preview.held ? (
                 <div className="ep-alert ep-alert--warning" role="status">
-                  The student already holds this certificate.{' '}
+                  {preview.person.name} already holds this certificate.{' '}
                   <a
-                    href={`/certificates?type=${type.code}&q=${encodeURIComponent(preview.student.admissionNo)}`}
+                    href={`/certificates?type=${type.code}&q=${encodeURIComponent(preview.person.no)}`}
                   >
                     Open it
                   </a>{' '}
@@ -222,8 +256,24 @@ export default async function IssueCertificatePage({
               <h2 className="ep-card__title">3. What it prints</h2>
               <form action={issueCertificate} className="ep-cert-form">
                 <input type="hidden" name="type" value={type.code} />
-                <input type="hidden" name="student" value={studentId} />
+                {staff ? (
+                  <input type="hidden" name="employee" value={employeeId} />
+                ) : (
+                  <input type="hidden" name="student" value={studentId} />
+                )}
                 <div className="ep-cert-fields">
+                  {preview.variants.length ? (
+                    <SelectField
+                      id="variant"
+                      name="variant"
+                      label="Layout"
+                      defaultValue={preview.variant ?? ''}
+                      options={preview.variants.map((v) => ({
+                        value: v.templateId ?? '',
+                        label: v.label,
+                      }))}
+                    />
+                  ) : null}
                   {asksPurpose ? (
                     <label className="ep-field" htmlFor="purpose">
                       <span className="ep-field__label">Purpose (printed)</span>
@@ -249,14 +299,14 @@ export default async function IssueCertificatePage({
                     <span className="ep-field__help">Today when left empty</span>
                   </label>
                   {preview.fields.map((f) => {
-                    const id = `${FIELD_PREFIX}${f.key}`;
+                    const fid = `${FIELD_PREFIX}${f.key}`;
                     const value = preview.values[f.key];
                     const v = value === undefined || value === null ? '' : String(value);
                     return f.kind === 'list' ? (
                       <SelectField
                         key={f.key}
-                        id={id}
-                        name={id}
+                        id={fid}
+                        name={fid}
                         label={`${f.label}${f.required ? ' *' : ''}`}
                         defaultValue={v}
                         options={[
@@ -265,7 +315,7 @@ export default async function IssueCertificatePage({
                         ]}
                       />
                     ) : (
-                      <label key={f.key} className="ep-field" htmlFor={id}>
+                      <label key={f.key} className="ep-field" htmlFor={fid}>
                         <span className="ep-field__label">
                           {f.label}
                           {f.required ? ' *' : ''}
@@ -274,8 +324,8 @@ export default async function IssueCertificatePage({
                           <input type="hidden" name={`num_${f.key}`} value="1" />
                         ) : null}
                         <input
-                          id={id}
-                          name={id}
+                          id={fid}
+                          name={fid}
                           className="ep-input"
                           type={
                             f.kind === 'date' ? 'date' : f.kind === 'number' ? 'number' : 'text'
@@ -336,15 +386,14 @@ export default async function IssueCertificatePage({
             <Card>
               <h2 className="ep-card__title">Preview</h2>
               <p className="ep-field__help" style={{ marginTop: 0 }}>
-                The number shows as “(next)” until it is issued; the school’s logo prints on the
-                PDF.
+                The number shows as “(next)” until it is issued.
               </p>
               {preview.html ? (
                 <iframe
                   title={`Preview of the ${type.name.toLowerCase()}`}
                   className="ep-cert-preview"
                   sandbox=""
-                  srcDoc={preview.html}
+                  srcDoc={fitPaper(preview.html)}
                 />
               ) : (
                 <p className="ep-field__help">This type has no template yet.</p>

@@ -1,8 +1,9 @@
 # Certificates
 
-One register for every certificate the school issues to its students: the transfer certificate (TC),
-bonafide, character and date of birth so far (more types, staff certificates, requests from the apps
-and a QR check follow). Each certificate gets the next number of its type and year, which is never
+One register for every certificate the school issues: for students the transfer certificate (TC),
+bonafide, character, date of birth and its justification, study, caste, residence, no objection, travel,
+visa, scholarship, board registration and fee paid; for staff experience, service and visa — and any type
+the school adds (requests from the apps, the QR check and bulk issue follow). Each certificate gets the next number of its type and year, which is never
 given again, even when it is cancelled. Every field it prints is kept as it was on the day, so a
 reprint or a duplicate is the same paper whatever changes later.
 
@@ -18,12 +19,15 @@ reprint or a duplicate is the same paper whatever changes later.
 ## Where to find it
 
 Side menu → **Certificates → Certificate register**. **Issue a certificate** opens from the register's
-header and from a student's profile (**Status** tab → Certificates card, or **Issue the TC**).
+header and from a student's profile (**Status** tab → Certificates card, or **Issue the TC**). **Certificates
+→ Certificate set-up** holds who signs, the types and the templates.
 
 ## Issuing a certificate
 
-1. **Type and student.** Choose the certificate, then find the student by name or admission number;
-   past students are found too (marked **Left**).
+1. **Type and person.** Choose the certificate, then find the student by name or admission number (a
+   staff certificate: the employee by name or employee code); past students and staff are found too
+   (marked **Left**). A type with more than one layout (bonafide: with both parents or the father only)
+   asks which.
 2. **Checks.** Each type checks what it needs before it can be issued:
 
    | Certificate   | Checks                                                                                                                                                     |
@@ -79,3 +83,26 @@ certificate; the eye opens the PDF, the arrow saves it.
    DUPLICATE.
 5. _Where are the TCs issued before the register?_ In the register under their old numbers (they print
    from the TC template of the time), and in People → Transfer certificates.
+
+## Set-up (Certificates → Certificate set-up)
+
+The page shows six figures, a **To look at** list (no signatory yet, a signatory with no signature image,
+a type with no template) and three sections:
+
+1. **Signatory and print** — find the principal (or whoever signs) among the employees; their name, Emp. ID,
+   designation and the **signature image on their employee record** print in the last box (untick it to
+   sign by hand). The **Prepared by** box prints who issued the certificate with the date and time; the
+   **Checked by** box is left to sign. A line at the foot (e.g. "Not valid without the school seal").
+2. **Certificate types** — open a type to change its name, number prefix, template and the other layouts
+   to choose at issue, its checks (the student's state, fees, library, hostel, transport, the classes it is
+   for), how many a person may hold, **who may issue it** (roles; none ticked: everyone who issues
+   certificates) and **the school's own fields** (each with a key, label, kind — text, date, number or a
+   list — and required or not). **Add a type of the school's own** gives it a code, a prefix and a copy of
+   a template to start from.
+3. **Templates** — open one to edit it: the text is HTML with placeholders; the **field list** puts a
+   placeholder where the cursor is (EduPro's blocks — letterhead, signature boxes, DUPLICATE, the foot with
+   the number — print the same on every certificate); the **preview** shows the paper with a sample from
+   the school a moment after each change. **Save** makes a new version: certificates already issued keep
+   the one they were made with. **Versions** lets you use an earlier one again; **Back to the ready layout**
+   restores EduPro's. **Copy a template** makes a new layout from one. A template may hold text, tables,
+   styles and images as data, never scripts or addresses on the internet.

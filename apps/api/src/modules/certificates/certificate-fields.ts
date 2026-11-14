@@ -1,7 +1,7 @@
 /**
- * The fields a type asks for at issue (docs/design/87, phase A): filled from the student's record where the record holds
- * them (working days, subjects, the month the dues are paid to …) and editable before issue. Phase B lets the school add
- * its own per type.
+ * The fields a type asks for at issue (docs/design/87): EduPro's own for each built-in type, filled from the record
+ * where the record holds them (working days, subjects, the month the dues are paid to …), then the school's own fields
+ * of the type (phase B, the type's set-up). All editable before issue.
  */
 export interface FieldSpec {
   key: string;
@@ -11,9 +11,16 @@ export interface FieldSpec {
   options?: string[];
   /** a hint under the field */
   hint?: string;
+  /** the school's own field (set on the type) */
+  custom?: boolean;
 }
 
 const CONDUCT = ['Excellent', 'Very good', 'Good', 'Satisfactory'];
+const TRAVEL: FieldSpec[] = [
+  { key: 'country', label: 'Country of travel', kind: 'text', required: true },
+  { key: 'fromDate', label: 'Travelling from', kind: 'date', required: true },
+  { key: 'toDate', label: 'Back by', kind: 'date', required: true },
+];
 
 export const TYPE_FIELDS: Record<string, FieldSpec[]> = {
   TC: [
@@ -67,11 +74,73 @@ export const TYPE_FIELDS: Record<string, FieldSpec[]> = {
       hint: "e.g. has taken part in the school's sports",
     },
   ],
-  BONAFIDE: [],
-  DOB: [],
+  DOB_JUST: [
+    {
+      key: 'basis',
+      label: 'Recorded on the basis of',
+      kind: 'text',
+      required: true,
+      hint: 'e.g. the birth certificate issued by the municipal corporation',
+    },
+    { key: 'remark', label: 'A line more (optional)', kind: 'text' },
+  ],
+  NOC: [
+    {
+      key: 'forWhat',
+      label: 'No objection to (printed after "no objection to her / him")',
+      kind: 'text',
+      required: true,
+      hint: 'e.g. appearing in the state-level science olympiad',
+    },
+  ],
+  TRAVEL_NOC: [
+    ...TRAVEL,
+    {
+      key: 'accompaniedBy',
+      label: 'Travelling with (optional)',
+      kind: 'text',
+      hint: 'e.g. the parents',
+    },
+  ],
+  VISA: [
+    ...TRAVEL,
+    {
+      key: 'embassy',
+      label: 'Addressed to (optional)',
+      kind: 'text',
+      hint: 'e.g. Embassy of Japan, New Delhi',
+    },
+  ],
+  SCHOLAR: [
+    {
+      key: 'scholarship',
+      label: 'The scholarship',
+      kind: 'text',
+      required: true,
+      hint: 'e.g. National Means-cum-Merit Scholarship 2026-27',
+    },
+  ],
+  BOARD_REG: [
+    { key: 'board', label: 'Board', kind: 'text', required: true },
+    { key: 'registrationNo', label: 'Registration no.', kind: 'text', required: true },
+    { key: 'session', label: 'Session', kind: 'text' },
+  ],
+  EXPERIENCE: [
+    { key: 'conduct', label: 'Work and conduct', kind: 'list', options: CONDUCT, required: true },
+    { key: 'remark', label: 'A line more (optional)', kind: 'text' },
+  ],
+  STAFF_VISA: [...TRAVEL, { key: 'embassy', label: 'Addressed to (optional)', kind: 'text' }],
 };
 
-export const fieldsOf = (code: string): FieldSpec[] => TYPE_FIELDS[code] ?? [];
+/** The fields of a type: EduPro's own, then the school's own (custom) ones. */
+export function fieldsOf(code: string, custom: unknown = []): FieldSpec[] {
+  const own = TYPE_FIELDS[code] ?? [];
+  const keys = new Set(own.map((f) => f.key));
+  const extra = (Array.isArray(custom) ? (custom as FieldSpec[]) : [])
+    .filter((f) => f && typeof f.key === 'string' && !keys.has(f.key))
+    .map((f) => ({ ...f, custom: true }));
+  return [...own, ...extra];
+}
 
 /** The defaults of the typed fields, from what the record holds. */
 export function fieldDefaults(
@@ -86,34 +155,50 @@ export function fieldDefaults(
     concession: string;
     workingDays: number;
     present: number;
+    board?: string;
+    registrationNo?: string;
+    year?: string;
   },
 ): Record<string, string | number> {
-  if (code === 'TC')
-    return {
-      reason: d.reason ?? '',
-      applicationDate: d.requestedOn ?? d.today,
-      struckOffDate: d.leavingOn ?? d.today,
-      examResult: '',
-      failed: 'No',
-      subjects: d.subjects,
-      promotion: '',
-      duesMonth: d.paidTo,
-      concession: d.concession,
-      workingDays: d.workingDays,
-      daysPresent: d.present,
-      ncc: 'No',
-      activities: '',
-      conduct: 'Good',
-      remarks: '',
-    };
-  if (code === 'CHARACTER') return { conduct: 'Good', remark: '' };
-  return {};
+  switch (code) {
+    case 'TC':
+      return {
+        reason: d.reason ?? '',
+        applicationDate: d.requestedOn ?? d.today,
+        struckOffDate: d.leavingOn ?? d.today,
+        examResult: '',
+        failed: 'No',
+        subjects: d.subjects,
+        promotion: '',
+        duesMonth: d.paidTo,
+        concession: d.concession,
+        workingDays: d.workingDays,
+        daysPresent: d.present,
+        ncc: 'No',
+        activities: '',
+        conduct: 'Good',
+        remarks: '',
+      };
+    case 'CHARACTER':
+    case 'EXPERIENCE':
+      return { conduct: 'Good', remark: '' };
+    case 'DOB_JUST':
+      return { basis: 'the birth certificate', remark: '' };
+    case 'BOARD_REG':
+      return {
+        board: d.board ?? '',
+        registrationNo: d.registrationNo ?? '',
+        session: d.year ?? '',
+      };
+    default:
+      return {};
+  }
 }
 
 /** The typed fields as given, checked against the spec: required ones present, lists in their options, numbers whole. */
-export function checkFields(code: string, given: Record<string, string | number>): string[] {
+export function checkFields(specs: FieldSpec[], given: Record<string, string | number>): string[] {
   const problems: string[] = [];
-  for (const f of fieldsOf(code)) {
+  for (const f of specs) {
     const v = given[f.key];
     const empty = v === undefined || v === null || String(v).trim() === '';
     if (empty) {
@@ -129,6 +214,44 @@ export function checkFields(code: string, given: Record<string, string | number>
       problems.push(`${f.label} must be a date`);
     if (f.kind === 'list' && f.options && !f.options.includes(String(v)))
       problems.push(`${f.label} must be one of: ${f.options.join(', ')}`);
+  }
+  const from = given.fromDate;
+  const to = given.toDate;
+  if (typeof from === 'string' && typeof to === 'string' && from && to && to < from)
+    problems.push('The return date is before the travel date');
+  return problems;
+}
+
+/** The typed fields as they read in a sentence: dates as dd-mm-yyyy, the conduct in small letters. */
+export function fieldText(
+  specs: FieldSpec[],
+  values: Record<string, string | number>,
+): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const f of specs) {
+    const v = values[f.key];
+    if (v === undefined || v === null) continue;
+    const s = String(v);
+    out[f.key] =
+      f.kind === 'date' && /^\d{4}-\d{2}-\d{2}$/.test(s)
+        ? `${s.slice(8, 10)}-${s.slice(5, 7)}-${s.slice(0, 4)}`
+        : f.key === 'conduct'
+          ? s.toLowerCase()
+          : s;
+  }
+  return out;
+}
+
+/** A custom field list as the school set it on a type, checked: keys unique and not EduPro's, lists with choices. */
+export function checkCustomFields(code: string, list: FieldSpec[]): string[] {
+  const own = new Set((TYPE_FIELDS[code] ?? []).map((f) => f.key));
+  const seen = new Set<string>();
+  const problems: string[] = [];
+  for (const f of list) {
+    if (own.has(f.key)) problems.push(`${f.key} is one of EduPro's own fields of this type`);
+    if (seen.has(f.key)) problems.push(`${f.key} appears twice`);
+    seen.add(f.key);
+    if (f.kind === 'list' && !f.options?.length) problems.push(`${f.label} needs its choices`);
   }
   return problems;
 }

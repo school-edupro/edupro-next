@@ -13,8 +13,10 @@ export interface CertificateRules {
   library?: boolean;
   hostel?: boolean;
   transport?: boolean;
+  /** the classes it is for (class codes: VIII, IX …; "XI" covers XI-COM, XI-SCI …) */
+  classes?: string[];
 }
-export type CheckKey = 'state' | 'fees' | 'library' | 'hostel' | 'transport' | 'one';
+export type CheckKey = 'state' | 'class' | 'fees' | 'library' | 'hostel' | 'transport' | 'one';
 export interface CertificateCheck {
   key: CheckKey;
   label: string;
@@ -23,6 +25,7 @@ export interface CertificateCheck {
 }
 export const CHECK_LABELS: Record<CheckKey, string> = {
   state: 'Student',
+  class: 'Class',
   fees: 'Fees',
   library: 'Library',
   hostel: 'Hostel',
@@ -43,6 +46,8 @@ const DEPARTMENTS: Partial<Record<CheckKey, (code: string) => boolean>> = {
 
 export interface CheckInput {
   studentId: string;
+  /** a staff certificate: the employee instead (studentId is then the employee's id too) */
+  audience?: 'STUDENT' | 'STAFF';
   typeId: string;
   rules: CertificateRules;
   multiple: 'ONE' | 'YEAR' | 'ANY';
@@ -55,7 +60,72 @@ export interface CheckInput {
   ledger: Ledger | null;
 }
 
+/** The checks of a staff certificate: the employee's state, library, one live certificate. */
+async function runStaffChecks(c: PoolClient, i: CheckInput): Promise<CertificateCheck[]> {
+  const out: CertificateCheck[] = [];
+  const push = (key: CheckKey, ok: boolean, detail: string) =>
+    out.push({ key, label: key === 'state' ? 'Employee' : CHECK_LABELS[key], ok, detail });
+  const e = (
+    await c.query<{ status: string }>(
+      `SELECT status::text FROM employees WHERE id = $1 AND deleted_at IS NULL`,
+      [i.studentId],
+    )
+  ).rows[0];
+  if (!e) return [{ key: 'state', label: 'Employee', ok: false, detail: 'Employee not found' }];
+  const state = i.rules.state ?? 'any';
+  const active = e.status === 'active';
+  if (state === 'active') push('state', active, active ? 'In service' : 'Has left the school');
+  else if (state === 'leaving')
+    push(
+      'state',
+      !active,
+      active ? 'Still in service: no exit is complete' : 'Has left the school',
+    );
+  else push('state', true, active ? 'In service' : 'A past employee');
+  if (i.rules.library) {
+    const r = (
+      await c.query<{ open: number }>(
+        `SELECT count(*) FILTER (WHERE returned_on IS NULL)::int AS open FROM library_loans
+          WHERE borrower_kind = 'employee' AND borrower_id = $1`,
+        [i.studentId],
+      )
+    ).rows[0];
+    const open = r?.open ?? 0;
+    push(
+      'library',
+      open === 0,
+      open ? `${String(open)} book${open === 1 ? '' : 's'} not returned` : 'No books out',
+    );
+  }
+  if (i.multiple !== 'ANY') {
+    const r = await c.query<{ number: string }>(
+      `SELECT number FROM certificates
+        WHERE type_id = $1 AND employee_id = $2 AND status = 'issued' AND copy_no = 0
+          AND ($3::text = 'ONE' OR year_code IS NOT DISTINCT FROM $4::text)
+        ORDER BY issued_on DESC LIMIT 1`,
+      [i.typeId, i.studentId, i.multiple, i.yearCode],
+    );
+    const held = r.rows[0]?.number;
+    push(
+      'one',
+      !held,
+      held ? `Already holds ${held}; cancel it or print a duplicate` : 'None held',
+    );
+  }
+  return out;
+}
+
+/** Whether a class code is one of the type's classes ("XI" covers "XI-COM"). */
+export const classAllowed = (classCode: string, classes: string[]) => {
+  const head = classCode.trim().toUpperCase().split(/[-\s]/)[0] ?? '';
+  return classes.some(
+    (x) =>
+      x.trim().toUpperCase() === head || x.trim().toUpperCase() === classCode.trim().toUpperCase(),
+  );
+};
+
 export async function runChecks(c: PoolClient, i: CheckInput): Promise<CertificateCheck[]> {
+  if (i.audience === 'STAFF') return runStaffChecks(c, i);
   const out: CertificateCheck[] = [];
   const push = (key: CheckKey, ok: boolean, detail: string) =>
     out.push({ key, label: CHECK_LABELS[key], ok, detail });
@@ -99,6 +169,24 @@ export async function runChecks(c: PoolClient, i: CheckInput): Promise<Certifica
             : 'No withdrawal is complete: the student is still on the rolls',
     );
   } else push('state', true, s.status === 'active' ? 'On the rolls' : 'A past student');
+  if (i.rules.classes?.length) {
+    const k = (
+      await c.query<{ code: string | null }>(
+        `SELECT cl.code FROM enrolments e JOIN class_sections cs ON cs.id = e.class_section_id
+           JOIN classes cl ON cl.id = cs.class_id JOIN academic_years y ON y.id = e.academic_year_id
+          WHERE e.student_id = $1 AND e.status <> 'cancelled' ORDER BY y.start_date DESC, e.id DESC LIMIT 1`,
+        [i.studentId],
+      )
+    ).rows[0]?.code;
+    const ok = !!k && classAllowed(k, i.rules.classes);
+    push(
+      'class',
+      ok,
+      ok
+        ? `Class ${k ?? ''}`
+        : `For classes ${i.rules.classes.join(', ')} only${k ? ` (in ${k})` : ''}`,
+    );
+  }
 
   // the departments cleared (or bypassed) in the withdrawal answer their checks
   const wdId = i.withdrawalId ?? s.wd;

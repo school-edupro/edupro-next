@@ -26,6 +26,7 @@ function printed(
 ): Array<{ group: string; key: string; value: string }> {
   const GROUPS: Record<string, string> = {
     student: 'Student',
+    employee: 'Employee',
     tc: 'Transfer certificate',
     fields: 'Fields typed at issue',
     attendance: 'Attendance',
@@ -118,10 +119,16 @@ export default async function CertificatePage({
           The certificate
         </h2>
         <dl className="ep-cert-dl">
-          <dt>Student</dt>
+          <dt>{x.employeeId ? 'Employee' : 'Student'}</dt>
           <dd>
-            {x.studentId ? (
-              <a href={`/people/students/${x.studentId}`}>
+            {x.studentId || x.employeeId ? (
+              <a
+                href={
+                  x.studentId
+                    ? `/people/students/${x.studentId}`
+                    : `/people/employees/${x.employeeId ?? ''}`
+                }
+              >
                 {x.studentName} · {x.admissionNo}
               </a>
             ) : (

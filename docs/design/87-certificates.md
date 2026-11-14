@@ -1,6 +1,6 @@
 # 87 — Certificate management
 
-Status: phase A (foundation) built 14 Nov 2026; phases B–F planned. Plan: `CERTIFICATE_MODULE_PLAN.md` beside
+Status: phases A (foundation) and B (templates and all types) built 14 Nov 2026; phases C–F planned. Plan: `CERTIFICATE_MODULE_PLAN.md` beside
 the legacy code (outside this repository).
 
 ## Source and approach
@@ -134,3 +134,71 @@ template editor for the certificate kinds (B; the existing editor edits the HTML
 (D), bulk issue and the TC book register (E), the old system's certificates (F). The template render endpoint
 still lets a holder of `platform.template.view` print a bonafide template ad hoc; the admin screens no longer
 offer it.
+
+## As built — phase B, templates and all types (14 Nov 2026)
+
+**Gate for A.** Every item of phase A was built and tested; two were finished here: the principal's **signature
+image** (A printed the signature lines) and **rights per type** (A had the module's rights only).
+
+**Data** (migration 0383). `certificate_types` gains `description`, `fields` (the school's own: key, label, kind
+text / date / number / list, required, options, hint), `variants` (other templates to choose at issue), `issuers`
+(role ids; empty — everyone with `certificate.register.issue`; `certificate.setup.manage` may always issue) and
+`built_in`; the rule `classes` (class codes; "XI" covers "XI-COM"). `document_templates.ready_code` remembers a
+ready template's layout. `certificate_settings` (one row a school): the signatory (an employee), the title of
+their box, whether their signature image prints, whether the issuer prints, a foot line; RLS and audit.
+`app.certificate_types_seed` now makes 17 types — student: TC, bonafide, character, date of birth, date of birth
+justification, study, caste (school record), domicile, no objection, travel NOC, visa letter, scholarship, board
+registration (VIII–XII), fee paid; staff: experience (has left; one each), service, staff visa NOC — run for every
+school; a school's own type or prefix is never overwritten.
+
+**Blocks** (`packages/db/src/certificate-blocks.ts`). Templates place `{{{blocks.letterhead}}}` (logo left; school,
+address, contacts, affiliation centred), `{{{blocks.signatures}}}` (Prepared by — the issuer's signature image,
+name, "Emp. ID · designation", "Issued on dd-mm-yyyy hh:mm AM" in the school's time zone; Checked by — empty;
+the signatory with their image when it prints), `{{{blocks.duplicate}}}` and `{{{blocks.footer}}}` (number, date,
+foot line and, from phase D, the QR). The engine inserts only `blocks.*` unescaped; the blocks escape what they
+hold. The signs are frozen in the certificate's data (`signs`, `footerNote`); images are stored files (a new
+image is a new file), loaded by the workers for the PDF and by the API for the preview. `CERTIFICATE_BLOCK_CSS`
+goes before the template's own CSS.
+
+**Ready templates**: 18 — one per type plus "bonafide (father only)" as a variant of bonafide; all on the blocks.
+Phase A's four were brought to the new layout on Alpha with **Back to the ready layout** (version 2; nothing had
+been issued with them).
+
+**What prints, added**: the student's address, the full set of words by gender (`pronoun`, `pronounObj`,
+`pronounPoss`, `pronounSubjCap`, `pronounPossCap`; `pronounCap` stays the possessive the first certificates
+used), attendance %, the fee paid in the year by head with the total in words (`fees.*`), and for staff
+`employee.*` (name, Emp. ID, designation and department from the latest posting, joining and leaving dates, father's
+name, the words); `text.*` holds the typed fields as they read (dates dd-mm-yyyy, the conduct in small letters).
+Defaults: board registration takes the school's board, the student's registration no. and the year; date of birth
+justification "the birth certificate"; experience "Good".
+
+**Checks, added**: staff — the employee's state (in service / left / any), library books out (`employee` loans),
+one live certificate; the class rule for students.
+
+**API** (`/certificates/setup`, `certificate.setup.manage`): `GET` (figures, what to look at, types, templates,
+settings), `GET|PUT types/:code`, `POST types` (the school's own, with a copy of a template or a plain one),
+`GET templates/:id` (with its versions, the types using it and the field list for a chosen type), `PUT
+templates/:id` (a new version), `POST templates/:id/reset`, `POST templates/:id/restore/:version`, `POST templates`
+(a copy), `POST templates/preview` (the body and styles as typed, with a sample student or employee, each typed
+field shown as [its label]), `GET|PUT settings`. Issue and preview take `employeeId` for a staff type and `variant`
+(one of the type's layouts); `GET /certificates/employees?q=`. A template holding a script, frame, form, event
+handler, `javascript:`, a style import or an address on the network is refused (`certificate-safety.ts`): the
+workers render templates in a browser.
+
+**Screens** (admin). **Certificates → Certificate set-up**: six figures, To look at, three numbered sections —
+**Signatory and print** (find the employee; title; print the image; print the issuer; foot line), **Certificate
+types** (the list with checks, layouts, issued, on / off, some roles, school's own; **Add a type of the school's
+own**) and a type's page (name and number; layouts; checks; who may issue it; the fields, with an add / remove
+row editor), **Templates** (the list; **Copy a template**) and the **template editor** (name, page size, the body
+and styles; the field list grouped — blocks, certificate, school, student, parents, admission and class,
+attendance and fees, words, the type's fields — inserting at the cursor; the live preview a moment after each
+change, scaled to its frame; Save as version n; Versions with "use again"; Back to the ready layout). The issue
+screen takes staff types (employee search) and asks for the layout when a type has more than one; the register
+and a certificate's page link a staff certificate to the employee.
+
+Tests: `certificates-setup.e2e-spec.ts` (7: the set-up and its right; the signatory and the boxes, with the image
+id frozen and the preview showing them; staff certificates and their checks, one experience certificate, the
+travel dates; the class rule and the board defaults; layouts; a type's own fields, who may issue it, prefix
+clash, a type of the school's own; the template editor — refusals, preview, versions, restore, reset, copy);
+`packages/db/test/certificate-templates.test.ts` (blocks escape and place images; only `blocks.*` raw; all 18
+ready templates render with nothing unfilled); the phase A suites updated (17 types).

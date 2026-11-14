@@ -13,6 +13,7 @@ export interface CertificateFieldSpec {
   required?: boolean;
   options?: string[];
   hint?: string;
+  custom?: boolean;
 }
 
 export interface CertificateType {
@@ -23,6 +24,7 @@ export interface CertificateType {
   template: string | null;
   rules: {
     state?: 'active' | 'leaving' | 'any';
+    classes?: string[];
     fees?: boolean;
     library?: boolean;
     hostel?: boolean;
@@ -32,6 +34,10 @@ export interface CertificateType {
   usesBook: boolean;
   active: boolean;
   issued: number;
+  description: string | null;
+  builtIn: boolean;
+  restricted: boolean;
+  variants: Array<{ templateId: string; label: string }>;
   fields: CertificateFieldSpec[];
 }
 
@@ -44,6 +50,7 @@ export interface CertificateCan {
 
 export interface Certificate {
   id: string;
+  employeeId: string | null;
   typeCode: string;
   typeName: string;
   number: string;
@@ -94,7 +101,14 @@ export interface CertificateDetail extends Certificate {
 }
 
 export interface CertificatePreview {
-  type: { code: string; name: string; usesBook: boolean; multiple: string };
+  type: {
+    code: string;
+    name: string;
+    usesBook: boolean;
+    multiple: string;
+    audience: 'STUDENT' | 'STAFF';
+  };
+  person: CertificatePerson;
   student: {
     id: string;
     name: string;
@@ -102,7 +116,9 @@ export interface CertificatePreview {
     className: string;
     section: string;
     left: boolean;
-  };
+  } | null;
+  variants: Array<{ templateId: string | null; label: string }>;
+  variant: string | null;
   checks: CertificateCheck[];
   failed: number;
   held: boolean;
@@ -130,3 +146,141 @@ export const dmy = (iso: string | null | undefined) =>
 
 /** The typed fields of the issue form travel as fld_<key>. */
 export const FIELD_PREFIX = 'fld_';
+
+// ---- phase B: staff, variants, set-up -------------------------------------------------------------------------------
+export interface CertificatePerson {
+  kind: 'student' | 'employee';
+  id: string;
+  name: string;
+  no: string;
+  detail: string;
+  left: boolean;
+}
+
+export interface CertificateEmployeeHit {
+  id: string;
+  name: string;
+  code: string;
+  designation: string | null;
+  left: boolean;
+}
+
+export interface CertificateSettings {
+  signatory: {
+    id: string;
+    name: string;
+    code: string;
+    designation: string | null;
+    hasSignature: boolean;
+  } | null;
+  signatoryTitle: string;
+  printSignature: boolean;
+  printPreparer: boolean;
+  footerNote: string;
+}
+
+export interface CertificateTemplateRow {
+  id: string;
+  code: string;
+  name: string;
+  kind: string;
+  version: number;
+  ready: boolean;
+  updatedAt: string;
+  usedBy: string[];
+  made: number;
+}
+
+export interface CertificateSetupOverview {
+  figures: {
+    types: number;
+    active: number;
+    own: number;
+    templates: number;
+    restricted: number;
+    signatory: boolean;
+  };
+  checks: Array<{ text: string; href: string }>;
+  types: Array<{
+    code: string;
+    name: string;
+    audience: 'STUDENT' | 'STAFF';
+    prefix: string;
+    template: string | null;
+    templateId: string | null;
+    rules: CertificateType['rules'] & { classes?: string[] };
+    multiple: 'ONE' | 'YEAR' | 'ANY';
+    active: boolean;
+    builtIn: boolean;
+    restricted: boolean;
+    ownFields: number;
+    variants: number;
+    issued: number;
+  }>;
+  templates: CertificateTemplateRow[];
+  settings: CertificateSettings;
+}
+
+export interface CertificateTypeDetail {
+  code: string;
+  name: string;
+  description: string | null;
+  audience: 'STUDENT' | 'STAFF';
+  prefix: string;
+  templateId: string | null;
+  variants: Array<{ templateId: string; label: string }>;
+  rules: CertificateType['rules'] & { classes?: string[] };
+  multiple: 'ONE' | 'YEAR' | 'ANY';
+  usesBook: boolean;
+  active: boolean;
+  sortOrder: number;
+  issuers: string[];
+  builtIn: boolean;
+  ownFields: CertificateFieldSpec[];
+  fields: CertificateFieldSpec[];
+  issued: number;
+  templates: CertificateTemplateRow[];
+  roles: Array<{ id: string; name: string; code: string }>;
+}
+
+export interface CertificateTemplateDetail {
+  id: string;
+  code: string;
+  name: string;
+  kind: string;
+  pageWidth: string;
+  pageHeight: string;
+  bodyHtml: string;
+  stylesCss: string;
+  version: number;
+  ready: boolean;
+  usedBy: Array<{ code: string; name: string }>;
+  types: Array<{ code: string; name: string; audience: 'STUDENT' | 'STAFF' }>;
+  forType: string | null;
+  catalogue: Array<{ group: string; items: Array<{ token: string; label: string }> }>;
+  versions: Array<{ version: number; at: string; by: string | null; made: number }>;
+}
+
+/** Page sizes a template can take. */
+export const PAGE_SIZES: Array<{ value: string; label: string; w: string; h: string }> = [
+  { value: 'a4p', label: 'A4, portrait', w: '210mm', h: '297mm' },
+  { value: 'a4l', label: 'A4, landscape', w: '297mm', h: '210mm' },
+  { value: 'a5p', label: 'A5, portrait', w: '148mm', h: '210mm' },
+  { value: 'a5l', label: 'A5, landscape', w: '210mm', h: '148mm' },
+  { value: 'ltr', label: 'Letter', w: '216mm', h: '279mm' },
+];
+
+/**
+ * The paper scaled to fit its preview frame: zoom steps by the frame's own width (an A4 page is about 800 CSS pixels
+ * wide), so the whole width shows on a narrow screen or a half column. Only for the screen preview, never the PDF.
+ */
+export function fitPaper(html: string, pageWidthPx = 800): string {
+  const steps: string[] = [];
+  for (
+    let w = pageWidthPx - 1, z = 0.95;
+    w > 240 && z >= 0.3;
+    w -= 40, z = Math.round((z - 0.05) * 100) / 100
+  )
+    steps.push(`@media screen and (max-width: ${String(w)}px) { html { zoom: ${String(z)}; } }`);
+  return html.replace('</head>', `<style>${steps.join('\n')}</style></head>`);
+}

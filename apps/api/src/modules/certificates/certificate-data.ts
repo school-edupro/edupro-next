@@ -1,4 +1,4 @@
-import type { PoolClient } from '@edupro/db';
+import { amountInWords, type PoolClient } from '@edupro/db';
 
 /**
  * What a certificate prints (docs/design/87, "the field catalogue"): the school, the student (identity, parents, the
@@ -148,6 +148,27 @@ const classLabel = (name: string | null, section: string | null) => {
   return section ? `${n} – ${section}` : n;
 };
 
+/**
+ * The words for a person by gender: "son of", "he", "him", "his" … (`pronounCap` stays the possessive "His", as the
+ * first certificates printed it; `pronounSubjCap` is "He").
+ */
+export function pronouns(gender: string | null | undefined) {
+  const g = (gender ?? '').toLowerCase();
+  const f = g.startsWith('f');
+  const m = g.startsWith('m');
+  const pick = (a: string, b: string, c: string) => (f ? a : m ? b : c);
+  return {
+    childOf: pick('daughter', 'son', 'ward'),
+    honorific: pick('Ms.', 'Mr.', 'Mx.'),
+    pronoun: pick('she', 'he', 'they'),
+    pronounObj: pick('her', 'him', 'them'),
+    pronounPoss: pick('her', 'his', 'their'),
+    pronounCap: pick('Her', 'His', 'Their'),
+    pronounPossCap: pick('Her', 'His', 'Their'),
+    pronounSubjCap: pick('She', 'He', 'They'),
+  };
+}
+
 /** The school's head of the paper. */
 export async function schoolData(c: PoolClient): Promise<Row> {
   const r = await c.query<Row>(
@@ -184,6 +205,7 @@ export async function studentData(
       left_on: string | null;
       status: string;
       profile: Record<string, unknown> | null;
+      address: unknown;
       father: string | null;
       mother: string | null;
       guardian: string | null;
@@ -198,7 +220,7 @@ export async function studentData(
       admission_class: string | null;
     }>(
       `SELECT s.id::text, s.display_name AS name, s.first_name, s.admission_no, s.gender::text, s.dob::text, s.category,
-              s.house, s.admitted_on::text, s.left_on::text, s.status::text, s.profile,
+              s.house, s.admitted_on::text, s.left_on::text, s.status::text, s.profile, s.address,
               (SELECT g.display_name FROM student_guardians sg JOIN guardians g ON g.id = sg.guardian_id
                 WHERE sg.student_id = s.id AND sg.relation = 'father' ORDER BY sg.is_primary DESC, sg.id LIMIT 1) AS father,
               (SELECT g.display_name FROM student_guardians sg JOIN guardians g ON g.id = sg.guardian_id
@@ -226,9 +248,6 @@ export async function studentData(
   if (!s) return null;
   const p = s.profile ?? {};
   const str = (k: string) => (typeof p[k] === 'string' ? String(p[k]) : '');
-  const g = (s.gender ?? '').toLowerCase();
-  const female = g.startsWith('f');
-  const male = g.startsWith('m');
   const att = s.section_id
     ? (
         await c.query<{ working: number; present: number }>(
@@ -309,12 +328,98 @@ export async function studentData(
       section: s.section ?? '',
       rollNo: s.roll_no ?? '',
       academicYear: s.year_code ?? '',
-      childOf: female ? 'daughter' : male ? 'son' : 'ward',
-      pronoun: female ? 'she' : male ? 'he' : 'they',
-      pronounCap: female ? 'Her' : male ? 'His' : 'Their',
+      address: addressLine(s.address),
+      ...pronouns(s.gender),
     },
-    attendance: { workingDays: att?.working ?? 0, present: att?.present ?? 0 },
+    attendance: {
+      workingDays: att?.working ?? 0,
+      present: att?.present ?? 0,
+      percent: att?.working ? Math.round((att.present / att.working) * 1000) / 10 : '',
+    },
     subjects: subjects ?? '',
     fees: { paidTo: fees?.paid_to ?? '', concession: fees?.concession ?? 'No' },
+  };
+}
+
+/** What the student paid in a year, by fee head (the fee paid certificate). */
+export async function feePaidData(
+  c: PoolClient,
+  studentId: string,
+  yearId: string | null,
+): Promise<Row> {
+  const year = yearId
+    ? (await c.query<{ code: string }>(`SELECT code FROM academic_years WHERE id = $1`, [yearId]))
+        .rows[0]?.code
+    : undefined;
+  const r = await c.query<{ name: string; paid: string }>(
+    `SELECT h.name, sum(d.paid)::numeric(14, 2)::text AS paid
+       FROM fee_demands d JOIN fee_heads h ON h.id = d.head_id
+      WHERE d.student_id = $1 AND d.academic_year_id = $2 AND d.status NOT IN ('cancelled', 'carried')
+      GROUP BY h.name, h.sort_order HAVING sum(d.paid) > 0
+      ORDER BY h.sort_order, h.name`,
+    [studentId, yearId],
+  );
+  const total = r.rows.reduce((n, x) => n + Number(x.paid), 0);
+  const money = (n: number) =>
+    n.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  return {
+    year: year ?? '',
+    heads: r.rows.map((x) => ({ name: x.name, amount: money(Number(x.paid)) })),
+    total: money(total),
+    totalWords: total > 0 ? amountInWords(total.toFixed(2)) : '',
+  };
+}
+
+/**
+ * The employee as a staff certificate prints them: name, employee code, designation and department, joining and
+ * leaving dates, father's name, the words for them by gender. Nothing secret (no PAN, Aadhaar or bank).
+ */
+export async function employeeData(c: PoolClient, employeeId: string): Promise<Row | null> {
+  const e = (
+    await c.query<{
+      id: string;
+      name: string;
+      code: string;
+      gender: string | null;
+      dob: string | null;
+      designation: string | null;
+      department: string | null;
+      joined_on: string | null;
+      left_on: string | null;
+      status: string;
+      profile: Record<string, unknown> | null;
+      employee_type: string | null;
+      exit_left_on: string | null;
+    }>(
+      `SELECT e.id::text, e.display_name AS name, e.employee_code AS code, e.gender::text, e.dob::text,
+              COALESCE(p.designation, e.designation) AS designation, COALESCE(p.department, e.department) AS department,
+              e.joined_on::text, e.left_on::text, e.status::text, e.profile, e.employee_type::text,
+              (SELECT x.left_on::text FROM employee_exits x WHERE x.employee_id = e.id AND x.left_on IS NOT NULL
+                ORDER BY x.left_on DESC LIMIT 1) AS exit_left_on
+         FROM employees e
+         LEFT JOIN LATERAL (SELECT designation, department FROM postings p
+                             WHERE p.employee_id = e.id ORDER BY p.valid_from DESC NULLS LAST, p.id DESC LIMIT 1) p ON true
+        WHERE e.id = $1 AND e.deleted_at IS NULL`,
+      [employeeId],
+    )
+  ).rows[0];
+  if (!e) return null;
+  const p = e.profile ?? {};
+  const str = (k: string) => (typeof p[k] === 'string' ? String(p[k]) : '');
+  return {
+    id: e.id,
+    name: e.name,
+    code: e.code,
+    gender: e.gender ?? '',
+    dob: dmy(e.dob),
+    designation: e.designation ?? '',
+    department: e.department ?? '',
+    employeeType: e.employee_type ?? '',
+    joinedOn: dmy(e.joined_on),
+    leftOn: dmy(e.left_on ?? e.exit_left_on),
+    left: e.status !== 'active',
+    fatherName: str('father_name'),
+    nationality: str('nationality') || 'Indian',
+    ...pronouns(e.gender),
   };
 }

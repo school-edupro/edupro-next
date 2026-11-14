@@ -1,4 +1,13 @@
-import { documentHtml, renderTemplate, tenantForJob, type Db, type JobEnvelope } from '@edupro/db';
+import {
+  CERTIFICATE_BLOCK_CSS,
+  certificateBlocks,
+  certificateImageIds,
+  documentHtml,
+  renderTemplate,
+  tenantForJob,
+  type Db,
+  type JobEnvelope,
+} from '@edupro/db';
 import type { StorageDriver } from '@edupro/storage';
 
 /**
@@ -44,17 +53,34 @@ export async function renderCertificateDoc(
         logo = null;
       }
     const cert = (row.data.cert ?? {}) as Record<string, unknown>;
-    const data = {
+    const data: Record<string, unknown> = {
       ...row.data,
       logo,
       cert: { ...cert, copyNo: row.copy_no, duplicate: row.copy_no > 0 },
     };
+    // the signature images frozen with it (stored files never change: a new image is a new file)
+    const ids = certificateImageIds(data);
+    const images: Record<string, string> = {};
+    if (ids.length) {
+      const f = await c.query<{ id: string; object_key: string; content_type: string | null }>(
+        `SELECT id::text, object_key, content_type FROM files WHERE id::text = ANY($1::text[]) AND deleted_at IS NULL`,
+        [ids],
+      );
+      for (const x of f.rows)
+        try {
+          const bytes = await storage.read(x.object_key);
+          images[x.id] = `data:${x.content_type ?? 'image/png'};base64,${bytes.toString('base64')}`;
+        } catch {
+          // an image that cannot be read prints an empty box
+        }
+    }
+    data.blocks = certificateBlocks(data, { logo, images });
     const width = row.page_width ?? '210mm';
     const height = row.page_height ?? '297mm';
     return {
       html: documentHtml({
         body: renderTemplate(row.body_html, data),
-        css: row.styles_css ?? '',
+        css: CERTIFICATE_BLOCK_CSS + (row.styles_css ?? ''),
         pageWidth: width,
         pageHeight: height,
       }),

@@ -3,8 +3,10 @@
  *   {{path.to.value}}            HTML-escaped value ("" when missing)
  *   {{#if path}} ... {{else}} ... {{/if}}
  *   {{#each path}} ... {{this}} / {{name}} ... {{/each}}
+ *   {{{blocks.name}}}            a block EduPro builds (letterhead, signatures, QR …), inserted as HTML
  * Templates are authored by school administrators, so the engine never evaluates code and always
- * escapes values; the surrounding HTML and CSS of the template itself are trusted admin content.
+ * escapes values; the surrounding HTML and CSS of the template itself are trusted admin content. Only
+ * `blocks.*` is ever inserted unescaped: those values are made by EduPro, which escapes what they hold.
  */
 export type TemplateData = Record<string, unknown>;
 
@@ -68,6 +70,10 @@ function renderScoped(src: string, scopes: TemplateData[]): string {
     }
     out = out.slice(0, m.index) + replacement + out.slice(m.index + whole.length);
   }
+  out = out.replace(/{{{\s*(blocks\.\w+)\s*}}}/g, (_, path: string) => {
+    const v = lookup(path, scopes);
+    return typeof v === 'string' ? v : '';
+  });
   return out.replace(/{{\s*([\w.]+)\s*}}/g, (_, path: string) => {
     const v = lookup(path, scopes);
     if (path === 'this') {

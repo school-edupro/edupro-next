@@ -32,9 +32,12 @@ function issueBody(fd: FormData) {
     const t = v.trim();
     fields[key] = fd.get(`num_${key}`) === '1' && /^\d{1,4}$/.test(t) ? Number(t) : t;
   }
+  const employee = str(fd, 'employee');
+  const variant = str(fd, 'variant');
   return {
     typeCode: str(fd, 'type'),
-    studentId: str(fd, 'student'),
+    ...(okId(employee) ? { employeeId: employee } : { studentId: str(fd, 'student') }),
+    ...(okId(variant) ? { variant } : {}),
     purpose: str(fd, 'purpose') || undefined,
     issuedOn: /^\d{4}-\d{2}-\d{2}$/.test(str(fd, 'issuedOn')) ? str(fd, 'issuedOn') : undefined,
     fields,
@@ -44,9 +47,11 @@ function issueBody(fd: FormData) {
 
 export async function issueCertificate(fd: FormData) {
   const body = issueBody(fd);
-  const here = `/certificates/issue?type=${encodeURIComponent(body.typeCode)}&student=${encodeURIComponent(body.studentId)}`;
-  if (!okId(body.studentId))
-    redirect('/certificates/issue?error=validation-failed&detail=Choose+a+student');
+  const person =
+    'employeeId' in body ? `employee=${body.employeeId ?? ''}` : `student=${body.studentId ?? ''}`;
+  const here = `/certificates/issue?type=${encodeURIComponent(body.typeCode)}&${person}`;
+  if (!okId(('employeeId' in body ? body.employeeId : body.studentId) ?? ''))
+    redirect('/certificates/issue?error=validation-failed&detail=Choose+the+person');
   let made: Certificate;
   try {
     made = await apiFetch<Certificate>('/certificates/issue', {

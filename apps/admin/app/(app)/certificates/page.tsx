@@ -72,6 +72,11 @@ export default async function CertificatesPage({
                 Issue a certificate
               </a>
             ) : null}
+            {list.can.setup ? (
+              <a className="ep-btn ep-btn--ghost ep-btn--sm" href="/certificates/setup">
+                Set-up
+              </a>
+            ) : null}
             <DownloadMenu
               xlsx={`/api/certificates-file?format=xlsx&${filters.toString()}`}
               pdf={`/api/certificates-file?format=pdf&${filters.toString()}`}
@@ -167,7 +172,7 @@ export default async function CertificatesPage({
             <input id="to" name="to" type="date" className="ep-input" defaultValue={day(sp.to)} />
           </label>
           <label className="ep-field" htmlFor="q" style={{ margin: 0 }}>
-            <span className="ep-field__label">Number, student or admission no.</span>
+            <span className="ep-field__label">Number, name, admission no. or Emp. ID</span>
             <input id="q" name="q" className="ep-input" defaultValue={sp.q ?? ''} maxLength={80} />
           </label>
           <SelectField
@@ -208,10 +213,16 @@ export default async function CertificatesPage({
             { key: 'type', header: 'Type', render: (x) => x.typeName },
             {
               key: 'student',
-              header: 'Student',
+              header: 'Student / employee',
               render: (x) =>
-                x.studentId ? (
-                  <a href={`/people/students/${x.studentId}`}>
+                x.studentId || x.employeeId ? (
+                  <a
+                    href={
+                      x.studentId
+                        ? `/people/students/${x.studentId}`
+                        : `/people/employees/${x.employeeId ?? ''}`
+                    }
+                  >
                     {x.studentName} · {x.admissionNo}
                   </a>
                 ) : (
