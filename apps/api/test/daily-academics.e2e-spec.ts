@@ -508,9 +508,20 @@ describe('daily academics and student lifecycle (e2e)', () => {
     });
     expect(escaped.json().html).not.toContain('<img src=x');
     expect(escaped.json().html).toContain('&lt;img src=x');
-    const queued = await inject({
+    // a bonafide is issued from the certificate register with its number and checks (docs/design/87), never printed
+    // here as a loose paper; a letter still prints
+    const loose = await inject({
       method: 'POST',
       url: `/platform/templates/${bonafide.id}/render`,
+      headers: h,
+      json: { entity: 'student', entityId: studentA },
+    });
+    expect(loose.statusCode).toBe(409);
+    expect(loose.json()).toMatchObject({ type: 'template.certificate' });
+    const letter = installed.json().data.find((t: { kind: string }) => t.kind === 'letter');
+    const queued = await inject({
+      method: 'POST',
+      url: `/platform/templates/${letter.id as string}/render`,
       headers: h,
       json: { entity: 'student', entityId: studentA },
     });

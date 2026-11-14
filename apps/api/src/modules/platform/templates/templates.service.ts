@@ -274,6 +274,29 @@ export class TemplatesService {
     const t = await this.get(ctx, id);
     if (t.status !== 'active')
       throw new DomainError('template.inactive', 'The template is inactive', { status: 409 });
+    // a certificate (TC, bonafide, a type's layout) is issued, numbered and checked in the certificate register
+    // (docs/design/87, decision 1), never printed here as a loose paper; its preview in the editor stays
+    const certificate =
+      t.kind === 'transfer_certificate' ||
+      t.kind === 'bonafide' ||
+      t.code.startsWith('cert_') ||
+      (await this.db.tenant(
+        requireTenant(ctx),
+        async (c) =>
+          (
+            await c.query(
+              `SELECT 1 FROM certificate_types
+              WHERE template_id = $1 OR variants @> jsonb_build_array(jsonb_build_object('templateId', $1::text)) LIMIT 1`,
+              [id],
+            )
+          ).rowCount === 1,
+      ));
+    if (certificate)
+      throw new DomainError(
+        'template.certificate',
+        'Certificates are issued from the certificate register (Certificates → Issue), with their number and checks',
+        { status: 409 },
+      );
     return this.reports.create(
       ctx,
       {

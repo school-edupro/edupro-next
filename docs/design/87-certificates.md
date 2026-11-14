@@ -132,8 +132,8 @@ profile route stopped by the checks, then issued by the principal with a reason,
 Not in phase A (as planned): the principal's signature image and the QR (phases B and D), staff types (B), the
 template editor for the certificate kinds (B; the existing editor edits the HTML), requests (C), the public check
 (D), bulk issue and the TC book register (E), the old system's certificates (F). The template render endpoint
-still lets a holder of `platform.template.view` print a bonafide template ad hoc; the admin screens no longer
-offer it.
+still let a holder of `platform.template.view` print a bonafide template ad hoc (closed on 15 Nov 2026, see "Completion
+check" below); the admin screens no longer offered it.
 
 ## As built — phase B, templates and all types (14 Nov 2026)
 
@@ -382,3 +382,14 @@ refused, a mapped name; the bring — old numbers, book and Sl. No., a deleted o
 fields, a duplicate, never twice, the next TC, bonafide and book number after the old ones; the reprint from the old
 record and the public check; the count check and a read asked); workers `legacy-certificates.test.ts` (2: the
 connection from the environment with the leave fallback; nothing read without it, and why).
+
+## Completion check (15 Nov 2026)
+
+Every phase checked against the plan, item by item. Two loose ends closed:
+
+- **No loose certificate prints.** `POST /platform/templates/:id/render` refuses (409 `template.certificate`) a TC or
+  bonafide template, any `cert_*` layout and any template a certificate type prints with: a certificate is issued,
+  numbered and checked in the register (decision 1). The editor's preview stays; letters and receipts still print.
+  `daily-academics.e2e-spec.ts` now expects the refusal and prints a letter instead.
+- **The asker's notices are tested.** `certificate-requests.e2e-spec.ts` checks that the parent is told in the app
+  (push) when the request is approved and when the certificate is ready.

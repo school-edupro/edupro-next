@@ -207,6 +207,18 @@ describe('certificate requests (e2e)', () => {
     expect(mine.requests[0]).toMatchObject({ id: req.id, status: 'issued', stage: 'issued' });
     expect(mine.requests[0].certificateIds).toEqual([issued.json().id]);
     expect(mine.certificates[0]).toMatchObject({ number: 'BON/2026-27/00001', person: 'Anu Test' });
+    // the parent is told in the app: approved, then ready
+    const told = await withMigrator((c) =>
+      c.query<{ code: string; channel: string }>(
+        `SELECT t.code, m.channel::text AS channel FROM comms_messages m JOIN comms_templates t ON t.id = m.template_id
+          WHERE m.school_id = $1 AND m.recipient_user_id = $2 ORDER BY m.id`,
+        [school.id, parent.id],
+      ),
+    );
+    expect(told.rows).toEqual([
+      { code: 'certificate_request_approved', channel: 'push' },
+      { code: 'certificate_request_ready', channel: 'push' },
+    ]);
     // the parent's own PDF of it
     const pdf = await post(
       `/certificate-requests/mine/certificates/${issued.json().id as string}/pdf`,
