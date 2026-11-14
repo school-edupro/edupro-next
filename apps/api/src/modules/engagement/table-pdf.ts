@@ -7,6 +7,8 @@ export interface TablePdf {
   title: string;
   /** Under the title: the filters used, the date. Several lines when an array. */
   subtitle?: string | string[];
+  /** The subtitle lines on the first page only (a letter's address and body over a long list). */
+  subtitleFirstOnly?: boolean;
   /** The school's address, under its name in the band. */
   address?: string;
   columns: Array<{
@@ -186,7 +188,7 @@ export async function tablePdf(t: TablePdf): Promise<Buffer> {
         margin: 28,
       });
     } else band();
-    for (const line of [t.subtitle ?? []].flat()) {
+    for (const line of t.subtitleFirstOnly && pages.length > 1 ? [] : [t.subtitle ?? []].flat()) {
       page.drawText(fit(regular, line, 9, W - 2 * M), {
         x: M,
         y,

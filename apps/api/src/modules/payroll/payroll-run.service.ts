@@ -102,6 +102,23 @@ export class PayrollRunService {
     if (!r.rowCount) bad(`The run is no longer ${from.toLowerCase()}: refresh and try again`, 409);
   }
 
+  /** A run whose bank file went (or may go) to the bank keeps its figures: corrections come as arrears or a new run. */
+  private async noBankFile(c: PoolClient, runId: string, what: string) {
+    const b = (
+      await c.query<{ seq: number; status: string }>(
+        `SELECT seq, status FROM payroll_bank_batches WHERE run_id = $1 AND status <> 'CANCELLED' ORDER BY seq LIMIT 1`,
+        [runId],
+      )
+    ).rows[0];
+    if (b)
+      bad(
+        b.status === 'GENERATED'
+          ? `Bank file ${String(b.seq)} is made for this run: cancel it before the run is ${what}`
+          : `The bank has file ${String(b.seq)} of this run: it is never ${what} — correct it with arrears or a supplementary run`,
+        409,
+      );
+  }
+
   /** Who a run works out: the roster (less those skipped), the staff named, or for a bonus who has something pending. */
   private async eligible(c: PoolClient, run: RunRow): Promise<string[]> {
     const m = run.month;
@@ -1178,6 +1195,7 @@ export class PayrollRunService {
             : 'Only an approved run is unapproved',
           409,
         );
+      await this.noBankFile(c, id, 'unapproved');
       await this.setStage(
         c,
         id,
@@ -1216,6 +1234,7 @@ export class PayrollRunService {
         )
       ).rowCount;
       if (later) bad('A later run exists: reopen it first (from the latest)', 409);
+      await this.noBankFile(c, id, 'reopened');
       const fees = (
         await c.query<{ id: string; pay: string }>(
           `SELECT a.id::text, a.fee_payment_id::text AS pay FROM payroll_adhoc a JOIN payroll_records r ON r.id = a.paid_in_record_id
@@ -1297,6 +1316,20 @@ export class PayrollRunService {
       const run = await this.runRow(c, id);
       if (!['APPROVED', 'LOCKED', 'PAID'].includes(run.stage))
         bad('A salary is held or released once the run is approved', 409);
+      if (!release) {
+        const inFile = (
+          await c.query<{ seq: number }>(
+            `SELECT b.seq FROM payroll_bank_batch_lines l JOIN payroll_bank_batches b ON b.id = l.batch_id
+              WHERE l.record_id = $1 AND l.status = 'SENT' LIMIT 1`,
+            [recordId],
+          )
+        ).rows[0];
+        if (inFile)
+          bad(
+            `This salary is in bank file ${String(inFile.seq)}: cancel that file, or record the payment as returned by the bank`,
+            409,
+          );
+      }
       const r = await c.query(
         `UPDATE payroll_records SET status = $3, held_reason = $4, updated_by = app.current_user_id(), updated_at = now()
           WHERE id = $1 AND run_id = $2 AND status = $5`,
