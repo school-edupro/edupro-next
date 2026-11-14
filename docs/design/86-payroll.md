@@ -181,8 +181,10 @@ engine's own heads. 136 tests, coverage held at 100 %.
 REJECTED goes back to DRAFT on the next Process. Create shows the checks (red ones — nobody in the run, attendance not finalised,
 no salary structure in force, a head on a structure with no version in force — refuse Process; amber are warnings).
 Process works through the employees in batches and can be pressed again to go on; one it cannot work out is
-FAILED with the reason. Supplementary and bonus runs only after the month's regular run is locked; a bonus is
-always a top-up. Approve: a checker who did not create it (the payroll admin excepted), no FAILED records, not
+FAILED with the reason. Supplementary and bonus runs only after the month's regular run is locked; a bonus is always a top-up and
+pays those with a one-off earning or an arrear still to pay. One-off items stay open after the month is
+locked (as the legacy): only a new supplementary or bonus run of that month pays them; they are refused while
+a run of the month is processing or approved. Approve: a checker who did not create it (the payroll admin excepted), no FAILED records, not
 empty. Lock freezes each payslip and posts the fee-recovery receipts (`app.post_receipt`, mode bank, "Salary
 deduction"). Reopen (payroll admin): LOCKED → DRAFT, the receipts reversed (`app.reverse_fee_payment`), loans
 restored, refused if a later run exists. Unapprove (payroll admin): APPROVED → REJECTED. Drop failed: a checker
@@ -233,11 +235,11 @@ figures; `/api/my-payslip` gives the locked PDF.
 
 **Tests**: `apps/api/test/payroll-inputs.e2e-spec.ts` (8: the pull from a locked register month with loss of pay,
 joiners and leavers; by hand, mark present, finalise and un-finalise; the sheet; hold and typed tax; loans;
-one-off items; fee recovery; recurring, payees, claims, overtime) and `payroll-run.e2e-spec.ts` (8: the checks
+one-off items; fee recovery; recurring, payees, claims, overtime) and `payroll-run.e2e-spec.ts` (9: the checks
 block a run; a negative net recovered; reject and afresh; approve by another checker, hold and release, lock;
 reopen with the receipt reversed and the loan restored; a supplementary top-up; the LOP reversal and
-reconciliation; payslips — the pattern checked, the locked file, the office copy, the zip, e-mail only on Send, My
-payslips mine only); the engine's 136 unit tests; a browser pass with axe at 1440 and 375 px.
+reconciliation; payslips — the pattern checked, the locked file, the office copy, the zip, e-mail only on Send, My payslips mine only; after the lock a one-off bonus, a bonus run as a top-up, a failed record dropped by a
+checker, the run unapproved by the payroll admin); the engine's 136 unit tests; a browser pass with axe at 1440 and 375 px.
 
 **Not in phase B**: the bank file, PF / ESI / PT / LWF returns and the PAID stage (phase C); declarations, proofs
 and the tax forms (phase D); the full and final run (phase E).

@@ -124,7 +124,9 @@ Get the month ready before its pay run. Each tab is one kind of input; pick the 
 - **Loans** — an advance or a loan: the amount, the interest (none, flat or reducing), the months.
   **See the schedule** before saving. The run takes each month's instalment; pause or close a loan
   from its page.
-- **One-off items** — an amount paid or kept back once, in this month only (an arrear, a fine).
+- **One-off items** — an amount paid or kept back once, in this month only (an arrear, a fine, a
+  bonus). Once the month's pay is locked you can still add one: only a new supplementary or bonus run
+  of that month pays it (a locked run never changes).
 - **Recurring** — an amount paid or kept back every month until its end month.
 - **Claims** — an employee's claim (travel, a bill); approved claims are paid in the next run.
 - **Overtime** — the hours worked over, for staff whose structure pays overtime.
@@ -138,7 +140,8 @@ Get the month ready before its pay run. Each tab is one kind of input; pick the 
 ## The pay run (Payroll → Pay runs)
 
 **One regular run a month.** Once it is locked, a **supplementary** run pays the staff it missed
-(name them) and a **bonus** run pays a bonus on top; their tax is only the extra they add.
+(name them) and a **bonus** run pays everyone with a bonus or other one-off earning still to pay for
+the month (add it on One-off items first); their tax is only the extra they add.
 
 1. **New run** — the month and the kind. The checks show first: red ones (attendance not finalised, no salary
    structure in force, a pay head with no version in force) stop the run until they are fixed;

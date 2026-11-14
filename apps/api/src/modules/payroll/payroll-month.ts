@@ -95,6 +95,23 @@ export async function runStages(c: PoolClient, month: string): Promise<string[]>
   ).rows.map((r) => r.stage);
 }
 export const FROZEN = ['PROCESSING', 'APPROVED', 'LOCKED', 'PAID'];
+/**
+ * One-off items stay open once the month is locked, as in the legacy (its E11 revision): a locked run never
+ * changes, so such an item pays only through a new supplementary or bonus run of the month. Refused while a run of
+ * the month is processing or approved (its figures are being made, or are committed and not yet locked).
+ */
+export async function mustBeOpenForTopUp(c: PoolClient, month: string, what: string) {
+  const stages = await runStages(c, month);
+  const s = stages.find((x) => x === 'PROCESSING' || x === 'APPROVED');
+  if (s)
+    bad(
+      `${monthWords(month)}'s run is ${s.toLowerCase()}: ${what} cannot change now${
+        s === 'PROCESSING' ? ' — wait until it is processed' : ''
+      }`,
+      409,
+    );
+  return { stages, locked: stages.some((x) => x === 'LOCKED' || x === 'PAID') };
+}
 export async function mustBeOpen(c: PoolClient, month: string, what: string) {
   const stages = await runStages(c, month);
   const s = stages.find((x) => FROZEN.includes(x));

@@ -108,7 +108,7 @@ function configBody(kind: ConfigKind, fd: FormData) {
     const v = text(fd, f);
     if (v === null) continue;
     // a field named …Rate is typed as a per cent (12 → 0.12), except the generic rate value
-    body[f] = /Rate$/.test(f)
+    body[f] = f.endsWith('Rate')
       ? String(Number((Number(v) / 100).toFixed(6)))
       : f === 'stateCode' || f === 'rateCode'
         ? v.toUpperCase()

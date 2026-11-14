@@ -33,6 +33,7 @@ import {
   monthWords,
   must,
   mustBeOpen,
+  mustBeOpenForTopUp,
   runCan,
   today,
 } from './payroll-month';
@@ -332,7 +333,7 @@ export class PayrollItemsService {
   async addAdhoc(ctx: RequestContext, dto: AdhocDto) {
     must(ctx, RUN.manage, 'Only payroll makers add one-off items');
     return this.db.tenant(requireTenant(ctx), async (c) => {
-      const stages = await mustBeOpen(c, dto.month, 'one-off items');
+      const open = await mustBeOpenForTopUp(c, dto.month, 'one-off items');
       await this.employee(c, ctx, dto.employeeId);
       const h = await this.usableHead(c, dto.payHeadId, dto.month);
       if (h.head_type === 'EARNING') {
@@ -372,9 +373,11 @@ export class PayrollItemsService {
       });
       return {
         id: r.rows[0]!.id,
-        message: stages.length
-          ? 'Saved. A run of this month exists: process it again for this to count.'
-          : 'Saved.',
+        message: open.locked
+          ? `Saved. ${monthWords(dto.month)}’s pay is locked: this pays only through a new supplementary or bonus run of the month.`
+          : open.stages.length
+            ? 'Saved. A run of this month exists: process it again for this to count.'
+            : 'Saved.',
       };
     });
   }
@@ -402,7 +405,7 @@ export class PayrollItemsService {
         bad('This pays a claim: reject or change the claim instead', 409);
       if (a!.ref_module === 'OT')
         bad('This is the month’s overtime: remove it on the Overtime tab', 409);
-      await mustBeOpen(c, monthOf(a!.month), 'one-off items');
+      await mustBeOpenForTopUp(c, monthOf(a!.month), 'one-off items');
       await c.query(
         `UPDATE payroll_adhoc SET deleted_at = now(), deleted_by = app.current_user_id() WHERE id = $1`,
         [id],

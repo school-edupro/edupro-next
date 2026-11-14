@@ -4,7 +4,9 @@
  * again; rejected and worked out afresh; approved by a checker who did not create it; a salary held and released;
  * locked — the payslips frozen, fee recovery's receipt posted in Fees; reopened by the payroll admin — the fee
  * receipt reversed, the loan balance restored exactly, the one-off lines pending again; a supplementary run only
- * after the regular one is locked, paying a pending arrear as a top-up with PF on what is left of the ceiling.
+ * after the regular one is locked, paying a pending arrear as a top-up with PF on what is left of the ceiling; the
+ * LOP reversal and reconciliation; payslips; after the lock a one-off bonus paid by a bonus run, a failed record
+ * dropped by a checker, the run unapproved by the payroll admin.
  */
 import type { NestFastifyApplication } from '@nestjs/platform-fastify';
 import {
@@ -569,5 +571,90 @@ describe('payroll run (e2e)', () => {
     ).toBe(404);
     // a sign-in with no staff record does not have My payslips
     expect((await call(maker, 'GET', '/payroll/me/payslips')).statusCode).toBe(403);
+  });
+  it('after the lock: a one-off bonus saved for a bonus run, a failed record dropped, the run unapproved', async () => {
+    // one-off items stay open once the month is locked (as the legacy): only a new run of the month pays them
+    const bonus = await call(maker, 'POST', '/payroll/inputs/adhoc', {
+      month: '2026-06',
+      employeeId: emp.B,
+      payHeadId: head.BONUS,
+      amount: '3000',
+      remarks: 'Festival bonus',
+    });
+    expect(bonus.statusCode).toBe(201);
+    expect(bonus.json().message).toContain('pays only through a new supplementary or bonus run');
+    // E: a small bonus and a larger deduction, so the bonus run's net is below nothing
+    for (const [h, amount] of [
+      ['BONUS', '100'],
+      ['LIC', '500'],
+    ] as const)
+      expect(
+        (
+          await call(maker, 'POST', '/payroll/inputs/adhoc', {
+            month: '2026-06',
+            employeeId: emp.E,
+            payHeadId: head[h],
+            amount,
+            remarks: 'After the lock',
+          })
+        ).statusCode,
+      ).toBe(201);
+    const created = await call(maker, 'POST', '/payroll/runs', {
+      month: '2026-06',
+      runType: 'BONUS',
+    });
+    expect(created.statusCode).toBe(201);
+    const id = created.json().id as string;
+    await processAll(id);
+    // only those with something to pay; a bonus is always a top-up: no structure, no PT
+    const b = await recordOf(id, 'B');
+    expect(b).toMatchObject({ status: 'COMPUTED', isTopUp: true, gross: '3000.00' });
+    expect(await recordOf(id, 'C')).toBeUndefined();
+    const bd = (await call(checker, 'GET', `/payroll/runs/${id}/records/${b.id as string}`)).json();
+    expect(bd.lines.map((l: { code: string }) => l.code)).toContain('BONUS');
+    expect(bd.lines.map((l: { code: string }) => l.code)).not.toContain('PT');
+    expect(bd.lines.map((l: { code: string }) => l.code)).not.toContain('BASIC');
+    expect((await recordOf(id, 'E')).status).toBe('FAILED');
+    // a failed record blocks approval; only a checker drops it, with a real reason
+    expect((await call(checker, 'POST', `/payroll/runs/${id}/approve`)).statusCode).toBe(409);
+    const drop = (u: SeededUser, reason: string) =>
+      call(u, 'POST', `/payroll/runs/${id}/drop-failed`, { reason });
+    expect((await drop(maker, 'Paid in a later run')).statusCode).toBe(403);
+    expect((await drop(checker, 'Later')).statusCode).toBe(400);
+    expect((await drop(checker, 'Paid in a later supplementary run')).statusCode).toBe(201);
+    expect(await recordOf(id, 'E')).toBeUndefined();
+    // E's lines were not paid: they wait for another run
+    expect(
+      (
+        await q<{ n: number }>(
+          `SELECT count(*)::int AS n FROM payroll_adhoc WHERE employee_id = $1 AND month = '2026-06-01'
+              AND remarks = 'After the lock' AND paid_in_record_id IS NULL AND deleted_at IS NULL`,
+          [emp.E],
+        )
+      )[0]!.n,
+    ).toBe(2);
+    expect((await call(checker, 'POST', `/payroll/runs/${id}/approve`)).statusCode).toBe(201);
+    // while the run is approved, the month's one-off items are frozen
+    expect(
+      (
+        await call(maker, 'POST', '/payroll/inputs/adhoc', {
+          month: '2026-06',
+          employeeId: emp.B,
+          payHeadId: head.BONUS,
+          amount: '10',
+          remarks: 'Too late',
+        })
+      ).statusCode,
+    ).toBe(409);
+    // unapprove: the payroll admin only, with a comment; back to rejected
+    expect(
+      (await call(checker, 'POST', `/payroll/runs/${id}/unapprove`, { comment: 'Recheck' }))
+        .statusCode,
+    ).toBe(403);
+    expect(
+      (await call(admin, 'POST', `/payroll/runs/${id}/unapprove`, { comment: 'Recheck the bonus' }))
+        .statusCode,
+    ).toBe(201);
+    expect((await call(checker, 'GET', `/payroll/runs/${id}`)).json().run.stage).toBe('REJECTED');
   });
 });

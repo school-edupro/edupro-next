@@ -63,7 +63,7 @@ const COLUMNS: Record<ConfigKind, Array<{ label: string; cell: (r: ConfigRow) =>
       label: 'Value',
       // a rate (DA_RATE …) also as a per cent; an amount as it is
       cell: (r) =>
-        `${Number(r.rateValue).toLocaleString('en-IN', { maximumFractionDigits: 6 })}${/RATE$/.test(s(r.rateCode)) ? ` (${pct(r.rateValue as string)})` : ''}`,
+        `${Number(r.rateValue).toLocaleString('en-IN', { maximumFractionDigits: 6 })}${s(r.rateCode).endsWith('RATE') ? ` (${pct(r.rateValue as string)})` : ''}`,
     },
     { label: 'Source', cell: (r) => (r.source === 'govt' ? 'Government' : 'School') },
     { label: 'Notified', cell: (r) => dmy(r.notifiedOn as string | null) },
