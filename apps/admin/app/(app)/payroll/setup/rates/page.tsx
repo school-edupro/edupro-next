@@ -147,7 +147,7 @@ const COLUMNS: Record<ConfigKind, Array<{ label: string; cell: (r: ConfigRow) =>
 };
 
 /** The draft form's own fields for each kind (rates are typed in per cent). */
-function draftFields(kind: ConfigKind, last: ConfigRow | undefined) {
+function draftFields(kind: ConfigKind, last: ConfigRow | undefined, employeeTypes: string[] = []) {
   const n = (
     name: string,
     label: string,
@@ -293,9 +293,30 @@ function draftFields(kind: ConfigKind, last: ConfigRow | undefined) {
       ];
     case 'ot':
       return [
-        t('employeeType', 'Employee type', {
-          help: 'As on the employee (teaching, non_teaching …)',
-        }),
+        // the employee types of the staff master: an employee's staff type finds the rate
+        <label className="ep-field" htmlFor="pr-ot-employeeType" key="employeeType">
+          <span className="ep-field__label">Employee type</span>
+          <select
+            id="pr-ot-employeeType"
+            name="employeeType"
+            className="ep-select"
+            required
+            defaultValue=""
+          >
+            <option value="" disabled>
+              {employeeTypes.length ? 'Choose…' : 'No employee types in the staff master'}
+            </option>
+            {employeeTypes.map((x) => (
+              <option key={x} value={x}>
+                {x}
+              </option>
+            ))}
+          </select>
+          <span className="ep-field__help">
+            From the staff master (Staff setup → Employee types): an employee’s staff type finds the
+            rate.
+          </span>
+        </label>,
         n('dailyAmount', 'A day (₹)', { dflt: '' }),
         n('hourlyAmount', 'An hour (₹)', { dflt: '' }),
       ];
@@ -372,7 +393,9 @@ export default async function PayrollRatesPage({
               title={`A new ${tab.label.toLowerCase()} row`}
             >
               <form action={addPayrollConfig.bind(null, kind)} className="ep-form-section__body">
-                <div className="ep-profile__grid">{draftFields(kind, last)}</div>
+                <div className="ep-profile__grid">
+                  {draftFields(kind, last, d.employeeTypes ?? [])}
+                </div>
                 <div className="ep-profile__grid">
                   <label className="ep-field" htmlFor="pr-from">
                     <span className="ep-field__label">From</span>

@@ -469,7 +469,16 @@ export class PayrollSetupListsService {
                   },
                 ]
               : []),
-            ...(kind === 'ot' ? [{ key: 'q', label: 'Employee type', kind: 'text' as const }] : []),
+            ...(kind === 'ot'
+              ? [
+                  {
+                    key: 'employeeType',
+                    label: 'Employee type',
+                    kind: 'select' as const,
+                    options: distinct(rows, 'employeeType'),
+                  },
+                ]
+              : []),
             ...(kind === 'rates'
               ? [
                   {
@@ -490,6 +499,7 @@ export class PayrollSetupListsService {
         match: (r, f) =>
           has1([r.rateCode, r.employeeType], f.q ?? '') &&
           (!f.state || r.stateCode === f.state) &&
+          (!f.employeeType || r.employeeType === f.employeeType) &&
           (!f.source || r.source === f.source) &&
           (!f.status || r.status === f.status) &&
           inForce(r, f.on ?? ''),

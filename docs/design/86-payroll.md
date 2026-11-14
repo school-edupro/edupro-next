@@ -635,3 +635,9 @@ files, timeline), tax, bank, drafts to approve (structure drafts; rate, rule and
 files with the filters line, recorded, PAN masked, the confidential employee out of a maker's file, missing-PAN and
 department filters; the bank list refused to a maker, the comparison paged in the database; the Set-up book's sheets,
 a maker's without bank accounts, the PDF). Browser (dev-admin; 1440 and 375; 17 views): axe clean.
+
+**Overtime rates by the staff master (14 Nov 2026)**: the Overtime tab's draft form picks the employee type from the
+staff master's active Employee types (`GET /payroll/config/ot` returns `employeeTypes`, by name) instead of free text;
+`POST /payroll/config/ot` refuses a type not in the master and saves the master's own spelling — the monthly overtime
+finds a rate by the employee's staff type (`profile.staff_type`, the master's name), so a typed "teaching" never
+matched. The list's employee-type filter is a drop-down too. Test: `payroll-setup-lists` (5).

@@ -65,6 +65,8 @@ export interface ConfigRow {
 export interface ConfigList {
   kind: ConfigKind;
   rows: ConfigRow[];
+  /** overtime: the active employee types of the staff master, by name */
+  employeeTypes?: string[];
   can: PayrollCan;
 }
 

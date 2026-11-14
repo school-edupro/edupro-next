@@ -86,7 +86,8 @@ matrix.
   **ESI** (shares, the wage limit, the higher limit for persons with disability), **Profession tax**
   (monthly slabs by state and gender; one month may differ — February), **LWF** (by state: a rate with
   a cap or flat amounts, monthly or in the months ticked), **Overtime rates** (a day and an hour by
-  employee type). On these tabs a per cent is typed as a per cent (12 for 12 %). **＋ New draft**
+  employee type — picked from the staff master, Staff setup → Employee types, because an employee's
+  staff type finds the rate; a new type is added there first). On these tabs a per cent is typed as a per cent (12 for 12 %). **＋ New draft**
   starts from the row in force.
 - **Income tax** — the slabs, standard deduction, rebate (with marginal relief), cess, the rate
   without a PAN and the surcharge, for the new and the old regime, and the lines of the tax sheet with

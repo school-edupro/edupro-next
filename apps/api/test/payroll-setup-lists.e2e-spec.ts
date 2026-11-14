@@ -211,6 +211,40 @@ describe('payroll set-up lists (e2e)', () => {
     expect(f).not.toContain('The same');
   });
 
+  it('overtime rates are by the employee types of the staff master', async () => {
+    await q(`SELECT app.staff_masters_seed($1)`, [school.id]);
+    const ot = (await call(maker, '/payroll/config/ot?status=all')).json();
+    expect(ot.employeeTypes).toEqual(
+      expect.arrayContaining(['Teaching Regular', 'Visiting Faculty']),
+    );
+    const post = (employeeType: string) =>
+      inject({
+        method: 'POST',
+        url: '/payroll/config/ot',
+        headers: headersFor(maker.sub, school.id),
+        json: {
+          employeeType,
+          dailyAmount: '500',
+          hourlyAmount: '80',
+          effectiveFrom: '2026-12-01',
+          changeReason: 'Overtime by type',
+        },
+      });
+    const no = await post('teaching');
+    expect(no.statusCode).toBe(400);
+    expect(no.json().detail).toContain('not an employee type of the staff master');
+    expect((await post('teaching regular')).statusCode).toBe(201);
+    const rows = await q<{ employee_type: string }>(
+      `SELECT employee_type FROM payroll_ot_rates WHERE school_id = $1`,
+      [school.id],
+    );
+    expect(rows.map((r) => r.employee_type)).toEqual(['Teaching Regular']);
+    const list = (await call(checker, '/payroll/setup-lists/config?kind=ot')).json();
+    expect(list.filters.find((f: { key: string }) => f.key === 'employeeType').options).toEqual([
+      { value: 'Teaching Regular', label: 'Teaching Regular' },
+    ]);
+  });
+
   it('the Set-up book: a sheet each, recorded; the PDF in one piece', async () => {
     const x = (await call(checker, '/payroll/setup-book?format=xlsx')).json();
     const wb = await sheet(x.base64);

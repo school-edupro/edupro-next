@@ -407,9 +407,20 @@ export class PayrollSetupService {
           const out = Object.fromEntries(Object.entries(r).map(([k, v]) => [camel(k), v]));
           return { ...out, mine: r.created_by === requireTenant(ctx).userId };
         }),
+        // overtime rates are by the employee types of the staff master (what an employee's staff type says)
+        ...(kind === 'ot' ? { employeeTypes: await PayrollSetupService.employeeTypes(c) } : {}),
         can: PayrollSetupService.can(ctx),
       };
     });
+  }
+
+  /** The active employee types of the staff master, by name (an employee's staff type holds the name). */
+  static async employeeTypes(c: PoolClient) {
+    return (
+      await c.query<{ name: string }>(
+        `SELECT name FROM employee_types WHERE status = 'active' ORDER BY sort_order, name`,
+      )
+    ).rows.map((r) => r.name);
   }
 
   /** A new dated row, as a DRAFT. */
@@ -418,6 +429,20 @@ export class PayrollSetupService {
     const dto = parse(kind, body);
     const t = DATED[kind]!;
     return this.db.tenant(requireTenant(ctx), async (c) => {
+      if (kind === 'ot') {
+        // an overtime rate is found by the employee's staff type: only a type of the staff master ever matches
+        const typed = String((dto as { employeeType?: string }).employeeType ?? '').trim();
+        const name = (await PayrollSetupService.employeeTypes(c)).find(
+          (n) => n.toLowerCase() === typed.toLowerCase(),
+        );
+        if (!name)
+          throw new DomainError(
+            'validation-failed',
+            `“${typed.slice(0, 60)}” is not an employee type of the staff master (Staff setup → Employee types): pick one from the list`,
+            { status: 400 },
+          );
+        (dto as { employeeType?: string }).employeeType = name;
+      }
       const { cols, vals, casts } = this.columns(kind, dto);
       try {
         const id = (
