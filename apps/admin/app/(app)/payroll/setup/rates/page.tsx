@@ -3,6 +3,7 @@ import { notFound } from 'next/navigation';
 import type { ReactNode } from 'react';
 import { Notice } from '@/components/Notice';
 import { DialogButton } from '@/components/leave/DialogButton';
+import { RowFix, type RowUsage } from '@/components/payroll/RowFix';
 import { SetupListBar } from '@/components/payroll/SetupListBar';
 import { ApiError, apiFetch, getMe } from '@/lib/api';
 import {
@@ -10,7 +11,6 @@ import {
   money,
   MONTHS,
   pct,
-  STATUS_TONE,
   type ConfigKind,
   type ConfigList,
   type ConfigRow,
@@ -19,6 +19,7 @@ import {
   addPayrollConfig,
   approvePayrollConfig,
   deletePayrollConfig,
+  editPayrollConfig,
   endPayrollConfig,
 } from '@/lib/payroll-actions';
 import { setupList, type SetupList, type SetupListNav } from '@/lib/payroll-lists';
@@ -56,6 +57,20 @@ const TABS: Array<{ id: ConfigKind; label: string; text: string }> = [
   },
 ];
 const s = (v: unknown) => (v === null || v === undefined ? '' : String(v));
+const today = () =>
+  new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' }).format(new Date());
+/** a row as people read it: approved and past its end is Ended; Withdrawn is a mistake taken back */
+const stateOf = (r: ConfigRow) =>
+  r.status === 'active' && r.effectiveTo && r.effectiveTo < today()
+    ? 'ended'
+    : (r.status as 'draft' | 'active' | 'ended' | 'withdrawn');
+const STATE_WORD = { draft: 'Draft', active: 'Active', ended: 'Ended', withdrawn: 'Withdrawn' };
+const STATE_TONE = {
+  draft: 'warning',
+  active: 'success',
+  ended: 'neutral',
+  withdrawn: 'danger',
+} as const;
 
 /** The columns of each kind's table (besides the dates, status and people). */
 const COLUMNS: Record<ConfigKind, Array<{ label: string; cell: (r: ConfigRow) => ReactNode }>> = {
@@ -146,31 +161,40 @@ const COLUMNS: Record<ConfigKind, Array<{ label: string; cell: (r: ConfigRow) =>
   ],
 };
 
-/** The draft form's own fields for each kind (rates are typed in per cent). */
-function draftFields(kind: ConfigKind, last: ConfigRow | undefined, employeeTypes: string[] = []) {
+/**
+ * The fields of a dated row of each kind (rates are typed in per cent). `row` gives the values: for a new draft the
+ * row in force (only what is worth keeping), for an edit or a correction the row itself (`full`). `idp` keeps the ids
+ * of each dialog's fields apart.
+ */
+function draftFields(
+  kind: ConfigKind,
+  row: ConfigRow | undefined,
+  employeeTypes: string[] = [],
+  idp = `pr-${kind}`,
+  full = false,
+) {
+  const raw = (name: string) =>
+    row?.[name] !== undefined && row[name] !== null ? String(row[name]) : '';
+  const per = (name: string) =>
+    raw(name) === '' ? '' : String(Number((Number(raw(name)) * 100).toFixed(4)));
   const n = (
     name: string,
     label: string,
-    opts: { pct?: boolean; req?: boolean; step?: string; help?: string; dflt?: string } = {},
+    opts: { pct?: boolean; req?: boolean; help?: string; dflt?: string } = {},
   ) => (
-    <label className="ep-field" htmlFor={`pr-${kind}-${name}`} key={name}>
+    <label className="ep-field" htmlFor={`${idp}-${name}`} key={name}>
       <span className="ep-field__label">
         {label}
         {opts.pct ? ' (%)' : ''}
       </span>
       <input
-        id={`pr-${kind}-${name}`}
+        id={`${idp}-${name}`}
         name={name}
         className="ep-input"
         inputMode="decimal"
         required={opts.req ?? true}
         defaultValue={
-          opts.dflt ??
-          (last?.[name] !== undefined && last[name] !== null
-            ? opts.pct
-              ? String(Number(last[name]) * 100)
-              : String(last[name])
-            : '')
+          !full && opts.dflt !== undefined ? opts.dflt : opts.pct ? per(name) : raw(name)
         }
       />
       {opts.help ? <span className="ep-field__help">{opts.help}</span> : null}
@@ -181,18 +205,43 @@ function draftFields(kind: ConfigKind, last: ConfigRow | undefined, employeeType
     label: string,
     opts: { req?: boolean; help?: string; max?: number } = {},
   ) => (
-    <label className="ep-field" htmlFor={`pr-${kind}-${name}`} key={name}>
+    <label className="ep-field" htmlFor={`${idp}-${name}`} key={name}>
       <span className="ep-field__label">{label}</span>
       <input
-        id={`pr-${kind}-${name}`}
+        id={`${idp}-${name}`}
         name={name}
         className="ep-input"
         required={opts.req ?? true}
         maxLength={opts.max ?? 100}
+        defaultValue={full ? raw(name) : ''}
       />
       {opts.help ? <span className="ep-field__help">{opts.help}</span> : null}
     </label>
   );
+  const sel = (
+    name: string,
+    label: string,
+    options: Array<[string, string]>,
+    dflt: string,
+    key = name,
+  ) => (
+    <label className="ep-field" htmlFor={`${idp}-${name}`} key={key}>
+      <span className="ep-field__label">{label}</span>
+      <select
+        id={`${idp}-${name}`}
+        name={name}
+        className="ep-select"
+        defaultValue={full && raw(name) ? raw(name) : dflt}
+      >
+        {options.map(([v, l]) => (
+          <option key={v} value={v}>
+            {l}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
+  const overrides = Object.entries((row?.monthOverrides as Record<string, string> | null) ?? {});
   switch (kind) {
     case 'rates':
       return [
@@ -204,16 +253,24 @@ function draftFields(kind: ConfigKind, last: ConfigRow | undefined, employeeType
           help: 'A rate as 0.62 or 62%, or an amount such as 1500',
           dflt: '',
         }),
-        <label className="ep-field" htmlFor="pr-rates-source" key="source">
-          <span className="ep-field__label">Source</span>
-          <select id="pr-rates-source" name="source" className="ep-select" defaultValue="govt">
-            <option value="govt">Government notification</option>
-            <option value="school">The school’s own</option>
-          </select>
-        </label>,
-        <label className="ep-field" htmlFor="pr-rates-notified" key="notified">
+        sel(
+          'source',
+          'Source',
+          [
+            ['govt', 'Government notification'],
+            ['school', 'The school’s own'],
+          ],
+          'govt',
+        ),
+        <label className="ep-field" htmlFor={`${idp}-notifiedOn`} key="notified">
           <span className="ep-field__label">Notified on</span>
-          <input id="pr-rates-notified" name="notifiedOn" type="date" className="ep-input" />
+          <input
+            id={`${idp}-notifiedOn`}
+            name="notifiedOn"
+            type="date"
+            className="ep-input"
+            defaultValue={full ? raw('notifiedOn') : ''}
+          />
           <span className="ep-field__help">
             When it was announced (a later date than “from” means arrears)
           </span>
@@ -241,20 +298,27 @@ function draftFields(kind: ConfigKind, last: ConfigRow | undefined, employeeType
     case 'pt':
       return [
         t('stateCode', 'State (two letters)', { max: 2 }),
-        <label className="ep-field" htmlFor="pr-pt-gender" key="gender">
-          <span className="ep-field__label">Gender</span>
-          <select id="pr-pt-gender" name="gender" className="ep-select" defaultValue="ANY">
-            <option value="ANY">Any</option>
-            <option value="M">Men</option>
-            <option value="F">Women</option>
-          </select>
-        </label>,
+        sel(
+          'gender',
+          'Gender',
+          [
+            ['ANY', 'Any'],
+            ['M', 'Men'],
+            ['F', 'Women'],
+          ],
+          'ANY',
+        ),
         n('wageFrom', 'Monthly wage from (₹)', { dflt: '' }),
         n('wageTo', 'up to (₹)', { req: false, help: 'Empty: and above', dflt: '' }),
         n('monthlyAmount', 'Tax a month (₹)', { dflt: '' }),
-        <label className="ep-field" htmlFor="pr-pt-om" key="om">
+        <label className="ep-field" htmlFor={`${idp}-overrideMonth`} key="om">
           <span className="ep-field__label">One month differs</span>
-          <select id="pr-pt-om" name="overrideMonth" className="ep-select" defaultValue="">
+          <select
+            id={`${idp}-overrideMonth`}
+            name="overrideMonth"
+            className="ep-select"
+            defaultValue={full ? (overrides[0]?.[0] ?? '') : ''}
+          >
             <option value="">No</option>
             {MONTHS.map((m, i) => (
               <option key={m} value={String(i + 1)}>
@@ -263,7 +327,16 @@ function draftFields(kind: ConfigKind, last: ConfigRow | undefined, employeeType
             ))}
           </select>
         </label>,
-        n('overrideAmount', 'Tax in that month (₹)', { req: false, dflt: '' }),
+        <label className="ep-field" htmlFor={`${idp}-overrideAmount`} key="oa">
+          <span className="ep-field__label">Tax in that month (₹)</span>
+          <input
+            id={`${idp}-overrideAmount`}
+            name="overrideAmount"
+            className="ep-input"
+            inputMode="decimal"
+            defaultValue={full ? (overrides[0]?.[1] ?? '') : ''}
+          />
+        </label>,
       ];
     case 'lwf':
       return [
@@ -273,19 +346,27 @@ function draftFields(kind: ConfigKind, last: ConfigRow | undefined, employeeType
         n('eeFlat', 'Or a flat employee amount (₹)', { req: false, dflt: '' }),
         n('erFlat', 'Employer flat amount (₹)', { req: false, dflt: '' }),
         n('erMultiplier', 'Or the employer pays (× the employee)', { req: false, dflt: '' }),
-        <label className="ep-field" htmlFor="pr-lwf-f" key="f">
-          <span className="ep-field__label">When</span>
-          <select id="pr-lwf-f" name="frequency" className="ep-select" defaultValue="half_yearly">
-            <option value="monthly">Every month</option>
-            <option value="half_yearly">In the months ticked</option>
-          </select>
-        </label>,
+        sel(
+          'frequency',
+          'When',
+          [
+            ['monthly', 'Every month'],
+            ['half_yearly', 'In the months ticked'],
+          ],
+          'half_yearly',
+        ),
         <fieldset className="ep-field" key="months">
           <legend className="ep-field__label">Months</legend>
           <div className="ep-grid__toolbar">
             {MONTHS.map((m, i) => (
               <label key={m} className="ep-check">
-                <input type="checkbox" name="months" value={String(i + 1)} /> {m.slice(0, 3)}
+                <input
+                  type="checkbox"
+                  name="months"
+                  value={String(i + 1)}
+                  defaultChecked={full && ((row?.months as number[] | null) ?? []).includes(i + 1)}
+                />{' '}
+                {m.slice(0, 3)}
               </label>
             ))}
           </div>
@@ -294,14 +375,14 @@ function draftFields(kind: ConfigKind, last: ConfigRow | undefined, employeeType
     case 'ot':
       return [
         // the employee types of the staff master: an employee's staff type finds the rate
-        <label className="ep-field" htmlFor="pr-ot-employeeType" key="employeeType">
+        <label className="ep-field" htmlFor={`${idp}-employeeType`} key="employeeType">
           <span className="ep-field__label">Employee type</span>
           <select
-            id="pr-ot-employeeType"
+            id={`${idp}-employeeType`}
             name="employeeType"
             className="ep-select"
             required
-            defaultValue=""
+            defaultValue={full ? raw('employeeType') : ''}
           >
             <option value="" disabled>
               {employeeTypes.length ? 'Choose…' : 'No employee types in the staff master'}
@@ -321,6 +402,77 @@ function draftFields(kind: ConfigKind, last: ConfigRow | undefined, employeeType
         n('hourlyAmount', 'An hour (₹)', { dflt: '' }),
       ];
   }
+}
+
+/** A dated row's form: its fields, the date, the reference and why — a new draft, an edit, or a correction. */
+function DraftForm({
+  kind,
+  row,
+  full,
+  employeeTypes,
+  idp,
+  action,
+  from,
+  minFrom,
+  keepWhy,
+  submit,
+}: {
+  kind: ConfigKind;
+  row: ConfigRow | undefined;
+  full: boolean;
+  employeeTypes: string[];
+  idp: string;
+  action: (fd: FormData) => Promise<void>;
+  from?: string;
+  minFrom?: string;
+  keepWhy?: boolean;
+  submit: string;
+}) {
+  return (
+    <form action={action} className="ep-form-section__body">
+      <div className="ep-profile__grid">{draftFields(kind, row, employeeTypes, idp, full)}</div>
+      <div className="ep-profile__grid">
+        <label className="ep-field" htmlFor={`${idp}-from`}>
+          <span className="ep-field__label">From</span>
+          <input
+            id={`${idp}-from`}
+            name="effectiveFrom"
+            type="date"
+            className="ep-input"
+            required
+            min={minFrom}
+            defaultValue={from ?? ''}
+          />
+        </label>
+        <label className="ep-field" htmlFor={`${idp}-ref`}>
+          <span className="ep-field__label">Reference</span>
+          <input
+            id={`${idp}-ref`}
+            name="referenceNo"
+            className="ep-input"
+            maxLength={60}
+            defaultValue={keepWhy ? (row?.referenceNo ?? '') : ''}
+          />
+          <span className="ep-field__help">The notification or order number</span>
+        </label>
+        <label className="ep-field" htmlFor={`${idp}-why`}>
+          <span className="ep-field__label">Why</span>
+          <input
+            id={`${idp}-why`}
+            name="changeReason"
+            className="ep-input"
+            maxLength={200}
+            defaultValue={keepWhy ? (row?.changeReason ?? '') : ''}
+          />
+        </label>
+      </div>
+      <p>
+        <button type="submit" className="ep-btn ep-btn--primary">
+          {submit}
+        </button>
+      </p>
+    </form>
+  );
 }
 
 /** Rates and statutory rules (legacy Rate Registry): dated rows, drafts approved by another person. */
@@ -392,37 +544,15 @@ export default async function PayrollRatesPage({
               label="＋ New draft"
               title={`A new ${tab.label.toLowerCase()} row`}
             >
-              <form action={addPayrollConfig.bind(null, kind)} className="ep-form-section__body">
-                <div className="ep-profile__grid">
-                  {draftFields(kind, last, d.employeeTypes ?? [])}
-                </div>
-                <div className="ep-profile__grid">
-                  <label className="ep-field" htmlFor="pr-from">
-                    <span className="ep-field__label">From</span>
-                    <input
-                      id="pr-from"
-                      name="effectiveFrom"
-                      type="date"
-                      className="ep-input"
-                      required
-                    />
-                  </label>
-                  <label className="ep-field" htmlFor="pr-ref">
-                    <span className="ep-field__label">Reference</span>
-                    <input id="pr-ref" name="referenceNo" className="ep-input" maxLength={60} />
-                    <span className="ep-field__help">The notification or order number</span>
-                  </label>
-                  <label className="ep-field" htmlFor="pr-why">
-                    <span className="ep-field__label">Why</span>
-                    <input id="pr-why" name="changeReason" className="ep-input" maxLength={200} />
-                  </label>
-                </div>
-                <p>
-                  <button type="submit" className="ep-btn ep-btn--primary">
-                    Save as a draft
-                  </button>
-                </p>
-              </form>
+              <DraftForm
+                kind={kind}
+                row={last}
+                full={false}
+                employeeTypes={d.employeeTypes ?? []}
+                idp="pr-new"
+                action={addPayrollConfig.bind(null, kind)}
+                submit="Save as a draft"
+              />
             </DialogButton>
           ) : null}
         </div>
@@ -456,19 +586,17 @@ export default async function PayrollRatesPage({
                       <td>{dmy(r.effectiveFrom)}</td>
                       <td>{r.effectiveTo ? dmy(r.effectiveTo) : 'Open'}</td>
                       <td>
-                        <Badge tone={STATUS_TONE[r.status]}>
-                          {r.status === 'draft'
-                            ? 'Draft'
-                            : r.status === 'active'
-                              ? 'Active'
-                              : 'Ended'}
-                        </Badge>
+                        <Badge tone={STATE_TONE[stateOf(r)]}>{STATE_WORD[stateOf(r)]}</Badge>
                       </td>
                       <td>
                         {r.createdByName ?? 'Default'}
                         {r.approvedByName ? ` · ${r.approvedByName}` : ''}
                       </td>
-                      <td>{r.changeReason ?? ''}</td>
+                      <td>
+                        {r.status === 'withdrawn'
+                          ? `Withdrawn: ${String(r.withdrawReason ?? '')}`
+                          : (r.changeReason ?? '')}
+                      </td>
                       <td>
                         <div className="ep-grid__toolbar">
                           {r.status === 'draft' && d.can.approve ? (
@@ -477,6 +605,52 @@ export default async function PayrollRatesPage({
                                 Approve
                               </button>
                             </form>
+                          ) : null}
+                          {r.status === 'draft' && d.can.manage && (r.mine || d.can.approve) ? (
+                            <DialogButton
+                              id={`pr-edit-${r.id}`}
+                              label="Edit"
+                              title={`Change the draft from ${dmy(r.effectiveFrom)}`}
+                              className="ep-btn ep-btn--ghost ep-btn--sm"
+                            >
+                              <DraftForm
+                                kind={kind}
+                                row={r}
+                                full
+                                keepWhy
+                                employeeTypes={d.employeeTypes ?? []}
+                                idp={`pr-e${r.id}`}
+                                from={r.effectiveFrom}
+                                action={editPayrollConfig.bind(null, kind, r.id)}
+                                submit="Save the draft"
+                              />
+                            </DialogButton>
+                          ) : null}
+                          {r.status === 'active' ? (
+                            <RowFix
+                              kind={kind}
+                              id={r.id}
+                              usage={r.usage as RowUsage | undefined}
+                              back={`/payroll/setup/rates?tab=${kind}`}
+                              canApprove={d.can.approve || d.can.admin}
+                              canManage={d.can.manage}
+                              what={`the row from ${dmy(r.effectiveFrom)}`}
+                              correct={
+                                <DraftForm
+                                  kind={kind}
+                                  row={r}
+                                  full
+                                  employeeTypes={d.employeeTypes ?? []}
+                                  idp={`pr-c${r.id}`}
+                                  from={(r.usage as RowUsage | undefined)?.correctFrom ?? undefined}
+                                  minFrom={
+                                    (r.usage as RowUsage | undefined)?.correctFrom ?? undefined
+                                  }
+                                  action={addPayrollConfig.bind(null, kind)}
+                                  submit="Save the correction as a draft"
+                                />
+                              }
+                            />
                           ) : null}
                           {r.status === 'draft' && (r.mine || d.can.approve) ? (
                             <form action={deletePayrollConfig.bind(null, kind, r.id)}>

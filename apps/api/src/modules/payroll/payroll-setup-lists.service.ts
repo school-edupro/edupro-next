@@ -88,7 +88,13 @@ const STATUS = opt([
   ['draft', 'Draft'],
   ['active', 'Active'],
   ['ended', 'Ended'],
+  ['withdrawn', 'Withdrawn'],
 ]);
+const TODAY = () =>
+  new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' }).format(new Date());
+/** a dated row's state as people read it: an approved row whose end has passed is Ended */
+const stateOf = (r: Row) =>
+  r.status === 'active' && r.effectiveTo && s(r.effectiveTo) < TODAY() ? 'ended' : s(r.status);
 const MONTHS = [
   'January',
   'February',
@@ -157,9 +163,9 @@ const dated: GridCol[] = [
 const datedCells = (r: Row) => ({
   from: dmy(r.effectiveFrom),
   to: r.effectiveTo ? dmy(r.effectiveTo) : 'Open',
-  status: s(r.status),
+  status: stateOf(r),
   made: [r.createdByName, r.approvedByName].filter(Boolean).join(' · '),
-  why: s(r.changeReason),
+  why: r.status === 'withdrawn' ? `Withdrawn: ${s(r.withdrawReason)}` : s(r.changeReason),
 });
 /** in force on a date: active, from on or before, to open or on or after */
 const inForce = (r: Row, on: string) =>
@@ -330,7 +336,7 @@ export class PayrollSetupListsService {
           (!f.type || r.headType === f.type) &&
           (!f.category || r.category === f.category) &&
           (!f.calc || (f.calc === 'NONE' ? !r.calcType : r.calcType === f.calc)) &&
-          (!f.status || r.status === f.status) &&
+          (!f.status || stateOf(r) === f.status) &&
           (!f.drafts || (f.drafts === 'yes') === Number(r.drafts) > 0),
         columns: () => [
           { key: 'code', label: 'Code', width: 0.09 },
@@ -375,7 +381,7 @@ export class PayrollSetupListsService {
           { key: 'on', label: 'In force on', kind: 'date' },
         ],
         match: (r, f) =>
-          (!f.status || r.status === f.status) &&
+          (!f.status || stateOf(r) === f.status) &&
           (!f.calc || r.calcType === f.calc) &&
           inForce(r, f.on ?? ''),
         columns: () => [
@@ -501,7 +507,7 @@ export class PayrollSetupListsService {
           (!f.state || r.stateCode === f.state) &&
           (!f.employeeType || r.employeeType === f.employeeType) &&
           (!f.source || r.source === f.source) &&
-          (!f.status || r.status === f.status) &&
+          (!f.status || stateOf(r) === f.status) &&
           inForce(r, f.on ?? ''),
         columns: (p) => [
           ...CONFIG_COLS[configKind(p)].map((c, i) => ({
@@ -1082,7 +1088,7 @@ export class PayrollSetupListsService {
         ],
         match: (r, f) =>
           (!f.head || r.code === f.head) &&
-          (!f.status || r.status === f.status) &&
+          (!f.status || stateOf(r) === f.status) &&
           inForce(r, f.on ?? ''),
         columns: () => [
           { key: 'code', label: 'Head', width: 0.1 },
@@ -1100,7 +1106,7 @@ export class PayrollSetupListsService {
           amount: s(r.amount),
           from: dmy(r.effectiveFrom),
           to: r.effectiveTo ? dmy(r.effectiveTo) : 'Open',
-          status: s(r.status),
+          status: stateOf(r),
           why: s(r.changeReason),
           made: [r.madeBy, r.approvedBy].filter(Boolean).join(' · '),
         }),

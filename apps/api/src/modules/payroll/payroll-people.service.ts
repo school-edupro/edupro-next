@@ -5,7 +5,7 @@ import { DbService } from '../../common/db/db.service';
 import { DomainError } from '../../common/errors/domain-error';
 import { readSheet, templateSheet } from '../../common/excel/sheet';
 import { requireTenant, type RequestContext } from '../../common/http/request-context';
-import { approveDated, DATED } from './payroll-dated';
+import { approveDated, DATED, withUsage } from './payroll-dated';
 import { istToday, PayrollSetupService } from './payroll-setup.service';
 import {
   PAYROLL,
@@ -406,16 +406,20 @@ export class PayrollPeopleService {
           [employeeId, day, ENGINE_OWNED],
         )
       ).rows.map(camelRow);
-      const timeline = (
-        await c.query<Record<string, unknown>>(
-          `SELECT s.id::text, h.code, h.name, s.amount::text, s.effective_from::text, s.effective_to::text, s.status,
-                  s.change_reason, (SELECT display_name FROM users u WHERE u.id = s.created_by) AS made_by,
+      const timeline = await withUsage(
+        c,
+        DATED.structures!,
+        (
+          await c.query<Record<string, unknown> & { id: string; status: string }>(
+            `SELECT s.id::text, h.code, h.name, s.amount::text, s.effective_from::text, s.effective_to::text, s.status,
+                  s.change_reason, s.withdraw_reason, (SELECT display_name FROM users u WHERE u.id = s.created_by) AS made_by,
                   (SELECT display_name FROM users u WHERE u.id = s.approved_by) AS approved_by
              FROM payroll_structures s JOIN payroll_pay_heads h ON h.id = s.pay_head_id
             WHERE s.employee_id = $1 ORDER BY s.effective_from DESC, h.print_order`,
-          [employeeId],
-        )
-      ).rows.map(camelRow);
+            [employeeId],
+          )
+        ).rows.map((r) => camelRow(r) as Record<string, unknown> & { id: string; status: string }),
+      );
       const templates = (
         await c.query<Record<string, unknown>>(
           `SELECT id::text, name, description, staff_types, lines FROM payroll_structure_templates ORDER BY name`,

@@ -11,6 +11,7 @@ import {
   endDated,
   loadDated,
   mustOwnDraft,
+  withUsage,
 } from './payroll-dated';
 import {
   CONFIG_SCHEMAS,
@@ -392,7 +393,7 @@ export class PayrollSetupService {
         await c.query<Record<string, unknown>>(
           // eslint-disable-next-line no-restricted-syntax -- table, columns and order come from the fixed maps above
           `SELECT r.id::text, ${cols.map((col) => `r.${col}`).join(', ')}, r.effective_from::text, r.effective_to::text,
-                  r.status, r.reference_no, r.change_reason, r.created_by::text, r.created_at, r.approved_at,
+                  r.status, r.reference_no, r.change_reason, r.withdraw_reason, r.created_by::text, r.created_at, r.approved_at,
                   (SELECT display_name FROM users u WHERE u.id = r.created_by) AS created_by_name,
                   (SELECT display_name FROM users u WHERE u.id = r.approved_by) AS approved_by_name
              FROM ${t.table} r
@@ -403,10 +404,20 @@ export class PayrollSetupService {
       ).rows;
       return {
         kind,
-        rows: rows.map((r) => {
-          const out = Object.fromEntries(Object.entries(r).map(([k, v]) => [camel(k), v]));
-          return { ...out, mine: r.created_by === requireTenant(ctx).userId };
-        }),
+        // each approved row says which runs read it: the screens offer Withdraw or Correct
+        rows: await withUsage(
+          c,
+          t,
+          rows.map((r) => {
+            const out = Object.fromEntries(Object.entries(r).map(([k, v]) => [camel(k), v]));
+            return {
+              ...out,
+              id: String(r.id),
+              status: String(r.status),
+              mine: r.created_by === requireTenant(ctx).userId,
+            };
+          }),
+        ),
         // overtime rates are by the employee types of the staff master (what an employee's staff type says)
         ...(kind === 'ot' ? { employeeTypes: await PayrollSetupService.employeeTypes(c) } : {}),
         can: PayrollSetupService.can(ctx),

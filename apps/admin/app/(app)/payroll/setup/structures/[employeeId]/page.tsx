@@ -3,6 +3,7 @@ import { notFound } from 'next/navigation';
 import { FoldCard } from '@/components/FoldCard';
 import { Notice } from '@/components/Notice';
 import { ApplyTemplate } from '@/components/payroll/ApplyTemplate';
+import { RowFix } from '@/components/payroll/RowFix';
 import { SetupListBar, SetupListFiles } from '@/components/payroll/SetupListBar';
 import { ApiError, apiFetch, getMe } from '@/lib/api';
 import { setupList, type SetupList, type SetupListNav } from '@/lib/payroll-lists';
@@ -201,6 +202,8 @@ export default async function PayrollStructurePage({
                   type="date"
                   className="ep-input"
                   required
+                  defaultValue={/^\d{4}-\d{2}-\d{2}$/.test(sp.from ?? '') ? sp.from : undefined}
+                  min={/^\d{4}-\d{2}-\d{2}$/.test(sp.from ?? '') ? sp.from : undefined}
                 />
                 <span className="ep-field__help">
                   The amounts before it end the day before, once approved
@@ -275,6 +278,9 @@ export default async function PayrollStructurePage({
                     <th scope="col">Status</th>
                     <th scope="col">Why</th>
                     <th scope="col">Made · approved by</th>
+                    <th scope="col">
+                      <span className="ep-sr-only">Actions</span>
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
@@ -298,15 +304,47 @@ export default async function PayrollStructurePage({
                         >
                           {t.status === 'draft'
                             ? 'Draft'
-                            : t.status === 'active'
-                              ? 'Approved'
-                              : 'Ended'}
+                            : t.status === 'withdrawn'
+                              ? 'Withdrawn'
+                              : t.status === 'active'
+                                ? 'Approved'
+                                : 'Ended'}
                         </Badge>
                       </td>
-                      <td>{t.changeReason ?? ''}</td>
+                      <td>
+                        {t.status === 'withdrawn'
+                          ? `Withdrawn: ${t.withdrawReason ?? ''}`
+                          : (t.changeReason ?? '')}
+                      </td>
                       <td>
                         {t.madeBy ?? ''}
                         {t.approvedBy ? ` · ${t.approvedBy}` : ''}
+                      </td>
+                      <td>
+                        {t.status === 'active' ? (
+                          <RowFix
+                            kind="structures"
+                            id={t.id}
+                            usage={t.usage}
+                            back={here}
+                            canApprove={d.can.approve || d.can.admin}
+                            canManage={d.can.manage}
+                            what={`${t.code} from ${dmy(t.effectiveFrom)}`}
+                            correct={
+                              <p>
+                                <a
+                                  className="ep-btn ep-btn--primary ep-btn--sm"
+                                  href={`${here}?from=${t.usage?.correctFrom ?? ''}#sv-heads`}
+                                >
+                                  Type the right amount from{' '}
+                                  {t.usage?.correctFrom
+                                    ? dmy(t.usage.correctFrom)
+                                    : 'the next month'}
+                                </a>
+                              </p>
+                            }
+                          />
+                        ) : null}
                       </td>
                     </tr>
                   ))}

@@ -31,6 +31,8 @@ import { PayrollSettlementController } from './payroll-settlement.controller';
 import { PayrollSettlementService } from './payroll-settlement.service';
 import { PayrollReportsController } from './payroll-reports.controller';
 import { PayrollReportsService } from './payroll-reports.service';
+import { PayrollCorrectionsController } from './payroll-corrections.controller';
+import { PayrollCorrectionsService } from './payroll-corrections.service';
 import { PayrollSetupListsController } from './payroll-setup-lists.controller';
 import { PayrollSetupListsService } from './payroll-setup-lists.service';
 import { PayrollTransferService } from './payroll-transfer.service';
@@ -64,6 +66,7 @@ import { PayrollSetupService } from './payroll-setup.service';
     PayrollReportsController,
     PayrollGoLiveController,
     PayrollSetupListsController,
+    PayrollCorrectionsController,
   ],
   providers: [
     PayrollSetupService,
@@ -89,6 +92,7 @@ import { PayrollSetupService } from './payroll-setup.service';
     PayrollHomeService,
     PayrollGoLiveService,
     PayrollSetupListsService,
+    PayrollCorrectionsService,
     AuditService,
   ],
   exports: [PayrollSetupService],

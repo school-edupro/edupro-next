@@ -153,7 +153,8 @@ export async function bringPeople(c: PoolClient, t: Tally, historyFrom: string) 
     ).rows.map((r) => r.id),
   );
   for (const s of (await rowsOf(c, 'payroll_structure')).filter((r) => !num(r.isTrash))) {
-    const status = { ACTIVE: 'active', ENDED: 'ended' }[str(s.ApprovalStatus)];
+    // an ENDED row of the old module is bounded by its dates: kept ACTIVE, the months it covers still read it
+    const status = { ACTIVE: 'active', ENDED: 'active' }[str(s.ApprovalStatus)];
     if (!status) continue; // a draft never paid anyone
     const id = emp(s.EmpId);
     const code = heads.codeOf(s.PayHeadSrno);

@@ -880,6 +880,23 @@ export class PayrollRunService {
   }
 
   /** Everything a run's records consumed given back, then the records removed (a reprocess starts clean). */
+  /**
+   * A set-up row this run read was withdrawn (docs/design/86, "Withdraw and correct"): a run processed but not approved
+   * is worked out afresh — its records go and it is back in draft, to be processed again.
+   */
+  async resetForSetup(c: PoolClient, runId: string, why: string) {
+    const run = (
+      await c.query<{ stage: string }>(`SELECT stage FROM payroll_runs WHERE id = $1 FOR UPDATE`, [
+        runId,
+      ])
+    ).rows[0];
+    if (!run || !['PROCESSING', 'REVIEW'].includes(run.stage)) return false;
+    await this.purge(c, runId);
+    await this.setStage(c, runId, run.stage, 'DRAFT');
+    await this.event(c, runId, 'setup_withdrawn', run.stage, 'DRAFT', why.slice(0, 300));
+    return true;
+  }
+
   private async purge(c: PoolClient, runId: string) {
     await c.query(
       `UPDATE payroll_loans l SET balance = l.balance + x.principal,

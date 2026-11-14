@@ -21,6 +21,7 @@ import {
   endDated,
   loadDated,
   mustOwnDraft,
+  withUsage,
 } from './payroll-dated';
 import { istToday, PayrollSetupService } from './payroll-setup.service';
 import {
@@ -108,10 +109,16 @@ export class PayrollHeadsService {
         )
       ).rows[0];
       if (!head) throw new DomainError('not-found', 'Pay head not found', { status: 404 });
-      const versions = (await this.versions(c, id)).map((v) => ({
-        ...camelRow(v as unknown as Record<string, unknown>),
-        mine: v.created_by === requireTenant(ctx).userId,
-      }));
+      const versions = await withUsage(
+        c,
+        DATED.versions!,
+        (await this.versions(c, id)).map((v) => ({
+          ...camelRow(v as unknown as Record<string, unknown>),
+          id: String(v.id),
+          status: String(v.status),
+          mine: v.created_by === requireTenant(ctx).userId,
+        })),
+      );
       const slabs = (
         await c.query<Record<string, unknown>>(
           `SELECT s.version_id::text, s.basis, s.range_from, s.range_to, s.flat_amount, s.percent, s.seq
@@ -136,7 +143,7 @@ export class PayrollHeadsService {
       await c.query<VersionRow>(
         `SELECT v.id::text, v.calc_type, v.formula, v.depends_on, v.is_taxable, v.pf_wage, v.esi_wage, v.pt_wage,
                 v.prorate_on_lop, v.rounding, v.effective_from::text, v.effective_to::text, v.status, v.reference_no,
-                v.change_reason, v.created_by::text,
+                v.change_reason, v.withdraw_reason, v.created_by::text,
                 (SELECT display_name FROM users u WHERE u.id = v.created_by) AS created_by_name,
                 (SELECT display_name FROM users u WHERE u.id = v.approved_by) AS approved_by_name
            FROM payroll_pay_head_versions v WHERE v.pay_head_id = $1 ORDER BY v.effective_from DESC`,

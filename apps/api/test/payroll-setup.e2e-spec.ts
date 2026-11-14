@@ -233,10 +233,17 @@ describe('payroll set-up (e2e)', () => {
         })
       ).statusCode,
     ).toBe(201);
-    const list = (await call(maker, 'GET', '/payroll/config/rates?status=ended')).json();
-    expect(list.rows).toEqual([
-      expect.objectContaining({ rateCode: 'CCA_RATE', effectiveTo: '2026-12-31', status: 'ended' }),
-    ]);
+    // ended by its date, it stays ACTIVE: the months up to the end still read it (it used to be hidden from them)
+    const list = (await call(maker, 'GET', '/payroll/config/rates?status=active')).json();
+    expect(list.rows).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          rateCode: 'CCA_RATE',
+          effectiveTo: '2026-12-31',
+          status: 'active',
+        }),
+      ]),
+    );
   });
 
   it('statutory rows are checked', async () => {

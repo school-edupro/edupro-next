@@ -641,3 +641,41 @@ staff master's active Employee types (`GET /payroll/config/ot` returns `employee
 `POST /payroll/config/ot` refuses a type not in the master and saves the master's own spelling — the monthly overtime
 finds a rate by the employee's staff type (`profile.staff_type`, the master's name), so a typed "teaching" never
 matched. The list's employee-type filter is a drop-down too. Test: `payroll-setup-lists` (5).
+
+## As built — fixing a wrong entry: Edit, Withdraw, Correct (14 Nov 2026)
+
+**Asked**: in every section of Rates and statutory rules, how to delete or manage a wrong entry. **Benchmark**: greytHR,
+Keka and Zoho Payroll allow changing or deleting an effective-dated revision until payroll is processed for its
+period; after that a fix is a new revision from a later date with arrears. **Decided** (all recommended): Withdraw an
+approved row no approved run has read; Correct from a date once one has; the same for all dated set-up.
+
+**Migration 0380**: the eight dated tables (rates, PF, ESI, PT, LWF, OT, pay-head versions, structures) take status
+`withdrawn`, `withdrawn_by|at`, `withdraw_reason` (10–300) and `closed_rows` (what an approval ended, each with its
+earlier end). It also fixes **End**: an ended row had status `ended`, which every run leaves out, so ending a rate on
+31-03 hid it from December too. End now only sets the end date (the row stays `active`, bounded by its dates, as the
+rows an approval closes always were); the `ended` rows became `active`; the old module's ENDED structures come across
+`active` too.
+
+**API**: `payroll-dated.ts` — `approveDated` records `closed_rows`; `endDated` keeps `active`; `datedUsage` (the runs
+a row was read by: a run's month meets the row's dates; a structure only by runs with a record of that employee;
+APPROVED / LOCKED / PAID close it, PROCESSING / REVIEW are open) and `withUsage` (each ACTIVE row of a list gets
+`usage: { closed, closedMonths, open, correctFrom }` — config lists, a head's versions, a structure's timeline);
+`withdrawDated` (refused when closed, naming the month to correct from; the rows it ended reopen to their own end but
+never past this row's end; rows approved before `closed_rows` are found by their end the day before). `POST
+/payroll/dated/:kind/:id/withdraw {reason}` (`payroll-corrections.service.ts`, a checker or the payroll admin): the
+open runs that read it go back to draft (`PayrollRunService.resetForSetup`: records purged as on a reject, event
+`setup_withdrawn`); audit `payroll.<kind>.withdraw`. Set-up lists: status filter Withdrawn; Ended means past its end.
+
+**Screens**: `components/payroll/RowFix.tsx` (Withdraw: the reason, the runs that go back to draft; Correct: why, the
+month, the form or pointer). Rates: **Edit** a draft (the API's PUT, now on screen), Withdraw / Correct on approved
+rows (Correct opens the draft form with the row's values from the first open month; the form builder now prefills
+any row and keeps each dialog's ids apart), state badges (Ended by date, Withdrawn) and the reason in Why. A head's
+versions: Withdraw / Correct (the New version dialog, dated from the month shown). A structure's timeline: Withdraw /
+Correct (a link to the amounts form with From set, `?from=`). Help: Payroll → Dated rows → A wrong entry.
+
+**Tests**: `payroll-withdraw.e2e-spec.ts` (4: withdrawn, kept, the row before back in force, a maker refused, a reason
+needed, listed with its reason, audited; refused once an approved run read it with the month to correct from, a
+processed run sent back to draft and the row before reopened; End keeps a row active; a salary amount withdrawn while
+only another employee's run was approved). `payroll-setup` (End keeps the row active). Gate: the payroll suites
+(withdraw, setup, set-up lists, go-live, run, people docs, revision, inputs, settlement, statutory, tax, reports,
+SPOC), permissions, the database's 143. Browser (dev-admin; the Withdraw dialog on four tabs, a head's page): axe clean.

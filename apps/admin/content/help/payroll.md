@@ -58,7 +58,27 @@ Every rate, pay-head version and salary amount applies **from a date**. A change
 old row: it is a **new dated row**, made as a **draft**. When a checker approves it, the row in force
 before it **ends the day before**, and stays — so a month already run, or run again, reads the rate it
 had then. You cannot date a draft behind a later approved row, nor make two rows from the same date.
-**End** a row by hand only when the rule stops altogether.
+**End** a row by hand only when the rule stops altogether: the months up to its last day still read it.
+
+### A wrong entry: how to fix it
+
+The same on every tab of Rates and statutory rules (Rates, PF, ESI, Profession tax, LWF, Overtime rates), on a
+pay head's versions and on an employee's salary amounts:
+
+| The wrong row is …                                  | What to do                                                                              |
+| --------------------------------------------------- | --------------------------------------------------------------------------------------- |
+| A **draft** (not approved yet)                      | **Edit** it, or **Delete** it — its maker or a checker                                  |
+| **Approved**, and no approved pay run has read it   | **Withdraw** it — a checker or the payroll admin, with the reason                       |
+| **Approved**, and an approved or locked run read it | **Correct** it — a new row from the first month not yet approved; a checker approves it |
+
+**Withdraw** keeps the row in the history, marked **Withdrawn** with the reason; no pay run reads it, and the row
+it had replaced is in force again. If a run that read it was only processed (not approved), that run goes back to
+draft — process it again. Every withdrawal is in the payroll audit trail.
+
+**Correct** is for a row a paid or approved month already used: those months keep it (their payslips and returns
+stand). The button opens a new draft with the row's values, dated from the first month after the last approved
+one. To pay a difference for the months already approved, use **Pay changes and leavers → a revision** with
+arrears.
 
 ## The set-up (Payroll → Payroll set-up)
 

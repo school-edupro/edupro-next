@@ -150,6 +150,41 @@ export async function addPayrollConfig(kind: ConfigKind, fd: FormData) {
   done(here, 'Saved as a draft: a payroll checker approves it.');
 }
 
+/** A draft changed (its maker or a checker): the same fields as a new one. */
+export async function editPayrollConfig(kind: ConfigKind, id: string, fd: FormData) {
+  if (!KINDS.includes(kind) || !okId(id)) return;
+  const here = `/payroll/setup/rates?tab=${kind}`;
+  try {
+    await send(`/payroll/config/${kind}/${id}`, 'PUT', configBody(kind, fd, here));
+  } catch (e) {
+    if (e instanceof ApiError) back(here, e);
+    throw e;
+  }
+  done(here, 'The draft is changed: a payroll checker approves it.');
+}
+
+const DATED_KINDS = [...KINDS, 'versions', 'structures'];
+/**
+ * An approved row withdrawn (a checker or the payroll admin, with a reason) while no approved run has read it: kept
+ * as WITHDRAWN, the row before it in force again, a run only processed that read it back to draft.
+ */
+export async function withdrawDatedRow(kind: string, id: string, fd: FormData) {
+  if (!DATED_KINDS.includes(kind) || !okId(id)) return;
+  const here = safe(fd.get('back'), '/payroll/setup');
+  let message = 'Withdrawn.';
+  try {
+    message = (
+      (await send(`/payroll/dated/${kind}/${id}/withdraw`, 'POST', {
+        reason: text(fd, 'reason') ?? '',
+      })) as { message: string }
+    ).message;
+  } catch (e) {
+    if (e instanceof ApiError) back(here, e);
+    throw e;
+  }
+  done(here, message);
+}
+
 /** `returnTo`: the page to come back to (the drafts list); a form bound without it passes its FormData there. */
 export async function approvePayrollConfig(kind: ConfigKind, id: string, returnTo?: unknown) {
   if (!KINDS.includes(kind) || !okId(id)) return;

@@ -4,6 +4,7 @@ import { FoldCard } from '@/components/FoldCard';
 import { Notice } from '@/components/Notice';
 import { DialogButton } from '@/components/leave/DialogButton';
 import { VersionFields } from '@/components/payroll/VersionFields';
+import { RowFix } from '@/components/payroll/RowFix';
 import { SetupListBar } from '@/components/payroll/SetupListBar';
 import { ApiError, apiFetch, getMe } from '@/lib/api';
 import { setupList, type SetupList, type SetupListNav } from '@/lib/payroll-lists';
@@ -187,21 +188,33 @@ export default async function PayHeadPage({
                     <td>{flags(v)}</td>
                     <td>{ROUND_LABEL[v.rounding] ?? v.rounding}</td>
                     <td>
-                      <Badge tone={STATUS_TONE[v.status]}>
+                      <Badge
+                        tone={
+                          v.status === 'withdrawn'
+                            ? 'danger'
+                            : STATUS_TONE[v.status as 'draft' | 'active' | 'ended']
+                        }
+                      >
                         {v.status === 'draft'
                           ? 'Draft'
-                          : v === live
-                            ? 'In force'
-                            : v.status === 'active'
-                              ? 'Approved'
-                              : 'Ended'}
+                          : v.status === 'withdrawn'
+                            ? 'Withdrawn'
+                            : v === live
+                              ? 'In force'
+                              : v.status === 'active'
+                                ? 'Approved'
+                                : 'Ended'}
                       </Badge>
                     </td>
                     <td>
                       {v.createdByName ?? 'Default'}
                       {v.approvedByName ? ` · ${v.approvedByName}` : ''}
                     </td>
-                    <td>{v.changeReason ?? ''}</td>
+                    <td>
+                      {v.status === 'withdrawn'
+                        ? `Withdrawn: ${v.withdrawReason ?? ''}`
+                        : (v.changeReason ?? '')}
+                    </td>
                     <td>
                       <div className="ep-grid__toolbar">
                         {v.status === 'draft' && d.can.approve ? (
@@ -217,6 +230,27 @@ export default async function PayHeadPage({
                               Delete
                             </button>
                           </form>
+                        ) : null}
+                        {v.status === 'active' ? (
+                          <RowFix
+                            kind="versions"
+                            id={v.id}
+                            usage={v.usage}
+                            back={`/payroll/setup/heads/${h.id}`}
+                            canApprove={d.can.approve || d.can.admin}
+                            canManage={d.can.manage}
+                            what={`the version from ${dmy(v.effectiveFrom)}`}
+                            correct={
+                              <p className="ep-field__help">
+                                Close this and press <strong>＋ New version</strong> on this page:
+                                give it the right formula, dated from{' '}
+                                {v.usage?.correctFrom
+                                  ? dmy(v.usage.correctFrom)
+                                  : 'the next open month'}
+                                . Its tests run before it can be approved.
+                              </p>
+                            }
+                          />
                         ) : null}
                         {v.status === 'active' && !v.effectiveTo && d.can.approve ? (
                           <DialogButton

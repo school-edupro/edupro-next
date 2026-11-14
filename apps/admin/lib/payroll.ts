@@ -52,7 +52,7 @@ export interface PayrollSettings {
 export type ConfigKind = 'rates' | 'pf' | 'esi' | 'pt' | 'lwf' | 'ot';
 export interface ConfigRow {
   id: string;
-  status: 'draft' | 'active' | 'ended';
+  status: 'draft' | 'active' | 'ended' | 'withdrawn';
   effectiveFrom: string;
   effectiveTo: string | null;
   referenceNo: string | null;
@@ -118,6 +118,9 @@ export interface HeadListRow {
 
 export interface HeadVersion {
   id: string;
+  /** which runs read it (an approved version): Withdraw or Correct */
+  usage?: import('@/components/payroll/RowFix').RowUsage;
+  withdrawReason?: string | null;
   calcType: string;
   formula: string | null;
   dependsOn: string | null;
@@ -129,7 +132,7 @@ export interface HeadVersion {
   rounding: string;
   effectiveFrom: string;
   effectiveTo: string | null;
-  status: 'draft' | 'active' | 'ended';
+  status: 'draft' | 'active' | 'ended' | 'withdrawn';
   referenceNo: string | null;
   changeReason: string | null;
   createdByName: string | null;
@@ -325,8 +328,11 @@ export interface StructureView {
     effectiveTo: string | null;
     status: string;
     changeReason: string | null;
+    withdrawReason?: string | null;
     madeBy: string | null;
     approvedBy: string | null;
+    /** which runs paid it (an approved amount): Withdraw or Correct */
+    usage?: import('@/components/payroll/RowFix').RowUsage;
   }>;
   templates: Array<{
     id: string;
