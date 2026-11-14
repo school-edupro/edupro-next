@@ -16212,3 +16212,66 @@ button.ep-shiftcal__cell:focus-visible {
   font-weight: var(--fw-bold);
   text-align: center;
 }
+
+/* ---- certificate register (docs/design/87) ------------------------------------------------------ */
+.ep-cert-issue {
+  display: grid;
+  gap: var(--sp-4);
+}
+.ep-cert-hits,
+.ep-cert-checks {
+  list-style: none;
+  margin: var(--sp-3) 0 0;
+  padding: 0;
+  display: grid;
+  gap: var(--sp-2);
+}
+.ep-cert-hits a[aria-current='true'] {
+  font-weight: var(--fw-bold);
+  text-decoration: underline;
+}
+.ep-cert-form {
+  display: grid;
+  gap: var(--sp-3);
+}
+.ep-cert-fields {
+  display: grid;
+  gap: var(--sp-3);
+  grid-template-columns: minmax(0, 1fr);
+}
+@media (min-width: 48rem) {
+  .ep-cert-fields {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+.ep-cert-fields .ep-field {
+  margin: 0;
+}
+.ep-cert-preview {
+  width: 100%;
+  height: 70rem;
+  max-height: 80vh;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  background: var(--surface-card);
+}
+.ep-cert-dl {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--sp-1) var(--sp-4);
+  margin: 0;
+}
+@media (min-width: 40rem) {
+  .ep-cert-dl {
+    grid-template-columns: minmax(8rem, 14rem) minmax(0, 1fr);
+  }
+}
+.ep-cert-dl dt {
+  color: var(--text-muted);
+  font-size: var(--fs-small);
+}
+.ep-cert-dl dd {
+  margin: 0 0 var(--sp-2);
+  color: var(--text-body);
+  overflow-wrap: anywhere;
+}

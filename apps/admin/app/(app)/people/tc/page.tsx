@@ -31,7 +31,18 @@ export default async function TcPage({
   const list = await apiFetch<Page<TransferCertificate>>(`/people/tc?${query.toString()}`);
   return (
     <>
-      <PageHeader kicker={t('kicker')} title={t('title')} description={t('description')} />
+      <PageHeader
+        kicker={t('kicker')}
+        title={t('title')}
+        description={t('description')}
+        actions={
+          me.permissions.includes('certificate.register.view') ? (
+            <a className="ep-btn ep-btn--secondary ep-btn--sm" href="/certificates?type=TC">
+              Certificate register
+            </a>
+          ) : null
+        }
+      />
       <Notice params={sp} />
       <Card>
         <form

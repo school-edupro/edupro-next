@@ -22,6 +22,7 @@ import type { PdfEngine } from './pdf';
 import { renderAiReport } from '../renderers/ai-report';
 import { buildStrength, strengthToHtml, strengthToXlsx } from '../renderers/strength-report';
 import { renderCertificate, renderCertificateBatch } from '../renderers/certificate';
+import { renderCertificateDoc } from '../renderers/certificate-doc';
 import { renderReportCard, renderReportCardBatch } from '../renderers/report-card';
 import { renderDocument } from '../renderers/document';
 import { renderDsrAccess } from '../renderers/dsr-access';
@@ -160,6 +161,9 @@ export function exportProcessor({ db, storage, pdf, log, ttlDays }: ExportDeps) 
           log.info({ exportId, count: doc.count }, 'ACRs rendered');
         } else if (renderer.id === 'dsr_access') {
           const doc = await renderDsrAccess(db, envelope, row.params);
+          bytes = await pdf.render(doc.html, { width: doc.width, height: doc.height });
+        } else if (renderer.id === 'certificate_doc') {
+          const doc = await renderCertificateDoc(db, storage, envelope, row.params);
           bytes = await pdf.render(doc.html, { width: doc.width, height: doc.height });
         } else if (renderer.id === 'certificate') {
           const doc = await renderCertificate(db, envelope, row.params);

@@ -34,7 +34,7 @@
 
 - **People → Promotion**: decisions per pupil (promote, detain, leave), applied into the new year's
   enrolments; sections of the new year are created from the current structure.
-- **Transfer certificates** and withdrawals from **People**.
+- **Transfer certificates** from **Certificates → Certificate register** (see [certificates](certificates.md)); withdrawals from **People**.
 
 ## Five common questions
 

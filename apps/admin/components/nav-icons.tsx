@@ -61,6 +61,7 @@ const P = {
   globe:
     'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18ZM3 12h18M12 3c2.5 2.5 3.5 5.5 3.5 9S14.5 18.5 12 21M12 3c-2.5 2.5-3.5 5.5-3.5 9s1 6.5 3.5 9',
   school: 'M3 10l9-6 9 6M5 10v10h14V10M9 20v-5h6v5M12 10.5h.01',
+  award: 'M12 15a6 6 0 1 0 0-12 6 6 0 0 0 0 12ZM8.5 13.8 7 21l5-3 5 3-1.5-7.2',
 } as const;
 
 export type IconName = keyof typeof P;
@@ -71,6 +72,7 @@ export const isIconName = (v: unknown): v is IconName =>
 export const SECTION_ICON: Record<string, IconName> = {
   overview: 'home',
   people: 'users',
+  certificates: 'award',
   employeeManagement: 'userPlus',
   employeeLeave: 'calendar',
   payroll: 'wallet',

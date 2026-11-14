@@ -224,7 +224,8 @@ export async function Shell({
           // staff screens ride on the people module switch
           ((g.section === 'employeeManagement' ||
             g.section === 'employeeLeave' ||
-            g.section === 'payroll') &&
+            g.section === 'payroll' ||
+            g.section === 'certificates') &&
             features.has('people')) ||
           // appointments ride on the engagement module switch
           ((g.section === 'appointments' || g.section === 'clinic') &&

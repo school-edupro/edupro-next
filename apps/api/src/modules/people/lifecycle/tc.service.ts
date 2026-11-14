@@ -6,6 +6,7 @@ import { DomainError } from '../../../common/errors/domain-error';
 import { requireTenant, type RequestContext } from '../../../common/http/request-context';
 import { TemplatesService } from '../../platform/templates/templates.service';
 import { ReportsService } from '../../reports/reports.service';
+import { CertificatesService } from '../../certificates/certificates.service';
 import type { CancelDto, IssueTcDto, ListTcQueryDto } from './lifecycle.dto';
 
 export interface TcRow {
@@ -93,6 +94,7 @@ export class TcService {
     private readonly audit: AuditService,
     private readonly reports: ReportsService,
     private readonly templates: TemplatesService,
+    private readonly certificates: CertificatesService,
   ) {}
 
   async list(ctx: RequestContext, q: ListTcQueryDto): Promise<{ rows: TcRow[]; total: number }> {
@@ -148,134 +150,75 @@ export class TcService {
   }
 
   /**
-   * Issues a TC. From a withdrawal still in progress (`keepStatus`), the student stays active until the
-   * withdrawal completes; otherwise the TC itself ends the enrolment.
+   * Issues a TC through the certificate register (docs/design/87): its checks (the withdrawal; fees, library, hostel and
+   * transport cleared; one live TC) run on every route, the principal may override a failed one with a reason; the
+   * number is the type's of the year (TC/2026-27/00001) with the book Sl. No.; every printed field is frozen. From a
+   * withdrawal still in progress (`keepStatus`), the student stays active until the withdrawal completes; otherwise the
+   * TC itself ends the enrolment.
    */
   async issue(
     ctx: RequestContext,
     studentId: string,
     dto: IssueTcDto,
-    opts: { keepStatus?: boolean } = {},
+    opts: { keepStatus?: boolean; withdrawalId?: string | null; leavingOn?: string | null } = {},
   ): Promise<TcRow> {
     const tenant = requireTenant(ctx);
-    if (!tenant.academicYearId)
-      throw new DomainError('year.not_selected', 'No academic year is active or selected', {
-        status: 409,
-      });
-    const yearId = tenant.academicYearId;
-    // 1. the certificate row and the student's departure, committed first so the renderer can read them
-    const tcId = await this.db.tenant(tenant, async (c) => {
-      const s = await c.query<{
-        status: string;
-        snapshot: Record<string, unknown>;
-        last_class: string | null;
-        year_code: string;
-      }>(
-        `SELECT s.status::text, y.code AS year_code,
-                (SELECT c.code || '-' || cs.name FROM enrolments e JOIN class_sections cs ON cs.id = e.class_section_id JOIN classes c ON c.id = cs.class_id
-                  WHERE e.student_id = s.id ORDER BY e.academic_year_id DESC, e.id DESC LIMIT 1) AS last_class,
-                jsonb_build_object('name', s.display_name, 'admissionNo', s.admission_no, 'dob', to_char(s.dob, 'DD Mon YYYY'), 'gender', s.gender::text,
-                  'category', s.category, 'admittedOn', to_char(s.admitted_on, 'DD Mon YYYY'), 'house', s.house,
-                  'guardianName', (SELECT g.display_name FROM student_guardians sg JOIN guardians g ON g.id = sg.guardian_id WHERE sg.student_id = s.id ORDER BY sg.is_primary DESC, sg.id LIMIT 1),
-                  'guardianMobile', (SELECT g.mobile FROM student_guardians sg JOIN guardians g ON g.id = sg.guardian_id WHERE sg.student_id = s.id ORDER BY sg.is_primary DESC, sg.id LIMIT 1)) AS snapshot
-           FROM students s CROSS JOIN academic_years y
-          WHERE s.id = $1 AND s.deleted_at IS NULL AND y.id = $2`,
-        [studentId, yearId],
-      );
-      const student = s.rows[0];
-      if (!student) throw new DomainError('not-found', 'Student not found');
-      const open = await c.query(
-        `SELECT 1 FROM transfer_certificates WHERE student_id = $1 AND status = 'issued'`,
+    const open = await this.db.tenant(tenant, (c) =>
+      c.query<{ tc_no: string }>(
+        `SELECT tc_no FROM transfer_certificates WHERE student_id = $1 AND status = 'issued' LIMIT 1`,
         [studentId],
+      ),
+    );
+    if (open.rows[0])
+      throw new DomainError(
+        'tc.already_issued',
+        `The student already holds an issued transfer certificate (${open.rows[0].tc_no})`,
+        { status: 409 },
       );
-      if (open.rowCount)
-        throw new DomainError(
-          'tc.already_issued',
-          'The student already holds an issued transfer certificate',
-          {
-            status: 409,
-          },
-        );
-      const template = dto.templateId
-        ? await this.templates.get(ctx, dto.templateId)
-        : await this.templates.activeOfKind(c, 'transfer_certificate');
-      if (!template)
-        throw new DomainError(
-          'template.missing',
-          'No active transfer certificate template; install the defaults first',
-          {
-            status: 409,
-          },
-        );
-      const no = await c.query<{ tc_no: string; serial: number }>(
-        `SELECT * FROM app.next_tc_no($1)`,
-        [student.year_code],
-      );
-      const r = await c.query<{ id: string }>(
-        `INSERT INTO transfer_certificates (school_id, student_id, academic_year_id, tc_no, serial, issued_on, reason, last_class, conduct, promotion_status, dues_cleared, remarks, snapshot, template_id, issued_by)
-         VALUES (app.current_school_id(), $1, $2, $3, $4, COALESCE($5::date, CURRENT_DATE), $6, $7, $8, $9, $10, $11, $12::jsonb, $13, app.current_user_id())
-         RETURNING id::text`,
-        [
-          studentId,
-          yearId,
-          no.rows[0]!.tc_no,
-          no.rows[0]!.serial,
-          dto.issuedOn ?? null,
-          dto.reason,
-          student.last_class,
-          dto.conduct,
-          dto.promotionStatus ?? null,
-          dto.duesCleared,
-          dto.remarks ?? null,
-          JSON.stringify(student.snapshot),
-          template.id,
-        ],
-      );
-      const id = r.rows[0]!.id;
-      if (student.status === 'active' && !opts.keepStatus) {
-        await c.query(`SELECT set_config('app.status_reason', $1, true)`, [
-          `transfer certificate ${no.rows[0]!.tc_no}`,
-        ]);
-        await c.query(
-          `UPDATE students SET status = 'inactive', left_on = COALESCE($2::date, CURRENT_DATE), updated_at = now(), updated_by = app.current_user_id() WHERE id = $1`,
-          [studentId, dto.issuedOn ?? null],
-        );
-        await c.query(
-          `UPDATE enrolments SET status = 'transferred', ended_on = COALESCE($2::date, CURRENT_DATE), updated_at = now(), updated_by = app.current_user_id()
-            WHERE student_id = $1 AND status = 'active'`,
-          [studentId, dto.issuedOn ?? null],
-        );
-      }
-      await this.audit.stage(ctx, c, {
-        action: 'people.tc.issue',
-        entityType: 'transfer_certificates',
-        entityId: id,
-        after: { tcNo: no.rows[0]!.tc_no, studentId, reason: dto.reason },
-      });
-      return id;
-    });
-    // 2. the PDF through the export service (its own transaction and outbox row)
-    const tc = (await this.db.tenant(tenant, (c) => this.find(c, tcId)))!;
-    const exp = await this.reports.create(
+    const cert = await this.certificates.issue(
       ctx,
       {
-        dataset: 'document',
-        format: 'pdf',
-        params: { templateId: tc.templateId, entity: 'transfer_certificate', entityId: tcId },
-        title: `TC ${tc.tcNo}`,
+        typeCode: 'TC',
+        studentId,
+        issuedOn: dto.issuedOn,
+        fields: {
+          ...dto.fields,
+          reason: dto.reason,
+          conduct: dto.conduct,
+          ...(dto.promotionStatus ? { promotion: dto.promotionStatus } : {}),
+          ...(dto.remarks ? { remarks: dto.remarks } : {}),
+        },
+        overrideReason: dto.overrideReason,
       },
-      'people.tc.render',
+      opts,
     );
+    const tc = (await this.db.tenant(tenant, (c) => this.find(c, cert.transferCertificateId!)))!;
     await this.db.tenant(tenant, (c) =>
-      c.query(`UPDATE transfer_certificates SET export_id = $2 WHERE id = $1`, [tcId, exp.id]),
+      this.audit.stage(ctx, c, {
+        action: 'people.tc.issue',
+        entityType: 'transfer_certificates',
+        entityId: tc.id,
+        after: { tcNo: tc.tcNo, studentId, reason: dto.reason, certificateId: cert.id },
+      }),
     );
-    return { ...tc, exportId: exp.id };
+    return tc;
   }
 
   /** (Re)queues the PDF, for certificates created before a template existed or after a template change. */
   async render(ctx: RequestContext, id: string): Promise<TcRow> {
     const tenant = requireTenant(ctx);
     const tc = await this.get(ctx, id);
+    const kept = await this.db.tenant(tenant, (c) =>
+      c.query<{ id: string }>(
+        `SELECT id::text FROM certificates WHERE transfer_certificate_id = $1 AND copy_no = 0`,
+        [id],
+      ),
+    );
+    if (kept.rows[0]) {
+      // the register's paper (the frozen fields through the template version it was made with, or the old TC template)
+      const cert = await this.certificates.render(ctx, kept.rows[0].id);
+      return { ...tc, exportId: cert.exportId };
+    }
     let templateId = tc.templateId;
     if (!templateId) {
       const t = await this.db.tenant(tenant, (c) =>
@@ -322,6 +265,8 @@ export class TcService {
         `UPDATE transfer_certificates SET status = 'cancelled', cancelled_at = now(), cancelled_by = app.current_user_id(), cancel_reason = $2 WHERE id = $1`,
         [id, dto.reason],
       );
+      // its register row (and any duplicate) with it: the number is never given again
+      await this.certificates.cancelForTc(c, id, dto.reason.length >= 3 ? dto.reason : 'Cancelled');
       const after = (await this.find(c, id))!;
       await this.audit.stage(ctx, c, {
         action: 'people.tc.cancel',

@@ -67,6 +67,15 @@ export const RENDERERS: Record<string, RendererDefinition> = {
 
 // 19 Oct 2026: an employee's annual confidential report, or every ACR shown on the board (a page break
 // per ACR); the ACR endpoint checks the ids, so the renderer names no required parameter
+/** docs/design/87: one certificate of the register, from its frozen data and the template version it was made with. */
+RENDERERS.certificate_doc = {
+  id: 'certificate_doc',
+  title: 'Certificate',
+  permission: 'certificate.register.view',
+  page: { width: '210mm', height: '297mm' },
+  requiredParams: ['certificateId'],
+};
+
 RENDERERS.acr_report = {
   id: 'acr_report',
   title: 'Annual confidential report',

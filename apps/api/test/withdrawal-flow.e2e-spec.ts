@@ -265,6 +265,22 @@ describe('withdrawal through configured departments (e2e)', () => {
     });
     expect(tc.statusCode).toBe(201);
     expect((tc.json() as Withdrawal).tc?.tcNo).toMatch(/^TC\//);
+    // in the certificate register, its checks answered by the withdrawal (docs/design/87)
+    const reg = await inject({
+      method: 'GET',
+      url: `/certificates/student/${ids.a}`,
+      headers: h(),
+    });
+    expect(reg.json().rows[0]).toMatchObject({
+      number: (tc.json() as Withdrawal).tc?.tcNo,
+      typeCode: 'TC',
+      overrideReason: null,
+    });
+    expect(
+      (reg.json().rows[0].checks as Array<{ key: string; ok: boolean; detail: string }>).find(
+        (x) => x.key === 'state',
+      ),
+    ).toMatchObject({ ok: true, detail: expect.stringContaining('withdrawal') });
     const student = await inject({ method: 'GET', url: `/people/students/${ids.a}`, headers: h() });
     expect(student.json().status).toBe('active');
     const again = await inject({

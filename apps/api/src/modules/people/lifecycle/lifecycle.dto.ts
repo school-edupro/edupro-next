@@ -20,6 +20,10 @@ export const LIFECYCLE = {
 } as const;
 
 // ---- transfer certificates ----------------------------------------------------------------------
+const TcFields = z
+  .record(z.string().regex(/^[a-zA-Z]{2,30}$/), z.union([z.string().trim().max(500), z.number()]))
+  .default({});
+const OverrideReason = z.string().trim().min(10, 'at least 10 characters').max(300).optional();
 export const IssueTcSchema = z.object({
   reason: z.string().trim().min(1).max(300),
   issuedOn: DateSchema.optional(),
@@ -28,6 +32,10 @@ export const IssueTcSchema = z.object({
   duesCleared: z.boolean().default(true),
   remarks: z.string().trim().max(500).optional(),
   templateId: IdSchema.optional(),
+  /** the TC's other fields (docs/design/87): working days, subjects, exam result … (filled from the record when left out) */
+  fields: TcFields,
+  /** the principal's reason to issue although a check (fees, library, hostel, transport, the withdrawal) fails */
+  overrideReason: OverrideReason,
 });
 export class IssueTcDto extends createZodDto(IssueTcSchema) {}
 
@@ -95,6 +103,8 @@ export const BulkTcSchema = z.object({
   conduct: z.string().trim().min(1).max(60).default('Good'),
   promotionStatus: z.string().trim().max(120).optional(),
   remarks: z.string().trim().max(500).optional(),
+  fields: TcFields,
+  overrideReason: OverrideReason,
 });
 export class BulkTcDto extends createZodDto(BulkTcSchema) {}
 

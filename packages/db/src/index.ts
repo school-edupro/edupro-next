@@ -224,6 +224,7 @@ export * from './template-engine';
 export * from './document-data';
 export * from './report-facts';
 export * from './document-defaults';
+export * from './certificate-templates';
 export * from './admission-form';
 export * from './student-fields';
 export * from './student-profile';

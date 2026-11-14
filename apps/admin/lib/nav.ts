@@ -55,6 +55,17 @@ export const NAV: Array<{
     ],
   },
   {
+    // docs/design/87: one register for every certificate (issue opens from the register)
+    section: 'certificates',
+    items: [
+      {
+        href: '/certificates',
+        label: 'certificateRegister',
+        permission: 'certificate.register.view',
+      },
+    ],
+  },
+  {
     // staff, apart from the students and families of People
     section: 'employeeManagement',
     items: [
@@ -431,7 +442,7 @@ export const NAV: Array<{
       },
       {
         href: '/engagement/certificates',
-        label: 'certificates',
+        label: 'achievementCertificates',
         permission: 'engagement.certificate.issue',
       },
       { href: '/engagement/cctv', label: 'cctv', permission: 'engagement.cctv.decide' },

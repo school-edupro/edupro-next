@@ -1291,8 +1291,10 @@ export class WithdrawalsService {
         promotionStatus: dto.promotionStatus,
         duesCleared: true,
         remarks: dto.remarks,
+        fields: dto.fields ?? {},
+        overrideReason: dto.overrideReason,
       },
-      { keepStatus: w.status !== 'completed' },
+      { keepStatus: w.status !== 'completed', withdrawalId: id, leavingOn: w.leavingOn },
     );
     await this.db.tenant(requireTenant(ctx), async (c) => {
       await c.query(`UPDATE student_withdrawals SET tc_id = $2, updated_at = now() WHERE id = $1`, [

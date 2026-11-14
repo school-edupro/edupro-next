@@ -1,5 +1,6 @@
 import { Module, type OnModuleInit } from '@nestjs/common';
 import { AuditService } from '../../../common/audit/audit.service';
+import { CertificatesModule } from '../../certificates/certificates.module';
 import { FeesModule } from '../../fees/fees.module';
 import { FilesModule } from '../../files/files.module';
 import { TemplatesModule } from '../../platform/templates/templates.module';
@@ -16,7 +17,14 @@ import { WithdrawalsService } from './withdrawals.service';
 
 /** Transfers between schools of the group, transfer certificates, withdrawal clearance by configured departments, promotion decisions. */
 @Module({
-  imports: [ReportsModule, TemplatesModule, FeesModule, FilesModule, WorkflowModule],
+  imports: [
+    ReportsModule,
+    TemplatesModule,
+    FeesModule,
+    FilesModule,
+    WorkflowModule,
+    CertificatesModule,
+  ],
   controllers: [LifecycleController, AdmissionCancellationsController],
   providers: [
     TcService,

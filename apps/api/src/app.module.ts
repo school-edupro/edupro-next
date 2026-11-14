@@ -18,6 +18,7 @@ import { ClassesModule } from './modules/academics/classes/classes.module';
 import { AcademicsSetupModule } from './modules/academics/setup/academics-setup.module';
 import { DailyAcademicsModule } from './modules/academics/daily/daily.module';
 import { LifecycleModule } from './modules/people/lifecycle/lifecycle.module';
+import { CertificatesModule } from './modules/certificates/certificates.module';
 import { AdmissionsModule } from './modules/admissions/admissions.module';
 import { FeesModule } from './modules/fees/fees.module';
 import { WorkflowModule } from './modules/workflow/workflow.module';
@@ -75,6 +76,7 @@ import { ReportsModule } from './modules/reports/reports.module';
     DailyAcademicsModule,
     TemplatesModule,
     LifecycleModule,
+    CertificatesModule,
     WorkflowModule,
     FileMovementModule,
     ActivityLogModule,

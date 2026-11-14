@@ -60,6 +60,7 @@ import type {
   TransferCertificate,
   Withdrawal,
 } from '@/lib/types';
+import { dmy, type Certificate } from '@/lib/certificates';
 import { sectionOptions } from '@/lib/sections';
 
 const monthName = (v: string) =>
@@ -130,7 +131,7 @@ export default async function StudentPage({
   const history = await apiFetch<{ data: StatusHistoryRow[] }>(
     `/people/students/${id}/status-history`,
   ).then((r) => r.data);
-  const [tcs, withdrawals, templates, l] = await Promise.all([
+  const [tcs, withdrawals, templates, l, certs] = await Promise.all([
     can('people.tc.view')
       ? apiFetch<{ data: TransferCertificate[] }>(`/people/students/${id}/tc`).then((r) => r.data)
       : Promise.resolve<TransferCertificate[]>([]),
@@ -139,10 +140,22 @@ export default async function StudentPage({
       : Promise.resolve<Withdrawal[]>([]),
     can('platform.template.view')
       ? apiFetch<{ data: DocumentTemplate[] }>('/platform/templates').then((r) =>
-          r.data.filter((x) => x.kind !== 'transfer_certificate' && x.status === 'active'),
+          // certificates (TC, bonafide …) are issued and numbered in the certificate register (docs/design/87)
+          r.data.filter(
+            (x) =>
+              x.kind !== 'transfer_certificate' &&
+              x.kind !== 'bonafide' &&
+              !x.code.startsWith('cert_') &&
+              x.status === 'active',
+          ),
         )
       : Promise.resolve<DocumentTemplate[]>([]),
     getTranslations('lifecycle'),
+    can('certificate.register.view')
+      ? apiFetch<{ rows: Certificate[] }>(`/certificates/student/${id}`)
+          .then((r) => r.rows)
+          .catch(() => [] as Certificate[])
+      : Promise.resolve<Certificate[]>([]),
   ]);
   const openWithdrawal = withdrawals.find(
     (w) => w.status === 'requested' || w.status === 'cleared',
@@ -713,7 +726,20 @@ export default async function StudentPage({
                 emptyTitle={l('noTc')}
               />
             ) : null}
-            {can('people.tc.issue') && !issuedTc ? (
+            {!issuedTc && can('certificate.register.issue') ? (
+              <p style={{ marginTop: 'var(--sp-4)' }}>
+                <a
+                  className="ep-btn ep-btn--secondary ep-btn--sm"
+                  href={`/certificates/issue?type=TC&student=${student.id}`}
+                >
+                  Issue the TC
+                </a>{' '}
+                <span className="ep-field__help">
+                  With its checks (the withdrawal; fees, library, hostel and transport cleared), the
+                  CBSE fields and a preview.
+                </span>
+              </p>
+            ) : can('people.tc.issue') && !issuedTc ? (
               <form action={issueTc} style={{ marginTop: 'var(--sp-4)' }}>
                 <input type="hidden" name="studentId" value={student.id} />
                 <p className="ep-field__help">{l('issueTcHelp')}</p>
@@ -742,10 +768,6 @@ export default async function StudentPage({
                   />
                   <InputField id="tcRemarks" name="remarks" label={l('remarks')} maxLength={500} />
                 </FormRow>
-                <label style={{ display: 'flex', gap: 'var(--sp-2)', alignItems: 'center' }}>
-                  <input type="checkbox" name="duesCleared" value="1" defaultChecked />{' '}
-                  {l('duesCleared')}
-                </label>
                 <FormActions>
                   <Button type="submit" variant="secondary">
                     {l('issue')}
@@ -868,6 +890,41 @@ export default async function StudentPage({
                   </Button>
                 </FormActions>
               </form>
+            ) : null}
+          </Card>
+        ) : null}
+
+        {tab === 'status' && can('certificate.register.view') ? (
+          <Card title="Certificates">
+            {certs.length ? (
+              <ul className="ep-cert-checks" style={{ marginTop: 0 }}>
+                {certs.map((x) => (
+                  <li key={x.id}>
+                    <a href={`/certificates/${x.id}`}>
+                      <strong>{x.number}</strong>
+                    </a>{' '}
+                    · {x.typeName}
+                    {x.copyNo ? ` · duplicate ${String(x.copyNo)}` : ''} · {dmy(x.issuedOn)}{' '}
+                    <Badge tone={x.status === 'issued' ? 'success' : 'danger'}>
+                      {x.status === 'issued' ? 'Issued' : 'Cancelled'}
+                    </Badge>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="ep-field__help" style={{ marginTop: 0 }}>
+                No certificate issued yet.
+              </p>
+            )}
+            {can('certificate.register.issue') ? (
+              <p style={{ marginBottom: 0 }}>
+                <a
+                  className="ep-btn ep-btn--ghost ep-btn--sm"
+                  href={`/certificates/issue?student=${student.id}`}
+                >
+                  Issue a certificate
+                </a>
+              </p>
             ) : null}
           </Card>
         ) : null}

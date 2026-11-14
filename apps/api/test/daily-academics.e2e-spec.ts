@@ -528,15 +528,30 @@ describe('daily academics and student lifecycle (e2e)', () => {
   // ---- transfer certificate --------------------------------------------------------------------
   it('issues a numbered transfer certificate that ends the enrolment and queues the PDF', async () => {
     const h = headersFor(admin.sub, school.id);
+    const body = {
+      reason: 'Family relocated',
+      promotionStatus: 'Promoted to VII',
+      remarks: 'Dues nil',
+    };
+    // still on the rolls with no withdrawal: the TC's checks stop it (docs/design/87) …
+    const stopped = await inject({
+      method: 'POST',
+      url: `/people/students/${studentB}/tc`,
+      headers: h,
+      json: body,
+    });
+    expect(stopped.statusCode).toBe(409);
+    expect(stopped.json()).toMatchObject({ type: 'certificate.checks_failed' });
+    // … unless the principal issues it anyway, with a reason
     const tc = await inject({
       method: 'POST',
       url: `/people/students/${studentB}/tc`,
       headers: h,
-      json: { reason: 'Family relocated', promotionStatus: 'Promoted to VII', remarks: 'Dues nil' },
+      json: { ...body, overrideReason: 'Withdrawal handled on paper by the office' },
     });
     expect(tc.statusCode).toBe(201);
     expect(tc.json()).toMatchObject({
-      tcNo: 'TC/2026-27/0001',
+      tcNo: 'TC/2026-27/00001',
       status: 'issued',
       lastClass: 'VI-B',
     });
@@ -555,7 +570,7 @@ describe('daily academics and student lifecycle (e2e)', () => {
     });
     expect(history.json().data[0]).toMatchObject({
       toStatus: 'inactive',
-      reason: 'transfer certificate TC/2026-27/0001',
+      reason: 'transfer certificate TC/2026-27/00001',
     });
     const again = await inject({
       method: 'POST',
@@ -580,7 +595,7 @@ describe('daily academics and student lifecycle (e2e)', () => {
       headers: h,
     });
     expect(exportRow.statusCode).toBe(200);
-    expect(exportRow.json().export.dataset).toBe('document');
+    expect(exportRow.json().export.dataset).toBe('certificate_doc');
   });
 
   // ---- withdrawal through the departments, step by step --------------------------------------------
