@@ -102,16 +102,41 @@ export interface ProjectionInput {
   monthlyPt: bigint;
   /** tax deducted in the year's earlier months */
   ytdTds: bigint;
-  /** phase D: declarations, exemptions (old regime) */
+  /** deductions of the old regime only (phase B's slot; phase D passes `extras.deductions`) */
   otherDeductions?: bigint;
+  /** what declarations and the year's other facts bring (phase D) */
+  extras?: TaxExtras;
   panPresent: boolean;
   rules: TaxRules;
 }
+/**
+ * The year's other facts (phase D), each already decided for the regime by the caller (`allowedDeductions`,
+ * `hraExemption`, `houseLoss`): salary and tax from earlier employers this year, perquisites, exemptions from salary,
+ * income from other sources, a house's loss, the deductions allowed.
+ */
+export interface TaxExtras {
+  prevSalary?: bigint;
+  prevTds?: bigint;
+  /** profession tax an earlier employer deducted (counts in the old regime) */
+  prevPt?: bigint;
+  perquisites?: bigint;
+  exemptions?: bigint;
+  otherIncome?: bigint;
+  houseLoss?: bigint;
+  deductions?: bigint;
+}
 export interface Projection {
+  /** the year's salary: this employer's (projected), perquisites and earlier employers' */
   gross: bigint;
   standardDeduction: bigint;
   ptDeduction: bigint;
+  /** every deduction from the gross total income (the old regime's slot and the allowed deductions) */
   otherDeductions: bigint;
+  exemptions: bigint;
+  perquisites: bigint;
+  prevSalary: bigint;
+  otherIncome: bigint;
+  houseLoss: bigint;
   tax: AnnualTax;
   ytdTds: bigint;
   monthsLeft: number;
@@ -126,12 +151,25 @@ export interface Projection {
 export function projectTax(p: ProjectionInput): Projection {
   const left = Math.max(1, p.monthsLeft);
   const future = BigInt(left - 1);
-  const gross = p.ytdTaxable + p.thisTaxable + p.monthlyRate * future;
-  const sd = gross < p.rules.standardDeduction ? gross : p.rules.standardDeduction;
-  const pt = p.regime === 'OLD' ? p.ytdPt + p.thisPt + p.monthlyPt * future : 0n;
-  const other = p.regime === 'OLD' ? (p.otherDeductions ?? 0n) : 0n;
-  const tax = annualTax(gross - sd - pt - other, p.rules, p.panPresent);
-  const remaining = tax.total - p.ytdTds;
+  const x = p.extras ?? {};
+  const perqs = x.perquisites ?? 0n;
+  const prev = x.prevSalary ?? 0n;
+  const gross = p.ytdTaxable + p.thisTaxable + p.monthlyRate * future + perqs + prev;
+  const exempt = x.exemptions ?? 0n;
+  const afterExempt = gross - exempt;
+  const sd =
+    afterExempt < p.rules.standardDeduction
+      ? afterExempt > 0n
+        ? afterExempt
+        : 0n
+      : p.rules.standardDeduction;
+  const pt = p.regime === 'OLD' ? p.ytdPt + p.thisPt + p.monthlyPt * future + (x.prevPt ?? 0n) : 0n;
+  const other = (p.regime === 'OLD' ? (p.otherDeductions ?? 0n) : 0n) + (x.deductions ?? 0n);
+  const otherIncome = x.otherIncome ?? 0n;
+  const house = x.houseLoss ?? 0n;
+  const tax = annualTax(afterExempt - sd - pt + otherIncome - house - other, p.rules, p.panPresent);
+  const ytdTds = p.ytdTds + (x.prevTds ?? 0n);
+  const remaining = tax.total - ytdTds;
   const warnings: string[] = [];
   let monthly: bigint;
   if (left === 1) {
@@ -149,8 +187,13 @@ export function projectTax(p: ProjectionInput): Projection {
     standardDeduction: sd,
     ptDeduction: pt,
     otherDeductions: other,
+    exemptions: exempt,
+    perquisites: perqs,
+    prevSalary: prev,
+    otherIncome,
+    houseLoss: house,
     tax,
-    ytdTds: p.ytdTds,
+    ytdTds,
     monthsLeft: left,
     monthly,
     it: monthly - cess,

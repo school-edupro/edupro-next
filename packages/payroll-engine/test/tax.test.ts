@@ -125,6 +125,58 @@ describe('projectTax', () => {
     expect(p.otherDeductions).toBe(R(150000));
     expect(projectTax({ ...base, regime: 'OLD', rules: OLD }).otherDeductions).toBe(0n);
   });
+  it('the year’s other facts: earlier employers, perquisites, exemptions, other income, a house’s loss', () => {
+    const p = projectTax({
+      ...base,
+      regime: 'OLD',
+      rules: OLD,
+      extras: {
+        prevSalary: R(200000),
+        prevTds: R(10000),
+        prevPt: R(1000),
+        perquisites: R(50000),
+        exemptions: R(120000),
+        otherIncome: R(30000),
+        houseLoss: R(200000),
+        deductions: R(150000),
+      },
+    });
+    // 13,00,000 + 50,000 + 2,00,000 = 15,50,000; less HRA 1,20,000, standard 50,000 (old), PT 2,400 + 1,000;
+    // plus other income 30,000; less house 2,00,000 and deductions 1,50,000 → 10,56,600
+    expect(p.gross).toBe(R(1550000));
+    expect(p.exemptions).toBe(R(120000));
+    expect(p.ptDeduction).toBe(R(3400));
+    expect(p.tax.taxable).toBe(R(1056600));
+    expect(p.otherDeductions).toBe(R(150000));
+    expect([p.perquisites, p.prevSalary, p.otherIncome, p.houseLoss]).toEqual([
+      R(50000),
+      R(200000),
+      R(30000),
+      R(200000),
+    ]);
+    expect(p.ytdTds).toBe(R(10000));
+    // the new regime: earlier PT does not count; the allowed deductions do
+    const n = projectTax({ ...base, extras: { prevPt: R(1000), deductions: R(30000) } });
+    expect(n.ptDeduction).toBe(0n);
+    expect(n.otherDeductions).toBe(R(30000));
+    // exemptions that leave less than the standard deduction, or nothing
+    const small = projectTax({
+      ...base,
+      ytdTaxable: 0n,
+      thisTaxable: R(50000),
+      monthlyRate: 0n,
+      extras: { exemptions: R(10000) },
+    });
+    expect(small.standardDeduction).toBe(R(40000));
+    const none = projectTax({
+      ...base,
+      ytdTaxable: 0n,
+      thisTaxable: R(5000),
+      monthlyRate: 0n,
+      extras: { exemptions: R(10000) },
+    });
+    expect(none.standardDeduction).toBe(0n);
+  });
   it('the last month takes the rest; more deducted than due gives nothing', () => {
     expect(projectTax({ ...base, monthsLeft: 1, ytdTds: R(20000) }).monthly).toBe(R(0));
     const last = projectTax({ ...base, monthsLeft: 1, ytdTaxable: R(1300000), ytdTds: R(65100) });

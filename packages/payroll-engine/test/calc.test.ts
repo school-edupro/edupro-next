@@ -622,6 +622,17 @@ describe('statutory switches', () => {
     expect(line(r, 'TDS')!.earned).toBe(R(2600));
   });
 
+  it('the year’s declarations and earlier employers change the month’s tax', () => {
+    const plain = ok(calculate(input()));
+    const declared = ok(
+      calculate(
+        input({ tax: { ...input().tax, extras: { prevSalary: R(300000), prevTds: R(5000) } } }),
+      ),
+    );
+    expect(declared.tds).toMatchObject({ prevSalary: R(300000) });
+    expect(declared.itAmount + declared.cessAmount).not.toBe(plain.itAmount + plain.cessAmount);
+  });
+
   it('the last month: tax beyond what was due warns', () => {
     const r = ok(calculate(input({ tax: { ...input().tax, monthsLeft: 1, ytdTds: R(999999) } })));
     expect(r.warnings[0]).toContain('More tax was deducted');

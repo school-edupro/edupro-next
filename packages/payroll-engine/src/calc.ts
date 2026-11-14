@@ -32,7 +32,7 @@ import {
   type PfRates,
   type PtSlab,
 } from './statutory';
-import { projectTax, topUpTax, type TaxRules } from './tax';
+import { projectTax, topUpTax, type TaxExtras, type TaxRules } from './tax';
 
 /** the heads payroll works out itself */
 export const ENGINE_HEADS = ['PF', 'VPF', 'NPS', 'ESI', 'PT', 'LWF', 'TDS', 'ADV'] as const;
@@ -138,6 +138,8 @@ export interface CalcInput {
     manual: { it: bigint; cess: bigint } | null;
     /** the regime's rules for the year; null: none */
     rules: TaxRules | null;
+    /** declarations, earlier employers, perquisites … for the year (phase D) */
+    extras?: TaxExtras;
     ytdTaxable: bigint;
     ytdPt: bigint;
     ytdTds: bigint;
@@ -568,6 +570,7 @@ export function calculate(i: CalcInput): CalcOutcome {
       ytdTds: i.tax.ytdTds,
       panPresent: i.employee.panPresent,
       rules: i.tax.rules,
+      ...(i.tax.extras ? { extras: i.tax.extras } : {}),
     });
     it = pr.it;
     cess = pr.cess;

@@ -12,3 +12,4 @@ export * from './loans';
 export * from './statutory';
 export * from './tax';
 export * from './calc';
+export * from './declare';
