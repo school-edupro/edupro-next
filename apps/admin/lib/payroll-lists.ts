@@ -80,7 +80,10 @@ export async function setupList<R>(
   };
   const file = (format: 'xlsx' | 'pdf') => {
     const u = new URLSearchParams({ kind: 'setuplist', key, format, save: '1' });
-    for (const [k, v] of Object.entries({ ...values, ...(opts.params ?? {}) })) if (v) u.set(k, v);
+    // the list's own params and filters go under f_: a list's `kind` (a rate tab, a draft's kind) must not take the
+    // place of the file's kind
+    for (const [k, v] of Object.entries({ ...values, ...(opts.params ?? {}) }))
+      if (v) u.set(`f_${k}`, v);
     return `/api/payroll/pay-file?${u.toString()}`;
   };
   const clear = new URLSearchParams(keep).toString();
