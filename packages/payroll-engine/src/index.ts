@@ -13,3 +13,4 @@ export * from './statutory';
 export * from './tax';
 export * from './calc';
 export * from './declare';
+export * from './settle';
