@@ -18,6 +18,8 @@ import { PayrollPayslipController } from './payroll-payslip.controller';
 import { PayrollPayslipService } from './payroll-payslip.service';
 import { PayrollReviewController } from './payroll-review.controller';
 import { PayrollReviewService } from './payroll-review.service';
+import { PayrollRevisionController } from './payroll-revision.controller';
+import { PayrollRevisionService } from './payroll-revision.service';
 import { PayrollRunController } from './payroll-run.controller';
 import { PayrollRunService } from './payroll-run.service';
 import { PayrollController } from './payroll.controller';
@@ -42,6 +44,7 @@ import { PayrollSetupService } from './payroll-setup.service';
     PayrollAccountsController,
     PayrollTaxController,
     PayrollTaxDocsController,
+    PayrollRevisionController,
   ],
   providers: [
     PayrollSetupService,
@@ -57,6 +60,7 @@ import { PayrollSetupService } from './payroll-setup.service';
     PayrollAccountsService,
     PayrollTaxService,
     PayrollTaxDocsService,
+    PayrollRevisionService,
     AuditService,
   ],
   exports: [PayrollSetupService],

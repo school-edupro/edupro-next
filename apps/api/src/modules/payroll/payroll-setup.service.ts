@@ -127,6 +127,8 @@ export class PayrollSetupService {
     await c.query(`SELECT app.payroll_seed(app.current_school_id())`);
     // phase D's sections (the shared 80C cap, more Chapter VI-A sections, the declaration forms)
     await c.query(`SELECT app.payroll_tax_sections_seed(app.current_school_id())`);
+    // phase E's settlement heads (gratuity, leave encashment, recoveries)
+    await c.query(`SELECT app.payroll_fnf_heads_seed(app.current_school_id())`);
   }
 
   // ---- overview ------------------------------------------------------------------------------------------
