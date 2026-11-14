@@ -175,6 +175,27 @@ settings page has its own Excel and PDF, and **Set-up book** on the Payroll set-
 settings, pay heads with the formula in force, each rate tab in force today, the pay matrix, templates, this year's
 tax and (for checkers) the bank accounts — as one workbook, a sheet each, or one PDF.
 
+### Changing the income-tax set-up (Payroll set-up → Income tax)
+
+The **payroll admin** (the school admin or the Payroll SPOC) keeps each financial year's tax figures up to date —
+after a Budget or a notification. Every change asks **why** and is recorded in the payroll audit trail.
+
+- **＋ Add a year** — copies the last year (slabs, rules, surcharges and lines, with their group limits); then
+  correct what changed.
+- **Change** on a regime (new or old) — its **slabs** (the first from ₹0; each starts where the one before ends;
+  the last has no "up to"; two spare rows add a slab, clear a row to remove it), its **rules** (standard deduction,
+  rebate and the income it is given up to, cess, the rate without a PAN, marginal relief) and its **surcharges**,
+  saved together. Amounts may be typed with commas (4,00,000); rates as a per cent (5 for 5 %).
+- **Lines on the tax sheet** — **Edit** a line's label, regime, cap, the group limit it counts within (80C,
+  80CCC and 80CCD(1) within G80C) and whether staff declare it; **＋ Add a line** for a new deduction (a declared
+  line with a cap is counted, up to its cap); **Remove** an added line no declaration uses. The lines the
+  computation and the papers use (80C, HRA, the rebate, Form 16 …) are changed, never removed.
+- **Remove this year** — only for a year added by mistake: not the running year, and nothing uses it (no pay run,
+  declaration, challan, certificate or return).
+
+**A year already in use**: when an approved or locked run of the year has deducted TDS, a change asks you to tick
+that you understand — the TDS already deducted stays; the months after are projected on the new figures.
+
 ## The month's inputs (Payroll → Monthly inputs)
 
 Get the month ready before its pay run. Each tab is one kind of input; pick the month at the top.

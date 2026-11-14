@@ -679,3 +679,34 @@ processed run sent back to draft and the row before reopened; End keeps a row ac
 only another employee's run was approved). `payroll-setup` (End keeps the row active). Gate: the payroll suites
 (withdraw, setup, set-up lists, go-live, run, people docs, revision, inputs, settlement, statutory, tax, reports,
 SPOC), permissions, the database's 143. Browser (dev-admin; the Withdraw dialog on four tabs, a head's page): axe clean.
+
+## As built — income-tax set-up: edit and add (14 Nov 2026)
+
+**Asked**: on the Income tax page, how a user edits and adds. **Found**: only "Add a year" (a copy); nothing of a year
+could be changed, and the copy lost the lines' group limits (80C, 80CCC and 80CCD(1) no longer shared ₹1.5 lakh in a
+copied year). **Decided** (all recommended): the payroll admin edits with a reason, audited; a year in use changes
+only with a tick (TDS deducted stays, the rest projected anew); lines edited, added, removed when unused; a year
+nothing uses removed.
+
+**API** (`payroll-tax-setup.service.ts`, `payroll-tax-setup.controller.ts`, all `payroll.settings.manage`): `PUT
+/payroll/tax/:fy/regimes/:regime` (slabs from ₹0, meeting, only the last open, rates 0–1; rules — the rebate not over
+its income limit; surcharges rising; replaced together, audit `payroll.tax.regime` with before and after); `POST
+/payroll/tax/:fy/lines`, `PUT …/lines/:code` (a group limit must be a non-declared line with a cap), `POST
+…/lines/:code/remove` (not `BUILT_IN_LINES`, not used by a declaration, not a group others count in); `POST
+/payroll/tax/years/:fy/remove` (not the running year; no run, declaration, challan, certificate, earlier employer,
+perquisite, regime choice, final tax, return or bonus rule in it — `taxYearBlockers`; returns are keyed by the
+year's first calendar year). A year with an approved, locked or paid run (`taxYearInUse`) refuses a change without
+`confirm`. `GET /payroll/tax` adds `inUse`, `blockers` and each line's `capGroup`, `used`, `builtIn`. "Add a year" now
+copies `cap_group`.
+
+**Screens** (`components/payroll/TaxEdit.tsx`): Change on each regime card (the slabs grid with two spare rows, the
+rules, the surcharges, the reason, the in-use tick); ＋ Add a line, Edit and Remove on the lines (a Within column for
+the group limit, the declarations using a line); Remove this year, or "in use: it stays". Actions
+(`lib/payroll-actions.ts`): amounts with commas or ₹, rates as per cents. Help: Payroll set-up → Changing the
+income-tax set-up.
+
+**Tests**: `payroll-tax-setup.e2e-spec.ts` (4: a checker refused, slabs checked — from ₹0, meeting, one open — a
+reason needed, saved and audited; a year an approved run used refused without the tick, saved with it; lines added,
+a duplicate refused, a group limit checked, G80C's cap raised, a built-in line and one a declaration uses not
+removed, an unused one removed; a new year keeps the group limits; a year nothing uses removed, one in use not). The
+tax, tax papers, set-up and set-up lists suites; permissions. Browser (dev-admin; Change, Add a line, Edit): axe clean.

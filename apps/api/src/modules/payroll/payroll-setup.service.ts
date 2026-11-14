@@ -4,6 +4,7 @@ import { AuditService } from '../../common/audit/audit.service';
 import { DbService } from '../../common/db/db.service';
 import { DomainError } from '../../common/errors/domain-error';
 import { requireTenant, type RequestContext } from '../../common/http/request-context';
+import { BUILT_IN_LINES, taxYearBlockers, taxYearInUse } from './payroll-tax-setup.service';
 import {
   approveDated,
   DATED,
@@ -630,10 +631,21 @@ export class PayrollSetupService {
         surcharges: await read(
           `SELECT regime, income_from, rate FROM payroll_tds_surcharges WHERE fy = $1 ORDER BY regime, income_from`,
         ),
-        labels: await read(
-          `SELECT line_code, label, applies_to, cap_amount, declarable, sort_order FROM payroll_tax_labels
-            WHERE fy = $1 ORDER BY sort_order, line_code`,
-        ),
+        labels: (
+          await read(
+            `SELECT l.line_code, l.label, l.applies_to, l.cap_amount, l.cap_group, l.declarable, l.sort_order,
+                    (SELECT count(*)::int FROM payroll_declarations d WHERE d.fy = l.fy AND d.line_code = l.line_code) AS used
+               FROM payroll_tax_labels l WHERE l.fy = $1 ORDER BY l.sort_order, l.line_code`,
+          )
+        ).map((l) => ({ ...l, builtIn: BUILT_IN_LINES.has(String(l.lineCode)) })),
+        // the months an approved run used (a change needs a tick) and what ties the year down (it is not removed)
+        inUse: years.includes(fy) ? await taxYearInUse(c, fy) : [],
+        blockers: years.includes(fy)
+          ? [
+              ...(fy === fyOf(istToday()) ? ['the running year'] : []),
+              ...(await taxYearBlockers(c, fy)),
+            ]
+          : [],
         can: PayrollSetupService.can(ctx),
       };
     });
@@ -671,9 +683,10 @@ export class PayrollSetupService {
         [dto.fy, dto.copyFrom],
       );
       await c.query(
-        `INSERT INTO payroll_tax_labels (school_id, fy, line_code, label, applies_to, cap_amount, declarable, sort_order,
-                                         created_by, updated_by)
-         SELECT school_id, $1, line_code, label, applies_to, cap_amount, declarable, sort_order, app.current_user_id(), app.current_user_id()
+        `INSERT INTO payroll_tax_labels (school_id, fy, line_code, label, applies_to, cap_amount, cap_group, declarable,
+                                         sort_order, created_by, updated_by)
+         SELECT school_id, $1, line_code, label, applies_to, cap_amount, cap_group, declarable, sort_order,
+                app.current_user_id(), app.current_user_id()
            FROM payroll_tax_labels WHERE fy = $2`,
         [dto.fy, dto.copyFrom],
       );

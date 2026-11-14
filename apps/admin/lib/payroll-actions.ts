@@ -675,3 +675,164 @@ export async function importStructureSheet(file: string, dryRun: boolean) {
     throw e;
   }
 }
+
+// ---- the income-tax set-up of a year (the payroll admin) ------------------------------------------------------
+/** an amount as typed (1,50,000 · ₹ 75000 · .5), or null when empty; `bad` when not a number */
+const taxAmount = (v: FormDataEntryValue | null): string | null | 'bad' => {
+  const s = String(v ?? '')
+    .replace(/[\s,₹]/g, '')
+    .replace(/^rs\.?/i, '');
+  if (!s) return null;
+  const n = s.startsWith('.') ? `0${s}` : s;
+  return /^\d{1,12}(\.\d{1,2})?$/.test(n) ? n : 'bad';
+};
+/** a per cent as typed (5 · 5% · 0.5) as a rate (0.05), or null / `bad` */
+const taxRate = (v: FormDataEntryValue | null): string | null | 'bad' => {
+  const s = String(v ?? '')
+    .replace(/[\s%]/g, '')
+    .replace(/^\./, '0.');
+  if (!s) return null;
+  if (!/^\d{1,3}(\.\d{1,4})?$/.test(s) || Number(s) > 100) return 'bad';
+  return String(Number((Number(s) / 100).toFixed(6)));
+};
+const taxBack = (fy: string, detail: string): never =>
+  redirect(
+    `/payroll/setup/tax?fy=${encodeURIComponent(fy)}&error=validation-failed&detail=${encodeURIComponent(detail)}`,
+  );
+const taxDone = (fy: string, detail: string): never => {
+  revalidatePath('/payroll/setup/tax');
+  redirect(
+    `/payroll/setup/tax?fy=${encodeURIComponent(fy)}&ok=1&detail=${encodeURIComponent(detail)}&r=${Date.now().toString(36)}`,
+  );
+};
+const okFy = (fy: string) => /^\d{4}-\d{2}$/.test(fy);
+
+/** A regime's slabs (rows left empty are dropped), its rules and its surcharges, saved together. */
+export async function saveTaxRegime(fy: string, regime: string, fd: FormData) {
+  if (!okFy(fy) || !['NEW', 'OLD'].includes(regime)) return;
+  const froms = fd.getAll('sFrom');
+  const tos = fd.getAll('sTo');
+  const rates = fd.getAll('sRate');
+  const slabs: Array<{ from: string; to: string | null; rate: string }> = [];
+  for (let i = 0; i < froms.length; i += 1) {
+    const from = taxAmount(froms[i] ?? null);
+    const to = taxAmount(tos[i] ?? null);
+    const rate = taxRate(rates[i] ?? null);
+    if (from === null && to === null && rate === null) continue;
+    if (from === 'bad' || to === 'bad' || from === null)
+      taxBack(fy, `Slab ${String(i + 1)}: type the incomes as amounts (₹ 4,00,000 or 400000)`);
+    if (rate === 'bad' || rate === null)
+      taxBack(fy, `Slab ${String(i + 1)}: type the rate as a per cent (5 for 5 %)`);
+    slabs.push({ from: from as string, to: to as string | null, rate: rate as string });
+  }
+  const xFroms = fd.getAll('xFrom');
+  const xRates = fd.getAll('xRate');
+  const surcharges: Array<{ incomeFrom: string; rate: string }> = [];
+  for (let i = 0; i < xFroms.length; i += 1) {
+    const from = taxAmount(xFroms[i] ?? null);
+    const rate = taxRate(xRates[i] ?? null);
+    if (from === null && rate === null) continue;
+    if (from === 'bad' || from === null || rate === 'bad' || rate === null)
+      taxBack(fy, `Surcharge ${String(i + 1)}: an income (₹) and a per cent`);
+    surcharges.push({ incomeFrom: from as string, rate: rate as string });
+  }
+  const amt = (k: string, what: string) => {
+    const v = taxAmount(fd.get(k));
+    if (v === null || v === 'bad') return taxBack(fy, `${what}: type an amount`);
+    return v;
+  };
+  const pc = (k: string, what: string) => {
+    const v = taxRate(fd.get(k));
+    if (v === null || v === 'bad') return taxBack(fy, `${what}: type a per cent`);
+    return v;
+  };
+  const rules = {
+    standardDeduction: amt('standardDeduction', 'Standard deduction'),
+    rebateIncomeLimit: amt('rebateIncomeLimit', 'Rebate up to income'),
+    rebateMax: amt('rebateMax', 'Rebate at most'),
+    cessRate: pc('cessRate', 'Cess'),
+    panAbsentRate: pc('panAbsentRate', 'Rate without a PAN'),
+    marginalRelief: fd.get('marginalRelief') === 'on',
+  };
+  let message = 'Saved.';
+  try {
+    message = (
+      (await send(`/payroll/tax/${fy}/regimes/${regime}`, 'PUT', {
+        slabs,
+        rules,
+        surcharges,
+        reason: text(fd, 'reason') ?? '',
+        confirm: fd.get('confirm') === 'on',
+      })) as { message: string }
+    ).message;
+  } catch (e) {
+    if (e instanceof ApiError) back(`/payroll/setup/tax?fy=${fy}`, e);
+    throw e;
+  }
+  taxDone(fy, message);
+}
+
+/** A line of the tax sheet added (no code given) or changed. */
+export async function saveTaxLine(fy: string, code: string | null, fd: FormData) {
+  if (!okFy(fy)) return;
+  const cap = taxAmount(fd.get('capAmount'));
+  if (cap === 'bad') taxBack(fy, 'Cap: type an amount (₹ 1,50,000 or 150000), or leave it empty');
+  let message = 'Saved.';
+  try {
+    message = (
+      (await send(
+        code ? `/payroll/tax/${fy}/lines/${encodeURIComponent(code)}` : `/payroll/tax/${fy}/lines`,
+        code ? 'PUT' : 'POST',
+        {
+          ...(code ? {} : { lineCode: (text(fd, 'lineCode') ?? '').toUpperCase() }),
+          label: text(fd, 'label') ?? '',
+          appliesTo: String(fd.get('appliesTo') ?? 'BOTH'),
+          capAmount: cap,
+          capGroup: text(fd, 'capGroup'),
+          declarable: fd.get('declarable') === 'on',
+          reason: text(fd, 'reason') ?? '',
+          confirm: fd.get('confirm') === 'on',
+        },
+      )) as { message: string }
+    ).message;
+  } catch (e) {
+    if (e instanceof ApiError) back(`/payroll/setup/tax?fy=${fy}`, e);
+    throw e;
+  }
+  taxDone(fy, message);
+}
+
+/** An added line no declaration uses, removed. */
+export async function removeTaxLine(fy: string, code: string, fd: FormData) {
+  if (!okFy(fy)) return;
+  let message = 'Removed.';
+  try {
+    message = (
+      (await send(`/payroll/tax/${fy}/lines/${encodeURIComponent(code)}/remove`, 'POST', {
+        reason: text(fd, 'reason') ?? '',
+      })) as { message: string }
+    ).message;
+  } catch (e) {
+    if (e instanceof ApiError) back(`/payroll/setup/tax?fy=${fy}`, e);
+    throw e;
+  }
+  taxDone(fy, message);
+}
+
+/** A year added by mistake, removed while nothing uses it. */
+export async function removeTaxYear(fy: string, fd: FormData) {
+  if (!okFy(fy)) return;
+  let message = 'Removed.';
+  try {
+    message = (
+      (await send(`/payroll/tax/years/${fy}/remove`, 'POST', {
+        reason: text(fd, 'reason') ?? '',
+      })) as { message: string }
+    ).message;
+  } catch (e) {
+    if (e instanceof ApiError) back(`/payroll/setup/tax?fy=${fy}`, e);
+    throw e;
+  }
+  revalidatePath('/payroll/setup/tax');
+  redirect(`/payroll/setup/tax?ok=1&detail=${encodeURIComponent(message)}`);
+}

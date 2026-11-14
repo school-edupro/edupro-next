@@ -89,8 +89,18 @@ export interface TaxYear {
     label: string;
     appliesTo: string;
     capAmount: string | null;
+    /** the group limit it counts within (G80C) */
+    capGroup?: string | null;
     declarable: boolean;
+    /** declarations of the year that use it */
+    used?: number;
+    /** a line the computation and papers name: edited, never removed */
+    builtIn?: boolean;
   }>;
+  /** the months an approved, locked or paid run used: a change needs a tick */
+  inUse?: string[];
+  /** what ties the year down: it is not removed while any */
+  blockers?: string[];
   can: PayrollCan;
 }
 

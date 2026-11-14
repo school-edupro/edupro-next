@@ -7,6 +7,7 @@ import { ApiError, apiFetch, getMe } from '@/lib/api';
 import { setupList, type SetupList, type SetupListNav } from '@/lib/payroll-lists';
 import { money, pct, type TaxYear } from '@/lib/payroll';
 import { addTaxYear } from '@/lib/payroll-actions';
+import { LineEditor, LineRemove, RegimeEditor, YearRemove } from '@/components/payroll/TaxEdit';
 
 const REGIME = { NEW: 'New regime', OLD: 'Old regime' } as Record<string, string>;
 const regime = (r: string) => REGIME[r] ?? r;
@@ -110,6 +111,15 @@ export default async function PayrollTaxPage({
             </form>
           </DialogButton>
         ) : null}
+        {d.can.admin && d.years.includes(d.fy) ? (
+          (d.blockers ?? []).length ? (
+            <span className="ep-field__help" title={(d.blockers ?? []).join(', ')}>
+              {d.fy} is in use: it stays
+            </span>
+          ) : (
+            <YearRemove fy={d.fy} />
+          )
+        ) : null}
       </div>
       {!d.slabs.length ? (
         <div className="ep-alert ep-alert--warning" role="status">
@@ -127,9 +137,15 @@ export default async function PayrollTaxPage({
             const cfg = d.config.find((c) => c.regime === r);
             return (
               <section key={r} className="ep-card" aria-labelledby={`tx-${r}`}>
-                <h2 id={`tx-${r}`} className="ep-card__title">
-                  {regime(r)}
-                </h2>
+                <div className="ep-grid__toolbar">
+                  <h2 id={`tx-${r}`} className="ep-card__title">
+                    {regime(r)}
+                  </h2>
+                  <span className="ep-grid__spacer" />
+                  {d.can.admin && (r === 'NEW' || r === 'OLD') ? (
+                    <RegimeEditor fy={d.fy} regime={r} d={d} />
+                  ) : null}
+                </div>
                 <div
                   className="ep-table-wrap"
                   tabIndex={0}
@@ -195,6 +211,12 @@ export default async function PayrollTaxPage({
             The deductions and exemptions staff declare and the printed lines of the tax
             computation, with the cap the projection uses.
           </p>
+          {d.can.admin ? (
+            <p className="ep-grid__toolbar">
+              <span className="ep-grid__spacer" />
+              <LineEditor fy={d.fy} line={null} d={d} />
+            </p>
+          ) : null}
           <SetupListBar list={ll.list} nav={ll.nav} id="tx-l">
             <div className="ep-table-wrap" tabIndex={0} role="region" aria-labelledby="tx-labels">
               <table className="ep-table ep-table--dense">
@@ -204,7 +226,13 @@ export default async function PayrollTaxPage({
                     <th scope="col">Label</th>
                     <th scope="col">Regime</th>
                     <th scope="col">Cap (₹)</th>
+                    <th scope="col">Within the limit of</th>
                     <th scope="col">Staff declare it</th>
+                    {d.can.admin ? (
+                      <th scope="col">
+                        <span className="ep-sr-only">Actions</span>
+                      </th>
+                    ) : null}
                   </tr>
                 </thead>
                 <tbody>
@@ -216,7 +244,23 @@ export default async function PayrollTaxPage({
                       <td>{l.label}</td>
                       <td>{l.appliesTo === 'BOTH' ? 'Both' : regime(l.appliesTo)}</td>
                       <td>{l.capAmount ? money(l.capAmount) : ''}</td>
-                      <td>{l.declarable ? <Badge tone="info">Declared</Badge> : ''}</td>
+                      <td>{l.capGroup ?? ''}</td>
+                      <td>
+                        {l.declarable ? <Badge tone="info">Declared</Badge> : ''}
+                        {l.used ? (
+                          <span className="ep-field__help" style={{ display: 'block', margin: 0 }}>
+                            {l.used} declaration(s)
+                          </span>
+                        ) : null}
+                      </td>
+                      {d.can.admin ? (
+                        <td>
+                          <div className="ep-grid__toolbar">
+                            <LineEditor fy={d.fy} line={l} d={d} />
+                            {!l.builtIn && !l.used ? <LineRemove fy={d.fy} line={l} /> : null}
+                          </div>
+                        </td>
+                      ) : null}
                     </tr>
                   ))}
                 </tbody>
