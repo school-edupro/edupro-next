@@ -12,6 +12,7 @@ import type { StorageDriver } from '@edupro/storage';
 import type { Logger } from '../logger';
 import { deliverConsentWebhooks } from './consent-webhooks';
 import { readLegacyLeave } from './legacy-leave';
+import { readLegacyPayroll } from './legacy-payroll';
 import { centralSourceFromEnv, pullCentralPunches } from './staff-punches';
 import type { JobLike } from './notifications';
 
@@ -587,6 +588,21 @@ export function maintenanceProcessor({ db, storage, log, migratorUrl }: Maintena
           if (st.rows[0]?.status !== 'parallel') continue;
         }
         await readLegacyLeave(db, s.id, log);
+      }
+      return;
+    }
+    if (kind === 'payroll.legacy_read') {
+      // Payroll go-live (docs/design/86, phase G): the old payroll module's database read into the holding area —
+      // when the cut-over page asks for a school, and every night for the schools in their parallel months
+      const asked = (job.data as JobEnvelope<{ schoolIds?: string[] }>).payload?.schoolIds;
+      for (const s of await schoolsFor(db, job)) {
+        const st = await db.withTenant(
+          { schoolId: s.id, userId: null, allowedSchoolIds: [s.id] },
+          (c) => c.query<{ status: string }>('SELECT status FROM payroll_cutover'),
+        );
+        if (!st.rows[0]) continue;
+        if (!asked?.length && st.rows[0].status !== 'PARALLEL') continue;
+        await readLegacyPayroll(db, s.id, log);
       }
       return;
     }

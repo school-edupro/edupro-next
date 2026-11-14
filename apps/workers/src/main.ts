@@ -206,6 +206,12 @@ async function main(): Promise<void> {
     { pattern: '0 21 * * *' },
     { name: 'staff.legacy_read', data: SYSTEM_ENVELOPE('staff.legacy_read') },
   );
+  // the payroll go-live's parallel months: the old payroll database read again every night (03:00 IST)
+  await maintenance.upsertJobScheduler(
+    'payroll.legacy_read',
+    { pattern: '30 21 * * *' },
+    { name: 'payroll.legacy_read', data: SYSTEM_ENVELOPE('payroll.legacy_read') },
+  );
   await maintenance.upsertJobScheduler(
     'leave.digest',
     { pattern: '0 3 * * *' },

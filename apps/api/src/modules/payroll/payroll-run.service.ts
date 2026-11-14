@@ -15,6 +15,8 @@ import {
   hiddenFor,
   monthWords,
   must,
+  mustBePayable,
+  mustBeRunnable,
   ROSTER_SQL,
   runCan,
   today,
@@ -66,7 +68,7 @@ export class PayrollRunService {
       await c.query<RunRow>(
         lock
           ? `SELECT id::text, to_char(month, 'YYYY-MM') AS month, run_type, seq, employee_ids::text[] AS employee_ids, stage,
-                    created_by::text, (created_by = app.current_user_id()) AS mine
+                    created_by::text, (created_by = app.current_user_id()) AS mine, imported
                FROM payroll_runs WHERE id = $1 AND deleted_at IS NULL FOR UPDATE`
           : `SELECT id::text, to_char(month, 'YYYY-MM') AS month, run_type, seq, employee_ids::text[] AS employee_ids, stage,
                     created_by::text, (created_by = app.current_user_id()) AS mine
@@ -75,6 +77,12 @@ export class PayrollRunService {
       )
     ).rows[0];
     if (!r) bad('Run not found', 404);
+    // the old payroll's runs brought as history change no more (their payslips reprint as they were)
+    if (lock && (r as RunRow & { imported?: boolean }).imported)
+      bad(
+        'This run was paid by the old payroll and brought as history: it does not change here',
+        409,
+      );
     return r!;
   }
   private async event(
@@ -188,6 +196,7 @@ export class PayrollRunService {
     must(ctx, RUN.manage, 'Only payroll makers create runs');
     return this.db.tenant(requireTenant(ctx), async (c) => {
       const m = dto.month;
+      const golive = await mustBeRunnable(c, m, dto.runType);
       const runs = (
         await c.query<{ run_type: string; stage: string; month: string }>(
           `SELECT run_type, stage, to_char(month, 'YYYY-MM') AS month FROM payroll_runs
@@ -210,9 +219,21 @@ export class PayrollRunService {
             [firstOf(m)],
           )
         ).rowCount;
-        if (prev && !['LOCKED', 'PAID'].includes(prev.stage))
+        // the second parallel month follows the first, which EduPro only approves (the old payroll pays it)
+        const parallelPrev =
+          !!golive && golive.status !== 'SWITCHED' && golive.parallel.includes(addMonths(m, -1));
+        if (
+          prev &&
+          !['LOCKED', 'PAID'].includes(prev.stage) &&
+          !(parallelPrev && prev.stage === 'APPROVED')
+        )
           bad(
             `${monthWords(addMonths(m, -1))}'s regular run is ${prev.stage.toLowerCase()}: lock it first`,
+            409,
+          );
+        if (!prev && golive)
+          bad(
+            `${monthWords(addMonths(m, -1))} has no regular run here: bring the old payroll's months up to it first (Payroll set-up → Moving from the old payroll)`,
             409,
           );
         if (!prev && anyEarlier)
@@ -1130,6 +1151,11 @@ export class PayrollRunService {
       const run = await this.runRow(c, id, true);
       if (run.stage !== 'APPROVED')
         bad(`The run is ${run.stage.toLowerCase()}: only an approved run is locked`, 409);
+      await mustBePayable(c, run.month, 'locking a run');
+      // the first live lock ends the go-live's rollback
+      await c.query(
+        `UPDATE payroll_cutover SET first_live_lock_at = COALESCE(first_live_lock_at, now()), updated_at = now()`,
+      );
       await this.setStage(
         c,
         id,

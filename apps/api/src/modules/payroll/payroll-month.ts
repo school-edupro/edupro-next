@@ -131,3 +131,52 @@ export async function mustBeOpen(c: PoolClient, month: string, what: string) {
     );
   return stages;
 }
+
+/** The go-live state, when the school is moving from the old payroll (docs/design/86, phase G); null otherwise. */
+export async function goLiveOf(c: PoolClient) {
+  const r = (
+    await c.query<{ status: string; switch_month: string | null; parallel: string[] }>(
+      `SELECT status, to_char(switch_month, 'YYYY-MM') AS switch_month,
+              ARRAY(SELECT to_char(m, 'YYYY-MM') FROM unnest(parallel_months) m ORDER BY m) AS parallel
+         FROM payroll_cutover`,
+    )
+  ).rows[0];
+  return r ?? null;
+}
+
+/**
+ * A month EduPro may run: until the switch only the parallel months (the old payroll pays them; EduPro stops at
+ * Approved); after it, from the switch month on.
+ */
+export async function mustBeRunnable(c: PoolClient, month: string, runType: string) {
+  const g = await goLiveOf(c);
+  if (!g) return null;
+  if (g.status !== 'SWITCHED') {
+    if (!g.parallel.includes(month))
+      bad(
+        `Until the go-live switch the old payroll pays: EduPro runs only the parallel months${
+          g.parallel.length ? ` (${g.parallel.map(monthWords).join(', ')})` : ''
+        }`,
+        409,
+      );
+    if (runType !== 'REGULAR') bad('A parallel month has only its regular run here', 409);
+  } else if (g.switch_month && month < g.switch_month)
+    bad(
+      `${monthWords(month)} was paid by the old payroll: EduPro pays from ${monthWords(g.switch_month)}`,
+      409,
+    );
+  return g;
+}
+
+/** What only a live month does — the lock, a bank file: refused until the switch, and for the old payroll's months. */
+export async function mustBePayable(c: PoolClient, month: string, what: string) {
+  const g = await goLiveOf(c);
+  if (!g) return;
+  if (g.status !== 'SWITCHED')
+    bad(
+      `Payroll is still paid by the old module: ${what} waits until the go-live is signed and switched`,
+      409,
+    );
+  if (g.switch_month && month < g.switch_month)
+    bad(`${monthWords(month)} was paid by the old payroll: ${what} is not done here`, 409);
+}

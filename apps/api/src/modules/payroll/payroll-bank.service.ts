@@ -29,7 +29,7 @@ import type {
   RejectLineDto,
 } from './payroll-bank.dto';
 import { RUN } from './payroll-inputs.dto';
-import { bad, camelRow, has, monthWords, must } from './payroll-month';
+import { bad, camelRow, has, monthWords, must, mustBePayable } from './payroll-month';
 import { amountInWords } from './payroll-words';
 import { PAYROLL } from './payroll.dto';
 
@@ -379,6 +379,7 @@ export class PayrollBankService {
     must(ctx, RUN.approve, 'Only a payroll checker makes a bank file');
     return this.db.tenant(requireTenant(ctx), async (c) => {
       const run = await this.runOf(c, runId, true);
+      await mustBePayable(c, run.month, 'a bank file');
       if (!['APPROVED', 'LOCKED', 'PAID'].includes(run.stage))
         bad(
           `The run is ${run.stage.toLowerCase()}: a bank file is made from an approved or locked run`,
