@@ -22,6 +22,7 @@ import {
 import type { PoolClient } from '@edupro/db';
 import { decryptField, maskValue } from '@edupro/db';
 import { fyOf } from './payroll-setup.service';
+import { loadTaxExtras } from './payroll-tax-extras';
 
 const P = (v: string | number | null | undefined) => toPaise(String(v ?? '0')) ?? 0n;
 const PN = (v: string | number | null | undefined) => (v === null || v === undefined ? null : P(v));
@@ -544,6 +545,16 @@ export async function loadEmployee(
     ]),
   );
   const regime = (p.tax_regime === 'OLD' ? 'OLD' : 'NEW') as 'NEW' | 'OLD';
+  // the year's declarations, earlier employer, perquisites … (phase D)
+  const extras = await loadTaxExtras(c, {
+    employeeId,
+    fy: m.fy,
+    fyStart,
+    monthStart: m.start,
+    regime,
+    npsApplicable: !!p.nps_applicable,
+    includeMonth: opts.topUp !== null,
+  });
   const plain = (v: string | null) => (v ? decryptField(v) : null);
   const bank = plain(e.bank_account_no);
   const input: CalcInput = {
@@ -619,6 +630,7 @@ export async function loadEmployee(
       ytdPt: P(ytd.pt),
       ytdTds: P(ytd.tds),
       monthsLeft: monthsLeftInYear(m.month, e.left_on),
+      ...(extras ? { extras } : {}),
     },
   };
   return {

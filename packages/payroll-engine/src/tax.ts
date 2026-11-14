@@ -6,6 +6,7 @@
  * salary itself, the standard deduction and (old regime) profession tax.
  */
 import { divHalfUp, roundHead } from './money';
+import type { DeclaredLine } from './declare';
 import { mulRate } from './statutory';
 
 export interface TaxSlab {
@@ -124,6 +125,24 @@ export interface TaxExtras {
   otherIncome?: bigint;
   houseLoss?: bigint;
   deductions?: bigint;
+  /**
+   * the HRA exemption, worked out by the month's calculation (old regime): the year's rent and whether it is paid in
+   * one of the year's listed cities, HRA and basic + DA paid in the year's earlier months
+   */
+  hra?: { rentPaid: bigint; listedCity: boolean; ytdHra: bigint; ytdSalary: bigint };
+  /** the employer's NPS: paid in the earlier months, and its deduction's cap as a share of basic + DA */
+  npsEr?: { ytd: bigint; capRate: string };
+  /**
+   * the declared sections (as counted: declared until the proof deadline, then verified), worked out by the month's
+   * calculation with the employee's own PF and VPF of the year added to `pf80c.code` (80C)
+   */
+  declared?: {
+    lines: DeclaredLine[];
+    groupCaps: Record<string, bigint>;
+    pf80c?: { ytd: bigint; code: string };
+  };
+  /** the school's final figure for the year, collected over the months left of `spreadLeft` (from this month) */
+  final?: { annual: bigint; spreadLeft?: number };
 }
 export interface Projection {
   /** the year's salary: this employer's (projected), perquisites and earlier employers' */
@@ -149,8 +168,7 @@ export interface Projection {
 
 /** The year's projected tax and this month's share of what is still to deduct. */
 export function projectTax(p: ProjectionInput): Projection {
-  const left = Math.max(1, p.monthsLeft);
-  const future = BigInt(left - 1);
+  const future = BigInt(Math.max(1, p.monthsLeft) - 1);
   const x = p.extras ?? {};
   const perqs = x.perquisites ?? 0n;
   const prev = x.prevSalary ?? 0n;
@@ -169,8 +187,16 @@ export function projectTax(p: ProjectionInput): Projection {
   const house = x.houseLoss ?? 0n;
   const tax = annualTax(afterExempt - sd - pt + otherIncome - house - other, p.rules, p.panPresent);
   const ytdTds = p.ytdTds + (x.prevTds ?? 0n);
-  const remaining = tax.total - ytdTds;
   const warnings: string[] = [];
+  let left = Math.max(1, p.monthsLeft);
+  if (x.final) {
+    warnings.push(
+      `The school's final figure for the year is used (${String(x.final.annual / 100n)}; worked out: ${String(tax.total / 100n)})`,
+    );
+    tax.total = x.final.annual;
+    if (x.final.spreadLeft !== undefined) left = Math.min(left, Math.max(1, x.final.spreadLeft));
+  }
+  const remaining = tax.total - ytdTds;
   let monthly: bigint;
   if (left === 1) {
     monthly = remaining > 0n ? remaining : 0n;

@@ -633,6 +633,135 @@ describe('statutory switches', () => {
     expect(declared.itAmount + declared.cessAmount).not.toBe(plain.itAmount + plain.cessAmount);
   });
 
+  it('the HRA exemption from the year’s HRA, basic and DA, the old regime only', () => {
+    const extras = { hra: { rentPaid: R(300000), listedCity: true, ytdHra: 0n, ytdSalary: 0n } };
+    const old = ok(
+      calculate(
+        input({
+          profile: { ...input().profile, taxRegime: 'OLD' },
+          tax: { ...input().tax, extras },
+        }),
+      ),
+    );
+    const hra = line(old, 'HRA')!.earned;
+    const salary = line(old, 'BASIC')!.earned + line(old, 'DA')!.earned;
+    // the least of HRA received (the year), rent − 10 % and 50 % of the salary: the HRA received here
+    expect(old.taxWorking!.hra).toMatchObject({
+      received: hra * 10n,
+      salary: salary * 10n,
+      exempt: hra * 10n,
+    });
+    expect(old.tds).toMatchObject({ exemptions: hra * 10n });
+    const neu = ok(calculate(input({ tax: { ...input().tax, extras } })));
+    expect(neu.taxWorking!.hra!.exempt).toBe(0n);
+    expect(neu.taxWorking!.npsEr).toBeNull();
+    // no HRA head: nothing received, nothing exempt
+    const noHra = ok(
+      calculate(
+        input({
+          structure: input().structure.filter((x) => x.code !== 'HRA'),
+          profile: { ...input().profile, taxRegime: 'OLD' },
+          tax: { ...input().tax, extras },
+        }),
+      ),
+    );
+    expect(noHra.taxWorking!.hra!.exempt).toBe(0n);
+  });
+
+  it('the employer’s NPS: added to the income, deducted within its cap', () => {
+    const r = ok(
+      calculate(
+        input({
+          profile: { ...input().profile, npsApplicable: true },
+          tax: { ...input().tax, extras: { npsEr: { ytd: R(1000), capRate: '0.14' } } },
+        }),
+      ),
+    );
+    const annual = R(1000) + r.nps!.er * 10n;
+    const salary = (line(r, 'BASIC')!.earned + line(r, 'DA')!.earned) * 10n;
+    const cap = (salary * 14n + 50n) / 100n;
+    expect(r.taxWorking!.npsEr).toEqual({ annual, allowed: annual < cap ? annual : cap });
+    expect(r.taxWorking!.hra).toBeNull();
+    const wide = ok(
+      calculate(
+        input({
+          profile: { ...input().profile, npsApplicable: true },
+          tax: { ...input().tax, extras: { npsEr: { ytd: 0n, capRate: '0.90' } } },
+        }),
+      ),
+    );
+    expect(wide.taxWorking!.npsEr!.allowed).toBe(wide.taxWorking!.npsEr!.annual);
+    // no NPS this month: what the earlier months paid
+    const none = ok(
+      calculate(
+        input({ tax: { ...input().tax, extras: { npsEr: { ytd: R(500), capRate: '0.14' } } } }),
+      ),
+    );
+    expect(none.taxWorking!.npsEr!.annual).toBe(R(500));
+  });
+
+  it('declared sections with the year’s own PF in 80C, within the shared cap', () => {
+    const declared = {
+      lines: [
+        {
+          code: 'CHAPVIA_80C',
+          amount: R(50000),
+          cap: R(150000),
+          appliesTo: 'OLD' as const,
+          group: 'G80C',
+        },
+        { code: 'CHAPVIA_80D', amount: R(30000), cap: R(25000), appliesTo: 'OLD' as const },
+      ],
+      groupCaps: { G80C: R(150000) },
+      pf80c: { ytd: R(10000), code: 'CHAPVIA_80C' },
+    };
+    const r = ok(
+      calculate(
+        input({
+          profile: { ...input().profile, taxRegime: 'OLD' },
+          tax: { ...input().tax, extras: { declared } },
+        }),
+      ),
+    );
+    const pf = line(r, 'PF')!.earned;
+    const c80 = r.taxWorking!.deductions!.find((l) => l.code === 'CHAPVIA_80C')!;
+    expect(c80.declared).toBe(R(50000) + R(10000) + pf * 10n);
+    // PF at the ceiling (₹1,800 a month): 50,000 + 10,000 + 18,000 = 78,000, within the shared cap
+    expect(c80.allowed).toBe(c80.declared);
+    expect(r.taxWorking!.deductions!.find((l) => l.code === 'CHAPVIA_80D')!.allowed).toBe(R(25000));
+    expect(r.tds).toMatchObject({ otherDeductions: c80.allowed + R(25000) });
+    // without PF in 80C: as declared
+    const plain = ok(
+      calculate(
+        input({
+          profile: { ...input().profile, taxRegime: 'OLD' },
+          tax: { ...input().tax, extras: { declared: { ...declared, pf80c: undefined } } },
+        }),
+      ),
+    );
+    expect(plain.taxWorking!.deductions![0]!.declared).toBe(R(50000));
+  });
+
+  it('the school’s final figure for the year wins, over the months it sets', () => {
+    const r = ok(
+      calculate(input({ tax: { ...input().tax, extras: { final: { annual: R(60000) } } } })),
+    );
+    expect(r.tds).toMatchObject({ monthsLeft: 10, monthly: R(6000) });
+    expect((r.tds as { warnings: string[] }).warnings[0]).toContain('final figure');
+    const quick = ok(
+      calculate(
+        input({ tax: { ...input().tax, extras: { final: { annual: R(60000), spreadLeft: 3 } } } }),
+      ),
+    );
+    expect(quick.tds).toMatchObject({ monthsLeft: 3, monthly: R(20000) });
+    const now = ok(
+      calculate(
+        input({ tax: { ...input().tax, extras: { final: { annual: R(60000), spreadLeft: 0 } } } }),
+      ),
+    );
+    expect(now.tds).toMatchObject({ monthsLeft: 1, monthly: R(60000) });
+  });
+
   it('the last month: tax beyond what was due warns', () => {
     const r = ok(calculate(input({ tax: { ...input().tax, monthsLeft: 1, ytdTds: R(999999) } })));
     expect(r.warnings[0]).toContain('More tax was deducted');

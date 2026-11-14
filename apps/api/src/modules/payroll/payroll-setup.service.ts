@@ -125,6 +125,8 @@ export class PayrollSetupService {
   /** A school's defaults, inserted when absent (the legacy seed). */
   static async seed(c: PoolClient) {
     await c.query(`SELECT app.payroll_seed(app.current_school_id())`);
+    // phase D's sections (the shared 80C cap, more Chapter VI-A sections, the declaration forms)
+    await c.query(`SELECT app.payroll_tax_sections_seed(app.current_school_id())`);
   }
 
   // ---- overview ------------------------------------------------------------------------------------------

@@ -24,6 +24,7 @@ import {
   esi as esiOf,
   esiCoveredAt,
   lwf as lwfOf,
+  mulRate,
   ncpDays,
   nps as npsOf,
   pf as pfOf,
@@ -32,6 +33,7 @@ import {
   type PfRates,
   type PtSlab,
 } from './statutory';
+import { allowedDeductions, hraExemption, type AllowedLine } from './declare';
 import { projectTax, topUpTax, type TaxExtras, type TaxRules } from './tax';
 
 /** the heads payroll works out itself */
@@ -183,6 +185,13 @@ export interface CalcResult {
   ncpDays: bigint;
   pf: ReturnType<typeof pfOf> | null;
   nps: { wage: bigint; ee: bigint; er: bigint; eeRate: string; erRate: string } | null;
+  /** the year's HRA exemption and employer NPS as the tax worked them out (phase D) */
+  taxWorking: {
+    hra: { received: bigint; salary: bigint; rent: bigint; exempt: bigint } | null;
+    npsEr: { annual: bigint; allowed: bigint } | null;
+    /** each declared section: declared (as counted) and allowed */
+    deductions: AllowedLine[] | null;
+  } | null;
   esi: { covered: boolean; wage: bigint; ee: bigint; er: bigint } | null;
   lwf: { ee: bigint; er: bigint } | null;
   loans: Array<{ id: string; interest: bigint; emi: bigint; principal: bigint; closing: bigint }>;
@@ -546,6 +555,7 @@ export function calculate(i: CalcInput): CalcOutcome {
   }
   // ---- income tax ----------------------------------------------------------------------------------------
   let tds: CalcResult['tds'] = null;
+  let taxWorking: CalcResult['taxWorking'] = null;
   let it = 0n;
   let cess = 0n;
   if (i.tax.manual) {
@@ -558,6 +568,20 @@ export function calculate(i: CalcInput): CalcOutcome {
         'NO_TAX_RULES',
         `No income-tax slabs for the ${p.taxRegime === 'NEW' ? 'new' : 'old'} regime this year: add the year in Payroll set-up → Income tax.`,
       );
+    const rateOf = (code: string) => projections.get(code) ?? 0n;
+    const extras = yearExtras(i.tax.extras, p.taxRegime, i.tax.monthsLeft, {
+      hra: earnings.filter((l) => l.code === 'HRA').reduce((n, l) => n + l.earned, 0n),
+      salary: earnings
+        .filter((l) => l.code === 'BASIC' || l.code === 'DA')
+        .reduce((n, l) => n + l.earned, 0n),
+      hraRate: rateOf('HRA'),
+      salaryRate: rateOf('BASIC') + rateOf('DA'),
+      npsEr: npsR?.er ?? 0n,
+      pf: engine
+        .filter((x) => x.code === 'PF' || x.code === 'VPF')
+        .reduce((n, x) => n + x.amount, 0n),
+    });
+    taxWorking = extras.working;
     const pr = (top ? topUpTax : projectTax)({
       regime: p.taxRegime,
       ytdTaxable: i.tax.ytdTaxable,
@@ -570,7 +594,7 @@ export function calculate(i: CalcInput): CalcOutcome {
       ytdTds: i.tax.ytdTds,
       panPresent: i.employee.panPresent,
       rules: i.tax.rules,
-      ...(i.tax.extras ? { extras: i.tax.extras } : {}),
+      ...(extras.extras ? { extras: extras.extras } : {}),
     });
     it = pr.it;
     cess = pr.cess;
@@ -756,6 +780,7 @@ export function calculate(i: CalcInput): CalcOutcome {
     ncpDays: top ? 0n : ncpDays(att.monthDays, att.lopDays, att.preJoinDays, att.postLeaveDays),
     pf: pfR,
     nps: npsR,
+    taxWorking,
     esi: esiR,
     lwf: lwfR,
     loans: loansOut,
@@ -798,4 +823,72 @@ export function calculate(i: CalcInput): CalcOutcome {
   function earnedOf(code: string) {
     return earnings.find((l) => l.code === code && l.isStructure)?.earned ?? 0n;
   }
+}
+
+/**
+ * The year's tax extras with what only the month's calculation knows: the HRA exemption (old regime: the year's HRA
+ * and basic + DA — earlier months, this month, the months left at this month's rates) and the employer's NPS (added
+ * to the income, then deducted within its cap).
+ */
+function yearExtras(
+  x: TaxExtras | undefined,
+  regime: 'NEW' | 'OLD',
+  monthsLeft: number,
+  now: {
+    hra: bigint;
+    salary: bigint;
+    hraRate: bigint;
+    salaryRate: bigint;
+    npsEr: bigint;
+    pf: bigint;
+  },
+): { extras: TaxExtras | undefined; working: CalcResult['taxWorking'] } {
+  if (!x || (!x.hra && !x.npsEr && !x.declared)) return { extras: x, working: null };
+  const future = BigInt(Math.max(1, monthsLeft) - 1);
+  const salary = (x.hra?.ytdSalary ?? 0n) + now.salary + now.salaryRate * future;
+  let hra: NonNullable<CalcResult['taxWorking']>['hra'] = null;
+  let exempt = 0n;
+  if (x.hra) {
+    const received = x.hra.ytdHra + now.hra + now.hraRate * future;
+    exempt =
+      regime === 'OLD'
+        ? hraExemption({
+            hraReceived: received,
+            salary,
+            rentPaid: x.hra.rentPaid,
+            listedCity: x.hra.listedCity,
+          })
+        : 0n;
+    hra = { received, salary, rent: x.hra.rentPaid, exempt };
+  }
+  let npsEr: NonNullable<CalcResult['taxWorking']>['npsEr'] = null;
+  let annual = 0n;
+  let allowed = 0n;
+  if (x.npsEr) {
+    annual = x.npsEr.ytd + now.npsEr * (future + 1n);
+    const cap = mulRate(salary, x.npsEr.capRate);
+    allowed = annual < cap ? annual : cap;
+    npsEr = { annual, allowed };
+  }
+  let deductions: AllowedLine[] | null = null;
+  let declaredTotal = 0n;
+  if (x.declared) {
+    const d = x.declared;
+    const pf = d.pf80c ? d.pf80c.ytd + now.pf * (future + 1n) : 0n;
+    const lines = d.lines.map((l) =>
+      d.pf80c && l.code === d.pf80c.code ? { ...l, amount: l.amount + pf } : l,
+    );
+    const r = allowedDeductions(regime, lines, d.groupCaps);
+    deductions = r.lines;
+    declaredTotal = r.total;
+  }
+  return {
+    extras: {
+      ...x,
+      exemptions: (x.exemptions ?? 0n) + exempt,
+      perquisites: (x.perquisites ?? 0n) + annual,
+      deductions: (x.deductions ?? 0n) + allowed + declaredTotal,
+    },
+    working: { hra, npsEr, deductions },
+  };
 }
