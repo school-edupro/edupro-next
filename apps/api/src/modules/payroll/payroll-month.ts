@@ -56,7 +56,14 @@ export async function windowOf(c: PoolClient, month: string) {
 
 /** Confidential staff a maker may not see (a checker and the payroll admin see everyone). */
 export async function hiddenFor(c: PoolClient, ctx: RequestContext): Promise<string[]> {
-  if (has(ctx, RUN.approve) || has(ctx, PAYROLL.approve) || has(ctx, PAYROLL.admin)) return [];
+  // checkers, the payroll admin and the auditor see every employee; makers not the confidential staff
+  if (
+    has(ctx, RUN.approve) ||
+    has(ctx, PAYROLL.approve) ||
+    has(ctx, PAYROLL.admin) ||
+    has(ctx, 'payroll.audit.view')
+  )
+    return [];
   return (
     (
       await c.query<{ ids: string[] }>(

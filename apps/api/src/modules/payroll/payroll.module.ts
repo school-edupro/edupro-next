@@ -20,10 +20,15 @@ import { PayrollReviewController } from './payroll-review.controller';
 import { PayrollReviewService } from './payroll-review.service';
 import { PayrollRevisionController } from './payroll-revision.controller';
 import { PayrollRevisionService } from './payroll-revision.service';
+import { PayrollAnnualService } from './payroll-annual.service';
+import { PayrollAuditService } from './payroll-audit.service';
+import { PayrollHomeService } from './payroll-home.service';
 import { PayrollPeopleDocsController } from './payroll-people-docs.controller';
 import { PayrollPeopleDocsService } from './payroll-people-docs.service';
 import { PayrollSettlementController } from './payroll-settlement.controller';
 import { PayrollSettlementService } from './payroll-settlement.service';
+import { PayrollReportsController } from './payroll-reports.controller';
+import { PayrollReportsService } from './payroll-reports.service';
 import { PayrollTransferService } from './payroll-transfer.service';
 import { PayrollRunController } from './payroll-run.controller';
 import { PayrollRunService } from './payroll-run.service';
@@ -52,6 +57,7 @@ import { PayrollSetupService } from './payroll-setup.service';
     PayrollRevisionController,
     PayrollSettlementController,
     PayrollPeopleDocsController,
+    PayrollReportsController,
   ],
   providers: [
     PayrollSetupService,
@@ -71,6 +77,10 @@ import { PayrollSetupService } from './payroll-setup.service';
     PayrollSettlementService,
     PayrollPeopleDocsService,
     PayrollTransferService,
+    PayrollReportsService,
+    PayrollAnnualService,
+    PayrollAuditService,
+    PayrollHomeService,
     AuditService,
   ],
   exports: [PayrollSetupService],

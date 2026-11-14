@@ -870,11 +870,7 @@ export class PayrollStatutoryService {
     });
   }
 
-  private async registerTable(
-    ctx: RequestContext,
-    month: string,
-    kind: 'pf' | 'esi' | 'pt' | 'lwf',
-  ) {
+  async registerTable(ctx: RequestContext, month: string, kind: 'pf' | 'esi' | 'pt' | 'lwf') {
     type Col = { label: string; width: number; right?: boolean; number?: boolean; text?: boolean };
     const num = (label: string, width = 0.08): Col => ({ label, width, right: true, number: true });
     if (kind === 'pf') {
