@@ -440,6 +440,66 @@ describe('certificate register (e2e)', () => {
     expect(detail.json().copies.map((x: Cert) => x.copyNo)).toEqual([0, 1, 2]);
   });
 
+  it('opens its PDF: the one kept for good, or made again once when it was cleared', async () => {
+    const first = await inject({
+      method: 'POST',
+      url: `/certificates/${bonafide.id}/pdf`,
+      headers: h(office),
+    });
+    expect(first.statusCode).toBe(201);
+    const exportId = first.json().exportId as string;
+    expect(first.json()).toMatchObject({ ready: false });
+    const kept = await withMigrator((c) =>
+      c.query<{ far: boolean }>(
+        `SELECT expires_at > now() + interval '50 years' AS far FROM exports WHERE id = $1`,
+        [exportId],
+      ),
+    );
+    expect(kept.rows[0]!.far).toBe(true);
+    // cleared (as before 16 Nov, after seven days): made again, and the register points to it
+    await withMigrator((c) =>
+      c.query(
+        `UPDATE exports SET status = 'expired', expires_at = now() - interval '1 day' WHERE id = $1`,
+        [exportId],
+      ),
+    );
+    const again = await inject({
+      method: 'POST',
+      url: `/certificates/${bonafide.id}/pdf`,
+      headers: h(office),
+    });
+    expect(again.json().exportId).not.toBe(exportId);
+    expect(again.json()).toMatchObject({ ready: false });
+    const row = await inject({ method: 'GET', url: `/certificates/${bonafide.id}`, headers: h() });
+    expect(row.json().exportId).toBe(again.json().exportId);
+    // while it is being made, the same one; ready, it opens
+    const twice = await inject({
+      method: 'POST',
+      url: `/certificates/${bonafide.id}/pdf`,
+      headers: h(office),
+    });
+    expect(twice.json().exportId).toBe(again.json().exportId);
+    await withMigrator((c) =>
+      c.query(`UPDATE exports SET status = 'ready' WHERE id = $1`, [again.json().exportId]),
+    );
+    const ready = await inject({
+      method: 'POST',
+      url: `/certificates/${bonafide.id}/pdf`,
+      headers: h(office),
+    });
+    expect(ready.json()).toEqual({ exportId: again.json().exportId, ready: true });
+    // not another school's
+    expect(
+      (
+        await inject({
+          method: 'POST',
+          url: `/certificates/${bonafide.id}/pdf`,
+          headers: headersFor(outsider.sub, other.id),
+        })
+      ).statusCode,
+    ).toBe(404);
+  });
+
   it('keeps the paper it was made with when the template or the record changes later', async () => {
     const before = await withMigrator((c) =>
       c.query<{ template_version_id: string; name: string }>(

@@ -247,6 +247,12 @@ export class CertificateBulkService {
         'certificate.batch.render',
       );
       exportId = exp.id;
+      // the batch's print is kept for good, as its certificates are
+      await this.db.tenant(tenant, (c) =>
+        c.query(`UPDATE exports SET expires_at = now() + interval '100 years' WHERE id = $1`, [
+          exp.id,
+        ]),
+      );
     }
     await this.db.tenant(tenant, async (c) => {
       await c.query(

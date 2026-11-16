@@ -1302,6 +1302,55 @@ export class CertificatesService {
     if (r.rows[0]) await this.cancelRows(c, r.rows[0].id, reason);
   }
 
+  /**
+   * The certificate's PDF to open (16 Nov 2026): the one kept, or — cleared, failed or never made — made again from the
+   * frozen paper (a certificate moved in from the achievement module: its batch PDF made again, every certificate of
+   * that batch pointing to it). A certificate's PDF is kept for good: it is a record, not a report export.
+   */
+  async pdf(ctx: RequestContext, id: string): Promise<{ exportId: string; ready: boolean }> {
+    const tenant = requireTenant(ctx);
+    const x = await this.db.tenant(tenant, async (c) => {
+      const r = await c.query<{
+        export_id: string | null;
+        status: string | null;
+        versioned: boolean;
+        legacy_ref: string | null;
+      }>(
+        `SELECT x.export_id::text, e.status::text, x.template_version_id IS NOT NULL AS versioned, x.legacy_ref
+           FROM certificates x LEFT JOIN exports e ON e.id = x.export_id WHERE x.id = $1`,
+        [id],
+      );
+      return r.rows[0];
+    });
+    if (!x) throw new DomainError('not-found', 'Certificate not found');
+    if (x.export_id && ['ready', 'queued', 'running'].includes(x.status ?? '')) {
+      await this.keepPdf(ctx, x.export_id);
+      return { exportId: x.export_id, ready: x.status === 'ready' };
+    }
+    let exportId: string;
+    if (!x.versioned && x.legacy_ref?.startsWith('achievement:') && x.export_id) {
+      exportId = (await this.reports.again(ctx, x.export_id)).id;
+      await this.db.tenant(tenant, (c) =>
+        c.query(`UPDATE certificates SET export_id = $2 WHERE export_id = $1`, [
+          x.export_id,
+          exportId,
+        ]),
+      );
+    } else exportId = await this.queue(ctx, id);
+    await this.keepPdf(ctx, exportId);
+    return { exportId, ready: false };
+  }
+
+  /** A certificate's PDF is not cleared after the exports' seven days. */
+  private async keepPdf(ctx: RequestContext, exportId: string) {
+    await this.db.tenant(requireTenant(ctx), (c) =>
+      c.query(
+        `UPDATE exports SET expires_at = GREATEST(expires_at, now() + interval '100 years') WHERE id = $1`,
+        [exportId],
+      ),
+    );
+  }
+
   /** (Re)makes the PDF: the frozen data through the template version it was made with. */
   async render(ctx: RequestContext, id: string): Promise<CertificateRow> {
     await this.queue(ctx, id);
@@ -1361,6 +1410,10 @@ export class CertificatesService {
       });
     await this.db.tenant(tenant, async (c) => {
       await c.query(`UPDATE certificates SET export_id = $2 WHERE id = $1`, [id, exp.id]);
+      // a certificate's PDF is kept for good
+      await c.query(`UPDATE exports SET expires_at = now() + interval '100 years' WHERE id = $1`, [
+        exp.id,
+      ]);
       if (x.tc && x.copy_no === 0)
         await c.query(`UPDATE transfer_certificates SET export_id = $2 WHERE id = $1`, [
           x.tc,

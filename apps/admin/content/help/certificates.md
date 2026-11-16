@@ -68,7 +68,9 @@ On a certificate's page, **Duplicate or cancel**:
 Six figures (all, issued, this month, duplicates, cancelled, issued past a check), then filters: type,
 status, originals or duplicates, issued past a check, year, issue dates, and a number, student or
 admission number. **Download** gives the list as filtered, as Excel or PDF. Each row opens its
-certificate; the eye opens the PDF, the arrow saves it.
+certificate; the eye opens the PDF, the arrow saves it. A certificate's PDF is kept for good. One that was
+cleared before 16 Nov 2026 (other files are kept seven days) is made again from the same paper when it is
+opened: a short "Opening the PDF" step, then the PDF opens by itself.
 
 ## The five most common questions
 

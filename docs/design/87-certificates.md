@@ -449,3 +449,21 @@ See, and a template's page with the paper first.
 Tests: a browser pass at 1440 and 375 px with axe on both pages and the dialogs: the groups and the search; See shows
 the paper; Copy prefills the name; Insert a detail by "father" at the cursor, a block and bold; Save enabled only
 after a change and says the version — nothing saved.
+
+## A certificate's PDF opens straight away (16 Nov 2026)
+
+The register's eye went to the export's download, and a certificate PDF older than the exports' seven days had been
+cleared, so the user landed on the export's page instead of the PDF. A certificate is a record, not a report export:
+
+- **Kept for good**: a certificate's PDF (`queue`, the PDF call) and a bulk batch's print get `expires_at` 100 years
+  ahead; migration 0389 keeps those not cleared yet.
+- **`POST /certificates/:id/pdf`** (certificate view right): the kept PDF (`ready`), the one being made, or — cleared,
+  failed or never made — made again from the frozen paper (an achievement-module certificate: its batch PDF made again
+  through `POST /reports/exports/:id/again`, every certificate of that batch pointing to it).
+- **Admin** `GET /certificates/:id/pdf` (`?save=1` to save): straight to the PDF when ready; otherwise
+  `/certificates/:id/opening`, which waits and replaces itself with the PDF (`OpenWhenReady`). The register and a
+  certificate's page (its PDF and its copies) link there; "Make the PDF" links are gone.
+
+Tests: `certificates.e2e-spec.ts` (the PDF kept 100 years; cleared, made again once and the register pointing to it;
+ready, it opens; another school's: not found); a browser pass on the links and the opening step (nothing made on
+Alpha).

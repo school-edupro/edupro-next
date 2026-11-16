@@ -75,12 +75,13 @@ export default async function CertificatePage({
   const label = `${x.typeName} ${x.number}${x.copyNo ? ` duplicate ${String(x.copyNo)}` : ''}`;
   const failed = x.checks.filter((c) => !c.ok);
   const rows = printed(x.data);
-  // the PDF: ready to open, or still being made by the workers
-  const exportReady = x.exportId
+  // the PDF: still being made by the workers (followed here), or to open — kept, or made again when it was cleared
+  const exportStatus = x.exportId
     ? await apiFetch<{ export: { status: string } }>(`/reports/exports/${x.exportId}`)
-        .then((r) => r.export.status === 'ready')
-        .catch(() => false)
-    : false;
+        .then((r) => r.export.status)
+        .catch(() => null)
+    : null;
+  const making = exportStatus === 'queued' || exportStatus === 'running';
   return (
     <>
       <Breadcrumbs
@@ -186,9 +187,7 @@ export default async function CertificatePage({
           </dd>
           <dt>PDF</dt>
           <dd>
-            {x.exportId && exportReady ? (
-              <FileLinks href={`/reports/exports/${x.exportId}/download`} label={label} />
-            ) : x.exportId ? (
+            {x.exportId && making ? (
               <ExportWatcher
                 id={x.exportId}
                 format="pdf"
@@ -202,7 +201,7 @@ export default async function CertificatePage({
                 }}
               />
             ) : (
-              'Not made yet'
+              <FileLinks href={`/certificates/${x.id}/pdf`} label={label} />
             )}{' '}
             {x.status === 'issued' ? (
               <form action={renderCertificate} style={{ display: 'inline' }}>
@@ -296,15 +295,12 @@ export default async function CertificatePage({
             {
               key: 'pdf',
               header: 'PDF',
-              render: (c) =>
-                c.exportId ? (
-                  <FileLinks
-                    href={`/reports/exports/${c.exportId}/download`}
-                    label={`${c.number}${c.copyNo ? ` duplicate ${String(c.copyNo)}` : ''}`}
-                  />
-                ) : (
-                  ''
-                ),
+              render: (c) => (
+                <FileLinks
+                  href={`/certificates/${c.id}/pdf`}
+                  label={`${c.number}${c.copyNo ? ` duplicate ${String(c.copyNo)}` : ''}`}
+                />
+              ),
             },
           ]}
           rows={x.copies}

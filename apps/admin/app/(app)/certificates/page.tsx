@@ -270,15 +270,13 @@ export default async function CertificatesPage({
             {
               key: 'pdf',
               header: 'PDF',
-              render: (x) =>
-                x.exportId ? (
-                  <FileLinks
-                    href={`/reports/exports/${x.exportId}/download`}
-                    label={`${x.typeName} ${x.number}${x.copyNo ? ` duplicate ${String(x.copyNo)}` : ''}`}
-                  />
-                ) : (
-                  <a href={`/certificates/${x.id}`}>Make the PDF</a>
-                ),
+              render: (x) => (
+                // straight to the PDF; one cleared after its seven days (or never made) is made again and opens
+                <FileLinks
+                  href={`/certificates/${x.id}/pdf`}
+                  label={`${x.typeName} ${x.number}${x.copyNo ? ` duplicate ${String(x.copyNo)}` : ''}`}
+                />
+              ),
             },
           ]}
           rows={list.rows}

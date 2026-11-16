@@ -124,6 +124,16 @@ export class CertificatesController {
     return this.certificates.cancel(ctx, id, body.reason);
   }
 
+  @Post(':id/pdf')
+  @ApiOperation({
+    summary:
+      "The certificate's PDF to open: the one kept, or made again when it was cleared, failed or never made",
+  })
+  @RequirePermission(CERTIFICATE.view)
+  pdf(@ReqCtx() ctx: RequestContext, @Param('id') id: string) {
+    return this.certificates.pdf(ctx, id);
+  }
+
   @Post(':id/render')
   @ApiOperation({ summary: 'Make the PDF again (the same frozen paper)' })
   @RequirePermission(CERTIFICATE.view)
