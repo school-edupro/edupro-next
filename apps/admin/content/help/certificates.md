@@ -133,8 +133,8 @@ in part (e.g. "A\*\*\*v S\*\*\*\*a") to compare with the paper. A duplicate has 
 "duplicate 1" of the same number. The page allows a few checks a minute from one place.
 
 Each check is recorded: a certificate's page (**Public checks**) shows when it was checked, by QR or by
-number, and what it answered — never who checked. Certificates issued before the QR get one when their PDF
-is made again (**Make it again**).
+number, and what it answered — never who checked. Certificates issued before the QR get one the next time
+their PDF is opened.
 
 ## Bulk issue, awards, the TC book and reports
 

@@ -10,7 +10,6 @@ import {
   cancelCertificate,
   duplicateCertificate,
   reissueCertificate,
-  renderCertificate,
 } from '@/lib/certificate-actions';
 import { dmy, type Certificate, type CertificateDetail } from '@/lib/certificates';
 
@@ -18,7 +17,6 @@ const OK: Record<string, string> = {
   issued: 'Issued. The PDF is being made.',
   duplicated: 'Duplicate made. Its PDF is being made.',
   cancelled: 'Cancelled. Its number will not be given again.',
-  rendered: 'The PDF is being made again.',
   reissued:
     "Re-issued with today's settings: it prints the signatory, layout and school details as they are now. The earlier certificate is cancelled; its number is never given again.",
 };
@@ -222,16 +220,10 @@ export default async function CertificatePage({
                 }}
               />
             ) : (
+              // the frozen paper: opening it makes the PDF when it is missing (cleared, failed, never made, or
+              // made before the QR); its words change only by a re-issue with today's settings
               <FileLinks href={`/certificates/${x.id}/pdf`} label={label} />
-            )}{' '}
-            {x.status === 'issued' ? (
-              <form action={renderCertificate} style={{ display: 'inline' }}>
-                <input type="hidden" name="id" value={x.id} />
-                <button type="submit" className="ep-btn ep-btn--ghost ep-btn--sm">
-                  {x.exportId ? 'Make it again' : 'Make the PDF'}
-                </button>
-              </form>
-            ) : null}
+            )}
           </dd>
         </dl>
         {x.overrideReason ? (

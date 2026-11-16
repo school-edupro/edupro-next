@@ -466,7 +466,10 @@ cleared, so the user landed on the export's page instead of the PDF. A certifica
   days, undoing "kept for good").
 - **Admin** `GET /certificates/:id/pdf` (`?save=1` to save): straight to the PDF when ready; otherwise
   `/certificates/:id/opening`, which waits and replaces itself with the PDF (`OpenWhenReady`). The register and a
-  certificate's page (its PDF and its copies) link there; "Make the PDF" links are gone.
+  certificate's page (its PDF and its copies) link there; "Make the PDF" links are gone. The page's **Make it again**
+  button went too (16 Nov): it remade the same frozen paper, so nothing changed and it read as broken; opening the PDF
+  makes it when it is missing, and once more for one made before the QR. Its words change only by a re-issue with
+  today's settings.
 
 Tests: `certificates.e2e-spec.ts` (the PDF kept 100 years; cleared, made again once and the register pointing to it;
 ready, it opens; another school's: not found); a browser pass on the links and the opening step (nothing made on

@@ -488,6 +488,23 @@ describe('certificate register (e2e)', () => {
       headers: h(office),
     });
     expect(ready.json()).toEqual({ exportId: again.json().exportId, ready: true });
+    // one made before the QR: opened, it is made again once, with its QR
+    await withMigrator((c) =>
+      c.query(`UPDATE certificates SET data = data - 'qr' WHERE id = $1`, [bonafide.id]),
+    );
+    const withQr = await inject({
+      method: 'POST',
+      url: `/certificates/${bonafide.id}/pdf`,
+      headers: h(office),
+    });
+    expect(withQr.json().ready).toBe(false);
+    expect(withQr.json().exportId).not.toBe(again.json().exportId);
+    const stamped = await withMigrator((c) =>
+      c.query<{ has: boolean }>(`SELECT data ? 'qr' AS has FROM certificates WHERE id = $1`, [
+        bonafide.id,
+      ]),
+    );
+    expect(stamped.rows[0]!.has).toBe(true);
     // not another school's
     expect(
       (

@@ -1433,15 +1433,19 @@ export class CertificatesService {
         status: string | null;
         versioned: boolean;
         legacy_ref: string | null;
+        has_qr: boolean;
       }>(
-        `SELECT x.export_id::text, e.status::text, x.template_version_id IS NOT NULL AS versioned, x.legacy_ref
+        `SELECT x.export_id::text, e.status::text, x.template_version_id IS NOT NULL AS versioned, x.legacy_ref,
+                x.data ? 'qr' AS has_qr
            FROM certificates x LEFT JOIN exports e ON e.id = x.export_id WHERE x.id = $1`,
         [id],
       );
       return r.rows[0];
     });
     if (!x) throw new DomainError('not-found', 'Certificate not found');
-    if (x.export_id && ['ready', 'queued', 'running'].includes(x.status ?? '')) {
+    // one made before the QR (phase D) is made again once, with its QR
+    const qrMissing = x.versioned && !x.has_qr && x.status === 'ready';
+    if (x.export_id && ['ready', 'queued', 'running'].includes(x.status ?? '') && !qrMissing) {
       await this.keepPdf(ctx, x.export_id);
       return { exportId: x.export_id, ready: x.status === 'ready' };
     }
