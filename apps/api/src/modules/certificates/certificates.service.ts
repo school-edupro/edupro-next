@@ -63,6 +63,10 @@ export interface TypeRow {
 }
 
 export interface IssueOptions {
+  /** a re-issue of this earlier certificate (with today's settings) */
+  reissueOf?: string;
+  /** run inside the issue's own transaction before the checks (a re-issue cancels the earlier one first) */
+  beforeIssue?: (c: PoolClient) => Promise<void>;
   /** issued from this withdrawal (its departments that gate the TC are cleared) */
   withdrawalId?: string | null;
   leavingOn?: string | null;
@@ -102,6 +106,10 @@ export interface CertificateRow {
   cancelledBy: string | null;
   cancelReason: string | null;
   createdAt: string;
+  /** made again from this earlier certificate (re-issue with today's settings) */
+  reissueOf: { id: string; number: string } | null;
+  /** made again as this later certificate */
+  reissuedAs: { id: string; number: string } | null;
 }
 
 const SELECT = `SELECT x.id::text, t.code AS type_code, t.name AS type_name, x.number, x.copy_no, x.original_id::text,
@@ -110,7 +118,10 @@ const SELECT = `SELECT x.id::text, t.code AS type_code, t.name AS type_name, x.n
         COALESCE(x.data->'student'->>'className', x.data->'employee'->>'designation') AS class_name,
         x.status, x.issued_on::text, u.display_name AS issued_by, x.purpose, x.book_no, x.sl_no, x.override_reason,
         ou.display_name AS override_by, x.checks, x.export_id::text, x.transfer_certificate_id::text, x.legacy,
-        x.cancelled_at, cu.display_name AS cancelled_by, x.cancel_reason, x.created_at
+        x.cancelled_at, cu.display_name AS cancelled_by, x.cancel_reason, x.created_at,
+        x.reissue_of::text, (SELECT r.number FROM certificates r WHERE r.id = x.reissue_of) AS reissue_of_number,
+        (SELECT r.id::text FROM certificates r WHERE r.reissue_of = x.id) AS reissued_as,
+        (SELECT r.number FROM certificates r WHERE r.reissue_of = x.id) AS reissued_as_number
    FROM certificates x
    JOIN certificate_types t ON t.id = x.type_id
    LEFT JOIN students s ON s.id = x.student_id
@@ -147,6 +158,10 @@ interface Db {
   cancelled_by: string | null;
   cancel_reason: string | null;
   created_at: Date;
+  reissue_of: string | null;
+  reissue_of_number: string | null;
+  reissued_as: string | null;
+  reissued_as_number: string | null;
 }
 
 const toRow = (r: Db): CertificateRow => ({
@@ -177,6 +192,8 @@ const toRow = (r: Db): CertificateRow => ({
   cancelledBy: r.cancelled_by,
   cancelReason: r.cancel_reason,
   createdAt: r.created_at.toISOString(),
+  reissueOf: r.reissue_of ? { id: r.reissue_of, number: r.reissue_of_number ?? '' } : null,
+  reissuedAs: r.reissued_as ? { id: r.reissued_as, number: r.reissued_as_number ?? '' } : null,
 });
 
 const dmy = (iso: string) => `${iso.slice(8, 10)}-${iso.slice(5, 7)}-${iso.slice(0, 4)}`;
@@ -1028,6 +1045,7 @@ export class CertificatesService {
         type.id,
         dto.studentId ?? `e${dto.employeeId ?? ''}`,
       ]);
+      if (opts.beforeIssue) await opts.beforeIssue(c);
       const b = await this.build(c, ctx, type, dto, ledger, opts);
       if (dto.requestId) {
         if (!this.requestHook) throw new Error('certificate requests are not wired');
@@ -1152,6 +1170,11 @@ export class CertificatesService {
           opts.batchId,
         ]);
       const id = r.rows[0]!.id;
+      if (opts.reissueOf)
+        await c.query(`UPDATE certificates SET reissue_of = $2 WHERE id = $1`, [
+          id,
+          opts.reissueOf,
+        ]);
       await this.verify.stamp(c, id);
       if (dto.requestId && this.requestHook) {
         await c.query(`UPDATE certificates SET request_id = $2 WHERE id = $1`, [id, dto.requestId]);
@@ -1171,6 +1194,7 @@ export class CertificatesService {
             ? { override: dto.overrideReason, failed: failed.map((x) => x.key) }
             : {}),
           ...(book ? { bookNo: book.book_no, slNo: book.sl_no } : {}),
+          ...(opts.reissueOf ? { reissueOf: opts.reissueOf } : {}),
         },
       });
       return id;
@@ -1252,36 +1276,130 @@ export class CertificatesService {
 
   /** Cancels an issued certificate (and its duplicates); its number is never given again. A TC's row is cancelled too. */
   async cancel(ctx: RequestContext, id: string, reason: string): Promise<CertificateRow> {
-    await this.db.tenant(requireTenant(ctx), async (c) => {
-      const x = (
-        await c.query<{ status: string; number: string; copy_no: number; tc: string | null }>(
-          `SELECT status, number, copy_no, transfer_certificate_id::text AS tc FROM certificates WHERE id = $1 FOR UPDATE`,
-          [id],
-        )
-      ).rows[0];
-      if (!x) throw new DomainError('not-found', 'Certificate not found');
-      if (x.status === 'cancelled')
-        throw new DomainError(
-          'certificate.already_cancelled',
-          'The certificate is already cancelled',
-          { status: 409 },
-        );
-      await this.cancelRows(c, id, reason);
-      if (x.tc && x.copy_no === 0)
-        await c.query(
-          `UPDATE transfer_certificates SET status = 'cancelled', cancelled_at = now(), cancelled_by = app.current_user_id(), cancel_reason = $2
-            WHERE id = $1 AND status = 'issued'`,
-          [x.tc, reason],
-        );
-      await this.audit.stage(ctx, c, {
-        action: 'certificate.cancel',
-        entityType: 'certificates',
-        entityId: id,
-        before: { status: x.status },
-        after: { status: 'cancelled', number: x.number, copyNo: x.copy_no, reason },
-      });
-    });
+    await this.db.tenant(requireTenant(ctx), (c) => this.cancelIn(c, ctx, id, reason));
     return this.get(ctx, id);
+  }
+
+  /** The cancel itself, inside a transaction (the cancel route, and a re-issue's first step). */
+  private async cancelIn(c: PoolClient, ctx: RequestContext, id: string, reason: string) {
+    const x = (
+      await c.query<{ status: string; number: string; copy_no: number; tc: string | null }>(
+        `SELECT status, number, copy_no, transfer_certificate_id::text AS tc FROM certificates WHERE id = $1 FOR UPDATE`,
+        [id],
+      )
+    ).rows[0];
+    if (!x) throw new DomainError('not-found', 'Certificate not found');
+    if (x.status === 'cancelled')
+      throw new DomainError(
+        'certificate.already_cancelled',
+        'The certificate is already cancelled',
+        { status: 409 },
+      );
+    await this.cancelRows(c, id, reason);
+    if (x.tc && x.copy_no === 0)
+      await c.query(
+        `UPDATE transfer_certificates SET status = 'cancelled', cancelled_at = now(), cancelled_by = app.current_user_id(), cancel_reason = $2
+          WHERE id = $1 AND status = 'issued'`,
+        [x.tc, reason],
+      );
+    await this.audit.stage(ctx, c, {
+      action: 'certificate.cancel',
+      entityType: 'certificates',
+      entityId: id,
+      before: { status: x.status },
+      after: { status: 'cancelled', number: x.number, copyNo: x.copy_no, reason },
+    });
+  }
+
+  /**
+   * Re-issue with today's settings (16 Nov 2026): an issued certificate prints what it froze at issue — the signatory,
+   * the layout, the school and the person as they were. This makes it again as a new certificate (a new number) with
+   * the same type, person, purpose, layout and details, printed as things are now, through the type's checks; the
+   * earlier one is cancelled in the same step (or was already) and the two point to each other. A failed check or a
+   * missing detail leaves both as they were.
+   */
+  async reissue(ctx: RequestContext, id: string, reason: string): Promise<CertificateRow> {
+    const o = await this.db.tenant(requireTenant(ctx), async (c) => {
+      const r = await c.query<{
+        status: string;
+        copy_no: number;
+        type_code: string;
+        type_template: string | null;
+        variants: unknown;
+        student_id: string | null;
+        employee_id: string | null;
+        purpose: string | null;
+        fields: unknown;
+        template_id: string | null;
+        reissued_as: string | null;
+        override_reason: string | null;
+      }>(
+        `SELECT x.status, x.copy_no, x.override_reason, t.code AS type_code, t.template_id::text AS type_template, t.variants,
+                x.student_id::text, x.employee_id::text, x.purpose, x.data->'fields' AS fields,
+                v.template_id::text AS template_id,
+                (SELECT r.number FROM certificates r WHERE r.reissue_of = x.id) AS reissued_as
+           FROM certificates x JOIN certificate_types t ON t.id = x.type_id
+           LEFT JOIN document_template_versions v ON v.id = x.template_version_id
+          WHERE x.id = $1`,
+        [id],
+      );
+      return r.rows[0];
+    });
+    if (!o) throw new DomainError('not-found', 'Certificate not found');
+    if (o.copy_no > 0)
+      throw new DomainError(
+        'certificate.reissue_original',
+        'Re-issue the original certificate; its duplicates go with it',
+        { status: 400 },
+      );
+    if (o.reissued_as)
+      throw new DomainError(
+        'certificate.already_reissued',
+        `Already re-issued as ${o.reissued_as}`,
+        {
+          status: 409,
+        },
+      );
+    if (o.status === 'issued' && !ctx.permissions?.has(CERTIFICATE.cancel))
+      throw new DomainError(
+        'permission-denied',
+        'A re-issue cancels this certificate: it needs the right to cancel certificates',
+        { status: 403, extra: { permission: CERTIFICATE.cancel } },
+      );
+    const variants = Array.isArray(o.variants)
+      ? (o.variants as Array<{ templateId?: string }>)
+      : [];
+    const variant =
+      o.template_id &&
+      o.template_id !== o.type_template &&
+      variants.some((v) => v.templateId === o.template_id)
+        ? o.template_id
+        : undefined;
+    const fields =
+      o.fields && typeof o.fields === 'object' && !Array.isArray(o.fields)
+        ? (o.fields as IssueCertificateDto['fields'])
+        : {};
+    const why = `Re-issued with today's settings: ${reason}`.slice(0, 300);
+    return this.issue(
+      ctx,
+      {
+        typeCode: o.type_code,
+        ...(o.student_id ? { studentId: o.student_id } : {}),
+        ...(o.employee_id ? { employeeId: o.employee_id } : {}),
+        ...(variant ? { variant } : {}),
+        ...(o.purpose ? { purpose: o.purpose } : {}),
+        // issued past a failed check: if it still fails, the principal's reason carries over — the override right
+        // and a fresh sign-in are still asked, as at issue
+        ...(o.override_reason ? { overrideReason: o.override_reason } : {}),
+        fields,
+      } as IssueCertificateDto,
+      {
+        reissueOf: id,
+        ...(o.status === 'issued'
+          ? { beforeIssue: (c: PoolClient) => this.cancelIn(c, ctx, id, why) }
+          : {}),
+      },
+    );
   }
 
   /** The register rows of a certificate (an original takes its duplicates with it). */

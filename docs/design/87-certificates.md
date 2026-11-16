@@ -471,3 +471,25 @@ cleared, so the user landed on the export's page instead of the PDF. A certifica
 Tests: `certificates.e2e-spec.ts` (the PDF kept 100 years; cleared, made again once and the register pointing to it;
 ready, it opens; another school's: not found); a browser pass on the links and the opening step (nothing made on
 Alpha).
+
+## Re-issue with today's settings (16 Nov 2026)
+
+A certificate freezes its paper at issue, so a signatory set two minutes later did not show on BON/2026-27/00001; the
+user asked for a button to make it again with the current settings.
+
+- **Data** (migration 0390): `certificates.reissue_of` (unique where set: one re-issue each).
+- **`POST /certificates/:id/reissue`** (issue right; `reason`): the original only (400 on a duplicate), once (409
+  `certificate.already_reissued`); an issued one needs the cancel right too. It issues a new certificate — the same
+  type, person, purpose, layout (a variant still offered) and fields — through `issue` with `beforeIssue` (the cancel,
+  "Re-issued with today's settings: …", inside the issue's own transaction, so the "one a person" check sees it gone)
+  and `reissueOf`. A failed check or a missing field rolls both back. One issued past a failed check carries its
+  override reason: if the check still fails, the override right and a fresh sign-in are asked as at issue.
+- **The row** carries `reissueOf` and `reissuedAs` (`{id, number}`).
+- **Admin**: on a certificate's page, "Duplicate, re-issue or cancel" has **Re-issue with today's settings** (a reason;
+  the dialog says what happens); a cancelled original not re-issued has **Issue again with today's settings**; the
+  details show "Re-issue of" / "Re-issued as"; the register marks **Re-issue** / **Re-issued**; a fresh sign-in, when
+  asked, comes back to the certificate.
+
+Tests: `certificates.e2e-spec.ts` (refused without the issue right; a new number with the new signatory title and foot
+line; the earlier one cancelled, pointing to it, its paper unchanged; once only; not a duplicate; one past a failed
+check: refused to the office with nothing changed, re-issued by the principal with the reason carried).

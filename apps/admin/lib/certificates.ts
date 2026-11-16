@@ -76,6 +76,10 @@ export interface Certificate {
   cancelledBy: string | null;
   cancelReason: string | null;
   createdAt: string;
+  /** made again from this earlier certificate (re-issue with today's settings) */
+  reissueOf: { id: string; number: string } | null;
+  /** made again as this later certificate */
+  reissuedAs: { id: string; number: string } | null;
 }
 
 export interface CertificateList {

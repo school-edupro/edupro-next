@@ -53,15 +53,26 @@ reason is printed nowhere but kept on the certificate and shown in the register 
 a failed check**). It needs a recent two-step sign-in. "Already holds this certificate" is never
 overridden: open the one held and print a duplicate, or cancel it first.
 
-## Duplicates and cancelling
+## Duplicates, re-issue and cancelling
 
-On a certificate's page, **Duplicate or cancel**:
+A certificate keeps what it printed on the day it was issued: the signatory, the layout, the school's
+and the person's details. A later change in the set-up does not alter it. On a certificate's page,
+**Duplicate, re-issue or cancel**:
 
 - **Print a duplicate** (with a reason, e.g. the original was lost): the same number and paper,
   printed **DUPLICATE (copy 1)**, then copy 2 …
+- **Re-issue with today's settings** (with a reason, e.g. issued before the signatory was set): a new
+  certificate with a new number for the same person, purpose, layout and details, printed with the
+  signatory, layout and school details as they are now, after the type's checks. The earlier one (and its
+  duplicates) is cancelled in the same step; each points to the other. If a check fails now, nothing
+  changes; one issued past a failed check carries the principal's reason over, which needs the
+  principal's right and a fresh sign-in.
 - **Cancel** (with a reason): the certificate and its duplicates show as cancelled; a TC's own record is
   cancelled too. The number is not given again. Cancelling a TC does not put the student back on the
   rolls: revoke the withdrawal for that.
+
+A cancelled certificate that was not re-issued has **Issue again with today's settings**. In the
+register, **Re-issue** and **Re-issued** mark the two.
 
 ## The register
 

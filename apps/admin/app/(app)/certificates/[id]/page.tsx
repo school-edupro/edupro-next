@@ -9,6 +9,7 @@ import { ApiError, apiFetch } from '@/lib/api';
 import {
   cancelCertificate,
   duplicateCertificate,
+  reissueCertificate,
   renderCertificate,
 } from '@/lib/certificate-actions';
 import { dmy, type Certificate, type CertificateDetail } from '@/lib/certificates';
@@ -18,6 +19,8 @@ const OK: Record<string, string> = {
   duplicated: 'Duplicate made. Its PDF is being made.',
   cancelled: 'Cancelled. Its number will not be given again.',
   rendered: 'The PDF is being made again.',
+  reissued:
+    "Re-issued with today's settings: it prints the signatory, layout and school details as they are now. The earlier certificate is cancelled; its number is never given again.",
 };
 
 /** The printed fields, as label → value rows, from the frozen data (nested objects one level down). */
@@ -163,6 +166,24 @@ export default async function CertificatePage({
               <dt>TC</dt>
               <dd>
                 <a href={`/people/tc?q=${encodeURIComponent(x.number)}`}>In the TC list</a>
+              </dd>
+            </>
+          ) : null}
+          {x.reissueOf ? (
+            <>
+              <dt>Re-issue of</dt>
+              <dd>
+                <a href={`/certificates/${x.reissueOf.id}`}>{x.reissueOf.number}</a> (cancelled),
+                printed with the settings of its own day
+              </dd>
+            </>
+          ) : null}
+          {x.reissuedAs ? (
+            <>
+              <dt>Re-issued as</dt>
+              <dd>
+                <a href={`/certificates/${x.reissuedAs.id}`}>{x.reissuedAs.number}</a>, with the
+                settings of its day
               </dd>
             </>
           ) : null}
@@ -331,15 +352,41 @@ export default async function CertificatePage({
       {x.status === 'issued' && (x.can.issue || x.can.cancel) ? (
         <FoldCard
           id="cert-actions"
-          title="Duplicate or cancel"
-          hint="A lost original, or one issued in error"
+          title="Duplicate, re-issue or cancel"
+          hint="A lost original, one to print with today's settings, or one issued in error"
+          open={sp.open === 'actions'}
         >
           <p className="ep-field__help" style={{ marginTop: 0 }}>
-            A duplicate keeps the number and prints DUPLICATE. Cancelling takes its duplicates with
-            it
+            A duplicate keeps the number and paper and prints DUPLICATE. A re-issue makes it again
+            with a new number, printed with today&apos;s settings (signatory, layout, school
+            details), and cancels this one. Cancelling takes its duplicates with it
             {x.transferCertificateId ? ' and cancels the TC' : ''}; the number is never given again.
           </p>
           <div style={{ display: 'flex', gap: 'var(--sp-2)', flexWrap: 'wrap' }}>
+            {x.can.issue && x.can.cancel && !x.copyNo && !x.reissuedAs ? (
+              <ConfirmAction
+                action={reissueCertificate}
+                fields={{ id: x.id }}
+                label="Re-issue with today's settings"
+                title={`Re-issue ${x.number} with today's settings`}
+                confirmLabel="Re-issue it"
+                variant="secondary"
+                reason={{
+                  label: 'Why it is re-issued',
+                  placeholder: 'e.g. issued before the signatory was set',
+                }}
+              >
+                A new certificate with a new number for the same{' '}
+                {x.employeeId ? 'employee' : 'student'}, purpose and details, printed with the
+                signatory, layout and school details as they are now — after the type&apos;s checks.{' '}
+                {x.number}
+                {x.copies.length > 1 ? ' and its duplicates are' : ' is'} cancelled in the same
+                step.
+                {x.overrideReason
+                  ? " It was issued past a failed check: if that check still fails, the principal's reason carries over (the principal's right and a fresh sign-in are needed)."
+                  : ''}
+              </ConfirmAction>
+            ) : null}
             {x.can.issue ? (
               <ConfirmAction
                 action={duplicateCertificate}
@@ -370,6 +417,31 @@ export default async function CertificatePage({
               </ConfirmAction>
             ) : null}
           </div>
+        </FoldCard>
+      ) : null}
+      {x.status === 'cancelled' && x.can.issue && !x.copyNo && !x.reissuedAs ? (
+        <FoldCard
+          id="cert-again"
+          title="Issue again with today's settings"
+          hint="A new certificate for the same person, purpose and details"
+        >
+          <p className="ep-field__help" style={{ marginTop: 0 }}>
+            A new certificate with a new number, printed with the signatory, layout and school
+            details as they are now, after the type&apos;s checks. This one stays cancelled and
+            points to it.
+          </p>
+          <ConfirmAction
+            action={reissueCertificate}
+            fields={{ id: x.id }}
+            label="Issue again with today's settings"
+            title={`Issue ${x.number} again with today's settings`}
+            confirmLabel="Issue it"
+            variant="secondary"
+            reason={{ label: 'Why it is issued again', placeholder: 'e.g. cancelled in error' }}
+          >
+            The same type, {x.employeeId ? 'employee' : 'student'}, purpose and details; a new
+            number.
+          </ConfirmAction>
         </FoldCard>
       ) : null}
     </>

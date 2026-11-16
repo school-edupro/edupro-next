@@ -651,4 +651,114 @@ describe('certificate register (e2e)', () => {
     });
     expect(outside.statusCode).toBe(404);
   });
+
+  it("re-issues with today's settings: a new number printed as things are now; the earlier one cancelled; once", async () => {
+    const before = (
+      await inject({ method: 'GET', url: `/certificates/${bonafide.id}`, headers: h() })
+    ).json();
+    expect(before.status).toBe('issued');
+    // the school changes who signs after it was issued
+    const set = await inject({
+      method: 'PUT',
+      url: '/certificates/setup/settings',
+      headers: h(),
+      json: {
+        signatoryEmployeeId: null,
+        signatoryTitle: 'Head of School',
+        printSignature: false,
+        printPreparer: true,
+        footerNote: 'Not valid without the school seal',
+      },
+    });
+    expect(set.statusCode).toBe(200);
+    // not by someone who may not issue
+    const refused = await inject({
+      method: 'POST',
+      url: `/certificates/${bonafide.id}/reissue`,
+      headers: h(teacher),
+      json: { reason: 'Signed by the new head' },
+    });
+    expect(refused.statusCode).toBe(403);
+    const r = await inject({
+      method: 'POST',
+      url: `/certificates/${bonafide.id}/reissue`,
+      headers: h(office),
+      json: { reason: 'Signed by the new head' },
+    });
+    expect(r.statusCode).toBe(201);
+    expect(r.json().number).not.toBe(bonafide.number);
+    expect(r.json().number).toMatch(/^BON\//);
+    expect(r.json()).toMatchObject({
+      status: 'issued',
+      reissueOf: { id: bonafide.id, number: bonafide.number },
+      purpose: before.purpose,
+    });
+    const now = (
+      await inject({ method: 'GET', url: `/certificates/${r.json().id as string}`, headers: h() })
+    ).json();
+    const titles = (now.data.signs as Array<{ title: string }>).map((x) => x.title);
+    expect(titles).toContain('Head of School');
+    expect(now.data.footerNote).toBe('Not valid without the school seal');
+    // the earlier one: cancelled, pointing to the new one; it kept what it printed
+    const old = (
+      await inject({ method: 'GET', url: `/certificates/${bonafide.id}`, headers: h() })
+    ).json();
+    expect(old).toMatchObject({
+      status: 'cancelled',
+      reissuedAs: { id: r.json().id, number: r.json().number },
+    });
+    expect(old.cancelReason).toMatch(/^Re-issued with today's settings: Signed by the new head/);
+    expect(old.data.signs).toEqual(before.data.signs);
+    // once only; a duplicate is not re-issued on its own
+    const twice = await inject({
+      method: 'POST',
+      url: `/certificates/${bonafide.id}/reissue`,
+      headers: h(office),
+      json: { reason: 'Again' },
+    });
+    expect(twice.statusCode).toBe(409);
+    expect(twice.json()).toMatchObject({ type: 'certificate.already_reissued' });
+    const tcCopies = (
+      await inject({ method: 'GET', url: `/certificates/${tc.id}`, headers: h() })
+    ).json().copies as Array<{ id: string; copyNo: number }>;
+    const dup = tcCopies.find((x) => x.copyNo > 0)!;
+    const ofDup = await inject({
+      method: 'POST',
+      url: `/certificates/${dup.id}/reissue`,
+      headers: h(office),
+      json: { reason: 'A copy' },
+    });
+    expect(ofDup.statusCode).toBe(400);
+    // one issued past a failed check: the check still fails, so the principal's reason carries over — the office
+    // (no override) is refused and nothing changes; the principal re-issues it
+    const past = (
+      await inject({
+        method: 'GET',
+        url: '/certificates?type=BONAFIDE&override=yes&status=issued',
+        headers: h(),
+      })
+    ).json().rows[0] as { id: string; number: string };
+    const noRight = await inject({
+      method: 'POST',
+      url: `/certificates/${past.id}/reissue`,
+      headers: h(office),
+      json: { reason: 'New signatory' },
+    });
+    expect(noRight.statusCode).toBe(403);
+    expect(
+      (await inject({ method: 'GET', url: `/certificates/${past.id}`, headers: h() })).json()
+        .status,
+    ).toBe('issued');
+    const byPrincipal = await inject({
+      method: 'POST',
+      url: `/certificates/${past.id}/reissue`,
+      headers: h(),
+      json: { reason: 'New signatory' },
+    });
+    expect(byPrincipal.statusCode).toBe(201);
+    expect(byPrincipal.json()).toMatchObject({
+      overrideReason: 'Needed for the scholarship form',
+      reissueOf: { id: past.id },
+    });
+  });
 });

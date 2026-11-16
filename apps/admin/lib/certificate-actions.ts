@@ -102,6 +102,27 @@ export async function cancelCertificate(fd: FormData) {
   redirect(`/certificates/${id}?ok=cancelled`);
 }
 
+/** Re-issue with today's settings: a new certificate printed as things are now; the earlier one cancelled. */
+export async function reissueCertificate(fd: FormData) {
+  const id = str(fd, 'id');
+  if (!okId(id)) return;
+  let made: { id: string };
+  try {
+    made = await apiFetch<{ id: string }>(`/certificates/${id}/reissue`, {
+      method: 'POST',
+      body: JSON.stringify({ reason: str(fd, 'reason') }),
+    });
+  } catch (e) {
+    // carrying over a principal's reason asks for a fresh sign-in first, as at issue
+    if (e instanceof ApiError && e.problem.type === 'mfa-required')
+      redirect(`/step-up?returnTo=${encodeURIComponent(`/certificates/${id}?open=actions`)}`);
+    if (e instanceof ApiError) back(`/certificates/${id}`, e);
+    throw e;
+  }
+  revalidatePath('/certificates');
+  redirect(`/certificates/${made.id}?ok=reissued`);
+}
+
 export async function renderCertificate(fd: FormData) {
   const id = str(fd, 'id');
   if (!okId(id)) return;

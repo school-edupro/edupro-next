@@ -113,6 +113,16 @@ export class CertificatesController {
     return this.certificates.duplicate(ctx, id, body.reason);
   }
 
+  @Post(':id/reissue')
+  @ApiOperation({
+    summary:
+      "Re-issue with today's settings: a new certificate (new number) for the same person, type, purpose and details, printed as things are now; an issued one is cancelled in the same step",
+  })
+  @RequirePermission(CERTIFICATE.issue)
+  reissue(@ReqCtx() ctx: RequestContext, @Param('id') id: string, @Body() body: ReasonDto) {
+    return this.certificates.reissue(ctx, id, body.reason);
+  }
+
   @Post(':id/cancel')
   @ApiOperation({
     summary: 'Cancel a certificate (and its duplicates); its number is never given again',
