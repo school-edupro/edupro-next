@@ -130,8 +130,9 @@ export function exportProcessor({ db, storage, pdf, log, ttlDays }: ExportDeps) 
           ],
         );
         await c.query(
+          // kept the export days from now — or longer when it was asked to be kept (a certificate's PDF, 16 Nov 2026)
           `UPDATE exports SET status = 'ready', file_id = $2, row_count = $3, finished_at = now(),
-                  expires_at = now() + make_interval(days => $4) WHERE id = $1`,
+                  expires_at = GREATEST(expires_at, now() + make_interval(days => $4)) WHERE id = $1`,
           [exportId, f.rows[0]!.id, rowCount, ttlDays],
         );
       });

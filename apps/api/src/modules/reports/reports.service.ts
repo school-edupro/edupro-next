@@ -504,6 +504,12 @@ export class ReportsService {
         [row.dataset, row.format, JSON.stringify(params), row.title],
       );
       const newId = r.rows[0]!.id;
+      // a batch of achievement certificates prints the certificates linked to its file: they move to the new one
+      if (row.dataset === 'certificate_batch')
+        await c.query(`UPDATE certificates_issued SET export_id = $2 WHERE export_id = $1`, [
+          id,
+          newId,
+        ]);
       await this.outbox.enqueue(c, ctx, QUEUES.exports, 'export.generate', { exportId: newId });
       const again = await this.get(tenant, newId, c);
       await this.audit.stage(ctx, c, {

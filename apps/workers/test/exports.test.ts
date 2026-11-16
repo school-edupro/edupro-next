@@ -121,6 +121,27 @@ describe('export processor (S3-03)', () => {
     expect(head?.sizeBytes).toBe(Number(row.rows[0]!.size_bytes));
   });
 
+  it('keeps a file asked to be kept longer (a certificate PDF) past the usual days', async () => {
+    const exportId = await requestExport('xlsx');
+    await withMigrator((c) =>
+      c.query(`UPDATE exports SET expires_at = now() + interval '100 years' WHERE id = $1`, [
+        exportId,
+      ]),
+    );
+    await exportProcessor({ db, storage: storage(), pdf: new NoPdfEngine(), log, ttlDays: 7 })({
+      data: envelope(exportId),
+      attemptsMade: 0,
+      opts: { attempts: 3 },
+    });
+    const row = await withMigrator((c) =>
+      c.query<{ status: string; far: boolean }>(
+        `SELECT status, expires_at > now() + interval '50 years' AS far FROM exports WHERE id = $1`,
+        [exportId],
+      ),
+    );
+    expect(row.rows[0]).toEqual({ status: 'ready', far: true });
+  });
+
   it('marks the export failed on the last attempt when the format engine is unavailable', async () => {
     const exportId = await requestExport('pdf');
     const processor = exportProcessor({

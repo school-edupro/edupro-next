@@ -1304,8 +1304,8 @@ export class CertificatesService {
 
   /**
    * The certificate's PDF to open (16 Nov 2026): the one kept, or — cleared, failed or never made — made again from the
-   * frozen paper (a certificate moved in from the achievement module: its batch PDF made again, every certificate of
-   * that batch pointing to it). A certificate's PDF is kept for good: it is a record, not a report export.
+   * frozen paper (a certificate moved in from the achievement module: its own page, from the achievement record). A
+   * certificate's PDF is kept for good: it is a record, not a report export.
    */
   async pdf(ctx: RequestContext, id: string): Promise<{ exportId: string; ready: boolean }> {
     const tenant = requireTenant(ctx);
@@ -1327,17 +1327,7 @@ export class CertificatesService {
       await this.keepPdf(ctx, x.export_id);
       return { exportId: x.export_id, ready: x.status === 'ready' };
     }
-    let exportId: string;
-    if (!x.versioned && x.legacy_ref?.startsWith('achievement:') && x.export_id) {
-      exportId = (await this.reports.again(ctx, x.export_id)).id;
-      await this.db.tenant(tenant, (c) =>
-        c.query(`UPDATE certificates SET export_id = $2 WHERE export_id = $1`, [
-          x.export_id,
-          exportId,
-        ]),
-      );
-    } else exportId = await this.queue(ctx, id);
-    await this.keepPdf(ctx, exportId);
+    const exportId = await this.queue(ctx, id);
     return { exportId, ready: false };
   }
 
@@ -1382,11 +1372,24 @@ export class CertificatesService {
       return r.rows[0];
     });
     if (!x) throw new DomainError('not-found', 'Certificate not found');
-    if (!x.version && x.legacy_ref?.startsWith('achievement:') && x.export_id) return x.export_id;
     if (x.version) await this.db.tenant(tenant, (c) => this.verify.stamp(c, id));
     const title = `${x.type_name} ${x.number}${x.copy_no ? ` (duplicate ${String(x.copy_no)})` : ''}`;
+    const achievement = !x.version && /^achievement:\d{1,18}$/.test(x.legacy_ref ?? '');
     let exp;
-    if (x.version)
+    if (achievement)
+      // moved in from the achievement module (docs/design/87, phase E): its own page, from its achievement record and
+      // template — a batch's PDF prints only the certificates still linked to that batch's file
+      exp = await this.reports.createRenderedForOwner(
+        ctx,
+        {
+          dataset: 'certificate',
+          format: 'pdf',
+          params: { certificateId: x.legacy_ref!.slice('achievement:'.length) },
+          title,
+        },
+        'certificate.render',
+      );
+    else if (x.version)
       exp = await this.reports.createRenderedForOwner(
         ctx,
         { dataset: 'certificate_doc', format: 'pdf', params: { certificateId: id }, title },

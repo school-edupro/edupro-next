@@ -309,15 +309,38 @@ describe('certificate office: bulk, awards, registers (e2e)', () => {
       'ACH/2026-27/00003',
     ]);
     expect(rows.rows.every((x) => x.number === x.serial_no && x.type === 'ACHIEVEMENT')).toBe(true);
-    // its PDF is the batch's
+    // in the register its PDF is the batch's; made again, it gets a page of its own (16 Nov 2026)
     const reg = await get('/certificates?type=ACHIEVEMENT');
     expect(reg.json().total).toBe(3);
-    const again = await post(
-      `/certificates/${(reg.json().rows[0] as { id: string }).id}/render`,
-      {},
-    );
+    const one = reg.json().rows[0] as { id: string; exportId: string };
+    expect(one.exportId).toBe(r.json().exportId);
+    const open = await post(`/certificates/${one.id}/pdf`, {});
+    expect(open.json()).toMatchObject({ exportId: r.json().exportId });
+    const again = await post(`/certificates/${one.id}/render`, {});
     expect(again.statusCode).toBe(201);
-    expect(again.json().exportId).toBe(r.json().exportId);
+    expect(again.json().exportId).not.toBe(r.json().exportId);
+    const own = await get(`/reports/exports/${again.json().exportId as string}`);
+    expect(own.json().export).toMatchObject({ dataset: 'certificate', format: 'pdf' });
+    const issued = await withMigrator((c) =>
+      c.query<{ id: string }>(
+        `SELECT ci.id::text FROM certificates_issued ci JOIN certificates x ON x.legacy_ref = 'achievement:' || ci.id::text WHERE x.id = $1`,
+        [one.id],
+      ),
+    );
+    expect(own.json().export.params).toEqual({ certificateId: issued.rows[0]!.id });
+    // the batch's file made again after it was cleared: its certificates move to the new file, so it prints them
+    await withMigrator((c) =>
+      c.query(`UPDATE exports SET status = 'expired' WHERE id = $1`, [r.json().exportId]),
+    );
+    const batch = await post(`/reports/exports/${r.json().exportId as string}/again`, {});
+    expect(batch.statusCode).toBe(201);
+    const moved = await withMigrator((c) =>
+      c.query<{ n: number }>(
+        `SELECT count(*)::int AS n FROM certificates_issued WHERE school_id = $1 AND export_id = $2`,
+        [school.id, batch.json().id],
+      ),
+    );
+    expect(moved.rows[0]!.n).toBe(3);
   });
   it('keeps the TC book register and the reports, with their files', async () => {
     await withMigrator((c) =>

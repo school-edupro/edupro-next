@@ -458,8 +458,12 @@ cleared, so the user landed on the export's page instead of the PDF. A certifica
 - **Kept for good**: a certificate's PDF (`queue`, the PDF call) and a bulk batch's print get `expires_at` 100 years
   ahead; migration 0389 keeps those not cleared yet.
 - **`POST /certificates/:id/pdf`** (certificate view right): the kept PDF (`ready`), the one being made, or — cleared,
-  failed or never made — made again from the frozen paper (an achievement-module certificate: its batch PDF made again
-  through `POST /reports/exports/:id/again`, every certificate of that batch pointing to it).
+  failed or never made — made again from the frozen paper. A certificate moved in from the achievement module gets a
+  page of its own (renderer `certificate`, its achievement record) rather than the batch's file: a batch prints only
+  the certificates linked to its file, so a remade batch file came out blank. `POST /reports/exports/:id/again` on a
+  `certificate_batch` file moves the batch's certificates to the new file.
+- **Workers**: a finished file keeps the later of its own `expires_at` and the usual days (it used to reset to seven
+  days, undoing "kept for good").
 - **Admin** `GET /certificates/:id/pdf` (`?save=1` to save): straight to the PDF when ready; otherwise
   `/certificates/:id/opening`, which waits and replaces itself with the PDF (`OpenWhenReady`). The register and a
   certificate's page (its PDF and its copies) link there; "Make the PDF" links are gone.
