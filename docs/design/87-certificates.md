@@ -393,3 +393,31 @@ Every phase checked against the plan, item by item. Two loose ends closed:
   `daily-academics.e2e-spec.ts` now expects the refusal and prints a letter instead.
 - **The asker's notices are tested.** `certificate-requests.e2e-spec.ts` checks that the parent is told in the app
   (push) when the request is approved and when the certificate is ready.
+
+## Certificate types, rebuilt (16 Nov 2026)
+
+The user found the types list and a type's page confusing: one long table with a template column repeating the
+name and checks in shorthand; a type's page of six open cards with two saves, every template as a tick-box,
+all 36 roles as possible issuers (parents, students, wardens), classes typed as codes and placeholders in the
+help. Chosen (both recommended): a grouped list, and a type's page as a summary with folds.
+
+- **API**: `GET /certificates/setup` gives each type its next number this year (`nextNumber`, as
+  `app.next_certificate_no` makes it), issued this year, requests waiting and its request settings, and the figures
+  `online`, `withFee`, `issued`, `issuedYear`, `toFix` with the year's code. `GET /certificates/setup/types/:code`
+  adds the same figures, the classes of the school (students' types) and, on each role, `issues` — whether it holds
+  `certificate.register.issue`.
+- **The list**: six figures; search and filters (for, status); student and staff certificates in two tables
+  (certificate with its next number, checked before issue and asked for online in words, issued this year and in
+  all, status with "no layout", "n waiting", "some roles", "school's own", an Edit button); **Add a type** in a
+  dialog — the code is made from the name (kept apart from the codes used).
+- **A type's page**: six figures; **Basics** open; folded with a one-line summary: Layout (the layout, See and edit,
+  the other layouts kept by a tick, one added from a list; a school's copy is marked), Checks before issue (radios
+  for the state and how many, the clearances, all classes or ticked ones), Who may issue it (everyone who issues, or
+  only some of the roles that issue — the others are not offered), Asked for online (as before; the level rows are
+  searchable with arrow and bin icons), Details asked at issue, More (note, place in lists, the fixed code). One
+  sticky **Save changes** posts both parts (the type, then its request settings). A part closed over a field the
+  browser stops at opens itself (`OpenOnInvalid`).
+
+Tests: `certificates-setup.e2e-spec.ts` (unchanged, 7); a browser pass at 1440 and 375 px with axe on both pages and
+the dialog, the filters, Edit, the issuing roles only, and Save's posted fields caught and stopped (DOB, board
+registration with its classes, bonafide with its other layout, the TC's checks and two levels) — nothing saved.

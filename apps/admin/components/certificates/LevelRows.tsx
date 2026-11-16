@@ -1,5 +1,6 @@
 'use client';
 import { useState } from 'react';
+import { Icon } from '@/components/nav-icons';
 
 export type Level =
   | { kind: 'office' }
@@ -63,7 +64,7 @@ export function LevelRows({
             <span className="ep-field__label">Decided by</span>
             <select
               id={`lk${i}`}
-              className="ep-input"
+              className="ep-select"
               value={l.kind}
               onChange={(e) => {
                 const k = e.target.value as Level['kind'];
@@ -87,7 +88,7 @@ export function LevelRows({
               <span className="ep-field__label">Role</span>
               <select
                 id={`lr${i}`}
-                className="ep-input"
+                className="ep-select"
                 value={l.roleId}
                 onChange={(e) => set(i, { kind: 'role', roleId: e.target.value })}
               >
@@ -105,23 +106,29 @@ export function LevelRows({
               className="ep-btn ep-btn--ghost ep-btn--sm"
               onClick={() => move(i, -1)}
               disabled={i === 0}
+              title="Decide earlier"
             >
-              Up
+              <Icon name="arrowUp" size={16} />
+              <span className="ep-sr-only">Move level {i + 1} up</span>
             </button>
             <button
               type="button"
               className="ep-btn ep-btn--ghost ep-btn--sm"
               onClick={() => move(i, 1)}
               disabled={i === rows.length - 1}
+              title="Decide later"
             >
-              Down
+              <Icon name="arrowDown" size={16} />
+              <span className="ep-sr-only">Move level {i + 1} down</span>
             </button>
             <button
               type="button"
               className="ep-btn ep-btn--ghost ep-btn--sm"
               onClick={() => setRows((r) => r.filter((_, j) => j !== i))}
+              title="Remove this level"
             >
-              Remove level {i + 1}
+              <Icon name="trash" size={16} />
+              <span className="ep-sr-only">Remove level {i + 1}</span>
             </button>
           </div>
         </fieldset>

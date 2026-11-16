@@ -199,7 +199,13 @@ export interface CertificateSetupOverview {
     templates: number;
     restricted: number;
     signatory: boolean;
+    online: number;
+    withFee: number;
+    issued: number;
+    issuedYear: number;
+    toFix: number;
   };
+  yearCode: string | null;
   checks: Array<{ text: string; href: string }>;
   types: Array<{
     code: string;
@@ -216,6 +222,10 @@ export interface CertificateSetupOverview {
     ownFields: number;
     variants: number;
     issued: number;
+    issuedYear: number;
+    waiting: number;
+    nextNumber: string | null;
+    request: CertificateRequestSettings;
   }>;
   templates: CertificateTemplateRow[];
   settings: CertificateSettings;
@@ -239,8 +249,14 @@ export interface CertificateTypeDetail {
   ownFields: CertificateFieldSpec[];
   fields: CertificateFieldSpec[];
   issued: number;
+  issuedYear: number;
+  waiting: number;
+  yearCode: string | null;
+  nextNumber: string | null;
+  classes: Array<{ code: string; name: string }>;
   templates: CertificateTemplateRow[];
-  roles: Array<{ id: string; name: string; code: string }>;
+  /** `issues`: the role holds the right to issue certificates */
+  roles: Array<{ id: string; name: string; code: string; issues: boolean }>;
   request: CertificateRequestSettings;
 }
 
@@ -490,4 +506,71 @@ export interface CertificateReports {
     avgDays: number | null;
   }>;
   checks: { total: number; valid: number; cancelled: number; not_found: number };
+}
+
+// ---- certificate types in plain words (the types list and a type's page) --------------------------------------------
+type TypeRules = CertificateType['rules'] & { classes?: string[] };
+
+/** Who can get it, in words: the student's or employee's state. */
+export const stateInWords = (state: string | undefined, staff: boolean) =>
+  staff
+    ? state === 'active'
+      ? 'In service'
+      : state === 'leaving'
+        ? 'Has left'
+        : 'Any employee'
+    : state === 'active'
+      ? 'On the rolls'
+      : state === 'leaving'
+        ? 'Withdrawal complete or left'
+        : 'Any student';
+
+/** What a type checks before it is issued, in a few words. */
+export function checksInWords(rules: TypeRules, multiple: string, staff: boolean): string {
+  const cleared = [
+    rules.fees ? 'fees' : null,
+    rules.library ? 'library' : null,
+    rules.hostel ? 'hostel' : null,
+    rules.transport ? 'transport' : null,
+  ].filter(Boolean);
+  return [
+    stateInWords(rules.state, staff),
+    cleared.length ? `${cleared.join(', ')} cleared` : null,
+    rules.classes?.length ? `classes ${rules.classes.join(', ')}` : null,
+    multiple === 'ONE' ? 'one a person' : multiple === 'YEAR' ? 'one a year' : null,
+  ]
+    .filter(Boolean)
+    .join(' · ');
+}
+
+const LEVEL_WORD: Record<string, string> = {
+  office: 'the office',
+  class_teacher: 'the class teacher',
+  signatory: 'the principal',
+};
+
+/** Who decides a request, in order: "the office, then the principal". */
+export const levelsInWords = (levels: CertificateRequestSettings['levels']) =>
+  levels
+    .map((l) => ('name' in l && l.name ? l.name : (LEVEL_WORD[l.kind] ?? 'a role')))
+    .join(', then ');
+
+/** Who may ask for it online and on what terms, in a few words; "Office only" when no one may. */
+export function onlineInWords(r: CertificateRequestSettings, staff: boolean): string {
+  const who = staff
+    ? r.open.staff
+      ? ['Staff']
+      : []
+    : [r.open.parent ? 'Parents' : null, r.open.student ? 'students' : null].filter(
+        (x): x is string => !!x,
+      );
+  if (!who.length) return 'Office only (not asked online)';
+  const w = who.join(', ');
+  return [
+    w.charAt(0).toUpperCase() + w.slice(1),
+    staff ? null : r.fee && r.fee > 0 ? `₹${String(r.fee)} a copy` : 'free',
+    r.levels.length ? `decided by ${levelsInWords(r.levels)}` : 'no one decides yet',
+  ]
+    .filter(Boolean)
+    .join(' · ');
 }

@@ -153,14 +153,23 @@ a type with no template) and four sections:
    designation and the **signature image on their employee record** print in the last box (untick it to
    sign by hand). The **Prepared by** box prints who issued the certificate with the date and time; the
    **Checked by** box is left to sign. A line at the foot (e.g. "Not valid without the school seal").
-2. **Certificate types** — open a type to change its name, number prefix, template and the other layouts
-   to choose at issue, its checks (the student's state, fees, library, hostel, transport, the classes it is
-   for), how many a person may hold, **who may issue it** (roles; none ticked: everyone who issues
-   certificates) and **the school's own fields** (each with a key, label, kind — text, date, number or a
-   list — and required or not). **Add a type of the school's own** gives it a code, a prefix and a copy of
-   a template to start from.
-   **Requests online** (on the same page): who may ask (parents, students, staff), the purposes to
-   choose from, the copies, a fee a copy, and the approval levels in order.
+2. **Certificate types** — the list shows six figures, a search and **For** / **Status** filters, then the
+   student and the staff certificates in two tables. Each row gives the next number, what is checked before
+   issue and who may ask for it online, in words, with an **Edit** button. **Add a type** (top right) asks
+   for a name, students or staff, a number prefix and the layout to start from; its page opens next.
+   A type's page shows its figures (issued, this year, requests waiting, the next number, layouts, on or
+   off). **Basics** stays open; each other part is folded with a line saying what is set — open one to
+   change it, and **Save changes** (at the bottom of the screen) keeps every part at once:
+   - **Layout** — the layout it prints with (**See and edit the layout**), and other layouts the office
+     may choose at issue (untick one to stop offering it; **Add another layout**).
+   - **Checks before issue** — which students (or employees) can get it, how many one person may hold,
+     what must be cleared first, and all classes or only some (tick them).
+   - **Who may issue it** — everyone who issues certificates, or only some of those roles.
+   - **Asked for online** — who may ask (parents, students, staff), the copies, a fee a copy, the purposes
+     to choose from and who decides, in order (the arrows move a level).
+   - **Details asked at issue** — the school's own details for the office to fill (each a label, a kind —
+     text, date, number or a list — and required or not).
+   - **More** — a note for the office, the place in lists and the fixed code.
 3. **Templates** — open one to edit it: the text is HTML with placeholders; the **field list** puts a
    placeholder where the cursor is (EduPro's blocks — letterhead, signature boxes, DUPLICATE, the foot with
    the number — print the same on every certificate); the **preview** shows the paper with a sample from

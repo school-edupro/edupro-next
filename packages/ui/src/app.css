@@ -16428,3 +16428,81 @@ button.ep-shiftcal__cell:focus-visible {
   color: var(--text-muted);
   font-size: var(--fs-small);
 }
+
+/* ---- certificate types: the list and a type's page, rebuilt (docs/design/87, 16 Nov 2026) ------------------------ */
+.ep-ctype__num {
+  display: block;
+  margin-top: 2px;
+  color: var(--text-muted);
+  font-size: var(--fs-small);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+/* the next number (the 4th figure) is long: a smaller figure keeps it on one line */
+.ep-ctype__kpis > :nth-child(4) .ep-kpi__value {
+  font-size: var(--fs-h4);
+  overflow-wrap: anywhere;
+}
+.ep-ctype__filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--sp-3);
+  margin-bottom: var(--sp-4);
+}
+.ep-ctype__filters .ep-field {
+  margin: 0;
+  min-width: min(100%, 12rem);
+}
+.ep-ctype__filters .ep-field--grow {
+  flex: 1 1 16rem;
+}
+.ep-ctype__group {
+  display: grid;
+  gap: var(--sp-4);
+}
+.ep-ctype__part {
+  display: grid;
+  gap: var(--sp-4);
+}
+.ep-ctype__sub {
+  margin: 0 0 var(--sp-2);
+  font-weight: var(--fw-semibold);
+  color: var(--text-heading);
+}
+.ep-ctype__note {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: var(--fs-small);
+}
+/* "only some …": the list shows once that choice is made */
+.ep-ctype__more {
+  display: none;
+  margin-top: var(--sp-2);
+}
+.ep-ctype__pick:has(input[data-some]:checked) .ep-ctype__more {
+  display: grid;
+}
+.ep-ctype__layouts {
+  display: grid;
+  gap: var(--sp-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.ep-ctype__layouts li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-2);
+  padding: var(--sp-2) var(--sp-3);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+}
+.ep-ctype__actions {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+  align-items: center;
+}

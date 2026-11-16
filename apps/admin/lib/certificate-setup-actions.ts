@@ -5,6 +5,7 @@ import { redirect } from 'next/navigation';
 import { ApiError, apiFetch } from './api';
 import {
   PAGE_SIZES,
+  type CertificateSetupOverview,
   type CertificateTemplateDetail,
   type CertificateTypeDetail,
 } from './certificates';
@@ -49,15 +50,22 @@ export async function saveCertificateType(fd: FormData) {
     );
   }
   const templateId = str(fd, 'templateId');
-  const variants = fd
-    .getAll('variant')
-    .map(String)
-    .filter((id) => okId(id) && id !== templateId)
-    .map((id) => ({ templateId: id, label: str(fd, `variantLabel_${id}`) || 'Layout' }));
-  const classes = str(fd, 'classes')
-    .split(/[,\s]+/)
-    .map((x) => x.trim().toUpperCase())
-    .filter(Boolean);
+  // the layouts kept, and one added from the list
+  const add = str(fd, 'addVariant');
+  const variants = [...fd.getAll('variant').map(String), ...(okId(add) ? [add] : [])]
+    .filter((id, i, all) => okId(id) && id !== templateId && all.indexOf(id) === i)
+    .map((id) => ({
+      templateId: id,
+      label: str(fd, `variantLabel_${id}`) || str(fd, 'addVariantLabel') || 'Layout',
+    }));
+  // classes ticked, only when "only some classes" is chosen
+  const classes =
+    str(fd, 'classMode') === 'some'
+      ? fd
+          .getAll('class')
+          .map((x) => String(x).trim().toUpperCase())
+          .filter((x) => /^[A-Z0-9][A-Z0-9 _-]{0,19}$/.test(x))
+      : [];
   const body = {
     name: str(fd, 'name'),
     description: str(fd, 'description') || undefined,
@@ -75,7 +83,7 @@ export async function saveCertificateType(fd: FormData) {
     multiple: ['ONE', 'YEAR', 'ANY'].includes(str(fd, 'multiple')) ? str(fd, 'multiple') : 'ANY',
     active: fd.get('active') !== null,
     sortOrder: Math.min(9999, Math.max(0, Number(str(fd, 'sortOrder')) || 100)),
-    issuers: fd.getAll('issuer').map(String).filter(okId),
+    issuers: str(fd, 'issuerMode') === 'some' ? fd.getAll('issuer').map(String).filter(okId) : [],
     fields,
   };
   await call(here, () =>
@@ -84,13 +92,33 @@ export async function saveCertificateType(fd: FormData) {
       body: JSON.stringify(body),
     }),
   );
+  // the page saves its online-request part with the rest
+  if (fd.has('levelsJson')) await putRequests(fd, code, here);
   revalidatePath('/certificates/setup');
   redirect(`${here}?ok=saved`);
 }
 
 /** A type of the school's own. */
+/** A type's code made from its name (SPORTS_DAY), kept apart from the codes already used. */
+function codeFrom(name: string, taken: Set<string>): string {
+  let base = name
+    .toUpperCase()
+    .replace(/[^A-Z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '')
+    .slice(0, 16);
+  if (!/^[A-Z]/.test(base)) base = `C_${base}`.slice(0, 16);
+  if (base.length < 2) base = 'OWN';
+  let code = base.replace(/_+$/, '');
+  for (let n = 2; taken.has(code); n += 1) code = `${base.slice(0, 16)}_${String(n)}`;
+  return code;
+}
+
 export async function createCertificateType(fd: FormData) {
-  const code = str(fd, 'code').toUpperCase();
+  const typed = str(fd, 'code').toUpperCase();
+  const taken = new Set(
+    (await apiFetch<CertificateSetupOverview>('/certificates/setup')).types.map((t) => t.code),
+  );
+  const code = okCode(typed) ? typed : codeFrom(str(fd, 'name'), taken);
   const copy = str(fd, 'copyTemplateId');
   const made = await call('/certificates/setup/types', () =>
     apiFetch<CertificateTypeDetail>('/certificates/setup/types', {
@@ -187,10 +215,8 @@ export async function saveCertificateSettings(fd: FormData) {
 }
 
 /** Who may ask for a type online and how it is decided. */
-export async function saveCertificateRequests(fd: FormData) {
-  const code = str(fd, 'code');
-  if (!okCode(code)) return;
-  const here = `/certificates/setup/types/${code}`;
+/** A type's online-request settings, as the type's page posts them. */
+async function putRequests(fd: FormData, code: string, here: string) {
   let levels: unknown = [];
   try {
     levels = JSON.parse(str(fd, 'levelsJson') || '[]');
@@ -219,8 +245,15 @@ export async function saveCertificateRequests(fd: FormData) {
       }),
     }),
   );
+}
+
+export async function saveCertificateRequests(fd: FormData) {
+  const code = str(fd, 'code');
+  if (!okCode(code)) return;
+  const here = `/certificates/setup/types/${code}`;
+  await putRequests(fd, code, here);
   revalidatePath('/certificates/setup');
-  redirect(`${here}?ok=requests#requests`);
+  redirect(`${here}?ok=saved`);
 }
 
 // ---- from the old system (phase F) ----------------------------------------------------------------------------------

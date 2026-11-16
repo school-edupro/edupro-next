@@ -144,6 +144,10 @@ function catalogue(audience: 'STUDENT' | 'STAFF', fields: FieldSpec[]) {
 }
 
 /** A type's request settings, read with their defaults (closed, one copy, no fee, no levels). */
+/** The number the next certificate of a type gets this year, as `app.next_certificate_no` makes it. */
+export const nextNumber = (prefix: string, year: string | null, last: number) =>
+  year ? `${prefix}/${year}/${String(last + 1).padStart(5, '0')}` : null;
+
 export function requestSettings(raw: unknown): RequestSettings {
   const parsed = RequestSettingsSchema.safeParse(
     raw && typeof raw === 'object' && Object.keys(raw).length
@@ -188,6 +192,7 @@ export class CertificateSetupService {
   async overview(ctx: RequestContext) {
     return this.db.tenant(requireTenant(ctx), async (c) => {
       await this.certificates.ensureSetup(c);
+      const year = await this.yearCode(c, ctx);
       const types = await c.query<{
         code: string;
         name: string;
@@ -203,12 +208,20 @@ export class CertificateSetupService {
         fields: unknown[];
         variants: unknown[];
         issued: number;
+        issued_year: number;
+        last_serial: number;
+        waiting: number;
+        request: unknown;
       }>(
         `SELECT t.code, t.name, t.audience, t.prefix, d.name AS template, t.template_id::text, t.rules, t.multiple, t.active,
-                t.built_in, t.issuers, t.fields, t.variants,
-                (SELECT count(*)::int FROM certificates x WHERE x.type_id = t.id AND x.copy_no = 0) AS issued
+                t.built_in, t.issuers, t.fields, t.variants, t.request,
+                (SELECT count(*)::int FROM certificates x WHERE x.type_id = t.id AND x.copy_no = 0) AS issued,
+                (SELECT count(*)::int FROM certificates x WHERE x.type_id = t.id AND x.copy_no = 0 AND x.year_code = $1) AS issued_year,
+                COALESCE((SELECT s.last_serial FROM certificate_series s WHERE s.type_code = t.code AND s.year_code = $1), 0) AS last_serial,
+                (SELECT count(*)::int FROM certificate_requests r WHERE r.type_id = t.id AND r.status IN ('submitted', 'approved')) AS waiting
            FROM certificate_types t LEFT JOIN document_templates d ON d.id = t.template_id AND d.deleted_at IS NULL
           ORDER BY t.audience DESC, t.sort_order, t.name`,
+        [year],
       );
       const templates = await this.templates(c);
       const settings = await this.settingsOf(c);
@@ -221,7 +234,16 @@ export class CertificateSetupService {
           templates: templates.length,
           restricted: types.rows.filter((t) => t.issuers.length > 0).length,
           signatory: !!settings.signatory,
+          online: types.rows.filter((t) => {
+            const o = requestSettings(t.request).open;
+            return t.active && (o.parent || o.student || o.staff);
+          }).length,
+          withFee: types.rows.filter((t) => (requestSettings(t.request).fee ?? 0) > 0).length,
+          issued: types.rows.reduce((n, t) => n + t.issued, 0),
+          issuedYear: types.rows.reduce((n, t) => n + t.issued_year, 0),
+          toFix: missing.length,
         },
+        yearCode: year,
         checks: [
           ...(settings.signatory
             ? settings.signatory.hasSignature || !settings.printSignature
@@ -258,6 +280,10 @@ export class CertificateSetupService {
           ownFields: t.fields.length,
           variants: t.variants.length,
           issued: t.issued,
+          issuedYear: t.issued_year,
+          waiting: t.waiting,
+          nextNumber: nextNumber(t.prefix, year, t.last_serial),
+          request: requestSettings(t.request),
         })),
         templates,
         settings,
@@ -305,6 +331,16 @@ export class CertificateSetupService {
     }));
   }
 
+  /** The code of the selected academic year (e.g. 2026-27): the year a certificate issued now is numbered in. */
+  private async yearCode(c: PoolClient, ctx: RequestContext): Promise<string | null> {
+    const id = requireTenant(ctx).academicYearId;
+    if (!id) return null;
+    return (
+      (await c.query<{ code: string }>(`SELECT code FROM academic_years WHERE id = $1`, [id]))
+        .rows[0]?.code ?? null
+    );
+  }
+
   // ---- types ---------------------------------------------------------------------------------------------------------
   private async typeRow(c: PoolClient, code: string): Promise<TypeRow> {
     const r = await c.query<TypeRow>(
@@ -324,15 +360,37 @@ export class CertificateSetupService {
     return this.db.tenant(requireTenant(ctx), async (c) => {
       await this.certificates.ensureSetup(c);
       const t = await this.typeRow(c, code);
-      const roles = await c.query<{ id: string; name: string; code: string }>(
-        `SELECT id::text, name, code FROM roles
-          WHERE (school_id IS NULL OR school_id = app.current_school_id()) AND deleted_at IS NULL AND status = 'active'
-          ORDER BY name`,
+      const roles = await c.query<{ id: string; name: string; code: string; issues: boolean }>(
+        `SELECT r.id::text, r.name, r.code,
+                EXISTS (SELECT 1 FROM role_permissions p WHERE p.role_id = r.id AND p.permission_code = 'certificate.register.issue') AS issues
+           FROM roles r
+          WHERE (r.school_id IS NULL OR r.school_id = app.current_school_id()) AND r.deleted_at IS NULL AND r.status = 'active'
+          ORDER BY r.name`,
       );
-      const issued = await c.query<{ n: number }>(
-        `SELECT count(*)::int AS n FROM certificates WHERE type_id = $1`,
-        [t.id],
-      );
+      const year = await this.yearCode(c, ctx);
+      const n = (
+        await c.query<{
+          issued: number;
+          issued_year: number;
+          waiting: number;
+          last_serial: number;
+        }>(
+          `SELECT (SELECT count(*)::int FROM certificates WHERE type_id = $1 AND copy_no = 0) AS issued,
+                  (SELECT count(*)::int FROM certificates WHERE type_id = $1 AND copy_no = 0 AND year_code = $2) AS issued_year,
+                  (SELECT count(*)::int FROM certificate_requests WHERE type_id = $1 AND status IN ('submitted', 'approved')) AS waiting,
+                  COALESCE((SELECT last_serial FROM certificate_series WHERE type_code = $3 AND year_code = $2), 0) AS last_serial`,
+          [t.id, year, t.code],
+        )
+      ).rows[0]!;
+      const classes =
+        t.audience === 'STAFF'
+          ? []
+          : (
+              await c.query<{ code: string; name: string }>(
+                `SELECT DISTINCT ON (upper(code)) upper(code) AS code, name FROM classes
+                  WHERE deleted_at IS NULL AND status = 'active' ORDER BY upper(code), display_order`,
+              )
+            ).rows;
       return {
         code: t.code,
         name: t.name,
@@ -350,7 +408,12 @@ export class CertificateSetupService {
         builtIn: t.built_in,
         ownFields: fieldsOf(t.code, []),
         fields: Array.isArray(t.fields) ? (t.fields as FieldSpec[]) : [],
-        issued: issued.rows[0]?.n ?? 0,
+        issued: n.issued,
+        issuedYear: n.issued_year,
+        waiting: n.waiting,
+        yearCode: year,
+        nextNumber: nextNumber(t.prefix, year, n.last_serial),
+        classes,
         checks: Object.entries(CHECK_LABELS).map(([key, label]) => ({ key, label })),
         templates: await this.templates(c, true),
         roles: roles.rows,
