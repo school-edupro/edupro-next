@@ -170,14 +170,23 @@ a type with no template) and four sections:
    - **Details asked at issue** — the school's own details for the office to fill (each a label, a kind —
      text, date, number or a list — and required or not).
    - **More** — a note for the office, the place in lists and the fixed code.
-3. **Templates** — open one to edit it: the text is HTML with placeholders; the **field list** puts a
-   placeholder where the cursor is (EduPro's blocks — letterhead, signature boxes, DUPLICATE, the foot with
-   the number — print the same on every certificate); the **preview** shows the paper with a sample from
-   the school a moment after each change. **Save** makes a new version: certificates already issued keep
-   the one they were made with. **Versions** lets you use an earlier one again; **Back to the ready layout**
-   restores EduPro's. **Copy a template** makes a new layout from one. A template may hold text, tables,
-   styles and images as data, never scripts or addresses on the internet. **Certificate from the old system
-   (reprint)** is the layout for certificates brought from the earlier system; no type prints with it.
+3. **Templates** — the layouts certificates print with. The list shows six figures, a search, and two
+   tables: layouts **used by a certificate type** and those **used by no type** (the school's copies,
+   spares, and **Certificate from the old system (reprint)**, which prints certificates brought from the
+   earlier system). Each row says where the layout comes from (EduPro's ready layout, changed by the
+   school, or the school's copy), its paper and when it changed, with three buttons: **See** (the paper
+   with a sample from the school, in a pop-up), **Edit** and **Copy**. **Make a copy** (top right) does
+   the same for any layout; give the copy to a type on the type's page, under Layout.
+   A layout's page shows which types use it, **Make a copy** and **Back to the ready layout** (EduPro's
+   layout again; the school's changes stay under Versions). **How it prints** shows the paper with a
+   sample of the type you choose, and changes a moment after you type. Beside it: the name, the paper and
+   the **Wording**. Words in `{{ }}` are filled in for each certificate: put the cursor where one should
+   go, then **Insert a detail** (find it by its plain name, e.g. father, class, date). The buttons add
+   EduPro's blocks (**Letterhead**, **Signature boxes**, **DUPLICATE mark**, **Footer: number and QR**),
+   **B** (bold), **New paragraph** and **Line break**. Sizes and fonts are under **Advanced: styles**.
+   **Save changes** (at the bottom of the screen) makes a new version for the next certificates; those
+   already issued keep theirs. **Versions** lets you use an earlier one again. A layout may hold text,
+   tables, styles and images as data, never scripts or addresses on the internet.
 4. **From the old system** — bringing the earlier system's certificates across, once (below).
 
 ## From the old system (Certificate set-up → From the old system)

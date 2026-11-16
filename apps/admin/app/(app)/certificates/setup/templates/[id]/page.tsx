@@ -1,11 +1,14 @@
-import { Breadcrumbs, Button, DataTable, PageHeader, SelectField } from '@edupro/ui';
+import { Badge, Breadcrumbs, Button, DataTable, PageHeader } from '@edupro/ui';
 import { notFound } from 'next/navigation';
 import { ConfirmAction } from '@/components/ConfirmAction';
 import { FoldCard } from '@/components/FoldCard';
+import { DialogButton } from '@/components/leave/DialogButton';
+import { Icon } from '@/components/nav-icons';
 import { Notice } from '@/components/Notice';
 import { TemplateEditor } from '@/components/certificates/TemplateEditor';
 import { ApiError, apiFetch, getMe } from '@/lib/api';
 import {
+  copyCertificateTemplate,
   resetCertificateTemplate,
   restoreCertificateTemplate,
   saveCertificateTemplate,
@@ -14,7 +17,10 @@ import { dmy, type CertificateTemplateDetail } from '@/lib/certificates';
 
 type V = CertificateTemplateDetail['versions'][number];
 
-/** One certificate template (docs/design/87, phase B): the editor, its versions, back to the ready layout. */
+/**
+ * One certificate template (docs/design/87; rebuilt 16 Nov 2026): who uses it, Make a copy and Back to the ready layout
+ * at the top; the editor with the paper as it prints in view; the versions folded below.
+ */
 export default async function CertificateTemplatePage({
   params,
   searchParams,
@@ -37,10 +43,18 @@ export default async function CertificateTemplatePage({
     throw e;
   }
   const saved = sp.ok?.startsWith('v')
-    ? `Saved as version ${sp.ok.slice(1)}.`
+    ? `Saved as version ${sp.ok.slice(1)}. The next certificates print with it.`
     : sp.ok === 'copied'
-      ? 'Copy made.'
+      ? 'Copy made. Change it here, then give it to a certificate type under Layout on the type’s page.'
       : null;
+  const origin =
+    t.code === 'cert_legacy'
+      ? 'Prints the certificates brought from the old system'
+      : !t.ready
+        ? "The school's copy"
+        : t.version > 1
+          ? "EduPro's layout, changed by the school"
+          : "EduPro's ready layout";
   return (
     <>
       <Breadcrumbs
@@ -53,10 +67,55 @@ export default async function CertificateTemplatePage({
       <PageHeader
         kicker="Certificate template"
         title={t.name}
-        description={
-          t.usedBy.length
-            ? `Used by ${t.usedBy.map((u) => u.name).join(', ')} · version ${String(t.version)}`
-            : `Not used by a type yet · version ${String(t.version)}`
+        description={`${origin} · version ${String(t.version)} in use`}
+        actions={
+          <>
+            <DialogButton
+              id="tpl-copy"
+              className="ep-btn ep-btn--secondary ep-btn--sm"
+              label={
+                <>
+                  <Icon name="copy" size={16} /> Make a copy
+                </>
+              }
+              title={`Make a copy of ${t.name}`}
+            >
+              <form action={copyCertificateTemplate} className="ep-cert-fields">
+                <input type="hidden" name="copyOf" value={t.id} />
+                <label className="ep-field" htmlFor="cpName" style={{ gridColumn: '1 / -1' }}>
+                  <span className="ep-field__label">Name of the copy *</span>
+                  <input
+                    id="cpName"
+                    name="name"
+                    className="ep-input"
+                    required
+                    minLength={2}
+                    maxLength={120}
+                    defaultValue={`${t.name} (copy)`}
+                  />
+                  <span className="ep-field__help">
+                    The copy is made from the saved layout (not from changes not saved yet).
+                  </span>
+                </label>
+                <div>
+                  <Button type="submit">Make the copy</Button>
+                </div>
+              </form>
+            </DialogButton>
+            {t.ready ? (
+              <ConfirmAction
+                action={resetCertificateTemplate}
+                fields={{ id: t.id }}
+                label="Back to the ready layout"
+                title="Back to the ready layout"
+                confirmLabel="Use the ready layout"
+                variant="ghost"
+              >
+                EduPro&apos;s ready layout becomes version {String(t.version + 1)}. The
+                school&apos;s changes stay under Versions, to use again.
+              </ConfirmAction>
+            ) : null}
+          </>
         }
       />
       {saved ? (
@@ -66,36 +125,28 @@ export default async function CertificateTemplatePage({
       ) : (
         <Notice params={sp} />
       )}
-      <form
-        method="get"
-        style={{
-          display: 'flex',
-          gap: 'var(--sp-3)',
-          alignItems: 'flex-end',
-          flexWrap: 'wrap',
-          marginBottom: 'var(--sp-3)',
-        }}
-      >
-        <SelectField
-          id="forType"
-          name="type"
-          label="Show the fields and a sample of"
-          defaultValue={t.forType ?? ''}
-          options={t.types.map((x) => ({
-            value: x.code,
-            label: `${x.name}${x.audience === 'STAFF' ? ' (staff)' : ''}`,
-          }))}
-        />
-        <Button type="submit" variant="secondary">
-          Show
-        </Button>
-      </form>
+      <p className="ep-ctpl__usedby">
+        <span className="ep-field__label">Used by</span>{' '}
+        {t.usedBy.length ? (
+          t.usedBy.map((u) => (
+            <a key={u.code} className="ep-ctpl__chip" href={`/certificates/setup/types/${u.code}`}>
+              {u.name}
+            </a>
+          ))
+        ) : (
+          <Badge tone="neutral">No certificate type</Badge>
+        )}
+      </p>
       <TemplateEditor
         key={`${t.id}-${String(t.version)}-${t.forType ?? ''}`}
         t={t}
         action={saveCertificateTemplate}
       />
-      <FoldCard id="tpl-versions" title="Versions" hint={`${String(t.versions.length)} saved`}>
+      <FoldCard
+        id="tpl-versions"
+        title="Versions"
+        hint={`${String(t.versions.length)} saved · version ${String(t.version)} in use`}
+      >
         <DataTable<V>
           caption="Versions of the template"
           density="dense"
@@ -106,10 +157,10 @@ export default async function CertificateTemplatePage({
             { key: 'made', header: 'Certificates made with it', render: (v) => String(v.made) },
             {
               key: 'act',
-              header: '',
+              header: 'Use',
               render: (v) =>
                 v.version === t.version ? (
-                  'In use'
+                  <Badge tone="success">In use</Badge>
                 ) : (
                   <ConfirmAction
                     action={restoreCertificateTemplate}
@@ -130,24 +181,6 @@ export default async function CertificateTemplatePage({
           emptyTitle="No versions"
         />
       </FoldCard>
-      {t.ready ? (
-        <FoldCard
-          id="tpl-reset"
-          title="Back to the ready layout"
-          hint="EduPro's layout for this certificate"
-        >
-          <ConfirmAction
-            action={resetCertificateTemplate}
-            fields={{ id: t.id }}
-            label="Back to the ready layout"
-            title="Back to the ready layout"
-            confirmLabel="Use the ready layout"
-          >
-            The ready layout becomes version {String(t.version + 1)}; the school&apos;s changes stay
-            in the versions above.
-          </ConfirmAction>
-        </FoldCard>
-      ) : null}
     </>
   );
 }

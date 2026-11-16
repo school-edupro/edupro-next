@@ -189,6 +189,8 @@ export interface CertificateTemplateRow {
   updatedAt: string;
   usedBy: string[];
   made: number;
+  pageWidth: string;
+  pageHeight: string;
 }
 
 export interface CertificateSetupOverview {
@@ -300,6 +302,10 @@ export const PAGE_SIZES: Array<{ value: string; label: string; w: string; h: str
   { value: 'a5l', label: 'A5, landscape', w: '210mm', h: '148mm' },
   { value: 'ltr', label: 'Letter', w: '216mm', h: '279mm' },
 ];
+
+/** A page size in words ("A4, portrait"); an odd size as its measures. */
+export const paperLabel = (w: string, h: string) =>
+  PAGE_SIZES.find((p) => p.w === w && p.h === h)?.label ?? `${w} × ${h}`;
 
 /**
  * The paper scaled to fit its preview frame: zoom steps by the frame's own width (an A4 page is about 800 CSS pixels

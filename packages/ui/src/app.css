@@ -16506,3 +16506,177 @@ button.ep-shiftcal__cell:focus-visible {
   gap: var(--sp-2);
   align-items: center;
 }
+
+/* ---- certificate template editor, rebuilt: the paper in view (docs/design/87, 16 Nov 2026) ----------------------- */
+.ep-ctpl {
+  display: grid;
+  gap: var(--sp-4);
+  grid-template-columns: minmax(0, 1fr);
+  margin-bottom: var(--sp-4);
+}
+/* on a narrow screen the paper comes first, the editor under it */
+@media (max-width: 71.99rem) {
+  .ep-ctpl__preview {
+    order: -1;
+  }
+}
+@media (min-width: 72rem) {
+  .ep-ctpl {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr);
+    align-items: start;
+  }
+  .ep-ctpl__preview {
+    position: sticky;
+    top: var(--sp-4);
+  }
+}
+.ep-ctpl__edit,
+.ep-ctpl__preview,
+.ep-ctpl__wording {
+  display: grid;
+  gap: var(--sp-3);
+  min-width: 0;
+}
+.ep-ctpl__edit,
+.ep-ctpl__preview {
+  background: var(--surface-card);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-lg);
+  padding: var(--sp-4);
+}
+.ep-ctpl__edit .ep-field,
+.ep-ctpl__preview .ep-field {
+  margin: 0;
+}
+.ep-ctpl__save {
+  grid-column: 1 / -1;
+  align-items: center;
+}
+.ep-ctpl__tools {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-2);
+}
+.ep-ctpl__sep {
+  width: 1px;
+  align-self: stretch;
+  background: var(--border-default);
+}
+.ep-ctpl__picker {
+  position: relative;
+}
+.ep-ctpl__panel {
+  position: absolute;
+  z-index: 5;
+  top: calc(100% + var(--sp-1));
+  left: 0;
+  width: min(26rem, 80vw);
+  background: var(--surface-card);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-overlay);
+  padding: var(--sp-3);
+  display: grid;
+  gap: var(--sp-2);
+}
+.ep-ctpl__panelhead {
+  display: flex;
+  gap: var(--sp-2);
+  align-items: center;
+}
+.ep-ctpl__list {
+  max-height: 22rem;
+  overflow-y: auto;
+}
+.ep-ctpl__list ul {
+  list-style: none;
+  margin: 0 0 var(--sp-2);
+  padding: 0;
+  display: grid;
+  gap: 2px;
+}
+.ep-ctpl__group {
+  margin: var(--sp-2) 0 var(--sp-1);
+  font-size: var(--fs-small);
+  font-weight: var(--fw-semibold);
+  color: var(--text-heading);
+}
+.ep-ctpl__item {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: var(--sp-1) var(--sp-2);
+  width: 100%;
+  text-align: left;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-body);
+  padding: var(--sp-1) var(--sp-2);
+  cursor: pointer;
+  font: inherit;
+  font-size: var(--fs-small);
+}
+.ep-ctpl__item:hover,
+.ep-ctpl__item:focus-visible {
+  background: var(--surface-subtle);
+}
+.ep-ctpl__item code {
+  color: var(--text-muted);
+  overflow-wrap: anywhere;
+}
+.ep-ctpl__adv > summary {
+  cursor: pointer;
+  font-weight: var(--fw-semibold);
+  color: var(--text-heading);
+}
+.ep-ctpl__previewhead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--sp-2);
+}
+.ep-ctpl__sampleof {
+  max-width: 24rem;
+}
+.ep-ctpl__usedby {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-2);
+  margin: 0 0 var(--sp-3);
+}
+.ep-ctpl__chip {
+  display: inline-flex;
+  padding: 2px var(--sp-2);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-pill);
+  background: var(--surface-card);
+  font-size: var(--fs-small);
+}
+.ep-ctpl__sample {
+  height: 75vh;
+}
+/* the paper's own shape: no empty frame under it on a phone; on a wide screen it stays within the window */
+.ep-ctpl__preview .ep-cert-preview {
+  height: auto;
+  max-height: none;
+  aspect-ratio: 210 / 297;
+}
+.ep-ctpl__preview .ep-cert-preview[data-paper='landscape'] {
+  aspect-ratio: 297 / 210;
+}
+@media (min-width: 72rem) {
+  .ep-ctpl__preview .ep-cert-preview {
+    max-height: 78vh;
+  }
+}
+.ep-ctpl__rowacts {
+  flex-wrap: nowrap;
+}
+.ep-ctpl__nowrap,
+.ep-ctpl__rowacts .ep-btn {
+  white-space: nowrap;
+}

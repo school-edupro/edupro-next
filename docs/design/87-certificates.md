@@ -421,3 +421,31 @@ help. Chosen (both recommended): a grouped list, and a type's page as a summary 
 Tests: `certificates-setup.e2e-spec.ts` (unchanged, 7); a browser pass at 1440 and 375 px with axe on both pages and
 the dialog, the filters, Edit, the issuing roles only, and Save's posted fields caught and stopped (DOB, board
 registration with its classes, bonafide with its other layout, the TC's checks and two levels) — nothing saved.
+
+## Certificate templates, rebuilt (16 Nov 2026)
+
+The user found the templates list and a template's page confusing: one table of 26 with "Ready layout" on 23 rows
+and three older copies named like ready layouts; technical columns; no way to see a layout without opening it; the
+copy form always open. The page led with raw HTML, a "Show the fields and a sample of … Show" form, a preview that
+started empty in a narrow column and a field list of code tokens. Chosen (both recommended): a grouped table with
+See, and a template's page with the paper first.
+
+- **API**: each template in `GET /certificates/setup` carries its `pageWidth` and `pageHeight`.
+- **Admin route** `GET /api/certificates-template-preview?id=` renders a saved layout with a sample of the type it is
+  for (the template's `forType`), for See.
+- **The list**: six figures (layouts, used by a type, used by none, changed by the school, EduPro's ready, the
+  school's copies); a search; "Used by a certificate type" and "Used by no type" (a line: copies and spares, give one
+  to a type under Layout); each row: the layout with where it comes from, used by, paper, certificates made, changed
+  on, and See (a dialog, `TemplateSample`, fetched when opened), Edit, Copy (a dialog, the name prefilled "… (copy)");
+  Make a copy in the header with a pick of any layout.
+- **A template's page**: used-by chips linking to the types; Make a copy and Back to the ready layout in the header;
+  the editor (`TemplateEditor`, rebuilt): the paper ("How it prints", a sample of the chosen type, sticky on a wide
+  screen, first on a narrow one, the frame in the paper's shape) and the edit panel — name, paper, the wording with
+  Insert a detail (a searchable list by plain name, the token small), EduPro's blocks and bold / new paragraph / line
+  break as buttons; styles under Advanced; one sticky Save that says what it does ("Saving makes version n";
+  "Nothing changed yet"); leaving with unsaved changes asks first; the first picture comes at once. Versions folded
+  below.
+
+Tests: a browser pass at 1440 and 375 px with axe on both pages and the dialogs: the groups and the search; See shows
+the paper; Copy prefills the name; Insert a detail by "father" at the cursor, a block and bold; Save enabled only
+after a change and says the version — nothing saved.

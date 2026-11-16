@@ -306,8 +306,10 @@ export class CertificateSetupService {
       updated_at: Date;
       used_by: string[] | null;
       made: number;
+      page_width: string;
+      page_height: string;
     }>(
-      `SELECT d.id::text, d.code, d.name, d.kind::text, d.version, d.ready_code, d.updated_at,
+      `SELECT d.id::text, d.code, d.name, d.kind::text, d.version, d.ready_code, d.updated_at, d.page_width, d.page_height,
               (SELECT array_agg(t.name ORDER BY t.sort_order) FROM certificate_types t
                 WHERE t.template_id = d.id OR t.variants @> jsonb_build_array(jsonb_build_object('templateId', d.id::text))) AS used_by,
               (SELECT count(*)::int FROM certificates x JOIN document_template_versions v ON v.id = x.template_version_id
@@ -328,6 +330,8 @@ export class CertificateSetupService {
       updatedAt: x.updated_at.toISOString(),
       usedBy: x.used_by ?? [],
       made: x.made,
+      pageWidth: x.page_width,
+      pageHeight: x.page_height,
     }));
   }
 
