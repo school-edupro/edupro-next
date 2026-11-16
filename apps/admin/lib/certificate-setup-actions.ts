@@ -207,6 +207,7 @@ export async function saveCertificateSettings(fd: FormData) {
         printSignature: fd.get('printSignature') !== null,
         printPreparer: fd.get('printPreparer') !== null,
         footerNote: str(fd, 'footerNote') || undefined,
+        correctionsKeepNumber: fd.get('correctionsKeepNumber') !== null,
       }),
     }),
   );

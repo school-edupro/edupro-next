@@ -114,6 +114,17 @@ export class CertificatesController {
     return this.certificates.duplicate(ctx, id, body.reason);
   }
 
+  @Post(':id/correct')
+  @ApiOperation({
+    summary:
+      'Correct a certificate keeping its number (when the set-up says so): a new revision with what was corrected, every revision kept with its PDF and a change log',
+  })
+  @RequirePermission(CERTIFICATE.issue)
+  correct(@ReqCtx() ctx: RequestContext, @Param('id') id: string, @Body() body: ReissueDto) {
+    const { reason, ...changes } = body;
+    return this.certificates.correct(ctx, id, reason, changes);
+  }
+
   @Post(':id/reissue')
   @ApiOperation({
     summary:

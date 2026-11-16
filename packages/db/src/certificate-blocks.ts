@@ -126,7 +126,14 @@ export function certificateBlocks(
     : '';
 
   const note = typeof data.footerNote === 'string' && data.footerNote ? esc(data.footerNote) : '';
-  const footer = `<div class="eb-foot"><div>${esc(cert.number)} · issued on ${esc(cert.issuedOn)}${
+  // a correction that kept the number (16 Nov 2026): "Revision 2 · corrected on 16-11-2026"
+  const rev = Number((cert as { revision?: unknown }).revision ?? 1);
+  const revisedOn = (cert as { revisedOn?: unknown }).revisedOn;
+  const revised =
+    rev > 1
+      ? `<br>Revision ${String(rev)}${typeof revisedOn === 'string' && revisedOn ? ` · corrected on ${esc(revisedOn)}` : ''}`
+      : '';
+  const footer = `<div class="eb-foot"><div>${esc(cert.number)} · issued on ${esc(cert.issuedOn)}${revised}${
     note ? `<br>${note}` : ''
   }</div>${qr}</div>`;
 

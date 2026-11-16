@@ -80,6 +80,9 @@ export interface Certificate {
   reissueOf: { id: string; number: string } | null;
   /** made again as this later certificate */
   reissuedAs: { id: string; number: string } | null;
+  /** corrections that kept the number: 1 as issued, then 2, 3 … */
+  revision: number;
+  revisedAt: string | null;
 }
 
 export interface CertificateList {
@@ -101,6 +104,19 @@ export interface CertificateDetail extends Certificate {
   copies: Certificate[];
   data: Record<string, unknown>;
   template: { id: string | null; name: string; version: number | null } | null;
+  /** the change log of a certificate corrected keeping its number, newest first (revision 1: as issued) */
+  revisions: Array<{
+    revision: number;
+    at: string;
+    by: string | null;
+    reason: string | null;
+    changes: Array<{ label: string; from: string; to: string }>;
+    exportId: string | null;
+    ready: boolean;
+    issuedOn: string;
+  }>;
+  /** the school's set-up: a correction keeps the number */
+  correctionsKeepNumber: boolean;
   can: CertificateCan;
 }
 
@@ -181,6 +197,8 @@ export interface CertificateSettings {
   printSignature: boolean;
   printPreparer: boolean;
   footerNote: string;
+  /** a correction keeps the certificate number (a new revision) */
+  correctionsKeepNumber: boolean;
 }
 
 export interface CertificateTemplateRow {

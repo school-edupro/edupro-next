@@ -172,6 +172,25 @@ export default async function CertificateSettingsPage({
             <span className="ep-check__box" />
             Print who issued it in the Prepared by box (name, Emp. ID, date and time)
           </label>
+          <label className="ep-check" htmlFor="stKeep" style={{ gridColumn: '1 / -1' }}>
+            <input
+              id="stKeep"
+              type="checkbox"
+              name="correctionsKeepNumber"
+              className="ep-check__input"
+              defaultChecked={s.correctionsKeepNumber}
+            />
+            <span className="ep-check__box" />
+            <span className="ep-check__text">
+              Corrections keep the certificate number
+              <span className="ep-field__help" style={{ margin: 0 }}>
+                On: &ldquo;Correct this certificate&rdquo; keeps the number as revision 2, 3 …; the
+                paper prints &ldquo;Revision n · corrected on …&rdquo; and every earlier revision
+                stays in its change log with its PDF. Off: a correction is a re-issue with a new
+                number, and the earlier one is cancelled.
+              </span>
+            </span>
+          </label>
           <div>
             <Button type="submit">Save</Button>
           </div>

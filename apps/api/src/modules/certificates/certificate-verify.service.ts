@@ -115,12 +115,16 @@ export class CertificateVerifyService {
             employee: string | null;
             legacy: boolean;
             copies: number;
+            revision: number;
+            revised_at: Date | null;
           }>(
             `SELECT x.id::text, t.name AS type_name, x.number, x.copy_no, x.issued_on::text, x.status, x.cancelled_at,
+                    COALESCE(o.revision, x.revision) AS revision, COALESCE(o.revised_at, x.revised_at) AS revised_at,
                     COALESCE(x.data->'student'->>'name', s.display_name) AS student,
                     COALESCE(x.data->'employee'->>'name', e.display_name) AS employee, x.legacy,
                     (SELECT count(*)::int FROM certificates d WHERE d.original_id = COALESCE(x.original_id, x.id)) AS copies
                FROM certificates x JOIN certificate_types t ON t.id = x.type_id
+               LEFT JOIN certificates o ON o.id = x.original_id
                LEFT JOIN students s ON s.id = x.student_id LEFT JOIN employees e ON e.id = x.employee_id
               WHERE x.id = $1`,
             [found],
@@ -154,6 +158,9 @@ export class CertificateVerifyService {
             cancelledOn: x.cancelled_at ? x.cancelled_at.toISOString().slice(0, 10) : null,
             duplicates: x.copies,
             legacy: x.legacy,
+            revision: x.revision,
+            correctedOn:
+              x.revision > 1 && x.revised_at ? x.revised_at.toISOString().slice(0, 10) : null,
           }
         : null,
       checkedAt: new Date().toISOString(),
@@ -200,7 +207,9 @@ export class CertificateVerifyService {
       const id =
         (
           await c.query<{ id: string }>(
-            `SELECT id::text FROM certificates WHERE upper(number) = upper($1) AND issued_on = $2::date AND copy_no = 0`,
+            `SELECT x.id::text FROM certificates x WHERE upper(x.number) = upper($1) AND x.copy_no = 0
+                AND (x.issued_on = $2::date
+                     OR EXISTS (SELECT 1 FROM certificate_revisions r WHERE r.certificate_id = x.id AND r.issued_on = $2::date))`,
             [number.trim(), issuedOn],
           )
         ).rows[0]?.id ?? null;

@@ -16811,3 +16811,27 @@ button.ep-shiftcal__cell:focus-visible {
   color: var(--text-muted);
   font-size: var(--fs-small);
 }
+
+/* ---- a certificate's change log: corrections that kept the number (docs/design/87, 16 Nov 2026) --------------- */
+.ep-cert-revs {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: var(--sp-3);
+}
+.ep-cert-revs > li {
+  border-left: 3px solid var(--border-accent);
+  padding: var(--sp-1) 0 var(--sp-1) var(--sp-3);
+}
+.ep-cert-revs__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-1) var(--sp-3);
+}
+.ep-cert-revs__changes {
+  margin: var(--sp-1) 0 0;
+  padding-left: var(--sp-4);
+  font-size: var(--fs-small);
+}

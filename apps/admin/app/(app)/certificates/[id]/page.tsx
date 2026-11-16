@@ -17,6 +17,8 @@ const OK: Record<string, string> = {
   issued: 'Issued. The PDF is being made.',
   duplicated: 'Duplicate made. Its PDF is being made.',
   cancelled: 'Cancelled. Its number will not be given again.',
+  corrected:
+    'Corrected: the same number, as its next revision. The earlier paper stays in its change log; the new PDF is being made.',
   reissued:
     "Re-issued with today's settings: it prints the signatory, layout and school details as they are now. The earlier certificate is cancelled; its number is never given again.",
 };
@@ -84,8 +86,9 @@ export default async function CertificatePage({
     : null;
   const making = exportStatus === 'queued' || exportStatus === 'running';
   // re-issue with changes: the issue page filled in with this certificate (purpose, typed details, layout)
-  const changesLink = (() => {
-    const u = new URLSearchParams({ type: x.typeCode, reissue: x.id });
+  const keepNumber = x.correctionsKeepNumber;
+  const changesLink = (mode: 'reissue' | 'correct') => {
+    const u = new URLSearchParams({ type: x.typeCode, [mode]: x.id });
     if (x.employeeId) u.set('employee', x.employeeId);
     else if (x.studentId) u.set('student', x.studentId);
     if (x.purpose) u.set('purpose', x.purpose);
@@ -96,7 +99,7 @@ export default async function CertificatePage({
         if (/^[a-zA-Z]{2,30}$/.test(k) && (typeof v === 'string' || typeof v === 'number'))
           u.set(`${FIELD_PREFIX}${k}`, String(v));
     return `/certificates/issue?${u.toString()}`;
-  })();
+  };
   return (
     <>
       <Breadcrumbs
@@ -187,6 +190,16 @@ export default async function CertificatePage({
               <dd>
                 <a href={`/certificates/${x.reissueOf.id}`}>{x.reissueOf.number}</a> (cancelled),
                 printed with the settings of its own day
+              </dd>
+            </>
+          ) : null}
+          {x.revision > 1 ? (
+            <>
+              <dt>Revision</dt>
+              <dd>
+                {String(x.revision)} · corrected on{' '}
+                {x.revisedAt ? dmy(x.revisedAt.slice(0, 10)) : ''}{' '}
+                <a href="#cert-changes">The change log</a>
               </dd>
             </>
           ) : null}
@@ -355,26 +368,89 @@ export default async function CertificatePage({
           <p className="ep-field__help">Nothing recorded.</p>
         )}
       </FoldCard>
+      {x.revisions.length ? (
+        <FoldCard
+          id="cert-changes"
+          title={`Changes (${String(x.revisions.length)} revisions)`}
+          hint={`Revision ${String(x.revision)} in use · ${x.revisions[0]?.reason ?? ''}`}
+          open
+        >
+          <ol className="ep-cert-revs">
+            {x.revisions.map((r) => (
+              <li key={r.revision}>
+                <div className="ep-cert-revs__head">
+                  <strong>Revision {String(r.revision)}</strong>
+                  <span className="ep-field__help" style={{ margin: 0 }}>
+                    {dmy(r.at.slice(0, 10))} {r.at.slice(11, 16)} UTC · {r.by ?? '—'}
+                    {r.revision === 1 ? ' · as issued' : ''}
+                    {r.revision === x.revision ? ' · in use' : ''}
+                  </span>
+                  {r.revision === x.revision ? (
+                    <FileLinks
+                      href={`/certificates/${x.id}/pdf`}
+                      label={`${label} revision ${String(r.revision)}`}
+                    />
+                  ) : r.exportId && r.ready ? (
+                    <FileLinks
+                      href={`/reports/exports/${r.exportId}/download`}
+                      label={`${label} revision ${String(r.revision)}`}
+                    />
+                  ) : (
+                    <span className="ep-field__help" style={{ margin: 0 }}>
+                      No PDF kept
+                    </span>
+                  )}
+                </div>
+                {r.reason ? <p style={{ margin: 'var(--sp-1) 0' }}>Why: {r.reason}</p> : null}
+                {r.changes.length ? (
+                  <ul className="ep-cert-revs__changes">
+                    {r.changes.map((c, i) => (
+                      <li key={`${c.label}-${String(i)}`}>
+                        <strong>{c.label}</strong>: {c.from || '—'} → {c.to || '—'}
+                      </li>
+                    ))}
+                  </ul>
+                ) : r.revision > 1 ? (
+                  <p className="ep-field__help" style={{ margin: 0 }}>
+                    Printed again with today&apos;s details and settings; nothing typed changed.
+                  </p>
+                ) : null}
+              </li>
+            ))}
+          </ol>
+        </FoldCard>
+      ) : null}
       {x.status === 'issued' && (x.can.issue || x.can.cancel) ? (
         <FoldCard
           id="cert-actions"
-          title="Duplicate, re-issue or cancel"
-          hint="A lost original, one to print with today's settings, or one issued in error"
+          title={keepNumber ? 'Duplicate, correct or cancel' : 'Duplicate, re-issue or cancel'}
+          hint={
+            keepNumber
+              ? 'A lost original, a correction keeping the number, or one issued in error'
+              : "A lost original, one to print with today's settings, or one issued in error"
+          }
           open={sp.open === 'actions'}
         >
           <p className="ep-field__help" style={{ marginTop: 0 }}>
-            A duplicate keeps the number and paper and prints DUPLICATE. A re-issue makes it again
-            with a new number, printed with today&apos;s settings (signatory, layout, school
-            details), and cancels this one. Cancelling takes its duplicates with it
+            A duplicate keeps the number and paper and prints DUPLICATE.{' '}
+            {keepNumber
+              ? 'A correction keeps the number: it becomes the next revision, printed with today\u2019s details and settings and what was corrected; the earlier paper stays in its change log.'
+              : 'A re-issue makes it again with a new number, printed with today\u2019s settings (signatory, layout, school details), and cancels this one.'}{' '}
+            Cancelling takes its duplicates with it
             {x.transferCertificateId ? ' and cancels the TC' : ''}; the number is never given again.
           </p>
           <div style={{ display: 'flex', gap: 'var(--sp-2)', flexWrap: 'wrap' }}>
-            {x.can.issue && x.can.cancel && !x.copyNo && !x.reissuedAs ? (
-              <a className="ep-btn ep-btn--secondary ep-btn--sm" href={changesLink}>
+            {keepNumber && x.can.issue && !x.copyNo && x.template ? (
+              <a className="ep-btn ep-btn--secondary ep-btn--sm" href={changesLink('correct')}>
+                Correct this certificate
+              </a>
+            ) : null}
+            {!keepNumber && x.can.issue && x.can.cancel && !x.copyNo && !x.reissuedAs ? (
+              <a className="ep-btn ep-btn--secondary ep-btn--sm" href={changesLink('reissue')}>
                 Re-issue with changes
               </a>
             ) : null}
-            {x.can.issue && x.can.cancel && !x.copyNo && !x.reissuedAs ? (
+            {!keepNumber && x.can.issue && x.can.cancel && !x.copyNo && !x.reissuedAs ? (
               <ConfirmAction
                 action={reissueCertificate}
                 fields={{ id: x.id }}
@@ -453,7 +529,7 @@ export default async function CertificatePage({
             The same type, {x.employeeId ? 'employee' : 'student'}, purpose and details; a new
             number.
           </ConfirmAction>{' '}
-          <a className="ep-btn ep-btn--ghost ep-btn--sm" href={changesLink}>
+          <a className="ep-btn ep-btn--ghost ep-btn--sm" href={changesLink('reissue')}>
             Issue again with changes
           </a>
         </FoldCard>

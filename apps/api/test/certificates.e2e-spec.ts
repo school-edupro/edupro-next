@@ -5,6 +5,7 @@
  * issued through the register from the register and the profile; the register's filters, figures and files.
  */
 import type { NestFastifyApplication } from '@nestjs/platform-fastify';
+import { CacheService } from '../src/common/cache/cache.service';
 import {
   createApp,
   headersFor,
@@ -895,5 +896,133 @@ describe('certificate register (e2e)', () => {
         [school.id],
       ),
     );
+  });
+  it('corrects keeping the number when the school says so: revisions, the change log, the paper and the check', async () => {
+    const made = await issue(
+      { typeCode: 'BONAFIDE', studentId: pupils.asha, purpose: 'Bank account' },
+      office,
+    );
+    expect(made.statusCode).toBe(201);
+    const cert = made.json() as { id: string; number: string; issuedOn: string };
+    // the school gives a new number on a correction (the default)
+    const off = await inject({
+      method: 'POST',
+      url: `/certificates/${cert.id}/correct`,
+      headers: h(office),
+      json: { reason: 'Purpose typed wrong', purpose: 'Passport' },
+    });
+    expect(off.statusCode).toBe(409);
+    expect(off.json()).toMatchObject({ type: 'certificate.corrections_new_number' });
+    const st = (
+      await inject({ method: 'GET', url: '/certificates/setup/settings', headers: h() })
+    ).json();
+    const put = await inject({
+      method: 'PUT',
+      url: '/certificates/setup/settings',
+      headers: h(),
+      json: {
+        signatoryEmployeeId: st.signatory?.id ?? null,
+        signatoryTitle: st.signatoryTitle,
+        printSignature: st.printSignature,
+        printPreparer: st.printPreparer,
+        footerNote: st.footerNote || undefined,
+        correctionsKeepNumber: true,
+      },
+    });
+    expect(put.statusCode).toBe(200);
+    // revision 2: the same number, the purpose corrected
+    const r2 = await inject({
+      method: 'POST',
+      url: `/certificates/${cert.id}/correct`,
+      headers: h(office),
+      json: { reason: 'Purpose typed wrong', purpose: 'Passport' },
+    });
+    expect(r2.statusCode).toBe(201);
+    expect(r2.json()).toMatchObject({
+      id: cert.id,
+      number: cert.number,
+      purpose: 'Passport',
+      revision: 2,
+      status: 'issued',
+    });
+    // revision 3: the date corrected
+    const r3 = await inject({
+      method: 'POST',
+      url: `/certificates/${cert.id}/correct`,
+      headers: h(office),
+      json: { reason: 'Date typed wrong', issuedOn: '2026-11-02' },
+    });
+    expect(r3.json()).toMatchObject({
+      number: cert.number,
+      revision: 3,
+      issuedOn: '2026-11-02',
+      purpose: 'Passport',
+    });
+    const d = (
+      await inject({ method: 'GET', url: `/certificates/${cert.id}`, headers: h() })
+    ).json();
+    expect((d.revisions as Array<{ revision: number }>).map((x) => x.revision)).toEqual([3, 2, 1]);
+    expect(d.revisions[0]).toMatchObject({
+      reason: 'Date typed wrong',
+      changes: [{ label: 'Date of issue', from: expect.any(String), to: '02-11-2026' }],
+    });
+    expect(d.revisions[1]).toMatchObject({
+      reason: 'Purpose typed wrong',
+      changes: expect.arrayContaining([{ label: 'Purpose', from: 'Bank account', to: 'Passport' }]),
+    });
+    expect(d.revisions[2]).toMatchObject({ revision: 1, reason: null });
+    expect(d.data.cert).toMatchObject({ number: cert.number, revision: 3 });
+    // the public check: corrected; the number with the date first printed still matches
+    const tok = await withMigrator((c) =>
+      c.query<{ token: string; code: string }>(
+        `SELECT x.verify_token AS token, lower(s.code) AS code FROM certificates x JOIN schools s ON s.id = x.school_id WHERE x.id = $1`,
+        [cert.id],
+      ),
+    );
+    const v = await inject({
+      method: 'GET',
+      url: `/public/certificates/${tok.rows[0]!.code}/verify/${tok.rows[0]!.token}`,
+      headers: {},
+    });
+    expect(v.json()).toMatchObject({ result: 'valid', certificate: { revision: 3 } });
+    expect(v.json().certificate.correctedOn).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    await app.get(CacheService).delByPrefix('edupro:throttle:PublicCertificatesController');
+    const byOldDate = await inject({
+      method: 'GET',
+      url: `/public/certificates/${tok.rows[0]!.code}/verify?number=${encodeURIComponent(cert.number)}&date=${cert.issuedOn}`,
+      headers: {},
+    });
+    expect(byOldDate.json()).toMatchObject({ result: 'valid' });
+    // a duplicate printed now carries the correction; a duplicate itself is not corrected
+    const dup = await inject({
+      method: 'POST',
+      url: `/certificates/${cert.id}/duplicate`,
+      headers: h(office),
+      json: { reason: 'Lost' },
+    });
+    expect(dup.json()).toMatchObject({ number: cert.number, purpose: 'Passport', copyNo: 1 });
+    expect(
+      (
+        await inject({
+          method: 'POST',
+          url: `/certificates/${dup.json().id as string}/correct`,
+          headers: h(office),
+          json: { reason: 'Copy' },
+        })
+      ).statusCode,
+    ).toBe(400);
+    await inject({
+      method: 'PUT',
+      url: '/certificates/setup/settings',
+      headers: h(),
+      json: {
+        signatoryEmployeeId: st.signatory?.id ?? null,
+        signatoryTitle: st.signatoryTitle,
+        printSignature: st.printSignature,
+        printPreparer: st.printPreparer,
+        footerNote: st.footerNote || undefined,
+        correctionsKeepNumber: false,
+      },
+    });
   });
 });

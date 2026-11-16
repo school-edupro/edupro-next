@@ -563,3 +563,34 @@ for a re-issue with changes.
 Tests: `certificates.e2e-spec.ts` (a one-a-person type: the preview holds without `reissueOf` and not with it; a value
 outside the list refused with nothing changed; purpose, a typed detail and the date corrected; the old cancelled and
 linked). A browser pass at 1440 and 375 px from the button to the filled page and the posted changes (stopped).
+
+## Corrections that keep the number (16 Nov 2026)
+
+Some schools do not change a certificate's number on a correction. Chosen (all recommended): the school decides in
+set-up; revisions with a change log; a small "Revised" line on the paper.
+
+- **Data** (migration 0392): `certificate_settings.corrections_keep_number` (default off), `certificates.revision`
+  (1 as issued) and `revised_at`, `certificate_revisions` (the paper of each revision — data, version, purpose, date,
+  its PDF — and how it came: reason, `changes` [{label, from, to}], by, at; revision 1 is written at the first
+  correction from the certificate as issued; RLS, audit).
+- **API**: `POST /certificates/:id/correct` (`ReissueDto`: reason and what is corrected) — refused when the setting
+  is off (409 `certificate.corrections_new_number`), for a duplicate (400), a cancelled one (409) or one with no
+  template version (old system, achievement module: re-issue). In one transaction it builds the paper as an issue
+  would (`reissueOf` sets it aside for the one-a-person check; the checks are shown, not a bar; a missing or wrong
+  detail refuses), keeps the number, book, Sl. No. and QR, stamps `cert.revision` / `cert.revisedOn`, writes the
+  revision with its changes (`changesOf`: purpose, date, layout, each typed detail, the person's printed details,
+  who signs, the foot line), updates the certificate and queues its PDF (kept for good; the revision row takes it).
+  The detail carries `revisions` and `correctionsKeepNumber`; the row `revision` / `revisedAt`. The foot block
+  prints "Revision n · corrected on …" for n > 1. The public check returns `revision` / `correctedOn` and a search
+  by number matches the date of any revision.
+- **Admin**: the set-up switch (Signatory and print); on a certificate, with the switch on, **Correct this
+  certificate** (the Issue page with `correct=<id>`: title, note, fixed person, the checks not a bar, a reason, "Save
+  as revision n"); the details' **Revision** line; a **Changes** fold — each revision with when, who, why, what
+  changed and its PDF; **Rev n** in the register; the public check's "Corrected on … · revision n". A refused
+  correction or re-issue link shows its reason and no issue form.
+
+Tests: `certificates.e2e-spec.ts` (refused while the setting is off; revisions 2 and 3 keep the number with the
+purpose and the date corrected; the log 3, 2, 1 with its changes; the paper's revision; the public check corrected and
+the first date still matching; a duplicate after it carries the correction; a duplicate is not corrected); the db
+blocks test (the foot line). A browser pass on the switch and a refused correction link (the "on" pages were not
+looked at on Alpha: switching it on there was not done).

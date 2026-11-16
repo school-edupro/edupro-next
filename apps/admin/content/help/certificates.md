@@ -80,7 +80,17 @@ and the person's details. A later change in the set-up does not alter it. On a c
   rolls: revoke the withdrawal for that.
 
 A cancelled certificate that was not re-issued has **Issue again with today's settings** and **Issue
-again with changes**. In the
+again with changes**.
+
+**Keeping the number on a correction.** If your school wants a corrected certificate to keep its number, tick
+**Corrections keep the certificate number** in Certificate set-up → Signatory and print. A certificate then has
+**Correct this certificate** instead of the re-issue buttons: the Issue page opens filled in (the certificate and
+person fixed); correct the purpose, the typed details, the date or the layout, say why, and **Save as revision 2**
+(3, 4 …). The person's details, the signatory and the layout print as they are now. The paper prints **Revision n
+· corrected on …** at the foot, the public check says it was corrected (the number with the date first printed
+still checks), and the certificate's **Changes** list keeps every revision — who, when, why and what changed
+(old → new) — each with its own PDF. Duplicates printed after a correction carry it. The register marks them
+**Rev n**. In the
 register, **Re-issue** and **Re-issued** mark the two.
 
 ## The register

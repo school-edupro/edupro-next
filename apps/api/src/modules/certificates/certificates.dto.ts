@@ -175,6 +175,8 @@ export const SettingsSchema = z.object({
   printSignature: z.boolean(),
   printPreparer: z.boolean(),
   footerNote: z.string().trim().max(200).optional(),
+  /** a correction keeps the certificate number (a new revision) instead of a new number (16 Nov 2026) */
+  correctionsKeepNumber: z.boolean().default(false),
 });
 export class SettingsDto extends createZodDto(SettingsSchema) {}
 

@@ -83,6 +83,15 @@ describe('certificate blocks', () => {
     expect(b.footer).toContain('<svg id="q"></svg>');
     expect(b.footer).toContain('https://x.test/verify/abc');
   });
+
+  it('prints the revision of a corrected certificate at the foot, and nothing for the first', () => {
+    expect(certificateBlocks(data).footer).not.toContain('Revision');
+    const b = certificateBlocks({
+      ...data,
+      cert: { ...data.cert, revision: 2, revisedOn: '16-11-2026' },
+    });
+    expect(b.footer).toContain('Revision 2 · corrected on 16-11-2026');
+  });
 });
 
 describe('the template engine and the ready templates', () => {

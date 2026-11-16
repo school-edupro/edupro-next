@@ -111,6 +111,9 @@ export interface CertificateRow {
   reissueOf: { id: string; number: string } | null;
   /** made again as this later certificate */
   reissuedAs: { id: string; number: string } | null;
+  /** corrections that kept the number (16 Nov 2026): 1 as issued, then 2, 3 … */
+  revision: number;
+  revisedAt: string | null;
 }
 
 const SELECT = `SELECT x.id::text, t.code AS type_code, t.name AS type_name, x.number, x.copy_no, x.original_id::text,
@@ -122,7 +125,8 @@ const SELECT = `SELECT x.id::text, t.code AS type_code, t.name AS type_name, x.n
         x.cancelled_at, cu.display_name AS cancelled_by, x.cancel_reason, x.created_at,
         x.reissue_of::text, (SELECT r.number FROM certificates r WHERE r.id = x.reissue_of) AS reissue_of_number,
         (SELECT r.id::text FROM certificates r WHERE r.reissue_of = x.id) AS reissued_as,
-        (SELECT r.number FROM certificates r WHERE r.reissue_of = x.id) AS reissued_as_number
+        (SELECT r.number FROM certificates r WHERE r.reissue_of = x.id) AS reissued_as_number,
+        x.revision, x.revised_at
    FROM certificates x
    JOIN certificate_types t ON t.id = x.type_id
    LEFT JOIN students s ON s.id = x.student_id
@@ -163,6 +167,8 @@ interface Db {
   reissue_of_number: string | null;
   reissued_as: string | null;
   reissued_as_number: string | null;
+  revision: number;
+  revised_at: Date | null;
 }
 
 const toRow = (r: Db): CertificateRow => ({
@@ -195,10 +201,60 @@ const toRow = (r: Db): CertificateRow => ({
   createdAt: r.created_at.toISOString(),
   reissueOf: r.reissue_of ? { id: r.reissue_of, number: r.reissue_of_number ?? '' } : null,
   reissuedAs: r.reissued_as ? { id: r.reissued_as, number: r.reissued_as_number ?? '' } : null,
+  revision: r.revision,
+  revisedAt: r.revised_at ? r.revised_at.toISOString() : null,
 });
 
 const dmy = (iso: string) => `${iso.slice(8, 10)}-${iso.slice(5, 7)}-${iso.slice(0, 4)}`;
 const todayIso = () => new Date().toISOString().slice(0, 10);
+
+/** Words for a key of the printed data ("fatherName" → "Father name"). */
+const words = (k: string) => {
+  const w = k
+    .replace(/([A-Z])/g, ' $1')
+    .toLowerCase()
+    .trim();
+  return w.charAt(0).toUpperCase() + w.slice(1);
+};
+const flat = (v: unknown): string =>
+  v === null || v === undefined ? '' : typeof v === 'object' ? '' : String(v);
+
+/**
+ * What a correction changed, in words (old → new): the purpose, the date, the layout, each typed detail, the person's
+ * printed details, who signs and the foot line.
+ */
+function changesOf(
+  a: { data: Record<string, unknown>; purpose: string | null; issuedOn: string; layout: string },
+  b: { data: Record<string, unknown>; purpose: string | null; issuedOn: string; layout: string },
+  specs: Array<{ key: string; label: string }>,
+): Array<{ label: string; from: string; to: string }> {
+  const out: Array<{ label: string; from: string; to: string }> = [];
+  const add = (label: string, from: string, to: string) => {
+    if (from !== to) out.push({ label, from, to });
+  };
+  add('Purpose', a.purpose ?? '', b.purpose ?? '');
+  add('Date of issue', dmy(a.issuedOn), dmy(b.issuedOn));
+  add('Layout', a.layout, b.layout);
+  const fa = (a.data.fields ?? {}) as Record<string, unknown>;
+  const fb = (b.data.fields ?? {}) as Record<string, unknown>;
+  for (const k of new Set([...Object.keys(fa), ...Object.keys(fb)]))
+    add(specs.find((x) => x.key === k)?.label ?? words(k), flat(fa[k]), flat(fb[k]));
+  for (const who of ['student', 'employee'] as const) {
+    const pa = (a.data[who] ?? {}) as Record<string, unknown>;
+    const pb = (b.data[who] ?? {}) as Record<string, unknown>;
+    for (const k of new Set([...Object.keys(pa), ...Object.keys(pb)]))
+      if (k !== 'id' && typeof (pa[k] ?? pb[k]) !== 'object')
+        add(words(k), flat(pa[k]), flat(pb[k]));
+  }
+  const signer = (d: Record<string, unknown>) => {
+    const signs = Array.isArray(d.signs) ? (d.signs as Array<Record<string, unknown>>) : [];
+    const last = signs[signs.length - 1] ?? {};
+    return [flat(last.title), flat(last.name)].filter(Boolean).join(' · ');
+  };
+  add('Signed by', signer(a.data), signer(b.data));
+  add('Foot line', flat(a.data.footerNote), flat(b.data.footerNote));
+  return out;
+}
 /** "14-11-2026 09:40 AM" in the school's time zone */
 export function stamp(d: Date, timeZone?: string | null): string {
   const fmt = (tz: string) =>
@@ -1315,6 +1371,210 @@ export class CertificatesService {
   }
 
   /**
+   * Correct a certificate keeping its number (16 Nov 2026), when the school's set-up says so: the paper is made again
+   * as revision n — the same number, the person's details, the signatory and the layout as they are now, with what was
+   * corrected (purpose, typed details, date, layout) — and the foot prints "Revision n · corrected on …". Every revision
+   * stays read-only with its PDF in the change log, with who, when, why and what changed (old → new). The type's checks
+   * are shown but do not stop a correction (the certificate was issued); a missing or wrong detail does.
+   */
+  async correct(
+    ctx: RequestContext,
+    id: string,
+    reason: string,
+    changes: Omit<ReissueDto, 'reason'> = {},
+  ): Promise<CertificateRow> {
+    const tenant = requireTenant(ctx);
+    const o = await this.db.tenant(tenant, async (c) => {
+      const keep = (
+        await c.query<{ keep: boolean | null }>(
+          `SELECT corrections_keep_number AS keep FROM certificate_settings WHERE school_id = app.current_school_id()`,
+        )
+      ).rows[0]?.keep;
+      if (!keep)
+        throw new DomainError(
+          'certificate.corrections_new_number',
+          'This school gives a corrected certificate a new number: re-issue it (Certificate set-up → Signatory and print)',
+          { status: 409 },
+        );
+      const r = await c.query<{
+        status: string;
+        copy_no: number;
+        type_code: string;
+        student_id: string | null;
+        employee_id: string | null;
+        purpose: string | null;
+        fields: unknown;
+        template_id: string | null;
+        version_id: string | null;
+        issued_on: string;
+        revision: number;
+      }>(
+        `SELECT x.status, x.copy_no, t.code AS type_code, x.student_id::text, x.employee_id::text, x.purpose,
+                x.data->'fields' AS fields, v.template_id::text, x.template_version_id::text AS version_id,
+                x.issued_on::text, x.revision
+           FROM certificates x JOIN certificate_types t ON t.id = x.type_id
+           LEFT JOIN document_template_versions v ON v.id = x.template_version_id
+          WHERE x.id = $1`,
+        [id],
+      );
+      return r.rows[0];
+    });
+    if (!o) throw new DomainError('not-found', 'Certificate not found');
+    if (o.copy_no > 0)
+      throw new DomainError(
+        'certificate.correct_original',
+        'Correct the original certificate; duplicates printed after it carry the correction',
+        { status: 400 },
+      );
+    if (o.status !== 'issued')
+      throw new DomainError('certificate.cancelled', 'A cancelled certificate is not corrected', {
+        status: 409,
+      });
+    if (!o.version_id)
+      throw new DomainError(
+        'certificate.no_version',
+        'A certificate from the old system or the achievement module is not corrected here: re-issue it',
+        { status: 409 },
+      );
+    const type = await this.db.tenant(tenant, (c) => this.typeOf(c, o.type_code));
+    const ledger = await this.ledgerOf(ctx, type, o.student_id ?? undefined);
+    const fields =
+      changes.fields ??
+      (o.fields && typeof o.fields === 'object' && !Array.isArray(o.fields)
+        ? (o.fields as IssueCertificateDto['fields'])
+        : {});
+    const purpose = changes.purpose !== undefined ? changes.purpose : o.purpose;
+    const dto = {
+      typeCode: o.type_code,
+      ...(o.student_id ? { studentId: o.student_id } : {}),
+      ...(o.employee_id ? { employeeId: o.employee_id } : {}),
+      ...((changes.variant ?? o.template_id) ? { variant: changes.variant ?? o.template_id! } : {}),
+      ...(purpose ? { purpose } : {}),
+      issuedOn: changes.issuedOn ?? o.issued_on,
+      fields,
+      reissueOf: id,
+    } as IssueCertificateDto;
+    await this.db.tenant(tenant, async (c) => {
+      const cur = (
+        await c.query<{
+          number: string;
+          status: string;
+          revision: number;
+          data: Record<string, unknown>;
+          template_version_id: string | null;
+          purpose: string | null;
+          issued_on: string;
+          export_id: string | null;
+          issued_by: string | null;
+          created_at: Date;
+          book_no: number | null;
+          sl_no: number | null;
+        }>(
+          `SELECT number, status, revision, data, template_version_id::text, purpose, issued_on::text, export_id::text,
+                  issued_by::text, created_at, book_no, sl_no
+             FROM certificates WHERE id = $1 FOR UPDATE`,
+          [id],
+        )
+      ).rows[0]!;
+      if (cur.status !== 'issued')
+        throw new DomainError('certificate.cancelled', 'A cancelled certificate is not corrected', {
+          status: 409,
+        });
+      const b = await this.build(c, ctx, type, dto, ledger, {});
+      if (b.problems.length)
+        throw new DomainError('validation-failed', b.problems.join('; '), {
+          status: 400,
+          extra: { problems: b.problems },
+        });
+      if (!b.template)
+        throw new DomainError('template.missing', `${type.name} has no template`, { status: 409 });
+      const rev = cur.revision + 1;
+      const data: Record<string, unknown> = {
+        ...b.data,
+        cert: {
+          ...(b.data.cert as Record<string, unknown>),
+          number: cur.number,
+          bookNo: cur.book_no,
+          slNo: cur.sl_no,
+          revision: rev,
+          revisedOn: dmy(todayIso()),
+        },
+        // the same check link: the QR printed on every revision
+        ...(cur.data.qr ? { qr: cur.data.qr } : {}),
+      };
+      const names = await c.query<{ id: string; name: string }>(
+        `SELECT v.id::text, d.name FROM document_template_versions v JOIN document_templates d ON d.id = v.template_id
+          WHERE v.id = ANY($1::bigint[])`,
+        [[cur.template_version_id, b.template.version_id].filter(Boolean)],
+      );
+      const layoutOf = (vid: string | null) => names.rows.find((x) => x.id === vid)?.name ?? '';
+      const diff = changesOf(
+        {
+          data: cur.data,
+          purpose: cur.purpose,
+          issuedOn: cur.issued_on,
+          layout: layoutOf(cur.template_version_id),
+        },
+        {
+          data,
+          purpose: purpose || null,
+          issuedOn: b.issuedOn,
+          layout: layoutOf(b.template.version_id),
+        },
+        b.specs,
+      );
+      // the first correction keeps the paper as issued as revision 1
+      if (cur.revision === 1)
+        await c.query(
+          `INSERT INTO certificate_revisions (school_id, certificate_id, revision, data, template_version_id, purpose, issued_on,
+                                              export_id, reason, changes, created_by, created_at)
+           VALUES (app.current_school_id(), $1, 1, $2::jsonb, $3, $4, $5::date, $6, NULL, '[]'::jsonb, $7, $8)
+           ON CONFLICT (certificate_id, revision) DO NOTHING`,
+          [
+            id,
+            JSON.stringify(cur.data),
+            cur.template_version_id,
+            cur.purpose,
+            cur.issued_on,
+            cur.export_id,
+            cur.issued_by,
+            cur.created_at,
+          ],
+        );
+      await c.query(
+        `INSERT INTO certificate_revisions (school_id, certificate_id, revision, data, template_version_id, purpose, issued_on,
+                                            reason, changes, created_by)
+         VALUES (app.current_school_id(), $1, $2, $3::jsonb, $4, $5, $6::date, $7, $8::jsonb, app.current_user_id())`,
+        [
+          id,
+          rev,
+          JSON.stringify(data),
+          b.template.version_id,
+          purpose || null,
+          b.issuedOn,
+          reason,
+          JSON.stringify(diff),
+        ],
+      );
+      await c.query(
+        `UPDATE certificates SET data = $2::jsonb, template_version_id = $3, purpose = $4, issued_on = $5::date,
+                revision = $6, revised_at = now(), export_id = NULL
+          WHERE id = $1`,
+        [id, JSON.stringify(data), b.template.version_id, purpose || null, b.issuedOn, rev],
+      );
+      await this.audit.stage(ctx, c, {
+        action: 'certificate.correct',
+        entityType: 'certificates',
+        entityId: id,
+        before: { revision: cur.revision },
+        after: { number: cur.number, revision: rev, reason, changed: diff.map((x) => x.label) },
+      });
+    });
+    await this.queue(ctx, id);
+    return this.get(ctx, id);
+  }
+
+  /**
    * Re-issue with today's settings (16 Nov 2026): an issued certificate prints what it froze at issue — the signatory,
    * the layout, the school and the person as they were. This makes it again as a new certificate (a new number) with
    * the same type, person, purpose, layout and details, printed as things are now, through the type's checks; the
@@ -1554,6 +1814,12 @@ export class CertificatesService {
       await c.query(`UPDATE exports SET expires_at = now() + interval '100 years' WHERE id = $1`, [
         exp.id,
       ]);
+      // a corrected one: the PDF of its current revision
+      await c.query(
+        `UPDATE certificate_revisions r SET export_id = $2 FROM certificates x
+          WHERE x.id = $1 AND r.certificate_id = x.id AND r.revision = x.revision`,
+        [id, exp.id],
+      );
       if (x.tc && x.copy_no === 0)
         await c.query(`UPDATE transfer_certificates SET export_id = $2 WHERE id = $1`, [
           x.tc,
@@ -1596,9 +1862,41 @@ export class CertificatesService {
           WHERE x.id = $1`,
         [id],
       );
+      const revisions = await c.query<{
+        revision: number;
+        created_at: Date;
+        by: string | null;
+        reason: string | null;
+        changes: Array<{ label: string; from: string; to: string }>;
+        export_id: string | null;
+        export_status: string | null;
+        issued_on: string;
+      }>(
+        `SELECT r.revision, r.created_at, u.display_name AS by, r.reason, r.changes, r.export_id::text,
+                e.status::text AS export_status, r.issued_on::text
+           FROM certificate_revisions r LEFT JOIN users u ON u.id = r.created_by LEFT JOIN exports e ON e.id = r.export_id
+          WHERE r.certificate_id = $1 ORDER BY r.revision DESC`,
+        [originalId],
+      );
       return {
         ...row,
         copies: copies.rows.map(toRow),
+        revisions: revisions.rows.map((r) => ({
+          revision: r.revision,
+          at: r.created_at.toISOString(),
+          by: r.by,
+          reason: r.reason,
+          changes: Array.isArray(r.changes) ? r.changes : [],
+          exportId: r.export_id,
+          ready: r.export_status === 'ready',
+          issuedOn: r.issued_on,
+        })),
+        correctionsKeepNumber:
+          (
+            await c.query<{ keep: boolean | null }>(
+              `SELECT corrections_keep_number AS keep FROM certificate_settings WHERE school_id = app.current_school_id()`,
+            )
+          ).rows[0]?.keep ?? false,
         data: d.rows[0]?.data ?? {},
         template: d.rows[0]?.template
           ? { id: d.rows[0].template_id, name: d.rows[0].template, version: d.rows[0].version }

@@ -265,6 +265,7 @@ export default async function CertificatesPage({
                   {x.overrideReason ? <Badge tone="warning">Past a check</Badge> : null}
                   {x.legacy ? <Badge tone="neutral">Old system</Badge> : null}
                   {x.reissueOf ? <Badge tone="info">Re-issue</Badge> : null}
+                  {x.revision > 1 ? <Badge tone="info">{`Rev ${String(x.revision)}`}</Badge> : null}
                   {x.reissuedAs ? <Badge tone="neutral">Re-issued</Badge> : null}
                 </span>
               ),

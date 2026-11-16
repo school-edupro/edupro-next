@@ -860,12 +860,14 @@ export class CertificateSetupService {
         print_signature: boolean | null;
         print_preparer: boolean | null;
         footer_note: string | null;
+        corrections_keep_number: boolean | null;
         name: string | null;
         code: string | null;
         designation: string | null;
         has_signature: boolean | null;
       }>(
         `SELECT cs.signatory_employee_id::text, cs.signatory_title, cs.print_signature, cs.print_preparer, cs.footer_note,
+                cs.corrections_keep_number,
                 e.display_name AS name, e.employee_code AS code, e.designation, e.signature_file_id IS NOT NULL AS has_signature
            FROM schools sc LEFT JOIN certificate_settings cs ON cs.school_id = sc.id
            LEFT JOIN employees e ON e.id = cs.signatory_employee_id
@@ -886,6 +888,7 @@ export class CertificateSetupService {
       printSignature: r?.print_signature ?? true,
       printPreparer: r?.print_preparer ?? true,
       footerNote: r?.footer_note ?? '',
+      correctionsKeepNumber: r?.corrections_keep_number ?? false,
     };
   }
 
@@ -902,11 +905,13 @@ export class CertificateSetupService {
         if (!e.rowCount) throw new DomainError('not-found', 'Employee not found');
       }
       const r = await c.query<{ id: string }>(
-        `INSERT INTO certificate_settings (school_id, signatory_employee_id, signatory_title, print_signature, print_preparer, footer_note, updated_by)
-         VALUES (app.current_school_id(), $1, $2, $3, $4, $5, app.current_user_id())
+        `INSERT INTO certificate_settings (school_id, signatory_employee_id, signatory_title, print_signature, print_preparer, footer_note,
+                                           corrections_keep_number, updated_by)
+         VALUES (app.current_school_id(), $1, $2, $3, $4, $5, $6, app.current_user_id())
          ON CONFLICT (school_id) DO UPDATE SET signatory_employee_id = EXCLUDED.signatory_employee_id,
             signatory_title = EXCLUDED.signatory_title, print_signature = EXCLUDED.print_signature,
-            print_preparer = EXCLUDED.print_preparer, footer_note = EXCLUDED.footer_note, updated_at = now(),
+            print_preparer = EXCLUDED.print_preparer, footer_note = EXCLUDED.footer_note,
+            corrections_keep_number = EXCLUDED.corrections_keep_number, updated_at = now(),
             updated_by = app.current_user_id()
          RETURNING id::text`,
         [
@@ -915,6 +920,7 @@ export class CertificateSetupService {
           dto.printSignature,
           dto.printPreparer,
           dto.footerNote || null,
+          dto.correctionsKeepNumber,
         ],
       );
       await this.audit.stage(ctx, c, {

@@ -37,6 +37,14 @@ export function CertificateCheckResult({ r, lang }: { r: CertificateCheck; lang:
                   x.holder,
                 ],
                 [t(lang, 'Issued by', 'जारीकर्ता'), r.school.name],
+                ...(x.correctedOn && (x.revision ?? 1) > 1
+                  ? [
+                      [
+                        t(lang, 'Corrected on', 'सुधार की तिथि'),
+                        `${dmy(x.correctedOn)} · ${t(lang, 'revision', 'संशोधन')} ${String(x.revision)}`,
+                      ],
+                    ]
+                  : []),
                 ...(x.cancelledOn
                   ? [[t(lang, 'Cancelled on', 'रद्द करने की तिथि'), dmy(x.cancelledOn)]]
                   : []),

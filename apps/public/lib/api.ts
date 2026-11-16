@@ -252,6 +252,9 @@ export interface CertificateCheck {
     cancelledOn: string | null;
     duplicates: number;
     legacy: boolean;
+    /** a correction that kept the number: its revision and when (16 Nov 2026) */
+    revision?: number;
+    correctedOn?: string | null;
   } | null;
   checkedAt: string;
 }

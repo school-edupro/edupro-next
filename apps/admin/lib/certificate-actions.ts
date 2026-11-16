@@ -102,6 +102,36 @@ export async function cancelCertificate(fd: FormData) {
   redirect(`/certificates/${id}?ok=cancelled`);
 }
 
+/**
+ * Correct keeping the number (16 Nov 2026, when the set-up says so): the Issue page in correction mode posts what was
+ * corrected; the certificate becomes its next revision.
+ */
+export async function correctCertificate(fd: FormData) {
+  const id = str(fd, 'id');
+  if (!okId(id)) return;
+  const b = issueBody(fd);
+  const page = str(fd, 'returnTo').startsWith('/certificates/issue?')
+    ? str(fd, 'returnTo')
+    : `/certificates/${id}`;
+  try {
+    await apiFetch(`/certificates/${id}/correct`, {
+      method: 'POST',
+      body: JSON.stringify({
+        reason: str(fd, 'reason'),
+        purpose: str(fd, 'purpose'),
+        fields: b.fields,
+        ...(b.issuedOn ? { issuedOn: b.issuedOn } : {}),
+        ...('variant' in b && b.variant ? { variant: b.variant } : {}),
+      }),
+    });
+  } catch (e) {
+    if (e instanceof ApiError) back(page, e);
+    throw e;
+  }
+  revalidatePath('/certificates');
+  redirect(`/certificates/${id}?ok=corrected`);
+}
+
 /** Re-issue with today's settings: a new certificate printed as things are now; the earlier one cancelled. */
 export async function reissueCertificate(fd: FormData) {
   const id = str(fd, 'id');

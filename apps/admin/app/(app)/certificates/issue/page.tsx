@@ -3,7 +3,11 @@ import { notFound } from 'next/navigation';
 import { IssuePicker } from '@/components/certificates/IssuePicker';
 import { Notice } from '@/components/Notice';
 import { ApiError, apiFetch, getMe } from '@/lib/api';
-import { issueCertificate, reissueCertificate } from '@/lib/certificate-actions';
+import {
+  correctCertificate,
+  issueCertificate,
+  reissueCertificate,
+} from '@/lib/certificate-actions';
 import {
   FIELD_PREFIX,
   fitPaper,
@@ -82,19 +86,30 @@ export default async function IssueCertificatePage({
   // answering a request (phase C): it travels with the form and the issue marks it issued
   const requestId = id(sp.request ?? sp.requestId);
   // re-issue with changes (16 Nov 2026): the certificate being corrected; the type and person stay its own
-  const reissueId = id(sp.reissue);
-  const original = reissueId
-    ? await apiFetch<CertificateDetail>(`/certificates/${reissueId}`).catch(() => null)
+  // or a correction keeping the number (the school's set-up says so): revision n+1 of the same certificate
+  const correctId = id(sp.correct);
+  const reissueId = correctId ? '' : id(sp.reissue);
+  const editId = correctId || reissueId;
+  const original = editId
+    ? await apiFetch<CertificateDetail>(`/certificates/${editId}`).catch(() => null)
     : null;
   const reissueBlocked = !original
-    ? reissueId
+    ? editId
       ? 'That certificate was not found'
       : null
-    : original.copyNo
-      ? 'Re-issue the original certificate; its duplicates go with it'
-      : original.reissuedAs
-        ? `Already re-issued as ${original.reissuedAs.number}`
-        : null;
+    : correctId
+      ? original.copyNo
+        ? 'Correct the original certificate; duplicates printed after it carry the correction'
+        : original.status !== 'issued'
+          ? 'A cancelled certificate is not corrected'
+          : !original.correctionsKeepNumber
+            ? 'This school gives a corrected certificate a new number: use Re-issue with changes'
+            : null
+      : original.copyNo
+        ? 'Re-issue the original certificate; its duplicates go with it'
+        : original.reissuedAs
+          ? `Already re-issued as ${original.reissuedAs.number}`
+          : null;
   let preview: CertificatePreview | null = null;
   let previewError: string | null = null;
   if (type && personId)
@@ -116,10 +131,14 @@ export default async function IssueCertificatePage({
       previewError = e.problem.detail ?? e.problem.type;
     }
   const failed = preview?.checks.filter((x) => !x.ok) ?? [];
-  const blocked = !!preview && (preview.held || (failed.length > 0 && !preview.can.override));
+  const correcting = !!correctId && !!original && !reissueBlocked;
+  // a correction: the certificate was issued; its checks are shown, not a bar
+  const blocked =
+    !correcting && !!preview && (preview.held || (failed.length > 0 && !preview.can.override));
   const asksPurpose = type ? type.code !== 'TC' : false;
   const who = staff ? 'employee' : 'student';
-  const reissuing = !!original && !reissueBlocked;
+  const reissuing = !!original && !reissueBlocked && !correcting;
+  const editing = reissuing || correcting;
   // this page as it is, for coming back after a refusal or a fresh sign-in
   const here = `/certificates/issue?${new URLSearchParams(
     Object.entries(sp).filter(
@@ -134,11 +153,19 @@ export default async function IssueCertificatePage({
       />
       <PageHeader
         kicker="Certificates"
-        title={reissuing ? `Re-issue ${original!.number} with changes` : 'Issue a certificate'}
+        title={
+          correcting
+            ? `Correct ${original!.number}`
+            : reissuing
+              ? `Re-issue ${original!.number} with changes`
+              : 'Issue a certificate'
+        }
         description={
-          reissuing
-            ? 'Correct what is wrong — the purpose, the details typed at issue, the date or the layout — look at the paper, then re-issue. It gets a new number; the earlier one is cancelled in the same step.'
-            : "Choose the type and the person, look at the checks and the paper, then issue. The number is the type's next for the year and is never given again."
+          correcting
+            ? `Correct what is wrong — the purpose, the details typed at issue, the date or the layout; the person's details, the signatory and the layout print as they are now. It keeps its number and becomes revision ${String(original!.revision + 1)}; the earlier paper stays in its change log.`
+            : reissuing
+              ? 'Correct what is wrong — the purpose, the details typed at issue, the date or the layout — look at the paper, then re-issue. It gets a new number; the earlier one is cancelled in the same step.'
+              : "Choose the type and the person, look at the checks and the paper, then issue. The number is the type's next for the year and is never given again."
         }
       />
       <Notice params={sp} />
@@ -146,6 +173,12 @@ export default async function IssueCertificatePage({
         <div className="ep-alert ep-alert--danger" role="alert">
           {reissueBlocked}.{' '}
           {original ? <a href={`/certificates/${original.id}`}>Back to {original.number}</a> : null}
+        </div>
+      ) : correcting ? (
+        <div className="ep-alert ep-alert--info" role="status">
+          Correcting <a href={`/certificates/${original!.id}`}>{original!.number}</a>: the same
+          number, revision {String(original!.revision + 1)}. Its paper prints &ldquo;Revision{' '}
+          {String(original!.revision + 1)} · corrected on …&rdquo; and its QR check says so.
         </div>
       ) : reissuing ? (
         <div className="ep-alert ep-alert--info" role="status">
@@ -164,7 +197,7 @@ export default async function IssueCertificatePage({
       <div className="ep-cert-issue">
         <Card>
           <h2 className="ep-card__title">1. Certificate and {staff ? 'employee' : 'student'}</h2>
-          {reissuing ? (
+          {editing ? (
             <p style={{ margin: 0 }}>
               <strong>{type?.name ?? original!.typeName}</strong> · {original!.studentName} ·{' '}
               {original!.admissionNo}
@@ -203,7 +236,7 @@ export default async function IssueCertificatePage({
             </p>
           ) : null}
         </Card>
-        {!type || !personId ? (
+        {reissueBlocked ? null : !type || !personId ? (
           <Card>
             <p className="ep-field__help" style={{ margin: 0 }}>
               {!type
@@ -249,14 +282,24 @@ export default async function IssueCertificatePage({
             <Card>
               <h2 className="ep-card__title">3. What it prints</h2>
               <form
-                action={reissuing ? reissueCertificate : issueCertificate}
+                action={
+                  correcting
+                    ? correctCertificate
+                    : reissuing
+                      ? reissueCertificate
+                      : issueCertificate
+                }
                 className="ep-cert-form"
               >
                 <input type="hidden" name="type" value={type.code} />
-                {reissuing ? (
+                {editing ? (
                   <>
                     <input type="hidden" name="id" value={original!.id} />
-                    <input type="hidden" name="reissue" value={original!.id} />
+                    <input
+                      type="hidden"
+                      name={correcting ? 'correct' : 'reissue'}
+                      value={original!.id}
+                    />
                     <input type="hidden" name="changes" value="1" />
                     <input type="hidden" name="returnTo" value={here} />
                   </>
@@ -373,9 +416,11 @@ export default async function IssueCertificatePage({
                     </span>
                   </label>
                 ) : null}
-                {reissuing ? (
+                {editing ? (
                   <label className="ep-field" htmlFor="reason">
-                    <span className="ep-field__label">Why it is re-issued *</span>
+                    <span className="ep-field__label">
+                      {correcting ? 'Why it is corrected *' : 'Why it is re-issued *'}
+                    </span>
                     <textarea
                       id="reason"
                       name="reason"
@@ -387,13 +432,19 @@ export default async function IssueCertificatePage({
                       placeholder="e.g. the purpose was typed wrong"
                     />
                     <span className="ep-field__help">
-                      Recorded on {original!.number} as the reason it was cancelled.
+                      {correcting
+                        ? `Recorded in the change log of ${original!.number}, with what changed.`
+                        : `Recorded on ${original!.number} as the reason it was cancelled.`}
                     </span>
                   </label>
                 ) : null}
                 <div style={{ display: 'flex', gap: 'var(--sp-2)', flexWrap: 'wrap' }}>
                   <Button type="submit" disabled={blocked}>
-                    {reissuing ? 'Re-issue with these changes' : `Issue ${type.name.toLowerCase()}`}
+                    {correcting
+                      ? `Save as revision ${String(original!.revision + 1)}`
+                      : reissuing
+                        ? 'Re-issue with these changes'
+                        : `Issue ${type.name.toLowerCase()}`}
                   </Button>
                   <button
                     type="submit"
