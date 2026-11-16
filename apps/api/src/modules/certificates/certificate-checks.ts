@@ -58,6 +58,8 @@ export interface CheckInput {
   yearCode: string | null;
   /** the student's fee ledger, read by the caller (null: no ledger) */
   ledger: Ledger | null;
+  /** a certificate being re-issued: not counted as one already held (it is cancelled first) */
+  exceptId?: string | null;
 }
 
 /** The checks of a staff certificate: the employee's state, library, one live certificate. */
@@ -102,8 +104,9 @@ async function runStaffChecks(c: PoolClient, i: CheckInput): Promise<Certificate
       `SELECT number FROM certificates
         WHERE type_id = $1 AND employee_id = $2 AND status = 'issued' AND copy_no = 0
           AND ($3::text = 'ONE' OR year_code IS NOT DISTINCT FROM $4::text)
+          AND ($5::bigint IS NULL OR id <> $5::bigint)
         ORDER BY issued_on DESC LIMIT 1`,
-      [i.typeId, i.studentId, i.multiple, i.yearCode],
+      [i.typeId, i.studentId, i.multiple, i.yearCode, i.exceptId ?? null],
     );
     const held = r.rows[0]?.number;
     push(
@@ -260,8 +263,9 @@ export async function runChecks(c: PoolClient, i: CheckInput): Promise<Certifica
       `SELECT number FROM certificates
         WHERE type_id = $1 AND student_id = $2 AND status = 'issued' AND copy_no = 0
           AND ($3::text = 'ONE' OR year_code IS NOT DISTINCT FROM $4::text)
+          AND ($5::bigint IS NULL OR id <> $5::bigint)
         ORDER BY issued_on DESC LIMIT 1`,
-      [i.typeId, i.studentId, i.multiple, i.yearCode],
+      [i.typeId, i.studentId, i.multiple, i.yearCode, i.exceptId ?? null],
     );
     const held = r.rows[0]?.number;
     push(

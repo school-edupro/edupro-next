@@ -544,3 +544,22 @@ Tests: `certificates.e2e-spec.ts` (an empty list with those on the rolls first; 
 left first; employees listed; one letter allowed). A browser pass at 1440 and 375 px: the dropdown follows the
 certificate, filters by class, keyboard choice loads the preview, a staff type lists employees (not the students of
 before) — nothing issued.
+
+## Re-issue with changes (16 Nov 2026)
+
+A re-issue copied the purpose and the typed details, so a mistake there meant cancel and issue again; the user asked
+for a re-issue with changes.
+
+- **API**: `POST /certificates/:id/reissue` (`ReissueDto`) also takes `purpose` ("" prints none), `fields` (all of
+  them), `issuedOn`, `variant` and a new `overrideReason`; what is not sent stays as on the certificate. The preview
+  and issue take `reissueOf`: the "one a person / a year" check (`exceptId`) does not count the certificate being
+  replaced. A refused value (a detail not in its list …) leaves both as they were.
+- **Admin**: on a certificate's page **Re-issue with changes** (a cancelled original not re-issued: **Issue again with
+  changes**) opens the Issue page with `reissue=<id>`, the type, the person, the purpose, its layout and the typed
+  details: the title and a note say what happens; the certificate and person are fixed; the checks, fields and paper
+  as for an issue; a required reason; **Re-issue with these changes** posts to the re-issue (`changes=1`), and a
+  refusal or a fresh sign-in comes back to the same page. The detail carries its template's id for the layout.
+
+Tests: `certificates.e2e-spec.ts` (a one-a-person type: the preview holds without `reissueOf` and not with it; a value
+outside the list refused with nothing changed; purpose, a typed detail and the date corrected; the old cancelled and
+linked). A browser pass at 1440 and 375 px from the button to the filled page and the posted changes (stopped).

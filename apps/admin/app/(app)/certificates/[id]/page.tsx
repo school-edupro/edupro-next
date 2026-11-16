@@ -11,7 +11,7 @@ import {
   duplicateCertificate,
   reissueCertificate,
 } from '@/lib/certificate-actions';
-import { dmy, type Certificate, type CertificateDetail } from '@/lib/certificates';
+import { FIELD_PREFIX, dmy, type Certificate, type CertificateDetail } from '@/lib/certificates';
 
 const OK: Record<string, string> = {
   issued: 'Issued. The PDF is being made.',
@@ -83,6 +83,20 @@ export default async function CertificatePage({
         .catch(() => null)
     : null;
   const making = exportStatus === 'queued' || exportStatus === 'running';
+  // re-issue with changes: the issue page filled in with this certificate (purpose, typed details, layout)
+  const changesLink = (() => {
+    const u = new URLSearchParams({ type: x.typeCode, reissue: x.id });
+    if (x.employeeId) u.set('employee', x.employeeId);
+    else if (x.studentId) u.set('student', x.studentId);
+    if (x.purpose) u.set('purpose', x.purpose);
+    if (x.template?.id) u.set('variant', x.template.id);
+    const typed = x.data.fields;
+    if (typed && typeof typed === 'object' && !Array.isArray(typed))
+      for (const [k, v] of Object.entries(typed as Record<string, unknown>))
+        if (/^[a-zA-Z]{2,30}$/.test(k) && (typeof v === 'string' || typeof v === 'number'))
+          u.set(`${FIELD_PREFIX}${k}`, String(v));
+    return `/certificates/issue?${u.toString()}`;
+  })();
   return (
     <>
       <Breadcrumbs
@@ -356,6 +370,11 @@ export default async function CertificatePage({
           </p>
           <div style={{ display: 'flex', gap: 'var(--sp-2)', flexWrap: 'wrap' }}>
             {x.can.issue && x.can.cancel && !x.copyNo && !x.reissuedAs ? (
+              <a className="ep-btn ep-btn--secondary ep-btn--sm" href={changesLink}>
+                Re-issue with changes
+              </a>
+            ) : null}
+            {x.can.issue && x.can.cancel && !x.copyNo && !x.reissuedAs ? (
               <ConfirmAction
                 action={reissueCertificate}
                 fields={{ id: x.id }}
@@ -433,7 +452,10 @@ export default async function CertificatePage({
           >
             The same type, {x.employeeId ? 'employee' : 'student'}, purpose and details; a new
             number.
-          </ConfirmAction>
+          </ConfirmAction>{' '}
+          <a className="ep-btn ep-btn--ghost ep-btn--sm" href={changesLink}>
+            Issue again with changes
+          </a>
         </FoldCard>
       ) : null}
     </>

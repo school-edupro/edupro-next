@@ -64,6 +64,11 @@ and the person's details. A later change in the set-up does not alter it. On a c
 
 - **Print a duplicate** (with a reason, e.g. the original was lost): the same number and paper,
   printed **DUPLICATE (copy 1)**, then copy 2 …
+- **Re-issue with changes**: the Issue page opens filled in with this certificate — the certificate and the
+  person stay fixed; correct the purpose, the details typed at issue, the date (today when left empty) or
+  the layout, **Update the preview** to see the paper, say why, then **Re-issue with these changes**. A new
+  number; the earlier one is cancelled in the same step. If the person holds only one of this kind, the one
+  being replaced does not count.
 - **Re-issue with today's settings** (with a reason, e.g. issued before the signatory was set): a new
   certificate with a new number for the same person, purpose, layout and details, printed with the
   signatory, layout and school details as they are now, after the type's checks. The earlier one (and its
@@ -74,7 +79,8 @@ and the person's details. A later change in the set-up does not alter it. On a c
   cancelled too. The number is not given again. Cancelling a TC does not put the student back on the
   rolls: revoke the withdrawal for that.
 
-A cancelled certificate that was not re-issued has **Issue again with today's settings**. In the
+A cancelled certificate that was not re-issued has **Issue again with today's settings** and **Issue
+again with changes**. In the
 register, **Re-issue** and **Re-issued** mark the two.
 
 ## The register

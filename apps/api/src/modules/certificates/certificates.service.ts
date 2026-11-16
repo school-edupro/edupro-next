@@ -28,6 +28,7 @@ import {
   CERTIFICATE,
   type CertificatesFileQueryDto,
   type IssueCertificateDto,
+  type ReissueDto,
   type ListCertificatesQueryDto,
   type PreviewCertificateDto,
   type TemplatePreviewDto,
@@ -687,6 +688,7 @@ export class CertificatesService {
       };
       const checks = await runChecks(c, {
         audience: 'STAFF',
+        exceptId: dto.reissueOf ?? null,
         studentId: dto.employeeId,
         typeId: type.id,
         rules: type.rules,
@@ -764,6 +766,7 @@ export class CertificatesService {
       ...given,
     };
     const checks = await runChecks(c, {
+      exceptId: dto.reissueOf ?? null,
       studentId,
       typeId: type.id,
       rules: type.rules,
@@ -1318,7 +1321,12 @@ export class CertificatesService {
    * earlier one is cancelled in the same step (or was already) and the two point to each other. A failed check or a
    * missing detail leaves both as they were.
    */
-  async reissue(ctx: RequestContext, id: string, reason: string): Promise<CertificateRow> {
+  async reissue(
+    ctx: RequestContext,
+    id: string,
+    reason: string,
+    changes: Omit<ReissueDto, 'reason'> = {},
+  ): Promise<CertificateRow> {
     const o = await this.db.tenant(requireTenant(ctx), async (c) => {
       const r = await c.query<{
         status: string;
@@ -1369,16 +1377,20 @@ export class CertificatesService {
     const variants = Array.isArray(o.variants)
       ? (o.variants as Array<{ templateId?: string }>)
       : [];
+    // with changes: what was corrected; the rest as on the certificate
     const variant =
-      o.template_id &&
+      changes.variant ??
+      (o.template_id &&
       o.template_id !== o.type_template &&
       variants.some((v) => v.templateId === o.template_id)
         ? o.template_id
-        : undefined;
+        : undefined);
     const fields =
-      o.fields && typeof o.fields === 'object' && !Array.isArray(o.fields)
+      changes.fields ??
+      (o.fields && typeof o.fields === 'object' && !Array.isArray(o.fields)
         ? (o.fields as IssueCertificateDto['fields'])
-        : {};
+        : {});
+    const purpose = changes.purpose !== undefined ? changes.purpose : o.purpose;
     const why = `Re-issued with today's settings: ${reason}`.slice(0, 300);
     return this.issue(
       ctx,
@@ -1387,10 +1399,13 @@ export class CertificatesService {
         ...(o.student_id ? { studentId: o.student_id } : {}),
         ...(o.employee_id ? { employeeId: o.employee_id } : {}),
         ...(variant ? { variant } : {}),
-        ...(o.purpose ? { purpose: o.purpose } : {}),
-        // issued past a failed check: if it still fails, the principal's reason carries over — the override right
-        // and a fresh sign-in are still asked, as at issue
-        ...(o.override_reason ? { overrideReason: o.override_reason } : {}),
+        ...(purpose ? { purpose } : {}),
+        ...(changes.issuedOn ? { issuedOn: changes.issuedOn } : {}),
+        // issued past a failed check: if it still fails, the principal's reason (a new one, or the one it had)
+        // carries over — the override right and a fresh sign-in are still asked, as at issue
+        ...((changes.overrideReason ?? o.override_reason)
+          ? { overrideReason: changes.overrideReason ?? o.override_reason! }
+          : {}),
         fields,
       } as IssueCertificateDto,
       {
@@ -1573,8 +1588,9 @@ export class CertificatesService {
         data: Record<string, unknown>;
         version: number | null;
         template: string | null;
+        template_id: string | null;
       }>(
-        `SELECT x.data, v.version, dt.name AS template
+        `SELECT x.data, v.version, dt.name AS template, dt.id::text AS template_id
            FROM certificates x LEFT JOIN document_template_versions v ON v.id = x.template_version_id
            LEFT JOIN document_templates dt ON dt.id = v.template_id
           WHERE x.id = $1`,
@@ -1585,7 +1601,7 @@ export class CertificatesService {
         copies: copies.rows.map(toRow),
         data: d.rows[0]?.data ?? {},
         template: d.rows[0]?.template
-          ? { name: d.rows[0].template, version: d.rows[0].version }
+          ? { id: d.rows[0].template_id, name: d.rows[0].template, version: d.rows[0].version }
           : null,
         can: this.can(ctx),
       };

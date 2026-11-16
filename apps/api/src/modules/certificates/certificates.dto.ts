@@ -29,6 +29,8 @@ const PreviewBase = z.object({
   issuedOn: DateSchema.optional(),
   purpose: z.string().trim().max(200).optional(),
   fields: Fields,
+  /** a re-issue with changes (16 Nov 2026): the certificate it replaces, not counted as one already held */
+  reissueOf: IdSchema.optional(),
 });
 const onePerson = (v: { studentId?: string; employeeId?: string }) =>
   !(v.studentId && v.employeeId);
@@ -49,6 +51,20 @@ export const ReasonSchema = z.object({
   reason: z.string().trim().min(3, 'at least 3 characters').max(300),
 });
 export class ReasonDto extends createZodDto(ReasonSchema) {}
+/**
+ * A re-issue (16 Nov 2026): the reason, and — "with changes" — what is corrected: the purpose ("" to print none),
+ * the typed details (all of them), the date of issue, the layout, the principal's reason for a check not clear.
+ */
+export const ReissueSchema = ReasonSchema.extend({
+  purpose: z.string().trim().max(200).optional(),
+  fields: z
+    .record(z.string().regex(/^[a-zA-Z]{2,30}$/), z.union([z.string().trim().max(500), z.number()]))
+    .optional(),
+  issuedOn: DateSchema.optional(),
+  variant: IdSchema.optional(),
+  overrideReason: z.string().trim().min(10, 'at least 10 characters').max(300).optional(),
+});
+export class ReissueDto extends createZodDto(ReissueSchema) {}
 
 export const ListCertificatesQuerySchema = z.object({
   type: TypeCode.optional(),

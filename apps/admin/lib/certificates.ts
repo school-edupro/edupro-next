@@ -100,7 +100,7 @@ export interface CertificateList {
 export interface CertificateDetail extends Certificate {
   copies: Certificate[];
   data: Record<string, unknown>;
-  template: { name: string; version: number | null } | null;
+  template: { id: string | null; name: string; version: number | null } | null;
   can: CertificateCan;
 }
 

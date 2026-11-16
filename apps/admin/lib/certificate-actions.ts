@@ -106,17 +106,36 @@ export async function cancelCertificate(fd: FormData) {
 export async function reissueCertificate(fd: FormData) {
   const id = str(fd, 'id');
   if (!okId(id)) return;
+  // with changes (the issue page in re-issue mode): what was corrected there; else as on the certificate
+  const withChanges = str(fd, 'changes') === '1';
+  const b = withChanges ? issueBody(fd) : null;
   let made: { id: string };
   try {
     made = await apiFetch<{ id: string }>(`/certificates/${id}/reissue`, {
       method: 'POST',
-      body: JSON.stringify({ reason: str(fd, 'reason') }),
+      body: JSON.stringify({
+        reason: str(fd, 'reason'),
+        ...(b
+          ? {
+              purpose: str(fd, 'purpose'),
+              fields: b.fields,
+              ...(b.issuedOn ? { issuedOn: b.issuedOn } : {}),
+              ...('variant' in b && b.variant ? { variant: b.variant } : {}),
+              ...(b.overrideReason ? { overrideReason: b.overrideReason } : {}),
+            }
+          : {}),
+      }),
     });
   } catch (e) {
     // carrying over a principal's reason asks for a fresh sign-in first, as at issue
+    const page = str(fd, 'returnTo').startsWith('/certificates/issue?')
+      ? str(fd, 'returnTo')
+      : `/certificates/${id}`;
     if (e instanceof ApiError && e.problem.type === 'mfa-required')
-      redirect(`/step-up?returnTo=${encodeURIComponent(`/certificates/${id}?open=actions`)}`);
-    if (e instanceof ApiError) back(`/certificates/${id}`, e);
+      redirect(
+        `/step-up?returnTo=${encodeURIComponent(withChanges ? page : `/certificates/${id}?open=actions`)}`,
+      );
+    if (e instanceof ApiError) back(page, e);
     throw e;
   }
   revalidatePath('/certificates');

@@ -3,10 +3,11 @@ import { notFound } from 'next/navigation';
 import { IssuePicker } from '@/components/certificates/IssuePicker';
 import { Notice } from '@/components/Notice';
 import { ApiError, apiFetch, getMe } from '@/lib/api';
-import { issueCertificate } from '@/lib/certificate-actions';
+import { issueCertificate, reissueCertificate } from '@/lib/certificate-actions';
 import {
   FIELD_PREFIX,
   fitPaper,
+  type CertificateDetail,
   type CertificatePreview,
   type CertificateType,
 } from '@/lib/certificates';
@@ -80,6 +81,20 @@ export default async function IssueCertificatePage({
   const variant = id(sp.variant);
   // answering a request (phase C): it travels with the form and the issue marks it issued
   const requestId = id(sp.request ?? sp.requestId);
+  // re-issue with changes (16 Nov 2026): the certificate being corrected; the type and person stay its own
+  const reissueId = id(sp.reissue);
+  const original = reissueId
+    ? await apiFetch<CertificateDetail>(`/certificates/${reissueId}`).catch(() => null)
+    : null;
+  const reissueBlocked = !original
+    ? reissueId
+      ? 'That certificate was not found'
+      : null
+    : original.copyNo
+      ? 'Re-issue the original certificate; its duplicates go with it'
+      : original.reissuedAs
+        ? `Already re-issued as ${original.reissuedAs.number}`
+        : null;
   let preview: CertificatePreview | null = null;
   let previewError: string | null = null;
   if (type && personId)
@@ -93,6 +108,7 @@ export default async function IssueCertificatePage({
           purpose: purpose || undefined,
           issuedOn: issuedOn || undefined,
           fields,
+          ...(original && !reissueBlocked ? { reissueOf: original.id } : {}),
         }),
       });
     } catch (e) {
@@ -103,6 +119,14 @@ export default async function IssueCertificatePage({
   const blocked = !!preview && (preview.held || (failed.length > 0 && !preview.can.override));
   const asksPurpose = type ? type.code !== 'TC' : false;
   const who = staff ? 'employee' : 'student';
+  const reissuing = !!original && !reissueBlocked;
+  // this page as it is, for coming back after a refusal or a fresh sign-in
+  const here = `/certificates/issue?${new URLSearchParams(
+    Object.entries(sp).filter(
+      (e): e is [string, string] =>
+        typeof e[1] === 'string' && !['ok', 'error', 'detail'].includes(e[0]),
+    ),
+  ).toString()}`;
   return (
     <>
       <Breadcrumbs
@@ -110,10 +134,27 @@ export default async function IssueCertificatePage({
       />
       <PageHeader
         kicker="Certificates"
-        title="Issue a certificate"
-        description="Choose the type and the person, look at the checks and the paper, then issue. The number is the type's next for the year and is never given again."
+        title={reissuing ? `Re-issue ${original!.number} with changes` : 'Issue a certificate'}
+        description={
+          reissuing
+            ? 'Correct what is wrong — the purpose, the details typed at issue, the date or the layout — look at the paper, then re-issue. It gets a new number; the earlier one is cancelled in the same step.'
+            : "Choose the type and the person, look at the checks and the paper, then issue. The number is the type's next for the year and is never given again."
+        }
       />
       <Notice params={sp} />
+      {reissueBlocked ? (
+        <div className="ep-alert ep-alert--danger" role="alert">
+          {reissueBlocked}.{' '}
+          {original ? <a href={`/certificates/${original.id}`}>Back to {original.number}</a> : null}
+        </div>
+      ) : reissuing ? (
+        <div className="ep-alert ep-alert--info" role="status">
+          Re-issuing <a href={`/certificates/${original!.id}`}>{original!.number}</a>
+          {original!.status === 'issued'
+            ? ': it is cancelled when the new one is issued, and each points to the other.'
+            : ' (cancelled): the new one points to it.'}
+        </div>
+      ) : null}
       {requestId ? (
         <div className="ep-alert ep-alert--info" role="status">
           Answering <a href={`/certificates/requests/${requestId}`}>request {requestId}</a>: issuing
@@ -123,27 +164,38 @@ export default async function IssueCertificatePage({
       <div className="ep-cert-issue">
         <Card>
           <h2 className="ep-card__title">1. Certificate and {staff ? 'employee' : 'student'}</h2>
-          <IssuePicker
-            key={type?.code ?? ''}
-            types={types.map((t) => ({
-              code: t.code,
-              name: t.name,
-              staff: t.audience === 'STAFF',
-            }))}
-            type={type?.code ?? ''}
-            person={
-              preview && personId
-                ? {
-                    id: personId,
-                    name: preview.person.name,
-                    no: preview.person.no,
-                    detail: null,
-                    left: false,
-                  }
-                : null
-            }
-            keep={requestId ? { request: requestId } : {}}
-          />
+          {reissuing ? (
+            <p style={{ margin: 0 }}>
+              <strong>{type?.name ?? original!.typeName}</strong> · {original!.studentName} ·{' '}
+              {original!.admissionNo}
+              <span className="ep-field__help" style={{ display: 'block' }}>
+                The certificate and the person stay as they were; to change them, cancel it and
+                issue a new one.
+              </span>
+            </p>
+          ) : (
+            <IssuePicker
+              key={type?.code ?? ''}
+              types={types.map((t) => ({
+                code: t.code,
+                name: t.name,
+                staff: t.audience === 'STAFF',
+              }))}
+              type={type?.code ?? ''}
+              person={
+                preview && personId
+                  ? {
+                      id: personId,
+                      name: preview.person.name,
+                      no: preview.person.no,
+                      detail: null,
+                      left: false,
+                    }
+                  : null
+              }
+              keep={requestId ? { request: requestId } : {}}
+            />
+          )}
           {type ? (
             <p className="ep-field__help">
               <strong>{type.name}</strong> checks: {rulesText(type)}.
@@ -196,8 +248,19 @@ export default async function IssueCertificatePage({
             </Card>
             <Card>
               <h2 className="ep-card__title">3. What it prints</h2>
-              <form action={issueCertificate} className="ep-cert-form">
+              <form
+                action={reissuing ? reissueCertificate : issueCertificate}
+                className="ep-cert-form"
+              >
                 <input type="hidden" name="type" value={type.code} />
+                {reissuing ? (
+                  <>
+                    <input type="hidden" name="id" value={original!.id} />
+                    <input type="hidden" name="reissue" value={original!.id} />
+                    <input type="hidden" name="changes" value="1" />
+                    <input type="hidden" name="returnTo" value={here} />
+                  </>
+                ) : null}
                 {requestId ? <input type="hidden" name="requestId" value={requestId} /> : null}
                 {staff ? (
                   <input type="hidden" name="employee" value={employeeId} />
@@ -310,9 +373,27 @@ export default async function IssueCertificatePage({
                     </span>
                   </label>
                 ) : null}
+                {reissuing ? (
+                  <label className="ep-field" htmlFor="reason">
+                    <span className="ep-field__label">Why it is re-issued *</span>
+                    <textarea
+                      id="reason"
+                      name="reason"
+                      className="ep-input"
+                      rows={2}
+                      minLength={3}
+                      maxLength={250}
+                      required
+                      placeholder="e.g. the purpose was typed wrong"
+                    />
+                    <span className="ep-field__help">
+                      Recorded on {original!.number} as the reason it was cancelled.
+                    </span>
+                  </label>
+                ) : null}
                 <div style={{ display: 'flex', gap: 'var(--sp-2)', flexWrap: 'wrap' }}>
                   <Button type="submit" disabled={blocked}>
-                    Issue {type.name.toLowerCase()}
+                    {reissuing ? 'Re-issue with these changes' : `Issue ${type.name.toLowerCase()}`}
                   </Button>
                   <button
                     type="submit"

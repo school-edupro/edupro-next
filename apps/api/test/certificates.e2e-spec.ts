@@ -819,4 +819,81 @@ describe('certificate register (e2e)', () => {
       reissueOf: { id: past.id },
     });
   });
+
+  it('re-issues with changes: the purpose, a typed detail and the date corrected; one-a-person is no bar', async () => {
+    const ch = (
+      await inject({
+        method: 'GET',
+        url: '/certificates?type=CHARACTER&status=issued&copy=original',
+        headers: h(),
+      })
+    ).json().rows[0] as { id: string; number: string; studentId: string };
+    // the type allows one a person: the student holds this one, but a re-issue replaces it
+    await withMigrator((c) =>
+      c.query(
+        `UPDATE certificate_types SET multiple = 'ONE' WHERE school_id = $1 AND code = 'CHARACTER'`,
+        [school.id],
+      ),
+    );
+    const held = await inject({
+      method: 'POST',
+      url: '/certificates/preview',
+      headers: h(office),
+      json: { typeCode: 'CHARACTER', studentId: ch.studentId, fields: { conduct: 'Good' } },
+    });
+    expect(held.json().held).toBe(true);
+    const aside = await inject({
+      method: 'POST',
+      url: '/certificates/preview',
+      headers: h(office),
+      json: {
+        typeCode: 'CHARACTER',
+        studentId: ch.studentId,
+        fields: { conduct: 'Good' },
+        reissueOf: ch.id,
+      },
+    });
+    expect(aside.json().held).toBe(false);
+    // a wrong value is refused and nothing changes
+    const bad = await inject({
+      method: 'POST',
+      url: `/certificates/${ch.id}/reissue`,
+      headers: h(office),
+      json: { reason: 'Conduct typed wrong', fields: { conduct: 'Wonderful' } },
+    });
+    expect(bad.statusCode).toBe(400);
+    expect(
+      (await inject({ method: 'GET', url: `/certificates/${ch.id}`, headers: h() })).json().status,
+    ).toBe('issued');
+    const r = await inject({
+      method: 'POST',
+      url: `/certificates/${ch.id}/reissue`,
+      headers: h(office),
+      json: {
+        reason: 'Conduct and purpose typed wrong',
+        purpose: 'Scholarship form',
+        fields: { conduct: 'Good' },
+        issuedOn: '2026-11-01',
+      },
+    });
+    expect(r.statusCode).toBe(201);
+    expect(r.json()).toMatchObject({
+      purpose: 'Scholarship form',
+      issuedOn: '2026-11-01',
+      reissueOf: { id: ch.id, number: ch.number },
+    });
+    const now = (
+      await inject({ method: 'GET', url: `/certificates/${r.json().id as string}`, headers: h() })
+    ).json();
+    expect(now.data.fields).toMatchObject({ conduct: 'Good' });
+    expect(
+      (await inject({ method: 'GET', url: `/certificates/${ch.id}`, headers: h() })).json(),
+    ).toMatchObject({ status: 'cancelled', reissuedAs: { id: r.json().id } });
+    await withMigrator((c) =>
+      c.query(
+        `UPDATE certificate_types SET multiple = 'ANY' WHERE school_id = $1 AND code = 'CHARACTER'`,
+        [school.id],
+      ),
+    );
+  });
 });

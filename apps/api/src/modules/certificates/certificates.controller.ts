@@ -9,6 +9,7 @@ import {
   ListCertificatesQueryDto,
   PreviewCertificateDto,
   ReasonDto,
+  ReissueDto,
   StudentSearchQueryDto,
 } from './certificates.dto';
 import { CertificatesService } from './certificates.service';
@@ -119,8 +120,9 @@ export class CertificatesController {
       "Re-issue with today's settings: a new certificate (new number) for the same person, type, purpose and details, printed as things are now; an issued one is cancelled in the same step",
   })
   @RequirePermission(CERTIFICATE.issue)
-  reissue(@ReqCtx() ctx: RequestContext, @Param('id') id: string, @Body() body: ReasonDto) {
-    return this.certificates.reissue(ctx, id, body.reason);
+  reissue(@ReqCtx() ctx: RequestContext, @Param('id') id: string, @Body() body: ReissueDto) {
+    const { reason, ...changes } = body;
+    return this.certificates.reissue(ctx, id, reason, changes);
   }
 
   @Post(':id/cancel')
