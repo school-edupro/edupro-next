@@ -525,3 +525,22 @@ per section, only the ticked; the run's page; the ZIP refused while a PDF is bei
 staff: departments with in service / left, a batch per department, those who have left). A browser pass at 1440 and
 375 px on the pickers, the preview ticks, the run page (a throwaway run), the issue's posted ticks caught and
 stopped — nothing issued on Alpha.
+
+## Issue: the person from a dropdown that follows the certificate (16 Nov 2026)
+
+The issue page asked "Find the student" with a Find button and a reload, and still said "student" for a staff type;
+the user asked for the person to be a dropdown according to the certificate.
+
+- **API**: `GET /certificates/students` and `/certificates/employees` take an empty `q` (the first 50: students on
+  the rolls in class, section and roll order; employees in service) and an optional `type`: those its rule wants come
+  first (`state: leaving` — a TC, an experience certificate — those who have left or whose withdrawal is cleared or
+  complete). Students also match a class ("VI-A", "Class VI – A"); employees a designation or department.
+- **Admin**: `IssuePicker` (step 1): the certificate (student types, then staff) and a combobox labelled Student or
+  Employee — opens on click, filters as you type through `GET /api/certificates-people`, arrow keys and Enter, each
+  row with its number and class (designation · department) and **Left**; choosing one loads the checks and the paper.
+  The picker starts afresh when the certificate changes (`key` = the type).
+
+Tests: `certificates.e2e-spec.ts` (an empty list with those on the rolls first; by class; a TC wants the one who has
+left first; employees listed; one letter allowed). A browser pass at 1440 and 375 px: the dropdown follows the
+certificate, filters by class, keyboard choice loads the preview, a staff type lists employees (not the students of
+before) — nothing issued.

@@ -70,7 +70,14 @@ export const CertificatesFileQuerySchema = ListCertificatesQuerySchema.extend({
 });
 export class CertificatesFileQueryDto extends createZodDto(CertificatesFileQuerySchema) {}
 
-export const StudentSearchQuerySchema = z.object({ q: z.string().trim().min(2).max(80) });
+/**
+ * The issue page's people list (16 Nov 2026): empty lists the first ones (students on the rolls in class order;
+ * employees in service); `type` puts those its rule wants first (e.g. those who have left, for a TC).
+ */
+export const StudentSearchQuerySchema = z.object({
+  q: z.string().trim().max(80).default(''),
+  type: TypeCode.optional(),
+});
 export class StudentSearchQueryDto extends createZodDto(StudentSearchQuerySchema) {}
 
 // ---- set-up (phase B) ----------------------------------------------------------------------------------------------

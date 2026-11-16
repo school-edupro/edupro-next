@@ -24,10 +24,13 @@ header and from a student's profile (**Status** tab → Certificates card, or **
 
 ## Issuing a certificate
 
-1. **Type and person.** Choose the certificate, then find the student by name or admission number (a
-   staff certificate: the employee by name or employee code); past students and staff are found too
-   (marked **Left**). A type with more than one layout (bonafide: with both parents or the father only)
-   asks which.
+1. **Certificate and person.** Choose the certificate; the next box follows it — **Student** for a student
+   certificate, **Employee** for a staff one. Click it for the list (students on the rolls in class, section
+   and roll order; employees in service), or type to narrow it: a name, admission no. or class (e.g. VI-A);
+   for staff a name, employee code, designation or department. Those the certificate wants come first —
+   for a TC or an experience certificate, those who have left (marked **Left**). Choose one (or use the
+   arrow keys and Enter) to see the checks and the paper. A type with more than one layout (bonafide:
+   with both parents or the father only) asks which.
 2. **Checks.** Each type checks what it needs before it can be issued:
 
    | Certificate   | Checks                                                                                                                                                     |

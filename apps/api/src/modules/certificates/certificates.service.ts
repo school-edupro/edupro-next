@@ -1661,8 +1661,24 @@ export class CertificatesService {
   }
 
   /** Students to issue to (on the rolls or past), by name or admission no., for the issue screen. */
-  async students(ctx: RequestContext, q: string) {
+  /** The state a type's rule wants first in the people list: those in service / on the rolls, or those who left. */
+  private async wants(c: PoolClient, typeCode?: string): Promise<'active' | 'leaving'> {
+    if (!typeCode) return 'active';
+    const r = await c.query<{ state: string | null }>(
+      `SELECT rules->>'state' AS state FROM certificate_types WHERE code = $1`,
+      [typeCode],
+    );
+    return r.rows[0]?.state === 'leaving' ? 'leaving' : 'active';
+  }
+
+  /**
+   * Students to issue to (16 Nov 2026: the issue page's dropdown): by name, admission no. or class; empty, the first
+   * ones in class, section and roll order. Those the type's rule wants come first (on the rolls, or — a TC — those
+   * whose withdrawal is complete or who have left).
+   */
+  async students(ctx: RequestContext, q: string, typeCode?: string) {
     return this.db.tenant(requireTenant(ctx), async (c) => {
+      const wants = await this.wants(c, typeCode);
       const r = await c.query<{
         id: string;
         name: string;
@@ -1671,15 +1687,27 @@ export class CertificatesService {
         class_label: string | null;
         left_on: string | null;
       }>(
-        `SELECT s.id::text, s.display_name AS name, s.admission_no, s.status::text, s.left_on::text,
-                (SELECT c.name || ' – ' || cs.name FROM enrolments e JOIN class_sections cs ON cs.id = e.class_section_id
-                   JOIN classes c ON c.id = cs.class_id JOIN academic_years y ON y.id = e.academic_year_id
-                  WHERE e.student_id = s.id AND e.status <> 'cancelled' ORDER BY y.start_date DESC, e.id DESC LIMIT 1) AS class_label
-           FROM students s
-          WHERE s.deleted_at IS NULL AND s.merged_into_id IS NULL
-            AND (s.display_name ILIKE $1 OR s.admission_no ILIKE $1)
-          ORDER BY (s.status = 'active') DESC, s.display_name LIMIT 20`,
-        [`%${q}%`],
+        `WITH p AS (
+           SELECT s.id, s.display_name AS name, s.admission_no, s.status::text AS status, s.left_on::text AS left_on,
+                  cur.class_label, cur.class_order, cur.section_name, cur.roll_no,
+                  EXISTS (SELECT 1 FROM student_withdrawals w WHERE w.student_id = s.id
+                            AND w.status IN ('cleared', 'completed') AND w.kind IS DISTINCT FROM 'admission_cancelled') AS leaving
+             FROM students s
+             LEFT JOIN LATERAL (
+               SELECT c.name || ' – ' || cs.name AS class_label, c.display_order AS class_order, cs.name AS section_name,
+                      e.roll_no
+                 FROM enrolments e JOIN class_sections cs ON cs.id = e.class_section_id
+                 JOIN classes c ON c.id = cs.class_id JOIN academic_years y ON y.id = e.academic_year_id
+                WHERE e.student_id = s.id AND e.status <> 'cancelled' ORDER BY y.start_date DESC, e.id DESC LIMIT 1
+             ) cur ON true
+            WHERE s.deleted_at IS NULL AND s.merged_into_id IS NULL)
+         SELECT id::text, name, admission_no, status, left_on, class_label FROM p
+          WHERE $1 = '' OR name ILIKE $2 OR admission_no ILIKE $2 OR class_label ILIKE $2
+                OR replace(class_label, ' – ', '-') ILIKE $2
+          ORDER BY (CASE WHEN $3 = 'leaving' THEN (status <> 'active' OR leaving) ELSE status = 'active' END) DESC,
+                   class_order NULLS LAST, class_label NULLS LAST, roll_no NULLS LAST, name
+          LIMIT 50`,
+        [q, `%${q}%`, wants],
       );
       return {
         rows: r.rows.map((x) => ({
@@ -1694,21 +1722,28 @@ export class CertificatesService {
     });
   }
 
-  /** Employees to issue to (in service or past), by name or employee code: staff certificates and the signatory. */
-  async employees(ctx: RequestContext, q: string) {
+  /**
+   * Employees to issue to (in service or past), by name, employee code, designation or department; empty, the first
+   * ones: staff certificates and the signatory. Those the type's rule wants come first (in service, or who have left).
+   */
+  async employees(ctx: RequestContext, q: string, typeCode?: string) {
     return this.db.tenant(requireTenant(ctx), async (c) => {
+      const wants = await this.wants(c, typeCode);
       const r = await c.query<{
         id: string;
         name: string;
         code: string;
         designation: string | null;
+        department: string | null;
         status: string;
       }>(
-        `SELECT id::text, display_name AS name, employee_code AS code, designation, status::text
+        `SELECT id::text, display_name AS name, employee_code AS code, designation, department, status::text
            FROM employees
-          WHERE deleted_at IS NULL AND (display_name ILIKE $1 OR employee_code ILIKE $1)
-          ORDER BY (status = 'active') DESC, display_name LIMIT 20`,
-        [`%${q}%`],
+          WHERE deleted_at IS NULL
+            AND ($1 = '' OR display_name ILIKE $2 OR employee_code ILIKE $2 OR designation ILIKE $2 OR department ILIKE $2)
+          ORDER BY (CASE WHEN $3 = 'leaving' THEN status <> 'active' ELSE status = 'active' END) DESC, display_name
+          LIMIT 50`,
+        [q, `%${q}%`, wants],
       );
       return {
         rows: r.rows.map((x) => ({
@@ -1716,6 +1751,7 @@ export class CertificatesService {
           name: x.name,
           code: x.code,
           designation: x.designation,
+          department: x.department,
           left: x.status !== 'active',
         })),
       };

@@ -75,14 +75,14 @@ export class CertificatesController {
   })
   @RequirePermission(CERTIFICATE.issue)
   students(@ReqCtx() ctx: RequestContext, @Query() q: StudentSearchQueryDto) {
-    return this.certificates.students(ctx, q.q);
+    return this.certificates.students(ctx, q.q, q.type);
   }
 
   @Get('employees')
   @ApiOperation({ summary: 'Employees to issue to (in service or past), by name or employee code' })
   @RequirePermission(CERTIFICATE.issue)
   employees(@ReqCtx() ctx: RequestContext, @Query() q: StudentSearchQueryDto) {
-    return this.certificates.employees(ctx, q.q);
+    return this.certificates.employees(ctx, q.q, q.type);
   }
 
   @Get('student/:studentId')

@@ -16751,3 +16751,63 @@ button.ep-shiftcal__cell:focus-visible {
   font-weight: var(--fw-semibold);
   color: var(--text-heading);
 }
+
+/* ---- issue a certificate: the certificate, then the person from a dropdown that follows it (16 Nov 2026) ------- */
+.ep-ipick {
+  display: grid;
+  gap: var(--sp-3);
+}
+.ep-ipick__wrap {
+  position: relative;
+}
+.ep-ipick__wrap > .ep-input {
+  width: 100%;
+}
+.ep-ipick__chosen {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-2);
+  margin: 0 0 var(--sp-1);
+}
+.ep-ipick__list {
+  position: absolute;
+  z-index: 6;
+  left: 0;
+  right: 0;
+  top: calc(100% + var(--sp-1));
+  max-height: 22rem;
+  overflow-y: auto;
+  margin: 0;
+  padding: var(--sp-1);
+  list-style: none;
+  background: var(--surface-card);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-overlay);
+}
+.ep-ipick__opt {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: var(--sp-1) var(--sp-3);
+  padding: var(--sp-2);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font-size: var(--fs-small);
+}
+.ep-ipick__opt[aria-selected='true'],
+.ep-ipick__opt:hover {
+  background: var(--surface-subtle);
+}
+.ep-ipick__detail {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  color: var(--text-muted);
+}
+.ep-ipick__note {
+  padding: var(--sp-2);
+  color: var(--text-muted);
+  font-size: var(--fs-small);
+}

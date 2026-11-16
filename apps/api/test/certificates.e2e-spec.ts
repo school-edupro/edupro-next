@@ -168,12 +168,45 @@ describe('certificate register (e2e)', () => {
         ['Esha Test', true],
       ],
     );
+    // one letter narrows the dropdown too (16 Nov 2026: the issue page lists as you type)
     const short = await inject({
       method: 'GET',
       url: '/certificates/students?q=a',
       headers: h(office),
     });
-    expect(short.statusCode).toBe(400);
+    expect(short.statusCode).toBe(200);
+  });
+
+  it('lists the people to issue to: empty in class order, by class, those the type wants first', async () => {
+    const all = await inject({ method: 'GET', url: '/certificates/students', headers: h(office) });
+    expect(all.statusCode).toBe(200);
+    const rows = all.json().rows as Array<{ id: string; left: boolean; className: string | null }>;
+    expect(rows.length).toBeGreaterThan(2);
+    // on the rolls first (Esha has left)
+    expect(rows[0]!.left).toBe(false);
+    const byClass = await inject({
+      method: 'GET',
+      url: '/certificates/students?q=VIII-A',
+      headers: h(office),
+    });
+    expect(
+      (byClass.json().rows as Array<{ className: string }>).every(
+        (r) => r.className === 'Class VIII – A',
+      ),
+    ).toBe(true);
+    // a TC wants those who have left first
+    const forTc = await inject({
+      method: 'GET',
+      url: '/certificates/students?type=TC',
+      headers: h(office),
+    });
+    expect((forTc.json().rows as Array<{ id: string }>)[0]!.id).toBe(pupils.esha);
+    const staff = await inject({
+      method: 'GET',
+      url: '/certificates/employees',
+      headers: h(office),
+    });
+    expect(staff.statusCode).toBe(200);
   });
 
   it('previews a bonafide (checks, fields, the paper) without saving anything', async () => {

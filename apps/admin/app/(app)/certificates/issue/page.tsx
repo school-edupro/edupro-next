@@ -1,14 +1,13 @@
 import { Badge, Breadcrumbs, Button, Card, PageHeader, SelectField } from '@edupro/ui';
 import { notFound } from 'next/navigation';
+import { IssuePicker } from '@/components/certificates/IssuePicker';
 import { Notice } from '@/components/Notice';
 import { ApiError, apiFetch, getMe } from '@/lib/api';
 import { issueCertificate } from '@/lib/certificate-actions';
 import {
   FIELD_PREFIX,
   fitPaper,
-  type CertificateEmployeeHit,
   type CertificatePreview,
-  type CertificateStudentHit,
   type CertificateType,
 } from '@/lib/certificates';
 
@@ -67,17 +66,6 @@ export default async function IssueCertificatePage({
   const studentId = staff ? '' : id(sp.student);
   const employeeId = staff ? id(sp.employee) : '';
   const personId = staff ? employeeId : studentId;
-  const sq = (sp.sq ?? '').trim().slice(0, 80);
-  const hits: Array<CertificateStudentHit | (CertificateEmployeeHit & { admissionNo?: string })> =
-    sq.length >= 2
-      ? staff
-        ? await apiFetch<{ rows: CertificateEmployeeHit[] }>(
-            `/certificates/employees?q=${encodeURIComponent(sq)}`,
-          ).then((r) => r.rows)
-        : await apiFetch<{ rows: CertificateStudentHit[] }>(
-            `/certificates/students?q=${encodeURIComponent(sq)}`,
-          ).then((r) => r.rows)
-      : [];
   // the fields typed so far travel in the address (Update the preview) and go to the API as they are
   const fields: Record<string, string | number> = {};
   for (const [k, v] of Object.entries(sp)) {
@@ -111,12 +99,6 @@ export default async function IssueCertificatePage({
       if (!(e instanceof ApiError)) throw e;
       previewError = e.problem.detail ?? e.problem.type;
     }
-  const link = (over: Record<string, string>) => {
-    const u = new URLSearchParams();
-    if (type) u.set('type', type.code);
-    for (const [k, v] of Object.entries(over)) if (v) u.set(k, v);
-    return `/certificates/issue?${u.toString()}`;
-  };
   const failed = preview?.checks.filter((x) => !x.ok) ?? [];
   const blocked = !!preview && (preview.held || (failed.length > 0 && !preview.can.override));
   const asksPurpose = type ? type.code !== 'TC' : false;
@@ -140,89 +122,41 @@ export default async function IssueCertificatePage({
       ) : null}
       <div className="ep-cert-issue">
         <Card>
-          <h2 className="ep-card__title">1. Type and {staff ? 'employee' : 'student'}</h2>
-          <form
-            method="get"
-            action="/certificates/issue"
-            style={{ display: 'grid', gap: 'var(--sp-3)' }}
-          >
-            <SelectField
-              id="type"
-              name="type"
-              label="Certificate"
-              defaultValue={type?.code ?? ''}
-              options={[
-                { value: '', label: 'Choose…' },
-                ...types.map((t) => ({
-                  value: t.code,
-                  label: `${t.name}${t.audience === 'STAFF' ? ' (staff)' : ''}`,
-                })),
-              ]}
-            />
-            {studentId ? <input type="hidden" name="student" value={studentId} /> : null}
-            {employeeId ? <input type="hidden" name="employee" value={employeeId} /> : null}
-            <label className="ep-field" htmlFor="sq" style={{ margin: 0 }}>
-              <span className="ep-field__label">
-                Find the {who} ({staff ? 'name or employee code' : 'name or admission no.'})
-              </span>
-              <input
-                id="sq"
-                name="sq"
-                className="ep-input"
-                defaultValue={sq}
-                minLength={2}
-                maxLength={80}
-                autoComplete="off"
-              />
-            </label>
-            <div>
-              <Button type="submit" variant="secondary">
-                Find
-              </Button>
-            </div>
-          </form>
+          <h2 className="ep-card__title">1. Certificate and {staff ? 'employee' : 'student'}</h2>
+          <IssuePicker
+            key={type?.code ?? ''}
+            types={types.map((t) => ({
+              code: t.code,
+              name: t.name,
+              staff: t.audience === 'STAFF',
+            }))}
+            type={type?.code ?? ''}
+            person={
+              preview && personId
+                ? {
+                    id: personId,
+                    name: preview.person.name,
+                    no: preview.person.no,
+                    detail: null,
+                    left: false,
+                  }
+                : null
+            }
+            keep={requestId ? { request: requestId } : {}}
+          />
           {type ? (
             <p className="ep-field__help">
               <strong>{type.name}</strong> checks: {rulesText(type)}.
               {type.restricted ? ' Issued only by the roles set on the type.' : ''}
             </p>
           ) : null}
-          {sq.length >= 2 ? (
-            hits.length ? (
-              <ul
-                className="ep-cert-hits"
-                aria-label={staff ? 'Employees found' : 'Students found'}
-              >
-                {hits.map((h) => {
-                  const no = 'code' in h ? h.code : h.admissionNo;
-                  const detail = 'code' in h ? h.designation : h.className;
-                  return (
-                    <li key={h.id}>
-                      <a
-                        href={link(staff ? { employee: h.id } : { student: h.id })}
-                        aria-current={h.id === personId ? 'true' : undefined}
-                      >
-                        <strong>{h.name}</strong> · {no}
-                        {detail ? ` · ${detail}` : ''}
-                      </a>{' '}
-                      {h.left ? <Badge tone="neutral">Left</Badge> : null}
-                    </li>
-                  );
-                })}
-              </ul>
-            ) : (
-              <p className="ep-field__help">
-                No {who} matches “{sq}”.
-              </p>
-            )
-          ) : null}
         </Card>
         {!type || !personId ? (
           <Card>
             <p className="ep-field__help" style={{ margin: 0 }}>
               {!type
-                ? 'Choose the certificate, then find the person.'
-                : `Find the ${who} and choose them from the list.`}
+                ? 'Choose the certificate, then the person.'
+                : `Choose the ${who} from the list.`}
             </p>
           </Card>
         ) : previewError ? (
