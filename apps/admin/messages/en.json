@@ -532,7 +532,7 @@
     "reports_exports": {
       "kicker": "Reports",
       "title": "Export centre",
-      "description": "Files are generated in the background and kept for seven days. Reload to see progress."
+      "description": "Files are made in the background and kept for seven days. A cleared file can be made again."
     },
     "system_audit": {
       "kicker": "System",

@@ -72,6 +72,16 @@ export class ReportsController {
     return { filename: f.filename, contentType: f.contentType, base64: f.bytes.toString('base64') };
   }
 
+  @Post('exports/:id/again')
+  @ApiOperation({
+    summary:
+      'Make a cleared (expired) or failed export again: same dataset, format and parameters, asked by the caller, who may open the first',
+  })
+  @RequirePermission(REPORTS.exportView)
+  again(@ReqCtx() ctx: RequestContext, @Param('id') id: string) {
+    return this.reports.again(ctx, id);
+  }
+
   @Get('exports/:id')
   @ApiOperation({
     summary:

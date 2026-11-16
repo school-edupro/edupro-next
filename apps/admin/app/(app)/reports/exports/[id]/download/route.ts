@@ -14,14 +14,10 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
       export: { status: string };
       download: { url: string; saveUrl?: string } | null;
     }>(`/reports/exports/${id}`);
+    // not ready to open (being made, failed, or cleared after its seven days): the file's own page says which and
+    // offers to make it again
     if (!status.download) {
-      return NextResponse.redirect(
-        new URL(
-          `/reports/exports?error=export.not_ready&detail=${encodeURIComponent(`Export is ${status.export.status}`)}`,
-          _req.url,
-        ),
-        { status: 303 },
-      );
+      return NextResponse.redirect(new URL(`/reports/exports/${id}`, _req.url), { status: 303 });
     }
     const save = _req.nextUrl.searchParams.get('save') === '1';
     return NextResponse.redirect(

@@ -2,17 +2,10 @@ import { Badge, Button, Card, DataTable, InputField, PageHeader, SelectField } f
 import { FileLinks } from '@/components/FileLinks';
 import { getTranslations } from 'next-intl/server';
 import { Notice } from '@/components/Notice';
-import { createExport } from '@/lib/actions';
+import { createExport, makeExportAgain } from '@/lib/actions';
 import { apiFetch } from '@/lib/api';
 import type { Dataset, ExportRow, Page } from '@/lib/types';
-
-const TONE: Record<ExportRow['status'], 'neutral' | 'info' | 'success' | 'danger' | 'warning'> = {
-  queued: 'info',
-  running: 'warning',
-  ready: 'success',
-  failed: 'danger',
-  expired: 'neutral',
-};
+import { EXPORT_STATUS, EXPORT_TONE } from './status';
 
 export default async function ExportsPage({
   searchParams,
@@ -63,7 +56,7 @@ export default async function ExportsPage({
             {
               key: 'status',
               header: 'Status',
-              render: (e) => <Badge tone={TONE[e.status]}>{e.status}</Badge>,
+              render: (e) => <Badge tone={EXPORT_TONE[e.status]}>{EXPORT_STATUS[e.status]}</Badge>,
             },
             {
               key: 'actions',
@@ -74,9 +67,19 @@ export default async function ExportsPage({
                     href={`/reports/exports/${e.id}/download`}
                     label={e.title ?? 'export'}
                   />
-                ) : e.status === 'failed' ? (
-                  <span className="ep-field__error">{e.error}</span>
-                ) : null,
+                ) : e.status === 'expired' || e.status === 'failed' ? (
+                  <form action={makeExportAgain}>
+                    <input type="hidden" name="id" value={e.id} />
+                    <Button type="submit" size="sm" variant="secondary">
+                      {e.status === 'failed' ? 'Try again' : 'Make again'}
+                      <span className="ep-sr-only"> {e.title}</span>
+                    </Button>
+                  </form>
+                ) : (
+                  <a href={`/reports/exports/${e.id}`}>
+                    Follow<span className="ep-sr-only"> {e.title}</span>
+                  </a>
+                ),
             },
           ]}
           rows={exports.data}

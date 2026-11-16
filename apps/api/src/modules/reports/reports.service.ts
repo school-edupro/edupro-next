@@ -460,6 +460,63 @@ export class ReportsService {
   }
 
   /**
+   * POST /reports/exports/:id/again (16 Nov 2026): a file cleared after its seven days (or one that failed) made
+   * again — the same dataset, format, parameters and title, asked by the caller, who may open the first (OPENABLE).
+   * A list report's parameters are narrowed to the caller's scopes again; a document keeps its own. One already being
+   * made again (or made) by the caller is handed back rather than a second.
+   */
+  async again(ctx: RequestContext, id: string): Promise<ExportRow> {
+    const tenant = requireTenant(ctx);
+    const open = await this.db.tenant(tenant, async (c) => {
+      const r = await c.query('SELECT 1 FROM exports e WHERE e.id = $1 AND ' + OPENABLE, [
+        id,
+        ...(await this.openableBinds(c, ctx)),
+      ]);
+      return Boolean(r.rowCount);
+    });
+    if (!open) throw new DomainError('not-found', 'Export not found');
+    const row = await this.get(tenant, id);
+    if (row.status !== 'expired' && row.status !== 'failed')
+      throw new DomainError(
+        'export.not_expired',
+        row.status === 'ready'
+          ? 'This file is still here to open'
+          : 'This file is still being made',
+        { status: 409, extra: { exportStatus: row.status } },
+      );
+    const renderer = rendererOrNull(row.dataset);
+    const params = renderer
+      ? row.params
+      : (await this.prepare(ctx, row.dataset, row.params)).params;
+    return this.db.tenant(tenant, async (c) => {
+      const made = await c.query<{ id: string }>(
+        `SELECT id::text FROM exports
+          WHERE dataset = $1 AND format = $2 AND params = $3::jsonb AND requested_by = app.current_user_id()
+            AND status IN ('queued', 'running', 'ready') AND requested_at > $4
+          ORDER BY requested_at DESC LIMIT 1`,
+        [row.dataset, row.format, JSON.stringify(params), row.requestedAt],
+      );
+      if (made.rows[0]) return this.get(tenant, made.rows[0].id, c);
+      const r = await c.query<{ id: string }>(
+        `INSERT INTO exports (school_id, dataset, format, params, title, requested_by, request_id)
+         VALUES (app.current_school_id(), $1, $2, $3::jsonb, $4, app.current_user_id(), app.current_request_id())
+         RETURNING id::text`,
+        [row.dataset, row.format, JSON.stringify(params), row.title],
+      );
+      const newId = r.rows[0]!.id;
+      await this.outbox.enqueue(c, ctx, QUEUES.exports, 'export.generate', { exportId: newId });
+      const again = await this.get(tenant, newId, c);
+      await this.audit.stage(ctx, c, {
+        action: 'reports.export.again',
+        entityType: 'exports',
+        entityId: newId,
+        after: { id: newId, againOf: id, dataset: again.dataset, format: again.format },
+      });
+      return again;
+    });
+  }
+
+  /**
    * Status plus a signed download URL once the file is ready. Each URL issue counts as a download. The
    * check that the export is the caller's is the caller's (a family's own receipt or report card, the
    * access report of its own data request), as for createRenderedForOwner.

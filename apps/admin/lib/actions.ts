@@ -480,6 +480,24 @@ export async function createExport(fd: FormData) {
   );
 }
 
+/** A cleared (expired) or failed file made again; its own page follows it until it is ready. */
+export async function makeExportAgain(fd: FormData) {
+  const id = str(fd, 'id');
+  if (!/^\d{1,18}$/.test(id)) return;
+  const here = `/reports/exports/${id}`;
+  let made: { id: string };
+  try {
+    made = await apiFetch<{ id: string }>(`/reports/exports/${id}/again`, { method: 'POST' });
+  } catch (error) {
+    if (error instanceof ApiError && error.problem.type === 'mfa-required')
+      redirect(`/step-up?returnTo=${encodeURIComponent(here)}`);
+    if (error instanceof ApiError) back(here, error.problem.type, problemDetail(error));
+    throw error;
+  }
+  revalidatePath('/reports/exports');
+  redirect(`/reports/exports/${made.id}?ok=again`);
+}
+
 export async function exportAudit(fd: FormData) {
   const params: Record<string, string> = {};
   for (const key of ['from', 'to', 'entityType', 'entityId', 'actorUserId', 'action']) {

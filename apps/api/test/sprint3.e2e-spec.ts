@@ -262,6 +262,8 @@ describe('comms, reports, audit and jobs (e2e)', () => {
         'lesson_plans',
         'members',
         'parent_queries',
+        'payroll_heads',
+        'payroll_register',
         'settlement_lines',
         'substitutions',
         'term_results',
@@ -346,6 +348,84 @@ describe('comms, reports, audit and jobs (e2e)', () => {
       expect(outbox.json().data.some((j: { kind: string }) => j.kind === 'export.generate')).toBe(
         true,
       );
+    });
+
+    it('makes a cleared or failed file again, once, for whoever may open it', async () => {
+      const first = await inject({
+        method: 'POST',
+        url: '/reports/exports',
+        headers: A(teacher.sub),
+        json: { dataset: 'classes', format: 'xlsx', title: 'Classes again' },
+      });
+      const id = first.json().id as string;
+      // still being made, or still here: nothing to make again
+      const early = await inject({
+        method: 'POST',
+        url: `/reports/exports/${id}/again`,
+        headers: A(teacher.sub),
+      });
+      expect(early.statusCode).toBe(409);
+      expect(early.json()).toMatchObject({ type: 'export.not_expired' });
+      await withMigrator((c) =>
+        c.query(
+          `UPDATE exports SET status = 'expired', expires_at = now() - interval '1 day' WHERE id = $1`,
+          [id],
+        ),
+      );
+      const again = await inject({
+        method: 'POST',
+        url: `/reports/exports/${id}/again`,
+        headers: A(teacher.sub),
+      });
+      expect(again.statusCode).toBe(201);
+      expect(again.json()).toMatchObject({
+        status: 'queued',
+        dataset: 'classes',
+        format: 'xlsx',
+        title: 'Classes again',
+        requestedBy: teacher.id,
+      });
+      expect(again.json().id).not.toBe(id);
+      expect(again.json().params).toEqual(first.json().params);
+      // a second click hands back the same one
+      const twice = await inject({
+        method: 'POST',
+        url: `/reports/exports/${id}/again`,
+        headers: A(teacher.sub),
+      });
+      expect(twice.json().id).toBe(again.json().id);
+      // a failed one too
+      await withMigrator((c) =>
+        c.query(`UPDATE exports SET status = 'failed', error = 'boom' WHERE id = $1`, [
+          again.json().id,
+        ]),
+      );
+      const retry = await inject({
+        method: 'POST',
+        url: `/reports/exports/${again.json().id as string}/again`,
+        headers: A(teacher.sub),
+      });
+      expect(retry.statusCode).toBe(201);
+      expect(retry.json().id).not.toBe(again.json().id);
+      // not someone's who may not open it; not another school's
+      expect(
+        (
+          await inject({
+            method: 'POST',
+            url: `/reports/exports/${id}/again`,
+            headers: A(member.sub),
+          })
+        ).statusCode,
+      ).toBe(403);
+      expect(
+        (
+          await inject({
+            method: 'POST',
+            url: `/reports/exports/${id}/again`,
+            headers: headersFor(outsider.sub, other.id),
+          })
+        ).statusCode,
+      ).toBe(404);
     });
 
     it('adds the class section scope of the requester to the parameters', async () => {
