@@ -140,11 +140,21 @@ their PDF is opened.
 
 From the register's header:
 
-- **Bulk issue** — one type to a section's students on the rolls, or to the **leavers** (a withdrawal cleared
-  or complete and no TC yet), in roll order. **Preview** shows each student's checks; **Issue** gives each
-  that can have it its own number and leaves out the others with the reason (who already holds it; a check
-  not clear — the principal can include them with a reason). One PDF prints the whole batch in roll order;
-  the batch's page lists who got one and who was left out.
+- **Bulk issue** — choose the certificate, then who:
+  - a **student certificate**: **Classes and sections** in one tick list (tick a class for all its sections,
+    or single sections; **All classes**; a search; the students on the rolls beside each), or **the
+    leavers** (a withdrawal cleared or complete and no TC yet);
+  - a **staff certificate**: **Departments** in one tick list (**Employees in service** or **Those who have
+    left**; **All departments**; the employees beside each).
+
+  **Preview** lists everyone in class, section and roll order (staff: department and Emp. ID) with their
+  checks and a tick each: those clear are ticked; untick anyone who should not get one. One who already
+  holds it cannot be ticked; one whose checks are not clear only by the principal, with a reason.
+  **Issue to … ticked** gives each its own number and makes a batch and **one PDF for each section or
+  department** (at most 600 at a time). The next page lists the batches, each with View and Download as
+  its PDF is made, and **Download all (ZIP)** once every PDF is ready; each batch's page lists who got one
+  and who was left out, with the reason.
+
 - **Awards** — the awards the school gives (set-up: each printed on the achievement, merit, participation
   or award certificate), and who received them: add one (admission no., event, place, date) or upload a
   CSV (admission_no, award, event, position, date, remarks). The file is checked first and nothing is

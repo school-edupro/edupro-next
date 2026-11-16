@@ -1,46 +1,52 @@
-import {
-  Badge,
-  Breadcrumbs,
-  Button,
-  Card,
-  DataTable,
-  KpiTile,
-  PageHeader,
-  SelectField,
-} from '@edupro/ui';
+import { Breadcrumbs, Card, KpiTile, PageHeader } from '@edupro/ui';
 import { notFound } from 'next/navigation';
+import { BulkPreviewTicks } from '@/components/certificates/BulkPreviewTicks';
+import { BulkScopePicker, type PickerType } from '@/components/certificates/BulkScopePicker';
 import { Notice } from '@/components/Notice';
 import { ApiError, apiFetch, getMe } from '@/lib/api';
-import { bulkIssueCertificates } from '@/lib/certificate-actions';
-import { FIELD_PREFIX, dmy, type BulkPreview, type CertificateType } from '@/lib/certificates';
+import { bulkRunCertificates } from '@/lib/certificate-actions';
+import {
+  FIELD_PREFIX,
+  NO_DEPT,
+  dmy,
+  type BulkClasses,
+  type BulkDepartments,
+  type BulkPreview,
+  type CertificateType,
+} from '@/lib/certificates';
 
-type Row = BulkPreview['rows'][number];
+const all = (v: string | string[] | undefined): string[] =>
+  v === undefined ? [] : Array.isArray(v) ? v : [v];
+const one = (v: string | string[] | undefined): string =>
+  Array.isArray(v) ? (v[0] ?? '') : (v ?? '');
 
 /**
- * Bulk issue (docs/design/87, phase E): one type to a section's students on the rolls or to the leavers, in roll
- * order; the preview shows each one's checks; the issue leaves out who cannot have it (with the reason) and prints the
- * batch as one PDF.
+ * Bulk issue (docs/design/87; 16 Nov 2026): a student certificate to several classes and sections (one tick list) or
+ * to the leavers, or a staff certificate to departments (in service or who have left); the preview lists everyone with
+ * their checks and a tick each; the issue makes a batch and a PDF for each section or department.
  */
 export default async function BulkIssuePage({
   searchParams,
 }: {
-  searchParams: Promise<Record<string, string | undefined>>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const sp = await searchParams;
   const me = await getMe();
   if (!me.permissions.includes('certificate.register.issue')) notFound();
-  const [types, sections, batches] = await Promise.all([
+  const [types, classes, departments, batches] = await Promise.all([
     apiFetch<{ rows: CertificateType[] }>('/certificates/types').then((r) =>
-      r.rows.filter((t) => t.active && t.audience === 'STUDENT'),
+      r.rows.filter((t) => t.active),
     ),
-    apiFetch<{ data: Array<{ id: string; label: string }> }>('/people/sections')
-      .then((r) => r.data)
-      .catch(() => [] as Array<{ id: string; label: string }>),
+    apiFetch<BulkClasses>('/certificates/bulk/sections').catch(
+      () => ({ classes: [], max: 600 }) as BulkClasses,
+    ),
+    apiFetch<BulkDepartments>('/certificates/bulk/departments').catch(
+      () => ({ departments: [], max: 600 }) as BulkDepartments,
+    ),
     apiFetch<{
       rows: Array<{
         id: string;
         title: string;
-        typeName: string;
         issued: number;
         skipped: number;
         by: string | null;
@@ -48,23 +54,38 @@ export default async function BulkIssuePage({
       }>;
     }>('/certificates/batches').then((r) => r.rows),
   ]);
-  const type = types.find((t) => t.code === sp.type) ?? null;
-  const leavers = sp.scope === 'leavers';
-  const section = /^\d{1,18}$/.test(sp.section ?? '') ? sp.section! : '';
+  const ordered = [
+    ...types.filter((t) => t.audience === 'STUDENT'),
+    ...types.filter((t) => t.audience === 'STAFF'),
+  ];
+  const type = ordered.find((t) => t.code === one(sp.type)) ?? null;
+  const staff = type?.audience === 'STAFF';
+  const scope = staff ? 'departments' : one(sp.scope) === 'leavers' ? 'leavers' : 'sections';
+  const sections = all(sp.section).filter((x) => /^\d{1,18}$/.test(x));
+  const depts = all(sp.dept).filter((x) => x.length <= 80);
+  const state = one(sp.state) === 'left' ? 'left' : 'active';
+  const purpose = one(sp.purpose);
   const fields: Record<string, string> = {};
   for (const [k, v] of Object.entries(sp))
-    if (k.startsWith(FIELD_PREFIX) && typeof v === 'string' && v.trim())
-      fields[k.slice(FIELD_PREFIX.length)] = v;
+    if (k.startsWith(FIELD_PREFIX) && one(v).trim()) fields[k.slice(FIELD_PREFIX.length)] = one(v);
+  const max = classes.max;
+
   let preview: BulkPreview | null = null;
   let error: string | null = null;
-  if (type && (leavers || section))
+  const ready =
+    type && (scope === 'leavers' || (scope === 'sections' ? sections.length : depts.length));
+  if (ready)
     try {
       preview = await apiFetch<BulkPreview>('/certificates/bulk/preview', {
         method: 'POST',
         body: JSON.stringify({
           typeCode: type.code,
-          ...(leavers ? { leavers: true } : { sectionId: section }),
-          purpose: sp.purpose || undefined,
+          ...(scope === 'leavers'
+            ? { leavers: true }
+            : scope === 'departments'
+              ? { departments: depts.map((d) => (d === NO_DEPT ? '' : d)), staffState: state }
+              : { sectionIds: sections }),
+          purpose: purpose || undefined,
           fields,
         }),
       });
@@ -72,7 +93,24 @@ export default async function BulkIssuePage({
       if (!(e instanceof ApiError)) throw e;
       error = e.problem.detail ?? e.problem.type;
     }
-  const failing = preview ? preview.figures.failed : 0;
+
+  // what the issue posts, besides the ticks
+  const hidden: Array<[string, string]> = [
+    ['type', type?.code ?? ''],
+    ['scope', scope],
+    ...sections.map((x) => ['section', x] as [string, string]),
+    ...depts.map((x) => ['dept', x] as [string, string]),
+    ['state', state],
+    ['purpose', purpose],
+    ...Object.entries(fields).map(([k, v]) => [`${FIELD_PREFIX}${k}`, v] as [string, string]),
+  ];
+  const pickerTypes: PickerType[] = ordered.map((t) => ({
+    code: t.code,
+    name: t.name,
+    audience: t.audience,
+    fields: t.fields,
+  }));
+
   return (
     <>
       <Breadcrumbs
@@ -81,88 +119,27 @@ export default async function BulkIssuePage({
       <PageHeader
         kicker="Certificates"
         title="Bulk issue"
-        description="One type to a section or to the leavers, in roll order: each gets its own number; one PDF prints the batch."
+        description="A student certificate to several classes and sections, or a staff certificate to departments: tick who gets one; each gets its own number, and each section or department its own PDF."
       />
-      <Notice params={sp} />
+      <Notice
+        params={Object.fromEntries(Object.entries(sp).map(([k, v]) => [k, one(v) || undefined]))}
+      />
       <Card>
-        <form method="get" className="ep-cert-fields">
-          <SelectField
-            id="type"
-            name="type"
-            label="Certificate"
-            defaultValue={type?.code ?? ''}
-            options={[
-              { value: '', label: 'Choose…' },
-              ...types.map((t) => ({ value: t.code, label: t.name })),
-            ]}
-          />
-          <SelectField
-            id="scope"
-            name="scope"
-            label="To"
-            defaultValue={leavers ? 'leavers' : 'section'}
-            options={[
-              { value: 'section', label: 'A section (students on the rolls)' },
-              { value: 'leavers', label: 'The leavers (withdrawal cleared, no TC yet)' },
-            ]}
-          />
-          <SelectField
-            id="section"
-            name="section"
-            label="Section"
-            defaultValue={section}
-            options={[
-              { value: '', label: 'Choose…' },
-              ...sections.map((s) => ({ value: s.id, label: s.label })),
-            ]}
-          />
-          <label className="ep-field" htmlFor="purpose">
-            <span className="ep-field__label">Purpose (printed, optional)</span>
-            <input
-              id="purpose"
-              name="purpose"
-              className="ep-input"
-              defaultValue={sp.purpose ?? ''}
-              maxLength={200}
-            />
-          </label>
-          {type?.fields.map((f) => (
-            <label key={f.key} className="ep-field" htmlFor={`${FIELD_PREFIX}${f.key}`}>
-              <span className="ep-field__label">
-                {f.label}
-                {f.required ? ' *' : ''} (the same for all)
-              </span>
-              {f.kind === 'list' ? (
-                <select
-                  id={`${FIELD_PREFIX}${f.key}`}
-                  name={`${FIELD_PREFIX}${f.key}`}
-                  className="ep-input"
-                  defaultValue={fields[f.key] ?? ''}
-                >
-                  <option value="">—</option>
-                  {(f.options ?? []).map((o) => (
-                    <option key={o} value={o}>
-                      {o}
-                    </option>
-                  ))}
-                </select>
-              ) : (
-                <input
-                  id={`${FIELD_PREFIX}${f.key}`}
-                  name={`${FIELD_PREFIX}${f.key}`}
-                  className="ep-input"
-                  type={f.kind === 'date' ? 'date' : f.kind === 'number' ? 'number' : 'text'}
-                  defaultValue={fields[f.key] ?? ''}
-                />
-              )}
-            </label>
-          ))}
-          <div style={{ alignSelf: 'end' }}>
-            <Button type="submit" variant="secondary">
-              Preview
-            </Button>
-          </div>
-        </form>
+        <BulkScopePicker
+          types={pickerTypes}
+          classes={classes.classes}
+          departments={departments.departments}
+          max={max}
+          initial={{
+            type: type?.code ?? '',
+            scope,
+            sections,
+            depts,
+            state,
+            purpose,
+            fields,
+          }}
+        />
       </Card>
       {error ? (
         <div className="ep-alert ep-alert--danger" role="alert">
@@ -172,82 +149,34 @@ export default async function BulkIssuePage({
       {preview && type ? (
         <>
           <div className="ep-dash-kpis">
-            <KpiTile label="Students" value={String(preview.figures.total)} />
+            <KpiTile
+              label={staff ? 'Employees' : 'Students'}
+              value={String(preview.figures.total)}
+            />
             <KpiTile label="Clear" value={String(preview.figures.ok)} />
             <KpiTile label="A check not clear" value={String(preview.figures.failed)} />
             <KpiTile label="Already hold it" value={String(preview.figures.held)} />
-            <KpiTile label="Type" value={preview.type.name} />
-            <KpiTile label="Order" value="Roll no." />
-          </div>
-          <Card>
-            <DataTable<Row>
-              caption="Who would get it"
-              density="dense"
-              columns={[
-                { key: 'roll', header: 'Roll', render: (r) => r.rollNo ?? '' },
-                { key: 'name', header: 'Student', render: (r) => `${r.name} · ${r.admissionNo}` },
-                { key: 'class', header: 'Class', render: (r) => r.classLabel ?? '' },
-                {
-                  key: 'ok',
-                  header: 'Checks',
-                  render: (r) =>
-                    r.ok ? (
-                      <Badge tone="success">Clear</Badge>
-                    ) : (
-                      <>
-                        <Badge tone={r.held ? 'neutral' : 'danger'}>
-                          {r.held ? 'Holds it' : 'Not clear'}
-                        </Badge>{' '}
-                        <span className="ep-field__help" style={{ margin: 0 }}>
-                          {[
-                            ...r.checks.filter((c) => !c.ok).map((c) => `${c.label}: ${c.detail}`),
-                            ...r.problems,
-                          ].join('; ')}
-                        </span>
-                      </>
-                    ),
-                },
-              ]}
-              rows={preview.rows}
-              rowKey={(r) => r.id}
-              emptyTitle="No students"
+            <KpiTile
+              label={staff ? 'Departments (a PDF each)' : 'Sections (a PDF each)'}
+              value={String(scope === 'leavers' ? 1 : preview.figures.sections)}
             />
-            <form
-              action={bulkIssueCertificates}
-              style={{ display: 'grid', gap: 'var(--sp-3)', marginTop: 'var(--sp-3)' }}
-            >
-              <input type="hidden" name="type" value={type.code} />
-              <input type="hidden" name="scope" value={leavers ? 'leavers' : 'section'} />
-              <input type="hidden" name="section" value={section} />
-              <input type="hidden" name="purpose" value={sp.purpose ?? ''} />
-              {Object.entries(fields).map(([k, v]) => (
-                <input key={k} type="hidden" name={`${FIELD_PREFIX}${k}`} value={v} />
-              ))}
-              {failing && preview.can.override ? (
-                <label className="ep-field" htmlFor="overrideReason">
-                  <span className="ep-field__label">
-                    To issue to the {String(failing)} whose checks are not clear too, say why
-                    (optional)
-                  </span>
-                  <textarea
-                    id="overrideReason"
-                    name="overrideReason"
-                    className="ep-input"
-                    rows={2}
-                    maxLength={300}
-                  />
-                </label>
-              ) : null}
-              <div>
-                <Button
-                  type="submit"
-                  disabled={!preview.figures.ok && !(failing && preview.can.override)}
-                >
-                  Issue to {String(preview.figures.ok)} student(s)
-                  {failing && preview.can.override ? ' (more with a reason)' : ''}
-                </Button>
-              </div>
-            </form>
+            <KpiTile label="Certificate" value={preview.type.name} />
+          </div>
+          <Card title={`Who gets it — ${type.name}`}>
+            {preview.rows.length ? (
+              <BulkPreviewTicks
+                rows={preview.rows}
+                canOverride={preview.can.override}
+                staff={staff}
+                max={max}
+                action={bulkRunCertificates}
+                hidden={hidden}
+              />
+            ) : (
+              <p className="ep-field__help" style={{ margin: 0 }}>
+                No {staff ? 'employees' : 'students'} here.
+              </p>
+            )}
           </Card>
         </>
       ) : null}

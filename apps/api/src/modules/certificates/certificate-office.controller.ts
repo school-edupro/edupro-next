@@ -11,6 +11,7 @@ import {
   AwardDto,
   BulkIssueDto,
   BulkPreviewDto,
+  BulkRunDto,
   CERTIFICATE,
   IssueAllotmentsDto,
   ListAllotmentsQueryDto,
@@ -46,6 +47,49 @@ export class CertificateOfficeController {
   @RequirePermission(CERTIFICATE.issue)
   bulkIssue(@ReqCtx() ctx: RequestContext, @Body() body: BulkIssueDto) {
     return this.bulk.issue(ctx, body);
+  }
+
+  @Get('bulk/sections')
+  @ApiOperation({
+    summary: 'Classes with their sections and the students on the rolls in each, for bulk issue',
+  })
+  @RequirePermission(CERTIFICATE.issue)
+  bulkSections(@ReqCtx() ctx: RequestContext) {
+    return this.bulk.sections(ctx);
+  }
+
+  @Get('bulk/departments')
+  @ApiOperation({
+    summary:
+      'Departments with their employees in service and who have left, for bulk issue of staff certificates',
+  })
+  @RequirePermission(CERTIFICATE.issue)
+  bulkDepartments(@ReqCtx() ctx: RequestContext) {
+    return this.bulk.departments(ctx);
+  }
+
+  @Post('bulk/run')
+  @ApiOperation({
+    summary:
+      'Bulk issue to the students ticked in the preview: a batch (and PDF) for each section, sharing a run id',
+  })
+  @RequirePermission(CERTIFICATE.issue)
+  bulkRun(@ReqCtx() ctx: RequestContext, @Body() body: BulkRunDto) {
+    return this.bulk.issueRun(ctx, body);
+  }
+
+  @Get('runs/:runId')
+  @ApiOperation({ summary: "A bulk run's batches and their PDFs" })
+  @RequirePermission(CERTIFICATE.view)
+  run(@ReqCtx() ctx: RequestContext, @Param('runId') runId: string) {
+    return this.bulk.runOf(ctx, runId);
+  }
+
+  @Get('runs/:runId/zip')
+  @ApiOperation({ summary: 'Every batch PDF of a run in one ZIP' })
+  @RequirePermission(CERTIFICATE.view)
+  runZip(@ReqCtx() ctx: RequestContext, @Param('runId') runId: string) {
+    return this.bulk.runZip(ctx, runId);
   }
 
   @Get('batches')

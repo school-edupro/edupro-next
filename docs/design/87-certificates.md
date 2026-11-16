@@ -496,3 +496,32 @@ user asked for a button to make it again with the current settings.
 Tests: `certificates.e2e-spec.ts` (refused without the issue right; a new number with the new signatory title and foot
 line; the earlier one cancelled, pointing to it, its paper unchanged; once only; not a duplicate; one past a failed
 check: refused to the office with nothing changed, re-issued by the principal with the reason carried).
+
+## Bulk issue to several classes and sections, or departments (16 Nov 2026)
+
+Asked: issue class and section wise with several picked at once, for students or employees. Chosen (all recommended):
+one tick list, one PDF per section (Download all as a ZIP), unticking students in the preview; staff by a departments
+tick list (in service or who have left).
+
+- **Data** (migration 0391): `certificate_batches.run_id` (UUID): the batches of one run.
+- **API**: `GET /certificates/bulk/sections` (classes of the selected year with their sections and the students on the
+  rolls in each), `GET /certificates/bulk/departments` (each department, "" for none, with employees in service and
+  who have left). The bulk scope takes `sectionIds` (class, section, roll order; each row knows its section) or, for a
+  staff type, `departments` + `staffState`; a staff type takes only departments and a student type never
+  (`assertAudience`). `POST /certificates/bulk/run` (`only`: the ticked; the principal's `overrideReason` for ticked
+  ones not clear): a batch per section or department (the leavers or chosen students: one), each through `run` (own
+  numbers, own transactions, its PDF kept for good), sharing a run id. `GET /certificates/runs/:runId` (the batches,
+  their PDFs, figures) and `GET /certificates/runs/:runId/zip` (every batch PDF, named by its title; 409 while one is
+  being made). At most 600 (`BULK_MAX`) at a time.
+- **Admin**: the bulk page — `BulkScopePicker` (the certificate; students: classes and sections or the leavers;
+  staff: departments, in service or left; search; All; counts; the chosen total), the preview's `BulkPreviewTicks`
+  (ticks; tick all clear / untick all; the principal's reason when a ticked one is not clear; "Issue to n ticked") —
+  and `/certificates/runs/:runId` (figures; each batch with View / Download as its PDF is made, refreshing until all
+  are; Download all (ZIP)).
+
+Tests: `certificates-office.e2e-spec.ts` (the tick list's counts; a preview of two sections in class, section and
+roll order; a staff type refused for sections and a student type for departments; a run with one unticked — a batch
+per section, only the ticked; the run's page; the ZIP refused while a PDF is being made, then a file per section;
+staff: departments with in service / left, a batch per department, those who have left). A browser pass at 1440 and
+375 px on the pickers, the preview ticks, the run page (a throwaway run), the issue's posted ticks caught and
+stopped — nothing issued on Alpha.

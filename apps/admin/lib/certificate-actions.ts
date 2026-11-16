@@ -3,7 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { ApiError, apiFetch } from './api';
-import { FIELD_PREFIX, type Certificate } from './certificates';
+import { FIELD_PREFIX, NO_DEPT, type Certificate } from './certificates';
 
 const okId = (id: string) => /^\d{1,18}$/.test(id);
 const str = (fd: FormData, k: string) => String(fd.get(k) ?? '').trim();
@@ -201,6 +201,56 @@ export async function bulkIssueCertificates(fd: FormData) {
   }
   revalidatePath('/certificates');
   redirect(`/certificates/batches/${batch.id}?ok=issued`);
+}
+
+/**
+ * Bulk issue to several classes and sections, or departments (16 Nov 2026): the students or employees ticked in the
+ * preview; a batch and PDF for each section or department; then the run's page.
+ */
+export async function bulkRunCertificates(fd: FormData) {
+  const type = str(fd, 'type');
+  const scope = str(fd, 'scope');
+  const sections = fd.getAll('section').map(String).filter(okId);
+  const depts = fd
+    .getAll('dept')
+    .map(String)
+    .filter((d) => d.length <= 80);
+  const state = str(fd, 'state') === 'left' ? 'left' : 'active';
+  const fields: Record<string, string | number> = {};
+  for (const [k, v] of fd.entries())
+    if (k.startsWith(FIELD_PREFIX) && typeof v === 'string' && v.trim())
+      fields[k.slice(FIELD_PREFIX.length)] = v.trim();
+  // back to the same preview when something is refused
+  const q = new URLSearchParams({ type, scope });
+  for (const x of sections) q.append('section', x);
+  for (const x of depts) q.append('dept', x);
+  if (scope === 'departments') q.set('state', state);
+  if (str(fd, 'purpose')) q.set('purpose', str(fd, 'purpose'));
+  for (const [k, v] of Object.entries(fields)) q.set(`${FIELD_PREFIX}${k}`, String(v));
+  const here = `/certificates/bulk?${q.toString()}`;
+  let run: { runId: string };
+  try {
+    run = await apiFetch<{ runId: string }>('/certificates/bulk/run', {
+      method: 'POST',
+      body: JSON.stringify({
+        typeCode: type,
+        ...(scope === 'leavers'
+          ? { leavers: true }
+          : scope === 'departments'
+            ? { departments: depts.map((d) => (d === NO_DEPT ? '' : d)), staffState: state }
+            : { sectionIds: sections }),
+        only: fd.getAll('only').map(String).filter(okId),
+        purpose: str(fd, 'purpose') || undefined,
+        fields,
+        overrideReason: str(fd, 'overrideReason') || undefined,
+      }),
+    });
+  } catch (e) {
+    if (e instanceof ApiError) back(here, e);
+    throw e;
+  }
+  revalidatePath('/certificates');
+  redirect(`/certificates/runs/${run.runId}?ok=issued`);
 }
 
 export async function saveAward(fd: FormData) {

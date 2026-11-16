@@ -16680,3 +16680,74 @@ button.ep-shiftcal__cell:focus-visible {
 .ep-ctpl__rowacts .ep-btn {
   white-space: nowrap;
 }
+
+/* ---- bulk issue: classes and sections or departments, ticks in the preview (docs/design/87, 16 Nov 2026) ------- */
+.ep-bulk,
+.ep-bulk__issue {
+  display: grid;
+  gap: var(--sp-4);
+}
+.ep-bulk__pick {
+  display: grid;
+  gap: var(--sp-2);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  padding: var(--sp-3);
+}
+.ep-bulk__pickhead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-2);
+}
+.ep-bulk__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: var(--sp-1);
+  max-height: 28rem;
+  overflow-y: auto;
+}
+.ep-bulk__list > li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-1) var(--sp-3);
+  padding: var(--sp-1) var(--sp-2);
+  border-radius: var(--radius-sm);
+}
+.ep-bulk__list > li:nth-child(even) {
+  background: var(--surface-subtle);
+}
+.ep-bulk__all {
+  border-bottom: 1px solid var(--border-default);
+}
+.ep-bulk__list > li.ep-bulk__class {
+  display: grid;
+  justify-content: stretch;
+}
+.ep-bulk__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-2);
+}
+.ep-bulk__sections {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-1) var(--sp-4);
+  padding-left: var(--sp-6);
+}
+.ep-bulk__n {
+  color: var(--text-muted);
+  font-size: var(--fs-small);
+  font-variant-numeric: tabular-nums;
+}
+.ep-bulk__sum {
+  margin: 0;
+  font-weight: var(--fw-semibold);
+  color: var(--text-heading);
+}

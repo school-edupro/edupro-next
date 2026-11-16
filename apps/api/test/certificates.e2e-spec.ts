@@ -456,7 +456,15 @@ describe('certificate register (e2e)', () => {
       ),
     );
     expect(kept.rows[0]!.far).toBe(true);
-    // cleared (as before 16 Nov, after seven days): made again, and the register points to it
+    // cleared (as before 16 Nov, after seven days): made again, and the register points to it. With the workers
+    // running the first PDF may still be being made: let it settle, so they do not mark it ready after this
+    for (let i = 0; i < 20; i += 1) {
+      const st = await withMigrator((c) =>
+        c.query<{ status: string }>(`SELECT status::text FROM exports WHERE id = $1`, [exportId]),
+      );
+      if (!['queued', 'running'].includes(st.rows[0]!.status) || i === 19) break;
+      await new Promise((r) => setTimeout(r, 250));
+    }
     await withMigrator((c) =>
       c.query(
         `UPDATE exports SET status = 'expired', expires_at = now() - interval '1 day' WHERE id = $1`,

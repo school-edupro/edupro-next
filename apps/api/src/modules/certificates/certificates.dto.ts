@@ -206,18 +206,39 @@ export const ListRequestsQuerySchema = z.object({
 export class ListRequestsQueryDto extends createZodDto(ListRequestsQuerySchema) {}
 
 // ---- bulk, awards, registers (phase E) ------------------------------------------------------------------------------
+/** the most students one bulk issue takes (each issued in its own transaction, in the same request) */
+export const BULK_MAX = 600;
 const BulkBase = z.object({
   typeCode: TypeCode,
-  /** a section's students on the rolls, chosen students, or the leavers (withdrawal cleared or complete, no TC yet) */
+  /**
+   * a section's students on the rolls, several sections' (16 Nov 2026: a batch each), chosen students, or the leavers
+   * (withdrawal cleared or complete, no TC yet)
+   */
   sectionId: IdSchema.optional(),
-  studentIds: z.array(IdSchema).max(300).optional(),
+  sectionIds: z.array(IdSchema).min(1).max(100).optional(),
+  studentIds: z.array(IdSchema).max(BULK_MAX).optional(),
   leavers: z.boolean().optional(),
+  /** a staff type: the employees of these departments ("" for those with none), in service or who have left */
+  departments: z.array(z.string().trim().max(80)).min(1).max(100).optional(),
+  staffState: z.enum(['active', 'left']).default('active'),
   purpose: z.string().trim().max(200).optional(),
   issuedOn: DateSchema.optional(),
   fields: Fields,
 });
-const oneScope = (v: { sectionId?: string; studentIds?: string[]; leavers?: boolean }) =>
-  [!!v.sectionId, !!v.studentIds?.length, !!v.leavers].filter(Boolean).length === 1;
+const oneScope = (v: {
+  sectionId?: string;
+  sectionIds?: string[];
+  studentIds?: string[];
+  leavers?: boolean;
+  departments?: string[];
+}) =>
+  [
+    !!v.sectionId,
+    !!v.sectionIds?.length,
+    !!v.studentIds?.length,
+    !!v.leavers,
+    !!v.departments?.length,
+  ].filter(Boolean).length === 1;
 export const BulkPreviewSchema = BulkBase.refine(oneScope, {
   message: 'a section, chosen students or the leavers',
 });
@@ -228,6 +249,14 @@ export const BulkIssueSchema = BulkBase.extend({
   overrideReason: z.string().trim().min(10, 'at least 10 characters').max(300).optional(),
 }).refine(oneScope, { message: 'a section, chosen students or the leavers' });
 export class BulkIssueDto extends createZodDto(BulkIssueSchema) {}
+/** A run (16 Nov 2026): the scope as for the preview, only the students ticked in it, a batch for each section. */
+export const BulkRunSchema = BulkBase.extend({
+  /** the students ticked in the preview: only these get one */
+  only: z.array(IdSchema).min(1, 'tick at least one student').max(BULK_MAX),
+  /** the principal's reason, for ticked students whose checks are not clear */
+  overrideReason: z.string().trim().min(10, 'at least 10 characters').max(300).optional(),
+}).refine(oneScope, { message: 'sections, a section, chosen students or the leavers' });
+export class BulkRunDto extends createZodDto(BulkRunSchema) {}
 
 export const AwardSchema = z.object({
   name: z.string().trim().min(2).max(120),

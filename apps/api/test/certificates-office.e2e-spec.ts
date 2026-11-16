@@ -5,6 +5,9 @@
  * the reports with their files; the achievement certificates numbered by the register's series and in the register.
  */
 import type { NestFastifyApplication } from '@nestjs/platform-fastify';
+import type { StorageDriver } from '@edupro/storage';
+import JSZip from 'jszip';
+import { STORAGE_DRIVER } from '../src/modules/files/storage';
 import {
   createApp,
   headersFor,
@@ -377,4 +380,197 @@ describe('certificate office: bulk, awards, registers (e2e)', () => {
       expect(Buffer.from(f.json().base64 as string, 'base64').length).toBeGreaterThan(300);
     }
   });
+
+  /** The run's batch PDFs as stand-in files (the test does not wait for the workers), then ready. */
+  const fakePdfs = async (batches: Array<{ exportId: string | null; title: string }>) => {
+    const storage = app.get<StorageDriver>(STORAGE_DRIVER);
+    for (const b of batches) {
+      const key = `test/run-${b.exportId!}.pdf`;
+      await storage.write(key, Buffer.from(`%PDF-1.4 ${b.title}`), 'application/pdf');
+      await withMigrator(async (c) => {
+        const f = await c.query<{ id: string }>(
+          `INSERT INTO files (school_id, bucket, object_key, content_type, size_bytes, sha256, original_name,
+                              owner_entity_type, owner_entity_id, classification, storage_driver, status, scanned_at, scan_result)
+           VALUES ($1, $2, $3, 'application/pdf', 20, repeat('0', 64), 'run.pdf', 'exports', $4, 'internal', $5, 'ready', now(), 'generated')
+           RETURNING id::text`,
+          [school.id, storage.bucket, key, b.exportId, storage.name],
+        );
+        await c.query(`UPDATE exports SET status = 'ready', file_id = $2 WHERE id = $1`, [
+          b.exportId,
+          f.rows[0]!.id,
+        ]);
+      });
+    }
+  };
+
+  it('issues to several classes and sections at once: a batch each, only the ticked, the run and its ZIP', async () => {
+    const t = stamp('CRS');
+    const k9 = await post('/academics/classes', { code: 'IX', name: 'Class IX', displayOrder: 9 });
+    const a = (
+      await post(`/academics/classes/${k9.json().id as string}/sections`, { name: 'A' })
+    ).json().id as string;
+    const b = (
+      await post(`/academics/classes/${k9.json().id as string}/sections`, { name: 'B' })
+    ).json().id as string;
+    const ids: Record<string, string> = {};
+    for (const [sec, first, roll] of [
+      [b, 'Raj', 2],
+      [a, 'Om', 2],
+      [b, 'Pia', 1],
+      [a, 'Ira', 1],
+    ] as const) {
+      const r = await post('/people/students', {
+        admissionNo: `${t}-${first}`,
+        firstName: first,
+        lastName: 'Test',
+        dob: '2012-02-02',
+        gender: 'female',
+        guardians: [],
+        enrolment: { classSectionId: sec, rollNo: roll },
+      });
+      ids[first] = r.json().id as string;
+    }
+    // the tick list: classes with their sections and how many on the rolls
+    const list = (await get('/certificates/bulk/sections')).json();
+    const nine = (
+      list.classes as Array<{
+        name: string;
+        students: number;
+        sections: Array<{ name: string; students: number }>;
+      }>
+    ).find((c) => c.name === 'Class IX')!;
+    expect(nine.students).toBe(4);
+    expect(nine.sections.map((x) => [x.name, x.students])).toEqual([
+      ['A', 2],
+      ['B', 2],
+    ]);
+    // a preview of both sections: class, section and roll order
+    const pv = await post('/certificates/bulk/preview', {
+      typeCode: 'BONAFIDE',
+      sectionIds: [b, a],
+    });
+    expect(pv.statusCode).toBe(201);
+    expect((pv.json().rows as Array<{ name: string }>).map((r) => r.name)).toEqual([
+      'Ira Test',
+      'Om Test',
+      'Pia Test',
+      'Raj Test',
+    ]);
+    expect(pv.json().figures).toMatchObject({ total: 4, sections: 2 });
+    // a staff type is not for sections
+    expect(
+      (await post('/certificates/bulk/preview', { typeCode: 'SERVICE', sectionIds: [a] }))
+        .statusCode,
+    ).toBe(400);
+    // Om unticked: a batch per section, in order, only the ticked
+    const run = await post('/certificates/bulk/run', {
+      typeCode: 'BONAFIDE',
+      sectionIds: [a, b],
+      only: [ids.Ira, ids.Pia, ids.Raj],
+      purpose: 'Bank account',
+    });
+    expect(run.statusCode).toBe(201);
+    expect(run.json().figures).toMatchObject({ batches: 2, issued: 3, skipped: 0, withPdf: 2 });
+    expect((run.json().batches as Array<{ title: string }>).map((x) => x.title)).toEqual([
+      'Bonafide certificate · Class IX – A (1)',
+      'Bonafide certificate · Class IX – B (2)',
+    ]);
+    const omHas = await withMigrator((c) =>
+      c.query(`SELECT 1 FROM certificates WHERE student_id = $1`, [ids.Om]),
+    );
+    expect(omHas.rowCount).toBe(0);
+    // the run's page; the ZIP waits until every PDF is made, then holds one a section
+    const runId = run.json().runId as string;
+    expect((await get(`/certificates/runs/${runId}`)).json().batches).toHaveLength(2);
+    await fakePdfs(run.json().batches);
+    const one = (run.json().batches as Array<{ exportId: string }>)[0]!.exportId;
+    await withMigrator((c) =>
+      c.query(`UPDATE exports SET status = 'running' WHERE id = $1`, [one]),
+    );
+    expect((await get(`/certificates/runs/${runId}/zip`)).statusCode).toBe(409);
+    await withMigrator((c) => c.query(`UPDATE exports SET status = 'ready' WHERE id = $1`, [one]));
+    const zip = await get(`/certificates/runs/${runId}/zip`);
+    expect(zip.statusCode).toBe(200);
+    expect(zip.json().contentType).toBe('application/zip');
+    const opened = await JSZip.loadAsync(Buffer.from(zip.json().base64 as string, 'base64'));
+    expect(Object.keys(opened.files).sort()).toEqual([
+      'Bonafide certificate · Class IX – A (1).pdf',
+      'Bonafide certificate · Class IX – B (2).pdf',
+    ]);
+    // not another school's run
+    expect((await get(`/certificates/runs/${randomRun()}`)).statusCode).toBe(404);
+  });
+
+  it('issues a staff certificate to departments: in service or who have left, a batch per department', async () => {
+    const t = stamp('CRD');
+    await withMigrator(async (c) => {
+      for (const [code, first, dept, status] of [
+        ['S1', 'Asha', 'Science', 'active'],
+        ['S2', 'Bina', 'Science', 'active'],
+        ['M1', 'Chet', 'Maths', 'active'],
+        ['M2', 'Dev', 'Maths', 'inactive'],
+      ] as const)
+        await c.query(
+          `INSERT INTO employees (school_id, employee_code, first_name, last_name, status, designation, department, joined_on, left_on)
+           VALUES ($1, $2, $3, 'Test', $4, 'TGT', $5, '2018-06-01', $6)`,
+          [
+            school.id,
+            `${t}-${code}`,
+            first,
+            status,
+            dept,
+            status === 'active' ? null : '2025-05-31',
+          ],
+        );
+    });
+    const d = (await get('/certificates/bulk/departments')).json().departments as Array<{
+      name: string;
+      active: number;
+      left: number;
+    }>;
+    expect(d.find((x) => x.name === 'Science')).toMatchObject({ active: 2, left: 0 });
+    expect(d.find((x) => x.name === 'Maths')).toMatchObject({ active: 1, left: 1 });
+    // a student type is not for departments
+    expect(
+      (await post('/certificates/bulk/preview', { typeCode: 'BONAFIDE', departments: ['Science'] }))
+        .statusCode,
+    ).toBe(400);
+    const pv = await post('/certificates/bulk/preview', {
+      typeCode: 'SERVICE',
+      departments: ['Science', 'Maths'],
+    });
+    expect(pv.statusCode).toBe(201);
+    expect((pv.json().rows as Array<{ name: string }>).map((r) => r.name)).toEqual([
+      'Chet Test',
+      'Asha Test',
+      'Bina Test',
+    ]);
+    const only = (pv.json().rows as Array<{ id: string }>).map((r) => r.id);
+    const run = await post('/certificates/bulk/run', {
+      typeCode: 'SERVICE',
+      departments: ['Science', 'Maths'],
+      only,
+    });
+    expect(run.statusCode).toBe(201);
+    expect((run.json().batches as Array<{ title: string }>).map((x) => x.title)).toEqual([
+      'Service certificate · Maths (1)',
+      'Service certificate · Science (2)',
+    ]);
+    const batch = (
+      await get(`/certificates/batches/${(run.json().batches as Array<{ id: string }>)[1]!.id}`)
+    ).json();
+    expect((batch.issued as Array<{ name: string }>).map((x) => x.name)).toEqual([
+      'Asha Test',
+      'Bina Test',
+    ]);
+    // those who have left
+    const left = await post('/certificates/bulk/preview', {
+      typeCode: 'EXPERIENCE',
+      departments: ['Maths'],
+      staffState: 'left',
+    });
+    expect((left.json().rows as Array<{ name: string }>).map((r) => r.name)).toEqual(['Dev Test']);
+  });
 });
+
+const randomRun = () => '00000000-0000-4000-8000-000000000000';

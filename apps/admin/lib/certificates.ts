@@ -415,10 +415,46 @@ export interface BulkPreview {
     problems: string[];
     held: boolean;
     ok: boolean;
+    /** the section (students) or department (staff) it is taken from */
+    sectionId: string | null;
+    kind: 'student' | 'employee';
   }>;
-  figures: { total: number; ok: number; failed: number; held: number };
+  figures: { total: number; ok: number; failed: number; held: number; sections: number };
   can: { override: boolean };
 }
+
+/** Bulk issue's tick lists (16 Nov 2026). */
+export interface BulkClasses {
+  classes: Array<{
+    id: string;
+    name: string;
+    students: number;
+    sections: Array<{ id: string; name: string; students: number }>;
+  }>;
+  max: number;
+}
+export interface BulkDepartments {
+  departments: Array<{ name: string; active: number; left: number }>;
+  max: number;
+}
+/** A bulk run: a batch (and PDF) for each section or department. */
+export interface BulkRun {
+  runId: string;
+  typeName: string;
+  by: string | null;
+  createdAt: string;
+  figures: { batches: number; issued: number; skipped: number; ready: number; withPdf: number };
+  batches: Array<{
+    id: string;
+    title: string;
+    issued: number;
+    skipped: number;
+    exportId: string | null;
+    exportStatus: string | null;
+  }>;
+}
+/** "No department" travels as this token in a link (an empty value would be dropped). */
+export const NO_DEPT = '~';
 export interface CertificateBatch {
   id: string;
   title: string;
