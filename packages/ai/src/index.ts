@@ -7,3 +7,4 @@ export * from './audit';
 export * from './assistant';
 export * from './config';
 export * from './narrative';
+export * from './structured';

@@ -9,23 +9,21 @@ import {
   SelectField,
 } from '@edupro/ui';
 import { getTranslations } from 'next-intl/server';
+import { ConfirmAction } from '@/components/ConfirmAction';
+import { FoldCard } from '@/components/FoldCard';
 import { Notice } from '@/components/Notice';
 import { boardImportCommit, boardImportValidate, masterExport } from '@/lib/actions';
 import { apiFetch, getMe } from '@/lib/api';
+import { setBoardLayout, uploadGazette } from '@/lib/board-actions';
+import {
+  statusOf,
+  when,
+  type BoardImport,
+  type BoardLayout,
+  type BoardTab,
+  type BoardYear,
+} from '@/lib/board-results';
 
-interface BoardImport {
-  id: string;
-  board: string;
-  classLabel: string;
-  fileName: string | null;
-  status: 'validated' | 'committed' | 'failed';
-  totalRows: number;
-  okRows: number;
-  rejectedRows: number;
-  unmatchedRows: number;
-  report: Array<{ row: number; column: string; message: string }>;
-  createdAt: string;
-}
 interface BoardRow extends Record<string, string | null> {
   id: string;
 }
@@ -34,11 +32,17 @@ interface Analysis extends Record<string, string | number | null> {
   subject_code: string;
 }
 
-/** Sprint 18: board result import and analysis. */
+const TABS: BoardTab[] = ['upload', 'results', 'analysis', 'setup'];
+
+/**
+ * Board results (docs/design/88): Upload CBSE's result file (the .TXT gazette, read with a known layout or one the
+ * AI learns from masked lines) or an Excel / CSV file; Results; Analysis; Set-up (the layouts).
+ */
 export default async function BoardResultsPage({
   searchParams,
 }: {
   searchParams: Promise<{
+    tab?: string;
     classLabel?: string;
     q?: string;
     import?: string;
@@ -48,165 +52,270 @@ export default async function BoardResultsPage({
   }>;
 }) {
   const sp = await searchParams;
-  const q = new URLSearchParams({ size: '200' });
-  if (sp.classLabel) q.set('classLabel', sp.classLabel);
-  if (sp.q) q.set('q', sp.q);
-  const [t, b, me, list, imports] = await Promise.all([
+  const [t, b, me] = await Promise.all([
     getTranslations('pages.exams_board_results'),
     getTranslations('boardResults'),
     getMe(),
-    apiFetch<{ data: BoardRow[]; page: { total: number }; analysis: Analysis[] }>(
-      `/exams/board-results?${q.toString()}`,
-    ),
-    apiFetch<{ data: BoardImport[] }>('/exams/board-results/imports').then((x) => x.data),
   ]);
   const canImport = me.permissions.includes('exams.board_result.import');
-  const current = imports.find((i) => i.id === sp.import) ?? null;
+  const tab: BoardTab = TABS.includes(sp.tab as BoardTab)
+    ? (sp.tab as BoardTab)
+    : sp.import || canImport
+      ? 'upload'
+      : 'results';
+  const q = new URLSearchParams({ size: '200' });
+  if (sp.classLabel) q.set('classLabel', sp.classLabel);
+  if (sp.q) q.set('q', sp.q);
+  const [list, imports, years, layouts] = await Promise.all([
+    tab === 'results' || tab === 'analysis'
+      ? apiFetch<{ data: BoardRow[]; page: { total: number }; analysis: Analysis[] }>(
+          `/exams/board-results?${q.toString()}`,
+        )
+      : null,
+    tab === 'upload'
+      ? apiFetch<{ data: BoardImport[] }>('/exams/board-results/imports').then((x) => x.data)
+      : ([] as BoardImport[]),
+    tab === 'upload' && canImport
+      ? apiFetch<{ data: BoardYear[] }>('/exams/board-results/years').then((x) => x.data)
+      : ([] as BoardYear[]),
+    tab === 'setup'
+      ? apiFetch<{ data: BoardLayout[] }>('/exams/board-results/layouts').then((x) => x.data)
+      : ([] as BoardLayout[]),
+  ]);
+  const current = imports.find((i) => i.id === sp.import && i.kind === 'sheet') ?? null;
+  const yearNow = years.find((y) => y.current) ?? years[0];
+
   return (
     <>
       <PageHeader
         kicker={t('kicker')}
         title={t('title')}
-        description={t('description')}
+        description={b('pageHelp')}
         actions={
-          <span style={{ display: 'inline-flex', gap: 'var(--sp-2)' }}>
-            {(['xlsx', 'pdf'] as const).map((format) => (
-              <form key={format} action={masterExport}>
-                <input type="hidden" name="master" value="__dataset__" />
-                <input type="hidden" name="dataset" value="board_results" />
-                <input type="hidden" name="back" value="/exams/board-results" />
-                <input type="hidden" name="format" value={format} />
-                <Button type="submit" variant="secondary" size="sm">
-                  {b(format === 'xlsx' ? 'excel' : 'pdf')}
-                </Button>
-              </form>
-            ))}
-          </span>
+          tab === 'results' ? (
+            <span style={{ display: 'inline-flex', gap: 'var(--sp-2)' }}>
+              {(['xlsx', 'pdf'] as const).map((format) => (
+                <form key={format} action={masterExport}>
+                  <input type="hidden" name="master" value="__dataset__" />
+                  <input type="hidden" name="dataset" value="board_results" />
+                  <input type="hidden" name="back" value="/exams/board-results?tab=results" />
+                  <input type="hidden" name="format" value={format} />
+                  <Button type="submit" variant="secondary" size="sm">
+                    {b(format === 'xlsx' ? 'excel' : 'pdf')}
+                  </Button>
+                </form>
+              ))}
+            </span>
+          ) : undefined
         }
       />
       <Notice params={sp} />
-      <div
-        style={{
-          display: 'grid',
-          gap: 'var(--sp-5)',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 560px), 1fr))',
-        }}
+      <nav
+        className="ep-tabs-links"
+        aria-label={t('title')}
+        style={{ marginBottom: 'var(--sp-4)' }}
       >
-        {canImport ? (
-          <Card title={b('upload')}>
-            <form action={boardImportValidate}>
-              <FormRow columns={3}>
-                <InputField
-                  id="board"
-                  name="board"
-                  label={b('board')}
-                  defaultValue="CBSE"
-                  pattern="[A-Z]{2,10}"
-                />
-                <SelectField
-                  id="classLabel"
-                  name="classLabel"
-                  label={b('classLabel')}
-                  options={[
-                    { value: 'X', label: 'X' },
-                    { value: 'XII', label: 'XII' },
-                  ]}
-                />
-                <label className="ep-field">
-                  <span className="ep-field__label">{b('file')}</span>
-                  <input
-                    className="ep-input"
-                    type="file"
-                    name="file"
-                    accept=".csv,.xlsx"
+        {TABS.map((x) => (
+          <a
+            key={x}
+            href={`/exams/board-results?tab=${x}`}
+            aria-current={tab === x ? 'page' : undefined}
+          >
+            {b(`tab_${x}`)}
+          </a>
+        ))}
+      </nav>
+
+      {tab === 'upload' ? (
+        <div style={{ display: 'grid', gap: 'var(--sp-5)' }}>
+          {canImport ? (
+            <Card title={b('gazette')}>
+              <p className="ep-field__help" style={{ marginTop: 0 }}>
+                {b('gazetteHelp')}
+              </p>
+              <form action={uploadGazette}>
+                <FormRow columns={3}>
+                  <SelectField
+                    id="gzClass"
+                    name="classLabel"
+                    label={b('classLabel')}
                     required
+                    options={[
+                      { value: 'X', label: 'X' },
+                      { value: 'XII', label: 'XII' },
+                    ]}
                   />
-                </label>
-              </FormRow>
-              <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-                <Button type="submit" variant="secondary">
-                  {b('validate')}
-                </Button>
-              </div>
-            </form>
-            {current ? (
-              <div className="ep-master__report">
-                <strong>{b('report')}</strong> · {current.fileName ?? ''} ·{' '}
-                {b('rows', {
-                  ok: current.okRows,
-                  total: current.totalRows,
-                  rejected: current.rejectedRows,
-                  unmatched: current.unmatchedRows,
-                })}
-                {current.status === 'validated' ? (
-                  <form action={boardImportCommit} style={{ marginTop: 'var(--sp-2)' }}>
-                    <input type="hidden" name="importId" value={current.id} />
-                    <Button type="submit">{b('commit', { ok: current.okRows })}</Button>
-                  </form>
-                ) : null}
-                {current.status === 'committed' ? (
-                  <div>
-                    <Badge tone="success">{b('committed')}</Badge>
-                  </div>
-                ) : null}
-                {current.status === 'failed' ? (
-                  <p className="ep-field__help">{b('failed')}</p>
-                ) : null}
-                {current.report.length ? (
-                  <table className="ep-table ep-table--dense">
-                    <tbody>
-                      {current.report.slice(0, 50).map((r, i) => (
-                        <tr key={i}>
-                          <td>{r.row || ''}</td>
-                          <td>{r.column}</td>
-                          <td>{r.message}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                ) : null}
-              </div>
-            ) : null}
-            {imports.length ? (
-              <details style={{ marginTop: 'var(--sp-3)' }}>
-                <summary className="ep-kicker">{b('recent')}</summary>
-                <table className="ep-table ep-table--dense">
-                  <tbody>
-                    {imports.map((i) => (
-                      <tr key={i.id}>
-                        <td>{i.createdAt.slice(0, 16).replace('T', ' ')}</td>
-                        <td>
-                          {i.board} {i.classLabel}
-                        </td>
-                        <td>
-                          <Badge
-                            tone={
-                              i.status === 'committed'
-                                ? 'success'
-                                : i.status === 'failed'
-                                  ? 'danger'
-                                  : 'warning'
-                            }
-                          >
-                            {i.status}
-                          </Badge>
-                        </td>
-                        <td>
-                          {b('rows', {
-                            ok: i.okRows,
-                            total: i.totalRows,
-                            rejected: i.rejectedRows,
-                            unmatched: i.unmatchedRows,
-                          })}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </details>
-            ) : null}
+                  <SelectField
+                    id="gzYear"
+                    name="academicYearId"
+                    label={b('academicYear')}
+                    required
+                    defaultValue={yearNow?.id ?? ''}
+                    options={years.map((y) => ({
+                      value: y.id,
+                      label: b('examOf', { year: y.name, exam: y.examYear }),
+                    }))}
+                  />
+                  <label className="ep-field" htmlFor="gzFile">
+                    <span className="ep-field__label">{b('gazetteFile')} *</span>
+                    <input
+                      id="gzFile"
+                      className="ep-input"
+                      type="file"
+                      name="file"
+                      accept=".txt,.TXT,text/plain"
+                      required
+                    />
+                  </label>
+                </FormRow>
+                <p className="ep-field__help">{b('aiNote')}</p>
+                <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                  <Button type="submit">{b('uploadCheck')}</Button>
+                </div>
+              </form>
+            </Card>
+          ) : null}
+
+          <Card title={b('uploads')}>
+            <DataTable<BoardImport>
+              caption={b('uploads')}
+              density="dense"
+              columns={[
+                {
+                  key: 'f',
+                  header: b('fileCol'),
+                  render: (i) => (
+                    <a
+                      href={
+                        i.kind === 'gazette'
+                          ? `/exams/board-results/imports/${i.id}`
+                          : `/exams/board-results?tab=upload&import=${i.id}`
+                      }
+                    >
+                      {i.fileName || b(i.kind === 'gazette' ? 'kind_gazette' : 'kind_sheet')}
+                    </a>
+                  ),
+                },
+                { key: 'c', header: b('classLabel'), render: (i) => i.classLabel },
+                {
+                  key: 'y',
+                  header: b('examYear'),
+                  render: (i) => (i.examYear ? String(i.examYear) : '—'),
+                },
+                {
+                  key: 'k',
+                  header: b('kind'),
+                  render: (i) => b(i.kind === 'gazette' ? 'kind_gazette' : 'kind_sheet'),
+                },
+                {
+                  key: 'n',
+                  header: b('candidates'),
+                  numeric: true,
+                  render: (i) => String(i.figures.candidates ?? i.totalRows),
+                },
+                {
+                  key: 's',
+                  header: b('state'),
+                  render: (i) => {
+                    const s = statusOf(i);
+                    return <Badge tone={s.tone}>{b(`state_${s.key}`)}</Badge>;
+                  },
+                },
+                { key: 'w', header: b('uploadedOn'), render: (i) => when(i.createdAt) },
+              ]}
+              rows={imports}
+              rowKey={(i) => i.id}
+              emptyTitle={b('noUploads')}
+            />
           </Card>
-        ) : null}
+
+          {canImport ? (
+            <FoldCard
+              id="sheet-import"
+              title={b('sheet')}
+              hint={b('sheetHint')}
+              open={Boolean(current)}
+            >
+              <form action={boardImportValidate}>
+                <FormRow columns={3}>
+                  <InputField
+                    id="board"
+                    name="board"
+                    label={b('board')}
+                    defaultValue="CBSE"
+                    pattern="[A-Z]{2,10}"
+                  />
+                  <SelectField
+                    id="classLabel"
+                    name="classLabel"
+                    label={b('classLabel')}
+                    options={[
+                      { value: 'X', label: 'X' },
+                      { value: 'XII', label: 'XII' },
+                    ]}
+                  />
+                  <label className="ep-field" htmlFor="sheetFile">
+                    <span className="ep-field__label">{b('file')}</span>
+                    <input
+                      id="sheetFile"
+                      className="ep-input"
+                      type="file"
+                      name="file"
+                      accept=".csv,.xlsx"
+                      required
+                    />
+                  </label>
+                </FormRow>
+                <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                  <Button type="submit" variant="secondary">
+                    {b('validate')}
+                  </Button>
+                </div>
+              </form>
+              {current ? (
+                <div className="ep-master__report">
+                  <strong>{b('report')}</strong> · {current.fileName ?? ''} ·{' '}
+                  {b('rows', {
+                    ok: current.okRows,
+                    total: current.totalRows,
+                    rejected: current.rejectedRows,
+                    unmatched: current.unmatchedRows,
+                  })}
+                  {current.status === 'validated' ? (
+                    <form action={boardImportCommit} style={{ marginTop: 'var(--sp-2)' }}>
+                      <input type="hidden" name="importId" value={current.id} />
+                      <Button type="submit">{b('commit', { ok: current.okRows })}</Button>
+                    </form>
+                  ) : null}
+                  {current.status === 'committed' ? (
+                    <div>
+                      <Badge tone="success">{b('committed')}</Badge>
+                    </div>
+                  ) : null}
+                  {current.status === 'failed' ? (
+                    <p className="ep-field__help">{b('failed')}</p>
+                  ) : null}
+                  {current.report.length ? (
+                    <table className="ep-table ep-table--dense">
+                      <tbody>
+                        {current.report.slice(0, 50).map((r, i) => (
+                          <tr key={i}>
+                            <td>{r.row || ''}</td>
+                            <td>{r.column}</td>
+                            <td>{r.message}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  ) : null}
+                </div>
+              ) : null}
+            </FoldCard>
+          ) : null}
+        </div>
+      ) : null}
+
+      {tab === 'analysis' && list ? (
         <Card title={b('analysis')}>
           <DataTable<Analysis>
             caption={b('analysis')}
@@ -223,7 +332,12 @@ export default async function BoardResultsPage({
               { key: 'h', header: b('highest'), numeric: true, render: (x) => x.highest ?? '' },
               { key: 'l', header: b('lowest'), numeric: true, render: (x) => x.lowest ?? '' },
               { key: 'p', header: b('passed'), numeric: true, render: (x) => x.passed },
-              { key: 'd', header: b('distinctions'), numeric: true, render: (x) => x.distinctions },
+              {
+                key: 'd',
+                header: b('distinctions'),
+                numeric: true,
+                render: (x) => x.distinctions,
+              },
               {
                 key: 'u',
                 header: b('unlinked'),
@@ -237,72 +351,148 @@ export default async function BoardResultsPage({
             emptyTitle="—"
           />
         </Card>
-      </div>
-      <Card
-        title={`${b('results')} · ${list.page.total}`}
-        style={{ marginTop: 'var(--sp-5)' }}
-        actions={
-          <form
-            method="get"
-            style={{ display: 'flex', gap: 'var(--sp-2)', alignItems: 'flex-end' }}
-          >
-            <SelectField
-              id="fc"
-              name="classLabel"
-              label={b('classLabel')}
-              defaultValue={sp.classLabel ?? ''}
-              options={[
-                { value: '', label: '—' },
-                { value: 'X', label: 'X' },
-                { value: 'XII', label: 'XII' },
-              ]}
-            />
-            <InputField
-              id="fq"
-              name="q"
-              label={b('search')}
-              defaultValue={sp.q ?? ''}
-              maxLength={80}
-            />
-            <Button type="submit" variant="secondary" size="sm">
-              {b('search')}
-            </Button>
-          </form>
-        }
-      >
-        <DataTable<BoardRow>
-          caption={b('results')}
-          density="dense"
-          columns={[
-            { key: 'r', header: b('rollNo'), render: (x) => <strong>{x.roll_no}</strong> },
-            {
-              key: 'c',
-              header: b('candidate'),
-              render: (x) => (
-                <>
-                  {x.candidate_name ?? ''}
-                  <div className="ep-kicker">
-                    {x.student ? `${x.student} · ${x.admission_no}` : b('unlinked')}
-                  </div>
-                </>
-              ),
-            },
-            {
-              key: 's',
-              header: b('subject'),
-              render: (x) => `${x.subject_code} · ${x.subject_name ?? ''}`,
-            },
-            { key: 't', header: b('theory'), numeric: true, render: (x) => x.theory ?? '' },
-            { key: 'p', header: b('practical'), numeric: true, render: (x) => x.practical ?? '' },
-            { key: 'tot', header: b('total'), numeric: true, render: (x) => x.total ?? '' },
-            { key: 'g', header: b('grade'), render: (x) => x.grade ?? '' },
-            { key: 'res', header: b('result'), render: (x) => x.result ?? '' },
-          ]}
-          rows={list.data}
-          rowKey={(x) => x.id}
-          emptyTitle="—"
-        />
-      </Card>
+      ) : null}
+
+      {tab === 'results' && list ? (
+        <Card
+          title={`${b('results')} · ${list.page.total}`}
+          actions={
+            <form
+              method="get"
+              style={{ display: 'flex', gap: 'var(--sp-2)', alignItems: 'flex-end' }}
+            >
+              <input type="hidden" name="tab" value="results" />
+              <SelectField
+                id="fc"
+                name="classLabel"
+                label={b('classLabel')}
+                defaultValue={sp.classLabel ?? ''}
+                options={[
+                  { value: '', label: '—' },
+                  { value: 'X', label: 'X' },
+                  { value: 'XII', label: 'XII' },
+                ]}
+              />
+              <InputField
+                id="fq"
+                name="q"
+                label={b('search')}
+                defaultValue={sp.q ?? ''}
+                maxLength={80}
+              />
+              <Button type="submit" variant="secondary" size="sm">
+                {b('search')}
+              </Button>
+            </form>
+          }
+        >
+          <DataTable<BoardRow>
+            caption={b('results')}
+            density="dense"
+            columns={[
+              { key: 'r', header: b('rollNo'), render: (x) => <strong>{x.roll_no}</strong> },
+              {
+                key: 'c',
+                header: b('candidate'),
+                render: (x) => (
+                  <>
+                    {x.candidate_name ?? ''}
+                    <div className="ep-kicker">
+                      {x.student ? `${x.student} · ${x.admission_no}` : b('unlinked')}
+                    </div>
+                  </>
+                ),
+              },
+              {
+                key: 's',
+                header: b('subject'),
+                render: (x) => `${x.subject_code} · ${x.subject_name ?? ''}`,
+              },
+              { key: 't', header: b('theory'), numeric: true, render: (x) => x.theory ?? '' },
+              {
+                key: 'p',
+                header: b('practical'),
+                numeric: true,
+                render: (x) => x.practical ?? '',
+              },
+              { key: 'tot', header: b('total'), numeric: true, render: (x) => x.total ?? '' },
+              { key: 'g', header: b('grade'), render: (x) => x.grade ?? '' },
+              { key: 'res', header: b('result'), render: (x) => x.result ?? '' },
+            ]}
+            rows={list.data}
+            rowKey={(x) => x.id}
+            emptyTitle="—"
+          />
+        </Card>
+      ) : null}
+
+      {tab === 'setup' ? (
+        <Card title={b('layouts')}>
+          <p className="ep-field__help" style={{ marginTop: 0 }}>
+            {b('layoutsHelp')}
+          </p>
+          <DataTable<BoardLayout>
+            caption={b('layouts')}
+            density="dense"
+            columns={[
+              { key: 'n', header: b('layoutName'), render: (l) => <strong>{l.name}</strong> },
+              { key: 'c', header: b('classLabel'), render: (l) => l.classLabel },
+              {
+                key: 's',
+                header: b('source'),
+                render: (l) =>
+                  l.source === 'built-in'
+                    ? b('src_builtin')
+                    : l.source === 'claude'
+                      ? `${b('src_claude')}${l.model ? ` (${l.model})` : ''}`
+                      : b('src_edited'),
+              },
+              {
+                key: 'f',
+                header: b('learnedFrom'),
+                render: (l) =>
+                  l.learnedFrom ? (
+                    <a href={`/exams/board-results/imports/${l.learnedFrom.importId}`}>
+                      {l.learnedFrom.fileName ?? b('kind_gazette')}
+                    </a>
+                  ) : (
+                    '—'
+                  ),
+              },
+              { key: 'w', header: b('learnedOn'), render: (l) => when(l.createdAt) },
+              {
+                key: 'a',
+                header: b('state'),
+                render: (l) => (
+                  <Badge tone={l.active ? 'success' : 'neutral'}>
+                    {b(l.active ? 'inUse' : 'switchedOff')}
+                  </Badge>
+                ),
+              },
+              {
+                key: 'x',
+                header: b('actions'),
+                render: (l) =>
+                  l.source !== 'built-in' && canImport ? (
+                    <ConfirmAction
+                      action={setBoardLayout}
+                      fields={{ id: l.key.slice(3), active: String(!l.active) }}
+                      label={b(l.active ? 'switchOff' : 'switchOn')}
+                      title={b(l.active ? 'switchOff' : 'switchOn')}
+                      confirmLabel={b(l.active ? 'switchOff' : 'switchOn')}
+                      variant="ghost"
+                    >
+                      {b(l.active ? 'switchOffHelp' : 'switchOnHelp')}
+                    </ConfirmAction>
+                  ) : null,
+              },
+            ]}
+            rows={layouts}
+            rowKey={(l) => l.key}
+            emptyTitle="—"
+          />
+        </Card>
+      ) : null}
     </>
   );
 }

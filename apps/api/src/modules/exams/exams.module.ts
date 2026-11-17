@@ -6,6 +6,8 @@ import { ReportsModule } from '../reports/reports.module';
 import { ReportCardSignaturesService } from './report-card-signatures.service';
 import { BoardResultsController } from './board-results.controller';
 import { BoardResultsService } from './board-results.service';
+import { BoardGazetteService } from './board-gazette.service';
+import { BoardLayoutAi } from './board-layout-ai';
 import { ExamAnalysisController } from './exam-analysis.controller';
 import { ExamAnalysisService } from './exam-analysis.service';
 import { ExamDateSheetsController } from './exam-date-sheets.controller';
@@ -71,6 +73,8 @@ import { SubjectChoicesService } from './subject-choices.service';
     ExamResultsService,
     ReportCardsService,
     BoardResultsService,
+    BoardGazetteService,
+    BoardLayoutAi,
     SubjectChoicesService,
     ExamStatusService,
     MarkSchemesService,

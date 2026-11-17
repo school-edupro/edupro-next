@@ -189,3 +189,48 @@ subject); compartment, absent, withheld / later lists (with the student, section
 - What the **FL** column's `I` means (122 of 311 Class X candidates carry it; none in XII) — shown as printed
   until the school says.
 - The school's IT sets the Claude key on the server before the first new layout.
+
+## As built — phase A, reading the file (17 Nov 2026)
+
+- **Reader** (`apps/api/src/modules/exams/board-gazette.ts`, pure): a layout is data (`FieldAt` = line of the
+  record, 0-based start, width; width 0 = absent). `readGazette` reads every record and checks it — a 3-digit
+  code (a cut-off code means the layout does not fit), marks 0–100 or the absent token, a CBSE grade, a known
+  result word (PASS, COMP, FAIL, ER, ABST, RW, RL, UFM, XXXX; another is kept with a warning), no roll number
+  twice; a blank marks line (an absent / UFM candidate) is kept without error. `layoutFits` = candidates found and
+  errors on ≤ 5 % of them (at least 1). The fingerprint = the examination title (dates, region, page, years
+  removed) + the column headings, spaces collapsed.
+- **Built-in layouts** for 2026, measured on the school's files (the data sits one or two columns right of its
+  heading — why the AI sees sample lines, not only headings): X — 7 slots at 64 + 7k, grade +4, result 114,
+  compartment 132; XII — 6 slots at 65 + 8k, grade +5, internal grades 114 / 117 / 120, result 126, compartment 144. Checked locally on the real files: 311 + 311 candidates, no problem, counts equal the annexures.
+- **Finding a layout**: the school's kept layouts and the built-in ones with the same fingerprint; else each known
+  layout of the class that reads the file with no error; else Claude.
+- **Claude** (`board-layout-ai.ts` + `packages/ai/src/structured.ts`, official `@anthropic-ai/sdk` 1.9):
+  `claude-opus-5-5`, structured output (`output_config.format` json_schema, effort high), the server-side refusal
+  fallback (`fallbacks: "default"`); the reply validated again (`LayoutZ` + fields inside the record). What it
+  sees (`maskedSample`): the heading block (date and region masked, the school line replaced) and up to four
+  records (the first, the widest, one with an absent mark, one with COMP / not PASS), token by token: grades and
+  result words kept, every other digit → 9, every 2+ letter run → X, single letters kept — every column in place;
+  a column ruler. Retry ("Ask the AI again") adds the failed checks (field and message, values removed). The
+  school's monthly AI token budget (`AI_SCHOOL_MONTHLY_TOKENS`, summed from `ai_audit`) applies; every call writes
+  `ai_audit` (kinds `board_layout`, `board_layout_refused`, `board_layout_error`; tokens, cost; no student data).
+  No key (`AI_PROVIDER=mock`) → 409 `board.ai_not_set_up`; refusal → 422 `board.ai_no_layout`; unusable reply →
+  422 `board.ai_bad_layout`.
+- **Data (0396)**: `board_layouts` (learned, inactive until its file is saved; one active per fingerprint);
+  `board_result_imports` + kind, exam year, layout key / how, the file's text, figures, replaced at / by,
+  academic year optional; `board_candidates` (one per candidate: result, compartment, internal grades, total and %
+  of the subjects with marks, student and how matched); `board_results` + exam year, candidate, slot, absent; one
+  row per board, class, exam year, roll, subject (the Sprint 18 Excel / CSV import uses the same key).
+- **API** (`/exams/board-results`): `POST gazette` (preview), `GET imports/:id`, `GET imports/:id/file`,
+  `POST imports/:id/relearn`, `POST imports/:id/commit` (gazette or sheet), `GET years`, `GET layouts`,
+  `POST layouts/:id/active`. Saving replaces the earlier saved file of the same board, class and year (its rows
+  removed, the import marked replaced) and keeps a learned layout.
+- **Admin**: Board results with tabs Upload (the .TXT form with class and academic year, the uploads list, the
+  Excel / CSV import folded) · Results · Analysis · Set-up (layouts, switch off / use again; English + Hindi);
+  each upload's page (figures; next step — save, ask the AI again, saved / replaced; the file View / Download and
+  the layout; folded problems, results by word, subjects, candidates).
+- **Tests**: unit `board-gazette.spec.ts` (6: both layouts, the checks, a moved layout refused, masking, the reply
+  schema), `packages/ai/test/structured.test.ts` (3); e2e `board-gazette.e2e-spec.ts` (5: preview → save, students
+  by roll and name, replace, a new layout learned with no name / roll / mark in the request and `ai_audit`
+  written, kept → fingerprint next time, switched off → learned again, a wrong layout failed → asked again →
+  passes, no AI / refusal / bad reply, Class XII, not a gazette, the auditor can look but not upload); Sprint 18
+  still passes. A browser pass (test school): every tab and three upload pages, axe clean at 1440 and 375 px.

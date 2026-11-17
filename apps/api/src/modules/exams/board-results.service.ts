@@ -10,10 +10,17 @@ import type { BoardListQueryDto, BoardUploadDto } from './board-results.dto';
 
 export interface BoardImportRow {
   id: string;
+  /** sheet: a CSV / Excel file; gazette: CBSE's result .TXT (docs/design/88) */
+  kind: 'sheet' | 'gazette';
   board: string;
   classLabel: string;
+  examYear: number | null;
   fileName: string | null;
   status: 'validated' | 'committed' | 'failed';
+  /** a later saved file of the same class and year took its place */
+  replacedAt: string | null;
+  layoutHow: 'fingerprint' | 'tried' | 'claude' | null;
+  figures: Record<string, unknown>;
   totalRows: number;
   okRows: number;
   rejectedRows: number;
@@ -111,8 +118,10 @@ export class BoardResultsService {
       const hardRejects = parsed.rejects.filter((x) => x.row > 0);
       const status = hardRejects.length ? 'failed' : 'validated';
       const ins = await c.query<{ id: string }>(
-        `INSERT INTO board_result_imports (school_id, academic_year_id, board, class_label, file_name, status, total_rows, ok_rows, rejected_rows, unmatched_rows, report, payload, requested_by, request_id)
-         VALUES (app.current_school_id(), app.current_academic_year_id(), $1, $2, $3, $4::import_status, $5, $6, $7, $8, $9::jsonb, $10::jsonb, app.current_user_id(), app.current_request_id())
+        `INSERT INTO board_result_imports (school_id, academic_year_id, exam_year, board, class_label, file_name, status, total_rows, ok_rows, rejected_rows, unmatched_rows, report, payload, requested_by, request_id)
+         VALUES (app.current_school_id(), app.current_academic_year_id(),
+                 (SELECT EXTRACT(YEAR FROM end_date)::int FROM academic_years WHERE id = app.current_academic_year_id()),
+                 $1, $2, $3, $4::import_status, $5, $6, $7, $8, $9::jsonb, $10::jsonb, app.current_user_id(), app.current_request_id())
          RETURNING id::text`,
         [
           dto.board,
@@ -145,7 +154,7 @@ export class BoardResultsService {
         class_label: string;
         payload: ParsedRow[];
       }>(
-        `SELECT status::text, board, class_label, payload FROM board_result_imports WHERE id = $1`,
+        `SELECT status::text, board, class_label, payload FROM board_result_imports WHERE id = $1 AND kind = 'sheet'`,
         [importId],
       );
       const row = imp.rows[0];
@@ -154,9 +163,11 @@ export class BoardResultsService {
         throw new DomainError('conflict', `Import is ${row.status}`, { status: 409 });
       for (const r of row.payload)
         await c.query(
-          `INSERT INTO board_results (school_id, academic_year_id, board, class_label, roll_no, candidate_name, student_id, subject_code, subject_name, theory, practical, total, grade, result, import_id, raw)
-           VALUES (app.current_school_id(), app.current_academic_year_id(), $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14::jsonb)
-           ON CONFLICT (academic_year_id, board, class_label, roll_no, subject_code) DO UPDATE SET candidate_name = EXCLUDED.candidate_name, student_id = COALESCE(EXCLUDED.student_id, board_results.student_id),
+          `INSERT INTO board_results (school_id, academic_year_id, exam_year, board, class_label, roll_no, candidate_name, student_id, subject_code, subject_name, theory, practical, total, grade, result, import_id, raw)
+           VALUES (app.current_school_id(), app.current_academic_year_id(),
+                   (SELECT EXTRACT(YEAR FROM end_date)::int FROM academic_years WHERE id = app.current_academic_year_id()),
+                   $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14::jsonb)
+           ON CONFLICT (school_id, board, class_label, exam_year, roll_no, subject_code) DO UPDATE SET candidate_name = EXCLUDED.candidate_name, student_id = COALESCE(EXCLUDED.student_id, board_results.student_id),
              subject_name = EXCLUDED.subject_name, theory = EXCLUDED.theory, practical = EXCLUDED.practical, total = EXCLUDED.total, grade = EXCLUDED.grade, result = EXCLUDED.result, import_id = EXCLUDED.import_id, raw = EXCLUDED.raw`,
           [
             row.board,
@@ -192,8 +203,8 @@ export class BoardResultsService {
   async imports(ctx: RequestContext): Promise<BoardImportRow[]> {
     return this.db.tenant(requireTenant(ctx), async (c) => {
       const r = await c.query<Record<string, unknown>>(
-        `SELECT id::text, board, class_label, file_name, status::text, total_rows, ok_rows, rejected_rows, unmatched_rows, report, created_at, committed_at
-           FROM board_result_imports WHERE academic_year_id = app.current_academic_year_id() ORDER BY created_at DESC LIMIT 20`,
+        // eslint-disable-next-line no-restricted-syntax -- IMPORT_COLUMNS is a constant
+        `SELECT ${IMPORT_COLUMNS} FROM board_result_imports ORDER BY created_at DESC LIMIT 30`,
       );
       return r.rows.map(toImport);
     });
@@ -244,21 +255,41 @@ export class BoardResultsService {
     });
   }
 
+  /** sheet or gazette (the confirm route serves both). */
+  async kindOf(ctx: RequestContext, id: string): Promise<'sheet' | 'gazette' | null> {
+    return this.db.tenant(requireTenant(ctx), async (c) => {
+      const r = await c.query<{ kind: 'sheet' | 'gazette' }>(
+        `SELECT kind FROM board_result_imports WHERE id = $1`,
+        [id],
+      );
+      return r.rows[0]?.kind ?? null;
+    });
+  }
+
   private async getImport(c: PoolClient, id: string): Promise<BoardImportRow | null> {
     const r = await c.query<Record<string, unknown>>(
-      `SELECT id::text, board, class_label, file_name, status::text, total_rows, ok_rows, rejected_rows, unmatched_rows, report, created_at, committed_at FROM board_result_imports WHERE id = $1`,
+      // eslint-disable-next-line no-restricted-syntax -- IMPORT_COLUMNS is a constant
+      `SELECT ${IMPORT_COLUMNS} FROM board_result_imports WHERE id = $1`,
       [id],
     );
     return r.rows[0] ? toImport(r.rows[0]) : null;
   }
 }
 
-const toImport = (r: Record<string, unknown>): BoardImportRow => ({
+export const IMPORT_COLUMNS = `id::text, kind, board, class_label, exam_year, file_name, status::text, total_rows, ok_rows, rejected_rows,
+  unmatched_rows, report, figures, layout_how, replaced_at, created_at, committed_at`;
+
+export const toImport = (r: Record<string, unknown>): BoardImportRow => ({
   id: String(r.id),
+  kind: (r.kind as BoardImportRow['kind'] | undefined) ?? 'sheet',
   board: String(r.board),
   classLabel: String(r.class_label),
+  examYear: r.exam_year == null ? null : Number(r.exam_year),
   fileName: (r.file_name as string | null) ?? null,
   status: r.status as BoardImportRow['status'],
+  replacedAt: r.replaced_at ? new Date(r.replaced_at as string).toISOString() : null,
+  layoutHow: (r.layout_how as BoardImportRow['layoutHow']) ?? null,
+  figures: (r.figures as Record<string, unknown> | undefined) ?? {},
   totalRows: Number(r.total_rows),
   okRows: Number(r.ok_rows),
   rejectedRows: Number(r.rejected_rows),

@@ -471,6 +471,35 @@ listed remarks only; put remarks in the bank under each category. Teachers write
 app **Remarks** (or **Exams → open exam → Remarks**): one per student and category. The remarks lock
 of the class closes them; the report card prints them under the remarks.
 
+## Board results (CBSE Class X and XII)
+
+**Exams → Board results** keeps the board's results and their analysis. It has four tabs: **Upload**, **Results**,
+**Analysis** and **Set-up**.
+
+**Uploading CBSE's result file.** On **Upload**, choose the class (X or XII) and the academic year, choose the
+`.TXT` file CBSE sends (the "School / Roll No wise Gazette") exactly as it came, and press **Upload and check**.
+EduPro reads every candidate — roll number, name, sex, each subject's code, marks and grade, internal grades
+(XII), the result and any compartment subjects — and checks each one (a mark and a grade for every subject, marks
+0–100 or absent, real grades, a known result word, no roll number twice). Nothing is saved yet: the upload's page
+shows the figures (candidates, appeared, passed, other results, students found, problems), what EduPro found, and
+**Save these results**. Saving a second file of the same class and year replaces the first (the first stays in
+**Uploads**, marked Replaced, with its file).
+
+**Students** are found by the board roll number on their enrolment, else by their name in the class that year;
+anyone not found is kept by roll number (the analysis still counts them).
+
+**When CBSE changes the file's layout.** EduPro knows the 2026 Class X and XII layouts. A file laid out
+differently is read by the AI (Claude): it is shown only the column headings and a few lines in which every name,
+roll number and mark is replaced by X or 9 — no student's data leaves EduPro — and it says where each field sits.
+EduPro then reads every candidate itself and checks them as above. If the checks fail, **Ask the AI again** (it
+is told which checks failed). Once that file is saved, the layout is kept (**Set-up → Result file layouts**), so
+the next file laid out the same way is read without the AI. Switch a kept layout off and the next such file is
+learned again. The AI needs the school's server to be set up for it (IT: `AI_PROVIDER=claude` and the
+`ANTHROPIC_API_KEY`); without it, known layouts still work.
+
+An Excel or CSV file (one row per candidate per subject, or one row per candidate) can still be imported from the
+**Excel or CSV result file** card on the same tab.
+
 ## Five common questions
 
 1. _A teacher cannot see a section._ They need a teacher assignment for that section and subject this
@@ -481,5 +510,5 @@ of the class closes them; the report card prints them under the remarks.
    withheld for a fee balance above the release's minimum.
 4. _We need to change a mark after locking._ Reopen the subject (coordinator), correct, lock again;
    recompute results and re-render the card.
-5. _Board results._ **Exams → Board results**: upload the CBSE file; pupils match by board roll number
-   (kept on the enrolment) or by name; the analysis and the export are available at once.
+5. _Board results._ **Exams → Board results → Upload**: upload CBSE's `.TXT` as it came, check what EduPro
+   found, then **Save these results** (see "Board results" above).
