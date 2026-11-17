@@ -230,8 +230,14 @@ a type with no template) and four sections:
    tables:
    - **Used by a certificate type**: a type prints with it — issuing that certificate uses this paper.
      Changing it changes certificates issued from then on; those already issued keep their paper.
-   - **Used by no type**: issuing never picks it — the school's copies and spare layouts. To use one,
-     open the type and choose it under **Layout**. Some here are still in use and say so — keep them:
+   - **Used by no type**: issuing never picks it — the Issue page lists certificate types, and a
+     layout shows there only when a type uses it. To use one, press **Use for a type** on its row:
+     choose the type (the one in the layout's name is chosen for you) and how — **Offer it as a choice
+     at issue** (the type keeps its layout; on the Issue page a **Layout** list offers this one too,
+     after choosing the person) or **Print every certificate of the type with it** (from now on;
+     certificates already issued keep their paper). Give a layout to the kind of certificate it was
+     made for: it prints that type's details. The same can be done on the type's page, under
+     **Layout**. Some here are still in use and say so — keep them:
      **Old-system reprints** (Certificate from the old system (reprint): it reprints certificates
      brought from the earlier system; no type may use it), **TCs from before the register** (the TCs
      issued before the register print with it) and **Achievement certificates screen** (Parent

@@ -650,3 +650,27 @@ Tests: `certificates-setup.e2e-spec.ts` (a TC from before the register: `tcMade`
 page), `certificates-office.e2e-spec.ts` (an achievement batch of three: `screenMade` 3, `made` 0, no type). A browser
 pass at 1440 and 375 px, axe clean (Alpha: the reprint layout, Merit certificate — 8 from the achievement screen, the
 earlier TC layout — 3 TCs; read only).
+
+## Use for a type, from the templates list (17 Nov 2026)
+
+The user asked why "Tesrt" and "Achievement certificate 2026" were not in the Issue page's list: that list is of
+certificate types, and a layout reaches it only through a type (its layout, or one of its variants); both were used by
+no type. Chosen: a **Use for a type** button on those rows; and, on Alpha, the user's go-ahead to offer "Achievement
+certificate 2026" for the Achievement certificate type as a choice (done through the button: the type keeps its layout,
+the copy is its one variant).
+
+- **API**: `POST /certificates/setup/templates/:id/use` (`UseTemplateDto`: `typeCode`, `as` main | choice, optional
+  `label`; set-up right). In one transaction, the type row locked: the template must be a certificate layout of the
+  school and not the reprint layout (400, `assertTemplates`); an unknown type 404; already its layout, or already a
+  choice, 409 `certificate.layout_in_use`; ten choices at most (400). `main` sets `template_id` and drops it from the
+  variants; `choice` appends `{templateId, label}` (the layout's name). Audit `certificate.type.layout`. Returns the
+  type's and the layout's names.
+- **Admin**: on each row used by no type (not the reprint layout), **Use for a type** opens a dialog — the type (a
+  searchable list; the type whose name is inside the layout's name chosen for you; staff and not-in-use types marked),
+  How (a choice at issue, the default / every certificate of the type), a line to give a layout to its own kind —
+  and Use it, back to the list with what changed. The "Used by no type" line says why issuing does not offer these.
+
+Tests: `certificates-setup.e2e-spec.ts` (a copy offered as a choice — the type keeps its layout, the issue preview
+offers both, twice refused; then made the main layout — it leaves the choices and the earlier layout is used by no
+type; the reprint layout 400, an unknown type 404, the office 403; set back). A browser pass at 1440 and 375 px with
+axe on the dialog (the type guessed, choice first), then the change on Alpha and the Issue page's Layout list with both.

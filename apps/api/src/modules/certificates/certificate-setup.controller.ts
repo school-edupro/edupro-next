@@ -8,6 +8,7 @@ import {
   CERTIFICATE,
   CreateTemplateDto,
   CreateTypeDto,
+  UseTemplateDto,
   LegacyBringDto,
   LegacyMapDto,
   SaveTemplateDto,
@@ -91,6 +92,19 @@ export class CertificateSetupController {
   @RequirePermission(CERTIFICATE.setup)
   copyTemplate(@ReqCtx() ctx: RequestContext, @Body() body: CreateTemplateDto) {
     return this.setup.copyTemplate(ctx, body);
+  }
+
+  @Post('templates/:id/use')
+  @ApiOperation({
+    summary: 'Give a layout to a type: the one it prints with, or one more to choose at issue',
+  })
+  @RequirePermission(CERTIFICATE.setup)
+  useTemplate(
+    @ReqCtx() ctx: RequestContext,
+    @Param('id') id: string,
+    @Body() body: UseTemplateDto,
+  ) {
+    return this.setup.useTemplate(ctx, id, body);
   }
 
   @Get('templates/:id')

@@ -158,6 +158,15 @@ export const CreateTemplateSchema = z.object({
 });
 export class CreateTemplateDto extends createZodDto(CreateTemplateSchema) {}
 
+/** A layout given to a type from the templates list (17 Nov 2026): the one it prints with, or one more at issue. */
+export const UseTemplateSchema = z.object({
+  typeCode: TypeCode,
+  as: z.enum(['main', 'choice']),
+  /** the name the office sees at issue (a choice); the layout's name when left out */
+  label: z.string().trim().min(2).max(60).optional(),
+});
+export class UseTemplateDto extends createZodDto(UseTemplateSchema) {}
+
 export const TemplatePreviewSchema = z.object({
   typeCode: TypeCode,
   studentId: IdSchema.optional(),

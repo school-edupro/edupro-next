@@ -177,6 +177,72 @@ describe('certificate set-up (e2e)', () => {
     expect((await get('/certificates/setup', office)).statusCode).toBe(403);
   });
 
+  it('gives a layout to a type from the templates list: a choice at issue, or the one it prints with', async () => {
+    const o = (await get('/certificates/setup')).json();
+    const tpls = o.templates as Array<{ id: string; code: string; usedBy: string[] }>;
+    const scholar = tpls.find((t) => t.code === 'cert_scholar')!;
+    const copy = await send('POST', '/certificates/setup/templates', {
+      copyOf: scholar.id,
+      name: 'Scholarship 2026',
+    });
+    expect(copy.statusCode).toBe(201);
+    const id = copy.json().id as string;
+    const use = (body: unknown, u: SeededUser = admin) =>
+      send('POST', `/certificates/setup/templates/${id}/use`, body, u);
+    // one more layout to choose at issue: the type keeps its own
+    const a = await use({ typeCode: 'SCHOLAR', as: 'choice' });
+    expect(a.statusCode).toBe(201);
+    expect(a.json()).toMatchObject({
+      typeName: 'Scholarship certificate',
+      templateName: 'Scholarship 2026',
+      as: 'choice',
+    });
+    const t1 = (await get('/certificates/setup/types/SCHOLAR')).json();
+    expect(t1.templateId).toBe(scholar.id);
+    expect(t1.variants).toEqual([{ templateId: id, label: 'Scholarship 2026' }]);
+    expect((await use({ typeCode: 'SCHOLAR', as: 'choice' })).statusCode).toBe(409);
+    // the issue preview offers it
+    const pv = await send('POST', '/certificates/preview', {
+      typeCode: 'SCHOLAR',
+      studentId: pupils.six,
+      variant: id,
+    });
+    expect(pv.statusCode).toBe(201);
+    expect((pv.json().variants as Array<{ templateId: string }>).map((v) => v.templateId)).toEqual(
+      expect.arrayContaining([scholar.id, id]),
+    );
+    // the one it prints with: it leaves the choices; the type's earlier layout is no longer its own
+    expect((await use({ typeCode: 'SCHOLAR', as: 'main' })).statusCode).toBe(201);
+    const t2 = (await get('/certificates/setup/types/SCHOLAR')).json();
+    expect(t2.templateId).toBe(id);
+    expect(t2.variants).toEqual([]);
+    expect((await use({ typeCode: 'SCHOLAR', as: 'main' })).statusCode).toBe(409);
+    const after = (await get('/certificates/setup')).json().templates as typeof tpls;
+    expect(after.find((t) => t.id === id)?.usedBy).toEqual(['Scholarship certificate']);
+    expect(after.find((t) => t.id === scholar.id)?.usedBy).toEqual([]);
+    // never the reprint layout; an unknown type; only with the set-up right
+    const legacy = tpls.find((t) => t.code === 'cert_legacy')!;
+    expect(
+      (
+        await send('POST', `/certificates/setup/templates/${legacy.id}/use`, {
+          typeCode: 'SCHOLAR',
+          as: 'choice',
+        })
+      ).statusCode,
+    ).toBe(400);
+    expect((await use({ typeCode: 'NOPE', as: 'choice' })).statusCode).toBe(404);
+    expect((await use({ typeCode: 'DOB', as: 'choice' }, office)).statusCode).toBe(403);
+    // back as it was, for the tests after
+    expect(
+      (
+        await send('POST', `/certificates/setup/templates/${scholar.id}/use`, {
+          typeCode: 'SCHOLAR',
+          as: 'main',
+        })
+      ).statusCode,
+    ).toBe(201);
+  });
+
   it('sets who signs; the boxes print the issuer, the date and time, and the principal with the signature', async () => {
     const bad = await send('PUT', '/certificates/setup/settings', {
       signatoryEmployeeId: '999999999',

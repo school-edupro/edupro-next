@@ -195,6 +195,32 @@ export async function copyCertificateTemplate(fd: FormData) {
   redirect(`/certificates/setup/templates/${t.id}?ok=copied`);
 }
 
+/** A layout given to a type from the templates list: the one it prints with, or one more at issue. */
+export async function useCertificateTemplate(fd: FormData) {
+  const id = str(fd, 'id');
+  const typeCode = str(fd, 'typeCode');
+  const as = str(fd, 'as') === 'main' ? 'main' : 'choice';
+  const list = '/certificates/setup/templates';
+  if (!okId(id)) return;
+  if (!okCode(typeCode))
+    redirect(
+      `${list}?error=validation-failed&detail=${encodeURIComponent('Choose the certificate type')}`,
+    );
+  const r = await call(list, () =>
+    apiFetch<{ typeName: string; templateName: string }>(
+      `/certificates/setup/templates/${id}/use`,
+      { method: 'POST', body: JSON.stringify({ typeCode, as }) },
+    ),
+  );
+  revalidatePath(list);
+  revalidatePath(`/certificates/setup/types/${typeCode}`);
+  const said =
+    as === 'main'
+      ? `${r.typeName} now prints with ${r.templateName}.`
+      : `${r.templateName} is now offered at issue for ${r.typeName} (Layout, after choosing the person).`;
+  redirect(`${list}?ok=1&detail=${encodeURIComponent(said)}`);
+}
+
 /** Who signs and what prints. */
 export async function saveCertificateSettings(fd: FormData) {
   const signatory = str(fd, 'signatoryEmployeeId');

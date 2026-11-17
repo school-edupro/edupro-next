@@ -14,7 +14,7 @@ import { DialogButton } from '@/components/leave/DialogButton';
 import { Icon } from '@/components/nav-icons';
 import { Notice } from '@/components/Notice';
 import { ApiError, apiFetch, getMe } from '@/lib/api';
-import { copyCertificateTemplate } from '@/lib/certificate-setup-actions';
+import { copyCertificateTemplate, useCertificateTemplate } from '@/lib/certificate-setup-actions';
 import {
   dmy,
   paperLabel,
@@ -173,6 +173,77 @@ export default async function CertificateTemplatesPage({
     </form>
   );
 
+  // the type a layout is most likely for: the longest type name inside the layout's name
+  const guessType = (t: R) =>
+    [...o.types]
+      .filter((x) => t.name.toLowerCase().includes(x.name.toLowerCase()))
+      .sort((a, b) => b.name.length - a.name.length)[0]?.code ?? '';
+  const useForm = (t: R) => (
+    <form action={useCertificateTemplate} className="ep-cert-fields">
+      <input type="hidden" name="id" value={t.id} />
+      <div style={{ gridColumn: '1 / -1' }}>
+        <SelectField
+          id={`useType${t.id}`}
+          name="typeCode"
+          label="Certificate type"
+          required
+          defaultValue={guessType(t)}
+          options={[
+            { value: '', label: 'Choose the type' },
+            ...o.types.map((x) => ({
+              value: x.code,
+              label: `${x.name}${x.audience === 'STAFF' ? ' (staff)' : ''}${x.active ? '' : ' — not in use'}`,
+            })),
+          ]}
+        />
+      </div>
+      <fieldset style={{ gridColumn: '1 / -1', border: 0, padding: 0, margin: 0 }}>
+        <legend className="ep-field__label">How</legend>
+        <div style={{ display: 'grid', gap: 'var(--sp-2)' }}>
+          {(
+            [
+              [
+                'choice',
+                'Offer it as a choice at issue',
+                'The type keeps its layout; on the Issue page a Layout list offers this one too.',
+              ],
+              [
+                'main',
+                'Print every certificate of the type with it',
+                'From now on; certificates already issued keep their paper. The type’s present layout is no longer used by it.',
+              ],
+            ] as const
+          ).map(([v, label, help]) => (
+            <label key={v} className="ep-radio" htmlFor={`useAs${t.id}_${v}`}>
+              <input
+                id={`useAs${t.id}_${v}`}
+                type="radio"
+                name="as"
+                value={v}
+                className="ep-radio__input"
+                defaultChecked={v === 'choice'}
+              />
+              <span className="ep-radio__dot" />
+              <span className="ep-check__text">
+                {label}
+                <span className="ep-field__help" style={{ margin: 0 }}>
+                  {help}
+                </span>
+              </span>
+            </label>
+          ))}
+        </div>
+      </fieldset>
+      <p className="ep-field__help" style={{ gridColumn: '1 / -1', margin: 0 }}>
+        Give a layout to the kind of certificate it was made for: it prints that type&apos;s details
+        (an achievement layout, for one, prints the award and the event).
+      </p>
+      <div>
+        <Button type="submit">Use it</Button>
+      </div>
+    </form>
+  );
+
   const columns = [
     {
       key: 'name',
@@ -227,6 +298,21 @@ export default async function CertificateTemplatesPage({
           >
             <Icon name="pencil" size={16} /> Edit<span className="ep-sr-only"> {t.name}</span>
           </a>
+          {!t.usedBy.length && t.code !== 'cert_legacy' ? (
+            <DialogButton
+              id={`use-${t.id}`}
+              className="ep-btn ep-btn--secondary ep-btn--sm"
+              label={
+                <>
+                  <Icon name="plus" size={16} /> Use for a type
+                  <span className="ep-sr-only"> {t.name}</span>
+                </>
+              }
+              title={`Use ${t.name} for a certificate type`}
+            >
+              {useForm(t)}
+            </DialogButton>
+          ) : null}
           <DialogButton
             id={`copy-${t.id}`}
             className="ep-btn ep-btn--ghost ep-btn--sm"
@@ -328,10 +414,10 @@ export default async function CertificateTemplatesPage({
         </Card>
         <Card title={`Used by no type (${String(spare.length)})`}>
           <p className="ep-ctype__note" style={{ marginTop: 0 }}>
-            Copies and spare layouts — and some still in use, marked: the old system&apos;s reprint
-            layout, the layout of TCs issued before the register, and layouts the Achievement
-            certificates screen printed with. To give a layout to a type, open the type and choose
-            it under Layout.
+            Issuing never offers these — the Issue page lists certificate types, and a layout shows
+            there only when a type uses it. <strong>Use for a type</strong> gives one to a type: as
+            the layout it prints with, or one more to choose at issue. Some here are still in use
+            elsewhere and say so: keep them.
           </p>
           <DataTable<R>
             caption="Layouts used by no type"

@@ -16,6 +16,7 @@ import {
   type SettingsDto,
   type UpdateRequestSettingsDto,
   type UpdateTypeDto,
+  type UseTemplateDto,
 } from './certificates.dto';
 import { CertificatesService, type TypeRow } from './certificates.service';
 
@@ -521,6 +522,73 @@ export class CertificateSetupService {
       });
     });
     return this.type(ctx, code);
+  }
+
+  /**
+   * A layout given to a type from the templates list (17 Nov 2026): `main` — every certificate of the type prints with
+   * it from now on (those issued keep theirs; it leaves the type's other choices); `choice` — one more layout the
+   * office may choose at issue, the type keeping its own. The reprint layout of old-system certificates is never a
+   * type's.
+   */
+  async useTemplate(ctx: RequestContext, id: string, dto: UseTemplateDto) {
+    return this.db.tenant(requireTenant(ctx), async (c) => {
+      await this.assertTemplates(c, [id]);
+      const tpl = (
+        await c.query<{ name: string }>(`SELECT name FROM document_templates WHERE id = $1`, [id])
+      ).rows[0]!;
+      const t = (
+        await c.query<{
+          id: string;
+          name: string;
+          template_id: string | null;
+          variants: Array<{ templateId: string; label: string }>;
+        }>(
+          `SELECT id::text, name, template_id::text, variants FROM certificate_types WHERE code = $1 FOR UPDATE`,
+          [dto.typeCode],
+        )
+      ).rows[0];
+      if (!t) throw new DomainError('not-found', 'Certificate type not found');
+      if (t.template_id === id)
+        throw new DomainError(
+          'certificate.layout_in_use',
+          `${t.name} already prints with ${tpl.name}`,
+          { status: 409 },
+        );
+      let variants = t.variants;
+      if (dto.as === 'main') variants = variants.filter((v) => v.templateId !== id);
+      else {
+        if (variants.some((v) => v.templateId === id))
+          throw new DomainError(
+            'certificate.layout_in_use',
+            `${tpl.name} is already a choice for ${t.name}`,
+            { status: 409 },
+          );
+        if (variants.length >= 10)
+          throw new DomainError(
+            'validation-failed',
+            `${t.name} already offers ten layouts: untick one on its page first`,
+            { status: 400 },
+          );
+        variants = [...variants, { templateId: id, label: dto.label ?? tpl.name.slice(0, 60) }];
+      }
+      await c.query(
+        `UPDATE certificate_types SET template_id = $2, variants = $3::jsonb, updated_at = now(),
+                updated_by = app.current_user_id()
+          WHERE id = $1`,
+        [t.id, dto.as === 'main' ? id : t.template_id, JSON.stringify(variants)],
+      );
+      await this.audit.stage(ctx, c, {
+        action: 'certificate.type.layout',
+        entityType: 'certificate_types',
+        entityId: t.id,
+        before: { templateId: t.template_id, variants: t.variants.map((v) => v.templateId) },
+        after: {
+          templateId: dto.as === 'main' ? id : t.template_id,
+          variants: variants.map((v) => v.templateId),
+        },
+      });
+      return { typeCode: dto.typeCode, typeName: t.name, templateName: tpl.name, as: dto.as };
+    });
   }
 
   /**
