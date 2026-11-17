@@ -870,3 +870,40 @@ students / staff and a staff layout's page offering staff types only), the regis
 A browser pass on Alpha: the tabs (30: 26 for students, 3 for staff), the staff filter, axe clean at 1440 and 375 px;
 the form previewed for a Class X student (not issued). Alpha's new layout was brought to the latest ready version with
 Back to the ready layout (version 2; version 1 in its history).
+
+## A paper that is not valid says so; the TC card opens the certificate (17 Nov 2026)
+
+The user's ask: a certificate cancelled, rejected or pending prints a watermark saying so. Decided (buttons, the
+recommended each time): a word by state; the clean PDF made before a cancel is replaced everywhere; the word shows on
+screen and on paper.
+
+- **The word.** `packages/db` `certificate-blocks.ts`: `certificateMarkHtml(mark, note)` and `CERTIFICATE_MARK_CSS`
+  (rotated, faint red, boxed; `position: fixed` so a two-page paper has it on each page; inside `.eb-mark-host` — one
+  page of a batch PDF — it stays on that page; appended after the template's CSS with `!important` so a layout cannot
+  hide it). Words: CANCELLED (+ "Cancelled on dd-mm-yyyy"), PENDING, REJECTED, NOT ISSUED.
+- **Renderers (workers).** `certificate-doc` (the register's), `certificate-batch-doc` (a run's section, per page),
+  `certificate` (achievement certificates, by their register row `achievement:<id>`; the class file per pupil) and
+  `document` (an old TC from its template, by `transfer_certificates.status`) print CANCELLED with the day.
+- **Previews (API).** `paperHtml(..., mark)`; `preview()` reads the request (`requestId` now on the preview DTO, the
+  admin Issue page passes it): submitted/approved → PENDING, rejected/withdrawn → REJECTED, else NOT ISSUED; the
+  layout preview → NOT ISSUED. The preview returns `mark`.
+- **Cancel retires the clean PDFs.** `cancelRows` → `retirePdfs`: the certificate's own finished PDFs (each revision's,
+  the TC's) get `expires_at = now()` — no longer handed out, swept by the expiry job — and `export_id` is cleared, so
+  View / Download makes it again, marked. A run's section PDF or an achievement class file holding it is made again at
+  once (`ReportsService.remakeIn`, in the same transaction: new export, links moved, the old retired); the run's ZIP
+  takes the new file. A PDF still being made needs nothing (the workers read the cancel). An old TC never in the
+  register: its clean PDF is retired on cancel too (`TcService.cancel`). Reports: an export `ready` but past its
+  `expires_at` reads `expired` (no download; Make again allowed).
+- **Catch-up (0395).** Certificates cancelled before today: their clean PDFs (and old cancelled TCs') retired, a run's
+  section PDF holding one made again (exports + `jobs_outbox` rows). On Alpha: 372 PDFs retired, 3 section PDFs made
+  again (2 on Alpha, 1 on a test school) — checked: the cancelled page carries CANCELLED, the next page clean.
+- **The student's TC card (Status tab).** The TC number opens its certificate; the PDF column is View / Download of the
+  certificate itself (`/certificates/:id/pdf`; the export's own download when the register right is missing); the
+  "Generate PDF" (document template) form is gone. TC rows carry `certificateId` (the original's register row). The
+  TC list (People → Transfer certificates) does the same.
+
+Tests: worker `certificate-marks.test.ts` (each renderer, issued vs cancelled, a batch's own page, CSS after the
+template's); db mark unit tests; e2e — the preview's NOT ISSUED, PENDING while a request waits (and once approved),
+REJECTED for a rejected or withdrawn one; a TC cancel retires its PDFs (export `expired`, no download, a fresh PDF on
+open); a run's section PDF made again on a cancel (the other section untouched, the ZIP waits); an achievement class
+file made again with the others following; the TC row's `certificateId`.

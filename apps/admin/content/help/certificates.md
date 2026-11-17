@@ -95,6 +95,14 @@ and the person's details. A later change in the set-up does not alter it. On a c
   cancelled too. The number is not given again. Cancelling a TC does not put the student back on the
   rolls: revoke the withdrawal for that.
 
+**A paper that is not valid says so.** A cancelled certificate prints **CANCELLED** across every page, with the day
+it was cancelled — wherever it is opened: its View and Download, the student's TC card, a bulk run's section PDF (only
+its own page is marked) and its ZIP. The clean PDF made before the cancel is no longer handed out, even from Reports →
+Export centre. Before a certificate is issued, its paper says what it is: **NOT ISSUED** on the Issue page's preview
+and a layout's preview, **PENDING** when it answers a request still with its approvers, its fee or the office, and
+**REJECTED** when that request was rejected or withdrawn. An issued certificate prints without a word (a copy says
+DUPLICATE, as before).
+
 A cancelled certificate that was not re-issued has **Issue again with today's settings** and **Issue
 again with changes**.
 
