@@ -156,9 +156,13 @@ describe('permission coverage', () => {
       'PublicAppointmentsController.pass (public/appointments)',
       'PublicAppointmentsController.passCard (public/appointments)',
       'PublicAppointmentsController.slots (public/appointments)',
-      // docs/design/87, phase D: the public check of a certificate (no sign-in, rate-limited)
+      // docs/design/87, phase D: the public check of a certificate (no sign-in, rate-limited); since 17 Nov 2026 the
+      // two GET pages give only the school's name and which person check to show (no certificate data), and the
+      // POST answers come only after that check, with per-visitor and per-number locks
       'PublicCertificatesController.byToken (public/certificates)',
+      'PublicCertificatesController.page (public/certificates)',
       'PublicCertificatesController.search (public/certificates)',
+      'PublicCertificatesController.tokenPage (public/certificates)',
       // the public link and QR of a consent form (0169): only with the form's random link token, throttled per IP;
       // info is read-only, otp needs a proof of work (three live codes per address), verify allows five tries;
       // the rest need the `cf.` pass (two hours, signed, bound to the form) and touch only that pass's answers
