@@ -76,6 +76,8 @@ export interface IssueOptions {
   keepStatus?: boolean;
   /** part of a batch (phase E): no PDF of its own (the batch prints them together) */
   batchId?: string;
+  /** what it would print only, the checks not run (a certificate sheet's row, 17 Nov 2026) */
+  noChecks?: boolean;
 }
 
 export interface CertificateRow {
@@ -756,17 +758,19 @@ export class CertificatesService {
         ...fieldDefaults(type.code, none),
         ...given,
       };
-      const checks = await runChecks(c, {
-        audience: 'STAFF',
-        exceptId: dto.reissueOf ?? null,
-        studentId: dto.employeeId,
-        typeId: type.id,
-        rules: type.rules,
-        multiple: type.multiple,
-        asOf: today,
-        yearCode: year,
-        ledger: null,
-      });
+      const checks = opts.noChecks
+        ? []
+        : await runChecks(c, {
+            audience: 'STAFF',
+            exceptId: dto.reissueOf ?? null,
+            studentId: dto.employeeId,
+            typeId: type.id,
+            rules: type.rules,
+            multiple: type.multiple,
+            asOf: today,
+            yearCode: year,
+            ledger: null,
+          });
       return {
         year,
         issuedOn,
@@ -840,17 +844,19 @@ export class CertificatesService {
       }),
       ...given,
     };
-    const checks = await runChecks(c, {
-      exceptId: dto.reissueOf ?? null,
-      studentId,
-      typeId: type.id,
-      rules: type.rules,
-      multiple: type.multiple,
-      asOf: leavingOn && leavingOn < today ? leavingOn : today,
-      withdrawalId: opts.withdrawalId ?? null,
-      yearCode: year,
-      ledger,
-    });
+    const checks = opts.noChecks
+      ? []
+      : await runChecks(c, {
+          exceptId: dto.reissueOf ?? null,
+          studentId,
+          typeId: type.id,
+          rules: type.rules,
+          multiple: type.multiple,
+          asOf: leavingOn && leavingOn < today ? leavingOn : today,
+          withdrawalId: opts.withdrawalId ?? null,
+          yearCode: year,
+          ledger,
+        });
     const asDate = (v: string | number | undefined) =>
       typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v) ? dmy(v) : String(v ?? '');
     const tc =
@@ -1309,6 +1315,46 @@ export class CertificatesService {
       const b = await this.build(c, ctx, type, dto, ledger, {});
       return { checks: b.checks, problems: b.problems, person: b.person };
     });
+  }
+
+  /**
+   * A person's row of a certificate sheet (17 Nov 2026): the type's details filled from the record and what the paper
+   * would print, the checks not run.
+   */
+  async sheetData(
+    c: PoolClient,
+    ctx: RequestContext,
+    type: TypeRow,
+    person: { studentId?: string; employeeId?: string },
+  ) {
+    const b = await this.build(
+      c,
+      ctx,
+      type,
+      { typeCode: type.code, ...person, fields: {} } as PreviewCertificateDto,
+      null,
+      { noChecks: true },
+    );
+    return { fields: b.fields, specs: b.specs, data: b.data as Record<string, unknown> };
+  }
+
+  /** Each layout a type may print with — its own, then its variants — with the wording of its latest version. */
+  async layoutsOf(
+    c: PoolClient,
+    type: TypeRow,
+  ): Promise<Array<{ templateId: string; label: string; body: string }>> {
+    const ids = [
+      ...(type.template_id
+        ? [{ id: type.template_id, label: type.template_name ?? 'Standard' }]
+        : []),
+      ...type.variants.map((v) => ({ id: v.templateId, label: v.label })),
+    ];
+    const out: Array<{ templateId: string; label: string; body: string }> = [];
+    for (const x of ids) {
+      const t = await this.templateOf(c, type, x.id === type.template_id ? undefined : x.id);
+      if (t) out.push({ templateId: x.id, label: x.label, body: t.body_html });
+    }
+    return out;
   }
 
   /**

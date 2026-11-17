@@ -737,3 +737,56 @@ holds it" (typed by hand it opens nothing for others; the API still asks the rig
 pass: dev-admin on Alpha (Navya Iyer's TC) — held back, opened, kept open by Update the preview, closed; a clear
 bonafide shows at once; a test school's certificate office — no button, `anyway=1` opens nothing; axe clean at 1440
 and 375 px.
+
+## Certificates from Excel (17 Nov 2026)
+
+The user: after the Class XII result, the school issues the TCs in bulk from an Excel sheet with every detail; the same
+for the other certificates; a sample sheet made for the chosen certificate; upload, generate, verify. Benchmark (the
+leading school ERPs): a template per certificate, filled with the class list and what the records know, drop-downs for
+list answers, a check before anything is committed with a row-level report and an errors file to fix and upload
+again, the clean rows committed in order (register numbers, a PDF per class, a ZIP), an upload history. Bulk issue
+before this gave everyone the same typed details. Chosen (all recommended): a sheet filled with the class list; TC
+rows without a withdrawal start withdrawals from the upload; issue the clean rows and fix the rest; every type, the
+sheet built per type.
+
+- **Data** (migration 0393): `certificate_imports` — type, title, scope, the last file's name, uploads, the sheet's
+  columns, the rows (JSONB: the cells by heading, the person found, the section or department, state ready /
+  attention / issuing / issued, what to fix, whether a withdrawal may be started, what it issues with, the
+  certificate and number), the runs made from it. Tenant RLS; no row-change audit (up to 600 rows a write) — the
+  events are audited: `certificate.import.upload`, `certificate.import.issue`.
+- **API** (`certificate-imports.service.ts`, `CertificateImportsController` at `/certificates/imports`, the issue
+  right): `POST sheet` (a bulk scope → the .xlsx as base64): columns — the key (Admission no. / Employee code), name
+  and class or department (not read), Date of issue, Purpose (not a TC), Layout (a type with variants: a drop-down),
+  the type's fields (`fieldsOf`: required red, list drop-downs, dates and whole numbers formatted), the person details
+  every layout of the type prints (`printedDetails`; a heading like a field's gets "(as printed)"); rows filled from
+  `CertificatesService.sheetData` (the builder in `noChecks` mode) — dates as dates; a How to fill sheet. `POST`
+  (upload: type, title, scope, file) → read (`readSheet`; dates yyyy-mm-dd / dd-mm-yyyy / dd/mm/yyyy; whole numbers;
+  list answers matched; an empty cell left to the record) → checked: the person by key, a second row of them, then
+  `assess` with the row's fields and person details (problems + checks not clear); a TC row (`rules.state` leaving)
+  whose state check fails and has no withdrawal → `startWithdrawal`. `POST :id/upload` (a corrected sheet: its rows
+  replace the same people's rows not issued, others kept, all re-checked), `POST :id/verify`, `GET :id/errors` (the
+  rows needing attention with "What to fix", the same columns, to upload again), `POST :id/issue` (the ready rows
+  marked `issuing` under a row lock — a second press finds none — then `CertificateBulkService.issueInGroups`, a batch
+  a section or department in one run, each with its own fields and person details; a row refused at issue goes back
+  with why), `GET` (the last 50 uploads with figures), `GET :id`. Bulk issue's run refactored onto `issueInGroups`;
+  `targets` public; the builder's `noChecks`; `layoutsOf`.
+- **Admin**: Bulk issue → **From Excel — each with their own details** (`/certificates/imports`): 1. Download the
+  sheet (`BulkScopePicker mode="sheet"` → `/certificates/imports/sheet`, a route streaming the file), 2. Upload the
+  filled sheet (certificate, name, file → `uploadCertificateSheet`, files up to 700 KB — the API body is 1 MB), Earlier
+  uploads. An upload's page (`/certificates/imports/:id`): six figures; What to do — Issue the N ready (confirm),
+  Download what to fix, Upload a corrected sheet (dialog), Check again, and for TC rows without a withdrawal **Start
+  the withdrawals for N** (leaving date, reason → `POST /people/withdrawals/bulk` with those students, then a re-check;
+  with the withdrawal right, else a note); the runs (their PDFs and ZIP); the rows with tabs (Need attention, Ready,
+  Issued, All): row, person, state, what to fix or the certificate, **See the paper** (the Issue page filled with the
+  row's details).
+
+Tests: `certificate-imports.e2e-spec.ts` — the TC sheet (headings, filled from the record, the conduct drop-down, no
+purpose, How to fill), a bonafide's purpose, a staff sheet by employee code, a student type refused departments, the
+issue right; an upload of six rows (a missing reason, a wrong date, a typed mother's name, Bina twice, an unknown
+admission no.) — nothing issued, each row's problems, four withdrawals to start; withdrawals started and cleared,
+checked again (a reason left empty now the withdrawal's); the errors file; a corrected sheet into the same upload; the
+four ready issued in one run (TC/2026-27/00001–4, one batch, the typed mother's name printed); nothing to issue twice;
+the list. Sizes on Alpha: 150 students → a 43 KB sheet in under half a second. A browser pass: Alpha (dev-admin) —
+From Excel from Bulk issue, a TC sheet downloaded, axe clean at 1440 and 375 px, nothing saved; a throwaway test
+school (switched on for the run, off after) — a bonafide sheet downloaded, uploaded (two ready, one who left), the
+upload's page axe clean, the two issued with the run linked.

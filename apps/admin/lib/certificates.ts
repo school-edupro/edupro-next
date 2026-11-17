@@ -682,3 +682,62 @@ export function onlineInWords(r: CertificateRequestSettings, staff: boolean): st
     .filter(Boolean)
     .join(' · ');
 }
+
+// ---- certificates from an Excel sheet (17 Nov 2026) --------------------------------------------------------------------
+export type ImportRowStatus = 'ready' | 'attention' | 'issued' | 'issuing';
+export interface CertificateImportRow {
+  upload: number;
+  row: number;
+  key: string;
+  personId: string | null;
+  name: string;
+  groupLabel: string | null;
+  status: ImportRowStatus;
+  problems: string[];
+  /** a TC whose student has no withdrawal yet */
+  startWithdrawal: boolean;
+  withdrawal: { id: string; status: string } | null;
+  issue: {
+    fields: Record<string, string | number>;
+    person: Record<string, string>;
+    purpose?: string;
+    issuedOn?: string;
+    variant?: string;
+  };
+  certificateId: string | null;
+  number: string | null;
+}
+export interface CertificateImport {
+  id: string;
+  title: string;
+  type: { code: string; name: string; audience: 'STUDENT' | 'STAFF' };
+  scope: { label?: string };
+  fileName: string | null;
+  uploads: number;
+  by: string | null;
+  createdAt: string;
+  updatedAt: string;
+  runIds: string[];
+  figures: {
+    rows: number;
+    ready: number;
+    attention: number;
+    issued: number;
+    startWithdrawal: number;
+  };
+  rows: CertificateImportRow[];
+}
+export interface CertificateImportSummary {
+  id: string;
+  title: string;
+  typeName: string;
+  fileName: string | null;
+  uploads: number;
+  total: number;
+  ready: number;
+  attention: number;
+  issued: number;
+  by: string | null;
+  createdAt: string;
+  updatedAt: string;
+}

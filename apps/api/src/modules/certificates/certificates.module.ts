@@ -7,6 +7,8 @@ import { ReportsModule } from '../reports/reports.module';
 import { WorkflowModule } from '../workflow/workflow.module';
 import { CertificateAwardsService } from './certificate-awards.service';
 import { CertificateBulkService } from './certificate-bulk.service';
+import { CertificateImportsController } from './certificate-imports.controller';
+import { CertificateImportsService } from './certificate-imports.service';
 import { CertificateOfficeController } from './certificate-office.controller';
 import { CertificateReportsService } from './certificate-reports.service';
 import { CertificateLegacyService } from './certificate-legacy.service';
@@ -28,6 +30,7 @@ import { CertificatesService } from './certificates.service';
     CertificateRequestsController,
     PublicCertificatesController,
     CertificateOfficeController,
+    CertificateImportsController,
     CertificatesController,
   ],
   providers: [
@@ -36,6 +39,7 @@ import { CertificatesService } from './certificates.service';
     CertificateRequestsService,
     CertificateVerifyService,
     CertificateBulkService,
+    CertificateImportsService,
     CertificateAwardsService,
     CertificateReportsService,
     CertificateLegacyService,

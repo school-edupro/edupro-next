@@ -204,6 +204,31 @@ From the register's header:
   its PDF is made, and **Download all (ZIP)** once every PDF is ready; each batch's page lists who got one
   and who was left out, with the reason.
 
+- **From Excel** (Bulk issue → **From Excel — each with their own details**) — when each person needs their
+  own details, e.g. the Class XII TCs after the board result:
+  1. **Download the sheet**: choose the certificate and who (classes and sections, the leavers, or
+     departments). The sheet has a row for each person, **filled from the records**, with the columns that
+     certificate needs: the admission no. (employee code for staff), name and class to help, the date of
+     issue, the purpose (not for a TC), the layout (a type with more than one), the certificate's own
+     details (for a TC: reason, application and struck-off dates, exam result, conduct …, list answers as
+     drop-downs) and what it prints about the person (name, parents, date of birth …). A **How to fill**
+     sheet explains it.
+  2. **Fill or correct it** in Excel. A cell left empty prints as the record has it; a changed person's
+     detail prints on that certificate only (the record stays as it is). Delete the rows of those who
+     should not get one.
+  3. **Upload and check**: nothing is issued yet. The upload's page shows the figures (rows, ready, need
+     attention, issued, withdrawal not started) and each row as **Ready** or with **what to fix** — the
+     admission no. not found, a second row of the same person, a missing or wrong detail, a check not clear.
+  4. **Fix and upload again**: **Download what to fix** gives those rows with the reason in the last column;
+     correct them (or the record, the fees, the withdrawal) and **Upload a corrected sheet** into the same
+     upload — its rows replace the same people's, the rest stay. **Check again** re-checks every row (after
+     the departments have cleared, for instance). **See the paper** opens a row on the Issue page.
+  5. **TCs without a withdrawal**: **Start the withdrawals for …** (needs the withdrawal right) starts them in
+     bulk with one leaving date and reason; the departments clear them as usual; then **Check again**.
+  6. **Issue the … ready**: each gets its number in order and its own details; a PDF for each section or
+     department (the run's page has them and the ZIP). The rows needing attention stay to fix and issue
+     later; **Earlier uploads** keeps every upload.
+
 - **Awards** — the awards the school gives (set-up: each printed on the achievement, merit, participation
   or award certificate), and who received them: add one (admission no., event, place, date) or upload a
   CSV (admission_no, award, event, position, date, remarks). The file is checked first and nothing is

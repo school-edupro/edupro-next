@@ -19,7 +19,8 @@ export interface PickerType {
  * Bulk issue's "who" (16 Nov 2026): the certificate, then — a student type — classes and sections in one tick list (a
  * class ticks all its sections; "All classes"; a search; the students in each) or the leavers, or — a staff type —
  * departments in one tick list (employees in service or who have left). Posts as a GET form: type, scope, section,
- * dept, state, purpose and the type's fields.
+ * dept, state, purpose and the type's fields. `sheet` (17 Nov 2026): the same choice downloads the certificate's Excel
+ * sheet for them (no details typed here: each row has its own).
  */
 export function BulkScopePicker({
   types,
@@ -27,7 +28,9 @@ export function BulkScopePicker({
   departments,
   max,
   initial,
+  mode = 'bulk',
 }: {
+  mode?: 'bulk' | 'sheet';
   types: PickerType[];
   classes: BulkClasses['classes'];
   departments: BulkDepartments['departments'];
@@ -101,7 +104,11 @@ export function BulkScopePicker({
   const tooMany = staff ? pickedEmployees > max : !leavers && pickedStudents > max;
 
   return (
-    <form method="get" className="ep-bulk">
+    <form
+      method="get"
+      className="ep-bulk"
+      {...(mode === 'sheet' ? { action: '/certificates/imports/sheet' } : {})}
+    >
       <div className="ep-cert-fields">
         <label className="ep-field" htmlFor="bkType">
           <span className="ep-field__label">Certificate</span>
@@ -299,7 +306,7 @@ export function BulkScopePicker({
         </section>
       ) : null}
 
-      {t ? (
+      {t && mode === 'bulk' ? (
         <div className="ep-cert-fields">
           <label className="ep-field" htmlFor="bkPurpose">
             <span className="ep-field__label">Purpose (printed, optional)</span>
@@ -345,8 +352,12 @@ export function BulkScopePicker({
         </div>
       ) : null}
       <div>
-        <button type="submit" className="ep-btn ep-btn--secondary" disabled={nothing || tooMany}>
-          Preview
+        <button
+          type="submit"
+          className={`ep-btn ${mode === 'sheet' ? 'ep-btn--primary' : 'ep-btn--secondary'}`}
+          disabled={nothing || tooMany}
+        >
+          {mode === 'sheet' ? 'Download the sheet' : 'Preview'}
         </button>
       </div>
     </form>

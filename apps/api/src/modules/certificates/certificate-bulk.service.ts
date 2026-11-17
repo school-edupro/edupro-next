@@ -109,8 +109,8 @@ export class CertificateBulkService {
     });
   }
 
-  /** The students of the scope, in roll order. */
-  private async targets(c: PoolClient, dto: BulkPreviewDto): Promise<BulkTarget[]> {
+  /** The people of a scope, in order (the bulk preview, and a certificate sheet's rows). */
+  async targets(c: PoolClient, dto: BulkPreviewDto): Promise<BulkTarget[]> {
     const cls = `(SELECT c.name || ' – ' || cs.name FROM enrolments en JOIN class_sections cs ON cs.id = en.class_section_id
                     JOIN classes c ON c.id = cs.class_id JOIN academic_years y ON y.id = en.academic_year_id
                    WHERE en.student_id = s.id AND en.status <> 'cancelled' ORDER BY y.start_date DESC, en.id DESC LIMIT 1)`;
@@ -371,26 +371,14 @@ export class CertificateBulkService {
         label: dto.leavers ? 'the leavers' : 'chosen students',
         students: chosen,
       });
-    for (const g of groups) {
-      const batchId = await this.db.tenant(tenant, async (c) => {
-        const b = await c.query<{ id: string }>(
-          `INSERT INTO certificate_batches (school_id, type_id, title, scope, override_reason, created_by, run_id)
-           VALUES (app.current_school_id(), $1, $2, $3::jsonb, $4, app.current_user_id(), $5) RETURNING id::text`,
-          [
-            type.id,
-            `${type.name} · ${g.label} (${String(g.students.length)})`.slice(0, 200),
-            JSON.stringify(g.scope),
-            dto.overrideReason ?? null,
-            runId,
-          ],
-        );
-        return b.rows[0]!.id;
-      });
-      await this.run(
-        ctx,
-        batchId,
-        type.name,
-        g.students.map((s) => ({
+    await this.issueInGroups(
+      ctx,
+      type,
+      runId,
+      groups.map((g) => ({
+        scope: g.scope,
+        label: g.label,
+        items: g.students.map((s) => ({
           student: s,
           dto: {
             typeCode: dto.typeCode,
@@ -401,9 +389,47 @@ export class CertificateBulkService {
             overrideReason: dto.overrideReason,
           },
         })),
-      );
-    }
+      })),
+      dto.overrideReason ?? null,
+    );
     return this.runOf(ctx, runId);
+  }
+
+  /**
+   * One run: a batch for each group (a section or department) in order, each person with their own certificate and
+   * details (a sheet's rows, 17 Nov 2026), each batch with its PDF. Returns each batch as `run` leaves it.
+   */
+  async issueInGroups(
+    ctx: RequestContext,
+    type: { id: string; name: string },
+    runId: string,
+    groups: Array<{
+      scope: Record<string, unknown>;
+      label: string;
+      items: Parameters<CertificateBulkService['run']>[3];
+    }>,
+    overrideReason: string | null,
+  ) {
+    const tenant = requireTenant(ctx);
+    const out: Array<Awaited<ReturnType<CertificateBulkService['run']>>> = [];
+    for (const g of groups) {
+      const batchId = await this.db.tenant(tenant, async (c) => {
+        const b = await c.query<{ id: string }>(
+          `INSERT INTO certificate_batches (school_id, type_id, title, scope, override_reason, created_by, run_id)
+           VALUES (app.current_school_id(), $1, $2, $3::jsonb, $4, app.current_user_id(), $5) RETURNING id::text`,
+          [
+            type.id,
+            `${type.name} · ${g.label} (${String(g.items.length)})`.slice(0, 200),
+            JSON.stringify(g.scope),
+            overrideReason,
+            runId,
+          ],
+        );
+        return b.rows[0]!.id;
+      });
+      out.push(await this.run(ctx, batchId, type.name, g.items));
+    }
+    return out;
   }
 
   /** A run's batches with their PDFs (the run's page). */

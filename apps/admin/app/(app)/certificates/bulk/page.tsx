@@ -120,6 +120,11 @@ export default async function BulkIssuePage({
         kicker="Certificates"
         title="Bulk issue"
         description="A student certificate to several classes and sections, or a staff certificate to departments: tick who gets one; each gets its own number, and each section or department its own PDF."
+        actions={
+          <a className="ep-btn ep-btn--secondary" href="/certificates/imports">
+            From Excel — each with their own details
+          </a>
+        }
       />
       <Notice
         params={Object.fromEntries(Object.entries(sp).map(([k, v]) => [k, one(v) || undefined]))}

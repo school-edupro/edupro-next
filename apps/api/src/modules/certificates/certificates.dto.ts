@@ -301,6 +301,32 @@ export const BulkRunSchema = BulkBase.extend({
 }).refine(oneScope, { message: 'sections, a section, chosen students or the leavers' });
 export class BulkRunDto extends createZodDto(BulkRunSchema) {}
 
+/** Certificates from an Excel sheet (17 Nov 2026): an upload of the sheet made for a type, kept as a draft. */
+const SheetFile = {
+  fileName: z.string().trim().min(1).max(200),
+  /** the .xlsx (or .csv) as base64; the JSON body is at most 1 MB */
+  fileBase64: z.string().min(16).max(1_000_000),
+};
+export const ImportUploadSchema = z.object({
+  typeCode: TypeCode,
+  /** a name for the upload (e.g. "TC · XII-A, XII-B") */
+  title: z.string().trim().max(200).optional(),
+  /** who the sheet was made for, as chosen (shown with the upload) */
+  scope: z
+    .object({
+      sectionIds: z.array(IdSchema).max(100).optional(),
+      leavers: z.boolean().optional(),
+      departments: z.array(z.string().trim().max(80)).max(100).optional(),
+      staffState: z.enum(['active', 'left']).optional(),
+      label: z.string().trim().max(200).optional(),
+    })
+    .optional(),
+  ...SheetFile,
+});
+export class ImportUploadDto extends createZodDto(ImportUploadSchema) {}
+export const ImportReuploadSchema = z.object(SheetFile);
+export class ImportReuploadDto extends createZodDto(ImportReuploadSchema) {}
+
 export const AwardSchema = z.object({
   name: z.string().trim().min(2).max(120),
   typeCode: TypeCode,
