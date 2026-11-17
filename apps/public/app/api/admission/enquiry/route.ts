@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { API } from '@/lib/api';
+import { visitorHeaders } from '@/lib/visitor';
 
 /** The website's admission enquiry (the challenge solved in the browser). */
 export async function POST(req: Request) {
@@ -10,7 +11,7 @@ export async function POST(req: Request) {
       : undefined;
   const res = await fetch(`${API}/api/v1/public/admission/enquiry`, {
     method: 'POST',
-    headers: { 'content-type': 'application/json' },
+    headers: { 'content-type': 'application/json', ...(await visitorHeaders()) },
     body: JSON.stringify({
       schoolCode: pick('school'),
       challenge: pick('challenge'),

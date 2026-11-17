@@ -1,4 +1,5 @@
 import { cookies } from 'next/headers';
+import { visitorHeaders } from './visitor';
 
 export const API = process.env.API_BASE_URL ?? 'http://localhost:4000';
 export const COOKIE = 'edupro_applicant';
@@ -55,6 +56,8 @@ async function call<T>(
   if (init.body && !headers.has('Content-Type')) headers.set('Content-Type', 'application/json');
   const t = token === undefined ? (await cookies()).get(COOKIE)?.value : token;
   if (t) headers.set('Authorization', `Bearer ${t}`);
+  // the visitor's address, so the API's limits count each visitor (17 Nov 2026)
+  for (const [k, v] of Object.entries(await visitorHeaders())) headers.set(k, v);
   const res = await fetch(`${API}/api/v1${base}${path}`, {
     ...init,
     headers,
@@ -128,9 +131,8 @@ export interface Application {
   } | null;
 }
 
-export type Lang = 'en' | 'hi';
-export const t = (lang: Lang, en: string, hi: string) => (lang === 'hi' ? hi : en);
-export const langOf = (v: string | undefined): Lang => (v === 'hi' ? 'hi' : 'en');
+import type { Lang } from './words';
+export { langOf, t, type Lang } from './words';
 
 export interface VisitHost {
   id: string;

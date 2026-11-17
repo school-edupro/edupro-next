@@ -1,9 +1,17 @@
-import { PageHeader } from '@edupro/ui';
+import { Card, PageHeader } from '@edupro/ui';
+import type { Metadata } from 'next';
+import { headers } from 'next/headers';
 import { notFound } from 'next/navigation';
-import { CertificateCheckResult } from '@/components/CertificateCheckResult';
-import { PublicApiError, certFetch, langOf, t, type CertificateCheck } from '@/lib/api';
+import { VerifyCheck, type HumanCheck } from '@/components/VerifyCheck';
+import { PublicApiError, certFetch, langOf, t } from '@/lib/api';
 
-/** The page behind a certificate's QR (docs/design/87, phase D): is it valid, and what it is. */
+/** Not in search engines: the page is for people holding a certificate. */
+export const metadata: Metadata = { robots: { index: false, follow: false } };
+
+/**
+ * The page behind a certificate's QR (docs/design/87, phase D): is it valid, and what it is. For people only (17 Nov
+ * 2026): the answer shows after the human check.
+ */
 export default async function VerifyTokenPage({
   params,
   searchParams,
@@ -13,10 +21,11 @@ export default async function VerifyTokenPage({
 }) {
   const { school, token } = await params;
   const lang = langOf((await searchParams).lang);
-  let r: CertificateCheck;
+  if (!/^[0-9a-f]{20,64}$/.test(token)) notFound();
+  let page: { school: string; check: HumanCheck };
   try {
-    r = await certFetch<CertificateCheck>(
-      `/${encodeURIComponent(school)}/verify/${encodeURIComponent(token)}`,
+    page = await certFetch<{ school: string; check: HumanCheck }>(
+      `/${encodeURIComponent(school)}/verify/${token}`,
     );
   } catch (error) {
     if (error instanceof PublicApiError && error.status === 404) notFound();
@@ -33,24 +42,27 @@ export default async function VerifyTokenPage({
       );
     throw error;
   }
+  const nonce = (await headers()).get('x-nonce') ?? undefined;
   return (
     <>
       <PageHeader
         kicker={t(lang, 'Certificate check', 'प्रमाणपत्र जाँच')}
-        title={r.school.name}
+        title={page.school}
         description={t(
           lang,
           'What the school’s register says of this certificate.',
           'विद्यालय के रजिस्टर के अनुसार इस प्रमाणपत्र का विवरण।',
         )}
       />
-      <CertificateCheckResult r={r} lang={lang} />
+      <Card>
+        <VerifyCheck school={school} lang={lang} check={page.check} token={token} nonce={nonce} />
+      </Card>
       <p className="ep-field__help">
         <a href={`/${school}/verify${lang === 'hi' ? '?lang=hi' : ''}`}>
           {t(
             lang,
             'Check another certificate by its number',
-            'क्रमांक से कोई और प्रमाणपत्र जाँचें',
+            'क्रमांक से कोई अन्य प्रमाणपत्र जाँचें',
           )}
         </a>
       </p>

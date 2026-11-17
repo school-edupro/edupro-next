@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { API } from '@/lib/api';
+import { visitorHeaders } from '@/lib/visitor';
 import { SCHOOL_RE, TOKEN_RE } from '@/lib/consent';
 
 /** Asks the API for a one-time code on a consent form's public link (after the proof of work). */
@@ -11,7 +12,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ type: 'not-found' }, { status: 404 });
   const res = await fetch(`${API}/api/v1/public/consent-forms/${school}/${token}/otp`, {
     method: 'POST',
-    headers: { 'content-type': 'application/json' },
+    headers: { 'content-type': 'application/json', ...(await visitorHeaders()) },
     body: JSON.stringify({
       mode: body.mode,
       mobile: body.mobile || undefined,

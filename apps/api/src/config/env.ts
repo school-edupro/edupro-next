@@ -18,6 +18,13 @@ const EnvSchema = z.object({
   /** Sprint 8: public admissions surface. */
   APPLICANT_JWT_SECRET: z.string().min(32).default('dev-applicant-jwt-secret-change-me-0123456789'),
   PUBLIC_POW_DIFFICULTY: z.coerce.number().int().min(1).max(8).default(4),
+  /**
+   * Google reCAPTCHA v2 ("I'm not a robot") on the public certificate check (17 Nov 2026): the site key (public, shown
+   * to the page) and the secret (server only; Key Vault in production). Both or neither: without them the check is
+   * EduPro's own proof-of-work.
+   */
+  RECAPTCHA_SITE_KEY: z.string().trim().max(100).optional(),
+  RECAPTCHA_SECRET: z.string().trim().max(100).optional(),
   PUBLIC_RATE_LIMIT_PER_MINUTE: z.coerce.number().int().min(5).default(60),
   OTP_TTL_MINUTES: z.coerce.number().int().min(1).max(60).default(10),
   /** Sprint 9: payments v0 (PayU) and the public app origin for return URLs. */

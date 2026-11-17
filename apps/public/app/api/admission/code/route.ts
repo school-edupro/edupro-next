@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { API } from '@/lib/api';
+import { visitorHeaders } from '@/lib/visitor';
 
 /** A sign-in code for the admission portal (the challenge solved in the browser). */
 export async function POST(req: Request) {
@@ -11,7 +12,7 @@ export async function POST(req: Request) {
   };
   const res = await fetch(`${API}/api/v1/public/admission/code`, {
     method: 'POST',
-    headers: { 'content-type': 'application/json' },
+    headers: { 'content-type': 'application/json', ...(await visitorHeaders()) },
     body: JSON.stringify({
       schoolCode: body.school,
       identifier: body.identifier,

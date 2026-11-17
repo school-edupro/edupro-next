@@ -1,5 +1,6 @@
 import { Badge, Card } from '@edupro/ui';
-import { t, type CertificateCheck, type Lang } from '@/lib/api';
+import type { CertificateCheck } from '@/lib/api';
+import { t, type Lang } from '@/lib/words';
 
 const dmy = (iso: string) => `${iso.slice(8, 10)}-${iso.slice(5, 7)}-${iso.slice(0, 4)}`;
 

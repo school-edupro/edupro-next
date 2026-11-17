@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { API } from '@/lib/api';
+import { visitorHeaders } from '@/lib/visitor';
 import { CAREERS_COOKIE } from '@/lib/careers';
 
 /** The code exchanged for a candidate token, kept in an HttpOnly cookie. */
@@ -13,7 +14,7 @@ export async function POST(req: Request) {
   };
   const res = await fetch(`${API}/api/v1/public/careers/otp/verify`, {
     method: 'POST',
-    headers: { 'content-type': 'application/json' },
+    headers: { 'content-type': 'application/json', ...(await visitorHeaders()) },
     body: JSON.stringify({
       schoolCode: body.school,
       channel: body.channel,

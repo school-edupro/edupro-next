@@ -301,6 +301,21 @@ export const BulkRunSchema = BulkBase.extend({
 }).refine(oneScope, { message: 'sections, a section, chosen students or the leavers' });
 export class BulkRunDto extends createZodDto(BulkRunSchema) {}
 
+/** The human check sent with a public certificate check (17 Nov 2026): a reCAPTCHA answer, or a solved challenge. */
+const HumanCheck = {
+  recaptcha: z.string().trim().max(4000).optional(),
+  challenge: z.string().trim().max(600).optional(),
+  nonce: z.string().trim().max(40).optional(),
+};
+export const PublicCheckSchema = z.object(HumanCheck);
+export class PublicCheckDto extends createZodDto(PublicCheckSchema) {}
+export const PublicSearchSchema = z.object({
+  number: z.string().trim().min(3).max(60),
+  date: z.string().trim().max(10),
+  ...HumanCheck,
+});
+export class PublicSearchDto extends createZodDto(PublicSearchSchema) {}
+
 /** Certificates from an Excel sheet (17 Nov 2026): an upload of the sheet made for a type, kept as a draft. */
 const SheetFile = {
   fileName: z.string().trim().min(1).max(200),

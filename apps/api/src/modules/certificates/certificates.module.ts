@@ -21,6 +21,8 @@ import { PublicThrottleGuard } from '../admissions/public/public-throttle.guard'
 import { CertificateSetupService } from './certificate-setup.service';
 import { CertificatesController } from './certificates.controller';
 import { CertificatesService } from './certificates.service';
+import { HumanCheckService } from './human-check.service';
+import { PowService } from '../admissions/public/pow.service';
 
 /** Certificate management (docs/design/87): types, the register, numbering, checks, duplicates and cancels. */
 @Module({
@@ -44,6 +46,8 @@ import { CertificatesService } from './certificates.service';
     CertificateReportsService,
     CertificateLegacyService,
     PublicThrottleGuard,
+    PowService,
+    HumanCheckService,
     AuditService,
   ],
   exports: [CertificatesService],

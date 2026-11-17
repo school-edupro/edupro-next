@@ -2,13 +2,17 @@
  * Certificate management, phase D (docs/design/87): every certificate carries the QR of its own check link; the public
  * check by the QR's token or by the number and date answers valid, cancelled or not found, with the school and a masked
  * name, without a sign-in; a duplicate has its own link; every check is logged (a hash, never the address); the search
- * is rate-limited; a certificate issued before the QR gets one on its next PDF.
+ * is rate-limited; a certificate issued before the QR gets one on its next PDF. For people only (17 Nov 2026): a search
+ * and a QR check each pass a human check (EduPro's proof-of-work here: no reCAPTCHA keys), the pages give only the
+ * school and the check to show, each visitor has their own limit, and a visitor (or a number) that keeps finding
+ * nothing waits.
  */
 import type { NestFastifyApplication } from '@nestjs/platform-fastify';
 import { CacheService } from '../src/common/cache/cache.service';
 import {
   createApp,
   headersFor,
+  humanCheck,
   injector,
   seedSchool,
   seedUser,
@@ -31,6 +35,21 @@ describe('certificate check (e2e)', () => {
 
   const h = () => headersFor(admin.sub, school.id);
   const pub = (url: string) => inject({ method: 'GET', url, headers: {} });
+  /** a check as a visitor (their address, as the public app passes it on) after the human check */
+  const qr = (tok: string, ip = '10.1.0.1', at = code) =>
+    inject({
+      method: 'POST',
+      url: `/public/certificates/${at}/verify/${tok}`,
+      headers: { 'x-forwarded-for': ip },
+      json: humanCheck(app),
+    });
+  const search = (number: string, date: string, ip = '10.1.0.1') =>
+    inject({
+      method: 'POST',
+      url: `/public/certificates/${code}/verify`,
+      headers: { 'x-forwarded-for': ip },
+      json: { number, date, ...humanCheck(app) },
+    });
 
   beforeAll(async () => {
     const s = stamp('CRV');
@@ -48,6 +67,7 @@ describe('certificate check (e2e)', () => {
     inject = injector(app);
     // the public limit counts per address for a minute: start this suite with a clean count (a rerun within the minute)
     await app.get(CacheService).delByPrefix('edupro:throttle:PublicCertificatesController');
+    await app.get(CacheService).delByPrefix('edupro:verify:miss:');
     const k = await inject({
       method: 'POST',
       url: '/academics/classes',
@@ -110,9 +130,37 @@ describe('certificate check (e2e)', () => {
     expect(p.json().html).toContain(`/${code}/verify`);
   });
 
-  it('answers the QR without a sign-in: valid, the school, the name masked', async () => {
-    const r = await pub(`/public/certificates/${code}/verify/${token}`);
-    expect(r.statusCode).toBe(200);
+  it('answers the QR without a sign-in, after the human check: valid, the school, the name masked', async () => {
+    // the page gives the school and the check to show, never the answer
+    const page = await pub(`/public/certificates/${code}/verify/${token}`);
+    expect(page.statusCode).toBe(200);
+    expect(page.json()).toEqual({ school: expect.any(String), check: { provider: 'pow' } });
+    // no check, a check used twice: refused
+    const none = await inject({
+      method: 'POST',
+      url: `/public/certificates/${code}/verify/${token}`,
+      headers: {},
+      json: {},
+    });
+    expect(none.statusCode).toBe(400);
+    expect(none.json().type).toBe('human-check.required');
+    const once = humanCheck(app);
+    const first = await inject({
+      method: 'POST',
+      url: `/public/certificates/${code}/verify/${token}`,
+      headers: {},
+      json: once,
+    });
+    expect(first.statusCode).toBe(201);
+    const again = await inject({
+      method: 'POST',
+      url: `/public/certificates/${code}/verify/${token}`,
+      headers: {},
+      json: once,
+    });
+    expect(again.json().type).toBe('pow.reused');
+    const r = await qr(token);
+    expect(r.statusCode).toBe(201);
     expect(r.json()).toMatchObject({
       result: 'valid',
       school: { code },
@@ -125,7 +173,7 @@ describe('certificate check (e2e)', () => {
         cancelledOn: null,
       },
     });
-    const bogus = await pub(`/public/certificates/${code}/verify/${'0'.repeat(36)}`);
+    const bogus = await qr('0'.repeat(36));
     expect(bogus.json()).toMatchObject({ result: 'not_found', certificate: null });
     // a token is good only at its own school
     const otherCode = await withMigrator((c) =>
@@ -133,29 +181,34 @@ describe('certificate check (e2e)', () => {
         other.id,
       ]),
     );
-    const wrongSchool = await pub(
-      `/public/certificates/${otherCode.rows[0]!.code}/verify/${token}`,
-    );
+    const wrongSchool = await qr(token, '10.1.0.1', otherCode.rows[0]!.code);
     expect(wrongSchool.json().result).toBe('not_found');
     expect((await pub(`/public/certificates/nosuchschool/verify/${token}`)).statusCode).toBe(404);
+    expect((await qr(token, '10.1.0.1', 'nosuchschool')).statusCode).toBe(404);
   });
 
   it('answers a search by the number and the date of issue; both must match', async () => {
     const page = await pub(`/public/certificates/${code}/verify`);
     expect(page.statusCode).toBe(200);
-    expect(page.json()).toHaveProperty('school');
-    const ok = await pub(
-      `/public/certificates/${code}/verify?number=${encodeURIComponent(cert.number.toLowerCase())}&date=${cert.issuedOn}`,
+    expect(page.json()).toMatchObject({ school: expect.any(String), check: { provider: 'pow' } });
+    // the old address with the number and date in it answers nothing now
+    const old = await pub(
+      `/public/certificates/${code}/verify?number=${encodeURIComponent(cert.number)}&date=${cert.issuedOn}`,
     );
+    expect(old.json()).not.toHaveProperty('result');
+    const ok = await search(cert.number.toLowerCase(), cert.issuedOn, '10.2.0.1');
     expect(ok.json()).toMatchObject({ result: 'valid', certificate: { number: cert.number } });
-    const wrongDate = await pub(
-      `/public/certificates/${code}/verify?number=${encodeURIComponent(cert.number)}&date=2001-01-01`,
-    );
+    const wrongDate = await search(cert.number, '2001-01-01', '10.2.0.1');
     expect(wrongDate.json().result).toBe('not_found');
-    const bad = await pub(
-      `/public/certificates/${code}/verify?number=${encodeURIComponent(cert.number)}&date=14-11-2026`,
-    );
+    const bad = await search(cert.number, '14-11-2026', '10.2.0.1');
     expect(bad.statusCode).toBe(400);
+    const noCheck = await inject({
+      method: 'POST',
+      url: `/public/certificates/${code}/verify`,
+      headers: {},
+      json: { number: cert.number, date: cert.issuedOn },
+    });
+    expect(noCheck.json().type).toBe('human-check.required');
   });
 
   it('gives a duplicate its own link, and says cancelled once it is cancelled', async () => {
@@ -173,7 +226,7 @@ describe('certificate check (e2e)', () => {
     );
     expect(dupToken.rows[0]!.token).not.toBe(token);
     expect(dupToken.rows[0]!.url).toContain(dupToken.rows[0]!.token);
-    const d = await pub(`/public/certificates/${code}/verify/${dupToken.rows[0]!.token}`);
+    const d = await qr(dupToken.rows[0]!.token);
     expect(d.json()).toMatchObject({
       result: 'valid',
       certificate: { copy: 1, number: cert.number },
@@ -184,12 +237,10 @@ describe('certificate check (e2e)', () => {
       headers: h(),
       json: { reason: 'Issued in error' },
     });
-    const c = await pub(`/public/certificates/${code}/verify/${token}`);
+    const c = await qr(token);
     expect(c.json()).toMatchObject({ result: 'cancelled', certificate: { duplicates: 1 } });
     expect(c.json().certificate.cancelledOn).toMatch(/^\d{4}-\d{2}-\d{2}$/);
-    expect(
-      (await pub(`/public/certificates/${code}/verify/${dupToken.rows[0]!.token}`)).json().result,
-    ).toBe('cancelled');
+    expect((await qr(dupToken.rows[0]!.token)).json().result).toBe('cancelled');
   });
 
   it('logs every check with a hash of the address, never the address', async () => {
@@ -199,7 +250,8 @@ describe('certificate check (e2e)', () => {
       headers: h(),
     });
     expect(log.statusCode).toBe(200);
-    expect(log.json().total).toBe(3);
+    // the QR twice (one answer used once), the search, and the QR after the cancel
+    expect(log.json().total).toBe(4);
     expect(log.json().rows.map((x: { method: string }) => x.method)).toEqual(
       expect.arrayContaining(['qr', 'search']),
     );
@@ -236,12 +288,41 @@ describe('certificate check (e2e)', () => {
     expect(d.rows[0]!.has).toBe(true);
   });
 
-  it('limits the searches from one address', async () => {
+  it('makes a visitor who keeps finding nothing wait, not the others', async () => {
+    await app.get(CacheService).delByPrefix('edupro:verify:miss:');
+    for (let i = 0; i < 5; i++)
+      expect((await search(`XYZ${String(i)}`, '2026-11-14', '10.3.0.1')).json().result).toBe(
+        'not_found',
+      );
+    // the sixth search of that visitor waits, even a right one; another visitor is not held up
+    const held = await search(cert.number, cert.issuedOn, '10.3.0.1');
+    expect(held.statusCode).toBe(429);
+    expect(held.json().type).toBe('verify.locked');
+    // found (cancelled by now: the duplicate's test)
+    expect((await search(cert.number, cert.issuedOn, '10.3.0.2')).json().certificate?.number).toBe(
+      cert.number,
+    );
+  });
+
+  it('rests a certificate number after five wrong dates, from any visitors', async () => {
+    await app.get(CacheService).delByPrefix('edupro:verify:miss:');
+    for (let i = 0; i < 5; i++)
+      expect(
+        (await search(cert.number, `2001-01-0${String(i + 1)}`, `10.4.0.${String(i)}`)).json()
+          .result,
+      ).toBe('not_found');
+    const rest = await search(cert.number, cert.issuedOn, '10.4.0.9');
+    expect(rest.statusCode).toBe(429);
+    expect(rest.json().type).toBe('verify.number_locked');
+    // another number is not held
+    expect((await search('NOPE/1', '2026-11-14', '10.4.0.9')).statusCode).toBe(201);
+  });
+
+  it('limits the searches of one visitor a minute', async () => {
+    await app.get(CacheService).delByPrefix('edupro:verify:miss:');
     let limited = false;
     for (let i = 0; i < 15 && !limited; i++) {
-      const r = await pub(
-        `/public/certificates/${code}/verify?number=XYZ${String(i)}&date=2026-11-14`,
-      );
+      const r = await search(cert.number, cert.issuedOn, '10.5.0.1');
       if (r.statusCode === 429) limited = true;
     }
     expect(limited).toBe(true);

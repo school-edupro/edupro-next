@@ -9,6 +9,7 @@ import { CacheService } from '../src/common/cache/cache.service';
 import {
   createApp,
   headersFor,
+  humanCheck,
   injector,
   seedSchool,
   seedUser,
@@ -980,17 +981,19 @@ describe('certificate register (e2e)', () => {
       ),
     );
     const v = await inject({
-      method: 'GET',
+      method: 'POST',
       url: `/public/certificates/${tok.rows[0]!.code}/verify/${tok.rows[0]!.token}`,
       headers: {},
+      json: humanCheck(app),
     });
     expect(v.json()).toMatchObject({ result: 'valid', certificate: { revision: 3 } });
     expect(v.json().certificate.correctedOn).toMatch(/^\d{4}-\d{2}-\d{2}$/);
     await app.get(CacheService).delByPrefix('edupro:throttle:PublicCertificatesController');
     const byOldDate = await inject({
-      method: 'GET',
-      url: `/public/certificates/${tok.rows[0]!.code}/verify?number=${encodeURIComponent(cert.number)}&date=${cert.issuedOn}`,
+      method: 'POST',
+      url: `/public/certificates/${tok.rows[0]!.code}/verify`,
       headers: {},
+      json: { number: cert.number, date: cert.issuedOn, ...humanCheck(app) },
     });
     expect(byOldDate.json()).toMatchObject({ result: 'valid' });
     // a duplicate printed now carries the correction; a duplicate itself is not corrected

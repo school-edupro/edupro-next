@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { API } from '@/lib/api';
+import { visitorHeaders } from '@/lib/visitor';
 import { ADMISSION_COOKIE } from '@/lib/admission';
 
 /** The code exchanged for the admission token, kept in an HttpOnly cookie. */
@@ -7,7 +8,7 @@ export async function POST(req: Request) {
   const body = (await req.json()) as { school: string; identifier: string; code: string };
   const res = await fetch(`${API}/api/v1/public/admission/code/verify`, {
     method: 'POST',
-    headers: { 'content-type': 'application/json' },
+    headers: { 'content-type': 'application/json', ...(await visitorHeaders()) },
     body: JSON.stringify({ schoolCode: body.school, identifier: body.identifier, code: body.code }),
     cache: 'no-store',
   });

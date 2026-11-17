@@ -9,6 +9,7 @@ import { Client } from 'pg';
 import { AppModule } from '../src/app.module';
 import { setupApp } from '../src/app.setup';
 import { loadEnv } from '../src/config/env';
+import { PowService } from '../src/modules/admissions/public/pow.service';
 
 export const MIGRATOR_URL =
   process.env.DATABASE_MIGRATOR_URL ??
@@ -93,7 +94,11 @@ export async function createApp(): Promise<NestFastifyApplication> {
   process.env.AUTH_DEV_BYPASS = '1';
   const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).compile();
   const app = moduleRef.createNestApplication<NestFastifyApplication>(
-    new FastifyAdapter({ bodyLimit: 26_214_400 }),
+    // as main.ts: one ingress hop is trusted, so X-Forwarded-For names the visitor (the public app passes it on)
+    new FastifyAdapter({
+      bodyLimit: 26_214_400,
+      trustProxy: (_address: string, hop: number) => hop === 0,
+    }),
   );
   try {
     await setupApp(app, loadEnv());
@@ -145,4 +150,13 @@ export function injector(app: NestFastifyApplication) {
         ...(payload !== undefined ? { payload } : {}),
       });
   };
+}
+
+/**
+ * A solved human check for the public certificate check (17 Nov 2026): EduPro's proof-of-work (the tests have no
+ * reCAPTCHA keys).
+ */
+export function humanCheck(app: NestFastifyApplication): { challenge: string; nonce: string } {
+  const ch = app.get(PowService, { strict: false }).issue();
+  return { challenge: ch.challenge, nonce: PowService.solve(ch.challenge, ch.difficulty) };
 }

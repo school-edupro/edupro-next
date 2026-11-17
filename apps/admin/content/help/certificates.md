@@ -179,7 +179,17 @@ school, an embassy, an employer — scans it (or opens the school's check page,
 `<public site>/<school code>/verify`, and types the number and the date of issue) and sees, without
 signing in: **Valid** or **Cancelled**, the type, number, date of issue, the school, and the holder's name
 in part (e.g. "A\*\*\*v S\*\*\*\*a") to compare with the paper. A duplicate has its own QR and shows as
-"duplicate 1" of the same number. The page allows a few checks a minute from one place.
+"duplicate 1" of the same number.
+
+**For people only.** Before any answer — a search or a QR scan — the visitor passes a check that they are a
+person: Google's **"I'm not a robot"** box once the school's server has its reCAPTCHA keys (set by whoever runs
+the server: `RECAPTCHA_SITE_KEY` and `RECAPTCHA_SECRET`, made for the public site's address at Google's
+reCAPTCHA admin, type v2 checkbox), and until then EduPro's own quick check (the browser solves a small puzzle
+when **Check** is pressed). Each visitor may check a few times a minute; a visitor whose checks find nothing five
+times in 15 minutes waits 15 minutes, and a certificate number tried with five wrong dates rests an hour (from
+anyone). The number and date never appear in the page's address, the page is not shown in search engines, and
+the crawlers of AI companies are refused. No check stops every automated agent: what the page shows is kept
+small — the holder's name only in part.
 
 Each check is recorded: a certificate's page (**Public checks**) shows when it was checked, by QR or by
 number, and what it answered — never who checked. Certificates issued before the QR get one the next time

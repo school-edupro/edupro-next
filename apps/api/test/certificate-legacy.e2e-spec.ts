@@ -9,6 +9,7 @@ import type { NestFastifyApplication } from '@nestjs/platform-fastify';
 import {
   createApp,
   headersFor,
+  humanCheck,
   injector,
   seedSchool,
   seedUser,
@@ -283,9 +284,10 @@ describe('certificates from the old system (e2e)', () => {
       ),
     );
     const v = await inject({
-      method: 'GET',
+      method: 'POST',
       url: `/public/certificates/${tok.rows[0]!.code}/verify/${tok.rows[0]!.token}`,
       headers: {},
+      json: humanCheck(app),
     });
     expect(v.json()).toMatchObject({
       result: 'valid',

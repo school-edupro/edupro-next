@@ -790,3 +790,44 @@ the list. Sizes on Alpha: 150 students → a 43 KB sheet in under half a second.
 From Excel from Bulk issue, a TC sheet downloaded, axe clean at 1440 and 375 px, nothing saved; a throwaway test
 school (switched on for the run, off after) — a bonafide sheet downloaded, uploaded (two ready, one who left), the
 upload's page axe clean, the two issued with the run linked.
+
+## The public check for people only (17 Nov 2026)
+
+The user: the open check page (`<public>/alpha/verify`) should be used by people, not bots or AI agents; it is rate
+limited; suggested a CAPTCHA. Found: the page called the API from the public app's server, so every visitor came with
+that server's address — the "10 a minute per address" was 10 a minute for everyone together (one bot could lock out
+all, and no bot was singled out); the same for the public admission, consent and careers forms. Benchmark: Cloudflare
+Turnstile (strongest against scripts and automated browsers, no ad tracking), Google reCAPTCHA (familiar; Google
+tracks the visitor — consent under DPDP), self-hosted proof-of-work (no third party; a speed bump); no CAPTCHA stops
+every modern AI agent driving a browser, so the leaders layer a human check, per-visitor limits, locks on wrong
+guesses, small answers, no indexing and refusing declared AI crawlers. Chosen by the user: **Google reCAPTCHA** (v2
+checkbox), the check on the **QR too**, and (recommended) **per-visitor limits with locks on wrong guesses**.
+
+- **API**: `RECAPTCHA_SITE_KEY` / `RECAPTCHA_SECRET` (env; the secret in Key Vault in production; both or neither).
+  `HumanCheckService` (certificates module, with its own `PowService`): `config()` → reCAPTCHA with the site key, or
+  EduPro's proof-of-work; `verify(answer, ip)` → Google's siteverify (secret, answer, the visitor's address; 5 s; a
+  failure 400 `human-check.failed`, Google unreachable 503 `human-check.unavailable`) or the challenge consumed once;
+  `assertNotLocked` / `missed`: a visitor 5 not-found checks in 15 minutes → 429 `verify.locked` for 15 minutes; a
+  certificate number 5 not-found searches in an hour (from anyone, whether or not it exists — no oracle) → 429
+  `verify.number_locked`. Routes: `GET :school/verify` and `GET :school/verify/:token` give only `{school, check}`;
+  `POST :school/verify` (number, date, the answer; 10 a minute a visitor) and `POST :school/verify/:token` (the
+  answer; 30) give the result after the lock and the check. The test app trusts one proxy hop as `main.ts` does.
+- **Public app**: `lib/visitor.ts` — the visitor's address (the last X-Forwarded-For entry the ingress added, or
+  X-Real-IP) passed on as X-Forwarded-For by `call()` and by the route handlers of the OTP, admission, careers,
+  consent and challenge calls; `lib/words.ts` (t / Lang, safe in the browser; `lib/api` re-exports them).
+  `components/VerifyCheck.tsx` (client): the number and date (or, for a QR, nothing more), Google's box (loaded with
+  the page's nonce; reset after each check) or the proof-of-work on Check, `POST /api/certificate-check` (a route
+  passing the answer and the address on), the result shown on the page — nothing in the address. Both verify pages
+  are `noindex`; `middleware.ts` refuses declared AI agents (GPTBot, ClaudeBot, PerplexityBot, CCBot, Bytespider …)
+  on the verify pages and the check call with 403 and sends `X-Robots-Tag: noindex` there; `app/robots.ts` disallows
+  `/*/verify` and `/api/`; the page CSP allows Google's reCAPTCHA frame (`frame-src`), route handlers none.
+
+Tests: `certificate-verify.e2e-spec.ts` (the pages give no answer; no check / a check used twice refused; QR and search
+after the check; the old address with the number answers nothing; a visitor locked after five misses while another is
+not; a number rested after five wrong dates from five visitors; a visitor's minute limit), the register and legacy
+suites' public checks, `human-check.service.spec.ts` (reCAPTCHA with keys — Google asked with the secret, the answer
+and the address; no answer, a failed one, Google unreachable; proof-of-work without keys; the locks). Browser: the
+search and the QR page on Alpha with EduPro's check at 1440 and 375 px (axe clean; nothing in the address; Hindi);
+with Google's published test keys on a temporary API run, the box shows and Check without the tick is refused (the box
+was not ticked); from outside: GPTBot / ClaudeBot 403, `X-Robots-Tag`, robots.txt. Alpha runs EduPro's check until
+the school's keys are set.

@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { API } from '@/lib/api';
+import { visitorHeaders } from '@/lib/visitor';
 import { CONSENT_COOKIE, SCHOOL_RE, TOKEN_RE } from '@/lib/consent';
 
 /** Checks the code; the pass for the form goes into an HttpOnly cookie the browser never reads. */
@@ -11,7 +12,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ type: 'not-found' }, { status: 404 });
   const res = await fetch(`${API}/api/v1/public/consent-forms/${school}/${token}/otp/verify`, {
     method: 'POST',
-    headers: { 'content-type': 'application/json' },
+    headers: { 'content-type': 'application/json', ...(await visitorHeaders()) },
     body: JSON.stringify({
       mode: body.mode,
       mobile: body.mobile || undefined,
