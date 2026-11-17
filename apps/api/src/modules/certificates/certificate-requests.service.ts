@@ -306,6 +306,16 @@ export class CertificateRequestsService implements OnModuleInit {
           fee: t.s.fee,
           forParents: t.s.open.parent,
           forStudents: t.s.open.student,
+          // who decides, in order, in words (16 Nov 2026: the app's list says it)
+          decidedBy: t.s.levels.map((l) =>
+            l.kind === 'office'
+              ? 'the office'
+              : l.kind === 'class_teacher'
+                ? 'the class teacher'
+                : l.kind === 'signatory'
+                  ? 'the principal'
+                  : (l.name ?? 'the school'),
+          ),
         }));
       const ids = me.students.map((s) => s.id);
       const empId = me.employee?.id ?? null;
@@ -318,17 +328,26 @@ export class CertificateRequestsService implements OnModuleInit {
       const certs = await c.query<{
         id: string;
         type_name: string;
+        type_code: string;
         number: string;
         copy_no: number;
         issued_on: string;
         person: string;
         student_id: string | null;
+        purpose: string | null;
+        revision: number;
+        award: string | null;
+        legacy_ref: string | null;
       }>(
-        `SELECT x.id::text, t.name AS type_name, x.number, x.copy_no, x.issued_on::text,
-                COALESCE(s.display_name, e.display_name) AS person, x.student_id::text
+        `SELECT x.id::text, t.name AS type_name, t.code AS type_code, x.number, x.copy_no, x.issued_on::text,
+                COALESCE(s.display_name, e.display_name) AS person, x.student_id::text, x.purpose, x.revision,
+                NULLIF(concat_ws(' · ', x.data->'fields'->>'award', x.data->'fields'->>'event', x.data->'fields'->>'position'), '') AS award,
+                x.legacy_ref
            FROM certificates x JOIN certificate_types t ON t.id = x.type_id
            LEFT JOIN students s ON s.id = x.student_id LEFT JOIN employees e ON e.id = x.employee_id
-          WHERE x.status = 'issued' AND x.template_version_id IS NOT NULL
+          WHERE x.status = 'issued'
+            -- made in the register, or moved in from the achievement module (16 Nov 2026: one list in the app)
+            AND (x.template_version_id IS NOT NULL OR x.legacy_ref ~ '^achievement:[0-9]{1,18}$')
             AND (x.student_id = ANY($1::bigint[]) OR x.employee_id = $2)
           ORDER BY x.issued_on DESC, x.id DESC LIMIT 100`,
         [ids, empId],
@@ -346,6 +365,15 @@ export class CertificateRequestsService implements OnModuleInit {
           issuedOn: x.issued_on,
           person: x.person,
           studentId: x.student_id,
+          purpose: x.purpose,
+          revision: x.revision,
+          // an award or achievement (16 Nov 2026: one list in the app, these marked)
+          award: ['ACHIEVEMENT', 'MERIT', 'PARTICIPATION', 'AWARD'].includes(x.type_code),
+          awardText: x.award,
+          // the achievement module's record it came from (the app lists that record once, here)
+          achievementId: /^achievement:\d{1,18}$/.test(x.legacy_ref ?? '')
+            ? x.legacy_ref!.slice('achievement:'.length)
+            : null,
         })),
       };
     });
@@ -540,10 +568,19 @@ export class CertificateRequestsService implements OnModuleInit {
           copy_no: number;
           type_name: string;
           versioned: boolean;
+          legacy_ref: string | null;
+          export_id: string | null;
+          export_status: string | null;
+          export_own: boolean;
         }>(
+          // export_own: the file is this certificate's alone (an achievement batch's PDF holds a whole class)
           `SELECT x.student_id::text, x.employee_id::text, x.status, x.number, x.copy_no, t.name AS type_name,
-                  x.template_version_id IS NOT NULL AS versioned
-             FROM certificates x JOIN certificate_types t ON t.id = x.type_id WHERE x.id = $1`,
+                  x.template_version_id IS NOT NULL AS versioned, x.legacy_ref, x.export_id::text,
+                  e.status::text AS export_status,
+                  (e.dataset IN ('certificate_doc', 'certificate')
+                   AND NOT EXISTS (SELECT 1 FROM certificates y WHERE y.export_id = e.id AND y.id <> x.id)) AS export_own
+             FROM certificates x JOIN certificate_types t ON t.id = x.type_id
+             LEFT JOIN exports e ON e.id = x.export_id WHERE x.id = $1`,
           [certificateId],
         )
       ).rows[0];
@@ -551,30 +588,53 @@ export class CertificateRequestsService implements OnModuleInit {
         x &&
         (me.students.some((s) => s.id === x.student_id) ||
           (!!me.employee && me.employee.id === x.employee_id));
-      if (!x || !mineToo || x.status !== 'issued' || !x.versioned)
+      const achievement = !x?.versioned && /^achievement:\d{1,18}$/.test(x?.legacy_ref ?? '');
+      if (!x || !mineToo || x.status !== 'issued' || !(x.versioned || achievement))
         throw new DomainError('not-found', 'Certificate not found');
-      return x;
+      return { ...x, achievement };
     });
+    // the certificate's own PDF (kept for good), when it is there or being made: the same paper the office prints
+    if (
+      own.export_id &&
+      own.export_own &&
+      ['ready', 'queued', 'running'].includes(own.export_status ?? '')
+    )
+      return { exportId: own.export_id, ready: own.export_status === 'ready' };
+    const title = `${own.type_name} ${own.number}${own.copy_no ? ` (duplicate ${String(own.copy_no)})` : ''}`;
     const exp = await this.reports.createRenderedForOwner(
       ctx,
-      {
-        dataset: 'certificate_doc',
-        format: 'pdf',
-        params: { certificateId },
-        title: `${own.type_name} ${own.number}${own.copy_no ? ` (duplicate ${String(own.copy_no)})` : ''}`,
-      },
+      own.achievement
+        ? // moved in from the achievement module: its own page, from its achievement record
+          {
+            dataset: 'certificate',
+            format: 'pdf',
+            params: { certificateId: own.legacy_ref!.slice('achievement:'.length) },
+            title,
+          }
+        : { dataset: 'certificate_doc', format: 'pdf', params: { certificateId }, title },
       'certificate.render.own',
     );
-    return { exportId: exp.id };
+    return { exportId: exp.id, ready: false };
   }
 
   /** The status and link of an export the asker made. */
   async myExport(ctx: RequestContext, exportId: string) {
-    const own = await this.db.tenant(requireTenant(ctx), (c) =>
-      c.query(`SELECT 1 FROM exports WHERE id = $1 AND requested_by = app.current_user_id()`, [
-        exportId,
-      ]),
-    );
+    // one the asker made, or the kept PDF of a certificate of their own child (or their own)
+    const own = await this.db.tenant(requireTenant(ctx), async (c) => {
+      const me = await this.mine(c);
+      return c.query(
+        `SELECT 1 FROM exports e
+          WHERE e.id = $1
+            AND (e.requested_by = app.current_user_id()
+                 OR (e.dataset IN ('certificate_doc', 'certificate')
+                     AND EXISTS (SELECT 1 FROM certificates x WHERE x.export_id = e.id AND x.status = 'issued'
+                                   AND (x.student_id = ANY($2::bigint[]) OR x.employee_id = $3))
+                     -- never a file shared with others' certificates (an achievement batch's PDF)
+                     AND NOT EXISTS (SELECT 1 FROM certificates y WHERE y.export_id = e.id
+                                       AND NOT COALESCE(y.student_id = ANY($2::bigint[]) OR y.employee_id = $3, false))))`,
+        [exportId, me.students.map((x) => x.id), me.employee?.id ?? null],
+      );
+    });
     if (!own.rowCount) throw new DomainError('not-found', 'Export not found');
     return this.reports.statusForOwner(ctx, exportId);
   }

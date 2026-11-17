@@ -594,3 +594,38 @@ purpose and the date corrected; the log 3, 2, 1 with its changes; the paper's re
 the first date still matching; a duplicate after it carries the correction; a duplicate is not corrected); the db
 blocks test (the foot line). A browser pass on the switch and a refused correction link (the "on" pages were not
 looked at on Alpha: switching it on there was not done).
+
+## The parent app's Certificates page, rebuilt (17 Nov 2026)
+
+The page was a request form on top, then three lists (requests, "Issued by the school", "Awards and achievements") with
+a PDF button that reloaded the page with a notice. Chosen (all recommended): ready first, then requests, then ask; the
+ask list with fee and who decides; one list with awards marked.
+
+- **API** (`certificate-requests.service.ts`): `GET /certificate-requests/mine` — each type carries `decidedBy` (its
+  levels in words: the office, the class teacher, the principal, a role's name); each certificate `purpose`,
+  `revision`, `award` (ACHIEVEMENT / MERIT / PARTICIPATION / AWARD), `awardText` (award · event · position) and
+  `achievementId`; the list now takes the achievement module's certificates moved into the register (no template
+  version, `legacy_ref achievement:<id>`). `POST …/mine/certificates/:id/pdf` returns `{exportId, ready}`: the
+  certificate's kept PDF when it is its own file (`certificate_doc` / `certificate`, no other certificate on it) and
+  ready, queued or running; otherwise a new one — an achievement-module certificate gets its own page (`certificate`
+  renderer, its achievement record). `GET …/mine/exports/:id` opens the asker's own exports and a kept certificate
+  PDF of their child (or their own) only when no other person's certificate shares the file: a class batch's PDF is
+  never handed to a parent.
+- **Parent app**: `/api/certificate-pdf?id=&kind=&save=` — straight to the PDF (View) or its save link (Download)
+  when ready, else to `/certificates/opening` (`OpenCertificate` polls `/api/certificate-export` and opens or saves it
+  in place; a minute's wait says the school is still making it; a failure links back). The page: three figures
+  (ready, in progress, to pay); **Your certificates** — register and achievement records merged (an achievement
+  record already in the register is not listed twice), newest first, an **Award** badge, `FileLinks` (`inPlace`:
+  Download is a plain link, since it may pass through the opening step); **Requests** — open ones with a step line
+  (`ep-pcert-track`; Fee only when there is one) and Pay the fee (amount × copies) / Withdraw, closed ones in
+  **Earlier requests**; **Ask for a certificate** — one bordered list of `<details>`: name, who decides, up to three
+  purposes, the fee (Free / ₹x a copy); the form (purpose, copies, note, fee line, Send) opens under the tapped one
+  (`?ask=<code>` opens it after a refused send); `AskSearch` past five. The old `?export=` / `?cexport=` links go to
+  the opening step; `registerCertificatePdf` is gone. Hindi for every new string. Styles `ep-pcert-*` in app.css.
+
+Tests: `certificate-requests.e2e-spec.ts` (decidedBy; the certificate's purpose, revision, award; the kept PDF reused
+on every open; an achievement batch to a class lists only the parent's child, once, marked; the batch PDF refused to
+the parent; their own page made from the achievement record; another child's refused). A browser pass on Alpha as the
+demo parent at 1440 and 375 (axe clean; no sideways scroll; View and Download redirect to the kept PDF; another
+family's id goes back with a message; the ask search; a step line drawn on the page only — the demo family has no
+open request, and none was made on Alpha).

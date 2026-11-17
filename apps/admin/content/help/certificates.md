@@ -138,6 +138,20 @@ on the type (Set-up → the type → **Requests online**).
 4. **Download.** The requester is told in the app at each step and downloads the PDF from the same page.
    A request not yet issued can be withdrawn by the requester.
 
+**What the parent sees.** The parent app's **Certificates** page, for the child chosen at the top:
+
+- three figures — certificates **ready**, requests **in progress**, requests waiting **to pay**;
+- **Your certificates** — every certificate of the child once, newest first, with its number, date and
+  purpose; awards and achievements are marked **Award**. The eye opens the PDF and the arrow saves it,
+  straight away (the PDF the office made is the one opened; if none is kept, it is made and opens by itself
+  in a few seconds). A parent is only ever given that child's own page, never a class batch's file;
+- **Requests** — each open request with its steps (Asked → Approved → Fee → Being made → Ready, the Fee
+  step only when there is one) and what to do next: **Pay the fee** or **Withdraw**; closed ones fold
+  under **Earlier requests**;
+- **Ask for a certificate** — the certificates open to the parent, each with its fee (**Free** or the
+  amount a copy) and who decides; tap one and its short form opens under it. With more than five, a search
+  box narrows the list.
+
 The **Requests** page shows six figures (waiting for approval, waiting with me, waiting for the fee,
 ready to issue, issued this month, the oldest open request in days), filters (status, type, waiting with
 me, a name or number) and each request's stage, who it waits with and its age.

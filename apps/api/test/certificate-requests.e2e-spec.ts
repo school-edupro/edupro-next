@@ -39,6 +39,7 @@ describe('certificate requests (e2e)', () => {
   let principal: SeededUser;
   let principalEmp: string;
   let teacherEmp: string;
+  let sectionId: string;
   const kids: Record<string, string> = {};
 
   const h = (u: SeededUser) => headersFor(u.sub, school.id);
@@ -77,6 +78,7 @@ describe('certificate requests (e2e)', () => {
       admin,
     );
     const sec = await post(`/academics/classes/${k.json().id}/sections`, { name: 'A' }, admin);
+    sectionId = sec.json().id as string;
     let roll = 1;
     for (const [key, first, withParent] of [
       ['anu', 'Anu', true],
@@ -131,6 +133,10 @@ describe('certificate requests (e2e)', () => {
     const pt = (p.json().types as Array<{ code: string }>).map((t) => t.code);
     expect(pt).toEqual(expect.arrayContaining(['TC', 'BONAFIDE', 'CHARACTER']));
     expect(pt).not.toContain('SERVICE');
+    // who decides, in words, for the app's list (16 Nov 2026)
+    const types = p.json().types as Array<{ code: string; decidedBy: string[] }>;
+    expect(types.every((t) => t.decidedBy.length > 0)).toBe(true);
+    expect(types.find((t) => t.code === 'BONAFIDE')?.decidedBy).toEqual(['the office']);
     const st = (await get('/certificate-requests/mine', pupil)).json();
     expect(st.students).toEqual([expect.objectContaining({ name: 'Ben Test', self: true })]);
     expect((st.types as Array<{ code: string }>).map((t) => t.code)).not.toContain('TC');
@@ -206,7 +212,14 @@ describe('certificate requests (e2e)', () => {
     const mine = (await get('/certificate-requests/mine', parent)).json();
     expect(mine.requests[0]).toMatchObject({ id: req.id, status: 'issued', stage: 'issued' });
     expect(mine.requests[0].certificateIds).toEqual([issued.json().id]);
-    expect(mine.certificates[0]).toMatchObject({ number: 'BON/2026-27/00001', person: 'Anu Test' });
+    expect(mine.certificates[0]).toMatchObject({
+      number: 'BON/2026-27/00001',
+      person: 'Anu Test',
+      purpose: 'Passport application',
+      revision: 1,
+      award: false,
+      achievementId: null,
+    });
     // the parent is told in the app: approved, then ready
     const told = await withMigrator((c) =>
       c.query<{ code: string; channel: string }>(
@@ -232,6 +245,20 @@ describe('certificate requests (e2e)', () => {
     );
     expect(ex.statusCode).toBe(200);
     expect(ex.json().export.dataset).toBe('certificate_doc');
+    // the PDF the office made is the one kept for good: the parent gets that same file, not a new one each time
+    const kept = await withMigrator((c) =>
+      c.query<{ export_id: string | null }>(
+        `SELECT export_id::text FROM certificates WHERE id = $1`,
+        [issued.json().id],
+      ),
+    );
+    expect(kept.rows[0]!.export_id).toBe(pdf.json().exportId);
+    const twiceOpened = await post(
+      `/certificate-requests/mine/certificates/${issued.json().id as string}/pdf`,
+      {},
+      parent,
+    );
+    expect(twiceOpened.json().exportId).toBe(pdf.json().exportId);
     // not someone else's
     expect(
       (
@@ -249,6 +276,72 @@ describe('certificate requests (e2e)', () => {
       office,
     );
     expect(twice.statusCode).toBe(409);
+  });
+
+  it('lists an achievement certificate once, marked, and never hands a parent the class batch PDF', async () => {
+    const tpl = await withMigrator((c) =>
+      c.query<{ id: string }>(
+        `INSERT INTO document_templates (school_id, code, name, kind, page_width, page_height, body_html, styles_css, variables)
+         VALUES ($1, 'ach_app', 'Achievement', 'certificate', '297mm', '210mm', '<p>{{student.name}}</p>', '', '[]'::jsonb)
+         RETURNING id::text`,
+        [school.id],
+      ),
+    );
+    const r = await post(
+      '/engagement/certificates',
+      { templateId: tpl.rows[0]!.id, classSectionId: sectionId, title: 'Best attendance' },
+      admin,
+    );
+    expect(r.statusCode).toBe(201);
+    const batchPdf = r.json().exportId as string;
+    const mine = (await get('/certificate-requests/mine', parent)).json();
+    const awards = (
+      mine.certificates as Array<{ id: string; award: boolean; achievementId: string | null }>
+    ).filter((x) => x.award);
+    // the parent's child only, once (the earlier list's record is the same one)
+    expect(awards).toEqual([
+      expect.objectContaining({
+        typeName: 'Achievement certificate',
+        person: 'Anu Test',
+        awardText: 'Best attendance',
+        achievementId: expect.stringMatching(/^\d+$/),
+      }),
+    ]);
+    // the batch's file prints the whole class: not for a parent
+    expect((await get(`/certificate-requests/mine/exports/${batchPdf}`, parent)).statusCode).toBe(
+      404,
+    );
+    const pdf = await post(
+      `/certificate-requests/mine/certificates/${awards[0]!.id}/pdf`,
+      {},
+      parent,
+    );
+    expect(pdf.statusCode).toBe(201);
+    expect(pdf.json()).toMatchObject({ ready: false });
+    expect(pdf.json().exportId).not.toBe(batchPdf);
+    const ex = await get(
+      `/certificate-requests/mine/exports/${pdf.json().exportId as string}`,
+      parent,
+    );
+    expect(ex.statusCode).toBe(200);
+    expect(ex.json().export).toMatchObject({ dataset: 'certificate' });
+    const made = await withMigrator((c) =>
+      c.query<{ params: { certificateId: string } }>(`SELECT params FROM exports WHERE id = $1`, [
+        pdf.json().exportId,
+      ]),
+    );
+    expect(made.rows[0]!.params).toEqual({ certificateId: awards[0]!.achievementId });
+    // the student of the class without a parent here: not the parent's
+    const other = await withMigrator((c) =>
+      c.query<{ id: string }>(
+        `SELECT id::text FROM certificates WHERE school_id = $1 AND student_id = $2 AND legacy_ref LIKE 'achievement:%'`,
+        [school.id, kids.cia],
+      ),
+    );
+    expect(
+      (await post(`/certificate-requests/mine/certificates/${other.rows[0]!.id}/pdf`, {}, parent))
+        .statusCode,
+    ).toBe(404);
   });
 
   it('runs the TC through the office and then the principal', async () => {

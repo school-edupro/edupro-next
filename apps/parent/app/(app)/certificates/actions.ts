@@ -1,5 +1,5 @@
 'use server';
-/** Certificate requests from the parent app (docs/design/87, phase C): ask, withdraw, a PDF of an issued one. */
+/** Certificate requests from the parent app (docs/design/87, phase C): ask and withdraw (a PDF: /api/certificate-pdf). */
 import { redirect } from 'next/navigation';
 import { ApiError } from '@edupro/bff';
 import { bff } from '@/lib/bff';
@@ -47,24 +47,4 @@ export async function withdrawCertificateRequest(fd: FormData) {
     fail('/certificates', error);
   }
   redirect('/certificates?withdrawn=1');
-}
-
-/** The PDF of an issued certificate: made for the asker, then opened from the page. */
-export async function registerCertificatePdf(fd: FormData) {
-  const id = str(fd, 'id');
-  if (!okId(id)) return;
-  let exportId = '';
-  try {
-    exportId = (
-      await bff.api.fetch<{ exportId: string }>(
-        `/certificate-requests/mine/certificates/${id}/pdf`,
-        {
-          method: 'POST',
-        },
-      )
-    ).exportId;
-  } catch (error) {
-    fail('/certificates', error);
-  }
-  redirect(`/certificates?cexport=${exportId}`);
 }

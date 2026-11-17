@@ -16835,3 +16835,181 @@ button.ep-shiftcal__cell:focus-visible {
   padding-left: var(--sp-4);
   font-size: var(--fs-small);
 }
+
+/* Parent app → Certificates (16 Nov 2026): three figures, one list of certificates (awards marked), each request's step
+   line, and the list to ask from (fee and who decides on each). */
+.ep-pcert-figs {
+  display: grid;
+  gap: var(--sp-2);
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin-bottom: var(--sp-3);
+}
+.ep-pcert-figs > div {
+  display: grid;
+  gap: var(--sp-1);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  background: var(--surface-card);
+  padding: var(--sp-2) var(--sp-3);
+}
+.ep-pcert-figs strong {
+  font-family: var(--font-heading);
+  font-size: var(--fs-h3);
+  color: var(--text-heading);
+  font-variant-numeric: tabular-nums;
+}
+.ep-pcert-figs span {
+  font-size: var(--fs-caption);
+  color: var(--text-muted);
+}
+.ep-pcert-figs > [data-due] {
+  border-color: var(--status-warning);
+  background: var(--status-warning-bg);
+}
+.ep-pcert-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.ep-pcert-list > li {
+  display: flex;
+  gap: var(--sp-3);
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--sp-3) 0;
+  border-top: 1px solid var(--border-subtle);
+}
+.ep-pcert-list > li:first-child {
+  border-top: 0;
+  padding-top: 0;
+}
+.ep-pcert-list > li[data-wrap] {
+  flex-wrap: wrap;
+}
+.ep-pcert-item {
+  min-width: 0;
+  flex: 1 1 16rem;
+}
+.ep-pcert-item__title {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-1) var(--sp-2);
+  align-items: center;
+  font-weight: var(--fw-semibold);
+  color: var(--text-heading);
+}
+.ep-pcert-item__meta {
+  font-size: var(--fs-small);
+  color: var(--text-muted);
+  margin-top: var(--sp-1);
+  overflow-wrap: anywhere;
+}
+.ep-pcert-track {
+  list-style: none;
+  margin: var(--sp-2) 0 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-1) var(--sp-2);
+  font-size: var(--fs-caption);
+}
+.ep-pcert-track li {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-1);
+  color: var(--text-muted);
+}
+.ep-pcert-track li::before {
+  content: '';
+  flex: none;
+  width: 0.7rem;
+  height: 0.7rem;
+  border-radius: 50%;
+  border: 2px solid var(--border-default);
+  background: var(--surface-card);
+}
+.ep-pcert-track li:not(:last-child)::after {
+  content: '';
+  width: var(--sp-3);
+  border-top: 2px solid var(--border-default);
+}
+.ep-pcert-track li[data-state='done'] {
+  color: var(--text-body);
+}
+.ep-pcert-track li[data-state='done']::before {
+  border-color: var(--status-success);
+  background: var(--status-success);
+}
+.ep-pcert-track li[data-state='now'] {
+  color: var(--text-heading);
+  font-weight: var(--fw-semibold);
+}
+.ep-pcert-track li[data-state='now']::before {
+  border-color: var(--status-warning);
+  background: var(--status-warning-bg);
+}
+.ep-pcert-ask {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+.ep-pcert-ask > li:not([hidden]) ~ li:not([hidden]) {
+  border-top: 1px solid var(--border-subtle);
+}
+.ep-pcert-ask details[open] {
+  background: var(--surface-subtle);
+  box-shadow: inset 3px 0 0 var(--action-primary);
+}
+.ep-pcert-ask summary {
+  cursor: pointer;
+  list-style: none;
+  display: flex;
+  gap: var(--sp-3);
+  justify-content: space-between;
+  align-items: flex-start;
+  padding: var(--sp-2) var(--sp-3);
+}
+.ep-pcert-ask summary:hover {
+  background: var(--surface-subtle);
+}
+.ep-pcert-ask summary::-webkit-details-marker {
+  display: none;
+}
+.ep-pcert-ask summary:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+.ep-pcert-ask__fee {
+  flex: none;
+  font-size: var(--fs-small);
+  font-weight: var(--fw-semibold);
+  color: var(--text-heading);
+  white-space: nowrap;
+}
+.ep-pcert-ask__form {
+  display: grid;
+  gap: var(--sp-3);
+  padding: var(--sp-2) var(--sp-3) var(--sp-3);
+}
+/* a short fact of a line (a number, a date) stays whole when the line wraps */
+.ep-pcert-bit {
+  white-space: nowrap;
+}
+.ep-pcert-ask li[hidden] {
+  display: none;
+}
+.ep-pcert-more {
+  margin-top: var(--sp-3);
+  border-top: 1px solid var(--border-subtle);
+  padding-top: var(--sp-3);
+}
+.ep-pcert-more > summary {
+  cursor: pointer;
+  font-size: var(--fs-small);
+  font-weight: var(--fw-semibold);
+  color: var(--text-link, var(--action-primary));
+}

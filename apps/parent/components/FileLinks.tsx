@@ -1,7 +1,8 @@
 /**
  * A file on the portal as two icons: View opens it in a new tab (PDFs and images show in the browser)
  * and Download saves a copy (the signed `saveUrl`). No file name is shown; `label` names the file for
- * screen readers and the tooltip.
+ * screen readers and the tooltip. `inPlace`: Download goes through a page of the app (it may first make the file), so it
+ * is a plain link, not one the browser saves as it is.
  */
 export function FileLinks({
   url,
@@ -9,12 +10,14 @@ export function FileLinks({
   label,
   viewLabel = 'View',
   saveLabel = 'Download',
+  inPlace = false,
 }: {
   url: string;
   saveUrl?: string | null;
   label: string;
   viewLabel?: string;
   saveLabel?: string;
+  inPlace?: boolean;
 }) {
   return (
     <span className="ep-filelinks">
@@ -39,7 +42,7 @@ export function FileLinks({
       <a
         href={saveUrl ?? url}
         className="ep-filelinks__btn"
-        download
+        download={inPlace ? undefined : true}
         aria-label={`${saveLabel}: ${label}`}
         title={`${saveLabel}: ${label}`}
       >
