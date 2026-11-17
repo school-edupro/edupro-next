@@ -43,10 +43,22 @@ header and from a student's profile (**Status** tab → Certificates card, or **
    A check that is not clear names what is wrong (e.g. "₹4,500.00 due up to 31-03-2027"). From a
    withdrawal, a department that has cleared (or was bypassed) there answers its check.
 
-3. **What it prints.** The fields are filled from the record where it holds them (the TC's working
-   days and days present, subjects, the month the dues are paid to, any concession …) and can be
-   changed before issue. **Update the preview** shows the paper as it will print; the number shows as
-   "(next)" until it is issued.
+3. **What it prints.** Two groups, every box filled and changeable before issue:
+   - **From the student's record** (or the employee's): the person's details the chosen layout prints,
+     starting with the name — for a TC its points 1 to 8 (name, father's and mother's name, nationality,
+     SC/ST/OBC, the date and class of first admission, the date of birth in figures and words, the class
+     last studied), then ID numbers such as PEN and APAAR. A change prints on **this certificate only**:
+     the student record stays as it is (correct the record in People for the next ones). A changed box
+     turns amber and shows what the record says; the date of birth in words follows the date unless typed.
+     The guardian's name is asked only when there is no father's name; the admission number always
+     prints from the record. The certificate's page lists each change under **Changed from the record**,
+     and a re-issue or correction carries them.
+   - **The certificate's own details**, filled from the record where it holds them (the TC's working
+     days and days present, subjects, the month the dues are paid to, any concession …).
+
+   **Update the preview** shows the paper as it will print; the number shows as "(next)" until it is
+   issued.
+
 4. **Issue.** The certificate takes its number (e.g. `TC/2026-27/00005`; the TC also takes its book
    and Sl. no., 100 to a book), its PDF is made, and its page opens. A TC also takes the student off
    the rolls, unless the withdrawal is still running (then the withdrawal's completion does).

@@ -586,4 +586,42 @@ describe('certificate set-up (e2e)', () => {
     );
     expect(notReady.statusCode).toBe(409);
   });
+  it("asks a staff certificate's printed details of the employee, filled from the record, changed on it only", async () => {
+    const pv = await send('POST', '/certificates/preview', {
+      typeCode: 'SERVICE',
+      employeeId: staff.teacher,
+      person: { 'employee.designation': 'Senior PGT Physics', 'employee.joinedOn': '2019-07-15' },
+    });
+    expect(pv.statusCode).toBe(201);
+    const boxes = pv.json().personDetails as Array<{
+      path: string;
+      value: string;
+      record: string;
+      changed: boolean;
+    }>;
+    expect(boxes[0]!.path).toBe('employee.name');
+    expect(boxes.every((b) => b.path.startsWith('employee.'))).toBe(true);
+    expect(boxes.find((b) => b.path === 'employee.designation')).toMatchObject({
+      value: 'Senior PGT Physics',
+      record: 'PGT Physics',
+      changed: true,
+    });
+    expect(boxes.find((b) => b.path === 'employee.joinedOn')).toMatchObject({
+      value: '2019-07-15',
+      record: '01-07-2019',
+      changed: true,
+    });
+    expect(pv.json().html).toContain('Senior PGT Physics');
+    expect(pv.json().html).toContain('15-07-2019');
+    // the record is as it was
+    const again = await send('POST', '/certificates/preview', {
+      typeCode: 'SERVICE',
+      employeeId: staff.teacher,
+    });
+    expect(
+      (again.json().personDetails as Array<{ path: string; value: string }>).find(
+        (b) => b.path === 'employee.designation',
+      )?.value,
+    ).toBe('PGT Physics');
+  });
 });

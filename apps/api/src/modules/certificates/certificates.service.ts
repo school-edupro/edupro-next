@@ -22,6 +22,7 @@ import { ReportsService } from '../reports/reports.service';
 import { runChecks, type CertificateCheck, type CertificateRules } from './certificate-checks';
 import { employeeData, feePaidData, schoolData, studentData } from './certificate-data';
 import { checkFields, fieldDefaults, fieldsOf, fieldText } from './certificate-fields';
+import { applyPerson, personLabel, personOf, printedDetails } from './certificate-person';
 import { assertSafeTemplate } from './certificate-safety';
 import { CertificateVerifyService } from './certificate-verify.service';
 import {
@@ -244,7 +245,13 @@ function changesOf(
     const pb = (b.data[who] ?? {}) as Record<string, unknown>;
     for (const k of new Set([...Object.keys(pa), ...Object.keys(pb)]))
       if (k !== 'id' && typeof (pa[k] ?? pb[k]) !== 'object')
-        add(words(k), flat(pa[k]), flat(pb[k]));
+        add(personLabel(`${who}.${k}`) ?? words(k), flat(pa[k]), flat(pb[k]));
+  }
+  // the TC's class last studied (a person's detail printed from the record, or as typed)
+  for (const k of ['lastClass', 'lastClassWords']) {
+    const ta = (a.data.tc ?? {}) as Record<string, unknown>;
+    const tb = (b.data.tc ?? {}) as Record<string, unknown>;
+    add(personLabel(`tc.${k}`) ?? words(k), flat(ta[k]), flat(tb[k]));
   }
   const signer = (d: Record<string, unknown>) => {
     const signs = Array.isArray(d.signs) ? (d.signs as Array<Record<string, unknown>>) : [];
@@ -736,8 +743,15 @@ export class CertificatesService {
     if (type.audience === 'STAFF') {
       if (!dto.employeeId)
         throw new DomainError('validation-failed', 'Choose the employee', { status: 400 });
-      const employee = await employeeData(c, dto.employeeId);
-      if (!employee) throw new DomainError('not-found', 'Employee not found');
+      const rec = await employeeData(c, dto.employeeId);
+      if (!rec) throw new DomainError('not-found', 'Employee not found');
+      // the details the layout prints, as typed at issue (17 Nov 2026): on this certificate only
+      const employee = { ...rec };
+      const pd = applyPerson(
+        { employee },
+        printedDetails(template?.body_html, 'STAFF'),
+        dto.person,
+      );
       const fields: Record<string, string | number> = {
         ...fieldDefaults(type.code, none),
         ...given,
@@ -758,23 +772,26 @@ export class CertificatesService {
         issuedOn,
         leavingOn: null as string | null,
         checks,
-        problems: checkFields(specs, fields),
+        problems: [...checkFields(specs, fields), ...pd.problems],
         fields,
         specs,
         template,
         withdrawal: null,
         student: null as Record<string, unknown> | null,
+        personBoxes: pd.boxes,
+        printed: pd.printed,
         person: {
           kind: 'employee' as 'student' | 'employee',
           id: dto.employeeId,
-          name: String(employee.name),
-          no: String(employee.code),
-          detail: String(employee.designation ?? ''),
-          left: Boolean(employee.left),
+          name: String(rec.name),
+          no: String(rec.code),
+          detail: String(rec.designation ?? ''),
+          left: Boolean(rec.left),
         },
         data: {
           school,
           employee,
+          ...(Object.keys(pd.printed).length ? { printed: pd.printed } : {}),
           fields,
           text: fieldText(specs, fields),
           cert,
@@ -803,7 +820,9 @@ export class CertificatesService {
       )
     ).rows[0];
     const leavingOn = opts.leavingOn ?? wd?.leaving_on ?? null;
-    const st = sd.student;
+    const rec = sd.student;
+    // the details the layout prints, as typed at issue (17 Nov 2026): on this certificate only
+    const st: Record<string, unknown> = { ...rec };
     const fields: Record<string, string | number> = {
       ...fieldDefaults(type.code, {
         ...none,
@@ -837,8 +856,8 @@ export class CertificatesService {
     const tc =
       type.code === 'TC'
         ? {
-            lastClass: [st.className, st.section].filter(Boolean).join(' – '),
-            lastClassWords: st.classWords,
+            lastClass: [rec.className, rec.section].filter(Boolean).join(' – '),
+            lastClassWords: rec.classWords,
             examResult: fields.examResult ?? '',
             failed: fields.failed ?? '',
             subjects: fields.subjects ?? '',
@@ -856,6 +875,11 @@ export class CertificatesService {
             remarks: fields.remarks ?? '',
           }
         : undefined;
+    const pd = applyPerson(
+      { student: st, tc: tc as Record<string, unknown> | undefined },
+      printedDetails(template?.body_html, 'STUDENT'),
+      dto.person,
+    );
     const fees =
       type.code === 'FEE_PAID'
         ? await feePaidData(c, studentId, tenant.academicYearId ?? null)
@@ -865,23 +889,26 @@ export class CertificatesService {
       issuedOn,
       leavingOn,
       checks,
-      problems: checkFields(specs, fields),
+      problems: [...checkFields(specs, fields), ...pd.problems],
+      personBoxes: pd.boxes,
+      printed: pd.printed,
       fields,
       specs,
       template,
       withdrawal: wd ?? null,
-      student: st as Record<string, unknown> | null,
+      student: rec as Record<string, unknown> | null,
       person: {
         kind: 'student' as 'student' | 'employee',
         id: studentId,
-        name: String(st.name),
-        no: String(st.admissionNo),
-        detail: String(st.classLabel ?? ''),
-        left: Boolean(st.left),
+        name: String(rec.name),
+        no: String(rec.admissionNo),
+        detail: String(rec.classLabel ?? ''),
+        left: Boolean(rec.left),
       },
       data: {
         school,
         student: st,
+        ...(Object.keys(pd.printed).length ? { printed: pd.printed } : {}),
         attendance: sd.attendance,
         ...(tc ? { tc } : {}),
         ...(fees ? { fees } : {}),
@@ -943,6 +970,8 @@ export class CertificatesService {
         held: b.checks.some((x) => x.key === 'one' && !x.ok),
         fields: b.specs,
         values: b.fields,
+        /** the person's details the layout prints, filled from the record; any changed for this certificate */
+        personDetails: b.personBoxes,
         problems: b.problems,
         variants: type.variants.length
           ? [
@@ -1254,6 +1283,8 @@ export class CertificatesService {
             : {}),
           ...(book ? { bookNo: book.book_no, slNo: book.sl_no } : {}),
           ...(opts.reissueOf ? { reissueOf: opts.reissueOf } : {}),
+          // the person's details printed differently from the record (on this certificate only)
+          ...(Object.keys(b.printed).length ? { printed: b.printed } : {}),
         },
       });
       return id;
@@ -1404,13 +1435,15 @@ export class CertificatesService {
         employee_id: string | null;
         purpose: string | null;
         fields: unknown;
+        printed: unknown;
         template_id: string | null;
         version_id: string | null;
         issued_on: string;
         revision: number;
       }>(
         `SELECT x.status, x.copy_no, t.code AS type_code, x.student_id::text, x.employee_id::text, x.purpose,
-                x.data->'fields' AS fields, v.template_id::text, x.template_version_id::text AS version_id,
+                x.data->'fields' AS fields, x.data->'printed' AS printed, v.template_id::text,
+                x.template_version_id::text AS version_id,
                 x.issued_on::text, x.revision
            FROM certificates x JOIN certificate_types t ON t.id = x.type_id
            LEFT JOIN document_template_versions v ON v.id = x.template_version_id
@@ -1452,6 +1485,8 @@ export class CertificatesService {
       ...(purpose ? { purpose } : {}),
       issuedOn: changes.issuedOn ?? o.issued_on,
       fields,
+      // the person's details as printed on it, unless corrected now
+      person: changes.person ?? personOf(o.printed),
       reissueOf: id,
     } as IssueCertificateDto;
     await this.db.tenant(tenant, async (c) => {
@@ -1598,13 +1633,14 @@ export class CertificatesService {
         employee_id: string | null;
         purpose: string | null;
         fields: unknown;
+        printed: unknown;
         template_id: string | null;
         reissued_as: string | null;
         override_reason: string | null;
       }>(
         `SELECT x.status, x.copy_no, x.override_reason, t.code AS type_code, t.template_id::text AS type_template, t.variants,
                 x.student_id::text, x.employee_id::text, x.purpose, x.data->'fields' AS fields,
-                v.template_id::text AS template_id,
+                x.data->'printed' AS printed, v.template_id::text AS template_id,
                 (SELECT r.number FROM certificates r WHERE r.reissue_of = x.id) AS reissued_as
            FROM certificates x JOIN certificate_types t ON t.id = x.type_id
            LEFT JOIN document_template_versions v ON v.id = x.template_version_id
@@ -1667,6 +1703,8 @@ export class CertificatesService {
           ? { overrideReason: changes.overrideReason ?? o.override_reason! }
           : {}),
         fields,
+        // the person's details as printed on it, unless changed now
+        person: changes.person ?? personOf(o.printed),
       } as IssueCertificateDto,
       {
         reissueOf: id,

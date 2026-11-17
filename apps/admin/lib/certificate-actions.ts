@@ -3,7 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { ApiError, apiFetch } from './api';
-import { FIELD_PREFIX, NO_DEPT, type Certificate } from './certificates';
+import { FIELD_PREFIX, NO_DEPT, personFrom, type Certificate } from './certificates';
 
 const okId = (id: string) => /^\d{1,18}$/.test(id);
 const str = (fd: FormData, k: string) => String(fd.get(k) ?? '').trim();
@@ -42,6 +42,8 @@ function issueBody(fd: FormData) {
     purpose: str(fd, 'purpose') || undefined,
     issuedOn: /^\d{4}-\d{2}-\d{2}$/.test(str(fd, 'issuedOn')) ? str(fd, 'issuedOn') : undefined,
     fields,
+    // the person's details as the boxes hold them (printed on this certificate only)
+    person: personFrom(fd.entries()),
     overrideReason: str(fd, 'overrideReason') || undefined,
   };
 }
@@ -120,6 +122,7 @@ export async function correctCertificate(fd: FormData) {
         reason: str(fd, 'reason'),
         purpose: str(fd, 'purpose'),
         fields: b.fields,
+        person: b.person,
         ...(b.issuedOn ? { issuedOn: b.issuedOn } : {}),
         ...('variant' in b && b.variant ? { variant: b.variant } : {}),
       }),
@@ -149,6 +152,7 @@ export async function reissueCertificate(fd: FormData) {
           ? {
               purpose: str(fd, 'purpose'),
               fields: b.fields,
+              person: b.person,
               ...(b.issuedOn ? { issuedOn: b.issuedOn } : {}),
               ...('variant' in b && b.variant ? { variant: b.variant } : {}),
               ...(b.overrideReason ? { overrideReason: b.overrideReason } : {}),

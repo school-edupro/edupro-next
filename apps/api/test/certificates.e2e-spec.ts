@@ -1025,4 +1025,124 @@ describe('certificate register (e2e)', () => {
       },
     });
   });
+  it("prints the person's details as typed at issue, on that certificate only; the record stays; a re-issue carries them", async () => {
+    const preview = (json: Record<string, unknown>) =>
+      inject({ method: 'POST', url: '/certificates/preview', headers: h(office), json });
+    type Box = { path: string; kind: string; value: string; record: string; changed: boolean };
+    // a TC asks for what its layout prints, in the order it prints them, filled from the record
+    const tcp = await preview({ typeCode: 'TC', studentId: pupils.asha });
+    expect(tcp.statusCode).toBe(201);
+    const boxes = tcp.json().personDetails as Box[];
+    const paths = boxes.map((d) => d.path);
+    expect(paths).toEqual(
+      expect.arrayContaining([
+        'student.name',
+        'student.fatherName',
+        'student.motherName',
+        'student.nationality',
+        'student.category',
+        'student.admittedOn',
+        'student.admissionClassLabel',
+        'student.dob',
+        'student.dobWords',
+        'tc.lastClass',
+        'tc.lastClassWords',
+      ]),
+    );
+    expect(paths.indexOf('student.name')).toBeLessThan(paths.indexOf('student.motherName'));
+    expect(paths.indexOf('student.dob')).toBeLessThan(paths.indexOf('tc.lastClass'));
+    expect(paths).not.toContain('student.admissionNo');
+    // the name first, the ID numbers last; the guardian only asked when there is no father
+    expect(paths[0]).toBe('student.name');
+    expect(paths.indexOf('student.pen')).toBeGreaterThan(paths.indexOf('tc.lastClassWords'));
+    expect(paths).not.toContain('student.guardianName');
+    expect(boxes.find((d) => d.path === 'student.dob')).toMatchObject({
+      kind: 'date',
+      value: '2013-03-09',
+      record: '09-03-2013',
+      changed: false,
+    });
+    // a date of birth certificate with the father's name and the date of birth typed (a detail it does not print is left out)
+    const father = (
+      (await preview({ typeCode: 'DOB', studentId: pupils.asha })).json().personDetails as Box[]
+    ).find((d) => d.path === 'student.fatherName')!.record;
+    expect(father).toMatch(/^Ravi/);
+    const person = {
+      'student.fatherName': 'Ravi Kumar',
+      'student.dob': '2013-03-10',
+      'student.house': 'Blue',
+    };
+    const pv = await preview({ typeCode: 'DOB', studentId: pupils.asha, person });
+    expect(
+      (pv.json().personDetails as Box[]).find((d) => d.path === 'student.fatherName'),
+    ).toMatchObject({
+      value: 'Ravi Kumar',
+      record: father,
+      changed: true,
+    });
+    expect((pv.json().personDetails as Box[]).map((d) => d.path)).not.toContain('student.house');
+    expect(pv.json().html).toContain('Ravi Kumar');
+    expect(pv.json().html).toContain('Tenth March two thousand thirteen');
+    const made = await issue(
+      { typeCode: 'DOB', studentId: pupils.asha, purpose: 'Passport', person },
+      office,
+    );
+    expect(made.statusCode).toBe(201);
+    const got = (
+      await inject({
+        method: 'GET',
+        url: `/certificates/${made.json().id as string}`,
+        headers: h(),
+      })
+    ).json();
+    expect(got.data.printed).toEqual({
+      'student.fatherName': { label: "Father's name", record: father, printed: 'Ravi Kumar' },
+      'student.dob': { label: 'Date of birth', record: '09-03-2013', printed: '10-03-2013' },
+      'student.dobWords': {
+        label: 'Date of birth in words',
+        record: 'Ninth March two thousand thirteen',
+        printed: 'Tenth March two thousand thirteen',
+      },
+    });
+    expect(got.data.student).toMatchObject({ fatherName: 'Ravi Kumar', dob: '10-03-2013' });
+    const logged = await withMigrator((c) =>
+      c.query<{ after: { printed?: Record<string, unknown> } }>(
+        `SELECT after FROM audit_logs WHERE action = 'certificate.issue' AND entity_id = $1::text`,
+        [made.json().id],
+      ),
+    );
+    expect(Object.keys(logged.rows[0]!.after.printed ?? {})).toEqual(
+      expect.arrayContaining(['student.fatherName', 'student.dob']),
+    );
+    // the record is as it was: the next certificate prints the record
+    const again = (await preview({ typeCode: 'DOB', studentId: pupils.asha })).json();
+    expect(
+      (again.personDetails as Box[]).find((d) => d.path === 'student.fatherName'),
+    ).toMatchObject({
+      value: father,
+      changed: false,
+    });
+    // a re-issue with today's settings carries what was typed
+    const re = await inject({
+      method: 'POST',
+      url: `/certificates/${made.json().id as string}/reissue`,
+      headers: h(office),
+      json: { reason: 'Signed again' },
+    });
+    expect(re.statusCode).toBe(201);
+    const now = (
+      await inject({ method: 'GET', url: `/certificates/${re.json().id as string}`, headers: h() })
+    ).json();
+    expect(now.data.printed['student.fatherName']).toMatchObject({ printed: 'Ravi Kumar' });
+    expect(now.data.student.dob).toBe('10-03-2013');
+    // the name cannot be left empty; a date must be a date
+    const bad = await preview({
+      typeCode: 'DOB',
+      studentId: pupils.asha,
+      person: { 'student.name': ' ', 'student.dob': 'soon' },
+    });
+    expect(bad.json().problems).toEqual(
+      expect.arrayContaining(['Name of the student: it cannot be empty', 'Date of birth: a date']),
+    );
+  });
 });

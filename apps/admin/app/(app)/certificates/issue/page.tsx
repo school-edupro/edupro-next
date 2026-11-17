@@ -10,7 +10,9 @@ import {
 } from '@/lib/certificate-actions';
 import {
   FIELD_PREFIX,
+  PERSON_PREFIX,
   fitPaper,
+  personFrom,
   type CertificateDetail,
   type CertificatePreview,
   type CertificateType,
@@ -80,6 +82,8 @@ export default async function IssueCertificatePage({
       fields[key] = spec?.kind === 'number' && /^\d{1,4}$/.test(v.trim()) ? Number(v.trim()) : v;
     }
   }
+  // the person's details as typed in their boxes (per_<path>): printed on this certificate only
+  const person = personFrom(Object.entries(sp));
   const purpose = (sp.purpose ?? '').slice(0, 200);
   const issuedOn = /^\d{4}-\d{2}-\d{2}$/.test(sp.issuedOn ?? '') ? sp.issuedOn! : '';
   const variant = id(sp.variant);
@@ -123,6 +127,7 @@ export default async function IssueCertificatePage({
           purpose: purpose || undefined,
           issuedOn: issuedOn || undefined,
           fields,
+          person,
           ...(original && !reissueBlocked ? { reissueOf: original.id } : {}),
         }),
       });
@@ -347,6 +352,51 @@ export default async function IssueCertificatePage({
                     />
                     <span className="ep-field__help">Today when left empty</span>
                   </label>
+                  {preview.personDetails?.length ? (
+                    <div className="ep-cert-person" style={{ gridColumn: '1 / -1' }}>
+                      <h3 className="ep-ctype__sub">
+                        From the {staff ? "employee's" : "student's"} record
+                      </h3>
+                      <p className="ep-field__help" style={{ margin: 0 }}>
+                        What this layout prints about the {who}, filled from the record. Change any
+                        of them for this certificate: the record stays as it is, and the certificate
+                        keeps both.
+                        {staff ? '' : ' The admission number prints from the record.'}
+                      </p>
+                    </div>
+                  ) : null}
+                  {(preview.personDetails ?? []).map((d) => {
+                    const pid = `${PERSON_PREFIX}${d.path}`;
+                    return (
+                      <label key={d.path} className="ep-field" htmlFor={pid}>
+                        <span className="ep-field__label">{d.label}</span>
+                        <input
+                          id={pid}
+                          name={pid}
+                          className="ep-input"
+                          type={d.kind === 'date' ? 'date' : 'text'}
+                          maxLength={d.kind === 'text' ? 300 : undefined}
+                          defaultValue={d.value}
+                          required={d.path === 'student.name' || d.path === 'employee.name'}
+                        />
+                        {d.changed ? (
+                          <span className="ep-field__help ep-cert-person__changed">
+                            Changed for this certificate · the record:{' '}
+                            {d.record ? <strong>{d.record}</strong> : 'none'}
+                          </span>
+                        ) : d.path === 'student.dobWords' ? (
+                          <span className="ep-field__help">
+                            Follows the date of birth unless typed
+                          </span>
+                        ) : null}
+                      </label>
+                    );
+                  })}
+                  {preview.personDetails?.length && preview.fields.length ? (
+                    <h3 className="ep-ctype__sub" style={{ gridColumn: '1 / -1', margin: 0 }}>
+                      {type.name}: the details for this certificate
+                    </h3>
+                  ) : null}
                   {preview.fields.map((f) => {
                     const fid = `${FIELD_PREFIX}${f.key}`;
                     const value = preview.values[f.key];

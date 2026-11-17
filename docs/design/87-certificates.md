@@ -674,3 +674,38 @@ Tests: `certificates-setup.e2e-spec.ts` (a copy offered as a choice — the type
 offers both, twice refused; then made the main layout — it leaves the choices and the earlier layout is used by no
 type; the reprint layout 400, an unknown type 404, the office 403; set back). A browser pass at 1440 and 375 px with
 axe on the dialog (the type guessed, choice first), then the change on Alpha and the Issue page's Layout list with both.
+
+## The person's printed details, typed at issue (17 Nov 2026)
+
+The user asked for the TC's points 1–8 (name, parents, nationality, SC/ST/OBC, first admission, date of birth, class
+last studied) in "What it prints", filled from the student's data and all changeable. Chosen (both recommended): a
+change goes on **this certificate only** (the record untouched; the certificate keeps both), and the boxes are **what
+the layout prints**, for every type, students and staff alike.
+
+- **API** (`certificate-person.ts`): `PERSON_DETAILS` — each printable detail by where a layout reads it
+  (`student.*`, `tc.lastClass` / `lastClassWords`, `employee.*`) with a label and text/date; the admission number and
+  employee code stay as in the record, the pronouns follow the record's gender. `printedDetails(body, audience)` reads
+  the chosen layout's wording for them, in the order it prints them, the name first and the ID numbers (PEN, APAAR,
+  SRN, board registration) last; the date of birth goes with its words. `applyPerson` puts the boxes' values on copies
+  of the record's data: a value that differs from the record is printed and kept in `printed` {label, record,
+  printed}; a changed date of birth changes its words unless they were typed; a date as yyyy-mm-dd or dd-mm-yyyy
+  ("…: a date" otherwise); the name not empty; the guardian asked only when there is no father's name (the layouts
+  print "father, else guardian"). `build()` applies it for both audiences (the checks and `b.person` stay on the
+  record); `PreviewBase.person` / `ReissueSchema.person` (path → value); the preview returns `personDetails` (path,
+  label, kind, value, record, changed); the issue keeps `data.printed` and logs it in the audit's `after.printed`;
+  a re-issue (with today's settings or with changes) and a correction carry the printed changes unless new ones are
+  given; the change log labels the person's details by the catalogue and adds the TC's class last studied.
+- **Admin**: Issue → What it prints: **From the student's record** (or employee's) — a line on what it is, then a box
+  each (`per_<path>`, travelling in the address with Update the preview and posted with Issue / Re-issue / Correct);
+  a changed box amber with "Changed for this certificate · the record: …"; then "<type>: the details for this
+  certificate" and the type's fields. Picking another person starts a fresh address (nothing typed carries over). A
+  certificate's page: **Changed from the record** (detail, printed, the record) when any; Re-issue / Correct links
+  carry them.
+
+Tests: `certificates.e2e-spec.ts` (a TC's boxes: the paths, the name first, ID numbers last, no guardian with a father,
+the date as yyyy-mm-dd with the record's dd-mm-yyyy; a date of birth certificate with the father's name and the date
+changed — the paper, `data.printed` with the words following, the audit, the record unchanged, a re-issue carrying
+them; an empty name and a wrong date refused); `certificates-setup.e2e-spec.ts` (a service certificate: the employee's
+designation and joining date changed on the paper only). A browser pass on Alpha at 1440 and 375 px (axe clean; the TC
+boxes for a student; a change marked and printed after Update the preview; Issue caught before it reached the server —
+nothing issued).

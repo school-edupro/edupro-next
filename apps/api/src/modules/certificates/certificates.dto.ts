@@ -19,6 +19,11 @@ const Fields = z
   .record(z.string().regex(/^[a-zA-Z]{2,30}$/), z.union([z.string().trim().max(500), z.number()]))
   .default({});
 
+/** the person's printed details, by where the layout reads them (student.fatherName, tc.lastClass …) */
+const PersonDetails = z
+  .record(z.string().regex(/^(student|employee|tc)\.[a-zA-Z]{2,30}$/), z.string().max(300))
+  .optional();
+
 const PreviewBase = z.object({
   typeCode: TypeCode,
   /** a student type's student, or a staff type's employee */
@@ -31,6 +36,8 @@ const PreviewBase = z.object({
   fields: Fields,
   /** a re-issue with changes (16 Nov 2026): the certificate it replaces, not counted as one already held */
   reissueOf: IdSchema.optional(),
+  /** the person's details the layout prints, as the boxes hold them (17 Nov 2026): on this certificate only */
+  person: PersonDetails,
 });
 const onePerson = (v: { studentId?: string; employeeId?: string }) =>
   !(v.studentId && v.employeeId);
@@ -63,6 +70,8 @@ export const ReissueSchema = ReasonSchema.extend({
   issuedOn: DateSchema.optional(),
   variant: IdSchema.optional(),
   overrideReason: z.string().trim().min(10, 'at least 10 characters').max(300).optional(),
+  /** the person's printed details (all the boxes); left out, those printed on the earlier one */
+  person: PersonDetails,
 });
 export class ReissueDto extends createZodDto(ReissueSchema) {}
 

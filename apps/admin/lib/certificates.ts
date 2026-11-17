@@ -144,9 +144,43 @@ export interface CertificatePreview {
   held: boolean;
   fields: CertificateFieldSpec[];
   values: Record<string, string | number>;
+  /** the person's details the layout prints (17 Nov 2026): filled from the record, changed for this certificate */
+  personDetails?: CertificatePersonBox[];
   problems: string[];
   html: string | null;
   can: CertificateCan;
+}
+
+export interface CertificatePersonBox {
+  /** student.fatherName, employee.designation, tc.lastClass … */
+  path: string;
+  label: string;
+  kind: 'text' | 'date';
+  /** as it prints now (a date yyyy-mm-dd) */
+  value: string;
+  /** the record's value, as it prints */
+  record: string;
+  changed: boolean;
+}
+/** what a certificate printed differently from the record: path → both values */
+export type CertificatePrinted = Record<string, { label: string; record: string; printed: string }>;
+
+/** The person's printed details travel as per_<path> (per_student.fatherName). */
+export const PERSON_PREFIX = 'per_';
+export const PERSON_PATH = /^(student|employee|tc)\.[a-zA-Z]{2,30}$/;
+/** The boxes of the person's details, from a form or the address: path → value. */
+export function personFrom(entries: Iterable<[string, unknown]>): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const [k, v] of entries) {
+    const path = k.replace(/^_?\d+_/, '').slice(PERSON_PREFIX.length);
+    if (
+      k.replace(/^_?\d+_/, '').startsWith(PERSON_PREFIX) &&
+      typeof v === 'string' &&
+      PERSON_PATH.test(path)
+    )
+      out[path] = v.slice(0, 300);
+  }
+  return out;
 }
 
 export interface CertificateStudentHit {

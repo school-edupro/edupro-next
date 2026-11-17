@@ -17013,3 +17013,18 @@ button.ep-shiftcal__cell:focus-visible {
   font-weight: var(--fw-semibold);
   color: var(--text-link, var(--action-primary));
 }
+/* Issue → What it prints: the person's details from the record (17 Nov 2026); one changed for this certificate */
+.ep-cert-person {
+  border-top: 1px solid var(--border-subtle);
+  padding-top: var(--sp-3);
+}
+.ep-cert-person .ep-ctype__sub {
+  margin: 0 0 var(--sp-1);
+}
+.ep-cert-person__changed {
+  color: var(--text-body);
+}
+.ep-field:has(.ep-cert-person__changed) .ep-input {
+  border-color: var(--status-warning);
+  background: var(--status-warning-bg);
+}

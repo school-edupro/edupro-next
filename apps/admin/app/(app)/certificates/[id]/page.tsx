@@ -11,7 +11,15 @@ import {
   duplicateCertificate,
   reissueCertificate,
 } from '@/lib/certificate-actions';
-import { FIELD_PREFIX, dmy, type Certificate, type CertificateDetail } from '@/lib/certificates';
+import {
+  FIELD_PREFIX,
+  PERSON_PATH,
+  PERSON_PREFIX,
+  dmy,
+  type Certificate,
+  type CertificateDetail,
+  type CertificatePrinted,
+} from '@/lib/certificates';
 
 const OK: Record<string, string> = {
   issued: 'Issued. The PDF is being made.',
@@ -78,6 +86,10 @@ export default async function CertificatePage({
   const label = `${x.typeName} ${x.number}${x.copyNo ? ` duplicate ${String(x.copyNo)}` : ''}`;
   const failed = x.checks.filter((c) => !c.ok);
   const rows = printed(x.data);
+  // the person's details printed differently from the record (17 Nov 2026): on this certificate only
+  const changed = Object.entries((x.data.printed ?? {}) as CertificatePrinted).filter(
+    ([p, v]) => PERSON_PATH.test(p) && v && typeof v === 'object',
+  );
   // the PDF: still being made by the workers (followed here), or to open — kept, or made again when it was cleared
   const exportStatus = x.exportId
     ? await apiFetch<{ export: { status: string } }>(`/reports/exports/${x.exportId}`)
@@ -98,6 +110,8 @@ export default async function CertificatePage({
       for (const [k, v] of Object.entries(typed as Record<string, unknown>))
         if (/^[a-zA-Z]{2,30}$/.test(k) && (typeof v === 'string' || typeof v === 'number'))
           u.set(`${FIELD_PREFIX}${k}`, String(v));
+    // and the person's details as it printed them
+    for (const [p, v] of changed) u.set(`${PERSON_PREFIX}${p}`, String(v.printed ?? ''));
     return `/certificates/issue?${u.toString()}`;
   };
   return (
@@ -348,6 +362,26 @@ export default async function CertificatePage({
           emptyTitle="No copies"
         />
       </FoldCard>
+      {changed.length ? (
+        <FoldCard
+          id="cert-person"
+          title="Changed from the record"
+          hint={`${String(changed.length)} of the ${x.employeeId ? "employee's" : "student's"} details printed differently on this certificate; the record is as it was`}
+        >
+          <DataTable<[string, CertificatePrinted[string]]>
+            caption="Details printed differently from the record"
+            density="dense"
+            columns={[
+              { key: 'd', header: 'Detail', render: ([, v]) => v.label },
+              { key: 'p', header: 'Printed', render: ([, v]) => v.printed || '—' },
+              { key: 'r', header: 'The record', render: ([, v]) => v.record || '—' },
+            ]}
+            rows={changed}
+            rowKey={([p]) => p}
+            emptyTitle="None"
+          />
+        </FoldCard>
+      ) : null}
       <FoldCard
         id="cert-printed"
         title="What it printed"
