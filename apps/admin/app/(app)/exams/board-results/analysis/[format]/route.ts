@@ -18,7 +18,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ form
   const section = (sp.get('section') ?? '').trim();
   if (section && section.length <= 40) q.set('section', section);
   const annexure = sp.get('annexure') ?? '';
-  if (format === 'pdf' && /^([1-9]|10)$/.test(annexure)) q.set('annexure', annexure);
+  if (format === 'pdf' && /^([1-9]|1[0-3])$/.test(annexure)) q.set('annexure', annexure);
   try {
     const f = await apiFetch<{ filename: string; contentType: string; base64: string }>(
       `/exams/board-results/analysis/file?${q.toString()}`,

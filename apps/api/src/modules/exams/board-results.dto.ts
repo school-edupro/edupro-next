@@ -142,7 +142,7 @@ export class BoardAnalysisQueryDto extends createZodDto(BoardAnalysisQuerySchema
 
 export const BoardAnalysisFileSchema = BoardAnalysisQuerySchema.extend({
   format: z.enum(['xlsx', 'pdf']),
-  annexure: z.coerce.number().int().min(1).max(10).optional(),
+  annexure: z.coerce.number().int().min(1).max(13).optional(),
 });
 export class BoardAnalysisFileDto extends createZodDto(BoardAnalysisFileSchema) {}
 
@@ -161,3 +161,52 @@ export const BoardMineQuerySchema = z.object({
   examYear: z.coerce.number().int().min(2000).max(2100).optional(),
 });
 export class BoardMineQueryDto extends createZodDto(BoardMineQuerySchema) {}
+
+// ---- phase E: an earlier year's figures typed in (its result file lost) ----
+
+const Count = z.coerce.number().int().min(0).max(100_000);
+const Share = z.coerce.number().min(0).max(100);
+export const BoardYearSubjectSchema = z.object({
+  code: Code,
+  appeared: Count,
+  highest: Share.nullable().optional(),
+  aGrades: Count.nullable().optional(),
+  compartments: Count.nullable().optional(),
+  failures: Count.nullable().optional(),
+  distinctions: Count.nullable().optional(),
+  average: Share.nullable().optional(),
+  pi: Share.nullable().optional(),
+});
+export const BoardYearFiguresSchema = z
+  .object({
+    classLabel: ClassLabel,
+    examYear: z.coerce.number().int().min(2000).max(2100),
+    registered: Count.nullable().optional(),
+    appeared: Count,
+    passed: Count.nullable().optional(),
+    compartments: Count.nullable().optional(),
+    failures: Count.nullable().optional(),
+    n90: Count.nullable().optional(),
+    n75: Count.nullable().optional(),
+    aggregate: Share.nullable().optional(),
+    pi: Share.nullable().optional(),
+    subjects: z.array(BoardYearSubjectSchema).max(60).default([]),
+    note: z.string().trim().max(500).nullable().optional(),
+  })
+  .refine((v) => v.passed == null || v.passed <= v.appeared, {
+    message: 'Passed cannot be more than appeared',
+    path: ['passed'],
+  })
+  .refine((v) => v.n75 == null || v.n75 <= v.appeared, {
+    message: '75% and above cannot be more than appeared',
+    path: ['n75'],
+  })
+  .refine((v) => v.n90 == null || v.n75 == null || v.n90 <= v.n75, {
+    message: '90% and above cannot be more than 75% and above',
+    path: ['n90'],
+  })
+  .refine((v) => new Set(v.subjects.map((s) => s.code)).size === v.subjects.length, {
+    message: 'A subject code is there twice',
+    path: ['subjects'],
+  });
+export class BoardYearFiguresDto extends createZodDto(BoardYearFiguresSchema) {}

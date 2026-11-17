@@ -12,6 +12,7 @@ import {
   BoardAnalysisFileDto,
   BoardMineQueryDto,
   BoardParentsDto,
+  BoardYearFiguresDto,
   BoardAnalysisQueryDto,
   BoardClassQueryDto,
   BoardListQueryDto,
@@ -307,6 +308,30 @@ export class BoardResultsController {
   @RequirePermission(BOARD_RESULTS.import)
   setParents(@ReqCtx() ctx: RequestContext, @Body() body: BoardParentsDto) {
     return this.analyses.setParents(ctx, body.on);
+  }
+  // ---- phase E: an earlier year's figures typed in ----
+
+  @Get('year-figures')
+  @ApiOperation({ summary: "Earlier years' figures typed in (their result files lost), by class" })
+  @RequirePermission(BOARD_RESULTS.view)
+  yearFigures(@ReqCtx() ctx: RequestContext, @Query() q: BoardClassQueryDto) {
+    return this.analyses.yearFigures(ctx, q.classLabel);
+  }
+
+  @Put('year-figures')
+  @ApiOperation({
+    summary:
+      "Type (or correct) an earlier year's figures: the headline and each subject's (not for a year whose file is saved)",
+  })
+  @RequirePermission(BOARD_RESULTS.import)
+  saveYearFigures(@ReqCtx() ctx: RequestContext, @Body() body: BoardYearFiguresDto) {
+    return this.analyses.saveYearFigures(ctx, body);
+  }
+
+  @Delete('year-figures/:id')
+  @RequirePermission(BOARD_RESULTS.import)
+  removeYearFigures(@ReqCtx() ctx: RequestContext, @Param('id') figuresId: string) {
+    return this.analyses.removeYearFigures(ctx, id(figuresId));
   }
 }
 

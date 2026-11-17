@@ -10,6 +10,7 @@ import { STORAGE_DRIVER } from '../files/storage';
 import {
   analyse,
   bestFive,
+  round2,
   DEFAULT_BOARD_RULES,
   RULE_WORDS,
   teacherView,
@@ -19,16 +20,43 @@ import {
   type AnSubject,
   type AnYear,
   type BoardRules,
+  type SubjectFigures,
 } from './board-analysis';
 import { analysisPdf, analysisXlsx, examName } from './board-analysis-file';
 import { BoardDetailsService } from './board-details.service';
-import { BoardRulesSchema } from './board-results.dto';
+import { BoardRulesSchema, type BoardYearFiguresDto } from './board-results.dto';
 import { CBSE_SUBJECTS, type BoardSubjectKind } from './board-subjects';
 import { registerGeneratedOn, registerLetterhead, registerLogo } from './register-head';
 
 type BoardClass = 'X' | 'XII';
 const KEY = 'exams.board_rules';
 const PARENTS = 'exams.board_result.parents';
+interface TypedSubject {
+  appeared: number;
+  highest?: number | null;
+  aGrades?: number | null;
+  compartments?: number | null;
+  failures?: number | null;
+  distinctions?: number | null;
+  average?: number | null;
+  pi?: number | null;
+}
+interface TypedYear {
+  id: string;
+  examYear: number;
+  registered: number | null;
+  appeared: number;
+  passed: number | null;
+  compartments: number | null;
+  failures: number | null;
+  n90: number | null;
+  n75: number | null;
+  aggregate: number | null;
+  pi: number | null;
+  subjects: Record<string, TypedSubject>;
+  note: string | null;
+  updatedAt: string;
+}
 const KIND_ORDER: BoardSubjectKind[] = ['language', 'main', 'skill', 'additional', 'internal'];
 
 /**
@@ -225,14 +253,31 @@ export class BoardAnalysisService {
     const subjects = await this.subjectsOf(c, q.classLabel);
     const candidates = await this.candidatesOf(c, q.classLabel, examYear, q.section);
     // the four years before, from their saved files (typed figures come in phase E)
+    // the four years before: a saved file's figures, else (for the whole class) the figures typed in — phase E
+    const typed = q.section
+      ? []
+      : (await this.typedOf(c, q.classLabel)).filter((t) => !years.includes(t.examYear));
+    const earlier = [
+      ...years.filter((x) => x < examYear),
+      ...typed.map((t) => t.examYear).filter((x) => x < examYear),
+    ]
+      .sort((a, b) => b - a)
+      .slice(0, 4);
     const history: AnYear[] = [];
-    for (const y of years.filter((x) => x < examYear).slice(0, 4))
+    for (const y of earlier) {
+      const t = typed.find((x) => x.examYear === y);
       history.push(
-        yearFigures(y, await this.candidatesOf(c, q.classLabel, y, q.section), subjects, rules),
+        t
+          ? BoardAnalysisService.typedYear(t)
+          : yearFigures(y, await this.candidatesOf(c, q.classLabel, y, q.section), subjects, rules),
       );
+    }
+    const typedLast = typed.find((t) => t.examYear === examYear - 1);
     const lastYear = years.includes(examYear - 1)
       ? subjectFigures(await this.candidatesOf(c, q.classLabel, examYear - 1, q.section), rules)
-      : null;
+      : typedLast
+        ? BoardAnalysisService.typedSubjects(typedLast)
+        : null;
     const who = await this.details.teacherResolver(c, 'CBSE', q.classLabel, examYear);
     const file = (
       await c.query<{ id: string; file_name: string | null; committed_at: Date | null }>(
@@ -556,6 +601,191 @@ export class BoardAnalysisService {
         });
       }
       return { classes: out };
+    });
+  }
+
+  // ---- phase E: an earlier year's figures typed in (its result file lost) ----
+
+  private async typedOf(c: PoolClient, classLabel: BoardClass): Promise<TypedYear[]> {
+    const r = await c.query<{
+      id: string;
+      exam_year: number;
+      registered: number | null;
+      appeared: number;
+      passed: number | null;
+      compartments: number | null;
+      failures: number | null;
+      n90: number | null;
+      n75: number | null;
+      aggregate: string | null;
+      pi: string | null;
+      subjects: Record<string, TypedSubject>;
+      note: string | null;
+      updated_at: Date;
+    }>(
+      `SELECT id::text, exam_year, registered, appeared, passed, compartments, failures, n90, n75,
+              aggregate::text, pi::text, subjects, note, updated_at
+         FROM board_year_figures WHERE board = 'CBSE' AND class_label = $1 ORDER BY exam_year DESC`,
+      [classLabel],
+    );
+    return r.rows.map((x) => ({
+      id: x.id,
+      examYear: x.exam_year,
+      registered: x.registered,
+      appeared: x.appeared,
+      passed: x.passed,
+      compartments: x.compartments,
+      failures: x.failures,
+      n90: x.n90,
+      n75: x.n75,
+      aggregate: x.aggregate === null ? null : Number(x.aggregate),
+      pi: x.pi === null ? null : Number(x.pi),
+      subjects: x.subjects,
+      note: x.note,
+      updatedAt: x.updated_at.toISOString(),
+    }));
+  }
+
+  /** A typed year as the five-year rows and the trend read it. */
+  private static typedYear(t: TypedYear): AnYear {
+    const share = (n: number | null) =>
+      n === null || !t.appeared ? null : round2((n * 100) / t.appeared);
+    return {
+      examYear: t.examYear,
+      appeared: t.appeared,
+      pct90: share(t.n90),
+      pct75: share(t.n75),
+      aggregate: t.aggregate,
+      passPct: share(t.passed),
+      pi: t.pi,
+      subjects: Object.fromEntries(
+        Object.entries(t.subjects).map(([code, s]) => [
+          code,
+          { pi: s.pi ?? null, average: s.average ?? null },
+        ]),
+      ),
+    };
+  }
+
+  /** A typed year's subjects as Annexure 5 compares with them. */
+  private static typedSubjects(t: TypedYear): Map<string, SubjectFigures> {
+    return new Map(
+      Object.entries(t.subjects).map(([code, s]) => [
+        code,
+        {
+          code,
+          appeared: s.appeared,
+          highest: s.highest ?? null,
+          aGrades: s.aGrades ?? 0,
+          compartments: s.compartments ?? 0,
+          failures: s.failures ?? 0,
+          distinctions: s.distinctions ?? 0,
+          average: s.average ?? null,
+          pi: s.pi ?? null,
+        },
+      ]),
+    );
+  }
+
+  /** The typed years of a class, each with whether a saved file now covers it (the file wins). */
+  async yearFigures(ctx: RequestContext, classLabel: BoardClass) {
+    return this.db.tenant(requireTenant(ctx), async (c) => {
+      const files = new Set(
+        (
+          await c.query<{ y: number }>(
+            `SELECT DISTINCT exam_year AS y FROM board_candidates WHERE board = 'CBSE' AND class_label = $1`,
+            [classLabel],
+          )
+        ).rows.map((r) => r.y),
+      );
+      return {
+        classLabel,
+        subjects: (await this.subjectsOf(c, classLabel)).filter((s) => s.kind !== 'internal'),
+        rows: (await this.typedOf(c, classLabel)).map((t) => ({
+          ...t,
+          subjects: Object.entries(t.subjects).map(([code, s]) => ({ ...s, code })),
+          fileSaved: files.has(t.examYear),
+        })),
+      };
+    });
+  }
+
+  /** Type (or correct) an earlier year's figures. A year whose result file is saved takes its figures from the file. */
+  async saveYearFigures(ctx: RequestContext, dto: BoardYearFiguresDto) {
+    return this.db.tenant(requireTenant(ctx), async (c) => {
+      const file = await c.query(
+        `SELECT 1 FROM board_candidates WHERE board = 'CBSE' AND class_label = $1 AND exam_year = $2 LIMIT 1`,
+        [dto.classLabel, dto.examYear],
+      );
+      if (file.rowCount)
+        throw new DomainError(
+          'conflict',
+          `The Class ${dto.classLabel} ${String(dto.examYear)} result file is saved: its figures come from the file`,
+          { status: 409 },
+        );
+      const subjects = Object.fromEntries(
+        dto.subjects.map(({ code, ...s }) => [
+          code,
+          Object.fromEntries(Object.entries(s).filter(([, v]) => v !== undefined && v !== null)),
+        ]),
+      );
+      const r = await c.query<{ id: string; inserted: boolean }>(
+        `INSERT INTO board_year_figures (school_id, board, class_label, exam_year, registered, appeared, passed, compartments,
+                                         failures, n90, n75, aggregate, pi, subjects, note, created_by, updated_by)
+         VALUES (app.current_school_id(), 'CBSE', $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12::jsonb, $13,
+                 app.current_user_id(), app.current_user_id())
+         ON CONFLICT (school_id, board, class_label, exam_year) DO UPDATE SET
+           registered = EXCLUDED.registered, appeared = EXCLUDED.appeared, passed = EXCLUDED.passed,
+           compartments = EXCLUDED.compartments, failures = EXCLUDED.failures, n90 = EXCLUDED.n90, n75 = EXCLUDED.n75,
+           aggregate = EXCLUDED.aggregate, pi = EXCLUDED.pi, subjects = EXCLUDED.subjects, note = EXCLUDED.note,
+           updated_by = app.current_user_id(), updated_at = now()
+         RETURNING id::text, (xmax = 0) AS inserted`,
+        [
+          dto.classLabel,
+          dto.examYear,
+          dto.registered ?? null,
+          dto.appeared,
+          dto.passed ?? null,
+          dto.compartments ?? null,
+          dto.failures ?? null,
+          dto.n90 ?? null,
+          dto.n75 ?? null,
+          dto.aggregate ?? null,
+          dto.pi ?? null,
+          JSON.stringify(subjects),
+          dto.note ?? null,
+        ],
+      );
+      await this.audit.stage(ctx, c, {
+        action: 'exams.board_result.year_figures',
+        entityType: 'board_year_figures',
+        entityId: r.rows[0]!.id,
+        after: {
+          classLabel: dto.classLabel,
+          examYear: dto.examYear,
+          appeared: dto.appeared,
+          subjects: dto.subjects.length,
+          inserted: r.rows[0]!.inserted,
+        },
+      });
+      return { id: r.rows[0]!.id, inserted: r.rows[0]!.inserted };
+    });
+  }
+
+  async removeYearFigures(ctx: RequestContext, id: string) {
+    return this.db.tenant(requireTenant(ctx), async (c) => {
+      const r = await c.query<{ class_label: string; exam_year: number }>(
+        `DELETE FROM board_year_figures WHERE id = $1 RETURNING class_label, exam_year`,
+        [id],
+      );
+      if (!r.rows[0]) throw new DomainError('not-found', 'Not found', { status: 404 });
+      await this.audit.stage(ctx, c, {
+        action: 'exams.board_result.year_figures_remove',
+        entityType: 'board_year_figures',
+        entityId: id,
+        before: { classLabel: r.rows[0].class_label, examYear: r.rows[0].exam_year },
+      });
+      return { removed: true };
     });
   }
 }

@@ -247,6 +247,10 @@ describe('CBSE board results: PI, trend, lists, teachers, students, parents (e2e
     // the workbook names the extras' sheets
     const x = await get('/exams/board-results/analysis/file?classLabel=X&format=xlsx');
     expect(x.statusCode).toBe(200);
+    // an extra prints on its own too
+    const p13 = await get('/exams/board-results/analysis/file?classLabel=X&format=pdf&annexure=13');
+    expect(p13.statusCode).toBe(200);
+    expect(p13.json().filename).toMatch(/Annexure-13\.pdf$/);
   });
 
   it('a teacher sees only the sections and subjects they taught; others see nothing of them', async () => {

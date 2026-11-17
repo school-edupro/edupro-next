@@ -352,3 +352,27 @@ subject); compartment, absent, withheld / later lists (with the student, section
   figures, the parent switch off → on with the rights around it); `board-analysis.e2e-spec.ts` now expects the
   extras. `teacher-a11y.spec.ts` lists `/my-board-results`. Browser pass (admin annexures 11–13, Exams, the
   student's Academics tab, Set-up; staff app; parent app) at 1440 and 375: axe clean.
+
+## As built — phase E, earlier years (17 Nov 2026)
+
+- **An earlier file**: the upload's year list offers, after the academic years, the ten examinations before the
+  first one ("2022 examination (an earlier year, not in EduPro)"); the file is sent with `examYear` alone, saved
+  with no academic year (its candidates kept by roll number, nothing to match or snapshot) and analysed like any
+  other. A layout CBSE used then is learned once (phase A).
+- **Typed figures** (migration 0399 `board_year_figures`, one row a class and year): registered, appeared, passed,
+  compartments, failures, 90% / 75% counts, aggregate, PI, a note, and `subjects` (code → appeared, highest, A
+  grades, compartments, failures, distinctions, average, PI). Checks: passed and 75%+ ≤ appeared, 90%+ ≤ 75%+, a
+  code once. `GET / PUT / DELETE year-figures` (view / import / import; audited). A year with a saved file refuses
+  typed figures (409) and, if they were typed earlier, the file wins.
+- **Analysis**: the four years before come from saved files, else typed figures (shares worked out from the counts);
+  the year before (Annexure 5) from its file, else its typed subjects. Typed figures are the whole class's, so a
+  one-section analysis leaves them out.
+- **Admin**: Set-up → **Earlier years' figures** (X / XII; the typed years with "file saved" where a file now
+  covers one; Type a year's figures / Edit in a dialog — headline fields and a subject line each, commas or tabs,
+  pasted rows work; Remove). English + Hindi.
+- **Found on the way**: annexures 11–13 could not be opened by their links (the annexure number was checked as
+  1–10 in the page, the file route and the API) — now 1–13, with a PDF of Annexure 13 in the phase D e2e.
+- **Tests**: e2e `board-years.e2e-spec.ts` (3: a file saved by its examination year alone, analysed and in the five
+  years; typed figures — rights, checks, refused for a year with a file, corrected — in the five years, the trend
+  and Annexure 5, left out for one section; removed again, audited). Browser pass (Set-up with the edit dialog
+  open, Upload, Annexures 12 and 5) at 1440 and 375: axe clean.

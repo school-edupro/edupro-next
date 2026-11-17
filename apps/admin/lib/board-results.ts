@@ -298,3 +298,49 @@ export interface BoardSummary {
     pi: number | null;
   }>;
 }
+
+// ---- phase E: earlier years' figures typed in ----
+
+export interface BoardYearSubject {
+  code: string;
+  appeared: number;
+  highest?: number | null;
+  aGrades?: number | null;
+  compartments?: number | null;
+  failures?: number | null;
+  distinctions?: number | null;
+  average?: number | null;
+  pi?: number | null;
+}
+export interface BoardYearFigures {
+  classLabel: 'X' | 'XII';
+  subjects: Array<{ code: string; name: string; kind: string }>;
+  rows: Array<{
+    id: string;
+    examYear: number;
+    registered: number | null;
+    appeared: number;
+    passed: number | null;
+    compartments: number | null;
+    failures: number | null;
+    n90: number | null;
+    n75: number | null;
+    aggregate: number | null;
+    pi: number | null;
+    subjects: BoardYearSubject[];
+    note: string | null;
+    updatedAt: string;
+    fileSaved: boolean;
+  }>;
+}
+/** The order of a subject line's figures when typed or pasted (after the code). */
+export const YEAR_SUBJECT_FIELDS = [
+  'appeared',
+  'highest',
+  'aGrades',
+  'compartments',
+  'failures',
+  'distinctions',
+  'average',
+  'pi',
+] as const;

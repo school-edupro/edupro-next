@@ -70,7 +70,7 @@ export async function AnalysisTab({
   const section = (sp.section ?? '').trim();
   if (section && section.length <= 40) q.set('section', section);
   const v = await apiFetch<BoardAnalysisView>(`/exams/board-results/analysis?${q.toString()}`);
-  const no = /^([1-9]|10)$/.test(sp.annexure ?? '') ? Number(sp.annexure) : 1;
+  const no = /^([1-9]|1[0-3])$/.test(sp.annexure ?? '') ? Number(sp.annexure) : 1;
   const a = v.analysis;
   const ax = a?.annexures.find((x) => x.no === no) ?? a?.annexures[0];
   const fileQ = new URLSearchParams({ classLabel: cls });

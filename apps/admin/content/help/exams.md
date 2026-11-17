@@ -549,6 +549,15 @@ subject's marks and grade. **The parent app** shows the same on its Results page
 on the parent app** is switched on (off at first). The **Exams** page shows each class's latest pass %, school
 aggregate and 90% and above.
 
+**Earlier years.** Upload an earlier year's `.TXT` the same way: in the year list, after the academic years, pick
+"_2022 examination (an earlier year, not in EduPro)_" for a year before EduPro (its candidates are kept by roll
+number; there are no students to match). A layout CBSE used then is learned once, like any new one. Where a year's
+file is lost, **Set-up → Earlier years' figures** takes its figures typed in: the headline (appeared, passed, 90% and
+75% and above, the aggregate, the PI) and, for Annexure 5, a line a subject — the code, then appeared, highest, A
+grades, compartments, failures, distinctions, average marks and PI, separated by commas or tabs (rows copied from the
+old workbook paste straight in). The five-year rows, the trend and Annexure 5 use them; a saved file always wins
+over typed figures, and typed figures are the whole class's, so they are left out when one section is shown.
+
 ## Five common questions
 
 1. _A teacher cannot see a section._ They need a teacher assignment for that section and subject this

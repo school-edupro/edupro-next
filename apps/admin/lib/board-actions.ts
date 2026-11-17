@@ -3,7 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { ApiError, apiFetch } from './api';
-import type { BoardImport } from './board-results';
+import { YEAR_SUBJECT_FIELDS, type BoardImport } from './board-results';
 
 const okId = (id: string) => /^\d{1,18}$/.test(id);
 const str = (fd: FormData, k: string) => String(fd.get(k) ?? '').trim();
@@ -36,11 +36,14 @@ export async function uploadGazette(fd: FormData) {
         detail: 'The file is larger than the 900 KB a result file can be.',
       });
     const year = str(fd, 'academicYearId');
+    // "y:2022": an earlier examination with no academic year in EduPro (phase E)
+    const earlier = /^y:(\d{4})$/.exec(year);
     const r = await apiFetch<BoardImport>('/exams/board-results/gazette', {
       method: 'POST',
       body: JSON.stringify({
         classLabel: str(fd, 'classLabel'),
         ...(okId(year) ? { academicYearId: year } : {}),
+        ...(earlier ? { examYear: Number(earlier[1]) } : {}),
         fileName: file.name.slice(0, 200),
         // a CBSE file is plain ASCII; latin1 keeps any odd byte instead of failing
         text: new TextDecoder('latin1').decode(await file.arrayBuffer()),
@@ -317,4 +320,86 @@ export async function setBoardParents(fd: FormData) {
       ? "Families now see their child's board result on the parent app."
       : 'The board result is no longer shown on the parent app.',
   );
+}
+
+// ---- phase E: earlier years' figures typed in -----------------------------------------------------------------------
+
+const num = (fd: FormData, k: string) => {
+  const v = str(fd, k);
+  return v === '' ? null : Number(v);
+};
+
+/**
+ * An earlier year's figures (its result file lost): the headline, and each subject as a line — the code, then
+ * appeared, highest, A grades, compartments, failures, distinctions, average, PI (commas or tabs; pasted from the
+ * old workbook; a figure left out is blank).
+ */
+export async function saveBoardYearFigures(fd: FormData) {
+  const cls = str(fd, 'classLabel') === 'XII' ? 'XII' : 'X';
+  const here = `/exams/board-results?tab=setup&figures=${cls}#figures`;
+  const subjects: Array<Record<string, string | number | null>> = [];
+  const lines = str(fd, 'subjects').split(/\r?\n/);
+  for (const [i, raw] of lines.entries()) {
+    const line = raw.trim();
+    if (!line) continue;
+    const parts = line.split(/\s*[\t,;]\s*/);
+    const code = (parts[0] ?? '').replace(/\D/g, '').padStart(3, '0');
+    const figures = parts.slice(1).map((x) => (x.trim() === '' ? null : Number(x.trim())));
+    if (
+      !/^\d{3}$/.test(code) ||
+      figures[0] == null ||
+      figures.some((x) => x !== null && !Number.isFinite(x))
+    )
+      back(
+        here,
+        new ApiError(400, {
+          type: 'validation-failed',
+          detail: `Subject line ${String(i + 1)}: write the 3-digit code, then the numbers (appeared first), separated by commas or tabs.`,
+        }),
+      );
+    const row: Record<string, string | number | null> = { code };
+    YEAR_SUBJECT_FIELDS.forEach((k, j) => (row[k] = figures[j] ?? null));
+    subjects.push(row);
+  }
+  try {
+    await apiFetch('/exams/board-results/year-figures', {
+      method: 'PUT',
+      body: JSON.stringify({
+        classLabel: cls,
+        examYear: num(fd, 'examYear'),
+        registered: num(fd, 'registered'),
+        appeared: num(fd, 'appeared'),
+        passed: num(fd, 'passed'),
+        compartments: num(fd, 'compartments'),
+        failures: num(fd, 'failures'),
+        n90: num(fd, 'n90'),
+        n75: num(fd, 'n75'),
+        aggregate: num(fd, 'aggregate'),
+        pi: num(fd, 'pi'),
+        subjects,
+        note: str(fd, 'note') || null,
+      }),
+    });
+  } catch (error) {
+    back(here, error);
+  }
+  revalidatePath('/exams/board-results');
+  done(
+    here,
+    `The Class ${cls} ${str(fd, 'examYear')} figures are saved: the five-year rows and the trend use them.`,
+  );
+}
+
+export async function removeBoardYearFigures(fd: FormData) {
+  const id = str(fd, 'id');
+  const cls = str(fd, 'classLabel') === 'XII' ? 'XII' : 'X';
+  const here = `/exams/board-results?tab=setup&figures=${cls}#figures`;
+  if (!okId(id)) redirect(here);
+  try {
+    await apiFetch(`/exams/board-results/year-figures/${id}`, { method: 'DELETE' });
+  } catch (error) {
+    back(here, error);
+  }
+  revalidatePath('/exams/board-results');
+  done(here, "The year's typed figures are removed.");
 }

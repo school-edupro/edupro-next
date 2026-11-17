@@ -30,6 +30,7 @@ import {
   when,
   type BoardImport,
   type BoardRules,
+  type BoardYearFigures,
   type BoardLayout,
   type BoardSubjectKind,
   type BoardSubjectRow,
@@ -47,6 +48,7 @@ interface Analysis extends Record<string, string | number | null> {
 }
 
 import { AnalysisTab } from './AnalysisTab';
+import { YearFiguresCard } from './YearFiguresCard';
 
 const TABS: BoardTab[] = ['upload', 'results', 'analysis', 'teachers', 'setup'];
 const KINDS: BoardSubjectKind[] = ['language', 'main', 'skill', 'additional', 'internal'];
@@ -65,6 +67,7 @@ export default async function BoardResultsPage({
     section?: string;
     annexure?: string;
     subjects?: string;
+    figures?: string;
     q?: string;
     import?: string;
     ok?: string;
@@ -89,39 +92,52 @@ export default async function BoardResultsPage({
   if (sp.q) q.set('q', sp.q);
   const cls = sp.classLabel === 'XII' ? 'XII' : 'X';
   const subjectsCls = sp.subjects === 'XII' ? 'XII' : 'X';
-  const [list, imports, years, layouts, teachers, subjects, rules, parents] = await Promise.all([
-    tab === 'results' || tab === 'analysis'
-      ? apiFetch<{ data: BoardRow[]; page: { total: number }; analysis: Analysis[] }>(
-          `/exams/board-results?${q.toString()}`,
-        )
-      : null,
-    tab === 'upload'
-      ? apiFetch<{ data: BoardImport[] }>('/exams/board-results/imports').then((x) => x.data)
-      : ([] as BoardImport[]),
-    tab === 'upload' && canImport
-      ? apiFetch<{ data: BoardYear[] }>('/exams/board-results/years').then((x) => x.data)
-      : ([] as BoardYear[]),
-    tab === 'setup'
-      ? apiFetch<{ data: BoardLayout[] }>('/exams/board-results/layouts').then((x) => x.data)
-      : ([] as BoardLayout[]),
-    tab === 'teachers'
-      ? apiFetch<BoardTeachers>(
-          `/exams/board-results/teachers?classLabel=${cls}${/^\d{4}$/.test(sp.examYear ?? '') ? `&examYear=${sp.examYear!}` : ''}`,
-        )
-      : null,
-    tab === 'setup'
-      ? apiFetch<{
-          rows: BoardSubjectRow[];
-          options: Array<{ id: string; name: string; code: string }>;
-        }>(`/exams/board-results/subjects?classLabel=${subjectsCls}`)
-      : null,
-    tab === 'setup'
-      ? apiFetch<{ rules: BoardRules; isDefault: boolean }>('/exams/board-results/rules')
-      : null,
-    tab === 'setup' ? apiFetch<{ on: boolean }>('/exams/board-results/parents') : null,
-  ]);
+  const figuresCls = sp.figures === 'XII' ? 'XII' : 'X';
+  const [list, imports, years, layouts, teachers, subjects, rules, parents, figures] =
+    await Promise.all([
+      tab === 'results' || tab === 'analysis'
+        ? apiFetch<{ data: BoardRow[]; page: { total: number }; analysis: Analysis[] }>(
+            `/exams/board-results?${q.toString()}`,
+          )
+        : null,
+      tab === 'upload'
+        ? apiFetch<{ data: BoardImport[] }>('/exams/board-results/imports').then((x) => x.data)
+        : ([] as BoardImport[]),
+      tab === 'upload' && canImport
+        ? apiFetch<{ data: BoardYear[] }>('/exams/board-results/years').then((x) => x.data)
+        : ([] as BoardYear[]),
+      tab === 'setup'
+        ? apiFetch<{ data: BoardLayout[] }>('/exams/board-results/layouts').then((x) => x.data)
+        : ([] as BoardLayout[]),
+      tab === 'teachers'
+        ? apiFetch<BoardTeachers>(
+            `/exams/board-results/teachers?classLabel=${cls}${/^\d{4}$/.test(sp.examYear ?? '') ? `&examYear=${sp.examYear!}` : ''}`,
+          )
+        : null,
+      tab === 'setup'
+        ? apiFetch<{
+            rows: BoardSubjectRow[];
+            options: Array<{ id: string; name: string; code: string }>;
+          }>(`/exams/board-results/subjects?classLabel=${subjectsCls}`)
+        : null,
+      tab === 'setup'
+        ? apiFetch<{ rules: BoardRules; isDefault: boolean }>('/exams/board-results/rules')
+        : null,
+      tab === 'setup' ? apiFetch<{ on: boolean }>('/exams/board-results/parents') : null,
+      tab === 'setup'
+        ? apiFetch<BoardYearFigures>(`/exams/board-results/year-figures?classLabel=${figuresCls}`)
+        : null,
+    ]);
   const current = imports.find((i) => i.id === sp.import && i.kind === 'sheet') ?? null;
   const yearNow = years.find((y) => y.current) ?? years[0];
+  // earlier examinations without an academic year in EduPro: the ten before the first one
+  const covered = new Set(years.map((y) => y.examYear));
+  const firstYear = years.length
+    ? Math.min(...years.map((y) => y.examYear))
+    : new Date().getFullYear();
+  const earlierYears = Array.from({ length: 10 }, (_, i) => firstYear - 1 - i).filter(
+    (y) => !covered.has(y),
+  );
 
   return (
     <>
@@ -189,10 +205,17 @@ export default async function BoardResultsPage({
                     label={b('academicYear')}
                     required
                     defaultValue={yearNow?.id ?? ''}
-                    options={years.map((y) => ({
-                      value: y.id,
-                      label: b('examOf', { year: y.name, exam: y.examYear }),
-                    }))}
+                    options={[
+                      ...years.map((y) => ({
+                        value: y.id,
+                        label: b('examOf', { year: y.name, exam: y.examYear }),
+                      })),
+                      // an earlier year's file (phase E): the examination year alone, its students not matched
+                      ...earlierYears.map((y) => ({
+                        value: `y:${String(y)}`,
+                        label: b('earlierYear', { exam: y }),
+                      })),
+                    ]}
                   />
                   <label className="ep-field" htmlFor="gzFile">
                     <span className="ep-field__label">{b('gazetteFile')} *</span>
@@ -947,6 +970,10 @@ export default async function BoardResultsPage({
                 </form>
               </DialogButton>
             </div>
+          ) : null}
+
+          {tab === 'setup' && figures ? (
+            <YearFiguresCard data={figures} canImport={canImport} />
           ) : null}
         </Card>
       ) : null}
