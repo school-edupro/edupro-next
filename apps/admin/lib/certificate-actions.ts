@@ -54,7 +54,7 @@ export async function issueCertificate(fd: FormData) {
     'employeeId' in body ? `employee=${body.employeeId ?? ''}` : `student=${body.studentId ?? ''}`;
   const here = `/certificates/issue?type=${encodeURIComponent(body.typeCode)}&${person}${
     'requestId' in body && body.requestId ? `&request=${body.requestId}` : ''
-  }`;
+  }${str(fd, 'anyway') === '1' ? '&anyway=1' : ''}`;
   if (!okId(('employeeId' in body ? body.employeeId : body.studentId) ?? ''))
     redirect('/certificates/issue?error=validation-failed&detail=Choose+the+person');
   let made: Certificate;

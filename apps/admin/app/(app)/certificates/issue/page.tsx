@@ -140,6 +140,12 @@ export default async function IssueCertificatePage({
   // a correction: the certificate was issued; its checks are shown, not a bar
   const blocked =
     !correcting && !!preview && (preview.held || (failed.length > 0 && !preview.can.override));
+  // a check not clear keeps What it prints and the preview back for everyone (17 Nov 2026); whoever may issue past a
+  // check opens them with "Issue it anyway" (?anyway=1), to give the reason
+  const canAnyway = !!preview && !preview.held && failed.length > 0 && preview.can.override;
+  const anyway = sp.anyway === '1' && canAnyway;
+  const notClear = !correcting && !!preview && (preview.held || failed.length > 0);
+  const holdBack = notClear && !anyway;
   const asksPurpose = type ? type.code !== 'TC' : false;
   const who = staff ? 'employee' : 'student';
   const reissuing = !!original && !reissueBlocked && !correcting;
@@ -151,6 +157,14 @@ export default async function IssueCertificatePage({
         typeof e[1] === 'string' && !['ok', 'error', 'detail'].includes(e[0]),
     ),
   ).toString()}`;
+  // the same page with What it prints opened past a check, or kept back again
+  const keepBackHref = `/certificates/issue?${new URLSearchParams(
+    Object.entries(sp).filter(
+      (e): e is [string, string] =>
+        typeof e[1] === 'string' && !['ok', 'error', 'detail', 'anyway'].includes(e[0]),
+    ),
+  ).toString()}`;
+  const anywayHref = `${keepBackHref}&anyway=1#what-it-prints`;
   return (
     <>
       <Breadcrumbs
@@ -277,12 +291,16 @@ export default async function IssueCertificatePage({
                   </a>{' '}
                   to print a duplicate or cancel it.
                 </div>
-              ) : failed.length && !preview.can.override && !correcting ? (
+              ) : failed.length && !correcting ? (
                 <div className="ep-alert ep-alert--warning" role="status">
                   <div>
                     <p style={{ margin: 0 }}>
-                      <strong>Not clear yet.</strong> What it prints and the preview show once the
-                      checks above are clear — or the principal may issue it anyway, with a reason.
+                      <strong>Not clear yet.</strong>{' '}
+                      {anyway
+                        ? 'You are issuing it although a check is not clear: give the reason below; it is kept on the certificate with your name.'
+                        : canAnyway
+                          ? 'What it prints and the preview show once the checks above are clear. You may issue it anyway, with a reason.'
+                          : 'What it prints and the preview show once the checks above are clear — or the principal may issue it anyway, with a reason.'}
                     </p>
                     {type.code === 'TC' && !staff ? (
                       <p style={{ margin: 'var(--sp-2) 0 0' }}>
@@ -306,14 +324,29 @@ export default async function IssueCertificatePage({
                         )}
                       </p>
                     ) : null}
+                    {canAnyway ? (
+                      <p style={{ margin: 'var(--sp-3) 0 0' }}>
+                        {anyway ? (
+                          <a className="ep-btn ep-btn--ghost ep-btn--sm" href={keepBackHref}>
+                            Keep it back until the checks are clear
+                          </a>
+                        ) : (
+                          <a className="ep-btn ep-btn--secondary ep-btn--sm" href={anywayHref}>
+                            Issue it anyway, with a reason
+                          </a>
+                        )}
+                      </p>
+                    ) : null}
                   </div>
                 </div>
               ) : null}
             </Card>
-            {blocked ? null : (
+            {holdBack ? null : (
               <>
                 <Card>
-                  <h2 className="ep-card__title">3. What it prints</h2>
+                  <h2 className="ep-card__title" id="what-it-prints">
+                    3. What it prints
+                  </h2>
                   <form
                     action={
                       correcting
@@ -325,6 +358,7 @@ export default async function IssueCertificatePage({
                     className="ep-cert-form"
                   >
                     <input type="hidden" name="type" value={type.code} />
+                    {anyway ? <input type="hidden" name="anyway" value="1" /> : null}
                     {editing ? (
                       <>
                         <input type="hidden" name="id" value={original!.id} />

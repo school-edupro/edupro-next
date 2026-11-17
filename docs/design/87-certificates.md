@@ -727,3 +727,13 @@ Tests: `certificates.e2e-spec.ts` (the TC preview's `withdrawal` null with none)
 axe clean: a test school's certificate office (no override; its school switched on for the run and off after) sees the
 note and the start link, no section 3 and no preview; dev-admin on Alpha (override) still sees both for student 12247.
 None of Alpha's demo logins issues without the override right.
+
+Follow-up (17 Nov 2026): the user, as Dev Admin (school admin, who may issue past a check), still saw section 3 for
+a TC not clear. Chosen (recommended): keep them back **for everyone** while a check is not clear (or the person holds
+it); whoever may issue past a check gets **Issue it anyway, with a reason** (`?anyway=1#what-it-prints`, kept by
+Update the preview and after a refused issue), which opens section 3, the preview and the reason box, and **Keep it
+back until the checks are clear** to close them. `anyway` counts only with the override right and no "already
+holds it" (typed by hand it opens nothing for others; the API still asks the right and a fresh sign-in). A browser
+pass: dev-admin on Alpha (Navya Iyer's TC) — held back, opened, kept open by Update the preview, closed; a clear
+bonafide shows at once; a test school's certificate office — no button, `anyway=1` opens nothing; axe clean at 1440
+and 375 px.

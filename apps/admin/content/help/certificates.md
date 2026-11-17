@@ -66,7 +66,8 @@ header and from a student's profile (**Status** tab → Certificates card, or **
 **When a check is not clear**, the page shows the checks and what to do next, and keeps **What it
 prints** and the preview back until they are clear — for a TC, a link to the student's withdrawal (or to
 start one on the student's page, Status): its departments clear the fees, library, hostel and transport.
-Only the principal (or whoever may issue past a check) still sees them, to issue it anyway: the screen asks why, and the
+Whoever may issue past a check (the principal; the school admin) gets **Issue it anyway, with a reason**,
+which opens them; **Keep it back until the checks are clear** closes them again. Issuing it anyway: the screen asks why, and the
 reason is printed nowhere but kept on the certificate and shown in the register (**Checks → Issued past
 a failed check**). It needs a recent two-step sign-in. "Already holds this certificate" is never
 overridden: open the one held and print a duplicate, or cancel it first.
