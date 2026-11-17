@@ -278,3 +278,25 @@ export async function removeBoardTeacher(fd: FormData) {
   }
   done(here, 'Removed: the year’s teacher assignment applies again.');
 }
+
+// ---- phase C: the annexures' rules -----------------------------------------------------------------------------------
+
+/** The rules the annexures count with: the best five, the distinction and pass marks, grades from marks or printed. */
+export async function saveBoardRules(fd: FormData) {
+  const here = '/exams/board-results?tab=setup';
+  try {
+    await apiFetch('/exams/board-results/rules', {
+      method: 'PUT',
+      body: JSON.stringify({
+        bestFive: str(fd, 'bestFive'),
+        distinction: Number(str(fd, 'distinction')),
+        passMarks: Number(str(fd, 'passMarks')),
+        grades: str(fd, 'grades'),
+      }),
+    });
+  } catch (error) {
+    back(here, error);
+  }
+  revalidatePath('/exams/board-results');
+  done(here, 'The analysis rules are saved; the annexures count with them from now.');
+}

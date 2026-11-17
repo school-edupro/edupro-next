@@ -398,7 +398,8 @@ describe('CBSE board results: students, details, subjects, teachers (e2e, docs/d
       'CWSN (Specify Y fro CWSN students)',
     ]);
     one.addRow([R[0], 'ANU DETAIL', `${s}-0`, 'A', 'Boarder', 'OBC', 'Hindu', 'N', 'Y']);
-    one.addRow([R[3], 'DEV UNKNOWN', `${s}-3`, 'B', 'Other', 'GEN', '', '', '']);
+    // the school's own sheet writes the column's word (EWS, CWSN) for yes
+    one.addRow([R[3], 'DEV UNKNOWN', `${s}-3`, 'B', 'Other', 'GEN', '', 'EWS', 'CWSN']);
     one.addRow(['28199999', 'NOT IN FILE', '', 'A', 'Other', 'GEN', '', '', '']);
     const two = wb.addWorksheet('Sheet2');
     two.addRow([
@@ -442,6 +443,8 @@ describe('CBSE board results: students, details, subjects, teachers (e2e, docs/d
       student_id: st.ELA,
       match: 'picked',
       section: 'B',
+      ews: true,
+      cwsn: true,
       details_from: 'sheet',
     });
     const t = (await get('/exams/board-results/teachers?classLabel=X')).json().rows as Array<{

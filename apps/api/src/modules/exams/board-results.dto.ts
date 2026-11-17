@@ -128,3 +128,26 @@ export const DetailsSheetSchema = z.object({
   fileBase64: z.string().min(10).max(1_000_000, 'The sheet is larger than 700 KB'),
 });
 export class DetailsSheetDto extends createZodDto(DetailsSheetSchema) {}
+
+// ---- phase C: the annexures ----
+
+export const BoardAnalysisQuerySchema = z.object({
+  classLabel: ClassLabel.default('X'),
+  examYear: z.coerce.number().int().min(2000).max(2100).optional(),
+  section: z.string().trim().min(1).max(40).optional(),
+});
+export class BoardAnalysisQueryDto extends createZodDto(BoardAnalysisQuerySchema) {}
+
+export const BoardAnalysisFileSchema = BoardAnalysisQuerySchema.extend({
+  format: z.enum(['xlsx', 'pdf']),
+  annexure: z.coerce.number().int().min(1).max(10).optional(),
+});
+export class BoardAnalysisFileDto extends createZodDto(BoardAnalysisFileSchema) {}
+
+export const BoardRulesSchema = z.object({
+  bestFive: z.enum(['language-plus-four', 'english-plus-four', 'any-five']),
+  distinction: z.coerce.number().int().min(33).max(100),
+  passMarks: z.coerce.number().int().min(1).max(60),
+  grades: z.enum(['marks', 'printed']),
+});
+export class BoardRulesDto extends createZodDto(BoardRulesSchema) {}

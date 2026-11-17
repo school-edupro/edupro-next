@@ -18,14 +18,17 @@ import { apiFetch, getMe } from '@/lib/api';
 import {
   addBoardTeacher,
   removeBoardTeacher,
+  saveBoardRules,
   saveBoardSubject,
   setBoardLayout,
   uploadGazette,
 } from '@/lib/board-actions';
 import {
+  BEST_FIVE,
   statusOf,
   when,
   type BoardImport,
+  type BoardRules,
   type BoardLayout,
   type BoardSubjectKind,
   type BoardSubjectRow,
@@ -42,6 +45,8 @@ interface Analysis extends Record<string, string | number | null> {
   subject_code: string;
 }
 
+import { AnalysisTab } from './AnalysisTab';
+
 const TABS: BoardTab[] = ['upload', 'results', 'analysis', 'teachers', 'setup'];
 const KINDS: BoardSubjectKind[] = ['language', 'main', 'skill', 'additional', 'internal'];
 
@@ -56,6 +61,8 @@ export default async function BoardResultsPage({
     tab?: string;
     classLabel?: string;
     examYear?: string;
+    section?: string;
+    annexure?: string;
     subjects?: string;
     q?: string;
     import?: string;
@@ -81,7 +88,7 @@ export default async function BoardResultsPage({
   if (sp.q) q.set('q', sp.q);
   const cls = sp.classLabel === 'XII' ? 'XII' : 'X';
   const subjectsCls = sp.subjects === 'XII' ? 'XII' : 'X';
-  const [list, imports, years, layouts, teachers, subjects] = await Promise.all([
+  const [list, imports, years, layouts, teachers, subjects, rules] = await Promise.all([
     tab === 'results' || tab === 'analysis'
       ? apiFetch<{ data: BoardRow[]; page: { total: number }; analysis: Analysis[] }>(
           `/exams/board-results?${q.toString()}`,
@@ -106,6 +113,9 @@ export default async function BoardResultsPage({
           rows: BoardSubjectRow[];
           options: Array<{ id: string; name: string; code: string }>;
         }>(`/exams/board-results/subjects?classLabel=${subjectsCls}`)
+      : null,
+    tab === 'setup'
+      ? apiFetch<{ rules: BoardRules; isDefault: boolean }>('/exams/board-results/rules')
       : null,
   ]);
   const current = imports.find((i) => i.id === sp.import && i.kind === 'sheet') ?? null;
@@ -341,42 +351,45 @@ export default async function BoardResultsPage({
         </div>
       ) : null}
 
-      {tab === 'analysis' && list ? (
-        <Card title={b('analysis')}>
-          <DataTable<Analysis>
-            caption={b('analysis')}
-            density="dense"
-            columns={[
-              { key: 'c', header: b('classLabel'), render: (x) => x.class_label },
-              {
-                key: 's',
-                header: b('subject'),
-                render: (x) => `${x.subject_code} · ${x.subject_name ?? ''}`,
-              },
-              { key: 'n', header: b('candidates'), numeric: true, render: (x) => x.candidates },
-              { key: 'm', header: b('mean'), numeric: true, render: (x) => x.mean ?? '' },
-              { key: 'h', header: b('highest'), numeric: true, render: (x) => x.highest ?? '' },
-              { key: 'l', header: b('lowest'), numeric: true, render: (x) => x.lowest ?? '' },
-              { key: 'p', header: b('passed'), numeric: true, render: (x) => x.passed },
-              {
-                key: 'd',
-                header: b('distinctions'),
-                numeric: true,
-                render: (x) => x.distinctions,
-              },
-              {
-                key: 'u',
-                header: b('unlinked'),
-                numeric: true,
-                render: (x) =>
-                  Number(x.unlinked) ? <Badge tone="warning">{x.unlinked}</Badge> : 0,
-              },
-            ]}
-            rows={list.analysis}
-            rowKey={(x) => `${x.class_label}-${x.subject_code}`}
-            emptyTitle="—"
-          />
-        </Card>
+      {tab === 'analysis' ? <AnalysisTab sp={sp} canImport={canImport} /> : null}
+      {tab === 'analysis' && list && list.analysis.length ? (
+        <div style={{ marginTop: 'var(--sp-4)' }}>
+          <FoldCard id="an-old" title={b('an_old')} hint={b('an_oldHint')}>
+            <DataTable<Analysis>
+              caption={b('analysis')}
+              density="dense"
+              columns={[
+                { key: 'c', header: b('classLabel'), render: (x) => x.class_label },
+                {
+                  key: 's',
+                  header: b('subject'),
+                  render: (x) => `${x.subject_code} · ${x.subject_name ?? ''}`,
+                },
+                { key: 'n', header: b('candidates'), numeric: true, render: (x) => x.candidates },
+                { key: 'm', header: b('mean'), numeric: true, render: (x) => x.mean ?? '' },
+                { key: 'h', header: b('highest'), numeric: true, render: (x) => x.highest ?? '' },
+                { key: 'l', header: b('lowest'), numeric: true, render: (x) => x.lowest ?? '' },
+                { key: 'p', header: b('passed'), numeric: true, render: (x) => x.passed },
+                {
+                  key: 'd',
+                  header: b('distinctions'),
+                  numeric: true,
+                  render: (x) => x.distinctions,
+                },
+                {
+                  key: 'u',
+                  header: b('unlinked'),
+                  numeric: true,
+                  render: (x) =>
+                    Number(x.unlinked) ? <Badge tone="warning">{x.unlinked}</Badge> : 0,
+                },
+              ]}
+              rows={list.analysis}
+              rowKey={(x) => `${x.class_label}-${x.subject_code}`}
+              emptyTitle="—"
+            />
+          </FoldCard>
+        </div>
       ) : null}
 
       {tab === 'results' && list ? (
@@ -628,6 +641,76 @@ export default async function BoardResultsPage({
             rowKey={(r) => r.k}
             emptyTitle={b('noYear')}
           />
+        </Card>
+      ) : null}
+
+      {tab === 'setup' && rules ? (
+        <Card title={b('rules')} id="rules" style={{ marginBottom: 'var(--sp-5)' }}>
+          <p className="ep-field__help" style={{ marginTop: 0 }}>
+            {b('rulesHelp')}
+          </p>
+          <form action={saveBoardRules}>
+            <FormRow>
+              <SelectField
+                id="rules-best"
+                name="bestFive"
+                label={b('rules_bestFive')}
+                defaultValue={rules.rules.bestFive}
+                disabled={!canImport}
+                options={BEST_FIVE.map((x) => ({
+                  value: x,
+                  label: b(
+                    x === 'language-plus-four'
+                      ? 'bf_language'
+                      : x === 'english-plus-four'
+                        ? 'bf_english'
+                        : 'bf_any',
+                  ),
+                }))}
+              />
+              <SelectField
+                id="rules-grades"
+                name="grades"
+                label={b('rules_grades')}
+                defaultValue={rules.rules.grades}
+                disabled={!canImport}
+                options={[
+                  { value: 'marks', label: b('an_grades_marks') },
+                  { value: 'printed', label: b('an_grades_printed') },
+                ]}
+              />
+            </FormRow>
+            <FormRow>
+              <InputField
+                id="rules-dist"
+                name="distinction"
+                type="number"
+                min={33}
+                max={100}
+                label={b('rules_distinction')}
+                defaultValue={String(rules.rules.distinction)}
+                disabled={!canImport}
+              />
+              <InputField
+                id="rules-pass"
+                name="passMarks"
+                type="number"
+                min={1}
+                max={60}
+                label={b('rules_pass')}
+                defaultValue={String(rules.rules.passMarks)}
+                disabled={!canImport}
+              />
+            </FormRow>
+            <p className="ep-field__help">
+              {rules.isDefault ? b('rules_default') : b('rules_set')}
+            </p>
+            {canImport ? (
+              <Button type="submit" size="sm">
+                {b('rules_save')}
+              </Button>
+            ) : null}
+          </form>
         </Card>
       ) : null}
 

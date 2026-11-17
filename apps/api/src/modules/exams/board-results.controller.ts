@@ -3,10 +3,13 @@ import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { RequirePermission } from '../../common/access/require-permission.decorator';
 import { DomainError } from '../../common/errors/domain-error';
 import { ReqCtx, type RequestContext } from '../../common/http/request-context';
+import { BoardAnalysisService } from './board-analysis.service';
 import { BoardDetailsService } from './board-details.service';
 import { BoardGazetteService } from './board-gazette.service';
 import {
   BOARD_RESULTS,
+  BoardAnalysisFileDto,
+  BoardAnalysisQueryDto,
   BoardClassQueryDto,
   BoardListQueryDto,
   BoardSubjectAddDto,
@@ -17,6 +20,7 @@ import {
   GazetteUploadDto,
   LayoutActiveDto,
   PickDto,
+  BoardRulesDto,
 } from './board-results.dto';
 import { BoardResultsService } from './board-results.service';
 
@@ -38,6 +42,7 @@ export class BoardResultsController {
     private readonly boards: BoardResultsService,
     private readonly gazettes: BoardGazetteService,
     private readonly details: BoardDetailsService,
+    private readonly analyses: BoardAnalysisService,
   ) {}
 
   @Get()
@@ -224,5 +229,39 @@ export class BoardResultsController {
   @RequirePermission(BOARD_RESULTS.import)
   removeTeacher(@ReqCtx() ctx: RequestContext, @Param('id') overrideId: string) {
     return this.details.removeTeacher(ctx, id(overrideId));
+  }
+
+  // ---- phase C: the ten annexures ----
+
+  @Get('analysis')
+  @ApiOperation({
+    summary:
+      "The school's ten annexures of a saved CBSE result (a class and year, one section or all), with the rules used",
+  })
+  @RequirePermission(BOARD_RESULTS.view)
+  analysis(@ReqCtx() ctx: RequestContext, @Query() q: BoardAnalysisQueryDto) {
+    return this.analyses.analysis(ctx, q);
+  }
+
+  @Get('analysis/file')
+  @ApiOperation({ summary: 'The annexures as one Excel workbook, or a PDF (one annexure or all)' })
+  @RequirePermission(BOARD_RESULTS.view)
+  analysisFile(@ReqCtx() ctx: RequestContext, @Query() q: BoardAnalysisFileDto) {
+    return this.analyses.file(ctx, q);
+  }
+
+  @Get('rules')
+  @RequirePermission(BOARD_RESULTS.view)
+  rules(@ReqCtx() ctx: RequestContext) {
+    return this.analyses.rules(ctx);
+  }
+
+  @Put('rules')
+  @ApiOperation({
+    summary: 'The best five, distinction and pass marks and the grade basis the annexures use',
+  })
+  @RequirePermission(BOARD_RESULTS.import)
+  saveRules(@ReqCtx() ctx: RequestContext, @Body() body: BoardRulesDto) {
+    return this.analyses.saveRules(ctx, body);
   }
 }

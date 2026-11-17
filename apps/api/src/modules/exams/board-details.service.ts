@@ -10,7 +10,11 @@ import { CBSE_SUBJECTS, likelySubject, type BoardSubjectKind } from './board-sub
 type BoardClass = 'X' | 'XII';
 
 export interface TeacherOf {
+  /** The teacher when one; null when several share the section or the name is not on the staff list. */
   employeeId: string | null;
+  /** Every staff member who taught it (a section may share a subject between teachers). */
+  employeeIds: string[];
+  /** The name, or the names joined by commas. */
   name: string;
 }
 
@@ -474,14 +478,26 @@ export class BoardDetailsService {
         [board, classLabel, examYear],
       )
     ).rows;
+    const of = (xs: Array<{ employee_id: string | null; name: string }>): TeacherOf | null => {
+      if (!xs.length) return null;
+      const ids = [...new Set(xs.map((x) => x.employee_id).filter((x): x is string => Boolean(x)))];
+      return {
+        employeeId: xs.length === 1 ? xs[0]!.employee_id : null,
+        employeeIds: ids,
+        name: [...new Set(xs.map((x) => x.name))].join(', '),
+      };
+    };
+    // for a roll: the overrides naming it, else the section's whole-class overrides (several share it), else the
+    // year's subject teachers of the section
     return (section: string | null, code: string, roll: string): TeacherOf | null => {
       if (!section) return null;
-      const o =
-        overrides.find((x) => x.section === section && x.code === code && x.rolls.includes(roll)) ??
-        overrides.find((x) => x.section === section && x.code === code && x.rolls.length === 0);
-      if (o) return { employeeId: o.employee_id, name: o.name };
-      const a = assigned.find((x) => x.section === section && x.code === code);
-      return a ? { employeeId: a.employee_id, name: a.name } : null;
+      const here = overrides.filter((x) => x.section === section && x.code === code);
+      const byRoll = here.filter((x) => x.rolls.includes(roll));
+      const whole = here.filter((x) => x.rolls.length === 0);
+      return (
+        of(byRoll.length ? byRoll : whole) ??
+        of(assigned.filter((x) => x.section === section && x.code === code))
+      );
     };
   }
 
@@ -655,7 +671,9 @@ export class BoardDetailsService {
     const s2 = rowsOf(second);
     return this.db.tenant(requireTenant(ctx), async (c) => {
       const i = await this.savedImport(c, importId);
-      const yes = (v: string) => /^(y|yes|true|1)$/i.test(v.trim());
+      // yes: Y / Yes / true / 1, or the column's own word (the school's sheet writes EWS, CWSN)
+      const yes = (v: string, word: string) =>
+        /^(y|yes|true|1)$/i.test(v.trim()) || v.trim().toUpperCase() === word;
       let updated = 0;
       let linked = 0;
       const unknown: string[] = [];
@@ -726,8 +744,8 @@ export class BoardDetailsService {
             v(r, at.stream),
             v(r, at.caste),
             v(r, at.religion),
-            at.ews >= 0 && v(r, at.ews) ? (yes(v(r, at.ews)) ? 'Y' : 'N') : '',
-            at.cwsn >= 0 && v(r, at.cwsn) ? (yes(v(r, at.cwsn)) ? 'Y' : 'N') : '',
+            at.ews >= 0 && v(r, at.ews) ? (yes(v(r, at.ews), 'EWS') ? 'Y' : 'N') : '',
+            at.cwsn >= 0 && v(r, at.cwsn) ? (yes(v(r, at.cwsn), 'CWSN') ? 'Y' : 'N') : '',
             kind,
           ],
         );

@@ -399,6 +399,18 @@ export const SETTINGS_CATALOGUE: Record<string, SettingDefinition> = {
     description: 'Default capacity for a new section',
     module: 'academics',
   },
+  'exams.board_rules': {
+    schema: z.object({
+      bestFive: z.enum(['language-plus-four', 'english-plus-four', 'any-five']),
+      distinction: z.number().int().min(33).max(100),
+      passMarks: z.number().int().min(1).max(60),
+      grades: z.enum(['marks', 'printed']),
+    }),
+    default: { bestFive: 'language-plus-four', distinction: 75, passMarks: 33, grades: 'marks' },
+    description:
+      'CBSE board result analysis: the best five (the best language and four others, English and four, or any five), the distinction and pass marks, and grades from the marks or as printed',
+    module: 'exams',
+  },
   'exams.reportcard.hold_for_fee_defaulters': {
     schema: z.boolean(),
     default: false,

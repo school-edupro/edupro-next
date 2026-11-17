@@ -473,8 +473,8 @@ of the class closes them; the report card prints them under the remarks.
 
 ## Board results (CBSE Class X and XII)
 
-**Exams → Board results** keeps the board's results and their analysis. It has four tabs: **Upload**, **Results**,
-**Analysis** and **Set-up**.
+**Exams → Board results** keeps the board's results and their analysis. It has five tabs: **Upload**, **Results**,
+**Analysis**, **Teachers** and **Set-up**.
 
 **Uploading CBSE's result file.** On **Upload**, choose the class (X or XII) and the academic year, choose the
 `.TXT` file CBSE sends (the "School / Roll No wise Gazette") exactly as it came, and press **Upload and check**.
@@ -514,6 +514,26 @@ a code a file printed that is not on the list appears at the top to be named.
 
 An Excel or CSV file (one row per candidate per subject, or one row per candidate) can still be imported from the
 **Excel or CSV result file** card on the same tab.
+
+**Analysis: the ten annexures.** **Analysis** counts a saved year as the school's own result workbook does: pick the
+class, the examination and a section (or all) and the annexure — 1 School summary (five years, the result in
+figures, the top scorers, full scores, distinctions, the highest in each subject, A1 + A2), 2 Overall result (boys
+and girls, the aggregate bands, and the subject-wise table with the mark bands by boys and girls), 3 Result by
+category (EWS, boarders, staff wards, SC / ST / OBC / general, CWSN), 4 Subject-wise summary, 5 This year against
+last year, 6 Best five toppers, 7 Section-wise analysis (each section's subjects with the teacher), 8 Subject-wise
+analysis (each subject's sections), 9 Subject performance and 10 the ACR report (mark bands by subject and by
+teacher). The headline figures sit on top. **PDF of this annexure** or **of all annexures** prints them on the
+school's letterhead with Prepared by, Checked by and Principal boxes; **Excel workbook** saves all ten as sheets
+Annexure-1 … Annexure-10, laid out as the school's (Annexure 4 as a block a subject). The five-year rows and
+Annexure 5 fill in as earlier years' files are saved.
+
+**How the annexures count** (**Set-up → Analysis rules**, from the day it is changed): the **best five** — the best
+language and the best four other subjects (the default, as the school's 2026 workbooks), English and four, or any
+five; **distinction** from 75 marks; **pass** from 33; **grades** A1 91–100, A2 81–90, B1 71–80, B2 61–70, C1 51–60,
+C2 41–50, D from the pass marks to 40, E below (the workbooks' scale), or the grades as CBSE printed them. A subject
+CBSE lists as a candidate's compartment counts as a compartment, not a pass; marks below the pass marks are a
+failure; a candidate absent from the whole examination is in no subject's count, one absent in a subject is counted
+absent in it.
 
 ## Five common questions
 

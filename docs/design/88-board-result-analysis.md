@@ -267,3 +267,59 @@ subject); compartment, absent, withheld / later lists (with the student, section
   subjects seeded / linked / unnamed code / renamed, teachers from assignments and overrides by section and roll,
   the details sheet, refresh). Browser pass at 1440 and 375 (saved page, review with a picker, teachers with the
   dialog open, subjects): axe clean.
+
+## As built — phase C, the ten annexures (17 Nov 2026)
+
+- **Counting** (`board-analysis.ts`, pure): one saved class and year → the headline and the ten annexures, each a
+  list of tables (columns with heading groups, rows), so the screen, the workbook and the PDF print the same
+  figures. `BoardAnalysisService` loads the candidates (one section, when asked), their subjects, the school's
+  CBSE subjects (languages first, English first of them), the four years before (their headline, for the five-year
+  rows), the year before (per subject, for Annexure 5) and the teacher of each section's subject.
+- **Rules learned from the school's 2026 workbooks** (now the defaults; `exams.board_rules` setting, Set-up →
+  Analysis rules, valid from the day saved):
+  - Best five = the best language + the best four others (XII: English + the best four, the same figures).
+  - Grades counted **from the marks** on the workbooks' scale (A1 91–100, A2 81–90, B1 71–80, B2 61–70, C1 51–60,
+    C2 41–50, D pass–40, E below) — CBSE's printed grades are positional and differ; "as printed" is the other
+    choice. A grades = A1 + A2. "Total no. of division" = A1 … D (E is not a division).
+  - Distinction from 75; failure = marks under 33. A subject CBSE lists as the candidate's compartment counts as a
+    compartment, not a pass (the workbook counts it as passed — see below).
+  - A candidate absent throughout (ABST, UFM …) is registered, not appeared, and in no subject's count; one absent
+    in a subject is in that subject's total and its absent count.
+  - Bands: the overall (best-five %) ≥90, 75–89.9, 60–74.9, 45–59.9, <45; the subject table 91–100 … 41–50 and
+    33–40 (boys / girls); sections ≥90, 80–89 … 30–39, <30; ACR 0–20, 21–32, 33–40, 41–50 … 91–100.
+  - Annexure 5's "% diff": the change in the share of those who appeared, in percentage points; average: marks.
+- **Layout choices**: Annexure 1 shows the top 10 (X) / first twenty positions (XII), and for both classes full
+  scores, distinctions, the highest in each subject and A1 + A2; Annexure 3 is one table, a row a group (EWS,
+  non-EWS, boarders, day scholars, staff wards, SC, ST, OBC, general, CWSN); Annexure 7 a table a section,
+  Annexure 8 a table a subject with an all-sections line; Annexure 10 adds the bands by teacher (for the ACR).
+  Teachers sharing a section's subject are named together ("A, B").
+- **Files** (`board-analysis-file.ts`): the workbook has sheets Annexure-1 … Annexure-10 (title band, heading
+  groups merged, Annexure 4 as a block a subject, the rules line); the PDF (one annexure or all) is `tablePdf` on
+  the register letterhead, tables with the same columns run on with heading bands, A3 for the wide ones, Prepared
+  by (the user, the time) / Checked by / Principal at the end. Each export is audited.
+- **API**: `GET analysis` (classLabel, examYear, section), `GET analysis/file` (format xlsx | pdf, annexure),
+  `GET / PUT rules` (the import right changes them).
+- **Admin**: the Analysis tab — class, examination, section and annexure; six figures; the annexure's tables (the
+  first three open, the rest folded); PDF of this annexure / of all (View + Download), the Excel workbook; the old
+  per-subject table of imported rows kept in a fold. Set-up → Analysis rules. English + Hindi.
+- **Local acceptance on the school's real files** (structure only, never committed; a script in the scratchpad
+  compared every figure it could place):
+  - **Class XII: 2,671 figures equal, 38 differ**, all explained: (1) the one compartment candidate's two
+    compartment subjects — EduPro counts them as compartments, the workbook as passes (Annexures 2, 4, 5, 7, 8);
+    (2) the workbook's lowest subject band is 34–40, so a mark of 33 is in no band (EduPro: 33–40); (3) the
+    workbook's CWSN block of Annexure 3 is empty though the details sheet marks 30 CWSN students.
+  - **Class X: 681 equal, 191 differ.** The X file is CBSE's revised gazette: seven subjects (184, 085, 303, 041,
+    241, 086, 087) carry higher marks than the workbook was made from, so every figure that depends on marks
+    differs there; the counts (registered, appeared, absent, results, subject entries, boys / girls, sections) are
+    equal. Besides: two absent candidates are not in the details sheet (non-EWS 258 against 256); the workbook's
+    Annexure 3 boys / girls passed % are 0; a candidate absent in Computer Applications is counted absent there
+    (the workbook leaves them out of that subject).
+- **Found on the way**: the school's details sheet writes "EWS" / "CWSN" for yes — the reader now takes the
+  column's own word as well as Y / Yes.
+- **Tests**: unit `board-analysis.spec.ts` (6: the three best-five rules, the headline and bands, subject outcomes
+  and both grade bases, groups and categories, sections split by roll with the all-sections line and ACR by teacher,
+  five years and the year before); e2e `board-analysis.e2e-spec.ts` (5: all ten annexures of a made-up file, one
+  section, the workbook's sheets and blocks, PDFs and the audit, rules as a setting with rights and validation,
+  teachers sharing a section and a class with nothing saved); `board-details.e2e-spec.ts` now also reads the
+  EWS / CWSN words. Browser pass at 1440 and 375 (annexures 1, 2, 4, 7, 10 with a section, an empty class, Set-up):
+  axe clean.

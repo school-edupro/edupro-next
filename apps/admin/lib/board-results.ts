@@ -202,3 +202,67 @@ export const MATCH_WORD: Record<BoardReview['candidates'][number]['match'], stri
   none: 'Not found',
   not_ours: 'Not our student',
 };
+
+// ---- phase C: the annexures (docs/design/88) ----
+
+export type AnCell = string | number | null;
+export interface AnColumn {
+  key: string;
+  label: string;
+  group?: string;
+  num?: boolean;
+  width?: number;
+}
+export interface AnTable {
+  key: string;
+  title: string;
+  columns: AnColumn[];
+  rows: Array<Record<string, AnCell>>;
+  strong?: number[];
+  blocks?: boolean;
+  note?: string;
+}
+export interface Annexure {
+  no: number;
+  title: string;
+  tables: AnTable[];
+}
+export type BestFiveRule = 'language-plus-four' | 'english-plus-four' | 'any-five';
+export interface BoardRules {
+  bestFive: BestFiveRule;
+  distinction: number;
+  passMarks: number;
+  grades: 'marks' | 'printed';
+}
+export interface BoardAnalysisView {
+  classLabel: 'X' | 'XII';
+  examYear: number | null;
+  years: number[];
+  sections: string[];
+  section: string | null;
+  rules: BoardRules;
+  rulesDefault: boolean;
+  file: { id: string; fileName: string | null; savedAt: string | null } | null;
+  analysis: {
+    classLabel: 'X' | 'XII';
+    examYear: number;
+    headline: {
+      registered: number;
+      appeared: number;
+      absent: number;
+      failures: number;
+      compartments: number;
+      passed: number;
+      passPct: number | null;
+      aggregate: number | null;
+      n90: number;
+      n75: number;
+      pct90: number | null;
+      pct75: number | null;
+    };
+    annexures: Annexure[];
+  } | null;
+}
+export const BEST_FIVE: BestFiveRule[] = ['language-plus-four', 'english-plus-four', 'any-five'];
+/** The year as the school writes it: 2026 → "2025-26". */
+export const yearLabel = (y: number) => `${String(y - 1)}-${String(y).slice(2)}`;
