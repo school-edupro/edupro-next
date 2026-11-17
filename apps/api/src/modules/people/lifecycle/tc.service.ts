@@ -25,6 +25,8 @@ export interface TcRow {
   remarks: string | null;
   templateId: string | null;
   exportId: string | null;
+  /** its entry in the certificate register (the original, not a duplicate): its page and its PDF */
+  certificateId: string | null;
   status: 'issued' | 'cancelled';
   issuedBy: string | null;
   cancelledAt: string | null;
@@ -48,6 +50,7 @@ interface Db {
   remarks: string | null;
   template_id: string | null;
   export_id: string | null;
+  certificate_id: string | null;
   status: TcRow['status'];
   issued_by: string | null;
   cancelled_at: Date | null;
@@ -57,6 +60,7 @@ interface Db {
 
 const SELECT = `SELECT t.id::text, t.student_id::text, s.display_name AS student_name, s.admission_no, t.tc_no, t.serial, t.issued_on::text, t.reason,
         t.last_class, t.conduct, t.promotion_status, t.dues_cleared, t.remarks, t.template_id::text, t.export_id::text, t.status,
+        (SELECT x.id::text FROM certificates x WHERE x.transfer_certificate_id = t.id AND x.copy_no = 0 ORDER BY x.id LIMIT 1) AS certificate_id,
         u.display_name AS issued_by, t.cancelled_at, t.cancel_reason, t.created_at
    FROM transfer_certificates t JOIN students s ON s.id = t.student_id LEFT JOIN users u ON u.id = t.issued_by`;
 
@@ -76,6 +80,7 @@ const toRow = (r: Db): TcRow => ({
   remarks: r.remarks,
   templateId: r.template_id,
   exportId: r.export_id,
+  certificateId: r.certificate_id,
   status: r.status,
   issuedBy: r.issued_by,
   cancelledAt: r.cancelled_at ? r.cancelled_at.toISOString() : null,
@@ -266,7 +271,20 @@ export class TcService {
         [id, dto.reason],
       );
       // its register row (and any duplicate) with it: the number is never given again
-      await this.certificates.cancelForTc(c, id, dto.reason.length >= 3 ? dto.reason : 'Cancelled');
+      await this.certificates.cancelForTc(
+        c,
+        ctx,
+        id,
+        dto.reason.length >= 3 ? dto.reason : 'Cancelled',
+      );
+      // an old TC never in the register: its clean PDF is retired; made again it prints CANCELLED (17 Nov 2026)
+      await c.query(
+        `UPDATE exports SET expires_at = now()
+          WHERE id = (SELECT export_id FROM transfer_certificates WHERE id = $1)
+            AND status = 'ready' AND expires_at > now()
+            AND NOT EXISTS (SELECT 1 FROM certificates x WHERE x.transfer_certificate_id = $1)`,
+        [id],
+      );
       const after = (await this.find(c, id))!;
       await this.audit.stage(ctx, c, {
         action: 'people.tc.cancel',

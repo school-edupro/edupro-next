@@ -14,6 +14,7 @@ import {
 import { getTranslations } from 'next-intl/server';
 import { notFound, redirect } from 'next/navigation';
 import { ExportWatcher } from '@/components/ExportWatcher';
+import { FileLinks } from '@/components/FileLinks';
 import { Notice } from '@/components/Notice';
 import { StudentFeeRequests } from '@/components/fees/StudentFeeRequests';
 import { StudentDiscounts } from '@/components/fees/StudentDiscounts';
@@ -39,7 +40,6 @@ import {
   linkGuardian,
   generateStudentDemand,
   issueTc,
-  renderTemplateFor,
   requestProfileChange,
   setFeeProfile,
   requestWithdrawal,
@@ -49,7 +49,6 @@ import {
 } from '@/lib/actions';
 import { ApiError, apiFetch, getMe } from '@/lib/api';
 import type {
-  DocumentTemplate,
   Enrolment,
   FeeDemandSummary,
   FeeProfile,
@@ -131,25 +130,13 @@ export default async function StudentPage({
   const history = await apiFetch<{ data: StatusHistoryRow[] }>(
     `/people/students/${id}/status-history`,
   ).then((r) => r.data);
-  const [tcs, withdrawals, templates, l, certs] = await Promise.all([
+  const [tcs, withdrawals, l, certs] = await Promise.all([
     can('people.tc.view')
       ? apiFetch<{ data: TransferCertificate[] }>(`/people/students/${id}/tc`).then((r) => r.data)
       : Promise.resolve<TransferCertificate[]>([]),
     can('people.withdrawal.view')
       ? apiFetch<{ data: Withdrawal[] }>(`/people/students/${id}/withdrawals`).then((r) => r.data)
       : Promise.resolve<Withdrawal[]>([]),
-    can('platform.template.view')
-      ? apiFetch<{ data: DocumentTemplate[] }>('/platform/templates').then((r) =>
-          // certificates (TC, bonafide …) are issued and numbered in the certificate register (docs/design/87)
-          r.data.filter(
-            (x) =>
-              x.kind !== 'transfer_certificate' &&
-              x.kind !== 'bonafide' &&
-              !x.code.startsWith('cert_') &&
-              x.status === 'active',
-          ),
-        )
-      : Promise.resolve<DocumentTemplate[]>([]),
     getTranslations('lifecycle'),
     can('certificate.register.view')
       ? apiFetch<{ rows: Certificate[] }>(`/certificates/student/${id}`)
@@ -702,7 +689,18 @@ export default async function StudentPage({
                   {
                     key: 'no',
                     header: l('tcNo'),
-                    render: (x) => <a href="/people/tc">{x.tcNo}</a>,
+                    // its page in the certificate register (re-issue, duplicate, history), else the TC list
+                    render: (x) => (
+                      <a
+                        href={
+                          x.certificateId && can('certificate.register.view')
+                            ? `/certificates/${x.certificateId}`
+                            : `/people/tc?q=${encodeURIComponent(x.tcNo)}`
+                        }
+                      >
+                        {x.tcNo}
+                      </a>
+                    ),
                   },
                   { key: 'on', header: l('issuedOn'), render: (x) => x.issuedOn },
                   { key: 'reason', header: l('reason'), render: (x) => x.reason },
@@ -718,7 +716,21 @@ export default async function StudentPage({
                   {
                     key: 'pdf',
                     header: l('pdf'),
-                    render: (x) => (x.exportId ? <a href="/reports/exports">#{x.exportId}</a> : ''),
+                    // the certificate itself: View opens it, Download saves it (made again if it was cleared)
+                    render: (x) =>
+                      x.certificateId && can('certificate.register.view') ? (
+                        <FileLinks
+                          href={`/certificates/${x.certificateId}/pdf`}
+                          label={`transfer certificate ${x.tcNo}`}
+                        />
+                      ) : x.exportId ? (
+                        <FileLinks
+                          href={`/reports/exports/${x.exportId}/download`}
+                          label={`transfer certificate ${x.tcNo}`}
+                        />
+                      ) : (
+                        '—'
+                      ),
                   },
                 ]}
                 rows={tcs}
@@ -861,32 +873,6 @@ export default async function StudentPage({
                 <FormActions>
                   <Button type="submit" variant="secondary">
                     {l('requestWithdrawal')}
-                  </Button>
-                </FormActions>
-              </form>
-            ) : null}
-            {templates.length > 0 ? (
-              <form
-                action={renderTemplateFor}
-                style={{
-                  marginTop: 'var(--sp-4)',
-                  display: 'flex',
-                  gap: 'var(--sp-3)',
-                  alignItems: 'flex-end',
-                }}
-              >
-                <input type="hidden" name="entity" value="student" />
-                <input type="hidden" name="entityId" value={student.id} />
-                <input type="hidden" name="returnTo" value={`/people/students/${student.id}`} />
-                <SelectField
-                  id="docTemplate"
-                  name="templateId"
-                  label={l('pdf')}
-                  options={templates.map((x) => ({ value: x.id, label: x.name }))}
-                />
-                <FormActions>
-                  <Button type="submit" variant="ghost">
-                    {l('generatePdf')}
                   </Button>
                 </FormActions>
               </form>

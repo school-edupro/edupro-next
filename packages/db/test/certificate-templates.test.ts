@@ -1,8 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import {
   CERTIFICATE_BLOCK_CSS,
+  CERTIFICATE_MARK_CSS,
   certificateBlocks,
   certificateImageIds,
+  certificateMarkHtml,
+  markDate,
 } from '../src/certificate-blocks';
 import { CERTIFICATE_TEMPLATES, readyTemplate } from '../src/certificate-templates';
 import { renderTemplate } from '../src/template-engine';
@@ -91,6 +94,32 @@ describe('certificate blocks', () => {
       cert: { ...data.cert, revision: 2, revisedOn: '16-11-2026' },
     });
     expect(b.footer).toContain('Revision 2 · corrected on 16-11-2026');
+  });
+});
+
+describe('the word across a paper that is not a valid issued certificate (17 Nov 2026)', () => {
+  it('prints nothing for an issued one, and the word (with an escaped note) otherwise', () => {
+    expect(certificateMarkHtml(null)).toBe('');
+    const html = certificateMarkHtml('CANCELLED', 'Cancelled on <17-11-2026>');
+    expect(html).toContain('data-mark="CANCELLED"');
+    expect(html).toContain('>CANCELLED<');
+    expect(html).toContain('Cancelled on &lt;17-11-2026&gt;');
+    expect(html).toContain('aria-hidden="true"');
+    expect(certificateMarkHtml('NOT ISSUED')).not.toContain('eb-mark__note');
+    for (const w of ['PENDING', 'REJECTED'] as const)
+      expect(certificateMarkHtml(w)).toContain(`>${w}<`);
+  });
+
+  it('repeats on every page (fixed), stays on its page inside a host, and a layout cannot hide it', () => {
+    expect(CERTIFICATE_MARK_CSS).toMatch(/\.eb-mark \{ position: fixed;/);
+    expect(CERTIFICATE_MARK_CSS).toContain('.eb-mark-host > .eb-mark { position: absolute; }');
+    expect(CERTIFICATE_MARK_CSS).toContain('display: flex !important');
+    expect(CERTIFICATE_MARK_CSS).toContain('visibility: visible !important');
+  });
+
+  it('writes the day as dd-mm-yyyy', () => {
+    expect(markDate('2026-11-17')).toBe('17-11-2026');
+    expect(markDate(null)).toBe('');
   });
 });
 

@@ -353,6 +353,41 @@ describe('certificate office: bulk, awards, registers (e2e)', () => {
       ),
     );
     expect(moved.rows[0]!.n).toBe(3);
+    // one cancelled in the register while the class's file is kept (17 Nov 2026): the file is made again with its
+    // page marked, the others follow it; the cancelled one gets a PDF of its own when opened
+    const two = reg.json().rows as Array<{ id: string }>;
+    const [gone, stays] = [two[1]!.id, two[2]!.id];
+    await withMigrator(async (c) => {
+      await c.query(`UPDATE exports SET status = 'ready' WHERE id = $1`, [batch.json().id]);
+      await c.query(`UPDATE certificates SET export_id = $2 WHERE id = ANY($1::bigint[])`, [
+        [gone, stays],
+        batch.json().id,
+      ]);
+    });
+    expect((await post(`/certificates/${gone}/cancel`, { reason: 'Wrong event' })).statusCode).toBe(
+      201,
+    );
+    const links = await withMigrator((c) =>
+      c.query<{ id: string; export_id: string | null }>(
+        `SELECT id::text, export_id::text FROM certificates WHERE id = ANY($1::bigint[])`,
+        [[gone, stays]],
+      ),
+    );
+    const linkOf = (id: string) => links.rows.find((x) => x.id === id)!.export_id;
+    expect(linkOf(gone)).toBeNull();
+    const newFile = linkOf(stays)!;
+    expect(newFile).not.toBe(batch.json().id);
+    expect((await get(`/reports/exports/${newFile}`)).json().export).toMatchObject({
+      dataset: 'certificate_batch',
+      status: 'queued',
+    });
+    const followed = await withMigrator((c) =>
+      c.query<{ n: number }>(
+        `SELECT count(*)::int AS n FROM certificates_issued WHERE school_id = $1 AND export_id = $2`,
+        [school.id, newFile],
+      ),
+    );
+    expect(followed.rows[0]!.n).toBe(3);
   });
   it('keeps the TC book register and the reports, with their files', async () => {
     await withMigrator((c) =>
@@ -506,6 +541,30 @@ describe('certificate office: bulk, awards, registers (e2e)', () => {
       'Bonafide certificate · Class IX – A (1).pdf',
       'Bonafide certificate · Class IX – B (2).pdf',
     ]);
+    // one in section B cancelled (17 Nov 2026): B's PDF is made again with CANCELLED on that page, the clean one
+    // retired; A's stays; the ZIP waits for the new file
+    const [batchA, batchB] = run.json().batches as Array<{ exportId: string }>;
+    const pia = await withMigrator((c) =>
+      c.query<{ id: string }>(`SELECT id::text FROM certificates WHERE student_id = $1`, [ids.Pia]),
+    );
+    const cancel = await post(`/certificates/${pia.rows[0]!.id}/cancel`, {
+      reason: 'Issued in error',
+    });
+    expect(cancel.json()).toMatchObject({ status: 'cancelled' });
+    const after = (await get(`/certificates/runs/${runId}`)).json().batches as Array<{
+      exportId: string;
+    }>;
+    expect(after[0]!.exportId).toBe(batchA!.exportId);
+    expect(after[1]!.exportId).not.toBe(batchB!.exportId);
+    const remade = await get(`/reports/exports/${after[1]!.exportId}`);
+    expect(remade.json().export).toMatchObject({
+      dataset: 'certificate_batch_doc',
+      status: 'queued',
+    });
+    expect((await get(`/reports/exports/${batchB!.exportId}`)).json().export.status).toBe(
+      'expired',
+    );
+    expect((await get(`/certificates/runs/${runId}/zip`)).statusCode).toBe(409);
     // not another school's run
     expect((await get(`/certificates/runs/${randomRun()}`)).statusCode).toBe(404);
   });

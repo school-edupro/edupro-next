@@ -1,11 +1,14 @@
 import { Inject, Injectable } from '@nestjs/common';
 import {
   CERTIFICATE_BLOCK_CSS,
+  CERTIFICATE_MARK_CSS,
   CERTIFICATE_TEMPLATES,
   certificateBlocks,
   certificateImageIds,
+  certificateMarkHtml,
   documentHtml,
   renderTemplate,
+  type CertificateMark,
   type CertificateSign,
   type PoolClient,
 } from '@edupro/db';
@@ -674,19 +677,25 @@ export class CertificatesService {
     return { logo, images };
   }
 
-  /** The paper: the template with EduPro's blocks, on its page. */
+  /**
+   * The paper: the template with EduPro's blocks, on its page. A paper before issue carries its word across it
+   * (17 Nov 2026) - NOT ISSUED, or PENDING / REJECTED for a request's - on screen and when printed.
+   */
   private paperHtml(
     t: { body_html: string; styles_css: string; page_width: string; page_height: string },
     data: Record<string, unknown>,
     assets: { logo: string | null; images: Record<string, string> },
+    mark: CertificateMark | null = null,
   ): string {
     const qr = data.qr as { url: string; image: string } | undefined;
     return documentHtml({
-      body: renderTemplate(t.body_html, {
-        ...data,
-        blocks: certificateBlocks(data, { ...assets, qr: qr ?? null }),
-      }),
-      css: CERTIFICATE_BLOCK_CSS + t.styles_css,
+      body:
+        certificateMarkHtml(mark) +
+        renderTemplate(t.body_html, {
+          ...data,
+          blocks: certificateBlocks(data, { ...assets, qr: qr ?? null }),
+        }),
+      css: CERTIFICATE_BLOCK_CSS + t.styles_css + (mark ? CERTIFICATE_MARK_CSS : ''),
       pageWidth: t.page_width,
       pageHeight: t.page_height,
     });
@@ -929,6 +938,24 @@ export class CertificatesService {
     };
   }
 
+  /**
+   * The word across a paper before issue (17 Nov 2026): PENDING while the request it answers is with its approvers,
+   * its fee or the office; REJECTED once that request was rejected or withdrawn; else NOT ISSUED.
+   */
+  private async previewMark(c: PoolClient, requestId?: string): Promise<CertificateMark> {
+    if (!requestId) return 'NOT ISSUED';
+    const r = await c.query<{ status: string }>(
+      `SELECT status FROM certificate_requests WHERE id = $1`,
+      [requestId],
+    );
+    const status = r.rows[0]?.status;
+    return status === 'submitted' || status === 'approved'
+      ? 'PENDING'
+      : status === 'rejected' || status === 'withdrawn'
+        ? 'REJECTED'
+        : 'NOT ISSUED';
+  }
+
   /** What the certificate would print, its checks and the fields it asks for, before it is issued (nothing saved). */
   async preview(ctx: RequestContext, dto: PreviewCertificateDto) {
     const tenant = requireTenant(ctx);
@@ -939,6 +966,7 @@ export class CertificatesService {
     const ledger = await this.ledgerOf(ctx, type, dto.studentId);
     return this.db.tenant(tenant, async (c) => {
       const b = await this.build(c, ctx, type, dto, ledger, {});
+      const mark = await this.previewMark(c, dto.requestId);
       const data = {
         ...b.data,
         cert: {
@@ -991,7 +1019,9 @@ export class CertificatesService {
             ]
           : [],
         variant: dto.variant ?? type.template_id,
-        html: b.template ? this.paperHtml(b.template, data, assets) : null,
+        /** the word across the paper: it is not issued yet (PENDING / REJECTED for a request's) */
+        mark,
+        html: b.template ? this.paperHtml(b.template, data, assets, mark) : null,
         can: this.can(ctx),
       };
     });
@@ -1087,6 +1117,7 @@ export class CertificatesService {
           },
           data,
           assets,
+          'NOT ISSUED',
         ),
       };
     });
@@ -1436,7 +1467,7 @@ export class CertificatesService {
         'The certificate is already cancelled',
         { status: 409 },
       );
-    await this.cancelRows(c, id, reason);
+    await this.cancelRows(c, ctx, id, reason);
     if (x.tc && x.copy_no === 0)
       await c.query(
         `UPDATE transfer_certificates SET status = 'cancelled', cancelled_at = now(), cancelled_by = app.current_user_id(), cancel_reason = $2
@@ -1767,21 +1798,75 @@ export class CertificatesService {
   }
 
   /** The register rows of a certificate (an original takes its duplicates with it). */
-  async cancelRows(c: PoolClient, id: string, reason: string) {
-    await c.query(
+  async cancelRows(c: PoolClient, ctx: RequestContext, id: string, reason: string) {
+    const done = await c.query<{ id: string }>(
       `UPDATE certificates SET status = 'cancelled', cancelled_at = now(), cancelled_by = app.current_user_id(), cancel_reason = $2
-        WHERE (id = $1 OR original_id = $1) AND status = 'issued'`,
+        WHERE (id = $1 OR original_id = $1) AND status = 'issued'
+        RETURNING id::text`,
       [id, reason],
+    );
+    await this.retirePdfs(
+      c,
+      ctx,
+      done.rows.map((x) => x.id),
     );
   }
 
+  /**
+   * A cancelled certificate is never printed clean again (17 Nov 2026). Its own finished PDFs (each revision's too, a
+   * TC's) are retired - no longer handed out, cleared from the Export centre by the expiry job - and opened again it is
+   * made with CANCELLED across it. A batch PDF holding it (a bulk run's section, an achievement class's file) is made
+   * again at once, its page marked, and the clean one retired; the run's ZIP takes the new file. A PDF still being
+   * made needs nothing: it reads the cancel when it is made.
+   */
+  private async retirePdfs(c: PoolClient, ctx: RequestContext, ids: string[]) {
+    if (!ids.length) return;
+    const shared = await c.query<{ id: string }>(
+      `SELECT DISTINCT e.id::text FROM exports e
+        WHERE e.status = 'ready' AND e.expires_at > now()
+          AND (e.id IN (SELECT b.export_id FROM certificate_batches b WHERE b.certificate_ids && $1::bigint[])
+               OR (e.dataset = 'certificate_batch'
+                   AND e.id IN (SELECT x.export_id FROM certificates x WHERE x.id = ANY($1::bigint[]))))`,
+      [ids],
+    );
+    for (const s of shared.rows) {
+      const made = await this.reports.remakeIn(c, ctx, s.id, 'a certificate in it was cancelled');
+      await c.query(`UPDATE certificate_batches SET export_id = $2 WHERE export_id = $1`, [
+        s.id,
+        made,
+      ]);
+      // the others in an achievement class's file follow it; the cancelled ones get their own PDF when opened
+      await c.query(
+        `UPDATE certificates SET export_id = $2 WHERE export_id = $1 AND NOT (id = ANY($3::bigint[]))`,
+        [s.id, made, ids],
+      );
+    }
+    const own = await c.query<{ id: string }>(
+      `UPDATE exports e SET expires_at = now()
+        WHERE e.status = 'ready' AND e.expires_at > now()
+          AND e.dataset IN ('certificate_doc', 'certificate', 'document')
+          AND (e.id IN (SELECT export_id FROM certificates WHERE id = ANY($1::bigint[]))
+               OR e.id IN (SELECT export_id FROM certificate_revisions WHERE certificate_id = ANY($1::bigint[])))
+          AND NOT EXISTS (SELECT 1 FROM certificates y WHERE y.export_id = e.id AND y.status = 'issued')
+        RETURNING e.id::text`,
+      [ids],
+    );
+    const retired = [...own.rows.map((x) => x.id), ...shared.rows.map((x) => x.id)];
+    // opened again, its PDF is made with the word
+    if (retired.length)
+      await c.query(
+        `UPDATE certificates SET export_id = NULL WHERE id = ANY($1::bigint[]) AND export_id = ANY($2::bigint[])`,
+        [ids, retired],
+      );
+  }
+
   /** The TC's register row, when a TC is cancelled from its own screen. */
-  async cancelForTc(c: PoolClient, tcId: string, reason: string) {
+  async cancelForTc(c: PoolClient, ctx: RequestContext, tcId: string, reason: string) {
     const r = await c.query<{ id: string }>(
       `SELECT id::text FROM certificates WHERE transfer_certificate_id = $1 AND copy_no = 0`,
       [tcId],
     );
-    if (r.rows[0]) await this.cancelRows(c, r.rows[0].id, reason);
+    if (r.rows[0]) await this.cancelRows(c, ctx, r.rows[0].id, reason);
   }
 
   /**
@@ -1799,7 +1884,10 @@ export class CertificatesService {
         legacy_ref: string | null;
         has_qr: boolean;
       }>(
-        `SELECT x.export_id::text, e.status::text, x.template_version_id IS NOT NULL AS versioned, x.legacy_ref,
+        // a file past its day (or retired: the clean PDF of a certificate since cancelled) is made again
+        `SELECT x.export_id::text,
+                CASE WHEN e.status = 'ready' AND e.expires_at <= now() THEN 'expired' ELSE e.status::text END AS status,
+                x.template_version_id IS NOT NULL AS versioned, x.legacy_ref,
                 x.data ? 'qr' AS has_qr
            FROM certificates x LEFT JOIN exports e ON e.id = x.export_id WHERE x.id = $1`,
         [id],

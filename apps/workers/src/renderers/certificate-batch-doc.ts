@@ -1,7 +1,10 @@
 import {
   CERTIFICATE_BLOCK_CSS,
+  CERTIFICATE_MARK_CSS,
   certificateBlocks,
   certificateImageIds,
+  certificateMarkHtml,
+  markDate,
   renderTemplate,
   tenantForJob,
   type Db,
@@ -11,7 +14,8 @@ import type { StorageDriver } from '@edupro/storage';
 
 /**
  * The certificates of a batch (docs/design/87, phase E): each its frozen data through its template version, one a
- * page, in the batch's order (roll numbers), with the logo, the signature images and its own QR.
+ * page, in the batch's order (roll numbers), with the logo, the signature images and its own QR. A certificate
+ * cancelled since prints CANCELLED across its own page (17 Nov 2026).
  */
 export async function renderCertificateBatchDoc(
   db: Db,
@@ -31,13 +35,15 @@ export async function renderCertificateBatchDoc(
       id: string;
       data: Record<string, unknown>;
       copy_no: number;
+      status: string;
+      cancelled_on: string | null;
       body_html: string | null;
       styles_css: string | null;
       page_width: string | null;
       page_height: string | null;
       version_id: string | null;
     }>(
-      `SELECT x.id::text, x.data, x.copy_no, v.body_html, v.styles_css, v.page_width, v.page_height, v.id::text AS version_id
+      `SELECT x.id::text, x.data, x.copy_no, x.status, (x.cancelled_at AT TIME ZONE 'Asia/Kolkata')::date::text AS cancelled_on, v.body_html, v.styles_css, v.page_width, v.page_height, v.id::text AS version_id
          FROM unnest($1::bigint[]) WITH ORDINALITY AS o(id, n)
          JOIN certificates x ON x.id = o.id
          LEFT JOIN document_template_versions v ON v.id = x.template_version_id
@@ -88,7 +94,13 @@ export async function renderCertificateBatchDoc(
       };
       const qr = data.qr as { url: string; image: string } | undefined;
       data.blocks = certificateBlocks(data, { logo, images, qr: qr ?? null });
-      pages.push(`<div class="eb-page">${renderTemplate(r.body_html, data)}</div>`);
+      const mark =
+        r.status === 'cancelled'
+          ? certificateMarkHtml('CANCELLED', `Cancelled on ${markDate(r.cancelled_on)}`)
+          : '';
+      pages.push(
+        `<div class="eb-page eb-mark-host">${mark}${renderTemplate(r.body_html, data)}</div>`,
+      );
     }
     const html = `<!doctype html><html><head><meta charset="utf-8"><style>
   @page { size: ${width} ${height}; margin: 0; }
@@ -97,6 +109,7 @@ export async function renderCertificateBatchDoc(
   .eb-page:last-child { page-break-after: auto; break-after: auto; }
   ${CERTIFICATE_BLOCK_CSS}
   ${[...css.values()].join('\n')}
+  ${CERTIFICATE_MARK_CSS}
   </style></head><body>${pages.join('')}</body></html>`;
     return { html, width, height, count: pages.length };
   });

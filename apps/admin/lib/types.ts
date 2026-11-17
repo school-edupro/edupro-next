@@ -615,6 +615,8 @@ export interface TransferCertificate {
   remarks: string | null;
   templateId: string | null;
   exportId: string | null;
+  /** its entry in the certificate register: its page and its PDF */
+  certificateId: string | null;
   status: 'issued' | 'cancelled';
   issuedBy: string | null;
   cancelledAt: string | null;

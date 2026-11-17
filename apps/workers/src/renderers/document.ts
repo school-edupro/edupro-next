@@ -1,6 +1,9 @@
 import {
+  CERTIFICATE_MARK_CSS,
+  certificateMarkHtml,
   documentHtml,
   loadDocumentData,
+  markDate,
   renderTemplate,
   tenantForJob,
   type Db,
@@ -16,7 +19,8 @@ export interface RenderedDocument {
 
 /**
  * Sprint 7: fills a document template (transfer certificate, bonafide, letter) for one entity under the
- * requester's tenant context. The template's own page size wins over the renderer default.
+ * requester's tenant context. The template's own page size wins over the renderer default. A transfer certificate
+ * that was cancelled prints CANCELLED across the page, with the day (17 Nov 2026).
  */
 export async function renderDocument(
   db: Db,
@@ -39,10 +43,23 @@ export async function renderDocument(
     const template = t.rows[0];
     if (!template) throw new Error(`template ${templateId} not found`);
     const data = await loadDocumentData(c, entity, entityId);
+    let mark = '';
+    if (entity === 'transfer_certificate') {
+      const tc = await c.query<{ status: string; cancelled_on: string | null }>(
+        `SELECT status, (cancelled_at AT TIME ZONE 'Asia/Kolkata')::date::text AS cancelled_on
+           FROM transfer_certificates WHERE id = $1`,
+        [entityId],
+      );
+      if (tc.rows[0]?.status === 'cancelled')
+        mark = certificateMarkHtml(
+          'CANCELLED',
+          `Cancelled on ${markDate(tc.rows[0].cancelled_on)}`,
+        );
+    }
     return {
       html: documentHtml({
-        body: renderTemplate(template.body_html, data),
-        css: template.styles_css,
+        body: mark + renderTemplate(template.body_html, data),
+        css: template.styles_css + (mark ? CERTIFICATE_MARK_CSS : ''),
         pageWidth: template.page_width,
         pageHeight: template.page_height,
       }),

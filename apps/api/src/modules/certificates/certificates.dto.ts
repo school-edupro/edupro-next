@@ -41,6 +41,8 @@ const PreviewBase = z.object({
   reissueOf: IdSchema.optional(),
   /** the person's details the layout prints, as the boxes hold them (17 Nov 2026): on this certificate only */
   person: PersonDetails,
+  /** the request it answers (phase C): approved, its fee paid or waived; the preview reads PENDING / REJECTED by it */
+  requestId: IdSchema.optional(),
 });
 const onePerson = (v: { studentId?: string; employeeId?: string }) =>
   !(v.studentId && v.employeeId);
@@ -52,8 +54,6 @@ export class PreviewCertificateDto extends createZodDto(PreviewCertificateSchema
 export const IssueCertificateSchema = PreviewBase.extend({
   /** the principal's reason to issue although a check fails */
   overrideReason: z.string().trim().min(10, 'at least 10 characters').max(300).optional(),
-  /** the request it answers (phase C): approved, its fee paid or waived */
-  requestId: IdSchema.optional(),
 }).refine(onePerson, { message: 'a student or an employee, not both' });
 export class IssueCertificateDto extends createZodDto(IssueCertificateSchema) {}
 

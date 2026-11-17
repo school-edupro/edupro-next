@@ -567,6 +567,24 @@ describe('daily academics and student lifecycle (e2e)', () => {
       lastClass: 'VI-B',
     });
     expect(tc.json().exportId).toMatch(/^\d+$/);
+    // the row names its certificate in the register: the student page's TC no. and PDF open that certificate
+    expect(tc.json().certificateId).toMatch(/^\d+$/);
+    const listed = await inject({
+      method: 'GET',
+      url: `/people/students/${studentB}/tc`,
+      headers: h,
+    });
+    expect(listed.json().data[0]).toMatchObject({
+      tcNo: 'TC/2026-27/00001',
+      certificateId: tc.json().certificateId,
+    });
+    const pdf = await inject({
+      method: 'POST',
+      url: `/certificates/${tc.json().certificateId}/pdf`,
+      headers: h,
+    });
+    expect(pdf.statusCode).toBe(201);
+    expect(pdf.json().exportId).toMatch(/^\d+$/);
     const student = await inject({
       method: 'GET',
       url: `/people/students/${studentB}`,

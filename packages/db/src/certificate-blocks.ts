@@ -37,6 +37,43 @@ const esc = (v: unknown): string =>
 const obj = (v: unknown): Record<string, unknown> =>
   v && typeof v === 'object' && !Array.isArray(v) ? (v as Record<string, unknown>) : {};
 
+/**
+ * The word across a paper that is not a valid issued certificate (17 Nov 2026), on screen and on paper: CANCELLED (a
+ * cancelled certificate, with the day), PENDING (a request still with its approvers, its fee or the office), REJECTED
+ * (a request rejected or withdrawn), NOT ISSUED (any other paper before issue: the Issue page's preview, a layout's).
+ */
+export type CertificateMark = 'CANCELLED' | 'PENDING' | 'REJECTED' | 'NOT ISSUED';
+
+/**
+ * The mark's CSS, kept apart so a paper that does not carry the blocks (a certificate from the achievement module, an
+ * old TC printed from its template) carries it too. Fixed, so a paper of two pages has it on each; inside a host (one
+ * page of a batch PDF) it stays on that page. The template's own CSS cannot hide it: it comes last.
+ */
+export const CERTIFICATE_MARK_CSS = `
+.eb-mark { position: fixed; top: 0; left: 0; right: 0; bottom: 0; display: flex !important; flex-direction: column; align-items: center; justify-content: center; pointer-events: none; z-index: 2147483000 !important; transform: rotate(-30deg); visibility: visible !important; opacity: 1 !important; }
+.eb-mark__word { font-family: Arial, sans-serif; font-size: 70pt; font-weight: 800; letter-spacing: 0.06em; white-space: nowrap; color: rgba(180, 35, 24, 0.2); border: 5pt solid rgba(180, 35, 24, 0.2); border-radius: 4mm; padding: 1mm 7mm; line-height: 1.1; }
+.eb-mark__note { font-family: Arial, sans-serif; font-size: 15pt; font-weight: 700; color: rgba(180, 35, 24, 0.35); margin-top: 3mm; white-space: nowrap; }
+.eb-mark-host { position: relative; }
+.eb-mark-host > .eb-mark { position: absolute; }
+`;
+
+/** The mark's HTML ('' for a valid issued certificate); `note` is a short line under the word ("Cancelled on …"). */
+export function certificateMarkHtml(
+  mark: CertificateMark | null | undefined,
+  note?: string | null,
+): string {
+  if (!mark) return '';
+  return `<div class="eb-mark" aria-hidden="true" data-mark="${esc(mark)}"><div class="eb-mark__word">${esc(mark)}</div>${
+    note ? `<div class="eb-mark__note">${esc(note)}</div>` : ''
+  }</div>`;
+}
+
+/** "2026-11-17" → "17-11-2026" (the note under CANCELLED). */
+export function markDate(iso: string | null | undefined): string {
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso ?? '');
+  return m ? `${m[3]}-${m[2]}-${m[1]}` : '';
+}
+
 /** The CSS every certificate carries for its blocks (the template's own CSS comes after and may change it). */
 export const CERTIFICATE_BLOCK_CSS = `
 .eb-head { display: flex; align-items: center; gap: 6mm; border-bottom: 2px solid #0b1f3a; padding-bottom: 4mm; }

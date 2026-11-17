@@ -86,7 +86,9 @@ const toRow = (x: ExportDbRow): ExportRow => ({
   format: x.format,
   title: x.title,
   params: x.params,
-  status: x.status,
+  // past its day and not yet swept by the expiry job (or retired early: a cancelled certificate's clean PDF, 17 Nov
+  // 2026): no longer handed out, and it may be made again
+  status: x.status === 'ready' && x.expires_at.getTime() <= Date.now() ? 'expired' : x.status,
   fileId: x.file_id,
   rowCount: x.row_count,
   error: x.error,
@@ -520,6 +522,39 @@ export class ReportsService {
       });
       return again;
     });
+  }
+
+  /**
+   * A kept document made again inside the caller's transaction (17 Nov 2026: a batch PDF holding a certificate just
+   * cancelled, so its page prints CANCELLED): the same dataset, parameters and title, kept as long as the first; the
+   * first is retired (cleared by the expiry job, no longer handed out). An achievement batch's certificates move to
+   * the new file, as with Make again; the caller moves its own links. Returns the new export's id.
+   */
+  async remakeIn(c: PoolClient, ctx: RequestContext, id: string, why: string): Promise<string> {
+    const r = await c.query<{ id: string; dataset: string }>(
+      `INSERT INTO exports (school_id, dataset, format, params, title, requested_by, request_id, expires_at)
+       SELECT school_id, dataset, format, params, title, app.current_user_id(), app.current_request_id(),
+              GREATEST(expires_at, now() + interval '7 days')
+         FROM exports WHERE id = $1
+       RETURNING id::text, dataset`,
+      [id],
+    );
+    const made = r.rows[0];
+    if (!made) throw new DomainError('not-found', 'Export not found');
+    await c.query(`UPDATE exports SET expires_at = LEAST(expires_at, now()) WHERE id = $1`, [id]);
+    if (made.dataset === 'certificate_batch')
+      await c.query(`UPDATE certificates_issued SET export_id = $2 WHERE export_id = $1`, [
+        id,
+        made.id,
+      ]);
+    await this.outbox.enqueue(c, ctx, QUEUES.exports, 'export.generate', { exportId: made.id });
+    await this.audit.stage(ctx, c, {
+      action: 'reports.export.again',
+      entityType: 'exports',
+      entityId: made.id,
+      after: { id: made.id, againOf: id, dataset: made.dataset, why },
+    });
+    return made.id;
   }
 
   /**

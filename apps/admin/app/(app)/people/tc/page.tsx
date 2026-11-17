@@ -1,5 +1,6 @@
 import { Badge, Button, Card, DataTable, InputField, PageHeader, SelectField } from '@edupro/ui';
 import { getTranslations } from 'next-intl/server';
+import { FileLinks } from '@/components/FileLinks';
 import { Notice } from '@/components/Notice';
 import { cancelTc, renderTc } from '@/lib/actions';
 import { apiFetch, getMe } from '@/lib/api';
@@ -25,6 +26,7 @@ export default async function TcPage({
     getMe(),
   ]);
   const canIssue = me.permissions.includes('people.tc.issue');
+  const canRegister = me.permissions.includes('certificate.register.view');
   const query = new URLSearchParams({ size: '100' });
   if (sp.q) query.set('q', sp.q);
   if (sp.status) query.set('status', sp.status);
@@ -36,7 +38,7 @@ export default async function TcPage({
         title={t('title')}
         description={t('description')}
         actions={
-          me.permissions.includes('certificate.register.view') ? (
+          canRegister ? (
             <a className="ep-btn ep-btn--secondary ep-btn--sm" href="/certificates?type=TC">
               Certificate register
             </a>
@@ -74,7 +76,18 @@ export default async function TcPage({
           caption={t('title')}
           density="dense"
           columns={[
-            { key: 'no', header: l('tcNo'), render: (x) => <strong>{x.tcNo}</strong> },
+            {
+              key: 'no',
+              header: l('tcNo'),
+              render: (x) =>
+                x.certificateId && canRegister ? (
+                  <a href={`/certificates/${x.certificateId}`}>
+                    <strong>{x.tcNo}</strong>
+                  </a>
+                ) : (
+                  <strong>{x.tcNo}</strong>
+                ),
+            },
             {
               key: 'student',
               header: l('student'),
@@ -98,11 +111,18 @@ export default async function TcPage({
             {
               key: 'pdf',
               header: l('pdf'),
+              // the certificate itself: View opens it, Download saves it (made again if it was cleared)
               render: (x) =>
-                x.exportId ? (
-                  <a href={`/reports/exports?highlight=${x.exportId}`}>
-                    {l('pdf')} #{x.exportId}
-                  </a>
+                x.certificateId && canRegister ? (
+                  <FileLinks
+                    href={`/certificates/${x.certificateId}/pdf`}
+                    label={`transfer certificate ${x.tcNo}`}
+                  />
+                ) : x.exportId ? (
+                  <FileLinks
+                    href={`/reports/exports/${x.exportId}/download`}
+                    label={`transfer certificate ${x.tcNo}`}
+                  />
                 ) : canIssue && x.status === 'issued' ? (
                   <form action={renderTc}>
                     <input type="hidden" name="id" value={x.id} />

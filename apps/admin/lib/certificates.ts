@@ -149,6 +149,8 @@ export interface CertificatePreview {
   /** the student's withdrawal, when one is open or done (a TC's checks clear there) */
   withdrawal?: { id: string; leavingOn: string | null } | null;
   problems: string[];
+  /** the word across the paper before issue: NOT ISSUED, or PENDING / REJECTED for a request's */
+  mark?: 'NOT ISSUED' | 'PENDING' | 'REJECTED';
   html: string | null;
   can: CertificateCan;
 }

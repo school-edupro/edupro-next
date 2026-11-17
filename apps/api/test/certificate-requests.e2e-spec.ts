@@ -186,6 +186,18 @@ describe('certificate requests (e2e)', () => {
       channel: 'parent',
       copies: 2,
     });
+    // its paper before issue reads PENDING while the request waits (17 Nov 2026)
+    const markOf = async (requestId: string, typeCode = 'BONAFIDE') =>
+      (
+        await post(
+          '/certificates/preview',
+          { typeCode, studentId: kids.anu, purpose: 'Passport application', requestId },
+          office,
+        )
+      ).json() as { mark: string; html: string };
+    const waiting = await markOf(req.id);
+    expect(waiting.mark).toBe('PENDING');
+    expect(waiting.html).toContain('data-mark="PENDING"');
     // the parent cannot decide; the office can
     expect(
       (await post(`/certificate-requests/${req.id}/decide`, { decision: 'approve' }, parent))
@@ -197,6 +209,7 @@ describe('certificate requests (e2e)', () => {
       office,
     );
     expect(ok.json()).toMatchObject({ status: 'approved', stage: 'ready' });
+    expect((await markOf(req.id)).mark).toBe('PENDING');
     // issued against the request
     const issued = await post(
       '/certificates/issue',
@@ -551,6 +564,16 @@ describe('certificate requests (e2e)', () => {
       ),
     );
     expect(inst.rows[0]!.status).toBe('cancelled');
+    // the paper of a rejected or withdrawn request reads REJECTED (17 Nov 2026)
+    for (const id of [sid, cid]) {
+      const pv = await post(
+        '/certificates/preview',
+        { typeCode: 'CHARACTER', studentId: kids.anu, purpose: 'Scholarship', requestId: id },
+        office,
+      );
+      expect(pv.json().mark).toBe('REJECTED');
+      expect(pv.json().html).toContain('data-mark="REJECTED"');
+    }
     // a student cannot ask for the TC; staff cannot ask for a student type
     expect(
       (

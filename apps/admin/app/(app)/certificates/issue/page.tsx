@@ -129,6 +129,8 @@ export default async function IssueCertificatePage({
           fields,
           person,
           ...(original && !reissueBlocked ? { reissueOf: original.id } : {}),
+          // the paper reads PENDING / REJECTED by the request it answers (else NOT ISSUED)
+          ...(requestId ? { requestId } : {}),
         }),
       });
     } catch (e) {

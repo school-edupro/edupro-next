@@ -230,6 +230,9 @@ describe('certificate register (e2e)', () => {
     expect(html).toContain('daughter of');
     expect(html).toContain('Ninth March two thousand thirteen');
     expect(html).toContain('BON/2026-27/(next)');
+    // not issued yet: the word across it, on screen and when printed (17 Nov 2026)
+    expect(p.json().mark).toBe('NOT ISSUED');
+    expect(html).toContain('data-mark="NOT ISSUED"');
     const list = await inject({ method: 'GET', url: '/certificates', headers: h() });
     expect(list.json().total).toBe(0);
   });
@@ -616,6 +619,21 @@ describe('certificate register (e2e)', () => {
   });
 
   it('cancels a TC with its duplicates and its TC row; the number stays used', async () => {
+    // the PDFs made at issue (the workers would have made them by now): ready, kept for good
+    const before = await withMigrator((c) =>
+      c.query<{ export_id: string | null }>(
+        `SELECT export_id::text FROM certificates WHERE id = $1 OR original_id = $1`,
+        [tc.id],
+      ),
+    );
+    const made = before.rows.map((x) => x.export_id).filter((x): x is string => !!x);
+    expect(made.length).toBeGreaterThan(0);
+    await withMigrator((c) =>
+      c.query(
+        `UPDATE exports SET status = 'ready', expires_at = now() + interval '100 years' WHERE id = ANY($1::bigint[])`,
+        [made],
+      ),
+    );
     const c = await inject({
       method: 'POST',
       url: `/certificates/${tc.id}/cancel`,
@@ -634,7 +652,26 @@ describe('certificate register (e2e)', () => {
       url: `/people/students/${pupils.dev}/tc`,
       headers: h(),
     });
-    expect(tcs.json().data[0]).toMatchObject({ status: 'cancelled' });
+    expect(tcs.json().data[0]).toMatchObject({ status: 'cancelled', certificateId: tc.id });
+    // never printed clean again (17 Nov 2026): the clean PDFs are retired - no longer handed out - and opened again
+    // the certificate's PDF is made anew (the workers print CANCELLED across it)
+    const after = await withMigrator((c) =>
+      c.query<{ export_id: string | null }>(
+        `SELECT export_id::text FROM certificates WHERE id = $1 OR original_id = $1`,
+        [tc.id],
+      ),
+    );
+    expect(after.rows.every((x) => x.export_id === null)).toBe(true);
+    const old = await inject({ method: 'GET', url: `/reports/exports/${made[0]!}`, headers: h() });
+    expect(old.json().export.status).toBe('expired');
+    expect(old.json().download).toBeNull();
+    const fresh = await inject({
+      method: 'POST',
+      url: `/certificates/${tc.id}/pdf`,
+      headers: h(office),
+    });
+    expect(fresh.json().ready).toBe(false);
+    expect(made).not.toContain(fresh.json().exportId);
     const twice = await inject({
       method: 'POST',
       url: `/certificates/${tc.id}/cancel`,

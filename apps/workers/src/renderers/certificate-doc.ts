@@ -1,8 +1,11 @@
 import {
   CERTIFICATE_BLOCK_CSS,
+  CERTIFICATE_MARK_CSS,
   certificateBlocks,
   certificateImageIds,
+  certificateMarkHtml,
   documentHtml,
+  markDate,
   renderTemplate,
   tenantForJob,
   type Db,
@@ -12,7 +15,8 @@ import type { StorageDriver } from '@edupro/storage';
 
 /**
  * One certificate of the register (docs/design/87): its frozen data through the template version it was made with —
- * a reprint is the same paper whatever changed since — with the school's logo and, on a duplicate, DUPLICATE.
+ * a reprint is the same paper whatever changed since — with the school's logo and, on a duplicate, DUPLICATE. A
+ * cancelled one prints CANCELLED across every page, with the day (17 Nov 2026).
  */
 export async function renderCertificateDoc(
   db: Db,
@@ -25,6 +29,8 @@ export async function renderCertificateDoc(
     const r = await c.query<{
       data: Record<string, unknown>;
       copy_no: number;
+      status: string;
+      cancelled_on: string | null;
       body_html: string | null;
       styles_css: string | null;
       page_width: string | null;
@@ -32,7 +38,7 @@ export async function renderCertificateDoc(
       logo_key: string | null;
       logo_type: string | null;
     }>(
-      `SELECT x.data, x.copy_no, v.body_html, v.styles_css, v.page_width, v.page_height,
+      `SELECT x.data, x.copy_no, x.status, (x.cancelled_at AT TIME ZONE 'Asia/Kolkata')::date::text AS cancelled_on, v.body_html, v.styles_css, v.page_width, v.page_height,
               f.object_key AS logo_key, f.content_type AS logo_type
          FROM certificates x
          LEFT JOIN document_template_versions v ON v.id = x.template_version_id
@@ -81,8 +87,11 @@ export async function renderCertificateDoc(
     const height = row.page_height ?? '297mm';
     return {
       html: documentHtml({
-        body: renderTemplate(row.body_html, data),
-        css: CERTIFICATE_BLOCK_CSS + (row.styles_css ?? ''),
+        body:
+          (row.status === 'cancelled'
+            ? certificateMarkHtml('CANCELLED', `Cancelled on ${markDate(row.cancelled_on)}`)
+            : '') + renderTemplate(row.body_html, data),
+        css: CERTIFICATE_BLOCK_CSS + (row.styles_css ?? '') + CERTIFICATE_MARK_CSS,
         pageWidth: width,
         pageHeight: height,
       }),
