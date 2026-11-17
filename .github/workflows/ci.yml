@@ -149,6 +149,16 @@ jobs:
           for i in $(seq 1 60); do curl -sf http://localhost:4000/api/v1/health && curl -sf http://localhost:3000/login >/dev/null && break; sleep 2; done
       - name: Smoke
         run: pnpm --filter @edupro/admin e2e
+      # the servers' last errors as notes on the run (annotations), readable without signing in to GitHub
+      - name: Server errors as notes
+        if: failure()
+        run: |
+          for f in /tmp/api.log /tmp/admin.log; do
+            [ -f "$f" ] || continue
+            grep -E '"level":(50|60)|Error|error|ERR' "$f" | tail -n 8 | cut -c1-1500 \
+              | sed -e 's/%/%25/g' -e 's/\r/%0D/g' \
+              | while IFS= read -r line; do echo "::warning title=$(basename "$f")::$line"; done
+          done
       - uses: actions/upload-artifact@v4
         if: failure()
         with:
