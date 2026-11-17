@@ -1,4 +1,4 @@
-import { amountInWords, type PoolClient } from '@edupro/db';
+import { amountInWords, decryptField, maskValue, type PoolClient } from '@edupro/db';
 
 /**
  * What a certificate prints (docs/design/87, "the field catalogue"): the school, the student (identity, parents, the
@@ -209,6 +209,11 @@ export async function studentData(
       father: string | null;
       mother: string | null;
       guardian: string | null;
+      secure: Record<string, unknown> | null;
+      father_secure: Record<string, unknown> | null;
+      mother_secure: Record<string, unknown> | null;
+      contact_mobile: string | null;
+      contact_email: string | null;
       class_id: string | null;
       class_code: string | null;
       class_name: string | null;
@@ -220,7 +225,15 @@ export async function studentData(
       admission_class: string | null;
     }>(
       `SELECT s.id::text, s.display_name AS name, s.first_name, s.admission_no, s.gender::text, s.dob::text, s.category,
-              s.house, s.admitted_on::text, s.left_on::text, s.status::text, s.profile, s.address,
+              s.house, s.admitted_on::text, s.left_on::text, s.status::text, s.profile, s.address, s.secure,
+              (SELECT g.secure FROM student_guardians sg JOIN guardians g ON g.id = sg.guardian_id
+                WHERE sg.student_id = s.id AND sg.relation = 'father' ORDER BY sg.is_primary DESC, sg.id LIMIT 1) AS father_secure,
+              (SELECT g.secure FROM student_guardians sg JOIN guardians g ON g.id = sg.guardian_id
+                WHERE sg.student_id = s.id AND sg.relation = 'mother' ORDER BY sg.is_primary DESC, sg.id LIMIT 1) AS mother_secure,
+              (SELECT g.mobile FROM student_guardians sg JOIN guardians g ON g.id = sg.guardian_id
+                WHERE sg.student_id = s.id AND g.mobile IS NOT NULL ORDER BY sg.is_primary DESC, sg.id LIMIT 1) AS contact_mobile,
+              (SELECT g.email FROM student_guardians sg JOIN guardians g ON g.id = sg.guardian_id
+                WHERE sg.student_id = s.id AND g.email IS NOT NULL ORDER BY sg.is_primary DESC, sg.id LIMIT 1) AS contact_email,
               (SELECT g.display_name FROM student_guardians sg JOIN guardians g ON g.id = sg.guardian_id
                 WHERE sg.student_id = s.id AND sg.relation = 'father' ORDER BY sg.is_primary DESC, sg.id LIMIT 1) AS father,
               (SELECT g.display_name FROM student_guardians sg JOIN guardians g ON g.id = sg.guardian_id
@@ -262,20 +275,21 @@ export async function studentData(
       ).rows[0]
     : undefined;
   // the subjects the student chose that year; else the class's compulsory subjects
-  const subjects = s.year_id
-    ? (
-        await c.query<{ names: string | null }>(
+  const subjectList = s.year_id
+    ? ((
+        await c.query<{ names: string[] | null }>(
           `SELECT COALESCE(
-                    (SELECT string_agg(sub.name, ', ' ORDER BY sub.display_order, sub.name)
+                    (SELECT array_agg(sub.name ORDER BY sub.display_order, sub.name)
                        FROM student_subjects ss JOIN subjects sub ON sub.id = ss.subject_id
                       WHERE ss.student_id = $1 AND ss.academic_year_id = $2),
-                    (SELECT string_agg(sub.name, ', ' ORDER BY cs.sort_order, sub.display_order, sub.name)
+                    (SELECT array_agg(sub.name ORDER BY cs.sort_order, sub.display_order, sub.name)
                        FROM class_subjects cs JOIN subjects sub ON sub.id = cs.subject_id
                       WHERE cs.class_id = $3 AND cs.academic_year_id = $2 AND NOT cs.is_elective)) AS names`,
           [studentId, s.year_id, s.class_id],
         )
-      ).rows[0]?.names
-    : null;
+      ).rows[0]?.names ?? [])
+    : [];
+  const subjects = subjectList.length ? subjectList.join(', ') : null;
   // the fee facts: the month every demand is paid to (the last period wholly paid), and any concession
   const fees = (
     await c.query<{ paid_to: string | null; concession: string | null }>(
@@ -330,6 +344,25 @@ export async function studentData(
       academicYear: s.year_code ?? '',
       address: addressLine(s.address),
       ...pronouns(s.gender),
+      // the Board exam registration form's details (17 Nov 2026)
+      sex: s.gender === 'male' ? 'M' : s.gender === 'female' ? 'F' : s.gender ? 'Other' : '',
+      mobile: s.contact_mobile ?? (str('sms_mobile') || str('whatsapp_no')),
+      email: str('primary_email') || (s.contact_email ?? ''),
+      familyIncome: incomeOf(p.family_income),
+      cwsn: cwsnOf(str('cwsn'), str('type_of_disability')),
+      singleChild: yesNo(p.single_child),
+      minority: minorityOf(str('religion')),
+      // Aadhaar only ever masked to its last four digits (UIDAI): the full number is never on a paper
+      aadhaar: maskedAadhaar(s.secure),
+      fatherAadhaar: maskedAadhaar(s.father_secure),
+      motherAadhaar: maskedAadhaar(s.mother_secure),
+      // the subjects of the year one by one: five, then an additional one
+      subject1: subjectList[0] ?? '',
+      subject2: subjectList[1] ?? '',
+      subject3: subjectList[2] ?? '',
+      subject4: subjectList[3] ?? '',
+      subject5: subjectList[4] ?? '',
+      additionalSubject: subjectList.slice(5).join(', '),
     },
     attendance: {
       workingDays: att?.working ?? 0,
@@ -339,6 +372,48 @@ export async function studentData(
     subjects: subjects ?? '',
     fees: { paidTo: fees?.paid_to ?? '', concession: fees?.concession ?? 'No' },
   };
+}
+
+/** An Aadhaar number from a secure profile, masked to its last four digits (XXXX-XXXX-1234), or ''. */
+export function maskedAadhaar(secure: Record<string, unknown> | null | undefined): string {
+  const stored = secure?.aadhaar_no;
+  if (typeof stored !== 'string' || !stored) return '';
+  const plain = (decryptField(stored) ?? '').replace(/\D/g, '');
+  return plain.length >= 4 ? maskValue(plain, 'digits12') : '';
+}
+/** Any typed Aadhaar number masked the same way (the full number is never printed). */
+export const maskAadhaarText = (v: string): string => {
+  const d = v.replace(/\D/g, '');
+  return d.length >= 4 ? maskValue(d, 'digits12') : v;
+};
+
+/** The religions notified as minorities (the National Commission for Minorities Act): a Yes with the religion. */
+const MINORITIES = ['Muslim', 'Sikh', 'Jain', 'Buddhist', 'Christian', 'Parsi'];
+function minorityOf(religion: string): string {
+  if (!religion) return '';
+  const r = religion.trim().toLowerCase();
+  const m = MINORITIES.find(
+    (x) =>
+      r === x.toLowerCase() ||
+      (x === 'Parsi' && /zoroastrian|parsee/.test(r)) ||
+      (x === 'Muslim' && r === 'islam'),
+  );
+  return m ? `Yes — ${m}` : 'No';
+}
+function cwsnOf(cwsn: string, kind: string): string {
+  if (!cwsn) return '';
+  return /^y/i.test(cwsn) ? `Yes${kind ? ` — ${kind}` : ''}` : 'No';
+}
+function yesNo(v: unknown): string {
+  if (v === true || (typeof v === 'string' && /^y/i.test(v))) return 'Yes';
+  if (v === false || (typeof v === 'string' && /^n/i.test(v))) return 'No';
+  return '';
+}
+function incomeOf(v: unknown): string {
+  if (typeof v === 'number') return `₹${v.toLocaleString('en-IN')}`;
+  if (typeof v === 'string' && /^\d+(\.\d+)?$/.test(v.trim()))
+    return `₹${Number(v).toLocaleString('en-IN')}`;
+  return typeof v === 'string' ? v.trim() : '';
 }
 
 /** What the student paid in a year, by fee head (the fee paid certificate). */

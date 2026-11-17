@@ -277,7 +277,12 @@ a type with no template) and four sections:
    - **Details asked at issue** — the school's own details for the office to fill (each a label, a kind —
      text, date, number or a list — and required or not).
    - **More** — a note for the office, the place in lists and the fixed code.
-3. **Templates** — the layouts certificates print with. The list shows six figures, a search, and two
+3. **Templates** — the layouts certificates print with. **For students or for staff**: every layout is
+   marked **For students** or **For staff** — the side of the certificate type that uses it (set when the type
+   is made: a student certificate prints a student's details, a staff one an employee's), or, for a layout no
+   type uses yet, the details it prints (**Either** when it prints neither). **All / For students / For staff**
+   above the list filters it; **Use for a type** offers only types of the layout's side, and a layout's page
+   shows the sample and **Insert a detail** of its side only. The list shows six figures, a search, and two
    tables:
    - **Used by a certificate type**: a type prints with it — issuing that certificate uses this paper.
      Changing it changes certificates issued from then on; those already issued keep their paper.
@@ -333,3 +338,19 @@ it: IT sets the server's read-only connection.
 A brought certificate sits in the register marked **Old system**. It can't be changed, but it can be printed
 again (with a line saying it comes from the old system), given a duplicate or cancelled. Its QR check says the
 same.
+
+## Board exam registration form (Class X and XII)
+
+The circular a school gives each Board candidate's parents before registering them with the Board: **Board
+exam registration form**, a student certificate for classes X and XII (one a student a year, numbered
+`BEF/<year>/00001`). Its layout (Templates → **Board exam registration form**, For students): the letterhead;
+**Ref** (the number), **CIRCULAR**, **Dated**; the opening lines with the year of the examination, the date to
+return it by and the examination fee (typed at issue, the same for a class); **Candidate's details** — name,
+sex, admission no., class, mother's and father's names, date of birth, APAAR ID, mobile and e-mail (the primary
+guardian's), annual income, the **Aadhaar numbers of the child, father and mother — only ever masked to the last
+four digits** (XXXX-XXXX-1234), differently abled, single child, category, minority (Yes and the religion for
+Muslim, Sikh, Jain, Buddhist, Christian, Parsi); **Subjects offered** — the student's subjects of the year, I to
+V and an additional one; the parents' signature lines and the date; a note. What the record holds is printed;
+what it does not is a line for the parents to fill. Every detail can be changed for that form at issue (an
+Aadhaar typed there is masked too). Print it for one student (Issue), for a whole section (Bulk issue), or from
+Excel. Change its wording like any layout (Templates → Edit).

@@ -126,7 +126,15 @@ export default async function CertificateTemplatePage({
         <Notice params={sp} />
       )}
       <p className="ep-ctpl__usedby">
-        <span className="ep-field__label">Used by</span>{' '}
+        <span className="ep-field__label">For</span>{' '}
+        {t.audience === 'STUDENT' ? (
+          <Badge tone="info">Students</Badge>
+        ) : t.audience === 'STAFF' ? (
+          <Badge tone="success">Staff</Badge>
+        ) : (
+          <Badge tone="neutral">Students or staff</Badge>
+        )}{' '}
+        <span className="ep-field__label">· Used by</span>{' '}
         {t.usedBy.map((u) => (
           <a key={u.code} className="ep-ctpl__chip" href={`/certificates/setup/types/${u.code}`}>
             {u.name}

@@ -323,9 +323,10 @@ const DEFAULT_REQUESTS: Record<string, unknown> = {
       },
     ]),
   ),
-  // the award certificates are issued by the office from the awards, not asked for
+  // the award certificates are issued by the office from the awards, not asked for; the Board form by the office to
+  // a class
   ...Object.fromEntries(
-    ['ACHIEVEMENT', 'MERIT', 'PARTICIPATION', 'AWARD'].map((k) => [
+    ['ACHIEVEMENT', 'MERIT', 'PARTICIPATION', 'AWARD', 'BOARD_FORM'].map((k) => [
       k,
       {
         open: { parent: false, student: false, staff: false },

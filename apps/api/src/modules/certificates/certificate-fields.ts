@@ -129,6 +129,34 @@ export const TYPE_FIELDS: Record<string, FieldSpec[]> = {
       hint: 'e.g. National Means-cum-Merit Scholarship 2026-27',
     },
   ],
+  // the Board exam registration form (17 Nov 2026): the circular's own lines, the same for a class
+  BOARD_FORM: [
+    {
+      key: 'examYear',
+      label: 'Year of the Board examination',
+      kind: 'text',
+      required: true,
+      hint: 'e.g. 2027',
+    },
+    {
+      key: 'lastDate',
+      label: 'Last date to return the form',
+      kind: 'date',
+      required: true,
+    },
+    {
+      key: 'fee',
+      label: 'Examination fee (printed as written)',
+      kind: 'text',
+      hint: 'e.g. ₹1,500; ₹300 for an additional subject; ₹150 for each practical subject',
+    },
+    {
+      key: 'note',
+      label: 'Note at the foot',
+      kind: 'text',
+      hint: 'e.g. Please attach a photocopy of the Class X marksheet.',
+    },
+  ],
   BOARD_REG: [
     { key: 'board', label: 'Board', kind: 'text', required: true },
     { key: 'registrationNo', label: 'Registration no.', kind: 'text', required: true },
@@ -196,6 +224,16 @@ export function fieldDefaults(
       return { conduct: 'Good', remark: '' };
     case 'DOB_JUST':
       return { basis: 'the birth certificate', remark: '' };
+    case 'BOARD_FORM': {
+      // the Board examination of a year 2026-27 is held in 2027
+      const end = /^(\d{4})-(\d{2})$/.exec(String(d.year ?? ''));
+      return {
+        examYear: end ? `${end[1]!.slice(0, 2)}${end[2]!}` : '',
+        lastDate: '',
+        fee: '',
+        note: '',
+      };
+    }
     case 'BOARD_REG':
       return {
         board: d.board ?? '',

@@ -169,7 +169,7 @@ export type CertificatePrinted = Record<string, { label: string; record: string;
 
 /** The person's printed details travel as per_<path> (per_student.fatherName). */
 export const PERSON_PREFIX = 'per_';
-export const PERSON_PATH = /^(student|employee|tc)\.[a-zA-Z]{2,30}$/;
+export const PERSON_PATH = /^(student|employee|tc)\.[a-zA-Z][a-zA-Z0-9]{1,30}$/;
 /** The boxes of the person's details, from a form or the address: path → value. */
 export function personFrom(entries: Iterable<[string, unknown]>): Record<string, string> {
   const out: Record<string, string> = {};
@@ -246,6 +246,8 @@ export interface CertificateTemplateRow {
   ready: boolean;
   updatedAt: string;
   usedBy: string[];
+  /** whom it is for: the side of the types using it, else what it prints (17 Nov 2026) */
+  audience?: 'STUDENT' | 'STAFF' | null;
   made: number;
   /** printed by Parent engagement → Achievement certificates, which picks a layout itself */
   screenMade?: number;
@@ -350,6 +352,8 @@ export interface CertificateTemplateDetail {
   version: number;
   ready: boolean;
   usedBy: Array<{ code: string; name: string }>;
+  /** whom it is for (17 Nov 2026): its sample and details are of that side only */
+  audience?: 'STUDENT' | 'STAFF' | null;
   /** printed by Parent engagement → Achievement certificates, which picks a layout itself */
   screenMade?: number;
   /** transfer certificates issued before the register, which print with it */

@@ -1,8 +1,8 @@
 /**
  * The ready certificate templates (docs/design/87): one per type — the transfer certificate in the CBSE layout with all
  * its items, bonafide (and a "father only" variant), character, date of birth and its justification, study, caste,
- * domicile, no objection, travel, visa, scholarship, board registration, fee paid; for staff experience, service and
- * visa. Each places EduPro's blocks — {{{blocks.duplicate}}}, {{{blocks.letterhead}}}, {{{blocks.signatures}}},
+ * domicile, no objection, travel, visa, scholarship, board registration, the Board exam registration form, fee paid; for
+ * staff experience, service and visa. Each places EduPro's blocks — {{{blocks.duplicate}}}, {{{blocks.letterhead}}}, {{{blocks.signatures}}},
  * {{{blocks.footer}}} (number, date, the QR from phase D) — around its own text. The data is the certificate's frozen
  * `data` (see certificate-data.ts in the API); `text.*` holds the typed fields as they read in a sentence.
  */
@@ -40,6 +40,25 @@ p.to { font-size: 11pt; line-height: 1.6; margin: 6mm 0 0; }
 `;
 
 const A4 = { pageWidth: '210mm', pageHeight: '297mm', stylesCss: CSS };
+/** the Board exam registration form: a reference line, an intro box, sections with a bar, a four-column table */
+const BOARD_FORM_CSS = `
+.bf { font-size: 10pt; }
+.bf-ref { display: flex; justify-content: space-between; align-items: baseline; gap: 4mm; margin: 3mm 0; font-size: 10pt; }
+.bf-kind { font-weight: 700; letter-spacing: 0.08em; }
+.bf-intro { border: 1px solid #c9d1dc; padding: 3mm; line-height: 1.55; margin: 2mm 0 5mm; }
+.bf-bar { background: #1b3a6b; color: #fff; font-weight: 600; padding: 1.6mm 3mm; border-radius: 3mm 3mm 0 0; margin-top: 4mm; }
+table.bf-t { width: 100%; border-collapse: collapse; table-layout: fixed; }
+table.bf-t th, table.bf-t td { border: 1px solid #9aa7b8; padding: 1.8mm 2mm; vertical-align: top; text-align: left; overflow-wrap: anywhere; }
+table.bf-t th { width: 25%; font-weight: 600; background: #f3f6fa; }
+.bf-small { font-size: 9pt; line-height: 1.5; }
+.bf-line { display: inline-block; width: 30mm; max-width: 100%; border-bottom: 1px solid #0b1f3a; height: 1em; vertical-align: bottom; }
+.bf-line.s { width: 22mm; }
+.bf-parents { display: flex; justify-content: space-between; margin-top: 16mm; }
+.bf-parents div { width: 45%; font-weight: 600; }
+.bf-sign { display: block; border-top: 1px solid #0b1f3a; margin-bottom: 1.5mm; width: 60mm; }
+.bf-date { margin: 6mm 0 2mm; font-weight: 600; }
+.bf-note { font-size: 9pt; border-top: 1px solid #c9d1dc; padding-top: 2mm; margin: 4mm 0; }
+`;
 const HEAD = `<div class="cert">{{{blocks.duplicate}}}{{{blocks.letterhead}}}
 <div class="ids"><span>No. <strong>{{cert.number}}</strong></span><span>Date <strong>{{cert.issuedOn}}</strong></span></div>`;
 const FOOT = `{{{blocks.signatures}}}{{{blocks.footer}}}</div>`;
@@ -264,6 +283,41 @@ ${FOOT}`,
       'Board registration verification',
       `This is to certify that ${PUPIL_FATHER}, ${STUDYING}. {{student.pronounSubjCap}} is registered with the <strong>{{fields.board}}</strong> under registration no. <strong>{{fields.registrationNo}}</strong>{{#if fields.session}} for the session <strong>{{fields.session}}</strong>{{/if}}, with the date of birth <strong>{{student.dob}}</strong> as per the school records.`,
     ),
+  },
+  {
+    // the circular the parents check, correct and sign before the Board registration (17 Nov 2026)
+    code: 'cert_board_form',
+    name: 'Board exam registration form',
+    kind: 'certificate',
+    typeCode: 'BOARD_FORM',
+    pageWidth: '210mm',
+    pageHeight: '297mm',
+    stylesCss: `${CSS}${BOARD_FORM_CSS}`,
+    bodyHtml: `<div class="cert bf">{{{blocks.duplicate}}}{{{blocks.letterhead}}}
+<div class="bf-ref"><span>Ref: <strong>{{cert.number}}</strong></span><span class="bf-kind">CIRCULAR</span><span>Dated: <strong>{{cert.issuedOn}}</strong></span></div>
+<div class="bf-intro">This is to inform you that your ward will be appearing for the <strong>{{student.className}}</strong> Board Examinations scheduled to be held in the year <strong>{{fields.examYear}}</strong>. You are, therefore, requested to check the details below, correct them where needed and return this form, signed, by <strong>{{text.lastDate}}</strong>.{{#if fields.fee}} You are also requested to submit the examination fee: <strong>{{fields.fee}}</strong>. Please calculate the amount accordingly.{{/if}}</div>
+<div class="bf-bar">Candidate's details</div>
+<table class="bf-t">
+<tr><th>Candidate's name</th><td>{{student.name}}</td><th>Sex</th><td>{{student.sex}}</td></tr>
+<tr><th>Admission no.</th><td>{{student.admissionNo}}</td><th>Class</th><td>{{student.classLabel}}</td></tr>
+<tr><th>*Mother's name</th><td>{{student.motherName}}</td><th>*Father's name</th><td>{{#if student.fatherName}}{{student.fatherName}}{{else}}{{student.guardianName}}{{/if}}</td></tr>
+<tr><th>Date of birth</th><td>{{student.dob}}</td><th>APAAR ID</th><td>{{student.apaar}}</td></tr>
+<tr><th>Mobile number</th><td>{{student.mobile}}</td><th>E-mail ID</th><td>{{student.email}}</td></tr>
+<tr><th>Annual income (mother and father)</th><td>{{#if student.familyIncome}}{{student.familyIncome}}{{else}}<span class="bf-line"></span>{{/if}}</td><th>Aadhaar no. (child / father / mother)</th><td class="bf-small">Child: {{#if student.aadhaar}}{{student.aadhaar}}{{else}}<span class="bf-line s"></span>{{/if}}<br>Father: {{#if student.fatherAadhaar}}{{student.fatherAadhaar}}{{else}}<span class="bf-line s"></span>{{/if}}<br>Mother: {{#if student.motherAadhaar}}{{student.motherAadhaar}}{{else}}<span class="bf-line s"></span>{{/if}}</td></tr>
+<tr><th>Differently abled child</th><td colspan="3">{{#if student.cwsn}}{{student.cwsn}}{{else}}<span class="bf-line"></span> If yes, specify: spastic, dyslexic, blind, physically challenged, hearing impaired, autistic (attach supporting documents from a Govt. hospital){{/if}}</td></tr>
+<tr><th>Single child (Yes / No)</th><td>{{#if student.singleChild}}{{student.singleChild}}{{else}}<span class="bf-line"></span>{{/if}}</td><th>Category (SC / ST / OBC / Gen): attach a copy of the supporting document</th><td>{{student.category}}</td></tr>
+<tr><th>Minority (Yes / No)</th><td colspan="3">{{#if student.minority}}{{student.minority}}{{else}}<span class="bf-line"></span> If yes, specify: Muslim, Sikh, Jain, Buddhist, Christian, Parsi{{/if}}</td></tr>
+</table>
+<div class="bf-bar">Subjects offered</div>
+<table class="bf-t">
+<tr><th>Subject I</th><td>{{student.subject1}}</td><th>Subject II</th><td>{{student.subject2}}</td></tr>
+<tr><th>Subject III</th><td>{{student.subject3}}</td><th>Subject IV</th><td>{{student.subject4}}</td></tr>
+<tr><th>Subject V</th><td>{{student.subject5}}</td><th>Additional subject (if any)</th><td>{{student.additionalSubject}}</td></tr>
+</table>
+<div class="bf-parents"><div><span class="bf-sign"></span>Signature of the mother</div><div><span class="bf-sign"></span>Signature of the father</div></div>
+<p class="bf-date">Date: <span class="bf-line"></span></p>
+<p class="bf-note">{{#if fields.note}}<strong>Note:</strong> {{fields.note}}<br>{{/if}}Details filled as recorded at the time of the student's admission do not change. * as on the admission record.</p>
+{{{blocks.signatures}}}{{{blocks.footer}}}</div>`,
   },
   {
     code: 'cert_fee_paid',

@@ -21,7 +21,10 @@ const Fields = z
 
 /** the person's printed details, by where the layout reads them (student.fatherName, tc.lastClass …) */
 const PersonDetails = z
-  .record(z.string().regex(/^(student|employee|tc)\.[a-zA-Z]{2,30}$/), z.string().max(300))
+  .record(
+    z.string().regex(/^(student|employee|tc)\.[a-zA-Z][a-zA-Z0-9]{1,30}$/),
+    z.string().max(300),
+  )
   .optional();
 
 const PreviewBase = z.object({

@@ -831,3 +831,42 @@ search and the QR page on Alpha with EduPro's check at 1440 and 375 px (axe clea
 with Google's published test keys on a temporary API run, the box shows and Check without the tick is refused (the box
 was not ticked); from outside: GPTBot / ClaudeBot 403, `X-Robots-Tag`, robots.txt. Alpha runs EduPro's check until
 the school's keys are set.
+
+## The Board exam registration form, and layouts for students or staff (17 Nov 2026)
+
+The user shared a school's Class XII Board-exam registration circular (a real document: its structure and wording
+only were used; no name, number or school name copied) to add to Templates, and asked how a certificate for students
+differs from one for staff. Chosen (all recommended): a new built-in student type with its ready layout; Aadhaar
+only masked to the last four digits; fill what the record holds and leave the rest as lines; mark and filter each
+layout for students or staff.
+
+- **Data** (migration 0394): `app.certificate_types_seed` gains **BOARD_FORM** "Board exam registration form" —
+  STUDENT, prefix BEF, rules `{state: active, classes: [X, XII]}`, one a year, sort 86 — seeded for every school.
+  Not asked for in the apps (the office prints it for a class).
+- **Student data** (`studentData`): `sex` (M / F), `mobile` (the primary guardian's, else the profile's SMS or
+  WhatsApp number), `email` (the profile's, else the guardian's), `familyIncome` (₹ with Indian grouping),
+  `cwsn` (Yes — kind / No), `singleChild` (when recorded), `minority` (from the religion: the six notified
+  minorities → "Yes — <religion>", else No), `aadhaar` / `fatherAadhaar` / `motherAadhaar` (decrypted only to mask:
+  `maskValue(…, 'digits12')` → XXXX-XXXX-1234; the full number is never in a certificate's data), `subject1`…`5` and
+  `additionalSubject` (the student's subjects of the year, else the class's compulsory ones). The person-detail
+  catalogue lists them all (a typed Aadhaar is masked by `applyPerson`); detail paths may hold digits
+  (`student.subject1`); the name is always the first box. The editor's Insert a detail adds "Contact and family" and
+  "Subjects of the year".
+- **Fields** (TYPE_FIELDS.BOARD_FORM): year of the Board examination (default: the academic year's end, 2026-27 →
+  2027), last date to return the form, examination fee (printed as written), note.
+- **Layout** `cert_board_form` (A4): letterhead; Ref / CIRCULAR / Dated; the intro box; "Candidate's details" and
+  "Subjects offered" as four-column tables under a bar; blanks (`.bf-line`) where the record holds nothing; the
+  parents' signature lines and date; the note; EduPro's signature boxes and QR.
+- **For students or staff**: `audienceOf(types' sides, body)` — the side of the types using a layout, else what it
+  prints (`student.*` / `tc.*` → students, `employee.*` → staff, neither or both → null); the templates list and a
+  layout's page carry `audience`; a layout's page offers sample types (and Insert a detail) of its side only. Admin:
+  a For students / For staff / Either badge on each layout, All / For students / For staff tabs, Use for a type
+  offers only that side's types, the layout's page shows "For: Students / Staff".
+
+Tests: `certificates-setup.e2e-spec.ts` (22 types, 24 ready layouts; the form for a Class XII student — filled from
+the record, Aadhaar of the child and father masked and never in full, minority "Yes — Sikh", income ₹4,50,000, the
+guardian's mobile; a typed mother's Aadhaar masked; a Class VI student refused by the class check; layouts marked for
+students / staff and a staff layout's page offering staff types only), the register count, the db templates test (24).
+A browser pass on Alpha: the tabs (30: 26 for students, 3 for staff), the staff filter, axe clean at 1440 and 375 px;
+the form previewed for a Class X student (not issued). Alpha's new layout was brought to the latest ready version with
+Back to the ready layout (version 2; version 1 in its history).

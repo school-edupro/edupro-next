@@ -24,6 +24,17 @@ import {
 
 type R = CertificateTemplateRow;
 
+/** Whom a layout is for: students or staff (or either, when it prints neither's details). */
+function SideBadge({ side }: { side: 'STUDENT' | 'STAFF' | null }) {
+  return side === 'STUDENT' ? (
+    <Badge tone="info">For students</Badge>
+  ) : side === 'STAFF' ? (
+    <Badge tone="success">For staff</Badge>
+  ) : (
+    <Badge tone="neutral">Either</Badge>
+  );
+}
+
 /** Where a layout comes from, in words. */
 const originOf = (t: R) =>
   t.code === 'cert_legacy'
@@ -122,8 +133,12 @@ export default async function CertificateTemplatesPage({
     throw e;
   }
   const q = (sp.q ?? '').trim().toLowerCase();
+  // for students or for staff (17 Nov 2026): a layout's side is its types', else what it prints
+  const side = sp.for === 'students' ? 'STUDENT' : sp.for === 'staff' ? 'STAFF' : null;
   const shown = o.templates.filter(
-    (t) => !q || `${t.name} ${t.usedBy.join(' ')}`.toLowerCase().includes(q),
+    (t) =>
+      (!q || `${t.name} ${t.usedBy.join(' ')}`.toLowerCase().includes(q)) &&
+      (!side || t.audience === side),
   );
   const used = shown.filter((t) => t.usedBy.length > 0);
   const spare = shown.filter((t) => t.usedBy.length === 0);
@@ -190,10 +205,13 @@ export default async function CertificateTemplatesPage({
           defaultValue={guessType(t)}
           options={[
             { value: '', label: 'Choose the type' },
-            ...o.types.map((x) => ({
-              value: x.code,
-              label: `${x.name}${x.audience === 'STAFF' ? ' (staff)' : ''}${x.active ? '' : ' — not in use'}`,
-            })),
+            // only the types of the layout's side: a student layout prints a student's details
+            ...o.types
+              .filter((x) => !t.audience || x.audience === t.audience)
+              .map((x) => ({
+                value: x.code,
+                label: `${x.name}${x.audience === 'STAFF' ? ' (staff)' : ''}${x.active ? '' : ' — not in use'}`,
+              })),
           ]}
         />
       </div>
@@ -252,7 +270,8 @@ export default async function CertificateTemplatesPage({
         <>
           <a href={`/certificates/setup/templates/${t.id}`}>
             <strong>{t.name}</strong>
-          </a>
+          </a>{' '}
+          <SideBadge side={t.audience ?? null} />
           <span className="ep-ctype__num" style={{ whiteSpace: 'normal' }}>
             {originOf(t)}
           </span>
@@ -390,6 +409,7 @@ export default async function CertificateTemplatesPage({
             placeholder="Layout or certificate type"
           />
         </label>
+        {side ? <input type="hidden" name="for" value={sp.for} /> : null}
         <div className="ep-ctype__actions">
           <Button type="submit" variant="secondary">
             Find
@@ -401,6 +421,33 @@ export default async function CertificateTemplatesPage({
           ) : null}
         </div>
       </form>
+      <nav
+        aria-label="Layouts for"
+        style={{ display: 'flex', gap: 'var(--sp-2)', flexWrap: 'wrap', margin: 'var(--sp-3) 0' }}
+      >
+        {(
+          [
+            ['', 'All', all.length],
+            ['students', 'For students', all.filter((t) => t.audience === 'STUDENT').length],
+            ['staff', 'For staff', all.filter((t) => t.audience === 'STAFF').length],
+          ] as const
+        ).map(([k, label, n]) => {
+          const on = (sp.for ?? '') === k || (!side && k === '');
+          const u = new URLSearchParams();
+          if (k) u.set('for', k);
+          if (q) u.set('q', sp.q ?? '');
+          return (
+            <a
+              key={k || 'all'}
+              href={`/certificates/setup/templates${u.toString() ? `?${u.toString()}` : ''}`}
+              className={`ep-btn ep-btn--sm ${on ? 'ep-btn--primary' : 'ep-btn--ghost'}`}
+              aria-current={on ? 'page' : undefined}
+            >
+              {label} ({String(n)})
+            </a>
+          );
+        })}
+      </nav>
       <div className="ep-ctype__group">
         <Card title={`Used by a certificate type (${String(used.length)})`}>
           <DataTable<R>

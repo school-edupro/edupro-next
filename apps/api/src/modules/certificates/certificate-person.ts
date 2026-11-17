@@ -3,7 +3,7 @@
  * changed for this certificate only — the record is not touched. Only the details the chosen layout prints are asked
  * (found in its wording, in the order it prints them). The certificate keeps each change with the record's value.
  */
-import { dateInWords } from './certificate-data';
+import { dateInWords, maskAadhaarText } from './certificate-data';
 
 export interface PersonSpec {
   /** where the layout reads it: student.fatherName, employee.designation, tc.lastClass */
@@ -57,6 +57,23 @@ export const PERSON_DETAILS: PersonSpec[] = [
   t('student.apaar', 'APAAR ID'),
   t('student.srn', 'SRN'),
   t('student.registrationNo', 'Board registration no.'),
+  // the Board exam registration form (17 Nov 2026)
+  t('student.sex', 'Sex'),
+  t('student.mobile', 'Mobile number'),
+  t('student.email', 'E-mail'),
+  t('student.familyIncome', 'Annual income (mother and father)'),
+  t('student.aadhaar', "Child's Aadhaar (masked)"),
+  t('student.fatherAadhaar', "Father's Aadhaar (masked)"),
+  t('student.motherAadhaar', "Mother's Aadhaar (masked)"),
+  t('student.cwsn', 'Differently abled'),
+  t('student.singleChild', 'Single child'),
+  t('student.minority', 'Minority'),
+  t('student.subject1', 'Subject I'),
+  t('student.subject2', 'Subject II'),
+  t('student.subject3', 'Subject III'),
+  t('student.subject4', 'Subject IV'),
+  t('student.subject5', 'Subject V'),
+  t('student.additionalSubject', 'Additional subject'),
   t('tc.lastClass', 'Class in which the pupil last studied'),
   t('tc.lastClassWords', 'Class last studied, in words'),
   t('employee.name', 'Name of the employee'),
@@ -83,7 +100,7 @@ export function printedDetails(
   const who = audience === 'STAFF' ? ['employee'] : ['student', 'tc'];
   const seen: string[] = [];
   for (const m of body.matchAll(
-    /\{\{[#/]?(?:if\s+|unless\s+)?((?:student|employee|tc)\.[a-zA-Z]+)/g,
+    /\{\{[#/]?(?:if\s+|unless\s+)?((?:student|employee|tc)\.[a-zA-Z][a-zA-Z0-9]*)/g,
   )) {
     const path = m[1]!;
     if (!seen.includes(path) && BY_PATH.has(path) && who.includes(path.split('.')[0]!))
@@ -94,7 +111,11 @@ export function printedDetails(
     seen.splice(seen.indexOf('student.dobWords'), 0, 'student.dob');
   // the ID numbers (often at the top of the paper) after the person's details, which start with the name
   const ids = seen.filter((p) => ID_NUMBERS.includes(p));
-  return [...seen.filter((p) => !ID_NUMBERS.includes(p)), ...ids].map((p) => BY_PATH.get(p)!);
+  // the name always first (a wording may name the class before it)
+  const name: string[] = seen.filter((p) => p === 'student.name' || p === 'employee.name');
+  return [...name, ...seen.filter((p) => !ID_NUMBERS.includes(p) && !name.includes(p)), ...ids].map(
+    (p) => BY_PATH.get(p)!,
+  );
 }
 const ID_NUMBERS = ['student.pen', 'student.apaar', 'student.srn', 'student.registrationNo'];
 
@@ -152,6 +173,8 @@ export function applyPerson(
       }
       v = dmyOf(v);
     }
+    // an Aadhaar number is never printed in full, typed or not
+    if (/Aadhaar$/i.test(s.path)) v = maskAadhaarText(v);
     const was = record.get(s.path) ?? '';
     if (v === was) continue;
     if (!v && (s.path === 'student.name' || s.path === 'employee.name')) {

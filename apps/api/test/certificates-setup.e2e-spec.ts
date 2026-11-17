@@ -4,6 +4,7 @@
  * the live preview and the field list, and refusing a template that would run code; who signs and the signature
  * boxes; staff certificates; the class rule.
  */
+import { encryptField } from '@edupro/db';
 import type { NestFastifyApplication } from '@nestjs/platform-fastify';
 import {
   createApp,
@@ -137,12 +138,12 @@ describe('certificate set-up (e2e)', () => {
   it('shows the set-up: every type, the ready templates, what to look at; only to the set-up right', async () => {
     const o = await get('/certificates/setup');
     expect(o.statusCode).toBe(200);
-    expect(o.json().figures).toMatchObject({ types: 21, active: 21, own: 0, signatory: false });
-    // the 22 ready layouts and the reprint of certificates from the old system (used by no type)
+    expect(o.json().figures).toMatchObject({ types: 22, active: 22, own: 0, signatory: false });
+    // the 23 ready layouts and the reprint of certificates from the old system (used by no type)
     const ready = (
       o.json().templates as Array<{ ready: boolean; code: string; usedBy: string[] }>
     ).filter((t) => t.ready);
-    expect(ready).toHaveLength(23);
+    expect(ready).toHaveLength(24);
     expect(ready.find((t) => t.code === 'cert_legacy')).toMatchObject({ usedBy: [] });
     // a TC issued before the register prints with its own layout: the list says so (17 Nov 2026)
     const pupil = Object.values(pupils)[0]!;
@@ -623,5 +624,113 @@ describe('certificate set-up (e2e)', () => {
         (b) => b.path === 'employee.designation',
       )?.value,
     ).toBe('PGT Physics');
+  });
+  it('prints the Board exam registration form for Class XII: filled from the record, Aadhaar only masked', async () => {
+    const cls = await send('POST', '/academics/classes', {
+      code: 'XII',
+      name: 'Class XII',
+      displayOrder: 12,
+    });
+    const sec = await send('POST', `/academics/classes/${cls.json().id as string}/sections`, {
+      name: 'A',
+    });
+    const st = await send('POST', '/people/students', {
+      admissionNo: `BF-${Date.now()}`,
+      firstName: 'Kavya',
+      lastName: 'Test',
+      dob: '2008-05-12',
+      gender: 'female',
+      category: 'GEN',
+      guardians: [
+        {
+          guardian: { firstName: 'Ravi', lastName: 'Test', mobile: '9876500011' },
+          relation: 'father',
+          isPrimary: true,
+        },
+        {
+          guardian: { firstName: 'Meena', lastName: 'Test', mobile: '9876500012' },
+          relation: 'mother',
+        },
+      ],
+      enrolment: { classSectionId: sec.json().id, rollNo: 1 },
+    });
+    expect(st.statusCode).toBe(201);
+    const id = st.json().id as string;
+    await withMigrator(async (c) => {
+      await c.query(
+        `UPDATE students SET secure = jsonb_build_object('aadhaar_no', $2::text),
+                profile = COALESCE(profile, '{}'::jsonb) || jsonb_build_object('religion', 'Sikh', 'cwsn', 'No', 'apaar_id', '130000000001', 'family_income', '450000')
+          WHERE id = $1`,
+        [id, encryptField('123456785678')],
+      );
+      await c.query(
+        `UPDATE guardians g SET secure = jsonb_build_object('aadhaar_no', $2::text)
+           FROM student_guardians sg WHERE sg.guardian_id = g.id AND sg.student_id = $1 AND sg.relation = 'father'`,
+        [id, encryptField('987654324321')],
+      );
+    });
+    // the type: for classes X and XII, one a year
+    const types = (await get('/certificates/types')).json().rows as Array<{
+      code: string;
+      audience: string;
+      rules: { classes?: string[] };
+      multiple: string;
+    }>;
+    expect(types.find((t) => t.code === 'BOARD_FORM')).toMatchObject({
+      audience: 'STUDENT',
+      rules: { classes: ['X', 'XII'] },
+      multiple: 'YEAR',
+    });
+    const pv = await send('POST', '/certificates/preview', {
+      typeCode: 'BOARD_FORM',
+      studentId: id,
+      fields: { examYear: '2027', lastDate: '2026-12-15', fee: '₹1,500' },
+    });
+    expect(pv.statusCode).toBe(201);
+    const html = pv.json().html as string;
+    expect(html).toContain('CIRCULAR');
+    expect(html).toContain('Kavya Test');
+    expect(html).toContain('Meena Test');
+    expect(html).toContain('15-12-2026');
+    expect(html).toContain('XXXX-XXXX-5678');
+    expect(html).toContain('XXXX-XXXX-4321');
+    expect(html).not.toContain('123456785678');
+    expect(html).not.toContain('987654324321');
+    expect(html).toContain('Yes — Sikh');
+    expect(html).toContain('₹4,50,000');
+    expect(html).toContain('9876500011');
+    // the boxes at issue: a typed Aadhaar is masked too
+    const typed = await send('POST', '/certificates/preview', {
+      typeCode: 'BOARD_FORM',
+      studentId: id,
+      fields: { examYear: '2027', lastDate: '2026-12-15' },
+      person: { 'student.motherAadhaar': '5555 6666 7777' },
+    });
+    expect(typed.json().html).toContain('XXXX-XXXX-7777');
+    expect(typed.json().html).not.toContain('5555 6666 7777');
+    // a class VI student is not for this type
+    const six = await send('POST', '/certificates/preview', {
+      typeCode: 'BOARD_FORM',
+      studentId: pupils.six,
+      fields: { examYear: '2027', lastDate: '2026-12-15' },
+    });
+    expect(
+      (six.json().checks as Array<{ key: string; ok: boolean }>).find((x) => x.key === 'class')?.ok,
+    ).toBe(false);
+  });
+
+  it('marks each layout for students or for staff, and its page offers only its own side', async () => {
+    const o = (await get('/certificates/setup')).json();
+    const tpls = o.templates as Array<{ id: string; code: string; audience: string | null }>;
+    expect(tpls.find((t) => t.code === 'cert_board_form')?.audience).toBe('STUDENT');
+    expect(tpls.find((t) => t.code === 'cert_tc')?.audience).toBe('STUDENT');
+    expect(tpls.find((t) => t.code === 'cert_service')?.audience).toBe('STAFF');
+    const svc = (
+      await get(`/certificates/setup/templates/${tpls.find((t) => t.code === 'cert_service')!.id}`)
+    ).json();
+    expect(svc.audience).toBe('STAFF');
+    expect((svc.types as Array<{ audience: string }>).every((t) => t.audience === 'STAFF')).toBe(
+      true,
+    );
   });
 });

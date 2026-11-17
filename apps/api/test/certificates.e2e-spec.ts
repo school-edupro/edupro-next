@@ -134,7 +134,7 @@ describe('certificate register (e2e)', () => {
       fields: Array<{ key: string }>;
     }>;
     expect(types.map((t) => t.code).slice(0, 4)).toEqual(['TC', 'BONAFIDE', 'CHARACTER', 'DOB']);
-    expect(types).toHaveLength(21);
+    expect(types).toHaveLength(22);
     expect(types.every((t) => t.template)).toBe(true);
     const tcType = types.find((t) => t.code === 'TC')!;
     expect(tcType).toMatchObject({ usesBook: true, multiple: 'ONE' });

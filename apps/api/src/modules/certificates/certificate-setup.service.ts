@@ -74,6 +74,27 @@ function catalogue(audience: 'STUDENT' | 'STAFF', fields: FieldSpec[]) {
             ['{{student.motherName}}', "Mother's name"],
             ['{{student.guardianName}}', "Guardian's name"],
           ]),
+          // the Board exam registration form's details (17 Nov 2026)
+          g('Contact and family', [
+            ['{{student.sex}}', 'Sex (M / F)'],
+            ['{{student.mobile}}', "Mobile number (the primary guardian's)"],
+            ['{{student.email}}', 'E-mail'],
+            ['{{student.familyIncome}}', 'Annual income (mother and father)'],
+            ['{{student.aadhaar}}', "Child's Aadhaar (masked: XXXX-XXXX-1234)"],
+            ['{{student.fatherAadhaar}}', "Father's Aadhaar (masked)"],
+            ['{{student.motherAadhaar}}', "Mother's Aadhaar (masked)"],
+            ['{{student.cwsn}}', 'Differently abled (Yes — kind / No)'],
+            ['{{student.singleChild}}', 'Single child (Yes / No)'],
+            ['{{student.minority}}', 'Minority (Yes — religion / No)'],
+          ]),
+          g('Subjects of the year', [
+            ['{{student.subject1}}', 'Subject I'],
+            ['{{student.subject2}}', 'Subject II'],
+            ['{{student.subject3}}', 'Subject III'],
+            ['{{student.subject4}}', 'Subject IV'],
+            ['{{student.subject5}}', 'Subject V'],
+            ['{{student.additionalSubject}}', 'Additional subject'],
+          ]),
           g('Admission and class', [
             ['{{student.admittedOn}}', 'Date of admission'],
             ['{{student.admissionClassLabel}}', 'Class at admission'],
@@ -181,6 +202,22 @@ const genericBody = (name: string, audience: 'STUDENT' | 'STAFF') =>
  * Certificate set-up (docs/design/87, phase B): the types and their checks, fields, layouts and who issues them; the
  * school's own types; the templates with their versions, the field list and a live preview; who signs.
  */
+/**
+ * Whom a layout is for (17 Nov 2026): the side of the types that use it, else what it prints — a student's details
+ * (student.*, a TC's tc.*) or an employee's (employee.*); null when neither (or both).
+ */
+export function audienceOf(
+  usedBy: string[] | null | undefined,
+  body: string | null | undefined,
+): 'STUDENT' | 'STAFF' | null {
+  const sides = (usedBy ?? []).filter((x) => x === 'STUDENT' || x === 'STAFF');
+  if (sides.length === 1) return sides[0] as 'STUDENT' | 'STAFF';
+  const b = body ?? '';
+  const student = /\{\{[#/]?(?:if\s+|unless\s+)?(?:student|tc)\./.test(b);
+  const staff = /\{\{[#/]?(?:if\s+|unless\s+)?employee\./.test(b);
+  return student === staff ? null : student ? 'STUDENT' : 'STAFF';
+}
+
 @Injectable()
 export class CertificateSetupService {
   constructor(
@@ -306,6 +343,8 @@ export class CertificateSetupService {
       ready_code: string | null;
       updated_at: Date;
       used_by: string[] | null;
+      used_audiences: string[] | null;
+      body_html: string;
       made: number;
       screen_made: number;
       tc_made: number;
@@ -313,6 +352,9 @@ export class CertificateSetupService {
       page_height: string;
     }>(
       `SELECT d.id::text, d.code, d.name, d.kind::text, d.version, d.ready_code, d.updated_at, d.page_width, d.page_height,
+              d.body_html,
+              (SELECT array_agg(DISTINCT t.audience::text) FROM certificate_types t
+                WHERE t.template_id = d.id OR t.variants @> jsonb_build_array(jsonb_build_object('templateId', d.id::text))) AS used_audiences,
               (SELECT array_agg(t.name ORDER BY t.sort_order) FROM certificate_types t
                 WHERE t.template_id = d.id OR t.variants @> jsonb_build_array(jsonb_build_object('templateId', d.id::text))) AS used_by,
               (SELECT count(*)::int FROM certificates x JOIN document_template_versions v ON v.id = x.template_version_id
@@ -338,6 +380,7 @@ export class CertificateSetupService {
       ready: !!x.ready_code,
       updatedAt: x.updated_at.toISOString(),
       usedBy: x.used_by ?? [],
+      audience: audienceOf(x.used_audiences, x.body_html),
       made: x.made,
       screenMade: x.screen_made,
       tcMade: x.tc_made,
@@ -763,7 +806,7 @@ export class CertificateSetupService {
         audience: 'STUDENT' | 'STAFF';
         fields: unknown;
       }>(
-        `SELECT code, name, audience, fields FROM certificate_types
+        `SELECT code, name, audience::text AS audience, fields FROM certificate_types
           WHERE template_id = $1 OR variants @> jsonb_build_array(jsonb_build_object('templateId', $1::text))
           ORDER BY sort_order`,
         [id],
@@ -783,10 +826,14 @@ export class CertificateSetupService {
                                      AND x.template_version_id IS NOT NULL)) AS tc`,
         [id],
       );
+      // whom it is for: the types of that side only, for the sample and its details (17 Nov 2026)
+      const audience = audienceOf([...new Set(types.rows.map((x) => x.audience))], t.body_html);
+      const sameSide = all.rows.filter((x) => !audience || x.audience === audience);
       const forType =
-        all.rows.find((x) => x.code === typeCode) ??
+        sameSide.find((x) => x.code === typeCode) ??
         types.rows[0] ??
-        all.rows.find((x) => x.code === 'BONAFIDE');
+        sameSide.find((x) => x.code === (audience === 'STAFF' ? 'SERVICE' : 'BONAFIDE')) ??
+        sameSide[0];
       return {
         id: t.id,
         code: t.code,
@@ -801,7 +848,8 @@ export class CertificateSetupService {
         usedBy: types.rows.map((x) => ({ code: x.code, name: x.name })),
         screenMade: screen.rows[0]?.n ?? 0,
         tcMade: screen.rows[0]?.tc ?? 0,
-        types: all.rows.map((x) => ({ code: x.code, name: x.name, audience: x.audience })),
+        audience,
+        types: sameSide.map((x) => ({ code: x.code, name: x.name, audience: x.audience })),
         forType: forType?.code ?? null,
         catalogue: catalogue(
           forType?.audience ?? 'STUDENT',
