@@ -234,3 +234,36 @@ subject); compartment, absent, withheld / later lists (with the student, section
   written, kept → fingerprint next time, switched off → learned again, a wrong layout failed → asked again →
   passes, no AI / refusal / bad reply, Class XII, not a gazette, the auditor can look but not upload); Sprint 18
   still passes. A browser pass (test school): every tab and three upload pages, axe clean at 1440 and 375 px.
+
+## As built — phase B, matching and completing (17 Nov 2026)
+
+- **Matching**: board roll number on the enrolment, else the name within the class that year — unique and agreeing
+  on sex where the record has it. On save the board roll number is written to a found student's enrolment (only
+  where none is set), so the next file matches by it.
+- **Details snapshot** (`BoardDetailsService.snapshot`, at save, on a pick, and on "Take the details again"):
+  section (the enrolment that year), stream / religion / EWS / CWSN (the profile), category (the student's column),
+  boarder (a hostel allotment overlapping the year), staff ward (a linked guardian marked school staff); kept on
+  `board_candidates` with `details_from` record / sheet / none (0397).
+- **Review students** (`GET imports/:id/review`, `POST candidates/:id/student`): candidates not found first; the
+  class's unlinked students, likely ones first (name words, same sex); link (details + roll follow), not ours,
+  unlink; one student is one candidate a year.
+- **CBSE subjects** (`board_subjects`, `board-subjects.ts`): seeded per class on first use (names checked against the
+  school's annexures; e.g. 119 Sanskrit (Communicative), 303 Urdu Course-B, 409 Food Production, the 8xx skill
+  subjects of XII, 500 / 502 / 503 internal), linked to the school's subjects by name words; a code a file prints
+  that is not listed is added unnamed; renaming updates the saved results' subject names. `GET / POST / PUT subjects`.
+- **Teachers**: the year's `teacher_assignments` (subject teacher, through the code's school subject) unless
+  `board_teacher_overrides` says otherwise (for listed roll numbers first, then the whole section); an override may
+  name a teacher who is not an employee. `GET teachers` (sections × codes of a saved year, the teachers with their
+  candidate counts, the overrides), `POST teachers`, `DELETE teachers/:id`; `teacherResolver` serves the analysis.
+- **The school's old details sheet** (`POST imports/:id/details-sheet`): sheet 1 (BoardRollNo, admission no.,
+  section, stream, category Boarder / Staff / Other, SC/ST/OBC/GEN, religion, EWS, CWSN) overrides those
+  candidates' details and links one not found by its admission number; sheet 2 (Section, SubjectCode, Teacher,
+  roll numbers) replaces that year's overrides, teachers matched to employees by name, else kept as written.
+- **Admin**: the saved upload's "Students and details" card (counts; Review students; take the details again;
+  upload the details sheet); the Review students page; the Teachers tab (class and year, Set a teacher, remove);
+  Set-up → CBSE subjects (X / XII, edit, add a code). English + Hindi on the main page.
+- **Tests**: unit `board-subjects.spec.ts` (2); e2e `board-details.e2e-spec.ts` (5: details from the record and the
+  roll number kept, a name that disagrees on sex not matched, review / pick / not ours / unlink / one student once,
+  subjects seeded / linked / unnamed code / renamed, teachers from assignments and overrides by section and roll,
+  the details sheet, refresh). Browser pass at 1440 and 375 (saved page, review with a picker, teachers with the
+  dialog open, subjects): axe clean.

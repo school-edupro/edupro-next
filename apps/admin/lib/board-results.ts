@@ -1,6 +1,6 @@
 /** Board results (docs/design/88): what the screens show of an upload, a candidate and a layout. */
 
-export type BoardTab = 'upload' | 'results' | 'analysis' | 'setup';
+export type BoardTab = 'upload' | 'results' | 'analysis' | 'teachers' | 'setup';
 
 export interface BoardImport {
   id: string;
@@ -88,6 +88,8 @@ export interface BoardLayout {
 }
 
 export interface BoardImportDetail extends BoardImport {
+  saved: BoardSaved | null;
+  subjectNames: Record<string, string>;
   academicYear: string | null;
   by: string | null;
   layout: BoardLayout | null;
@@ -140,3 +142,63 @@ export function when(iso: string | null): string {
   const h = d.getUTCHours();
   return `${String(d.getUTCDate())} ${MONTHS[d.getUTCMonth()]!} ${String(d.getUTCFullYear())}, ${String(h % 12 || 12)}:${String(d.getUTCMinutes()).padStart(2, '0')} ${h < 12 ? 'am' : 'pm'}`;
 }
+
+// ---- phase B --------------------------------------------------------------------------------------------------------
+
+export interface BoardSaved {
+  roll: number;
+  name: number;
+  picked: number;
+  none: number;
+  notOurs: number;
+  fromRecord: number;
+  fromSheet: number;
+}
+
+export interface BoardReview {
+  classLabel: 'X' | 'XII';
+  examYear: number;
+  candidates: Array<{
+    id: string;
+    roll: string;
+    name: string | null;
+    sex: string | null;
+    match: 'roll' | 'name' | 'picked' | 'none' | 'not_ours';
+    student: { id: string; name: string; admissionNo: string | null } | null;
+    suggested: string[];
+  }>;
+  students: Array<{ id: string; name: string; admissionNo: string; section: string; sex: string }>;
+}
+
+export type BoardSubjectKind = 'language' | 'main' | 'skill' | 'additional' | 'internal';
+export interface BoardSubjectRow {
+  id: string;
+  code: string;
+  name: string | null;
+  kind: BoardSubjectKind;
+  subject: { id: string; name: string } | null;
+  candidates: number;
+}
+
+export interface BoardTeachers {
+  classLabel: 'X' | 'XII';
+  examYear: number | null;
+  years: number[];
+  rows: Array<{
+    section: string | null;
+    code: string;
+    name: string | null;
+    candidates: number;
+    teachers: Array<{ name: string | null; candidates: number }>;
+    overrides: Array<{ id: string; name: string; employeeId: string | null; rolls: string[] }>;
+  }>;
+  options: Array<{ id: string; name: string; code: string }>;
+}
+
+export const MATCH_WORD: Record<BoardReview['candidates'][number]['match'], string> = {
+  roll: 'By board roll no',
+  name: 'By name',
+  picked: 'Picked',
+  none: 'Not found',
+  not_ours: 'Not our student',
+};

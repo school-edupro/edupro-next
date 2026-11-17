@@ -5,7 +5,13 @@ import { FileLinks } from '@/components/FileLinks';
 import { FoldCard } from '@/components/FoldCard';
 import { Notice } from '@/components/Notice';
 import { ApiError, apiFetch, getMe } from '@/lib/api';
-import { relearnBoardImport, saveBoardImport } from '@/lib/board-actions';
+import { DialogButton } from '@/components/leave/DialogButton';
+import {
+  refreshBoardDetails,
+  relearnBoardImport,
+  saveBoardImport,
+  uploadDetailsSheet,
+} from '@/lib/board-actions';
 import {
   LAYOUT_HOW,
   RESULT_WORDS,
@@ -180,6 +186,80 @@ export default async function BoardImportPage({
         )}
       </Card>
 
+      {u.saved ? (
+        <Card title="Students and details">
+          <p style={{ marginTop: 0 }}>
+            <strong>
+              {String(u.saved.roll + u.saved.name + u.saved.picked)} of{' '}
+              {String(f.candidates ?? u.totalRows)}
+            </strong>{' '}
+            candidates are linked to their students ({String(u.saved.roll)} by board roll number,{' '}
+            {String(u.saved.name)} by name, {String(u.saved.picked)} picked)
+            {u.saved.none ? `; ${String(u.saved.none)} not found yet` : ''}
+            {u.saved.notOurs ? `; ${String(u.saved.notOurs)} not our students` : ''}. Their section,
+            stream, category, religion, EWS, CWSN, boarder and staff ward come from the records (
+            {String(u.saved.fromRecord)})
+            {u.saved.fromSheet ? ` or the details sheet (${String(u.saved.fromSheet)})` : ''}.
+          </p>
+          <span style={{ display: 'inline-flex', gap: 'var(--sp-2)', flexWrap: 'wrap' }}>
+            <a
+              className={`ep-btn ep-btn--sm ${u.saved.none ? 'ep-btn--primary' : 'ep-btn--secondary'}`}
+              href={`/exams/board-results/imports/${u.id}/review`}
+            >
+              Review students{u.saved.none ? ` (${String(u.saved.none)} not found)` : ''}
+            </a>
+            {canImport ? (
+              <>
+                <ConfirmAction
+                  action={refreshBoardDetails}
+                  fields={{ id: u.id }}
+                  label="Take the details again from the records"
+                  title="Take the details again from the records"
+                  confirmLabel="Take them again"
+                  variant="ghost"
+                >
+                  After a record was put right: every linked candidate&apos;s section, stream,
+                  category, religion, EWS, CWSN, boarder and staff ward are read again. Values from
+                  the details sheet are replaced.
+                </ConfirmAction>
+                <DialogButton
+                  id="details-sheet"
+                  className="ep-btn ep-btn--ghost ep-btn--sm"
+                  label="Upload the details sheet"
+                  title="Upload the details sheet (optional)"
+                >
+                  <form action={uploadDetailsSheet} className="ep-cert-fields">
+                    <input type="hidden" name="id" value={u.id} />
+                    <p className="ep-field__help" style={{ gridColumn: '1 / -1', margin: 0 }}>
+                      Only where the records are not enough: the school&apos;s old sheet with two
+                      sheets — (1) BoardRollNo, admission number, section, stream, category (Boarder
+                      / Staff / Other), SC/ST/OBC/GEN, religion, EWS, CWSN; (2) Section,
+                      SubjectCode, Teacher and, if only some, their board roll numbers. Its values
+                      override the records for those candidates; a candidate not found is linked by
+                      the admission number.
+                    </p>
+                    <label className="ep-field" htmlFor="dsFile" style={{ gridColumn: '1 / -1' }}>
+                      <span className="ep-field__label">The details sheet (.xlsx) *</span>
+                      <input
+                        id="dsFile"
+                        name="file"
+                        type="file"
+                        accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                        className="ep-input"
+                        required
+                      />
+                    </label>
+                    <div>
+                      <Button type="submit">Upload</Button>
+                    </div>
+                  </form>
+                </DialogButton>
+              </>
+            ) : null}
+          </span>
+        </Card>
+      ) : null}
+
       <Card title="The file and its layout">
         <dl className="ep-facts">
           <div>
@@ -287,7 +367,15 @@ export default async function BoardImportPage({
           caption="Subjects in the file"
           density="dense"
           columns={[
-            { key: 'c', header: 'Code', render: (s) => <strong>{s.code}</strong> },
+            {
+              key: 'c',
+              header: 'Subject',
+              render: (s) => (
+                <>
+                  <strong>{s.code}</strong> {u.subjectNames[s.code] ?? ''}
+                </>
+              ),
+            },
             { key: 'n', header: 'Candidates', numeric: true, render: (s) => String(s.candidates) },
             { key: 'a', header: 'Absent', numeric: true, render: (s) => String(s.absent) },
             { key: 'h', header: 'Highest', numeric: true, render: (s) => String(s.highest ?? '—') },

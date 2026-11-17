@@ -1,15 +1,22 @@
-import { Body, Controller, Get, Param, Post, Query } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Post, Put, Query } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { RequirePermission } from '../../common/access/require-permission.decorator';
 import { DomainError } from '../../common/errors/domain-error';
 import { ReqCtx, type RequestContext } from '../../common/http/request-context';
+import { BoardDetailsService } from './board-details.service';
 import { BoardGazetteService } from './board-gazette.service';
 import {
   BOARD_RESULTS,
+  BoardClassQueryDto,
   BoardListQueryDto,
+  BoardSubjectAddDto,
+  BoardSubjectDto,
+  BoardTeacherDto,
   BoardUploadDto,
+  DetailsSheetDto,
   GazetteUploadDto,
   LayoutActiveDto,
+  PickDto,
 } from './board-results.dto';
 import { BoardResultsService } from './board-results.service';
 
@@ -30,6 +37,7 @@ export class BoardResultsController {
   constructor(
     private readonly boards: BoardResultsService,
     private readonly gazettes: BoardGazetteService,
+    private readonly details: BoardDetailsService,
   ) {}
 
   @Get()
@@ -127,5 +135,94 @@ export class BoardResultsController {
     @Body() body: LayoutActiveDto,
   ) {
     return this.gazettes.setLayoutActive(ctx, id(layoutId), body.active);
+  }
+
+  // ---- phase B: students, details, CBSE subjects, teachers ---------------------------------------------------------
+  @Get('imports/:id/review')
+  @ApiOperation({
+    summary:
+      'A saved file: its candidates (those not found first) and the class students not linked',
+  })
+  @RequirePermission(BOARD_RESULTS.view)
+  review(@ReqCtx() ctx: RequestContext, @Param('id') importId: string) {
+    return this.details.review(ctx, id(importId));
+  }
+
+  @Post('candidates/:id/student')
+  @ApiOperation({
+    summary:
+      'Link a candidate to a student (or mark not ours, or unlink); details and roll number follow',
+  })
+  @RequirePermission(BOARD_RESULTS.import)
+  pick(@ReqCtx() ctx: RequestContext, @Param('id') candidateId: string, @Body() body: PickDto) {
+    return this.details.pick(ctx, id(candidateId), body);
+  }
+
+  @Post('imports/:id/refresh')
+  @ApiOperation({ summary: "Take every found candidate's details again from the student records" })
+  @RequirePermission(BOARD_RESULTS.import)
+  refresh(@ReqCtx() ctx: RequestContext, @Param('id') importId: string) {
+    return this.details.refresh(ctx, id(importId));
+  }
+
+  @Post('imports/:id/details-sheet')
+  @ApiOperation({
+    summary:
+      "The school's old details sheet (roll no → details; section × code → teacher) as an override",
+  })
+  @RequirePermission(BOARD_RESULTS.import)
+  detailsSheet(
+    @ReqCtx() ctx: RequestContext,
+    @Param('id') importId: string,
+    @Body() body: DetailsSheetDto,
+  ) {
+    return this.details.detailsSheet(ctx, id(importId), body.fileBase64);
+  }
+
+  @Get('subjects')
+  @ApiOperation({ summary: "The school's CBSE subject codes of a class, linked to its subjects" })
+  @RequirePermission(BOARD_RESULTS.view)
+  subjects(@ReqCtx() ctx: RequestContext, @Query() q: BoardClassQueryDto) {
+    return this.details.subjects(ctx, q.classLabel);
+  }
+
+  @Post('subjects')
+  @RequirePermission(BOARD_RESULTS.import)
+  addSubject(@ReqCtx() ctx: RequestContext, @Body() body: BoardSubjectAddDto) {
+    return this.details.addSubject(ctx, body);
+  }
+
+  @Put('subjects/:id')
+  @RequirePermission(BOARD_RESULTS.import)
+  saveSubject(
+    @ReqCtx() ctx: RequestContext,
+    @Param('id') subjectId: string,
+    @Body() body: BoardSubjectDto,
+  ) {
+    return this.details.saveSubject(ctx, id(subjectId), body);
+  }
+
+  @Get('teachers')
+  @ApiOperation({
+    summary: 'Each section × subject of a saved year with its teacher(s) and the overrides',
+  })
+  @RequirePermission(BOARD_RESULTS.view)
+  teachers(@ReqCtx() ctx: RequestContext, @Query() q: BoardClassQueryDto) {
+    return this.details.teachers(ctx, q.classLabel, q.examYear);
+  }
+
+  @Post('teachers')
+  @ApiOperation({
+    summary: "A section's subject taught by another teacher (all of it, or some roll numbers)",
+  })
+  @RequirePermission(BOARD_RESULTS.import)
+  setTeacher(@ReqCtx() ctx: RequestContext, @Body() body: BoardTeacherDto) {
+    return this.details.setTeacher(ctx, body);
+  }
+
+  @Delete('teachers/:id')
+  @RequirePermission(BOARD_RESULTS.import)
+  removeTeacher(@ReqCtx() ctx: RequestContext, @Param('id') overrideId: string) {
+    return this.details.removeTeacher(ctx, id(overrideId));
   }
 }

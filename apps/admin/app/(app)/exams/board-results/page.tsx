@@ -11,16 +11,26 @@ import {
 import { getTranslations } from 'next-intl/server';
 import { ConfirmAction } from '@/components/ConfirmAction';
 import { FoldCard } from '@/components/FoldCard';
+import { DialogButton } from '@/components/leave/DialogButton';
 import { Notice } from '@/components/Notice';
 import { boardImportCommit, boardImportValidate, masterExport } from '@/lib/actions';
 import { apiFetch, getMe } from '@/lib/api';
-import { setBoardLayout, uploadGazette } from '@/lib/board-actions';
+import {
+  addBoardTeacher,
+  removeBoardTeacher,
+  saveBoardSubject,
+  setBoardLayout,
+  uploadGazette,
+} from '@/lib/board-actions';
 import {
   statusOf,
   when,
   type BoardImport,
   type BoardLayout,
+  type BoardSubjectKind,
+  type BoardSubjectRow,
   type BoardTab,
+  type BoardTeachers,
   type BoardYear,
 } from '@/lib/board-results';
 
@@ -32,7 +42,8 @@ interface Analysis extends Record<string, string | number | null> {
   subject_code: string;
 }
 
-const TABS: BoardTab[] = ['upload', 'results', 'analysis', 'setup'];
+const TABS: BoardTab[] = ['upload', 'results', 'analysis', 'teachers', 'setup'];
+const KINDS: BoardSubjectKind[] = ['language', 'main', 'skill', 'additional', 'internal'];
 
 /**
  * Board results (docs/design/88): Upload CBSE's result file (the .TXT gazette, read with a known layout or one the
@@ -44,6 +55,8 @@ export default async function BoardResultsPage({
   searchParams: Promise<{
     tab?: string;
     classLabel?: string;
+    examYear?: string;
+    subjects?: string;
     q?: string;
     import?: string;
     ok?: string;
@@ -66,7 +79,9 @@ export default async function BoardResultsPage({
   const q = new URLSearchParams({ size: '200' });
   if (sp.classLabel) q.set('classLabel', sp.classLabel);
   if (sp.q) q.set('q', sp.q);
-  const [list, imports, years, layouts] = await Promise.all([
+  const cls = sp.classLabel === 'XII' ? 'XII' : 'X';
+  const subjectsCls = sp.subjects === 'XII' ? 'XII' : 'X';
+  const [list, imports, years, layouts, teachers, subjects] = await Promise.all([
     tab === 'results' || tab === 'analysis'
       ? apiFetch<{ data: BoardRow[]; page: { total: number }; analysis: Analysis[] }>(
           `/exams/board-results?${q.toString()}`,
@@ -81,6 +96,17 @@ export default async function BoardResultsPage({
     tab === 'setup'
       ? apiFetch<{ data: BoardLayout[] }>('/exams/board-results/layouts').then((x) => x.data)
       : ([] as BoardLayout[]),
+    tab === 'teachers'
+      ? apiFetch<BoardTeachers>(
+          `/exams/board-results/teachers?classLabel=${cls}${/^\d{4}$/.test(sp.examYear ?? '') ? `&examYear=${sp.examYear!}` : ''}`,
+        )
+      : null,
+    tab === 'setup'
+      ? apiFetch<{
+          rows: BoardSubjectRow[];
+          options: Array<{ id: string; name: string; code: string }>;
+        }>(`/exams/board-results/subjects?classLabel=${subjectsCls}`)
+      : null,
   ]);
   const current = imports.find((i) => i.id === sp.import && i.kind === 'sheet') ?? null;
   const yearNow = years.find((y) => y.current) ?? years[0];
@@ -426,6 +452,185 @@ export default async function BoardResultsPage({
         </Card>
       ) : null}
 
+      {tab === 'teachers' && teachers ? (
+        <Card title={b('teachers')}>
+          <p className="ep-field__help" style={{ marginTop: 0 }}>
+            {b('teachersHelp')}
+          </p>
+          <form
+            method="get"
+            style={{
+              display: 'flex',
+              gap: 'var(--sp-2)',
+              alignItems: 'flex-end',
+              flexWrap: 'wrap',
+              marginBottom: 'var(--sp-3)',
+            }}
+          >
+            <input type="hidden" name="tab" value="teachers" />
+            <SelectField
+              id="tCls"
+              name="classLabel"
+              label={b('classLabel')}
+              defaultValue={cls}
+              options={[
+                { value: 'X', label: 'X' },
+                { value: 'XII', label: 'XII' },
+              ]}
+            />
+            <SelectField
+              id="tYear"
+              name="examYear"
+              label={b('examYear')}
+              defaultValue={String(teachers.examYear ?? '')}
+              options={teachers.years.map((y) => ({ value: String(y), label: String(y) }))}
+            />
+            <Button type="submit" variant="secondary" size="sm">
+              {b('show')}
+            </Button>
+            {canImport && teachers.examYear ? (
+              <DialogButton
+                id="set-teacher"
+                className="ep-btn ep-btn--secondary ep-btn--sm"
+                label={b('setTeacher')}
+                title={b('setTeacher')}
+              >
+                <form action={addBoardTeacher} className="ep-cert-fields">
+                  <input type="hidden" name="classLabel" value={teachers.classLabel} />
+                  <input type="hidden" name="examYear" value={String(teachers.examYear)} />
+                  <p className="ep-field__help" style={{ gridColumn: '1 / -1', margin: 0 }}>
+                    {b('setTeacherHelp')}
+                  </p>
+                  <SelectField
+                    id="stSection"
+                    name="section"
+                    label={b('section')}
+                    required
+                    options={[
+                      ...new Set(
+                        teachers.rows.map((r) => r.section).filter((x): x is string => Boolean(x)),
+                      ),
+                    ].map((x) => ({ value: x, label: x }))}
+                  />
+                  <SelectField
+                    id="stCode"
+                    name="code"
+                    label={b('subjectCol')}
+                    required
+                    options={[...new Map(teachers.rows.map((r) => [r.code, r.name])).entries()].map(
+                      ([code, name]) => ({
+                        value: code,
+                        label: `${code} ${name ?? ''}`.trim(),
+                      }),
+                    )}
+                  />
+                  <SelectField
+                    id="stEmp"
+                    name="employeeId"
+                    label={b('teacher')}
+                    options={[
+                      { value: '', label: b('orName') },
+                      ...teachers.options.map((e) => ({
+                        value: e.id,
+                        label: `${e.name} · ${e.code}`,
+                      })),
+                    ]}
+                  />
+                  <InputField
+                    id="stName"
+                    name="teacherName"
+                    label={b('teacherName')}
+                    maxLength={120}
+                  />
+                  <label className="ep-field" htmlFor="stRolls" style={{ gridColumn: '1 / -1' }}>
+                    <span className="ep-field__label">{b('rollsField')}</span>
+                    <textarea id="stRolls" name="rolls" className="ep-input" rows={2} />
+                    <span className="ep-field__help">{b('rollsHelp')}</span>
+                  </label>
+                  <div>
+                    <Button type="submit">{b('save')}</Button>
+                  </div>
+                </form>
+              </DialogButton>
+            ) : null}
+          </form>
+          <DataTable<BoardTeachers['rows'][number] & { k: string }>
+            caption={b('teachers')}
+            density="dense"
+            columns={[
+              {
+                key: 's',
+                header: b('subjectCol'),
+                render: (r) => (
+                  <>
+                    <strong>{r.code}</strong> {r.name ?? ''}
+                  </>
+                ),
+              },
+              { key: 'sec', header: b('section'), render: (r) => r.section ?? '—' },
+              {
+                key: 'n',
+                header: b('candidates'),
+                numeric: true,
+                render: (r) => String(r.candidates),
+              },
+              {
+                key: 't',
+                header: b('teacher'),
+                render: (r) =>
+                  r.teachers.map((t, i) => (
+                    <div key={i}>
+                      {t.name ?? <Badge tone="warning">{b('noTeacher')}</Badge>}
+                      {r.teachers.length > 1 ? ` (${String(t.candidates)})` : ''}
+                    </div>
+                  )),
+              },
+              {
+                key: 'o',
+                header: b('changedHere'),
+                render: (r) =>
+                  r.overrides.length
+                    ? r.overrides.map((o) => (
+                        <div
+                          key={o.id}
+                          style={{
+                            display: 'flex',
+                            gap: 'var(--sp-2)',
+                            alignItems: 'center',
+                            flexWrap: 'wrap',
+                          }}
+                        >
+                          <span>
+                            {o.name}
+                            {o.rolls.length ? ` · ${o.rolls.join(', ')}` : ''}
+                          </span>
+                          {canImport ? (
+                            <form action={removeBoardTeacher}>
+                              <input type="hidden" name="id" value={o.id} />
+                              <input type="hidden" name="classLabel" value={teachers.classLabel} />
+                              <input
+                                type="hidden"
+                                name="examYear"
+                                value={String(teachers.examYear ?? '')}
+                              />
+                              <Button type="submit" variant="ghost" size="sm">
+                                {b('remove')}
+                                <span className="ep-sr-only"> {o.name}</span>
+                              </Button>
+                            </form>
+                          ) : null}
+                        </div>
+                      ))
+                    : '—',
+              },
+            ]}
+            rows={teachers.rows.map((r) => ({ ...r, k: `${r.code}-${r.section ?? ''}` }))}
+            rowKey={(r) => r.k}
+            emptyTitle={b('noYear')}
+          />
+        </Card>
+      ) : null}
+
       {tab === 'setup' ? (
         <Card title={b('layouts')}>
           <p className="ep-field__help" style={{ marginTop: 0 }}>
@@ -491,6 +696,152 @@ export default async function BoardResultsPage({
             rowKey={(l) => l.key}
             emptyTitle="—"
           />
+        </Card>
+      ) : null}
+
+      {tab === 'setup' && subjects ? (
+        <Card
+          title={b('cbseSubjects')}
+          style={{ marginTop: 'var(--sp-5)' }}
+          actions={
+            <nav className="ep-tabs-links" aria-label={b('cbseSubjects')}>
+              {(['X', 'XII'] as const).map((x) => (
+                <a
+                  key={x}
+                  href={`/exams/board-results?tab=setup&subjects=${x}`}
+                  aria-current={subjectsCls === x ? 'page' : undefined}
+                >
+                  {b('classLabel')} {x}
+                </a>
+              ))}
+            </nav>
+          }
+        >
+          <p className="ep-field__help" style={{ marginTop: 0 }}>
+            {b('cbseSubjectsHelp')}
+          </p>
+          <DataTable<BoardSubjectRow>
+            caption={b('cbseSubjects')}
+            density="dense"
+            columns={[
+              { key: 'c', header: b('code'), render: (x) => <strong>{x.code}</strong> },
+              {
+                key: 'n',
+                header: b('name'),
+                render: (x) => x.name ?? <Badge tone="warning">{b('notNamed')}</Badge>,
+              },
+              { key: 'k', header: b('kindCol'), render: (x) => b(`kind_${x.kind}`) },
+              { key: 's', header: b('schoolSubject'), render: (x) => x.subject?.name ?? '—' },
+              {
+                key: 'u',
+                header: b('candidates'),
+                numeric: true,
+                render: (x) => String(x.candidates),
+              },
+              {
+                key: 'e',
+                header: b('actions'),
+                render: (x) =>
+                  canImport ? (
+                    <DialogButton
+                      id={`subj-${x.id}`}
+                      className="ep-btn ep-btn--ghost ep-btn--sm"
+                      label={
+                        <>
+                          {b('edit')}
+                          <span className="ep-sr-only"> {x.code}</span>
+                        </>
+                      }
+                      title={`${x.code} ${x.name ?? ''}`.trim()}
+                    >
+                      <form action={saveBoardSubject} className="ep-cert-fields">
+                        <input type="hidden" name="id" value={x.id} />
+                        <input type="hidden" name="classLabel" value={subjectsCls} />
+                        <InputField
+                          id={`sn-${x.id}`}
+                          name="name"
+                          label={b('name')}
+                          defaultValue={x.name ?? ''}
+                          required
+                          maxLength={120}
+                        />
+                        <SelectField
+                          id={`sk-${x.id}`}
+                          name="kind"
+                          label={b('kindCol')}
+                          defaultValue={x.kind}
+                          options={KINDS.map((k) => ({ value: k, label: b(`kind_${k}`) }))}
+                        />
+                        <SelectField
+                          id={`ss-${x.id}`}
+                          name="subjectId"
+                          label={b('schoolSubject')}
+                          defaultValue={x.subject?.id ?? ''}
+                          options={[
+                            { value: '', label: '—' },
+                            ...subjects.options.map((o) => ({
+                              value: o.id,
+                              label: `${o.name} (${o.code})`,
+                            })),
+                          ]}
+                        />
+                        <div>
+                          <Button type="submit">{b('save')}</Button>
+                        </div>
+                      </form>
+                    </DialogButton>
+                  ) : null,
+              },
+            ]}
+            rows={subjects.rows}
+            rowKey={(x) => x.id}
+            emptyTitle="—"
+          />
+          {canImport ? (
+            <div style={{ marginTop: 'var(--sp-3)' }}>
+              <DialogButton
+                id="subj-add"
+                className="ep-btn ep-btn--secondary ep-btn--sm"
+                label={b('addCode')}
+                title={b('addCode')}
+              >
+                <form action={saveBoardSubject} className="ep-cert-fields">
+                  <input type="hidden" name="classLabel" value={subjectsCls} />
+                  <InputField
+                    id="naCode"
+                    name="code"
+                    label={b('code')}
+                    required
+                    pattern="[0-9]{3}"
+                    maxLength={3}
+                  />
+                  <InputField id="naName" name="name" label={b('name')} required maxLength={120} />
+                  <SelectField
+                    id="naKind"
+                    name="kind"
+                    label={b('kindCol')}
+                    defaultValue="main"
+                    options={KINDS.map((k) => ({ value: k, label: b(`kind_${k}`) }))}
+                  />
+                  <SelectField
+                    id="naSubject"
+                    name="subjectId"
+                    label={b('schoolSubject')}
+                    options={[
+                      { value: '', label: '—' },
+                      ...subjects.options.map((o) => ({
+                        value: o.id,
+                        label: `${o.name} (${o.code})`,
+                      })),
+                    ]}
+                  />
+                  <div>
+                    <Button type="submit">{b('save')}</Button>
+                  </div>
+                </form>
+              </DialogButton>
+            </div>
+          ) : null}
         </Card>
       ) : null}
     </>

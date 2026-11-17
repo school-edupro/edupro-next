@@ -7,6 +7,7 @@ import { ReportCardSignaturesService } from './report-card-signatures.service';
 import { BoardResultsController } from './board-results.controller';
 import { BoardResultsService } from './board-results.service';
 import { BoardGazetteService } from './board-gazette.service';
+import { BoardDetailsService } from './board-details.service';
 import { BoardLayoutAi } from './board-layout-ai';
 import { ExamAnalysisController } from './exam-analysis.controller';
 import { ExamAnalysisService } from './exam-analysis.service';
@@ -74,6 +75,7 @@ import { SubjectChoicesService } from './subject-choices.service';
     ReportCardsService,
     BoardResultsService,
     BoardGazetteService,
+    BoardDetailsService,
     BoardLayoutAi,
     SubjectChoicesService,
     ExamStatusService,

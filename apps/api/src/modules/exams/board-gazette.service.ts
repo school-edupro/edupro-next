@@ -15,6 +15,7 @@ import {
   type GazetteLayout,
   type GazetteProblem,
 } from './board-gazette';
+import { BoardDetailsService } from './board-details.service';
 import { BoardLayoutAi } from './board-layout-ai';
 import type { GazetteUploadDto } from './board-results.dto';
 import { IMPORT_COLUMNS, toImport, type BoardImportRow } from './board-results.service';
@@ -101,6 +102,7 @@ export class BoardGazetteService {
     private readonly db: DbService,
     private readonly audit: AuditService,
     private readonly ai: BoardLayoutAi,
+    private readonly details: BoardDetailsService,
   ) {}
 
   /** Known layouts of a class: the school's kept ones first, then the built-in ones. */
@@ -160,8 +162,14 @@ export class BoardGazetteService {
   ): Promise<GazetteRow[]> {
     const pupils = academicYearId
       ? (
-          await c.query<{ id: string; name: string; roll: string | null; admission_no: string }>(
-            `SELECT DISTINCT s.id::text, s.display_name AS name, e.board_roll_no AS roll, s.admission_no
+          await c.query<{
+            id: string;
+            name: string;
+            roll: string | null;
+            admission_no: string;
+            gender: string | null;
+          }>(
+            `SELECT DISTINCT s.id::text, s.display_name AS name, e.board_roll_no AS roll, s.admission_no, s.gender::text AS gender
                FROM enrolments e JOIN students s ON s.id = e.student_id AND s.deleted_at IS NULL
                JOIN class_sections cs ON cs.id = e.class_section_id JOIN classes k ON k.id = cs.class_id
               WHERE e.academic_year_id = $1 AND k.code = $2`,
@@ -174,7 +182,11 @@ export class BoardGazetteService {
     for (const p of pupils) names.set(norm(p.name), [...(names.get(norm(p.name)) ?? []), p]);
     return candidates.map((cand) => {
       const roll = byRoll.get(cand.roll);
-      const sameName = names.get(norm(cand.name)) ?? [];
+      // a name match also agrees on sex where the record has it (M / F)
+      const sexOf = (g: string | null) => (g === 'male' ? 'M' : g === 'female' ? 'F' : '');
+      const sameName = (names.get(norm(cand.name)) ?? []).filter(
+        (p) => !sexOf(p.gender) || !cand.sex || sexOf(p.gender) === cand.sex,
+      );
       const p = roll ?? (sameName.length === 1 ? sameName[0] : undefined);
       return {
         ...cand,
@@ -429,8 +441,25 @@ export class BoardGazetteService {
           ORDER BY committed_at DESC LIMIT 1`,
         [base.board, base.classLabel, base.examYear, id],
       );
+      // a saved file: how its candidates were found and where their details came from
+      const saved =
+        base.status === 'committed' && !base.replacedAt
+          ? (
+              await c.query<Record<string, number>>(
+                `SELECT count(*) FILTER (WHERE match = 'roll')::int AS roll, count(*) FILTER (WHERE match = 'name')::int AS name,
+                        count(*) FILTER (WHERE match = 'picked')::int AS picked, count(*) FILTER (WHERE match = 'none')::int AS none,
+                        count(*) FILTER (WHERE match = 'not_ours')::int AS "notOurs",
+                        count(*) FILTER (WHERE details_from = 'record')::int AS "fromRecord",
+                        count(*) FILTER (WHERE details_from = 'sheet')::int AS "fromSheet"
+                   FROM board_candidates WHERE import_id = $1`,
+                [id],
+              )
+            ).rows[0]
+          : null;
       return {
         ...base,
+        saved,
+        subjectNames: await this.details.names(c, base.board, base.classLabel as BoardClass),
         academicYear: x.year,
         by: x.by,
         layout,
@@ -553,6 +582,13 @@ export class BoardGazetteService {
            JOIN board_candidates bc ON bc.import_id = $1 AND bc.roll_no = x.roll`,
         [id, i.academic_year_id, i.exam_year, i.board, i.class_label, JSON.stringify(subjects)],
       );
+      // the subject codes named, every found candidate's details from the record, the board roll numbers kept
+      await this.details.ensureSubjects(c, i.board, i.class_label, [
+        ...new Set(subjects.map((s) => s.code)),
+      ]);
+      await this.details.nameResults(c, id);
+      await this.details.snapshot(c, { importId: id });
+      await this.details.writeRolls(c, { importId: id });
       // a layout learned for this file is kept for the next one of the same layout
       if (i.layout_key?.startsWith('db:')) {
         const lid = i.layout_key.slice(3);

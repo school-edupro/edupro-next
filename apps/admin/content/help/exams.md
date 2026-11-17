@@ -497,6 +497,21 @@ the next file laid out the same way is read without the AI. Switch a kept layout
 learned again. The AI needs the school's server to be set up for it (IT: `AI_PROVIDER=claude` and the
 `ANTHROPIC_API_KEY`); without it, known layouts still work.
 
+**After saving: students, details, teachers.** Saving takes each found candidate's section, stream, category,
+religion, EWS, CWSN, boarder (a hostel allotment that year) and staff ward (a parent on the staff) from the
+student's record, and keeps the board roll number on the enrolment, so the next file — the compartment result, say —
+finds them by it. On the upload's page, **Review students** lists the candidates not found first: pick the student
+(the likely ones are listed first) or mark **Not our student**; a link can be undone. **Take the details again from
+the records** reads them again after a record was put right. Where the records are not enough, **Upload the details
+sheet** takes the school's old two-sheet file (roll number → section, category, EWS …; section × subject code →
+teacher) and its values win for those candidates.
+
+**Teachers** (tab) shows who taught each section's subject in the examination year — the year's teacher
+assignments, through each CBSE code's school subject — and **Set a teacher** changes one for this examination only
+(the whole section, or some roll numbers, e.g. a language group). **Set-up → CBSE subjects** lists the codes CBSE
+prints with their names, kinds (language, main, skill, additional, internal) and the school subject each one is;
+a code a file printed that is not on the list appears at the top to be named.
+
 An Excel or CSV file (one row per candidate per subject, or one row per candidate) can still be imported from the
 **Excel or CSV result file** card on the same tab.
 

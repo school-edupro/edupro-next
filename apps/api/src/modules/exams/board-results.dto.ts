@@ -65,3 +65,66 @@ export class GazetteUploadDto extends createZodDto(GazetteUploadSchema) {}
 
 export const LayoutActiveSchema = z.object({ active: z.boolean() });
 export class LayoutActiveDto extends createZodDto(LayoutActiveSchema) {}
+
+const ClassLabel = z.enum(['X', 'XII']);
+const Code = z
+  .string()
+  .trim()
+  .regex(/^\d{3}$/, 'a 3-digit CBSE code');
+const Kind = z.enum(['language', 'main', 'skill', 'additional', 'internal']);
+
+/** A candidate linked to a student, marked not ours, or unlinked (docs/design/88, phase B). */
+export const PickSchema = z.object({
+  studentId: Id.nullable().optional(),
+  notOurs: z.boolean().optional(),
+});
+export class PickDto extends createZodDto(PickSchema) {}
+
+export const BoardSubjectSchema = z.object({
+  name: z.string().trim().min(2).max(120),
+  kind: Kind,
+  subjectId: Id.nullable(),
+});
+export class BoardSubjectDto extends createZodDto(BoardSubjectSchema) {}
+
+export const BoardSubjectAddSchema = BoardSubjectSchema.extend({
+  classLabel: ClassLabel,
+  code: Code,
+});
+export class BoardSubjectAddDto extends createZodDto(BoardSubjectAddSchema) {}
+
+export const BoardClassQuerySchema = z.object({
+  classLabel: ClassLabel.default('X'),
+  examYear: z.coerce.number().int().min(2000).max(2100).optional(),
+});
+export class BoardClassQueryDto extends createZodDto(BoardClassQuerySchema) {}
+
+export const BoardTeacherSchema = z
+  .object({
+    classLabel: ClassLabel,
+    examYear: z.coerce.number().int().min(2000).max(2100),
+    section: z.string().trim().min(1).max(40),
+    code: Code,
+    employeeId: Id.nullable().optional(),
+    teacherName: z.string().trim().min(2).max(120).nullable().optional(),
+    rolls: z
+      .array(
+        z
+          .string()
+          .trim()
+          .regex(/^\d{6,10}$/, 'a roll number'),
+      )
+      .max(400)
+      .default([]),
+  })
+  .refine((v) => Boolean(v.employeeId) || Boolean(v.teacherName), {
+    message: 'Choose the teacher',
+    path: ['employeeId'],
+  });
+export class BoardTeacherDto extends createZodDto(BoardTeacherSchema) {}
+
+export const DetailsSheetSchema = z.object({
+  fileName: z.string().trim().max(200).optional(),
+  fileBase64: z.string().min(10).max(1_000_000, 'The sheet is larger than 700 KB'),
+});
+export class DetailsSheetDto extends createZodDto(DetailsSheetSchema) {}
