@@ -277,253 +277,283 @@ export default async function IssueCertificatePage({
                   </a>{' '}
                   to print a duplicate or cancel it.
                 </div>
-              ) : failed.length && !preview.can.override ? (
+              ) : failed.length && !preview.can.override && !correcting ? (
                 <div className="ep-alert ep-alert--warning" role="status">
-                  A check is not clear: only the principal may issue it anyway. Clear it first, or
-                  ask the principal.
+                  <div>
+                    <p style={{ margin: 0 }}>
+                      <strong>Not clear yet.</strong> What it prints and the preview show once the
+                      checks above are clear — or the principal may issue it anyway, with a reason.
+                    </p>
+                    {type.code === 'TC' && !staff ? (
+                      <p style={{ margin: 'var(--sp-2) 0 0' }}>
+                        {preview.withdrawal ? (
+                          <>
+                            Next:{' '}
+                            <a href={`/people/withdrawals/${preview.withdrawal.id}`}>
+                              open the withdrawal
+                            </a>{' '}
+                            — its departments clear the fees, library, hostel and transport, and it
+                            takes the student off the rolls when it is complete.
+                          </>
+                        ) : (
+                          <>
+                            Next:{' '}
+                            <a href={`/people/students/${studentId}?tab=status`}>
+                              start the withdrawal on the student&apos;s page
+                            </a>{' '}
+                            (Status) — the TC is issued once it is complete.
+                          </>
+                        )}
+                      </p>
+                    ) : null}
+                  </div>
                 </div>
               ) : null}
             </Card>
-            <Card>
-              <h2 className="ep-card__title">3. What it prints</h2>
-              <form
-                action={
-                  correcting
-                    ? correctCertificate
-                    : reissuing
-                      ? reissueCertificate
-                      : issueCertificate
-                }
-                className="ep-cert-form"
-              >
-                <input type="hidden" name="type" value={type.code} />
-                {editing ? (
-                  <>
-                    <input type="hidden" name="id" value={original!.id} />
-                    <input
-                      type="hidden"
-                      name={correcting ? 'correct' : 'reissue'}
-                      value={original!.id}
-                    />
-                    <input type="hidden" name="changes" value="1" />
-                    <input type="hidden" name="returnTo" value={here} />
-                  </>
-                ) : null}
-                {requestId ? <input type="hidden" name="requestId" value={requestId} /> : null}
-                {staff ? (
-                  <input type="hidden" name="employee" value={employeeId} />
-                ) : (
-                  <input type="hidden" name="student" value={studentId} />
-                )}
-                <div className="ep-cert-fields">
-                  {preview.variants.length ? (
-                    <SelectField
-                      id="variant"
-                      name="variant"
-                      label="Layout"
-                      defaultValue={preview.variant ?? ''}
-                      options={preview.variants.map((v) => ({
-                        value: v.templateId ?? '',
-                        label: v.label,
-                      }))}
-                    />
-                  ) : null}
-                  {asksPurpose ? (
-                    <label className="ep-field" htmlFor="purpose">
-                      <span className="ep-field__label">Purpose (printed)</span>
-                      <input
-                        id="purpose"
-                        name="purpose"
-                        className="ep-input"
-                        defaultValue={purpose}
-                        maxLength={200}
-                        placeholder="e.g. opening a bank account"
-                      />
-                    </label>
-                  ) : null}
-                  <label className="ep-field" htmlFor="issuedOn">
-                    <span className="ep-field__label">Date of issue</span>
-                    <input
-                      id="issuedOn"
-                      name="issuedOn"
-                      type="date"
-                      className="ep-input"
-                      defaultValue={issuedOn}
-                    />
-                    <span className="ep-field__help">Today when left empty</span>
-                  </label>
-                  {preview.personDetails?.length ? (
-                    <div className="ep-cert-person" style={{ gridColumn: '1 / -1' }}>
-                      <h3 className="ep-ctype__sub">
-                        From the {staff ? "employee's" : "student's"} record
-                      </h3>
-                      <p className="ep-field__help" style={{ margin: 0 }}>
-                        What this layout prints about the {who}, filled from the record. Change any
-                        of them for this certificate: the record stays as it is, and the certificate
-                        keeps both.
-                        {staff ? '' : ' The admission number prints from the record.'}
-                      </p>
-                    </div>
-                  ) : null}
-                  {(preview.personDetails ?? []).map((d) => {
-                    const pid = `${PERSON_PREFIX}${d.path}`;
-                    return (
-                      <label key={d.path} className="ep-field" htmlFor={pid}>
-                        <span className="ep-field__label">{d.label}</span>
-                        <input
-                          id={pid}
-                          name={pid}
-                          className="ep-input"
-                          type={d.kind === 'date' ? 'date' : 'text'}
-                          maxLength={d.kind === 'text' ? 300 : undefined}
-                          defaultValue={d.value}
-                          required={d.path === 'student.name' || d.path === 'employee.name'}
-                        />
-                        {d.changed ? (
-                          <span className="ep-field__help ep-cert-person__changed">
-                            Changed for this certificate · the record:{' '}
-                            {d.record ? <strong>{d.record}</strong> : 'none'}
-                          </span>
-                        ) : d.path === 'student.dobWords' ? (
-                          <span className="ep-field__help">
-                            Follows the date of birth unless typed
-                          </span>
-                        ) : null}
-                      </label>
-                    );
-                  })}
-                  {preview.personDetails?.length && preview.fields.length ? (
-                    <h3 className="ep-ctype__sub" style={{ gridColumn: '1 / -1', margin: 0 }}>
-                      {type.name}: the details for this certificate
-                    </h3>
-                  ) : null}
-                  {preview.fields.map((f) => {
-                    const fid = `${FIELD_PREFIX}${f.key}`;
-                    const value = preview.values[f.key];
-                    const v = value === undefined || value === null ? '' : String(value);
-                    return f.kind === 'list' ? (
-                      <SelectField
-                        key={f.key}
-                        id={fid}
-                        name={fid}
-                        label={`${f.label}${f.required ? ' *' : ''}`}
-                        defaultValue={v}
-                        options={[
-                          ...(f.required ? [] : [{ value: '', label: '—' }]),
-                          ...(f.options ?? []).map((o) => ({ value: o, label: o })),
-                        ]}
-                      />
-                    ) : (
-                      <label key={f.key} className="ep-field" htmlFor={fid}>
-                        <span className="ep-field__label">
-                          {f.label}
-                          {f.required ? ' *' : ''}
-                        </span>
-                        {f.kind === 'number' ? (
-                          <input type="hidden" name={`num_${f.key}`} value="1" />
-                        ) : null}
-                        <input
-                          id={fid}
-                          name={fid}
-                          className="ep-input"
-                          type={
-                            f.kind === 'date' ? 'date' : f.kind === 'number' ? 'number' : 'text'
-                          }
-                          min={f.kind === 'number' ? 0 : undefined}
-                          max={f.kind === 'number' ? 9999 : undefined}
-                          maxLength={f.kind === 'text' ? 500 : undefined}
-                          defaultValue={v}
-                          required={f.required}
-                        />
-                        {f.hint ? <span className="ep-field__help">{f.hint}</span> : null}
-                      </label>
-                    );
-                  })}
-                </div>
-                {preview.problems.length ? (
-                  <div className="ep-alert ep-alert--warning" role="status">
-                    {preview.problems.join('; ')}
-                  </div>
-                ) : null}
-                {failed.length && preview.can.override && !preview.held ? (
-                  <label className="ep-field" htmlFor="overrideReason">
-                    <span className="ep-field__label">
-                      Why it is issued although{' '}
-                      {failed.map((x) => x.label.toLowerCase()).join(', ')}{' '}
-                      {failed.length === 1 ? 'is' : 'are'} not clear *
-                    </span>
-                    <textarea
-                      id="overrideReason"
-                      name="overrideReason"
-                      className="ep-input"
-                      rows={2}
-                      minLength={10}
-                      maxLength={300}
-                      required
-                    />
-                    <span className="ep-field__help">
-                      Recorded on the certificate with your name; it shows in the register.
-                    </span>
-                  </label>
-                ) : null}
-                {editing ? (
-                  <label className="ep-field" htmlFor="reason">
-                    <span className="ep-field__label">
-                      {correcting ? 'Why it is corrected *' : 'Why it is re-issued *'}
-                    </span>
-                    <textarea
-                      id="reason"
-                      name="reason"
-                      className="ep-input"
-                      rows={2}
-                      minLength={3}
-                      maxLength={250}
-                      required
-                      placeholder="e.g. the purpose was typed wrong"
-                    />
-                    <span className="ep-field__help">
-                      {correcting
-                        ? `Recorded in the change log of ${original!.number}, with what changed.`
-                        : `Recorded on ${original!.number} as the reason it was cancelled.`}
-                    </span>
-                  </label>
-                ) : null}
-                <div style={{ display: 'flex', gap: 'var(--sp-2)', flexWrap: 'wrap' }}>
-                  <Button type="submit" disabled={blocked}>
-                    {correcting
-                      ? `Save as revision ${String(original!.revision + 1)}`
-                      : reissuing
-                        ? 'Re-issue with these changes'
-                        : `Issue ${type.name.toLowerCase()}`}
-                  </Button>
-                  <button
-                    type="submit"
-                    className="ep-btn ep-btn--secondary"
-                    formAction="/certificates/issue"
-                    formMethod="get"
-                    formNoValidate
+            {blocked ? null : (
+              <>
+                <Card>
+                  <h2 className="ep-card__title">3. What it prints</h2>
+                  <form
+                    action={
+                      correcting
+                        ? correctCertificate
+                        : reissuing
+                          ? reissueCertificate
+                          : issueCertificate
+                    }
+                    className="ep-cert-form"
                   >
-                    Update the preview
-                  </button>
-                </div>
-              </form>
-            </Card>
-            <Card>
-              <h2 className="ep-card__title">Preview</h2>
-              <p className="ep-field__help" style={{ marginTop: 0 }}>
-                The number shows as “(next)” until it is issued.
-              </p>
-              {preview.html ? (
-                <iframe
-                  title={`Preview of the ${type.name.toLowerCase()}`}
-                  className="ep-cert-preview"
-                  sandbox=""
-                  srcDoc={fitPaper(preview.html)}
-                />
-              ) : (
-                <p className="ep-field__help">This type has no template yet.</p>
-              )}
-            </Card>
+                    <input type="hidden" name="type" value={type.code} />
+                    {editing ? (
+                      <>
+                        <input type="hidden" name="id" value={original!.id} />
+                        <input
+                          type="hidden"
+                          name={correcting ? 'correct' : 'reissue'}
+                          value={original!.id}
+                        />
+                        <input type="hidden" name="changes" value="1" />
+                        <input type="hidden" name="returnTo" value={here} />
+                      </>
+                    ) : null}
+                    {requestId ? <input type="hidden" name="requestId" value={requestId} /> : null}
+                    {staff ? (
+                      <input type="hidden" name="employee" value={employeeId} />
+                    ) : (
+                      <input type="hidden" name="student" value={studentId} />
+                    )}
+                    <div className="ep-cert-fields">
+                      {preview.variants.length ? (
+                        <SelectField
+                          id="variant"
+                          name="variant"
+                          label="Layout"
+                          defaultValue={preview.variant ?? ''}
+                          options={preview.variants.map((v) => ({
+                            value: v.templateId ?? '',
+                            label: v.label,
+                          }))}
+                        />
+                      ) : null}
+                      {asksPurpose ? (
+                        <label className="ep-field" htmlFor="purpose">
+                          <span className="ep-field__label">Purpose (printed)</span>
+                          <input
+                            id="purpose"
+                            name="purpose"
+                            className="ep-input"
+                            defaultValue={purpose}
+                            maxLength={200}
+                            placeholder="e.g. opening a bank account"
+                          />
+                        </label>
+                      ) : null}
+                      <label className="ep-field" htmlFor="issuedOn">
+                        <span className="ep-field__label">Date of issue</span>
+                        <input
+                          id="issuedOn"
+                          name="issuedOn"
+                          type="date"
+                          className="ep-input"
+                          defaultValue={issuedOn}
+                        />
+                        <span className="ep-field__help">Today when left empty</span>
+                      </label>
+                      {preview.personDetails?.length ? (
+                        <div className="ep-cert-person" style={{ gridColumn: '1 / -1' }}>
+                          <h3 className="ep-ctype__sub">
+                            From the {staff ? "employee's" : "student's"} record
+                          </h3>
+                          <p className="ep-field__help" style={{ margin: 0 }}>
+                            What this layout prints about the {who}, filled from the record. Change
+                            any of them for this certificate: the record stays as it is, and the
+                            certificate keeps both.
+                            {staff ? '' : ' The admission number prints from the record.'}
+                          </p>
+                        </div>
+                      ) : null}
+                      {(preview.personDetails ?? []).map((d) => {
+                        const pid = `${PERSON_PREFIX}${d.path}`;
+                        return (
+                          <label key={d.path} className="ep-field" htmlFor={pid}>
+                            <span className="ep-field__label">{d.label}</span>
+                            <input
+                              id={pid}
+                              name={pid}
+                              className="ep-input"
+                              type={d.kind === 'date' ? 'date' : 'text'}
+                              maxLength={d.kind === 'text' ? 300 : undefined}
+                              defaultValue={d.value}
+                              required={d.path === 'student.name' || d.path === 'employee.name'}
+                            />
+                            {d.changed ? (
+                              <span className="ep-field__help ep-cert-person__changed">
+                                Changed for this certificate · the record:{' '}
+                                {d.record ? <strong>{d.record}</strong> : 'none'}
+                              </span>
+                            ) : d.path === 'student.dobWords' ? (
+                              <span className="ep-field__help">
+                                Follows the date of birth unless typed
+                              </span>
+                            ) : null}
+                          </label>
+                        );
+                      })}
+                      {preview.personDetails?.length && preview.fields.length ? (
+                        <h3 className="ep-ctype__sub" style={{ gridColumn: '1 / -1', margin: 0 }}>
+                          {type.name}: the details for this certificate
+                        </h3>
+                      ) : null}
+                      {preview.fields.map((f) => {
+                        const fid = `${FIELD_PREFIX}${f.key}`;
+                        const value = preview.values[f.key];
+                        const v = value === undefined || value === null ? '' : String(value);
+                        return f.kind === 'list' ? (
+                          <SelectField
+                            key={f.key}
+                            id={fid}
+                            name={fid}
+                            label={`${f.label}${f.required ? ' *' : ''}`}
+                            defaultValue={v}
+                            options={[
+                              ...(f.required ? [] : [{ value: '', label: '—' }]),
+                              ...(f.options ?? []).map((o) => ({ value: o, label: o })),
+                            ]}
+                          />
+                        ) : (
+                          <label key={f.key} className="ep-field" htmlFor={fid}>
+                            <span className="ep-field__label">
+                              {f.label}
+                              {f.required ? ' *' : ''}
+                            </span>
+                            {f.kind === 'number' ? (
+                              <input type="hidden" name={`num_${f.key}`} value="1" />
+                            ) : null}
+                            <input
+                              id={fid}
+                              name={fid}
+                              className="ep-input"
+                              type={
+                                f.kind === 'date' ? 'date' : f.kind === 'number' ? 'number' : 'text'
+                              }
+                              min={f.kind === 'number' ? 0 : undefined}
+                              max={f.kind === 'number' ? 9999 : undefined}
+                              maxLength={f.kind === 'text' ? 500 : undefined}
+                              defaultValue={v}
+                              required={f.required}
+                            />
+                            {f.hint ? <span className="ep-field__help">{f.hint}</span> : null}
+                          </label>
+                        );
+                      })}
+                    </div>
+                    {preview.problems.length ? (
+                      <div className="ep-alert ep-alert--warning" role="status">
+                        {preview.problems.join('; ')}
+                      </div>
+                    ) : null}
+                    {failed.length && preview.can.override && !preview.held ? (
+                      <label className="ep-field" htmlFor="overrideReason">
+                        <span className="ep-field__label">
+                          Why it is issued although{' '}
+                          {failed.map((x) => x.label.toLowerCase()).join(', ')}{' '}
+                          {failed.length === 1 ? 'is' : 'are'} not clear *
+                        </span>
+                        <textarea
+                          id="overrideReason"
+                          name="overrideReason"
+                          className="ep-input"
+                          rows={2}
+                          minLength={10}
+                          maxLength={300}
+                          required
+                        />
+                        <span className="ep-field__help">
+                          Recorded on the certificate with your name; it shows in the register.
+                        </span>
+                      </label>
+                    ) : null}
+                    {editing ? (
+                      <label className="ep-field" htmlFor="reason">
+                        <span className="ep-field__label">
+                          {correcting ? 'Why it is corrected *' : 'Why it is re-issued *'}
+                        </span>
+                        <textarea
+                          id="reason"
+                          name="reason"
+                          className="ep-input"
+                          rows={2}
+                          minLength={3}
+                          maxLength={250}
+                          required
+                          placeholder="e.g. the purpose was typed wrong"
+                        />
+                        <span className="ep-field__help">
+                          {correcting
+                            ? `Recorded in the change log of ${original!.number}, with what changed.`
+                            : `Recorded on ${original!.number} as the reason it was cancelled.`}
+                        </span>
+                      </label>
+                    ) : null}
+                    <div style={{ display: 'flex', gap: 'var(--sp-2)', flexWrap: 'wrap' }}>
+                      <Button type="submit" disabled={blocked}>
+                        {correcting
+                          ? `Save as revision ${String(original!.revision + 1)}`
+                          : reissuing
+                            ? 'Re-issue with these changes'
+                            : `Issue ${type.name.toLowerCase()}`}
+                      </Button>
+                      <button
+                        type="submit"
+                        className="ep-btn ep-btn--secondary"
+                        formAction="/certificates/issue"
+                        formMethod="get"
+                        formNoValidate
+                      >
+                        Update the preview
+                      </button>
+                    </div>
+                  </form>
+                </Card>
+                <Card>
+                  <h2 className="ep-card__title">Preview</h2>
+                  <p className="ep-field__help" style={{ marginTop: 0 }}>
+                    The number shows as “(next)” until it is issued.
+                  </p>
+                  {preview.html ? (
+                    <iframe
+                      title={`Preview of the ${type.name.toLowerCase()}`}
+                      className="ep-cert-preview"
+                      sandbox=""
+                      srcDoc={fitPaper(preview.html)}
+                    />
+                  ) : (
+                    <p className="ep-field__help">This type has no template yet.</p>
+                  )}
+                </Card>
+              </>
+            )}
           </>
         ) : null}
       </div>

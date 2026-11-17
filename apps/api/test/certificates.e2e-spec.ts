@@ -1032,6 +1032,8 @@ describe('certificate register (e2e)', () => {
     // a TC asks for what its layout prints, in the order it prints them, filled from the record
     const tcp = await preview({ typeCode: 'TC', studentId: pupils.asha });
     expect(tcp.statusCode).toBe(201);
+    // no withdrawal yet: the page links to start one (17 Nov 2026)
+    expect(tcp.json().withdrawal).toBeNull();
     const boxes = tcp.json().personDetails as Box[];
     const paths = boxes.map((d) => d.path);
     expect(paths).toEqual(

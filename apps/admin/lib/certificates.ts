@@ -146,6 +146,8 @@ export interface CertificatePreview {
   values: Record<string, string | number>;
   /** the person's details the layout prints (17 Nov 2026): filled from the record, changed for this certificate */
   personDetails?: CertificatePersonBox[];
+  /** the student's withdrawal, when one is open or done (a TC's checks clear there) */
+  withdrawal?: { id: string; leavingOn: string | null } | null;
   problems: string[];
   html: string | null;
   can: CertificateCan;

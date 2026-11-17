@@ -709,3 +709,21 @@ them; an empty name and a wrong date refused); `certificates-setup.e2e-spec.ts` 
 designation and joining date changed on the paper only). A browser pass on Alpha at 1440 and 375 px (axe clean; the TC
 boxes for a student; a change marked and printed after Update the preview; Issue caught before it reached the server —
 nothing issued).
+
+## A check not clear keeps the paper back (17 Nov 2026)
+
+The user found "3. What it prints" and the preview shown for a TC whose withdrawal was not complete. Chosen
+(recommended): hide them until the checks are clear for whoever may not issue past a check; the principal (override
+right) still sees them with "Why it is issued anyway".
+
+- **API**: the preview carries `withdrawal` {id, leavingOn} (the student's latest open or done withdrawal) or null.
+- **Admin** (Issue): when a check fails (or the person already holds it) and the user may not override — `blocked`,
+  not for a correction — section 3 and the preview are not shown; under the checks a "Not clear yet" note says they
+  show once the checks are clear or the principal issues it with a reason, and for a TC the next step: **open the
+  withdrawal** (`/people/withdrawals/:id`, whose departments clear fees, library, hostel and transport) or **start
+  the withdrawal on the student's page** (`/people/students/:id?tab=status`).
+
+Tests: `certificates.e2e-spec.ts` (the TC preview's `withdrawal` null with none). A browser pass at 1440 and 375 px,
+axe clean: a test school's certificate office (no override; its school switched on for the run and off after) sees the
+note and the start link, no section 3 and no preview; dev-admin on Alpha (override) still sees both for student 12247.
+None of Alpha's demo logins issues without the override right.

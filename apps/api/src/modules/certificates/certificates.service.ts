@@ -972,6 +972,10 @@ export class CertificatesService {
         values: b.fields,
         /** the person's details the layout prints, filled from the record; any changed for this certificate */
         personDetails: b.personBoxes,
+        /** the student's withdrawal (its departments clear a TC's checks), when one is open or done */
+        withdrawal: b.withdrawal
+          ? { id: b.withdrawal.id, leavingOn: b.withdrawal.leaving_on }
+          : null,
         problems: b.problems,
         variants: type.variants.length
           ? [
