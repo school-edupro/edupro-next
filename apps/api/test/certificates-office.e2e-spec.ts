@@ -312,6 +312,15 @@ describe('certificate office: bulk, awards, registers (e2e)', () => {
       'ACH/2026-27/00003',
     ]);
     expect(rows.rows.every((x) => x.number === x.serial_no && x.type === 'ACHIEVEMENT')).toBe(true);
+    // the set-up's layouts say the achievement screen printed with it, though no type uses it (17 Nov 2026)
+    const setup = (await get('/certificates/setup')).json();
+    expect(
+      (setup.templates as Array<{ id: string }>).find((x) => x.id === tpl.rows[0]!.id),
+    ).toMatchObject({ usedBy: [], made: 0, screenMade: 3 });
+    expect((await get(`/certificates/setup/templates/${tpl.rows[0]!.id}`)).json()).toMatchObject({
+      usedBy: [],
+      screenMade: 3,
+    });
     // in the register its PDF is the batch's; made again, it gets a page of its own (16 Nov 2026)
     const reg = await get('/certificates?type=ACHIEVEMENT');
     expect(reg.json().total).toBe(3);

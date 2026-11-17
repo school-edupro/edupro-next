@@ -211,6 +211,10 @@ export interface CertificateTemplateRow {
   updatedAt: string;
   usedBy: string[];
   made: number;
+  /** printed by Parent engagement → Achievement certificates, which picks a layout itself */
+  screenMade?: number;
+  /** transfer certificates issued before the register, which print with it */
+  tcMade?: number;
   pageWidth: string;
   pageHeight: string;
 }
@@ -310,6 +314,10 @@ export interface CertificateTemplateDetail {
   version: number;
   ready: boolean;
   usedBy: Array<{ code: string; name: string }>;
+  /** printed by Parent engagement → Achievement certificates, which picks a layout itself */
+  screenMade?: number;
+  /** transfer certificates issued before the register, which print with it */
+  tcMade?: number;
   types: Array<{ code: string; name: string; audience: 'STUDENT' | 'STAFF' }>;
   forType: string | null;
   catalogue: Array<{ group: string; items: Array<{ token: string; label: string }> }>;

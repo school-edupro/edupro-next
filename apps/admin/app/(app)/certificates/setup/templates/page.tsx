@@ -28,11 +28,78 @@ type R = CertificateTemplateRow;
 const originOf = (t: R) =>
   t.code === 'cert_legacy'
     ? 'Prints certificates brought from the old system'
-    : !t.ready
-      ? "The school's copy"
-      : t.version > 1
-        ? `EduPro's layout, changed by the school (version ${String(t.version)})`
-        : "EduPro's ready layout";
+    : t.code === 'tc_default' || t.code === 'bonafide_default'
+      ? 'The layout used before the certificate register'
+      : !t.ready
+        ? "The school's copy"
+        : t.version > 1
+          ? `EduPro's layout, changed by the school (version ${String(t.version)})`
+          : "EduPro's ready layout";
+
+/**
+ * Who uses a layout. A layout no type uses may still be in use (17 Nov 2026): the reprint layout of certificates from
+ * the old system, or one the achievement certificates screen printed with (it picks a layout itself) — said, so that
+ * nobody takes it for a spare one.
+ */
+function UsedBy({ t }: { t: R }) {
+  const screen = t.screenMade ?? 0;
+  const tcs = t.tcMade ?? 0;
+  // underlined: a link inside a line of text
+  const screenLink = (
+    <a href="/engagement/certificates" style={{ textDecoration: 'underline' }}>
+      Parent engagement → Achievement certificates
+    </a>
+  );
+  const tcLink = (
+    <a href="/people/tc" style={{ textDecoration: 'underline' }}>
+      People → Transfer certificates
+    </a>
+  );
+  if (t.code === 'cert_legacy')
+    return (
+      <>
+        <Badge tone="info">Old-system reprints</Badge>
+        <span className="ep-ctype__num" style={{ whiteSpace: 'normal' }}>
+          No type may use it: it reprints the certificates brought from the old system. Keep it.
+        </span>
+      </>
+    );
+  if (!t.usedBy.length && screen)
+    return (
+      <>
+        <Badge tone="info">Achievement certificates screen</Badge>
+        <span className="ep-ctype__num" style={{ whiteSpace: 'normal' }}>
+          {String(screen)} printed from {screenLink}, which picks its layout itself. Keep it.
+        </span>
+      </>
+    );
+  if (!t.usedBy.length && tcs)
+    return (
+      <>
+        <Badge tone="info">TCs from before the register</Badge>
+        <span className="ep-ctype__num" style={{ whiteSpace: 'normal' }}>
+          {String(tcs)} transfer certificates issued before the register print with it ({tcLink}).
+          Keep it.
+        </span>
+      </>
+    );
+  if (!t.usedBy.length) return <Badge tone="neutral">No type</Badge>;
+  return (
+    <>
+      {t.usedBy.join(', ')}
+      {screen ? (
+        <span className="ep-ctype__num" style={{ whiteSpace: 'normal' }}>
+          Also {screenLink} ({String(screen)} printed)
+        </span>
+      ) : null}
+      {tcs ? (
+        <span className="ep-ctype__num" style={{ whiteSpace: 'normal' }}>
+          Also {String(tcs)} TCs from before the register
+        </span>
+      ) : null}
+    </>
+  );
+}
 
 /**
  * Certificate templates (docs/design/87; rebuilt 16 Nov 2026): the figures, a search, the layouts used by a certificate
@@ -124,14 +191,13 @@ export default async function CertificateTemplatesPage({
     {
       key: 'used',
       header: 'Used by',
-      render: (t: R) =>
-        t.usedBy.length ? t.usedBy.join(', ') : <Badge tone="neutral">No type</Badge>,
+      render: (t: R) => <UsedBy t={t} />,
     },
     { key: 'paper', header: 'Paper', render: (t: R) => paperLabel(t.pageWidth, t.pageHeight) },
     {
       key: 'made',
       header: 'Certificates made',
-      render: (t: R) => String(t.made),
+      render: (t: R) => String(t.made + (t.screenMade ?? 0) + (t.tcMade ?? 0)),
     },
     { key: 'at', header: 'Changed on', render: (t: R) => dmy(t.updatedAt.slice(0, 10)) },
     {
@@ -262,8 +328,10 @@ export default async function CertificateTemplatesPage({
         </Card>
         <Card title={`Used by no type (${String(spare.length)})`}>
           <p className="ep-ctype__note" style={{ marginTop: 0 }}>
-            Copies and spare layouts. To use one, open a certificate type and choose it under
-            Layout.
+            Copies and spare layouts — and some still in use, marked: the old system&apos;s reprint
+            layout, the layout of TCs issued before the register, and layouts the Achievement
+            certificates screen printed with. To give a layout to a type, open the type and choose
+            it under Layout.
           </p>
           <DataTable<R>
             caption="Layouts used by no type"

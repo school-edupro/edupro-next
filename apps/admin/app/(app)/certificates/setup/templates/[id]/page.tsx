@@ -127,15 +127,26 @@ export default async function CertificateTemplatePage({
       )}
       <p className="ep-ctpl__usedby">
         <span className="ep-field__label">Used by</span>{' '}
-        {t.usedBy.length ? (
-          t.usedBy.map((u) => (
-            <a key={u.code} className="ep-ctpl__chip" href={`/certificates/setup/types/${u.code}`}>
-              {u.name}
-            </a>
-          ))
-        ) : (
+        {t.usedBy.map((u) => (
+          <a key={u.code} className="ep-ctpl__chip" href={`/certificates/setup/types/${u.code}`}>
+            {u.name}
+          </a>
+        ))}
+        {t.screenMade ? (
+          <a className="ep-ctpl__chip" href="/engagement/certificates">
+            Achievement certificates screen ({String(t.screenMade)} printed)
+          </a>
+        ) : null}
+        {t.tcMade ? (
+          <a className="ep-ctpl__chip" href="/people/tc">
+            TCs from before the register ({String(t.tcMade)})
+          </a>
+        ) : null}
+        {t.code === 'cert_legacy' ? (
+          <Badge tone="info">Old-system reprints — no type may use it</Badge>
+        ) : !t.usedBy.length && !t.screenMade && !t.tcMade ? (
           <Badge tone="neutral">No certificate type</Badge>
-        )}
+        ) : null}
       </p>
       <TemplateEditor
         key={`${t.id}-${String(t.version)}-${t.forType ?? ''}`}

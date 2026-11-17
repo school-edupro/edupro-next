@@ -306,6 +306,8 @@ export class CertificateSetupService {
       updated_at: Date;
       used_by: string[] | null;
       made: number;
+      screen_made: number;
+      tc_made: number;
       page_width: string;
       page_height: string;
     }>(
@@ -313,7 +315,13 @@ export class CertificateSetupService {
               (SELECT array_agg(t.name ORDER BY t.sort_order) FROM certificate_types t
                 WHERE t.template_id = d.id OR t.variants @> jsonb_build_array(jsonb_build_object('templateId', d.id::text))) AS used_by,
               (SELECT count(*)::int FROM certificates x JOIN document_template_versions v ON v.id = x.template_version_id
-                WHERE v.template_id = d.id) AS made
+                WHERE v.template_id = d.id) AS made,
+              -- printed by the achievement certificates screen, which picks a layout itself (17 Nov 2026)
+              (SELECT count(*)::int FROM certificates_issued ci WHERE ci.template_id = d.id) AS screen_made,
+              -- TCs issued before the register print with their template
+              (SELECT count(*)::int FROM transfer_certificates tc WHERE tc.template_id = d.id
+                 AND NOT EXISTS (SELECT 1 FROM certificates x WHERE x.transfer_certificate_id = tc.id
+                                   AND x.template_version_id IS NOT NULL)) AS tc_made
          FROM document_templates d
         WHERE d.deleted_at IS NULL AND d.kind::text IN ('transfer_certificate', 'bonafide', 'certificate')
           AND (NOT $1 OR d.ready_code IS DISTINCT FROM 'cert_legacy')
@@ -330,6 +338,8 @@ export class CertificateSetupService {
       updatedAt: x.updated_at.toISOString(),
       usedBy: x.used_by ?? [],
       made: x.made,
+      screenMade: x.screen_made,
+      tcMade: x.tc_made,
       pageWidth: x.page_width,
       pageHeight: x.page_height,
     }));
@@ -696,6 +706,15 @@ export class CertificateSetupService {
         audience: 'STUDENT' | 'STAFF';
         fields: unknown;
       }>(`SELECT code, name, audience, fields FROM certificate_types ORDER BY sort_order, name`);
+      // printed by the achievement certificates screen, which picks a layout itself
+      // and the TCs issued before the register, which print with their template
+      const screen = await c.query<{ n: number; tc: number }>(
+        `SELECT (SELECT count(*)::int FROM certificates_issued WHERE template_id = $1) AS n,
+                (SELECT count(*)::int FROM transfer_certificates tc WHERE tc.template_id = $1
+                   AND NOT EXISTS (SELECT 1 FROM certificates x WHERE x.transfer_certificate_id = tc.id
+                                     AND x.template_version_id IS NOT NULL)) AS tc`,
+        [id],
+      );
       const forType =
         all.rows.find((x) => x.code === typeCode) ??
         types.rows[0] ??
@@ -712,6 +731,8 @@ export class CertificateSetupService {
         version: t.version,
         ready: !!t.ready_code,
         usedBy: types.rows.map((x) => ({ code: x.code, name: x.name })),
+        screenMade: screen.rows[0]?.n ?? 0,
+        tcMade: screen.rows[0]?.tc ?? 0,
         types: all.rows.map((x) => ({ code: x.code, name: x.name, audience: x.audience })),
         forType: forType?.code ?? null,
         catalogue: catalogue(

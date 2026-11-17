@@ -629,3 +629,24 @@ the parent; their own page made from the achievement record; another child's ref
 demo parent at 1440 and 375 (axe clean; no sideways scroll; View and Download redirect to the kept PDF; another
 family's id goes back with a message; the ask search; a step line drawn on the page only — the demo family has no
 open request, and none was made on Alpha).
+
+## "Used by no type" says what is still in use (17 Nov 2026)
+
+The user asked what separates "Used by a certificate type" from "Used by no type". A layout used by no type is never
+picked when a certificate is issued, but some are still in use elsewhere and looked spare. Chosen: say so on the row.
+
+- **API**: each layout in `GET /certificates/setup` and `GET /certificates/setup/templates/:id` carries `screenMade`
+  (certificates the achievement certificates screen printed with it — it picks a layout itself) and `tcMade` (TCs
+  that print with it: a TC with this template and no register certificate with a template version, i.e. issued
+  before the register).
+- **Admin**, the list's Used by: **Old-system reprints** (`cert_legacy`: no type may use it, keep it); **Achievement
+  certificates screen** (n printed, a link to Parent engagement → Achievement certificates, keep it); **TCs from before
+  the register** (n, a link to People → Transfer certificates, keep it); otherwise **No type**. A layout a type uses
+  adds "Also …" for either count. Certificates made counts all three. The earlier default layouts (`tc_default`,
+  `bonafide_default`) read "The layout used before the certificate register". The group's line says some are still in
+  use. A layout's page shows the same as chips. Links inside the note are underlined (axe link-in-text-block).
+
+Tests: `certificates-setup.e2e-spec.ts` (a TC from before the register: `tcMade` 1 in the list and on the layout's
+page), `certificates-office.e2e-spec.ts` (an achievement batch of three: `screenMade` 3, `made` 0, no type). A browser
+pass at 1440 and 375 px, axe clean (Alpha: the reprint layout, Merit certificate — 8 from the achievement screen, the
+earlier TC layout — 3 TCs; read only).

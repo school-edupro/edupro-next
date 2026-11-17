@@ -144,6 +144,31 @@ describe('certificate set-up (e2e)', () => {
     ).filter((t) => t.ready);
     expect(ready).toHaveLength(23);
     expect(ready.find((t) => t.code === 'cert_legacy')).toMatchObject({ usedBy: [] });
+    // a TC issued before the register prints with its own layout: the list says so (17 Nov 2026)
+    const pupil = Object.values(pupils)[0]!;
+    const tcTpl = await withMigrator(async (c) => {
+      const t = await c.query<{ id: string }>(
+        `INSERT INTO document_templates (school_id, code, name, kind, page_width, page_height, body_html, styles_css, variables)
+         VALUES ($1, 'tc_before', 'TC before the register', 'transfer_certificate', '210mm', '297mm', '<p>TC</p>', '', '[]'::jsonb)
+         RETURNING id::text`,
+        [school.id],
+      );
+      await c.query(
+        `INSERT INTO transfer_certificates (school_id, student_id, academic_year_id, tc_no, serial, reason, template_id)
+         VALUES ($1, $2, $3, 'TC/OLD/1', 1, 'Moving', $4)`,
+        [school.id, pupil, school.yearId, t.rows[0]!.id],
+      );
+      return t.rows[0]!.id;
+    });
+    const after = (await get('/certificates/setup')).json();
+    expect((after.templates as Array<{ id: string }>).find((x) => x.id === tcTpl)).toMatchObject({
+      usedBy: [],
+      tcMade: 1,
+      screenMade: 0,
+    });
+    expect((await get(`/certificates/setup/templates/${tcTpl}`)).json()).toMatchObject({
+      tcMade: 1,
+    });
     expect(o.json().checks[0].text).toMatch(/No signatory/);
     const staffTypes = (o.json().types as Array<{ code: string; audience: string }>)
       .filter((t) => t.audience === 'STAFF')

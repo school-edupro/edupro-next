@@ -227,9 +227,17 @@ a type with no template) and four sections:
      text, date, number or a list — and required or not).
    - **More** — a note for the office, the place in lists and the fixed code.
 3. **Templates** — the layouts certificates print with. The list shows six figures, a search, and two
-   tables: layouts **used by a certificate type** and those **used by no type** (the school's copies,
-   spares, and **Certificate from the old system (reprint)**, which prints certificates brought from the
-   earlier system). Each row says where the layout comes from (EduPro's ready layout, changed by the
+   tables:
+   - **Used by a certificate type**: a type prints with it — issuing that certificate uses this paper.
+     Changing it changes certificates issued from then on; those already issued keep their paper.
+   - **Used by no type**: issuing never picks it — the school's copies and spare layouts. To use one,
+     open the type and choose it under **Layout**. Some here are still in use and say so — keep them:
+     **Old-system reprints** (Certificate from the old system (reprint): it reprints certificates
+     brought from the earlier system; no type may use it), **TCs from before the register** (the TCs
+     issued before the register print with it) and **Achievement certificates screen** (Parent
+     engagement → Achievement certificates picks its layout itself; the count says how many it printed).
+
+   Each row says where the layout comes from (EduPro's ready layout, changed by the
    school, or the school's copy), its paper and when it changed, with three buttons: **See** (the paper
    with a sample from the school, in a pop-up), **Edit** and **Copy**. **Make a copy** (top right) does
    the same for any layout; give the copy to a type on the type's page, under Layout.
@@ -243,6 +251,7 @@ a type with no template) and four sections:
    **Save changes** (at the bottom of the screen) makes a new version for the next certificates; those
    already issued keep theirs. **Versions** lets you use an earlier one again. A layout may hold text,
    tables, styles and images as data, never scripts or addresses on the internet.
+
 4. **From the old system** — bringing the earlier system's certificates across, once (below).
 
 ## From the old system (Certificate set-up → From the old system)
