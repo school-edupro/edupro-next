@@ -16,7 +16,10 @@ describe('HumanCheckService', () => {
   } as unknown as CacheService;
   const pow = { consume: jest.fn(() => Promise.resolve()) } as unknown as PowService;
   const make = (env: Partial<Env>) => new HumanCheckService(env as Env, cache, pow);
-  const keys = { RECAPTCHA_SITE_KEY: 'site-key-123456', RECAPTCHA_SECRET: 'secret-key-123456' };
+  // stand-in keys, short so they never read as real ones (the secret scan flags long key-like values)
+  const SITE = 'fake-site';
+  const PASS = 'fake-pass';
+  const keys = { RECAPTCHA_SITE_KEY: SITE, RECAPTCHA_SECRET: PASS };
   let fetchSpy: jest.SpyInstance;
 
   beforeEach(() => {
@@ -28,7 +31,7 @@ describe('HumanCheckService', () => {
   it('uses the proof-of-work without both keys, reCAPTCHA with them', () => {
     expect(make({}).config()).toEqual({ provider: 'pow' });
     expect(make({ RECAPTCHA_SITE_KEY: 'only-the-site-key' }).config()).toEqual({ provider: 'pow' });
-    expect(make(keys).config()).toEqual({ provider: 'recaptcha', siteKey: 'site-key-123456' });
+    expect(make(keys).config()).toEqual({ provider: 'recaptcha', siteKey: SITE });
   });
 
   it('asks Google with the secret, the answer and the address; passes on success', async () => {
@@ -38,7 +41,7 @@ describe('HumanCheckService', () => {
     expect(url).toBe('https://www.google.com/recaptcha/api/siteverify');
     const body = new URLSearchParams(String(init.body));
     expect(Object.fromEntries(body)).toEqual({
-      secret: 'secret-key-123456',
+      secret: PASS,
       response: 'answer-token',
       remoteip: '203.0.113.7',
     });
