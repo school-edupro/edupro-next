@@ -149,6 +149,12 @@ export const STAFF_MENU: StaffGroup[] = [
         help: 'Remarks, exam attendance, height and weight',
         allowed: (can) => can('exams.remark.enter'),
       },
+      {
+        href: '/my-board-results',
+        label: 'My board results',
+        help: 'CBSE Class X and XII results of the sections and subjects you taught (PI, ACR bands)',
+        allowed: (can) => can('exams.board_result.own'),
+      },
     ],
   },
   {
@@ -452,6 +458,7 @@ const SCREEN_ICON: Array<[string, string]> = [
   ['/my-payslips', 'file'],
   ['/my-tax', 'file'],
   ['/my-certificates', 'file'],
+  ['/my-board-results', 'chart'],
   ['/my-leave', 'calendar'],
   ['/leave-approvals', 'check'],
   ['/my-attendance', 'clock'],

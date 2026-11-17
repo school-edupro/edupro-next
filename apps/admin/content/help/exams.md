@@ -535,6 +535,20 @@ CBSE lists as a candidate's compartment counts as a compartment, not a pass; mar
 failure; a candidate absent from the whole examination is in no subject's count, one absent in a subject is counted
 absent in it.
 
+**EduPro's extras** follow the ten in the same list (and in the workbook and PDF): **11 Performance Index** — PI =
+Σ(students at a grade × its weight, A1 8, A2 7 … D2 1, E 0) × 100 ÷ (students × 8), from the grades CBSE printed, by
+subject, by section with its teacher and by teacher; **12 Five-year trend** — appeared, pass %, aggregate, 90% and
+75% and above and PI for each saved year, and each subject's PI and average marks by year; **13 Compartment, absent
+and withheld** — the office's lists with the admission number and the primary guardian's mobile.
+
+**Teachers' own results.** In the **staff app**, **Exams → My board results** shows a teacher only the sections and
+subjects they taught (from the year's subject-teacher assignments, or the Teachers tab): the section-wise figures
+with the PI, the ACR bands and their students' marks. Class and subject teachers have it; nobody else's sections are
+shown. **The student's record** (Academics tab) shows each saved board result — the result, the best five, every
+subject's marks and grade. **The parent app** shows the same on its Results page only after **Set-up → Board results
+on the parent app** is switched on (off at first). The **Exams** page shows each class's latest pass %, school
+aggregate and 90% and above.
+
 ## Five common questions
 
 1. _A teacher cannot see a section._ They need a teacher assignment for that section and subject this

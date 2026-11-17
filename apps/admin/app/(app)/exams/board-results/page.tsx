@@ -20,6 +20,7 @@ import {
   removeBoardTeacher,
   saveBoardRules,
   saveBoardSubject,
+  setBoardParents,
   setBoardLayout,
   uploadGazette,
 } from '@/lib/board-actions';
@@ -88,7 +89,7 @@ export default async function BoardResultsPage({
   if (sp.q) q.set('q', sp.q);
   const cls = sp.classLabel === 'XII' ? 'XII' : 'X';
   const subjectsCls = sp.subjects === 'XII' ? 'XII' : 'X';
-  const [list, imports, years, layouts, teachers, subjects, rules] = await Promise.all([
+  const [list, imports, years, layouts, teachers, subjects, rules, parents] = await Promise.all([
     tab === 'results' || tab === 'analysis'
       ? apiFetch<{ data: BoardRow[]; page: { total: number }; analysis: Analysis[] }>(
           `/exams/board-results?${q.toString()}`,
@@ -117,6 +118,7 @@ export default async function BoardResultsPage({
     tab === 'setup'
       ? apiFetch<{ rules: BoardRules; isDefault: boolean }>('/exams/board-results/rules')
       : null,
+    tab === 'setup' ? apiFetch<{ on: boolean }>('/exams/board-results/parents') : null,
   ]);
   const current = imports.find((i) => i.id === sp.import && i.kind === 'sheet') ?? null;
   const yearNow = years.find((y) => y.current) ?? years[0];
@@ -711,6 +713,27 @@ export default async function BoardResultsPage({
               </Button>
             ) : null}
           </form>
+        </Card>
+      ) : null}
+
+      {tab === 'setup' && parents ? (
+        <Card title={b('parentsTitle')} id="parents" style={{ marginBottom: 'var(--sp-5)' }}>
+          <p className="ep-field__help" style={{ marginTop: 0 }}>
+            {b('parentsHelp')}
+          </p>
+          <p style={{ marginTop: 0 }}>
+            <Badge tone={parents.on ? 'success' : 'neutral'}>
+              {b(parents.on ? 'parentsOn' : 'parentsOff')}
+            </Badge>
+          </p>
+          {canImport ? (
+            <form action={setBoardParents}>
+              <input type="hidden" name="on" value={parents.on ? 'false' : 'true'} />
+              <Button type="submit" size="sm" variant="secondary">
+                {b(parents.on ? 'parentsStop' : 'parentsStart')}
+              </Button>
+            </form>
+          ) : null}
         </Card>
       ) : null}
 

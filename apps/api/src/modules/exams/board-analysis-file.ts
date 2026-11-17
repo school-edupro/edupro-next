@@ -40,6 +40,11 @@ const HEAD = 'FFEEF1FB';
 const INK = 'FF1C2A70';
 const thin = { style: 'thin' as const, color: { argb: 'FFC9D0E6' } };
 const BOX = { top: thin, left: thin, bottom: thin, right: thin };
+const EXTRA_SHEET: Record<number, string> = {
+  11: 'Performance Index',
+  12: 'Five-year trend',
+  13: 'Lists',
+};
 const out = (v: Cell) => (v === null || v === undefined ? '' : v);
 
 /** The groups of a table's columns, in order: a label over a run of columns, or none. */
@@ -119,7 +124,8 @@ export async function analysisXlsx(a: BoardAnalysis, head: AnalysisHead): Promis
   wb.creator = 'EduPro Next';
   wb.created = new Date();
   for (const x of a.annexures) {
-    const ws = wb.addWorksheet(`Annexure-${String(x.no)}`);
+    // the school's ten as Annexure-1 … Annexure-10; EduPro's extras by name
+    const ws = wb.addWorksheet(EXTRA_SHEET[x.no] ?? `Annexure-${String(x.no)}`);
     const widest = Math.max(...x.tables.map((t) => (t.blocks ? 3 : t.columns.length)), 3);
     const lines = [
       head.school,

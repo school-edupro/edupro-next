@@ -323,3 +323,32 @@ subject); compartment, absent, withheld / later lists (with the student, section
   teachers sharing a section and a class with nothing saved); `board-details.e2e-spec.ts` now also reads the
   EWS / CWSN words. Browser pass at 1440 and 375 (annexures 1, 2, 4, 7, 10 with a section, an empty class, Set-up):
   axe clean.
+
+## As built — phase D, the extras (17 Nov 2026)
+
+- **Counting** (`board-analysis.ts`): `piOf` — the Kendriya Vidyalaya PI, Σ(grade weight) × 100 ÷ (students × 8),
+  weights A1 8 … D1 2, D2 1, E 0 from CBSE's printed grade (a missing grade weighed from the marks); `yearFigures`
+  — a year's headline with pass % and PI and each subject's PI and average (the trend's rows; phase E adds typed
+  years without subjects). Three more annexures in the same list, workbook (sheets "Performance Index",
+  "Five-year trend", "Lists") and PDF: **11** PI by subject (the printed grade counts, an all-subjects line), by
+  section with its teacher, by teacher; **12** the five-year trend (the school; PI and average by subject and year);
+  **13** compartment (with the subjects), absent, failed / withheld / later — each with the admission number and the
+  primary guardian's mobile (`board_candidates` → `students`, `student_guardians`). `teacherView(input, employeeId)`
+  — a teacher's sections × subjects (section-wise figures + PI), ACR bands and their students' marks.
+- **Rights** (migration 0398): `exams.board_result.own` — group / school admin, academic coordinator, class and
+  subject teachers. The whole analysis stays with `exams.board_result.view`.
+- **API**: `GET mine` (own; the employee linked to the sign-in, each class's latest saved year or `examYear`; the
+  resolver gives every teacher of a shared section), `GET student/:id` (view; each saved year with the best five),
+  `GET summary` (view; each class's latest year), `GET / PUT parents` (the `exams.board_result.parents` setting, off
+  by default; changing it needs the import right; audited), `GET exams/mine/board-results` (`exams.family.view`;
+  the family's children through the viewer, nothing while the setting is off).
+- **Screens**: staff app **My board results** (Exams group; the shared staff menu), the student's Academics tab
+  **Board results** card, the parent app's Results page (a card a saved year; Hindi strings), the Exams page's
+  **Board results** figures (pass %, aggregate, 90%+ per class; PI in the hint), Set-up → **Board results on the
+  parent app**.
+- **Tests**: unit `board-analysis.spec.ts` (+3: PI printed and from marks, a year's figures with the trend and the
+  lists, a teacher's view holds only their sections); e2e `board-extras.e2e-spec.ts` (4: annexures 11–13 with the
+  contact from the guardian, a teacher's own page and who cannot see it, the student's record and the exam page's
+  figures, the parent switch off → on with the rights around it); `board-analysis.e2e-spec.ts` now expects the
+  extras. `teacher-a11y.spec.ts` lists `/my-board-results`. Browser pass (admin annexures 11–13, Exams, the
+  student's Academics tab, Set-up; staff app; parent app) at 1440 and 375: axe clean.

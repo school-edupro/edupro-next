@@ -1,6 +1,9 @@
 import {
   analyse,
   bestFive,
+  piOf,
+  teacherView,
+  yearFigures,
   categoryOf,
   DEFAULT_BOARD_RULES,
   headlineOf,
@@ -328,5 +331,130 @@ describe('CBSE board result annexures (docs/design/88, phase C)', () => {
     expect(table(a, 1, 'toppers').rows).toEqual([
       expect.objectContaining({ rank: 1, total: 350, pct: 70 }),
     ]);
+  });
+});
+
+describe('CBSE board result extras (docs/design/88, phase D)', () => {
+  it('the Performance Index from the printed grades, else from the marks', () => {
+    const m = (marks: number | null, grade: string | null) => ({
+      m: { code: '041', marks, grade },
+    });
+    // A1 8 + D2 1 + E 0 = 9 of 24
+    expect(piOf([m(95, 'A1'), m(36, 'D2'), m(20, 'E')])).toBe(37.5);
+    // no grade printed: 91+ → 8, 81 → 7; an absent one is not counted
+    expect(piOf([m(91, null), m(81, null), m(null, null)])).toBe(93.75);
+    expect(piOf([m(null, null)])).toBeNull();
+  });
+
+  it("a year's figures for the trend, and the lists of the office", () => {
+    const all = [
+      cand([
+        ['184', 90, 'A1'],
+        ['085', 80, 'A2'],
+        ['041', 70, 'B1'],
+        ['086', 60, 'B2'],
+        ['087', 50, 'C1'],
+      ]),
+      cand(
+        [
+          ['184', 40, 'D1'],
+          ['085', 30, 'E'],
+          ['041', 40, 'D1'],
+          ['086', 40, 'D1'],
+          ['087', 40, 'D1'],
+        ],
+        { result: 'COMP', compartment: ['085'], admissionNo: 'AD-7', contact: '9000000001' },
+      ),
+      cand([['184', null]], { result: 'ABST' }),
+      cand(
+        [
+          ['184', 50, 'C1'],
+          ['085', 50, 'C1'],
+          ['041', 50, 'C1'],
+          ['086', 50, 'C1'],
+          ['087', 50, 'C1'],
+        ],
+        { result: 'RW' },
+      ),
+    ];
+    const y = yearFigures(2026, all, SUBJECTS, DEFAULT_BOARD_RULES);
+    expect(y).toMatchObject({ examYear: 2026, appeared: 3, passPct: 33.33 });
+    // English: A1 8, D1 2, C1 4 = 14 of 24
+    expect(y.subjects!['184']).toEqual({ pi: 58.33, average: 60 });
+    const lists = analyse(input(all)).annexures[12]!.tables;
+    expect(lists[0]!.rows).toEqual([
+      expect.objectContaining({
+        admissionNo: 'AD-7',
+        contact: '9000000001',
+        subjects: '085 Hindi Course-B',
+      }),
+    ]);
+    expect(lists[1]!.rows.map((r) => r.result)).toEqual(['ABST']);
+    expect(lists[2]!.rows.map((r) => r.result)).toEqual(['RW']);
+    const trend = analyse(
+      input(all, {
+        history: [
+          {
+            examYear: 2025,
+            appeared: 2,
+            pct90: 0,
+            pct75: 0,
+            aggregate: 50,
+            passPct: 100,
+            pi: 40,
+            subjects: { '184': { pi: 50, average: 70 } },
+          },
+        ],
+      }),
+    ).annexures[11]!;
+    expect(trend.tables[0]!.rows.map((r) => [r.year, r.pi])).toEqual([
+      ['2024-25', 40],
+      ['2025-26', y.pi],
+    ]);
+    expect(trend.tables[1]!.rows.find((r) => r.subject === nameOf('184'))).toMatchObject({
+      y2025: 50,
+      y2026: 58.33,
+    });
+  });
+
+  it("a teacher's own view holds only their sections and subjects", () => {
+    const all = [
+      cand(
+        [
+          ['041', 95, 'A1'],
+          ['086', 60, 'B2'],
+        ],
+        { section: 'A' },
+      ),
+      cand([['041', 70, 'B1']], { section: 'A' }),
+      cand([['041', 50, 'C1']], { section: 'B' }),
+    ];
+    const v = teacherView(
+      {
+        candidates: all,
+        subjects: SUBJECTS,
+        rules: DEFAULT_BOARD_RULES,
+        teacherIds: (section, code) => (code === '041' && section === 'A' ? ['7', '8'] : ['9']),
+      },
+      '7',
+    );
+    expect(v.students).toBe(2);
+    expect(v.tables[0]!.rows).toEqual([
+      expect.objectContaining({
+        code: '041',
+        section: 'A',
+        total: 2,
+        appeared: 2,
+        highest: 95,
+        pi: 87.5,
+      }),
+    ]);
+    expect(v.tables[2]!.rows.map((r) => r.marks)).toEqual([95, 70]);
+    expect(
+      teacherView(
+        { candidates: all, subjects: SUBJECTS, rules: DEFAULT_BOARD_RULES, teacherIds: () => [] },
+        '7',
+      ).tables[0]!.rows,
+    ).toEqual([]);
   });
 });

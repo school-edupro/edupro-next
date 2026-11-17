@@ -167,7 +167,10 @@ describe('CBSE board results: the ten annexures (e2e, docs/design/88 phase C)', 
     expect(v.examYear).toBe(year);
     expect(v.sections).toEqual(['A', 'B']);
     expect(v.rulesDefault).toBe(true);
-    expect(v.analysis!.annexures.map((x) => x.no)).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
+    // the school's ten, and EduPro's extras (phase D)
+    expect(v.analysis!.annexures.map((x) => x.no)).toEqual([
+      1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13,
+    ]);
     // ASHA: the best language (95) and four (100, 93, 92, 91) = 471; BIRJU 375; CHETAN 200; DIVYA 427
     expect(v.analysis!.headline).toMatchObject({
       registered: 5,
@@ -223,9 +226,12 @@ describe('CBSE board results: the ten annexures (e2e, docs/design/88 phase C)', 
     expect(x.json().filename).toMatch(/\.xlsx$/);
     const wb = new ExcelJS.Workbook();
     await wb.xlsx.load(Buffer.from(x.json().base64 as string, 'base64') as unknown as ArrayBuffer);
-    expect(wb.worksheets.map((w) => w.name)).toEqual(
-      Array.from({ length: 10 }, (_, i) => `Annexure-${String(i + 1)}`),
-    );
+    expect(wb.worksheets.map((w) => w.name)).toEqual([
+      ...Array.from({ length: 10 }, (_, i) => `Annexure-${String(i + 1)}`),
+      'Performance Index',
+      'Five-year trend',
+      'Lists',
+    ]);
     // Annexure 4 laid out as the school's: a block a subject, label | value
     const a4: string[] = [];
     wb.getWorksheet('Annexure-4')!.eachRow((r) =>

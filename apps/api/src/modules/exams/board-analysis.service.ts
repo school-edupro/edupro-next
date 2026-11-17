@@ -5,12 +5,16 @@ import { AuditService } from '../../common/audit/audit.service';
 import { DbService } from '../../common/db/db.service';
 import { DomainError } from '../../common/errors/domain-error';
 import { requireTenant, type RequestContext } from '../../common/http/request-context';
+import { ViewerService } from '../academics/daily/viewer.service';
 import { STORAGE_DRIVER } from '../files/storage';
 import {
   analyse,
+  bestFive,
   DEFAULT_BOARD_RULES,
-  headlineOf,
+  RULE_WORDS,
+  teacherView,
   subjectFigures,
+  yearFigures,
   type AnCandidate,
   type AnSubject,
   type AnYear,
@@ -24,6 +28,7 @@ import { registerGeneratedOn, registerLetterhead, registerLogo } from './registe
 
 type BoardClass = 'X' | 'XII';
 const KEY = 'exams.board_rules';
+const PARENTS = 'exams.board_result.parents';
 const KIND_ORDER: BoardSubjectKind[] = ['language', 'main', 'skill', 'additional', 'internal'];
 
 /**
@@ -38,6 +43,7 @@ export class BoardAnalysisService {
     private readonly db: DbService,
     private readonly details: BoardDetailsService,
     private readonly audit: AuditService,
+    private readonly viewer: ViewerService,
     @Inject(STORAGE_DRIVER) private readonly storage: StorageDriver,
   ) {}
 
@@ -126,10 +132,16 @@ export class BoardAnalysisService {
       cwsn: boolean | null;
       boarder: boolean | null;
       staff_ward: boolean | null;
+      admission_no: string | null;
+      contact: string | null;
     }>(
-      `SELECT id::text, roll_no, name, sex, result, compartment, section, stream, category, ews, cwsn, boarder, staff_ward
-         FROM board_candidates WHERE board = 'CBSE' AND class_label = $1 AND exam_year = $2
-          AND ($3::text IS NULL OR section = $3) ORDER BY roll_no`,
+      `SELECT bc.id::text, bc.roll_no, bc.name, bc.sex, bc.result, bc.compartment, bc.section, bc.stream, bc.category,
+              bc.ews, bc.cwsn, bc.boarder, bc.staff_ward, s.admission_no,
+              (SELECT g.mobile FROM student_guardians sg JOIN guardians g ON g.id = sg.guardian_id
+                WHERE sg.student_id = bc.student_id ORDER BY sg.is_primary DESC, g.id LIMIT 1) AS contact
+         FROM board_candidates bc LEFT JOIN students s ON s.id = bc.student_id
+        WHERE bc.board = 'CBSE' AND bc.class_label = $1 AND bc.exam_year = $2
+          AND ($3::text IS NULL OR bc.section = $3) ORDER BY bc.roll_no`,
       [classLabel, examYear, section ?? null],
     );
     const marks = await c.query<{
@@ -164,6 +176,8 @@ export class BoardAnalysisService {
       boarder: x.boarder,
       staffWard: x.staff_ward,
       marks: by.get(x.id) ?? [],
+      admissionNo: x.admission_no,
+      contact: x.contact,
     }));
   }
 
@@ -212,16 +226,10 @@ export class BoardAnalysisService {
     const candidates = await this.candidatesOf(c, q.classLabel, examYear, q.section);
     // the four years before, from their saved files (typed figures come in phase E)
     const history: AnYear[] = [];
-    for (const y of years.filter((x) => x < examYear).slice(0, 4)) {
-      const h = headlineOf(await this.candidatesOf(c, q.classLabel, y, q.section), subjects, rules);
-      history.push({
-        examYear: y,
-        appeared: h.appeared,
-        pct90: h.pct90,
-        pct75: h.pct75,
-        aggregate: h.aggregate,
-      });
-    }
+    for (const y of years.filter((x) => x < examYear).slice(0, 4))
+      history.push(
+        yearFigures(y, await this.candidatesOf(c, q.classLabel, y, q.section), subjects, rules),
+      );
     const lastYear = years.includes(examYear - 1)
       ? subjectFigures(await this.candidatesOf(c, q.classLabel, examYear - 1, q.section), rules)
       : null;
@@ -314,6 +322,240 @@ export class BoardAnalysisService {
         contentType: 'application/pdf',
         base64: (await analysisPdf(b.analysis, head, q.annexure ?? null)).toString('base64'),
       };
+    });
+  }
+
+  // ---- phase D: the teacher's own page, the student's record, the parent app, the dashboard ----
+
+  /** A school setting from today (as SettingsService.set: the open row closed, today's replaced). */
+  private async putSetting(c: PoolClient, key: string, value: unknown) {
+    await c.query(
+      `UPDATE school_settings SET valid_to = CURRENT_DATE - 1, updated_by = app.current_user_id()
+        WHERE key = $1 AND valid_to IS NULL AND valid_from < CURRENT_DATE`,
+      [key],
+    );
+    await c.query(`DELETE FROM school_settings WHERE key = $1 AND valid_from = CURRENT_DATE`, [
+      key,
+    ]);
+    await c.query(
+      `INSERT INTO school_settings (school_id, key, value, valid_from, created_by, updated_by)
+       VALUES (app.current_school_id(), $1, $2::jsonb, CURRENT_DATE, app.current_user_id(), app.current_user_id())`,
+      [key, JSON.stringify(value)],
+    );
+  }
+
+  private async parentsOn(c: PoolClient): Promise<boolean> {
+    const r = await c.query<{ v: unknown }>(`SELECT app.setting($1) AS v`, [PARENTS]);
+    return r.rows[0]?.v === true;
+  }
+
+  async parents(ctx: RequestContext) {
+    return this.db.tenant(requireTenant(ctx), async (c) => ({ on: await this.parentsOn(c) }));
+  }
+
+  /** Show (or stop showing) a child's board result on the parent app. */
+  async setParents(ctx: RequestContext, on: boolean) {
+    return this.db.tenant(requireTenant(ctx), async (c) => {
+      const before = await this.parentsOn(c);
+      await this.putSetting(c, PARENTS, on);
+      await this.audit.stage(ctx, c, {
+        action: 'exams.board_result.parents',
+        entityType: 'school_settings',
+        entityId: requireTenant(ctx).schoolId,
+        before: { on: before },
+        after: { on },
+      });
+      return { on };
+    });
+  }
+
+  /** Students' board results, every saved year: subjects with marks and grades, the result, the best five. */
+  private async resultsOf(c: PoolClient, studentIds: string[]) {
+    if (!studentIds.length) return [];
+    const cands = await c.query<{
+      id: string;
+      student_id: string;
+      class_label: BoardClass;
+      exam_year: number;
+      roll_no: string;
+      name: string | null;
+      result: string | null;
+      compartment: string[];
+    }>(
+      `SELECT id::text, student_id::text, class_label, exam_year, roll_no, name, result, compartment
+         FROM board_candidates WHERE board = 'CBSE' AND student_id = ANY($1::bigint[])
+        ORDER BY exam_year DESC, class_label DESC`,
+      [studentIds],
+    );
+    if (!cands.rows.length) return [];
+    const marks = await c.query<{
+      candidate_id: string;
+      code: string;
+      total: string | null;
+      grade: string | null;
+    }>(
+      `SELECT candidate_id::text, subject_code AS code, total::text, grade FROM board_results
+        WHERE candidate_id = ANY($1::bigint[]) ORDER BY candidate_id, slot NULLS LAST, subject_code`,
+      [cands.rows.map((x) => x.id)],
+    );
+    const { rules } = await this.rulesOf(c);
+    const lists = new Map<BoardClass, AnSubject[]>();
+    for (const cls of new Set(cands.rows.map((x) => x.class_label)))
+      lists.set(cls, await this.subjectsOf(c, cls));
+    return cands.rows.map((x) => {
+      const subjects = lists.get(x.class_label)!;
+      const kind = (code: string) => subjects.find((s) => s.code === code)?.kind;
+      const nameOf = (code: string) =>
+        subjects.find((s) => s.code === code)?.name ?? `Subject ${code}`;
+      const ms = marks.rows
+        .filter((m) => m.candidate_id === x.id)
+        .map((m) => ({
+          code: m.code,
+          marks: m.total === null ? null : Number(m.total),
+          grade: m.grade,
+        }));
+      const cand: AnCandidate = {
+        roll: x.roll_no,
+        name: x.name,
+        sex: null,
+        result: x.result,
+        compartment: x.compartment,
+        section: null,
+        stream: null,
+        category: null,
+        ews: null,
+        cwsn: null,
+        boarder: null,
+        staffWard: null,
+        marks: ms,
+      };
+      const best = ms.some((m) => m.marks !== null)
+        ? bestFive(cand, kind, rules.bestFive, nameOf)
+        : null;
+      return {
+        studentId: x.student_id,
+        classLabel: x.class_label,
+        examYear: x.exam_year,
+        roll: x.roll_no,
+        result: x.result,
+        compartment: x.compartment.map((code) => ({ code, name: nameOf(code) })),
+        subjects: ms.map((m) => ({
+          code: m.code,
+          name: nameOf(m.code),
+          kind: kind(m.code) ?? null,
+          marks: m.marks,
+          grade: m.grade,
+          inBestFive: best?.codes.includes(m.code) ?? false,
+        })),
+        bestFive: best ? { total: best.total, percent: best.percent } : null,
+        rule: RULE_WORDS[rules.bestFive],
+      };
+    });
+  }
+
+  /** One student's board results (the student's record). */
+  async student(ctx: RequestContext, studentId: string) {
+    return this.db.tenant(requireTenant(ctx), async (c) => ({
+      rows: await this.resultsOf(c, [studentId]),
+    }));
+  }
+
+  /** The family's children's board results — only when the school shows them on the parent app. */
+  async family(ctx: RequestContext) {
+    const v = await this.viewer.resolve(ctx, 'exams.family.view');
+    return this.db.tenant(requireTenant(ctx), async (c) => {
+      const enabled = await this.parentsOn(c);
+      if (!enabled || v.kind !== 'family') return { enabled, children: [] };
+      const rows = await this.resultsOf(
+        c,
+        v.students.map((s) => s.id),
+      );
+      return {
+        enabled,
+        children: v.students
+          .map((s) => ({
+            studentId: s.id,
+            name: s.name,
+            results: rows.filter((r) => r.studentId === s.id),
+          }))
+          .filter((x) => x.results.length),
+      };
+    });
+  }
+
+  /**
+   * My board results (the staff app): for each class with a saved year, the sections and subjects this teacher
+   * taught — by the year's teacher assignments or the Teachers tab's overrides.
+   */
+  async mine(ctx: RequestContext, examYear?: number) {
+    return this.db.tenant(requireTenant(ctx), async (c) => {
+      const emp = (
+        await c.query<{ id: string; name: string }>(
+          `SELECT id::text, display_name AS name FROM employees
+            WHERE user_id = app.current_user_id() AND deleted_at IS NULL ORDER BY id LIMIT 1`,
+        )
+      ).rows[0];
+      if (!emp) return { employee: null, classes: [] };
+      const { rules } = await this.rulesOf(c);
+      const classes = [];
+      for (const cls of ['X', 'XII'] as const) {
+        const years = (
+          await c.query<{ y: number }>(
+            `SELECT DISTINCT exam_year AS y FROM board_candidates WHERE board = 'CBSE' AND class_label = $1 ORDER BY 1 DESC`,
+            [cls],
+          )
+        ).rows.map((r) => r.y);
+        const y = examYear !== undefined && years.includes(examYear) ? examYear : years[0];
+        if (y === undefined) continue;
+        const who = await this.details.teacherResolver(c, 'CBSE', cls, y);
+        const view = teacherView(
+          {
+            candidates: await this.candidatesOf(c, cls, y),
+            subjects: await this.subjectsOf(c, cls),
+            rules,
+            teacherIds: (section, code, roll) => who(section, code, roll)?.employeeIds ?? [],
+          },
+          emp.id,
+        );
+        if (view.tables[0]!.rows.length)
+          classes.push({
+            classLabel: cls,
+            examYear: y,
+            years,
+            students: view.students,
+            tables: view.tables,
+          });
+      }
+      return { employee: emp, classes };
+    });
+  }
+
+  /** The exam page's figures: each class's latest saved year. */
+  async summary(ctx: RequestContext) {
+    return this.db.tenant(requireTenant(ctx), async (c) => {
+      const { rules } = await this.rulesOf(c);
+      const out = [];
+      for (const cls of ['X', 'XII'] as const) {
+        const y = (
+          await c.query<{ y: number | null }>(
+            `SELECT max(exam_year) AS y FROM board_candidates WHERE board = 'CBSE' AND class_label = $1`,
+            [cls],
+          )
+        ).rows[0]?.y;
+        if (!y) continue;
+        const subjects = await this.subjectsOf(c, cls);
+        const f = yearFigures(y, await this.candidatesOf(c, cls, y), subjects, rules);
+        out.push({
+          classLabel: cls,
+          examYear: y,
+          appeared: f.appeared,
+          passPct: f.passPct ?? null,
+          aggregate: f.aggregate,
+          pct90: f.pct90,
+          pi: f.pi ?? null,
+        });
+      }
+      return { classes: out };
     });
   }
 }

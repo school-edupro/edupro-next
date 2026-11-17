@@ -411,6 +411,13 @@ export const SETTINGS_CATALOGUE: Record<string, SettingDefinition> = {
       'CBSE board result analysis: the best five (the best language and four others, English and four, or any five), the distinction and pass marks, and grades from the marks or as printed',
     module: 'exams',
   },
+  'exams.board_result.parents': {
+    schema: z.boolean(),
+    default: false,
+    description:
+      "CBSE board results: show a child's board result (subjects, marks, grades, result) on the parent app",
+    module: 'exams',
+  },
   'exams.reportcard.hold_for_fee_defaulters': {
     schema: z.boolean(),
     default: false,

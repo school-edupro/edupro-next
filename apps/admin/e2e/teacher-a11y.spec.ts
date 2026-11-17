@@ -53,6 +53,8 @@ const PAGES = [
   '/leave-approvals',
   '/attendance-corrections',
   '/my-team',
+  // CBSE board results (docs/design/88, phase D): a teacher's own sections and subjects
+  '/my-board-results',
 ];
 
 for (const sub of ['dev-teacher']) {

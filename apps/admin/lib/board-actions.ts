@@ -300,3 +300,21 @@ export async function saveBoardRules(fd: FormData) {
   revalidatePath('/exams/board-results');
   done(here, 'The analysis rules are saved; the annexures count with them from now.');
 }
+
+/** A child's board result shown on the parent app, or no longer (docs/design/88, phase D). */
+export async function setBoardParents(fd: FormData) {
+  const here = '/exams/board-results?tab=setup';
+  const on = str(fd, 'on') === 'true';
+  try {
+    await apiFetch('/exams/board-results/parents', { method: 'PUT', body: JSON.stringify({ on }) });
+  } catch (error) {
+    back(here, error);
+  }
+  revalidatePath('/exams/board-results');
+  done(
+    here,
+    on
+      ? "Families now see their child's board result on the parent app."
+      : 'The board result is no longer shown on the parent app.',
+  );
+}

@@ -50,6 +50,9 @@ export interface AnCandidate {
   boarder: boolean | null;
   staffWard: boolean | null;
   marks: AnMark[];
+  /** The office lists' columns (phase D): the student it is, and a contact. */
+  admissionNo?: string | null;
+  contact?: string | null;
 }
 
 export interface AnSubject {
@@ -65,6 +68,10 @@ export interface AnYear {
   pct90: number | null;
   pct75: number | null;
   aggregate: number | null;
+  /** The trend's columns (phase D) — none for a year typed in without its file. */
+  passPct?: number | null;
+  pi?: number | null;
+  subjects?: Record<string, { pi: number | null; average: number | null }>;
 }
 
 export interface AnInput {
@@ -138,6 +145,7 @@ export interface SubjectFigures {
   failures: number;
   distinctions: number;
   average: number | null;
+  pi: number | null;
 }
 
 export interface BoardAnalysis {
@@ -414,10 +422,91 @@ export function subjectFigures(
           failures: s.fail,
           distinctions: s.distinctions,
           average: s.average,
+          pi: piOf(es),
         },
       ];
     }),
   );
+}
+
+// ---- the Performance Index (phase D) ----
+
+const PI_WEIGHT: Record<string, number> = {
+  A1: 8,
+  A2: 7,
+  B1: 6,
+  B2: 5,
+  C1: 4,
+  C2: 3,
+  D1: 2,
+  D2: 1,
+  D: 2,
+  E: 0,
+  E1: 0,
+  E2: 0,
+};
+/** A grade's weight: CBSE's printed grade, else one from the marks (A1 91+ … D 33+, E below). */
+function piWeight(m: AnMark & { marks: number }): number {
+  const w = PI_WEIGHT[(m.grade ?? '').toUpperCase()];
+  if (w !== undefined) return w;
+  const x = Math.floor(m.marks);
+  return x >= 91
+    ? 8
+    : x >= 81
+      ? 7
+      : x >= 71
+        ? 6
+        : x >= 61
+          ? 5
+          : x >= 51
+            ? 4
+            : x >= 41
+              ? 3
+              : x >= 33
+                ? 2
+                : 0;
+}
+/**
+ * The Performance Index as Kendriya Vidyalayas count it: Σ(students at a grade × its weight, A1 8 … D2 1, E 0)
+ * × 100 ÷ (students × 8), over those with marks.
+ */
+export function piOf(entries: Array<{ m: AnMark }>): number | null {
+  const marked = entries.filter((e): e is { m: AnMark & { marks: number } } => e.m.marks !== null);
+  if (!marked.length) return null;
+  return round2((sum(marked.map((e) => piWeight(e.m))) * 100) / (marked.length * 8));
+}
+
+/** One year's figures for the trend (phase D): the headline with pass % and PI, and each subject's PI and average. */
+export function yearFigures(
+  examYear: number,
+  candidates: AnCandidate[],
+  subjects: AnSubject[],
+  rules: BoardRules,
+): AnYear {
+  const h = headlineOf(candidates, subjects, rules);
+  const by = entriesBySubject(candidates);
+  const kind = new Map(subjects.map((x) => [x.code, x.kind]));
+  const all = [...by].filter(([code]) => kind.get(code) !== 'internal').flatMap(([, es]) => es);
+  return {
+    examYear,
+    appeared: h.appeared,
+    pct90: h.pct90,
+    pct75: h.pct75,
+    aggregate: h.aggregate,
+    passPct: h.passPct,
+    pi: piOf(all),
+    subjects: Object.fromEntries(
+      [...by]
+        .filter(([code]) => kind.get(code) !== 'internal')
+        .map(([code, es]) => [
+          code,
+          {
+            pi: piOf(es),
+            average: mean(es.filter((e) => e.m.marks !== null).map((e) => e.m.marks!)),
+          },
+        ]),
+    ),
+  };
 }
 
 /** Each subject's entries — of the candidates who sat the examination (one absent throughout is in no subject). */
@@ -1040,25 +1129,35 @@ export function analyse(input: AnInput): BoardAnalysis {
     ACR_BANDS.forEach((b, i) => (row[`b${i}`] = s.band(b)));
     return row;
   };
-  const byTeacher = codes.flatMap((code) => {
-    const g = new Map<string, { sections: Set<string>; es: Entry[] }>();
-    for (const e of bySubject.get(code)!) {
-      const who = teacherOf(e.c, code);
-      const x = g.get(who) ?? { sections: new Set<string>(), es: [] };
-      x.sections.add(sectionOf(e.c));
-      x.es.push(e);
-      g.set(who, x);
-    }
-    return [...g].map(([teacher, x]) => ({
-      teacher,
-      ...subjCell(code),
-      sections: [...x.sections]
-        .sort((a, b) => a.localeCompare(b, 'en', { numeric: true }))
-        .join(', '),
-      ...acr(x.es),
-    }));
-  });
-  byTeacher.sort((a, b) => String(a.teacher).localeCompare(String(b.teacher)));
+  /** Each teacher's entries of a subject (over the sections they taught), teachers in name order. */
+  function byTeacherGroups() {
+    return codes
+      .flatMap((code) => {
+        const g = new Map<string, { sections: Set<string>; es: Entry[] }>();
+        for (const e of bySubject.get(code)!) {
+          const who = teacherOf(e.c, code);
+          const x = g.get(who) ?? { sections: new Set<string>(), es: [] };
+          x.sections.add(sectionOf(e.c));
+          x.es.push(e);
+          g.set(who, x);
+        }
+        return [...g].map(([teacher, x]) => ({
+          teacher,
+          code,
+          sections: [...x.sections]
+            .sort((a, b) => a.localeCompare(b, 'en', { numeric: true }))
+            .join(', '),
+          es: x.es,
+        }));
+      })
+      .sort((a, b) => a.teacher.localeCompare(b.teacher));
+  }
+  const byTeacher = byTeacherGroups().map((x) => ({
+    teacher: x.teacher,
+    ...subjCell(x.code),
+    sections: x.sections,
+    ...acr(x.es),
+  }));
   const a10: Annexure = {
     no: 10,
     title: 'ACR report subject-wise',
@@ -1084,17 +1183,358 @@ export function analyse(input: AnInput): BoardAnalysis {
     ],
   };
 
+  // ---- phase D: the extras ----
+
+  // 11 — the Performance Index by subject, section and teacher
+  const printed = (es: Entry[], g: string) =>
+    es.filter(
+      (e) => e.m.marks !== null && (e.m.grade ?? '').toUpperCase().replace(/^E\d$/, 'E') === g,
+    ).length;
+  const marksOf = (es: Entry[]) => es.filter((e) => e.m.marks !== null).map((e) => e.m.marks!);
+  const allEntries = codes.flatMap((code) => bySubject.get(code)!);
+  const a11: Annexure = {
+    no: 11,
+    title: 'Performance Index',
+    tables: [
+      {
+        key: 'subjects',
+        title: 'By subject',
+        columns: [
+          t('code', 'Code', 1),
+          t('subject', 'Subject', 3),
+          n('appeared', 'Appeared'),
+          ...PRINTED_GRADES.map((g) => n(`g${g}`, g, 'Grades as printed')),
+          n('pi', 'PI'),
+        ],
+        rows: [
+          ...codes.map((code) => {
+            const es = bySubject.get(code)!;
+            return {
+              ...subjCell(code),
+              appeared: marksOf(es).length,
+              ...Object.fromEntries(PRINTED_GRADES.map((g) => [`g${g}`, printed(es, g)])),
+              pi: piOf(es),
+            };
+          }),
+          {
+            code: '',
+            subject: 'All subjects',
+            appeared: marksOf(allEntries).length,
+            ...Object.fromEntries(PRINTED_GRADES.map((g) => [`g${g}`, printed(allEntries, g)])),
+            pi: piOf(allEntries),
+          },
+        ],
+        strong: [codes.length],
+        note: 'PI = Σ(students at a grade × its weight: A1 8, A2 7 … D2 1, E 0) × 100 ÷ (students × 8), from the grades CBSE printed.',
+      },
+      {
+        key: 'sections',
+        title: 'By section',
+        columns: [
+          t('code', 'Code', 1),
+          t('subject', 'Subject', 3),
+          t('section', 'Section', 1),
+          t('teacher', 'Teacher', 3),
+          n('appeared', 'Appeared'),
+          n('avg', 'Average'),
+          n('pi', 'PI'),
+        ],
+        rows: codes.flatMap((code) =>
+          split(bySubject.get(code)!).map((g) => ({
+            ...subjCell(code),
+            section: g.section,
+            teacher: g.teacher,
+            appeared: marksOf(g.es).length,
+            avg: mean(marksOf(g.es)),
+            pi: piOf(g.es),
+          })),
+        ),
+      },
+      {
+        key: 'teachers',
+        title: 'By teacher',
+        columns: [
+          t('teacher', 'Teacher', 3),
+          t('code', 'Code', 1),
+          t('subject', 'Subject', 3),
+          t('sections', 'Sections', 2),
+          n('appeared', 'Appeared'),
+          n('avg', 'Average'),
+          n('pi', 'PI'),
+        ],
+        rows: byTeacherGroups().map((x) => ({
+          teacher: x.teacher,
+          ...subjCell(x.code),
+          sections: x.sections,
+          appeared: marksOf(x.es).length,
+          avg: mean(marksOf(x.es)),
+          pi: piOf(x.es),
+        })),
+      },
+    ],
+  };
+
+  // 12 — five years: the headline, and each subject's PI and average
+  const nowYear = yearFigures(input.examYear, all, input.subjects, rules);
+  const trend = [
+    ...input.history
+      .filter((h) => h.examYear < input.examYear)
+      .sort((a, b) => a.examYear - b.examYear)
+      .slice(-4),
+    nowYear,
+  ];
+  const trendCols = trend.map((y) => n(`y${y.examYear}`, yearLabel(y.examYear)));
+  const bySubjectYear = (
+    f: (v: { pi: number | null; average: number | null }) => number | null,
+  ): Array<Record<string, Cell>> =>
+    codes.map(
+      (code) =>
+        Object.fromEntries([
+          ['subject', nameOf(code)],
+          ...trend.map((y) => {
+            const v = y.subjects?.[code];
+            return [`y${y.examYear}`, v ? f(v) : null];
+          }),
+        ]) as Record<string, Cell>,
+    );
+  const a12: Annexure = {
+    no: 12,
+    title: 'Five-year trend',
+    tables: [
+      {
+        key: 'years',
+        title: 'The school',
+        columns: [
+          t('year', 'Year', 1),
+          n('appeared', 'Appeared'),
+          n('passPct', 'Pass %'),
+          n('aggregate', 'Aggregate %'),
+          n('pct90', '90% and above (%)'),
+          n('pct75', '75% and above (%)'),
+          n('pi', 'PI'),
+        ],
+        rows: trend.map((y) => ({
+          year: yearLabel(y.examYear),
+          appeared: y.appeared,
+          passPct: y.passPct ?? null,
+          aggregate: y.aggregate,
+          pct90: y.pct90,
+          pct75: y.pct75,
+          pi: y.pi ?? null,
+        })),
+        ...(trend.length < 2
+          ? {
+              note: 'Earlier years appear as their result files are saved (or their figures typed in).',
+            }
+          : {}),
+      },
+      {
+        key: 'pi',
+        title: 'Performance Index by subject',
+        columns: [t('subject', 'Subject', 3), ...trendCols],
+        rows: bySubjectYear((v) => v.pi),
+      },
+      {
+        key: 'avg',
+        title: 'Average marks by subject',
+        columns: [t('subject', 'Subject', 3), ...trendCols],
+        rows: bySubjectYear((v) => v.average),
+      },
+    ],
+  };
+
+  // 13 — the office's lists: compartment, absent, failed / withheld / later
+  const person = (c: AnCandidate) => ({
+    roll: c.roll,
+    name: c.name,
+    section: c.section,
+    admissionNo: c.admissionNo ?? null,
+    contact: c.contact ?? null,
+  });
+  const personCols: AnColumn[] = [
+    t('roll', 'Roll no', 1),
+    t('name', 'Name', 3),
+    t('section', 'Section', 1),
+    t('admissionNo', 'Admission no', 1),
+  ];
+  const byRoll = (a: AnCandidate, b: AnCandidate) => a.roll.localeCompare(b.roll);
+  const a13: Annexure = {
+    no: 13,
+    title: 'Compartment, absent and withheld',
+    tables: [
+      {
+        key: 'compartment',
+        title: 'Compartment',
+        columns: [...personCols, t('subjects', 'Subjects', 3), t('contact', 'Contact', 2)],
+        rows: app
+          .filter((c) => c.result === 'COMP')
+          .sort(byRoll)
+          .map((c) => ({
+            ...person(c),
+            subjects: c.compartment.map((code) => `${code} ${nameOf(code)}`).join(', '),
+          })),
+      },
+      {
+        key: 'absent',
+        title: 'Absent',
+        columns: [...personCols, t('result', 'Result', 1), t('contact', 'Contact', 2)],
+        rows: all
+          .filter((c) => !appeared(c))
+          .sort(byRoll)
+          .map((c) => ({ ...person(c), result: c.result })),
+      },
+      {
+        key: 'other',
+        title: 'Failed, withheld or later',
+        columns: [...personCols, t('result', 'Result', 1), t('contact', 'Contact', 2)],
+        rows: app
+          .filter((c) => c.result !== 'PASS' && c.result !== 'COMP')
+          .sort(byRoll)
+          .map((c) => ({ ...person(c), result: c.result })),
+        note: 'FAIL failed, ER essential repeat, RW result withheld, RL result later, UFM unfair means.',
+      },
+    ],
+  };
+
   return {
     classLabel: input.classLabel,
     examYear: input.examYear,
     rules,
     headline: head,
-    annexures: [a1, a2, a3, a4, a5, a6, a7, a8, a9, a10],
+    annexures: [a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13],
   };
 }
+
+const PRINTED_GRADES = ['A1', 'A2', 'B1', 'B2', 'C1', 'C2', 'D1', 'D2', 'E'] as const;
 
 export const RULE_WORDS: Record<BestFiveRule, string> = {
   'language-plus-four': 'the best language and the best four other subjects',
   'english-plus-four': 'English and the best four other subjects',
   'any-five': 'the best five subjects',
 };
+
+/**
+ * A teacher's own board results (phase D, for the ACR): each section × subject they taught — the section-wise
+ * figures with the PI, the ACR bands — and their students' marks. Nothing of other teachers' sections.
+ */
+export function teacherView(
+  input: Pick<AnInput, 'candidates' | 'subjects' | 'rules'> & {
+    teacherIds: (section: string, code: string, roll: string) => string[];
+  },
+  employeeId: string,
+): { tables: AnTable[]; students: number } {
+  const kind = new Map(input.subjects.map((s) => [s.code, s.kind]));
+  const nameOf = (code: string) =>
+    input.subjects.find((s) => s.code === code)?.name ?? `Subject ${code}`;
+  const order = new Map(input.subjects.map((s, i) => [s.code, i]));
+  const mine = new Map<string, Entry[]>();
+  for (const [code, es] of entriesBySubject(input.candidates)) {
+    if (kind.get(code) === 'internal') continue;
+    for (const e of es) {
+      const section = e.c.section ?? '—';
+      if (!input.teacherIds(section, code, e.c.roll).includes(employeeId)) continue;
+      const k = `${code}\u0000${section}`;
+      mine.set(k, [...(mine.get(k) ?? []), e]);
+    }
+  }
+  const groups = [...mine]
+    .map(([k, es]) => {
+      const [code, section] = k.split('\u0000') as [string, string];
+      return { code, section, es };
+    })
+    .sort(
+      (a, b) =>
+        (order.get(a.code) ?? 999) - (order.get(b.code) ?? 999) ||
+        a.section.localeCompare(b.section, 'en', { numeric: true }),
+    );
+  const head = (g: { code: string; section: string }) => ({
+    code: g.code,
+    subject: nameOf(g.code),
+    section: g.section,
+  });
+  const cols: AnColumn[] = [
+    t('code', 'Code', 1),
+    t('subject', 'Subject', 3),
+    t('section', 'Section', 1),
+  ];
+  const students = new Set(groups.flatMap((g) => g.es.map((e) => e.c.roll)));
+  return {
+    students: students.size,
+    tables: [
+      {
+        key: 'sections',
+        title: 'My sections',
+        columns: [
+          ...cols,
+          n('total', 'Total no.'),
+          n('appeared', 'Appeared'),
+          n('pass', 'Pass'),
+          ...SECTION_BANDS.map(([label], i) => n(`b${i}`, label)),
+          n('highest', 'Highest'),
+          n('lowest', 'Lowest'),
+          n('avg', 'Average'),
+          n('pi', 'PI'),
+        ],
+        rows: groups.map((g) => {
+          const s = subjectStats(g.es, input.rules);
+          return {
+            ...head(g),
+            total: s.total,
+            appeared: s.appeared,
+            pass: s.pass,
+            ...Object.fromEntries(SECTION_BANDS.map((b, i) => [`b${i}`, s.band(b)])),
+            highest: s.highest,
+            lowest: s.lowest,
+            avg: s.average,
+            pi: piOf(g.es),
+          };
+        }),
+      },
+      {
+        key: 'acr',
+        title: 'ACR bands',
+        columns: [
+          ...cols,
+          ...ACR_BANDS.map(([label], i) => n(`b${i}`, label)),
+          n('total', 'Total'),
+        ],
+        rows: groups.map((g) => {
+          const s = subjectStats(g.es, input.rules);
+          return {
+            ...head(g),
+            ...Object.fromEntries(ACR_BANDS.map((b, i) => [`b${i}`, s.band(b)])),
+            total: s.appeared,
+          };
+        }),
+      },
+      {
+        key: 'students',
+        title: 'My students',
+        columns: [
+          ...cols,
+          t('roll', 'Roll no', 1),
+          t('name', 'Name', 3),
+          n('marks', 'Marks'),
+          t('grade', 'Grade', 1),
+          t('result', 'Result', 1),
+        ],
+        rows: groups.flatMap((g) =>
+          [...g.es]
+            .sort((a, b) => a.c.roll.localeCompare(b.c.roll))
+            .map((e) => ({
+              ...head(g),
+              roll: e.c.roll,
+              name: e.c.name,
+              marks: e.m.marks,
+              grade: e.m.grade,
+              result: e.c.compartment.includes(g.code)
+                ? 'COMP'
+                : e.m.marks === null
+                  ? 'ABSENT'
+                  : e.c.result,
+            })),
+        ),
+      },
+    ],
+  };
+}

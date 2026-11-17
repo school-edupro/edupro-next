@@ -1,3 +1,4 @@
+import type { BoardSummary } from '@/lib/board-results';
 import { Badge, Card, KpiTile, PageHeader } from '@edupro/ui';
 import { getTranslations } from 'next-intl/server';
 import { AutoSubmit } from '@/components/AutoSubmit';
@@ -39,6 +40,12 @@ export default async function ExamsPage({
     apiFetch<Page<ClassRow>>('/academics/classes?size=200').then((r) => r.data),
   ]);
   const canManage = me.permissions.includes('exams.master.manage');
+  // the latest CBSE board results in figures (docs/design/88, phase D)
+  const board = me.permissions.includes('exams.board_result.view')
+    ? await apiFetch<BoardSummary>('/exams/board-results/summary')
+        .then((r) => r.classes)
+        .catch(() => [] as BoardSummary['classes'])
+    : [];
   const q = (sp.q ?? '').trim().toLowerCase();
   const shown = exams.filter(
     (e) =>
@@ -76,6 +83,44 @@ export default async function ExamsPage({
         <KpiTile label={s('verification')} value={String(count(['verification']))} />
         <KpiTile label={s('results')} value={String(count(['results', 'released']))} />
       </div>
+      {board.length ? (
+        <Card
+          title="Board results"
+          style={{ marginBottom: 'var(--sp-4)' }}
+          actions={
+            <a href="/exams/board-results?tab=analysis" style={{ textDecoration: 'underline' }}>
+              The analysis
+            </a>
+          }
+        >
+          <div className="ep-kpis">
+            {board.flatMap((b) => {
+              const of = `Class ${b.classLabel} · ${String(b.examYear)}`;
+              const pc = (v: number | null) => (v === null ? '—' : `${String(v)}%`);
+              return [
+                <KpiTile
+                  key={`${b.classLabel}-p`}
+                  label="Pass %"
+                  value={pc(b.passPct)}
+                  hint={`${of} · ${String(b.appeared)} appeared`}
+                />,
+                <KpiTile
+                  key={`${b.classLabel}-a`}
+                  label="School aggregate"
+                  value={pc(b.aggregate)}
+                  hint={`${of} · best five`}
+                />,
+                <KpiTile
+                  key={`${b.classLabel}-9`}
+                  label="90% and above"
+                  value={pc(b.pct90)}
+                  hint={b.pi === null ? of : `${of} · PI ${String(b.pi)}`}
+                />,
+              ];
+            })}
+          </div>
+        </Card>
+      ) : null}
       <Card title={t('filters')}>
         <form method="get" className="ep-rp__row" role="search" aria-label={t('filters')}>
           <AutoSubmit />

@@ -4,7 +4,7 @@ import { DailyAcademicsModule } from '../academics/daily/daily.module';
 import { FilesModule } from '../files/files.module';
 import { ReportsModule } from '../reports/reports.module';
 import { ReportCardSignaturesService } from './report-card-signatures.service';
-import { BoardResultsController } from './board-results.controller';
+import { BoardFamilyController, BoardResultsController } from './board-results.controller';
 import { BoardResultsService } from './board-results.service';
 import { BoardGazetteService } from './board-gazette.service';
 import { BoardAnalysisService } from './board-analysis.service';
@@ -49,6 +49,7 @@ import { SubjectChoicesService } from './subject-choices.service';
 @Module({
   imports: [DailyAcademicsModule, ReportsModule, FilesModule],
   controllers: [
+    BoardFamilyController,
     ExamDateSheetsController,
     SubjectChoicesController,
     ExamStatusController,

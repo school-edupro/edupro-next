@@ -1,3 +1,5 @@
+import { BoardResultCard } from '@/components/BoardResultCard';
+import type { BoardStudentResult } from '@/lib/board-results';
 import {
   Badge,
   Breadcrumbs,
@@ -233,6 +235,13 @@ export default async function StudentPage({
             .catch(() => [] as ClassCorrectionItem[]),
         ])
       : [null, [] as ClassCorrectionItem[]];
+  // the CBSE board results (docs/design/88, phase D) on the Academics tab
+  const boardResults =
+    tab === 'academics' && can('exams.board_result.view')
+      ? await apiFetch<{ rows: BoardStudentResult[] }>(`/exams/board-results/student/${id}`)
+          .then((r) => r.rows)
+          .catch(() => [] as BoardStudentResult[])
+      : [];
   // a section move stays within the class; another class is a class correction
   const ownClass = student.enrolment
     ? sections.filter((o) => o.label.startsWith(`${student.enrolment!.classCode}-`))
@@ -579,6 +588,10 @@ export default async function StudentPage({
               </form>
             ) : null}
           </Card>
+        ) : null}
+
+        {tab === 'academics' && boardResults.length ? (
+          <BoardResultCard rows={boardResults} />
         ) : null}
 
         {tab === 'academics' && classSetup ? (

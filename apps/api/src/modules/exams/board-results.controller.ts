@@ -6,9 +6,12 @@ import { ReqCtx, type RequestContext } from '../../common/http/request-context';
 import { BoardAnalysisService } from './board-analysis.service';
 import { BoardDetailsService } from './board-details.service';
 import { BoardGazetteService } from './board-gazette.service';
+import { REPORT_CARDS } from './report-cards.dto';
 import {
   BOARD_RESULTS,
   BoardAnalysisFileDto,
+  BoardMineQueryDto,
+  BoardParentsDto,
   BoardAnalysisQueryDto,
   BoardClassQueryDto,
   BoardListQueryDto,
@@ -263,5 +266,61 @@ export class BoardResultsController {
   @RequirePermission(BOARD_RESULTS.import)
   saveRules(@ReqCtx() ctx: RequestContext, @Body() body: BoardRulesDto) {
     return this.analyses.saveRules(ctx, body);
+  }
+
+  // ---- phase D: a teacher's own, a student's, the dashboard's, the parent app switch ----
+
+  @Get('mine')
+  @ApiOperation({
+    summary:
+      'My board results: the sections and subjects I taught (section-wise figures, PI, ACR bands, my students)',
+  })
+  @RequirePermission(BOARD_RESULTS.own, {
+    description: 'See my own CBSE board results: the sections and subjects I taught',
+  })
+  mine(@ReqCtx() ctx: RequestContext, @Query() q: BoardMineQueryDto) {
+    return this.analyses.mine(ctx, q.examYear);
+  }
+
+  @Get('student/:id')
+  @ApiOperation({ summary: "A student's CBSE board results, every saved year" })
+  @RequirePermission(BOARD_RESULTS.view)
+  student(@ReqCtx() ctx: RequestContext, @Param('id') studentId: string) {
+    return this.analyses.student(ctx, id(studentId));
+  }
+
+  @Get('summary')
+  @ApiOperation({ summary: "Each class's latest saved year in figures (the exam page)" })
+  @RequirePermission(BOARD_RESULTS.view)
+  summary(@ReqCtx() ctx: RequestContext) {
+    return this.analyses.summary(ctx);
+  }
+
+  @Get('parents')
+  @RequirePermission(BOARD_RESULTS.view)
+  parents(@ReqCtx() ctx: RequestContext) {
+    return this.analyses.parents(ctx);
+  }
+
+  @Put('parents')
+  @ApiOperation({ summary: "Show (or stop showing) a child's board result on the parent app" })
+  @RequirePermission(BOARD_RESULTS.import)
+  setParents(@ReqCtx() ctx: RequestContext, @Body() body: BoardParentsDto) {
+    return this.analyses.setParents(ctx, body.on);
+  }
+}
+
+/** The parent app's board results (docs/design/88, phase D): the family's children, when the school shows them. */
+@ApiTags('exams')
+@ApiBearerAuth()
+@Controller('exams/mine')
+export class BoardFamilyController {
+  constructor(private readonly analyses: BoardAnalysisService) {}
+
+  @Get('board-results')
+  @ApiOperation({ summary: "My children's CBSE board results (when the school shows them)" })
+  @RequirePermission(REPORT_CARDS.familyView)
+  family(@ReqCtx() ctx: RequestContext) {
+    return this.analyses.family(ctx);
   }
 }

@@ -4,6 +4,8 @@ import { z } from 'zod';
 export const BOARD_RESULTS = {
   view: 'exams.board_result.view',
   import: 'exams.board_result.import',
+  /** a teacher's own sections and subjects (phase D) */
+  own: 'exams.board_result.own',
 } as const;
 
 export const BoardUploadSchema = z
@@ -151,3 +153,11 @@ export const BoardRulesSchema = z.object({
   grades: z.enum(['marks', 'printed']),
 });
 export class BoardRulesDto extends createZodDto(BoardRulesSchema) {}
+
+export const BoardParentsSchema = z.object({ on: z.boolean() });
+export class BoardParentsDto extends createZodDto(BoardParentsSchema) {}
+
+export const BoardMineQuerySchema = z.object({
+  examYear: z.coerce.number().int().min(2000).max(2100).optional(),
+});
+export class BoardMineQueryDto extends createZodDto(BoardMineQuerySchema) {}

@@ -3710,7 +3710,13 @@
     "rules_pass": "Pass from (marks)",
     "rules_save": "Save the rules",
     "rules_default": "The defaults are in use.",
-    "rules_set": "The school's own rules are in use."
+    "rules_set": "The school's own rules are in use.",
+    "parentsTitle": "Board results on the parent app",
+    "parentsHelp": "When on, a family sees their child's CBSE board result on the parent app's Results page: the result, the best five and every subject's marks and grade, as CBSE printed them.",
+    "parentsOn": "Shown to families",
+    "parentsOff": "Not shown to families",
+    "parentsStart": "Show it on the parent app",
+    "parentsStop": "Stop showing it"
   },
   "stock": {
     "start": "Open a stock check",

@@ -32,6 +32,23 @@ interface Term {
 interface Res {
   children: Array<{ student: { id: string; name: string; section: string | null }; terms: Term[] }>;
 }
+/** the child's CBSE board result, when the school shows it (docs/design/88, phase D) */
+interface BoardFamily {
+  enabled: boolean;
+  children: Array<{
+    studentId: string;
+    name: string;
+    results: Array<{
+      classLabel: 'X' | 'XII';
+      examYear: number;
+      roll: string;
+      result: string | null;
+      compartment: Array<{ code: string; name: string }>;
+      subjects: Array<{ code: string; name: string; marks: number | null; grade: string | null }>;
+      bestFive: { total: number; percent: number } | null;
+    }>;
+  }>;
+}
 /** the progress card's parent feedback per exam (docs/design/65 part 5) */
 interface MyFeedback {
   exams: Array<{ examId: string; code: string; name: string; open: boolean; text: string | null }>;
@@ -65,6 +82,9 @@ export default async function ResultsPage({
     throw error;
   }
   const kid = await chosenChild();
+  const board = await bff.api.fetch<BoardFamily>('/exams/mine/board-results').catch(() => null);
+  const boardOf = (studentId: string) =>
+    board?.enabled ? (board.children.find((x) => x.studentId === studentId)?.results ?? []) : [];
   const exportStatus = sp.export
     ? await bff.api
         .fetch<{
@@ -363,6 +383,66 @@ export default async function ResultsPage({
             ))}
           </Card>
         ))}
+      {res.children
+        .filter((c) => !kid || c.student.id === kid.id)
+        .flatMap((c) =>
+          boardOf(c.student.id).map((r) => (
+            <Card
+              key={`board-${c.student.id}-${r.classLabel}-${String(r.examYear)}`}
+              title={`${t(lang, 'CBSE board result')} · Class ${r.classLabel} ${String(r.examYear)} · ${c.student.name}`}
+              style={{ marginBottom: 'var(--sp-3)' }}
+            >
+              <p style={{ marginTop: 0 }}>
+                {`${t(lang, 'Board roll no')} ${r.roll} · `}
+                <Badge
+                  tone={
+                    r.result === 'PASS' ? 'success' : r.result === 'COMP' ? 'warning' : 'neutral'
+                  }
+                >
+                  {r.result ?? '—'}
+                </Badge>
+                {r.bestFive
+                  ? ` · ${t(lang, 'Best five')} ${String(r.bestFive.total)} (${String(r.bestFive.percent)}%)`
+                  : ''}
+                {r.compartment.length
+                  ? ` · ${t(lang, 'Compartment in')} ${r.compartment.map((x) => x.name).join(', ')}`
+                  : ''}
+              </p>
+              <div
+                className="ep-table-wrap"
+                tabIndex={0}
+                role="region"
+                aria-label={t(lang, 'CBSE board result')}
+              >
+                <table className="ep-table ep-table--dense">
+                  <thead>
+                    <tr>
+                      <th scope="col">{t(lang, 'Subject')}</th>
+                      <th scope="col" style={{ textAlign: 'right' }}>
+                        {t(lang, 'Marks')}
+                      </th>
+                      <th scope="col">{t(lang, 'Grade')}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {r.subjects.map((x) => (
+                      <tr key={x.code}>
+                        <td>{x.name}</td>
+                        <td style={{ textAlign: 'right' }}>
+                          {x.marks === null ? t(lang, 'Absent') : String(x.marks)}
+                        </td>
+                        <td>{x.grade ?? ''}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <p className="ep-field__help" style={{ marginBottom: 0 }}>
+                {t(lang, 'Grades as CBSE printed them; the best five as the school counts them.')}
+              </p>
+            </Card>
+          )),
+        )}
     </main>
   );
 }

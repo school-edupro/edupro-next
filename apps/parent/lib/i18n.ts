@@ -1183,6 +1183,13 @@ const DICT: Record<string, string> = {
     'प्रतीक्षा करें: स्कूल PDF बना रहा है। तैयार होते ही यह पेज उसे खोल देगा।',
   'The PDF could not be made.': 'PDF नहीं बन सका।',
   'The PDF is saved to your downloads.': 'PDF आपके डाउनलोड में सहेज दिया गया है।',
+  'CBSE board result': 'CBSE बोर्ड परिणाम',
+  'Board roll no': 'बोर्ड अनुक्रमांक',
+  'Best five': 'सर्वश्रेष्ठ पाँच',
+  'Compartment in': 'कम्पार्टमेंट',
+  Marks: 'अंक',
+  'Grades as CBSE printed them; the best five as the school counts them.':
+    'ग्रेड जैसे CBSE ने छापे; सर्वश्रेष्ठ पाँच जैसे विद्यालय गिनता है।',
 };
 
 /** Translates a known English string; unknown strings fall back to English. */

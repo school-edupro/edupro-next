@@ -266,3 +266,35 @@ export interface BoardAnalysisView {
 export const BEST_FIVE: BestFiveRule[] = ['language-plus-four', 'english-plus-four', 'any-five'];
 /** The year as the school writes it: 2026 → "2025-26". */
 export const yearLabel = (y: number) => `${String(y - 1)}-${String(y).slice(2)}`;
+
+// ---- phase D: a student's board results, the exam page's figures ----
+
+export interface BoardStudentResult {
+  studentId: string;
+  classLabel: 'X' | 'XII';
+  examYear: number;
+  roll: string;
+  result: string | null;
+  compartment: Array<{ code: string; name: string }>;
+  subjects: Array<{
+    code: string;
+    name: string;
+    kind: string | null;
+    marks: number | null;
+    grade: string | null;
+    inBestFive: boolean;
+  }>;
+  bestFive: { total: number; percent: number } | null;
+  rule: string;
+}
+export interface BoardSummary {
+  classes: Array<{
+    classLabel: 'X' | 'XII';
+    examYear: number;
+    appeared: number;
+    passPct: number | null;
+    aggregate: number | null;
+    pct90: number | null;
+    pi: number | null;
+  }>;
+}
