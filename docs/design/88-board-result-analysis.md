@@ -441,3 +441,10 @@ subject); compartment, absent, withheld / later lists (with the student, section
   aggregate. Filters: class, examination, compare with 0–4 saved years (none by default, as the old screen),
   calculation method, gender. `rangeOverall` in `board-reports.ts`, `GET reports/range-overall` and `/file`; the file
   builders take the report's labels (`SUBJECT_LABELS`, `OVERALL_LABELS`). Tests: unit + 1, e2e + 1.
+- **Subject Summary** (the old "All Subject Performance Report (Percentage-Based, Not Grade-Based)", 18 Nov 2026): a
+  row a subject (short names, the school's order) and a total line — appeared (boys, girls), failures, compartments,
+  pass, boys' and girls' pass (No. and %), average % (all, boys, girls), highest, and boys / girls in each marks range
+  A1 (91–100) … E1 (0–32), by the marks whatever the grade setting. Filters: class, examination, gender, subject.
+  `subjectPerformance` in `board-reports.ts` returns an `AnTable` (heading groups); `GET reports/subject-summary` and
+  `/file` (`singleTableXlsx`, `singleTablePdf` — A3, the total bold). The admin's `GroupedTable` draws heading groups.
+  Tests: unit + 1, e2e + 1.

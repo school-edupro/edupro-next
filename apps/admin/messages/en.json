@@ -3804,7 +3804,10 @@
     "rp_range_marks": "Range of marks",
     "rp_students": "No. of students",
     "rp_percentage": "Percentage (%)",
-    "rp_overallNote": "Pass, fail and compartment by the CBSE result; distinction, divisions and ranges by each student's aggregate (the calculation method). Shares are of those who appeared; absent of all students. Divisions do not overlap: distinction from the distinction marks, 1st division from 60, 2nd from 45, 3rd from the pass marks."
+    "rp_overallNote": "Pass, fail and compartment by the CBSE result; distinction, divisions and ranges by each student's aggregate (the calculation method). Shares are of those who appeared; absent of all students. Divisions do not overlap: distinction from the distinction marks, 1st division from 60, 2nd from 45, 3rd from the pass marks.",
+    "rp_subjects": "Subject summary",
+    "rp_subjectsTitle": "All subject performance (percentage-based, not grade-based)",
+    "rp_subjectsHelp": "Every subject by boys and girls: appeared, failures, compartments, pass, the averages and the highest, and boys and girls in each marks range A1 (91–100) … E1 (0–32), with a total line."
   },
   "stock": {
     "start": "Open a stock check",

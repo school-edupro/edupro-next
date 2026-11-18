@@ -547,6 +547,11 @@ and the aggregate ranges (90–100 %, 80–89.99 % … below 33 %) by each stude
 picks the school's best five or all subjects — and the highest, lowest and average aggregate; for all students, boys
 or girls, with up to four saved years before it compared. Excel and PDF give the same.
 
+**Subject summary** (the old "All Subject Performance Report — percentage-based, not grade-based") is a row a
+subject with boys and girls: appeared, failures, compartments, pass, boys' and girls' pass, the averages and the
+highest, and boys and girls in each marks range A1 (91–100) … E1 (0–32) — always by the marks, whatever the grade
+setting — with a total line; for all students, boys or girls, all subjects or one. Excel and PDF (A3) give the same.
+
 **Analysis: the ten annexures.** **Analysis** counts a saved year as the school's own result workbook does: pick the
 class, the examination and a section (or all) and the annexure — 1 School summary (five years, the result in
 figures, the top scorers, full scores, distinctions, the highest in each subject, A1 + A2), 2 Overall result (boys

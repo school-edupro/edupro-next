@@ -1,5 +1,5 @@
 import { DEFAULT_BOARD_RULES, type AnCandidate, type AnSubject } from './board-analysis';
-import { rangeOverall, rangeSubjectSummary } from './board-reports';
+import { rangeOverall, rangeSubjectSummary, subjectPerformance } from './board-reports';
 
 // Every roll number and mark here is made up.
 const SUBJECTS: AnSubject[] = [
@@ -153,5 +153,44 @@ describe('Range Wise Subject Summary (docs/design/88)', () => {
       method: 'all',
     });
     expect(boys.blocks[0]!.rows.find((x) => x.key === 'total')!.values['2026']!.count).toBe(3);
+  });
+
+  it('Subject Summary: a row a subject by boys and girls, the marks ranges whatever the grades, a total line', () => {
+    const t = subjectPerformance(
+      now,
+      SUBJECTS,
+      { ...DEFAULT_BOARD_RULES, grades: 'printed' },
+      { gender: 'all' },
+    );
+    expect(t.rows.map((r) => r.subject)).toEqual(['English Lng & Lit', 'AI', 'Total']);
+    expect(t.strong).toEqual([2]);
+    const eng = t.rows[0]!;
+    // 95 F, 70 M, 50 F, 40 M (compartment), 30 M (failure)
+    expect(eng).toMatchObject({
+      appeared: 5,
+      boys: 3,
+      girls: 2,
+      failNo: 1,
+      failPct: 20,
+      compNo: 1,
+      passNo: 3,
+      boysPassNo: 1,
+      boysPassPct: 33.33,
+      girlsPassNo: 2,
+      girlsPassPct: 100,
+      avg: 57,
+      avgGirls: 72.5,
+      highest: 95,
+    });
+    // marks ranges, not printed grades: 95 girl → A1; 70 boy → B2 (61–70); 30 boy → E1
+    expect([eng.r0G, eng.r3B, eng.r7B]).toEqual([1, 1, 1]);
+    const total = t.rows[2]!;
+    expect(total).toMatchObject({ appeared: 6, passNo: 4, highest: null });
+    // girls only
+    const girls = subjectPerformance(now, SUBJECTS, DEFAULT_BOARD_RULES, {
+      gender: 'F',
+      code: '184',
+    });
+    expect(girls.rows[0]).toMatchObject({ appeared: 2, boys: 0, girls: 2 });
   });
 });

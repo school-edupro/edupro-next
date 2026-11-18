@@ -421,3 +421,15 @@ export interface BoardOverall {
   rule: string;
   summary: NonNullable<BoardRange['summary']> | null;
 }
+
+// ---- the Reports tab: Subject Summary ----
+
+export interface BoardSubjectPerf {
+  classLabel: 'X' | 'XII';
+  examYear: number | null;
+  years: number[];
+  gender: 'all' | 'M' | 'F';
+  code: string | null;
+  subjects: Array<{ code: string; name: string }>;
+  table: AnTable | null;
+}

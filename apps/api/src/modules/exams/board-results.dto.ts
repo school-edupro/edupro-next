@@ -270,3 +270,18 @@ export const BoardOverallFileSchema = BoardOverallQuerySchema.extend({
   format: z.enum(['xlsx', 'pdf']),
 });
 export class BoardOverallFileDto extends createZodDto(BoardOverallFileSchema) {}
+
+// ---- the Reports tab: Subject Summary (every subject by boys and girls) ----
+
+export const BoardSubjectPerfQuerySchema = z.object({
+  classLabel: ClassLabel.default('X'),
+  examYear: z.coerce.number().int().min(2000).max(2100).optional(),
+  gender: z.enum(['all', 'M', 'F']).default('all'),
+  code: Code.optional(),
+});
+export class BoardSubjectPerfQueryDto extends createZodDto(BoardSubjectPerfQuerySchema) {}
+
+export const BoardSubjectPerfFileSchema = BoardSubjectPerfQuerySchema.extend({
+  format: z.enum(['xlsx', 'pdf']),
+});
+export class BoardSubjectPerfFileDto extends createZodDto(BoardSubjectPerfFileSchema) {}

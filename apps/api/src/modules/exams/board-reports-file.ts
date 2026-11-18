@@ -2,6 +2,7 @@ import ExcelJS from 'exceljs';
 import type { LetterheadLogo } from '../../common/pdf/letterhead';
 import { tablePdf } from '../engagement/table-pdf';
 import type { SignBox } from '../purchase/purchase-doc-sign';
+import type { AnTable } from './board-analysis';
 import { rangeYearLabel, type RangeSummary } from './board-reports';
 
 /** The Range Wise Subject Summary as files: the Excel sheet as on screen, and the PDF on the letterhead. */
@@ -176,6 +177,49 @@ export async function rangePdf(
     portrait: r.years.length <= 2,
     fontSize: 8,
     footnote: labels.footnote,
+    signs,
+  });
+}
+
+/** One wide table (a report of the Reports tab) as a PDF: A3 landscape when wide, heading groups, the total bold. */
+export async function singleTablePdf(t: AnTable, head: ReportHead): Promise<Buffer> {
+  const many = t.columns.length;
+  const signs: SignBox[] = [
+    {
+      as: 'Prepared by',
+      name: head.by,
+      code: null,
+      designation: null,
+      when: head.generatedOn,
+      signature: null,
+    },
+    { as: 'Checked by', name: null, code: null, designation: null, when: null, signature: null },
+    { as: 'Principal', name: null, code: null, designation: null, when: null, signature: null },
+  ];
+  return tablePdf({
+    school: head.school,
+    address: head.address,
+    title: t.title,
+    subtitle: [head.title, head.scope],
+    letterhead: { logo: head.logo, details: `Made ${head.generatedOn}` },
+    columns: t.columns.map((c) => ({
+      label: c.label,
+      width: c.num ? 1 : (c.width ?? 2),
+      right: Boolean(c.num),
+      ...(c.group ? { group: c.group } : {}),
+    })),
+    rows: t.rows.map((r) =>
+      t.columns.map((c) => {
+        const v = r[c.key];
+        return v === null || v === undefined ? '' : v;
+      }),
+    ),
+    strong: t.strong ?? [],
+    rowCount: t.rows.length - (t.strong?.length ?? 0),
+    wrap: true,
+    fontSize: many > 30 ? 5.5 : many > 20 ? 6.5 : 8,
+    a3: many > 14,
+    ...(t.note ? { footnote: t.note } : {}),
     signs,
   });
 }

@@ -5,10 +5,15 @@ import {
   subjectStats,
   yearLabel,
   type AnCandidate,
+  type AnColumn,
+  type AnMark,
   type AnSubject,
+  type AnTable,
   type BoardRules,
+  type Cell,
+  type Entry,
 } from './board-analysis';
-import { marksRows, type MarksMethod } from './board-marks';
+import { marksRows, shortSubject, type MarksMethod } from './board-marks';
 
 /**
  * The Reports tab's ready-made reports (docs/design/88). The first, as the school's old "Range Wise Subject
@@ -264,5 +269,132 @@ export function rangeOverall(
         ],
       },
     ],
+  };
+}
+
+// ---- Subject Summary: every subject's performance by boys and girls (the old "All Subject Performance") ----
+
+/** The marks ranges of the old report's grade columns, whatever the grade setting ("percentage-based"). */
+export const MARK_RANGES: Array<[string, number, number]> = [
+  ['A1 (91-100%)', 91, 100],
+  ['A2 (81-90%)', 81, 90],
+  ['B1 (71-80%)', 71, 80],
+  ['B2 (61-70%)', 61, 70],
+  ['C1 (51-60%)', 51, 60],
+  ['C2 (41-50%)', 41, 50],
+  ['D (33-40%)', 33, 40],
+  ['E1 (0-32%)', 0, 32],
+];
+
+/**
+ * Subject Summary: a row a subject — appeared (boys, girls), failures, compartments, pass (boys, girls), the
+ * average (boys, girls), the highest, and boys and girls in each marks range — and a total row (counts added up,
+ * shares and averages over every subject entry).
+ */
+export function subjectPerformance(
+  candidates: AnCandidate[],
+  subjects: AnSubject[],
+  rules: BoardRules,
+  opts: { gender: Gender; code?: string | undefined },
+): AnTable {
+  const kind = new Map(subjects.map((s) => [s.code, s.kind]));
+  const order = new Map(subjects.map((s, i) => [s.code, i]));
+  const nameOf = (code: string) => subjects.find((s) => s.code === code)?.name ?? `Subject ${code}`;
+  const by = entriesBySubject(
+    candidates.filter((c) => opts.gender === 'all' || c.sex === opts.gender),
+  );
+  const codes = [...by.keys()]
+    .filter((c) => kind.get(c) !== 'internal')
+    .filter((c) => !opts.code || c === opts.code)
+    .filter((c) => by.get(c)!.some((e) => e.m.marks !== null))
+    .sort((a, b) => (order.get(a) ?? 999) - (order.get(b) ?? 999) || a.localeCompare(b));
+  const n = (key: string, label: string, group?: string): AnColumn => ({
+    key,
+    label,
+    num: true,
+    ...(group ? { group } : {}),
+  });
+  const columns: AnColumn[] = [
+    n('sno', 'S.No'),
+    { key: 'subject', label: 'Subject', width: 3 },
+    n('appeared', 'Appeared', 'No. of students'),
+    n('boys', 'Boys', 'No. of students'),
+    n('girls', 'Girls', 'No. of students'),
+    n('failNo', 'No.', 'Failures'),
+    n('failPct', '%', 'Failures'),
+    n('compNo', 'No.', 'Compartments'),
+    n('compPct', '%', 'Compartments'),
+    n('passNo', 'No.', 'Pass'),
+    n('passPct', '%', 'Pass'),
+    n('boysPassNo', 'No.', 'Boys pass'),
+    n('boysPassPct', '%', 'Boys pass'),
+    n('girlsPassNo', 'No.', 'Girls pass'),
+    n('girlsPassPct', '%', 'Girls pass'),
+    n('avg', 'All', 'Average %'),
+    n('avgBoys', 'Boys', 'Average %'),
+    n('avgGirls', 'Girls', 'Average %'),
+    n('highest', 'Highest'),
+    ...MARK_RANGES.flatMap(([label], i) => [
+      n(`r${String(i)}B`, 'Boys', label),
+      n(`r${String(i)}G`, 'Girls', label),
+    ]),
+  ];
+  type Marked = Entry & { m: AnMark & { marks: number } };
+  const pct = (k: number, of: number) => (of > 0 ? round2((k * 100) / of) : null);
+  const avg = (xs: number[]) =>
+    xs.length ? round2(xs.reduce((a, b) => a + b, 0) / xs.length) : null;
+  const inRange = (m: number, i: number) =>
+    Math.floor(m) >= MARK_RANGES[i]![1] && Math.floor(m) <= MARK_RANGES[i]![2];
+  const figures = (es: Entry[]) => {
+    const app = es.filter((e): e is Marked => e.m.marks !== null);
+    const boys = app.filter((e) => e.c.sex === 'M');
+    const girls = app.filter((e) => e.c.sex === 'F');
+    const outcome = (e: Marked) =>
+      e.c.compartment.includes(e.m.code) ? 'comp' : e.m.marks < rules.passMarks ? 'fail' : 'pass';
+    const count = (xs: Marked[], o: string) => xs.filter((e) => outcome(e) === o).length;
+    const row: Record<string, Cell> = {
+      appeared: app.length,
+      boys: boys.length,
+      girls: girls.length,
+      failNo: count(app, 'fail'),
+      failPct: pct(count(app, 'fail'), app.length),
+      compNo: count(app, 'comp'),
+      compPct: pct(count(app, 'comp'), app.length),
+      passNo: count(app, 'pass'),
+      passPct: pct(count(app, 'pass'), app.length),
+      boysPassNo: count(boys, 'pass'),
+      boysPassPct: pct(count(boys, 'pass'), boys.length),
+      girlsPassNo: count(girls, 'pass'),
+      girlsPassPct: pct(count(girls, 'pass'), girls.length),
+      avg: avg(app.map((e) => e.m.marks)),
+      avgBoys: avg(boys.map((e) => e.m.marks)),
+      avgGirls: avg(girls.map((e) => e.m.marks)),
+      highest: app.length ? Math.max(...app.map((e) => e.m.marks)) : null,
+    };
+    MARK_RANGES.forEach((_, i) => {
+      row[`r${String(i)}B`] = boys.filter((e) => inRange(e.m.marks, i)).length;
+      row[`r${String(i)}G`] = girls.filter((e) => inRange(e.m.marks, i)).length;
+    });
+    return row;
+  };
+  // the short names CBSE's sheets use ("English Lng & Lit"), as the old report's — the table is wide
+  const rows = codes.map((code, i) => ({
+    sno: i + 1,
+    subject: shortSubject(nameOf(code)),
+    ...figures(by.get(code)!),
+  }));
+  const total: Record<string, Cell> = {
+    sno: null,
+    subject: 'Total',
+    ...figures(codes.flatMap((code) => by.get(code)!)),
+    highest: null,
+  };
+  return {
+    key: 'subject-performance',
+    title: 'Subject summary',
+    columns,
+    rows: [...rows, total],
+    strong: [rows.length],
+    note: 'Percentage-based, not grade-based: the A1 … E1 columns count marks in those ranges. Shares are of those who appeared; a compartment subject is not a pass; averages are of the marks.',
   };
 }

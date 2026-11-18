@@ -397,4 +397,37 @@ describe('CBSE board results: the ten annexures (e2e, docs/design/88 phase C)', 
         .toString(),
     ).toBe('%PDF');
   });
+
+  it('Reports: the Subject Summary — every subject by boys and girls, with the total line and the files', async () => {
+    const r = await get('/exams/board-results/reports/subject-summary?classLabel=X');
+    expect(r.statusCode).toBe(200);
+    const t = r.json().table as {
+      rows: Array<Record<string, string | number | null>>;
+      strong: number[];
+    };
+    // five subjects and the total
+    expect(t.rows).toHaveLength(6);
+    expect(t.rows.at(-1)).toMatchObject({ subject: 'Total', appeared: 20 });
+    const hindi = t.rows.find((x) => x.subject === 'Hindi Course-B')!;
+    // ASHA 92 F, BIRJU 75 M, CHETAN 30 M (compartment), DIVYA 90 F
+    expect(hindi).toMatchObject({
+      appeared: 4,
+      boys: 2,
+      girls: 2,
+      compNo: 1,
+      passNo: 3,
+      girlsPassPct: 100,
+    });
+    const x = await get(
+      '/exams/board-results/reports/subject-summary/file?classLabel=X&format=xlsx',
+    );
+    expect(x.statusCode).toBe(200);
+    const p = await get(
+      '/exams/board-results/reports/subject-summary/file?classLabel=X&format=pdf&gender=M',
+    );
+    expect(p.json().filename).toMatch(/subject-summary\.pdf$/);
+    expect(
+      (await get('/exams/board-results/reports/subject-summary?classLabel=X', auditor)).statusCode,
+    ).toBe(200);
+  });
 });

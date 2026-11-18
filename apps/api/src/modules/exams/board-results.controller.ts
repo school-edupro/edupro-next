@@ -17,6 +17,8 @@ import {
   BoardOverallQueryDto,
   BoardRangeFileDto,
   BoardRangeQueryDto,
+  BoardSubjectPerfFileDto,
+  BoardSubjectPerfQueryDto,
   BoardParentsDto,
   BoardYearFiguresDto,
   BoardAnalysisQueryDto,
@@ -403,6 +405,23 @@ export class BoardResultsController {
   @RequirePermission(BOARD_RESULTS.view)
   overallSummaryFile(@ReqCtx() ctx: RequestContext, @Query() q: BoardOverallFileDto) {
     return this.analyses.overallSummaryFile(ctx, q);
+  }
+
+  @Get('reports/subject-summary')
+  @ApiOperation({
+    summary:
+      'Subject Summary: every subject by boys and girls — results, averages, highest and the marks ranges (percentage-based)',
+  })
+  @RequirePermission(BOARD_RESULTS.view)
+  subjectPerf(@ReqCtx() ctx: RequestContext, @Query() q: BoardSubjectPerfQueryDto) {
+    return this.analyses.subjectPerf(ctx, q);
+  }
+
+  @Get('reports/subject-summary/file')
+  @ApiOperation({ summary: 'The Subject Summary as Excel or PDF' })
+  @RequirePermission(BOARD_RESULTS.view)
+  subjectPerfFile(@ReqCtx() ctx: RequestContext, @Query() q: BoardSubjectPerfFileDto) {
+    return this.analyses.subjectPerfFile(ctx, q);
   }
 }
 

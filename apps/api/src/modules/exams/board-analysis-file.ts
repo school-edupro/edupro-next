@@ -238,3 +238,27 @@ export async function analysisPdf(
   }
   return Buffer.from(await doc.save());
 }
+
+/** One table (a report of the Reports tab) as a workbook: the title band, the heading groups, the rows. */
+export async function singleTableXlsx(
+  t: AnTable,
+  head: { school: string; title: string; scope: string; generatedOn: string; by: string },
+): Promise<Buffer> {
+  const wb = new ExcelJS.Workbook();
+  wb.creator = 'EduPro Next';
+  wb.created = new Date();
+  const ws = wb.addWorksheet(t.title.slice(0, 31).replace(/[\\/*?:[\]]/g, ' '));
+  for (const [i, line] of [head.school, head.title, head.scope].entries()) {
+    const r = ws.addRow([line]);
+    r.font = { bold: true, size: i === 0 ? 14 : 11, color: { argb: INK } };
+    ws.mergeCells(r.number, 1, r.number, Math.max(t.columns.length, 2));
+  }
+  ws.addRow([]);
+  writeTable(ws, { ...t, title: t.title });
+  ws.columns.forEach((col, i) => {
+    const c = t.columns[i];
+    col.width = c && !c.num ? 8 * (c.width ?? 2) : 9;
+  });
+  ws.addRow([`Made ${head.generatedOn} by ${head.by}`]).font = { italic: true, size: 9 };
+  return Buffer.from(await wb.xlsx.writeBuffer());
+}
