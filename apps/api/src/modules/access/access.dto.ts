@@ -68,6 +68,22 @@ export const ListAssignmentsQuerySchema = z.object({
 });
 export class ListAssignmentsQueryDto extends createZodDto(ListAssignmentsQuerySchema) {}
 
+/** The role assignments page: people with their roles (one row a person), filtered and paged. */
+export const AssignmentPeopleQuerySchema = z.object({
+  /** a name, e-mail or mobile */
+  q: z.string().trim().max(100).optional(),
+  roleId: IdSchema.optional(),
+  /** one person (after a grant, the list opens on them) */
+  userId: IdSchema.optional(),
+  /** staff (employees and outside staff), parents, students, or everyone */
+  people: z.enum(['staff', 'parents', 'students', 'all']).default('staff'),
+  /** active (ending soon included), ending within 30 days, starting later, ended, revoked, or all */
+  status: z.enum(['active', 'ending', 'upcoming', 'ended', 'revoked', 'all']).default('active'),
+  page: z.coerce.number().int().min(1).default(1),
+  size: z.coerce.number().int().min(1).max(100).default(25),
+});
+export class AssignmentPeopleQueryDto extends createZodDto(AssignmentPeopleQuerySchema) {}
+
 // ---- delegations ---------------------------------------------------------------------------------
 export const CreateDelegationSchema = z
   .object({

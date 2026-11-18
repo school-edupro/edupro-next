@@ -26,6 +26,7 @@ import {
   UpdateAssignmentDto,
   UpdateRoleDto,
   UserSearchQueryDto,
+  AssignmentPeopleQueryDto,
 } from './access.dto';
 import { ACCESS } from './access.permissions';
 import { AccessService } from './access.service';
@@ -95,6 +96,16 @@ export class AccessController {
   async listAssignments(@ReqCtx() ctx: RequestContext, @Query() q: ListAssignmentsQueryDto) {
     const { rows, total } = await this.assignments.list(requireTenant(ctx), q);
     return { data: rows, page: { number: q.page, size: q.size, total } };
+  }
+
+  @Get('assignments/people')
+  @ApiOperation({
+    summary:
+      'Role assignments by person: the figures, people per role, and a page of people with their roles (scopes named)',
+  })
+  @RequirePermission(ACCESS.assignmentView)
+  assignmentPeople(@ReqCtx() ctx: RequestContext, @Query() q: AssignmentPeopleQueryDto) {
+    return this.assignments.people(requireTenant(ctx), q);
   }
 
   @Get('assignments/:id')

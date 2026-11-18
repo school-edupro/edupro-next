@@ -313,6 +313,63 @@ describe('access administration (e2e)', () => {
       expect(res.json().data.length).toBeGreaterThanOrEqual(1);
       expect(res.json().data.every((a: { active: boolean }) => a.active === false)).toBe(true);
     });
+
+    it('lists people with their roles: the figures, roles held, filters and the sections named', async () => {
+      type People = {
+        figures: Record<string, number>;
+        roles: Array<{ id: string; name: string; people: number }>;
+        data: Array<{
+          userId: string;
+          name: string;
+          personType: string;
+          assignments: Array<{
+            roleCode: string;
+            state: string;
+            scopes: Array<{ type: string; name: string | null }>;
+          }>;
+        }>;
+        page: { total: number };
+      };
+      const get = async (q: string, sub = admin.sub) =>
+        inject({ method: 'GET', url: `/access/assignments/people${q}`, headers: A(sub) });
+      const res = await get('');
+      expect(res.statusCode).toBe(200);
+      const d = res.json() as People;
+      // staff with an active role: the admin and the teacher (the member's role was revoked)
+      expect(d.figures.staff).toBe(2);
+      // the segregation-of-duties grant and the member's role, both revoked above
+      expect(d.figures.revoked).toBe(2);
+      expect(d.data.map((p) => p.name).sort()).toEqual([admin.sub, teacher.sub].sort());
+      expect(d.roles.map((r) => r.people)).toEqual([1, 1]);
+      // a name search, a role filter
+      const t = (await get(`?q=${encodeURIComponent(teacher.sub)}`)).json() as People;
+      expect(t.data.map((p) => [p.name, p.personType, p.assignments[0]!.roleCode])).toEqual([
+        [teacher.sub, 'employee', 'class_teacher'],
+      ]);
+      const teacherRole = d.roles.find((r) => r.name !== t.data[0]!.name && r.people === 1)!;
+      expect((await get(`?roleId=${teacherRole.id}`)).json().page.total).toBe(1);
+      // the revoked one, its section named
+      const rv = (await get(`?people=all&status=revoked&userId=${member.id}`)).json() as People;
+      // (both of the member's grants were revoked; the scoped one names its section)
+      expect(rv.data[0]!.assignments.map((a) => [a.state, a.scopes.map((x) => x.name)])).toEqual(
+        expect.arrayContaining([['revoked', ['VII-A']]]),
+      );
+      expect(rv.data[0]!.assignments.every((a) => a.state === 'revoked')).toBe(true);
+      // parents only: no one here
+      expect((await get('?people=parents')).json().data).toEqual([]);
+      // a class teacher may not look; another school's admin sees none of these people
+      expect((await get('', teacher.sub)).statusCode).toBe(403);
+      const theirs = await inject({
+        method: 'GET',
+        url: '/access/assignments/people?people=all&status=all',
+        headers: headersFor(outsider.sub, other.id),
+      });
+      expect(
+        (theirs.json() as People).data.some((p) =>
+          [admin.sub, teacher.sub, member.sub].includes(p.name),
+        ),
+      ).toBe(false);
+    });
   });
 
   describe('delegations', () => {

@@ -119,28 +119,51 @@ export async function disableRole(fd: FormData) {
 }
 
 // ---- assignments ---------------------------------------------------------------------------------
+/**
+ * Grants a role from Access → Role assignments → Grant a role: the person, role, campus, dates, reason and the
+ * sections ticked (none: every section) in one call. On success the list opens on the person; on a refusal the
+ * grant page shows why (the search kept).
+ */
 export async function grantRole(fd: FormData) {
-  return run('/access/assignments', () =>
-    apiFetch('/access/assignments', {
+  const b = str(fd, 'back');
+  const form = /^\/access\/assignments\/new(\?[\w=&%.+-]*)?$/.test(b)
+    ? b
+    : '/access/assignments/new';
+  const userId = str(fd, 'userId');
+  const scopes = fd.getAll('sectionIds').map((v) => ({ type: 'class_section', id: String(v) }));
+  try {
+    await apiFetch('/access/assignments', {
       method: 'POST',
       body: JSON.stringify({
-        userId: str(fd, 'userId'),
+        userId,
         roleId: str(fd, 'roleId'),
         campusId: opt(fd, 'campusId'),
         validFrom: opt(fd, 'validFrom'),
         validTo: opt(fd, 'validTo'),
         reason: str(fd, 'reason'),
+        scopes,
       }),
-    }),
-  );
+    });
+  } catch (error) {
+    if (error instanceof ApiError && error.problem.type === 'mfa-required')
+      redirect(`/step-up?returnTo=${encodeURIComponent(form)}`);
+    if (error instanceof ApiError) back(form, error.problem.type, problemDetail(error));
+    throw error;
+  }
+  back(`/access/assignments?userId=${userId}&people=all&status=all`, 'ok');
 }
 
+/** Revokes an assignment with the reason typed in the confirm box; back to the list as it was (filters kept). */
 export async function revokeAssignment(fd: FormData) {
   const id = str(fd, 'id');
-  return run('/access/assignments', () =>
+  const b = str(fd, 'back');
+  const list = /^\/access\/assignments(\/\d{1,18})?(\?[\w=&%.+-]*)?$/.test(b)
+    ? b
+    : '/access/assignments';
+  return run(list, () =>
     apiFetch(`/access/assignments/${id}/revoke`, {
       method: 'POST',
-      body: JSON.stringify({ reason: str(fd, 'reason') || 'revoked from admin' }),
+      body: JSON.stringify({ reason: str(fd, 'reason') }),
     }),
   );
 }

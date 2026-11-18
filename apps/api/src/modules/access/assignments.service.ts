@@ -4,6 +4,7 @@ import { DbService } from '../../common/db/db.service';
 import { DomainError } from '../../common/errors/domain-error';
 import { requireTenant, type RequestContext } from '../../common/http/request-context';
 import type {
+  AssignmentPeopleQueryDto,
   GrantDto,
   ListAssignmentsQueryDto,
   SetScopesDto,
@@ -74,6 +75,65 @@ const toAssignment = (x: AssignmentDbRow): AssignmentRow => ({
   scopes: x.scopes ?? [],
 });
 
+/** Where an assignment stands today: active (ending within 30 days), starting later, ended or revoked. */
+export type AssignmentState = 'active' | 'ending' | 'upcoming' | 'ended' | 'revoked';
+
+export interface PersonAssignment {
+  id: string;
+  roleId: string;
+  roleCode: string;
+  roleName: string;
+  campusName: string | null;
+  validFrom: string;
+  validTo: string | null;
+  grantedByName: string | null;
+  reason: string | null;
+  revokedAt: string | null;
+  state: AssignmentState;
+  /** the sections (or campuses) it is limited to, named: "VI-A" */
+  scopes: Array<{ type: ScopeType; id: string; name: string | null }>;
+}
+
+export interface PersonWithRoles {
+  userId: string;
+  name: string;
+  personType: 'employee' | 'guardian' | 'student' | 'external';
+  email: string | null;
+  mobile: string | null;
+  assignments: PersonAssignment[];
+}
+
+/** today's state of `ur` (a user_roles row) */
+const STATE_SQL = `CASE WHEN ur.revoked_at IS NOT NULL THEN 'revoked'
+  WHEN ur.valid_from > CURRENT_DATE THEN 'upcoming'
+  WHEN ur.valid_to IS NOT NULL AND ur.valid_to < CURRENT_DATE THEN 'ended'
+  WHEN ur.valid_to IS NOT NULL AND ur.valid_to <= CURRENT_DATE + 30 THEN 'ending'
+  ELSE 'active' END`;
+
+/** every assignment with its state and the holder's kind (outside staff when no membership is left) */
+// eslint-disable-next-line no-restricted-syntax -- STATE_SQL is a fixed SQL fragment
+const STATED = `WITH a AS (
+  SELECT ur.id, ur.user_id, ur.role_id, ur.revoked_at, ${STATE_SQL} AS state,
+         COALESCE((SELECT m.person_type::text FROM user_school_memberships m
+                    WHERE m.user_id = ur.user_id AND m.deleted_at IS NULL
+                    ORDER BY (m.status = 'active') DESC, m.id LIMIT 1), 'external') AS ptype
+    FROM user_roles ur)`;
+
+const GROUP_TYPES: Record<AssignmentPeopleQueryDto['people'], string[] | null> = {
+  staff: ['employee', 'external'],
+  parents: ['guardian'],
+  students: ['student'],
+  all: null,
+};
+const STATUS_STATES: Record<AssignmentPeopleQueryDto['status'], string[] | null> = {
+  active: ['active', 'ending'],
+  ending: ['ending'],
+  upcoming: ['upcoming'],
+  ended: ['ended'],
+  revoked: ['revoked'],
+  all: null,
+};
+
 @Injectable()
 export class AssignmentsService {
   constructor(
@@ -118,6 +178,176 @@ export class AssignmentsService {
         params,
       );
       return { rows: r.rows.map(toAssignment), total: Number(total.rows[0]?.n ?? 0) };
+    });
+  }
+
+  /**
+   * The role assignments page (one row a person): the school's figures, the people holding each role, and a page of
+   * people — filtered by group, status, role and a name / e-mail / mobile — with their roles in that status.
+   */
+  people(tenant: TenantContext, q: AssignmentPeopleQueryDto) {
+    return this.db.tenant(tenant, async (c) => {
+      const figures = (
+        await c.query<Record<string, string>>(
+          // eslint-disable-next-line no-restricted-syntax -- fixed SQL constants; no values interpolated
+          `${STATED}
+           SELECT count(DISTINCT user_id) FILTER (WHERE state IN ('active','ending') AND ptype IN ('employee','external'))::text AS staff,
+                  count(DISTINCT user_id) FILTER (WHERE state IN ('active','ending') AND ptype = 'guardian')::text AS parents,
+                  count(DISTINCT user_id) FILTER (WHERE state IN ('active','ending') AND ptype = 'student')::text AS students,
+                  count(*) FILTER (WHERE state IN ('active','ending'))::text AS active,
+                  count(*) FILTER (WHERE state = 'ending')::text AS ending,
+                  count(*) FILTER (WHERE state = 'revoked' AND revoked_at >= now() - interval '30 days')::text AS revoked
+             FROM a`,
+        )
+      ).rows[0]!;
+      // the filters: group, status, name / e-mail / mobile (and the role, for the people)
+      const params: unknown[] = [];
+      const where: string[] = [];
+      const types = GROUP_TYPES[q.people];
+      if (types) {
+        params.push(types);
+        where.push(`a.ptype = ANY($${params.length}::text[])`);
+      }
+      const states = STATUS_STATES[q.status];
+      if (states) {
+        params.push(states);
+        where.push(`a.state = ANY($${params.length}::text[])`);
+      }
+      if (q.q) {
+        params.push(`%${q.q.replace(/[\\%_]/g, (x) => `\\${x}`)}%`);
+        where.push(
+          `(u.display_name ILIKE $${params.length} OR u.email ILIKE $${params.length} OR u.mobile ILIKE $${params.length})`,
+        );
+      }
+      if (q.userId) {
+        params.push(q.userId);
+        where.push(`a.user_id = $${params.length}`);
+      }
+      const base = where.length ? where.join(' AND ') : 'TRUE';
+      const roles = (
+        await c.query<{ id: string; name: string; people: number }>(
+          // eslint-disable-next-line no-restricted-syntax -- base is a conjunction of fixed fragments; values are bound parameters
+          `${STATED}
+           SELECT r.id::text, r.name, count(DISTINCT a.user_id)::int AS people
+             FROM a JOIN users u ON u.id = a.user_id JOIN roles r ON r.id = a.role_id
+            WHERE ${base}
+            GROUP BY r.id, r.name ORDER BY people DESC, r.name`,
+          params,
+        )
+      ).rows;
+      const pp = [...params];
+      let who = base;
+      if (q.roleId) {
+        pp.push(q.roleId);
+        who = `${base} AND a.role_id = $${pp.length}`;
+      }
+      const total = Number(
+        (
+          await c.query<{ n: string }>(
+            // eslint-disable-next-line no-restricted-syntax -- who is a conjunction of fixed fragments; values are bound parameters
+            `${STATED} SELECT count(DISTINCT a.user_id)::text AS n FROM a JOIN users u ON u.id = a.user_id WHERE ${who}`,
+            pp,
+          )
+        ).rows[0]?.n ?? 0,
+      );
+      pp.push(q.size, (q.page - 1) * q.size);
+      const people = (
+        await c.query<{
+          user_id: string;
+          name: string;
+          email: string | null;
+          mobile: string | null;
+          ptype: PersonWithRoles['personType'];
+        }>(
+          // eslint-disable-next-line no-restricted-syntax -- who is a conjunction of fixed fragments; values are bound parameters
+          `${STATED}
+           SELECT a.user_id::text, u.display_name AS name, u.email, u.mobile, min(a.ptype) AS ptype
+             FROM a JOIN users u ON u.id = a.user_id
+            WHERE ${who}
+            GROUP BY a.user_id, u.display_name, u.email, u.mobile
+            ORDER BY u.display_name, a.user_id
+            LIMIT $${pp.length - 1} OFFSET $${pp.length}`,
+          pp,
+        )
+      ).rows;
+      // their roles in the status asked (every role, not only the one filtered: what the person can do)
+      const rows = people.length
+        ? (
+            await c.query<{
+              id: string;
+              user_id: string;
+              role_id: string;
+              role_code: string;
+              role_name: string;
+              campus_name: string | null;
+              valid_from: string;
+              valid_to: string | null;
+              granted_by_name: string | null;
+              reason: string | null;
+              revoked_at: Date | null;
+              state: AssignmentState;
+              scopes: PersonAssignment['scopes'] | null;
+            }>(
+              // eslint-disable-next-line no-restricted-syntax -- STATE_SQL is a fixed SQL fragment; values are bound parameters
+              `SELECT ur.id::text, ur.user_id::text, ur.role_id::text, r.code AS role_code, r.name AS role_name,
+                      cp.name AS campus_name,
+                      to_char(ur.valid_from, 'YYYY-MM-DD') AS valid_from, to_char(ur.valid_to, 'YYYY-MM-DD') AS valid_to,
+                      gb.display_name AS granted_by_name, ur.reason, ur.revoked_at, ${STATE_SQL} AS state,
+                      (SELECT json_agg(json_build_object(
+                                'type', s.scope_type, 'id', s.scope_id::text,
+                                'name', CASE s.scope_type
+                                          WHEN 'class_section' THEN (SELECT k.code || '-' || cs.name FROM class_sections cs
+                                                                       JOIN classes k ON k.id = cs.class_id WHERE cs.id = s.scope_id)
+                                          WHEN 'campus' THEN (SELECT x.name FROM campuses x WHERE x.id = s.scope_id)
+                                        END) ORDER BY s.scope_type, s.scope_id)
+                         FROM user_role_scopes s WHERE s.user_role_id = ur.id) AS scopes
+                 FROM user_roles ur
+                 JOIN roles r ON r.id = ur.role_id
+                 LEFT JOIN campuses cp ON cp.id = ur.campus_id
+                 LEFT JOIN users gb ON gb.id = ur.granted_by
+                WHERE ur.user_id = ANY($1::bigint[])
+                  AND ($2::text[] IS NULL OR (${STATE_SQL}) = ANY($2::text[]))
+                ORDER BY r.name, ur.valid_from DESC, ur.id`,
+              [people.map((x) => x.user_id), states],
+            )
+          ).rows
+        : [];
+      const data: PersonWithRoles[] = people.map((x) => ({
+        userId: x.user_id,
+        name: x.name,
+        personType: x.ptype,
+        email: x.email,
+        mobile: x.mobile,
+        assignments: rows
+          .filter((r) => r.user_id === x.user_id)
+          .map((r) => ({
+            id: r.id,
+            roleId: r.role_id,
+            roleCode: r.role_code,
+            roleName: r.role_name,
+            campusName: r.campus_name,
+            validFrom: r.valid_from,
+            validTo: r.valid_to,
+            grantedByName: r.granted_by_name,
+            reason: r.reason,
+            revokedAt: r.revoked_at ? r.revoked_at.toISOString() : null,
+            state: r.state,
+            scopes: r.scopes ?? [],
+          })),
+      }));
+      return {
+        figures: {
+          staff: Number(figures.staff),
+          parents: Number(figures.parents),
+          students: Number(figures.students),
+          active: Number(figures.active),
+          ending: Number(figures.ending),
+          revoked: Number(figures.revoked),
+        },
+        roles,
+        data,
+        page: { number: q.page, size: q.size, total },
+      };
     });
   }
 
