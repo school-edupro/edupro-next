@@ -35,6 +35,7 @@ import {
   resultAnalysisTable,
   resultCharts,
   subjectPerformance,
+  teacherAnalysisTable,
 } from './board-reports';
 import { filterMarks, marksRows, type MarksRow } from './board-marks';
 import { readRules, writeRules } from './board-rules';
@@ -49,6 +50,8 @@ import {
   type BoardResultAnalysisQueryDto,
   type BoardSubjectPerfFileDto,
   type BoardSubjectPerfQueryDto,
+  type BoardTeacherAnalysisFileDto,
+  type BoardTeacherAnalysisQueryDto,
   type BoardToppersFileDto,
   type BoardToppersQueryDto,
   type BoardYearFiguresDto,
@@ -1224,6 +1227,102 @@ export class BoardAnalysisService {
         },
       });
       const base = `CBSE-Class-${q.classLabel}-${String(r.examYear)}-subject-summary`;
+      return q.format === 'xlsx'
+        ? {
+            filename: `${base}.xlsx`,
+            contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            base64: (await singleTableXlsx(r.table, head)).toString('base64'),
+          }
+        : {
+            filename: `${base}.pdf`,
+            contentType: 'application/pdf',
+            base64: (await singleTablePdf(r.table, head)).toString('base64'),
+          };
+    });
+  }
+
+  // ---- the Reports tab: Teacher wise result analysis ----
+
+  private async teacherAnalysisOf(c: PoolClient, q: BoardTeacherAnalysisQueryDto) {
+    const years = (
+      await c.query<{ y: number }>(
+        `SELECT DISTINCT exam_year AS y FROM board_candidates WHERE board = 'CBSE' AND class_label = $1 ORDER BY 1 DESC`,
+        [q.classLabel],
+      )
+    ).rows.map((r) => r.y);
+    const examYear = q.examYear !== undefined && years.includes(q.examYear) ? q.examYear : years[0];
+    const { rules } = await this.rulesOf(c, q.classLabel);
+    const subjects = await this.subjectsOf(c, q.classLabel);
+    if (examYear === undefined)
+      return { examYear: null, years, subjects, teachers: [], table: null };
+    const who = await this.details.teacherResolver(c, 'CBSE', q.classLabel, examYear);
+    const r = teacherAnalysisTable(
+      await this.candidatesOf(c, q.classLabel, examYear),
+      subjects,
+      rules,
+      (section, code, roll) => who(section, code, roll)?.people ?? [],
+      { gender: q.gender, code: q.code, teacher: q.teacher },
+    );
+    return { examYear, years, subjects, teachers: r.teachers, table: r.table };
+  }
+
+  /** Teacher wise result analysis: a teacher's subjects and sections with the result analysis figures. */
+  async teacherAnalysis(ctx: RequestContext, q: BoardTeacherAnalysisQueryDto) {
+    return this.db.tenant(requireTenant(ctx), async (c) => {
+      const r = await this.teacherAnalysisOf(c, q);
+      return {
+        classLabel: q.classLabel,
+        examYear: r.examYear,
+        years: r.years,
+        gender: q.gender,
+        code: q.code ?? null,
+        teacher: q.teacher ?? null,
+        subjects: r.subjects
+          .filter((s) => s.kind !== 'internal')
+          .map((s) => ({ code: s.code, name: s.name })),
+        teachers: r.teachers,
+        table: r.table,
+      };
+    });
+  }
+
+  async teacherAnalysisFile(ctx: RequestContext, q: BoardTeacherAnalysisFileDto) {
+    return this.db.tenant(requireTenant(ctx), async (c) => {
+      const r = await this.teacherAnalysisOf(c, q);
+      if (!r.table || r.examYear === null)
+        throw new DomainError('not-found', `No saved Class ${q.classLabel} result`, {
+          status: 404,
+        });
+      const h = await registerLetterhead(c);
+      const teacher = q.teacher ? r.teachers.find((t) => t.key === q.teacher)?.name : null;
+      const head = {
+        school: h.school,
+        address: h.address,
+        logo: q.format === 'pdf' ? await registerLogo(this.storage, h.file) : null,
+        generatedOn: registerGeneratedOn(),
+        by: ctx.user.displayName,
+        title: `CBSE ${q.classLabel === 'XII' ? 'AISSCE' : 'AISSE'} result (Class ${q.classLabel}) ${yearLabel(r.examYear)} · teacher wise result analysis`,
+        scope: [
+          teacher ?? 'all teachers',
+          q.gender === 'M' ? 'boys' : q.gender === 'F' ? 'girls' : 'all students',
+          q.code ? `subject ${q.code}` : 'all subjects',
+        ].join(' · '),
+      };
+      await this.audit.stage(ctx, c, {
+        action: 'exams.board_result.report_export',
+        entityType: 'board_candidates',
+        entityId: requireTenant(ctx).schoolId,
+        after: {
+          report: 'teacher-analysis',
+          classLabel: q.classLabel,
+          examYear: r.examYear,
+          gender: q.gender,
+          code: q.code ?? null,
+          teacher: q.teacher ?? null,
+          format: q.format,
+        },
+      });
+      const base = `CBSE-Class-${q.classLabel}-${String(r.examYear)}-teacher-analysis`;
       return q.format === 'xlsx'
         ? {
             filename: `${base}.xlsx`,

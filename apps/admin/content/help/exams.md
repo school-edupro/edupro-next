@@ -568,6 +568,14 @@ name) stay in view while the rest scrolls sideways.
 **Calculation method** wherever a student's aggregate counts (Results, Range wise summary): the best five by the
 school's rule, the **first five subjects as CBSE printed them**, or all subjects.
 
+**Teacher wise** is the all subject result analysis for each teacher: a row for each subject and section the
+teacher taught (the year's subject teachers, or the **Teachers** tab where they were changed) with students, absent,
+pass, fail, compartment, marks, distinction, divisions and the class's grades, the teacher's total when there is more
+than one row, the **PI**, and **against the class** — the subject's average over every section and the gap (the
+row's average less it; plus means above the class). A section shared by two teachers counts under each; subjects
+with no teacher set come last as "No teacher set". Filters: class, examination, teacher, subject, gender; PDF and
+Excel as the other reports.
+
 **Toppers** (the old Topper Report) shows the class's toppers by the aggregate — best five, first five or all
 subjects — and each subject's toppers by its marks, for a section and gender, with **lowest ranks** and a
 **percentage list** (at or above / at or below) when you ask. **Show** picks class toppers, subject toppers or both;

@@ -1,6 +1,7 @@
 import {
   entriesBySubject,
   gradeNames,
+  piOf,
   round2,
   subjectStats,
   yearLabel,
@@ -427,6 +428,46 @@ function analysisFigures(es: Entry[], rules: BoardRules): Record<string, Cell> {
   return row;
 }
 
+const num = (key: string, label: string, group?: string): AnColumn => ({
+  key,
+  label,
+  num: true,
+  ...(group ? { group } : {}),
+});
+
+/** The Result Analysis figures' columns (analysisFigures): students … divisions, then the class's grades. */
+function figureColumns(rules: BoardRules): AnColumn[] {
+  const n = num;
+  const gradeLabel = (g: string) => {
+    const band = rules.scale.find((b) => b.grade === g);
+    return rules.grades === 'printed' || !band ? g : `${g} (${bandRange(band)})`;
+  };
+  return [
+    n('total', 'Total', 'Students'),
+    n('appeared', 'Appeared', 'Students'),
+    n('absentNo', 'No.', 'Absent'),
+    n('absentPct', '%', 'Absent'),
+    n('passNo', 'No.', 'Pass'),
+    n('passPct', '%', 'Pass'),
+    n('failNo', 'No.', 'Fail'),
+    n('failPct', '%', 'Fail'),
+    n('compNo', 'No.', 'Compartment'),
+    n('compPct', '%', 'Compartment'),
+    n('highest', 'Highest', 'Marks'),
+    n('lowest', 'Lowest', 'Marks'),
+    n('avg', 'Average', 'Marks'),
+    n('distNo', 'No.', 'Distinction'),
+    n('distPct', '%', 'Distinction'),
+    n('firstNo', 'No.', '1st division'),
+    n('firstPct', '%', '1st division'),
+    n('secondNo', 'No.', '2nd division'),
+    n('secondPct', '%', '2nd division'),
+    n('thirdNo', 'No.', '3rd division'),
+    n('thirdPct', '%', '3rd division'),
+    ...gradeNames(rules).map((g) => n(`g${g}`, gradeLabel(g), 'Grades')),
+  ];
+}
+
 /**
  * The Result Analysis table: a row a subject (and, for boys against girls, an All, a Boys and a Girls row) with the
  * students, appeared, absent, pass, fail, compartment, marks, divisions and grades, and the total line(s). The
@@ -456,42 +497,11 @@ export function resultAnalysisTable(
   const word = (g: Gender) => (g === 'M' ? 'Boys' : g === 'F' ? 'Girls' : 'All');
   const label = (name: string, g: Gender) =>
     opts.gender === 'both' ? `${name} · ${word(g)}` : name;
-  const n = (key: string, lbl: string, group?: string): AnColumn => ({
-    key,
-    label: lbl,
-    num: true,
-    ...(group ? { group } : {}),
-  });
-  const gradeLabel = (g: string) => {
-    const band = rules.scale.find((b) => b.grade === g);
-    return rules.grades === 'printed' || !band ? g : `${g} (${bandRange(band)})`;
-  };
   const columns: AnColumn[] = [
-    n('sno', 'S.No'),
+    num('sno', 'S.No'),
     { key: 'code', label: 'Code', width: 1 },
     { key: 'subject', label: 'Subject', width: 3 },
-    n('total', 'Total', 'Students'),
-    n('appeared', 'Appeared', 'Students'),
-    n('absentNo', 'No.', 'Absent'),
-    n('absentPct', '%', 'Absent'),
-    n('passNo', 'No.', 'Pass'),
-    n('passPct', '%', 'Pass'),
-    n('failNo', 'No.', 'Fail'),
-    n('failPct', '%', 'Fail'),
-    n('compNo', 'No.', 'Compartment'),
-    n('compPct', '%', 'Compartment'),
-    n('highest', 'Highest', 'Marks'),
-    n('lowest', 'Lowest', 'Marks'),
-    n('avg', 'Average', 'Marks'),
-    n('distNo', 'No.', 'Distinction'),
-    n('distPct', '%', 'Distinction'),
-    n('firstNo', 'No.', '1st division'),
-    n('firstPct', '%', '1st division'),
-    n('secondNo', 'No.', '2nd division'),
-    n('secondPct', '%', '2nd division'),
-    n('thirdNo', 'No.', '3rd division'),
-    n('thirdPct', '%', '3rd division'),
-    ...gradeNames(rules).map((g) => n(`g${g}`, gradeLabel(g), 'Grades')),
+    ...figureColumns(rules),
   ];
   const rows: Array<Record<string, Cell>> = [];
   codes.forEach((code, i) => {
@@ -527,6 +537,131 @@ export function resultAnalysisTable(
         ? "Grades as CBSE printed them, matched to the class's grades by name (D1 and D2 counted as D)."
         : "Grades from the marks on the class's scale; they add up to those who appeared."
     }`,
+  };
+}
+
+// ---- Teacher wise: the Result Analysis a teacher (each subject × section taught, and the teacher's total) ----
+
+/** A teacher of a section's subject for one candidate (the Teachers tab's overrides, else the year's assignments). */
+export type TeachersOf = (
+  section: string | null,
+  code: string,
+  roll: string,
+) => Array<{ id: string | null; name: string }>;
+
+export const NO_TEACHER = 'none';
+
+/**
+ * Teacher wise result analysis: the Result Analysis figures for each subject and section a teacher taught (a section
+ * shared by teachers counts under each), the teacher's total when more than one, the PI, and the row's average
+ * against the subject's average over the whole class. Teachers by name; "No teacher set" last.
+ */
+export function teacherAnalysisTable(
+  candidates: AnCandidate[],
+  subjects: AnSubject[],
+  rules: BoardRules,
+  teachersOf: TeachersOf,
+  opts: { gender: Gender; code?: string | undefined; teacher?: string | undefined },
+): { table: AnTable; teachers: Array<{ key: string; name: string }> } {
+  const kind = new Map(subjects.map((s) => [s.code, s.kind]));
+  const order = new Map(subjects.map((s, i) => [s.code, i]));
+  const nameOf = (code: string) =>
+    shortSubject(subjects.find((s) => s.code === code)?.name ?? `Subject ${code}`);
+  const by = entriesBySubject(
+    candidates.filter((c) => opts.gender === 'all' || c.sex === opts.gender),
+  );
+  const codes = [...by.keys()]
+    .filter((c) => kind.get(c) !== 'internal')
+    .filter((c) => !opts.code || c === opts.code)
+    .filter((c) => by.get(c)!.some((e) => e.m.marks !== null));
+  const classAvg = new Map(codes.map((c) => [c, subjectStats(by.get(c)!, rules).average]));
+  const groups = new Map<
+    string,
+    { name: string; cells: Map<string, { code: string; section: string; es: Entry[] }> }
+  >();
+  for (const code of codes)
+    for (const e of by.get(code)!) {
+      const people = teachersOf(e.c.section, code, e.c.roll);
+      const who = people.length ? people : [{ id: NO_TEACHER, name: 'No teacher set' }];
+      for (const p of who) {
+        const key = p.id ?? `n:${p.name}`;
+        const g = groups.get(key) ?? { name: p.name, cells: new Map() };
+        const section = e.c.section ?? '—';
+        const at = `${code} ${section}`;
+        const cell = g.cells.get(at) ?? { code, section, es: [] };
+        cell.es.push(e);
+        g.cells.set(at, cell);
+        groups.set(key, g);
+      }
+    }
+  const teachers = [...groups.entries()]
+    .map(([key, g]) => ({ key, name: g.name }))
+    .sort(
+      (a, b) =>
+        Number(a.key === NO_TEACHER) - Number(b.key === NO_TEACHER) || a.name.localeCompare(b.name),
+    );
+  const rows: Array<Record<string, Cell>> = [];
+  const strong: number[] = [];
+  teachers
+    .filter((t) => !opts.teacher || t.key === opts.teacher)
+    .forEach((t, i) => {
+      const cells = [...groups.get(t.key)!.cells.values()].sort(
+        (a, b) =>
+          (order.get(a.code) ?? 999) - (order.get(b.code) ?? 999) ||
+          a.code.localeCompare(b.code) ||
+          a.section.localeCompare(b.section),
+      );
+      cells.forEach((x, j) => {
+        const f = analysisFigures(x.es, rules);
+        const avg = classAvg.get(x.code) ?? null;
+        rows.push({
+          sno: j === 0 ? i + 1 : '',
+          teacher: j === 0 ? t.name : '',
+          // the subject with its section, in the frozen columns on screen
+          subject: `${nameOf(x.code)} · ${x.section}`,
+          code: x.code,
+          section: x.section,
+          ...f,
+          pi: piOf(x.es),
+          classAvg: avg,
+          vsClass: typeof f.avg === 'number' && avg !== null ? round2(f.avg - avg) : null,
+        });
+      });
+      if (cells.length > 1) {
+        const all = cells.flatMap((x) => x.es);
+        strong.push(rows.length);
+        rows.push({
+          sno: '',
+          teacher: '',
+          subject: `Total (${t.name})`,
+          code: '',
+          section: '',
+          ...analysisFigures(all, rules),
+          pi: piOf(all),
+          classAvg: null,
+          vsClass: null,
+        });
+      }
+    });
+  return {
+    teachers,
+    table: {
+      key: 'teacher-analysis',
+      title: 'Teacher wise result analysis',
+      columns: [
+        num('sno', 'S.No'),
+        { key: 'teacher', label: 'Teacher', width: 3 },
+        { key: 'subject', label: 'Subject · section', width: 3 },
+        { key: 'code', label: 'Code', width: 1 },
+        ...figureColumns(rules),
+        num('pi', 'PI'),
+        num('classAvg', 'Class average', 'Against the class'),
+        num('vsClass', 'Gap', 'Against the class'),
+      ],
+      rows,
+      strong,
+      note: `A row a subject and section the teacher taught (the year's subject teachers, or the Teachers tab's changes); a section shared by teachers counts under each, and a teacher's total adds the rows. Shares are of those who appeared (absent: of all); a compartment subject is not a pass; distinction from ${String(rules.distinction)}, divisions do not overlap. PI: the KV weights on the grades CBSE printed (A1 8 … E 0). Against the class: the subject's average over every section, and the gap — the row's average less it (above the class: plus).`,
+    },
   };
 }
 

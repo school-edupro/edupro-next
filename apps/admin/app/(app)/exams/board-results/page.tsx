@@ -95,6 +95,7 @@ export default async function BoardResultsPage({
     subjects?: string;
     figures?: string;
     rules?: string;
+    teacher?: string;
     q?: string;
     import?: string;
     ok?: string;

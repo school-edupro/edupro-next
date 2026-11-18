@@ -569,3 +569,28 @@ subjects chosen by subject kind, today's rules for every year shown.
   `board-analysis.e2e-spec.ts` (class X saved with its own scale, a gap refused with the message, XII still default).
   Browser + axe at 1440 and 375 (save, a gap refused, the phone's three scale columns fit).
 
+## The Reports tab: Teacher wise result analysis (18 Nov 2026)
+
+Asked: "a new report in the report section, the [All subject result analysis] teacher wise". Built straight away
+with these defaults:
+
+- **Rows** (`board-reports.ts`, `teacherAnalysisTable`): teachers by name, "No teacher set" last; a row for each
+  subject × section the teacher taught — the Result Analysis figures (`analysisFigures`, its columns shared through
+  `figureColumns`), then the **PI** (`piOf`, KV weights on the printed grades) and **against the class**: the
+  subject's average over every section (same gender filter) and the gap (row average less it). A teacher with more
+  than one row gets a bold total (the gap left empty — it mixes subjects). The subject cell carries the section
+  ("Science · A") so the three frozen columns on screen (S.No, Teacher, Subject · section) keep the row readable.
+- **Teachers** come from `teacherResolver` (the Teachers tab's overrides, else the year's subject teachers), which now
+  also returns `people` (each teacher on their own: the staff id, or null for a name typed in). A section shared by
+  two teachers counts under each. Teacher keys: the staff id, `n:<name>` for a typed name, `none`.
+- **API**: `GET reports/teacher-analysis` (class, examination, gender all/M/F, subject, teacher) and `/file`
+  (PDF/Excel via `singleTablePdf` / `singleTableXlsx`, audited `exams.board_result.report_export` report
+  `teacher-analysis`; `CBSE-Class-X-2026-teacher-analysis.pdf`); the view right, as the other reports.
+- **Screen**: Reports → **Teacher wise** (between Result analysis and Toppers): filters, the table with View /
+  Download PDF and Excel, a link to the Teachers tab to change who taught what.
+- Tests: unit `board-reports.spec.ts` + 2 (rows, shared section under each, total, PI, class average and gap; one
+  teacher, one subject, girls); e2e `board-analysis.e2e-spec.ts` + 1 (two typed teachers of a shared section each on
+  their own, one teacher, a bad teacher key refused, PDF and Excel, no saved year 404). Browser + axe at 1440 and 375
+  (no sideways page scroll; the PDF served inline, the Excel saved); a made-up sample PDF looked at (one landscape
+  page).
+

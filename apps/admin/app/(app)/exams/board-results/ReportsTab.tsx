@@ -6,10 +6,11 @@ import { yearLabel, type BoardRange } from '@/lib/board-results';
 import { OverallReport } from './OverallReport';
 import { ResultAnalysisReport } from './ResultAnalysisReport';
 import { SubjectPerfReport } from './SubjectPerfReport';
+import { TeacherAnalysisReport } from './TeacherAnalysisReport';
 import { ToppersReport } from './ToppersReport';
 
 /** The ready-made reports of the Reports tab (more join the list as they are built). */
-const REPORTS = ['range', 'overall', 'subjects', 'analysis', 'toppers'] as const;
+const REPORTS = ['range', 'overall', 'subjects', 'analysis', 'teachers', 'toppers'] as const;
 
 /**
  * The Reports tab (docs/design/88): reports EduPro makes ready from the saved CBSE results, as the school's old
@@ -36,6 +37,7 @@ export async function ReportsTab({
     low?: string;
     pctOp?: string;
     pct?: string;
+    teacher?: string;
   };
 }) {
   const b = await getTranslations('boardResults');
@@ -43,6 +45,7 @@ export async function ReportsTab({
     sp.report === 'overall' ||
     sp.report === 'subjects' ||
     sp.report === 'analysis' ||
+    sp.report === 'teachers' ||
     sp.report === 'toppers'
       ? sp.report
       : 'range';
@@ -69,6 +72,8 @@ export async function ReportsTab({
           <SubjectPerfReport sp={sp} />
         ) : report === 'analysis' ? (
           <ResultAnalysisReport sp={sp} />
+        ) : report === 'teachers' ? (
+          <TeacherAnalysisReport sp={sp} />
         ) : (
           <ToppersReport sp={sp} />
         )}

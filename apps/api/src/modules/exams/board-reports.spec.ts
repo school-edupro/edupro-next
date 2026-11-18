@@ -5,6 +5,8 @@ import {
   resultAnalysisTable,
   resultCharts,
   subjectPerformance,
+  teacherAnalysisTable,
+  type TeachersOf,
 } from './board-reports';
 
 // Every roll number and mark here is made up.
@@ -271,5 +273,66 @@ describe('Range Wise Subject Summary (docs/design/88)', () => {
       code: '184',
     });
     expect(one.subjectYears.map((x) => x.code)).toEqual(['184']);
+  });
+});
+
+describe('Teacher wise result analysis (docs/design/88)', () => {
+  // English: A taught by a staff teacher (id 11); B shared by her and a name typed on the Teachers tab; AI: nobody set
+  const rows = [
+    cand(
+      'F',
+      [
+        ['184', 95],
+        ['417', 80],
+      ],
+      { section: 'A' },
+    ),
+    cand('M', [['184', 65]], { section: 'A' }),
+    cand('F', [['184', 85]], { section: 'B' }),
+    cand('M', [['184', 25]], { section: 'B' }),
+  ];
+  const ASHA = { id: '11', name: 'Asha Teacher' };
+  const GUEST = { id: null, name: 'Guest Teacher' };
+  const of: TeachersOf = (section, code) =>
+    code !== '184' ? [] : section === 'A' ? [ASHA] : [ASHA, GUEST];
+
+  it('a row a subject and section a teacher taught, her total, the PI and the class average; nobody set last', () => {
+    const r = teacherAnalysisTable(rows, SUBJECTS, DEFAULT_BOARD_RULES, of, { gender: 'all' });
+    expect(r.teachers).toEqual([
+      { key: '11', name: 'Asha Teacher' },
+      { key: 'n:Guest Teacher', name: 'Guest Teacher' },
+      { key: 'none', name: 'No teacher set' },
+    ]);
+    const t = r.table;
+    expect(t.rows.map((x) => [x.sno, x.teacher, x.code, x.section, x.appeared])).toEqual([
+      [1, 'Asha Teacher', '184', 'A', 2],
+      ['', '', '184', 'B', 2],
+      ['', '', '', '', 4],
+      [2, 'Guest Teacher', '184', 'B', 2],
+      [3, 'No teacher set', '417', 'A', 1],
+    ]);
+    expect(t.strong).toEqual([2]);
+    expect(t.rows[2]).toMatchObject({ subject: 'Total (Asha Teacher)', passNo: 3, failNo: 1 });
+    // English over the class: (95 + 65 + 85 + 25) / 4 = 67.5; section A 80 (+12.5), B 55 (-12.5)
+    expect(t.rows[0]).toMatchObject({ avg: 80, classAvg: 67.5, vsClass: 12.5 });
+    expect(t.rows[1]).toMatchObject({ avg: 55, classAvg: 67.5, vsClass: -12.5 });
+    expect(t.rows[1]!.subject).toBe('English Lng & Lit · B');
+    expect(t.columns.slice(0, 4).map((c) => c.key)).toEqual(['sno', 'teacher', 'subject', 'code']);
+    expect(t.columns.at(-1)).toMatchObject({ key: 'vsClass', group: 'Against the class' });
+  });
+
+  it('one teacher, one subject, girls only', () => {
+    const one = teacherAnalysisTable(rows, SUBJECTS, DEFAULT_BOARD_RULES, of, {
+      gender: 'F',
+      code: '184',
+      teacher: '11',
+    });
+    // the list of teachers stays whole for the filter; the rows are hers
+    expect(one.teachers.map((x) => x.key)).toEqual(['11', 'n:Guest Teacher']);
+    expect(one.table.rows.map((x) => [x.section, x.appeared, x.avg])).toEqual([
+      ['A', 1, 95],
+      ['B', 1, 85],
+      ['', 2, 90],
+    ]);
   });
 });

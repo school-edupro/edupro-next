@@ -471,6 +471,21 @@ export interface BoardSubjectPerf {
   table: AnTable | null;
 }
 
+// ---- the Reports tab: Teacher wise result analysis ----
+
+export interface BoardTeacherAnalysis {
+  classLabel: 'X' | 'XII';
+  examYear: number | null;
+  years: number[];
+  gender: 'all' | 'M' | 'F';
+  code: string | null;
+  teacher: string | null;
+  subjects: Array<{ code: string; name: string }>;
+  /** a staff id, "n:<name>" for a name typed on the Teachers tab, or "none" */
+  teachers: Array<{ key: string; name: string }>;
+  table: AnTable | null;
+}
+
 // ---- the Reports tab: Result Analysis ----
 
 export interface BoardResultAnalysis {

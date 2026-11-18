@@ -321,7 +321,10 @@ describe('CBSE board results: the ten annexures (e2e, docs/design/88 phase C)', 
     // Class XII keeps its defaults
     const xii = (await get('/exams/board-results/rules?classLabel=XII')).json();
     expect(xii.isDefault).toBe(true);
-    expect(xii.rules.bestFive).toMatchObject({ include: 'language', optionalKinds: ['additional'] });
+    expect(xii.rules.bestFive).toMatchObject({
+      include: 'language',
+      optionalKinds: ['additional'],
+    });
     expect(xii.rules.scale.at(-1)).toEqual({ grade: 'E1', from: 0, to: 32 });
   });
 
@@ -345,6 +348,48 @@ describe('CBSE board results: the ten annexures (e2e, docs/design/88 phase C)', 
     expect(none).toMatchObject({ years: [], analysis: null });
     expect(
       (await get('/exams/board-results/analysis/file?classLabel=XII&format=pdf')).statusCode,
+    ).toBe(404);
+  });
+
+  it('teacher wise result analysis: each teacher of a shared section on her own, one teacher, the files', async () => {
+    const r = await get('/exams/board-results/reports/teacher-analysis?classLabel=X');
+    expect(r.statusCode).toBe(200);
+    const d = r.json() as {
+      examYear: number;
+      teachers: Array<{ key: string; name: string }>;
+      table: { rows: Array<Record<string, string | number | null>>; strong: number[] };
+    };
+    expect(d.examYear).toBe(year);
+    // the two names typed for section A's English, each on her own
+    expect(d.teachers.map((t) => t.key)).toEqual(
+      expect.arrayContaining(['n:Asha Teacher', 'n:Bhanu Teacher']),
+    );
+    const asha = d.table.rows.findIndex((x) => x.teacher === 'Asha Teacher');
+    expect(d.table.rows[asha]).toMatchObject({ code: '184', section: 'A' });
+    const one = (
+      await get(
+        `/exams/board-results/reports/teacher-analysis?classLabel=X&teacher=${encodeURIComponent('n:Bhanu Teacher')}`,
+      )
+    ).json() as typeof d;
+    expect(one.table.rows.map((x) => [x.teacher, x.code, x.section])).toEqual([
+      ['Bhanu Teacher', '184', 'A'],
+    ]);
+    expect(
+      (await get('/exams/board-results/reports/teacher-analysis?classLabel=X&teacher=a%3Bb'))
+        .statusCode,
+    ).toBe(400);
+    for (const format of ['pdf', 'xlsx']) {
+      const f = await get(
+        `/exams/board-results/reports/teacher-analysis/file?classLabel=X&format=${format}`,
+      );
+      expect(f.statusCode).toBe(200);
+      expect(f.json()).toMatchObject({
+        filename: `CBSE-Class-X-${String(year)}-teacher-analysis.${format}`,
+      });
+    }
+    expect(
+      (await get('/exams/board-results/reports/teacher-analysis/file?classLabel=XII&format=pdf'))
+        .statusCode,
     ).toBe(404);
   });
 

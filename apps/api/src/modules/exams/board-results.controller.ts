@@ -38,6 +38,8 @@ import {
   PickDto,
   BoardRulesDto,
   BoardRulesQueryDto,
+  BoardTeacherAnalysisFileDto,
+  BoardTeacherAnalysisQueryDto,
 } from './board-results.dto';
 import { BoardResultsService } from './board-results.service';
 
@@ -429,6 +431,23 @@ export class BoardResultsController {
   @RequirePermission(BOARD_RESULTS.view)
   subjectPerfFile(@ReqCtx() ctx: RequestContext, @Query() q: BoardSubjectPerfFileDto) {
     return this.analyses.subjectPerfFile(ctx, q);
+  }
+
+  @Get('reports/teacher-analysis')
+  @ApiOperation({
+    summary:
+      'Teacher wise result analysis: the result analysis figures for each subject and section a teacher taught, the PI and the class average',
+  })
+  @RequirePermission(BOARD_RESULTS.view)
+  teacherAnalysis(@ReqCtx() ctx: RequestContext, @Query() q: BoardTeacherAnalysisQueryDto) {
+    return this.analyses.teacherAnalysis(ctx, q);
+  }
+
+  @Get('reports/teacher-analysis/file')
+  @ApiOperation({ summary: 'The teacher wise result analysis as Excel or PDF' })
+  @RequirePermission(BOARD_RESULTS.view)
+  teacherAnalysisFile(@ReqCtx() ctx: RequestContext, @Query() q: BoardTeacherAnalysisFileDto) {
+    return this.analyses.teacherAnalysisFile(ctx, q);
   }
 
   @Get('reports/toppers')

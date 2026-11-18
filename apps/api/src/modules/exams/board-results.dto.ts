@@ -285,6 +285,27 @@ export const BoardSubjectPerfFileSchema = BoardSubjectPerfQuerySchema.extend({
 });
 export class BoardSubjectPerfFileDto extends createZodDto(BoardSubjectPerfFileSchema) {}
 
+// ---- the Reports tab: Teacher wise result analysis ----
+
+export const BoardTeacherAnalysisQuerySchema = z.object({
+  classLabel: ClassLabel.default('X'),
+  examYear: z.coerce.number().int().min(2000).max(2100).optional(),
+  gender: z.enum(['all', 'M', 'F']).default('all'),
+  code: Code.optional(),
+  /** one teacher: a staff id, "n:<name>" for a name typed on the Teachers tab, or "none" (no teacher set) */
+  teacher: z
+    .string()
+    .trim()
+    .regex(/^(\d{1,18}|none|n:[^\n]{1,120})$/)
+    .optional(),
+});
+export class BoardTeacherAnalysisQueryDto extends createZodDto(BoardTeacherAnalysisQuerySchema) {}
+
+export const BoardTeacherAnalysisFileSchema = BoardTeacherAnalysisQuerySchema.extend({
+  format: z.enum(['xlsx', 'pdf']),
+});
+export class BoardTeacherAnalysisFileDto extends createZodDto(BoardTeacherAnalysisFileSchema) {}
+
 // ---- the Reports tab: Result Analysis (the subject table and its charts) ----
 
 export const BoardResultAnalysisQuerySchema = z.object({

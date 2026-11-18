@@ -16,6 +16,8 @@ export interface TeacherOf {
   employeeIds: string[];
   /** The name, or the names joined by commas. */
   name: string;
+  /** each teacher on their own (the teacher-wise report): the staff member, or null for a name typed in */
+  people: Array<{ id: string | null; name: string }>;
 }
 
 const norm = (s: string) =>
@@ -485,6 +487,11 @@ export class BoardDetailsService {
         employeeId: xs.length === 1 ? xs[0]!.employee_id : null,
         employeeIds: ids,
         name: [...new Set(xs.map((x) => x.name))].join(', '),
+        people: [
+          ...new Map(
+            xs.map((x) => [x.employee_id ?? `n:${x.name}`, { id: x.employee_id, name: x.name }]),
+          ).values(),
+        ],
       };
     };
     // for a roll: the overrides naming it, else the section's whole-class overrides (several share it), else the
