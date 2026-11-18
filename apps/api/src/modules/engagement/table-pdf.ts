@@ -20,6 +20,8 @@ export interface TablePdf {
     center?: boolean;
     /** A heading over this and the next columns that carry the same group (a date over M and A). */
     group?: string;
+    /** A bar instead of the number: its length the cell's value on a scale from 0 to this (marks out of 100). */
+    bar?: number;
   }>;
   rows: Array<Array<string | number | null | undefined>>;
   /** Smaller for a sheet with many columns (default 8.5). */
@@ -42,6 +44,8 @@ export interface TablePdf {
     rows: Array<Array<string | number | null | undefined>>;
     /** The last row is a total. */
     total?: boolean;
+    /** The full width of the page (default: a little over half). */
+    wide?: boolean;
   }>;
   /** A closing line under everything (the rule the figures follow). */
   footnote?: string;
@@ -60,6 +64,8 @@ export interface TablePdf {
   signsEachBreak?: boolean;
   /** A3 instead of A4 (a month's register of every employee). */
   a3?: boolean;
+  /** A heading row and the rows under it (to the next heading) start a new page rather than split, when they fit one. */
+  keepBlocks?: boolean;
 }
 
 const LONG = 841.89; // A4
@@ -70,6 +76,7 @@ const NAVY = rgb(0, 0.149, 0.365);
 const INK = rgb(0.043, 0.122, 0.227);
 const MUTED = rgb(0.357, 0.4, 0.463);
 const LINE = rgb(0.86, 0.88, 0.92);
+const BAR = rgb(0, 0.627, 0.776);
 const ZEBRA = rgb(0.965, 0.972, 0.985);
 // the bands of a grouped report, as in the school's own Excel sheets
 const BANDS = {
@@ -161,6 +168,22 @@ export async function tablePdf(t: TablePdf): Promise<Buffer> {
   const draw = (cells: string[][], font: PDFFont, color = INK) => {
     let x = M;
     t.columns.forEach((c, i) => {
+      if (c.bar && /^\d+(\.\d+)?$/.test(cells[i]![0] ?? '')) {
+        // a bar on a fixed scale (the track the full length), so short and long bars compare fairly
+        const span = widths[i]! - 2 * PAD;
+        const share = Math.max(0, Math.min(1, Number(cells[i]![0]) / c.bar));
+        page.drawRectangle({ x: x + PAD, y: y - 1, width: span, height: FS - 1, color: LINE });
+        if (share > 0)
+          page.drawRectangle({
+            x: x + PAD,
+            y: y - 1,
+            width: span * share,
+            height: FS - 1,
+            color: BAR,
+          });
+        x += widths[i]!;
+        return;
+      }
       cells[i]!.forEach((s, k) =>
         page.drawText(s, {
           x: c.right
@@ -298,6 +321,21 @@ export async function tablePdf(t: TablePdf): Promise<Buffer> {
       head();
     }
     const band = t.shade?.[n];
+    if (t.keepBlocks && n > 0 && (band === 'heading' || band === 'subheading')) {
+      // the block runs to the next heading (a subheading's to the next subheading or heading)
+      let k = n + 1;
+      while (
+        k < t.rows.length &&
+        t.shade?.[k] !== 'heading' &&
+        (band === 'heading' || t.shade?.[k] !== 'subheading')
+      )
+        k += 1;
+      const need = (k - n) * ROW;
+      if (y - need < M + 20 && need < H - 200) {
+        page = pdf.addPage([W, H]);
+        head();
+      }
+    }
     if (band === 'heading' || band === 'subheading') {
       // a heading runs across the table: its words are the first filled cell
       const words = String(row.find((v) => v !== null && v !== undefined && v !== '') ?? '');
@@ -354,7 +392,7 @@ export async function tablePdf(t: TablePdf): Promise<Buffer> {
   for (const block of t.after ?? []) {
     if (y - (block.rows.length + 3) * SROW < M + 20) fresh();
     else y -= 14;
-    const span = (W - 2 * M) * 0.55;
+    const span = (W - 2 * M) * (block.wide ? 1 : 0.55);
     const sum = block.columns.reduce((a, c) => a + c.width, 0) || 1;
     const bw = block.columns.map((c) => (span * c.width) / sum);
     page.drawText(fit(bold, block.title, SFS + 1.5, span), {

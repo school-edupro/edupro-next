@@ -79,6 +79,12 @@ export default async function BoardResultsPage({
     code?: string;
     report?: string;
     view?: string;
+    show?: string;
+    codes?: string | string[];
+    top?: string;
+    low?: string;
+    pctOp?: string;
+    pct?: string;
     subjects?: string;
     figures?: string;
     q?: string;

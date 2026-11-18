@@ -6,9 +6,10 @@ import { yearLabel, type BoardRange } from '@/lib/board-results';
 import { OverallReport } from './OverallReport';
 import { ResultAnalysisReport } from './ResultAnalysisReport';
 import { SubjectPerfReport } from './SubjectPerfReport';
+import { ToppersReport } from './ToppersReport';
 
 /** The ready-made reports of the Reports tab (more join the list as they are built). */
-const REPORTS = ['range', 'overall', 'subjects', 'analysis'] as const;
+const REPORTS = ['range', 'overall', 'subjects', 'analysis', 'toppers'] as const;
 
 /**
  * The Reports tab (docs/design/88): reports EduPro makes ready from the saved CBSE results, as the school's old
@@ -28,11 +29,21 @@ export async function ReportsTab({
     method?: string;
     result?: string;
     view?: string;
+    section?: string;
+    show?: string;
+    codes?: string | string[];
+    top?: string;
+    low?: string;
+    pctOp?: string;
+    pct?: string;
   };
 }) {
   const b = await getTranslations('boardResults');
   const report =
-    sp.report === 'overall' || sp.report === 'subjects' || sp.report === 'analysis'
+    sp.report === 'overall' ||
+    sp.report === 'subjects' ||
+    sp.report === 'analysis' ||
+    sp.report === 'toppers'
       ? sp.report
       : 'range';
   const nav = (
@@ -48,7 +59,7 @@ export async function ReportsTab({
       ))}
     </nav>
   );
-  if (report === 'overall' || report === 'subjects' || report === 'analysis')
+  if (report !== 'range')
     return (
       <div style={{ display: 'grid', gap: 'var(--sp-4)', gridTemplateColumns: 'minmax(0, 1fr)' }}>
         {nav}
@@ -56,8 +67,10 @@ export async function ReportsTab({
           <OverallReport sp={sp} />
         ) : report === 'subjects' ? (
           <SubjectPerfReport sp={sp} />
-        ) : (
+        ) : report === 'analysis' ? (
           <ResultAnalysisReport sp={sp} />
+        ) : (
+          <ToppersReport sp={sp} />
         )}
       </div>
     );

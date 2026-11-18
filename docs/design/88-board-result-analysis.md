@@ -499,3 +499,31 @@ dashboards): a PDF drawn by EduPro, a small chart a subject, 100% bars with % la
 - Tests: unit `board-reports.spec.ts` (eight grades, shares, every subject across the years, the filter) and
   `board-charts-pdf.spec.ts` (+2: pages, one subject and an empty year); e2e `board-years.e2e-spec.ts` (the data, the
   graphs PDF, no Excel). Browser + axe at 1440 and 375 (no sideways page scroll; View/Download served inline/saved).
+
+## The Reports tab: Topper Report (18 Nov 2026)
+
+The school's old "Topper Report" (its review notes in the user's file `toppers_page.md`), built with its own suggested
+fixes as the defaults.
+
+- **What it shows** (`board-toppers.ts`, `toppersReport`): the class's toppers by the aggregate (`best5` / `first5` /
+  `all`, from the Results tab's `marksRows`) and each subject's toppers by its marks (CBSE's printed order, internal
+  subjects out, one subject a code), each with up to three lists: **top N ranks**, **lowest N ranks** (lowest first),
+  a **percentage list** (at or above / at or below; a subject's marks for subjects). Filters: class, examination,
+  **section** (a real section — the old form's "Section" was the class), gender, method, show (class / subjects /
+  both), subjects (ticked; none = all), top (0–50, default 5), lowest (0–50, default 0), percentage, compare (0–4).
+- **Ranks are dense** (1, 1, 2): "top 5" is five ranks and may be more students — each list says both ("Top 5 ranks
+  — 12 students"), the old report's unclear "No. of Toppers: 5" put right. A section or gender filter ranks within
+  it; the class rank shows beside (the overall list).
+- **Over the years** (compare): a year a row, oldest first — ranked, highest %, at rank 1, where the top N ranks
+  start, in the top N ranks, 95%+ and 90%+ — and a bar chart of the highest % and the cut-off (0–100).
+- **Screen**: the lists as tables with a bar a student on a fixed 0–100 scale (navy top, amber lowest, cyan
+  percentage); subject blocks under "Subject toppers". **Files**: `GET reports/toppers` and `/file` (audited
+  `exams.board_result.report_export`, report `toppers`); PDF A4 upright on the letterhead — a heading band a block, a
+  subheading a list, a bar column (0–100), each block kept on one page when it fits, the years as a full-width table,
+  the note and signature boxes; Excel one sheet in the same order. `tablePdf` gained three opt-in options: a column
+  `bar` (scale), `keepBlocks`, and `wide` for the small tables after.
+- The old report's other faults do not arise: no duplicate subjects (CBSE codes), no bar a page (no chart pages),
+  names in the table rather than turned on an axis, a proper title, required fields marked.
+- Tests: unit `board-toppers.spec.ts` (3: ties, section and class rank, lowest first; subjects, ticked subjects,
+  percentage list; boys and the years); e2e `board-years.e2e-spec.ts` + 1 (lists, girls with class rank, years, PDF
+  and Excel, top over 50 refused). Browser + axe at 1440 and 375.

@@ -568,6 +568,16 @@ name) stay in view while the rest scrolls sideways.
 **Calculation method** wherever a student's aggregate counts (Results, Range wise summary): the best five by the
 school's rule, the **first five subjects as CBSE printed them**, or all subjects.
 
+**Toppers** (the old Topper Report) shows the class's toppers by the aggregate — best five, first five or all
+subjects — and each subject's toppers by its marks, for a section and gender, with **lowest ranks** and a
+**percentage list** (at or above / at or below) when you ask. **Show** picks class toppers, subject toppers or both;
+under **Subjects** tick only the subjects you want (none ticked: all). Ranks are dense — equal marks share a rank — so
+"top 5" means the top five ranks, and each list says how many students that is (for example _Top 5 ranks — 12
+students_). With a section or gender chosen, students are ranked within it and the class rank is shown beside.
+**Compare with** adds the toppers over the years: the highest %, how many share rank 1, where the top ranks start and
+how many reach 95% and 90%. The marks bars run on a fixed 0–100% scale. PDF (View or Download) and Excel give the
+same.
+
 **Analysis: the ten annexures.** **Analysis** counts a saved year as the school's own result workbook does: pick the
 class, the examination and a section (or all) and the annexure — 1 School summary (five years, the result in
 figures, the top scorers, full scores, distinctions, the highest in each subject, A1 + A2), 2 Overall result (boys

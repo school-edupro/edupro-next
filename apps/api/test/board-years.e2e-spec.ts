@@ -444,4 +444,63 @@ describe('CBSE board results: earlier years (e2e, docs/design/88 phase E)', () =
         .statusCode,
     ).toBe(200);
   });
+
+  it('Reports: the Topper Report — class and subject toppers, the lowest, a percentage list, girls, the years, the files', async () => {
+    const r = await get(
+      '/exams/board-results/reports/toppers?classLabel=X&top=1&low=1&pctOp=gte&pct=80&compare=2',
+    );
+    expect(r.statusCode).toBe(200);
+    const d = r.json() as {
+      sections: string[];
+      report: {
+        overall: {
+          appeared: number;
+          lists: Array<{ kind: string; rows: Array<{ roll: string; rank: number; pct: number }> }>;
+        };
+        subjects: Array<{
+          code: string;
+          lists: Array<{ kind: string; rows: Array<{ marks: number }> }>;
+        }>;
+        years: Array<{ label: string; highest: number; inTop: number }>;
+      };
+    };
+    // this year: 90, 80 and 70 in every subject (the best five: 90%, 80%, 70%)
+    const o = d.report.overall;
+    expect(o.appeared).toBe(3);
+    const [top, low, pct] = o.lists;
+    expect(top!.rows.map((x) => [x.roll, x.rank, x.pct])).toEqual([['29300001', 1, 90]]);
+    expect(low!.rows.map((x) => [x.roll, x.rank])).toEqual([['29300003', 3]]);
+    expect(pct!.rows.map((x) => x.roll)).toEqual(['29300001', '29300002']);
+    const eng = d.report.subjects.find((x) => x.code === '184')!;
+    expect(eng.lists[0]!.rows.map((x) => x.marks)).toEqual([90]);
+    // the two saved years in figures, oldest first
+    expect(d.report.years.map((y) => [y.highest, y.inTop])).toEqual([
+      [70, 1],
+      [90, 1],
+    ]);
+    // girls only, the class rank kept beside theirs
+    const girls = (
+      await get('/exams/board-results/reports/toppers?classLabel=X&gender=F&show=overall&top=2')
+    ).json();
+    expect(girls.report.subjects).toEqual([]);
+    expect(
+      girls.report.overall.lists[0].rows.map((x: { rank: number; classRank: number }) => [
+        x.rank,
+        x.classRank,
+      ]),
+    ).toEqual([
+      [1, 1],
+      [2, 3],
+    ]);
+    for (const format of ['pdf', 'xlsx']) {
+      const f = await get(
+        `/exams/board-results/reports/toppers/file?classLabel=X&format=${format}&low=1&compare=2`,
+      );
+      expect(f.statusCode).toBe(200);
+      expect(f.json().filename).toMatch(new RegExp(`toppers\\.${format}$`));
+    }
+    expect((await get('/exams/board-results/reports/toppers?classLabel=X&top=99')).statusCode).toBe(
+      400,
+    );
+  });
 });

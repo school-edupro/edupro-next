@@ -25,6 +25,8 @@ import {
 } from './board-analysis';
 import { analysisPdf, analysisXlsx, examName, singleTableXlsx } from './board-analysis-file';
 import { resultChartsPdf } from './board-charts-pdf';
+import { toppersPdf, toppersXlsx } from './board-toppers-file';
+import { toppersReport } from './board-toppers';
 import { BoardDetailsService } from './board-details.service';
 import { marksPdf, marksXlsx } from './board-marks-file';
 import { OVERALL_LABELS, rangePdf, rangeXlsx, singleTablePdf } from './board-reports-file';
@@ -48,6 +50,8 @@ import {
   type BoardResultAnalysisQueryDto,
   type BoardSubjectPerfFileDto,
   type BoardSubjectPerfQueryDto,
+  type BoardToppersFileDto,
+  type BoardToppersQueryDto,
   type BoardYearFiguresDto,
 } from './board-results.dto';
 import { CBSE_SUBJECTS, type BoardSubjectKind } from './board-subjects';
@@ -1349,6 +1353,136 @@ export class BoardAnalysisService {
             filename: `${base}.pdf`,
             contentType: 'application/pdf',
             base64: (await singleTablePdf(r.table, head)).toString('base64'),
+          };
+    });
+  }
+
+  // ---- the Reports tab: Topper Report ----
+
+  private async toppersOf(c: PoolClient, q: BoardToppersQueryDto) {
+    const years = (
+      await c.query<{ y: number }>(
+        `SELECT DISTINCT exam_year AS y FROM board_candidates WHERE board = 'CBSE' AND class_label = $1 ORDER BY 1 DESC`,
+        [q.classLabel],
+      )
+    ).rows.map((r) => r.y);
+    const examYear = q.examYear !== undefined && years.includes(q.examYear) ? q.examYear : years[0];
+    const { rules } = await this.rulesOf(c);
+    const subjects = await this.subjectsOf(c, q.classLabel);
+    if (examYear === undefined)
+      return { examYear: null, years, rules, subjects, sections: [] as string[], report: null };
+    const data = [];
+    for (const y of [examYear, ...years.filter((x) => x < examYear).slice(0, q.compare)])
+      data.push({ examYear: y, candidates: await this.candidatesOf(c, q.classLabel, y) });
+    const sections = [
+      ...new Set(data[0]!.candidates.map((x) => x.section).filter((x): x is string => Boolean(x))),
+    ].sort((a, b) => a.localeCompare(b, 'en', { numeric: true }));
+    const report = toppersReport(data, subjects, rules, {
+      method: q.method,
+      gender: q.gender,
+      section: q.section,
+      show: q.show,
+      codes: q.codes ? q.codes.split(',') : undefined,
+      top: q.top,
+      low: q.low,
+      pctOp: q.pct === undefined ? undefined : q.pctOp,
+      pct: q.pctOp ? q.pct : undefined,
+    });
+    return { examYear, years, rules, subjects, sections, report };
+  }
+
+  /** Topper Report: the class's and each subject's toppers (dense ranks), the lowest, a percentage list, the years. */
+  async toppers(ctx: RequestContext, q: BoardToppersQueryDto) {
+    return this.db.tenant(requireTenant(ctx), async (c) => {
+      const r = await this.toppersOf(c, q);
+      return {
+        classLabel: q.classLabel,
+        examYear: r.examYear,
+        years: r.years,
+        compare: q.compare,
+        method: q.method,
+        rule: RULE_WORDS[r.rules.bestFive],
+        gender: q.gender,
+        section: q.section ?? null,
+        sections: r.sections,
+        show: q.show,
+        codes: q.codes ? q.codes.split(',') : [],
+        top: q.top,
+        low: q.low,
+        pctOp: q.pctOp && q.pct !== undefined ? q.pctOp : null,
+        pct: q.pctOp && q.pct !== undefined ? q.pct : null,
+        subjects: r.subjects
+          .filter((s) => s.kind !== 'internal')
+          .map((s) => ({ code: s.code, name: s.name })),
+        report: r.report,
+      };
+    });
+  }
+
+  async toppersFile(ctx: RequestContext, q: BoardToppersFileDto) {
+    return this.db.tenant(requireTenant(ctx), async (c) => {
+      const r = await this.toppersOf(c, q);
+      if (!r.report || r.examYear === null)
+        throw new DomainError('not-found', `No saved Class ${q.classLabel} result`, {
+          status: 404,
+        });
+      const h = await registerLetterhead(c);
+      const method =
+        q.method === 'best5'
+          ? `best five (${RULE_WORDS[r.rules.bestFive]}), out of 500`
+          : q.method === 'first5'
+            ? 'the first five subjects as CBSE printed them, out of 500'
+            : 'all subjects with marks';
+      const head = {
+        school: h.school,
+        address: h.address,
+        logo: q.format === 'pdf' ? await registerLogo(this.storage, h.file) : null,
+        generatedOn: registerGeneratedOn(),
+        by: ctx.user.displayName,
+        title: `CBSE ${q.classLabel === 'XII' ? 'AISSCE' : 'AISSE'} result (Class ${q.classLabel}) ${yearLabel(r.examYear)}`,
+        scope: [
+          q.section ? `Section ${q.section}` : 'all sections',
+          q.gender === 'M' ? 'boys' : q.gender === 'F' ? 'girls' : 'all students',
+          q.show === 'overall'
+            ? 'class toppers'
+            : q.show === 'subjects'
+              ? 'subject toppers'
+              : 'class and subject toppers',
+          q.codes ? `subjects ${q.codes.split(',').join(', ')}` : '',
+        ]
+          .filter(Boolean)
+          .join(' · '),
+        method,
+        top: Math.max(1, q.top),
+      };
+      await this.audit.stage(ctx, c, {
+        action: 'exams.board_result.report_export',
+        entityType: 'board_candidates',
+        entityId: requireTenant(ctx).schoolId,
+        after: {
+          report: 'toppers',
+          classLabel: q.classLabel,
+          examYear: r.examYear,
+          section: q.section ?? null,
+          gender: q.gender,
+          show: q.show,
+          top: q.top,
+          low: q.low,
+          format: q.format,
+        },
+      });
+      const pct = q.pctOp && q.pct !== undefined ? { op: q.pctOp, value: q.pct } : {};
+      const base = `CBSE-Class-${q.classLabel}-${String(r.examYear)}-toppers`;
+      return q.format === 'xlsx'
+        ? {
+            filename: `${base}.xlsx`,
+            contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            base64: (await toppersXlsx(r.report, head, pct)).toString('base64'),
+          }
+        : {
+            filename: `${base}.pdf`,
+            contentType: 'application/pdf',
+            base64: (await toppersPdf(r.report, head, pct)).toString('base64'),
           };
     });
   }

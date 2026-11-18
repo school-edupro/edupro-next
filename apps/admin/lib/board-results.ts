@@ -468,3 +468,66 @@ export interface BoardResultAnalysis {
     }>;
   } | null;
 }
+
+// ---- the Reports tab: Topper Report ----
+
+export interface BoardTopperRow {
+  rank: number;
+  classRank: number | null;
+  roll: string;
+  name: string | null;
+  sex: string | null;
+  section: string | null;
+  marks: number;
+  max: number;
+  pct: number;
+  grade: string | null;
+}
+
+export interface BoardTopperList {
+  kind: 'top' | 'low' | 'pct';
+  ranks: number | null;
+  rows: BoardTopperRow[];
+}
+
+export interface BoardToppersBlock {
+  code: string | null;
+  name: string;
+  appeared: number;
+  max: number;
+  lists: BoardTopperList[];
+}
+
+export interface BoardToppers {
+  classLabel: 'X' | 'XII';
+  examYear: number | null;
+  years: number[];
+  compare: number;
+  method: 'best5' | 'first5' | 'all';
+  rule: string;
+  gender: 'all' | 'M' | 'F';
+  section: string | null;
+  sections: string[];
+  show: 'overall' | 'subjects' | 'both';
+  codes: string[];
+  top: number;
+  low: number;
+  pctOp: 'gte' | 'lte' | null;
+  pct: number | null;
+  subjects: Array<{ code: string; name: string }>;
+  report: {
+    overall: BoardToppersBlock | null;
+    subjects: BoardToppersBlock[];
+    years: Array<{
+      examYear: number;
+      label: string;
+      appeared: number;
+      highest: number | null;
+      atFirst: number;
+      cutoff: number | null;
+      inTop: number;
+      pct95: number;
+      pct90: number;
+    }>;
+  } | null;
+}

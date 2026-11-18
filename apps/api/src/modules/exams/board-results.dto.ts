@@ -313,3 +313,35 @@ export const BoardResultAnalysisFileSchema = BoardResultAnalysisQuerySchema.exte
   path: ['format'],
 });
 export class BoardResultAnalysisFileDto extends createZodDto(BoardResultAnalysisFileSchema) {}
+
+// ---- the Reports tab: Topper Report ----
+
+export const BoardToppersQuerySchema = z.object({
+  classLabel: ClassLabel.default('X'),
+  examYear: z.coerce.number().int().min(2000).max(2100).optional(),
+  /** saved years before it, in figures (the toppers over the years) */
+  compare: z.coerce.number().int().min(0).max(4).default(0),
+  method: z.enum(['best5', 'first5', 'all']).default('best5'),
+  gender: z.enum(['all', 'M', 'F']).default('all'),
+  section: z.string().trim().min(1).max(40).optional(),
+  /** overall: the class's toppers by the aggregate; subjects: each subject's; both */
+  show: z.enum(['overall', 'subjects', 'both']).default('both'),
+  /** the subjects shown, comma-separated codes (none: every subject) */
+  codes: z
+    .string()
+    .trim()
+    .regex(/^\d{3}(,\d{3}){0,79}$/)
+    .optional(),
+  /** the top ranks (0: none) */
+  top: z.coerce.number().int().min(0).max(50).default(5),
+  /** the lowest ranks (0: none) */
+  low: z.coerce.number().int().min(0).max(50).default(0),
+  pctOp: z.enum(['gte', 'lte']).optional(),
+  pct: z.coerce.number().min(0).max(100).optional(),
+});
+export class BoardToppersQueryDto extends createZodDto(BoardToppersQuerySchema) {}
+
+export const BoardToppersFileSchema = BoardToppersQuerySchema.extend({
+  format: z.enum(['xlsx', 'pdf']),
+});
+export class BoardToppersFileDto extends createZodDto(BoardToppersFileSchema) {}

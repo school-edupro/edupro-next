@@ -21,6 +21,8 @@ import {
   BoardResultAnalysisQueryDto,
   BoardSubjectPerfFileDto,
   BoardSubjectPerfQueryDto,
+  BoardToppersFileDto,
+  BoardToppersQueryDto,
   BoardParentsDto,
   BoardYearFiguresDto,
   BoardAnalysisQueryDto,
@@ -424,6 +426,23 @@ export class BoardResultsController {
   @RequirePermission(BOARD_RESULTS.view)
   subjectPerfFile(@ReqCtx() ctx: RequestContext, @Query() q: BoardSubjectPerfFileDto) {
     return this.analyses.subjectPerfFile(ctx, q);
+  }
+
+  @Get('reports/toppers')
+  @ApiOperation({
+    summary:
+      "Topper Report: the class's toppers by the aggregate and each subject's, the lowest, a percentage list (dense ranks)",
+  })
+  @RequirePermission(BOARD_RESULTS.view)
+  toppers(@ReqCtx() ctx: RequestContext, @Query() q: BoardToppersQueryDto) {
+    return this.analyses.toppers(ctx, q);
+  }
+
+  @Get('reports/toppers/file')
+  @ApiOperation({ summary: 'The Topper Report as Excel or PDF' })
+  @RequirePermission(BOARD_RESULTS.view)
+  toppersFile(@ReqCtx() ctx: RequestContext, @Query() q: BoardToppersFileDto) {
+    return this.analyses.toppersFile(ctx, q);
   }
 
   @Get('reports/result-analysis')
