@@ -784,6 +784,26 @@ export class BoardDetailsService {
         }
       }
 
+      // the staff to pick a teacher from (a 4th sheet; the reader takes only the first two)
+      const staffNames = (
+        await c.query<{ name: string; code: string | null }>(
+          `SELECT display_name AS name, employee_code AS code FROM employees
+            WHERE deleted_at IS NULL AND status::text = 'active' ORDER BY display_name LIMIT 2000`,
+        )
+      ).rows;
+      const teacherRows = teachers.rowCount - 1;
+      if (staffNames.length) {
+        const tcol = teachers.getColumn('teacher').letter;
+        const lastStaff = String(staffNames.length + 1);
+        for (let n = 2; n <= teacherRows + 31; n += 1)
+          teachers.getCell(`${tcol}${String(n)}`).dataValidation = {
+            type: 'list',
+            allowBlank: true,
+            showErrorMessage: false,
+            formulae: ["'Staff'!" + '$A$2:$A$' + lastStaff],
+          };
+      }
+
       const how = wb.addWorksheet('How to fill');
       how.columns = [
         { header: 'How to fill this sheet', key: 'a', width: 18 },
@@ -804,8 +824,9 @@ export class BoardDetailsService {
         ['EWS, CWSN', 'Y for yes, N for no.'],
         [
           'Teachers',
-          "One row a section and subject code with its teacher (a staff name as on EduPro). Two teachers of one section: two rows. Only some students (a language group): their board roll numbers, separated by commas. Uploading replaces this year's teacher list; leave the sheet empty to keep it.",
+          "One row a section and subject code with its teacher: pick the name from the list (the Staff tab), so the teacher sees the results on their own page. A name not on the staff list is kept as written. Two teachers of one section: two rows. Only some students (a language group): their board roll numbers, separated by commas. Uploading replaces this year's teacher list; rows without a teacher are left out, and if no row names a teacher the list stays as it is.",
         ],
+        ['Section', 'As EduPro names it (A, B …); "X-A" or "10 A" is read as A.'],
         [
           'Then',
           "Save, and upload this file on the result file's page: Students and details → Upload the details sheet. Keep the sheets in this order.",
@@ -817,11 +838,19 @@ export class BoardDetailsService {
         how.addRow({ a, b });
       how.getColumn('b').alignment = { wrapText: true, vertical: 'top' };
 
+      const staff = wb.addWorksheet('Staff');
+      staff.columns = [
+        { header: 'Teacher (staff name)', key: 'name', width: 32 },
+        { header: 'Employee code', key: 'code', width: 14 },
+      ];
+      head(staff);
+      for (const e of staffNames) staff.addRow({ name: e.name, code: e.code ?? '' });
+
       await this.audit.stage(ctx, c, {
         action: 'exams.board_result.details_template',
         entityType: 'board_result_imports',
         entityId: importId,
-        after: { candidates: rows.length, teacherRows: teachers.rowCount - 1 },
+        after: { candidates: rows.length, teacherRows },
       });
       return {
         filename: `CBSE-Class-${i.class_label}-${String(i.exam_year)}-details-sheet.xlsx`,
@@ -868,6 +897,12 @@ export class BoardDetailsService {
     const s2 = rowsOf(second);
     return this.db.tenant(requireTenant(ctx), async (c) => {
       const i = await this.savedImport(c, importId);
+      // a section as the school writes it on the class ("X-A", "10 A") is the section's own name ("A"), as the
+      // records and the teacher assignments name it
+      const sectionOf = (raw: string) => {
+        const prefix = i.class_label === 'XII' ? '(?:XII|12)' : '(?:X|10)';
+        return raw.trim().replace(new RegExp(`^${prefix}\\s*[-–/ ]\\s*(?=\\S)`, 'i'), '');
+      };
       // yes: Y / Yes / true / 1, or the column's own word (the school's sheet writes EWS, CWSN)
       const yes = (v: string, word: string) =>
         /^(y|yes|true|1)$/i.test(v.trim()) || v.trim().toUpperCase() === word;
@@ -937,7 +972,7 @@ export class BoardDetailsService {
             WHERE id = $1`,
           [
             id,
-            v(r, at.section),
+            sectionOf(v(r, at.section)),
             v(r, at.stream),
             v(r, at.caste),
             v(r, at.religion),
@@ -966,7 +1001,20 @@ export class BoardDetailsService {
             status: 400,
           },
         );
-      if (s2.rows.length) {
+      // the rows that name a section, a subject code and a teacher; the others are counted, not saved
+      const skipped = { noTeacher: 0, noSection: 0, badCode: 0 };
+      const good = s2.rows.flatMap((r) => {
+        const section = sectionOf(v(r, t.section));
+        const code = v(r, t.code).padStart(3, '0');
+        const name = v(r, t.teacher).replace(/\s+/g, ' ');
+        if (!section) skipped.noSection += 1;
+        else if (!/^\d{3}$/.test(code)) skipped.badCode += 1;
+        else if (name.length < 2) skipped.noTeacher += 1;
+        else return [{ r, section, code, name }];
+        return [];
+      });
+      // the year's teacher list is replaced only by a sheet that names teachers (an empty column keeps it)
+      if (good.length) {
         const staff = (
           await c.query<{ id: string; name: string }>(
             `SELECT id::text, display_name AS name FROM employees WHERE deleted_at IS NULL`,
@@ -976,11 +1024,7 @@ export class BoardDetailsService {
           `DELETE FROM board_teacher_overrides WHERE board = $1 AND class_label = $2 AND exam_year = $3`,
           [i.board, i.class_label, i.exam_year],
         );
-        for (const r of s2.rows) {
-          const section = v(r, t.section);
-          const code = v(r, t.code).padStart(3, '0');
-          const name = v(r, t.teacher).replace(/\s+/g, ' ');
-          if (!section || !/^\d{3}$/.test(code) || name.length < 2) continue;
+        for (const { r, section, code, name } of good) {
           const emp = staff.filter((e) => norm(e.name) === norm(name));
           const rolls = (t.rolls >= 0 ? v(r, t.rolls) : '')
             .split(/[\s,;]+/)
@@ -1007,7 +1051,7 @@ export class BoardDetailsService {
         action: 'exams.board_result.details_sheet',
         entityType: 'board_result_imports',
         entityId: importId,
-        after: { updated, linked, unknown: unknown.length, teachers, matched },
+        after: { updated, linked, unknown: unknown.length, teachers, matched, skipped },
       });
       return {
         updated,
@@ -1015,6 +1059,9 @@ export class BoardDetailsService {
         unknownRolls: unknown.slice(0, 50),
         teachers,
         teachersMatched: matched,
+        /** the teacher rows of the second sheet, and those left out (no teacher named, no section, no 3-digit code) */
+        teacherRows: s2.rows.length,
+        teachersSkipped: skipped,
       };
     });
   }

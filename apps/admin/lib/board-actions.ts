@@ -186,6 +186,8 @@ export async function uploadDetailsSheet(fd: FormData) {
     unknownRolls: string[];
     teachers: number;
     teachersMatched: number;
+    teacherRows?: number;
+    teachersSkipped?: { noTeacher: number; noSection: number; badCode: number };
   } | null = null;
   try {
     if (!(file instanceof File) || file.size === 0)
@@ -208,9 +210,26 @@ export async function uploadDetailsSheet(fd: FormData) {
   } catch (error) {
     back(here, error);
   }
+  const o = out!;
+  const sk = o.teachersSkipped ?? { noTeacher: 0, noSection: 0, badCode: 0 };
+  const why = [
+    sk.noTeacher ? `${String(sk.noTeacher)} with no teacher name` : '',
+    sk.noSection ? `${String(sk.noSection)} with no section` : '',
+    sk.badCode ? `${String(sk.badCode)} without a 3-digit subject code` : '',
+  ]
+    .filter(Boolean)
+    .join(', ');
+  const students = `${String(o.updated)} candidates updated, ${String(o.linked)} linked by admission number${o.unknownRolls.length ? `; ${String(o.unknownRolls.length)} roll numbers not in the result file` : ''}`;
+  // a Teachers sheet with rows but no teacher named: say so plainly (the teacher list is kept as it was)
+  if ((o.teacherRows ?? 0) > 0 && o.teachers === 0)
+    redirect(
+      `${here}?error=board.teachers_not_saved&detail=${encodeURIComponent(
+        `${students}. The Teachers sheet has ${String(o.teacherRows)} rows but none was saved (${why}): write each section's subject teacher in the Teacher column (pick from the Staff tab) and upload again. The teacher list is unchanged.`,
+      )}`,
+    );
   done(
     here,
-    `Details sheet: ${String(out!.updated)} candidates updated, ${String(out!.linked)} linked by admission number, ${String(out!.teachers)} teacher rows (${String(out!.teachersMatched)} matched to employees)${out!.unknownRolls.length ? `; ${String(out!.unknownRolls.length)} roll numbers not in the file` : ''}.`,
+    `Details sheet: ${students}; ${String(o.teachers)} teacher rows saved (${String(o.teachersMatched)} matched to staff)${why ? `, ${why} left out` : ''}.`,
   );
 }
 

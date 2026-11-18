@@ -18,6 +18,7 @@ const MESSAGES: Record<string, string> = {
   'year.active': 'Activate another year before closing this one.',
   'year.stage_locked': 'That stage of the year is locked.',
   'not-found': 'Not found.',
+  'board.teachers_not_saved': 'The students were updated, but no teacher was saved.',
   'library.not_on_loan': 'The book is not on loan.',
   'library.charge_due': 'Library dues (a late fine, a lost or damaged book) are not paid yet.',
   'library.fines_at_counter': 'Late fines are paid at the fees counter, not at the library.',

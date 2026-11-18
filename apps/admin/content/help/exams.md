@@ -508,7 +508,10 @@ teacher) and its values win for those candidates. Its dialog's **Download the sh
 made: every candidate of the result file (roll number and name as CBSE printed them) with what EduPro already has,
 pick-lists for category, SC/ST/OBC/GEN, religion, EWS and CWSN, each section's subject teachers, and a tab on how to
 fill it with the CBSE subject codes. Fill in what is missing (a blank cell keeps what EduPro has), save it and upload
-it in the same dialog.
+it in the same dialog. On the **Teachers** tab pick each section's subject teacher from the list (the **Staff** tab),
+so the teacher sees the results on their own page; a row without a teacher is left out, and if no row names a
+teacher the teacher list stays as it was and the page says so. A section written as the class shows it ("X-A",
+"10 A") is read as the section (A).
 
 **Teachers** (tab) shows who taught each section's subject in the examination year — the year's teacher
 assignments, through each CBSE code's school subject — and **Set a teacher** changes one for this examination only

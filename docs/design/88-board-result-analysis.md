@@ -390,3 +390,11 @@ subject); compartment, absent, withheld / later lists (with the student, section
   details and warns while no candidate has a section.
 - Test: `board-details.e2e-spec.ts` + 1 (the auditor cannot download; the layout and pre-filled values; a cell
   changed and uploaded back is applied). Browser pass with the dialog open at 1440 and 375: axe clean.
+- **Teachers not saved (18 Nov 2026)**: on Alpha a filled sheet updated 311 candidates but no teacher — the Teachers
+  tab's teacher cells were empty (the class had no subject-teacher assignments to pre-fill), rows without a teacher
+  were skipped silently, and the sections were written "X-A" while EduPro names them "A". Now: a section with the
+  class in front ("X-A", "10 A", "XII-B") is read as the section; teacher rows are counted (saved, no teacher, no
+  section, no 3-digit code) and the year's teacher list is replaced only when at least one row names a teacher; the
+  page says "The students were updated, but no teacher was saved" with the counts; the downloaded sheet has a
+  **Staff** tab and a pick-list of staff names in the Teacher column. e2e + 1 (blank teachers keep the list and are
+  counted; "X-B" read as B; the Staff tab), browser check of the message.

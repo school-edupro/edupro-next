@@ -480,7 +480,12 @@ describe('CBSE board results: students, details, subjects, teachers (e2e, docs/d
     expect(d.json().filename).toMatch(/^CBSE-Class-X-\d{4}-details-sheet\.xlsx$/);
     const wb = new ExcelJS.Workbook();
     await wb.xlsx.load(Buffer.from(d.json().base64 as string, 'base64') as unknown as ArrayBuffer);
-    expect(wb.worksheets.map((w) => w.name)).toEqual(['Students', 'Teachers', 'How to fill']);
+    expect(wb.worksheets.map((w) => w.name)).toEqual([
+      'Students',
+      'Teachers',
+      'How to fill',
+      'Staff',
+    ]);
     const one = wb.worksheets[0]!;
     expect((one.getRow(1).values as unknown[]).slice(1)).toEqual([
       'BoardRollNo',
@@ -540,5 +545,62 @@ describe('CBSE board results: students, details, subjects, teachers (e2e, docs/d
       ),
     );
     expect(now.rows[0]).toEqual({ section: 'A', ews: false, details_from: 'sheet' });
+  });
+
+  it('a Teachers sheet with no teacher named keeps the teacher list and says why; "X-A" is section A', async () => {
+    const before = await withMigrator((c) =>
+      c.query<{ n: number }>(
+        `SELECT count(*)::int AS n FROM board_teacher_overrides WHERE school_id = $1`,
+        [school.id],
+      ),
+    );
+    expect(before.rows[0]!.n).toBeGreaterThan(0);
+    const d = await get(`/exams/board-results/imports/${importId}/details-sheet`);
+    const wb = new ExcelJS.Workbook();
+    await wb.xlsx.load(Buffer.from(d.json().base64 as string, 'base64') as unknown as ArrayBuffer);
+    // the staff to pick a teacher from
+    expect(wb.worksheets.map((w) => w.name)).toEqual([
+      'Students',
+      'Teachers',
+      'How to fill',
+      'Staff',
+    ]);
+    const staff: string[] = [];
+    wb.getWorksheet('Staff')!.eachRow((r, n) => {
+      if (n > 1) staff.push(String(r.getCell(1).value));
+    });
+    expect(staff).toEqual(expect.arrayContaining(['Tara Teacher', 'Omar Other']));
+    // the section written as the class shows it; every teacher cell emptied
+    const one = wb.worksheets[0]!;
+    one.eachRow((r, n) => {
+      if (n > 1 && String(r.getCell(1).value) === R[1]) r.getCell(4).value = 'X-B';
+    });
+    const two = wb.worksheets[1]!;
+    let rows = 0;
+    two.eachRow((r, n) => {
+      if (n > 1) {
+        r.getCell(3).value = '';
+        rows += 1;
+      }
+    });
+    expect(rows).toBeGreaterThan(0);
+    const up = await post(`/exams/board-results/imports/${importId}/details-sheet`, {
+      fileName: 'no-teachers.xlsx',
+      fileBase64: Buffer.from(await wb.xlsx.writeBuffer()).toString('base64'),
+    });
+    expect(up.statusCode).toBe(201);
+    expect(up.json()).toMatchObject({
+      teachers: 0,
+      teacherRows: rows,
+      teachersSkipped: { noTeacher: rows, noSection: 0, badCode: 0 },
+    });
+    const after = await withMigrator((c) =>
+      c.query<{ n: number; section: string }>(
+        `SELECT (SELECT count(*)::int FROM board_teacher_overrides WHERE school_id = $1) AS n,
+                (SELECT section FROM board_candidates WHERE school_id = $1 AND roll_no = $2) AS section`,
+        [school.id, R[1]],
+      ),
+    );
+    expect(after.rows[0]).toEqual({ n: before.rows[0]!.n, section: 'B' });
   });
 });
