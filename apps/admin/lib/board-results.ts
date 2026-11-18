@@ -499,6 +499,9 @@ export interface BoardResultAnalysis {
   gender: 'all' | 'M' | 'F' | 'both';
   code: string | null;
   result: string | null;
+  /** one section, or "each" (a row for each section under every subject, with its teacher) */
+  section: string | null;
+  sections: string[];
   results: Array<{ word: string; n: number }>;
   grades: 'marks' | 'printed';
   subjects: Array<{ code: string; name: string }>;

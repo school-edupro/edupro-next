@@ -78,6 +78,7 @@ export async function ResultAnalysisReport({
     code?: string;
     result?: string;
     view?: string;
+    section?: string;
   };
 }) {
   const b = await getTranslations('boardResults');
@@ -89,6 +90,9 @@ export async function ResultAnalysisReport({
   if (sp.gender === 'M' || sp.gender === 'F' || sp.gender === 'both') f.set('gender', sp.gender);
   if (/^\d{3}$/.test(sp.code ?? '')) f.set('code', sp.code!);
   if (/^[A-Z]{1,8}$/.test(sp.result ?? '')) f.set('result', sp.result!);
+  // "each": a row for each section under every subject (the table); else one section, or all together
+  if (sp.section && sp.section.length <= 40 && !/[\n\r]/.test(sp.section))
+    f.set('section', sp.section);
   const d = await apiFetch<BoardResultAnalysis>(
     `/exams/board-results/reports/result-analysis?${f.toString()}`,
   );
@@ -109,6 +113,12 @@ export async function ResultAnalysisReport({
         : d.gender === 'F'
           ? b('rp_girls')
           : b('rp_genderAll');
+  const sectionWords =
+    d.section === 'each'
+      ? b('rp_sectionsEach')
+      : d.section
+        ? b('rp_sectionOnly', { s: d.section })
+        : b('rp_sectionsTogether');
   const ch = d.charts;
   const graphsQ = (() => {
     const x = new URLSearchParams(fileQ);
@@ -187,6 +197,17 @@ export async function ResultAnalysisReport({
             ]}
           />
           <SelectField
+            id="ra-section"
+            name="section"
+            label={b('an_section')}
+            defaultValue={d.section ?? ''}
+            options={[
+              { value: '', label: b('rp_sectionsTogether') },
+              { value: 'each', label: b('rp_sectionsEach') },
+              ...d.sections.map((x) => ({ value: x, label: b('rp_sectionOnly', { s: x }) })),
+            ]}
+          />
+          <SelectField
             id="ra-result"
             name="result"
             label={b('result')}
@@ -252,9 +273,15 @@ export async function ResultAnalysisReport({
           }
         >
           <p className="ep-field__help" style={{ marginTop: 0 }}>
-            {`Class ${cls} · ${String(d.examYear)} (${yearLabel(d.examYear)}) · ${genderWords}${
-              d.result ? ` · ${d.result}` : ''
-            }`}
+            {[
+              `Class ${cls}`,
+              `${String(d.examYear)} (${yearLabel(d.examYear)})`,
+              genderWords,
+              d.result ?? '',
+              sectionWords,
+            ]
+              .filter(Boolean)
+              .join(' · ')}
           </p>
           <GroupedTable t={d.table} label={b('rp_analysis')} freeze={3} />
           {d.table.note ? (

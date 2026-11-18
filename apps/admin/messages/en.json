@@ -3848,7 +3848,7 @@
     "rs_ruleFirst5": "Aggregate: the first five subjects in the order CBSE printed them (max 500).",
     "rp_analysis": "Result analysis",
     "rp_analysisTitle": "All subject result analysis",
-    "rp_analysisHelp": "A row a subject — students, appeared, absent, pass, fail, compartment, highest, lowest and average marks, distinction and divisions, grades — and the charts across the years, with the same filters on both views.",
+    "rp_analysisHelp": "A row a subject — students, appeared, absent, pass, fail, compartment, highest, lowest and average marks, distinction and divisions, grades — and the charts across the years, with the same filters on both views. Pick a section, or each section separately for a row a section under every subject with its teacher; the Teacher column names who taught each row (the Teachers tab changes it).",
     "rp_bothGenders": "Boys vs girls",
     "rp_compareCharts": "Years in the charts",
     "rp_views": "Views",

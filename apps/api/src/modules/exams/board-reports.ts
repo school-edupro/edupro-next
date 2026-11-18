@@ -500,13 +500,25 @@ export function resultAnalysisTable(
   candidates: AnCandidate[],
   subjects: AnSubject[],
   rules: BoardRules,
-  opts: { gender: GenderView; code?: string | undefined; result?: string | undefined },
+  opts: {
+    gender: GenderView;
+    code?: string | undefined;
+    result?: string | undefined;
+    /** one section's students, or "each": a subject's row then a row for each of its sections */
+    section?: string | undefined;
+    /** the subject teacher(s) of a candidate's subject: a Teacher column when given */
+    teachersOf?: TeachersOf | undefined;
+  },
 ): AnTable {
   const kind = new Map(subjects.map((s) => [s.code, s.kind]));
   const order = new Map(subjects.map((s, i) => [s.code, i]));
   const nameOf = (code: string) =>
     shortSubject(subjects.find((s) => s.code === code)?.name ?? `Subject ${code}`);
-  const pool = candidates.filter((c) => !opts.result || c.result === opts.result);
+  const each = opts.section === SECTION_EACH;
+  const only = opts.section && !each ? opts.section : null;
+  const pool = candidates.filter(
+    (c) => (!opts.result || c.result === opts.result) && (!only || c.section === only),
+  );
   const genders: Gender[] = opts.gender === 'both' ? ['all', 'M', 'F'] : [opts.gender];
   const by = new Map(
     genders.map((g) => [g, entriesBySubject(pool.filter((c) => g === 'all' || c.sex === g))]),
@@ -519,45 +531,126 @@ export function resultAnalysisTable(
   const word = (g: Gender) => (g === 'M' ? 'Boys' : g === 'F' ? 'Girls' : 'All');
   const label = (name: string, g: Gender) =>
     opts.gender === 'both' ? `${name} · ${word(g)}` : name;
+  const sectionOf = (e: Entry) => e.c.section ?? '—';
+  const sectionsIn = (es: Entry[]) =>
+    [...new Set(es.map(sectionOf))].sort((a, b) =>
+      a.localeCompare(b, undefined, { numeric: true }),
+    );
+  // the teachers of a row's students, each name once
+  const teachers = (es: Entry[]): Cell => {
+    if (!opts.teachersOf) return null;
+    const names = new Set<string>();
+    for (const e of es)
+      for (const p of opts.teachersOf(e.c.section, e.m.code, e.c.roll)) names.add(p.name);
+    // a row whose students have no teacher set says so (the Teachers tab sets one)
+    return names.size
+      ? [...names].sort((a, b) => a.localeCompare(b)).join(', ')
+      : es.length
+        ? 'Not set'
+        : '';
+  };
+  const withTeacher = Boolean(opts.teachersOf);
   const columns: AnColumn[] = [
     num('sno', 'S.No'),
     { key: 'code', label: 'Code', width: 1 },
-    { key: 'subject', label: 'Subject', width: 3 },
+    { key: 'subject', label: each ? 'Subject / section' : 'Subject', width: 3 },
+    ...(withTeacher ? [{ key: 'teacher', label: 'Teacher', width: 3 }] : []),
     ...figureColumns(rules),
   ];
   const rows: Array<Record<string, Cell>> = [];
+  const strong: number[] = [];
+  const add = (row: Record<string, Cell>, es: Entry[], bold = false) => {
+    if (bold) strong.push(rows.length);
+    const { teacher, ...rest } = row;
+    rows.push(withTeacher ? { ...rest, teacher: teacher ?? teachers(es) } : rest);
+  };
   codes.forEach((code, i) => {
-    for (const g of genders)
-      rows.push({
-        sno: g === genders[0] ? i + 1 : '',
-        code,
-        subject: label(nameOf(code), g),
-        ...analysisFigures(by.get(g)!.get(code) ?? [], rules),
-      });
+    for (const g of genders) {
+      const es = by.get(g)!.get(code) ?? [];
+      add(
+        {
+          sno: g === genders[0] ? i + 1 : '',
+          code,
+          subject: label(nameOf(code), g),
+          // section wise: the section rows name the teachers
+          ...(each || g !== genders[0] ? { teacher: '' } : {}),
+          ...analysisFigures(es, rules),
+        },
+        es,
+        each,
+      );
+    }
+    if (each)
+      for (const sec of sectionsIn(by.get(genders[0]!)!.get(code) ?? []))
+        for (const g of genders) {
+          const es = (by.get(g)!.get(code) ?? []).filter((e) => sectionOf(e) === sec);
+          add(
+            {
+              sno: '',
+              code: '',
+              subject: label(`Section ${sec}`, g),
+              ...(g !== genders[0] ? { teacher: '' } : {}),
+              ...analysisFigures(es, rules),
+            },
+            es,
+          );
+        }
   });
-  const firstTotal = rows.length;
+  const totalOf = (g: Gender) => codes.flatMap((code) => by.get(g)!.get(code) ?? []);
   for (const g of genders)
-    rows.push({
-      sno: '',
-      code: '',
-      subject: label('Total', g),
-      ...analysisFigures(
-        codes.flatMap((code) => by.get(g)!.get(code) ?? []),
-        rules,
-      ),
-      highest: null,
-      lowest: null,
-    });
+    add(
+      {
+        sno: '',
+        code: '',
+        subject: label('Total', g),
+        teacher: '',
+        ...analysisFigures(totalOf(g), rules),
+        highest: null,
+        lowest: null,
+      },
+      [],
+      true,
+    );
+  if (each)
+    for (const sec of sectionsIn(totalOf(genders[0]!)))
+      for (const g of genders)
+        add(
+          {
+            sno: '',
+            code: '',
+            subject: label(`Total · Section ${sec}`, g),
+            teacher: '',
+            ...analysisFigures(
+              totalOf(g).filter((e) => sectionOf(e) === sec),
+              rules,
+            ),
+            highest: null,
+            lowest: null,
+          },
+          [],
+        );
   return {
     key: 'result-analysis',
-    title: 'Result analysis',
+    title: each
+      ? 'Result analysis, section wise'
+      : only
+        ? `Result analysis, section ${only}`
+        : 'Result analysis',
     columns,
     rows,
-    strong: genders.map((_, k) => firstTotal + k),
+    strong,
     note: `Shares are of those who appeared (absent: of all). Divisions do not overlap: distinction from ${String(rules.distinction)}, 1st division from ${String(FIRST_DIVISION)}, 2nd from ${String(SECOND_DIVISION)}, 3rd from ${String(rules.passMarks)}. A compartment subject is not a pass. ${
       rules.grades === 'printed'
         ? "Grades as CBSE printed them, matched to the class's grades by name (D1 and D2 counted as D)."
         : "Grades from the marks on the class's scale; they add up to those who appeared."
+    }${
+      withTeacher
+        ? " Teacher: the subject teacher(s) of the row's students (the year's subject teachers, or the Teachers tab's changes)."
+        : ''
+    }${
+      each
+        ? " Section wise: a subject's bold row is every section; the rows under it are each section's students of it, with the section's teacher; the total's section rows add every subject entry of the section."
+        : ''
     }`,
   };
 }
@@ -717,7 +810,13 @@ export function resultCharts(
   years: Array<{ examYear: number; candidates: AnCandidate[] }>,
   subjects: AnSubject[],
   rules: BoardRules,
-  opts: { gender: GenderView; code?: string | undefined; result?: string | undefined },
+  opts: {
+    gender: GenderView;
+    code?: string | undefined;
+    result?: string | undefined;
+    /** one section narrows the charts too ("each" does not: the charts are of every section) */
+    section?: string | undefined;
+  },
 ): ResultCharts {
   const kind = new Map(subjects.map((s) => [s.code, s.kind]));
   const order = new Map(subjects.map((s, i) => [s.code, i]));
@@ -725,8 +824,14 @@ export function resultCharts(
     shortSubject(subjects.find((s) => s.code === code)?.name ?? `Subject ${code}`);
   const ordered = [...years].sort((a, b) => a.examYear - b.examYear);
   const asked = years[0]!;
+  const only = opts.section && opts.section !== SECTION_EACH ? opts.section : null;
   const keep = (cs: AnCandidate[], g: Gender) =>
-    cs.filter((c) => (!opts.result || c.result === opts.result) && (g === 'all' || c.sex === g));
+    cs.filter(
+      (c) =>
+        (!opts.result || c.result === opts.result) &&
+        (g === 'all' || c.sex === g) &&
+        (!only || c.section === only),
+    );
   const genders: Gender[] = opts.gender === 'both' ? ['all', 'M', 'F'] : [opts.gender];
   const word = (g: Gender) => (g === 'M' ? 'Boys' : g === 'F' ? 'Girls' : 'All');
   const passPct = (cs: AnCandidate[]) => {

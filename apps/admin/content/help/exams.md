@@ -568,6 +568,13 @@ name) stay in view while the rest scrolls sideways.
 **Calculation method** wherever a student's aggregate counts (Results, Range wise summary): the best five by the
 school's rule, the **first five subjects as CBSE printed them**, or all subjects.
 
+**Result analysis, section wise, with the teachers**: Result analysis has the same **Section** choice — all
+sections together, each section separately (every subject's row in bold, then a row for each of its sections; the
+total with a row for each section) or one section — and a **Teacher** column: a section row names that section's
+subject teacher(s), a subject row (together or one section) every teacher of it, and "Not set" when none is set (the
+**Teachers** tab sets them). One section narrows the graphs too; each section separately is for the table. The PDF
+and Excel follow the choice.
+
 **Subject summary, section wise**: in the Subject summary pick **Section** — all sections together (as before),
 **each section separately** (every subject's row in bold, then a row for each of its sections, and the total with a
 row for each section), or one section only. The PDF and Excel follow the choice.

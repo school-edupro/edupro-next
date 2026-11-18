@@ -1363,20 +1363,37 @@ export class BoardAnalysisService {
     const { rules } = await this.rulesOf(c, q.classLabel);
     const subjects = await this.subjectsOf(c, q.classLabel);
     if (examYear === undefined)
-      return { examYear: null, years, subjects, rules, table: null, charts: null, results: [] };
+      return {
+        examYear: null,
+        years,
+        subjects,
+        rules,
+        sections: [] as string[],
+        table: null,
+        charts: null,
+        results: [],
+      };
     const data = [];
     for (const y of [examYear, ...years.filter((x) => x < examYear).slice(0, q.compare)])
       data.push({ examYear: y, candidates: await this.candidatesOf(c, q.classLabel, y) });
-    const opts = { gender: q.gender, code: q.code, result: q.result };
+    const opts = { gender: q.gender, code: q.code, result: q.result, section: q.section };
     const counts = new Map<string, number>();
     for (const cand of data[0]!.candidates)
       counts.set(cand.result ?? '—', (counts.get(cand.result ?? '—') ?? 0) + 1);
+    const sections = [
+      ...new Set(data[0]!.candidates.map((x) => x.section).filter((x): x is string => Boolean(x))),
+    ].sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+    const who = await this.details.teacherResolver(c, 'CBSE', q.classLabel, examYear);
     return {
       examYear,
       years,
       subjects,
       rules,
-      table: resultAnalysisTable(data[0]!.candidates, subjects, rules, opts),
+      sections,
+      table: resultAnalysisTable(data[0]!.candidates, subjects, rules, {
+        ...opts,
+        teachersOf: (section, code, roll) => who(section, code, roll)?.people ?? [],
+      }),
       charts: resultCharts(data, subjects, rules, opts),
       results: [...counts].map(([word, n]) => ({ word, n })).sort((a, b) => b.n - a.n),
     };
@@ -1394,6 +1411,8 @@ export class BoardAnalysisService {
         gender: q.gender,
         code: q.code ?? null,
         result: q.result ?? null,
+        section: q.section ?? null,
+        sections: r.sections,
         results: r.results,
         grades: r.rules.grades,
         subjects: r.subjects
@@ -1430,6 +1449,13 @@ export class BoardAnalysisService {
                 : 'all students',
           q.code ? `subject ${q.code}` : 'all subjects',
           q.result ? `result ${q.result}` : 'all results',
+          q.section === 'each'
+            ? q.view === 'graphs'
+              ? 'all sections'
+              : 'each section'
+            : q.section
+              ? `section ${q.section}`
+              : 'all sections',
           ...(q.view === 'graphs' && r.charts && r.charts.passTrend.labels.length > 1
             ? [`years ${r.charts.passTrend.labels[0]!} to ${r.charts.passTrend.labels.at(-1)!}`]
             : []),
@@ -1446,11 +1472,12 @@ export class BoardAnalysisService {
           gender: q.gender,
           code: q.code ?? null,
           result: q.result ?? null,
+          section: q.section ?? null,
           ...(q.view === 'graphs' ? { compare: q.compare } : {}),
           format: q.format,
         },
       });
-      const base = `CBSE-Class-${q.classLabel}-${String(r.examYear)}-result-analysis`;
+      const base = `CBSE-Class-${q.classLabel}-${String(r.examYear)}-result-analysis${q.section === 'each' && q.view !== 'graphs' ? '-section-wise' : ''}`;
       if (q.view === 'graphs')
         return {
           filename: `${base}-graphs.pdf`,

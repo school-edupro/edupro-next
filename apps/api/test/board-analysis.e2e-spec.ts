@@ -393,6 +393,48 @@ describe('CBSE board results: the ten annexures (e2e, docs/design/88 phase C)', 
     ).toBe(404);
   });
 
+  it("result analysis section wise names each section's teachers; one section; the files", async () => {
+    type T = {
+      sections: string[];
+      table: { rows: Array<Record<string, string | number | null>>; strong: number[] };
+    };
+    const each = (
+      await get('/exams/board-results/reports/result-analysis?classLabel=X&section=each&compare=0')
+    ).json() as T;
+    expect(each.sections).toEqual(['A', 'B']);
+    const e = each.table.rows.findIndex((x) => x.code === '184');
+    expect(each.table.strong).toContain(e);
+    // section A's English: the two names typed on the Teachers tab
+    expect(each.table.rows[e + 1]).toMatchObject({
+      subject: 'Section A',
+      teacher: 'Asha Teacher, Bhanu Teacher',
+    });
+    expect(each.table.rows[e + 2]).toMatchObject({ subject: 'Section B' });
+    const together = (
+      await get('/exams/board-results/reports/result-analysis?classLabel=X&compare=0')
+    ).json() as T;
+    expect(together.table.rows.find((x) => x.code === '184')!.teacher).toBe(
+      'Asha Teacher, Bhanu Teacher',
+    );
+    const a = (
+      await get('/exams/board-results/reports/result-analysis?classLabel=X&section=A&compare=0')
+    ).json() as T;
+    expect(a.table.rows.find((x) => x.code === '184')!.appeared).toBe(
+      each.table.rows[e + 1]!.appeared,
+    );
+    const f = await get(
+      '/exams/board-results/reports/result-analysis/file?classLabel=X&format=pdf&section=each',
+    );
+    expect(f.json().filename).toMatch(/result-analysis-section-wise\.pdf$/);
+    expect(
+      (
+        await get(
+          '/exams/board-results/reports/result-analysis/file?classLabel=X&format=xlsx&section=A',
+        )
+      ).statusCode,
+    ).toBe(200);
+  });
+
   it('the Results tab: candidate-wise marks, the class rank, filters, pages and files', async () => {
     const m = await get('/exams/board-results/marks?classLabel=X');
     expect(m.statusCode).toBe(200);

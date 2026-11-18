@@ -323,6 +323,8 @@ export const BoardResultAnalysisQuerySchema = z.object({
     .trim()
     .regex(/^[A-Z]{1,8}$/)
     .optional(),
+  /** one section's students, or "each": every subject with a row for each of its sections */
+  section: z.string().trim().min(1).max(40).optional(),
 });
 export class BoardResultAnalysisQueryDto extends createZodDto(BoardResultAnalysisQuerySchema) {}
 

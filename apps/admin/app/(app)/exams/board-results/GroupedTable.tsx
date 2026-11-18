@@ -71,10 +71,20 @@ export function GroupedTable({
           <tbody>
             {t.rows.map((r, i) => (
               <tr key={String(i)}>
-                {t.columns.map((c) => {
+                {t.columns.map((c, k) => {
                   const v = show(r[c.key], c);
                   return (
-                    <td key={c.key} style={c.num ? { textAlign: 'right' } : undefined}>
+                    <td
+                      key={c.key}
+                      style={
+                        c.num
+                          ? { textAlign: 'right' }
+                          : // a wide text column past the frozen ones (the teachers' names) is not squeezed
+                            k >= (freeze ?? 0) && (c.width ?? 0) >= 3
+                            ? { minWidth: '11rem' }
+                            : undefined
+                      }
+                    >
                       {strong.has(i) ? <strong>{v}</strong> : v}
                     </td>
                   );

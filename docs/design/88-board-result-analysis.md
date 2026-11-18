@@ -604,3 +604,20 @@ only its students (title "Subject summary, section B"). The API returns the year
 audit and the file name (`…-subject-summary-section-wise.pdf`) say which. Tests: unit `board-reports.spec.ts` + 2;
 e2e `board-analysis.e2e-spec.ts` (each, one section, the PDF). Browser + axe at 1440 and 375.
 
+## Result Analysis section wise, with the teachers (18 Nov 2026)
+
+Asked: "in [Result analysis] add section wise bifurcation and show teacher name". `resultAnalysisTable` takes
+`section` (none / `each` / one) as the Subject Summary does, and `teachersOf` (the resolver's `people`) for a
+**Teacher** column after the subject: a section row names that section's teacher(s) of the subject (a section split
+by roll numbers names each); a subject row names every teacher of it when the sections are together or one section is
+chosen, and is blank in the section-wise view (its section rows name them); "Not set" when the students have none.
+With boys and girls (`gender=both`) every subject and section row has its All / Boys / Girls rows, the teacher on the
+All row. The subject column reads "Subject / section" in the section-wise view; the subjects' all-sections rows and
+the total are bold; the total has a row for each section. One section narrows the charts too (`resultCharts`
+`section`); `each` leaves them over every section. The API returns `sections`; scope line, audit and file name
+(`…-result-analysis-section-wise.pdf`) say the choice. `GroupedTable` gives a wide text column past the frozen ones
+a minimum width (the teachers' names). Tests: unit `board-reports.spec.ts` + 2 (section wise with teachers and Not
+set; together, one section, boys and girls, no column without teachers); e2e `board-analysis.e2e-spec.ts` + 1 (the
+typed teachers on section A, together, one section, PDF and Excel). Browser + axe at 1440 and 375 (graphs with one
+section, boys and girls section wise).
+

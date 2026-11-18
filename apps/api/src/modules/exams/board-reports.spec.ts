@@ -385,3 +385,88 @@ describe('Subject Summary section wise (docs/design/88)', () => {
     ]);
   });
 });
+
+describe('Result Analysis section wise, with the teachers (docs/design/88)', () => {
+  const rows = [
+    cand(
+      'F',
+      [
+        ['184', 95],
+        ['417', 80],
+      ],
+      { section: 'A' },
+    ),
+    cand('M', [['184', 65]], { section: 'A' }),
+    cand('F', [['184', 85]], { section: 'B' }),
+    cand('M', [['184', 25]], { section: 'B' }),
+  ];
+  const of: TeachersOf = (section, code) =>
+    code !== '184'
+      ? []
+      : section === 'A'
+        ? [{ id: '11', name: 'Asha Teacher' }]
+        : [
+            { id: '11', name: 'Asha Teacher' },
+            { id: null, name: 'Guest Teacher' },
+          ];
+
+  it("each subject's bold row, its sections with their teachers, the total's sections", () => {
+    const t = resultAnalysisTable(rows, SUBJECTS, DEFAULT_BOARD_RULES, {
+      gender: 'all',
+      section: 'each',
+      teachersOf: of,
+    });
+    expect(t.title).toBe('Result analysis, section wise');
+    expect(t.columns.slice(0, 4).map((c) => c.key)).toEqual(['sno', 'code', 'subject', 'teacher']);
+    expect(t.rows.map((x) => [x.sno, x.subject, x.teacher, x.appeared, x.passNo])).toEqual([
+      [1, 'English Lng & Lit', '', 4, 3],
+      ['', 'Section A', 'Asha Teacher', 2, 2],
+      ['', 'Section B', 'Asha Teacher, Guest Teacher', 2, 1],
+      [2, 'AI', '', 1, 1],
+      ['', 'Section A', 'Not set', 1, 1],
+      ['', 'Total', '', 5, 4],
+      ['', 'Total · Section A', '', 3, 3],
+      ['', 'Total · Section B', '', 2, 1],
+    ]);
+    expect(t.strong).toEqual([0, 3, 5]);
+  });
+
+  it('all sections together name every teacher of the subject; one section; boys and girls rows', () => {
+    const together = resultAnalysisTable(rows, SUBJECTS, DEFAULT_BOARD_RULES, {
+      gender: 'all',
+      teachersOf: of,
+    });
+    expect(together.rows[0]).toMatchObject({ teacher: 'Asha Teacher, Guest Teacher', appeared: 4 });
+    expect(together.rows[1]).toMatchObject({ subject: 'AI', teacher: 'Not set' });
+    const b = resultAnalysisTable(rows, SUBJECTS, DEFAULT_BOARD_RULES, {
+      gender: 'all',
+      section: 'B',
+      teachersOf: of,
+    });
+    expect(b.title).toBe('Result analysis, section B');
+    expect(b.rows.map((x) => [x.subject, x.teacher, x.appeared])).toEqual([
+      ['English Lng & Lit', 'Asha Teacher, Guest Teacher', 2],
+      ['Total', '', 2],
+    ]);
+    const both = resultAnalysisTable(rows, SUBJECTS, DEFAULT_BOARD_RULES, {
+      gender: 'both',
+      section: 'each',
+      code: '184',
+      teachersOf: of,
+    });
+    expect(both.rows.slice(0, 6).map((x) => [x.subject, x.teacher, x.appeared])).toEqual([
+      ['English Lng & Lit · All', '', 4],
+      ['English Lng & Lit · Boys', '', 2],
+      ['English Lng & Lit · Girls', '', 2],
+      ['Section A · All', 'Asha Teacher', 2],
+      ['Section A · Boys', '', 1],
+      ['Section A · Girls', '', 1],
+    ]);
+    // without the teachers, no Teacher column
+    expect(
+      resultAnalysisTable(rows, SUBJECTS, DEFAULT_BOARD_RULES, { gender: 'all' }).columns.some(
+        (c) => c.key === 'teacher',
+      ),
+    ).toBe(false);
+  });
+});

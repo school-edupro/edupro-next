@@ -18,6 +18,8 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ form
   if (/^\d{3}$/.test(code)) q.set('code', code);
   const result = sp.get('result') ?? '';
   if (/^[A-Z]{1,8}$/.test(result)) q.set('result', result);
+  const section = sp.get('section') ?? '';
+  if (section && section.length <= 40 && !/[\n\r]/.test(section)) q.set('section', section);
   // the graphs: a PDF only, across the years compared
   if (sp.get('view') === 'graphs') {
     if (format !== 'pdf') return new NextResponse(null, { status: 404 });
