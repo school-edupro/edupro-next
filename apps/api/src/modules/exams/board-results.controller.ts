@@ -13,6 +13,8 @@ import {
   BoardMarksFileDto,
   BoardMarksQueryDto,
   BoardMineQueryDto,
+  BoardRangeFileDto,
+  BoardRangeQueryDto,
   BoardParentsDto,
   BoardYearFiguresDto,
   BoardAnalysisQueryDto,
@@ -363,6 +365,25 @@ export class BoardResultsController {
   @RequirePermission(BOARD_RESULTS.view)
   marksFile(@ReqCtx() ctx: RequestContext, @Query() q: BoardMarksFileDto) {
     return this.analyses.marksFile(ctx, q);
+  }
+
+  // ---- the Reports tab ----
+
+  @Get('reports/range-subjects')
+  @ApiOperation({
+    summary:
+      "Range Wise Subject Summary: each subject's students, pass, fail, compartment, divisions, grades and marks, against earlier years",
+  })
+  @RequirePermission(BOARD_RESULTS.view)
+  rangeSummary(@ReqCtx() ctx: RequestContext, @Query() q: BoardRangeQueryDto) {
+    return this.analyses.rangeSummary(ctx, q);
+  }
+
+  @Get('reports/range-subjects/file')
+  @ApiOperation({ summary: 'The Range Wise Subject Summary as Excel or PDF' })
+  @RequirePermission(BOARD_RESULTS.view)
+  rangeSummaryFile(@ReqCtx() ctx: RequestContext, @Query() q: BoardRangeFileDto) {
+    return this.analyses.rangeSummaryFile(ctx, q);
   }
 }
 

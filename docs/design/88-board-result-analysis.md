@@ -416,3 +416,18 @@ subject); compartment, absent, withheld / later lists (with the student, section
 - Tests: unit `board-marks.spec.ts` (3: dense ranks with ties, all subjects, filters and sorts); e2e
   `board-analysis.e2e-spec.ts` + 1 (the list, ranks, filters, pages, the files). Browser + axe at 1440, 1280, 1024
   and 375.
+
+## The Reports tab: Range Wise Subject Summary (18 Nov 2026)
+
+- A **Reports** tab between Analysis and Teachers holds ready-made reports (a list; more join it). The first is the
+  school's old **Range Wise Subject Summary**: a block a subject (name order, internal subjects left out), 21 rows —
+  total students, appeared, absent, pass, fail, compartment, distinction, 1st / 2nd / 3rd division, A1 … E1 grades,
+  highest, lowest, average — a Count and a % (of those appeared) a year, the earlier years first. Filters: class,
+  examination, compare with 0–4 saved years before, gender (all / boys / girls), subject.
+- Divisions are exclusive (they add up to those who appeared, as the old report's do): distinction from the
+  distinction marks, 1st from 60, 2nd from 45, 3rd from the pass marks. Grades follow the Set-up rule; the row
+  labels carry the mark ranges when grades are counted from the marks.
+- `board-reports.ts` (`rangeSubjectSummary`), `GET reports/range-subjects` and `/file` (xlsx as on screen; PDF on the
+  letterhead with heading bands and signature boxes; audited `exams.board_result.report_export`).
+- Tests: unit `board-reports.spec.ts` (2); e2e `board-years.e2e-spec.ts` + 1 (two saved years compared, girls only,
+  one subject, the files). Browser + axe at 1440 and 375.

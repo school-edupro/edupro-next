@@ -48,10 +48,11 @@ interface Analysis extends Record<string, string | number | null> {
 }
 
 import { AnalysisTab } from './AnalysisTab';
+import { ReportsTab } from './ReportsTab';
 import { ResultsTab } from './ResultsTab';
 import { YearFiguresCard } from './YearFiguresCard';
 
-const TABS: BoardTab[] = ['upload', 'results', 'analysis', 'teachers', 'setup'];
+const TABS: BoardTab[] = ['upload', 'results', 'analysis', 'reports', 'teachers', 'setup'];
 const KINDS: BoardSubjectKind[] = ['language', 'main', 'skill', 'additional', 'internal'];
 
 /**
@@ -73,6 +74,10 @@ export default async function BoardResultsPage({
     sort?: string;
     page?: string;
     size?: string;
+    compare?: string;
+    gender?: string;
+    code?: string;
+    report?: string;
     subjects?: string;
     figures?: string;
     q?: string;
@@ -404,6 +409,7 @@ export default async function BoardResultsPage({
       ) : null}
 
       {tab === 'results' ? <ResultsTab sp={sp} /> : null}
+      {tab === 'reports' ? <ReportsTab sp={sp} /> : null}
 
       {tab === 'teachers' && teachers ? (
         <Card title={b('teachers')}>

@@ -1,6 +1,6 @@
 /** Board results (docs/design/88): what the screens show of an upload, a candidate and a layout. */
 
-export type BoardTab = 'upload' | 'results' | 'analysis' | 'teachers' | 'setup';
+export type BoardTab = 'upload' | 'results' | 'analysis' | 'reports' | 'teachers' | 'setup';
 
 export interface BoardImport {
   id: string;
@@ -382,4 +382,29 @@ export interface BoardMarks {
     percent: number | null;
     rank: number | null;
   }>;
+}
+
+// ---- the Reports tab: Range Wise Subject Summary ----
+
+export interface BoardRange {
+  classLabel: 'X' | 'XII';
+  examYear: number | null;
+  years: number[];
+  compare: number;
+  gender: 'all' | 'M' | 'F';
+  code: string | null;
+  subjects: Array<{ code: string; name: string }>;
+  grades: 'marks' | 'printed';
+  summary: {
+    years: number[];
+    blocks: Array<{
+      code: string;
+      name: string;
+      rows: Array<{
+        key: string;
+        label: string;
+        values: Record<string, { count: number | null; pct: number | null }>;
+      }>;
+    }>;
+  } | null;
 }

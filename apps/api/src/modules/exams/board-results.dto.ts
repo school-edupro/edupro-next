@@ -237,3 +237,20 @@ export const BoardMarksFileSchema = BoardMarksQuerySchema.extend({
   format: z.enum(['xlsx', 'pdf']),
 });
 export class BoardMarksFileDto extends createZodDto(BoardMarksFileSchema) {}
+
+// ---- the Reports tab: Range Wise Subject Summary ----
+
+export const BoardRangeQuerySchema = z.object({
+  classLabel: ClassLabel.default('X'),
+  examYear: z.coerce.number().int().min(2000).max(2100).optional(),
+  /** how many saved years before it to compare with */
+  compare: z.coerce.number().int().min(0).max(4).default(1),
+  gender: z.enum(['all', 'M', 'F']).default('all'),
+  code: Code.optional(),
+});
+export class BoardRangeQueryDto extends createZodDto(BoardRangeQuerySchema) {}
+
+export const BoardRangeFileSchema = BoardRangeQuerySchema.extend({
+  format: z.enum(['xlsx', 'pdf']),
+});
+export class BoardRangeFileDto extends createZodDto(BoardRangeFileSchema) {}

@@ -532,6 +532,14 @@ class's and dense: equal aggregates share a rank and the next one follows (1, 2,
 the PDF (View or Download) give the filtered list with every column — gender, class, comp subjects and max marks
 included.
 
+**Reports: ready-made reports.** **Reports** holds reports EduPro makes ready from the saved results, as the
+school's old system had them. **Range wise subject summary**: for each subject (in name order) its total students,
+appeared, absent, pass, fail, compartment, distinction, 1st / 2nd / 3rd division, the A1 … E1 grades, and the highest,
+lowest and average marks — a count and a share of those who appeared — for the chosen examination and up to four
+saved years before it (**Compare with**), for all students, boys or girls, all subjects or one. Divisions do not
+overlap: distinction from the distinction marks (Set-up), 1st division from 60, 2nd from 45, 3rd from the pass marks.
+Excel and PDF give the same.
+
 **Analysis: the ten annexures.** **Analysis** counts a saved year as the school's own result workbook does: pick the
 class, the examination and a section (or all) and the annexure — 1 School summary (five years, the result in
 figures, the top scorers, full scores, distinctions, the highest in each subject, A1 + A2), 2 Overall result (boys

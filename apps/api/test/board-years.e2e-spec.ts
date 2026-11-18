@@ -265,4 +265,58 @@ describe('CBSE board results: earlier years (e2e, docs/design/88 phase E)', () =
       'exams.board_result.year_figures_remove',
     ]);
   });
+
+  it('Reports: the Range Wise Subject Summary against the earlier saved year, as Excel and PDF', async () => {
+    const r = await get('/exams/board-results/reports/range-subjects?classLabel=X&compare=1');
+    expect(r.statusCode).toBe(200);
+    const d = r.json() as {
+      summary: {
+        years: number[];
+        blocks: Array<{
+          code: string;
+          rows: Array<{
+            key: string;
+            values: Record<string, { count: number | null; pct: number | null }>;
+          }>;
+        }>;
+      };
+    };
+    expect(d.summary.years).toEqual([now - 2, now]);
+    const eng = d.summary.blocks.find((b) => b.code === '184')!;
+    const row = (k: string) => eng.rows.find((x) => x.key === k)!.values;
+    expect(row('appeared')[String(now)]!.count).toBe(3);
+    expect(row('appeared')[String(now - 2)]!.count).toBe(2);
+    // marks 90, 80 and 70: two distinctions (75 and above) and one 1st division
+    expect(row('distinction')[String(now)]).toEqual({ count: 2, pct: 66.67 });
+    expect(row('first')[String(now)]).toEqual({ count: 1, pct: 33.33 });
+    expect(row('average')[String(now - 2)]!.count).toBe(65);
+    // girls only: two this year (the 1st and 3rd), one two years back
+    const girls = (
+      await get(
+        '/exams/board-results/reports/range-subjects?classLabel=X&compare=1&gender=F&code=184',
+      )
+    ).json();
+    expect(girls.summary.blocks).toHaveLength(1);
+    expect(
+      girls.summary.blocks[0].rows.find((x: { key: string }) => x.key === 'appeared').values[
+        String(now)
+      ].count,
+    ).toBe(2);
+    const x = await get(
+      '/exams/board-results/reports/range-subjects/file?classLabel=X&compare=1&format=xlsx',
+    );
+    expect(x.statusCode).toBe(200);
+    expect(x.json().filename).toMatch(/range-wise-subject-summary\.xlsx$/);
+    const p = await get(
+      '/exams/board-results/reports/range-subjects/file?classLabel=X&compare=1&format=pdf',
+    );
+    expect(
+      Buffer.from(p.json().base64 as string, 'base64')
+        .subarray(0, 4)
+        .toString(),
+    ).toBe('%PDF');
+    expect(
+      (await get('/exams/board-results/reports/range-subjects?classLabel=X', auditor)).statusCode,
+    ).toBe(200);
+  });
 });

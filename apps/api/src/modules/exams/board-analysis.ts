@@ -342,8 +342,8 @@ const ACR_BANDS: Band[] = [
 /** Marks can carry a half from grace; a band takes its whole number. */
 const inBand = (m: number, b: Band) => Math.floor(m) >= b[1] && Math.floor(m) <= b[2];
 
-const GRADES = ['A1', 'A2', 'B1', 'B2', 'C1', 'C2', 'D', 'E'] as const;
-type Grade = (typeof GRADES)[number];
+export const GRADES = ['A1', 'A2', 'B1', 'B2', 'C1', 'C2', 'D', 'E'] as const;
+export type Grade = (typeof GRADES)[number];
 /** The grade of a mark on the school's scale: A1 91–100, A2 81–90 … C2 41–50, D from the pass marks, E below. */
 function gradeOf(m: AnMark & { marks: number }, rules: BoardRules): Grade | null {
   if (rules.grades === 'printed') {
@@ -362,13 +362,13 @@ function gradeOf(m: AnMark & { marks: number }, rules: BoardRules): Grade | null
   return x >= rules.passMarks ? 'D' : 'E';
 }
 
-interface Entry {
+export interface Entry {
   c: AnCandidate;
   m: AnMark;
 }
 
 /** The figures of one subject over some candidates. */
-function subjectStats(entries: Entry[], rules: BoardRules) {
+export function subjectStats(entries: Entry[], rules: BoardRules) {
   const app = entries.filter((e) => e.m.marks !== null) as Array<{
     c: AnCandidate;
     m: AnMark & { marks: number };
@@ -512,7 +512,7 @@ export function yearFigures(
 }
 
 /** Each subject's entries — of the candidates who sat the examination (one absent throughout is in no subject). */
-function entriesBySubject(candidates: AnCandidate[]) {
+export function entriesBySubject(candidates: AnCandidate[]) {
   const by = new Map<string, Entry[]>();
   for (const c of candidates.filter(appeared))
     for (const m of c.marks) {

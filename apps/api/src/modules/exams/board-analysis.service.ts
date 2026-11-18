@@ -26,11 +26,15 @@ import {
 import { analysisPdf, analysisXlsx, examName } from './board-analysis-file';
 import { BoardDetailsService } from './board-details.service';
 import { marksPdf, marksXlsx } from './board-marks-file';
+import { rangePdf, rangeXlsx } from './board-reports-file';
+import { rangeSubjectSummary } from './board-reports';
 import { filterMarks, marksRows, type MarksRow } from './board-marks';
 import {
   BoardRulesSchema,
   type BoardMarksFileDto,
   type BoardMarksQueryDto,
+  type BoardRangeFileDto,
+  type BoardRangeQueryDto,
   type BoardYearFiguresDto,
 } from './board-results.dto';
 import { CBSE_SUBJECTS, type BoardSubjectKind } from './board-subjects';
@@ -927,6 +931,102 @@ export class BoardAnalysisService {
             filename: `${base}.pdf`,
             contentType: 'application/pdf',
             base64: (await marksPdf(m.rows, q.classLabel, head)).toString('base64'),
+          };
+    });
+  }
+
+  // ---- the Reports tab: Range Wise Subject Summary ----
+
+  private async rangeOf(c: PoolClient, q: BoardRangeQueryDto) {
+    const years = (
+      await c.query<{ y: number }>(
+        `SELECT DISTINCT exam_year AS y FROM board_candidates WHERE board = 'CBSE' AND class_label = $1 ORDER BY 1 DESC`,
+        [q.classLabel],
+      )
+    ).rows.map((r) => r.y);
+    const examYear = q.examYear !== undefined && years.includes(q.examYear) ? q.examYear : years[0];
+    const { rules } = await this.rulesOf(c);
+    const subjects = await this.subjectsOf(c, q.classLabel);
+    if (examYear === undefined) return { examYear: null, years, subjects, rules, summary: null };
+    // the year asked and the saved years before it that the comparison takes
+    const chosen = [examYear, ...years.filter((y) => y < examYear).slice(0, q.compare)];
+    const data = [];
+    for (const y of chosen)
+      data.push({ examYear: y, candidates: await this.candidatesOf(c, q.classLabel, y) });
+    return {
+      examYear,
+      years,
+      subjects,
+      rules,
+      summary: rangeSubjectSummary(data, subjects, rules, { gender: q.gender, code: q.code }),
+    };
+  }
+
+  /** Range Wise Subject Summary: each subject's 21 figures for the year and the saved years compared. */
+  async rangeSummary(ctx: RequestContext, q: BoardRangeQueryDto) {
+    return this.db.tenant(requireTenant(ctx), async (c) => {
+      const r = await this.rangeOf(c, q);
+      return {
+        classLabel: q.classLabel,
+        examYear: r.examYear,
+        years: r.years,
+        compare: q.compare,
+        gender: q.gender,
+        code: q.code ?? null,
+        subjects: r.subjects
+          .filter((s) => s.kind !== 'internal')
+          .map((s) => ({ code: s.code, name: s.name })),
+        grades: r.rules.grades,
+        summary: r.summary,
+      };
+    });
+  }
+
+  async rangeSummaryFile(ctx: RequestContext, q: BoardRangeFileDto) {
+    return this.db.tenant(requireTenant(ctx), async (c) => {
+      const r = await this.rangeOf(c, q);
+      if (!r.summary || r.examYear === null)
+        throw new DomainError('not-found', `No saved Class ${q.classLabel} result`, {
+          status: 404,
+        });
+      const h = await registerLetterhead(c);
+      const head = {
+        school: h.school,
+        address: h.address,
+        logo: q.format === 'pdf' ? await registerLogo(this.storage, h.file) : null,
+        generatedOn: registerGeneratedOn(),
+        by: ctx.user.displayName,
+        title: `CBSE ${q.classLabel === 'XII' ? 'AISSCE' : 'AISSE'} (Class ${q.classLabel}) · Range wise subject summary`,
+        scope: [
+          r.summary.years.map((y) => yearLabel(y)).join(' against '),
+          q.gender === 'M' ? 'boys' : q.gender === 'F' ? 'girls' : 'all students',
+          q.code ? `subject ${q.code}` : 'all subjects',
+        ].join(' · '),
+      };
+      await this.audit.stage(ctx, c, {
+        action: 'exams.board_result.report_export',
+        entityType: 'board_candidates',
+        entityId: requireTenant(ctx).schoolId,
+        after: {
+          report: 'range-subjects',
+          classLabel: q.classLabel,
+          years: r.summary.years,
+          gender: q.gender,
+          code: q.code ?? null,
+          format: q.format,
+        },
+      });
+      const base = `CBSE-Class-${q.classLabel}-${String(r.examYear)}-range-wise-subject-summary`;
+      return q.format === 'xlsx'
+        ? {
+            filename: `${base}.xlsx`,
+            contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            base64: (await rangeXlsx(r.summary, head)).toString('base64'),
+          }
+        : {
+            filename: `${base}.pdf`,
+            contentType: 'application/pdf',
+            base64: (await rangePdf(r.summary, head)).toString('base64'),
           };
     });
   }
