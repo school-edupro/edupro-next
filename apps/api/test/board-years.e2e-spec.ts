@@ -366,6 +366,12 @@ describe('CBSE board results: earlier years (e2e, docs/design/88 phase E)', () =
       charts: {
         passTrend: { labels: string[]; series: Array<{ values: Array<number | null> }> };
         marks: Array<{ code: string; values: number[] }>;
+        grades: string[];
+        gradeSpread: Array<{ code: string; appeared: number; counts: number[]; pct: number[] }>;
+        subjectYears: Array<{
+          code: string;
+          series: Array<{ label: string; appeared: number; counts: number[]; pct: number[] }>;
+        }>;
       };
     };
     const eng = d.table.rows.find((x) => x.code === '184')!;
@@ -383,6 +389,18 @@ describe('CBSE board results: earlier years (e2e, docs/design/88 phase E)', () =
     expect(d.charts.passTrend.labels).toHaveLength(2);
     expect(d.charts.passTrend.series[0]!.values).toEqual([100, 100]);
     expect(d.charts.marks.find((m) => m.code === '184')!.values).toEqual([90, 80, 70]);
+    // every grade A1 … E1 with its share of those who appeared; every subject across the years
+    expect(d.charts.grades).toHaveLength(8);
+    const g = d.charts.gradeSpread.find((x) => x.code === '184')!;
+    expect(g.appeared).toBe(3);
+    expect(g.counts.reduce((a, n) => a + n, 0)).toBe(3);
+    expect(g.pct.filter((v) => v > 0).every((v) => v === 33.33)).toBe(true);
+    expect(d.charts.subjectYears.map((x) => x.code)).toEqual(
+      d.charts.gradeSpread.map((x) => x.code),
+    );
+    const years184 = d.charts.subjectYears.find((x) => x.code === '184')!;
+    expect(years184.series).toHaveLength(2);
+    expect(years184.series.map((y) => y.appeared)).toEqual([2, 3]);
     const both = (
       await get('/exams/board-results/reports/result-analysis?classLabel=X&gender=both&code=184')
     ).json();
@@ -403,6 +421,20 @@ describe('CBSE board results: earlier years (e2e, docs/design/88 phase E)', () =
       '/exams/board-results/reports/result-analysis/file?classLabel=X&format=pdf&gender=both',
     );
     expect(p.json().filename).toMatch(/result-analysis\.pdf$/);
+    // the graphs, drawn as a PDF (no Excel of them)
+    const gp = await get(
+      '/exams/board-results/reports/result-analysis/file?classLabel=X&format=pdf&view=graphs&compare=2',
+    );
+    expect(gp.statusCode).toBe(200);
+    expect(gp.json().filename).toMatch(/result-analysis-graphs\.pdf$/);
+    expect(Buffer.from(gp.json().base64, 'base64').subarray(0, 5).toString()).toBe('%PDF-');
+    expect(
+      (
+        await get(
+          '/exams/board-results/reports/result-analysis/file?classLabel=X&format=xlsx&view=graphs',
+        )
+      ).statusCode,
+    ).toBe(400);
     // the first five as printed on the Results tab and the Range wise summary
     const first = (await get('/exams/board-results/marks?classLabel=X&method=first5')).json();
     expect(first.method).toBe('first5');

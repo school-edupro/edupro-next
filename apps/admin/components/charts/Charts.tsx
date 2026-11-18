@@ -3,7 +3,18 @@
  * rows. Colours come from the design tokens through the `ep-chart` classes; every chart carries a text
  * alternative and its numbers are also shown next to it or in a table on the page.
  */
-export type ChartTone = 'navy' | 'cyan' | 'success' | 'danger' | 'warning' | 'info' | 'muted';
+export type ChartTone =
+  | 'navy'
+  | 'cyan'
+  | 'success'
+  | 'danger'
+  | 'warning'
+  | 'info'
+  | 'muted'
+  // lighter shades, for charts of eight parts (the grades A1 … E1)
+  | 'success-soft'
+  | 'navy-soft'
+  | 'cyan-soft';
 export interface ChartSeries {
   label: string;
   tone: ChartTone;
@@ -34,6 +45,9 @@ export function BarChart({
   series,
   stacked = false,
   valueLabel,
+  max: fixedMax,
+  suffix = '',
+  width = 720,
 }: {
   title: string;
   data: Array<{ label: string; values: number[] }>;
@@ -41,16 +55,26 @@ export function BarChart({
   stacked?: boolean;
   /** Text over each group (e.g. a percentage); default: none. */
   valueLabel?: (values: number[]) => string;
+  /** The top of the scale (e.g. 100 for percentages); default: the largest value. */
+  max?: number;
+  /** After each number on the scale and in the tips (e.g. "%"). */
+  suffix?: string;
+  /** The drawing's width: smaller for a chart in half a row, so its writing stays readable. */
+  width?: number;
 }) {
-  const W = 720;
+  const W = width;
   const H = 240;
   const left = 44;
   const base = 200;
   const top = 20;
-  const max = Math.max(
-    1,
-    ...data.map((d) => (stacked ? d.values.reduce((a, b) => a + b, 0) : Math.max(...d.values, 0))),
-  );
+  const max =
+    fixedMax ??
+    Math.max(
+      1,
+      ...data.map((d) =>
+        stacked ? d.values.reduce((a, b) => a + b, 0) : Math.max(...d.values, 0),
+      ),
+    );
   const step = (W - left - 8) / Math.max(1, data.length);
   const group = Math.min(64, step * 0.72);
   const bar = stacked ? group : group / Math.max(1, series.length);
@@ -70,7 +94,7 @@ export function BarChart({
               strokeWidth="1"
             />
             <text x={left - 6} y={base - h(v) + 4} textAnchor="end" fontSize="11">
-              {compact(v)}
+              {`${compact(v)}${suffix}`}
             </text>
           </g>
         ))}
@@ -92,7 +116,7 @@ export function BarChart({
                     width={Math.max(1, bar - (stacked ? 0 : 2))}
                     height={height}
                   >
-                    <title>{`${d.label} · ${series[k]?.label ?? ''}: ${v.toLocaleString('en-IN')}`}</title>
+                    <title>{`${d.label} · ${series[k]?.label ?? ''}: ${v.toLocaleString('en-IN')}${suffix}`}</title>
                   </rect>
                 );
               })}
@@ -113,6 +137,106 @@ export function BarChart({
                   {valueLabel(d.values)}
                 </text>
               ) : null}
+              <text x={x0 + group / 2} y={base + 16} textAnchor="middle" fontSize="11">
+                {d.label}
+              </text>
+            </g>
+          );
+        })}
+      </svg>
+      <ChartLegend series={series} />
+    </figure>
+  );
+}
+
+/** The tones whose parts carry dark writing (light fills); the others carry light writing. */
+const DARK_TEXT = new Set<ChartTone>([
+  'warning',
+  'cyan',
+  'muted',
+  'success-soft',
+  'navy-soft',
+  'cyan-soft',
+]);
+
+/**
+ * 100% bars: each group's values as shares of their sum, stacked to 100, with the share written on each part that
+ * has room — so groups of different sizes compare fairly (a subject's grades as a share of those who appeared).
+ */
+export function PercentBarChart({
+  title,
+  data,
+  series,
+}: {
+  title: string;
+  /** `of`: the whole the shares are of (those who appeared), when it can be more than the parts' sum */
+  data: Array<{ label: string; values: number[]; of?: number }>;
+  series: ChartSeries[];
+}) {
+  const W = 720;
+  const H = 250;
+  const left = 44;
+  const base = 210;
+  const top = 14;
+  const step = (W - left - 8) / Math.max(1, data.length);
+  const group = Math.min(64, step * 0.78);
+  const h = (share: number) => ((base - top) * Math.max(0, share)) / 100;
+  return (
+    <figure className="ep-chart">
+      <svg viewBox={`0 0 ${String(W)} ${String(H)}`} role="img" aria-label={title}>
+        {[0, 50, 100].map((v) => (
+          <g key={String(v)}>
+            <line
+              className="ep-chart__grid"
+              x1={left}
+              x2={W - 4}
+              y1={base - h(v)}
+              y2={base - h(v)}
+              strokeWidth="1"
+            />
+            <text x={left - 6} y={base - h(v) + 4} textAnchor="end" fontSize="11">
+              {`${String(v)}%`}
+            </text>
+          </g>
+        ))}
+        {data.map((d, i) => {
+          const x0 = left + i * step + (step - group) / 2;
+          const sum = d.of ?? d.values.reduce((a, b) => a + b, 0);
+          let acc = 0;
+          return (
+            <g key={d.label}>
+              {d.values.map((v, k) => {
+                const share = sum > 0 ? (v * 100) / sum : 0;
+                const height = h(share);
+                const y = base - acc - height;
+                acc += height;
+                const tone = series[k]?.tone ?? 'navy';
+                return (
+                  <g key={String(k)}>
+                    <rect
+                      className={`ep-chart-fill--${tone}`}
+                      x={x0}
+                      y={y}
+                      width={group}
+                      height={height}
+                    >
+                      <title>{`${d.label} · ${series[k]?.label ?? ''}: ${v.toLocaleString('en-IN')} (${share.toFixed(1)}%)`}</title>
+                    </rect>
+                    {height >= 13 && share >= 4 ? (
+                      <text
+                        className={`ep-chart__part${DARK_TEXT.has(tone) ? ' ep-chart__part--dark' : ''}`}
+                        x={x0 + group / 2}
+                        y={y + height / 2 + 3.5}
+                        textAnchor="middle"
+                        fontSize="10"
+                        aria-hidden="true"
+                      >
+                        {`${String(Math.round(share))}%`}
+                      </text>
+                    ) : null}
+                  </g>
+                );
+              })}
               <text x={x0 + group / 2} y={base + 16} textAnchor="middle" fontSize="11">
                 {d.label}
               </text>

@@ -256,6 +256,20 @@ describe('Range Wise Subject Summary (docs/design/88)', () => {
     // 2026: 4 PASS of 5 appeared (the compartment is not a pass)
     expect(ch.passTrend.series[0]!.values[1]).toBe(80);
     expect(ch.marks.find((m) => m.code === '184')!.values).toEqual([95, 57, 30]);
-    expect(ch.subjectYears!.series.map((x) => x.label)).toEqual(['2024-25', '2025-26']);
+    expect(ch.grades).toEqual(['A1', 'A2', 'B1', 'B2', 'C1', 'C2', 'D', 'E1']);
+    const g184 = ch.gradeSpread.find((g) => g.code === '184')!;
+    expect(g184.counts).toHaveLength(8);
+    expect(g184.counts.reduce((a, n) => a + n, 0)).toBe(g184.appeared);
+    expect(g184.pct.reduce((a, n) => a + n, 0)).toBeCloseTo(100, 0);
+    // every subject across the years, oldest first, each year its own share
+    expect(ch.subjectYears.map((x) => x.code)).toEqual(ch.gradeSpread.map((x) => x.code));
+    const y184 = ch.subjectYears.find((x) => x.code === '184')!;
+    expect(y184.series.map((x) => x.label)).toEqual(['2024-25', '2025-26']);
+    expect(y184.series[1]!.counts).toEqual(g184.counts);
+    const one = resultCharts([{ examYear: 2026, candidates: now }], SUBJECTS, DEFAULT_BOARD_RULES, {
+      gender: 'all',
+      code: '184',
+    });
+    expect(one.subjectYears.map((x) => x.code)).toEqual(['184']);
   });
 });

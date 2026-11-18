@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { ApiError, apiFetch } from '@/lib/api';
 
-/** The Result Analysis table as Excel (saved) or PDF (shown, or saved with `?save=1`). */
+/** The Result Analysis table as Excel (saved) or PDF, or its graphs as a PDF (shown, or saved with `?save=1`). */
 export async function GET(req: NextRequest, { params }: { params: Promise<{ format: string }> }) {
   const { format } = await params;
   if (format !== 'pdf' && format !== 'xlsx') return new NextResponse(null, { status: 404 });
@@ -18,6 +18,13 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ form
   if (/^\d{3}$/.test(code)) q.set('code', code);
   const result = sp.get('result') ?? '';
   if (/^[A-Z]{1,8}$/.test(result)) q.set('result', result);
+  // the graphs: a PDF only, across the years compared
+  if (sp.get('view') === 'graphs') {
+    if (format !== 'pdf') return new NextResponse(null, { status: 404 });
+    q.set('view', 'graphs');
+    const compare = sp.get('compare') ?? '';
+    if (/^[0-4]$/.test(compare)) q.set('compare', compare);
+  }
   try {
     const f = await apiFetch<{ filename: string; contentType: string; base64: string }>(
       `/exams/board-results/reports/result-analysis/file?${q.toString()}`,

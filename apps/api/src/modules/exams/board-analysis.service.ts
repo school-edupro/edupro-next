@@ -24,6 +24,7 @@ import {
   yearLabel,
 } from './board-analysis';
 import { analysisPdf, analysisXlsx, examName, singleTableXlsx } from './board-analysis-file';
+import { resultChartsPdf } from './board-charts-pdf';
 import { BoardDetailsService } from './board-details.service';
 import { marksPdf, marksXlsx } from './board-marks-file';
 import { OVERALL_LABELS, rangePdf, rangeXlsx, singleTablePdf } from './board-reports-file';
@@ -1311,6 +1312,9 @@ export class BoardAnalysisService {
                 : 'all students',
           q.code ? `subject ${q.code}` : 'all subjects',
           q.result ? `result ${q.result}` : 'all results',
+          ...(q.view === 'graphs' && r.charts && r.charts.passTrend.labels.length > 1
+            ? [`years ${r.charts.passTrend.labels[0]!} to ${r.charts.passTrend.labels.at(-1)!}`]
+            : []),
         ].join(' · '),
       };
       await this.audit.stage(ctx, c, {
@@ -1318,16 +1322,23 @@ export class BoardAnalysisService {
         entityType: 'board_candidates',
         entityId: requireTenant(ctx).schoolId,
         after: {
-          report: 'result-analysis',
+          report: q.view === 'graphs' ? 'result-analysis-graphs' : 'result-analysis',
           classLabel: q.classLabel,
           examYear: r.examYear,
           gender: q.gender,
           code: q.code ?? null,
           result: q.result ?? null,
+          ...(q.view === 'graphs' ? { compare: q.compare } : {}),
           format: q.format,
         },
       });
       const base = `CBSE-Class-${q.classLabel}-${String(r.examYear)}-result-analysis`;
+      if (q.view === 'graphs')
+        return {
+          filename: `${base}-graphs.pdf`,
+          contentType: 'application/pdf',
+          base64: (await resultChartsPdf(r.charts!, head, { code: q.code })).toString('base64'),
+        };
       return q.format === 'xlsx'
         ? {
             filename: `${base}.xlsx`,

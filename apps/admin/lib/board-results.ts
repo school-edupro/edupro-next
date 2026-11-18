@@ -450,13 +450,21 @@ export interface BoardResultAnalysis {
   table: AnTable | null;
   charts: {
     passTrend: { labels: string[]; series: Array<{ label: string; values: Array<number | null> }> };
-    gradeSpread: Array<{ code: string; name: string; values: number[] }>;
-    marks: Array<{ code: string; name: string; values: number[] }>;
-    subjectYears: {
+    /** A1 … E1 */
+    grades: string[];
+    gradeSpread: Array<{
       code: string;
       name: string;
-      labels: string[];
-      series: Array<{ label: string; values: number[] }>;
-    } | null;
+      appeared: number;
+      counts: number[];
+      pct: number[];
+    }>;
+    marks: Array<{ code: string; name: string; values: number[] }>;
+    /** every subject (or the one chosen): its grades a year, as shares of those who appeared */
+    subjectYears: Array<{
+      code: string;
+      name: string;
+      series: Array<{ label: string; appeared: number; counts: number[]; pct: number[] }>;
+    }>;
   } | null;
 }

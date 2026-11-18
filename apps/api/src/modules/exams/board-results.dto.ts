@@ -306,5 +306,10 @@ export class BoardResultAnalysisQueryDto extends createZodDto(BoardResultAnalysi
 
 export const BoardResultAnalysisFileSchema = BoardResultAnalysisQuerySchema.extend({
   format: z.enum(['xlsx', 'pdf']),
+  /** graphs: the charts drawn as a PDF (no Excel) */
+  view: z.enum(['table', 'graphs']).default('table'),
+}).refine((v) => v.view === 'table' || v.format === 'pdf', {
+  message: 'The graphs are a PDF only',
+  path: ['format'],
 });
 export class BoardResultAnalysisFileDto extends createZodDto(BoardResultAnalysisFileSchema) {}

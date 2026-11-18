@@ -475,3 +475,27 @@ frozen first columns on every wide report table.
 - Tests: unit + 2 (`board-reports.spec.ts` result analysis and charts; `board-marks.spec.ts` first five), e2e + 1
   (`board-years.e2e-spec.ts`: table, boys vs girls, charts over two years, files, first five). Browser + axe at
   1440 and 375 (table frozen while scrolled, graphs, first five on Results and Range wise summary).
+
+### The graphs: every grade, every subject across the years, a PDF (18 Nov 2026)
+
+Asked: a PDF of the Graphs view; "grades across the years" for all subjects, not one; the share of students at each
+grade in "Grades by subject" (e.g. English A1 %). Answers chosen (benchmarked against the usual ERP result-analysis
+dashboards): a PDF drawn by EduPro, a small chart a subject, 100% bars with % labels, every grade A1 … E1.
+
+- **Data** (`resultCharts`): `grades` (A1 … E1); `gradeSpread` a subject — `appeared`, `counts[8]`, `pct[8]` (of those
+  who appeared); `subjectYears` — every subject shown (all, or the one in the filter), a year each with `appeared`,
+  `counts[8]`, `pct[8]`. Printed grades with a gap: the shares stay of those who appeared, so a bar may not reach 100%.
+- **Screen**: grades by subject as `PercentBarChart` (100% bars, the share on each part with room; `of` = appeared);
+  eight grade tones (A1/A2 green, B1/B2 navy, C1/C2 cyan — the second of each pair soft — D amber, E1 red; soft tones
+  and part-label colours in packages/ui); grades across the years as a grid of small `BarChart`s (`width` 400, two a
+  row on a desktop, one on a phone; % scale rounded to tens; a bar a year, the latest darkest; the legend gives each
+  year's appeared). Numbers tables: count and share.
+- **PDF** (`board-charts-pdf.ts`, pdf-lib, A4 upright, no worker): the letterhead, the scope (with the years
+  compared), pass % over the years (the scale starts under the lowest value, in tens), grades by subject as
+  horizontal 100% bars, marks by subject as three bars a subject, then every subject's grades across the years two a
+  page; a numbers table under each chart; the note and the signature boxes (Prepared by, Checked by, Principal);
+  page numbers. `GET reports/result-analysis/file?view=graphs&format=pdf` (Excel of the graphs refused, 400; audited
+  as `result-analysis-graphs` with the years compared); admin `reports/analysis/pdf?view=graphs` (View + Download).
+- Tests: unit `board-reports.spec.ts` (eight grades, shares, every subject across the years, the filter) and
+  `board-charts-pdf.spec.ts` (+2: pages, one subject and an empty year); e2e `board-years.e2e-spec.ts` (the data, the
+  graphs PDF, no Excel). Browser + axe at 1440 and 375 (no sideways page scroll; View/Download served inline/saved).

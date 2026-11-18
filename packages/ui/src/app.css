@@ -6201,6 +6201,40 @@ a.ep-tabs__tab {
 .ep-chart__legend [data-tone='info']::before {
   background: var(--status-info);
 }
+/* lighter shades of three tones, for eight parts (the grades A1 … E1: A2, B2 and C2 the lighter of their pair) */
+.ep-chart-fill--success-soft {
+  fill: var(--status-success);
+  fill-opacity: 0.5;
+}
+.ep-chart-fill--navy-soft {
+  fill: var(--action-primary);
+  fill-opacity: 0.5;
+}
+.ep-chart-fill--cyan-soft {
+  fill: var(--action-accent);
+  fill-opacity: 0.5;
+}
+.ep-chart__legend [data-tone='success-soft']::before {
+  background: var(--status-success);
+  opacity: 0.5;
+}
+.ep-chart__legend [data-tone='navy-soft']::before {
+  background: var(--action-primary);
+  opacity: 0.5;
+}
+.ep-chart__legend [data-tone='cyan-soft']::before {
+  background: var(--action-accent);
+  opacity: 0.5;
+}
+/* the share written on a part of a 100% bar: light on the strong tones, dark on the soft ones */
+/* the share written on a 100% bar's part: light on the strong fills, dark on the light ones (over `.ep-chart svg text`) */
+.ep-chart svg text.ep-chart__part {
+  fill: var(--text-inverse);
+  font-weight: var(--fw-semibold);
+}
+.ep-chart svg text.ep-chart__part--dark {
+  fill: var(--text-heading);
+}
 .ep-chart__rows {
   list-style: none;
   margin: 0;

@@ -557,8 +557,12 @@ the charts, gender (all, boys, girls, or **boys vs girls**: each subject as an A
 and result. **Table**: a row a subject with the total students, appeared, absent, pass, fail, compartment, highest,
 lowest and average marks, distinction and the three divisions, and the grades; the grades always add up to those
 who appeared, and their mark ranges show only when they are counted from the marks. **Graphs**: pass % over the
-years, grades by subject, marks by subject, and one subject's grades across the years — each with its numbers
-under it. Excel and PDF give the table. On every wide report table the first columns (number, code, subject or
+years; **grades by subject** — each subject's students at every grade A1 … E1 as a share of those who appeared (a
+100% bar a subject, the share written on each part, e.g. how many in English got A1); marks by subject; and **grades
+across the years** for every subject (a small chart a subject, a bar a year — choose a subject in the filter to see
+only that one). Each chart has its numbers under it (count and share). Excel and PDF give the table; on Graphs,
+**PDF** (View or Download) gives the charts on the letterhead with their numbers and the signature boxes, two
+subjects a page for the years. On every wide report table the first columns (number, code, subject or
 name) stay in view while the rest scrolls sideways.
 
 **Calculation method** wherever a student's aggregate counts (Results, Range wise summary): the best five by the

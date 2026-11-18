@@ -437,7 +437,7 @@ export class BoardResultsController {
   }
 
   @Get('reports/result-analysis/file')
-  @ApiOperation({ summary: 'The Result Analysis table as Excel or PDF' })
+  @ApiOperation({ summary: 'The Result Analysis table as Excel or PDF, or its graphs as a PDF' })
   @RequirePermission(BOARD_RESULTS.view)
   resultAnalysisFile(@ReqCtx() ctx: RequestContext, @Query() q: BoardResultAnalysisFileDto) {
     return this.analyses.resultAnalysisFile(ctx, q);

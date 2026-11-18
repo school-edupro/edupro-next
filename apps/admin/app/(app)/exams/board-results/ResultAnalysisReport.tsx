@@ -1,14 +1,31 @@
 import { Button, Card, SelectField } from '@edupro/ui';
 import { getTranslations } from 'next-intl/server';
-import { BarChart, LineChart, type ChartTone } from '@/components/charts/Charts';
+import { BarChart, LineChart, PercentBarChart, type ChartTone } from '@/components/charts/Charts';
 import { FileLinks } from '@/components/FileLinks';
 import { apiFetch } from '@/lib/api';
 import { RESULT_WORDS, yearLabel, type BoardResultAnalysis } from '@/lib/board-results';
 import { GroupedTable } from './GroupedTable';
 
 const YEAR_TONES: ChartTone[] = ['muted', 'info', 'cyan', 'warning', 'navy'];
-const GRADE_GROUPS = ['A1 + A2', 'B1 + B2', 'C1 + C2', 'D', 'E1'];
-const GRADE_TONES: ChartTone[] = ['success', 'navy', 'cyan', 'warning', 'danger'];
+/** A1 … E1: green, blue and cyan pairs (the second soft), then amber and red — the PDF draws the same */
+const GRADE_TONES: ChartTone[] = [
+  'success',
+  'success-soft',
+  'navy',
+  'navy-soft',
+  'cyan',
+  'cyan-soft',
+  'warning',
+  'danger',
+];
+/** 34.29 → "34.3%" */
+const pct = (v: number) => {
+  const r = Math.round(v * 10) / 10;
+  return `${Number.isInteger(r) ? String(r) : r.toFixed(1)}%`;
+};
+/** a round top for a % scale: 10, 20, 30 … 100 */
+const pctTop = (values: number[]) =>
+  Math.min(100, Math.max(10, Math.ceil(Math.max(0, ...values) / 10) * 10));
 
 /** A chart's numbers as a small table (a chart's text alternative, folded under it). */
 function Numbers({
@@ -38,7 +55,10 @@ function Numbers({
             {rows.map((r, i) => (
               <tr key={String(i)}>
                 {r.map((v, k) => (
-                  <td key={String(k)} style={k ? { textAlign: 'right' } : undefined}>
+                  <td
+                    key={String(k)}
+                    style={k ? { textAlign: 'right', whiteSpace: 'nowrap' } : undefined}
+                  >
                     {v === null ? '—' : String(v)}
                   </td>
                 ))}
@@ -54,8 +74,8 @@ function Numbers({
 /**
  * Result Analysis (docs/design/88), the school's old page of that name: the subject table — students, appeared,
  * absent, pass, fail, compartment, highest, lowest, average, distinction and divisions, grades — and the charts
- * (pass % over the years, the grade spread, the marks, one subject's grades across the years), with the same
- * filters on both views. The old page's faults are put right: the grades add up, their ranges show only when they
+ * (pass % over the years, each subject's grades A1 … E1 as 100% bars, the marks, every subject's grades across
+ * the years as shares), with the same filters on both views and a PDF of each. The old page's faults are put right: the grades add up, their ranges show only when they
  * are counted from the marks, the subject columns stay in view, the divisions have a legend.
  */
 export async function ResultAnalysisReport({
@@ -101,6 +121,11 @@ export async function ResultAnalysisReport({
           ? b('rp_girls')
           : b('rp_genderAll');
   const ch = d.charts;
+  const graphsQ = (() => {
+    const x = new URLSearchParams(fileQ);
+    x.set('view', 'graphs');
+    return x.toString();
+  })();
 
   return (
     <>
@@ -251,6 +276,24 @@ export async function ResultAnalysisReport({
         </Card>
       ) : (
         <div style={{ display: 'grid', gap: 'var(--sp-4)', gridTemplateColumns: 'minmax(0, 1fr)' }}>
+          <Card
+            title={b('rp_graphsTitle')}
+            actions={
+              <span style={{ display: 'inline-flex', gap: 'var(--sp-3)', alignItems: 'center' }}>
+                <span className="ep-field__help">PDF</span>
+                <FileLinks
+                  href={`/exams/board-results/reports/analysis/pdf?${graphsQ}`}
+                  label={b('rp_graphsTitle')}
+                />
+              </span>
+            }
+          >
+            <p className="ep-field__help" style={{ margin: 0 }}>
+              {`Class ${cls} · ${String(d.examYear)} (${yearLabel(d.examYear)}) · ${genderWords}${
+                d.result ? ` · ${d.result}` : ''
+              }${d.code ? ` · ${d.code}` : ''}. ${b('rp_chartsNote')}`}
+            </p>
+          </Card>
           <Card title={b('rp_chartPass')}>
             <p className="ep-field__help" style={{ marginTop: 0 }}>
               {d.code ? b('rp_chartPassSubject', { code: d.code }) : b('rp_chartPassHelp')}
@@ -279,16 +322,23 @@ export async function ResultAnalysisReport({
             <p className="ep-field__help" style={{ marginTop: 0 }}>
               {b('rp_chartGradesHelp')}
             </p>
-            <BarChart
+            <PercentBarChart
               title={b('rp_chartGrades')}
-              stacked
-              data={ch.gradeSpread.map((s) => ({ label: s.code, values: s.values }))}
-              series={GRADE_GROUPS.map((label, i) => ({ label, tone: GRADE_TONES[i]! }))}
+              data={ch.gradeSpread.map((s) => ({
+                label: s.code,
+                values: s.counts,
+                of: s.appeared,
+              }))}
+              series={ch.grades.map((label, i) => ({ label, tone: GRADE_TONES[i] ?? 'muted' }))}
             />
             <Numbers
-              caption={b('rp_numbers')}
-              head={[b('rp_subject'), ...GRADE_GROUPS]}
-              rows={ch.gradeSpread.map((s) => [`${s.code} ${s.name}`, ...s.values])}
+              caption={b('rp_numbersPct')}
+              head={[b('rp_subject'), b('an_appeared'), ...ch.grades]}
+              rows={ch.gradeSpread.map((s) => [
+                `${s.code} ${s.name}`,
+                s.appeared,
+                ...s.counts.map((n, i) => `${String(n)} (${pct(s.pct[i] ?? 0)})`),
+              ])}
             />
           </Card>
           <Card title={b('rp_chartMarks')}>
@@ -310,41 +360,60 @@ export async function ResultAnalysisReport({
               rows={ch.marks.map((s) => [`${s.code} ${s.name}`, ...s.values])}
             />
           </Card>
-          {ch.subjectYears ? (
-            <Card
-              title={b('rp_chartSubjectYears', {
-                subject: `${ch.subjectYears.code} ${ch.subjectYears.name}`,
-              })}
-            >
+          {ch.subjectYears.length ? (
+            <Card title={b('rp_chartYears')}>
               <p className="ep-field__help" style={{ marginTop: 0 }}>
-                {b('rp_chartSubjectYearsHelp')}
+                {b('rp_chartYearsHelp')}
               </p>
-              <BarChart
-                title={b('rp_chartSubjectYears', { subject: ch.subjectYears.name })}
-                data={ch.subjectYears.labels.map((g, i) => ({
-                  label: g,
-                  values: ch.subjectYears!.series.map((s) => s.values[i] ?? 0),
-                }))}
-                series={ch.subjectYears.series.map((s, i) => ({
-                  label: s.label,
-                  tone: YEAR_TONES[
-                    (YEAR_TONES.length - ch.subjectYears!.series.length + i) % YEAR_TONES.length
-                  ]!,
-                }))}
-              />
-              <Numbers
-                caption={b('rp_numbers')}
-                head={[b('rp_grade'), ...ch.subjectYears.series.map((s) => s.label)]}
-                rows={ch.subjectYears.labels.map((g, i) => [
-                  g,
-                  ...ch.subjectYears!.series.map((s) => s.values[i] ?? 0),
-                ])}
-              />
+              <div
+                style={{
+                  display: 'grid',
+                  gap: 'var(--sp-5)',
+                  gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 400px), 1fr))',
+                }}
+              >
+                {ch.subjectYears.map((s) => {
+                  const title = b('rp_chartSubjectYears', { subject: `${s.code} ${s.name}` });
+                  return (
+                    <section key={s.code} aria-labelledby={`ra-years-${s.code}`}>
+                      <h3
+                        id={`ra-years-${s.code}`}
+                        className="ep-field__label"
+                        style={{ margin: '0 0 var(--sp-2)' }}
+                      >
+                        {title}
+                      </h3>
+                      <BarChart
+                        title={title}
+                        width={400}
+                        data={ch.grades.map((g, i) => ({
+                          label: g,
+                          values: s.series.map((y) => y.pct[i] ?? 0),
+                        }))}
+                        series={s.series.map((y, i) => ({
+                          label: `${y.label} (${String(y.appeared)})`,
+                          tone: YEAR_TONES[
+                            (YEAR_TONES.length - s.series.length + i) % YEAR_TONES.length
+                          ]!,
+                        }))}
+                        max={pctTop(s.series.flatMap((y) => y.pct))}
+                        suffix="%"
+                      />
+                      <Numbers
+                        caption={b('rp_numbersPct')}
+                        head={[b('an_year'), b('an_appeared'), ...ch.grades]}
+                        rows={s.series.map((y) => [
+                          y.label,
+                          y.appeared,
+                          ...y.counts.map((n, i) => `${String(n)} (${pct(y.pct[i] ?? 0)})`),
+                        ])}
+                      />
+                    </section>
+                  );
+                })}
+              </div>
             </Card>
           ) : null}
-          <p className="ep-field__help" style={{ margin: 0 }}>
-            {`Class ${cls} · ${genderWords}${d.result ? ` · ${d.result}` : ''}. ${b('rp_chartsNote')}`}
-          </p>
         </div>
       )}
     </>

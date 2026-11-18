@@ -558,17 +558,24 @@ export function resultAnalysisTable(
 export interface ResultCharts {
   /** pass % a year (the CBSE result; one subject's passes when a subject is chosen) */
   passTrend: { labels: string[]; series: Array<{ label: string; values: Array<number | null> }> };
-  /** a subject's grades in five groups (A, B, C, D, E) — the bars of the grade chart */
-  gradeSpread: Array<{ code: string; name: string; values: number[] }>;
-  /** a subject's highest, average and lowest marks */
-  marks: Array<{ code: string; name: string; values: number[] }>;
-  /** one subject's grades across the years */
-  subjectYears: {
+  /** the grade labels (A1 … E1) of the grade charts, in order */
+  grades: string[];
+  /** a subject's students at each grade, and their share of those who appeared */
+  gradeSpread: Array<{
     code: string;
     name: string;
-    labels: string[];
-    series: Array<{ label: string; values: number[] }>;
-  } | null;
+    appeared: number;
+    counts: number[];
+    pct: number[];
+  }>;
+  /** a subject's highest, average and lowest marks */
+  marks: Array<{ code: string; name: string; values: number[] }>;
+  /** every subject's (or the chosen one's) grades across the years: a share of those who appeared, a year */
+  subjectYears: Array<{
+    code: string;
+    name: string;
+    series: Array<{ label: string; appeared: number; counts: number[]; pct: number[] }>;
+  }>;
 }
 
 /** The charts of the Result Analysis: across the years given (the first is the year asked). */
@@ -606,14 +613,14 @@ export function resultCharts(
     .filter((c) => !opts.code || c === opts.code)
     .filter((c) => now.get(c)!.some((e) => e.m.marks !== null))
     .sort((a, b) => (order.get(a) ?? 999) - (order.get(b) ?? 999) || a.localeCompare(b));
-  const groups = (g: Record<string, number>) => [
-    g.A1! + g.A2!,
-    g.B1! + g.B2!,
-    g.C1! + g.C2!,
-    g.D!,
-    g.E!,
-  ];
-  const focus = opts.code ?? codes[0];
+  const shares = (counts: number[], of: number) =>
+    counts.map((n) => (of > 0 ? round2((n * 100) / of) : 0));
+  const gradesOf = (es: Entry[]) => {
+    const st = es.length ? subjectStats(es, rules) : null;
+    const counts = GRADES.map((g) => (st ? st.grades[g] : 0));
+    const appeared = st ? st.appeared : 0;
+    return { appeared, counts, pct: shares(counts, appeared) };
+  };
   return {
     passTrend: {
       labels: ordered.map((y) => yearLabel(y.examYear)),
@@ -622,29 +629,19 @@ export function resultCharts(
         values: ordered.map((y) => passPct(keep(y.candidates, g))),
       })),
     },
-    gradeSpread: codes.map((code) => ({
-      code,
-      name: nameOf(code),
-      values: groups(subjectStats(now.get(code)!, rules).grades),
-    })),
+    grades: GRADES.map((g) => (g === 'E' ? 'E1' : g)),
+    gradeSpread: codes.map((code) => ({ code, name: nameOf(code), ...gradesOf(now.get(code)!) })),
     marks: codes.map((code) => {
       const s = subjectStats(now.get(code)!, rules);
       return { code, name: nameOf(code), values: [s.highest ?? 0, s.average ?? 0, s.lowest ?? 0] };
     }),
-    subjectYears: focus
-      ? {
-          code: focus,
-          name: nameOf(focus),
-          labels: GRADES.map((g) => (g === 'E' ? 'E1' : g)),
-          series: ordered.map((y) => {
-            const es = entriesBySubject(keep(y.candidates, main)).get(focus) ?? [];
-            const st = es.length ? subjectStats(es, rules) : null;
-            return {
-              label: yearLabel(y.examYear),
-              values: GRADES.map((g) => (st ? st.grades[g] : 0)),
-            };
-          }),
-        }
-      : null,
+    subjectYears: codes.map((code) => ({
+      code,
+      name: nameOf(code),
+      series: ordered.map((y) => ({
+        label: yearLabel(y.examYear),
+        ...gradesOf(entriesBySubject(keep(y.candidates, main)).get(code) ?? []),
+      })),
+    })),
   };
 }
