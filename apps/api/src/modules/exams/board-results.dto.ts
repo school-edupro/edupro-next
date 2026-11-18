@@ -218,7 +218,7 @@ export const BoardMarksQuerySchema = z.object({
   examYear: z.coerce.number().int().min(2000).max(2100).optional(),
   section: z.string().trim().min(1).max(40).optional(),
   /** best5: the school's best five (the rule in Set-up); all: every subject with marks */
-  method: z.enum(['best5', 'all']).default('best5'),
+  method: z.enum(['best5', 'first5', 'all']).default('best5'),
   result: z
     .string()
     .trim()
@@ -262,7 +262,7 @@ export const BoardOverallQuerySchema = z.object({
   examYear: z.coerce.number().int().min(2000).max(2100).optional(),
   compare: z.coerce.number().int().min(0).max(4).default(1),
   gender: z.enum(['all', 'M', 'F']).default('all'),
-  method: z.enum(['best5', 'all']).default('best5'),
+  method: z.enum(['best5', 'first5', 'all']).default('best5'),
 });
 export class BoardOverallQueryDto extends createZodDto(BoardOverallQuerySchema) {}
 
@@ -285,3 +285,26 @@ export const BoardSubjectPerfFileSchema = BoardSubjectPerfQuerySchema.extend({
   format: z.enum(['xlsx', 'pdf']),
 });
 export class BoardSubjectPerfFileDto extends createZodDto(BoardSubjectPerfFileSchema) {}
+
+// ---- the Reports tab: Result Analysis (the subject table and its charts) ----
+
+export const BoardResultAnalysisQuerySchema = z.object({
+  classLabel: ClassLabel.default('X'),
+  examYear: z.coerce.number().int().min(2000).max(2100).optional(),
+  /** saved years before it for the charts across years */
+  compare: z.coerce.number().int().min(0).max(4).default(4),
+  /** both: each subject as an All, a Boys and a Girls row */
+  gender: z.enum(['all', 'M', 'F', 'both']).default('all'),
+  code: Code.optional(),
+  result: z
+    .string()
+    .trim()
+    .regex(/^[A-Z]{1,8}$/)
+    .optional(),
+});
+export class BoardResultAnalysisQueryDto extends createZodDto(BoardResultAnalysisQuerySchema) {}
+
+export const BoardResultAnalysisFileSchema = BoardResultAnalysisQuerySchema.extend({
+  format: z.enum(['xlsx', 'pdf']),
+});
+export class BoardResultAnalysisFileDto extends createZodDto(BoardResultAnalysisFileSchema) {}

@@ -26,7 +26,7 @@ export async function OverallReport({
   if (/^\d{4}$/.test(sp.examYear ?? '')) f.set('examYear', sp.examYear!);
   f.set('compare', /^[0-4]$/.test(sp.compare ?? '') ? sp.compare! : '0');
   if (sp.gender === 'M' || sp.gender === 'F') f.set('gender', sp.gender);
-  if (sp.method === 'all') f.set('method', 'all');
+  if (sp.method === 'all' || sp.method === 'first5') f.set('method', sp.method);
   const d = await apiFetch<BoardOverall>(
     `/exams/board-results/reports/range-overall?${f.toString()}`,
   );
@@ -89,6 +89,7 @@ export async function OverallReport({
             defaultValue={d.method}
             options={[
               { value: 'best5', label: b('rs_best5') },
+              { value: 'first5', label: b('rs_first5') },
               { value: 'all', label: b('rs_all') },
             ]}
           />
@@ -147,7 +148,7 @@ export async function OverallReport({
           <p className="ep-field__help" style={{ marginTop: 0 }}>
             {`Class ${cls} · ${years.map((y) => yearLabel(y)).join(` ${b('rp_against')} `)} · ${
               d.gender === 'M' ? b('rp_boys') : d.gender === 'F' ? b('rp_girls') : b('rp_genderAll')
-            } · ${d.method === 'best5' ? b('rs_ruleBest5', { rule: d.rule }) : b('rs_ruleAll')}`}
+            } · ${d.method === 'best5' ? b('rs_ruleBest5', { rule: d.rule }) : d.method === 'first5' ? b('rs_ruleFirst5') : b('rs_ruleAll')}`}
             {years.length - 1 < d.compare ? ` · ${b('rp_fewerYears')}` : ''}
           </p>
           <div className="ep-table-wrap" tabIndex={0} role="region" aria-label={b('rp_overall')}>

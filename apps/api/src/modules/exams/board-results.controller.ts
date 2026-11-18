@@ -17,6 +17,8 @@ import {
   BoardOverallQueryDto,
   BoardRangeFileDto,
   BoardRangeQueryDto,
+  BoardResultAnalysisFileDto,
+  BoardResultAnalysisQueryDto,
   BoardSubjectPerfFileDto,
   BoardSubjectPerfQueryDto,
   BoardParentsDto,
@@ -422,6 +424,23 @@ export class BoardResultsController {
   @RequirePermission(BOARD_RESULTS.view)
   subjectPerfFile(@ReqCtx() ctx: RequestContext, @Query() q: BoardSubjectPerfFileDto) {
     return this.analyses.subjectPerfFile(ctx, q);
+  }
+
+  @Get('reports/result-analysis')
+  @ApiOperation({
+    summary:
+      'Result Analysis: a row a subject (students, results, marks, divisions, grades) and the charts across the years',
+  })
+  @RequirePermission(BOARD_RESULTS.view)
+  resultAnalysis(@ReqCtx() ctx: RequestContext, @Query() q: BoardResultAnalysisQueryDto) {
+    return this.analyses.resultAnalysis(ctx, q);
+  }
+
+  @Get('reports/result-analysis/file')
+  @ApiOperation({ summary: 'The Result Analysis table as Excel or PDF' })
+  @RequirePermission(BOARD_RESULTS.view)
+  resultAnalysisFile(@ReqCtx() ctx: RequestContext, @Query() q: BoardResultAnalysisFileDto) {
+    return this.analyses.resultAnalysisFile(ctx, q);
   }
 }
 

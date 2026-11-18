@@ -46,7 +46,7 @@ export async function ResultsTab({
   if (/^\d{4}$/.test(sp.examYear ?? '')) f.set('examYear', sp.examYear!);
   const section = (sp.section ?? '').trim();
   if (section && section.length <= 40) f.set('section', section);
-  if (sp.method === 'all') f.set('method', 'all');
+  if (sp.method === 'all' || sp.method === 'first5') f.set('method', sp.method);
   if (/^[A-Z]{1,8}$/.test(sp.result ?? '')) f.set('result', sp.result!);
   if ((BANDS as readonly string[]).includes(sp.band ?? '')) f.set('band', sp.band!);
   if ((SORTS as readonly string[]).includes(sp.sort ?? '')) f.set('sort', sp.sort!);
@@ -147,6 +147,7 @@ export async function ResultsTab({
             defaultValue={d.method}
             options={[
               { value: 'best5', label: b('rs_best5') },
+              { value: 'first5', label: b('rs_first5') },
               { value: 'all', label: b('rs_all') },
             ]}
           />
@@ -234,10 +235,14 @@ export async function ResultsTab({
           <p className="ep-field__help" style={{ marginTop: 0 }}>
             <Badge tone="info">{`Class ${cls}${section ? `-${section}` : ''}`}</Badge>{' '}
             <Badge tone="success">{`${String(d.examYear)} (${yearLabel(d.examYear)})`}</Badge>{' '}
-            {d.method === 'best5' ? b('rs_ruleBest5', { rule: d.rule }) : b('rs_ruleAll')}{' '}
+            {d.method === 'best5'
+              ? b('rs_ruleBest5', { rule: d.rule })
+              : d.method === 'first5'
+                ? b('rs_ruleFirst5')
+                : b('rs_ruleAll')}{' '}
             {b('rs_legend')}
           </p>
-          <div className="ep-table-tight">
+          <div className="ep-table-tight ep-table-freeze-3">
             <DataTable<Row>
               caption={b('rs_title')}
               density="dense"

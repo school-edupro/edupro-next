@@ -12,7 +12,8 @@ import {
  * school's best five, or all subjects), the percentage and the rank. Ranks are dense (equal totals share a rank,
  * the next one follows: 1, 2, 3, 3, 3, 4) and are the class's, whatever the filters.
  */
-export type MarksMethod = 'best5' | 'all';
+/** best5: the school's best five; first5: the first five as CBSE printed them; all: every subject with marks */
+export type MarksMethod = 'best5' | 'first5' | 'all';
 export type MarksBand = '90' | '75' | '60' | '45' | 'below45';
 export type MarksSort = 'rank' | 'roll' | 'name' | 'section';
 
@@ -72,6 +73,13 @@ export function marksRows(
         max = 500;
         percent = b.percent;
         counted = new Set(b.codes);
+      } else if (method === 'first5') {
+        // the first five subjects in the order CBSE printed them
+        const first = marked.slice(0, 5);
+        total = first.reduce((a, m) => a + m.marks, 0);
+        max = 500;
+        percent = round2(total / 5);
+        counted = new Set(first.map((m) => m.code));
       } else {
         total = marked.reduce((a, m) => a + m.marks, 0);
         max = marked.length * 100;

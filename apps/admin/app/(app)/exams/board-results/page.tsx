@@ -78,6 +78,7 @@ export default async function BoardResultsPage({
     gender?: string;
     code?: string;
     report?: string;
+    view?: string;
     subjects?: string;
     figures?: string;
     q?: string;

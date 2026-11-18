@@ -14,7 +14,8 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ form
   if (/^\d{4}$/.test(year)) q.set('examYear', year);
   const section = (sp.get('section') ?? '').trim();
   if (section && section.length <= 40) q.set('section', section);
-  if (sp.get('method') === 'all') q.set('method', 'all');
+  const method = sp.get('method') ?? '';
+  if (method === 'all' || method === 'first5') q.set('method', method);
   const result = sp.get('result') ?? '';
   if (/^[A-Z]{1,8}$/.test(result)) q.set('result', result);
   const band = sp.get('band') ?? '';

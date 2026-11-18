@@ -16,7 +16,8 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ form
   if (/^[0-4]$/.test(compare)) q.set('compare', compare);
   const gender = sp.get('gender') ?? '';
   if (gender === 'M' || gender === 'F') q.set('gender', gender);
-  if (sp.get('method') === 'all') q.set('method', 'all');
+  const method = sp.get('method') ?? '';
+  if (method === 'all' || method === 'first5') q.set('method', method);
   try {
     const f = await apiFetch<{ filename: string; contentType: string; base64: string }>(
       `/exams/board-results/reports/range-overall/file?${q.toString()}`,

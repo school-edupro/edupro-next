@@ -353,7 +353,7 @@ export interface BoardMarks {
   years: number[];
   sections: string[];
   results: Array<{ word: string; n: number }>;
-  method: 'best5' | 'all';
+  method: 'best5' | 'first5' | 'all';
   rule: string;
   total: number;
   page: number;
@@ -417,7 +417,7 @@ export interface BoardOverall {
   years: number[];
   compare: number;
   gender: 'all' | 'M' | 'F';
-  method: 'best5' | 'all';
+  method: 'best5' | 'first5' | 'all';
   rule: string;
   summary: NonNullable<BoardRange['summary']> | null;
 }
@@ -432,4 +432,31 @@ export interface BoardSubjectPerf {
   code: string | null;
   subjects: Array<{ code: string; name: string }>;
   table: AnTable | null;
+}
+
+// ---- the Reports tab: Result Analysis ----
+
+export interface BoardResultAnalysis {
+  classLabel: 'X' | 'XII';
+  examYear: number | null;
+  years: number[];
+  compare: number;
+  gender: 'all' | 'M' | 'F' | 'both';
+  code: string | null;
+  result: string | null;
+  results: Array<{ word: string; n: number }>;
+  grades: 'marks' | 'printed';
+  subjects: Array<{ code: string; name: string }>;
+  table: AnTable | null;
+  charts: {
+    passTrend: { labels: string[]; series: Array<{ label: string; values: Array<number | null> }> };
+    gradeSpread: Array<{ code: string; name: string; values: number[] }>;
+    marks: Array<{ code: string; name: string; values: number[] }>;
+    subjectYears: {
+      code: string;
+      name: string;
+      labels: string[];
+      series: Array<{ label: string; values: number[] }>;
+    } | null;
+  } | null;
 }

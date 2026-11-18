@@ -1,5 +1,11 @@
 import { DEFAULT_BOARD_RULES, type AnCandidate, type AnSubject } from './board-analysis';
-import { rangeOverall, rangeSubjectSummary, subjectPerformance } from './board-reports';
+import {
+  rangeOverall,
+  rangeSubjectSummary,
+  resultAnalysisTable,
+  resultCharts,
+  subjectPerformance,
+} from './board-reports';
 
 // Every roll number and mark here is made up.
 const SUBJECTS: AnSubject[] = [
@@ -192,5 +198,64 @@ describe('Range Wise Subject Summary (docs/design/88)', () => {
       code: '184',
     });
     expect(girls.rows[0]).toMatchObject({ appeared: 2, boys: 0, girls: 2 });
+  });
+
+  it('Result Analysis: grades add up to those who appeared; boys vs girls as three rows; the result filter; charts', () => {
+    const t = resultAnalysisTable(now, SUBJECTS, DEFAULT_BOARD_RULES, { gender: 'all' });
+    const eng = t.rows.find((r) => r.code === '184')!;
+    const grades = ['gA1', 'gA2', 'gB1', 'gB2', 'gC1', 'gC2', 'gD', 'gE'].map((k) =>
+      Number(eng[k]),
+    );
+    expect(grades.reduce((a, b) => a + b, 0)).toBe(eng.appeared);
+    expect(eng).toMatchObject({
+      total: 5,
+      appeared: 5,
+      absentNo: 0,
+      passNo: 3,
+      failNo: 1,
+      compNo: 1,
+      distNo: 1,
+      firstNo: 1,
+      secondNo: 1,
+      thirdNo: 1,
+    });
+    // the AI absent in one: absent of all
+    const ai = t.rows.find((r) => r.code === '417')!;
+    expect(ai).toMatchObject({ total: 2, appeared: 1, absentNo: 1, absentPct: 50 });
+    expect(t.columns.find((c) => c.key === 'gA1')!.label).toBe('A1 (91-100)');
+    const both = resultAnalysisTable(now, SUBJECTS, DEFAULT_BOARD_RULES, { gender: 'both' });
+    // two subjects × all/boys/girls, then three totals
+    expect(both.rows.map((r) => r.subject)).toEqual([
+      'English Lng & Lit · All',
+      'English Lng & Lit · Boys',
+      'English Lng & Lit · Girls',
+      'AI · All',
+      'AI · Boys',
+      'AI · Girls',
+      'Total · All',
+      'Total · Boys',
+      'Total · Girls',
+    ]);
+    expect(both.strong).toEqual([6, 7, 8]);
+    const comp = resultAnalysisTable(now, SUBJECTS, DEFAULT_BOARD_RULES, {
+      gender: 'all',
+      result: 'COMP',
+    });
+    expect(comp.rows.find((r) => r.code === '184')).toMatchObject({ appeared: 1, compNo: 1 });
+    const ch = resultCharts(
+      [
+        { examYear: 2026, candidates: now },
+        { examYear: 2025, candidates: before },
+      ],
+      SUBJECTS,
+      DEFAULT_BOARD_RULES,
+      { gender: 'both' },
+    );
+    expect(ch.passTrend.labels).toEqual(['2024-25', '2025-26']);
+    expect(ch.passTrend.series.map((x) => x.label)).toEqual(['All', 'Boys', 'Girls']);
+    // 2026: 4 PASS of 5 appeared (the compartment is not a pass)
+    expect(ch.passTrend.series[0]!.values[1]).toBe(80);
+    expect(ch.marks.find((m) => m.code === '184')!.values).toEqual([95, 57, 30]);
+    expect(ch.subjectYears!.series.map((x) => x.label)).toEqual(['2024-25', '2025-26']);
   });
 });

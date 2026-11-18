@@ -552,6 +552,18 @@ subject with boys and girls: appeared, failures, compartments, pass, boys' and g
 highest, and boys and girls in each marks range A1 (91–100) … E1 (0–32) — always by the marks, whatever the grade
 setting — with a total line; for all students, boys or girls, all subjects or one. Excel and PDF (A3) give the same.
 
+**Result analysis** (the old page of that name) has two views with the same filters — class, examination, years in
+the charts, gender (all, boys, girls, or **boys vs girls**: each subject as an All, a Boys and a Girls row), subject
+and result. **Table**: a row a subject with the total students, appeared, absent, pass, fail, compartment, highest,
+lowest and average marks, distinction and the three divisions, and the grades; the grades always add up to those
+who appeared, and their mark ranges show only when they are counted from the marks. **Graphs**: pass % over the
+years, grades by subject, marks by subject, and one subject's grades across the years — each with its numbers
+under it. Excel and PDF give the table. On every wide report table the first columns (number, code, subject or
+name) stay in view while the rest scrolls sideways.
+
+**Calculation method** wherever a student's aggregate counts (Results, Range wise summary): the best five by the
+school's rule, the **first five subjects as CBSE printed them**, or all subjects.
+
 **Analysis: the ten annexures.** **Analysis** counts a saved year as the school's own result workbook does: pick the
 class, the examination and a section (or all) and the annexure — 1 School summary (five years, the result in
 figures, the top scorers, full scores, distinctions, the highest in each subject, A1 + A2), 2 Overall result (boys

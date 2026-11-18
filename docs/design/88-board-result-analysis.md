@@ -448,3 +448,30 @@ subject); compartment, absent, withheld / later lists (with the student, section
   `subjectPerformance` in `board-reports.ts` returns an `AnTable` (heading groups); `GET reports/subject-summary` and
   `/file` (`singleTableXlsx`, `singleTablePdf` — A3, the total bold). The admin's `GroupedTable` draws heading groups.
   Tests: unit + 1, e2e + 1.
+
+## Result Analysis, First 5, frozen columns (18 Nov 2026)
+
+The school's old "Result Analysis" page (its review notes in the user's file `result_summary_page.md`), with the
+answers chosen: one report with two views, boys vs girls as three rows a subject, "First 5 subjects" everywhere,
+frozen first columns on every wide report table.
+
+- **Result analysis** (Reports): **Table** — a row a subject (24 figures: total, appeared, absent No./% of all, pass /
+  fail / compartment No./% of appeared, highest, lowest, average, distinction and 1st / 2nd / 3rd division No./%,
+  the eight grades) and the total line(s); gender "Boys vs girls" gives an All, a Boys and a Girls row a subject.
+  **Graphs** — pass % over the years (the CBSE result; one subject's passes when a subject is chosen; a line a gender
+  for boys vs girls), grades by subject (stacked A / B / C / D / E groups), marks by subject (highest, average,
+  lowest), one subject's grades across the years; each chart with its numbers folded under it. Filters on both
+  views: class, examination, years in the charts (0–4 saved years before), gender, subject, result (the old page
+  hid its result filter). `resultAnalysisTable`, `resultCharts` in `board-reports.ts`; `GET reports/result-analysis`
+  and `/file` (the table as Excel / A3 PDF).
+- The old page's faults put right: the grades add up to those appeared (marks: D from the pass marks to 40, E below;
+  printed: D1 + D2 as D); grade ranges in the headings only when counted from the marks; a proper title; no
+  duplicate chart; the same filters on both views; frozen columns; the division cut-offs in the note.
+- **First 5 subjects** (`first5`): the first five subjects with marks in the order CBSE printed them, over 500 — a
+  calculation method next to the best five and all subjects on the Results tab and the Range wise summary.
+- **Frozen columns**: `.ep-table-freeze-2` / `-3` (packages/ui, tokens only) keep the number, code / roll and
+  subject / name in view on the Results tab, Subject summary and Result analysis; the shared line chart's last label
+  now ends at its point instead of being cut.
+- Tests: unit + 2 (`board-reports.spec.ts` result analysis and charts; `board-marks.spec.ts` first five), e2e + 1
+  (`board-years.e2e-spec.ts`: table, boys vs girls, charts over two years, files, first five). Browser + axe at
+  1440 and 375 (table frozen while scrolled, graphs, first five on Results and Range wise summary).

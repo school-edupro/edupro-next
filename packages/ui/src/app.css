@@ -779,6 +779,52 @@
 .ep-table-tight .ep-table th {
   letter-spacing: normal;
 }
+/* wide report tables: the first columns (number, code or roll, subject or name) stay in view while the rest
+   scrolls sideways. -2 freezes a number and a name; -3 a number, a code and a name. Only the first heading row
+   is frozen (a second row holds the sub-headings of the groups). */
+.ep-table-freeze-2 {
+  --ep-freeze-1: 3rem;
+  --ep-freeze-2: 10rem;
+}
+.ep-table-freeze-3 {
+  --ep-freeze-1: 3rem;
+  --ep-freeze-2: 5.5rem;
+  --ep-freeze-3: 10rem;
+}
+.ep-table-freeze-2 .ep-table :is(thead tr:first-child th, tbody td):nth-child(-n + 2),
+.ep-table-freeze-3 .ep-table :is(thead tr:first-child th, tbody td):nth-child(-n + 3) {
+  position: sticky;
+  z-index: 1;
+  background: var(--surface-card);
+}
+.ep-table-freeze-2 .ep-table thead tr:first-child th:nth-child(-n + 2),
+.ep-table-freeze-3 .ep-table thead tr:first-child th:nth-child(-n + 3) {
+  z-index: 3;
+  background: var(--surface-subtle);
+}
+.ep-table-freeze-2 .ep-table tbody tr:hover td:nth-child(-n + 2),
+.ep-table-freeze-3 .ep-table tbody tr:hover td:nth-child(-n + 3) {
+  background: var(--surface-subtle);
+}
+:is(.ep-table-freeze-2, .ep-table-freeze-3) .ep-table :is(thead tr:first-child th, tbody td):nth-child(1) {
+  left: 0;
+  min-width: var(--ep-freeze-1);
+  max-width: var(--ep-freeze-1);
+}
+:is(.ep-table-freeze-2, .ep-table-freeze-3) .ep-table :is(thead tr:first-child th, tbody td):nth-child(2) {
+  left: var(--ep-freeze-1);
+  min-width: var(--ep-freeze-2);
+  max-width: var(--ep-freeze-2);
+}
+.ep-table-freeze-3 .ep-table :is(thead tr:first-child th, tbody td):nth-child(3) {
+  left: calc(var(--ep-freeze-1) + var(--ep-freeze-2));
+  min-width: var(--ep-freeze-3);
+  max-width: var(--ep-freeze-3);
+  box-shadow: inset -1px 0 0 var(--border-default);
+}
+.ep-table-freeze-2 .ep-table :is(thead tr:first-child th, tbody td):nth-child(2) {
+  box-shadow: inset -1px 0 0 var(--border-default);
+}
 .ep-table tbody tr:last-child td {
   border-bottom: none;
 }

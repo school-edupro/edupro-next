@@ -84,4 +84,12 @@ describe('the Results tab: candidate-wise marks (docs/design/88)', () => {
     expect(f({ sort: 'section' }).slice(-2)).toEqual(['4', '5']);
     expect(f({ sort: 'roll' })[0]).toBe('1');
   });
+
+  it('first five: the first five subjects as CBSE printed them, whatever their marks', () => {
+    const rows = marksRows(all, SUBJECTS, DEFAULT_BOARD_RULES, 'first5');
+    // six subjects 97, 95, 95, 97, 99, 97: the first five 483, not the best five 485
+    const six = rows.find((r) => r.roll === '31000002')!;
+    expect(six).toMatchObject({ total: 483, max: 500, percent: 96.6 });
+    expect(six.subjects.filter((x) => !x.counted).map((x) => x.code)).toEqual(['417']);
+  });
 });

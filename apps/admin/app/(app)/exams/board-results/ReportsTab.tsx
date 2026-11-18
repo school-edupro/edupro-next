@@ -4,10 +4,11 @@ import { FileLinks } from '@/components/FileLinks';
 import { apiFetch } from '@/lib/api';
 import { yearLabel, type BoardRange } from '@/lib/board-results';
 import { OverallReport } from './OverallReport';
+import { ResultAnalysisReport } from './ResultAnalysisReport';
 import { SubjectPerfReport } from './SubjectPerfReport';
 
 /** The ready-made reports of the Reports tab (more join the list as they are built). */
-const REPORTS = ['range', 'overall', 'subjects'] as const;
+const REPORTS = ['range', 'overall', 'subjects', 'analysis'] as const;
 
 /**
  * The Reports tab (docs/design/88): reports EduPro makes ready from the saved CBSE results, as the school's old
@@ -25,11 +26,15 @@ export async function ReportsTab({
     code?: string;
     report?: string;
     method?: string;
+    result?: string;
+    view?: string;
   };
 }) {
   const b = await getTranslations('boardResults');
   const report =
-    sp.report === 'overall' ? 'overall' : sp.report === 'subjects' ? 'subjects' : 'range';
+    sp.report === 'overall' || sp.report === 'subjects' || sp.report === 'analysis'
+      ? sp.report
+      : 'range';
   const nav = (
     <nav className="ep-tabs-links" aria-label={b('rp_list')}>
       {REPORTS.map((x) => (
@@ -43,11 +48,17 @@ export async function ReportsTab({
       ))}
     </nav>
   );
-  if (report === 'overall' || report === 'subjects')
+  if (report === 'overall' || report === 'subjects' || report === 'analysis')
     return (
       <div style={{ display: 'grid', gap: 'var(--sp-4)', gridTemplateColumns: 'minmax(0, 1fr)' }}>
         {nav}
-        {report === 'overall' ? <OverallReport sp={sp} /> : <SubjectPerfReport sp={sp} />}
+        {report === 'overall' ? (
+          <OverallReport sp={sp} />
+        ) : report === 'subjects' ? (
+          <SubjectPerfReport sp={sp} />
+        ) : (
+          <ResultAnalysisReport sp={sp} />
+        )}
       </div>
     );
   const cls = sp.classLabel === 'XII' ? 'XII' : 'X';

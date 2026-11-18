@@ -200,7 +200,14 @@ export function LineChart({
         })}
         {labels.map((l, i) =>
           labels.length > 16 && i % 2 ? null : (
-            <text key={String(i)} x={x(i)} y={base + 16} textAnchor="middle" fontSize="11">
+            <text
+              key={String(i)}
+              x={x(i)}
+              y={base + 16}
+              // the last label ends at its point, so it is not cut at the edge
+              textAnchor={labels.length > 1 && i === labels.length - 1 ? 'end' : 'middle'}
+              fontSize="11"
+            >
               {l}
             </text>
           ),

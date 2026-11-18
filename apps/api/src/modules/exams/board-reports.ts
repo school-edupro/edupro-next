@@ -384,7 +384,7 @@ export function subjectPerformance(
     ...figures(by.get(code)!),
   }));
   const total: Record<string, Cell> = {
-    sno: null,
+    sno: '',
     subject: 'Total',
     ...figures(codes.flatMap((code) => by.get(code)!)),
     highest: null,
@@ -396,5 +396,255 @@ export function subjectPerformance(
     rows: [...rows, total],
     strong: [rows.length],
     note: 'Percentage-based, not grade-based: the A1 … E1 columns count marks in those ranges. Shares are of those who appeared; a compartment subject is not a pass; averages are of the marks.',
+  };
+}
+
+// ---- Result Analysis: the subject table and its charts (the old "Result Analysis" page) ----
+
+export type GenderView = Gender | 'both';
+
+const GRADE_RANGE: Record<string, string> = {
+  A1: '91-100',
+  A2: '81-90',
+  B1: '71-80',
+  B2: '61-70',
+  C1: '51-60',
+  C2: '41-50',
+};
+
+/** A subject's (or all subjects') figures: the old page's 24 columns. */
+function analysisFigures(es: Entry[], rules: BoardRules): Record<string, Cell> {
+  const s = subjectStats(es, rules);
+  const marks = s.app.map((e) => e.m.marks);
+  const between = (from: number, below: number) =>
+    marks.filter((m) => m >= from && m < below).length;
+  const pc = (k: number, of: number) => (of > 0 ? round2((k * 100) / of) : null);
+  const row: Record<string, Cell> = {
+    total: s.total,
+    appeared: s.appeared,
+    absentNo: s.absent,
+    absentPct: pc(s.absent, s.total),
+    passNo: s.pass,
+    passPct: pc(s.pass, s.appeared),
+    failNo: s.fail,
+    failPct: pc(s.fail, s.appeared),
+    compNo: s.comp,
+    compPct: pc(s.comp, s.appeared),
+    highest: s.highest,
+    lowest: s.lowest,
+    avg: s.average,
+  };
+  const div: Array<[string, number, number]> = [
+    ['dist', rules.distinction, Infinity],
+    ['first', FIRST_DIVISION, rules.distinction],
+    ['second', SECOND_DIVISION, FIRST_DIVISION],
+    ['third', rules.passMarks, SECOND_DIVISION],
+  ];
+  for (const [k, from, below] of div) {
+    const n = between(from, below);
+    row[`${k}No`] = n;
+    row[`${k}Pct`] = pc(n, s.appeared);
+  }
+  for (const g of GRADES) row[`g${g}`] = s.grades[g];
+  return row;
+}
+
+/**
+ * The Result Analysis table: a row a subject (and, for boys against girls, an All, a Boys and a Girls row) with the
+ * students, appeared, absent, pass, fail, compartment, marks, divisions and grades, and the total line(s). The
+ * grades always add up to those who appeared (from the marks: D from the pass marks to 40, E below; as printed:
+ * D1 + D2 as D).
+ */
+export function resultAnalysisTable(
+  candidates: AnCandidate[],
+  subjects: AnSubject[],
+  rules: BoardRules,
+  opts: { gender: GenderView; code?: string | undefined; result?: string | undefined },
+): AnTable {
+  const kind = new Map(subjects.map((s) => [s.code, s.kind]));
+  const order = new Map(subjects.map((s, i) => [s.code, i]));
+  const nameOf = (code: string) =>
+    shortSubject(subjects.find((s) => s.code === code)?.name ?? `Subject ${code}`);
+  const pool = candidates.filter((c) => !opts.result || c.result === opts.result);
+  const genders: Gender[] = opts.gender === 'both' ? ['all', 'M', 'F'] : [opts.gender];
+  const by = new Map(
+    genders.map((g) => [g, entriesBySubject(pool.filter((c) => g === 'all' || c.sex === g))]),
+  );
+  const codes = [...new Set([...by.values()].flatMap((m) => [...m.keys()]))]
+    .filter((c) => kind.get(c) !== 'internal')
+    .filter((c) => !opts.code || c === opts.code)
+    .filter((c) => [...by.values()].some((m) => (m.get(c) ?? []).some((e) => e.m.marks !== null)))
+    .sort((a, b) => (order.get(a) ?? 999) - (order.get(b) ?? 999) || a.localeCompare(b));
+  const word = (g: Gender) => (g === 'M' ? 'Boys' : g === 'F' ? 'Girls' : 'All');
+  const label = (name: string, g: Gender) =>
+    opts.gender === 'both' ? `${name} · ${word(g)}` : name;
+  const n = (key: string, lbl: string, group?: string): AnColumn => ({
+    key,
+    label: lbl,
+    num: true,
+    ...(group ? { group } : {}),
+  });
+  const gradeLabel = (g: string) => {
+    const shown = g === 'E' ? 'E1' : g;
+    if (rules.grades === 'printed') return shown;
+    if (g === 'D') return `D (${String(rules.passMarks)}-40)`;
+    if (g === 'E') return `E1 (0-${String(rules.passMarks - 1)})`;
+    return `${shown} (${GRADE_RANGE[g]!})`;
+  };
+  const columns: AnColumn[] = [
+    n('sno', 'S.No'),
+    { key: 'code', label: 'Code', width: 1 },
+    { key: 'subject', label: 'Subject', width: 3 },
+    n('total', 'Total', 'Students'),
+    n('appeared', 'Appeared', 'Students'),
+    n('absentNo', 'No.', 'Absent'),
+    n('absentPct', '%', 'Absent'),
+    n('passNo', 'No.', 'Pass'),
+    n('passPct', '%', 'Pass'),
+    n('failNo', 'No.', 'Fail'),
+    n('failPct', '%', 'Fail'),
+    n('compNo', 'No.', 'Compartment'),
+    n('compPct', '%', 'Compartment'),
+    n('highest', 'Highest', 'Marks'),
+    n('lowest', 'Lowest', 'Marks'),
+    n('avg', 'Average', 'Marks'),
+    n('distNo', 'No.', 'Distinction'),
+    n('distPct', '%', 'Distinction'),
+    n('firstNo', 'No.', '1st division'),
+    n('firstPct', '%', '1st division'),
+    n('secondNo', 'No.', '2nd division'),
+    n('secondPct', '%', '2nd division'),
+    n('thirdNo', 'No.', '3rd division'),
+    n('thirdPct', '%', '3rd division'),
+    ...GRADES.map((g) => n(`g${g}`, gradeLabel(g), 'Grades')),
+  ];
+  const rows: Array<Record<string, Cell>> = [];
+  codes.forEach((code, i) => {
+    for (const g of genders)
+      rows.push({
+        sno: g === genders[0] ? i + 1 : '',
+        code,
+        subject: label(nameOf(code), g),
+        ...analysisFigures(by.get(g)!.get(code) ?? [], rules),
+      });
+  });
+  const firstTotal = rows.length;
+  for (const g of genders)
+    rows.push({
+      sno: '',
+      code: '',
+      subject: label('Total', g),
+      ...analysisFigures(
+        codes.flatMap((code) => by.get(g)!.get(code) ?? []),
+        rules,
+      ),
+      highest: null,
+      lowest: null,
+    });
+  return {
+    key: 'result-analysis',
+    title: 'Result analysis',
+    columns,
+    rows,
+    strong: genders.map((_, k) => firstTotal + k),
+    note: `Shares are of those who appeared (absent: of all). Divisions do not overlap: distinction from ${String(rules.distinction)}, 1st division from ${String(FIRST_DIVISION)}, 2nd from ${String(SECOND_DIVISION)}, 3rd from ${String(rules.passMarks)}. A compartment subject is not a pass. ${
+      rules.grades === 'printed'
+        ? 'Grades as CBSE printed them (D1 and D2 counted as D).'
+        : 'Grades from the marks; they add up to those who appeared.'
+    }`,
+  };
+}
+
+export interface ResultCharts {
+  /** pass % a year (the CBSE result; one subject's passes when a subject is chosen) */
+  passTrend: { labels: string[]; series: Array<{ label: string; values: Array<number | null> }> };
+  /** a subject's grades in five groups (A, B, C, D, E) — the bars of the grade chart */
+  gradeSpread: Array<{ code: string; name: string; values: number[] }>;
+  /** a subject's highest, average and lowest marks */
+  marks: Array<{ code: string; name: string; values: number[] }>;
+  /** one subject's grades across the years */
+  subjectYears: {
+    code: string;
+    name: string;
+    labels: string[];
+    series: Array<{ label: string; values: number[] }>;
+  } | null;
+}
+
+/** The charts of the Result Analysis: across the years given (the first is the year asked). */
+export function resultCharts(
+  years: Array<{ examYear: number; candidates: AnCandidate[] }>,
+  subjects: AnSubject[],
+  rules: BoardRules,
+  opts: { gender: GenderView; code?: string | undefined; result?: string | undefined },
+): ResultCharts {
+  const kind = new Map(subjects.map((s) => [s.code, s.kind]));
+  const order = new Map(subjects.map((s, i) => [s.code, i]));
+  const nameOf = (code: string) =>
+    shortSubject(subjects.find((s) => s.code === code)?.name ?? `Subject ${code}`);
+  const ordered = [...years].sort((a, b) => a.examYear - b.examYear);
+  const asked = years[0]!;
+  const keep = (cs: AnCandidate[], g: Gender) =>
+    cs.filter((c) => (!opts.result || c.result === opts.result) && (g === 'all' || c.sex === g));
+  const genders: Gender[] = opts.gender === 'both' ? ['all', 'M', 'F'] : [opts.gender];
+  const word = (g: Gender) => (g === 'M' ? 'Boys' : g === 'F' ? 'Girls' : 'All');
+  const passPct = (cs: AnCandidate[]) => {
+    if (opts.code) {
+      const es = entriesBySubject(cs).get(opts.code) ?? [];
+      const s = es.length ? subjectStats(es, rules) : null;
+      return s && s.appeared ? round2((s.pass * 100) / s.appeared) : null;
+    }
+    const app = cs.filter((c) => c.marks.some((m) => m.marks !== null));
+    return app.length
+      ? round2((app.filter((c) => c.result === 'PASS').length * 100) / app.length)
+      : null;
+  };
+  const main: Gender = opts.gender === 'both' ? 'all' : opts.gender;
+  const now = entriesBySubject(keep(asked.candidates, main));
+  const codes = [...now.keys()]
+    .filter((c) => kind.get(c) !== 'internal')
+    .filter((c) => !opts.code || c === opts.code)
+    .filter((c) => now.get(c)!.some((e) => e.m.marks !== null))
+    .sort((a, b) => (order.get(a) ?? 999) - (order.get(b) ?? 999) || a.localeCompare(b));
+  const groups = (g: Record<string, number>) => [
+    g.A1! + g.A2!,
+    g.B1! + g.B2!,
+    g.C1! + g.C2!,
+    g.D!,
+    g.E!,
+  ];
+  const focus = opts.code ?? codes[0];
+  return {
+    passTrend: {
+      labels: ordered.map((y) => yearLabel(y.examYear)),
+      series: genders.map((g) => ({
+        label: word(g),
+        values: ordered.map((y) => passPct(keep(y.candidates, g))),
+      })),
+    },
+    gradeSpread: codes.map((code) => ({
+      code,
+      name: nameOf(code),
+      values: groups(subjectStats(now.get(code)!, rules).grades),
+    })),
+    marks: codes.map((code) => {
+      const s = subjectStats(now.get(code)!, rules);
+      return { code, name: nameOf(code), values: [s.highest ?? 0, s.average ?? 0, s.lowest ?? 0] };
+    }),
+    subjectYears: focus
+      ? {
+          code: focus,
+          name: nameOf(focus),
+          labels: GRADES.map((g) => (g === 'E' ? 'E1' : g)),
+          series: ordered.map((y) => {
+            const es = entriesBySubject(keep(y.candidates, main)).get(focus) ?? [];
+            const st = es.length ? subjectStats(es, rules) : null;
+            return {
+              label: yearLabel(y.examYear),
+              values: GRADES.map((g) => (st ? st.grades[g] : 0)),
+            };
+          }),
+        }
+      : null,
   };
 }

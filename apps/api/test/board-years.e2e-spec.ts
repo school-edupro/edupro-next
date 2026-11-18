@@ -357,4 +357,59 @@ describe('CBSE board results: earlier years (e2e, docs/design/88 phase E)', () =
     );
     expect(x.statusCode).toBe(200);
   });
+
+  it('Reports: the Result Analysis — the subject table, boys vs girls, the charts across years, the files; first five', async () => {
+    const r = await get('/exams/board-results/reports/result-analysis?classLabel=X');
+    expect(r.statusCode).toBe(200);
+    const d = r.json() as {
+      table: { rows: Array<Record<string, string | number | null>> };
+      charts: {
+        passTrend: { labels: string[]; series: Array<{ values: Array<number | null> }> };
+        marks: Array<{ code: string; values: number[] }>;
+      };
+    };
+    const eng = d.table.rows.find((x) => x.code === '184')!;
+    expect(eng).toMatchObject({
+      total: 3,
+      appeared: 3,
+      passNo: 3,
+      distNo: 2,
+      firstNo: 1,
+      highest: 90,
+      lowest: 70,
+      avg: 80,
+    });
+    // the two saved years in the pass chart (all passed)
+    expect(d.charts.passTrend.labels).toHaveLength(2);
+    expect(d.charts.passTrend.series[0]!.values).toEqual([100, 100]);
+    expect(d.charts.marks.find((m) => m.code === '184')!.values).toEqual([90, 80, 70]);
+    const both = (
+      await get('/exams/board-results/reports/result-analysis?classLabel=X&gender=both&code=184')
+    ).json();
+    expect(both.table.rows.map((x: { subject: string }) => x.subject)).toEqual([
+      'English Lng & Lit · All',
+      'English Lng & Lit · Boys',
+      'English Lng & Lit · Girls',
+      'Total · All',
+      'Total · Boys',
+      'Total · Girls',
+    ]);
+    expect(both.charts.passTrend.series).toHaveLength(3);
+    const x = await get(
+      '/exams/board-results/reports/result-analysis/file?classLabel=X&format=xlsx',
+    );
+    expect(x.statusCode).toBe(200);
+    const p = await get(
+      '/exams/board-results/reports/result-analysis/file?classLabel=X&format=pdf&gender=both',
+    );
+    expect(p.json().filename).toMatch(/result-analysis\.pdf$/);
+    // the first five as printed on the Results tab and the Range wise summary
+    const first = (await get('/exams/board-results/marks?classLabel=X&method=first5')).json();
+    expect(first.method).toBe('first5');
+    expect(first.rows[0]).toMatchObject({ max: 500 });
+    expect(
+      (await get('/exams/board-results/reports/range-overall?classLabel=X&method=first5'))
+        .statusCode,
+    ).toBe(200);
+  });
 });
