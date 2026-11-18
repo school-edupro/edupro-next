@@ -18,6 +18,14 @@
 
 After remediation: 0 critical, 0 high, 1 moderate (the dev-only `uuid`).
 
+**Accepted exception (18 Nov 2026), temporary:** `picomatch` ≤ 4.0.7 — ReDoS through single-branch repeated
+extglobs (GHSA-fc5q-39xc-vjpf / CVE-2026-112366), high. No fixed release exists (4.0.7 is the latest). It reaches us
+through development tooling — ESLint (`eslint-config-next`, `typescript-eslint`) and Jest's `expect` — and, in the
+admin app's production dependencies, through `next-intl` → `@parcel/watcher` (a file watcher next-intl uses while
+developing and building). In every path it matches the repository's own glob patterns; no request handling passes
+user input to it. Ignored for `pnpm audit` in the root `package.json` (`pnpm.auditConfig.ignoreCves`; pnpm 9 does not read
+`ignoreGhsas`). **Remove the ignore as soon as picomatch ships a fix** and raise the version (override if needed).
+
 ## 2. Headers and client-side controls
 
 | Control                              | Admin                                                      | Parent                                                                                   | Teacher              | Public                | API                                       |
