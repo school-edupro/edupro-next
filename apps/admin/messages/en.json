@@ -3740,7 +3740,9 @@
     "yf_removeHelp": "The year's typed figures go; a file saved for the year is not touched.",
     "yf_fileSaved": "file saved: the file is used",
     "yf_none": "No year typed in",
-    "yf_subjectsCount": "Subjects"
+    "yf_subjectsCount": "Subjects",
+    "an_details": "Students and details (link students, upload the details sheet)",
+    "an_noDetails": "No candidate has a section or details yet, so the section-wise, category and teacher annexures are empty. Link the students to their records, or upload the school's details sheet, on the file's page:"
   },
   "stock": {
     "start": "Open a stock check",

@@ -166,7 +166,13 @@ export async function AnalysisTab({
                 {b('an_file', {
                   file: v.file.fileName ?? `#${v.file.id}`,
                   when: v.file.savedAt ? when(v.file.savedAt) : '—',
-                })}
+                })}{' '}
+                <a
+                  href={`/exams/board-results/imports/${v.file.id}`}
+                  style={{ textDecoration: 'underline' }}
+                >
+                  {b('an_details')}
+                </a>
               </>
             ) : null}
           </p>
@@ -184,6 +190,17 @@ export async function AnalysisTab({
         </Card>
       ) : (
         <>
+          {!v.sections.length && v.file ? (
+            <div className="ep-alert ep-alert--warning" role="status">
+              {b('an_noDetails')}{' '}
+              <a
+                href={`/exams/board-results/imports/${v.file.id}`}
+                style={{ textDecoration: 'underline' }}
+              >
+                {b('an_details')}
+              </a>
+            </div>
+          ) : null}
           <div className="ep-dash-kpis">
             <KpiTile label={b('an_registered')} value={String(h.registered)} />
             <KpiTile

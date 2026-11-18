@@ -201,6 +201,13 @@ export default async function BoardImportPage({
             {String(u.saved.fromRecord)})
             {u.saved.fromSheet ? ` or the details sheet (${String(u.saved.fromSheet)})` : ''}.
           </p>
+          {u.saved.fromRecord + u.saved.fromSheet === 0 ? (
+            <p className="ep-field__help" style={{ marginTop: 0 }}>
+              <strong>No details yet</strong> — the annexures need each candidate&apos;s section,
+              EWS, CWSN, category, boarder and staff ward. Link the students (Review students) so
+              they come from the records, or upload the school&apos;s details sheet.
+            </p>
+          ) : null}
           <span style={{ display: 'inline-flex', gap: 'var(--sp-2)', flexWrap: 'wrap' }}>
             <a
               className={`ep-btn ep-btn--sm ${u.saved.none ? 'ep-btn--primary' : 'ep-btn--secondary'}`}
@@ -224,7 +231,7 @@ export default async function BoardImportPage({
                 </ConfirmAction>
                 <DialogButton
                   id="details-sheet"
-                  className="ep-btn ep-btn--ghost ep-btn--sm"
+                  className="ep-btn ep-btn--secondary ep-btn--sm"
                   label="Upload the details sheet"
                   title="Upload the details sheet (optional)"
                 >
