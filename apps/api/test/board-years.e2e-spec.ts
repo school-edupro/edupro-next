@@ -4,6 +4,7 @@
  * rows, the trend and Annexure 5. All names, roll numbers and marks are invented.
  */
 import type { NestFastifyApplication } from '@nestjs/platform-fastify';
+import { PDFDocument } from 'pdf-lib';
 import { gazetteX, type FixtureCandidate } from './board-gazette-fixture';
 import {
   createApp,
@@ -310,11 +311,10 @@ describe('CBSE board results: earlier years (e2e, docs/design/88 phase E)', () =
     const p = await get(
       '/exams/board-results/reports/range-subjects/file?classLabel=X&compare=1&format=pdf',
     );
-    expect(
-      Buffer.from(p.json().base64 as string, 'base64')
-        .subarray(0, 4)
-        .toString(),
-    ).toBe('%PDF');
+    const pdfBytes = Buffer.from(p.json().base64 as string, 'base64');
+    expect(pdfBytes.subarray(0, 4).toString()).toBe('%PDF');
+    // a subject a page
+    expect((await PDFDocument.load(pdfBytes)).getPageCount()).toBe(d.summary.blocks.length);
     expect(
       (await get('/exams/board-results/reports/range-subjects?classLabel=X', auditor)).statusCode,
     ).toBe(200);

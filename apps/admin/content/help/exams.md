@@ -538,7 +538,8 @@ appeared, absent, pass, fail, compartment, distinction, 1st / 2nd / 3rd division
 lowest and average marks — a count and a share of those who appeared — for the chosen examination and up to four
 saved years before it (**Compare with**), for all students, boys or girls, all subjects or one. Divisions do not
 overlap: distinction from the distinction marks (Set-up), 1st division from 60, 2nd from 45, 3rd from the pass marks.
-Excel and PDF give the same.
+Excel and PDF give the same: the PDF prints each subject on a page of its own (headings and the signature boxes
+on every page), and the Excel sheet prints the same way.
 
 **Analysis: the ten annexures.** **Analysis** counts a saved year as the school's own result workbook does: pick the
 class, the examination and a section (or all) and the annexure — 1 School summary (five years, the result in

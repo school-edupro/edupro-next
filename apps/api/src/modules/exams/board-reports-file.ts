@@ -45,7 +45,16 @@ export async function rangeXlsx(r: RangeSummary, head: ReportHead): Promise<Buff
       c.alignment = { vertical: 'middle' };
     });
   ws.views = [{ state: 'frozen', ySplit: h.number }];
-  for (const b of r.blocks) {
+  ws.pageSetup = {
+    orientation: r.years.length <= 2 ? 'portrait' : 'landscape',
+    fitToPage: true,
+    fitToWidth: 1,
+    fitToHeight: 0,
+    printTitlesRow: `${String(g.number)}:${String(h.number)}`,
+  };
+  for (const [k, b] of r.blocks.entries()) {
+    // each subject on a page of its own when printed
+    if (k > 0) ws.lastRow?.addPageBreak();
     const t = ws.addRow(['', `${b.code} - ${b.name.toUpperCase()}`]);
     t.font = { bold: true };
     t.eachCell({ includeEmpty: true }, (c) => {
@@ -77,7 +86,10 @@ export async function rangeXlsx(r: RangeSummary, head: ReportHead): Promise<Buff
 export async function rangePdf(r: RangeSummary, head: ReportHead): Promise<Buffer> {
   const rows: Array<Array<string | number>> = [];
   const shade: Record<number, 'heading'> = {};
+  // each subject starts a page (its headings repeated), the signature boxes at the foot of each
+  const breakBefore: number[] = [];
   for (const b of r.blocks) {
+    if (rows.length) breakBefore.push(rows.length);
     shade[rows.length] = 'heading';
     rows.push([`${b.code} - ${b.name.toUpperCase()}`, '', ...r.years.flatMap(() => ['', ''])]);
     b.rows.forEach((row, i) =>
@@ -122,6 +134,8 @@ export async function rangePdf(r: RangeSummary, head: ReportHead): Promise<Buffe
     ],
     rows: rows.length ? rows : [['', 'No subject', ...r.years.flatMap(() => ['', ''])]],
     shade,
+    breakBefore,
+    signsEachBreak: true,
     portrait: r.years.length <= 2,
     fontSize: 8,
     footnote:

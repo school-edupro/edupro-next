@@ -429,5 +429,8 @@ subject); compartment, absent, withheld / later lists (with the student, section
   labels carry the mark ranges when grades are counted from the marks.
 - `board-reports.ts` (`rangeSubjectSummary`), `GET reports/range-subjects` and `/file` (xlsx as on screen; PDF on the
   letterhead with heading bands and signature boxes; audited `exams.board_result.report_export`).
+- Printing: the PDF puts each subject on a page of its own (the headings and the Prepared / Checked / Principal
+  boxes on every page); the Excel sheet has a page break before each subject, fits the page width and repeats the
+  headings.
 - Tests: unit `board-reports.spec.ts` (2); e2e `board-years.e2e-spec.ts` + 1 (two saved years compared, girls only,
-  one subject, the files). Browser + axe at 1440 and 375.
+  one subject, the files). Browser + axe at 1440 and 375. The e2e also checks one PDF page a subject.
