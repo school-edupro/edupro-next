@@ -9,7 +9,9 @@ const okId = (id: string) => /^\d{1,18}$/.test(id);
 const str = (fd: FormData, k: string) => String(fd.get(k) ?? '').trim();
 const back = (path: string, error: unknown): never => {
   if (error instanceof ApiError) {
-    const detail = error.problem.detail ?? error.problem.type;
+    // a form check's first message ("A+ starts at 90, so A must end at 89 …") when there is no detail
+    const first = (error.problem.errors as Array<{ message?: string }> | undefined)?.[0]?.message;
+    const detail = error.problem.detail ?? first ?? error.problem.type;
     redirect(
       `${path}${path.includes('?') ? '&' : '?'}error=${encodeURIComponent(error.problem.type)}&detail=${encodeURIComponent(detail.slice(0, 300))}`,
     );
@@ -303,24 +305,51 @@ export async function removeBoardTeacher(fd: FormData) {
 
 // ---- phase C: the annexures' rules -----------------------------------------------------------------------------------
 
-/** The rules the annexures count with: the best five, the distinction and pass marks, grades from marks or printed. */
+/**
+ * A class's analysis rules: the best five built from its parts, the distinction and pass marks, how grades are
+ * counted and the grade scale (the filled rows; the API sorts them and checks 0–100 is covered).
+ */
 export async function saveBoardRules(fd: FormData) {
-  const here = '/exams/board-results?tab=setup';
+  const cls = str(fd, 'classLabel') === 'XII' ? 'XII' : 'X';
+  const here = `/exams/board-results?tab=setup&rules=${cls}`;
+  const grades = fd.getAll('grade').map((v) => String(v).trim());
+  const froms = fd.getAll('from').map((v) => String(v).trim());
+  const tos = fd.getAll('to').map((v) => String(v).trim());
+  // an empty row is no grade (that is how one is removed); a half-filled row is sent back
+  const rows = grades
+    .map((grade, i) => ({ row: i + 1, grade, from: froms[i] ?? '', to: tos[i] ?? '' }))
+    .filter((r) => r.grade || r.from || r.to);
+  const half = rows.find((r) => !r.grade || r.from === '' || r.to === '');
+  if (half)
+    redirect(
+      `${here}&error=validation-failed&detail=${encodeURIComponent(`Grade row ${String(half.row)}: give the grade, its "from" and its "to" marks, or clear the row.`)}`,
+    );
+  const scale = rows.map((r) => ({ grade: r.grade, from: Number(r.from), to: Number(r.to) }));
   try {
     await apiFetch('/exams/board-results/rules', {
       method: 'PUT',
       body: JSON.stringify({
-        bestFive: str(fd, 'bestFive'),
+        classLabel: cls,
+        bestFive: {
+          include: str(fd, 'include'),
+          rest: str(fd, 'rest'),
+          optional: str(fd, 'optional'),
+          optionalKinds: fd.getAll('optionalKinds').map(String),
+        },
         distinction: Number(str(fd, 'distinction')),
         passMarks: Number(str(fd, 'passMarks')),
         grades: str(fd, 'grades'),
+        scale,
       }),
     });
   } catch (error) {
     back(here, error);
   }
   revalidatePath('/exams/board-results');
-  done(here, 'The analysis rules are saved; the annexures count with them from now.');
+  done(
+    here,
+    `Class ${cls}'s analysis rules are saved; the annexures and reports count with them from now.`,
+  );
 }
 
 /** A child's board result shown on the parent app, or no longer (docs/design/88, phase D). */

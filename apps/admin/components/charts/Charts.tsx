@@ -11,10 +11,14 @@ export type ChartTone =
   | 'warning'
   | 'info'
   | 'muted'
-  // lighter shades, for charts of eight parts (the grades A1 … E1)
+  // lighter shades, for charts of many parts (a class's grades, up to twelve)
   | 'success-soft'
   | 'navy-soft'
-  | 'cyan-soft';
+  | 'cyan-soft'
+  | 'info-soft'
+  | 'muted-soft'
+  | 'warning-soft'
+  | 'danger-soft';
 export interface ChartSeries {
   label: string;
   tone: ChartTone;
@@ -157,6 +161,10 @@ const DARK_TEXT = new Set<ChartTone>([
   'success-soft',
   'navy-soft',
   'cyan-soft',
+  'info-soft',
+  'muted-soft',
+  'warning-soft',
+  'danger-soft',
 ]);
 
 /**

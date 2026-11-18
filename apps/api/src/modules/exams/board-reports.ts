@@ -1,6 +1,6 @@
 import {
   entriesBySubject,
-  GRADES,
+  gradeNames,
   round2,
   subjectStats,
   yearLabel,
@@ -14,6 +14,7 @@ import {
   type Entry,
 } from './board-analysis';
 import { marksRows, shortSubject, type MarksMethod } from './board-marks';
+import { bandRange, gradeTones, type GradeTone } from './board-rules';
 
 /**
  * The Reports tab's ready-made reports (docs/design/88). The first, as the school's old "Range Wise Subject
@@ -52,19 +53,10 @@ export const FIRST_DIVISION = 60;
 export const SECOND_DIVISION = 45;
 
 /** The grade rows' labels: with their mark ranges when the grades are counted from the marks. */
-const gradeLabel = (g: (typeof GRADES)[number], rules: BoardRules) => {
-  if (rules.grades === 'printed') return `${g === 'E' ? 'E1' : g} grade (as printed)`;
-  const ranges: Record<string, string> = {
-    A1: '91-100%',
-    A2: '81-90%',
-    B1: '71-80%',
-    B2: '61-70%',
-    C1: '51-60%',
-    C2: '41-50%',
-    D: `${String(rules.passMarks)}-40%`,
-    E: `0-${String(rules.passMarks - 1)}%`,
-  };
-  return `${g === 'E' ? 'E1' : g} grade (${ranges[g]!})`;
+const gradeLabel = (g: string, rules: BoardRules) => {
+  if (rules.grades === 'printed') return `${g} grade (as printed)`;
+  const band = rules.scale.find((b) => b.grade === g);
+  return band ? `${g} grade (${bandRange(band)}%)` : `${g} grade`;
 };
 
 export function rangeSubjectSummary(
@@ -136,7 +128,9 @@ export function rangeSubjectSummary(
         row('first', '1st division', (s) => between(s, FIRST_DIVISION, rules.distinction), true),
         row('second', '2nd division', (s) => between(s, SECOND_DIVISION, FIRST_DIVISION), true),
         row('third', '3rd division', (s) => between(s, rules.passMarks, SECOND_DIVISION), true),
-        ...GRADES.map((g) => row(`g${g}`, gradeLabel(g, rules), (s) => s.grades[g], true)),
+        ...gradeNames(rules).map((g) =>
+          row(`g${g}`, gradeLabel(g, rules), (s) => s.grades[g] ?? 0, true),
+        ),
         row('highest', 'Highest marks', (s) => s.highest, false),
         row('lowest', 'Lowest marks', (s) => s.lowest, false),
         row('average', 'Average marks', (s) => s.average, false),
@@ -274,17 +268,9 @@ export function rangeOverall(
 
 // ---- Subject Summary: every subject's performance by boys and girls (the old "All Subject Performance") ----
 
-/** The marks ranges of the old report's grade columns, whatever the grade setting ("percentage-based"). */
-export const MARK_RANGES: Array<[string, number, number]> = [
-  ['A1 (91-100%)', 91, 100],
-  ['A2 (81-90%)', 81, 90],
-  ['B1 (71-80%)', 71, 80],
-  ['B2 (61-70%)', 61, 70],
-  ['C1 (51-60%)', 51, 60],
-  ['C2 (41-50%)', 41, 50],
-  ['D (33-40%)', 33, 40],
-  ['E1 (0-32%)', 0, 32],
-];
+/** The marks ranges of the grade columns: the class's scale, by the marks whatever the grade setting. */
+export const markRanges = (rules: BoardRules): Array<[string, number, number]> =>
+  rules.scale.map((b) => [`${b.grade} (${bandRange(b)}%)`, b.from, b.to]);
 
 /**
  * Subject Summary: a row a subject — appeared (boys, girls), failures, compartments, pass (boys, girls), the
@@ -300,6 +286,7 @@ export function subjectPerformance(
   const kind = new Map(subjects.map((s) => [s.code, s.kind]));
   const order = new Map(subjects.map((s, i) => [s.code, i]));
   const nameOf = (code: string) => subjects.find((s) => s.code === code)?.name ?? `Subject ${code}`;
+  const MARK_RANGES = markRanges(rules);
   const by = entriesBySubject(
     candidates.filter((c) => opts.gender === 'all' || c.sex === opts.gender),
   );
@@ -395,22 +382,13 @@ export function subjectPerformance(
     columns,
     rows: [...rows, total],
     strong: [rows.length],
-    note: 'Percentage-based, not grade-based: the A1 … E1 columns count marks in those ranges. Shares are of those who appeared; a compartment subject is not a pass; averages are of the marks.',
+    note: `Percentage-based, not grade-based: the ${gradeNames(rules)[0]!} … ${gradeNames(rules).at(-1)!} columns count marks in those ranges (the class's grade scale). Shares are of those who appeared; a compartment subject is not a pass; averages are of the marks.`,
   };
 }
 
 // ---- Result Analysis: the subject table and its charts (the old "Result Analysis" page) ----
 
 export type GenderView = Gender | 'both';
-
-const GRADE_RANGE: Record<string, string> = {
-  A1: '91-100',
-  A2: '81-90',
-  B1: '71-80',
-  B2: '61-70',
-  C1: '51-60',
-  C2: '41-50',
-};
 
 /** A subject's (or all subjects') figures: the old page's 24 columns. */
 function analysisFigures(es: Entry[], rules: BoardRules): Record<string, Cell> {
@@ -445,7 +423,7 @@ function analysisFigures(es: Entry[], rules: BoardRules): Record<string, Cell> {
     row[`${k}No`] = n;
     row[`${k}Pct`] = pc(n, s.appeared);
   }
-  for (const g of GRADES) row[`g${g}`] = s.grades[g];
+  for (const g of gradeNames(rules)) row[`g${g}`] = s.grades[g] ?? 0;
   return row;
 }
 
@@ -485,11 +463,8 @@ export function resultAnalysisTable(
     ...(group ? { group } : {}),
   });
   const gradeLabel = (g: string) => {
-    const shown = g === 'E' ? 'E1' : g;
-    if (rules.grades === 'printed') return shown;
-    if (g === 'D') return `D (${String(rules.passMarks)}-40)`;
-    if (g === 'E') return `E1 (0-${String(rules.passMarks - 1)})`;
-    return `${shown} (${GRADE_RANGE[g]!})`;
+    const band = rules.scale.find((b) => b.grade === g);
+    return rules.grades === 'printed' || !band ? g : `${g} (${bandRange(band)})`;
   };
   const columns: AnColumn[] = [
     n('sno', 'S.No'),
@@ -516,7 +491,7 @@ export function resultAnalysisTable(
     n('secondPct', '%', '2nd division'),
     n('thirdNo', 'No.', '3rd division'),
     n('thirdPct', '%', '3rd division'),
-    ...GRADES.map((g) => n(`g${g}`, gradeLabel(g), 'Grades')),
+    ...gradeNames(rules).map((g) => n(`g${g}`, gradeLabel(g), 'Grades')),
   ];
   const rows: Array<Record<string, Cell>> = [];
   codes.forEach((code, i) => {
@@ -549,8 +524,8 @@ export function resultAnalysisTable(
     strong: genders.map((_, k) => firstTotal + k),
     note: `Shares are of those who appeared (absent: of all). Divisions do not overlap: distinction from ${String(rules.distinction)}, 1st division from ${String(FIRST_DIVISION)}, 2nd from ${String(SECOND_DIVISION)}, 3rd from ${String(rules.passMarks)}. A compartment subject is not a pass. ${
       rules.grades === 'printed'
-        ? 'Grades as CBSE printed them (D1 and D2 counted as D).'
-        : 'Grades from the marks; they add up to those who appeared.'
+        ? "Grades as CBSE printed them, matched to the class's grades by name (D1 and D2 counted as D)."
+        : "Grades from the marks on the class's scale; they add up to those who appeared."
     }`,
   };
 }
@@ -558,8 +533,10 @@ export function resultAnalysisTable(
 export interface ResultCharts {
   /** pass % a year (the CBSE result; one subject's passes when a subject is chosen) */
   passTrend: { labels: string[]; series: Array<{ label: string; values: Array<number | null> }> };
-  /** the grade labels (A1 … E1) of the grade charts, in order */
+  /** the grade labels (the class's scale, A1 … E1 by default) of the grade charts, top first */
   grades: string[];
+  /** each grade's chart colour (the design system's tones; the PDF draws the same) */
+  tones: GradeTone[];
   /** a subject's students at each grade, and their share of those who appeared */
   gradeSpread: Array<{
     code: string;
@@ -617,7 +594,7 @@ export function resultCharts(
     counts.map((n) => (of > 0 ? round2((n * 100) / of) : 0));
   const gradesOf = (es: Entry[]) => {
     const st = es.length ? subjectStats(es, rules) : null;
-    const counts = GRADES.map((g) => (st ? st.grades[g] : 0));
+    const counts = gradeNames(rules).map((g) => (st ? (st.grades[g] ?? 0) : 0));
     const appeared = st ? st.appeared : 0;
     return { appeared, counts, pct: shares(counts, appeared) };
   };
@@ -629,7 +606,8 @@ export function resultCharts(
         values: ordered.map((y) => passPct(keep(y.candidates, g))),
       })),
     },
-    grades: GRADES.map((g) => (g === 'E' ? 'E1' : g)),
+    grades: gradeNames(rules),
+    tones: gradeTones(rules),
     gradeSpread: codes.map((code) => ({ code, name: nameOf(code), ...gradesOf(now.get(code)!) })),
     marks: codes.map((code) => {
       const s = subjectStats(now.get(code)!, rules);

@@ -77,7 +77,7 @@ describe('Range Wise Subject Summary (docs/design/88)', () => {
     const div = ['distinction', 'first', 'second', 'third'].map((k) => v(k).count);
     expect(div).toEqual([1, 1, 1, 1]); // 95; 70; 50; 40 (30 is in none)
     expect(v('gA1').count).toBe(1);
-    expect(v('gE').count).toBe(1);
+    expect(v('gE1').count).toBe(1);
     expect(v('highest').count).toBe(95);
     expect(v('lowest').count).toBe(30);
     expect(v('average').count).toBe(57);
@@ -109,7 +109,7 @@ describe('Range Wise Subject Summary (docs/design/88)', () => {
       { ...DEFAULT_BOARD_RULES, grades: 'printed' },
       { gender: 'all' },
     );
-    expect(printed.blocks[1]!.rows.find((x) => x.key === 'gE')!.label).toBe(
+    expect(printed.blocks[1]!.rows.find((x) => x.key === 'gE1')!.label).toBe(
       'E1 grade (as printed)',
     );
   });
@@ -203,7 +203,7 @@ describe('Range Wise Subject Summary (docs/design/88)', () => {
   it('Result Analysis: grades add up to those who appeared; boys vs girls as three rows; the result filter; charts', () => {
     const t = resultAnalysisTable(now, SUBJECTS, DEFAULT_BOARD_RULES, { gender: 'all' });
     const eng = t.rows.find((r) => r.code === '184')!;
-    const grades = ['gA1', 'gA2', 'gB1', 'gB2', 'gC1', 'gC2', 'gD', 'gE'].map((k) =>
+    const grades = ['gA1', 'gA2', 'gB1', 'gB2', 'gC1', 'gC2', 'gD', 'gE1'].map((k) =>
       Number(eng[k]),
     );
     expect(grades.reduce((a, b) => a + b, 0)).toBe(eng.appeared);

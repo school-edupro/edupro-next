@@ -527,3 +527,45 @@ fixes as the defaults.
 - Tests: unit `board-toppers.spec.ts` (3: ties, section and class rank, lowest first; subjects, ticked subjects,
   percentage list; boys and the years); e2e `board-years.e2e-spec.ts` + 1 (lists, girls with class rank, years, PDF
   and Excel, top over 50 refused). Browser + axe at 1440 and 375.
+
+## Analysis rules a class: the best five built, the school's grade scale (18 Nov 2026)
+
+The user asked for configurable rules: grades the school can edit or add to, and a best five set per class (XII:
+English + four main subjects or English + the best four leaving the optional subject out; X: the first five or the
+best five). Answers (all the recommended ones): a rule builder of five subjects, an own grade scale a class, optional
+subjects chosen by subject kind, today's rules for every year shown.
+
+- **Rules** (`board-rules.ts`, the setting `exams.board_rules` now `{ X?, XII? }`, history kept as before): a class's
+  `bestFive { include: language | english | none, rest: best | printed, optional: replace | never | failed,
+  optionalKinds }`, `distinction`, `passMarks`, `grades: marks | printed`, `scale [{ grade, from, to }]`. A class not
+  saved uses the defaults; the one set saved before the classes had their own is read for both (`readRules`);
+  saving one class keeps the other (`writeRules`). Defaults = the old behaviour: the best language + best four,
+  optional may replace a weaker one (X: skill + additional optional; XII: additional), scale A1 … D 33–40, E1 0–32 —
+  so the acceptance figures do not move.
+- **Best five** (`bestFive`): the subject always in (from the class's non-optional subjects, else an optional one
+  unless they never count), the rest by marks or CBSE's printed order, then each optional subject (best first) fills
+  a gap or replaces the weakest pick (`replace`), nothing (`never`), or — passed — only a failed pick (`failed`,
+  CBSE's rule). Always out of 500; the codes come back anchor first, then by marks.
+- **Scale**: 2–12 grades named 1–4 letters/digits/+/- (A1, B+, E), unique, 100 at the top, 0 at the bottom, each
+  ending one below the one above (`scaleProblem` says which row is wrong; the DTO sorts the rows highest first).
+  `gradeOn`: marks on the scale (a grace half takes its whole number), or the printed grade matched by name, else by
+  its letter when only one grade has it (D1/D2 → D, E → E1). A grade below the pass marks is failing ("total no. of
+  division" = the passing grades); the A grades are every grade named A… (column "A1+A2", or "A+, A").
+- **Everywhere**: Annexure 4's grade columns (`g<name>`; the default's last grade is now `gE1`, as the reports
+  already called it), Range Wise Subject Summary and Result Analysis grade rows/columns with each grade's marks,
+  Subject Summary's mark ranges = the scale, the charts' `grades` + `tones` (`gradeTones`: passing grades green,
+  navy, cyan … the last amber, failing red; the screen and the graphs PDF use the same — four more light tones in the
+  design system: info, muted, warning and danger soft). The KV Performance Index keeps its fixed weights on the
+  grades CBSE printed (a national formula). Notes say the rule in words (`ruleWords`).
+- **API**: `GET rules?classLabel=`, `PUT rules` `{ classLabel, …rules }` (import right; audited with the class). The
+  admin's board actions show a form check's first message when the API sends no detail.
+- **Set-up**: Analysis rules with a Class X / XII switch; three framed sections — Best five (always counted, the rest,
+  optional subjects, the optional kinds as ticks, the saved rule in words), Marks and grades, Grade scale (12 rows:
+  the saved grades then blanks; a half-filled row is sent back naming the row). The Analysis tab's rules line links
+  to the class's rules.
+- Tests: unit `board-rules.spec.ts` (5: scale checks and sorting, grading on the scale and printed, the old setting
+  read and the other class kept, words and tones, annexures + result analysis + charts + graphs PDF on a five-grade
+  scale), `board-analysis.spec.ts` + 1 (the builder: printed order, never / failed / replace, kinds); e2e
+  `board-analysis.e2e-spec.ts` (class X saved with its own scale, a gap refused with the message, XII still default).
+  Browser + axe at 1440 and 375 (save, a gap refused, the phone's three scale columns fit).
+

@@ -590,13 +590,22 @@ school's letterhead with Prepared by, Checked by and Principal boxes; **Excel wo
 Annexure-1 … Annexure-10, laid out as the school's (Annexure 4 as a block a subject). The five-year rows and
 Annexure 5 fill in as earlier years' files are saved.
 
-**How the annexures count** (**Set-up → Analysis rules**, from the day it is changed): the **best five** — the best
-language and the best four other subjects (the default, as the school's 2026 workbooks), English and four, or any
-five; **distinction** from 75 marks; **pass** from 33; **grades** A1 91–100, A2 81–90, B1 71–80, B2 61–70, C1 51–60,
-C2 41–50, D from the pass marks to 40, E below (the workbooks' scale), or the grades as CBSE printed them. A subject
-CBSE lists as a candidate's compartment counts as a compartment, not a pass; marks below the pass marks are a
-failure; a candidate absent from the whole examination is in no subject's count, one absent in a subject is counted
-absent in it.
+**How the annexures count** (**Set-up → Analysis rules**, a class at a time — pick **Class X** or **Class XII** — from
+the day it is changed, for every year shown so the years compare fairly). The **best five** is built from three
+choices: the subject **always counted** (the best language — the default, as the school's 2026 workbooks — English,
+or no fixed subject); **the rest** (the best marks, or the first as CBSE printed them); and what an **optional
+subject** may do (replace a weaker subject — the default — never count, or replace only a failed subject, which is
+CBSE's own rule). Tick the subject kinds that are optional in the class (by default skill and additional subjects in
+X, additional subjects in XII); a subject's kind is set under **CBSE subjects** on the same tab. The form shows the
+saved rule in words, e.g. "English and the best four other subjects; additional subjects never count". Then the
+**distinction** from 75 marks, **pass** from 33, and the class's **grade scale**: each grade with its from and to
+marks (A1 91–100 … C2 41–50, D 33–40, E1 below to start). Fill an empty row to add a grade, clear a row to remove
+one; the grades must cover 0 to 100 without gaps or overlaps (2 to 12 grades) — EduPro says which row is wrong. A grade
+below the pass marks is a failing grade (red in the charts). **Grades counted** is from the marks on this scale, or
+as CBSE printed them (matched to the scale by name: D1 and D2 count as D, E as E1). Every report, chart, PDF and Excel
+file shows the class's own grades; the A-grade columns count every grade named A…. A subject CBSE lists as a
+candidate's compartment counts as a compartment, not a pass; marks below the pass marks are a failure; a candidate
+absent from the whole examination is in no subject's count, one absent in a subject is counted absent in it.
 
 **EduPro's extras** follow the ten in the same list (and in the workbook and PDF): **11 Performance Index** — PI =
 Σ(students at a grade × its weight, A1 8, A2 7 … D2 1, E 0) × 100 ÷ (students × 8), from the grades CBSE printed, by

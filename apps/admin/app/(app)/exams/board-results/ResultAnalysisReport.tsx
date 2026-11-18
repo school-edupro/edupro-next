@@ -7,17 +7,6 @@ import { RESULT_WORDS, yearLabel, type BoardResultAnalysis } from '@/lib/board-r
 import { GroupedTable } from './GroupedTable';
 
 const YEAR_TONES: ChartTone[] = ['muted', 'info', 'cyan', 'warning', 'navy'];
-/** A1 … E1: green, blue and cyan pairs (the second soft), then amber and red — the PDF draws the same */
-const GRADE_TONES: ChartTone[] = [
-  'success',
-  'success-soft',
-  'navy',
-  'navy-soft',
-  'cyan',
-  'cyan-soft',
-  'warning',
-  'danger',
-];
 /** 34.29 → "34.3%" */
 const pct = (v: number) => {
   const r = Math.round(v * 10) / 10;
@@ -329,7 +318,7 @@ export async function ResultAnalysisReport({
                 values: s.counts,
                 of: s.appeared,
               }))}
-              series={ch.grades.map((label, i) => ({ label, tone: GRADE_TONES[i] ?? 'muted' }))}
+              series={ch.grades.map((label, i) => ({ label, tone: ch.tones[i] ?? 'muted' }))}
             />
             <Numbers
               caption={b('rp_numbersPct')}

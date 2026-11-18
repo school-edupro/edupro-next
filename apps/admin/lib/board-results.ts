@@ -1,3 +1,4 @@
+import type { ChartTone } from '@/components/charts/Charts';
 /** Board results (docs/design/88): what the screens show of an upload, a candidate and a layout. */
 
 export type BoardTab = 'upload' | 'results' | 'analysis' | 'reports' | 'teachers' | 'setup';
@@ -227,12 +228,49 @@ export interface Annexure {
   title: string;
   tables: AnTable[];
 }
-export type BestFiveRule = 'language-plus-four' | 'english-plus-four' | 'any-five';
+/** A class's analysis rules (docs/design/88): the best five built from parts, the marks, the grade scale. */
+export type BestInclude = 'language' | 'english' | 'none';
+export type BestRest = 'best' | 'printed';
+export type BestOptional = 'replace' | 'never' | 'failed';
+export type OptionalKind = 'language' | 'main' | 'skill' | 'additional';
+export const BEST_INCLUDE: BestInclude[] = ['language', 'english', 'none'];
+export const BEST_REST: BestRest[] = ['best', 'printed'];
+export const BEST_OPTIONAL: BestOptional[] = ['replace', 'never', 'failed'];
+export const OPTIONAL_KINDS: OptionalKind[] = ['language', 'main', 'skill', 'additional'];
+/** the most grades a scale may have (the form shows this many rows) */
+export const MAX_GRADES = 12;
+export interface BestFiveSpec {
+  include: BestInclude;
+  rest: BestRest;
+  optional: BestOptional;
+  optionalKinds: OptionalKind[];
+}
+export interface GradeBand {
+  grade: string;
+  from: number;
+  to: number;
+}
 export interface BoardRules {
-  bestFive: BestFiveRule;
+  bestFive: BestFiveSpec;
   distinction: number;
   passMarks: number;
   grades: 'marks' | 'printed';
+  scale: GradeBand[];
+}
+
+type Words = (key: string, values?: Record<string, string>) => string;
+/** The best five in words, as the API's notes say it: "English and the best four other subjects; …". */
+export function bestFiveWords(spec: BestFiveSpec, b: Words): string {
+  const five = spec.include === 'none';
+  const rest = b(`bfw_${spec.rest}_${five ? '5' : '4'}`);
+  const head = five ? rest : b(`bfw_head_${spec.include}`, { rest });
+  const kinds = spec.optionalKinds.map((k) => b(`bfk_${k}`));
+  if (!kinds.length || spec.optional === 'replace') return head;
+  const list =
+    kinds.length === 1
+      ? kinds[0]!
+      : `${kinds.slice(0, -1).join(', ')} ${b('bfw_and')} ${kinds[kinds.length - 1]!}`;
+  return b(`bfw_${spec.optional}`, { head, kinds: list });
 }
 export interface BoardAnalysisView {
   classLabel: 'X' | 'XII';
@@ -263,7 +301,6 @@ export interface BoardAnalysisView {
     annexures: Annexure[];
   } | null;
 }
-export const BEST_FIVE: BestFiveRule[] = ['language-plus-four', 'english-plus-four', 'any-five'];
 /** The year as the school writes it: 2026 → "2025-26". */
 export const yearLabel = (y: number) => `${String(y - 1)}-${String(y).slice(2)}`;
 
@@ -452,6 +489,8 @@ export interface BoardResultAnalysis {
     passTrend: { labels: string[]; series: Array<{ label: string; values: Array<number | null> }> };
     /** A1 … E1 */
     grades: string[];
+    /** each grade's chart tone (the class's scale: passing green … amber, failing red) */
+    tones: ChartTone[];
     gradeSpread: Array<{
       code: string;
       name: string;

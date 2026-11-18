@@ -2,6 +2,7 @@ import { PDFDocument, StandardFonts, rgb, type PDFFont, type PDFPage, type RGB }
 import { drawLetterhead, embedLogo } from '../../common/pdf/letterhead';
 import { drawSignBoxes, type SignBox } from '../purchase/purchase-doc-sign';
 import type { ResultCharts } from './board-reports';
+import type { GradeTone } from './board-rules';
 import type { ReportHead } from './board-reports-file';
 
 /**
@@ -36,9 +37,23 @@ const ZEBRA = hex('#f6f8fb');
 const HEAD = hex('#eef1fb');
 const WHITE = rgb(1, 1, 1);
 
-/** A1 … E1: green, blue and cyan pairs (the second soft), then amber and red, as on screen. */
-const GRADE_FILLS = [GREEN, soft(GREEN), NAVY, soft(NAVY), CYAN, soft(CYAN), AMBER, RED];
-const GRADE_DARK_TEXT = [false, true, false, true, true, true, true, false];
+/** The grades' tones (board-rules.ts gradeTones) as on screen: the colour, and whether a share on it is dark. */
+const TONE_FILL: Record<GradeTone, [RGB, boolean]> = {
+  success: [GREEN, false],
+  'success-soft': [soft(GREEN), true],
+  navy: [NAVY, false],
+  'navy-soft': [soft(NAVY), true],
+  cyan: [CYAN, true],
+  'cyan-soft': [soft(CYAN), true],
+  info: [INFO, false],
+  'info-soft': [soft(INFO), true],
+  muted: [GREY, true],
+  'muted-soft': [soft(GREY), true],
+  'warning-soft': [soft(AMBER), true],
+  warning: [AMBER, true],
+  danger: [RED, false],
+  'danger-soft': [soft(RED), true],
+};
 /** the years, the latest the strongest */
 const YEAR_FILLS = [GREY, INFO, CYAN, AMBER, NAVY];
 const SERIES_FILLS = [NAVY, CYAN, GREEN];
@@ -126,6 +141,8 @@ export async function resultChartsPdf(
   opts: { code?: string | null | undefined } = {},
   L: ChartsPdfLabels = CHARTS_LABELS,
 ): Promise<Buffer> {
+  const gradeFill = (i: number) => TONE_FILL[ch.tones[i] ?? 'muted'][0];
+  const gradeDark = (i: number) => TONE_FILL[ch.tones[i] ?? 'muted'][1];
   const pdf = await PDFDocument.create();
   pdf.setTitle(`${head.title} - graphs`);
   const regular = await pdf.embedFont(StandardFonts.Helvetica);
@@ -344,7 +361,7 @@ export async function resultChartsPdf(
   // 2. grades by subject: a 100% bar a subject, the share on each part wide enough to carry it
   section(L.gradesTitle, L.gradesHelp);
   {
-    legend(ch.grades.map((g, i) => ({ label: g, fill: GRADE_FILLS[i]! })));
+    legend(ch.grades.map((g, i) => ({ label: g, fill: gradeFill(i) })));
     const LABEL = 150;
     const left = M + LABEL;
     const span = W - M - left;
@@ -366,7 +383,7 @@ export async function resultChartsPdf(
     for (const s of ch.gradeSpread) {
       if (y - ROW < FOOT) {
         fresh();
-        legend(ch.grades.map((g, i) => ({ label: g, fill: GRADE_FILLS[i]! })));
+        legend(ch.grades.map((g, i) => ({ label: g, fill: gradeFill(i) })));
         axis();
       }
       text(`${s.code} ${s.name}`, M, y - BAR + 3.5, { size: 7.5, max: LABEL - 8 });
@@ -383,13 +400,13 @@ export async function resultChartsPdf(
       s.pct.forEach((p, i) => {
         const w = (span * p) / 100;
         if (w <= 0) return;
-        page.drawRectangle({ x, y: y - BAR, width: w, height: BAR, color: GRADE_FILLS[i]! });
+        page.drawRectangle({ x, y: y - BAR, width: w, height: BAR, color: gradeFill(i) });
         const label = `${String(Math.round(p))}%`;
         if (w >= bold.widthOfTextAtSize(label, 6.5) + 4)
           text(label, x + w / 2, y - BAR + 3.5, {
             size: 6.5,
             font: bold,
-            color: GRADE_DARK_TEXT[i] ? INK : WHITE,
+            color: gradeDark(i) ? INK : WHITE,
             align: 'center',
           });
         x += w;

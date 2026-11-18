@@ -4,7 +4,7 @@ import type { LetterheadLogo } from '../../common/pdf/letterhead';
 import { tablePdf } from '../engagement/table-pdf';
 import type { SignBox } from '../purchase/purchase-doc-sign';
 import {
-  RULE_WORDS,
+  ruleWords,
   yearLabel,
   type AnTable,
   type Annexure,
@@ -147,7 +147,7 @@ export async function analysisXlsx(a: BoardAnalysis, head: AnalysisHead): Promis
     });
     ws.addRow([]);
     ws.addRow([
-      `Best five: ${RULE_WORDS[a.rules.bestFive]} · distinction from ${String(a.rules.distinction)} · pass from ${String(a.rules.passMarks)} · made ${head.generatedOn} by ${head.by}`,
+      `Best five: ${ruleWords(a.rules.bestFive)} · distinction from ${String(a.rules.distinction)} · pass from ${String(a.rules.passMarks)} · made ${head.generatedOn} by ${head.by}`,
     ]).font = { italic: true, size: 9 };
   }
   return Buffer.from(await wb.xlsx.writeBuffer());
@@ -208,7 +208,7 @@ export async function analysisPdf(
         title: `Annexure ${String(x.no)}: ${x.title}`,
         subtitle: [
           `${examName(a)}${head.scope ? ` · ${head.scope}` : ''}${tables.length === 1 ? ` · ${t0.title}` : ''}`,
-          `Best five: ${RULE_WORDS[a.rules.bestFive]} · distinction from ${String(a.rules.distinction)} · pass from ${String(a.rules.passMarks)}`,
+          `Best five: ${ruleWords(a.rules.bestFive)} · distinction from ${String(a.rules.distinction)} · pass from ${String(a.rules.passMarks)}`,
         ],
         letterhead: { logo: head.logo, details: `Made ${head.generatedOn}` },
         columns: t0.columns.map((c) => ({

@@ -24,6 +24,7 @@ const charts: ResultCharts = {
     series: [{ label: 'All', values: [94, 96.5] }],
   },
   grades,
+  tones: ['success', 'success-soft', 'navy', 'navy-soft', 'cyan', 'cyan-soft', 'warning', 'danger'],
   gradeSpread: subjects.map((s, i) => ({ ...s, ...year('2026-27', [4 + i, 6, 8, 5, 4, 2, 1, i]) })),
   marks: subjects.map((s, i) => ({ ...s, values: [97 - i, 71.25, 30 + i] })),
   subjectYears: subjects.map((s, i) => ({

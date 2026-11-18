@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { BoardRulesSettingSchema, defaultRules } from '../exams/board-rules';
 
 /**
  * Typed school settings (S2-06). Unknown keys are rejected; values are validated by the key's schema and
@@ -400,15 +401,10 @@ export const SETTINGS_CATALOGUE: Record<string, SettingDefinition> = {
     module: 'academics',
   },
   'exams.board_rules': {
-    schema: z.object({
-      bestFive: z.enum(['language-plus-four', 'english-plus-four', 'any-five']),
-      distinction: z.number().int().min(33).max(100),
-      passMarks: z.number().int().min(1).max(60),
-      grades: z.enum(['marks', 'printed']),
-    }),
-    default: { bestFive: 'language-plus-four', distinction: 75, passMarks: 33, grades: 'marks' },
+    schema: BoardRulesSettingSchema,
+    default: { X: defaultRules('X'), XII: defaultRules('XII') },
     description:
-      'CBSE board result analysis: the best five (the best language and four others, English and four, or any five), the distinction and pass marks, and grades from the marks or as printed',
+      "CBSE board result analysis, a class at a time (X, XII): the best five (a subject always in — English, the best language or none; the rest by the best marks or as printed; optional subjects replace a weaker one, never count or replace only a failed one), the distinction and pass marks, and the class's grade scale (2 to 12 grades over 0-100), counted from the marks or as printed",
     module: 'exams',
   },
   'exams.board_result.parents': {

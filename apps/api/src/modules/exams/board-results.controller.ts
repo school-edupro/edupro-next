@@ -37,6 +37,7 @@ import {
   LayoutActiveDto,
   PickDto,
   BoardRulesDto,
+  BoardRulesQueryDto,
 } from './board-results.dto';
 import { BoardResultsService } from './board-results.service';
 
@@ -278,17 +279,19 @@ export class BoardResultsController {
 
   @Get('rules')
   @RequirePermission(BOARD_RESULTS.view)
-  rules(@ReqCtx() ctx: RequestContext) {
-    return this.analyses.rules(ctx);
+  rules(@ReqCtx() ctx: RequestContext, @Query() q: BoardRulesQueryDto) {
+    return this.analyses.rules(ctx, q.classLabel);
   }
 
   @Put('rules')
   @ApiOperation({
-    summary: 'The best five, distinction and pass marks and the grade basis the annexures use',
+    summary:
+      "A class's analysis rules: the best five (built from parts), distinction and pass marks, the grade scale",
   })
   @RequirePermission(BOARD_RESULTS.import)
   saveRules(@ReqCtx() ctx: RequestContext, @Body() body: BoardRulesDto) {
-    return this.analyses.saveRules(ctx, body);
+    const { classLabel, ...rules } = body;
+    return this.analyses.saveRules(ctx, classLabel, rules);
   }
 
   // ---- phase D: a teacher's own, a student's, the dashboard's, the parent app switch ----

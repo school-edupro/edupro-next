@@ -1,5 +1,6 @@
 import { createZodDto } from 'nestjs-zod';
 import { z } from 'zod';
+import { BoardRulesSchema } from './board-rules';
 
 export const BOARD_RESULTS = {
   view: 'exams.board_result.view',
@@ -146,13 +147,11 @@ export const BoardAnalysisFileSchema = BoardAnalysisQuerySchema.extend({
 });
 export class BoardAnalysisFileDto extends createZodDto(BoardAnalysisFileSchema) {}
 
-export const BoardRulesSchema = z.object({
-  bestFive: z.enum(['language-plus-four', 'english-plus-four', 'any-five']),
-  distinction: z.coerce.number().int().min(33).max(100),
-  passMarks: z.coerce.number().int().min(1).max(60),
-  grades: z.enum(['marks', 'printed']),
-});
-export class BoardRulesDto extends createZodDto(BoardRulesSchema) {}
+/** A class's analysis rules (board-rules.ts): the best five built, the marks, the grade scale. */
+export const BoardRulesSaveSchema = BoardRulesSchema.extend({ classLabel: z.enum(['X', 'XII']) });
+export class BoardRulesDto extends createZodDto(BoardRulesSaveSchema) {}
+export const BoardRulesQuerySchema = z.object({ classLabel: z.enum(['X', 'XII']).default('X') });
+export class BoardRulesQueryDto extends createZodDto(BoardRulesQuerySchema) {}
 
 export const BoardParentsSchema = z.object({ on: z.boolean() });
 export class BoardParentsDto extends createZodDto(BoardParentsSchema) {}

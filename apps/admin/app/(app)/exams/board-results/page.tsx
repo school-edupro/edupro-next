@@ -2,8 +2,10 @@ import {
   Badge,
   Button,
   Card,
+  Checkbox,
   DataTable,
   FormRow,
+  FormSection,
   InputField,
   PageHeader,
   SelectField,
@@ -25,7 +27,12 @@ import {
   uploadGazette,
 } from '@/lib/board-actions';
 import {
-  BEST_FIVE,
+  BEST_INCLUDE,
+  BEST_OPTIONAL,
+  BEST_REST,
+  MAX_GRADES,
+  OPTIONAL_KINDS,
+  bestFiveWords,
   statusOf,
   when,
   type BoardImport,
@@ -87,6 +94,7 @@ export default async function BoardResultsPage({
     pct?: string;
     subjects?: string;
     figures?: string;
+    rules?: string;
     q?: string;
     import?: string;
     ok?: string;
@@ -112,6 +120,7 @@ export default async function BoardResultsPage({
   const cls = sp.classLabel === 'XII' ? 'XII' : 'X';
   const subjectsCls = sp.subjects === 'XII' ? 'XII' : 'X';
   const figuresCls = sp.figures === 'XII' ? 'XII' : 'X';
+  const rulesCls = sp.rules === 'XII' ? 'XII' : 'X';
   const [list, imports, years, layouts, teachers, subjects, rules, parents, figures] =
     await Promise.all([
       tab === 'analysis'
@@ -140,7 +149,9 @@ export default async function BoardResultsPage({
           }>(`/exams/board-results/subjects?classLabel=${subjectsCls}`)
         : null,
       tab === 'setup'
-        ? apiFetch<{ rules: BoardRules; isDefault: boolean }>('/exams/board-results/rules')
+        ? apiFetch<{ rules: BoardRules; isDefault: boolean }>(
+            `/exams/board-results/rules?classLabel=${rulesCls}`,
+          )
         : null,
       tab === 'setup' ? apiFetch<{ on: boolean }>('/exams/board-results/parents') : null,
       tab === 'setup'
@@ -598,69 +609,196 @@ export default async function BoardResultsPage({
       ) : null}
 
       {tab === 'setup' && rules ? (
-        <Card title={b('rules')} id="rules" style={{ marginBottom: 'var(--sp-5)' }}>
+        <Card
+          title={b('rules')}
+          id="rules"
+          style={{ marginBottom: 'var(--sp-5)' }}
+          actions={
+            <nav className="ep-tabs-links" aria-label={b('rules')}>
+              {(['X', 'XII'] as const).map((x) => (
+                <a
+                  key={x}
+                  href={`/exams/board-results?tab=setup&rules=${x}#rules`}
+                  aria-current={rulesCls === x ? 'page' : undefined}
+                >
+                  {b('classLabel')} {x}
+                </a>
+              ))}
+            </nav>
+          }
+        >
           <p className="ep-field__help" style={{ marginTop: 0 }}>
             {b('rulesHelp')}
           </p>
-          <form action={saveBoardRules}>
-            <FormRow>
-              <SelectField
-                id="rules-best"
-                name="bestFive"
-                label={b('rules_bestFive')}
-                defaultValue={rules.rules.bestFive}
-                disabled={!canImport}
-                options={BEST_FIVE.map((x) => ({
-                  value: x,
-                  label: b(
-                    x === 'language-plus-four'
-                      ? 'bf_language'
-                      : x === 'english-plus-four'
-                        ? 'bf_english'
-                        : 'bf_any',
-                  ),
-                }))}
-              />
-              <SelectField
-                id="rules-grades"
-                name="grades"
-                label={b('rules_grades')}
-                defaultValue={rules.rules.grades}
-                disabled={!canImport}
-                options={[
-                  { value: 'marks', label: b('an_grades_marks') },
-                  { value: 'printed', label: b('an_grades_printed') },
-                ]}
-              />
-            </FormRow>
-            <FormRow>
-              <InputField
-                id="rules-dist"
-                name="distinction"
-                type="number"
-                min={33}
-                max={100}
-                label={b('rules_distinction')}
-                defaultValue={String(rules.rules.distinction)}
-                disabled={!canImport}
-              />
-              <InputField
-                id="rules-pass"
-                name="passMarks"
-                type="number"
-                min={1}
-                max={60}
-                label={b('rules_pass')}
-                defaultValue={String(rules.rules.passMarks)}
-                disabled={!canImport}
-              />
-            </FormRow>
+          <form action={saveBoardRules} key={rulesCls}>
+            <input type="hidden" name="classLabel" value={rulesCls} />
+            <FormSection title={b('rules_bestFive')}>
+              <FormRow columns={3}>
+                <SelectField
+                  id="rules-include"
+                  name="include"
+                  label={b('rules_include')}
+                  defaultValue={rules.rules.bestFive.include}
+                  disabled={!canImport}
+                  options={BEST_INCLUDE.map((x) => ({ value: x, label: b(`bf_inc_${x}`) }))}
+                />
+                <SelectField
+                  id="rules-rest"
+                  name="rest"
+                  label={b('rules_rest')}
+                  defaultValue={rules.rules.bestFive.rest}
+                  disabled={!canImport}
+                  options={BEST_REST.map((x) => ({ value: x, label: b(`bf_rest_${x}`) }))}
+                />
+                <SelectField
+                  id="rules-optional"
+                  name="optional"
+                  label={b('rules_optional')}
+                  defaultValue={rules.rules.bestFive.optional}
+                  disabled={!canImport}
+                  options={BEST_OPTIONAL.map((x) => ({ value: x, label: b(`bf_opt_${x}`) }))}
+                />
+              </FormRow>
+              <fieldset
+                style={{
+                  border: 0,
+                  padding: 0,
+                  margin: 0,
+                  display: 'grid',
+                  gap: 'var(--sp-2)',
+                  gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 180px), 1fr))',
+                }}
+              >
+                <legend
+                  className="ep-field__label"
+                  style={{ padding: 0, marginBottom: 'var(--sp-2)' }}
+                >
+                  {b('rules_kinds')}
+                </legend>
+                {OPTIONAL_KINDS.map((k) => (
+                  <Checkbox
+                    key={k}
+                    id={`rules-kind-${k}`}
+                    name="optionalKinds"
+                    value={k}
+                    defaultChecked={rules.rules.bestFive.optionalKinds.includes(k)}
+                    disabled={!canImport}
+                    label={b(`kind_${k}`)}
+                  />
+                ))}
+              </fieldset>
+              <p className="ep-field__help" style={{ margin: 0 }}>
+                {b('rules_kindsHelp')}
+              </p>
+              <p className="ep-field__help" style={{ margin: 0 }}>
+                <strong>{b('rules_now')}</strong> {bestFiveWords(rules.rules.bestFive, b)}
+              </p>
+            </FormSection>
+            <FormSection title={b('rules_marks')}>
+              <FormRow columns={3}>
+                <SelectField
+                  id="rules-grades"
+                  name="grades"
+                  label={b('rules_grades')}
+                  defaultValue={rules.rules.grades}
+                  disabled={!canImport}
+                  options={[
+                    { value: 'marks', label: b('an_grades_marks') },
+                    { value: 'printed', label: b('an_grades_printed') },
+                  ]}
+                />
+                <InputField
+                  id="rules-dist"
+                  name="distinction"
+                  type="number"
+                  min={33}
+                  max={100}
+                  label={b('rules_distinction')}
+                  defaultValue={String(rules.rules.distinction)}
+                  disabled={!canImport}
+                />
+                <InputField
+                  id="rules-pass"
+                  name="passMarks"
+                  type="number"
+                  min={1}
+                  max={60}
+                  label={b('rules_pass')}
+                  defaultValue={String(rules.rules.passMarks)}
+                  disabled={!canImport}
+                />
+              </FormRow>
+            </FormSection>
+            <FormSection title={b('rules_scale')} description={b('rules_scaleHelp')}>
+              <div className="ep-table-tight" style={{ overflowX: 'auto' }}>
+                <table
+                  className="ep-table ep-table--dense"
+                  style={{ width: '100%', maxWidth: '30rem', tableLayout: 'fixed' }}
+                >
+                  <caption className="ep-sr-only">{b('rules_scale')}</caption>
+                  <thead>
+                    <tr>
+                      <th scope="col">{b('rules_grade')}</th>
+                      <th scope="col">{b('rules_from')}</th>
+                      <th scope="col">{b('rules_to')}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {Array.from({ length: MAX_GRADES }, (_, i) => rules.rules.scale[i] ?? null).map(
+                      (g, i) => (
+                        <tr key={g ? `${g.grade}-${String(i)}` : `new-${String(i)}`}>
+                          <td>
+                            <input
+                              className="ep-input"
+                              style={{ width: '100%', paddingInline: 'var(--sp-2)' }}
+                              name="grade"
+                              aria-label={b('rules_rowGrade', { n: i + 1 })}
+                              defaultValue={g?.grade ?? ''}
+                              maxLength={4}
+                              disabled={!canImport}
+                            />
+                          </td>
+                          <td>
+                            <input
+                              className="ep-input"
+                              style={{ width: '100%', paddingInline: 'var(--sp-2)' }}
+                              name="from"
+                              type="number"
+                              min={0}
+                              max={100}
+                              step={1}
+                              aria-label={b('rules_rowFrom', { n: i + 1 })}
+                              defaultValue={g ? String(g.from) : ''}
+                              disabled={!canImport}
+                            />
+                          </td>
+                          <td>
+                            <input
+                              className="ep-input"
+                              style={{ width: '100%', paddingInline: 'var(--sp-2)' }}
+                              name="to"
+                              type="number"
+                              min={0}
+                              max={100}
+                              step={1}
+                              aria-label={b('rules_rowTo', { n: i + 1 })}
+                              defaultValue={g ? String(g.to) : ''}
+                              disabled={!canImport}
+                            />
+                          </td>
+                        </tr>
+                      ),
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </FormSection>
             <p className="ep-field__help">
-              {rules.isDefault ? b('rules_default') : b('rules_set')}
+              {b(rules.isDefault ? 'rules_default' : 'rules_set', { cls: rulesCls })}
             </p>
             {canImport ? (
               <Button type="submit" size="sm">
-                {b('rules_save')}
+                {b('rules_save', { cls: rulesCls })}
               </Button>
             ) : null}
           </form>

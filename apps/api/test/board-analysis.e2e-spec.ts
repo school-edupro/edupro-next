@@ -26,7 +26,7 @@ interface View {
   examYear: number | null;
   years: number[];
   sections: string[];
-  rules: { bestFive: string; distinction: number };
+  rules: { bestFive: { include: string }; distinction: number; scale: Array<{ grade: string }> };
   rulesDefault: boolean;
   analysis: {
     headline: Record<string, number | null>;
@@ -265,36 +265,46 @@ describe('CBSE board results: the ten annexures (e2e, docs/design/88 phase C)', 
     expect(audit.rows[0]!.n).toBe(3);
   });
 
-  it('the rules are a setting: any five changes the figures; the import right changes them', async () => {
-    expect(
-      (
-        await put(
-          '/exams/board-results/rules',
-          { bestFive: 'any-five', distinction: 75, passMarks: 33, grades: 'marks' },
-          auditor,
-        )
-      ).statusCode,
-    ).toBe(403);
-    expect(
-      (
-        await put('/exams/board-results/rules', {
-          bestFive: 'any-five',
-          distinction: 20,
-          passMarks: 33,
-          grades: 'marks',
-        })
-      ).statusCode,
-    ).toBe(400);
-    const r = await put('/exams/board-results/rules', {
-      bestFive: 'any-five',
+  it("a class's rules are a setting: any five, its own grade scale; the import right changes them", async () => {
+    const FIVE = [
+      { grade: 'A+', from: 90, to: 100 },
+      { grade: 'A', from: 75, to: 89 },
+      { grade: 'B', from: 60, to: 74 },
+      { grade: 'C', from: 33, to: 59 },
+      { grade: 'F', from: 0, to: 32 },
+    ];
+    const body = (more: Record<string, unknown> = {}) => ({
+      classLabel: 'X',
+      bestFive: {
+        include: 'none',
+        rest: 'best',
+        optional: 'replace',
+        optionalKinds: ['skill', 'additional'],
+      },
       distinction: 80,
       passMarks: 33,
       grades: 'marks',
+      scale: FIVE,
+      ...more,
     });
+    expect((await put('/exams/board-results/rules', body(), auditor)).statusCode).toBe(403);
+    expect((await put('/exams/board-results/rules', body({ distinction: 20 }))).statusCode).toBe(
+      400,
+    );
+    // a gap between A (75-88) and A+ (90-100): refused, saying where
+    const gap = await put(
+      '/exams/board-results/rules',
+      body({ scale: [FIVE[0], { ...FIVE[1], to: 88 }, ...FIVE.slice(2)] }),
+    );
+    expect(gap.statusCode).toBe(400);
+    expect(JSON.stringify(gap.json())).toContain('A+ starts at 90, so A must end at 89');
+    // the rows in any order: saved highest first
+    const r = await put('/exams/board-results/rules', body({ scale: [...FIVE].reverse() }));
     expect(r.statusCode).toBe(200);
     const v = await view();
     expect(v.rulesDefault).toBe(false);
-    expect(v.rules).toMatchObject({ bestFive: 'any-five', distinction: 80 });
+    expect(v.rules).toMatchObject({ bestFive: { include: 'none' }, distinction: 80 });
+    expect(v.rules.scale.map((g) => g.grade)).toEqual(['A+', 'A', 'B', 'C', 'F']);
     // ASHA's best five of any subjects is the same 471; CHETAN's: 50, 45, 40, 35, 30 — the same 200
     expect(tableOf(v, 1, 'toppers').rows[0]).toMatchObject({ total: 471 });
     // distinction from 80: Mathematics 100 only (75 and 79 no longer count)
@@ -302,9 +312,17 @@ describe('CBSE board results: the ten annexures (e2e, docs/design/88 phase C)', 
       (x) => x.subject === 'Mathematics (Standard)',
     )!;
     expect(maths).toMatchObject({ dist: 1 });
-    expect((await get('/exams/board-results/rules', auditor)).json().rules).toMatchObject({
-      bestFive: 'any-five',
-    });
+    // Annexure 4 counts the school's grades
+    expect(Object.keys(tableOf(v, 4, 'summary').rows[0]!)).toEqual(
+      expect.arrayContaining(['gA+', 'gA', 'gB', 'gC', 'gF']),
+    );
+    const x = (await get('/exams/board-results/rules?classLabel=X', auditor)).json();
+    expect(x.rules.bestFive).toMatchObject({ include: 'none' });
+    // Class XII keeps its defaults
+    const xii = (await get('/exams/board-results/rules?classLabel=XII')).json();
+    expect(xii.isDefault).toBe(true);
+    expect(xii.rules.bestFive).toMatchObject({ include: 'language', optionalKinds: ['additional'] });
+    expect(xii.rules.scale.at(-1)).toEqual({ grade: 'E1', from: 0, to: 32 });
   });
 
   it('two teachers sharing a section are named together; a class with no saved file says so', async () => {

@@ -11,7 +11,7 @@ import {
   type AnCandidate,
   type AnInput,
   type AnSubject,
-  type BoardRules,
+  type BestFiveSpec,
 } from './board-analysis';
 
 // Every name, roll number and mark here is made up.
@@ -75,12 +75,84 @@ describe('CBSE board result annexures (docs/design/88, phase C)', () => {
       ['165', 99],
       ['049', 88],
     ]);
-    const of = (rule: BoardRules['bestFive']) => bestFive(c, kind, rule, nameOf);
+    const of = (include: BestFiveSpec['include']) =>
+      bestFive(
+        c,
+        kind,
+        { ...DEFAULT_BOARD_RULES, bestFive: { ...DEFAULT_BOARD_RULES.bestFive, include } },
+        nameOf,
+      );
     // the best language (Hindi 70) and the best four others (99, 95, 90, 88)
-    expect(of('language-plus-four')).toMatchObject({ total: 442, percent: 88.4 });
-    expect(of('language-plus-four').codes).toEqual(['085', '165', '041', '086', '049']);
-    expect(of('english-plus-four').total).toBe(432);
-    expect(of('any-five').total).toBe(457);
+    expect(of('language')).toMatchObject({ total: 442, percent: 88.4 });
+    expect(of('language').codes).toEqual(['085', '165', '041', '086', '049']);
+    expect(of('english').total).toBe(432);
+    expect(of('none').total).toBe(457);
+  });
+
+  it('builds the best five: the rest as printed, optional subjects never / in place of a weaker / of a failed one', () => {
+    // 087 failed (25); 165 (skill) and 049 (additional) are optional in Class X
+    const c = cand([
+      ['184', 60],
+      ['085', 70],
+      ['041', 95],
+      ['086', 90],
+      ['087', 25],
+      ['165', 99],
+      ['049', 88],
+    ]);
+    const of = (spec: Partial<BestFiveSpec>, passMarks = 33) =>
+      bestFive(
+        c,
+        kind,
+        { passMarks, bestFive: { ...DEFAULT_BOARD_RULES.bestFive, ...spec } },
+        nameOf,
+      );
+    // English, then the best four of the rest (70, 95, 90, 25); no optional subject
+    expect(of({ include: 'english', optional: 'never' })).toMatchObject({
+      total: 340,
+      codes: ['184', '041', '086', '085', '087'],
+    });
+    // CBSE's rule: the best optional subject (165, 99) takes the failed one's place
+    expect(of({ include: 'english', optional: 'failed' })).toMatchObject({
+      total: 414,
+      codes: ['184', '165', '041', '086', '085'],
+    });
+    // nothing failed at a pass mark of 20: the optional subjects stay out
+    expect(of({ include: 'english', optional: 'failed' }, 20).total).toBe(340);
+    // may replace any weaker one: 99 and 88 in for 25 and 70
+    expect(of({ include: 'english', optional: 'replace' }).total).toBe(432);
+    // nothing optional: the first five as CBSE printed them, or the best five
+    expect(of({ include: 'none', rest: 'printed', optionalKinds: [] }).total).toBe(340);
+    expect(of({ include: 'none', rest: 'best', optionalKinds: [] }).total).toBe(442);
+    // the best language (Hindi) and the first four others as printed
+    expect(of({ include: 'language', rest: 'printed', optional: 'never' })).toMatchObject({
+      total: 340,
+      codes: ['085', '041', '086', '184', '087'],
+    });
+    // only the additional subject optional: the skill subject (99) is an ordinary one
+    expect(
+      of({ include: 'english', optional: 'never', optionalKinds: ['additional'] }),
+    ).toMatchObject({ total: 414, codes: ['184', '165', '041', '086', '085'] });
+    // a failed optional subject replaces nothing
+    const weak = cand([
+      ['184', 60],
+      ['041', 80],
+      ['086', 70],
+      ['087', 20],
+      ['085', 50],
+      ['165', 30],
+    ]);
+    expect(
+      bestFive(
+        weak,
+        kind,
+        {
+          passMarks: 33,
+          bestFive: { ...DEFAULT_BOARD_RULES.bestFive, include: 'english', optional: 'failed' },
+        },
+        nameOf,
+      ).total,
+    ).toBe(280);
   });
 
   it('counts registered, appeared, absent, failures, compartments and the best-five bands', () => {
@@ -205,7 +277,7 @@ describe('CBSE board result annexures (docs/design/88, phase C)', () => {
       fail: 1,
       gA2: 1,
       gD: 1,
-      gE: 1,
+      gE1: 1,
       graded: 2,
     });
     const sub = table(a, 2, 'subjects').rows.find((r) => r.subject === nameOf('184'))!;

@@ -9,14 +9,8 @@ import {
   type AnCell,
   type AnTable,
   type BoardAnalysisView,
-  type BestFiveRule,
+  bestFiveWords,
 } from '@/lib/board-results';
-
-const BF_KEY: Record<BestFiveRule, string> = {
-  'language-plus-four': 'bf_language',
-  'english-plus-four': 'bf_english',
-  'any-five': 'bf_any',
-};
 
 type Row = Record<string, AnCell> & { __i: number };
 
@@ -147,14 +141,14 @@ export async function AnalysisTab({
         {a ? (
           <p className="ep-field__help" style={{ marginBottom: 0 }}>
             {b('an_rules', {
-              words: b(BF_KEY[v.rules.bestFive]),
+              words: bestFiveWords(v.rules.bestFive, b),
               distinction: String(v.rules.distinction),
               pass: String(v.rules.passMarks),
               grades: b(v.rules.grades === 'marks' ? 'an_grades_marks' : 'an_grades_printed'),
             })}{' '}
             {canImport ? (
               <a
-                href="/exams/board-results?tab=setup#rules"
+                href={`/exams/board-results?tab=setup&rules=${v.classLabel}#rules`}
                 style={{ textDecoration: 'underline' }}
               >
                 {b('an_rulesLink')}

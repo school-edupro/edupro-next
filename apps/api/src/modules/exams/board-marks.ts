@@ -68,7 +68,7 @@ export function marksRows(
     let counted = new Set<string>();
     if (marked.length) {
       if (method === 'best5') {
-        const b = bestFive(c, kind, rules.bestFive, nameOf);
+        const b = bestFive(c, kind, rules, nameOf);
         total = b.total;
         max = 500;
         percent = b.percent;

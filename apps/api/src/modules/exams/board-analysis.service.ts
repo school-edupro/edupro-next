@@ -11,8 +11,7 @@ import {
   analyse,
   bestFive,
   round2,
-  DEFAULT_BOARD_RULES,
-  RULE_WORDS,
+  ruleWords,
   teacherView,
   subjectFigures,
   yearFigures,
@@ -38,8 +37,8 @@ import {
   subjectPerformance,
 } from './board-reports';
 import { filterMarks, marksRows, type MarksRow } from './board-marks';
+import { readRules, writeRules } from './board-rules';
 import {
-  BoardRulesSchema,
   type BoardMarksFileDto,
   type BoardMarksQueryDto,
   type BoardOverallFileDto,
@@ -111,26 +110,28 @@ export class BoardAnalysisService {
     @Inject(STORAGE_DRIVER) private readonly storage: StorageDriver,
   ) {}
 
-  private async rulesOf(c: PoolClient): Promise<{ rules: BoardRules; isDefault: boolean }> {
+  private async storedRules(c: PoolClient): Promise<unknown> {
     const r = await c.query<{ v: unknown }>(`SELECT app.setting($1) AS v`, [KEY]);
-    const parsed = BoardRulesSchema.safeParse({
-      ...DEFAULT_BOARD_RULES,
-      ...((r.rows[0]?.v as object | null) ?? {}),
-    });
-    return {
-      rules: parsed.success ? parsed.data : DEFAULT_BOARD_RULES,
-      isDefault: r.rows[0]?.v == null,
-    };
+    return r.rows[0]?.v ?? null;
   }
 
-  async rules(ctx: RequestContext) {
-    return this.db.tenant(requireTenant(ctx), (c) => this.rulesOf(c));
+  /** A class's analysis rules (board-rules.ts): its own, the one set saved before, or the defaults. */
+  private async rulesOf(
+    c: PoolClient,
+    classLabel: BoardClass,
+  ): Promise<{ rules: BoardRules; isDefault: boolean }> {
+    return readRules(await this.storedRules(c), classLabel);
   }
 
-  /** The rules from today (the setting keeps its history: earlier values stay with their dates). */
-  async saveRules(ctx: RequestContext, rules: BoardRules) {
+  async rules(ctx: RequestContext, classLabel: BoardClass) {
+    return this.db.tenant(requireTenant(ctx), (c) => this.rulesOf(c, classLabel));
+  }
+
+  /** A class's rules from today, the other class's kept (the setting keeps its history: earlier values stay with their dates). */
+  async saveRules(ctx: RequestContext, classLabel: BoardClass, rules: BoardRules) {
     return this.db.tenant(requireTenant(ctx), async (c) => {
-      const before = await this.rulesOf(c);
+      const stored = await this.storedRules(c);
+      const before = readRules(stored, classLabel);
       await c.query(
         `UPDATE school_settings SET valid_to = CURRENT_DATE - 1, updated_by = app.current_user_id()
           WHERE key = $1 AND valid_to IS NULL AND valid_from < CURRENT_DATE`,
@@ -142,14 +143,14 @@ export class BoardAnalysisService {
       await c.query(
         `INSERT INTO school_settings (school_id, key, value, valid_from, created_by, updated_by)
          VALUES (app.current_school_id(), $1, $2::jsonb, CURRENT_DATE, app.current_user_id(), app.current_user_id())`,
-        [KEY, JSON.stringify(rules)],
+        [KEY, JSON.stringify(writeRules(stored, classLabel, rules))],
       );
       await this.audit.stage(ctx, c, {
         action: 'exams.board_result.rules',
         entityType: 'school_settings',
         entityId: requireTenant(ctx).schoolId,
-        before: before.rules,
-        after: rules,
+        before: { classLabel, ...before.rules },
+        after: { classLabel, ...rules },
       });
       return { rules, isDefault: false };
     });
@@ -265,7 +266,7 @@ export class BoardAnalysisService {
         [q.classLabel],
       )
     ).rows.map((r) => r.y);
-    const { rules, isDefault } = await this.rulesOf(c);
+    const { rules, isDefault } = await this.rulesOf(c, q.classLabel);
     const examYear = q.examYear ?? years[0];
     if (examYear === undefined || !years.includes(examYear))
       return {
@@ -481,12 +482,15 @@ export class BoardAnalysisService {
         WHERE candidate_id = ANY($1::bigint[]) ORDER BY candidate_id, slot NULLS LAST, subject_code`,
       [cands.rows.map((x) => x.id)],
     );
-    const { rules } = await this.rulesOf(c);
     const lists = new Map<BoardClass, AnSubject[]>();
-    for (const cls of new Set(cands.rows.map((x) => x.class_label)))
+    const rulesBy = new Map<BoardClass, BoardRules>();
+    for (const cls of new Set(cands.rows.map((x) => x.class_label))) {
       lists.set(cls, await this.subjectsOf(c, cls));
+      rulesBy.set(cls, (await this.rulesOf(c, cls)).rules);
+    }
     return cands.rows.map((x) => {
       const subjects = lists.get(x.class_label)!;
+      const rules = rulesBy.get(x.class_label)!;
       const kind = (code: string) => subjects.find((s) => s.code === code)?.kind;
       const nameOf = (code: string) =>
         subjects.find((s) => s.code === code)?.name ?? `Subject ${code}`;
@@ -512,9 +516,7 @@ export class BoardAnalysisService {
         staffWard: null,
         marks: ms,
       };
-      const best = ms.some((m) => m.marks !== null)
-        ? bestFive(cand, kind, rules.bestFive, nameOf)
-        : null;
+      const best = ms.some((m) => m.marks !== null) ? bestFive(cand, kind, rules, nameOf) : null;
       return {
         studentId: x.student_id,
         classLabel: x.class_label,
@@ -531,7 +533,7 @@ export class BoardAnalysisService {
           inBestFive: best?.codes.includes(m.code) ?? false,
         })),
         bestFive: best ? { total: best.total, percent: best.percent } : null,
-        rule: RULE_WORDS[rules.bestFive],
+        rule: ruleWords(rules.bestFive),
       };
     });
   }
@@ -579,9 +581,9 @@ export class BoardAnalysisService {
         )
       ).rows[0];
       if (!emp) return { employee: null, classes: [] };
-      const { rules } = await this.rulesOf(c);
       const classes = [];
       for (const cls of ['X', 'XII'] as const) {
+        const { rules } = await this.rulesOf(c, cls);
         const years = (
           await c.query<{ y: number }>(
             `SELECT DISTINCT exam_year AS y FROM board_candidates WHERE board = 'CBSE' AND class_label = $1 ORDER BY 1 DESC`,
@@ -616,9 +618,9 @@ export class BoardAnalysisService {
   /** The exam page's figures: each class's latest saved year. */
   async summary(ctx: RequestContext) {
     return this.db.tenant(requireTenant(ctx), async (c) => {
-      const { rules } = await this.rulesOf(c);
       const out = [];
       for (const cls of ['X', 'XII'] as const) {
+        const { rules } = await this.rulesOf(c, cls);
         const y = (
           await c.query<{ y: number | null }>(
             `SELECT max(exam_year) AS y FROM board_candidates WHERE board = 'CBSE' AND class_label = $1`,
@@ -837,7 +839,7 @@ export class BoardAnalysisService {
       )
     ).rows.map((r) => r.y);
     const examYear = q.examYear !== undefined && years.includes(q.examYear) ? q.examYear : years[0];
-    const { rules } = await this.rulesOf(c);
+    const { rules } = await this.rulesOf(c, q.classLabel);
     if (examYear === undefined)
       return {
         examYear: null,
@@ -882,7 +884,7 @@ export class BoardAnalysisService {
         sections: m.sections,
         results: m.results,
         method: q.method,
-        rule: RULE_WORDS[m.rules.bestFive],
+        rule: ruleWords(m.rules.bestFive),
         total: m.rows.length,
         page: q.page,
         size: q.size,
@@ -919,7 +921,7 @@ export class BoardAnalysisService {
         scope: words.join(' · '),
         method:
           q.method === 'best5'
-            ? `Aggregate: best five (${RULE_WORDS[m.rules.bestFive]})`
+            ? `Aggregate: best five (${ruleWords(m.rules.bestFive)})`
             : q.method === 'first5'
               ? 'Aggregate: the first five subjects as CBSE printed them'
               : 'Aggregate: all subjects with marks',
@@ -964,7 +966,7 @@ export class BoardAnalysisService {
       )
     ).rows.map((r) => r.y);
     const examYear = q.examYear !== undefined && years.includes(q.examYear) ? q.examYear : years[0];
-    const { rules } = await this.rulesOf(c);
+    const { rules } = await this.rulesOf(c, q.classLabel);
     const subjects = await this.subjectsOf(c, q.classLabel);
     if (examYear === undefined) return { examYear: null, years, subjects, rules, summary: null };
     // the year asked and the saved years before it that the comparison takes
@@ -1060,7 +1062,7 @@ export class BoardAnalysisService {
       )
     ).rows.map((r) => r.y);
     const examYear = q.examYear !== undefined && years.includes(q.examYear) ? q.examYear : years[0];
-    const { rules } = await this.rulesOf(c);
+    const { rules } = await this.rulesOf(c, q.classLabel);
     if (examYear === undefined) return { examYear: null, years, rules, summary: null };
     const subjects = await this.subjectsOf(c, q.classLabel);
     const data = [];
@@ -1085,7 +1087,7 @@ export class BoardAnalysisService {
         compare: q.compare,
         gender: q.gender,
         method: q.method,
-        rule: RULE_WORDS[r.rules.bestFive],
+        rule: ruleWords(r.rules.bestFive),
         summary: r.summary,
       };
     });
@@ -1110,7 +1112,7 @@ export class BoardAnalysisService {
           r.summary.years.map((y) => yearLabel(y)).join(' against '),
           q.gender === 'M' ? 'boys' : q.gender === 'F' ? 'girls' : 'all students',
           q.method === 'best5'
-            ? `aggregate of the best five (${RULE_WORDS[r.rules.bestFive]})`
+            ? `aggregate of the best five (${ruleWords(r.rules.bestFive)})`
             : q.method === 'first5'
               ? 'aggregate of the first five subjects as printed'
               : 'aggregate of all subjects',
@@ -1154,7 +1156,7 @@ export class BoardAnalysisService {
       )
     ).rows.map((r) => r.y);
     const examYear = q.examYear !== undefined && years.includes(q.examYear) ? q.examYear : years[0];
-    const { rules } = await this.rulesOf(c);
+    const { rules } = await this.rulesOf(c, q.classLabel);
     const subjects = await this.subjectsOf(c, q.classLabel);
     if (examYear === undefined) return { examYear: null, years, subjects, table: null };
     return {
@@ -1246,7 +1248,7 @@ export class BoardAnalysisService {
       )
     ).rows.map((r) => r.y);
     const examYear = q.examYear !== undefined && years.includes(q.examYear) ? q.examYear : years[0];
-    const { rules } = await this.rulesOf(c);
+    const { rules } = await this.rulesOf(c, q.classLabel);
     const subjects = await this.subjectsOf(c, q.classLabel);
     if (examYear === undefined)
       return { examYear: null, years, subjects, rules, table: null, charts: null, results: [] };
@@ -1367,7 +1369,7 @@ export class BoardAnalysisService {
       )
     ).rows.map((r) => r.y);
     const examYear = q.examYear !== undefined && years.includes(q.examYear) ? q.examYear : years[0];
-    const { rules } = await this.rulesOf(c);
+    const { rules } = await this.rulesOf(c, q.classLabel);
     const subjects = await this.subjectsOf(c, q.classLabel);
     if (examYear === undefined)
       return { examYear: null, years, rules, subjects, sections: [] as string[], report: null };
@@ -1401,7 +1403,7 @@ export class BoardAnalysisService {
         years: r.years,
         compare: q.compare,
         method: q.method,
-        rule: RULE_WORDS[r.rules.bestFive],
+        rule: ruleWords(r.rules.bestFive),
         gender: q.gender,
         section: q.section ?? null,
         sections: r.sections,
@@ -1429,7 +1431,7 @@ export class BoardAnalysisService {
       const h = await registerLetterhead(c);
       const method =
         q.method === 'best5'
-          ? `best five (${RULE_WORDS[r.rules.bestFive]}), out of 500`
+          ? `best five (${ruleWords(r.rules.bestFive)}), out of 500`
           : q.method === 'first5'
             ? 'the first five subjects as CBSE printed them, out of 500'
             : 'all subjects with marks';

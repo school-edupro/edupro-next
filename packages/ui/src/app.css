@@ -806,12 +806,16 @@
 .ep-table-freeze-3 .ep-table tbody tr:hover td:nth-child(-n + 3) {
   background: var(--surface-subtle);
 }
-:is(.ep-table-freeze-2, .ep-table-freeze-3) .ep-table :is(thead tr:first-child th, tbody td):nth-child(1) {
+:is(.ep-table-freeze-2, .ep-table-freeze-3)
+  .ep-table
+  :is(thead tr:first-child th, tbody td):nth-child(1) {
   left: 0;
   min-width: var(--ep-freeze-1);
   max-width: var(--ep-freeze-1);
 }
-:is(.ep-table-freeze-2, .ep-table-freeze-3) .ep-table :is(thead tr:first-child th, tbody td):nth-child(2) {
+:is(.ep-table-freeze-2, .ep-table-freeze-3)
+  .ep-table
+  :is(thead tr:first-child th, tbody td):nth-child(2) {
   left: var(--ep-freeze-1);
   min-width: var(--ep-freeze-2);
   max-width: var(--ep-freeze-2);
@@ -6201,7 +6205,7 @@ a.ep-tabs__tab {
 .ep-chart__legend [data-tone='info']::before {
   background: var(--status-info);
 }
-/* lighter shades of three tones, for eight parts (the grades A1 … E1: A2, B2 and C2 the lighter of their pair) */
+/* lighter shades, for charts of many parts (a class's grades: A2, B2 and C2 the lighter of their pair by default) */
 .ep-chart-fill--success-soft {
   fill: var(--status-success);
   fill-opacity: 0.5;
@@ -6224,6 +6228,39 @@ a.ep-tabs__tab {
 }
 .ep-chart__legend [data-tone='cyan-soft']::before {
   background: var(--action-accent);
+  opacity: 0.5;
+}
+/* more lighter shades, for a grade scale of up to twelve grades (the chart tones a class's scale gets) */
+.ep-chart-fill--info-soft {
+  fill: var(--status-info);
+  fill-opacity: 0.5;
+}
+.ep-chart__legend [data-tone='info-soft']::before {
+  background: var(--status-info);
+  opacity: 0.5;
+}
+.ep-chart-fill--muted-soft {
+  fill: var(--border-strong);
+  fill-opacity: 0.5;
+}
+.ep-chart__legend [data-tone='muted-soft']::before {
+  background: var(--border-strong);
+  opacity: 0.5;
+}
+.ep-chart-fill--warning-soft {
+  fill: var(--status-warning);
+  fill-opacity: 0.5;
+}
+.ep-chart__legend [data-tone='warning-soft']::before {
+  background: var(--status-warning);
+  opacity: 0.5;
+}
+.ep-chart-fill--danger-soft {
+  fill: var(--status-danger);
+  fill-opacity: 0.5;
+}
+.ep-chart__legend [data-tone='danger-soft']::before {
+  background: var(--status-danger);
   opacity: 0.5;
 }
 /* the share written on a part of a 100% bar: light on the strong tones, dark on the soft ones */

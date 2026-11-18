@@ -1,3 +1,10 @@
+import {
+  failingGrade,
+  gradeOn,
+  ruleWords,
+  type BestFiveSpec,
+  type BoardRules,
+} from './board-rules';
 import type { BoardSubjectKind } from './board-subjects';
 
 /**
@@ -7,28 +14,13 @@ import type { BoardSubjectKind } from './board-subjects';
  * the PDF print the same figures.
  */
 
-/** How the best five are chosen: the best language and the best four others (default), English and the best four, any five. */
-export type BestFiveRule = 'language-plus-four' | 'english-plus-four' | 'any-five';
-
-export interface BoardRules {
-  bestFive: BestFiveRule;
-  /** Marks from which a subject counts as a distinction. */
-  distinction: number;
-  /** Marks below which a subject counts as a failure. */
-  passMarks: number;
-  /**
-   * Grades counted from the marks (A1 91–100, A2 81–90 … D 33–40, E below 33 — the school's workbook) or as CBSE
-   * printed them (D1 and D2 counted as D).
-   */
-  grades: 'marks' | 'printed';
-}
-
-export const DEFAULT_BOARD_RULES: BoardRules = {
-  bestFive: 'language-plus-four',
-  distinction: 75,
-  passMarks: 33,
-  grades: 'marks',
-};
+export {
+  DEFAULT_BOARD_RULES,
+  ruleWords,
+  type BestFiveSpec,
+  type BoardRules,
+  type GradeBand,
+} from './board-rules';
 
 export interface AnMark {
   code: string;
@@ -189,35 +181,59 @@ export const appeared = (c: AnCandidate) => c.marks.some((m) => m.marks !== null
 const FAIL_WORDS = new Set(['FAIL', 'ER']);
 
 /**
- * The best five of a candidate under the rule: the subjects and their total. Fewer than five marked subjects
- * count what there is (the share is still of 500).
+ * The best five of a candidate under the class's rule (board-rules.ts): the subject always in (English or the best
+ * language), the rest by the best marks or as CBSE printed them, then the optional subjects — replacing a weaker
+ * one, never, or only a failed one (CBSE's rule: an optional subject passed takes the place of a failed one).
+ * Fewer than five marked subjects count what there is (the share is still of 500).
  */
 export function bestFive(
   c: AnCandidate,
   kindOf: (code: string) => BoardSubjectKind | undefined,
-  rule: BestFiveRule,
+  rules: { bestFive: BestFiveSpec; passMarks: number },
   nameOf: (code: string) => string = () => '',
 ): { total: number; percent: number; codes: string[] } {
+  const spec = rules.bestFive;
   const ms = marked(c).filter((m) => kindOf(m.code) !== 'internal');
   const byMarks = (a: { marks: number }, b: { marks: number }) => b.marks - a.marks;
-  let pick: Array<{ code: string; marks: number }>;
-  const anchor =
-    rule === 'any-five'
-      ? undefined
-      : rule === 'english-plus-four'
-        ? ms.find((m) => /english/i.test(nameOf(m.code)) || m.code === '184' || m.code === '301')
-        : [...ms].filter((m) => kindOf(m.code) === 'language').sort(byMarks)[0];
-  if (anchor)
-    pick = [
-      anchor,
-      ...ms
-        .filter((m) => m !== anchor)
-        .sort(byMarks)
-        .slice(0, 4),
-    ];
-  else pick = [...ms].sort(byMarks).slice(0, 5);
-  const total = sum(pick.map((m) => m.marks));
-  return { total, percent: round2(total / 5), codes: pick.map((m) => m.code) };
+  const optional = (m: AnMark) =>
+    (spec.optionalKinds as string[]).includes(kindOf(m.code) ?? 'main');
+  const core = ms.filter((m) => !optional(m));
+  const spare = ms.filter(optional).sort(byMarks);
+  const isEnglish = (m: AnMark) =>
+    /english/i.test(nameOf(m.code)) || m.code === '184' || m.code === '301';
+  const anchorIn = (xs: typeof ms) =>
+    spec.include === 'english'
+      ? xs.find(isEnglish)
+      : spec.include === 'language'
+        ? [...xs].filter((m) => kindOf(m.code) === 'language').sort(byMarks)[0]
+        : undefined;
+  const anchor = anchorIn(core) ?? (spec.optional === 'never' ? undefined : anchorIn(spare));
+  const need = anchor ? 4 : 5;
+  const others = core.filter((m) => m !== anchor);
+  let pick = (spec.rest === 'best' ? [...others].sort(byMarks) : others).slice(0, need);
+  if (spec.optional !== 'never')
+    for (const o of spare) {
+      if (o === anchor) continue;
+      if (pick.length < need) {
+        if (spec.optional === 'replace' || o.marks >= rules.passMarks) pick.push(o);
+        continue;
+      }
+      const open =
+        spec.optional === 'failed'
+          ? o.marks >= rules.passMarks
+            ? pick.filter((p) => p.marks < rules.passMarks)
+            : []
+          : pick;
+      const weakest = open.reduce<(typeof pick)[number] | null>(
+        (w, p) => (w === null || p.marks < w.marks ? p : w),
+        null,
+      );
+      if (weakest && o.marks > weakest.marks) pick = pick.map((p) => (p === weakest ? o : p));
+    }
+  // the subject always in first, then the rest by marks
+  const all = anchor ? [anchor, ...pick.sort(byMarks)] : pick.sort(byMarks);
+  const total = sum(all.map((m) => m.marks));
+  return { total, percent: round2(total / 5), codes: all.map((m) => m.code) };
 }
 
 /** A candidate's place in a subject: a compartment in it, a failure (below the pass marks), or a pass. */
@@ -342,25 +358,11 @@ const ACR_BANDS: Band[] = [
 /** Marks can carry a half from grace; a band takes its whole number. */
 const inBand = (m: number, b: Band) => Math.floor(m) >= b[1] && Math.floor(m) <= b[2];
 
-export const GRADES = ['A1', 'A2', 'B1', 'B2', 'C1', 'C2', 'D', 'E'] as const;
-export type Grade = (typeof GRADES)[number];
-/** The grade of a mark on the school's scale: A1 91–100, A2 81–90 … C2 41–50, D from the pass marks, E below. */
-function gradeOf(m: AnMark & { marks: number }, rules: BoardRules): Grade | null {
-  if (rules.grades === 'printed') {
-    const g = (m.grade ?? '').toUpperCase();
-    if (/^D\d?$/.test(g)) return 'D';
-    if (/^E\d?$/.test(g)) return 'E';
-    return (GRADES as readonly string[]).includes(g) ? (g as Grade) : null;
-  }
-  const x = Math.floor(m.marks);
-  if (x >= 91) return 'A1';
-  if (x >= 81) return 'A2';
-  if (x >= 71) return 'B1';
-  if (x >= 61) return 'B2';
-  if (x >= 51) return 'C1';
-  if (x >= 41) return 'C2';
-  return x >= rules.passMarks ? 'D' : 'E';
-}
+/** The class's grades, top first (the scale's names). */
+export const gradeNames = (rules: Pick<BoardRules, 'scale'>) => rules.scale.map((b) => b.grade);
+/** The "A grades" (every grade named A…): "A1+A2" on the default scale. */
+const aNames = (rules: BoardRules) =>
+  rules.scale.filter((b) => /^a/i.test(b.grade)).map((b) => b.grade);
 
 export interface Entry {
   c: AnCandidate;
@@ -375,7 +377,8 @@ export function subjectStats(entries: Entry[], rules: BoardRules) {
   }>;
   const marks = app.map((e) => e.m.marks);
   const out = app.map((e) => outcome(e.c, e.m.code, e.m.marks, rules));
-  const grade = (g: Grade) => app.filter((e) => gradeOf(e.m, rules) === g).length;
+  const graded = app.map((e) => gradeOn(e.m, rules));
+  const grade = (g: string) => graded.filter((x) => x === g).length;
   const boys = app.filter((e) => isBoy(e.c));
   const girls = app.filter((e) => isGirl(e.c));
   const passOf = (xs: typeof app) =>
@@ -398,8 +401,15 @@ export function subjectStats(entries: Entry[], rules: BoardRules) {
     totalMarks: sum(marks),
     hundreds: marks.filter((m) => m >= 100).length,
     distinctions: marks.filter((m) => m >= rules.distinction).length,
-    grades: Object.fromEntries(GRADES.map((g) => [g, grade(g)])) as Record<Grade, number>,
-    aGrades: grade('A1') + grade('A2'),
+    grades: Object.fromEntries(gradeNames(rules).map((g) => [g, grade(g)])) as Record<
+      string,
+      number
+    >,
+    aGrades: sum(aNames(rules).map(grade)),
+    /** those at a passing grade */
+    passingGrades: sum(
+      rules.scale.filter((b) => !failingGrade(b, rules)).map((b) => grade(b.grade)),
+    ),
     band: (b: Band, of = app) => of.filter((e) => inBand(e.m.marks, b)).length,
   };
 }
@@ -537,7 +547,7 @@ export function headlineOf(
       bestFive(
         c,
         (k) => kind.get(k),
-        rules.bestFive,
+        rules,
         (k) => name.get(k) ?? '',
       ).percent,
   );
@@ -595,7 +605,7 @@ export function analyse(input: AnInput): BoardAnalysis {
   const app = all.filter(appeared);
   const score = new Map<AnCandidate, Scored>(
     app.map((c) => {
-      const b = bestFive(c, (k) => kind.get(k), rules.bestFive, nameOf);
+      const b = bestFive(c, (k) => kind.get(k), rules, nameOf);
       return [c, { c, total: b.total, percent: b.percent }];
     }),
   );
@@ -745,7 +755,12 @@ export function analyse(input: AnInput): BoardAnalysis {
         columns: [
           t('subject', 'Subject', 3),
           n('appeared', 'Total no. of students'),
-          n('a', 'A1+A2'),
+          // "A1+A2"; "A+, A" when a name has a plus
+          n(
+            'a',
+            aNames(rules).join(aNames(rules).some((g) => g.includes('+')) ? ', ' : '+') ||
+              'A grades',
+          ),
           n('aPct', '%'),
         ],
         rows: codes.map((code) => {
@@ -796,7 +811,7 @@ export function analyse(input: AnInput): BoardAnalysis {
         title: 'Overall result',
         columns: overallColumns(t('label', 'School')),
         rows: [{ label: 'School', ...overallRow(all, score) }],
-        note: `The result analysis is based on the aggregate of ${RULE_WORDS[rules.bestFive]}. Passed: excluding failures and compartments.`,
+        note: `The result analysis is based on the aggregate of ${ruleWords(rules.bestFive)}. Passed: excluding failures and compartments.`,
       },
       {
         key: 'subjects',
@@ -871,7 +886,7 @@ export function analyse(input: AnInput): BoardAnalysis {
           n('avg', 'Average marks'),
           n('sum', 'Total marks'),
           n('dist', 'Distinction'),
-          ...GRADES.map((g) => n(`g${g}`, `Total no. of ${g}`)),
+          ...gradeNames(rules).map((g) => n(`g${g}`, `Total no. of ${g}`)),
           n('graded', 'Total no. of division'),
         ],
         rows: codes.map((code) => {
@@ -888,8 +903,8 @@ export function analyse(input: AnInput): BoardAnalysis {
             avg: s.average,
             sum: s.totalMarks,
             dist: s.distinctions,
-            ...Object.fromEntries(GRADES.map((g) => [`g${g}`, s.grades[g]])),
-            graded: sum(GRADES.filter((g) => g !== 'E').map((g) => s.grades[g])),
+            ...Object.fromEntries(gradeNames(rules).map((g) => [`g${g}`, s.grades[g] ?? 0])),
+            graded: s.passingGrades,
           };
         }),
       },
@@ -1408,12 +1423,6 @@ export function analyse(input: AnInput): BoardAnalysis {
 }
 
 const PRINTED_GRADES = ['A1', 'A2', 'B1', 'B2', 'C1', 'C2', 'D1', 'D2', 'E'] as const;
-
-export const RULE_WORDS: Record<BestFiveRule, string> = {
-  'language-plus-four': 'the best language and the best four other subjects',
-  'english-plus-four': 'English and the best four other subjects',
-  'any-five': 'the best five subjects',
-};
 
 /**
  * A teacher's own board results (phase D, for the ACR): each section × subject they taught — the section-wise
