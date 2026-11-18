@@ -376,3 +376,17 @@ subject); compartment, absent, withheld / later lists (with the student, section
   years; typed figures — rights, checks, refused for a year with a file, corrected — in the five years, the trend
   and Annexure 5, left out for one section; removed again, audited). Browser pass (Set-up with the edit dialog
   open, Upload, Annexures 12 and 5) at 1440 and 375: axe clean.
+
+## After phase E — the details sheet to fill (18 Nov 2026)
+
+- The saved upload's **Upload the details sheet** dialog leads with **Download the sheet to fill**
+  (`GET imports/:id/details-sheet`, import right, audited `exams.board_result.details_template`): sheet 1 "Students"
+  — one row a candidate (BoardRollNo, name as printed, a linked student's admission number, stream for XII, section,
+  Boarder / Staff, SC/ST/OBC/GEN, religion, EWS / CWSN as Y) with pick-lists on the coded columns; sheet 2
+  "Teachers" — each section × subject code with the Teachers tab's overrides, else the year's assigned teachers, one
+  row a teacher; sheet 3 "How to fill" with the CBSE subject codes. The headings are the school's, so the reader
+  (`detailsSheet`) takes it back unchanged; a blank cell keeps what EduPro has.
+- The button is a real button with a "No details yet" line, and the Analysis tab links to the file's Students and
+  details and warns while no candidate has a section.
+- Test: `board-details.e2e-spec.ts` + 1 (the auditor cannot download; the layout and pre-filled values; a cell
+  changed and uploaded back is applied). Browser pass with the dialog open at 1440 and 375: axe clean.

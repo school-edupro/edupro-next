@@ -237,14 +237,31 @@ export default async function BoardImportPage({
                 >
                   <form action={uploadDetailsSheet} className="ep-cert-fields">
                     <input type="hidden" name="id" value={u.id} />
-                    <p className="ep-field__help" style={{ gridColumn: '1 / -1', margin: 0 }}>
-                      Only where the records are not enough: the school&apos;s old sheet with two
-                      sheets — (1) BoardRollNo, admission number, section, stream, category (Boarder
-                      / Staff / Other), SC/ST/OBC/GEN, religion, EWS, CWSN; (2) Section,
-                      SubjectCode, Teacher and, if only some, their board roll numbers. Its values
-                      override the records for those candidates; a candidate not found is linked by
-                      the admission number.
-                    </p>
+                    <ol style={{ gridColumn: '1 / -1', margin: 0, paddingLeft: 'var(--sp-5)' }}>
+                      <li>
+                        <strong>Download the sheet to fill</strong> — this file&apos;s{' '}
+                        {String(f.candidates ?? u.totalRows)} candidates (roll number and name as
+                        CBSE printed them) with what EduPro already has, and each section&apos;s
+                        subject teachers.{' '}
+                        <a
+                          className="ep-btn ep-btn--secondary ep-btn--sm"
+                          href={`/exams/board-results/imports/${u.id}/details-sheet`}
+                          download
+                        >
+                          Download the sheet to fill (.xlsx)
+                        </a>
+                      </li>
+                      <li>
+                        Fill in what is missing: section, stream, category (Boarder / Staff /
+                        Other), SC/ST/OBC/GEN, religion, EWS and CWSN (Y or N), and the teachers. A
+                        blank cell keeps what EduPro has; the sheet&apos;s third tab says how.
+                      </li>
+                      <li>
+                        Choose the filled file and press Upload. Your school&apos;s own old sheet in
+                        the same layout works too; a candidate not found is linked by the admission
+                        number.
+                      </li>
+                    </ol>
                     <label className="ep-field" htmlFor="dsFile" style={{ gridColumn: '1 / -1' }}>
                       <span className="ep-field__label">The details sheet (.xlsx) *</span>
                       <input

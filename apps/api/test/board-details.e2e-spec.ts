@@ -469,4 +469,76 @@ describe('CBSE board results: students, details, subjects, teachers (e2e, docs/d
     );
     expect(again.rows[0]).toEqual({ boarder: false, staff_ward: true, details_from: 'record' });
   });
+
+  it('the details sheet to fill: downloaded with what EduPro has, filled in, uploaded back', async () => {
+    // the import right; the auditor only looks
+    expect(
+      (await get(`/exams/board-results/imports/${importId}/details-sheet`, auditor)).statusCode,
+    ).toBe(403);
+    const d = await get(`/exams/board-results/imports/${importId}/details-sheet`);
+    expect(d.statusCode).toBe(200);
+    expect(d.json().filename).toMatch(/^CBSE-Class-X-\d{4}-details-sheet\.xlsx$/);
+    const wb = new ExcelJS.Workbook();
+    await wb.xlsx.load(Buffer.from(d.json().base64 as string, 'base64') as unknown as ArrayBuffer);
+    expect(wb.worksheets.map((w) => w.name)).toEqual(['Students', 'Teachers', 'How to fill']);
+    const one = wb.worksheets[0]!;
+    expect((one.getRow(1).values as unknown[]).slice(1)).toEqual([
+      'BoardRollNo',
+      'StudentName',
+      'SchoolNumber / Admission Number',
+      'Section',
+      'Category (Boarder / Staff / Other)',
+      'SCSTOBCGEN',
+      'Religion (Hindu / Muslim / Christian / Sikh / Jainism / Buddhism / Other)',
+      'EWS (Specify Y for EWS Students)',
+      'CWSN (Specify Y for CWSN students)',
+    ]);
+    const rowOf = (roll: string) => {
+      let at = 0;
+      one.eachRow((r, n) => {
+        if (String(r.getCell(1).value) === roll) at = n;
+      });
+      return one.getRow(at);
+    };
+    expect(one.rowCount).toBe(1 + R.length);
+    // ANU, from her record: section A, OBC, Hindu, EWS, CWSN, a staff ward, her admission number
+    expect((rowOf(R[0]!).values as unknown[]).slice(1)).toEqual([
+      R[0],
+      'ANU DETAIL',
+      `${s}-0`,
+      'A',
+      'Staff',
+      'OBC',
+      'Hindu',
+      'Y',
+      'Y',
+    ]);
+    // the teachers: the Teachers tab's overrides, one row a teacher
+    const two: string[] = [];
+    wb.worksheets[1]!.eachRow((r, n) => {
+      if (n > 1)
+        two.push(
+          `${String(r.getCell(1).value)}|${String(r.getCell(2).value)}|${String(r.getCell(3).value)}`,
+        );
+    });
+    expect(two).toContain('B|041|Omar Other');
+    expect(two).toContain('A|085|Guest Hindi Teacher');
+    // filled in: DEV is not EWS after all, and in section A
+    const dev = rowOf(R[3]!);
+    dev.getCell(4).value = 'A';
+    dev.getCell(8).value = 'N';
+    const back = await post(`/exams/board-results/imports/${importId}/details-sheet`, {
+      fileName: 'filled.xlsx',
+      fileBase64: Buffer.from(await wb.xlsx.writeBuffer()).toString('base64'),
+    });
+    expect(back.statusCode).toBe(201);
+    expect(back.json()).toMatchObject({ updated: R.length, unknownRolls: [] });
+    const now = await withMigrator((c) =>
+      c.query<Record<string, unknown>>(
+        `SELECT section, ews, details_from FROM board_candidates WHERE school_id = $1 AND roll_no = $2`,
+        [school.id, R[3]],
+      ),
+    );
+    expect(now.rows[0]).toEqual({ section: 'A', ews: false, details_from: 'sheet' });
+  });
 });

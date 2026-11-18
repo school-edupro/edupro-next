@@ -174,6 +174,16 @@ export class BoardResultsController {
     return this.details.refresh(ctx, id(importId));
   }
 
+  @Get('imports/:id/details-sheet')
+  @ApiOperation({
+    summary:
+      "The details sheet to fill: this saved file's candidates in the school's two-sheet layout, with what EduPro already has",
+  })
+  @RequirePermission(BOARD_RESULTS.import)
+  detailsTemplate(@ReqCtx() ctx: RequestContext, @Param('id') importId: string) {
+    return this.details.detailsTemplate(ctx, id(importId));
+  }
+
   @Post('imports/:id/details-sheet')
   @ApiOperation({
     summary:

@@ -503,8 +503,12 @@ student's record, and keeps the board roll number on the enrolment, so the next 
 finds them by it. On the upload's page, **Review students** lists the candidates not found first: pick the student
 (the likely ones are listed first) or mark **Not our student**; a link can be undone. **Take the details again from
 the records** reads them again after a record was put right. Where the records are not enough, **Upload the details
-sheet** takes the school's old two-sheet file (roll number → section, category, EWS …; section × subject code →
-teacher) and its values win for those candidates.
+sheet** takes the school's two-sheet file (roll number → section, category, EWS …; section × subject code →
+teacher) and its values win for those candidates. Its dialog's **Download the sheet to fill** gives that file ready
+made: every candidate of the result file (roll number and name as CBSE printed them) with what EduPro already has,
+pick-lists for category, SC/ST/OBC/GEN, religion, EWS and CWSN, each section's subject teachers, and a tab on how to
+fill it with the CBSE subject codes. Fill in what is missing (a blank cell keeps what EduPro has), save it and upload
+it in the same dialog.
 
 **Teachers** (tab) shows who taught each section's subject in the examination year — the year's teacher
 assignments, through each CBSE code's school subject — and **Set a teacher** changes one for this examination only

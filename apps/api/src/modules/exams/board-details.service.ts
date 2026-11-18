@@ -634,6 +634,203 @@ export class BoardDetailsService {
    * roll numbers). Its values override the record's for those candidates; an admission number links a candidate not
    * found; a teacher is matched to an employee by name, else kept as written.
    */
+  /**
+   * The details sheet to fill (docs/design/88): this saved file's candidates in the school's two-sheet layout — the
+   * first sheet one row a candidate with what EduPro already has (roll number and name as CBSE printed them, the
+   * admission number of a linked student, section, stream, category, religion, EWS, CWSN), the second the teacher of
+   * each section's subject, a third how to fill it with the CBSE subject codes. Filled in and uploaded back, it is
+   * read by `detailsSheet` (a blank cell keeps what EduPro has).
+   */
+  async detailsTemplate(ctx: RequestContext, importId: string) {
+    return this.db.tenant(requireTenant(ctx), async (c) => {
+      const i = await this.savedImport(c, importId);
+      const rows = (
+        await c.query<{
+          roll_no: string;
+          name: string | null;
+          admission_no: string | null;
+          stream: string | null;
+          section: string | null;
+          category: string | null;
+          religion: string | null;
+          ews: boolean | null;
+          cwsn: boolean | null;
+          boarder: boolean | null;
+          staff_ward: boolean | null;
+        }>(
+          `SELECT bc.roll_no, bc.name, s.admission_no, bc.stream, bc.section, bc.category, bc.religion, bc.ews, bc.cwsn,
+                  bc.boarder, bc.staff_ward
+             FROM board_candidates bc LEFT JOIN students s ON s.id = bc.student_id
+            WHERE bc.import_id = $1 ORDER BY bc.roll_no`,
+          [importId],
+        )
+      ).rows;
+      // each section × subject with its teacher(s): the Teachers tab's overrides, else the year's assignments
+      const cells = (
+        await c.query<{ section: string; code: string }>(
+          `SELECT DISTINCT bc.section, r.subject_code AS code
+             FROM board_results r JOIN board_candidates bc ON bc.id = r.candidate_id
+            WHERE bc.import_id = $1 AND bc.section IS NOT NULL
+            ORDER BY 1, 2`,
+          [importId],
+        )
+      ).rows;
+      const overrides = (
+        await c.query<{ section: string; code: string; name: string; rolls: string[] }>(
+          `SELECT o.section, o.code, COALESCE(e.display_name, o.teacher_name) AS name, o.rolls
+             FROM board_teacher_overrides o LEFT JOIN employees e ON e.id = o.employee_id
+            WHERE o.board = $1 AND o.class_label = $2 AND o.exam_year = $3 ORDER BY o.id`,
+          [i.board, i.class_label, i.exam_year],
+        )
+      ).rows;
+      const who = await this.teacherResolver(c, i.board, i.class_label, i.exam_year);
+      const subjects = (
+        await c.query<{ code: string; name: string | null }>(
+          `SELECT code, name FROM board_subjects WHERE board = $1 AND class_label = $2 AND kind <> 'internal' ORDER BY code`,
+          [i.board, i.class_label],
+        )
+      ).rows;
+
+      const wb = new ExcelJS.Workbook();
+      wb.creator = 'EduPro Next';
+      wb.created = new Date();
+      const head = (ws: ExcelJS.Worksheet) => {
+        const h = ws.getRow(1);
+        h.font = { bold: true, color: { argb: 'FF1C2A70' } };
+        h.alignment = { wrapText: true, vertical: 'top' };
+        h.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFEEF1FB' } };
+        h.height = 48;
+        ws.views = [{ state: 'frozen', ySplit: 1 }];
+      };
+      const xii = i.class_label === 'XII';
+      // the headings the reader looks for (BoardRollNo, Admission Number, Stream, Section, Category …), as the school's
+      const students = wb.addWorksheet('Students');
+      students.columns = [
+        { header: 'BoardRollNo', key: 'roll', width: 13 },
+        { header: 'StudentName', key: 'name', width: 30 },
+        { header: 'SchoolNumber / Admission Number', key: 'adm', width: 16 },
+        ...(xii ? [{ header: 'Stream', key: 'stream', width: 20 }] : []),
+        { header: 'Section', key: 'section', width: 9 },
+        { header: 'Category (Boarder / Staff / Other)', key: 'kind', width: 16 },
+        { header: 'SCSTOBCGEN', key: 'caste', width: 12 },
+        {
+          header: 'Religion (Hindu / Muslim / Christian / Sikh / Jainism / Buddhism / Other)',
+          key: 'religion',
+          width: 18,
+        },
+        { header: 'EWS (Specify Y for EWS Students)', key: 'ews', width: 12 },
+        { header: 'CWSN (Specify Y for CWSN students)', key: 'cwsn', width: 12 },
+      ];
+      head(students);
+      for (const r of rows)
+        students.addRow({
+          roll: r.roll_no,
+          name: r.name ?? '',
+          adm: r.admission_no ?? '',
+          stream: r.stream ?? '',
+          section: r.section ?? '',
+          kind: r.boarder ? 'Boarder' : r.staff_ward ? 'Staff' : '',
+          caste: r.category ?? '',
+          religion: r.religion ?? '',
+          ews: r.ews ? 'Y' : '',
+          cwsn: r.cwsn ? 'Y' : '',
+        });
+      // pick-lists for the coded columns on the candidates' rows (typing stays possible)
+      const last = rows.length + 1;
+      const list = (key: string, values: string[]) => {
+        const col = students.getColumn(key).letter;
+        for (let n = 2; n <= last; n += 1)
+          students.getCell(`${col}${String(n)}`).dataValidation = {
+            type: 'list',
+            allowBlank: true,
+            showErrorMessage: false,
+            formulae: [`"${values.join(',')}"`],
+          };
+      };
+      list('kind', ['Boarder', 'Staff', 'Other']);
+      list('caste', ['SC', 'ST', 'OBC', 'GEN']);
+      list('religion', ['Hindu', 'Muslim', 'Christian', 'Sikh', 'Jainism', 'Buddhism', 'Other']);
+      list('ews', ['Y', 'N']);
+      list('cwsn', ['Y', 'N']);
+      if (xii) list('stream', ['SCIENCE STREAM', 'COMMERCE STREAM', 'HUMANITIES STREAM']);
+
+      const teachers = wb.addWorksheet('Teachers');
+      teachers.columns = [
+        { header: 'Section', key: 'section', width: 9 },
+        { header: 'SubjectCode', key: 'code', width: 12 },
+        { header: 'Teacher', key: 'teacher', width: 30 },
+        {
+          header: 'Board_RollNumbers_seperated_by_comma_leave_blank_for_whole_class',
+          key: 'rolls',
+          width: 40,
+        },
+      ];
+      head(teachers);
+      for (const x of cells) {
+        const own = overrides.filter((o) => o.section === x.section && o.code === x.code);
+        if (own.length)
+          for (const o of own)
+            teachers.addRow({
+              section: x.section,
+              code: x.code,
+              teacher: o.name,
+              rolls: o.rolls.join(', '),
+            });
+        else {
+          const t = who(x.section, x.code, '');
+          // one row a teacher (a shared section's teachers come joined by commas)
+          for (const name of t ? t.name.split(', ') : [''])
+            teachers.addRow({ section: x.section, code: x.code, teacher: name, rolls: '' });
+        }
+      }
+
+      const how = wb.addWorksheet('How to fill');
+      how.columns = [
+        { header: 'How to fill this sheet', key: 'a', width: 18 },
+        { header: '', key: 'b', width: 90 },
+      ];
+      head(how);
+      for (const [a, b] of [
+        [
+          'Students',
+          'One row a candidate of this result file. Fill in what is missing; a blank cell keeps what EduPro has. Do not change BoardRollNo.',
+        ],
+        [
+          'Admission no',
+          'For a candidate EduPro could not find, the admission number links them to the student.',
+        ],
+        ['Category', 'Boarder, Staff (a staff ward) or Other.'],
+        ['SCSTOBCGEN', 'SC, ST, OBC or GEN.'],
+        ['EWS, CWSN', 'Y for yes, N for no.'],
+        [
+          'Teachers',
+          "One row a section and subject code with its teacher (a staff name as on EduPro). Two teachers of one section: two rows. Only some students (a language group): their board roll numbers, separated by commas. Uploading replaces this year's teacher list; leave the sheet empty to keep it.",
+        ],
+        [
+          'Then',
+          "Save, and upload this file on the result file's page: Students and details → Upload the details sheet. Keep the sheets in this order.",
+        ],
+        ['', ''],
+        ['CBSE subject codes', `Class ${i.class_label}`],
+        ...subjects.map((s): [string, string] => [s.code, s.name ?? '']),
+      ])
+        how.addRow({ a, b });
+      how.getColumn('b').alignment = { wrapText: true, vertical: 'top' };
+
+      await this.audit.stage(ctx, c, {
+        action: 'exams.board_result.details_template',
+        entityType: 'board_result_imports',
+        entityId: importId,
+        after: { candidates: rows.length, teacherRows: teachers.rowCount - 1 },
+      });
+      return {
+        filename: `CBSE-Class-${i.class_label}-${String(i.exam_year)}-details-sheet.xlsx`,
+        contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        base64: Buffer.from(await wb.xlsx.writeBuffer()).toString('base64'),
+      };
+    });
+  }
+
   async detailsSheet(ctx: RequestContext, importId: string, fileBase64: string) {
     const wb = new ExcelJS.Workbook();
     try {
