@@ -408,3 +408,16 @@ export interface BoardRange {
     }>;
   } | null;
 }
+
+// ---- the Reports tab: Range Wise Summary (the class's result) ----
+
+export interface BoardOverall {
+  classLabel: 'X' | 'XII';
+  examYear: number | null;
+  years: number[];
+  compare: number;
+  gender: 'all' | 'M' | 'F';
+  method: 'best5' | 'all';
+  rule: string;
+  summary: NonNullable<BoardRange['summary']> | null;
+}

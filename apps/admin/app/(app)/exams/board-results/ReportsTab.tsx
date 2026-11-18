@@ -3,9 +3,10 @@ import { getTranslations } from 'next-intl/server';
 import { FileLinks } from '@/components/FileLinks';
 import { apiFetch } from '@/lib/api';
 import { yearLabel, type BoardRange } from '@/lib/board-results';
+import { OverallReport } from './OverallReport';
 
 /** The ready-made reports of the Reports tab (more join the list as they are built). */
-const REPORTS = ['range'] as const;
+const REPORTS = ['range', 'overall'] as const;
 
 /**
  * The Reports tab (docs/design/88): reports EduPro makes ready from the saved CBSE results, as the school's old
@@ -22,10 +23,31 @@ export async function ReportsTab({
     gender?: string;
     code?: string;
     report?: string;
+    method?: string;
   };
 }) {
   const b = await getTranslations('boardResults');
-  const report = 'range';
+  const report = sp.report === 'overall' ? 'overall' : 'range';
+  const nav = (
+    <nav className="ep-tabs-links" aria-label={b('rp_list')}>
+      {REPORTS.map((x) => (
+        <a
+          key={x}
+          href={`/exams/board-results?tab=reports&report=${x}`}
+          aria-current={x === report ? 'page' : undefined}
+        >
+          {b(`rp_${x}`)}
+        </a>
+      ))}
+    </nav>
+  );
+  if (report === 'overall')
+    return (
+      <div style={{ display: 'grid', gap: 'var(--sp-4)', gridTemplateColumns: 'minmax(0, 1fr)' }}>
+        {nav}
+        <OverallReport sp={sp} />
+      </div>
+    );
   const cls = sp.classLabel === 'XII' ? 'XII' : 'X';
   const f = new URLSearchParams({ classLabel: cls });
   if (/^\d{4}$/.test(sp.examYear ?? '')) f.set('examYear', sp.examYear!);
@@ -45,17 +67,7 @@ export async function ReportsTab({
 
   return (
     <div style={{ display: 'grid', gap: 'var(--sp-4)', gridTemplateColumns: 'minmax(0, 1fr)' }}>
-      <nav className="ep-tabs-links" aria-label={b('rp_list')}>
-        {REPORTS.map((x) => (
-          <a
-            key={x}
-            href={`/exams/board-results?tab=reports&report=${x}`}
-            aria-current={x === report ? 'page' : undefined}
-          >
-            {b(`rp_${x}`)}
-          </a>
-        ))}
-      </nav>
+      {nav}
       <Card title={b('rp_range')}>
         <p className="ep-field__help" style={{ marginTop: 0 }}>
           {b('rp_rangeHelp')}

@@ -26,13 +26,15 @@ import {
 import { analysisPdf, analysisXlsx, examName } from './board-analysis-file';
 import { BoardDetailsService } from './board-details.service';
 import { marksPdf, marksXlsx } from './board-marks-file';
-import { rangePdf, rangeXlsx } from './board-reports-file';
-import { rangeSubjectSummary } from './board-reports';
+import { OVERALL_LABELS, rangePdf, rangeXlsx } from './board-reports-file';
+import { rangeOverall, rangeSubjectSummary } from './board-reports';
 import { filterMarks, marksRows, type MarksRow } from './board-marks';
 import {
   BoardRulesSchema,
   type BoardMarksFileDto,
   type BoardMarksQueryDto,
+  type BoardOverallFileDto,
+  type BoardOverallQueryDto,
   type BoardRangeFileDto,
   type BoardRangeQueryDto,
   type BoardYearFiguresDto,
@@ -1027,6 +1029,98 @@ export class BoardAnalysisService {
             filename: `${base}.pdf`,
             contentType: 'application/pdf',
             base64: (await rangePdf(r.summary, head)).toString('base64'),
+          };
+    });
+  }
+
+  // ---- the Reports tab: Range Wise Summary (the class's result) ----
+
+  private async overallOf(c: PoolClient, q: BoardOverallQueryDto) {
+    const years = (
+      await c.query<{ y: number }>(
+        `SELECT DISTINCT exam_year AS y FROM board_candidates WHERE board = 'CBSE' AND class_label = $1 ORDER BY 1 DESC`,
+        [q.classLabel],
+      )
+    ).rows.map((r) => r.y);
+    const examYear = q.examYear !== undefined && years.includes(q.examYear) ? q.examYear : years[0];
+    const { rules } = await this.rulesOf(c);
+    if (examYear === undefined) return { examYear: null, years, rules, summary: null };
+    const subjects = await this.subjectsOf(c, q.classLabel);
+    const data = [];
+    for (const y of [examYear, ...years.filter((x) => x < examYear).slice(0, q.compare)])
+      data.push({ examYear: y, candidates: await this.candidatesOf(c, q.classLabel, y) });
+    return {
+      examYear,
+      years,
+      rules,
+      summary: rangeOverall(data, subjects, rules, { gender: q.gender, method: q.method }),
+    };
+  }
+
+  /** Range Wise Summary: the class's result in figures for the year and the saved years compared. */
+  async overallSummary(ctx: RequestContext, q: BoardOverallQueryDto) {
+    return this.db.tenant(requireTenant(ctx), async (c) => {
+      const r = await this.overallOf(c, q);
+      return {
+        classLabel: q.classLabel,
+        examYear: r.examYear,
+        years: r.years,
+        compare: q.compare,
+        gender: q.gender,
+        method: q.method,
+        rule: RULE_WORDS[r.rules.bestFive],
+        summary: r.summary,
+      };
+    });
+  }
+
+  async overallSummaryFile(ctx: RequestContext, q: BoardOverallFileDto) {
+    return this.db.tenant(requireTenant(ctx), async (c) => {
+      const r = await this.overallOf(c, q);
+      if (!r.summary || r.examYear === null)
+        throw new DomainError('not-found', `No saved Class ${q.classLabel} result`, {
+          status: 404,
+        });
+      const h = await registerLetterhead(c);
+      const head = {
+        school: h.school,
+        address: h.address,
+        logo: q.format === 'pdf' ? await registerLogo(this.storage, h.file) : null,
+        generatedOn: registerGeneratedOn(),
+        by: ctx.user.displayName,
+        title: `CBSE ${q.classLabel === 'XII' ? 'AISSCE' : 'AISSE'} (Class ${q.classLabel}) · Range wise summary`,
+        scope: [
+          r.summary.years.map((y) => yearLabel(y)).join(' against '),
+          q.gender === 'M' ? 'boys' : q.gender === 'F' ? 'girls' : 'all students',
+          q.method === 'best5'
+            ? `aggregate of the best five (${RULE_WORDS[r.rules.bestFive]})`
+            : 'aggregate of all subjects',
+        ].join(' · '),
+      };
+      await this.audit.stage(ctx, c, {
+        action: 'exams.board_result.report_export',
+        entityType: 'board_candidates',
+        entityId: requireTenant(ctx).schoolId,
+        after: {
+          report: 'range-overall',
+          classLabel: q.classLabel,
+          years: r.summary.years,
+          gender: q.gender,
+          method: q.method,
+          format: q.format,
+        },
+      });
+      const base = `CBSE-Class-${q.classLabel}-${String(r.examYear)}-range-wise-summary`;
+      return q.format === 'xlsx'
+        ? {
+            filename: `${base}.xlsx`,
+            contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            base64: (await rangeXlsx(r.summary, head, OVERALL_LABELS)).toString('base64'),
+          }
+        : {
+            filename: `${base}.pdf`,
+            contentType: 'application/pdf',
+            base64: (await rangePdf(r.summary, head, OVERALL_LABELS)).toString('base64'),
           };
     });
   }

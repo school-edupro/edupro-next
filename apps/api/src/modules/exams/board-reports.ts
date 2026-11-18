@@ -8,6 +8,7 @@ import {
   type AnSubject,
   type BoardRules,
 } from './board-analysis';
+import { marksRows, type MarksMethod } from './board-marks';
 
 /**
  * The Reports tab's ready-made reports (docs/design/88). The first, as the school's old "Range Wise Subject
@@ -142,3 +143,126 @@ export function rangeSubjectSummary(
 
 /** "2025-26" for a column heading. */
 export const rangeYearLabel = (y: number) => yearLabel(y);
+
+// ---- Range Wise Summary: the class's result (the school's old "Result Summary") ----
+
+/** The aggregate ranges of the class's summary, highest first: [label, from, below]. */
+export const OVERALL_RANGES: Array<[string, number, number]> = [
+  ['90% – 100%', 90, Infinity],
+  ['80% – 89.99%', 80, 90],
+  ['70% – 79.99%', 70, 80],
+  ['60% – 69.99%', 60, 70],
+  ['50% – 59.99%', 50, 60],
+  ['40% – 49.99%', 40, 50],
+  ['33% – 39.99%', 33, 40],
+  ['Below 33%', -Infinity, 33],
+];
+
+/**
+ * Range Wise Summary: the class's students, appeared, absent, pass, fail and compartment (by the CBSE result),
+ * distinction and the three divisions and the aggregate ranges (by each student's aggregate — the school's best five
+ * or all subjects), the highest, lowest and average aggregate — a count and a share a year. One block, no heading.
+ */
+export function rangeOverall(
+  years: Array<{ examYear: number; candidates: AnCandidate[] }>,
+  subjects: AnSubject[],
+  rules: BoardRules,
+  opts: { gender: Gender; method: MarksMethod },
+): RangeSummary {
+  const ordered = [...years].sort((a, b) => a.examYear - b.examYear);
+  const data = ordered.map((y) => {
+    const cands = y.candidates.filter((c) => opts.gender === 'all' || c.sex === opts.gender);
+    const rows = marksRows(cands, subjects, rules, opts.method);
+    const appeared = rows.filter((r) => r.percent !== null);
+    return { examYear: y.examYear, all: rows, appeared, pcts: appeared.map((r) => r.percent!) };
+  });
+  type Y = (typeof data)[number];
+  const row = (
+    key: string,
+    label: string,
+    count: (y: Y) => number | null,
+    of: ((y: Y) => number) | null,
+  ): RangeRow => ({
+    key,
+    label,
+    values: Object.fromEntries(
+      data.map((y) => {
+        const n = count(y);
+        const base = of ? of(y) : 0;
+        return [
+          String(y.examYear),
+          { count: n, pct: of && n !== null && base > 0 ? round2((n * 100) / base) : null },
+        ];
+      }),
+    ),
+  });
+  const ofAppeared = (y: Y) => y.appeared.length;
+  const result = (y: Y, words: string[]) =>
+    y.appeared.filter((r) => words.includes(r.result ?? '')).length;
+  const between = (y: Y, from: number, below: number) =>
+    y.pcts.filter((p) => p >= from && p < below).length;
+  const mean = (xs: number[]) =>
+    xs.length ? round2(xs.reduce((a, b) => a + b, 0) / xs.length) : null;
+  return {
+    years: ordered.map((y) => y.examYear),
+    blocks: [
+      {
+        code: '',
+        name: '',
+        rows: [
+          row('total', 'Total no. of students', (y) => y.all.length, null),
+          row('appeared', 'No. of students appeared', (y) => y.appeared.length, null),
+          row(
+            'absent',
+            'No. of students absent',
+            (y) => y.all.length - y.appeared.length,
+            (y) => y.all.length,
+          ),
+          row('pass', 'No. of students pass', (y) => result(y, ['PASS']), ofAppeared),
+          row('fail', 'No. of students fail', (y) => result(y, ['FAIL', 'ER']), ofAppeared),
+          row('comp', 'No. of students compartment', (y) => result(y, ['COMP']), ofAppeared),
+          row(
+            'distinction',
+            'Distinction',
+            (y) => between(y, rules.distinction, Infinity),
+            ofAppeared,
+          ),
+          row(
+            'first',
+            '1st division',
+            (y) => between(y, FIRST_DIVISION, rules.distinction),
+            ofAppeared,
+          ),
+          row(
+            'second',
+            '2nd division',
+            (y) => between(y, SECOND_DIVISION, FIRST_DIVISION),
+            ofAppeared,
+          ),
+          row(
+            'third',
+            '3rd division',
+            (y) => between(y, rules.passMarks, SECOND_DIVISION),
+            ofAppeared,
+          ),
+          ...OVERALL_RANGES.map(([label, from, below], i) =>
+            row(`r${String(i)}`, label, (y) => between(y, from, below), ofAppeared),
+          ),
+          row(
+            'highest',
+            'Highest aggregate (%)',
+            (y) => (y.pcts.length ? Math.max(...y.pcts) : null),
+            null,
+          ),
+          row(
+            'lowest',
+            'Lowest aggregate (%)',
+            (y) => (y.pcts.length ? Math.min(...y.pcts) : null),
+            null,
+          ),
+          row('average', 'Average aggregate (%)', (y) => mean(y.pcts), null),
+        ],
+      },
+    ],
+  };
+}

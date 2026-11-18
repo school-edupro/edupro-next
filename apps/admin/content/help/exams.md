@@ -541,6 +541,12 @@ overlap: distinction from the distinction marks (Set-up), 1st division from 60, 
 Excel and PDF give the same: the PDF prints each subject on a page of its own (headings and the signature boxes
 on every page), and the Excel sheet prints the same way.
 
+**Range wise summary** (the old "Result Summary") is the class's result in one table: total students, appeared,
+absent (a share of all students), pass, fail and compartment by the CBSE result, distinction and the three divisions
+and the aggregate ranges (90–100 %, 80–89.99 % … below 33 %) by each student's aggregate — the **calculation method**
+picks the school's best five or all subjects — and the highest, lowest and average aggregate; for all students, boys
+or girls, with up to four saved years before it compared. Excel and PDF give the same.
+
 **Analysis: the ten annexures.** **Analysis** counts a saved year as the school's own result workbook does: pick the
 class, the examination and a section (or all) and the annexure — 1 School summary (five years, the result in
 figures, the top scorers, full scores, distinctions, the highest in each subject, A1 + A2), 2 Overall result (boys

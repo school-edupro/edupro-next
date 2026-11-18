@@ -434,3 +434,10 @@ subject); compartment, absent, withheld / later lists (with the student, section
   headings.
 - Tests: unit `board-reports.spec.ts` (2); e2e `board-years.e2e-spec.ts` + 1 (two saved years compared, girls only,
   one subject, the files). Browser + axe at 1440 and 375. The e2e also checks one PDF page a subject.
+- **Range Wise Summary** (the old "Result Summary", 18 Nov 2026): the class's result in one table — total students,
+  appeared, absent (share of all), pass / fail / compartment by the CBSE result, distinction and the three divisions
+  and eight aggregate ranges (90–100 … 33–39.99, below 33; the rows after the old screen's row 10 were not in the
+  screenshot, so these are EduPro's) by each student's aggregate (`best5` or `all`), highest / lowest / average
+  aggregate. Filters: class, examination, compare with 0–4 saved years (none by default, as the old screen),
+  calculation method, gender. `rangeOverall` in `board-reports.ts`, `GET reports/range-overall` and `/file`; the file
+  builders take the report's labels (`SUBJECT_LABELS`, `OVERALL_LABELS`). Tests: unit + 1, e2e + 1.

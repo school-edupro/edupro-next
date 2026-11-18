@@ -319,4 +319,42 @@ describe('CBSE board results: earlier years (e2e, docs/design/88 phase E)', () =
       (await get('/exams/board-results/reports/range-subjects?classLabel=X', auditor)).statusCode,
     ).toBe(200);
   });
+
+  it("Reports: the Range Wise Summary — the class's result against the earlier saved year", async () => {
+    const r = await get('/exams/board-results/reports/range-overall?classLabel=X&compare=1');
+    expect(r.statusCode).toBe(200);
+    const d = r.json() as {
+      summary: {
+        years: number[];
+        blocks: Array<{
+          rows: Array<{
+            key: string;
+            values: Record<string, { count: number | null; pct: number | null }>;
+          }>;
+        }>;
+      };
+    };
+    expect(d.summary.years).toEqual([now - 2, now]);
+    const v = (k: string, y: number) =>
+      d.summary.blocks[0]!.rows.find((x) => x.key === k)!.values[String(y)]!;
+    // this year: 90, 80 and 70 in every subject
+    expect(v('appeared', now)).toEqual({ count: 3, pct: null });
+    expect(v('pass', now)).toEqual({ count: 3, pct: 100 });
+    expect(v('distinction', now)).toEqual({ count: 2, pct: 66.67 });
+    expect(v('first', now).count).toBe(1);
+    expect([v('r0', now).count, v('r1', now).count, v('r2', now).count]).toEqual([1, 1, 1]);
+    expect(v('average', now).count).toBe(80);
+    // two years back: 60 and 70
+    expect(v('appeared', now - 2).count).toBe(2);
+    expect(v('average', now - 2).count).toBe(65);
+    const p = await get(
+      '/exams/board-results/reports/range-overall/file?classLabel=X&compare=1&format=pdf',
+    );
+    expect(p.statusCode).toBe(200);
+    expect(p.json().filename).toMatch(/range-wise-summary\.pdf$/);
+    const x = await get(
+      '/exams/board-results/reports/range-overall/file?classLabel=X&format=xlsx&gender=F',
+    );
+    expect(x.statusCode).toBe(200);
+  });
 });

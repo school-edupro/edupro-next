@@ -1,5 +1,5 @@
 import { DEFAULT_BOARD_RULES, type AnCandidate, type AnSubject } from './board-analysis';
-import { rangeSubjectSummary } from './board-reports';
+import { rangeOverall, rangeSubjectSummary } from './board-reports';
 
 // Every roll number and mark here is made up.
 const SUBJECTS: AnSubject[] = [
@@ -106,5 +106,52 @@ describe('Range Wise Subject Summary (docs/design/88)', () => {
     expect(printed.blocks[1]!.rows.find((x) => x.key === 'gE')!.label).toBe(
       'E1 grade (as printed)',
     );
+  });
+
+  it("Range Wise Summary: the class's result — results, divisions, ranges, highest, lowest, average", () => {
+    const five = (m: number): Array<[string, number | null]> => [
+      ['184', m],
+      ['417', m],
+    ];
+    const SUBS: AnSubject[] = [
+      { code: '184', name: 'English', kind: 'language' },
+      { code: '417', name: 'AI', kind: 'skill' },
+    ];
+    // two subjects only: the best five is their total over 500 — the "all subjects" method is over 200
+    const cands = [
+      cand('F', five(95)),
+      cand('M', five(85)),
+      cand('F', five(62)),
+      cand('M', five(50), { result: 'COMP', compartment: ['417'] }),
+      { ...cand('M', [['184', null]]), result: 'ABST' },
+    ];
+    const r = rangeOverall([{ examYear: 2026, candidates: cands }], SUBS, DEFAULT_BOARD_RULES, {
+      gender: 'all',
+      method: 'all',
+    });
+    expect(r.blocks).toHaveLength(1);
+    const v = (key: string) => r.blocks[0]!.rows.find((x) => x.key === key)!.values['2026']!;
+    expect(v('total')).toEqual({ count: 5, pct: null });
+    expect(v('appeared')).toEqual({ count: 4, pct: null });
+    expect(v('absent')).toEqual({ count: 1, pct: 20 }); // of all students
+    expect(v('pass')).toEqual({ count: 3, pct: 75 }); // of those who appeared
+    expect(v('comp')).toEqual({ count: 1, pct: 25 });
+    expect(['distinction', 'first', 'second', 'third'].map((k) => v(k).count)).toEqual([
+      2, 1, 1, 0,
+    ]);
+    // 90–100: 95; 80–89.99: 85; 60–69.99: 62; 50–59.99: 50
+    expect(v('r0').count).toBe(1);
+    expect(v('r1').count).toBe(1);
+    expect(v('r3').count).toBe(1);
+    expect(v('r4').count).toBe(1);
+    expect(v('highest').count).toBe(95);
+    expect(v('lowest').count).toBe(50);
+    expect(v('average').count).toBe(73);
+    // boys only
+    const boys = rangeOverall([{ examYear: 2026, candidates: cands }], SUBS, DEFAULT_BOARD_RULES, {
+      gender: 'M',
+      method: 'all',
+    });
+    expect(boys.blocks[0]!.rows.find((x) => x.key === 'total')!.values['2026']!.count).toBe(3);
   });
 });

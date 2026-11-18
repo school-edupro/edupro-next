@@ -17,11 +17,43 @@ export interface ReportHead {
 
 const cellText = (v: number | null) => (v === null ? '' : v);
 
-export async function rangeXlsx(r: RangeSummary, head: ReportHead): Promise<Buffer> {
+/** What a range report calls itself and its columns (the subject summary, the class's summary). */
+export interface RangeLabels {
+  report: string;
+  sheet: string;
+  first: string;
+  count: string;
+  pct: string;
+  footnote: string;
+}
+export const SUBJECT_LABELS: RangeLabels = {
+  report: 'Range wise subject summary',
+  sheet: 'Range wise subject summary',
+  first: 'Subject Code & Name',
+  count: 'Count',
+  pct: '%',
+  footnote:
+    'Divisions as the old report counts them: distinction from the distinction marks, 1st division from 60, 2nd from 45, 3rd from the pass marks. Shares are of those who appeared.',
+};
+export const OVERALL_LABELS: RangeLabels = {
+  report: 'Range wise summary',
+  sheet: 'Range wise summary',
+  first: 'Range of Marks',
+  count: 'No. of Students',
+  pct: 'Percentage (%)',
+  footnote:
+    "Pass, fail and compartment by the CBSE result; divisions and ranges by each student's aggregate. Shares are of those who appeared (absent: of all students).",
+};
+
+export async function rangeXlsx(
+  r: RangeSummary,
+  head: ReportHead,
+  labels: RangeLabels = SUBJECT_LABELS,
+): Promise<Buffer> {
   const wb = new ExcelJS.Workbook();
   wb.creator = 'EduPro Next';
   wb.created = new Date();
-  const ws = wb.addWorksheet('Range wise subject summary');
+  const ws = wb.addWorksheet(labels.sheet);
   const width = 2 + r.years.length * 2;
   for (const [i, line] of [head.school, head.title, head.scope].entries()) {
     const x = ws.addRow([line]);
@@ -29,12 +61,8 @@ export async function rangeXlsx(r: RangeSummary, head: ReportHead): Promise<Buff
     ws.mergeCells(x.number, 1, x.number, width);
   }
   ws.addRow([]);
-  const g = ws.addRow([
-    'Sr No',
-    'Subject Code & Name',
-    ...r.years.flatMap((y) => [rangeYearLabel(y), '']),
-  ]);
-  const h = ws.addRow(['', '', ...r.years.flatMap(() => ['Count', '%'])]);
+  const g = ws.addRow(['Sr No', labels.first, ...r.years.flatMap((y) => [rangeYearLabel(y), ''])]);
+  const h = ws.addRow(['', '', ...r.years.flatMap(() => [labels.count, labels.pct])]);
   ws.mergeCells(g.number, 1, h.number, 1);
   ws.mergeCells(g.number, 2, h.number, 2);
   r.years.forEach((_, i) => ws.mergeCells(g.number, 3 + i * 2, g.number, 4 + i * 2));
@@ -55,12 +83,15 @@ export async function rangeXlsx(r: RangeSummary, head: ReportHead): Promise<Buff
   for (const [k, b] of r.blocks.entries()) {
     // each subject on a page of its own when printed
     if (k > 0) ws.lastRow?.addPageBreak();
-    const t = ws.addRow(['', `${b.code} - ${b.name.toUpperCase()}`]);
-    t.font = { bold: true };
-    t.eachCell({ includeEmpty: true }, (c) => {
-      c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF4F6FB' } };
-    });
-    ws.mergeCells(t.number, 2, t.number, width);
+    // a block of the class's summary has no heading of its own
+    if (b.code) {
+      const t = ws.addRow(['', `${b.code} - ${b.name.toUpperCase()}`]);
+      t.font = { bold: true };
+      t.eachCell({ includeEmpty: true }, (c) => {
+        c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF4F6FB' } };
+      });
+      ws.mergeCells(t.number, 2, t.number, width);
+    }
     b.rows.forEach((row, i) =>
       ws.addRow([
         i + 1,
@@ -83,15 +114,21 @@ export async function rangeXlsx(r: RangeSummary, head: ReportHead): Promise<Buff
   return Buffer.from(await wb.xlsx.writeBuffer());
 }
 
-export async function rangePdf(r: RangeSummary, head: ReportHead): Promise<Buffer> {
+export async function rangePdf(
+  r: RangeSummary,
+  head: ReportHead,
+  labels: RangeLabels = SUBJECT_LABELS,
+): Promise<Buffer> {
   const rows: Array<Array<string | number>> = [];
   const shade: Record<number, 'heading'> = {};
   // each subject starts a page (its headings repeated), the signature boxes at the foot of each
   const breakBefore: number[] = [];
   for (const b of r.blocks) {
     if (rows.length) breakBefore.push(rows.length);
-    shade[rows.length] = 'heading';
-    rows.push([`${b.code} - ${b.name.toUpperCase()}`, '', ...r.years.flatMap(() => ['', ''])]);
+    if (b.code) {
+      shade[rows.length] = 'heading';
+      rows.push([`${b.code} - ${b.name.toUpperCase()}`, '', ...r.years.flatMap(() => ['', ''])]);
+    }
     b.rows.forEach((row, i) =>
       rows.push([
         i + 1,
@@ -121,15 +158,15 @@ export async function rangePdf(r: RangeSummary, head: ReportHead): Promise<Buffe
   return tablePdf({
     school: head.school,
     address: head.address,
-    title: 'Range wise subject summary',
+    title: labels.report,
     subtitle: [head.title, head.scope],
     letterhead: { logo: head.logo, details: `Made ${head.generatedOn}` },
     columns: [
       { label: 'Sr No', width: 0.6, right: true },
-      { label: 'Subject Code & Name', width: 4 },
+      { label: labels.first, width: 4 },
       ...r.years.flatMap((y) => [
-        { label: 'Count', width: 1.2, right: true, group: rangeYearLabel(y) },
-        { label: '%', width: 1.2, right: true, group: rangeYearLabel(y) },
+        { label: labels.count, width: 1.4, right: true, group: rangeYearLabel(y) },
+        { label: labels.pct, width: 1.4, right: true, group: rangeYearLabel(y) },
       ]),
     ],
     rows: rows.length ? rows : [['', 'No subject', ...r.years.flatMap(() => ['', ''])]],
@@ -138,8 +175,7 @@ export async function rangePdf(r: RangeSummary, head: ReportHead): Promise<Buffe
     signsEachBreak: true,
     portrait: r.years.length <= 2,
     fontSize: 8,
-    footnote:
-      'Divisions as the old report counts them: distinction from the distinction marks, 1st division from 60, 2nd from 45, 3rd from the pass marks. Shares are of those who appeared.',
+    footnote: labels.footnote,
     signs,
   });
 }

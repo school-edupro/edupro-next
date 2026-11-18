@@ -13,6 +13,8 @@ import {
   BoardMarksFileDto,
   BoardMarksQueryDto,
   BoardMineQueryDto,
+  BoardOverallFileDto,
+  BoardOverallQueryDto,
   BoardRangeFileDto,
   BoardRangeQueryDto,
   BoardParentsDto,
@@ -384,6 +386,23 @@ export class BoardResultsController {
   @RequirePermission(BOARD_RESULTS.view)
   rangeSummaryFile(@ReqCtx() ctx: RequestContext, @Query() q: BoardRangeFileDto) {
     return this.analyses.rangeSummaryFile(ctx, q);
+  }
+
+  @Get('reports/range-overall')
+  @ApiOperation({
+    summary:
+      "Range Wise Summary: the class's students, pass, fail, compartment, divisions and aggregate ranges, against earlier years",
+  })
+  @RequirePermission(BOARD_RESULTS.view)
+  overallSummary(@ReqCtx() ctx: RequestContext, @Query() q: BoardOverallQueryDto) {
+    return this.analyses.overallSummary(ctx, q);
+  }
+
+  @Get('reports/range-overall/file')
+  @ApiOperation({ summary: 'The Range Wise Summary as Excel or PDF' })
+  @RequirePermission(BOARD_RESULTS.view)
+  overallSummaryFile(@ReqCtx() ctx: RequestContext, @Query() q: BoardOverallFileDto) {
+    return this.analyses.overallSummaryFile(ctx, q);
   }
 }
 
