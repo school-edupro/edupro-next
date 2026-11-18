@@ -277,6 +277,8 @@ export const BoardSubjectPerfQuerySchema = z.object({
   examYear: z.coerce.number().int().min(2000).max(2100).optional(),
   gender: z.enum(['all', 'M', 'F']).default('all'),
   code: Code.optional(),
+  /** one section's students, or "each": every subject with a row for each of its sections */
+  section: z.string().trim().min(1).max(40).optional(),
 });
 export class BoardSubjectPerfQueryDto extends createZodDto(BoardSubjectPerfQuerySchema) {}
 

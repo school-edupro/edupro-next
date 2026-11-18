@@ -13,7 +13,7 @@ import { GroupedTable } from './GroupedTable';
 export async function SubjectPerfReport({
   sp,
 }: {
-  sp: { classLabel?: string; examYear?: string; gender?: string; code?: string };
+  sp: { classLabel?: string; examYear?: string; gender?: string; code?: string; section?: string };
 }) {
   const b = await getTranslations('boardResults');
   const cls = sp.classLabel === 'XII' ? 'XII' : 'X';
@@ -21,6 +21,9 @@ export async function SubjectPerfReport({
   if (/^\d{4}$/.test(sp.examYear ?? '')) f.set('examYear', sp.examYear!);
   if (sp.gender === 'M' || sp.gender === 'F') f.set('gender', sp.gender);
   if (/^\d{3}$/.test(sp.code ?? '')) f.set('code', sp.code!);
+  // "each": a row for each section under every subject; else one section, or all together
+  if (sp.section && sp.section.length <= 40 && !/[\n\r]/.test(sp.section))
+    f.set('section', sp.section);
   const d = await apiFetch<BoardSubjectPerf>(
     `/exams/board-results/reports/subject-summary?${f.toString()}`,
   );
@@ -76,6 +79,17 @@ export async function SubjectPerfReport({
             ]}
           />
           <SelectField
+            id="sb-section"
+            name="section"
+            label={b('an_section')}
+            defaultValue={d.section ?? ''}
+            options={[
+              { value: '', label: b('rp_sectionsTogether') },
+              { value: 'each', label: b('rp_sectionsEach') },
+              ...d.sections.map((x) => ({ value: x, label: b('rp_sectionOnly', { s: x }) })),
+            ]}
+          />
+          <SelectField
             id="sb-code"
             name="code"
             label={b('rp_subject')}
@@ -127,9 +141,22 @@ export async function SubjectPerfReport({
           }
         >
           <p className="ep-field__help" style={{ marginTop: 0 }}>
-            {`Class ${cls} · ${d.examYear ? `${String(d.examYear)} (${yearLabel(d.examYear)})` : ''} · ${
-              d.gender === 'M' ? b('rp_boys') : d.gender === 'F' ? b('rp_girls') : b('rp_genderAll')
-            }`}
+            {[
+              `Class ${cls}`,
+              d.examYear ? `${String(d.examYear)} (${yearLabel(d.examYear)})` : '',
+              d.gender === 'M'
+                ? b('rp_boys')
+                : d.gender === 'F'
+                  ? b('rp_girls')
+                  : b('rp_genderAll'),
+              d.section === 'each'
+                ? b('rp_sectionsEach')
+                : d.section
+                  ? b('rp_sectionOnly', { s: d.section })
+                  : b('rp_sectionsTogether'),
+            ]
+              .filter(Boolean)
+              .join(' · ')}
           </p>
           <GroupedTable t={d.table} label={b('rp_subjects')} freeze={2} />
           {d.table.note ? (

@@ -269,6 +269,9 @@ export function rangeOverall(
 
 // ---- Subject Summary: every subject's performance by boys and girls (the old "All Subject Performance") ----
 
+/** The Subject Summary's section choice for a subject's row then a row for each of its sections. */
+export const SECTION_EACH = 'each';
+
 /** The marks ranges of the grade columns: the class's scale, by the marks whatever the grade setting. */
 export const markRanges = (rules: BoardRules): Array<[string, number, number]> =>
   rules.scale.map((b) => [`${b.grade} (${bandRange(b)}%)`, b.from, b.to]);
@@ -282,14 +285,19 @@ export function subjectPerformance(
   candidates: AnCandidate[],
   subjects: AnSubject[],
   rules: BoardRules,
-  opts: { gender: Gender; code?: string | undefined },
+  /** section: one section's students, or "each" — a subject's row then a row for each of its sections */
+  opts: { gender: Gender; code?: string | undefined; section?: string | undefined },
 ): AnTable {
   const kind = new Map(subjects.map((s) => [s.code, s.kind]));
   const order = new Map(subjects.map((s, i) => [s.code, i]));
   const nameOf = (code: string) => subjects.find((s) => s.code === code)?.name ?? `Subject ${code}`;
   const MARK_RANGES = markRanges(rules);
+  const each = opts.section === SECTION_EACH;
+  const only = opts.section && !each ? opts.section : null;
   const by = entriesBySubject(
-    candidates.filter((c) => opts.gender === 'all' || c.sex === opts.gender),
+    candidates.filter(
+      (c) => (opts.gender === 'all' || c.sex === opts.gender) && (!only || c.section === only),
+    ),
   );
   const codes = [...by.keys()]
     .filter((c) => kind.get(c) !== 'internal')
@@ -365,25 +373,39 @@ export function subjectPerformance(
     });
     return row;
   };
+  // section wise: a subject's (or the total's) row over every section, then a row for each section it has
+  const sectionOf = (e: Entry) => e.c.section ?? '—';
+  const bySection = (es: Entry[]) =>
+    [...new Set(es.map(sectionOf))]
+      .sort((a, b) => a.localeCompare(b, undefined, { numeric: true }))
+      .map((sec) => ({ sec, es: es.filter((e) => sectionOf(e) === sec) }));
+  const rows: Array<Record<string, Cell>> = [];
+  const strong: number[] = [];
   // the short names CBSE's sheets use ("English Lng & Lit"), as the old report's — the table is wide
-  const rows = codes.map((code, i) => ({
-    sno: i + 1,
-    subject: shortSubject(nameOf(code)),
-    ...figures(by.get(code)!),
-  }));
-  const total: Record<string, Cell> = {
-    sno: '',
-    subject: 'Total',
-    ...figures(codes.flatMap((code) => by.get(code)!)),
-    highest: null,
-  };
+  codes.forEach((code, i) => {
+    if (each) strong.push(rows.length);
+    rows.push({ sno: i + 1, subject: shortSubject(nameOf(code)), ...figures(by.get(code)!) });
+    if (each)
+      for (const x of bySection(by.get(code)!))
+        rows.push({ sno: '', subject: `Section ${x.sec}`, ...figures(x.es) });
+  });
+  const all = codes.flatMap((code) => by.get(code)!);
+  strong.push(rows.length);
+  rows.push({ sno: '', subject: 'Total', ...figures(all), highest: null });
+  if (each)
+    for (const x of bySection(all))
+      rows.push({ sno: '', subject: `Total · Section ${x.sec}`, ...figures(x.es), highest: null });
   return {
     key: 'subject-performance',
-    title: 'Subject summary',
+    title: each
+      ? 'Subject summary, section wise'
+      : only
+        ? `Subject summary, section ${only}`
+        : 'Subject summary',
     columns,
-    rows: [...rows, total],
-    strong: [rows.length],
-    note: `Percentage-based, not grade-based: the ${gradeNames(rules)[0]!} … ${gradeNames(rules).at(-1)!} columns count marks in those ranges (the class's grade scale). Shares are of those who appeared; a compartment subject is not a pass; averages are of the marks.`,
+    rows,
+    strong,
+    note: `Percentage-based, not grade-based: the ${gradeNames(rules)[0]!} … ${gradeNames(rules).at(-1)!} columns count marks in those ranges (the class's grade scale). Shares are of those who appeared; a compartment subject is not a pass; averages are of the marks.${each ? " Section wise: a subject's bold row is every section; the rows under it are each section's students of it; the total's section rows add every subject entry of the section." : ''}`,
   };
 }
 

@@ -568,6 +568,10 @@ name) stay in view while the rest scrolls sideways.
 **Calculation method** wherever a student's aggregate counts (Results, Range wise summary): the best five by the
 school's rule, the **first five subjects as CBSE printed them**, or all subjects.
 
+**Subject summary, section wise**: in the Subject summary pick **Section** — all sections together (as before),
+**each section separately** (every subject's row in bold, then a row for each of its sections, and the total with a
+row for each section), or one section only. The PDF and Excel follow the choice.
+
 **Teacher wise** is the all subject result analysis for each teacher: a row for each subject and section the
 teacher taught (the year's subject teachers, or the **Teachers** tab where they were changed) with students, absent,
 pass, fail, compartment, marks, distinction, divisions and the class's grades, the teacher's total when there is more

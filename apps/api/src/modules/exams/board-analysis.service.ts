@@ -1161,17 +1161,22 @@ export class BoardAnalysisService {
     const examYear = q.examYear !== undefined && years.includes(q.examYear) ? q.examYear : years[0];
     const { rules } = await this.rulesOf(c, q.classLabel);
     const subjects = await this.subjectsOf(c, q.classLabel);
-    if (examYear === undefined) return { examYear: null, years, subjects, table: null };
+    if (examYear === undefined)
+      return { examYear: null, years, subjects, sections: [] as string[], table: null };
+    const candidates = await this.candidatesOf(c, q.classLabel, examYear);
+    const sections = [
+      ...new Set(candidates.map((x) => x.section).filter((x): x is string => Boolean(x))),
+    ].sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
     return {
       examYear,
       years,
       subjects,
-      table: subjectPerformance(
-        await this.candidatesOf(c, q.classLabel, examYear),
-        subjects,
-        rules,
-        { gender: q.gender, code: q.code },
-      ),
+      sections,
+      table: subjectPerformance(candidates, subjects, rules, {
+        gender: q.gender,
+        code: q.code,
+        section: q.section,
+      }),
     };
   }
 
@@ -1185,6 +1190,8 @@ export class BoardAnalysisService {
         years: r.years,
         gender: q.gender,
         code: q.code ?? null,
+        section: q.section ?? null,
+        sections: r.sections,
         subjects: r.subjects
           .filter((s) => s.kind !== 'internal')
           .map((s) => ({ code: s.code, name: s.name })),
@@ -1211,6 +1218,11 @@ export class BoardAnalysisService {
         scope: [
           q.gender === 'M' ? 'boys' : q.gender === 'F' ? 'girls' : 'all students',
           q.code ? `subject ${q.code}` : 'all subjects',
+          q.section === 'each'
+            ? 'each section'
+            : q.section
+              ? `section ${q.section}`
+              : 'all sections',
         ].join(' · '),
       };
       await this.audit.stage(ctx, c, {
@@ -1223,10 +1235,11 @@ export class BoardAnalysisService {
           examYear: r.examYear,
           gender: q.gender,
           code: q.code ?? null,
+          section: q.section ?? null,
           format: q.format,
         },
       });
-      const base = `CBSE-Class-${q.classLabel}-${String(r.examYear)}-subject-summary`;
+      const base = `CBSE-Class-${q.classLabel}-${String(r.examYear)}-subject-summary${q.section === 'each' ? '-section-wise' : ''}`;
       return q.format === 'xlsx'
         ? {
             filename: `${base}.xlsx`,

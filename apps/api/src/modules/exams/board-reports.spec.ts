@@ -336,3 +336,52 @@ describe('Teacher wise result analysis (docs/design/88)', () => {
     ]);
   });
 });
+
+describe('Subject Summary section wise (docs/design/88)', () => {
+  const rows = [
+    cand(
+      'F',
+      [
+        ['184', 95],
+        ['417', 80],
+      ],
+      { section: 'A' },
+    ),
+    cand('M', [['184', 65]], { section: 'A' }),
+    cand('F', [['184', 85]], { section: 'B' }),
+    cand('M', [['184', 25]], { section: 'B' }),
+  ];
+
+  it("each subject's row then a row for each of its sections, and the total's sections", () => {
+    const t = subjectPerformance(rows, SUBJECTS, DEFAULT_BOARD_RULES, {
+      gender: 'all',
+      section: 'each',
+    });
+    expect(t.title).toBe('Subject summary, section wise');
+    expect(t.rows.map((x) => [x.sno, x.subject, x.appeared, x.passNo])).toEqual([
+      [1, 'English Lng & Lit', 4, 3],
+      ['', 'Section A', 2, 2],
+      ['', 'Section B', 2, 1],
+      [2, 'AI', 1, 1],
+      ['', 'Section A', 1, 1],
+      ['', 'Total', 5, 4],
+      ['', 'Total · Section A', 3, 3],
+      ['', 'Total · Section B', 2, 1],
+    ]);
+    // the subjects' rows and the total in bold
+    expect(t.strong).toEqual([0, 3, 5]);
+    expect(t.rows[2]).toMatchObject({ avg: 55, boys: 1, girls: 1 });
+  });
+
+  it("one section's students only", () => {
+    const t = subjectPerformance(rows, SUBJECTS, DEFAULT_BOARD_RULES, {
+      gender: 'all',
+      section: 'B',
+    });
+    expect(t.title).toBe('Subject summary, section B');
+    expect(t.rows.map((x) => [x.subject, x.appeared])).toEqual([
+      ['English Lng & Lit', 2],
+      ['Total', 2],
+    ]);
+  });
+});

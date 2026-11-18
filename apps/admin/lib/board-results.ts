@@ -467,6 +467,9 @@ export interface BoardSubjectPerf {
   years: number[];
   gender: 'all' | 'M' | 'F';
   code: string | null;
+  /** one section, or "each" (a row for each section under every subject) */
+  section: string | null;
+  sections: string[];
   subjects: Array<{ code: string; name: string }>;
   table: AnTable | null;
 }

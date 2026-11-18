@@ -16,6 +16,8 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ form
   if (gender === 'M' || gender === 'F') q.set('gender', gender);
   const code = sp.get('code') ?? '';
   if (/^\d{3}$/.test(code)) q.set('code', code);
+  const section = sp.get('section') ?? '';
+  if (section && section.length <= 40 && !/[\n\r]/.test(section)) q.set('section', section);
   try {
     const f = await apiFetch<{ filename: string; contentType: string; base64: string }>(
       `/exams/board-results/reports/subject-summary/file?${q.toString()}`,

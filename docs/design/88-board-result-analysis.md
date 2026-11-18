@@ -594,3 +594,13 @@ with these defaults:
   (no sideways page scroll; the PDF served inline, the Excel saved); a made-up sample PDF looked at (one landscape
   page).
 
+## Subject Summary section wise (18 Nov 2026)
+
+Asked: "in report [Subject summary] add section wise bifurcation". A **Section** choice on the Subject Summary
+(`section` on `reports/subject-summary` and its file): none — all sections together, the old report unchanged (the
+default); `each` — every subject's row (bold, all sections) then a row for each of its sections ("Section A"), and the
+Total (bold) with a row for each section ("Total · Section A", every subject entry of the section); or one section —
+only its students (title "Subject summary, section B"). The API returns the year's `sections`; the scope line, the
+audit and the file name (`…-subject-summary-section-wise.pdf`) say which. Tests: unit `board-reports.spec.ts` + 2;
+e2e `board-analysis.e2e-spec.ts` (each, one section, the PDF). Browser + axe at 1440 and 375.
+

@@ -492,5 +492,27 @@ describe('CBSE board results: the ten annexures (e2e, docs/design/88 phase C)', 
     expect(
       (await get('/exams/board-results/reports/subject-summary?classLabel=X', auditor)).statusCode,
     ).toBe(200);
+    // section wise: Hindi's row, then sections A and B (the details give A and B)
+    const each = (
+      await get('/exams/board-results/reports/subject-summary?classLabel=X&section=each')
+    ).json() as {
+      sections: string[];
+      table: { rows: Array<Record<string, string | number | null>>; strong: number[] };
+    };
+    expect(each.sections).toEqual(['A', 'B']);
+    const h = each.table.rows.findIndex((x) => x.subject === 'Hindi Course-B');
+    const [ha, hb] = [each.table.rows[h + 1]!, each.table.rows[h + 2]!];
+    expect([ha.subject, hb.subject]).toEqual(['Section A', 'Section B']);
+    expect(Number(ha.appeared) + Number(hb.appeared)).toBe(4);
+    expect(each.table.strong).toContain(h);
+    expect(each.table.rows.at(-1)!.subject).toBe('Total · Section B');
+    const oneB = (
+      await get('/exams/board-results/reports/subject-summary?classLabel=X&section=B')
+    ).json() as typeof each;
+    expect(oneB.table.rows.find((x) => x.subject === 'Hindi Course-B')!.appeared).toBe(hb.appeared);
+    const f = await get(
+      '/exams/board-results/reports/subject-summary/file?classLabel=X&format=pdf&section=each',
+    );
+    expect(f.json().filename).toMatch(/subject-summary-section-wise\.pdf$/);
   });
 });
