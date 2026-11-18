@@ -522,6 +522,16 @@ a code a file printed that is not on the list appears at the top to be named.
 An Excel or CSV file (one row per candidate per subject, or one row per candidate) can still be imported from the
 **Excel or CSV result file** card on the same tab.
 
+**Results: the student marks data.** **Results** lists a saved year a candidate a row, as the school's old "Student
+Marks Data": roll number, name (with gender and class-section), each subject with its marks and grade (CBSE's short
+names; the full name on hover), the result with any compartment subjects, the aggregate over the maximum, the
+percentage and the rank. Pick the class, the examination, a section, the **calculation method** (the best five by
+the school's rule in Set-up, or all subjects), a result, a percentage band (90 and above … below 45), the order (rank,
+roll number, name or section), a search and the rows a page. Bold marks are counted in the aggregate. Ranks are the
+class's and dense: equal aggregates share a rank and the next one follows (1, 2, 3, 3, 3, 4). **Download Excel** and
+the PDF (View or Download) give the filtered list with every column — gender, class, comp subjects and max marks
+included.
+
 **Analysis: the ten annexures.** **Analysis** counts a saved year as the school's own result workbook does: pick the
 class, the examination and a section (or all) and the annexure — 1 School summary (five years, the result in
 figures, the top scorers, full scores, distinctions, the highest in each subject, A1 + A2), 2 Overall result (boys

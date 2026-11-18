@@ -329,4 +329,72 @@ describe('CBSE board results: the ten annexures (e2e, docs/design/88 phase C)', 
       (await get('/exams/board-results/analysis/file?classLabel=XII&format=pdf')).statusCode,
     ).toBe(404);
   });
+
+  it('the Results tab: candidate-wise marks, the class rank, filters, pages and files', async () => {
+    const m = await get('/exams/board-results/marks?classLabel=X');
+    expect(m.statusCode).toBe(200);
+    const d = m.json() as {
+      total: number;
+      maxSubjects: number;
+      results: Array<{ word: string; n: number }>;
+      rows: Array<{
+        sr: number;
+        roll: string;
+        total: number | null;
+        max: number | null;
+        rank: number | null;
+        result: string;
+      }>;
+    };
+    expect(d.total).toBe(5);
+    expect(d.maxSubjects).toBe(5);
+    expect(d.rows.map((r) => [r.roll, r.total, r.rank])).toEqual([
+      [R[0], 471, 1],
+      [R[3], 427, 2],
+      [R[1], 375, 3],
+      [R[2], 200, 4],
+      [R[4], null, null],
+    ]);
+    expect(d.results).toEqual(
+      expect.arrayContaining([
+        { word: 'PASS', n: 3 },
+        { word: 'COMP', n: 1 },
+      ]),
+    );
+    const one = (await get('/exams/board-results/marks?classLabel=X&result=COMP')).json();
+    expect(one.rows.map((r: { roll: string }) => r.roll)).toEqual([R[2]]);
+    const paged = (
+      await get('/exams/board-results/marks?classLabel=X&size=10&page=1&band=90')
+    ).json();
+    expect(paged.total).toBe(1);
+    // the auditor looks too; the files
+    expect((await get('/exams/board-results/marks?classLabel=X', auditor)).statusCode).toBe(200);
+    const x = await get('/exams/board-results/marks/file?classLabel=X&format=xlsx&sort=roll');
+    expect(x.statusCode).toBe(200);
+    const wb = new ExcelJS.Workbook();
+    await wb.xlsx.load(Buffer.from(x.json().base64 as string, 'base64') as unknown as ArrayBuffer);
+    const heads = (wb.worksheets[0]!.getRow(5).values as unknown[]).slice(1);
+    expect(heads.slice(0, 7)).toEqual([
+      'Sr#',
+      'Roll No',
+      'Name',
+      'Gender',
+      'Class',
+      'Comp Sub',
+      'Subject-1',
+    ]);
+    expect(heads.slice(-5)).toEqual([
+      'Max Marks',
+      'Result',
+      'Subject Aggregate',
+      'Total Percentage',
+      'Rank',
+    ]);
+    const p = await get('/exams/board-results/marks/file?classLabel=X&format=pdf');
+    expect(
+      Buffer.from(p.json().base64 as string, 'base64')
+        .subarray(0, 4)
+        .toString(),
+    ).toBe('%PDF');
+  });
 });

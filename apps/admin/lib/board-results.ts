@@ -344,3 +344,42 @@ export const YEAR_SUBJECT_FIELDS = [
   'average',
   'pi',
 ] as const;
+
+// ---- the Results tab: candidate-wise marks ----
+
+export interface BoardMarks {
+  classLabel: 'X' | 'XII';
+  examYear: number | null;
+  years: number[];
+  sections: string[];
+  results: Array<{ word: string; n: number }>;
+  method: 'best5' | 'all';
+  rule: string;
+  total: number;
+  page: number;
+  size: number;
+  maxSubjects: number;
+  rows: Array<{
+    sr: number;
+    roll: string;
+    name: string | null;
+    sex: string | null;
+    section: string | null;
+    studentId: string | null;
+    admissionNo: string | null;
+    result: string | null;
+    compartment: Array<{ code: string; name: string }>;
+    subjects: Array<{
+      code: string;
+      name: string;
+      short: string;
+      marks: number | null;
+      grade: string | null;
+      counted: boolean;
+    }>;
+    max: number | null;
+    total: number | null;
+    percent: number | null;
+    rank: number | null;
+  }>;
+}

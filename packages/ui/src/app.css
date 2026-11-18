@@ -770,6 +770,15 @@
   border-bottom: 1px solid var(--border-default);
   vertical-align: middle;
 }
+/* a wide table of many narrow columns (the board results' marks, a subject a column): tighter cells, plain
+   headings, so a class's marks fit the screen */
+.ep-table-tight .ep-table th,
+.ep-table-tight .ep-table td {
+  padding: var(--sp-2) var(--sp-2);
+}
+.ep-table-tight .ep-table th {
+  letter-spacing: normal;
+}
 .ep-table tbody tr:last-child td {
   border-bottom: none;
 }

@@ -210,3 +210,30 @@ export const BoardYearFiguresSchema = z
     path: ['subjects'],
   });
 export class BoardYearFiguresDto extends createZodDto(BoardYearFiguresSchema) {}
+
+// ---- the Results tab: candidate-wise marks (as the school's old "Student Marks Data") ----
+
+export const BoardMarksQuerySchema = z.object({
+  classLabel: ClassLabel.default('X'),
+  examYear: z.coerce.number().int().min(2000).max(2100).optional(),
+  section: z.string().trim().min(1).max(40).optional(),
+  /** best5: the school's best five (the rule in Set-up); all: every subject with marks */
+  method: z.enum(['best5', 'all']).default('best5'),
+  result: z
+    .string()
+    .trim()
+    .regex(/^[A-Z]{1,8}$/)
+    .optional(),
+  /** the percentage band: 90 and above, 75–89.9, 60–74.9, 45–59.9, below 45 */
+  band: z.enum(['90', '75', '60', '45', 'below45']).optional(),
+  sort: z.enum(['rank', 'roll', 'name', 'section']).default('rank'),
+  q: z.string().trim().max(60).optional(),
+  page: z.coerce.number().int().min(1).default(1),
+  size: z.coerce.number().int().min(10).max(1000).default(100),
+});
+export class BoardMarksQueryDto extends createZodDto(BoardMarksQuerySchema) {}
+
+export const BoardMarksFileSchema = BoardMarksQuerySchema.extend({
+  format: z.enum(['xlsx', 'pdf']),
+});
+export class BoardMarksFileDto extends createZodDto(BoardMarksFileSchema) {}

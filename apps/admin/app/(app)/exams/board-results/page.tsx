@@ -13,7 +13,7 @@ import { ConfirmAction } from '@/components/ConfirmAction';
 import { FoldCard } from '@/components/FoldCard';
 import { DialogButton } from '@/components/leave/DialogButton';
 import { Notice } from '@/components/Notice';
-import { boardImportCommit, boardImportValidate, masterExport } from '@/lib/actions';
+import { boardImportCommit, boardImportValidate } from '@/lib/actions';
 import { apiFetch, getMe } from '@/lib/api';
 import {
   addBoardTeacher,
@@ -48,6 +48,7 @@ interface Analysis extends Record<string, string | number | null> {
 }
 
 import { AnalysisTab } from './AnalysisTab';
+import { ResultsTab } from './ResultsTab';
 import { YearFiguresCard } from './YearFiguresCard';
 
 const TABS: BoardTab[] = ['upload', 'results', 'analysis', 'teachers', 'setup'];
@@ -66,6 +67,12 @@ export default async function BoardResultsPage({
     examYear?: string;
     section?: string;
     annexure?: string;
+    method?: string;
+    result?: string;
+    band?: string;
+    sort?: string;
+    page?: string;
+    size?: string;
     subjects?: string;
     figures?: string;
     q?: string;
@@ -95,7 +102,7 @@ export default async function BoardResultsPage({
   const figuresCls = sp.figures === 'XII' ? 'XII' : 'X';
   const [list, imports, years, layouts, teachers, subjects, rules, parents, figures] =
     await Promise.all([
-      tab === 'results' || tab === 'analysis'
+      tab === 'analysis'
         ? apiFetch<{ data: BoardRow[]; page: { total: number }; analysis: Analysis[] }>(
             `/exams/board-results?${q.toString()}`,
           )
@@ -141,28 +148,7 @@ export default async function BoardResultsPage({
 
   return (
     <>
-      <PageHeader
-        kicker={t('kicker')}
-        title={t('title')}
-        description={b('pageHelp')}
-        actions={
-          tab === 'results' ? (
-            <span style={{ display: 'inline-flex', gap: 'var(--sp-2)' }}>
-              {(['xlsx', 'pdf'] as const).map((format) => (
-                <form key={format} action={masterExport}>
-                  <input type="hidden" name="master" value="__dataset__" />
-                  <input type="hidden" name="dataset" value="board_results" />
-                  <input type="hidden" name="back" value="/exams/board-results?tab=results" />
-                  <input type="hidden" name="format" value={format} />
-                  <Button type="submit" variant="secondary" size="sm">
-                    {b(format === 'xlsx' ? 'excel' : 'pdf')}
-                  </Button>
-                </form>
-              ))}
-            </span>
-          ) : undefined
-        }
-      />
+      <PageHeader kicker={t('kicker')} title={t('title')} description={b('pageHelp')} />
       <Notice params={sp} />
       <nav
         className="ep-tabs-links"
@@ -417,78 +403,7 @@ export default async function BoardResultsPage({
         </div>
       ) : null}
 
-      {tab === 'results' && list ? (
-        <Card
-          title={`${b('results')} · ${list.page.total}`}
-          actions={
-            <form
-              method="get"
-              style={{ display: 'flex', gap: 'var(--sp-2)', alignItems: 'flex-end' }}
-            >
-              <input type="hidden" name="tab" value="results" />
-              <SelectField
-                id="fc"
-                name="classLabel"
-                label={b('classLabel')}
-                defaultValue={sp.classLabel ?? ''}
-                options={[
-                  { value: '', label: '—' },
-                  { value: 'X', label: 'X' },
-                  { value: 'XII', label: 'XII' },
-                ]}
-              />
-              <InputField
-                id="fq"
-                name="q"
-                label={b('search')}
-                defaultValue={sp.q ?? ''}
-                maxLength={80}
-              />
-              <Button type="submit" variant="secondary" size="sm">
-                {b('search')}
-              </Button>
-            </form>
-          }
-        >
-          <DataTable<BoardRow>
-            caption={b('results')}
-            density="dense"
-            columns={[
-              { key: 'r', header: b('rollNo'), render: (x) => <strong>{x.roll_no}</strong> },
-              {
-                key: 'c',
-                header: b('candidate'),
-                render: (x) => (
-                  <>
-                    {x.candidate_name ?? ''}
-                    <div className="ep-kicker">
-                      {x.student ? `${x.student} · ${x.admission_no}` : b('unlinked')}
-                    </div>
-                  </>
-                ),
-              },
-              {
-                key: 's',
-                header: b('subject'),
-                render: (x) => `${x.subject_code} · ${x.subject_name ?? ''}`,
-              },
-              { key: 't', header: b('theory'), numeric: true, render: (x) => x.theory ?? '' },
-              {
-                key: 'p',
-                header: b('practical'),
-                numeric: true,
-                render: (x) => x.practical ?? '',
-              },
-              { key: 'tot', header: b('total'), numeric: true, render: (x) => x.total ?? '' },
-              { key: 'g', header: b('grade'), render: (x) => x.grade ?? '' },
-              { key: 'res', header: b('result'), render: (x) => x.result ?? '' },
-            ]}
-            rows={list.data}
-            rowKey={(x) => x.id}
-            emptyTitle="—"
-          />
-        </Card>
-      ) : null}
+      {tab === 'results' ? <ResultsTab sp={sp} /> : null}
 
       {tab === 'teachers' && teachers ? (
         <Card title={b('teachers')}>

@@ -398,3 +398,21 @@ subject); compartment, absent, withheld / later lists (with the student, section
   page says "The students were updated, but no teacher was saved" with the counts; the downloaded sheet has a
   **Staff** tab and a pick-list of staff names in the Teacher column. e2e + 1 (blank teachers keep the list and are
   counted; "X-B" read as B; the Staff tab), browser check of the message.
+
+## The Results tab as the school's "Student Marks Data" (18 Nov 2026)
+
+- **Results** now lists a saved year a candidate a row (the old screen the school shared): Sr#, roll number, name
+  (gender and class-section under it), Subject-1 … Subject-N (CBSE's short name — "English Lng & Lit", "Maths Std" —
+  with the full name on hover, marks, grade; marks not counted in the aggregate shown light), result (compartment
+  subjects under it), aggregate / max, total % and rank. Filters: class, examination, section, calculation method
+  (`best5` — the school's rule from Set-up — or `all` subjects, max 100 each), result, percentage band, sort (rank,
+  roll, name, section), search, rows a page (25 / 50 / 100 / 500) with pages. Ranks are the class's, dense (1, 2, 3,
+  3, 3, 4), by the percentage. It replaces the Sprint 18 list of imported rows (a row a candidate × subject); the
+  per-subject summary of Excel / CSV imports stays under Analysis, folded.
+- `board-marks.ts` (`marksRows`, `filterMarks`, `shortSubject`), `GET marks`, `GET marks/file` (xlsx: every column
+  of the old screen, a subject as name / marks / grade; PDF: A3 letterhead with signature boxes; audited
+  `exams.board_result.marks_export`). A `.ep-table-tight` style (tokens only) keeps the many columns on a 1280-wide
+  screen.
+- Tests: unit `board-marks.spec.ts` (3: dense ranks with ties, all subjects, filters and sorts); e2e
+  `board-analysis.e2e-spec.ts` + 1 (the list, ranks, filters, pages, the files). Browser + axe at 1440, 1280, 1024
+  and 375.

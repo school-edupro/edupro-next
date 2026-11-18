@@ -21,16 +21,31 @@ import {
   type AnYear,
   type BoardRules,
   type SubjectFigures,
+  yearLabel,
 } from './board-analysis';
 import { analysisPdf, analysisXlsx, examName } from './board-analysis-file';
 import { BoardDetailsService } from './board-details.service';
-import { BoardRulesSchema, type BoardYearFiguresDto } from './board-results.dto';
+import { marksPdf, marksXlsx } from './board-marks-file';
+import { filterMarks, marksRows, type MarksRow } from './board-marks';
+import {
+  BoardRulesSchema,
+  type BoardMarksFileDto,
+  type BoardMarksQueryDto,
+  type BoardYearFiguresDto,
+} from './board-results.dto';
 import { CBSE_SUBJECTS, type BoardSubjectKind } from './board-subjects';
 import { registerGeneratedOn, registerLetterhead, registerLogo } from './register-head';
 
 type BoardClass = 'X' | 'XII';
 const KEY = 'exams.board_rules';
 const PARENTS = 'exams.board_result.parents';
+const BAND_WORDS = {
+  '90': '90 and above',
+  '75': '75 to 89.9',
+  '60': '60 to 74.9',
+  '45': '45 to 59.9',
+  below45: 'below 45',
+} as const;
 interface TypedSubject {
   appeared: number;
   highest?: number | null;
@@ -162,9 +177,10 @@ export class BoardAnalysisService {
       staff_ward: boolean | null;
       admission_no: string | null;
       contact: string | null;
+      student_id: string | null;
     }>(
       `SELECT bc.id::text, bc.roll_no, bc.name, bc.sex, bc.result, bc.compartment, bc.section, bc.stream, bc.category,
-              bc.ews, bc.cwsn, bc.boarder, bc.staff_ward, s.admission_no,
+              bc.ews, bc.cwsn, bc.boarder, bc.staff_ward, s.admission_no, bc.student_id::text,
               (SELECT g.mobile FROM student_guardians sg JOIN guardians g ON g.id = sg.guardian_id
                 WHERE sg.student_id = bc.student_id ORDER BY sg.is_primary DESC, g.id LIMIT 1) AS contact
          FROM board_candidates bc LEFT JOIN students s ON s.id = bc.student_id
@@ -206,6 +222,7 @@ export class BoardAnalysisService {
       marks: by.get(x.id) ?? [],
       admissionNo: x.admission_no,
       contact: x.contact,
+      studentId: x.student_id,
     }));
   }
 
@@ -786,6 +803,131 @@ export class BoardAnalysisService {
         before: { classLabel: r.rows[0].class_label, examYear: r.rows[0].exam_year },
       });
       return { removed: true };
+    });
+  }
+
+  // ---- the Results tab: candidate-wise marks ----
+
+  private async marksOf(c: PoolClient, q: BoardMarksQueryDto) {
+    const years = (
+      await c.query<{ y: number }>(
+        `SELECT DISTINCT exam_year AS y FROM board_candidates WHERE board = 'CBSE' AND class_label = $1 ORDER BY 1 DESC`,
+        [q.classLabel],
+      )
+    ).rows.map((r) => r.y);
+    const examYear = q.examYear !== undefined && years.includes(q.examYear) ? q.examYear : years[0];
+    const { rules } = await this.rulesOf(c);
+    if (examYear === undefined)
+      return {
+        examYear: null,
+        years,
+        sections: [] as string[],
+        results: [],
+        rules,
+        rows: [] as MarksRow[],
+      };
+    const subjects = await this.subjectsOf(c, q.classLabel);
+    const all = marksRows(
+      await this.candidatesOf(c, q.classLabel, examYear),
+      subjects,
+      rules,
+      q.method,
+    );
+    const sections = [
+      ...new Set(all.map((r) => r.section).filter((x): x is string => Boolean(x))),
+    ].sort((a, b) => a.localeCompare(b, 'en', { numeric: true }));
+    const counts = new Map<string, number>();
+    for (const r of all) counts.set(r.result ?? '—', (counts.get(r.result ?? '—') ?? 0) + 1);
+    return {
+      examYear,
+      years,
+      sections,
+      results: [...counts].map(([word, n]) => ({ word, n })).sort((a, b) => b.n - a.n),
+      rules,
+      rows: filterMarks(all, q),
+    };
+  }
+
+  /** The Results tab: one row a candidate with every subject, the aggregate, the percentage and the class rank. */
+  async marks(ctx: RequestContext, q: BoardMarksQueryDto) {
+    return this.db.tenant(requireTenant(ctx), async (c) => {
+      const m = await this.marksOf(c, q);
+      const from = (q.page - 1) * q.size;
+      const page = m.rows.slice(from, from + q.size);
+      return {
+        classLabel: q.classLabel,
+        examYear: m.examYear,
+        years: m.years,
+        sections: m.sections,
+        results: m.results,
+        method: q.method,
+        rule: RULE_WORDS[m.rules.bestFive],
+        total: m.rows.length,
+        page: q.page,
+        size: q.size,
+        maxSubjects: Math.max(0, ...page.map((r) => r.subjects.length)),
+        rows: page.map((r, i) => ({ sr: from + i + 1, ...r })),
+      };
+    });
+  }
+
+  /** The Results tab's list (every row the filters keep) as Excel or PDF. */
+  async marksFile(ctx: RequestContext, q: BoardMarksFileDto) {
+    return this.db.tenant(requireTenant(ctx), async (c) => {
+      const m = await this.marksOf(c, q);
+      if (m.examYear === null)
+        throw new DomainError('not-found', `No saved Class ${q.classLabel} result`, {
+          status: 404,
+        });
+      const h = await registerLetterhead(c);
+      const words = [
+        `Class ${q.classLabel}`,
+        q.section ? `Section ${q.section}` : 'all sections',
+        q.result ? `result ${q.result}` : '',
+        q.band ? `percentage ${BAND_WORDS[q.band]}` : '',
+        q.q ? `"${q.q}"` : '',
+        `${String(m.rows.length)} candidates`,
+      ].filter(Boolean);
+      const head = {
+        school: h.school,
+        address: h.address,
+        logo: q.format === 'pdf' ? await registerLogo(this.storage, h.file) : null,
+        generatedOn: registerGeneratedOn(),
+        by: ctx.user.displayName,
+        title: `CBSE ${q.classLabel === 'XII' ? 'AISSCE' : 'AISSE'} result (Class ${q.classLabel}) ${yearLabel(m.examYear)}`,
+        scope: words.join(' · '),
+        method:
+          q.method === 'best5'
+            ? `Aggregate: best five (${RULE_WORDS[m.rules.bestFive]})`
+            : 'Aggregate: all subjects with marks',
+      };
+      await this.audit.stage(ctx, c, {
+        action: 'exams.board_result.marks_export',
+        entityType: 'board_candidates',
+        entityId: requireTenant(ctx).schoolId,
+        after: {
+          classLabel: q.classLabel,
+          examYear: m.examYear,
+          format: q.format,
+          rows: m.rows.length,
+          method: q.method,
+          section: q.section ?? null,
+          result: q.result ?? null,
+          band: q.band ?? null,
+        },
+      });
+      const base = `CBSE-Class-${q.classLabel}-${String(m.examYear)}-student-marks`;
+      return q.format === 'xlsx'
+        ? {
+            filename: `${base}.xlsx`,
+            contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            base64: (await marksXlsx(m.rows, q.classLabel, head)).toString('base64'),
+          }
+        : {
+            filename: `${base}.pdf`,
+            contentType: 'application/pdf',
+            base64: (await marksPdf(m.rows, q.classLabel, head)).toString('base64'),
+          };
     });
   }
 }

@@ -53,6 +53,8 @@ export interface AnCandidate {
   /** The office lists' columns (phase D): the student it is, and a contact. */
   admissionNo?: string | null;
   contact?: string | null;
+  /** the linked student (the Results tab links the name) */
+  studentId?: string | null;
 }
 
 export interface AnSubject {

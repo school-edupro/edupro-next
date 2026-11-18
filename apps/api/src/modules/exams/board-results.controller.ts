@@ -10,6 +10,8 @@ import { REPORT_CARDS } from './report-cards.dto';
 import {
   BOARD_RESULTS,
   BoardAnalysisFileDto,
+  BoardMarksFileDto,
+  BoardMarksQueryDto,
   BoardMineQueryDto,
   BoardParentsDto,
   BoardYearFiguresDto,
@@ -342,6 +344,25 @@ export class BoardResultsController {
   @RequirePermission(BOARD_RESULTS.import)
   removeYearFigures(@ReqCtx() ctx: RequestContext, @Param('id') figuresId: string) {
     return this.analyses.removeYearFigures(ctx, id(figuresId));
+  }
+
+  // ---- the Results tab: candidate-wise marks ----
+
+  @Get('marks')
+  @ApiOperation({
+    summary:
+      'Candidate-wise marks of a saved CBSE result: every subject, the aggregate (best five or all), percentage, class rank',
+  })
+  @RequirePermission(BOARD_RESULTS.view)
+  marks(@ReqCtx() ctx: RequestContext, @Query() q: BoardMarksQueryDto) {
+    return this.analyses.marks(ctx, q);
+  }
+
+  @Get('marks/file')
+  @ApiOperation({ summary: 'The candidate-wise marks the filters keep, as Excel or PDF' })
+  @RequirePermission(BOARD_RESULTS.view)
+  marksFile(@ReqCtx() ctx: RequestContext, @Query() q: BoardMarksFileDto) {
+    return this.analyses.marksFile(ctx, q);
   }
 }
 
