@@ -29,6 +29,9 @@ AttendanceController_mine
 LeaveController_mine
 LeaveController_apply
 LeaveController_cancel
+LeaveController_myFile !file
+AttendanceDeskController_familyYear
+BusRollController_mine
 DailyWorkController_viewerInfo
 DailyWorkController_list
 DailyWorkController_file !file

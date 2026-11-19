@@ -282,7 +282,8 @@ apps forbid framing — correct; phones open them in a WebView, not a frame).
 - **Attendance** (`attendance.dart`): the month as a calendar (each day's status read out by the screen reader),
   the summary, the child's leave applications; **apply for leave** (the kind — type to search —, the days, the
   reason) and cancel one still waiting. A leave that needs a certificate (the school's rule: always, or more than the
-  long-leave days) goes to the web page, where the file is attached.
+  long-leave days) goes to the web page, where the file is attached. _(Replaced 19 Nov 2026: see "Attendance as on
+  the website" below; the certificate is now taken from the phone.)_
 - **Homework** (`homework.dart`): what is due first, then the last two weeks by day; in full with its files and "I
   have seen this" when the teacher asks for it.
 - **Timetable** (a day at a time, today first), **calendar** (holidays and events by month), **date sheet**.
@@ -641,3 +642,27 @@ place of Results (a student tab).
 (session handed over by the app AND the user agent marked `EduProApp/<version>`), not for a handed-over session in
 an ordinary browser. The app's web preview (Flutter web) cannot mark its frames, so pages still opened as web pages
 show the portal's frame there; on a phone they do not.
+
+## As built — Attendance as on the website (19 Nov 2026)
+
+**Attendance in the app, with no web page** (`family/attendance.dart`; Academics → Attendance or Home's tile, for a
+parent's child or a student), the same three views as apps/parent/app/(app)/attendance:
+
+- **Month**: Previous / Next month; the figures (school days, present, absent, on leave, late or part of the day,
+  and the percentage: 90 and above green, 75 and above amber, below that red); a ring of present / leave / absent
+  with the percentage; the calendar (each day's colour and code; the screen reader reads the date and the word) and
+  its key; **Day by day, with gate in and out times** folded until tapped (newest first, the status, In / Out from
+  the gate); the **School bus** of the month (`GET attendance/bus-roll/mine`: "n/m trips on the bus", each day's
+  morning and afternoon and the route).
+- **Year**: the session's figures; bars month by month (present, leave, absent stacked, the percentage over each;
+  the list below has the same numbers for the screen reader); **Month by month** (days, present, absent, leave,
+  late, the percentage); a month opens in the Month view (`GET attendance/desk/mine/year`).
+- **Leave**: Apply for leave; the approval rule ("up to n days by the class teacher; a longer one also goes to the
+  coordinator and the principal"); **Leave applied in this session**: kind and days, number, days, long leave,
+  reason, the certificate (View / Download, `GET attendance/leaves/mine/:id/files/:fileId`), the school's note,
+  ended early, the status ("With: Class teacher" while it waits), **Cancel this leave** (waiting, or not begun) or
+  **Child is back: end the leave today** (approved and under way).
+- **Apply for leave** (also from Month and Year): the kind (type to search), first and last day, reason, and the
+  **certificate or letter from the phone** (PDF or photo, 5 MB each, several; uploaded as files and sent as
+  `fileIds`); the certificate rules per kind are listed and a leave that needs one is not sent without it. The web
+  page is no longer opened for it.

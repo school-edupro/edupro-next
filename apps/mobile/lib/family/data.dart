@@ -73,6 +73,25 @@ final attendanceProvider = FutureProvider.autoDispose.family<Loaded<Json?>, (Pro
   return Loaded(childIn(asJson(r.data)['children'], p), r.at, stale: r.stale);
 });
 
+/// The child's school bus in a month (`2026-11`): each day's morning and afternoon, the route, the trips counted.
+final busRollProvider = FutureProvider.autoDispose.family<Loaded<Json?>, (Profile, String)>((
+  ref,
+  a,
+) async {
+  final (p, month) = a;
+  final r = await cached('bus:${p.id}:$month', () => _api(ref).busRollMine(month: month));
+  return Loaded(childIn(asJson(r.data)['children'], p), r.at, stale: r.stale);
+});
+
+/// The child's session month by month: school days, present, absent, leave and late, with the totals.
+final attendanceYearProvider = FutureProvider.autoDispose.family<Loaded<Json?>, Profile>((
+  ref,
+  p,
+) async {
+  final r = await cached('attYear:${p.id}', () => _api(ref).attendanceDeskFamilyYear());
+  return Loaded(childIn(asJson(r.data)['children'], p), r.at, stale: r.stale);
+});
+
 /// The child's leave applications, the kinds of leave and the school's rules for them.
 final leavesProvider = FutureProvider.autoDispose.family<Loaded<Json>, Profile>((ref, p) async {
   final r = await cached('leave:${p.id}', () => _api(ref).leaveMine());

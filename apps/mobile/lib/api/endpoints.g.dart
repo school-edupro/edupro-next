@@ -88,6 +88,18 @@ class EduProApi {
   Future<dynamic> leaveCancel({required String id}) =>
       _t.send('POST', '/attendance/leaves/mine/${Uri.encodeComponent(id)}/cancel');
 
+  /// GET /attendance/leaves/mine/{id}/files/{fileId}
+  Future<ApiFile> leaveMyFile({required String id, required String fileId}) =>
+      _t.file('GET', '/attendance/leaves/mine/${Uri.encodeComponent(id)}/files/${Uri.encodeComponent(fileId)}');
+
+  /// GET /attendance/desk/mine/year — A family’s children month by month over the session
+  Future<dynamic> attendanceDeskFamilyYear() =>
+      _t.send('GET', '/attendance/desk/mine/year');
+
+  /// GET /attendance/bus-roll/mine — My children’s bus attendance of a month
+  Future<dynamic> busRollMine({String? month}) =>
+      _t.send('GET', '/attendance/bus-roll/mine', query: {if (month != null) 'month': month});
+
   /// GET /academics/daily-work/viewer — Who is reading: the sections a teacher covers or the children of a guardian
   Future<dynamic> dailyWorkViewerInfo() =>
       _t.send('GET', '/academics/daily-work/viewer');

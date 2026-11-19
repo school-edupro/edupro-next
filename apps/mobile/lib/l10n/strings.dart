@@ -168,10 +168,75 @@ class S {
     'SB' => _t('Stay back', 'रुके रहे'),
     _ => code,
   };
-  String monthSummary(int present, int absent, int leave, int days) => _t(
-    'Present $present · Absent $absent · Leave $leave · of $days days',
-    'उपस्थित $present · अनुपस्थित $absent · अवकाश $leave · कुल $days दिन',
+  String get monthTab => _t('Month', 'माह');
+  String get yearTab => _t('Year', 'वर्ष');
+  String get schoolDays => _t('School days', 'विद्यालय के दिन');
+  String get lateOrPart => _t('Late or part of the day', 'विलंब या आंशिक दिन');
+  String get presentWord => _t('present', 'उपस्थित');
+  String get noAttendanceMonth =>
+      _t('No attendance marked in this month.', 'इस माह कोई उपस्थिति दर्ज नहीं।');
+  String get noAttendanceYear =>
+      _t('No attendance marked in this session yet.', 'इस सत्र में अभी कोई उपस्थिति दर्ज नहीं।');
+  String get dayByDay => _t(
+    'Day by day, with gate in and out times',
+    'दिन-प्रतिदिन, गेट पर आने और जाने के समय के साथ',
   );
+  String gateIn(String t) => _t('In $t', 'आए $t');
+  String gateOut(String t) => _t('Out $t', 'गए $t');
+  String get schoolBus => _t('School bus', 'स्कूल बस');
+  String busTrips(int onBus, int trips) =>
+      _t('$onBus/$trips trips on the bus', '$trips में से $onBus यात्राएँ बस में');
+  String get morning => _t('Morning', 'सुबह');
+  String get afternoon => _t('Afternoon', 'दोपहर');
+  String busCode(String code) => switch (code) {
+    'P' => _t('On the bus', 'बस में'),
+    'A' => _t('Not on the bus', 'बस में नहीं'),
+    'LV' => _t('On leave', 'अवकाश पर'),
+    'GP' => _t('Gate pass', 'गेट पास'),
+    'OT' => _t('Other arrangement', 'अन्य व्यवस्था'),
+    _ => code,
+  };
+  String get route => _t('Route', 'मार्ग');
+  String get monthByMonth => _t('Month by month', 'माह-दर-माह');
+  String get monthBarsLabel => _t(
+    'Attendance month by month; the list below has the same numbers',
+    'माह-दर-माह उपस्थिति; नीचे की सूची में यही संख्याएँ हैं',
+  );
+  String monthLine(int days, int present, int absent, int leave, int late) => _t(
+    '${daysN(days)} · Present $present · Absent $absent · Leave $leave · Late $late',
+    '${daysN(days)} · उपस्थित $present · अनुपस्थित $absent · अवकाश $leave · विलंब $late',
+  );
+  String leaveRule(int days) => _t(
+    'A leave of up to $days day(s) is approved by the class teacher; a longer one also goes to the '
+        'coordinator and the principal. An approved leave is marked in class and bus attendance by itself.',
+    '$days दिन तक का अवकाश कक्षा अध्यापक स्वीकृत करते हैं; उससे लंबा अवकाश समन्वयक और प्रधानाचार्य के पास '
+        'भी जाता है। स्वीकृत अवकाश कक्षा और बस की उपस्थिति में अपने आप दर्ज हो जाता है।',
+  );
+  String get leavesThisSession => _t('Leave applied in this session', 'इस सत्र में आवेदित अवकाश');
+  String get noLeaveYet => _t('No leave has been applied for yet.', 'अभी तक कोई अवकाश आवेदन नहीं।');
+  String get longLeave => _t('long leave', 'लंबा अवकाश');
+  String noteFromSchool(String n) => _t('Note from the school: $n', 'विद्यालय की टिप्पणी: $n');
+  String endedEarly(String d) =>
+      _t('Ended early: back at school from $d', 'पहले समाप्त: $d से विद्यालय में');
+  String withWhom(String who) => _t('With: $who', '$who के पास');
+  String get endLeaveToday =>
+      _t('Child is back: end the leave today', 'बच्चा लौट आया: अवकाश आज समाप्त करें');
+  String get endLeaveAsk => _t('End this leave from today?', 'क्या यह अवकाश आज से समाप्त करें?');
+  String get certificateFile => _t(
+    'Certificate or letter (PDF or photo, up to 5 MB)',
+    'प्रमाण-पत्र या पत्र (PDF या फ़ोटो, 5 MB तक)',
+  );
+  String removeFile(String name) => _t('Remove $name', '$name हटाएँ');
+  String get certAlways => _t('certificate always needed', 'प्रमाण-पत्र हमेशा चाहिए');
+  String certLong(int days) => _t(
+    'certificate needed for more than $days day(s)',
+    '$days दिन से अधिक के लिए प्रमाण-पत्र चाहिए',
+  );
+  String get addCertificate => _t('Add the certificate or letter.', 'प्रमाण-पत्र या पत्र जोड़ें।');
+  String get leaveFileTooBig =>
+      _t('Each file must be 5 MB or smaller.', 'हर फ़ाइल 5 MB या उससे छोटी होनी चाहिए।');
+  String get leaveFileType =>
+      _t('Send a PDF, JPG, PNG or WebP file.', 'PDF, JPG, PNG या WebP फ़ाइल भेजें।');
   String get leaves => _t('Leave', 'अवकाश');
   String get applyLeave => _t('Apply for leave', 'अवकाश के लिए आवेदन करें');
   String get leaveType => _t('Kind of leave', 'अवकाश का प्रकार');
@@ -187,8 +252,8 @@ class S {
       _t('Cancel this leave application?', 'क्या यह अवकाश का आवेदन रद्द करें?');
   String get leaveCancelled => _t('Leave cancelled.', 'अवकाश रद्द किया गया।');
   String get certificateNeeded => _t(
-    'This leave needs a certificate. Apply on the web page to attach it.',
-    'इस अवकाश के लिए प्रमाण-पत्र चाहिए। उसे लगाने के लिए वेब पेज पर आवेदन करें।',
+    'This leave needs a certificate or letter: add it below.',
+    'इस अवकाश के लिए प्रमाण-पत्र या पत्र चाहिए: नीचे जोड़ें।',
   );
   String get applyOnWeb => _t('Apply on the web page', 'वेब पेज पर आवेदन करें');
   String leaveStatus(String status) => switch (status) {
@@ -847,6 +912,9 @@ class S {
 
   /// November 2026
   String month(DateTime x) => '${(hindi ? _monthHi : _monthEn)[x.month - 1]} ${x.year}';
+
+  /// Sep (a month's short name, for a chart)
+  String monthShort(DateTime x) => (hindi ? _monHi : _monEn)[x.month - 1];
 
   /// Mon … Sat (1 … 7)
   String weekday(int n) => (hindi ? _dayHi : _dayEn)[(n - 1) % 7];

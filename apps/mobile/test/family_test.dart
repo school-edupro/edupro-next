@@ -4,8 +4,10 @@ import 'package:edupro/api/api_transport.dart';
 import 'package:edupro/app.dart';
 import 'package:edupro/app_services.dart';
 import 'package:edupro/auth/session_store.dart';
+import 'package:edupro/family/attendance.dart';
 import 'package:edupro/family/data.dart';
 import 'package:edupro/l10n/strings.dart';
+import 'package:edupro/staff/data.dart' show PickedFile;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_ui/material_ui.dart';
@@ -57,6 +59,23 @@ class School {
       'decisionNote': null,
       'endedOn': null,
       'waitingOn': 'Class teacher',
+    },
+    {
+      'id': '902',
+      'number': 'LV-2',
+      'studentId': '41',
+      'student': 'Kid Sample',
+      'leaveTypeLabel': 'Medical leave',
+      'fromDate': day(-1),
+      'toDate': day(2),
+      'days': 4,
+      'reason': 'Recovering at home',
+      'fileIds': ['77'],
+      'long': true,
+      'status': 'approved',
+      'decisionNote': 'Get well soon',
+      'endedOn': null,
+      'waitingOn': null,
     },
     {
       'id': '902',
@@ -116,7 +135,12 @@ class School {
               'section': 'VI-A',
               'month': c.query?['month'],
               'days': [
-                {'date': day(0), 'code': 'P', 'inAt': null, 'outAt': null},
+                {
+                  'date': day(0),
+                  'code': 'P',
+                  'inAt': '${day(0)}T02:35:00.000Z',
+                  'outAt': '${day(0)}T08:40:00.000Z',
+                },
               ],
               'summary': {'days': 20, 'present': 18, 'absent': 1, 'leave': 1},
             },
@@ -129,6 +153,50 @@ class School {
             },
           ],
         };
+      case 'GET /attendance/bus-roll/mine':
+        return {
+          'month': c.query?['month'],
+          'children': [
+            {
+              'id': '41',
+              'days': [
+                {'date': day(0), 'pick': 'P', 'drop': null, 'route': 'R1'},
+              ],
+              'summary': {'trips': 1, 'onBus': 1, 'notOnBus': 0},
+            },
+          ],
+        };
+      case 'GET /attendance/desk/mine/year':
+        return {
+          'months': ['2026-07', '2026-08'],
+          'children': [
+            {
+              'id': '41',
+              'name': 'Kid Sample',
+              'section': 'VI-A',
+              'months': [
+                {'month': '2026-07', 'days': 20, 'present': 19, 'absent': 1, 'leave': 0, 'late': 2},
+                {'month': '2026-08', 'days': 20, 'present': 14, 'absent': 4, 'leave': 2, 'late': 0},
+              ],
+              'total': {'days': 40, 'present': 33, 'absent': 5, 'leave': 2, 'late': 2},
+            },
+          ],
+        };
+      case 'GET /attendance/leaves/mine/902/files/77':
+        return const ApiFile(
+          bytes: [37, 80, 68, 70],
+          contentType: 'application/pdf',
+          name: 'c.pdf',
+        );
+      case 'POST /platform/files':
+        return {
+          'file': {'id': '88'},
+          'upload': {'url': '/upload/88', 'method': 'PUT'},
+        };
+      case 'PUT /upload/88':
+        return null;
+      case 'POST /platform/files/88/complete':
+        return {'ok': true};
       case 'GET /attendance/leaves/mine':
         return {
           'longDays': 3,
@@ -847,6 +915,12 @@ Future<(FakeTransport, School)> pumpFamily(
           (ref) async =>
               const DeviceDetails(id: 'phone-test0001', name: 'Test phone', platform: 'android'),
         ),
+        // the phone's file picker: a made-up doctor's note
+        leaveFilePickerProvider.overrideWithValue(
+          () async => const [
+            PickedFile(name: 'note.pdf', bytes: [37, 80, 68, 70], contentType: 'application/pdf'),
+          ],
+        ),
       ],
       child: const EduProApp(),
     ),
@@ -1103,73 +1177,171 @@ void main() {
     },
   );
 
-  testWidgets('attendance: the month and its summary; a leave sent and a waiting one cancelled', (
+  Future<void> openAttendance(WidgetTester tester) async {
+    await tester.binding.setSurfaceSize(const Size(420, 2400));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await tester.tap(find.text('Academics'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Attendance'));
+    await tester.pumpAndSettle();
+  }
+
+  testWidgets('attendance Month, as on the website: figures, ring, calendar, gate times, the bus', (
     tester,
   ) async {
-    final (t, school) = await pumpFamily(tester);
-    await tester.tap(find.text('Academics'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Attendance'));
-    await tester.pumpAndSettle();
-    expect(find.byKey(const Key('monthSummary')), findsOneWidget);
-    expect(find.text('Present 18 · Absent 1 · Leave 1 · of 20 days'), findsOneWidget);
+    final (t, _) = await pumpFamily(tester);
+    await openAttendance(tester);
+    // the figures: school days, present, absent, on leave, late or part of the day, the percentage
+    Finder fig(String text) =>
+        find.descendant(of: find.byKey(const Key('attFigures')), matching: find.text(text));
+    for (final x in ['School days', '20', 'Present', '18', 'Absent', 'On leave', '0', '90%']) {
+      expect(fig(x), findsWidgets, reason: x);
+    }
+    expect(fig('Late or part of the day'), findsOneWidget);
+    expect(find.bySemanticsLabel('Present 18, Absent 1, On leave 1'), findsOneWidget);
     expect(find.bySemanticsLabel('${S(false).date(now)}: Present'), findsOneWidget);
-    // only this child's leave is listed
-    await scrollTo(tester, find.text('Doctor visit'));
-    expect(find.text('Not this child'), findsNothing);
-    expect(find.text('Waiting for approval'), findsOneWidget);
-
-    // apply: the kind, the reason, send
-    await tester.tap(find.byKey(const Key('applyLeave')));
+    expect(find.text('Late or part of the day'), findsWidgets);
+    // the days with the gate times stay folded until tapped
+    expect(find.byKey(Key('day-${day(0)}')), findsNothing);
+    await tester.tap(find.byKey(const Key('dayByDay')));
     await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const Key('sendLeave')));
+    expect(find.byKey(Key('day-${day(0)}')), findsOneWidget);
+    String hm(DateTime x) =>
+        '${x.hour.toString().padLeft(2, '0')}:${x.minute.toString().padLeft(2, '0')}';
+    final inAt = DateTime.parse('${day(0)}T02:35:00.000Z').toLocal();
+    final outAt = DateTime.parse('${day(0)}T08:40:00.000Z').toLocal();
+    expect(find.text('In ${hm(inAt)} · Out ${hm(outAt)}'), findsOneWidget);
+    // the school bus of the month
+    expect(find.text('School bus · 1/1 trips on the bus'), findsOneWidget);
+    expect(find.text('Morning: On the bus'), findsOneWidget);
+    expect(find.text('Afternoon: —'), findsOneWidget);
+    expect(t.calls.any((c) => c.path == '/attendance/bus-roll/mine'), isTrue);
+    // the month before
+    await tester.tap(find.byKey(const Key('monthBack')));
     await tester.pumpAndSettle();
-    expect(find.text('Choose the kind of leave.'), findsOneWidget);
-    await tester.tap(find.byKey(const Key('leaveType')));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Sick leave').last);
-    await tester.pumpAndSettle();
-    await tester.enterText(find.byKey(const Key('leaveReason')), 'Fever since last night');
-    await tester.tap(find.byKey(const Key('sendLeave')));
-    await tester.pumpAndSettle();
-    final sent = t.calls.lastWhere(
-      (c) => c.method == 'POST' && c.path == '/attendance/leaves/mine',
+    final before = DateTime(now.year, now.month - 1);
+    expect(
+      t.calls.lastWhere((c) => c.path == '/attendance/mine').query!['month'],
+      '${before.year}-${before.month.toString().padLeft(2, '0')}',
     );
-    expect(sent.body, {
-      'studentId': '41',
-      'leaveType': 'SICK',
-      'fromDate': day(0),
-      'toDate': day(0),
-      'reason': 'Fever since last night',
-    });
-    expect(find.text('Leave application sent.'), findsOneWidget);
-
-    // cancel the one still waiting
-    await scrollTo(tester, find.byKey(const Key('cancelLeave-901')));
-    await tester.tap(find.byKey(const Key('cancelLeave-901')));
-    await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const Key('confirmCancelLeave')));
-    await tester.pumpAndSettle();
-    expect(t.calls.any((c) => c.path == '/attendance/leaves/mine/901/cancel'), isTrue);
-    expect(school.leaves.firstWhere((l) => l['id'] == '901')['status'], 'cancelled');
+    expect(t.calls.any((c) => c.path.contains('handoff')), isFalse);
   });
 
-  testWidgets('a leave that needs a certificate goes to the web page', (tester) async {
-    await pumpFamily(tester);
-    await tester.tap(find.text('Academics'));
+  testWidgets('attendance Year: the session month by month; a month opens in full', (tester) async {
+    final (t, _) = await pumpFamily(tester);
+    await openAttendance(tester);
+    await tester.tap(find.byKey(const Key('attView-year')));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Attendance'));
+    Finder fig(String text) =>
+        find.descendant(of: find.byKey(const Key('attFigures')), matching: find.text(text));
+    for (final x in ['40', '33', '5', '2', '83%']) {
+      expect(fig(x), findsWidgets, reason: x);
+    }
+    expect(
+      find.bySemanticsLabel('Attendance month by month; the list below has the same numbers'),
+      findsOneWidget,
+    );
+    expect(find.text('20 days · Present 19 · Absent 1 · Leave 0 · Late 2'), findsOneWidget);
+    expect(find.text('95%'), findsOneWidget);
+    expect(find.text('70%'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('month-2026-08')));
     await tester.pumpAndSettle();
+    expect(find.text('August 2026'), findsOneWidget);
+    expect(t.calls.lastWhere((c) => c.path == '/attendance/mine').query!['month'], '2026-08');
+  });
+
+  testWidgets(
+    'attendance Leave: the list as on the website; a leave sent, one cancelled, one ended',
+    (tester) async {
+      final (t, school) = await pumpFamily(tester);
+      await openAttendance(tester);
+      await tester.tap(find.byKey(const Key('attView-leave')));
+      await tester.pumpAndSettle();
+      // only this child's leave is listed; who has it now; the certificate; the school's note
+      expect(find.text('Not this child'), findsNothing);
+      expect(find.text('With: Class teacher'), findsOneWidget);
+      expect(find.text('LV-2 · 4 days · long leave'), findsOneWidget);
+      expect(find.text('Note from the school: Get well soon'), findsOneWidget);
+      await tester.tap(find.byKey(const Key('view-0')));
+      await tester.pumpAndSettle();
+      expect(t.calls.any((c) => c.path == '/attendance/leaves/mine/902/files/77'), isTrue);
+      await tester.tap(find.byType(BackButton));
+      await tester.pumpAndSettle();
+      // apply: the kind, the reason, send (no certificate needed for a day's sick leave)
+      await tester.tap(find.byKey(const Key('applyLeave')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('sendLeave')));
+      await tester.pumpAndSettle();
+      expect(find.text('Choose the kind of leave.'), findsOneWidget);
+      await tester.tap(find.byKey(const Key('leaveType')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Sick leave').last);
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byKey(const Key('leaveReason')), 'Fever since last night');
+      await tester.tap(find.byKey(const Key('sendLeave')));
+      await tester.pumpAndSettle();
+      final sent = t.calls.lastWhere(
+        (c) => c.method == 'POST' && c.path == '/attendance/leaves/mine',
+      );
+      expect(sent.body, {
+        'studentId': '41',
+        'leaveType': 'SICK',
+        'fromDate': day(0),
+        'toDate': day(0),
+        'reason': 'Fever since last night',
+      });
+      expect(find.text('Leave application sent.'), findsOneWidget);
+      // the leave under way ends today; the one waiting is cancelled
+      expect(find.text('Child is back: end the leave today'), findsOneWidget);
+      await tester.tap(find.byKey(const Key('cancelLeave-901')));
+      await tester.pumpAndSettle();
+      expect(find.text('Cancel this leave application?'), findsOneWidget);
+      await tester.tap(find.byKey(const Key('confirmCancelLeave')));
+      await tester.pumpAndSettle();
+      expect(t.calls.any((c) => c.path == '/attendance/leaves/mine/901/cancel'), isTrue);
+      expect(school.leaves.firstWhere((l) => l['id'] == '901')['status'], 'cancelled');
+
+      expect(t.calls.any((c) => c.path.contains('handoff') || c.path == '/web'), isFalse);
+    },
+  );
+
+  testWidgets('a leave that needs a certificate takes it from the phone: no web page', (
+    tester,
+  ) async {
+    final (t, _) = await pumpFamily(tester);
+    await openAttendance(tester);
     await scrollTo(tester, find.byKey(const Key('applyLeave')));
     await tester.tap(find.byKey(const Key('applyLeave')));
     await tester.pumpAndSettle();
+    expect(
+      find.text(
+        'Sick leave: certificate needed for more than 3 day(s) · Medical leave: certificate always needed',
+      ),
+      findsOneWidget,
+    );
     await tester.tap(find.byKey(const Key('leaveType')));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Medical leave').last);
     await tester.pumpAndSettle();
-    expect(find.textContaining('needs a certificate'), findsOneWidget);
-    expect(find.byKey(const Key('leaveOnWeb')), findsOneWidget);
-    expect(find.byKey(const Key('sendLeave')), findsNothing);
+    expect(find.text('This leave needs a certificate or letter: add it below.'), findsOneWidget);
+    await tester.enterText(find.byKey(const Key('leaveReason')), 'Doctor advised rest');
+    await tester.tap(find.byKey(const Key('sendLeave')));
+    await tester.pumpAndSettle();
+    expect(find.text('Add the certificate or letter.'), findsOneWidget);
+    expect(t.calls.any((c) => c.method == 'POST' && c.path == '/attendance/leaves/mine'), isFalse);
+    // the doctor's note from the phone, sent with the leave
+    await tester.tap(find.byKey(const Key('leaveAddFile')));
+    await tester.pumpAndSettle();
+    expect(find.text('note.pdf'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('sendLeave')));
+    await tester.pumpAndSettle();
+    expect(t.calls.any((c) => c.method == 'PUT' && c.path == '/upload/88'), isTrue);
+    final sent = t.calls.lastWhere(
+      (c) => c.method == 'POST' && c.path == '/attendance/leaves/mine',
+    );
+    expect(sent.body!['leaveType'], 'MED');
+    expect(sent.body!['fileIds'], ['88']);
+    expect(find.byKey(const Key('leaveOnWeb')), findsNothing);
   });
 
   testWidgets('homework: due first, by day; "I have seen this" and an attachment', (tester) async {
@@ -1519,6 +1691,12 @@ void main() {
         ]) {
           await tester.tap(find.text(screen).last);
           await check(screen);
+          if (screen == s.attendance) {
+            for (final v in ['year', 'leave']) {
+              await tester.tap(find.byKey(Key('attView-$v')));
+              await check('$screen, $v');
+            }
+          }
           await tester.tap(find.byType(BackButton));
           await tester.pumpAndSettle();
         }
@@ -1597,6 +1775,17 @@ void main() {
     await scrollTo(tester, find.text('Attendance'));
     await tester.tap(find.text('Attendance').last);
     await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull, reason: 'attendance month');
+    await scrollTo(tester, find.byKey(const Key('dayByDay')));
+    await tester.tap(find.byKey(const Key('dayByDay')));
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull, reason: 'attendance day by day');
+    for (final v in ['year', 'leave']) {
+      await scrollTo(tester, find.byKey(Key('attView-$v')));
+      await tester.tap(find.byKey(Key('attView-$v')));
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull, reason: 'attendance $v');
+    }
     await scrollTo(tester, find.byKey(const Key('applyLeave')));
     await tester.tap(find.byKey(const Key('applyLeave')));
     await tester.pumpAndSettle();
