@@ -92,6 +92,25 @@ final attendanceYearProvider = FutureProvider.autoDispose.family<Loaded<Json?>, 
   return Loaded(childIn(asJson(r.data)['children'], p), r.at, stale: r.stale);
 });
 
+/// The child's assignments given from `from` to `to` (either empty: no limit on that side), as the website's
+/// Assignments tab.
+final assignmentsProvider = FutureProvider.autoDispose
+    .family<Loaded<List<Json>>, (Profile, String, String)>((ref, a) async {
+      final (p, from, to) = a;
+      final r = await cached('assign:${p.id}:$from:$to', () async {
+        final section = await _sectionOf(ref, p);
+        if (section == null) return {'data': []};
+        return _api(ref).dailyWorkList(
+          classSectionId: section,
+          kind: 'assignment',
+          from: from.isEmpty ? null : from,
+          to: to.isEmpty ? null : to,
+          size: 200,
+        );
+      });
+      return Loaded(asList(asJson(r.data)['data']), r.at, stale: r.stale);
+    });
+
 /// Who teaches the child (the class teacher first, then each subject's teacher) and how much of their contact the
 /// school shows (`full`, `masked` or `hidden`): `{contact, child}`.
 final myTeachersProvider = FutureProvider.autoDispose.family<Loaded<Json>, Profile>((ref, p) async {

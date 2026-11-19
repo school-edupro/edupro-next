@@ -276,10 +276,52 @@ class School {
             {'id': '41', 'name': 'Kid Sample', 'classSectionId': '300', 'section': 'VI-A'},
           ],
         };
+      case 'GET /academics/daily-work' when (c.query ?? const {})['kind'] == 'assignment':
+        expect(c.query!['classSectionId'], '300');
+        return {
+          'data': [
+            for (final (id, due, title) in [
+              ('511', day(3), 'Project on rivers'),
+              ('512', day(-1), 'Essay on trees'),
+            ])
+              {
+                'id': id,
+                'kind': 'assignment',
+                'classSectionId': '300',
+                'section': 'VI-A',
+                'subjectName': 'Geography',
+                'title': title,
+                'body': '',
+                'assignedOn': day(-5),
+                'dueOn': due,
+                'postedBy': 'Ravi Teacher',
+                'files': [],
+                'publishAt': '${day(-5)}T04:00:00Z',
+                'ackRequired': false,
+                'ackedFor': [],
+              },
+          ],
+        };
       case 'GET /academics/daily-work':
         expect(c.query!['classSectionId'], '300');
         return {
           'data': [
+            {
+              'id': '510',
+              'kind': 'assignment',
+              'classSectionId': '300',
+              'section': 'VI-A',
+              'subjectName': 'Geography',
+              'title': 'An assignment, not on the day view',
+              'body': '',
+              'assignedOn': day(0),
+              'dueOn': day(9),
+              'postedBy': null,
+              'files': [],
+              'publishAt': day(0),
+              'ackRequired': false,
+              'ackedFor': [],
+            },
             {
               'id': '501',
               'kind': 'homework',
@@ -1026,7 +1068,7 @@ void main() {
       expect(tester.getTopLeft(find.byKey(const Key('shortcut-results'))).dy, first.dy);
       await tester.tap(find.byKey(const Key('shortcut-homework')));
       await tester.pumpAndSettle();
-      expect(find.byKey(const Key('work-501')), findsWidgets);
+      expect(find.byKey(const Key('entry-501')), findsWidgets);
     },
   );
 
@@ -1443,31 +1485,95 @@ void main() {
     expect(find.byKey(const Key('contactMasked')), findsNothing);
   });
 
-  testWidgets('homework: due first, by day; "I have seen this" and an attachment', (tester) async {
+  testWidgets(
+    'homework as on the website: a day at a time, earlier days, "I have seen this", a file',
+    (tester) async {
+      await tester.binding.setSurfaceSize(const Size(420, 1800));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      final (t, _) = await pumpFamily(tester, kind: 'student');
+      await tester.tap(
+        find.descendant(of: find.byType(NavigationBar), matching: find.text('Homework')),
+      );
+      await tester.pumpAndSettle();
+      // today: each subject with its work; the assignment is on its own tab
+      expect(find.text(S(false).dayLong(DateTime.parse(day(0)))), findsOneWidget);
+      expect(find.text('Science'), findsOneWidget);
+      expect(find.text('Plant a seed'), findsOneWidget);
+      expect(find.text('Plant a seed in a cup and note what happens each day.'), findsOneWidget);
+      expect(find.text('due ${S(false).dayShort(day(1))}'), findsOneWidget);
+      expect(find.text('An assignment, not on the day view'), findsNothing);
+      expect(find.text('Fractions page 12'), findsNothing);
+      expect(find.text('Assignments (1)'), findsOneWidget);
+      // no day after today
+      expect(tester.widget<IconButton>(find.byKey(const Key('dayNext'))).onPressed, isNull);
+      // "I have seen this" and the file, in the app
+      await tester.tap(find.byKey(const Key('ack-501')));
+      await tester.pumpAndSettle();
+      expect(t.calls.lastWhere((c) => c.path == '/academics/acks').body, {
+        'type': 'daily_work',
+        'id': '501',
+        'studentId': '41',
+      });
+      expect(find.text('Seen'), findsOneWidget);
+      await tester.tap(find.byKey(const Key('view-0')));
+      await tester.pumpAndSettle();
+      expect(t.calls.any((c) => c.path == '/academics/daily-work/501/files/71'), isTrue);
+      await tester.tap(find.byType(BackButton));
+      await tester.pumpAndSettle();
+      // an earlier day with work, from the days that had some
+      await tester.tap(find.byKey(Key('workDay-${day(-2)}')));
+      await tester.pumpAndSettle();
+      expect(find.text('Maths'), findsOneWidget);
+      expect(find.text('Fractions page 12'), findsOneWidget);
+      expect(find.text('Classwork'), findsOneWidget);
+      expect(find.text('Plant a seed'), findsNothing);
+      final asked = t.calls.lastWhere(
+        (c) => c.path == '/academics/daily-work' && c.query?['kind'] == null,
+      );
+      expect(asked.query!['to'], day(-2));
+      expect(asked.query!['from'], day(-15));
+      // the day before it: nothing; back to today
+      await tester.tap(find.byKey(const Key('dayBack')));
+      await tester.pumpAndSettle();
+      expect(find.text('Nothing was posted on this day.'), findsOneWidget);
+      await tester.tap(find.byKey(const Key('dayToday')));
+      await tester.pumpAndSettle();
+      expect(find.text('Plant a seed'), findsOneWidget);
+      expect(t.calls.any((c) => c.path.contains('handoff')), isFalse);
+    },
+  );
+
+  testWidgets('homework Assignments: still to do (nearest first), then past the due date', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(420, 1800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
     final (t, _) = await pumpFamily(tester);
     await tester.tap(find.text('Academics'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Homework'));
     await tester.pumpAndSettle();
-    expect(find.text('Homework due'), findsOneWidget);
-    expect(find.text('Fractions page 12'), findsOneWidget);
-    await tester.tap(find.byKey(const Key('work-501')).first);
+    await tester.tap(find.byKey(const Key('hwView-assignments')));
     await tester.pumpAndSettle();
-    expect(find.text('Plant a seed in a cup and note what happens each day.'), findsOneWidget);
-    expect(find.text('Attachment 1'), findsOneWidget);
-    expect(find.text('sheet.pdf'), findsNothing);
-    await tester.tap(find.byKey(const Key('ackWork')));
-    await tester.pumpAndSettle();
-    expect(t.calls.lastWhere((c) => c.path == '/academics/acks').body, {
-      'type': 'daily_work',
-      'id': '501',
-      'studentId': '41',
-    });
-    expect(find.text('Seen'), findsOneWidget);
-    await tester.tap(find.byKey(const Key('view-0')));
-    await tester.pumpAndSettle();
-    expect(t.calls.any((c) => c.path == '/academics/daily-work/501/files/71'), isTrue);
-    expect(find.byKey(const Key('shareFile')), findsOneWidget);
+    expect(
+      t.calls.any(
+        (c) => c.path == '/academics/daily-work' && (c.query ?? const {})['kind'] == 'assignment',
+      ),
+      isTrue,
+    );
+    expect(find.text('To do'), findsOneWidget);
+    expect(find.text('Past the due date'), findsOneWidget);
+    expect(
+      tester.getTopLeft(find.text('Project on rivers')).dy,
+      lessThan(tester.getTopLeft(find.text('Past the due date')).dy),
+    );
+    expect(
+      tester.getTopLeft(find.text('Essay on trees')).dy,
+      greaterThan(tester.getTopLeft(find.text('Past the due date')).dy),
+    );
+    expect(find.text('due ${S(false).dayShort(day(-1))} · overdue'), findsOneWidget);
+    expect(find.text('Geography · given ${S(false).dayShort(day(-5))}'), findsNWidgets(2));
+    expect(find.byKey(const Key('asgClear')), findsNothing);
   });
 
   testWidgets('results: marks, a card held for fees, the report card PDF made and fetched', (
@@ -1790,6 +1896,10 @@ void main() {
         ]) {
           await tester.tap(find.text(screen).last);
           await check(screen);
+          if (screen == s.homework) {
+            await tester.tap(find.byKey(const Key('hwView-assignments')));
+            await check('$screen, assignments');
+          }
           if (screen == s.attendance) {
             for (final v in ['year', 'leave']) {
               await tester.tap(find.byKey(Key('attView-$v')));
@@ -1870,11 +1980,14 @@ void main() {
     await scrollTo(tester, find.text('Homework'));
     await tester.tap(find.text('Homework').last);
     await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const Key('work-501')).first);
+    expect(tester.takeException(), isNull, reason: 'homework, a day');
+    await tester.tap(find.byKey(Key('workDay-${day(-2)}')));
     await tester.pumpAndSettle();
-    expect(tester.takeException(), isNull, reason: 'homework in full');
-    await tester.tap(find.byType(BackButton));
+    expect(tester.takeException(), isNull, reason: 'homework, an earlier day');
+    await scrollTo(tester, find.byKey(const Key('hwView-assignments')));
+    await tester.tap(find.byKey(const Key('hwView-assignments')));
     await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull, reason: 'homework, assignments');
     await tester.tap(find.byType(BackButton));
     await tester.pumpAndSettle();
     await scrollTo(tester, find.text('Attendance'));

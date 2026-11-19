@@ -285,7 +285,7 @@ apps forbid framing — correct; phones open them in a WebView, not a frame).
   long-leave days) goes to the web page, where the file is attached. _(Replaced 19 Nov 2026: see "Attendance as on
   the website" below; the certificate is now taken from the phone.)_
 - **Homework** (`homework.dart`): what is due first, then the last two weeks by day; in full with its files and "I
-  have seen this" when the teacher asks for it.
+  have seen this" when the teacher asks for it. _(Replaced 19 Nov 2026: see "Homework as on the website" below.)_
 - **Timetable** (a day at a time, today first), **calendar** (holidays and events by month), **date sheet**.
 - **Results** (`results.dart`): each released card with its marks, grade, rank and result; the report card as the
   school prints it, and its **PDF** (the API makes it in the background; the app waits up to a minute and shows it).
@@ -676,3 +676,20 @@ subject."; a card per teacher, the class teacher first (`GET academics/my-teache
 the role (Class teacher / Co-class teacher / Subject teacher), the subjects, the designation, and the contact the
 school shows. In full: the number and e-mail are buttons that call or write from the phone. In part: shown as they
 are, with the note to raise a query or book an appointment from the Help desk. Hidden: not shown.
+
+## As built — Homework as on the website (19 Nov 2026)
+
+**Homework in the app as apps/parent/app/(app)/homework**, so earlier homework can be opened (a student's Homework
+tab; Academics → Homework for a parent):
+
+- **Homework and classwork**: a day at a time — Previous / Next (no day after today), **Today**, **Day: …** (any
+  earlier day from the calendar), and the days that had work (up to seven, from the chosen day and the 13 before
+  it, as the website). Each subject with its homework, then its classwork; "Nothing has been published for today
+  yet." / "Nothing was posted on this day." (`GET academics/daily-work` from the day minus 13 to the day;
+  assignments left out).
+- **Assignments** (the tab shows how many are still to do): **Given from** / **To** from the calendar and Clear;
+  **To do** (no due date or due today or later, the nearest first) and **Past the due date**, each with its subject
+  and the day it was given (`GET academics/daily-work?kind=assignment`).
+- Each piece of work as the website shows it: its kind, title and text, the due date (today amber, past red with
+  "overdue"), the files (View / Download), who posted it and when it was published, and **I have seen this** when
+  the teacher asks for it. Home's "Homework due" and its full view are unchanged.

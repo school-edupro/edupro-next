@@ -274,6 +274,24 @@ class S {
   String dueOn(String date) => _t('Due $date', 'जमा करें $date');
   String postedBy(String name) => _t('By $name', '$name द्वारा');
   String get acknowledge => _t('I have seen this', 'मैंने यह देख लिया');
+  String get homeworkAndClasswork => _t('Homework and classwork', 'गृहकार्य और कक्षा-कार्य');
+  String get assignmentsTab => _t('Assignments', 'असाइनमेंट');
+  String get daysWithWork => _t('Days with work', 'कार्य वाले दिन');
+  String get nothingToday =>
+      _t('Nothing has been published for today yet.', 'आज के लिए अभी कुछ प्रकाशित नहीं हुआ है।');
+  String get nothingThatDay => _t('Nothing was posted on this day.', 'इस दिन कुछ नहीं दिया गया।');
+  String get generalSubject => _t('General', 'सामान्य');
+  String dueShort(String d) => _t('due $d', 'जमा $d');
+  String get overdueWord => _t('overdue', 'अतिदेय');
+  String publishedAt(String d) => _t('Published $d', 'प्रकाशित $d');
+  String givenOn(String d) => _t('given $d', 'दिया $d');
+  String get givenFrom => _t('Given from', 'कब से दिया');
+  String get givenTo => _t('To', 'तक');
+  String get clearDates => _t('Clear', 'हटाएँ');
+  String get toDo => _t('To do', 'करना है');
+  String get pastDueDate => _t('Past the due date', 'जमा तिथि निकल गई');
+  String get noPendingAssignment => _t('No assignment is pending.', 'कोई असाइनमेंट बाकी नहीं है।');
+  String chooseDay(String d) => _t('Day: $d', 'दिन: $d');
   String get acknowledged => _t('Seen', 'देख लिया');
   String get pinned => _t('Pinned', 'पिन की गई');
   String get loadMore => _t('Show more', 'और दिखाएँ');
