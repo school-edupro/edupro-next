@@ -17,6 +17,18 @@ class ProfileHeaders {
 /// Calls the API as the phone's session: the access token on every call, renewed with the refresh token a little
 /// before it ends (or when the API says it has) — one renewal at a time, every waiting call then carries on. A
 /// phone the API has signed out (another phone did it, the school did, an old token was played again) ends here.
+/// A school file's signed link from the local store (`…/api/v1/platform/files/…?token=…`) fetched through the
+/// app's own API address: the API names its own host (API_BASE_URL), which may not be how the phone reaches it (a
+/// proxy in front, or the app's web preview, where another address is a cross-origin request the browser refuses —
+/// photos and PDFs did not show). Other links (a storage service's) are left as they are.
+String viaApiBase(String url, String baseUrl) {
+  final u = Uri.tryParse(url);
+  final b = Uri.tryParse(baseUrl);
+  if (u == null || b == null || !u.path.startsWith('/api/v1/platform/files/')) return url;
+  if (u.hasScheme && u.origin == b.origin) return url;
+  return b.replace(path: u.path, query: u.hasQuery ? u.query : null).toString();
+}
+
 class DioTransport implements ApiTransport {
   DioTransport({
     required String baseUrl,
@@ -27,7 +39,8 @@ class DioTransport implements ApiTransport {
     required this.onSignedOut,
     Dio? dio,
     Dio? refreshDio,
-  }) : _dio = dio ?? Dio(),
+  }) : _base = baseUrl,
+       _dio = dio ?? Dio(),
        _refreshDio = refreshDio ?? Dio() {
     for (final d in [_dio, _refreshDio]) {
       d.options
@@ -38,6 +51,7 @@ class DioTransport implements ApiTransport {
     }
   }
 
+  final String _base;
   final SessionStore session;
   final Future<String> Function() deviceId;
   final String appVersion;
@@ -102,7 +116,10 @@ class DioTransport implements ApiTransport {
   @override
   Future<ApiFile> download(String url, {String? name, String? contentType}) async {
     try {
-      final f = await Dio().get<List<int>>(url, options: Options(responseType: ResponseType.bytes));
+      final f = await Dio().get<List<int>>(
+        viaApiBase(url, _base),
+        options: Options(responseType: ResponseType.bytes),
+      );
       final type = f.headers.value(Headers.contentTypeHeader);
       return ApiFile(
         bytes: f.data ?? const [],

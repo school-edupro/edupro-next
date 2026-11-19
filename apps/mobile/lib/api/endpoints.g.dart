@@ -356,13 +356,9 @@ class EduProApi {
   Future<dynamic> portalProfilePhoto({required String studentId, required String party}) =>
       _t.send('GET', '/engagement/mine/profile/${Uri.encodeComponent(studentId)}/photo/${Uri.encodeComponent(party)}');
 
-  /// POST /engagement/mine/profile/{studentId}/print — Queue the profile PDF with the fields this portal shows
-  Future<dynamic> portalProfilePrint({required String studentId}) =>
-      _t.send('POST', '/engagement/mine/profile/${Uri.encodeComponent(studentId)}/print');
-
-  /// GET /engagement/mine/exports/{id}
-  Future<dynamic> portalProfileExportStatus({required String id}) =>
-      _t.send('GET', '/engagement/mine/exports/${Uri.encodeComponent(id)}');
+  /// GET /engagement/mine/profile/{studentId}/print/file — The profile PDF at once, with the fields this portal shows (the portals and the app)
+  Future<ApiFile> portalProfilePrintFile({required String studentId}) =>
+      _t.file('GET', '/engagement/mine/profile/${Uri.encodeComponent(studentId)}/print/file');
 
   /// POST /comms/consents/mine — Grant or withdraw one of my consents
   Future<dynamic> commsConsentsRecordSelf({required SelfConsentDto body}) =>

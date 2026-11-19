@@ -150,29 +150,6 @@ final viewerChildrenProvider = FutureProvider.autoDispose.family<List<Json>, Pro
   }
 });
 
-/// The profile PDF: the API prepares it (the background work), the phone waits up to [wait] and fetches it.
-Future<ApiFile> profilePdf(
-  EduProApi api,
-  ApiTransport t,
-  S s, {
-  required String studentId,
-  Duration every = const Duration(seconds: 2),
-  Duration wait = const Duration(seconds: 60),
-}) async {
-  final id = '${asJson(await api.portalProfilePrint(studentId: studentId))['id']}';
-  final until = DateTime.now().add(wait);
-  while (true) {
-    final st = asJson(await api.portalProfileExportStatus(id: id));
-    final url = asJson(st['download'])['url'];
-    if (url is String) {
-      return t.download(url, name: 'profile.pdf', contentType: 'application/pdf');
-    }
-    if (asJson(st['export'])['status'] == 'failed') throw s.profilePdfFailed;
-    if (DateTime.now().isAfter(until)) throw s.pdfPreparing;
-    await Future<void>.delayed(every);
-  }
-}
-
 String _apiError(S s, Object e) {
   if (e is ApiException) return e.offline ? s.offline : e.detail;
   return '$e';
@@ -336,10 +313,27 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     if (reqs.isEmpty) return const [];
     final dark = Theme.of(context).brightness == Brightness.dark;
     final muted = dark ? Tokens.mobGray300 : Tokens.textMuted;
+    final waiting = reqs.where((r) => r['status'] == 'pending').length;
+    // folded until tapped, as on the website: the count waiting and decided, the history inside
     return [
-      SectionTitle(s.changeRequests, key: const Key('changeRequests')),
+      const SizedBox(height: Tokens.sp3),
       Card(
-        child: Column(
+        clipBehavior: Clip.antiAlias,
+        child: ExpansionTile(
+          key: const Key('changeRequests'),
+          leading: const Icon(Icons.history_outlined),
+          title: Text(s.changeRequests, style: const TextStyle(fontWeight: Tokens.fwBold)),
+          subtitle: Text(
+            [
+              if (waiting > 0) s.waitingN(waiting),
+              s.decidedN(reqs.length - waiting),
+              s.showHistory,
+            ].join(' · '),
+            style: TextStyle(color: muted, fontSize: 14),
+          ),
+          shape: const Border(),
+          collapsedShape: const Border(),
+          expandedCrossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             for (final r in reqs)
               Padding(
@@ -681,12 +675,9 @@ class _Hero extends ConsumerWidget {
                     FileIcons(
                       name: 'profilePdf',
                       label: s.profilePdf,
-                      load: () => profilePdf(
-                        ref.read(apiProvider),
-                        ref.read(transportProvider),
-                        s,
-                        studentId: p.studentId!,
-                      ),
+                      // made at once by the API: no waiting for background work
+                      load: () =>
+                          ref.read(apiProvider).portalProfilePrintFile(studentId: p.studentId!),
                     ),
                   ],
                 ),

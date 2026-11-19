@@ -1,8 +1,7 @@
-import { Button, Card } from '@edupro/ui';
+import { Card } from '@edupro/ui';
 import { ApiError } from '@edupro/bff';
 import { bff } from '@/lib/bff';
 import { t, type Lang } from '@/lib/i18n';
-import { downloadProfilePdf } from '@/app/(app)/profile/actions';
 import type { PortalProfile } from '@/app/(app)/profile/types';
 
 export interface FamilyChild {
@@ -72,12 +71,13 @@ export async function ChildProfileCard({ child, lang }: { child: FamilyChild; la
               <a className="ep-btn ep-btn--primary ep-btn--sm" href={`/profile?child=${child.id}`}>
                 {t(lang, 'View full profile')}
               </a>
-              <form action={downloadProfilePdf}>
-                <input type="hidden" name="child" value={child.id} />
-                <Button type="submit" variant="secondary" size="sm">
-                  {t(lang, 'Download profile (PDF)')}
-                </Button>
-              </form>
+              {/* the PDF is made at once by the API and saved */}
+              <a
+                className="ep-btn ep-btn--secondary ep-btn--sm"
+                href={`/profile/pdf?child=${child.id}&download=1`}
+              >
+                {t(lang, 'Download profile (PDF)')}
+              </a>
             </div>
           </div>
         </div>

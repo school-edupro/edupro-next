@@ -141,6 +141,27 @@ void main() {
       throwsA(isA<ApiException>().having((e) => e.offline, 'offline', true)),
     );
   });
+
+  test("a school file's signed link goes through the app's own API address", () {
+    const api = 'http://localhost:3010';
+    expect(
+      viaApiBase('http://localhost:4000/api/v1/platform/files/local?token=abc', api),
+      'http://localhost:3010/api/v1/platform/files/local?token=abc',
+    );
+    // already the app's address, a relative link, or another storage: unchanged / on the app's address
+    expect(
+      viaApiBase('http://localhost:3010/api/v1/platform/files/local?token=abc', api),
+      'http://localhost:3010/api/v1/platform/files/local?token=abc',
+    );
+    expect(
+      viaApiBase('/api/v1/platform/files/local?token=abc', api),
+      'http://localhost:3010/api/v1/platform/files/local?token=abc',
+    );
+    expect(
+      viaApiBase('https://bucket.example.test/school-1/x.png?X-Sig=1', api),
+      'https://bucket.example.test/school-1/x.png?X-Sig=1',
+    );
+  });
 }
 
 class _Throwing extends FakeAdapter {

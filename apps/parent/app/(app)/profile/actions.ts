@@ -134,19 +134,3 @@ export async function cancelProfileRequest(fd: FormData) {
   }
   redirect(`/profile?child=${child}&ok=withdrawn#requests`);
 }
-
-export async function downloadProfilePdf(fd: FormData) {
-  const child = str(fd, 'child');
-  let id = '';
-  try {
-    if (!idOk(child)) redirect('/profile');
-    id = (
-      await bff.api.fetch<{ id: string }>(`/engagement/mine/profile/${child}/print`, {
-        method: 'POST',
-      })
-    ).id;
-  } catch (error) {
-    fail(`/profile?child=${child}`, error);
-  }
-  redirect(`/profile?child=${child}&export=${id}`);
-}

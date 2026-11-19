@@ -89,6 +89,15 @@ export class PortalProfileController {
     return this.portal.requestPrint(ctx, studentId);
   }
 
+  @Get('engagement/mine/profile/:studentId/print/file')
+  @ApiOperation({
+    summary: 'The profile PDF at once, with the fields this portal shows (the portals and the app)',
+  })
+  @RequirePermission(ENGAGEMENT.familyView)
+  printFile(@ReqCtx() ctx: RequestContext, @Param('studentId') studentId: string) {
+    return this.portal.printFile(ctx, studentId);
+  }
+
   @Get('engagement/mine/exports/:id')
   @RequirePermission(ENGAGEMENT.familyView)
   exportStatus(@ReqCtx() ctx: RequestContext, @Param('id') id: string) {

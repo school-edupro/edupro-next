@@ -453,6 +453,9 @@ class S {
       _t('Profile updates are closed at the moment.', 'प्रोफ़ाइल बदलाव अभी बंद हैं।');
   String updatesOpenUntil(String d) => _t('Updates are open until $d.', 'बदलाव $d तक खुले हैं।');
   String get changeRequests => _t('Changes asked for', 'माँगे गए बदलाव');
+  String waitingN(int n) => _t('$n waiting', '$n प्रतीक्षा में');
+  String decidedN(int n) => _t('$n decided', '$n निर्णीत');
+  String get showHistory => _t('Show history', 'इतिहास देखें');
   String requestStatus(String st) => switch (st) {
     'pending' => _t('Waiting', 'प्रतीक्षा में'),
     'approved' => _t('Approved', 'स्वीकृत'),
@@ -546,10 +549,6 @@ class S {
   String get pdfPreparing => _t(
     'The PDF is being prepared. Try again in a minute.',
     'PDF तैयार हो रहा है। एक मिनट बाद फिर कोशिश करें।',
-  );
-  String get profilePdfFailed => _t(
-    'The PDF could not be prepared. Please try again.',
-    'PDF तैयार नहीं हो सका। फिर कोशिश करें।',
   );
   String get notLinked => _t(
     'Your account is not linked to a student yet. Please contact the school office.',

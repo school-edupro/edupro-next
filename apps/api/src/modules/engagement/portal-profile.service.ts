@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { Injectable } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
 import {
   LEGACY_PHOTO_KEYS,
   PORTAL_PHOTOS,
@@ -8,6 +8,7 @@ import {
   PROFILE_FIELD_BY_KEY,
   PROFILE_SECTIONS,
   PROOF_KINDS,
+  applies,
   approverLabel,
   decryptField,
   encryptField,
@@ -36,9 +37,12 @@ import { DbService } from '../../common/db/db.service';
 import { DomainError } from '../../common/errors/domain-error';
 import { requireTenant, type RequestContext } from '../../common/http/request-context';
 import { ViewerService } from '../academics/daily/viewer.service';
+import { registerGeneratedOn } from '../exams/register-head';
 import { FilesService } from '../files/files.service';
+import { STORAGE_DRIVER, type StorageDriver } from '../files/storage';
 import { ReportsService } from '../reports/reports.service';
 import { ENGAGEMENT } from './engagement.dto';
+import { studentProfilePdf } from './student-profile-pdf';
 import {
   PORTAL,
   type BulkDecideDto,
@@ -139,6 +143,20 @@ const PROOF_LABEL: Record<string, string> = {
   photo: 'photo',
   other: 'supporting document',
 };
+/** The documents table of the printed profile (the first four always listed; others when on file). */
+const DOC_LABEL: Record<string, string> = {
+  photo: 'Student photo',
+  birth_certificate: 'Birth certificate',
+  address_proof: 'Residence proof',
+  aadhaar: 'Aadhaar card',
+  transfer_certificate: 'Transfer certificate',
+  category_certificate: 'Caste / category certificate',
+  medical: 'Medical / disability certificate',
+  qualification: 'Previous report card',
+  bank: 'Bank passbook or cheque',
+  pan: 'PAN card',
+  other: 'Other document',
+};
 const CHECKLIST_BY_KIND: Record<string, string> = {
   birth_certificate: 'birth_certificate_submitted',
   address_proof: 'residence_proof_submitted',
@@ -160,6 +178,7 @@ export class PortalProfileService {
     private readonly viewer: ViewerService,
     private readonly reports: ReportsService,
     private readonly files: FilesService,
+    @Inject(STORAGE_DRIVER) private readonly storage: StorageDriver,
   ) {}
 
   // ---- policy (administrators) ---------------------------------------------------------------------
@@ -757,6 +776,185 @@ export class PortalProfileService {
       },
       'engagement.profile.print',
     );
+  }
+
+  /**
+   * The profile as a PDF at once (the portals and the phone app; no background worker): what the
+   * workers' printout holds, with only the fields this portal shows. The family link is checked here.
+   */
+  async printFile(ctx: RequestContext, studentId: string) {
+    const audience = await this.familyOf(ctx, studentId);
+    const data = await this.db.tenant(requireTenant(ctx), async (c) => {
+      const policy = await loadPortalPolicy(c);
+      // the family's own child: the full numbers, as on the profile page
+      const snap = await readStudentProfile(c, studentId, { showSensitive: true });
+      if (!snap) throw new DomainError('not-found', 'Student not found', { status: 404 });
+      const school = await c.query<{
+        name: string;
+        affiliation_no: string | null;
+        board: string | null;
+        address: Record<string, unknown> | null;
+        contact: Record<string, unknown> | null;
+        logo: string | null;
+      }>(
+        `SELECT name, affiliation_no, board, address, contact, NULLIF(branding->>'logoFileId', '') AS logo
+           FROM schools WHERE id = app.current_school_id()`,
+      );
+      const ids = [
+        ...Object.values(snap.photos).filter(Boolean),
+        school.rows[0]?.logo ?? '',
+      ].filter((id) => /^\d{1,18}$/.test(String(id)));
+      const files = ids.length
+        ? await c.query<{ id: string; object_key: string; content_type: string }>(
+            `SELECT id::text, object_key, content_type FROM files WHERE id = ANY($1::bigint[]) AND status = 'ready'`,
+            [ids],
+          )
+        : { rows: [] as Array<{ id: string; object_key: string; content_type: string }> };
+      const docs = await c.query<{ kind: string; verified: boolean }>(
+        `SELECT kind::text, bool_or(verified_at IS NOT NULL) AS verified FROM person_documents
+          WHERE person_type = 'student' AND person_id = $1 AND deleted_at IS NULL GROUP BY kind`,
+        [studentId],
+      );
+      return { policy, snap, school: school.rows[0], files: files.rows, docs: docs.rows };
+    });
+    const { snap } = data;
+    const v = snap.values;
+    const visible = (key: string) => data.policy.fields[audience][key] !== 'hidden';
+    const byKey = new Map(PROFILE_FIELDS.map((f) => [f.key, f]));
+    const val = (k: string) => {
+      if (!visible(k)) return '';
+      const x = v[k];
+      if (x === null || x === undefined || x === '') return '';
+      const t = String(x);
+      return byKey.get(k)?.type === 'date' && /^\d{4}-\d{2}-\d{2}$/.test(t)
+        ? `${t.slice(8, 10)}-${t.slice(5, 7)}-${t.slice(0, 4)}`
+        : t;
+    };
+    const fileOf = new Map(data.files.map((f) => [f.id, f]));
+    const image = async (id: string | null | undefined, max: number) => {
+      const f = id ? fileOf.get(id) : undefined;
+      if (!f || !/^image\/(png|jpe?g)$/.test(f.content_type)) return null;
+      try {
+        const bytes = await this.storage.read(f.object_key);
+        return bytes.length <= max ? { contentType: f.content_type, bytes } : null;
+      } catch {
+        return null; // a photo that cannot be read leaves its box empty; the paper still comes
+      }
+    };
+    const MB = 1024 * 1024;
+    const [logo, student, father, mother] = await Promise.all([
+      image(data.school?.logo, 2 * MB),
+      image(snap.photos.student, 3 * MB),
+      image(snap.photos.father, 3 * MB),
+      image(snap.photos.mother, 3 * MB),
+    ]);
+    const str = (x: unknown) => (typeof x === 'string' ? x.trim() : '');
+    const a = data.school?.address ?? {};
+    const ct = data.school?.contact ?? {};
+    const extra = [
+      data.school?.affiliation_no
+        ? `${data.school.board ?? ''} Affiliation No. ${data.school.affiliation_no}`.trim()
+        : '',
+      [str(ct.phone), str(ct.email), str(ct.website)].filter(Boolean).join(' · '),
+    ]
+      .filter(Boolean)
+      .join(' · ');
+    const e = snap.enrolment;
+    const facts: Array<[string, string, string?]> = [
+      ['Admission No', snap.admissionNo],
+      ['Class & Section', e ? `${e.className} ${e.section}` : ''],
+      ['Roll No', e?.rollNo ? String(e.rollNo) : ''],
+      ['Academic Year', e ? e.academicYear : ''],
+      [
+        'Date of Birth',
+        `${val('dob')}${v.age !== null && v.age !== undefined && visible('dob') ? ` (${String(v.age)} yrs)` : ''}`,
+        'dob',
+      ],
+      ['Gender', val('gender'), 'gender'],
+      ['Blood Group', val('blood_group'), 'blood_group'],
+      ['Category', val('category'), 'category'],
+      ['House', val('house'), 'house'],
+      ['Day Scholar / Hosteller', val('boarding'), 'boarding'],
+    ];
+    // the parents' photos and the enrolment facts are shown above; the documents become their table
+    const skip = new Set([
+      'photo_ref',
+      'father_photo',
+      'mother_photo',
+      'guardian_photo',
+      'academic_year',
+      'class',
+      'section',
+      'roll_no',
+    ]);
+    const sections = PROFILE_SECTIONS.filter((s) => s.id !== 'documents')
+      .map((s) => {
+        const fields = PROFILE_FIELDS.filter(
+          (f) =>
+            f.section === s.id && !f.retired && !skip.has(f.key) && visible(f.key) && applies(f, v),
+        );
+        const hasAny = fields.some(
+          (f) => v[f.key] !== null && v[f.key] !== undefined && v[f.key] !== '',
+        );
+        return {
+          title: s.title,
+          rows:
+            s.id === 'guardian' && !hasAny
+              ? []
+              : fields.map((f): [string, string] => [f.label, val(f.key)]),
+        };
+      })
+      .filter((s) => s.rows.length > 0);
+    const documents = Object.keys(DOC_LABEL).flatMap((k) => {
+      const d = data.docs.find((x) => x.kind === k);
+      if (!d && !['photo', 'birth_certificate', 'address_proof', 'aadhaar'].includes(k)) return [];
+      return [
+        {
+          label: DOC_LABEL[k]!,
+          status: d ? 'On file' : 'Not submitted',
+          verified: Boolean(d?.verified),
+        },
+      ];
+    });
+    const bytes = await studentProfilePdf({
+      school: {
+        name: data.school?.name ?? '',
+        address:
+          [a.line1, a.line2, a.line3, a.city, a.state, a.pin ?? a.pincode]
+            .map(str)
+            .filter(Boolean)
+            .join(', ') || null,
+      },
+      extra: extra || null,
+      logo,
+      title: `Student Profile · ${audience === 'parent' ? 'Parent' : 'Student'} copy`,
+      details: `Downloaded from the portal ${registerGeneratedOn()} · Profile ${String(snap.completeness.percent)}% complete`,
+      name: snap.displayName,
+      facts: facts.filter(([, , key]) => !key || visible(key)).map(([k, x]) => [k, x]),
+      photos: { student, father, mother },
+      father: { name: val('father_name'), mobile: val('father_mobile') },
+      mother: { name: val('mother_name'), mobile: val('mother_mobile') },
+      sections,
+      documents,
+      remarks: val('remarks'),
+      foot: `${data.school?.name ?? ''} · Student profile ${snap.admissionNo}`,
+    });
+    // a download of the full profile is a privileged read: kept in the audit trail, as the worker's print was
+    await this.audit.record(
+      ctx,
+      {
+        action: 'engagement.profile.print',
+        entityType: 'student',
+        entityId: studentId,
+        after: { audience, instant: true },
+      },
+      ENGAGEMENT.familyView,
+    );
+    return {
+      filename: `student-profile-${snap.admissionNo}`.replace(/[^A-Za-z0-9-]+/g, '-') + '.pdf',
+      contentType: 'application/pdf',
+      base64: bytes.toString('base64'),
+    };
   }
 
   async exportStatus(ctx: RequestContext, exportId: string) {

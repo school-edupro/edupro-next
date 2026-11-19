@@ -782,13 +782,8 @@ class School {
           contentType: 'image/png',
           name: 'photo.png',
         );
-      case 'POST /engagement/mine/profile/41/print':
-        return {'id': 'x1'};
-      case 'GET /engagement/mine/exports/x1':
-        return {
-          'export': {'id': 'x1', 'status': 'done'},
-          'download': {'url': '/files/profile.pdf'},
-        };
+      case 'GET /engagement/mine/profile/41/print/file':
+        return const ApiFile(bytes: [1], contentType: 'application/pdf', name: 'profile.pdf');
       case 'POST /comms/consents/mine':
         return {'recorded': true};
       case 'GET /privacy/requests/mine':
@@ -1353,7 +1348,11 @@ void main() {
       // the photo comes from the API, not a web page
       expect(t.calls.any((c) => c.path == '/files/photo-student'), isTrue);
       expect(find.byKey(const Key('photo-student')), findsOneWidget);
-      // the change waiting for approval: withdrawn
+      // the changes asked for stay folded until tapped; the one waiting for approval: withdrawn
+      expect(find.text('House: Red'), findsNothing);
+      expect(find.text('1 waiting · 0 decided · Show history'), findsOneWidget);
+      await tester.tap(find.byKey(const Key('changeRequests')));
+      await tester.pumpAndSettle();
       expect(find.text('House: Red'), findsOneWidget);
       await tester.tap(find.byKey(const Key('withdraw-r1')));
       await tester.pumpAndSettle();
@@ -1367,11 +1366,11 @@ void main() {
         'status': 'withdrawn',
       });
       expect(tester.widget<TextButton>(find.byKey(const Key('consent-safety'))).onPressed, isNull);
-      // the profile PDF: asked for, waited for, opened in the app
+      // the profile PDF: made at once by the API, opened in the app (no export to wait for)
       await tester.tap(find.byKey(const Key('view-profilePdf')));
       await tester.pumpAndSettle();
-      expect(t.calls.any((c) => c.path == '/engagement/mine/profile/41/print'), isTrue);
-      expect(t.calls.any((c) => c.path == '/files/profile.pdf'), isTrue);
+      expect(t.calls.any((c) => c.path == '/engagement/mine/profile/41/print/file'), isTrue);
+      expect(t.calls.any((c) => c.path.contains('/exports/')), isFalse);
       await tester.tap(find.byType(BackButton));
       await tester.pumpAndSettle();
       expect(t.calls.any((c) => c.path.contains('handoff')), isFalse);

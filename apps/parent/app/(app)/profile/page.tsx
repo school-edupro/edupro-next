@@ -7,10 +7,9 @@ import { chosenChild } from '@/lib/child';
 import { bff } from '@/lib/bff';
 import { currentLang, t, type Lang } from '@/lib/i18n';
 import { setConsent } from '../queries/actions';
-import { cancelProfileRequest, downloadProfilePdf, submitProfilePhoto } from './actions';
+import { cancelProfileRequest, submitProfilePhoto } from './actions';
 import { PhotoChange } from '@/components/PhotoChange';
 import { applies, shown, type PortalProfile, type PortalRequest } from './types';
-import { ExportWatcher } from '@/components/ExportWatcher';
 
 interface Family {
   children: Array<{ id: string; name: string; section: string | null }>;
@@ -158,7 +157,6 @@ export default async function ProfilePage({
     ok?: string;
     error?: string;
     detail?: string;
-    export?: string;
     requests?: string;
   }>;
 }) {
@@ -184,20 +182,12 @@ export default async function ProfilePage({
   const chosen = await chosenChild(sp.child);
   const child = fam.children.find((c) => c.id === chosen?.id) ?? fam.children[0];
   if (!child) return notLinked;
-  const [p, reqs, exp] = await Promise.all([
+  const [p, reqs] = await Promise.all([
     bff.api.fetch<PortalProfile>(`/engagement/mine/profile/${child.id}`),
     bff.api
       .fetch<{ data: PortalRequest[] }>(`/engagement/mine/profile/${child.id}/requests`)
       .then((r) => r.data)
       .catch(() => [] as PortalRequest[]),
-    sp.export
-      ? bff.api
-          .fetch<{
-            export: { id: string; status: string };
-            download: { url: string; saveUrl?: string } | null;
-          }>(`/engagement/mine/exports/${sp.export}`)
-          .catch(() => null)
-      : Promise.resolve(null),
   ]);
   const all = p.sections.flatMap((s) => s.fields);
   const values = Object.fromEntries(all.map((f) => [f.key, f.value]));
@@ -283,35 +273,6 @@ export default async function ProfilePage({
           {sp.detail || sp.error}
         </div>
       ) : null}
-      {exp ? (
-        <div className="ep-alert ep-alert--info" role="status">
-          {exp.export.status !== 'failed' ? (
-            <ExportWatcher id={exp.export.id} url={exp.download?.url ?? null} />
-          ) : null}
-          {exp.download ? (
-            <span className="ep-filecell">
-              {t(lang, 'Profile PDF')}
-              <FileLinks
-                url={exp.download.url}
-                saveUrl={exp.download.saveUrl}
-                label={t(lang, 'Profile PDF')}
-                viewLabel={t(lang, 'View')}
-                saveLabel={t(lang, 'Download')}
-              />
-            </span>
-          ) : exp.export.status === 'failed' ? (
-            t(lang, 'The PDF could not be prepared. Please try again.')
-          ) : (
-            <>
-              {t(lang, 'Your PDF is being prepared.')}{' '}
-              <a href={`/profile?child=${child.id}&export=${exp.export.id}`}>
-                {t(lang, 'Refresh')}
-              </a>
-            </>
-          )}
-        </div>
-      ) : null}
-
       <Card style={{ marginBottom: 'var(--sp-3)' }}>
         <div className="pp-hero">
           <div className="pp-photo-box">
@@ -357,12 +318,17 @@ export default async function ProfilePage({
               </div>
             </dl>
             <div className="pp-hero__actions">
-              <form action={downloadProfilePdf}>
-                <input type="hidden" name="child" value={child.id} />
-                <Button type="submit" variant="secondary" size="sm">
-                  {t(lang, 'Download profile (PDF)')}
-                </Button>
-              </form>
+              {/* made at once by the API: View opens it, Download saves it */}
+              <span className="ep-filecell">
+                {t(lang, 'Profile PDF')}
+                <FileLinks
+                  url={`/profile/pdf?child=${child.id}`}
+                  saveUrl={`/profile/pdf?child=${child.id}&download=1`}
+                  label={t(lang, 'Profile PDF')}
+                  viewLabel={t(lang, 'View')}
+                  saveLabel={t(lang, 'Download')}
+                />
+              </span>
               {pendingCount ? (
                 <a
                   className="ep-btn ep-btn--ghost ep-btn--sm"

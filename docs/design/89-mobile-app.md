@@ -607,14 +607,26 @@ Live payment waits for the schools' gateway accounts (the fee module's phase 2).
 **Profile in the app, with no web page** (`family/profile.dart`; More → Profile for a parent's child or a student):
 the photo (from the API; Add / Change photo from the camera or gallery, JPG / PNG / WebP up to 5 MB, uploaded as a
 `personal` file and sent as a change), class and roll, admission number, class teacher, how complete the profile
-is, the profile PDF (View / Download: the API prepares it in the background and the phone waits up to a minute), the
-parents with their photos (a parent's profile), the update window, the changes asked for (Withdraw on one's own
-pending request), every section with its values and what waits for approval, **Update** per section (only the
+is, the profile PDF (View / Download), the parents with their photos (a parent's profile), the update window, the
+changes asked for (folded until tapped, as on the website: "n waiting · n decided · Show history"; Withdraw on one's
+own pending request), every section with its values and what waits for approval, **Update** per section (only the
 editable fields: "Saved at once" or "Needs approval"; type-to-search lists with the address cascades; dates from a
 calendar; the proofs the school asks for, from the phone's files; a reason; only the fields changed are sent), **Your
 data** (the data-protection requests and their report; a new access, correction or grievance request, about oneself
 or a child) and **Your consents** (Allow / Withdraw; the required ones cannot be withdrawn). The same API calls and
 rules as the web pages (`appliesTo`, `optionsFor`, `shownValue` mirror apps/parent/app/(app)/profile/types.ts).
+
+**Photos and the profile PDF (19 Nov 2026).** A school file's signed link names the API's own address
+(`API_BASE_URL`); the app fetches it through the address it uses for the API (`viaApiBase` in
+`api/dio_transport.dart`), so the photos load wherever the app reaches the API (a phone, the web preview). The
+profile PDF is made **at once by the API** (`GET engagement/mine/profile/:studentId/print/file`,
+`modules/engagement/student-profile-pdf.ts`, pdf-lib): the letterhead (logo, address, affiliation and contact),
+"Student Profile · Parent / Student copy" with when it was downloaded and how complete the profile is, the student's,
+father's and mother's photos (PNG / JPEG; a WebP photo leaves its box empty) with the key facts, every section with
+only the fields this portal shows, the documents on file, the remarks, the declaration with three signature lines,
+and "Page x of y". It no longer waits for the background workers; each download is kept in the audit trail
+(`engagement.profile.print`). The website uses the same route (`/profile/pdf?child=`: View opens it, Download saves
+it; the Home card's Download profile too). The queued print (`POST …/print`) stays for other callers.
 
 **Receipts by fee type** (web Fees → Receipts and the app): School fee, Hostel fee (a hosteller, or one with hostel
 receipts) and Other fees (the MF series, until now not shown to parents), each with its count and what was received

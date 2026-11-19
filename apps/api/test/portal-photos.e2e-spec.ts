@@ -279,4 +279,32 @@ describe('portal photos: upload, approval and records (e2e)', () => {
     });
     expect(link.statusCode).toBe(200);
   });
+
+  it('the profile PDF comes at once for the parent and the student, kept in the audit trail; not for others', async () => {
+    for (const u of [parent, pupil]) {
+      const r = await inject({
+        method: 'GET',
+        url: `/engagement/mine/profile/${studentId}/print/file`,
+        headers: h(u),
+      });
+      expect(r.statusCode).toBe(200);
+      expect(r.json().contentType).toBe('application/pdf');
+      expect(r.json().filename).toBe(`student-profile-${s}-1.pdf`);
+      expect(Buffer.from(r.json().base64, 'base64').subarray(0, 5).toString()).toBe('%PDF-');
+    }
+    const office = await inject({
+      method: 'GET',
+      url: `/engagement/mine/profile/${studentId}/print/file`,
+      headers: h(),
+    });
+    expect(office.statusCode).toBe(403);
+    const audit = await withMigrator((c) =>
+      c.query<{ audience: string }>(
+        `SELECT after->>'audience' AS audience FROM audit_logs
+          WHERE action = 'engagement.profile.print' AND entity_id = $1 ORDER BY id`,
+        [studentId],
+      ),
+    );
+    expect(audit.rows.map((r) => r.audience)).toEqual(['parent', 'student']);
+  });
 });
