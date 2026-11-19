@@ -125,6 +125,16 @@ export const MERGE_RULES: MergeRule[] = [
     how: 'move',
     where: `{a}.entity_type = 'student'`,
   },
+  // a staff member's child for fee recovery from pay (docs/design/86): one link to a staff member. The kept
+  // record's link stays unless only the duplicate's is on (that waits, see MERGE_BLOCKERS)
+  {
+    table: 'payroll_ward_links',
+    col: 'student_id',
+    area: 'fees',
+    how: 'keep',
+    clash: `EXISTS (SELECT 1 FROM payroll_ward_links k WHERE k.student_id = $1 AND k.employee_id = d.employee_id AND (k.active OR NOT d.active))`,
+    rule: 'the kept record’s link to a staff member (fees kept back from pay)',
+  },
 
   // ---- class: promotion decisions before the enrolments they point at -----------------------------
   {
@@ -228,6 +238,8 @@ export const MERGE_RULES: MergeRule[] = [
     rule: 'the kept record’s report card',
   },
   { table: 'board_results', col: 'student_id', area: 'marks', how: 'move' },
+  // board result rows matched to the pupil (docs/design/88); both matched in one exam waits (MERGE_BLOCKERS)
+  { table: 'board_candidates', col: 'student_id', area: 'marks', how: 'move' },
   // examinations v2 (docs/design/65)
   {
     table: 'student_subjects',
@@ -346,6 +358,11 @@ export const MERGE_RULES: MergeRule[] = [
   },
   { table: 'certificates_issued', col: 'student_id', area: 'documents', how: 'move' },
   { table: 'transfer_certificates', col: 'student_id', area: 'documents', how: 'move' },
+  // certificates (docs/design/87): every paper issued, every request and award moves; what both records
+  // cannot hold at once waits (MERGE_BLOCKERS)
+  { table: 'certificates', col: 'student_id', area: 'documents', how: 'move' },
+  { table: 'certificate_requests', col: 'student_id', area: 'documents', how: 'move' },
+  { table: 'certificate_award_allotments', col: 'student_id', area: 'documents', how: 'move' },
 
   // ---- parents -----------------------------------------------------------------------------------
   {
@@ -584,5 +601,32 @@ export const MERGE_BLOCKERS: Array<{ sql: string; why: string }> = [
     sql: `SELECT 1 FROM fee_demands d JOIN fee_demands k ON k.student_id = $1 AND k.academic_year_id = d.academic_year_id AND k.period_id = d.period_id AND k.head_id = d.head_id
            WHERE d.student_id = $2 AND EXISTS (SELECT 1 FROM fee_adjustments a WHERE a.demand_id = d.id OR a.charge_demand_id = d.id)`,
     why: 'A fee line both records are charged for has a waiver or adjustment on the duplicate: undo it first',
+  },
+  {
+    sql: `SELECT 1 FROM payroll_adhoc WHERE ref_module = 'FEE' AND receipt_pending AND deleted_at IS NULL AND detail->>'studentId' = $2::text`,
+    why: 'The duplicate’s fees are set to be kept back from a staff member’s pay and their receipt is not made yet: lock that pay run or remove the fee recovery first',
+  },
+  {
+    sql: `SELECT 1 FROM payroll_ward_links d JOIN payroll_ward_links k ON k.student_id = $1 AND k.employee_id = d.employee_id AND NOT k.active
+           WHERE d.student_id = $2 AND d.active`,
+    why: 'Both records are linked to the same staff member for fee recovery, the duplicate’s link on and the kept record’s off: link the kept record (or unlink the duplicate) in payroll first',
+  },
+  {
+    sql: `SELECT 1 FROM certificate_requests d JOIN certificate_requests k ON k.student_id = $1 AND k.type_id = d.type_id AND k.status IN ('submitted', 'approved')
+           WHERE d.student_id = $2 AND d.status IN ('submitted', 'approved')`,
+    why: 'Both records have a request open for the same certificate: withdraw or reject the duplicate’s first',
+  },
+  {
+    sql: `SELECT 1 FROM certificates d JOIN certificate_types t ON t.id = d.type_id AND t.multiple <> 'ANY'
+            JOIN certificates k ON k.student_id = $1 AND k.type_id = d.type_id AND k.status = 'issued' AND k.copy_no = 0
+                               AND (t.multiple = 'ONE' OR k.year_code IS NOT DISTINCT FROM d.year_code)
+           WHERE d.student_id = $2 AND d.status = 'issued' AND d.copy_no = 0`,
+    why: 'Both records hold a certificate a pupil holds only once (or once a year): cancel the duplicate’s first',
+  },
+  {
+    sql: `SELECT 1 FROM board_candidates d JOIN board_candidates k ON k.student_id = $1 AND k.board = d.board
+                                                                AND k.class_label = d.class_label AND k.exam_year = d.exam_year
+           WHERE d.student_id = $2`,
+    why: 'Both records are matched to a candidate of the same board exam: unlink the wrong one in the board results first',
   },
 ];

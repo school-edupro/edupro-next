@@ -254,6 +254,113 @@ describe('student merges (e2e)', () => {
     expect(self.json().blockers).toEqual(['Choose two different records']);
   });
 
+  it('certificates, board results and staff-ward links move; what both cannot hold waits', async () => {
+    let fee = '';
+    await withMigrator(async (c) => {
+      const one = async (sql: string, p: unknown[]) =>
+        (await c.query<{ id: string }>(sql, [school.id, ...p])).rows[0]!.id;
+      // a staff parent: the kept record's link off, the duplicate's on; the duplicate's fee staged for pay
+      const emp = await one(
+        `INSERT INTO employees (school_id, employee_code, first_name) VALUES ($1, 'SMGE1', 'Anil') RETURNING id::text`,
+        [],
+      );
+      const head = await one(
+        `INSERT INTO payroll_pay_heads (school_id, code, name, head_type) VALUES ($1, 'WARDFEE', 'Ward fee', 'DEDUCTION') RETURNING id::text`,
+        [],
+      );
+      for (const [st, on] of [
+        [keep, false],
+        [dup, true],
+      ] as const)
+        await c.query(
+          `INSERT INTO payroll_ward_links (school_id, employee_id, student_id, source, active) VALUES ($1, $2, $3, 'manual', $4)`,
+          [school.id, emp, st, on],
+        );
+      fee = await one(
+        `INSERT INTO payroll_adhoc (school_id, employee_id, month, pay_head_id, amount, ref_module, ref_id, detail, receipt_pending)
+         VALUES ($1, $2, '2026-07-01', $3, 1000, 'FEE', $4, $5::jsonb, true) RETURNING id::text`,
+        [
+          emp,
+          head,
+          `FEE/${dup}/2026-07-10`,
+          JSON.stringify({ studentId: dup, dueOn: '2026-07-10' }),
+        ],
+      );
+      // a certificate held once, issued to both and asked for by both; an award on the duplicate
+      const type = await one(
+        `INSERT INTO certificate_types (school_id, code, name, audience, prefix, multiple) VALUES ($1, 'MERGE_T', 'Merge test', 'STUDENT', 'MRGT', 'ONE') RETURNING id::text`,
+        [],
+      );
+      for (const [st, no] of [
+        [keep, 'MRGT/1'],
+        [dup, 'MRGT/2'],
+      ] as const) {
+        await c.query(
+          `INSERT INTO certificates (school_id, type_id, number, student_id, status, issued_on) VALUES ($1, $2, $3, $4, 'issued', '2026-07-01')`,
+          [school.id, type, no, st],
+        );
+        await c.query(
+          `INSERT INTO certificate_requests (school_id, type_id, student_id, channel, status) VALUES ($1, $2, $3, 'office', 'submitted')`,
+          [school.id, type, st],
+        );
+      }
+      const award = await one(
+        `INSERT INTO certificate_awards (school_id, name, type_code) VALUES ($1, 'Merge award', 'MERGE_T') RETURNING id::text`,
+        [],
+      );
+      await c.query(
+        `INSERT INTO certificate_award_allotments (school_id, award_id, student_id, awarded_on) VALUES ($1, $2, $3, '2026-07-01')`,
+        [school.id, award, dup],
+      );
+      // both matched to a candidate of the same board exam
+      const imp = await one(
+        `INSERT INTO board_result_imports (school_id, class_label, status) VALUES ($1, 'X', 'committed') RETURNING id::text`,
+        [],
+      );
+      for (const [st, roll] of [
+        [keep, '101'],
+        [dup, '102'],
+      ] as const)
+        await c.query(
+          `INSERT INTO board_candidates (school_id, import_id, board, class_label, exam_year, roll_no, student_id, match)
+           VALUES ($1, $2, 'CBSE', 'X', 2026, $3, $4, 'roll')`,
+          [school.id, imp, roll, st],
+        );
+    });
+    const preview = () =>
+      inject({
+        method: 'POST',
+        url: '/people/student-merges/preview',
+        headers: h(),
+        json: { keepId: keep, duplicateId: dup },
+      });
+    expect((await preview()).json().blockers).toEqual([
+      expect.stringContaining('kept back from a staff member’s pay'),
+      expect.stringContaining('linked to the same staff member'),
+      expect.stringContaining('request open for the same certificate'),
+      expect.stringContaining('holds only once'),
+      expect.stringContaining('same board exam'),
+    ]);
+    // each settled: the pay run's fee taken out, the kept link on, the duplicate's request withdrawn and
+    // its certificate cancelled, the kept record's board match the wrong one
+    await withMigrator(async (c) => {
+      await c.query(`UPDATE payroll_adhoc SET deleted_at = now() WHERE id = $1`, [fee]);
+      await c.query(`UPDATE payroll_ward_links SET active = true WHERE student_id = $1`, [keep]);
+      await c.query(`UPDATE certificate_requests SET status = 'withdrawn' WHERE student_id = $1`, [
+        dup,
+      ]);
+      await c.query(
+        `UPDATE certificates SET status = 'cancelled', cancelled_at = now(), cancel_reason = 'Duplicate' WHERE student_id = $1`,
+        [dup],
+      );
+      await c.query(
+        `UPDATE board_candidates SET student_id = NULL, match = 'none' WHERE student_id = $1`,
+        [keep],
+      );
+    });
+    expect((await preview()).json().blockers).toEqual([]);
+  });
+
   it('merges when approved: records moved, the duplicate closed, its number retired and still found', async () => {
     const r = await inject({
       method: 'POST',
@@ -325,8 +432,22 @@ describe('student merges (e2e)', () => {
         `SELECT count(*)::int AS n FROM enrolments WHERE student_id = ANY($1::bigint[])`,
         [[keep, dup]],
       );
-      return { g: g.rows, a: a.rows, e: e.rows[0]!.n };
+      const n = async (sql: string, p: unknown[] = [keep]) =>
+        (await c.query<{ n: number }>(`SELECT count(*)::int AS n FROM ${sql}`, p)).rows[0]!.n;
+      const moved = {
+        wards: await n(`payroll_ward_links WHERE (student_id = $1 AND active) OR student_id = $2`, [
+          keep,
+          dup,
+        ]),
+        certificates: await n(`certificates WHERE student_id = $1 AND number LIKE 'MRGT/%'`),
+        requests: await n(`certificate_requests WHERE student_id = $1`),
+        awards: await n(`certificate_award_allotments WHERE student_id = $1`),
+        board: await n(`board_candidates WHERE student_id = $1 AND roll_no = '102'`),
+      };
+      return { g: g.rows, a: a.rows, e: e.rows[0]!.n, moved };
     });
+    // one link to the staff member, on; both certificates and requests, the award and the board row moved
+    expect(facts.moved).toEqual({ wards: 1, certificates: 2, requests: 2, awards: 1, board: 1 });
     expect(facts.g).toEqual([
       { relation: 'father', primary: true },
       { relation: 'mother', primary: false },

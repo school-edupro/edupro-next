@@ -93,20 +93,24 @@ Every step is audited; every approval uses the school's own levels (set-up page 
   admission number or name, choose which one stays, **See what changes**, the reason, **Send for
   approval** (workflow `student_merge`, principal at one level by default).
 - The rules are in `apps/api/src/modules/people/merge-rules.ts`, one per table that points at a student
-  (77 foreign keys and the person columns of files, documents, library, groups, messages, logins). A test
-  fails if a table is added without a rule. Rows move to the kept record; where both hold a row of the
+  (90 foreign keys by 19 Nov 2026, and the person columns of files, documents, library, groups,
+  messages, logins). A test fails if a table is added without a rule. Rows move to the kept record; where both hold a row of the
   same thing the kept record's stays and the duplicate's is removed: an attendance mark of the same day
   (whichever section), the marks of an exam subject, the enrolment of a year, the fee profile of a year,
-  a link to the same parent, the route of a year, and so on. The duplicate's own status history stays
-  with it.
+  a link to the same parent, the route of a year, a staff member's ward link (fees kept back from pay),
+  and so on. The duplicate's own status history stays with it. Certificates issued (cancelled ones too),
+  certificate requests, award allotments and board result rows matched to the duplicate move (19 Nov 2026).
 - Fees: every receipt moves. A fee line both were charged for (same month and head) keeps the kept
   record's; what was paid on the duplicate's goes to the kept record's dues in date order and the rest
   stays as advance on the receipt. The duplicate's other lines move.
 - Not possible while: the duplicate has a correction, fee change, transport request, withdrawal, hostel
   exit or school transfer waiting; both hold a hostel bed; both were carried forward into the same year;
   both have an advance refund in progress; the same misc fee is on both; a twin fee line has a waiver on
-  the duplicate. Anything else the database refuses shows as "cannot be done as it stands" in the
-  preview (the preview is the real merge rolled back).
+  the duplicate; the duplicate's fees are staged for recovery from a staff member's pay and not yet
+  receipted; both are linked to the same staff member with only the duplicate's link on; both have a
+  request open for the same certificate; both hold a live certificate of a kind held once (or once a
+  year); both are matched to a candidate of the same board exam. Anything else the database refuses
+  shows as "cannot be done as it stands" in the preview (the preview is the real merge rolled back).
 - On approval, in one transaction: the moves above; the kept record's main parent stays main; the
   duplicate's pupil login moves when the kept record has none, otherwise it stops; a tag card and photo
   the kept record lacks come over; the duplicate is closed (inactive, removed, "merged into"), its
@@ -114,7 +118,7 @@ Every step is audited; every approval uses the school's own levels (set-up page 
   Opening the duplicate's page goes to the kept record. Cannot be undone.
 - API: `GET people/student-merges/setup`, `POST people/student-merges/preview`, `POST people/student-merges`,
   `POST people/student-merges/:id/withdraw`, `GET people/students/:id/merges`. Tests:
-  `student-merges.e2e-spec.ts` (5 cases).
+  `student-merges.e2e-spec.ts` (6 cases).
 
 ## Part 4 as built (24 Oct 2026)
 - Migration 0236: enrolment status `cancelled`; `student_withdrawals.kind` (`withdrawal` /

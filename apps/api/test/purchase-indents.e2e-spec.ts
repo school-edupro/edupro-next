@@ -471,10 +471,11 @@ describe('purchase indents (e2e)', () => {
       return u;
     });
     const me = (await call(plain, 'GET', '/me')).json();
-    // what every employee has, whatever their roles: a PI, My leave / My attendance (docs/design/85) and
-    // uploading the document they ask for
+    // what every employee has, whatever their roles: a PI, My leave / My attendance (docs/design/85),
+    // uploading the document they ask for and My payslips (docs/design/86)
     expect(me.permissions).toEqual([
       'leave.own.apply',
+      'payroll.own.view',
       'platform.files.upload',
       'purchase.indent.raise',
     ]);
