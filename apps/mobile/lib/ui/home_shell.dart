@@ -79,7 +79,8 @@ Widget? nativeScreen(Profile p, String href, S s) {
     '/calendar' => CalendarScreen(profile: p),
     '/date-sheet' => DateSheetScreen(profile: p),
     '/results' => ResultsScreen(profile: p),
-    '/fees' when p.kind == 'parent' => FeesScreen(profile: p),
+    // a student sees their own fees, view only (no Pay: the payment right is the parent's)
+    '/fees' => FeesScreen(profile: p),
     '/messages' => MessagesScreen(profile: p),
     '/notices' => NoticesList(profile: p),
     _ => null,

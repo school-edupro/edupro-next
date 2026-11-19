@@ -1194,6 +1194,8 @@ const DICT: Record<string, string> = {
   receipt: 'रसीद',
   receipts: 'रसीदें',
   received: 'प्राप्त',
+  'What is due, every receipt of this session and the fee bill.':
+    'क्या देय है, इस सत्र की हर रसीद और फ़ीस बिल।',
 };
 
 /** Translates a known English string; unknown strings fall back to English. */

@@ -478,6 +478,10 @@ class School {
         };
       case 'GET /fees/misc-fees/mine/receipts/mr1/file':
         return const ApiFile(bytes: [1], contentType: 'application/pdf', name: 'mf.pdf');
+      case 'GET /payments/gateways/options' when kind == 'student':
+      case 'GET /payments/intents/mine' when kind == 'student':
+        // the payment right is the parent's
+        throw const ApiException(403, 'permission-denied', 'Not allowed');
       case 'GET /payments/gateways/options':
         return {
           'data': [
@@ -1077,30 +1081,58 @@ void main() {
     });
   });
 
-  testWidgets('a student: Home, Homework, Timetable, Results tabs; no fees; today\'s periods', (
+  testWidgets(
+    'a student: Home, Homework, Timetable, Results tabs; no fee figure; today\'s periods',
+    (tester) async {
+      final (t, _) = await pumpFamily(tester, kind: 'student');
+      for (final tab in ['Home', 'Homework', 'Timetable', 'Results', 'More']) {
+        expect(
+          find.descendant(of: find.byType(NavigationBar), matching: find.text(tab)),
+          findsOneWidget,
+        );
+      }
+      expect(find.byKey(const Key('figFees')), findsNothing);
+      expect(find.byKey(const Key('figExam')), findsOneWidget);
+      expect(t.calls.any((c) => c.path == '/fees/mine'), isFalse);
+      await tester.tap(
+        find.descendant(of: find.byType(NavigationBar), matching: find.text('Timetable')),
+      );
+      await tester.pumpAndSettle();
+      final weekday = now.weekday == 7 ? 1 : now.weekday;
+      expect(find.text(weekday.isEven ? 'Hindi' : 'English'), findsOneWidget);
+      expect(find.text('08:00–08:40'), findsOneWidget);
+      expect(find.text('Break'), findsOneWidget);
+      await tester.tap(find.text(S(false).weekday(weekday == 6 ? 5 : weekday + 1)));
+      await tester.pumpAndSettle();
+      expect(find.text(weekday.isEven ? 'English' : 'Hindi'), findsOneWidget);
+    },
+  );
+
+  testWidgets('a student sees their own fees from Home, view only: no Pay anywhere', (
     tester,
   ) async {
+    await tester.binding.setSurfaceSize(const Size(420, 2200));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
     final (t, _) = await pumpFamily(tester, kind: 'student');
-    for (final tab in ['Home', 'Homework', 'Timetable', 'Results', 'More']) {
-      expect(
-        find.descendant(of: find.byType(NavigationBar), matching: find.text(tab)),
-        findsOneWidget,
-      );
-    }
-    expect(find.byKey(const Key('figFees')), findsNothing);
-    expect(find.byKey(const Key('figExam')), findsOneWidget);
-    expect(t.calls.any((c) => c.path == '/fees/mine'), isFalse);
-    await tester.tap(
-      find.descendant(of: find.byType(NavigationBar), matching: find.text('Timetable')),
-    );
+    // Results is a student tab: Fees takes its tile on Home
+    expect(find.byKey(const Key('shortcut-results')), findsNothing);
+    await tester.tap(find.byKey(const Key('shortcut-fees')));
     await tester.pumpAndSettle();
-    final weekday = now.weekday == 7 ? 1 : now.weekday;
-    expect(find.text(weekday.isEven ? 'Hindi' : 'English'), findsOneWidget);
-    expect(find.text('08:00–08:40'), findsOneWidget);
-    expect(find.text('Break'), findsOneWidget);
-    await tester.tap(find.text(S(false).weekday(weekday == 6 ? 5 : weekday + 1)));
+    expect(find.text('Overdue'), findsOneWidget);
+    expect(find.byKey(const Key('pay-school')), findsNothing);
+    expect(find.byKey(Key('tick-school-${day(-2)}')), findsNothing);
+    await tester.tap(find.byKey(const Key('section-other')));
     await tester.pumpAndSettle();
-    expect(find.text(weekday.isEven ? 'English' : 'Hindi'), findsOneWidget);
+    expect(find.text('Science trip'), findsOneWidget);
+    expect(find.byKey(const Key('payMisc-m1')), findsNothing);
+    await tester.tap(find.byKey(const Key('section-receipts')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('receipts-school')), findsOneWidget);
+    expect(find.byKey(const Key('receipts-other')), findsOneWidget);
+    await tester.tap(find.byKey(const Key('view-receipt-1001')));
+    await tester.pumpAndSettle();
+    expect(t.calls.any((c) => c.path == '/fees/mine/receipts/1001/file'), isTrue);
+    expect(t.calls.any((c) => c.method == 'POST' && c.path.startsWith('/payments/')), isFalse);
   });
 
   testWidgets('no network: the screen shows the copy it had, with when it was', (tester) async {

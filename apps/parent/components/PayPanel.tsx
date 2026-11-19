@@ -120,7 +120,8 @@ export function PayPanel({
       <ul className="fp-pay__list" aria-label={words.instalment}>
         {rows.map((r) => {
           const i = open.indexOf(r);
-          const ticked = i >= 0 && i <= upTo;
+          // shown as ticked only where it can be paid (a student, or a closed session, only reads)
+          const ticked = payNow && i >= 0 && i <= upTo;
           const id = `pay-${ledger}-${r.key}`;
           return (
             <li key={r.key} className={`fp-pay__row${ticked ? ' fp-pay__row--on' : ''}`}>

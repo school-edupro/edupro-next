@@ -61,7 +61,8 @@ export const FAMILY_MENU: FamilyGroup[] = [
     section: 'fees',
     label: { parent: 'Fees', student: 'Fees' },
     icon: 'wallet',
-    items: [{ href: '/fees', label: 'Dues and receipts', parentOnly: true }],
+    // students see their own fees too, view only (19 Nov 2026): paying stays with the parent's right
+    items: [{ href: '/fees', label: 'Dues and receipts' }],
   },
   {
     section: 'help',

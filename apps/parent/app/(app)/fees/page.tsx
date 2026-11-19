@@ -321,7 +321,9 @@ export default async function FeesPage({
           title={t(lang, 'Dues and receipts')}
           description={t(
             lang,
-            'What is due, pay online, every receipt of this session and the fee bill.',
+            canPay
+              ? 'What is due, pay online, every receipt of this session and the fee bill.'
+              : 'What is due, every receipt of this session and the fee bill.',
           )}
           actions={
             <>

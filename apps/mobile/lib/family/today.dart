@@ -159,12 +159,21 @@ class TodayScreen extends ConsumerWidget {
                   Icons.schedule,
                   () => open(s.timetable, TimetableScreen(profile: p)),
                 ),
-                (
-                  'results',
-                  s.results,
-                  Icons.bar_chart,
-                  () => open(s.results, ResultsScreen(profile: p)),
-                ),
+                // a student has Results as a tab: Fees (view only) in its place here
+                if (p.kind == 'student')
+                  (
+                    'fees',
+                    s.fees,
+                    Icons.account_balance_wallet_outlined,
+                    () => open(s.fees, FeesScreen(profile: p)),
+                  )
+                else
+                  (
+                    'results',
+                    s.results,
+                    Icons.bar_chart,
+                    () => open(s.results, ResultsScreen(profile: p)),
+                  ),
                 (
                   'calendar',
                   s.calendar,
