@@ -226,7 +226,7 @@ const toRow = (x: Row): PassRow => ({
   itemsDue: Number(x.items_due ?? 0),
 });
 
-const KIND_LABEL: Record<string, string> = {
+export const KIND_LABEL: Record<string, string> = {
   hostel_home: 'Hostel home leave',
   hostel_outing: 'Hostel outing',
   early_leave: 'Early leave',

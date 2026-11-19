@@ -1,4 +1,5 @@
 import type { ApprovalSource, Decision, ListedItem } from './approval-source';
+import { KIND_LABEL as GATE_PASS_KIND } from '../engagement/gatepass.service';
 import { count, rows, str } from './approval-source';
 
 /**
@@ -524,7 +525,13 @@ export const APPROVAL_SOURCES: ApprovalSource[] = [
         item({
           id: String(x.id),
           title: join(x.number, name(x.student) ?? name(x.employee)) ?? 'Gate pass',
-          detail: join(x.kind, x.section, x.onDate, x.atTime, x.reason),
+          detail: join(
+            GATE_PASS_KIND[String(x.kind)] ?? x.kind,
+            x.section,
+            x.onDate,
+            x.atTime,
+            x.reason,
+          ),
           by: null,
           at: str(x.createdAt),
           amount: null,
