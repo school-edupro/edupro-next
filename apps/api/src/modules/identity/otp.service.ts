@@ -370,12 +370,28 @@ export class OtpService {
         const r = await c.query<{ v: boolean }>(`SELECT app.otp_screen_offered() AS v`);
         return r.rows[0]?.v ?? false;
       });
-      if (plain)
+      if (plain) {
+        // a number (or e-mail) entered for more than one person: said as it is, with the way in (0404)
+        if (!found) {
+          const shared = await this.db.global(async (c) => {
+            const r = await c.query<{ n: number }>(`SELECT app.otp_login_matches($1) AS n`, [
+              login.trim(),
+            ]);
+            return r.rows[0]?.n ?? 0;
+          });
+          if (shared > 1)
+            throw new DomainError(
+              'auth.otp_shared',
+              'This mobile number or e-mail belongs to more than one person at the school, so it cannot sign you in on its own. Sign in with your own e-mail or your child’s admission number, or ask the school office to correct the number.',
+              { status: 409 },
+            );
+        }
         throw new DomainError(
           'auth.otp_not_found',
           'No account was found for this email, mobile number or admission number, or it cannot sign in with a code. Ask the school office.',
           { status: 404 },
         );
+      }
       return { challengeId: randomUUID(), sentTo: null };
     };
     if (!found) return blind();

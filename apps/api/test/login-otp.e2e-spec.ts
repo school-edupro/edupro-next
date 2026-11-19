@@ -501,6 +501,44 @@ describe('sign-in with an emailed code (e2e)', () => {
     });
   });
 
+  it('a mobile number entered for two people is said so, with the way in; one person alone still signs in', async () => {
+    const shared = '9876577701';
+    const alone = '9876577702';
+    await withMigrator(async (c) => {
+      const a = await seedUser(c, school, `${s}-shared-a`, 'accountant');
+      const b = await seedUser(c, school, `${s}-shared-b`, 'accountant');
+      const one = await seedUser(c, school, `${s}-alone`, 'accountant');
+      await c.query(`UPDATE users SET mobile = $2 WHERE id = ANY($1::bigint[])`, [
+        [a.id, b.id],
+        shared,
+      ]);
+      await c.query(`UPDATE users SET mobile = $2 WHERE id = $1`, [one.id, alone]);
+    });
+    const start = (login: string) =>
+      inject({
+        method: 'POST',
+        url: '/auth/otp/start',
+        headers: {},
+        json: { login, app: 'admin' },
+      });
+    const two = await start(shared);
+    expect(two.statusCode).toBe(409);
+    expect(two.json()).toMatchObject({
+      type: 'auth.otp_shared',
+      detail: expect.stringContaining('more than one person'),
+    });
+    expect(two.json().detail).toContain('admission number');
+    // the same number written another way is the same number
+    expect((await start(`+91 ${shared.slice(0, 5)} ${shared.slice(5)}`)).json().type).toBe(
+      'auth.otp_shared',
+    );
+    const single = await start(alone);
+    expect(single.statusCode).toBe(200);
+    expect(single.json().screenCode).toMatch(/^\d{6}$/);
+    // an unknown login keeps its own words
+    expect((await start('9876577709')).json().type).toBe('auth.otp_not_found');
+  });
+
   it('the school sees the codes shown on screen and who has no email, and can forget remembered devices', async () => {
     const log = await inject({ method: 'GET', url: '/auth/otp/screen-log', headers: h() });
     expect(log.statusCode).toBe(200);
