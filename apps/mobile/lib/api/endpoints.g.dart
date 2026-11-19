@@ -403,6 +403,54 @@ class EduProApi {
   /// GET /privacy/requests/mine/{id}/export — Status and download of the access report of my completed request
   Future<dynamic> dsrMyExport({required String id}) =>
       _t.send('GET', '/privacy/requests/mine/${Uri.encodeComponent(id)}/export');
+
+  /// GET /clinic/mine/list — Clinic visits and health cards of my children together, with filters and pages
+  Future<dynamic> clinicMineList({String? studentId, String? kind, String? q, String? from, String? to, int? page, int? size}) =>
+      _t.send('GET', '/clinic/mine/list', query: {if (studentId != null) 'studentId': studentId, if (kind != null) 'kind': kind, if (q != null) 'q': q, if (from != null) 'from': from, if (to != null) 'to': to, if (page != null) 'page': page, if (size != null) 'size': size});
+
+  /// GET /clinic/mine/visits/{id}
+  Future<dynamic> clinicMineVisit({required String id}) =>
+      _t.send('GET', '/clinic/mine/visits/${Uri.encodeComponent(id)}');
+
+  /// GET /clinic/mine/cards/{id}/detail
+  Future<dynamic> clinicMineCardDetail({required String id}) =>
+      _t.send('GET', '/clinic/mine/cards/${Uri.encodeComponent(id)}/detail');
+
+  /// GET /clinic/mine/cards/{id} — A published health card as base64 (the portal speaks JSON)
+  Future<ApiFile> clinicMineCard({required String id}) =>
+      _t.file('GET', '/clinic/mine/cards/${Uri.encodeComponent(id)}');
+
+  /// GET /certificate-requests/mine — What I may ask for, my people, my requests and the certificates issued to them
+  Future<dynamic> certificateRequestsMine() =>
+      _t.send('GET', '/certificate-requests/mine');
+
+  /// POST /certificate-requests/mine — Ask for a certificate (for my child, or myself)
+  Future<dynamic> certificateRequestsAsk({required CertificateRequestDto body}) =>
+      _t.send('POST', '/certificate-requests/mine', body: body.toJson());
+
+  /// POST /certificate-requests/mine/{id}/withdraw — Withdraw my request before it is issued
+  Future<dynamic> certificateRequestsWithdraw({required String id}) =>
+      _t.send('POST', '/certificate-requests/mine/${Uri.encodeComponent(id)}/withdraw');
+
+  /// POST /certificate-requests/mine/certificates/{id}/pdf — The PDF of one of my (or my child’s) certificates
+  Future<dynamic> certificateRequestsMyPdf({required String id}) =>
+      _t.send('POST', '/certificate-requests/mine/certificates/${Uri.encodeComponent(id)}/pdf');
+
+  /// GET /certificate-requests/mine/exports/{id} — Status and link of a PDF I asked for
+  Future<dynamic> certificateRequestsMyExport({required String id}) =>
+      _t.send('GET', '/certificate-requests/mine/exports/${Uri.encodeComponent(id)}');
+
+  /// GET /engagement/mine/certificates
+  Future<dynamic> engagementPlusMyCertificates() =>
+      _t.send('GET', '/engagement/mine/certificates');
+
+  /// POST /engagement/mine/certificates/{id}/pdf
+  Future<dynamic> engagementPlusMyCertificatePdf({required String id}) =>
+      _t.send('POST', '/engagement/mine/certificates/${Uri.encodeComponent(id)}/pdf');
+
+  /// GET /fees/mine/exports/{id} — Status and download link of one of my own exports
+  Future<dynamic> feesMyExport({required String id}) =>
+      _t.send('GET', '/fees/mine/exports/${Uri.encodeComponent(id)}');
 }
 
 /** The OtpStartDto the API takes. */
@@ -864,5 +912,24 @@ class MyDsrDto {
         'kind': kind,
         if (studentId != null) 'studentId': studentId,
         'detail': detail,
+      };
+}
+
+/** The CertificateRequestDto the API takes. */
+class CertificateRequestDto {
+  const CertificateRequestDto({required this.typeCode, this.studentId, this.employeeId, required this.purpose, this.copies, this.note});
+  final String typeCode;
+  final String? studentId;
+  final String? employeeId;
+  final String purpose;
+  final int? copies;
+  final String? note;
+  Map<String, Object?> toJson() => {
+        'typeCode': typeCode,
+        if (studentId != null) 'studentId': studentId,
+        if (employeeId != null) 'employeeId': employeeId,
+        'purpose': purpose,
+        if (copies != null) 'copies': copies,
+        if (note != null) 'note': note,
       };
 }

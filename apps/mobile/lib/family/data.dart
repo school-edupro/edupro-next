@@ -230,6 +230,56 @@ final documentsProvider = FutureProvider.autoDispose.family<Loaded<Json>, Profil
   return Loaded(asJson(r.data), r.at, stale: r.stale);
 });
 
+/// The child's clinic visits and health check-up cards, latest first, ten a page, with the filters of the
+/// website's Health page: `(profile, kind, from, to, search, page)` (empty: no filter).
+final healthListProvider = FutureProvider.autoDispose
+    .family<Loaded<Json>, (Profile, String, String, String, String, int)>((ref, a) async {
+      final (p, kind, from, to, q, page) = a;
+      final r = await cached(
+        'health:${p.id}:$kind:$from:$to:$q:$page',
+        () => _api(ref).clinicMineList(
+          studentId: p.studentId,
+          kind: kind.isEmpty ? null : kind,
+          from: from.isEmpty ? null : from,
+          to: to.isEmpty ? null : to,
+          q: q.isEmpty ? null : q,
+          page: page,
+          size: 10,
+        ),
+      );
+      return Loaded(asJson(r.data), r.at, stale: r.stale);
+    });
+
+/// One clinic visit in full.
+final healthVisitProvider = FutureProvider.autoDispose.family<Json, String>(
+  (ref, id) async => asJson(await _api(ref).clinicMineVisit(id: id)),
+);
+
+/// One health check-up card in full, section by section.
+final healthCardProvider = FutureProvider.autoDispose.family<Json, String>(
+  (ref, id) async => asJson(await _api(ref).clinicMineCardDetail(id: id)),
+);
+
+/// The certificates and requests of the family (the register's, the types to ask for, the requests) and the
+/// achievement certificates of the earlier module: `{mine, awards}`.
+final certificatesProvider = FutureProvider.autoDispose.family<Loaded<Json>, Profile>((
+  ref,
+  p,
+) async {
+  final r = await cached('certs:${p.id}', () async {
+    final awards = asJson(await _api(ref).engagementPlusMyCertificates())['data'];
+    Object? mine;
+    try {
+      mine = await _api(ref).certificateRequestsMine();
+    } on ApiException catch (e) {
+      if (e.offline) rethrow;
+      mine = const {'students': [], 'types': [], 'requests': [], 'certificates': []};
+    }
+    return {'mine': mine, 'awards': awards};
+  });
+  return Loaded(asJson(r.data), r.at, stale: r.stale);
+});
+
 /// The school's holidays and events from `from` to `to`.
 final calendarProvider = FutureProvider.autoDispose.family<Loaded<Json>, (Profile, String, String)>(
   (ref, a) async {

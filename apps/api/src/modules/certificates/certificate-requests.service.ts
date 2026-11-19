@@ -13,7 +13,7 @@ import { runChecks, type CertificateCheck } from './certificate-checks';
 import { requestSettings } from './certificate-setup.service';
 import {
   CERTIFICATE,
-  type CreateRequestDto,
+  type CertificateRequestDto,
   type DecideRequestDto,
   type ListRequestsQueryDto,
   type RequestLevel,
@@ -385,7 +385,7 @@ export class CertificateRequestsService implements OnModuleInit {
   }
 
   /** A request from the app: the type must be open to the asker, the person theirs. */
-  async ask(ctx: RequestContext, dto: CreateRequestDto) {
+  async ask(ctx: RequestContext, dto: CertificateRequestDto) {
     const tenant = requireTenant(ctx);
     const id = await this.db.tenant(tenant, async (c) => {
       await this.certificates.ensureSetup(c);

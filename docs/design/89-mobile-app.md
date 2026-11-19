@@ -709,3 +709,24 @@ tab; Academics → Homework for a parent):
 - **Exam date sheet** (`family/date_sheet.dart`): as apps/parent/app/(app)/date-sheet — "The papers of each exam:
   date, day and time."; **Next paper** on top; each exam still to come with its papers (date and day, subject,
   time) and the school's note; **Earlier exams (n)** folded until tapped; "No date sheet yet." / "No exam coming up."
+
+## As built — Health and Certificates as on the website (19 Nov 2026)
+
+- **Health** (`family/health.dart`, menu `/health`, no web page): as apps/parent/app/(app)/health — "Clinic visits
+  and health cards", how many and latest first; All / Clinic visits / Health check-up cards, From / To from the
+  calendar, a search (complaint, treatment or remark), Clear; ten a page (`GET clinic/mine/list`). A visit: the date
+  and time, the complaint, the outcome (Back to class, Resting in the clinic, Sent home, Referred), the treatment and
+  medicine given; in full (`GET clinic/mine/visits/:id`): the facts, complaint and examination, treatment, the
+  medicines, what the school asks of you (sent home / referred) or the advice, the doctor. A health card: the camp,
+  "Please see a doctor" or "Health card", height, weight, BMI, blood group; in full (`GET clinic/mine/cards/:id/detail`)
+  section by section with the remarks for the parents, and its PDF (View / Download, `GET clinic/mine/cards/:id`).
+- **Certificates** (`family/certificates.dart`, menu `/certificates`, no web page): as
+  apps/parent/app/(app)/certificates — the figures (Ready, In progress, To pay, You can ask for); **Your
+  certificates** (the register's and the earlier achievement certificates, awards marked) with View / Download of
+  the PDF (made by `POST certificate-requests/mine/certificates/:id/pdf` or `engagement/mine/certificates/:id/pdf`,
+  then fetched when its export is ready; the app waits up to a minute); **Requests** with where each is (Asked →
+  Approved → Fee → Being made → Ready), Pay the fee (opens Fees) or Withdraw, the closed ones folded; **Ask for a
+  certificate**: each type with who decides, what for and its fee, the form opening under it (purpose — a list when
+  the school gives one —, copies, a note), `POST certificate-requests/mine`.
+- The certificate request's body type in the API is now `CertificateRequestDto` (it shared the name
+  `CreateRequestDto` with the comms module, which the app's generator refuses); the request is unchanged.

@@ -232,7 +232,7 @@ export const CreateRequestSchema = z.object({
   copies: z.number().int().min(1).max(10).default(1),
   note: z.string().trim().max(500).optional(),
 });
-export class CreateRequestDto extends createZodDto(CreateRequestSchema) {}
+export class CertificateRequestDto extends createZodDto(CreateRequestSchema) {}
 
 export const DecideRequestSchema = z.object({
   decision: z.enum(['approve', 'reject']),

@@ -123,6 +123,8 @@ class School {
                   'help': null,
                   'icon': 'file',
                 },
+                {'href': '/health', 'label': 'Health', 'help': null, 'icon': 'heart'},
+                {'href': '/certificates', 'label': 'Certificates', 'help': null, 'icon': 'file'},
               ],
             },
             if (queries)
@@ -464,6 +466,263 @@ class School {
               },
           ],
         };
+      case 'GET /clinic/mine/list':
+        final asked = (c.query ?? const {})['kind'];
+        final visit = {
+          'kind': 'visit',
+          'visit': {
+            'id': 'v1',
+            'number': 'CV-7',
+            'studentId': '41',
+            'student': 'Kid Sample',
+            'section': 'VI-A',
+            'admissionNo': 'A1234',
+            'inAt': '${day(-1)}T04:30:00Z',
+            'outAt': '${day(-1)}T05:10:00Z',
+            'complaint': 'Headache',
+            'diseases': ['Fever'],
+            'temperatureC': 38.5,
+            'pulse': 96,
+            'bp': null,
+            'spo2': 98,
+            'weightKg': null,
+            'diagnosis': 'Mild fever',
+            'treatment': 'Rest and water',
+            'prescription': null,
+            'remark': 'Please keep the child at home tomorrow.',
+            'outcome': 'sent_home',
+            'referredTo': null,
+            'clinic': 'Main clinic',
+            'doctor': 'Dr. Sample',
+            'nurse': 'Nurse Sample',
+            'medicines': [
+              {
+                'id': 'm1',
+                'name': 'Paracetamol',
+                'strength': '500mg',
+                'unit': 'tab',
+                'qty': 1,
+                'dosage': 'once',
+              },
+            ],
+          },
+        };
+        final card = {
+          'kind': 'card',
+          'card': {
+            'id': 'c1',
+            'camp': 'Annual check-up 2026',
+            'studentId': '41',
+            'student': 'Kid Sample',
+            'section': 'VI-A',
+            'admissionNo': 'A1234',
+            'examDate': day(-10),
+            'place': 'School hall',
+            'doctor': 'Dr. Sample',
+            'heightCm': 140,
+            'weightKg': 35,
+            'bmi': 17.9,
+            'bloodGroup': 'B+',
+            'remarks': 'Eyes to be checked.',
+            'needsAttention': true,
+          },
+        };
+        return {
+          'data': [if (asked != 'card') visit, if (asked != 'visit') card],
+          'page': {
+            'number': int.tryParse('${(c.query ?? const {})['page']}') ?? 1,
+            'size': 10,
+            'total': asked == null ? 12 : 1,
+          },
+          'students': [
+            {'id': '41', 'name': 'Kid Sample'},
+          ],
+        };
+      case 'GET /clinic/mine/visits/v1':
+        return {
+          'id': 'v1',
+          'number': 'CV-7',
+          'school': 'Sample School',
+          'student': 'Kid Sample',
+          'section': 'VI-A',
+          'admissionNo': 'A1234',
+          'inAt': '${day(-1)}T04:30:00Z',
+          'outAt': null,
+          'complaint': 'Headache',
+          'diseases': ['Fever'],
+          'temperatureC': 38.5,
+          'pulse': 96,
+          'bp': null,
+          'spo2': 98,
+          'weightKg': null,
+          'diagnosis': 'Mild fever',
+          'treatment': 'Rest and water',
+          'prescription': null,
+          'remark': 'Please keep the child at home tomorrow.',
+          'outcome': 'sent_home',
+          'referredTo': null,
+          'clinic': 'Main clinic',
+          'doctor': 'Dr. Sample',
+          'nurse': 'Nurse Sample',
+          'medicines': [
+            {
+              'id': 'm1',
+              'name': 'Paracetamol',
+              'strength': '500mg',
+              'unit': 'tab',
+              'qty': 1,
+              'dosage': 'once',
+            },
+          ],
+        };
+      case 'GET /clinic/mine/cards/c1/detail':
+        return {
+          'id': 'c1',
+          'camp': 'Annual check-up 2026',
+          'school': 'Sample School',
+          'student': 'Kid Sample',
+          'section': 'VI-A',
+          'admissionNo': 'A1234',
+          'dob': '2015-02-01',
+          'examDate': day(-10),
+          'place': 'School hall',
+          'doctor': 'Dr. Sample',
+          'remarks': 'Eyes to be checked.',
+          'needsAttention': true,
+          'note': null,
+          'groups': [
+            {
+              'title': 'Eyes',
+              'rows': [
+                ['Vision', '6/9'],
+              ],
+            },
+          ],
+        };
+      case 'GET /clinic/mine/cards/c1':
+        return const ApiFile(
+          bytes: [37, 80, 68, 70],
+          contentType: 'application/pdf',
+          name: 'card.pdf',
+        );
+      case 'GET /engagement/mine/certificates':
+        return {
+          'data': [
+            {
+              'id': '70',
+              'studentId': '41',
+              'student': 'Kid Sample',
+              'serialNo': 'ACH-1',
+              'title': 'Best in Science',
+              'text': 'Science fair',
+              'issuedOn': day(-30),
+            },
+          ],
+        };
+      case 'GET /certificate-requests/mine':
+        return {
+          'students': [
+            {'id': '41', 'name': 'Kid Sample', 'self': kind == 'student'},
+          ],
+          'types': [
+            {
+              'code': 'BONAFIDE',
+              'name': 'Bonafide certificate',
+              'audience': 'STUDENT',
+              'purposes': [],
+              'maxCopies': 2,
+              'fee': null,
+              'forParents': true,
+              'forStudents': true,
+              'decidedBy': ['the office'],
+            },
+            {
+              'code': 'CHAR',
+              'name': 'Character certificate',
+              'audience': 'STUDENT',
+              'purposes': ['Admission', 'Passport'],
+              'maxCopies': 1,
+              'fee': 50,
+              'forParents': true,
+              'forStudents': false,
+              'decidedBy': ['the class teacher', 'the principal'],
+            },
+          ],
+          'requests': [
+            {
+              'id': '81',
+              'typeName': 'Character certificate',
+              'studentId': '41',
+              'person': 'Kid Sample',
+              'purpose': 'Passport',
+              'copies': 2,
+              'stage': 'fee',
+              'fee': 50,
+              'feePaid': false,
+              'decisionNote': null,
+              'createdAt': '${day(-4)}T05:00:00Z',
+            },
+            {
+              'id': '82',
+              'typeName': 'Bonafide certificate',
+              'studentId': '41',
+              'person': 'Kid Sample',
+              'purpose': 'Bank account',
+              'copies': 1,
+              'stage': 'waiting',
+              'fee': null,
+              'feePaid': false,
+              'decisionNote': null,
+              'createdAt': '${day(-2)}T05:00:00Z',
+            },
+            {
+              'id': '80',
+              'typeName': 'Bonafide certificate',
+              'studentId': '41',
+              'person': 'Kid Sample',
+              'purpose': 'Bank account',
+              'copies': 1,
+              'stage': 'issued',
+              'fee': null,
+              'feePaid': false,
+              'decisionNote': null,
+              'createdAt': '${day(-20)}T05:00:00Z',
+            },
+          ],
+          'certificates': [
+            {
+              'id': '5',
+              'typeName': 'Bonafide certificate',
+              'number': 'BC/2026/0005',
+              'copyNo': 0,
+              'issuedOn': day(-15),
+              'person': 'Kid Sample',
+              'studentId': '41',
+              'purpose': 'Bank account',
+              'revision': 1,
+              'award': false,
+              'awardText': null,
+              'achievementId': null,
+            },
+          ],
+        };
+      case 'POST /certificate-requests/mine/certificates/5/pdf':
+        return {'exportId': 'x9', 'ready': true};
+      case 'GET /certificate-requests/mine/exports/x9':
+        return {
+          'export': {'id': 'x9', 'status': 'done'},
+          'download': {'url': '/files/cert.pdf'},
+        };
+      case 'GET /files/cert.pdf':
+        return const ApiFile(
+          bytes: [37, 80, 68, 70],
+          contentType: 'application/pdf',
+          name: 'c.pdf',
+        );
+      case 'POST /certificate-requests/mine':
+        return {'id': '83'};
+      case 'POST /certificate-requests/mine/82/withdraw':
+        return {'ok': true};
       case 'GET /academics/documents':
         return {
           'kinds': [
@@ -1560,6 +1819,141 @@ void main() {
     expect(find.byKey(const Key('contactMasked')), findsNothing);
   });
 
+  Future<void> openMore(WidgetTester tester, String label) async {
+    await tester.tap(find.descendant(of: find.byType(NavigationBar), matching: find.text('More')));
+    await tester.pumpAndSettle();
+    await scrollTo(tester, find.widgetWithText(ListTile, label));
+    await tester.tap(find.widgetWithText(ListTile, label));
+    await tester.pumpAndSettle();
+  }
+
+  testWidgets(
+    'Health in the app as on the website: the list, filters, a visit and a card in full',
+    (tester) async {
+      await tester.binding.setSurfaceSize(const Size(420, 2000));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      final (t, _) = await pumpFamily(tester, kind: 'student');
+      await openMore(tester, 'Health');
+      expect(find.text('Clinic visits and health cards'), findsOneWidget);
+      expect(find.text('12 in all · latest first'), findsOneWidget);
+      expect(t.calls.lastWhere((c) => c.path == '/clinic/mine/list').query!['studentId'], '41');
+      // a visit and a card, as the website lists them
+      expect(find.text('Headache'), findsOneWidget);
+      expect(find.text('Sent home'), findsOneWidget);
+      expect(find.text('Rest and water · Medicine given: Paracetamol 500mg'), findsOneWidget);
+      expect(find.text('Annual check-up 2026'), findsOneWidget);
+      expect(find.text('Please see a doctor'), findsOneWidget);
+      expect(find.text('Height 140 cm · Weight 35 kg · BMI 17.9 · Blood group B+'), findsOneWidget);
+      // pages of ten
+      expect(find.text('Page 1 / 2'), findsOneWidget);
+      await tester.tap(find.byKey(const Key('healthNext')));
+      await tester.pumpAndSettle();
+      expect(t.calls.lastWhere((c) => c.path == '/clinic/mine/list').query!['page'], 2);
+      // the type and a search
+      await tester.tap(find.byKey(const Key('healthKind-visit')));
+      await tester.pumpAndSettle();
+      expect(t.calls.lastWhere((c) => c.path == '/clinic/mine/list').query!['kind'], 'visit');
+      expect(find.text('1 found · latest first'), findsOneWidget);
+      expect(find.text('Annual check-up 2026'), findsNothing);
+      await tester.enterText(find.byKey(const Key('healthSearch')), 'fever');
+      await tester.testTextInput.receiveAction(TextInputAction.search);
+      await tester.pumpAndSettle();
+      expect(t.calls.lastWhere((c) => c.path == '/clinic/mine/list').query!['q'], 'fever');
+      // the visit in full
+      await tester.tap(find.byKey(const Key('visitDetails-v1')));
+      await tester.pumpAndSettle();
+      expect(find.text('Clinic visit · CV-7'), findsOneWidget);
+      expect(find.text('38.5 °C'), findsOneWidget);
+      expect(find.text('Still in the clinic'), findsOneWidget);
+      expect(find.text('Medicines given'), findsOneWidget);
+      expect(find.text('What the school asks of you'), findsOneWidget);
+      expect(
+        find.text(
+          'The school clinic sent your child home.\nPlease keep the child at home tomorrow.',
+        ),
+        findsOneWidget,
+      );
+      await tester.tap(find.byType(BackButton));
+      await tester.pumpAndSettle();
+      // the card in full, with its PDF
+      await tester.tap(find.byKey(const Key('healthClear')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('cardDetails-c1')));
+      await tester.pumpAndSettle();
+      expect(find.text('Eyes'), findsOneWidget);
+      expect(find.text('6/9'), findsOneWidget);
+      expect(
+        find.text('Eyes to be checked.\nPlease see a doctor or specialist about the points above.'),
+        findsOneWidget,
+      );
+      await tester.tap(find.byKey(const Key('view-hcardPdf')));
+      await tester.pumpAndSettle();
+      expect(t.calls.any((c) => c.path == '/clinic/mine/cards/c1'), isTrue);
+      expect(t.calls.any((c) => c.path.contains('handoff')), isFalse);
+    },
+  );
+
+  testWidgets('Certificates in the app as on the website: figures, PDF, requests, asking for one', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(420, 2600));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final (t, _) = await pumpFamily(tester);
+    await openMore(tester, 'Certificates');
+    Finder fig(String x) =>
+        find.descendant(of: find.byKey(const Key('certFigures')), matching: find.text(x));
+    // ready: the register's one and the award; in progress: the waiting one; to pay: one
+    expect(fig('2'), findsWidgets);
+    expect(fig('To pay'), findsOneWidget);
+    expect(find.text('Bonafide certificate'), findsWidgets);
+    expect(find.text('Best in Science'), findsOneWidget);
+    expect(find.text('Award'), findsOneWidget);
+    // a certificate's PDF, opened in the app
+    await tester.tap(find.byKey(const Key('view-cert-r5')));
+    await tester.pumpAndSettle();
+    expect(t.calls.any((c) => c.path == '/certificate-requests/mine/certificates/5/pdf'), isTrue);
+    expect(t.calls.any((c) => c.path == '/files/cert.pdf'), isTrue);
+    await tester.tap(find.byType(BackButton));
+    await tester.pumpAndSettle();
+    // requests: where each is; the fee to pay; the issued one folded away
+    expect(find.text('Pay the fee ₹100'), findsOneWidget);
+    expect(find.byKey(const Key('request-80')), findsNothing);
+    expect(find.text('Earlier requests (1)'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('withdrawCert-82')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('confirmWithdraw')));
+    await tester.pumpAndSettle();
+    expect(t.calls.any((c) => c.path == '/certificate-requests/mine/82/withdraw'), isTrue);
+    expect(find.text('The request is withdrawn.'), findsOneWidget);
+    // ask for one: the purpose is needed, two copies, sent
+    await scrollTo(tester, find.byKey(const Key('askType-BONAFIDE')));
+    await tester.tap(find.byKey(const Key('askType-BONAFIDE')));
+    await tester.pumpAndSettle();
+    expect(find.text('Decided by the office'), findsOneWidget);
+    await scrollTo(tester, find.byKey(const Key('sendCert-BONAFIDE')));
+    await tester.tap(find.byKey(const Key('sendCert-BONAFIDE')));
+    await tester.pumpAndSettle();
+    expect(find.text('Write the purpose.'), findsOneWidget);
+    await tester.enterText(find.byKey(const Key('purpose-BONAFIDE')), 'Bank account');
+    await tester.tap(find.byKey(const Key('copiesMore-BONAFIDE')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('sendCert-BONAFIDE')));
+    await tester.pumpAndSettle();
+    expect(
+      t.calls.lastWhere((c) => c.method == 'POST' && c.path == '/certificate-requests/mine').body,
+      {'typeCode': 'BONAFIDE', 'studentId': '41', 'purpose': 'Bank account', 'copies': 2},
+    );
+    await scrollTo(
+      tester,
+      find.text('Your request is sent to the school. You will see here when it is ready.'),
+    );
+    expect(
+      find.text('Your request is sent to the school. You will see here when it is ready.'),
+      findsOneWidget,
+    );
+    expect(t.calls.any((c) => c.path.contains('handoff')), isFalse);
+  });
+
   testWidgets(
     'exam date sheet as on the website: the next paper, the papers, earlier exams folded',
     (tester) async {
@@ -2109,6 +2503,13 @@ void main() {
         await tester.pumpAndSettle();
         await tester.tap(find.widgetWithText(ListTile, s.menu('Session plan and date sheets')));
         await check('Session plan and date sheets');
+        for (final page in ['Health', 'Certificates']) {
+          await tester.tap(find.byType(BackButton));
+          await tester.pumpAndSettle();
+          await scrollTo(tester, find.widgetWithText(ListTile, s.menu(page)));
+          await tester.tap(find.widgetWithText(ListTile, s.menu(page)));
+          await check(page);
+        }
         handle.dispose();
       },
     );
@@ -2235,6 +2636,28 @@ void main() {
     await tester.tap(find.widgetWithText(ListTile, 'Session plan and date sheets'));
     await tester.pumpAndSettle();
     expect(tester.takeException(), isNull, reason: 'Session plan and date sheets');
+    for (final page in ['Health', 'Certificates']) {
+      await tester.tap(find.byType(BackButton));
+      await tester.pumpAndSettle();
+      await scrollTo(tester, find.widgetWithText(ListTile, page));
+      await tester.tap(find.widgetWithText(ListTile, page));
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull, reason: page);
+      if (page == 'Health') {
+        // the search box scrolls too: move the page's own list
+        await tester.dragUntilVisible(
+          find.byKey(const Key('visitDetails-v1')),
+          find.byType(ListView).first,
+          const Offset(0, -300),
+        );
+        await tester.pumpAndSettle();
+        await tester.tap(find.byKey(const Key('visitDetails-v1')));
+        await tester.pumpAndSettle();
+        expect(tester.takeException(), isNull, reason: 'clinic visit in full');
+        await tester.tap(find.byType(BackButton));
+        await tester.pumpAndSettle();
+      }
+    }
   });
 
   test('the copies are kept per profile and wiped at sign-out', () async {

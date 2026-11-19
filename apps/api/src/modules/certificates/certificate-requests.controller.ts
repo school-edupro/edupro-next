@@ -6,7 +6,7 @@ import { ReqCtx, type RequestContext } from '../../common/http/request-context';
 import { CertificateRequestsService } from './certificate-requests.service';
 import {
   CERTIFICATE,
-  CreateRequestDto,
+  CertificateRequestDto,
   DecideRequestDto,
   ListRequestsQueryDto,
   ReasonDto,
@@ -34,7 +34,7 @@ export class CertificateRequestsController {
   @Post('mine')
   @ApiOperation({ summary: 'Ask for a certificate (for my child, or myself)' })
   @AuthenticatedOnly()
-  ask(@ReqCtx() ctx: RequestContext, @Body() body: CreateRequestDto) {
+  ask(@ReqCtx() ctx: RequestContext, @Body() body: CertificateRequestDto) {
     return this.requests.ask(ctx, body);
   }
 

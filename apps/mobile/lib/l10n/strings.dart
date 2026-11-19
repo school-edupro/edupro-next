@@ -274,6 +274,163 @@ class S {
   String dueOn(String date) => _t('Due $date', 'जमा करें $date');
   String postedBy(String name) => _t('By $name', '$name द्वारा');
   String get acknowledge => _t('I have seen this', 'मैंने यह देख लिया');
+  // health
+  String get healthTitle =>
+      _t('Clinic visits and health cards', 'क्लिनिक विज़िट और स्वास्थ्य कार्ड');
+  String healthCount(int n, bool filtered) => filtered
+      ? _t('$n found · latest first', '$n मिले · नवीनतम पहले')
+      : _t('$n in all · latest first', 'कुल $n · नवीनतम पहले');
+  String get clinicVisits => _t('Clinic visits', 'क्लिनिक विज़िट');
+  String get healthCards => _t('Health check-up cards', 'स्वास्थ्य जाँच कार्ड');
+  String get fromWord => _t('From', 'से');
+  String get healthSearch => _t('Complaint, treatment or remark', 'शिकायत, उपचार या टिप्पणी');
+  String get nothingMatches => _t('Nothing matches these filters.', 'इन फ़िल्टर से कुछ नहीं मिला।');
+  String get healthNothingYet => _t(
+    'Nothing yet. Clinic visits show here, and the health card once the school doctor publishes it.',
+    'अभी कुछ नहीं। क्लिनिक विज़िट यहाँ दिखती हैं, और स्वास्थ्य कार्ड विद्यालय के डॉक्टर के प्रकाशित करने पर।',
+  );
+  String outcome(String o) => switch (o) {
+    'back_to_class' => _t('Back to class', 'कक्षा में लौटे'),
+    'rest' => _t('Resting in the clinic', 'क्लिनिक में आराम'),
+    'sent_home' => _t('Sent home', 'घर भेजा गया'),
+    'referred' => _t('Referred', 'रेफ़र किया गया'),
+    _ => o,
+  };
+  String medicineGiven(String list) => _t('Medicine given: $list', 'दी गई दवा: $list');
+  String get clinicVisit => _t('Clinic visit', 'क्लिनिक विज़िट');
+  String get healthCheckUp => _t('Health check-up', 'स्वास्थ्य जाँच');
+  String get healthCardWord => _t('Health card', 'स्वास्थ्य कार्ड');
+  String get seeDoctor => _t('Please see a doctor', 'कृपया डॉक्टर को दिखाएँ');
+  String heightCm(String x) => _t('Height $x cm', 'ऊँचाई $x सेमी');
+  String weightKg(String x) => _t('Weight $x kg', 'वज़न $x किग्रा');
+  String bloodGroupIs(String x) => _t('Blood group $x', 'रक्त समूह $x');
+  String get healthCardPdf => _t('Health card (PDF)', 'स्वास्थ्य कार्ड (PDF)');
+  String pageOf(int n, int m) => _t('Page $n / $m', 'पृष्ठ $n / $m');
+  String get timeIn => _t('Time in', 'आने का समय');
+  String get timeOut => _t('Time out', 'जाने का समय');
+  String get stillInClinic => _t('Still in the clinic', 'अभी क्लिनिक में');
+  String get clinicLabel => _t('Clinic', 'क्लिनिक');
+  String get nurse => _t('Nurse', 'नर्स');
+  String get complaintExam => _t('Complaint and examination', 'शिकायत और जाँच');
+  String get complaint => _t('Complaint', 'शिकायत');
+  String get disease => _t('Disease', 'रोग');
+  String get temperature => _t('Temperature', 'तापमान');
+  String get pulse => _t('Pulse', 'नब्ज़');
+  String get bloodPressure => _t('Blood pressure', 'रक्तचाप');
+  String get weightLabel => _t('Weight', 'वज़न');
+  String get doctorFound => _t('What the doctor found', 'डॉक्टर ने क्या पाया');
+  String get treatmentTitle => _t('Treatment', 'उपचार');
+  String get treatmentGiven => _t('Treatment given', 'दिया गया उपचार');
+  String get prescription => _t('Prescription', 'नुस्ख़ा');
+  String get referredTo => _t('Referred to', 'रेफ़र किया गया');
+  String get medicinesGiven => _t('Medicines given', 'दी गई दवाएँ');
+  String get medicine => _t('Medicine', 'दवा');
+  String get quantity => _t('Quantity', 'मात्रा');
+  String get dosage => _t('Dosage', 'खुराक');
+  String get schoolAsks => _t('What the school asks of you', 'विद्यालय आपसे क्या चाहता है');
+  String get advice => _t('Advice', 'सलाह');
+  String referredText(String to) => _t(
+    'The school clinic referred your child to $to.',
+    'विद्यालय क्लिनिक ने आपके बच्चे को $to रेफ़र किया।',
+  );
+  String get sentHomeText =>
+      _t('The school clinic sent your child home.', 'विद्यालय क्लिनिक ने आपके बच्चे को घर भेजा।');
+  String get doctorLabel => _t('Doctor', 'डॉक्टर');
+  String get recordedByClinic =>
+      _t('Recorded by the school clinic.', 'विद्यालय क्लिनिक द्वारा दर्ज।');
+  String get healthCheckUpCard => _t('Health check-up card', 'स्वास्थ्य जाँच कार्ड');
+  String get dateOfBirth => _t('Date of birth', 'जन्म तिथि');
+  String get examinedOn => _t('Examined on', 'जाँच की तारीख़');
+  String get place => _t('Place', 'स्थान');
+  String get remarksForParents => _t('Remarks for the parents', 'अभिभावकों के लिए टिप्पणी');
+  String get seeDoctorAbout => _t(
+    'Please see a doctor or specialist about the points above.',
+    'ऊपर की बातों के लिए कृपया डॉक्टर या विशेषज्ञ को दिखाएँ।',
+  );
+  String get schoolDoctor => _t('School doctor', 'विद्यालय डॉक्टर');
+  String get signatureLabel => _t('Signature', 'हस्ताक्षर');
+  String get notCertificate => _t(
+    'This card records a school health check-up. It is not a medical certificate.',
+    'यह कार्ड विद्यालय की स्वास्थ्य जाँच का रिकॉर्ड है। यह मेडिकल प्रमाण-पत्र नहीं है।',
+  );
+
+  // certificates
+  String get certsHelp => _t(
+    'Certificates from the school, your requests, and asking for a new one.',
+    'विद्यालय के प्रमाण-पत्र, आपके अनुरोध, और नया माँगना।',
+  );
+  String get readyFig => _t('Ready', 'तैयार');
+  String get inProgress => _t('In progress', 'प्रक्रिया में');
+  String get toPayFig => _t('To pay', 'भुगतान बाकी');
+  String get canAskFig => _t('You can ask for', 'माँग सकते हैं');
+  String get yourCertificates => _t('Your certificates', 'आपके प्रमाण-पत्र');
+  String get awardTag => _t('Award', 'पुरस्कार');
+  String duplicateN(int n) => _t('duplicate $n', 'प्रतिलिपि $n');
+  String revisionN(int n) => _t('Revision $n', 'संशोधन $n');
+  String get noCertificates => _t('No certificates yet.', 'अभी कोई प्रमाण-पत्र नहीं।');
+  String get askBelow => _t('You can ask for one below.', 'आप नीचे से माँग सकते हैं।');
+  String get requestsTitle => _t('Requests', 'अनुरोध');
+  String get noRequestInProgress => _t('No request in progress.', 'कोई अनुरोध प्रक्रिया में नहीं।');
+  String earlierRequests(int n) => _t('Earlier requests ($n)', 'पिछले अनुरोध ($n)');
+  String askedOn(String d) => _t('Asked on $d', '$d को माँगा');
+  String copiesN(int n) => _t('$n copies', '$n प्रतियाँ');
+  String certStep(String step) => switch (step) {
+    'Asked' => _t('Asked', 'माँगा'),
+    'Approved' => _t('Approved', 'स्वीकृत'),
+    'Fee' => _t('Fee', 'शुल्क'),
+    'Being made' => _t('Being made', 'बन रहा है'),
+    _ => _t('Ready', 'तैयार'),
+  };
+  String get whereRequestIs => _t('Where the request is', 'अनुरोध कहाँ है');
+  String get notApproved => _t('Not approved', 'स्वीकृत नहीं');
+  String get withdrawnTag => _t('Withdrawn', 'वापस लिया');
+  String get underYourCerts =>
+      _t('It is under Your certificates.', 'यह आपके प्रमाण-पत्रों में है।');
+  String payFee(String amount) => _t('Pay the fee $amount', 'शुल्क दें $amount');
+  String get withdrawRequestAsk => _t('Withdraw this request?', 'क्या यह अनुरोध वापस लें?');
+  String get askTitle => _t('Ask for a certificate', 'प्रमाण-पत्र माँगें');
+  String tapToAsk(String name) => _t(
+    'Tap a certificate to ask for it for $name.',
+    '$name के लिए माँगने को प्रमाण-पत्र पर टैप करें।',
+  );
+  String get findCertificate => _t('Find a certificate', 'प्रमाण-पत्र खोजें');
+  String get noCertMatches => _t('No certificate matches.', 'कोई प्रमाण-पत्र नहीं मिला।');
+  String decidedBy(List<String> who) {
+    final words = (who.isEmpty ? ['the school'] : who).map(
+      (w) => hindi
+          ? switch (w) {
+              'the school' => 'विद्यालय',
+              'the office' => 'कार्यालय',
+              'the class teacher' => 'कक्षा अध्यापक',
+              'the principal' => 'प्रधानाचार्य',
+              'the coordinator' => 'समन्वयक',
+              _ => w,
+            }
+          : w,
+    );
+    return _t('Decided by ${words.join(', then ')}', 'निर्णय: ${words.join(', फिर ')}');
+  }
+
+  String forPurposes(String list) => _t('For: $list', 'किसके लिए: $list');
+  String aCopy(String amount) => _t('$amount a copy', '$amount प्रति प्रति');
+  String get freeWord => _t('Free', 'निःशुल्क');
+  String get purposeLabel => _t('Purpose', 'उद्देश्य');
+  String get purposeHint => _t('For example: bank account, passport', 'जैसे: बैंक खाता, पासपोर्ट');
+  String get copiesLabel => _t('Copies', 'प्रतियाँ');
+  String get noteForSchool =>
+      _t('A note for the school (optional)', 'विद्यालय के लिए टिप्पणी (वैकल्पिक)');
+  String feeHelp(String amount) => _t(
+    'Fee: $amount a copy — to pay once the school approves it.',
+    'शुल्क: $amount प्रति प्रति — विद्यालय की स्वीकृति के बाद देना है।',
+  );
+  String get noFee => _t('No fee.', 'कोई शुल्क नहीं।');
+  String get requestSentCert => _t(
+    'Your request is sent to the school. You will see here when it is ready.',
+    'आपका अनुरोध विद्यालय को भेज दिया गया है। तैयार होने पर यहाँ दिखेगा।',
+  );
+  String get purposeNeeded => _t('Write the purpose.', 'उद्देश्य लिखें।');
+  String get certPdfFailed => _t('The PDF could not be made.', 'PDF नहीं बन सका।');
+
   // timetable, shared papers, date sheet
   String get weekTab => _t('Week', 'सप्ताह');
   String get dayTab => _t('Day', 'दिन');

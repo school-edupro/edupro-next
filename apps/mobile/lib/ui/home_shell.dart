@@ -8,6 +8,8 @@ import '../theme/theme.dart';
 import '../theme/tokens.g.dart';
 import '../family/teachers.dart';
 import '../family/documents.dart';
+import '../family/health.dart';
+import '../family/certificates.dart';
 import '../family/academics.dart';
 import '../family/fees.dart';
 import '../family/profile.dart';
@@ -92,6 +94,9 @@ Widget? nativeScreen(Profile p, String href, S s) {
     '/teachers' => TeachersScreen(profile: p),
     // the session plan, curriculum, date sheets, magazine and almanac the school shared: no web page
     '/documents' => DocumentsScreen(profile: p),
+    // clinic visits and health cards, and the certificates (ask, follow, open): on the phone, no web page
+    '/health' => HealthScreen(profile: p),
+    '/certificates' => CertificatesScreen(profile: p),
     _ => null,
   };
 }
