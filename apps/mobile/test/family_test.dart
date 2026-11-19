@@ -1,0 +1,856 @@
+import 'package:edupro/api/api_transport.dart';
+import 'package:edupro/app.dart';
+import 'package:edupro/app_services.dart';
+import 'package:edupro/auth/session_store.dart';
+import 'package:edupro/family/data.dart';
+import 'package:edupro/l10n/strings.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:material_ui/material_ui.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
+import 'fakes.dart';
+
+/// Phase B (docs/design/89 §5.2): a parent's and a student's screens against a made-up school. Every name, number
+/// and amount here is made up.
+final now = DateTime.now();
+String day(int offset) => ymd(now.add(Duration(days: offset)));
+
+Map<String, Object?> profile(String kind) => {
+  'id': kind == 'parent' ? 'parent:7:41' : 'student:7:41',
+  'kind': kind,
+  'schoolId': '7',
+  'schoolCode': 'SAMPLE',
+  'schoolName': 'Sample School',
+  'name': 'Kid Sample',
+  'detail': 'VI-A · A1234',
+  'studentId': '41',
+  'app': 'parent',
+  'actingAs': null,
+  'hasPhoto': false,
+};
+
+/// What the fake API answers; [offline] makes every call fail as if there were no network.
+class School {
+  bool offline = false;
+  String kind = 'parent';
+  int statusPolls = 0;
+  final leaves = <Map<String, Object?>>[
+    {
+      'id': '901',
+      'number': 'LV-1',
+      'studentId': '41',
+      'student': 'Kid Sample',
+      'leaveTypeLabel': 'Sick leave',
+      'fromDate': day(3),
+      'toDate': day(3),
+      'days': 1,
+      'reason': 'Doctor visit',
+      'fileIds': [],
+      'long': false,
+      'status': 'pending',
+      'decisionNote': null,
+      'endedOn': null,
+      'waitingOn': 'Class teacher',
+    },
+    {
+      'id': '902',
+      'number': 'LV-2',
+      'studentId': '99',
+      'student': 'Another Child',
+      'leaveTypeLabel': 'Sick leave',
+      'fromDate': day(1),
+      'toDate': day(1),
+      'days': 1,
+      'reason': 'Not this child',
+      'fileIds': [],
+      'long': false,
+      'status': 'pending',
+      'decisionNote': null,
+      'endedOn': null,
+      'waitingOn': null,
+    },
+  ];
+
+  dynamic answer(Call c) {
+    if (offline) throw const ApiException(0, 'offline', 'No connection');
+    final key = '${c.method} ${c.path}';
+    switch (key) {
+      case 'GET /me/profiles':
+        return {
+          'data': [profile(kind)],
+        };
+      case 'GET /me/menu':
+        return {'app': 'parent', 'groups': []};
+      case 'GET /attendance/mine':
+        return {
+          'month': c.query?['month'],
+          'children': [
+            {
+              'id': '41',
+              'name': 'Kid Sample',
+              'section': 'VI-A',
+              'month': c.query?['month'],
+              'days': [
+                {'date': day(0), 'code': 'P', 'inAt': null, 'outAt': null},
+              ],
+              'summary': {'days': 20, 'present': 18, 'absent': 1, 'leave': 1},
+            },
+            {
+              'id': '99',
+              'name': 'Another Child',
+              'section': 'II-B',
+              'days': [],
+              'summary': {'days': 20, 'present': 2, 'absent': 18, 'leave': 0},
+            },
+          ],
+        };
+      case 'GET /attendance/leaves/mine':
+        return {
+          'longDays': 3,
+          'backDays': 7,
+          'types': [
+            {'value': 'SICK', 'label': 'Sick leave', 'certificate': 'long', 'maxDays': null},
+            {'value': 'MED', 'label': 'Medical leave', 'certificate': 'always', 'maxDays': null},
+          ],
+          'students': [
+            {'id': '41', 'name': 'Kid Sample'},
+          ],
+          'leaves': leaves,
+        };
+      case 'POST /attendance/leaves/mine':
+        leaves.insert(0, {
+          ...leaves.first,
+          'id': '903',
+          'reason': c.body!['reason'],
+          'status': 'pending',
+        });
+        return {'id': '903'};
+      case 'POST /attendance/leaves/mine/901/cancel':
+        leaves.firstWhere((l) => l['id'] == '901')['status'] = 'cancelled';
+        return {'ok': true};
+      case 'GET /academics/daily-work/viewer':
+        return {
+          'kind': 'family',
+          'students': [
+            {'id': '41', 'name': 'Kid Sample', 'classSectionId': '300', 'section': 'VI-A'},
+          ],
+        };
+      case 'GET /academics/daily-work':
+        expect(c.query!['classSectionId'], '300');
+        return {
+          'data': [
+            {
+              'id': '501',
+              'kind': 'homework',
+              'classSectionId': '300',
+              'section': 'VI-A',
+              'subjectName': 'Science',
+              'title': 'Plant a seed',
+              'body': 'Plant a seed in a cup and note what happens each day.',
+              'assignedOn': day(0),
+              'dueOn': day(1),
+              'postedBy': 'Asha Teacher',
+              'files': [
+                {'id': '71', 'name': 'sheet.pdf'},
+              ],
+              'publishAt': day(0),
+              'ackRequired': true,
+              'ackedFor': [],
+            },
+            {
+              'id': '502',
+              'kind': 'classwork',
+              'classSectionId': '300',
+              'section': 'VI-A',
+              'subjectName': 'Maths',
+              'title': 'Fractions page 12',
+              'body': 'Done in class.',
+              'assignedOn': day(-2),
+              'dueOn': null,
+              'postedBy': null,
+              'files': [],
+              'publishAt': day(-2),
+              'ackRequired': false,
+              'ackedFor': [],
+            },
+          ],
+        };
+      case 'POST /academics/acks':
+        return {'ok': true};
+      case 'GET /academics/daily-work/501/files/71':
+        return const ApiFile(bytes: [1, 2, 3], contentType: 'application/octet-stream', name: 'x');
+      case 'GET /academics/notices':
+        return {
+          'data': [
+            {
+              'id': '601',
+              'kind': 'circular',
+              'title': 'Sports day',
+              'body': '<p>Sports day is on <b>Friday</b>.</p>',
+              'bodyFormat': 'html',
+              'ackRequired': true,
+              'ackedFor': [],
+              'publishFrom': '${day(-1)}T09:00:00Z',
+              'publishedBy': 'Office',
+              'isPinned': false,
+              'targets': [],
+              'files': [],
+            },
+          ],
+        };
+      case 'GET /academics/notices/601':
+        return {
+          'id': '601',
+          'kind': 'circular',
+          'title': 'Sports day',
+          'body': '<p>Sports day is on <b>Friday</b>.</p>',
+          'bodyFormat': 'html',
+          'ackRequired': true,
+          'ackedFor': [],
+          'publishFrom': '${day(-1)}T09:00:00Z',
+          'publishedBy': 'Office',
+          'isPinned': false,
+          'targets': [],
+          'files': [],
+        };
+      case 'GET /comms/inbox/unread':
+        return {'unread': 3};
+      case 'GET /comms/inbox':
+        return {
+          'data': [
+            {
+              'id': 'm1',
+              'messageIds': ['801', '802'],
+              'title': 'Fee reminder',
+              'channels': ['sms', 'whatsapp'],
+              'subject': null,
+              'text': 'The second instalment is due on the 10th.',
+              'html': null,
+              'student': {'id': '41', 'name': 'Kid Sample'},
+              'sentAt': '${day(-1)}T10:00:00Z',
+              'status': {},
+              'readOnPhone': false,
+              'unread': true,
+              'attachments': [],
+            },
+          ],
+          'children': [
+            {'id': '41', 'name': 'Kid Sample'},
+          ],
+          'page': {'number': 1, 'size': 20, 'more': false},
+        };
+      case 'POST /comms/inbox/read':
+        return {'read': 2};
+      case 'GET /academics/timetable/periods':
+        return {
+          'data': [
+            {
+              'id': 'p1',
+              'number': 1,
+              'name': 'I',
+              'startsAt': '08:00:00',
+              'endsAt': '08:40:00',
+              'isBreak': false,
+            },
+            {
+              'id': 'p2',
+              'number': 2,
+              'name': 'Break',
+              'startsAt': '08:40:00',
+              'endsAt': '09:00:00',
+              'isBreak': true,
+            },
+          ],
+        };
+      case 'GET /academics/timetable/slots':
+        return {
+          'data': [
+            for (var w = 1; w <= 6; w++)
+              {
+                'weekday': w,
+                'periodId': 'p1',
+                'subjectName': w.isEven ? 'Hindi' : 'English',
+                'teacherName': 'Asha Teacher',
+                'room': '12',
+              },
+          ],
+        };
+      case 'GET /academics/calendar':
+        return {'holidays': [], 'events': [], 'from': c.query?['from'], 'to': c.query?['to']};
+      case 'GET /exams/mine/date-sheets':
+        return {
+          'children': [
+            {
+              'student': {'id': '41', 'name': 'Kid Sample', 'section': 'VI-A'},
+              'exams': [
+                {
+                  'id': 'e1',
+                  'name': 'Periodic test 2',
+                  'startsOn': day(5),
+                  'endsOn': day(6),
+                  'note': null,
+                  'papers': [
+                    {
+                      'subject': 'Maths',
+                      'examOn': day(5),
+                      'startsAt': '09:00:00',
+                      'endsAt': '10:00:00',
+                    },
+                    {'subject': 'Science', 'examOn': day(6), 'startsAt': null, 'endsAt': null},
+                  ],
+                },
+              ],
+            },
+          ],
+        };
+      case 'GET /exams/mine/results':
+        return {
+          'children': [
+            {
+              'student': {'id': '41', 'name': 'Kid Sample', 'section': 'VI-A'},
+              'terms': [
+                {
+                  'releaseId': 'r1',
+                  'kind': 'term',
+                  'termCode': 'T1',
+                  'name': 'Term 1',
+                  'releasedAt': '${day(-20)}T10:00:00Z',
+                  'exams': [
+                    {
+                      'code': 'T1',
+                      'name': 'Term 1 total',
+                      'pct': '82.5',
+                      'grade': 'A2',
+                      'result': 'Pass',
+                      'rank': 4,
+                    },
+                  ],
+                  'withheld': false,
+                  'held': false,
+                  'feeDue': false,
+                },
+                {
+                  'releaseId': 'r2',
+                  'kind': 'exam',
+                  'termCode': 'PT1',
+                  'name': 'Periodic test 1',
+                  'releasedAt': null,
+                  'exams': [],
+                  'withheld': false,
+                  'held': true,
+                  'feeDue': true,
+                },
+              ],
+            },
+          ],
+        };
+      case 'POST /exams/mine/report-cards/r1/41/pdf':
+        return {'exportId': 'x1'};
+      case 'GET /exams/mine/exports/x1':
+        statusPolls++;
+        return statusPolls < 2
+            ? {
+                'export': {'id': 'x1', 'status': 'running'},
+                'download': null,
+              }
+            : {
+                'export': {'id': 'x1', 'status': 'ready'},
+                'download': {'url': 'https://files.example.test/rc.pdf?token=t'},
+              };
+      case 'GET https://files.example.test/rc.pdf?token=t':
+        return const ApiFile(bytes: [1], contentType: 'application/octet-stream', name: 'rc.pdf');
+      case 'GET /fees/mine':
+        return {
+          'children': [
+            {
+              'student': {'id': '41', 'name': 'Kid Sample', 'admissionNo': 'A1234'},
+              'instalments': [
+                {
+                  'dueOn': day(-30),
+                  'ledger': 'school',
+                  'label': 'April–June',
+                  'net': '15000.00',
+                  'paid': '15000.00',
+                  'balance': '0.00',
+                  'lateFee': {'outstanding': '0.00'},
+                  'visible': true,
+                  'feePay': true,
+                  'status': 'paid',
+                },
+                {
+                  'dueOn': day(-2),
+                  'ledger': 'school',
+                  'label': 'July–September',
+                  'net': '12500.00',
+                  'paid': '0.00',
+                  'balance': '12500.00',
+                  'lateFee': {'outstanding': '150.00'},
+                  'visible': true,
+                  'feePay': true,
+                  'status': 'overdue',
+                },
+              ],
+              'totals': {'net': '27500.00', 'paid': '15000.00', 'balance': '12500.00'},
+              'payments': [
+                {
+                  'id': '1001',
+                  'receiptNo': 'R-77',
+                  'receivedOn': day(-31),
+                  'amount': '15000.00',
+                  'mode': 'Online',
+                },
+              ],
+              'payableNow': '12650.00',
+              'payableSchool': '12650.00',
+              'payableHostel': '0.00',
+              'hidden': 0,
+            },
+          ],
+        };
+      case 'GET /fees/mine/receipts/1001/file':
+        return const ApiFile(bytes: [1], contentType: 'application/octet-stream', name: 'r.pdf');
+    }
+    throw ApiException(404, 'not-found', 'no fake for $key');
+  }
+}
+
+Future<(FakeTransport, School)> pumpFamily(
+  WidgetTester tester, {
+  String kind = 'parent',
+  bool hindi = false,
+}) async {
+  SharedPreferences.setMockInitialValues({
+    'profile': kind == 'parent' ? 'parent:7:41' : 'student:7:41',
+    'hindi': hindi,
+  });
+  final school = School()..kind = kind;
+  final t = FakeTransport(school.answer);
+  final mem = MemorySecureStore();
+  final s = SessionStore(mem);
+  await s.save(
+    accessToken: 'otp.a',
+    expiresAt: DateTime.now().millisecondsSinceEpoch ~/ 1000 + 3600,
+    refreshToken: 'r' * 43,
+  );
+  await s.setPin('2468');
+  await tester.pumpWidget(
+    ProviderScope(
+      overrides: [
+        transportProvider.overrideWithValue(t),
+        secureStoreProvider.overrideWithValue(mem),
+        webFontsProvider.overrideWithValue(false),
+        deviceProvider.overrideWith(
+          (ref) async =>
+              const DeviceDetails(id: 'phone-test0001', name: 'Test phone', platform: 'android'),
+        ),
+      ],
+      child: const EduProApp(),
+    ),
+  );
+  await tester.pumpAndSettle();
+  await tester.enterText(find.byKey(const Key('pin')), '2468');
+  await tester.tap(find.byKey(const Key('pinSubmit')));
+  await tester.pumpAndSettle();
+  return (t, school);
+}
+
+Future<void> scrollTo(WidgetTester tester, Finder f) async {
+  await tester.scrollUntilVisible(f, 200, scrollable: find.byType(Scrollable).last);
+  await tester.pumpAndSettle();
+}
+
+void main() {
+  testWidgets(
+    'a parent\'s Home: the figures, today\'s attendance, homework due, next exam, notices',
+    (tester) async {
+      await tester.binding.setSurfaceSize(const Size(420, 1600));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      final (t, _) = await pumpFamily(tester);
+      expect(find.text('Welcome, Kid Sample'), findsOneWidget);
+      for (final tab in ['Home', 'Academics', 'Fees', 'Messages', 'More']) {
+        expect(
+          find.descendant(of: find.byType(NavigationBar), matching: find.text(tab)),
+          findsOneWidget,
+        );
+      }
+      // the figures: this child's month (not the other child's), homework due, fees to pay, unread
+      expect(
+        find.descendant(of: find.byKey(const Key('figAttendance')), matching: find.text('18/20')),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(of: find.byKey(const Key('figHomework')), matching: find.text('1')),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(of: find.byKey(const Key('figFees')), matching: find.text('₹12,650')),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(of: find.byKey(const Key('figUnread')), matching: find.text('3')),
+        findsOneWidget,
+      );
+      expect(find.text('Present'), findsOneWidget);
+      expect(find.text('18 of 20 days present'), findsOneWidget);
+      expect(find.text('Plant a seed'), findsOneWidget);
+      expect(find.text('Maths'), findsOneWidget);
+      expect(find.text('Sports day'), findsOneWidget);
+      // the family's calls go out with the child
+      expect(t.calls.firstWhere((c) => c.path == '/academics/notices').query!['studentId'], '41');
+    },
+  );
+
+  testWidgets('attendance: the month and its summary; a leave sent and a waiting one cancelled', (
+    tester,
+  ) async {
+    final (t, school) = await pumpFamily(tester);
+    await tester.tap(find.text('Academics'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Attendance'));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('monthSummary')), findsOneWidget);
+    expect(find.text('Present 18 · Absent 1 · Leave 1 · of 20 days'), findsOneWidget);
+    expect(find.bySemanticsLabel('${S(false).date(now)}: Present'), findsOneWidget);
+    // only this child's leave is listed
+    await scrollTo(tester, find.text('Doctor visit'));
+    expect(find.text('Not this child'), findsNothing);
+    expect(find.text('Waiting for approval'), findsOneWidget);
+
+    // apply: the kind, the reason, send
+    await tester.tap(find.byKey(const Key('applyLeave')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('sendLeave')));
+    await tester.pumpAndSettle();
+    expect(find.text('Choose the kind of leave.'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('leaveType')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Sick leave').last);
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byKey(const Key('leaveReason')), 'Fever since last night');
+    await tester.tap(find.byKey(const Key('sendLeave')));
+    await tester.pumpAndSettle();
+    final sent = t.calls.lastWhere(
+      (c) => c.method == 'POST' && c.path == '/attendance/leaves/mine',
+    );
+    expect(sent.body, {
+      'studentId': '41',
+      'leaveType': 'SICK',
+      'fromDate': day(0),
+      'toDate': day(0),
+      'reason': 'Fever since last night',
+    });
+    expect(find.text('Leave application sent.'), findsOneWidget);
+
+    // cancel the one still waiting
+    await scrollTo(tester, find.byKey(const Key('cancelLeave-901')));
+    await tester.tap(find.byKey(const Key('cancelLeave-901')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('confirmCancelLeave')));
+    await tester.pumpAndSettle();
+    expect(t.calls.any((c) => c.path == '/attendance/leaves/mine/901/cancel'), isTrue);
+    expect(school.leaves.firstWhere((l) => l['id'] == '901')['status'], 'cancelled');
+  });
+
+  testWidgets('a leave that needs a certificate goes to the web page', (tester) async {
+    await pumpFamily(tester);
+    await tester.tap(find.text('Academics'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Attendance'));
+    await tester.pumpAndSettle();
+    await scrollTo(tester, find.byKey(const Key('applyLeave')));
+    await tester.tap(find.byKey(const Key('applyLeave')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('leaveType')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Medical leave').last);
+    await tester.pumpAndSettle();
+    expect(find.textContaining('needs a certificate'), findsOneWidget);
+    expect(find.byKey(const Key('leaveOnWeb')), findsOneWidget);
+    expect(find.byKey(const Key('sendLeave')), findsNothing);
+  });
+
+  testWidgets('homework: due first, by day; "I have seen this" and an attachment', (tester) async {
+    final (t, _) = await pumpFamily(tester);
+    await tester.tap(find.text('Academics'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Homework'));
+    await tester.pumpAndSettle();
+    expect(find.text('Homework due'), findsOneWidget);
+    expect(find.text('Fractions page 12'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('work-501')).first);
+    await tester.pumpAndSettle();
+    expect(find.text('Plant a seed in a cup and note what happens each day.'), findsOneWidget);
+    expect(find.text('Attachment 1'), findsOneWidget);
+    expect(find.text('sheet.pdf'), findsNothing);
+    await tester.tap(find.byKey(const Key('ackWork')));
+    await tester.pumpAndSettle();
+    expect(t.calls.lastWhere((c) => c.path == '/academics/acks').body, {
+      'type': 'daily_work',
+      'id': '501',
+      'studentId': '41',
+    });
+    expect(find.text('Seen'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('view-0')));
+    await tester.pumpAndSettle();
+    expect(t.calls.any((c) => c.path == '/academics/daily-work/501/files/71'), isTrue);
+    expect(find.byKey(const Key('shareFile')), findsOneWidget);
+  });
+
+  testWidgets('results: marks, a card held for fees, the report card PDF made and fetched', (
+    tester,
+  ) async {
+    final (t, school) = await pumpFamily(tester);
+    await tester.tap(find.text('Academics'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Results'));
+    await tester.pumpAndSettle();
+    expect(find.text('Term 1'), findsOneWidget);
+    expect(find.text('82.5%'), findsOneWidget);
+    expect(find.text('A2'), findsOneWidget);
+    expect(find.text('Rank 4'), findsOneWidget);
+    expect(find.text('This report card opens when the fees due are paid.'), findsOneWidget);
+    expect(find.byKey(const Key('reportCardPdf-r2')), findsNothing);
+    await tester.tap(find.byKey(const Key('reportCardPdf-r1')));
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 3));
+    await tester.pumpAndSettle();
+    expect(school.statusPolls, 2);
+    expect(t.calls.any((c) => c.path == 'https://files.example.test/rc.pdf?token=t'), isTrue);
+    expect(find.byKey(const Key('shareFile')), findsOneWidget);
+  });
+
+  testWidgets('fees: to pay now, instalments, a receipt; messages read; a notice acknowledged', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(420, 1400));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final (t, _) = await pumpFamily(tester);
+    await tester.tap(find.text('Fees'));
+    await tester.pumpAndSettle();
+    expect(find.text('₹12,500'), findsOneWidget);
+    expect(find.textContaining('Pay online · ₹12,650'), findsOneWidget);
+    expect(find.text('Overdue'), findsOneWidget);
+    expect(find.textContaining('Late fee ₹150'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('receipt-1001')));
+    await tester.pumpAndSettle();
+    expect(t.calls.any((c) => c.path == '/fees/mine/receipts/1001/file'), isTrue);
+    await tester.tap(find.byType(BackButton));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Messages'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('message-m1')));
+    await tester.pumpAndSettle();
+    expect(find.text('The second instalment is due on the 10th.'), findsWidgets);
+    expect(t.calls.lastWhere((c) => c.path == '/comms/inbox/read').body, {
+      'ids': ['801', '802'],
+    });
+    await tester.tap(find.byType(BackButton));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Notices'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('notice-601')));
+    await tester.pumpAndSettle();
+    // the HTML notice as plain text
+    expect(find.text('Sports day is on Friday.'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('ackNotice')));
+    await tester.pumpAndSettle();
+    expect(t.calls.lastWhere((c) => c.path == '/academics/acks').body, {
+      'type': 'notice',
+      'id': '601',
+      'studentId': '41',
+    });
+  });
+
+  testWidgets('a student: Home, Homework, Timetable, Results tabs; no fees; today\'s periods', (
+    tester,
+  ) async {
+    final (t, _) = await pumpFamily(tester, kind: 'student');
+    for (final tab in ['Home', 'Homework', 'Timetable', 'Results', 'More']) {
+      expect(
+        find.descendant(of: find.byType(NavigationBar), matching: find.text(tab)),
+        findsOneWidget,
+      );
+    }
+    expect(find.byKey(const Key('figFees')), findsNothing);
+    expect(find.byKey(const Key('figExam')), findsOneWidget);
+    expect(t.calls.any((c) => c.path == '/fees/mine'), isFalse);
+    await tester.tap(
+      find.descendant(of: find.byType(NavigationBar), matching: find.text('Timetable')),
+    );
+    await tester.pumpAndSettle();
+    final weekday = now.weekday == 7 ? 1 : now.weekday;
+    expect(find.text(weekday.isEven ? 'Hindi' : 'English'), findsOneWidget);
+    expect(find.text('08:00–08:40'), findsOneWidget);
+    expect(find.text('Break'), findsOneWidget);
+    await tester.tap(find.text(S(false).weekday(weekday == 6 ? 5 : weekday + 1)));
+    await tester.pumpAndSettle();
+    expect(find.text(weekday.isEven ? 'English' : 'Hindi'), findsOneWidget);
+  });
+
+  testWidgets('no network: the screen shows the copy it had, with when it was', (tester) async {
+    final (_, school) = await pumpFamily(tester);
+    await tester.tap(find.text('Fees'));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('staleLine')), findsNothing);
+    school.offline = true;
+    await tester.fling(find.byType(ListView).first, const Offset(0, 400), 1000);
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('staleLine')), findsOneWidget);
+    expect(find.textContaining('No connection. This is the copy from'), findsOneWidget);
+    expect(find.text('₹12,500'), findsOneWidget);
+  });
+
+  for (final (dark, hindi) in [(false, false), (true, false), (false, true)]) {
+    testWidgets(
+      'accessibility (${dark ? 'dark' : 'light'}${hindi ? ', Hindi' : ''}): tap targets, labelled '
+      'controls and text contrast on every family screen',
+      (tester) async {
+        tester.platformDispatcher.platformBrightnessTestValue = dark
+            ? Brightness.dark
+            : Brightness.light;
+        addTearDown(tester.platformDispatcher.clearPlatformBrightnessTestValue);
+        final handle = tester.ensureSemantics();
+        await pumpFamily(tester, hindi: hindi);
+        final s = S(hindi);
+        Future<void> check(String where) async {
+          await tester.pumpAndSettle();
+          for (final g in [
+            androidTapTargetGuideline,
+            iOSTapTargetGuideline,
+            labeledTapTargetGuideline,
+            textContrastGuideline,
+          ]) {
+            await expectLater(tester, meetsGuideline(g), reason: '$where: ${g.description}');
+          }
+        }
+
+        await check('Home');
+        await tester.tap(find.text(s.academics).last);
+        await check('Academics');
+        for (final screen in [
+          s.attendance,
+          s.homework,
+          s.timetable,
+          s.dateSheet,
+          s.results,
+          s.calendar,
+        ]) {
+          await tester.tap(find.text(screen).last);
+          await check(screen);
+          await tester.tap(find.byType(BackButton));
+          await tester.pumpAndSettle();
+        }
+        await tester.tap(find.text(s.fees).last);
+        await check('Fees');
+        await tester.tap(find.text(s.messages).last);
+        await check('Messages');
+        await tester.tap(find.text(s.notices).last);
+        await check('Notices');
+        handle.dispose();
+      },
+    );
+  }
+
+  testWidgets('large text (twice the size): every family screen lays out without overflow', (
+    tester,
+  ) async {
+    tester.platformDispatcher.textScaleFactorTestValue = 2.0;
+    addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+    await tester.binding.setSurfaceSize(const Size(360, 780));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await pumpFamily(tester);
+    expect(tester.takeException(), isNull);
+    await tester.tap(find.text('Academics').last);
+    await tester.pumpAndSettle();
+    for (final screen in [
+      'Attendance',
+      'Homework',
+      'Timetable',
+      'Date sheet',
+      'Results',
+      'Calendar',
+    ]) {
+      await tester.tap(find.text(screen).last);
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull, reason: screen);
+      await tester.tap(find.byType(BackButton));
+      await tester.pumpAndSettle();
+    }
+    // the detail pages and the leave form
+    await tester.tap(find.text('Homework').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('work-501')).first);
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull, reason: 'homework in full');
+    await tester.tap(find.byType(BackButton));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byType(BackButton));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Attendance').last);
+    await tester.pumpAndSettle();
+    await scrollTo(tester, find.byKey(const Key('applyLeave')));
+    await tester.tap(find.byKey(const Key('applyLeave')));
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull, reason: 'leave form');
+    await tester.tap(find.byType(BackButton));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byType(BackButton));
+    await tester.pumpAndSettle();
+    for (final tab in ['Fees', 'Messages']) {
+      await tester.tap(find.text(tab).last);
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull, reason: tab);
+    }
+    await tester.tap(find.byKey(const Key('message-m1')));
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull, reason: 'message in full');
+    await tester.tap(find.byType(BackButton));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Notices').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('notice-601')));
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull, reason: 'notice in full');
+  });
+
+  test('the copies are kept per profile and wiped at sign-out', () async {
+    SharedPreferences.setMockInitialValues({});
+    final first = await cached('fees:parent:7:41', () async => {'a': 1});
+    expect(first.stale, isFalse);
+    final again = await cached(
+      'fees:parent:7:41',
+      () async => throw const ApiException(0, 'offline', 'No connection'),
+    );
+    expect(again.stale, isTrue);
+    expect(again.data, {'a': 1});
+    // an API refusal is not hidden behind the copy
+    expect(
+      () =>
+          cached('fees:parent:7:41', () async => throw const ApiException(403, 'forbidden', 'No')),
+      throwsA(isA<ApiException>()),
+    );
+    await clearCache();
+    expect(
+      () => cached(
+        'fees:parent:7:41',
+        () async => throw const ApiException(0, 'offline', 'No connection'),
+      ),
+      throwsA(isA<ApiException>()),
+    );
+  });
+
+  test('money in Indian grouping, dates in English and Hindi', () {
+    const en = S(false);
+    const hi = S(true);
+    expect(en.money('12650.00'), '₹12,650');
+    expect(en.money('1234567.5'), '₹12,34,567.50');
+    expect(en.money('999'), '₹999');
+    expect(en.date('2026-11-19'), '19 Nov 2026');
+    expect(hi.date('2026-11-19'), '19 नव॰ 2026');
+    expect(en.dayShort('2026-11-19'), 'Thu, 19 Nov');
+    expect(en.time('09:30:00'), '09:30');
+  });
+}

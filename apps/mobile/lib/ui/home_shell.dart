@@ -6,10 +6,44 @@ import '../l10n/strings.dart';
 import '../profiles/profiles.dart';
 import '../theme/theme.dart';
 import '../theme/tokens.g.dart';
+import '../family/academics.dart';
+import '../family/fees.dart';
+import '../family/messages.dart';
+import '../family/today.dart';
 import 'widgets.dart';
 
-/// The signed-in app: the profile in the bar (a tap switches), Home and More (phase A); the native daily screens
-/// join as tabs in phases B and C.
+/// A tab of the app's bottom bar.
+class AppTab {
+  const AppTab(this.icon, this.label, this.build);
+  final IconData icon;
+  final String label;
+  final Widget Function(Profile) build;
+}
+
+/// The tabs of a profile (docs/design/89 §5.2): a parent's Home, Academics, Fees, Messages, More; a student's Home,
+/// Homework, Timetable, Results, More; staff (phase C) Home and More.
+List<AppTab> tabsFor(Profile p, S s) => switch (p.kind) {
+  'parent' => [
+    AppTab(Icons.home_outlined, s.home, (p) => TodayScreen(profile: p)),
+    AppTab(Icons.menu_book_outlined, s.academics, (p) => AcademicsScreen(profile: p)),
+    AppTab(Icons.account_balance_wallet_outlined, s.fees, (p) => FeesScreen(profile: p)),
+    AppTab(Icons.chat_bubble_outline, s.messages, (p) => MessagesScreen(profile: p)),
+    AppTab(Icons.apps, s.more, (p) => _More(profile: p)),
+  ],
+  'student' => [
+    AppTab(Icons.home_outlined, s.home, (p) => TodayScreen(profile: p)),
+    AppTab(Icons.menu_book_outlined, s.homework, (p) => HomeworkScreen(profile: p)),
+    AppTab(Icons.calendar_month_outlined, s.timetable, (p) => TimetableScreen(profile: p)),
+    AppTab(Icons.insert_chart_outlined, s.results, (p) => ResultsScreen(profile: p)),
+    AppTab(Icons.apps, s.more, (p) => _More(profile: p)),
+  ],
+  _ => [
+    AppTab(Icons.home_outlined, s.home, (p) => _Home(profile: p)),
+    AppTab(Icons.apps, s.more, (p) => _More(profile: p)),
+  ],
+};
+
+/// The signed-in app: the profile in the bar (a tap switches) and the profile's tabs.
 class HomeShell extends ConsumerStatefulWidget {
   const HomeShell({super.key});
 
@@ -35,6 +69,7 @@ class _HomeShellState extends ConsumerState<HomeShell> {
             body: Padding(padding: const EdgeInsets.all(Tokens.sp5), child: Text(s.noProfiles)),
           );
         }
+        final tabs = tabsFor(p, s);
         return Scaffold(
           appBar: AppBar(
             titleSpacing: Tokens.sp3,
@@ -79,13 +114,12 @@ class _HomeShellState extends ConsumerState<HomeShell> {
               ),
             ],
           ),
-          body: _tab == 0 ? _Home(profile: p) : _More(profile: p),
+          body: tabs[_tab.clamp(0, tabs.length - 1)].build(p),
           bottomNavigationBar: NavigationBar(
-            selectedIndex: _tab,
+            selectedIndex: _tab.clamp(0, tabs.length - 1),
             onDestinationSelected: (i) => setState(() => _tab = i),
             destinations: [
-              NavigationDestination(icon: const Icon(Icons.home_outlined), label: s.home),
-              NavigationDestination(icon: const Icon(Icons.apps), label: s.more),
+              for (final t in tabs) NavigationDestination(icon: Icon(t.icon), label: t.label),
             ],
           ),
         );

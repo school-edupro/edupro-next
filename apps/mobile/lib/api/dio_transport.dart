@@ -84,20 +84,40 @@ class DioTransport implements ApiTransport {
           name: '${j['filename'] ?? 'file'}',
         );
       }
-      final url = j['url'] ?? j['downloadUrl'];
+      // `{url}`, `{downloadUrl}`, or an attachment's `{file: {name}, download: {url}}`
+      final nested = j['download'] is Map ? j['download'] as Map : const {};
+      final url = j['url'] ?? j['downloadUrl'] ?? nested['url'];
       if (url is String) {
-        final f = await Dio().get<List<int>>(
+        final f = j['file'] is Map ? j['file'] as Map : const {};
+        return download(
           url,
-          options: Options(responseType: ResponseType.bytes),
-        );
-        return ApiFile(
-          bytes: f.data ?? const [],
-          contentType: f.headers.value(Headers.contentTypeHeader) ?? '${j['contentType'] ?? ''}',
-          name: '${j['filename'] ?? j['name'] ?? _nameOf(f.headers) ?? 'file'}',
+          name: '${j['filename'] ?? j['name'] ?? f['name'] ?? f['originalName'] ?? ''}',
+          contentType: '${j['contentType'] ?? f['contentType'] ?? ''}',
         );
       }
     }
     return ApiFile(bytes: bytes, contentType: type, name: _nameOf(r.headers) ?? 'file');
+  }
+
+  @override
+  Future<ApiFile> download(String url, {String? name, String? contentType}) async {
+    try {
+      final f = await Dio().get<List<int>>(url, options: Options(responseType: ResponseType.bytes));
+      final type = f.headers.value(Headers.contentTypeHeader);
+      return ApiFile(
+        bytes: f.data ?? const [],
+        contentType:
+            type ??
+            (contentType == null || contentType.isEmpty ? 'application/octet-stream' : contentType),
+        name: _nameOf(f.headers) ?? (name == null || name.isEmpty ? 'file' : name),
+      );
+    } on DioException catch (e) {
+      throw ApiException(
+        e.response?.statusCode ?? 0,
+        'download',
+        e.message ?? 'The file could not be fetched.',
+      );
+    }
   }
 
   static String? _nameOf(Headers h) {

@@ -443,7 +443,7 @@ export const InboxQuerySchema = z.object({
 });
 export class InboxQueryDto extends createZodDto(InboxQuerySchema) {}
 export const InboxReadSchema = z.object({ ids: z.array(IdSchema).min(1).max(200) });
-export class InboxReadDto extends createZodDto(InboxReadSchema) {}
+export class CommsInboxReadDto extends createZodDto(InboxReadSchema) {}
 
 export const ApproversSchema = z.object({
   roleCodes: z

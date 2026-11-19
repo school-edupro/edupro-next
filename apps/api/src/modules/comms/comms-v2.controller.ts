@@ -12,7 +12,7 @@ import {
   CommsSettingsDto,
   CreditDto,
   InboxQueryDto,
-  InboxReadDto,
+  CommsInboxReadDto,
   PushDeviceDto,
   ProviderDto,
   ProviderTestDto,
@@ -169,7 +169,7 @@ export class CommsInboxController {
   @Post('read')
   @HttpCode(200)
   @AuthenticatedOnly()
-  read(@ReqCtx() ctx: RequestContext, @Body() dto: InboxReadDto) {
+  read(@ReqCtx() ctx: RequestContext, @Body() dto: CommsInboxReadDto) {
     return this.inbox.markRead(ctx, dto.ids);
   }
 }

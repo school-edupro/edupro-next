@@ -45,7 +45,23 @@ class FakeTransport implements ApiTransport {
     final c = Call(method, path, body, query, const {});
     calls.add(c);
     final r = answer(c);
-    return r is ApiFile ? r : const ApiFile(bytes: [37, 80, 68, 70], contentType: 'application/pdf', name: 'file.pdf');
+    return r is ApiFile
+        ? r
+        : const ApiFile(bytes: [37, 80, 68, 70], contentType: 'application/pdf', name: 'file.pdf');
+  }
+
+  @override
+  Future<ApiFile> download(String url, {String? name, String? contentType}) async {
+    final c = Call('GET', url, null, null, const {});
+    calls.add(c);
+    final r = answer(c);
+    return r is ApiFile
+        ? r
+        : ApiFile(
+            bytes: const [37, 80, 68, 70],
+            contentType: 'application/pdf',
+            name: name ?? 'file.pdf',
+          );
   }
 }
 

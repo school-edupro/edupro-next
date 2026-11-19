@@ -43,3 +43,9 @@ flutter analyze && flutter test
   `X-School-Id` and, for a teacher who is also a parent, `X-Acting-As: family`.
 - More (`GET /me/menu`): the web apps' own menus by the person's rights; a screen without a native one opens its web
   page inside the app with a one-time link (`POST /auth/mobile/web-handoff`).
+- Family screens (`lib/family/`, phase B): a parent's child or a student — Home, attendance and leave, homework,
+  timetable, calendar, date sheet, results and report cards, fees (paid online through the web fee page in the web
+  view), messages and notices. They call the parent web app's own endpoints; each keeps its last copy on the phone
+  (`family/data.dart`, wiped at sign-out) and shows it when there is no network.
+- An API operation used by the app must have an id and a request class name of its own in the OpenAPI description;
+  the generator stops when one is shared (rename the controller or DTO class).

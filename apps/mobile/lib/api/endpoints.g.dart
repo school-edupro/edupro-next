@@ -71,6 +71,102 @@ class EduProApi {
   /// GET /comms/inbox/unread
   Future<dynamic> commsInboxUnread() =>
       _t.send('GET', '/comms/inbox/unread');
+
+  /// GET /attendance/mine — A family’s children for a month (parent app)
+  Future<dynamic> attendanceMine({String? month}) =>
+      _t.send('GET', '/attendance/mine', query: {if (month != null) 'month': month});
+
+  /// GET /attendance/leaves/mine — My children’s leave of the session, with what the form needs
+  Future<dynamic> leaveMine() =>
+      _t.send('GET', '/attendance/leaves/mine');
+
+  /// POST /attendance/leaves/mine — Apply for leave for my child
+  Future<dynamic> leaveApply({required LeaveApplyDto body}) =>
+      _t.send('POST', '/attendance/leaves/mine', body: body.toJson());
+
+  /// POST /attendance/leaves/mine/{id}/cancel — Withdraw a leave that waits, or end an approved one from today
+  Future<dynamic> leaveCancel({required String id}) =>
+      _t.send('POST', '/attendance/leaves/mine/${Uri.encodeComponent(id)}/cancel');
+
+  /// GET /academics/daily-work/viewer — Who is reading: the sections a teacher covers or the children of a guardian
+  Future<dynamic> dailyWorkViewerInfo() =>
+      _t.send('GET', '/academics/daily-work/viewer');
+
+  /// GET /academics/daily-work — Homework, classwork and assignments (scoped: teachers by section, families by child)
+  Future<dynamic> dailyWorkList({String? classSectionId, String? subjectId, String? kind, String? from, String? to, int? page, int? size}) =>
+      _t.send('GET', '/academics/daily-work', query: {if (classSectionId != null) 'classSectionId': classSectionId, if (subjectId != null) 'subjectId': subjectId, if (kind != null) 'kind': kind, if (from != null) 'from': from, if (to != null) 'to': to, if (page != null) 'page': page, if (size != null) 'size': size});
+
+  /// GET /academics/daily-work/{id}/files/{fileId}
+  Future<ApiFile> dailyWorkFile({required String id, required String fileId}) =>
+      _t.file('GET', '/academics/daily-work/${Uri.encodeComponent(id)}/files/${Uri.encodeComponent(fileId)}');
+
+  /// POST /academics/acks — Acknowledge homework, a class document or a notice
+  Future<dynamic> documentsAck({required AckDto body}) =>
+      _t.send('POST', '/academics/acks', body: body.toJson());
+
+  /// GET /academics/notices — Notices and circulars visible to the caller
+  Future<dynamic> noticesList({String? kind, String? status, String? q, String? studentId, String? from, String? to, int? page, int? size}) =>
+      _t.send('GET', '/academics/notices', query: {if (kind != null) 'kind': kind, if (status != null) 'status': status, if (q != null) 'q': q, if (studentId != null) 'studentId': studentId, if (from != null) 'from': from, if (to != null) 'to': to, if (page != null) 'page': page, if (size != null) 'size': size});
+
+  /// GET /academics/notices/{id}
+  Future<dynamic> noticesGet({required String id}) =>
+      _t.send('GET', '/academics/notices/${Uri.encodeComponent(id)}');
+
+  /// GET /academics/notices/{id}/files/{fileId}
+  Future<ApiFile> noticesFile({required String id, required String fileId}) =>
+      _t.file('GET', '/academics/notices/${Uri.encodeComponent(id)}/files/${Uri.encodeComponent(fileId)}');
+
+  /// GET /comms/inbox — Messages the school sent me (parents: also about each child)
+  Future<dynamic> commsInboxList({String? studentId, int? page, int? size}) =>
+      _t.send('GET', '/comms/inbox', query: {if (studentId != null) 'studentId': studentId, if (page != null) 'page': page, if (size != null) 'size': size});
+
+  /// POST /comms/inbox/read
+  Future<dynamic> commsInboxRead({required CommsInboxReadDto body}) =>
+      _t.send('POST', '/comms/inbox/read', body: body.toJson());
+
+  /// GET /academics/timetable/periods — Periods of the school day
+  Future<dynamic> timetablePeriods() =>
+      _t.send('GET', '/academics/timetable/periods');
+
+  /// GET /academics/timetable/slots — Timetable of a section or a teacher for the working year
+  Future<dynamic> timetableSlots({String? classSectionId, String? employeeId}) =>
+      _t.send('GET', '/academics/timetable/slots', query: {if (classSectionId != null) 'classSectionId': classSectionId, if (employeeId != null) 'employeeId': employeeId});
+
+  /// GET /academics/calendar — Holidays and almanac events of the working year (audience-filtered)
+  Future<dynamic> calendarRead({String? from, String? to}) =>
+      _t.send('GET', '/academics/calendar', query: {if (from != null) 'from': from, if (to != null) 'to': to});
+
+  /// GET /exams/mine/date-sheets — My children's date sheets: their papers of the exams on the portal
+  Future<dynamic> examDateSheetsFamily() =>
+      _t.send('GET', '/exams/mine/date-sheets');
+
+  /// GET /exams/mine/results — Released terms of my children with the term summary
+  Future<dynamic> familyResultsMine() =>
+      _t.send('GET', '/exams/mine/results');
+
+  /// GET /exams/mine/report-cards/{releaseId}/{studentId}/view — My child’s report card as a page, at once (the same checks as the PDF)
+  Future<dynamic> familyResultsView({required String releaseId, required String studentId}) =>
+      _t.send('GET', '/exams/mine/report-cards/${Uri.encodeComponent(releaseId)}/${Uri.encodeComponent(studentId)}/view');
+
+  /// POST /exams/mine/report-cards/{releaseId}/{studentId}/pdf — Queue my child’s report card PDF (withheld while fee dues stand, when the release says so)
+  Future<dynamic> familyResultsPdf({required String releaseId, required String studentId}) =>
+      _t.send('POST', '/exams/mine/report-cards/${Uri.encodeComponent(releaseId)}/${Uri.encodeComponent(studentId)}/pdf');
+
+  /// GET /exams/mine/exports/{id}
+  Future<dynamic> familyResultsStatus({required String id}) =>
+      _t.send('GET', '/exams/mine/exports/${Uri.encodeComponent(id)}');
+
+  /// GET /fees/mine — The family's fee ledgers: visible instalments, receipts, refunds and what is payable now
+  Future<dynamic> feesMine() =>
+      _t.send('GET', '/fees/mine');
+
+  /// GET /fees/mine/receipts/{paymentId}/file — One of the family's own receipts as a PDF, made at once
+  Future<ApiFile> feesMyReceiptFile({required String paymentId}) =>
+      _t.file('GET', '/fees/mine/receipts/${Uri.encodeComponent(paymentId)}/file');
+
+  /// GET /fees/mine/bill/file — The fee bill of one of the family's children as a PDF
+  Future<ApiFile> feesMyBillFile({required String studentId, String? ledger}) =>
+      _t.file('GET', '/fees/mine/bill/file', query: {'studentId': studentId, if (ledger != null) 'ledger': ledger});
 }
 
 /** The OtpStartDto the API takes. */
@@ -193,5 +289,46 @@ class PushDeviceDto {
         'app': app,
         if (platform != null) 'platform': platform,
         if (userAgent != null) 'userAgent': userAgent,
+      };
+}
+
+/** The LeaveApplyDto the API takes. */
+class LeaveApplyDto {
+  const LeaveApplyDto({required this.studentId, required this.leaveType, required this.fromDate, required this.toDate, required this.reason, this.fileIds});
+  final String studentId;
+  final String leaveType;
+  final String fromDate;
+  final String toDate;
+  final String reason;
+  final List<String>? fileIds;
+  Map<String, Object?> toJson() => {
+        'studentId': studentId,
+        'leaveType': leaveType,
+        'fromDate': fromDate,
+        'toDate': toDate,
+        'reason': reason,
+        if (fileIds != null) 'fileIds': fileIds,
+      };
+}
+
+/** The AckDto the API takes. */
+class AckDto {
+  const AckDto({required this.type, required this.id, this.studentId});
+  final String type;
+  final String id;
+  final String? studentId;
+  Map<String, Object?> toJson() => {
+        'type': type,
+        'id': id,
+        if (studentId != null) 'studentId': studentId,
+      };
+}
+
+/** The CommsInboxReadDto the API takes. */
+class CommsInboxReadDto {
+  const CommsInboxReadDto({required this.ids});
+  final List<String> ids;
+  Map<String, Object?> toJson() => {
+        'ids': ids,
       };
 }

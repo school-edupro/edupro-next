@@ -268,3 +268,69 @@ the hand-off links open the parent and staff pages without their frame (axe clea
 Xcode are not installed), push through the EduPro Firebase project (no project or APNs key yet), crash reports (no
 Sentry DSN), the final package id and store listings. The web build cannot show the web pages inside the app (the web
 apps forbid framing — correct; phones open them in a WebView, not a frame).
+
+## As built — phase B, parent and student (19 Nov 2026)
+
+**App** (`apps/mobile/lib/family/`)
+
+- **Tabs** (§5.2): a parent's child — Home, Academics, Fees, Messages, More; a student — Home, Homework, Timetable,
+  Results, More (no fees). One parent profile is one child, so every screen shows that child only (the API's answers
+  list the family's children; the app picks the profile's).
+- **Home** (`today.dart`): the figures first, two a row — attendance this month (present / days), homework due today
+  and tomorrow, fees to pay now (a student: the next exam), unread messages — then today's attendance, the homework
+  due, the next exam (from the date sheet) and the three latest notices. Each part loads on its own.
+- **Attendance** (`attendance.dart`): the month as a calendar (each day's status read out by the screen reader),
+  the summary, the child's leave applications; **apply for leave** (the kind — type to search —, the days, the
+  reason) and cancel one still waiting. A leave that needs a certificate (the school's rule: always, or more than the
+  long-leave days) goes to the web page, where the file is attached.
+- **Homework** (`homework.dart`): what is due first, then the last two weeks by day; in full with its files and "I
+  have seen this" when the teacher asks for it.
+- **Timetable** (a day at a time, today first), **calendar** (holidays and events by month), **date sheet**.
+- **Results** (`results.dart`): each released card with its marks, grade, rank and result; the report card as the
+  school prints it, and its **PDF** (the API makes it in the background; the app waits up to a minute and shows it).
+  A card held back — or held until the fees are paid — says so.
+- **Fees** (`fees.dart`): to pay now and the year's balance, the instalments with their status and late fee, the
+  receipts (PDF), the fee bill, the certificate for tax (web page). **Pay online** opens the parent web app's fee page
+  in the app's web view (the school's gateway, as on the web); the app sees the gateway's return to `/fees?paid=`,
+  closes the page and shows the outcome on the refreshed statement.
+- **Messages** (`messages.dart`): the school's messages about the child, 20 a page (marked read when opened), the
+  notices (pinned first; in full with files and "I have seen this"), and the queries to the school (web page).
+- **Files**: report cards, receipts, bills and attachments open in the app (PDF pages or the picture) with Save /
+  Share (the phone's share sheet); attachments are numbered View and Download icons, without file names.
+- **No network** (§5.6): every screen keeps its last copy on the phone (per profile) and shows it with "No
+  connection. This is the copy from …" when the API cannot be reached; an API refusal is never hidden behind a copy.
+  The copies are wiped at sign-out (also when the API signs the phone out). Pull down to refresh everywhere.
+- **Hindi and English**, dates and money in Indian style (₹1,23,456.50). Dark mode: filled buttons now have navy text
+  on cyan (white on cyan was 3.1:1). Status words are body text on their tint with a coloured dot (the status colours
+  alone are under 4.5:1 for small text).
+
+**API**
+
+- No new endpoints: the app calls the parent web app's own (attendance, leave, daily work, acknowledgements, notices,
+  inbox, timetable, calendar, date sheets, results and report cards, fees and receipts), listed in
+  `api-operations.txt`.
+- **Unique names in the OpenAPI description**: the staff leave module's controllers are now `StaffLeaveController`
+  and `StaffAttendanceController` (two operations each had the ids `LeaveController_mine`, `AttendanceController_mine`
+  …), and the inbox's body class is `CommsInboxReadDto` (the admission portal's `InboxReadDto` overwrote it in the
+  description). 52 request classes still share names across modules; the generator now refuses an operation id used
+  twice and a request body whose class name is defined in more than one module, so a clash is fixed (renamed) when the
+  app first uses it, not discovered on a phone.
+- The app's file reader also follows an attachment's `{file, download: {url}}` and fetches signed links itself
+  (`ApiTransport.download`).
+
+**Tests**: API e2e `mobile-family.e2e-spec.ts` (6) — a parent and a student signed in on phones (their own session
+tokens) call every endpoint the screens use, exactly as the app does, and every field the app reads is there: this
+child's attendance only, homework with its file link and acknowledgement, a notice in full and acknowledged, the inbox
+page, leave rules / apply / cancel, timetable, calendar, results, date sheets, fees, and the web pages for paying, the
+tax certificate, queries and a leave with a file. Flutter (24): the family screens against a made-up school (Home's
+figures, attendance and leave, the certificate rule, homework, results and the report card PDF, fees and receipts,
+messages and notices, a student's tabs, the copy shown with no network, the copies wiped at sign-out, money and dates);
+accessibility guidelines (tap targets, labels, text contrast) on every screen in light, dark and Hindi; every screen
+at twice the text size without overflow. The related API suites (attendance, leave, comms, daily academics, login,
+portal: 17 files, 142 tests), permission coverage, lint and types pass. Checked in a browser on a test school: the
+app's web build signs the made-up parent in and every screen reads the real API without an error; the web pages the
+app opens (fees, tax certificate, queries, leave) come up signed in for the right child without the web app's frame.
+
+**Not done in phase B**: as in phase A, no run on Android / iOS devices yet (no Android Studio / Xcode on this Mac),
+so the payment's return inside a real WebView and the share sheet are checked on a phone in phase E's internal test
+builds; native gateway SDKs (Razorpay) stay for later (§5.5).

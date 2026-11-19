@@ -14,6 +14,9 @@ abstract interface class ApiTransport {
     Map<String, Object?>? body,
     Map<String, Object?>? query,
   });
+
+  /// A short-lived signed link the API gave (an attachment, a finished PDF): fetched without the session.
+  Future<ApiFile> download(String url, {String? name, String? contentType});
 }
 
 /// A file the API sent: its bytes, type and name.

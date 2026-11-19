@@ -12,7 +12,7 @@
  * The OpenAPI file comes from `pnpm --filter @edupro/api openapi:export` (or the built dist/openapi-export.js).
  */
 import { createRequire } from 'node:module';
-import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -116,12 +116,24 @@ function api() {
     .split('\n')
     .map((l) => l.replace(/#.*/, '').trim())
     .filter(Boolean);
-  const files = new Set(lines.filter((l) => / !file$/.test(l)).map((l) => l.replace(/ !file$/, '')));
+  const files = new Set(
+    lines.filter((l) => / !file$/.test(l)).map((l) => l.replace(/ !file$/, '')),
+  );
   const wanted = lines.map((l) => l.replace(/ !file$/, ''));
   const byId = new Map();
+  const twice = new Set();
   for (const [path, methods] of Object.entries(spec.paths))
     for (const [method, op] of Object.entries(methods))
-      if (op.operationId) byId.set(op.operationId, { path, method: method.toUpperCase(), op });
+      if (op.operationId) {
+        if (byId.has(op.operationId)) twice.add(op.operationId);
+        byId.set(op.operationId, { path, method: method.toUpperCase(), op });
+      }
+  // two controllers with the same class name give two operations one id: rename one of the classes
+  const ambiguous = wanted.filter((id) => twice.has(id));
+  if (ambiguous.length)
+    throw new Error(
+      `api-operations.txt names operation ids the API uses twice: ${ambiguous.join(', ')}`,
+    );
   const missing = wanted.filter((id) => !byId.has(id));
   if (missing.length)
     throw new Error(
@@ -129,6 +141,40 @@ function api() {
     );
 
   const schemas = spec.components?.schemas ?? {};
+  // Two request classes with one name in different modules share one schema in the spec (the last one wins), so
+  // a body the app sends must have a class name of its own in apps/api/src.
+  const classNames = new Map();
+  const scan = (dir) => {
+    for (const e of readdirSync(dir, { withFileTypes: true })) {
+      const p = join(dir, e.name);
+      if (e.isDirectory()) scan(p);
+      else if (e.name.endsWith('.ts'))
+        for (const m of readFileSync(p, 'utf8').matchAll(/export class (\w+)/g))
+          classNames.set(m[1], (classNames.get(m[1]) ?? 0) + 1);
+    }
+  };
+  scan(join(root, 'apps', 'api', 'src'));
+  const refsOf = (schema, seen = new Set()) => {
+    if (!schema || typeof schema !== 'object') return seen;
+    if (schema.$ref) {
+      const n = schema.$ref.split('/').pop();
+      if (!seen.has(n)) {
+        seen.add(n);
+        refsOf(schemas[n], seen);
+      }
+    }
+    for (const v of Object.values(schema)) if (v && typeof v === 'object') refsOf(v, seen);
+    return seen;
+  };
+  const shared = wanted.flatMap((id) =>
+    [...refsOf(byId.get(id).op.requestBody ?? {})]
+      .filter((n) => (classNames.get(n) ?? 0) > 1)
+      .map((n) => `${id} (${n})`),
+  );
+  if (shared.length)
+    throw new Error(
+      `request classes named in more than one API module (give them names of their own): ${shared.join(', ')}`,
+    );
   const classes = new Map();
   const pascal = (s) => s.charAt(0).toUpperCase() + s.slice(1);
   const ident = (s) => {

@@ -11,6 +11,7 @@ ThemeData eduproTheme({required Brightness brightness, bool webFonts = true}) {
     seedColor: Tokens.mobNavy800,
     brightness: brightness,
     primary: dark ? Tokens.mobCyan500 : Tokens.mobNavy800,
+    onPrimary: dark ? Tokens.mobNavy900 : Tokens.mobWhite,
     secondary: Tokens.mobCyan600,
     error: Tokens.mobRed600,
     surface: dark ? Tokens.mobGray900 : Tokens.mobWhite,
@@ -55,8 +56,9 @@ ThemeData eduproTheme({required Brightness brightness, bool webFonts = true}) {
     filledButtonTheme: FilledButtonThemeData(
       style: FilledButton.styleFrom(
         minimumSize: const Size.fromHeight(48),
+        // dark mode: navy text on cyan (5.6:1); white on cyan is too light (3.1:1)
         backgroundColor: dark ? Tokens.mobCyan600 : Tokens.mobNavy800,
-        foregroundColor: Tokens.mobWhite,
+        foregroundColor: dark ? Tokens.mobNavy900 : Tokens.mobWhite,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(Tokens.radiusSm)),
       ),
     ),

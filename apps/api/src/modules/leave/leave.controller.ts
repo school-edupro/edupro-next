@@ -31,7 +31,7 @@ import {
 @ApiTags('leave')
 @ApiBearerAuth()
 @Controller('leave')
-export class LeaveController {
+export class StaffLeaveController {
   constructor(
     private readonly leave: LeaveService,
     private readonly office: LeaveOfficeService,

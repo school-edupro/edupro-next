@@ -78,6 +78,269 @@ class S {
   String get retry => _t('Try again', 'फिर कोशिश करें');
   String get loading => _t('Loading…', 'लोड हो रहा है…');
   String get openInBrowser => _t('Open in the browser', 'ब्राउज़र में खोलें');
+
+  // ---- phase B: the family's screens
+  String get academics => _t('Academics', 'पढ़ाई');
+  String get fees => _t('Fees', 'शुल्क');
+  String get messages => _t('Messages', 'संदेश');
+  String get homework => _t('Homework', 'गृहकार्य');
+  String get timetable => _t('Timetable', 'समय-सारणी');
+  String get results => _t('Results', 'परिणाम');
+  String get attendance => _t('Attendance', 'उपस्थिति');
+  String get calendar => _t('Calendar', 'कैलेंडर');
+  String get dateSheet => _t('Date sheet', 'परीक्षा तिथि-पत्र');
+  String get notices => _t('Notices', 'सूचनाएँ');
+  String get queries => _t('Queries to the school', 'विद्यालय से प्रश्न');
+  String get saveOrShare => _t('Save or share', 'सहेजें या भेजें');
+  String get view => _t('View', 'देखें');
+  String get download => _t('Download', 'डाउनलोड');
+  String get nothingYet => _t('Nothing here yet.', 'यहाँ अभी कुछ नहीं है।');
+  String get seeAll => _t('See all', 'सब देखें');
+  String get previous => _t('Previous', 'पिछला');
+  String get next => _t('Next', 'अगला');
+  String get close => _t('Close', 'बंद करें');
+  String get cancel => _t('Cancel', 'रद्द करें');
+  String get send => _t('Send', 'भेजें');
+  String updatedAt(String at) =>
+      _t('No connection. This is the copy from $at.', 'कनेक्शन नहीं है। यह $at की प्रति है।');
+  String attachmentN(int n) => _t('Attachment $n', 'संलग्नक $n');
+
+  // home
+  String get today => _t('Today', 'आज');
+  String get attendanceToday => _t('Attendance today', 'आज की उपस्थिति');
+  String get notMarked => _t('Not marked yet', 'अभी दर्ज नहीं');
+  String get thisMonth => _t('This month', 'इस महीने');
+  String presentOf(int present, int days) =>
+      _t('$present of $days days present', '$days में से $present दिन उपस्थित');
+  String get homeworkDue => _t('Homework due', 'बाकी गृहकार्य');
+  String get noHomeworkDue =>
+      _t('No homework due today or tomorrow.', 'आज या कल कोई गृहकार्य बाकी नहीं।');
+  String get feesPayable => _t('Fees to pay', 'देय शुल्क');
+  String get nothingDue => _t('Nothing due', 'कुछ बाकी नहीं');
+  String get nextExam => _t('Next exam', 'अगली परीक्षा');
+  String get noExam => _t('No exam coming up.', 'कोई परीक्षा नहीं आ रही।');
+  String get latestNotices => _t('Latest notices', 'नई सूचनाएँ');
+  String get unreadMessages => _t('Unread messages', 'अपठित संदेश');
+
+  // attendance and leave
+  String attendanceCode(String code) => switch (code) {
+    'P' => _t('Present', 'उपस्थित'),
+    'A' => _t('Absent', 'अनुपस्थित'),
+    'LV' => _t('On leave', 'छुट्टी पर'),
+    'L' => _t('Late', 'देर से'),
+    'SR' => _t('Short leave', 'अल्प अवकाश'),
+    'H' => _t('Half day', 'आधा दिन'),
+    'OD' => _t('On duty', 'ड्यूटी पर'),
+    'SB' => _t('Stay back', 'रुके रहे'),
+    _ => code,
+  };
+  String monthSummary(int present, int absent, int leave, int days) => _t(
+    'Present $present · Absent $absent · Leave $leave · of $days days',
+    'उपस्थित $present · अनुपस्थित $absent · छुट्टी $leave · कुल $days दिन',
+  );
+  String get leaves => _t('Leave', 'छुट्टी');
+  String get applyLeave => _t('Apply for leave', 'छुट्टी के लिए आवेदन');
+  String get leaveType => _t('Kind of leave', 'छुट्टी का प्रकार');
+  String get fromDate => _t('First day', 'पहला दिन');
+  String get toDate => _t('Last day', 'आखिरी दिन');
+  String get reason => _t('Reason', 'कारण');
+  String get reasonShort =>
+      _t('Write the reason (at least 5 letters).', 'कारण लिखें (कम से कम 5 अक्षर)।');
+  String get chooseLeaveType => _t('Choose the kind of leave.', 'छुट्टी का प्रकार चुनें।');
+  String get leaveSent => _t('Leave application sent.', 'छुट्टी का आवेदन भेजा गया।');
+  String get cancelLeave => _t('Cancel this leave', 'यह छुट्टी रद्द करें');
+  String get cancelLeaveAsk =>
+      _t('Cancel this leave application?', 'क्या यह छुट्टी का आवेदन रद्द करें?');
+  String get leaveCancelled => _t('Leave cancelled.', 'छुट्टी रद्द की गई।');
+  String get certificateNeeded => _t(
+    'This leave needs a certificate. Apply on the web page to attach it.',
+    'इस छुट्टी के लिए प्रमाण-पत्र चाहिए। उसे लगाने के लिए वेब पेज पर आवेदन करें।',
+  );
+  String get applyOnWeb => _t('Apply on the web page', 'वेब पेज पर आवेदन करें');
+  String leaveStatus(String status) => switch (status) {
+    'pending' => _t('Waiting for approval', 'स्वीकृति की प्रतीक्षा'),
+    'approved' => _t('Approved', 'स्वीकृत'),
+    'rejected' => _t('Not approved', 'अस्वीकृत'),
+    'cancelled' => _t('Cancelled', 'रद्द'),
+    _ => status,
+  };
+  String daysN(int n) => _t(n == 1 ? '1 day' : '$n days', '$n दिन');
+
+  // homework and notices
+  String workKind(String kind) => switch (kind) {
+    'classwork' => _t('Classwork', 'कक्षा कार्य'),
+    'assignment' => _t('Assignment', 'असाइनमेंट'),
+    _ => _t('Homework', 'गृहकार्य'),
+  };
+  String dueOn(String date) => _t('Due $date', 'जमा करें $date');
+  String postedBy(String name) => _t('By $name', '$name द्वारा');
+  String get acknowledge => _t('I have seen this', 'मैंने यह देख लिया');
+  String get acknowledged => _t('Seen', 'देख लिया');
+  String get pinned => _t('Pinned', 'पिन किया गया');
+  String get loadMore => _t('Show more', 'और दिखाएँ');
+
+  // timetable, calendar, date sheet
+  String get breakTime => _t('Break', 'अवकाश');
+  String get holidays => _t('Holidays', 'छुट्टियाँ');
+  String get events => _t('Events', 'कार्यक्रम');
+
+  // results
+  String get reportCard => _t('Report card', 'रिपोर्ट कार्ड');
+  String get reportCardPdf => _t('Report card (PDF)', 'रिपोर्ट कार्ड (PDF)');
+  String get pdfLate => _t(
+    'The PDF is still being made. Try again in a minute.',
+    'PDF अभी बन रहा है। एक मिनट बाद फिर कोशिश करें।',
+  );
+  String get pdfFailed => _t('The PDF could not be made.', 'PDF नहीं बन सका।');
+  String get withheld => _t(
+    'The school has held this report card back. Please contact the school.',
+    'विद्यालय ने यह रिपोर्ट कार्ड रोका है। कृपया विद्यालय से संपर्क करें।',
+  );
+  String get heldForFees => _t(
+    'This report card opens when the fees due are paid.',
+    'बकाया शुल्क जमा होने पर यह रिपोर्ट कार्ड खुलेगा।',
+  );
+  String rank(int r) => _t('Rank $r', 'स्थान $r');
+
+  // fees
+  String get payableNow => _t('To pay now', 'अभी देय');
+  String get balance => _t('Balance for the year', 'वर्ष का बकाया');
+  String get paid => _t('Paid', 'जमा');
+  String get payNow => _t('Pay online', 'ऑनलाइन भुगतान करें');
+  String get instalments => _t('Instalments', 'किस्तें');
+  String get receipts => _t('Receipts', 'रसीदें');
+  String receiptNo(String no) => _t('Receipt $no', 'रसीद $no');
+  String get feeBill => _t('Fee bill', 'शुल्क बिल');
+  String get taxCertificate => _t('Fee certificate for tax', 'कर हेतु शुल्क प्रमाण-पत्र');
+  String instalmentStatus(String status) => switch (status) {
+    'paid' => _t('Paid', 'जमा'),
+    'overdue' => _t('Overdue', 'देरी'),
+    'due' => _t('Due', 'देय'),
+    _ => _t('Upcoming', 'आगामी'),
+  };
+  String lateFee(String amount) => _t('Late fee $amount', 'विलंब शुल्क $amount');
+  String get paymentDone =>
+      _t('Payment received. The receipt is below.', 'भुगतान मिल गया। रसीद नीचे है।');
+  String get paymentNotDone => _t(
+    'The payment did not go through. No money was taken, or it comes back.',
+    'भुगतान नहीं हुआ। पैसा नहीं कटा, या वापस आ जाएगा।',
+  );
+  String get noFees =>
+      _t('No fee statement for this year yet.', 'इस वर्ष का शुल्क विवरण अभी नहीं है।');
+
+  // dates and money
+  static const _monEn = [
+    'Jan',
+    'Feb',
+    'Mar',
+    'Apr',
+    'May',
+    'Jun',
+    'Jul',
+    'Aug',
+    'Sep',
+    'Oct',
+    'Nov',
+    'Dec',
+  ];
+  static const _monHi = [
+    'जन॰',
+    'फ़र॰',
+    'मार्च',
+    'अप्रैल',
+    'मई',
+    'जून',
+    'जुल॰',
+    'अग॰',
+    'सित॰',
+    'अक्तू॰',
+    'नव॰',
+    'दिस॰',
+  ];
+  static const _monthEn = [
+    'January',
+    'February',
+    'March',
+    'April',
+    'May',
+    'June',
+    'July',
+    'August',
+    'September',
+    'October',
+    'November',
+    'December',
+  ];
+  static const _monthHi = [
+    'जनवरी',
+    'फ़रवरी',
+    'मार्च',
+    'अप्रैल',
+    'मई',
+    'जून',
+    'जुलाई',
+    'अगस्त',
+    'सितंबर',
+    'अक्तूबर',
+    'नवंबर',
+    'दिसंबर',
+  ];
+  static const _dayEn = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+  static const _dayHi = ['सोम', 'मंगल', 'बुध', 'गुरु', 'शुक्र', 'शनि', 'रवि'];
+
+  /// 19 Nov 2026 (from a date or `2026-11-19`).
+  String date(Object d) {
+    final x = d is DateTime ? d : DateTime.tryParse('$d');
+    if (x == null) return '$d';
+    return '${x.day} ${(hindi ? _monHi : _monEn)[x.month - 1]} ${x.year}';
+  }
+
+  /// Thu, 19 Nov (and the year when it is not this year)
+  String dayShort(Object d) {
+    final x = d is DateTime ? d : DateTime.tryParse('$d');
+    if (x == null) return '$d';
+    final year = x.year == DateTime.now().year ? '' : ' ${x.year}';
+    return '${(hindi ? _dayHi : _dayEn)[x.weekday - 1]}, ${x.day} ${(hindi ? _monHi : _monEn)[x.month - 1]}$year';
+  }
+
+  /// 19 Nov 2026, 10:42
+  String dateTime(DateTime x) {
+    final l = x.toLocal();
+    return '${date(l)}, ${l.hour.toString().padLeft(2, '0')}:${l.minute.toString().padLeft(2, '0')}';
+  }
+
+  /// November 2026
+  String month(DateTime x) => '${(hindi ? _monthHi : _monthEn)[x.month - 1]} ${x.year}';
+
+  /// Mon … Sat (1 … 7)
+  String weekday(int n) => (hindi ? _dayHi : _dayEn)[(n - 1) % 7];
+
+  /// 09:30 from `09:30:00`
+  String time(String? t) => t == null || t.length < 5 ? (t ?? '') : t.substring(0, 5);
+
+  /// ₹12,345 or ₹12,345.50, in Indian grouping, from the API's money strings.
+  String money(Object? v) {
+    final n = num.tryParse('$v') ?? 0;
+    final neg = n < 0;
+    final paise = (n.abs() * 100).round();
+    final whole = '${paise ~/ 100}';
+    final frac = paise % 100;
+    String grouped;
+    if (whole.length <= 3) {
+      grouped = whole;
+    } else {
+      final last3 = whole.substring(whole.length - 3);
+      var rest = whole.substring(0, whole.length - 3);
+      final parts = <String>[];
+      while (rest.length > 2) {
+        parts.insert(0, rest.substring(rest.length - 2));
+        rest = rest.substring(0, rest.length - 2);
+      }
+      if (rest.isNotEmpty) parts.insert(0, rest);
+      grouped = '${parts.join(',')},$last3';
+    }
+    return '${neg ? '−' : ''}₹$grouped${frac == 0 ? '' : '.${frac.toString().padLeft(2, '0')}'}';
+  }
 }
 
 /// The language in use (Hindi kept in preferences).

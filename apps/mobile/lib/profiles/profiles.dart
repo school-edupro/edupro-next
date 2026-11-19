@@ -49,6 +49,12 @@ class Profile {
 
   bool get isStaff => kind == 'staff';
   ProfileHeaders get headers => ProfileHeaders(schoolId: schoolId, actingAs: actingAs);
+
+  /// One profile is one id (a fresh list from the API gives new objects for the same profiles).
+  @override
+  bool operator ==(Object other) => other is Profile && other.id == id;
+  @override
+  int get hashCode => id.hashCode;
 }
 
 class ProfilesState {

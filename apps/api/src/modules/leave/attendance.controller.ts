@@ -43,7 +43,7 @@ const Id = check(/^\d{1,18}$/, 'an id');
 @ApiTags('leave')
 @ApiBearerAuth()
 @Controller('staff-attendance')
-export class AttendanceController {
+export class StaffAttendanceController {
   constructor(private readonly att: AttendanceService) {}
 
   @Get('register')

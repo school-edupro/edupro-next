@@ -22,3 +22,30 @@ MeController_menu
 CommsPushController_register
 CommsPushController_unregister
 CommsInboxController_unread
+
+# phase B — the family's screens (a parent's child, a student): home, attendance and leave, homework, notices,
+# messages, timetable, calendar, date sheet, results and report cards, fees and receipts
+AttendanceController_mine
+LeaveController_mine
+LeaveController_apply
+LeaveController_cancel
+DailyWorkController_viewerInfo
+DailyWorkController_list
+DailyWorkController_file !file
+DocumentsController_ack
+NoticesController_list
+NoticesController_get
+NoticesController_file !file
+CommsInboxController_list
+CommsInboxController_read
+TimetableController_periods
+TimetableController_slots
+CalendarController_read
+ExamDateSheetsController_family
+FamilyResultsController_mine
+FamilyResultsController_view
+FamilyResultsController_pdf
+FamilyResultsController_status
+FeesController_mine
+FeesController_myReceiptFile !file
+FeesController_myBillFile !file

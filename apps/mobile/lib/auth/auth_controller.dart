@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../api/api_transport.dart';
 import '../api/endpoints.g.dart';
 import '../app_services.dart';
+import '../family/data.dart' show clearCache;
 
 /// Where sign-in stands.
 sealed class AuthState {
@@ -67,7 +68,10 @@ class AuthController extends Notifier<AuthState> {
   AuthState build() {
     // the API signed the phone out (elsewhere, by the school, or an old token): back to sign-in
     ref.listen(signedOutSignalProvider, (prev, next) {
-      if (prev != null && next != prev) state = const AuthSignedOut();
+      if (prev != null && next != prev) {
+        clearCache();
+        state = const AuthSignedOut();
+      }
     });
     return const AuthStarting();
   }
@@ -183,6 +187,8 @@ class AuthController extends Notifier<AuthState> {
       // signed out here whatever the network says
     }
     await ref.read(sessionStoreProvider).clear();
+    // the last copies of the screens belong to the person who signed out
+    await clearCache();
     state = const AuthSignedOut();
   }
 }
