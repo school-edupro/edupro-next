@@ -103,3 +103,19 @@ PaymentsController_createMine
 PaymentsController_createMineMisc
 PaymentsController_gatewayOptions
 PaymentsController_mock
+
+# Profile in the app, as the web Profile page has it, with no web page (docs/design/89, "Profile in the app"):
+# the child's profile and photos, changes (with proofs) and their requests, the profile PDF, the family's
+# consents, and the data-protection requests ("Your data")
+EngagementController_familyView
+PortalProfileController_profile
+PortalProfileController_submit
+PortalProfileController_requests
+PortalProfileController_cancel
+PortalProfileController_photo
+PortalProfileController_print
+PortalProfileController_exportStatus
+CommsConsentsController_recordSelf
+DsrController_mine
+DsrController_createMine
+DsrController_myExport

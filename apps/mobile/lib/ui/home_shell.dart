@@ -8,6 +8,7 @@ import '../theme/theme.dart';
 import '../theme/tokens.g.dart';
 import '../family/academics.dart';
 import '../family/fees.dart';
+import '../family/profile.dart';
 import '../family/messages.dart';
 import '../family/common.dart';
 import '../family/data.dart' show unreadProvider;
@@ -83,6 +84,8 @@ Widget? nativeScreen(Profile p, String href, S s) {
     '/fees' => FeesScreen(profile: p),
     '/messages' => MessagesScreen(profile: p),
     '/notices' => NoticesList(profile: p),
+    // the profile, its changes, Your data and consents: on the phone, no web page
+    '/profile' => ProfileScreen(profile: p),
     _ => null,
   };
 }

@@ -601,3 +601,31 @@ tax certificate PDF, own child only); app tests 73 (the pay rules, the escaping 
 address; Fees end to end with the development gateway, other fees, receipts, bill and tax certificate; light, dark,
 Hindi accessibility and double-size text on every Fees part); a headless pass of the web build on a test school.
 Live payment waits for the schools' gateway accounts (the fee module's phase 2).
+
+## As built — Profile, receipts by fee type, students' Fees (19 Nov 2026)
+
+**Profile in the app, with no web page** (`family/profile.dart`; More → Profile for a parent's child or a student):
+the photo (from the API; Add / Change photo from the camera or gallery, JPG / PNG / WebP up to 5 MB, uploaded as a
+`personal` file and sent as a change), class and roll, admission number, class teacher, how complete the profile
+is, the profile PDF (View / Download: the API prepares it in the background and the phone waits up to a minute), the
+parents with their photos (a parent's profile), the update window, the changes asked for (Withdraw on one's own
+pending request), every section with its values and what waits for approval, **Update** per section (only the
+editable fields: "Saved at once" or "Needs approval"; type-to-search lists with the address cascades; dates from a
+calendar; the proofs the school asks for, from the phone's files; a reason; only the fields changed are sent), **Your
+data** (the data-protection requests and their report; a new access, correction or grievance request, about oneself
+or a child) and **Your consents** (Allow / Withdraw; the required ones cannot be withdrawn). The same API calls and
+rules as the web pages (`appliesTo`, `optionsFor`, `shownValue` mirror apps/parent/app/(app)/profile/types.ts).
+
+**Receipts by fee type** (web Fees → Receipts and the app): School fee, Hostel fee (a hosteller, or one with hostel
+receipts) and Other fees (the MF series, until now not shown to parents), each with its count and what was received
+(cancelled and bounced not counted, refunds off); other-fee receipts have their own family routes
+(`GET /fees/misc-fees/mine/receipts/:id/view|file`, the fee receipt's sheet, parent copy).
+
+**Students see their own Fees**, view only, in the app and on the student website (`@edupro/menus`: Dues and receipts
+no longer parent-only); paying stays the parent's right (`payments.family.pay`); a student's Home grid shows Fees in
+place of Results (a student tab).
+
+**Portal frame**: the parent and teacher web layouts leave out their header and menu only inside the app's web view
+(session handed over by the app AND the user agent marked `EduProApp/<version>`), not for a handed-over session in
+an ordinary browser. The app's web preview (Flutter web) cannot mark its frames, so pages still opened as web pages
+show the portal's frame there; on a phone they do not.

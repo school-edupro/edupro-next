@@ -422,6 +422,140 @@ class S {
   String get payFail => _t('Fail the payment', 'भुगतान असफल करें');
   String get choosePayThrough => _t('Choose how to pay', 'भुगतान का माध्यम चुनें');
 
+  // ---- Profile in the app, as the web Profile page (no web page; docs/design/89 "Profile in the app") ----
+  String get profileTitle => _t('Profile', 'प्रोफ़ाइल');
+  String get rollNo => _t('Roll no', 'अनुक्रमांक');
+  String get classTeacher => _t('Class teacher', 'कक्षा अध्यापक');
+  String get profileComplete => _t('Profile complete', 'प्रोफ़ाइल पूर्ण');
+  String get downloadProfile => _t('Download profile (PDF)', 'प्रोफ़ाइल डाउनलोड करें (PDF)');
+  String get profilePdf => _t('Profile (PDF)', 'प्रोफ़ाइल (PDF)');
+  String waitingForApprovalN(int n) =>
+      _t('$n waiting for approval', '$n स्वीकृति की प्रतीक्षा में');
+  String get father => _t('Father', 'पिता');
+  String get mother => _t('Mother', 'माता');
+  String get guardian => _t('Guardian', 'अभिभावक');
+  String photoOf(String who) => _t('Photo: $who', 'फ़ोटो: $who');
+  String get changePhoto => _t('Change photo', 'फ़ोटो बदलें');
+  String get addPhoto => _t('Add photo', 'फ़ोटो जोड़ें');
+  String get photoWaiting =>
+      _t('New photo waiting for approval', 'नई फ़ोटो स्वीकृति की प्रतीक्षा में');
+  String get pickPhoto => _t('Choose from the gallery', 'गैलरी से चुनें');
+  String get photoTypeWrong =>
+      _t('Send a JPG, PNG or WebP photo.', 'JPG, PNG या WebP फ़ोटो भेजें।');
+  String get photoTooBig =>
+      _t('The photo must be 5 MB or smaller.', 'फ़ोटो 5 MB या उससे छोटी होनी चाहिए।');
+  String get photoSent => _t(
+    'The photo is sent to the school for approval.',
+    'फ़ोटो स्वीकृति के लिए विद्यालय को भेज दी गई है।',
+  );
+  String get photoSaved => _t('The photo is saved.', 'फ़ोटो सहेज ली गई है।');
+  String get updatesClosed =>
+      _t('Profile updates are closed at the moment.', 'प्रोफ़ाइल बदलाव अभी बंद हैं।');
+  String updatesOpenUntil(String d) => _t('Updates are open until $d.', 'बदलाव $d तक खुले हैं।');
+  String get changeRequests => _t('Changes asked for', 'माँगे गए बदलाव');
+  String requestStatus(String st) => switch (st) {
+    'pending' => _t('Waiting', 'प्रतीक्षा में'),
+    'approved' => _t('Approved', 'स्वीकृत'),
+    'rejected' => _t('Not approved', 'अस्वीकृत'),
+    'partially_approved' => _t('Partly approved', 'आंशिक स्वीकृत'),
+    'cancelled' => _t('Withdrawn', 'वापस लिया'),
+    _ => st,
+  };
+  String waitingWith(String who) => _t('Waiting with $who', '$who के पास प्रतीक्षा में');
+  String get withdrawRequest => _t('Withdraw', 'वापस लें');
+  String get requestWithdrawn => _t('The request is withdrawn.', 'अनुरोध वापस ले लिया गया।');
+  String get notGiven => _t('Not given', 'नहीं दिया');
+  String get waitingForApproval => _t('Waiting for approval', 'स्वीकृति की प्रतीक्षा में');
+  String get cleared => _t('(clear)', '(खाली)');
+  String get update => _t('Update', 'बदलें');
+  String updateSection(String t) => _t('Update: $t', 'बदलें: $t');
+  String get savedAtOnce => _t('Saved at once', 'तुरंत सहेजा जाता है');
+  String get needsApproval => _t('Needs approval', 'स्वीकृति आवश्यक');
+  String get pendingField => _t(
+    'A change is already waiting for approval.',
+    'एक बदलाव पहले से स्वीकृति की प्रतीक्षा में है।',
+  );
+  String proofOf(String kind) => _t('Proof: $kind', 'प्रमाण: $kind');
+  String proofFor(String labels) => _t('for $labels', '$labels के लिए');
+  String get chooseFile => _t('Choose a file', 'फ़ाइल चुनें');
+  String get proofNeeded =>
+      _t('Add the proof the school asks for.', 'विद्यालय द्वारा माँगा गया प्रमाण जोड़ें।');
+  String get changeReason => _t('Reason (optional)', 'कारण (वैकल्पिक)');
+  String get sendChanges => _t('Send the changes', 'बदलाव भेजें');
+  String get nothingChanged => _t('Nothing was changed.', 'कुछ नहीं बदला गया।');
+  String get changesSaved => _t('Your changes are saved.', 'आपके बदलाव सहेज लिए गए।');
+  String get changesSent => _t(
+    'Your changes are sent to the school for approval.',
+    'आपके बदलाव स्वीकृति के लिए विद्यालय को भेज दिए गए।',
+  );
+  String get changesBoth => _t(
+    'Some changes are saved; the others wait for the school\'s approval.',
+    'कुछ बदलाव सहेज लिए गए; बाकी विद्यालय की स्वीकृति की प्रतीक्षा में हैं।',
+  );
+  String get chooseDate => _t('Choose a date', 'तिथि चुनें');
+  String get yourData => _t('Your data', 'आपका डेटा');
+  String get yourDataHelp => _t(
+    'Ask for a copy of the data the school holds, a correction, or raise a grievance.',
+    'विद्यालय के पास रखे डेटा की प्रति, सुधार, या शिकायत के लिए अनुरोध करें।',
+  );
+  String get yourDataLaw => _t(
+    'Under the Digital Personal Data Protection Act you may ask what the school holds about you and your children, ask for a correction, or raise a grievance. The school answers within the time the law allows.',
+    'डिजिटल व्यक्तिगत डेटा संरक्षण अधिनियम के अंतर्गत आप पूछ सकते हैं कि विद्यालय के पास आपके और आपके बच्चों के बारे में क्या है, सुधार माँग सकते हैं, या शिकायत कर सकते हैं। विद्यालय कानून द्वारा तय समय में उत्तर देता है।',
+  );
+  String get whatDoYouNeed => _t('What do you need?', 'आपको क्या चाहिए?');
+  String dsrKind(String k) => switch (k) {
+    'access' => _t('A copy of the data the school holds', 'विद्यालय के पास रखे डेटा की प्रति'),
+    'correction' => _t('A correction to the data', 'डेटा में सुधार'),
+    'grievance' => _t('A grievance about how data is used', 'डेटा के उपयोग के बारे में शिकायत'),
+    _ => k,
+  };
+  String dsrKindShort(String k) => switch (k) {
+    'access' => _t('Access', 'प्रति'),
+    'correction' => _t('Correction', 'सुधार'),
+    'erasure' => _t('Erasure', 'मिटाना'),
+    _ => _t('Grievance', 'शिकायत'),
+  };
+  String get aboutWhom => _t('About whom?', 'किसके बारे में?');
+  String get myself => _t('Myself', 'स्वयं');
+  String get details => _t('Details', 'विवरण');
+  String get sendRequest => _t('Send the request', 'अनुरोध भेजें');
+  String get requestRecorded => _t(
+    'Your request is recorded. The school office will respond.',
+    'आपका अनुरोध दर्ज हो गया। विद्यालय कार्यालय उत्तर देगा।',
+  );
+  String get yourRequests => _t('Your requests', 'आपके अनुरोध');
+  String get noRequests => _t('No requests yet.', 'अभी कोई अनुरोध नहीं।');
+  String receivedDue(String r, String d) =>
+      _t('Received $r · Due by $d', 'प्राप्त $r · अंतिम तिथि $d');
+  String get dataReport => _t('Your data report (PDF)', 'आपकी डेटा रिपोर्ट (PDF)');
+  String get detailsNeeded => _t('Write the details.', 'विवरण लिखें।');
+  String get yourConsents => _t('Your consents', 'आपकी सहमतियाँ');
+  String get consentsHelp => _t(
+    'Under the Digital Personal Data Protection Act you choose what the school may send you. Fee, attendance and safety messages are always sent.',
+    'डिजिटल व्यक्तिगत डेटा संरक्षण अधिनियम के अंतर्गत आप चुनते हैं कि विद्यालय आपको क्या भेज सकता है। शुल्क, उपस्थिति और सुरक्षा संदेश हमेशा भेजे जाते हैं।',
+  );
+  String consentStatus(String? st) => switch (st) {
+    'granted' => _t('Allowed', 'अनुमति दी'),
+    'withdrawn' => _t('Withdrawn', 'वापस ली'),
+    _ => _t('Not recorded', 'दर्ज नहीं'),
+  };
+  String get allow => _t('Allow', 'अनुमति दें');
+  String allowWhat(String what) => _t('Allow: $what', 'अनुमति दें: $what');
+  String withdrawWhat(String what) => _t('Withdraw: $what', 'वापस लें: $what');
+  String get consentRecorded => _t('Your choice has been recorded.', 'आपकी पसंद दर्ज कर ली गई है।');
+  String get pdfPreparing => _t(
+    'The PDF is being prepared. Try again in a minute.',
+    'PDF तैयार हो रहा है। एक मिनट बाद फिर कोशिश करें।',
+  );
+  String get profilePdfFailed => _t(
+    'The PDF could not be prepared. Please try again.',
+    'PDF तैयार नहीं हो सका। फिर कोशिश करें।',
+  );
+  String get notLinked => _t(
+    'Your account is not linked to a student yet. Please contact the school office.',
+    'आपका खाता अभी किसी विद्यार्थी से नहीं जुड़ा है। कृपया विद्यालय कार्यालय से संपर्क करें।',
+  );
+
   // the phone's unsent work (phase C)
   String get unsent => _t('Not sent yet', 'अभी नहीं भेजा गया');
   String unsentN(int n) => _t(

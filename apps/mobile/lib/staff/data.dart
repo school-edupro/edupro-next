@@ -185,14 +185,20 @@ String contentTypeOf(String name) {
 
 /// Sends a file to the school's storage the way the web apps do (register, send the bytes, mark it complete) and
 /// gives its id to attach.
-Future<String> uploadFile(EduProApi api, ApiTransport t, PickedFile f) async {
+/// [classification]: `personal` for a family's own papers and photos (the profile), as the web apps send them.
+Future<String> uploadFile(
+  EduProApi api,
+  ApiTransport t,
+  PickedFile f, {
+  String classification = 'internal',
+}) async {
   final r = asJson(
     await api.filesCreate(
       body: CreateUploadDto(
         fileName: f.name,
         contentType: f.contentType,
         sizeBytes: f.bytes.length,
-        classification: 'internal',
+        classification: classification,
       ),
     ),
   );

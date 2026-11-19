@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:edupro/api/api_transport.dart';
 import 'package:edupro/app.dart';
 import 'package:edupro/app_services.dart';
@@ -87,6 +89,13 @@ class School {
         return {
           'app': 'parent',
           'groups': [
+            {
+              'label': 'My child',
+              'icon': 'users',
+              'items': [
+                {'href': '/profile', 'label': 'Profile', 'help': null, 'icon': 'user'},
+              ],
+            },
             if (queries)
               {
                 'label': 'Home',
@@ -620,6 +629,191 @@ class School {
         };
       case 'GET /fees/mine/tax-certificate/file':
         return const ApiFile(bytes: [1], contentType: 'application/pdf', name: 'tax.pdf');
+      // ---- Profile in the app (made-up) ----
+      case 'GET /engagement/family':
+        return {
+          'children': [
+            {'id': '41', 'name': 'Kid Sample'},
+          ],
+          'consents': [
+            {
+              'code': 'news',
+              'name': 'School news',
+              'description': 'Newsletters and events',
+              'status': 'granted',
+              'isRequired': false,
+            },
+            {
+              'code': 'safety',
+              'name': 'Fee and safety',
+              'description': 'Always sent',
+              'status': 'granted',
+              'isRequired': true,
+            },
+          ],
+        };
+      case 'GET /engagement/mine/profile/41':
+        Map<String, Object?> field(
+          String key,
+          String label,
+          Object? value, {
+          String type = 'text',
+          String level = 'view',
+          List<String>? options,
+          String? proof,
+        }) => {
+          'key': key,
+          'label': label,
+          'type': type,
+          'level': level,
+          'value': value,
+          'options': options,
+          'help': null,
+          'required': false,
+          'upper': false,
+          'when': null,
+          'proof': proof,
+          'pending': null,
+        };
+        return {
+          'studentId': '41',
+          'audience': kind == 'student' ? 'student' : 'parent',
+          'admissionNo': 'A1234',
+          'name': 'Kid Sample',
+          'enrolment': {'className': 'VI', 'section': 'A', 'rollNo': 7, 'academicYear': '2026-27'},
+          'classTeacher': 'Tara Teacher',
+          'completeness': 80,
+          'photos': {'student': true, 'father': false, 'mother': false},
+          'photoVersions': {'student': 'v1'},
+          'window': {'open': true, 'message': null, 'until': day(20)},
+          'canEdit': true,
+          'proofKinds': [
+            {'id': 'aadhaar_card', 'label': 'Aadhaar card'},
+          ],
+          'sections': [
+            {
+              'id': 'personal',
+              'title': 'Personal',
+              'fields': [
+                field(
+                  'blood_group',
+                  'Blood group',
+                  'O+',
+                  level: 'edit_direct',
+                  options: ['A+', 'B+', 'O+', 'AB+'],
+                ),
+                field(
+                  'aadhaar',
+                  'Aadhaar number',
+                  null,
+                  type: 'digits12',
+                  level: 'edit_approval',
+                  proof: 'aadhaar_card',
+                ),
+                field('house', 'House', 'Blue'),
+              ],
+            },
+            {
+              'id': 'parents',
+              'title': 'Parents',
+              'fields': [
+                field('father_name', 'Father', 'Parent Sample'),
+                field('father_mobile', 'Father mobile', '9000000001'),
+                field('mother_name', 'Mother', null),
+              ],
+            },
+          ],
+          'photoFields': [
+            {
+              'key': 'photo_student',
+              'party': 'student',
+              'label': 'Photo',
+              'level': 'edit_approval',
+              'pending': null,
+            },
+          ],
+          'geography': {'states': [], 'cities': []},
+        };
+      case 'GET /engagement/mine/profile/41/requests':
+        return {
+          'data': [
+            {
+              'id': 'r1',
+              'status': 'pending',
+              'autoApplied': false,
+              'requestedBy': 'Parent Sample',
+              'level': 1,
+              'levels': 1,
+              'waitingFor': 'Class teacher',
+              'items': [
+                {'key': 'house', 'label': 'House', 'to': 'Red', 'status': 'pending', 'note': null},
+              ],
+              'decisionNote': null,
+              'createdAt': day(-1),
+              'mine': true,
+            },
+          ],
+        };
+      case 'POST /engagement/mine/profile/41/changes':
+        final keys = asJson(c.body!['changes']).keys.toList();
+        return {
+          'applied': [
+            for (final k in keys)
+              if (k == 'blood_group') k,
+          ],
+          'pending': [
+            for (final k in keys)
+              if (k != 'blood_group') k,
+          ],
+        };
+      case 'POST /engagement/mine/change-requests/r1/cancel':
+        return {'cancelled': true};
+      case 'GET /engagement/mine/profile/41/photo/student':
+        return {
+          'file': {'contentType': 'image/png'},
+          'download': {'url': '/files/photo-student'},
+        };
+      case 'GET /files/photo-student':
+        // a 1 × 1 PNG
+        return ApiFile(
+          bytes: base64Decode(
+            'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=',
+          ),
+          contentType: 'image/png',
+          name: 'photo.png',
+        );
+      case 'POST /engagement/mine/profile/41/print':
+        return {'id': 'x1'};
+      case 'GET /engagement/mine/exports/x1':
+        return {
+          'export': {'id': 'x1', 'status': 'done'},
+          'download': {'url': '/files/profile.pdf'},
+        };
+      case 'POST /comms/consents/mine':
+        return {'recorded': true};
+      case 'GET /privacy/requests/mine':
+        return {
+          'data': [
+            {
+              'id': 'd1',
+              'kind': 'access',
+              'principal': 'Kid Sample',
+              'status': 'completed',
+              'receivedOn': day(-10),
+              'dueOn': day(20),
+              'outcome': null,
+              'exportId': 'e1',
+              'exportStatus': 'done',
+            },
+          ],
+        };
+      case 'POST /privacy/requests/mine':
+        return {'id': 'd2'};
+      case 'GET /privacy/requests/mine/d1/export':
+        return {
+          'export': {'id': 'e1', 'status': 'done'},
+          'download': {'url': '/files/data-report.pdf'},
+        };
       case 'GET /fees/mine/receipts/1001/file':
         return const ApiFile(bytes: [1], contentType: 'application/octet-stream', name: 'r.pdf');
     }
@@ -1135,6 +1329,144 @@ void main() {
     expect(t.calls.any((c) => c.method == 'POST' && c.path.startsWith('/payments/')), isFalse);
   });
 
+  Future<void> openProfile(WidgetTester tester) async {
+    await tester.tap(find.descendant(of: find.byType(NavigationBar), matching: find.text('More')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(ListTile, 'Profile'));
+    await tester.pumpAndSettle();
+  }
+
+  testWidgets(
+    'Profile in the app: facts, sections, a change withdrawn, consents and the PDF — no web page',
+    (tester) async {
+      await tester.binding.setSurfaceSize(const Size(420, 2600));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      final (t, _) = await pumpFamily(tester);
+      await openProfile(tester);
+      expect(find.text('Profile complete 80%'), findsOneWidget);
+      expect(find.text('Tara Teacher'), findsOneWidget);
+      expect(find.text('VI A · Roll no 7'), findsOneWidget);
+      // the parents (a parent's profile) and the sections
+      expect(find.text('Parent Sample'), findsWidgets);
+      expect(find.byKey(const Key('section-personal')), findsOneWidget);
+      expect(find.text('Not given'), findsWidgets);
+      // the photo comes from the API, not a web page
+      expect(t.calls.any((c) => c.path == '/files/photo-student'), isTrue);
+      expect(find.byKey(const Key('photo-student')), findsOneWidget);
+      // the change waiting for approval: withdrawn
+      expect(find.text('House: Red'), findsOneWidget);
+      await tester.tap(find.byKey(const Key('withdraw-r1')));
+      await tester.pumpAndSettle();
+      expect(t.calls.any((c) => c.path == '/engagement/mine/change-requests/r1/cancel'), isTrue);
+      expect(find.text('The request is withdrawn.'), findsOneWidget);
+      // consents: news withdrawn; fee and safety cannot be
+      await tester.tap(find.byKey(const Key('consent-news')));
+      await tester.pumpAndSettle();
+      expect(t.calls.lastWhere((c) => c.path == '/comms/consents/mine').body, {
+        'purposeCode': 'news',
+        'status': 'withdrawn',
+      });
+      expect(tester.widget<TextButton>(find.byKey(const Key('consent-safety'))).onPressed, isNull);
+      // the profile PDF: asked for, waited for, opened in the app
+      await tester.tap(find.byKey(const Key('view-profilePdf')));
+      await tester.pumpAndSettle();
+      expect(t.calls.any((c) => c.path == '/engagement/mine/profile/41/print'), isTrue);
+      expect(t.calls.any((c) => c.path == '/files/profile.pdf'), isTrue);
+      await tester.tap(find.byType(BackButton));
+      await tester.pumpAndSettle();
+      expect(t.calls.any((c) => c.path.contains('handoff')), isFalse);
+    },
+  );
+
+  testWidgets('Profile Update: a field saved at once; one needing a proof asks for it', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(420, 2600));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final (t, _) = await pumpFamily(tester);
+    await openProfile(tester);
+    await tester.tap(find.byKey(const Key('update-personal')));
+    await tester.pumpAndSettle();
+    expect(find.text('Saved at once'), findsOneWidget);
+    expect(find.text('Needs approval'), findsOneWidget);
+    // nothing changed: nothing to send
+    expect(tester.widget<FilledButton>(find.byKey(const Key('sendChanges'))).onPressed, isNull);
+    // a number that needs the Aadhaar card: the proof is asked for
+    await tester.enterText(
+      find.descendant(
+        of: find.byKey(const Key('field-aadhaar')),
+        matching: find.byType(EditableText),
+      ),
+      '123412341234',
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Proof: Aadhaar card *'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('sendChanges')));
+    await tester.pumpAndSettle();
+    expect(find.text('Add the proof the school asks for.'), findsOneWidget);
+    expect(t.calls.any((c) => c.path == '/engagement/mine/profile/41/changes'), isFalse);
+    // back to what it was, and the blood group (saved at once) instead
+    await tester.enterText(
+      find.descendant(
+        of: find.byKey(const Key('field-aadhaar')),
+        matching: find.byType(EditableText),
+      ),
+      '',
+    );
+    await tester.enterText(
+      find.descendant(
+        of: find.byKey(const Key('field-blood_group')),
+        matching: find.byType(EditableText),
+      ),
+      'B+',
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('sendChanges')));
+    await tester.pumpAndSettle();
+    expect(t.calls.lastWhere((c) => c.path == '/engagement/mine/profile/41/changes').body, {
+      'changes': {'blood_group': 'B+'},
+      'proofs': <Object?>[],
+    });
+    expect(find.text('Your changes are saved.'), findsOneWidget);
+  });
+
+  testWidgets('Your data: the requests and their report; a new request sent', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(420, 2600));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final (t, _) = await pumpFamily(tester);
+    await openProfile(tester);
+    await tester.tap(find.byKey(const Key('yourData')));
+    await tester.pumpAndSettle();
+    expect(find.text('Access · Kid Sample'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('view-dsr-d1')));
+    await tester.pumpAndSettle();
+    expect(t.calls.any((c) => c.path == '/files/data-report.pdf'), isTrue);
+    await tester.tap(find.byType(BackButton));
+    await tester.pumpAndSettle();
+    // details are needed
+    await tester.tap(find.byKey(const Key('dsrSend')));
+    await tester.pumpAndSettle();
+    expect(find.text('Write the details.'), findsOneWidget);
+    await tester.enterText(find.byKey(const Key('dsrDetail')), 'A copy of what you hold');
+    await tester.tap(find.byKey(const Key('dsrSend')));
+    await tester.pumpAndSettle();
+    expect(
+      t.calls.lastWhere((c) => c.path == '/privacy/requests/mine' && c.method == 'POST').body,
+      {'kind': 'access', 'detail': 'A copy of what you hold'},
+    );
+    expect(find.text('Your request is recorded. The school office will respond.'), findsOneWidget);
+  });
+
+  testWidgets("a student's own profile: no parents' block", (tester) async {
+    await tester.binding.setSurfaceSize(const Size(420, 2600));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await pumpFamily(tester, kind: 'student');
+    await openProfile(tester);
+    expect(find.text('Profile complete 80%'), findsOneWidget);
+    expect(find.byKey(const Key('photoBox-father')), findsNothing);
+    expect(find.byKey(const Key('photoBox-student')), findsOneWidget);
+  });
+
   testWidgets('no network: the screen shows the copy it had, with when it was', (tester) async {
     final (_, school) = await pumpFamily(tester);
     await tester.tap(find.text('Fees'));
@@ -1207,6 +1539,20 @@ void main() {
         await check('Messages');
         await tester.tap(find.text(s.notices).last);
         await check('Notices');
+        await tester.tap(
+          find.descendant(of: find.byType(NavigationBar), matching: find.text(s.more)),
+        );
+        await tester.pumpAndSettle();
+        await tester.tap(find.widgetWithText(ListTile, s.menu('Profile')));
+        await check('Profile');
+        await scrollTo(tester, find.byKey(const Key('update-personal')));
+        await tester.tap(find.byKey(const Key('update-personal')));
+        await check('Profile update');
+        await tester.tap(find.byType(BackButton));
+        await tester.pumpAndSettle();
+        await scrollTo(tester, find.byKey(const Key('yourData')));
+        await tester.tap(find.byKey(const Key('yourData')));
+        await check('Your data');
         handle.dispose();
       },
     );
@@ -1288,6 +1634,24 @@ void main() {
     await tester.tap(find.byKey(const Key('notice-601')));
     await tester.pumpAndSettle();
     expect(tester.takeException(), isNull, reason: 'notice in full');
+    // the profile, its update and Your data
+    await tester.tap(find.byType(BackButton));
+    await tester.pumpAndSettle();
+    await tester.tap(find.descendant(of: find.byType(NavigationBar), matching: find.text('More')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(ListTile, 'Profile'));
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull, reason: 'Profile');
+    await scrollTo(tester, find.byKey(const Key('update-personal')));
+    await tester.tap(find.byKey(const Key('update-personal')));
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull, reason: 'Profile update');
+    await tester.tap(find.byType(BackButton));
+    await tester.pumpAndSettle();
+    await scrollTo(tester, find.byKey(const Key('yourData')));
+    await tester.tap(find.byKey(const Key('yourData')));
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull, reason: 'Your data');
   });
 
   test('the copies are kept per profile and wiped at sign-out', () async {

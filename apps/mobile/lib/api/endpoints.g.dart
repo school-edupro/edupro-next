@@ -331,6 +331,54 @@ class EduProApi {
   /// POST /payments/payu/mock — Development gateway: signs and applies a success or failure for a transaction
   Future<dynamic> paymentsMock({required MockPayDto body}) =>
       _t.send('POST', '/payments/payu/mock', body: body.toJson());
+
+  /// GET /engagement/family — My children: profile, guardians, class teacher, route and my consents
+  Future<dynamic> engagementFamilyView() =>
+      _t.send('GET', '/engagement/family');
+
+  /// GET /engagement/mine/profile/{studentId} — My child’s profile as the school shows it on the portal
+  Future<dynamic> portalProfileProfile({required String studentId}) =>
+      _t.send('GET', '/engagement/mine/profile/${Uri.encodeComponent(studentId)}');
+
+  /// POST /engagement/mine/profile/{studentId}/changes — Change profile fields: applied at once or sent for approval, with proof documents
+  Future<dynamic> portalProfileSubmit({required SubmitPortalChangesDto body, required String studentId}) =>
+      _t.send('POST', '/engagement/mine/profile/${Uri.encodeComponent(studentId)}/changes', body: body.toJson());
+
+  /// GET /engagement/mine/profile/{studentId}/requests
+  Future<dynamic> portalProfileRequests({required String studentId}) =>
+      _t.send('GET', '/engagement/mine/profile/${Uri.encodeComponent(studentId)}/requests');
+
+  /// POST /engagement/mine/change-requests/{id}/cancel
+  Future<dynamic> portalProfileCancel({required String id}) =>
+      _t.send('POST', '/engagement/mine/change-requests/${Uri.encodeComponent(id)}/cancel');
+
+  /// GET /engagement/mine/profile/{studentId}/photo/{party}
+  Future<dynamic> portalProfilePhoto({required String studentId, required String party}) =>
+      _t.send('GET', '/engagement/mine/profile/${Uri.encodeComponent(studentId)}/photo/${Uri.encodeComponent(party)}');
+
+  /// POST /engagement/mine/profile/{studentId}/print — Queue the profile PDF with the fields this portal shows
+  Future<dynamic> portalProfilePrint({required String studentId}) =>
+      _t.send('POST', '/engagement/mine/profile/${Uri.encodeComponent(studentId)}/print');
+
+  /// GET /engagement/mine/exports/{id}
+  Future<dynamic> portalProfileExportStatus({required String id}) =>
+      _t.send('GET', '/engagement/mine/exports/${Uri.encodeComponent(id)}');
+
+  /// POST /comms/consents/mine — Grant or withdraw one of my consents
+  Future<dynamic> commsConsentsRecordSelf({required SelfConsentDto body}) =>
+      _t.send('POST', '/comms/consents/mine', body: body.toJson());
+
+  /// GET /privacy/requests/mine — My data-principal requests (family or staff)
+  Future<dynamic> dsrMine() =>
+      _t.send('GET', '/privacy/requests/mine');
+
+  /// POST /privacy/requests/mine — Raise an access, correction or grievance request
+  Future<dynamic> dsrCreateMine({required MyDsrDto body}) =>
+      _t.send('POST', '/privacy/requests/mine', body: body.toJson());
+
+  /// GET /privacy/requests/mine/{id}/export — Status and download of the access report of my completed request
+  Future<dynamic> dsrMyExport({required String id}) =>
+      _t.send('GET', '/privacy/requests/mine/${Uri.encodeComponent(id)}/export');
 }
 
 /** The OtpStartDto the API takes. */
@@ -744,5 +792,53 @@ class MockPayDto {
   Map<String, Object?> toJson() => {
         'txnid': txnid,
         if (outcome != null) 'outcome': outcome,
+      };
+}
+
+/** The SubmitPortalChangesDto the API takes. */
+class SubmitPortalChangesDto {
+  const SubmitPortalChangesDto({required this.changes, this.reason, this.proofs});
+  final Object? changes;
+  final String? reason;
+  final List<SubmitPortalChangesDtoProofsItem>? proofs;
+  Map<String, Object?> toJson() => {
+        'changes': changes,
+        if (reason != null) 'reason': reason,
+        if (proofs != null) 'proofs': proofs?.map((x) => x.toJson()).toList(),
+      };
+}
+
+/** The SubmitPortalChangesDtoProofsItem the API takes. */
+class SubmitPortalChangesDtoProofsItem {
+  const SubmitPortalChangesDtoProofsItem({required this.kind, required this.fileId});
+  final String kind;
+  final String fileId;
+  Map<String, Object?> toJson() => {
+        'kind': kind,
+        'fileId': fileId,
+      };
+}
+
+/** The SelfConsentDto the API takes. */
+class SelfConsentDto {
+  const SelfConsentDto({required this.purposeCode, required this.status});
+  final String purposeCode;
+  final String status;
+  Map<String, Object?> toJson() => {
+        'purposeCode': purposeCode,
+        'status': status,
+      };
+}
+
+/** The MyDsrDto the API takes. */
+class MyDsrDto {
+  const MyDsrDto({required this.kind, this.studentId, required this.detail});
+  final String kind;
+  final String? studentId;
+  final String detail;
+  Map<String, Object?> toJson() => {
+        'kind': kind,
+        if (studentId != null) 'studentId': studentId,
+        'detail': detail,
       };
 }
