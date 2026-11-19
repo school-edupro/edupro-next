@@ -27,7 +27,7 @@ ThemeData eduproTheme({required Brightness brightness, bool webFonts = true}) {
   final headings = webFonts ? body.apply(fontFamily: 'Poppins') : body;
   final heading = webFonts ? 'Poppins' : null;
   final radius = BorderRadius.circular(12);
-  final ink = dark ? Tokens.mobWhite : Tokens.mobNavy800;
+  final ink = (dark ? Tokens.mobWhite : Tokens.mobNavy800);
   return ThemeData(
     useMaterial3: true,
     brightness: brightness,

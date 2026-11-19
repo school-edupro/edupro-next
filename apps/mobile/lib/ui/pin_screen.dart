@@ -149,8 +149,8 @@ class _PinScreenState extends ConsumerState<PinScreen> {
       _delete();
       return KeyEventResult.handled;
     }
-    if (e.logicalKey == LogicalKeyboardKey.enter ||
-        e.logicalKey == LogicalKeyboardKey.numpadEnter) {
+    final enter = {LogicalKeyboardKey.enter, LogicalKeyboardKey.numpadEnter}.contains(e.logicalKey);
+    if (enter) {
       if (widget.setting && _first == null) _next();
       if (!widget.setting && _length == null && _typed.length >= 4) _open();
       return KeyEventResult.handled;
@@ -267,7 +267,7 @@ class PinDots extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final dark = Theme.of(context).brightness == Brightness.dark;
-    final ink = dark ? Tokens.mobWhite : Tokens.mobNavy800;
+    final ink = (dark ? Tokens.mobWhite : Tokens.mobNavy800);
     return Semantics(
       key: const Key('pinDots'),
       label: label,
